@@ -588,6 +588,8 @@ UBOOL UUC2ALAudioSubsystem::Init()
 		S->Voices.Num(), !S->bEFX ? TEXT("off (no EFX: dry sound)") : S->bEAXReverb ? TEXT("EFX (EAX reverb)") : TEXT("EFX (standard reverb)"),
 		S->bLoopPoints ? TEXT("yes") : TEXT("no"),
 		Wave.Len() ? *FString::Printf( TEXT(", writing %s"), *Wave ) : TEXT("") );
+	debugf( NAME_Init, TEXT("UC2ALAudio: category volumes (default profile): Music %.2f, FX %.2f, Voice %.2f"),
+		S->CategoryVolumes[VOLUME_Music], S->CategoryVolumes[VOLUME_FX], S->CategoryVolumes[VOLUME_Voice] );
 	if( !S->bEFX )
 		debugf( NAME_Init, TEXT("UC2ALAudio: %s: zone reverb is off, sound is dry"),
 			bWantEFX ? TEXT("the device has no EFX reverb") : TEXT("EFX switched off (UseEFX=False or -NOEFX)") );
@@ -1504,7 +1506,7 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 	M.bLoop			= Snd.Loops!=0;
 	M.bEnded		= 0;
 	M.bStopAfterFade= 0;
-	M.Volume		= Snd.Volume;
+	M.Volume		= Snd.Volume + (Snd.bHeadroomBoost ? 0 : -600);	// a cue like any other: the 6 dB voice headroom too
 	UBOOL bFade		= MusicFades && FadeInTime>0.f;
 	M.Fade			= bFade ? 0.f : 1.f;
 	M.FadeTarget	= 1.f;
