@@ -266,7 +266,7 @@ class ENGINE_API UActorChannel : public UChannel
 	// UActorChannel RecentMap helper functions
 	// Retrieve the address of the value stored in RecentMap with the key Offset
 	// Returns NULL if can't find it and, if bMayFail is false, logs a warning
-	FORCEINLINE BYTE* UActorChannel::GetMapValueAddr(INT Offset, UBOOL bMayFail = 0)
+	FORCEINLINE BYTE* GetMapValueAddr(INT Offset, UBOOL bMayFail = 0)
 	{
 		// Get the pointer to the pointer to the array
 		TArray<BYTE>** ppArray = RecentMap.Find( Offset );

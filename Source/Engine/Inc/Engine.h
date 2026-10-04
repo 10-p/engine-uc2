@@ -96,7 +96,11 @@ ENGINE_API extern class UGlobalTempObjects* GGlobalTempObjects;
 			debugf(NAME_Warning, TEXT("Replicating bool %s using DOREP!"), sp##var->GetName());\
 		}
 #else
+#if defined(_MSC_VER)
 	#define CheckNotBool __noop
+#else
+	#define CheckNotBool(...) ((void)0) /* __noop is an MSVC intrinsic: the argument is not evaluated */
+#endif
 #endif
 
 #define DOREP(obj,var,type) \

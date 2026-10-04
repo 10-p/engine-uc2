@@ -287,7 +287,7 @@ public:
 	template<EStatType Type>
 	UBOOL ReverseMap( INT CacheIndex, INT& StatTableIndex, INT& StatTableSlot, FName& DataName, INT& NameIndex, INT& IntStatIndex, INT& FloatStatIndex );
 
-	void UPlayerStats::DebugDump();
+	void DebugDump();
 
 	INT GetIntStatByCombo(const FName& ComboName, INT StatIndex) const;
 	void SetIntStatByCombo(const FName& ComboName, INT StatIndex, FLOAT IntValue, UBOOL bAdditive);

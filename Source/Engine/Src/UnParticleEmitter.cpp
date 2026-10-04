@@ -16,7 +16,11 @@
 IMPLEMENT_CLASS(UParticleEmitter);
 
 //jg -- The singleton pool of particles
+#if defined(_MSC_VER)
 TPooledList<FParticle>::TPoolInstance<FParticle> TPooledList<FParticle>::PoolInstance;
+#else
+template<> TPooledList<FParticle>::TPoolInstance<FParticle> TPooledList<FParticle>::PoolInstance{};
+#endif
 
 //
 // UnrealScript interface.
@@ -259,7 +263,8 @@ void UParticleEmitter::SetDynamicAtten( FLOAT AttenFactor )
 		return;
 
 	// skip if almost equal
-	static const MIN_ATTEN_DIFF = 0.2f;
+	// The type was left out (MSVC's implicit int), so the threshold is 0, not 0.2: kept as shipped.
+	static const INT MIN_ATTEN_DIFF = 0.2f;
 	if( Abs(AttenFactor - DynAttenMaxActive) >= MIN_ATTEN_DIFF )
         return;
 

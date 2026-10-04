@@ -49,7 +49,9 @@ target_include_directories(${PROJECT_NAME}
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Src
 )
 
-target_compile_definitions(${PROJECT_NAME} PRIVATE GPackage=Core)
+# Under __STATIC_LINK, IMPLEMENT_PACKAGE(pkg) defines G<pkg>Package (Inc/UnObjBas.h); GPackage must name it so
+# that Localize()'s default package argument resolves per library, as it did per DLL on the PC build.
+target_compile_definitions(${PROJECT_NAME} PRIVATE GPackage=GCorePackage)
 
 # zlib: Inc/FFileManagerGeneric.h (compressed-file reads) uses it, and that header is compiled by the
 # launchers, so the dependency is PUBLIC. UC2 has no Ogg/Vorbis in Core (UnUnix.cpp's include was stale).

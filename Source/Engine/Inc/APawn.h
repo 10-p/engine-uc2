@@ -101,15 +101,15 @@ typedef FLOAT ( *NodeEvaluator ) (ANavigationPoint*, APawn*, FLOAT);
 	UBOOL IsSpectatorTarget();
 
 	// Controller interface
-	inline UBOOL APawn::IsPlayer()
+	inline UBOOL IsPlayer()
 	{
 		return (Controller && Controller->bIsPlayer);
 	}
-	inline UBOOL APawn::IsHumanControlled()
+	inline UBOOL IsHumanControlled()
 	{
 		return (Controller && Controller->IsAPlayerController());
 	}
-	inline UBOOL APawn::IsLocallyControlled()
+	inline UBOOL IsLocallyControlled()
 	{
 		return (Controller && Controller->LocalPlayerController());
 	}

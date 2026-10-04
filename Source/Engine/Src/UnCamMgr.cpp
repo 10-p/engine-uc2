@@ -480,7 +480,7 @@ UBOOL UClient::BeginSplitScreen( UClient* Client, INT GamepadID )
 * ============================================================================
 */
 
-FORCEINLINE INT Compare( const UViewport*& A, UViewport*& B)
+FORCEINLINE INT Compare( UViewport*& A, UViewport*& B)
 {
 	// B>A returns >0
 	// B==A returns 0

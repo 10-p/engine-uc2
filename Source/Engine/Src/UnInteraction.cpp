@@ -126,7 +126,12 @@ UBOOL UBaseGUIController::HasContent( INT ContentType, const FString& ContentId 
 	UBOOL bResult = 0;
 	if ( ContentId.Len() == 0 )
 	{
+#if __PSX2_EE__ || __GCN__ || __LINUX__
+		// guard() does not declare __FUNC_NAME__ on these platforms (same test as Core/Inc/UnFile.h).
+		debugf(TEXT("%s - No ContentId specified!"), TEXT("UBaseGUIController::HasContent"));
+#else
 		debugf(TEXT("%s - No ContentId specified!"), __FUNC_NAME__);
+#endif
 	}
 	else
 	{

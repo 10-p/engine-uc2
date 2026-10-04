@@ -2442,7 +2442,7 @@ public:
 		appMemzero( DrawLists, sizeof(DrawLists) );
 	}
 
-	FORCEINLINE AddToList( FDynamicActor* DynamicActor, EDeferredType Type )
+	FORCEINLINE void AddToList( FDynamicActor* DynamicActor, EDeferredType Type )
 	{
 		DrawLists[Type] = new(GSceneMem) TList<FDynamicActor*>( DynamicActor, DrawLists[Type] );
 	}
@@ -2973,9 +2973,17 @@ FSceneMemStack	GSceneMem;
 //FSceneMemStack GSceneActorLightingMem;
 // scion sz -
 // the singleton pool of light lists
+#if defined(_MSC_VER)
 TPooledList<FLightList>::TPoolInstance<FLightList> TPooledList<FLightList>::PoolInstance;
+#else
+template<> TPooledList<FLightList>::TPoolInstance<FLightList> TPooledList<FLightList>::PoolInstance{};
+#endif
 // the singleton pool of projector lists
+#if defined(_MSC_VER)
 TPooledList<FProjectorList>::TPoolInstance<FProjectorList> TPooledList<FProjectorList>::PoolInstance;
+#else
+template<> TPooledList<FProjectorList>::TPoolInstance<FProjectorList> TPooledList<FProjectorList>::PoolInstance{};
+#endif
 
 
 //

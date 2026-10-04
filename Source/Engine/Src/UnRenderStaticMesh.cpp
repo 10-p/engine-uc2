@@ -13,7 +13,13 @@
 // FSortedIndexBuffer
 //
 
-#if ASMLINUX
+#if !defined(_MSC_VER) && (!defined(__i386__) || defined(UT_NO_X86_INTRIN))
+// Not 32-bit x86: the C equivalent of the x87 sequence below (round to nearest in the current mode).
+inline void FloatToInt(int *int_pointer, float f)
+{
+	*int_pointer = (int)lrintf(f);
+}
+#elif ASMLINUX
 inline void FloatToInt(int *int_pointer, float f)
 {
     __asm__ __volatile
@@ -532,7 +538,7 @@ void RenderStaticMesh(FDynamicActor* Owner,FLevelSceneNode* SceneNode,TList<FDyn
 		if(Owner->Actor->StaticSectionBatches.Num() != StaticMesh->Sections.Num())
 		{			
 			RI->EnableLighting(1, bUseStaticLighting, 1,NULL,SceneNode->Viewport->Actor->RendMap == REN_LightingOnly,lightSphere);
-			RI->SetAmbientLight(FColor(FPlane(Owner->AmbientColor) * 0.5f));
+			RI->SetAmbientLight(FColor(Owner->AmbientColor.operator FPlane() * 0.5f));
 		}
 		else
 		{

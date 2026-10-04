@@ -42,6 +42,7 @@ BYTE FConvexVolume::SphereCheck(const FSphere& Sphere)
 	BYTE ClippingFlags	= CF_Inside;
 
 //WD: added Pentium(r) 4 processor optimized version of SphereCheck()
+#if __HAS_SSE__ // the F32vec4 classes come from MSVC's <fvec.h>
 	if( NumPlanes >= 4 )
 	{
 		F32vec4 mask;
@@ -115,6 +116,7 @@ BYTE FConvexVolume::SphereCheck(const FSphere& Sphere)
 		}
 	}
 	else
+#endif // __HAS_SSE__ (elsewhere the plane-by-plane loop below handles every count)
 	{
 	    for(INT Index = 0;Index < NumPlanes;Index++)
 	    {
@@ -181,6 +183,7 @@ BYTE FConvexVolume::BoxCheck(const FVector& Origin,const FVector& Extent)
 	BYTE ClippingFlags	= CF_Inside;
 
 //WD: added Pentium(r) 4 processor optimized version of BoxCheck()
+#if __HAS_SSE__ // the F32vec4 classes come from MSVC's <fvec.h>
 	if( NumPlanes >= 4 )
 	{
 		CONST_INT32_PS(smask, ~(1<<31), ~(1<<31), ~(1<<31), ~(1<<31));
@@ -271,6 +274,7 @@ BYTE FConvexVolume::BoxCheck(const FVector& Origin,const FVector& Extent)
 		}
 	}
 	else
+#endif // __HAS_SSE__ (elsewhere the plane-by-plane loop below handles every count)
 	{
 		for (INT Index = 0; Index < NumPlanes; Index++)
 		{

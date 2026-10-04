@@ -1054,10 +1054,10 @@ void FStaticMeshBatchVertexStream::GetStreamData(void* Dest)
 			else if(StaticMeshInstance)
 			{
 				*DestLighting = StaticMeshInstance->ColorStream.Colors(VertexIndex);
-				*DestLighting += FColor(FPlane(DynamicActor->AmbientColor) * 0.5f);
+				*DestLighting += FColor(DynamicActor->AmbientColor.operator FPlane() * 0.5f);
 			}
 			else
-				*DestLighting = FColor(FPlane(DynamicActor->AmbientColor) * 0.5f);
+				*DestLighting = FColor(DynamicActor->AmbientColor.operator FPlane() * 0.5f);
 
 			for(INT UVIndex = 0;UVIndex < NumExistingUVs;UVIndex++)
 			{
@@ -1192,7 +1192,13 @@ INT FStaticMeshBatch::AddElement(AActor* Actor,INT SectionIndex)
 // FSortedStaticMeshBatchIndexBuffer
 //
 
-#if ASMLINUX
+#if !defined(_MSC_VER) && (!defined(__i386__) || defined(UT_NO_X86_INTRIN))
+// Not 32-bit x86: the C equivalent of the x87 sequence below (round to nearest in the current mode).
+inline void FloatToInt(int *int_pointer, float f)
+{
+	*int_pointer = (int)lrintf(f);
+}
+#elif ASMLINUX
 inline void FloatToInt(int *int_pointer, float f)
 {
     __asm__ __volatile__

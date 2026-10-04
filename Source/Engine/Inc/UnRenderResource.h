@@ -29,7 +29,7 @@ class FPackedUVCoord
 	SWORD Coord;
 
 	// Remaps the coordinate to a range between -1.0 and 1.0
-	FORCEINLINE SetCoord(FLOAT fl)
+	FORCEINLINE void SetCoord(FLOAT fl)
 	{
 		// This will clamp the value between -32767 and 32767, which is
 		// interpreted by D3DVSDT_NORMSHORT1 as -1.0 to 1.0

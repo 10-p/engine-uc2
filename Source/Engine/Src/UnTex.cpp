@@ -854,7 +854,7 @@ void UTexture::GenerateBumpmap( INT FormatToUse )
 		appMemcpy( pSourceData, &Mips(0).DataArray(0), USize*VSize*4 );
 		break;
 	default:
-		debugf( NAME_Progress, TEXT("FAILED: Texture format TEXF_%s can not be converted to bumpmap."), GetFormatDesc() );
+		debugf( NAME_Progress, TEXT("FAILED: Texture format TEXF_%s can not be converted to bumpmap."), *GetFormatDesc() );
 		return;
 	}
 
@@ -985,7 +985,7 @@ void UTexture::GenerateDistortionMap( INT FormatToUse )
 		appMemcpy( pSourceData, &Mips(0).DataArray(0), USize*VSize*4 );
 		break;
 	default:
-		debugf( NAME_Progress, TEXT("FAILED: Texture format TEXF_%s can not be converted to distortion map."), GetFormatDesc() );
+		debugf( NAME_Progress, TEXT("FAILED: Texture format TEXF_%s can not be converted to distortion map."), *GetFormatDesc() );
 		return;
 	}
 

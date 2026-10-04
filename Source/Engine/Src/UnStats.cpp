@@ -41,16 +41,16 @@
 #endif
 #define DRAW_STRING(Arg)		MAYBE_WRAP Canvas->CurX = CurX; Canvas->WrappedPrintf(Canvas->TinyFont,0,*Arg);
 
-#define TIME_ARGUMENTS(Arg)		(FLOAT) (DWORDOldStats(GEngineStats.##Arg) * GSecondsPerCycle * 1000.0f), *DWORDStatsDescriptions(GEngineStats.##Arg) )
-#define DWORD_ARGUMENTS(Arg)	DWORDOldStats(GEngineStats.##Arg), *DWORDStatsDescriptions(GEngineStats.##Arg) )
+#define TIME_ARGUMENTS(Arg)		(FLOAT) (DWORDOldStats(GEngineStats.Arg) * GSecondsPerCycle * 1000.0f), *DWORDStatsDescriptions(GEngineStats.Arg) )
+#define DWORD_ARGUMENTS(Arg)	DWORDOldStats(GEngineStats.Arg), *DWORDStatsDescriptions(GEngineStats.Arg) )
 
-#define TIME_ARGUMENTS_EX(Arg)		(FLOAT) (##Arg) * GSecondsPerCycle * 1000.0f, #Arg )
-#define DWORD_ARGUMENTS_EX(Arg)	(##Arg), #Arg )
+#define TIME_ARGUMENTS_EX(Arg)		(FLOAT) (Arg) * GSecondsPerCycle * 1000.0f, #Arg )
+#define DWORD_ARGUMENTS_EX(Arg)	(Arg), #Arg )
 
-#define DRAW_HEADLINE(Arg)		Canvas->Color = FColor(255,0,0); Canvas->CurY += 4; Dummy = ##Arg; DRAW_STRING( Dummy ); Canvas->Color = FColor(255,255,255);
+#define DRAW_HEADLINE(Arg)		Canvas->Color = FColor(255,0,0); Canvas->CurY += 4; Dummy = Arg; DRAW_STRING( Dummy ); Canvas->Color = FColor(255,255,255);
 
-#define TIME_ARGUMENTS_OWN_DESC(Arg1,Arg2)		(FLOAT) (DWORDOldStats(GEngineStats.##Arg1) * GSecondsPerCycle * 1000.0f), Arg2 )
-#define DWORD_ARGUMENTS_OWN_DESC(Arg1,Arg2)		DWORDOldStats(GEngineStats.##Arg1), Arg2 )
+#define TIME_ARGUMENTS_OWN_DESC(Arg1,Arg2)		(FLOAT) (DWORDOldStats(GEngineStats.Arg1) * GSecondsPerCycle * 1000.0f), Arg2 )
+#define DWORD_ARGUMENTS_OWN_DESC(Arg1,Arg2)		DWORDOldStats(GEngineStats.Arg1), Arg2 )
 
 #define DWORD_PRINTF			FString::Printf(TEXT("%u %s")
 #define TIME_PRINTF				FString::Printf(TEXT("%2.2f %s ms")
@@ -343,9 +343,9 @@ void FStats::CalcMovingAverage( INT StatIndex, DWORD CycleSize )
 }
 
 #define DRAW_ALL(Arg)			\
-for( INT i=0; i<GStats.Stats[##Arg].Num(); i++ )	\
+for( INT i=0; i<GStats.Stats[Arg].Num(); i++ )	\
 {	\
-	FSingleStatsInfo* StatsInfo = &GStats.Stats[##Arg](i);	\
+	FSingleStatsInfo* StatsInfo = &GStats.Stats[Arg](i);	\
 	switch( StatsInfo->StatsUnit )	\
 	{	\
 		case STATSUNIT_Default:	\

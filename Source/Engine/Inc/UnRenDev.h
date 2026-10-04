@@ -555,7 +555,14 @@ struct FD3DEvent
 	#define PIX_PARTICLE 1
 	#define PIX_PROJECTOR 1
 	#define PIX_DECO 1
+#if defined(_MSC_VER)
 	#define BEGIN_D3D_EVENT(x) { __noop
+#else
+	/* Used as BEGIN_D3D_EVENT(name)(colour,format,...): swallow the second argument list unevaluated,
+	   which is what the MSVC __noop intrinsic does. */
+	#define BEGIN_D3D_EVENT(x) { UC2_D3D_EVENT_NOOP
+	#define UC2_D3D_EVENT_NOOP(...) ((void)0)
+#endif
 	#define END_D3D_EVENT }
 #endif
 #else
@@ -572,7 +579,14 @@ struct FD3DEvent
 	#define PIX_PARTICLE 1
 	#define PIX_PROJECTOR 1
 	#define PIX_DECO 1
+#if defined(_MSC_VER)
 	#define BEGIN_D3D_EVENT(x) { __noop
+#else
+	/* Used as BEGIN_D3D_EVENT(name)(colour,format,...): swallow the second argument list unevaluated,
+	   which is what the MSVC __noop intrinsic does. */
+	#define BEGIN_D3D_EVENT(x) { UC2_D3D_EVENT_NOOP
+	#define UC2_D3D_EVENT_NOOP(...) ((void)0)
+#endif
 	#define END_D3D_EVENT }
 #endif
 

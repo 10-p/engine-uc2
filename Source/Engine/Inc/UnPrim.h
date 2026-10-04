@@ -63,6 +63,8 @@ struct FCheckResult : public FIteratorActorList
 	friend QSORT_RETURN CDECL CompareHits( const FCheckResult* A, const FCheckResult* B )
 		{ return A->Time<B->Time ? -1 : A->Time>B->Time ? 1 : 0; }
 };
+// Namespace-scope declaration so the friend can be named without a call (UnLevAct.cpp takes its address).
+QSORT_RETURN CDECL CompareHits( const FCheckResult* A, const FCheckResult* B );
 
 /*-----------------------------------------------------------------------------
 	UPrimitive.

@@ -908,7 +908,11 @@ public:
 // The global occlusion query manager
 FOcclusionQueryManager HWOcclusionManager;
 // The singleton pooled list manager
+#if defined(_MSC_VER)
 TPooledList<FHWOcclusionQuery>::TPoolInstance<FHWOcclusionQuery> TPooledList<FHWOcclusionQuery>::PoolInstance;
+#else
+template<> TPooledList<FHWOcclusionQuery>::TPoolInstance<FHWOcclusionQuery> TPooledList<FHWOcclusionQuery>::PoolInstance{};
+#endif
 
 // scion sz - needed for splitscreen and flushing queries in unloadmap
 // Simple function accessible everywhere

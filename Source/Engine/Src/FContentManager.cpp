@@ -33,19 +33,19 @@
 FContentManager::FHandlerEntry FContentManager::HandlerTable[] =
 {
 	// Activation files.
-	{TEXT("act"),	&HandleActivationFile},
+	{TEXT("act"),	&FContentManager::HandleActivationFile},
 	// International/English localization files.
-	{TEXT("int"),	&HandleLocalizationFile},
+	{TEXT("int"),	&FContentManager::HandleLocalizationFile},
 	// German localization files.
-	{TEXT("deu"),	&HandleLocalizationFile},
+	{TEXT("deu"),	&FContentManager::HandleLocalizationFile},
 	// French localization files.
-	{TEXT("fra"),	&HandleLocalizationFile},
+	{TEXT("fra"),	&FContentManager::HandleLocalizationFile},
 	// Italian localization files.
-	{TEXT("ita"),	&HandleLocalizationFile},
+	{TEXT("ita"),	&FContentManager::HandleLocalizationFile},
 	// Spanish localization files.
-	{TEXT("spa"),	&HandleLocalizationFile},
+	{TEXT("spa"),	&FContentManager::HandleLocalizationFile},
 	// Map files.
-	{TEXT("unr"),	&HandleMapFile},
+	{TEXT("unr"),	&FContentManager::HandleMapFile},
 };
 
 /* epic ====================================================================================================
