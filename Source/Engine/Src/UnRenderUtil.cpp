@@ -1454,7 +1454,18 @@ void FScreenPrimUtil::DrawTile(FLOAT X1,FLOAT Y1,FLOAT X2,FLOAT Y2,FLOAT U1[4],F
 	NumPrimitives += 1;
 
 #else
-	BeginPrimitive(PT_TriangleStrip,Material);
+	// UC2 port (M7): Epic's PC branch queued these four corners, which are in quad order
+	// (X1Y1, X2Y1, X2Y2, X1Y2), as a triangle strip. A strip of them is the two triangles
+	// X1Y1-X2Y1-X2Y2 and X2Y1-X2Y2-X1Y2: the quarter of the tile between its left edge and
+	// its centre is never drawn. Nothing on PC reached this function (its callers are the
+	// Xbox-only post-process paths), so it was never seen. In this order the corners are a
+	// triangle fan; a fan holds one tile, so each tile is its own draw (the Xbox draws
+	// them as a quad list, one after the other).
+	BeginPrimitive(PT_TriangleFan,Material);
+	if (NumVerts > 0)
+	{
+		Flush();
+	}
 	//jg -- Now that we've switched to a fixed number of items make sure
 	// we won't overwrite memory
 	if (NumVerts + 4 >= ARRAY_COUNT(Vertices))
