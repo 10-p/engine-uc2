@@ -418,7 +418,7 @@ class ENGINE_API ULevel : public ULevelBase
 	INT TickDemoRecord( FLOAT DeltaSeconds );
 	INT TickDemoPlayback( FLOAT DeltaSeconds );
 	void UpdateTime( ALevelInfo* Info );
-	FORCEINLINE UBOOL IsPaused();
+	UBOOL IsPaused();
 	// !! PSX2 has a problem with the TCHAR typedef.
 	#if UNICODE
 	void WelcomePlayer( UNetConnection* Connection, TCHAR* Optional=TEXT("") );

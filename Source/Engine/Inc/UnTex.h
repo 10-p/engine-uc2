@@ -545,7 +545,7 @@ class ENGINE_API UFont : public UObject
 		return CharCode;
 	}
 
-	FORCEINLINE void GetCharSize(TCHAR InCh, FLOAT& Width, FLOAT& Height);
+	void GetCharSize(TCHAR InCh, FLOAT& Width, FLOAT& Height);
 	void StrLen(const TCHAR* Text, FLOAT& XL, FLOAT& YL, FLOAT ScaleX = 1.0, FLOAT ScaleY = 1.0, INT SpaceX = 0 );
 };
 

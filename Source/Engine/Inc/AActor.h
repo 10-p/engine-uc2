@@ -23,7 +23,7 @@
 	// AActor interface.
 	//epic moelfke: added functions to create the recent map for replication, so we can skip properties that will never be replicated
 	virtual void CreateRecentMap(TMap<_WORD, TArray<BYTE>*>& RecentMap);
-	FORCEINLINE void AddToRecentMap(UProperty* It, BYTE* Default, TMap<_WORD, TArray<BYTE>*>& RecentMap);
+	void AddToRecentMap(UProperty* It, BYTE* Default, TMap<_WORD, TArray<BYTE>*>& RecentMap);
 	virtual INT* GetOptimizedRepList( BYTE* InDefault, FPropertyRetirement* Retire, INT* Ptr, UPackageMap* Map, UActorChannel* Channel );
 	class ULevel* GetLevel() const;
 	virtual APawn* GetPlayerPawn() const {return NULL;}
@@ -248,7 +248,7 @@
 	virtual FLOAT GetMaxSpeed();
 
 	//scion superville: Gravity accessor function
-	inline FVector GetGravity();
+	FVector GetGravity();
 	FLOAT GetLandingTime( FVector BaseLocation, FVector LandLocation, FVector Vel, UBOOL bTrace = 0 );
 
 	//scion superville: Force attachment updates

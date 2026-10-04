@@ -558,7 +558,7 @@ public:
 	// Update - Calculates render data for the actor.
 	void Update();
 	// scion sz - update deferred rendering flags for sorting
-	FORCEINLINE void UpdateSorting();	
+	void UpdateSorting();	
 	// scion sz - add a new projector list entry
 	// scion sz - delete light entries
 	FORCEINLINE void EmptyLights()

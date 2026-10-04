@@ -28,19 +28,20 @@ Revision history:
 // NullNetDriver static stuff
 //#include "NullNetDriver.h"
 
-#ifdef __LINUX_X86__
-// Fire static stuff.
-//#include "UnFractal.h"
-
-// IpDrv static stuff.
-//#include "UnIpDrv.h"
-//#include "UnTcpNetDriver.h"
-//#include "UnIpDrvCommandlets.h"
-//#include "UnIpDrvNative.h"
-
-// UWeb static stuff
-//#include "UWeb.h"
-//#include "UWebNative.h"
+#if !defined(_MSC_VER)
+// Every package linked into the portable ucc, as XboxLaunch/Src/Launch.cpp does for the static XBE.
+#include "ULoadSaveManager.h"
+#include "UnNullRenderDevice.h"
+#include "UnIpDrv.h"
+#include "UnTcpNetDriver.h"
+#include "UnTcpNetDriverXbox.h"
+#include "UnIpDrvCommandlets.h"
+#include "UWeb.h"
+#include "UWebNative.h"
+#include "UnrealGame.h"
+#include "UCElements.h"
+#include "UCGameplay.h"
+#include "GUI.h"
 #endif
 
 #endif
@@ -96,9 +97,15 @@ FFeedbackContextAnsi Warn;
 #include "FConfigCacheIni.h"
 
 //jg -- Thread synchronization factory
+#if WIN32
 #include "UnThreadingWindows.h"
 FSynchronizeFactoryWin SynchFactory;
 FThreadFactoryWin ThreadFactory;
+#else
+#include "UnThreadingPosix.h"
+FSynchronizeFactoryPosix SynchFactory;
+FThreadFactoryPosix ThreadFactory;
+#endif
 
 /*-----------------------------------------------------------------------------
 	Main.
@@ -141,44 +148,7 @@ int main( int argc, char* argv[] )
         #endif
     #endif
 
-	#if __STATIC_LINK
-	// Clean lookups.
-	for (INT k=0; k<ARRAY_COUNT(GNativeLookupFuncs); k++)
-	{
-		GNativeLookupFuncs[k] = NULL;
-	}
-
-	// Core lookups.
-	GNativeLookupFuncs[0] = &FindCoreUObjectNative;
-	GNativeLookupFuncs[1] = &FindCoreUCommandletNative;
-
-	// Engine lookups.
-	GNativeLookupFuncs[2] = &FindEngineAActorNative;
-	GNativeLookupFuncs[3] = &FindEngineAPawnNative;
-	GNativeLookupFuncs[4] = &FindEngineAPlayerPawnNative;
-	GNativeLookupFuncs[5] = &FindEngineADecalNative;
-	GNativeLookupFuncs[6] = &FindEngineAStatLogNative;
-	GNativeLookupFuncs[7] = &FindEngineAStatLogFileNative;
-	GNativeLookupFuncs[8] = &FindEngineAZoneInfoNative;
-	GNativeLookupFuncs[9] = &FindEngineAWarpZoneInfoNative;
-	GNativeLookupFuncs[10] = &FindEngineALevelInfoNative;
-	GNativeLookupFuncs[11] = &FindEngineAGameInfoNative;
-	GNativeLookupFuncs[12] = &FindEngineANavigationPointNative;
-	GNativeLookupFuncs[13] = &FindEngineUCanvasNative;
-	GNativeLookupFuncs[14] = &FindEngineUConsoleNative;
-
-	#ifdef __LINUX_X86__
-	// IpDrv lookups.
-//	GNativeLookupFuncs[16] = &FindIpDrvAInternetLinkNative;
-//	GNativeLookupFuncs[17] = &FindIpDrvAUdpLinkNative;
-//	GNativeLookupFuncs[18] = &FindIpDrvATcpLinkNative;
-
-	// UWeb lookups.
-//	GNativeLookupFuncs[19] = &FindUWebUWebResponseNative;
-//	GNativeLookupFuncs[20] = &FindUWebUWebRequestNative;
-	#endif
-
-	#endif
+	// (The static lookup tables are filled after appInit, with the class registrants; see below.)
 
 	//scion jg -- Default to having an error
 	INT ErrorLevel = 1;
@@ -224,15 +194,27 @@ int main( int argc, char* argv[] )
 		// Init engine core.
 		appInit( TEXT("Avaris"), CmdLine, &Malloc, &Log, &Error, &Warn, &FileManager, FConfigCacheIni::Factory, 1 ); //!!
 
-		// Init static classes.
+		// Init static classes: the native lookup tables and class registrants of every linked package,
+		// in the order XboxLaunch/Src/Launch.cpp uses for the static XBE.
 		#if __STATIC_LINK
+			for( INT k=0; k<ARRAY_COUNT(GNativeLookupFuncs); k++ )
+				GNativeLookupFuncs[k] = NULL;
+			INT Lookup = 0;
+			GNativeLookupFuncs[Lookup++] = &FindCoreUObjectNative;
+			GNativeLookupFuncs[Lookup++] = &FindCoreUCommandletNative;
 			AUTO_INITIALIZE_REGISTRANTS_ENGINE;
-			AUTO_INITIALIZE_REGISTRANTS_NULLNETDRIVER;
-			#ifdef __LINUX_86__
-		//	AUTO_INITIALIZE_REGISTRANTS_FIRE;
-		//	AUTO_INITIALIZE_REGISTRANTS_IPDRV;
-		//	AUTO_INITIALIZE_REGISTRANTS_UWEB;
-			#endif
+		#if !defined(_MSC_VER)
+			AUTO_INITIALIZE_REGISTRANTS_IPDRV;
+			AUTO_INITIALIZE_REGISTRANTS_UWEB;
+			AUTO_INITIALIZE_REGISTRANTS_UNREALGAME;
+			AUTO_INITIALIZE_REGISTRANTS_UCELEMENTS;
+			AUTO_INITIALIZE_REGISTRANTS_UCGAMEPLAY;
+			AUTO_INITIALIZE_REGISTRANTS_GUI;
+			check( Lookup < ARRAY_COUNT(GNativeLookupFuncs) );
+			RegisterNamesGUI();
+			RegisterNamesUCElements();
+			RegisterNamesUCGameplay();
+		#endif
 		#endif
 
 		// Set up meta package readers.

@@ -52,7 +52,7 @@ IMPLEMENT_CLASS(UUCRibbonEmitter);
 #define VerticesPerPoint		2
 #define IndicesPerPoint			2
 
-FORCEINLINE FLOAT FLinterp(FLOAT percent, FLOAT A, FLOAT B);
+FLOAT FLinterp(FLOAT percent, FLOAT A, FLOAT B);
 void VLinterp(FLOAT percent, const FVector& V1, const FVector& V2, FVector& Result);
 
 class FUCRibbonVertex

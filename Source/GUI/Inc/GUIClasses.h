@@ -1391,8 +1391,8 @@ public:
 	virtual FLOAT RelativeWidth( FLOAT Val = 99999.f ) const;			
 	virtual FLOAT RelativeHeight( FLOAT Val = 99999.f ) const;			
 
-	FORCEINLINE void  SaveCanvasState(UCanvas* Canvas);						
-	FORCEINLINE void  RestoreCanvasState(UCanvas* Canvas);					
+	void  SaveCanvasState(UCanvas* Canvas);						
+	void  RestoreCanvasState(UCanvas* Canvas);					
 
 	virtual UGUIComponent* UnderCursor(FLOAT MouseX, FLOAT MouseY);
 

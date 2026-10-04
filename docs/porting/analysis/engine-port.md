@@ -94,3 +94,36 @@ They were nearly clean; the whole list of changes:
 
 `TcpNetDriverXbox.cpp` is built (it is in `IpDrv.vcproj` for PC and its Xbox-only parts are `_XBOX`-gated), so
 the native class the shipped `IpDrv.u` declares exists.
+
+## First link: `ucc-bin` (M2 gate)
+
+`Source/UCC/CMakeLists.txt`: one executable, every package linked whole (`--whole-archive`, so class registrants
+and native tables survive) and `-Wl,-export-dynamic` (Core finds a linked-in package by looking up its
+`GLoaded<Package>` symbol). Native only: the root CMakeLists skips `UCC` and `Editor` under Emscripten.
+
+`UCC.cpp` changes:
+
+- The `__STATIC_LINK` block named UT99-era lookups that no longer exist. It now does what
+  `XboxLaunch/Src/Launch.cpp` does for the static XBE, after `appInit`: clear `GNativeLookupFuncs`, add the two
+  Core lookups, then `AUTO_INITIALIZE_REGISTRANTS_{ENGINE,IPDRV,UWEB,UNREALGAME,UCELEMENTS,UCGAMEPLAY,GUI}` and
+  `RegisterNames{GUI,UCElements,UCGameplay}`.
+- POSIX thread/synchronisation factories off Windows.
+
+The first link reported 13 unresolved functions, all one pattern: declared `FORCEINLINE`/`inline` but defined
+in a single `.cpp` and called from other files. MSVC still emits a callable copy; GCC and clang do not. The
+inline marker was removed at each site (declaration and definition): `AActor::GetGravity`, `IsJoinedTo`,
+`AddToRecentMap`; `UFont::GetCharSize`; `UReachSpec::supports`; `ULevel::IsPaused`;
+`UParticleEmitter::UpdateRelativeRot`; `FDynamicActor::UpdateSorting`; `ALevelInfo::NotifyPauseChange`;
+`UGUIComponent::SaveCanvasState`/`RestoreCanvasState` (in the generated `GUIClasses.h` **and** its source
+`GUI/Classes/GUIComponent.uc`, so a regeneration stays in step); free functions `FLinterp`, `CheckCanvasClip`.
+
+**Struct packing.** Every Visual Studio project sets `StructMemberAlignment="3"` (`/Zp4`), and the headers
+generated from script wrap themselves in `#pragma pack(push,4)` when `SUPPORTS_PRAGMA_PACK` is 1. `Core.h`
+decided that from `__LINUX__`, which is not defined yet at that point under GCC, so packing was silently off.
+`Core.h` now honours a value from the build and the root CMakeLists sets `SUPPORTS_PRAGMA_PACK=1` for every
+target (as engine-ut2004 does). Open for M3: hand-written structs outside those pragma regions follow the
+platform's default alignment, which equals `/Zp4` on i386 but not on wasm32 or x86_64.
+
+Gate evidence: `cmake --build build-native` → `[100%] Built target UCC`, 0 undefined references, 0 multiple
+definitions, `build-native/Source/UCC/ucc-bin` (45 MB). Run with no run tree it initialises and stops at Epic's
+missing-ini error, as expected. `cmake --build build-wasm` → all eight libraries, 0 errors.

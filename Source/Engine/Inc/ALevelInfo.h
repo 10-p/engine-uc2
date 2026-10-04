@@ -19,7 +19,7 @@
 	APhysicsVolume* GetPhysicsVolume(FVector Loc, AActor *A, UBOOL bUseTouch);
 
 	//epic moelfke: called when game is paused or unpaused. Notifies any subsystems that need to know about it.
-	FORCEINLINE void NotifyPauseChange(UBOOL bNowPaused);
+	void NotifyPauseChange(UBOOL bNowPaused);
 
 	//jg -- Hack for XPRs not being loaded in time
 	void WaitForDynamicLoadingComplete(void);

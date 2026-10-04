@@ -99,7 +99,7 @@ TCHAR* GetXCodeName( BYTE XCode )
 	return TEXT("");
 }
 
-FORCEINLINE UBOOL CheckCanvasClip( UCanvas* C, FLOAT X, FLOAT Y, FLOAT XL, FLOAT YL )
+UBOOL CheckCanvasClip( UCanvas* C, FLOAT X, FLOAT Y, FLOAT XL, FLOAT YL )
 {
 	guardSlow(CheckCanvasClip);
 
@@ -3251,7 +3251,7 @@ FLOAT UGUIComponent::RelativeHeight( FLOAT Value ) const
 // - SaveCanvasState and RestoreCanvasState are called before and after the actual component is rendered to make sure the
 //   canvas is kept in the proper state for any other action.
 
-FORCEINLINE void UGUIComponent::SaveCanvasState(UCanvas* Canvas)
+void UGUIComponent::SaveCanvasState(UCanvas* Canvas)
 {
 	if (SavedCanvasStateDepth++ > 0) return;
 	SaveX	  = Canvas->CurX;
@@ -3261,7 +3261,7 @@ FORCEINLINE void UGUIComponent::SaveCanvasState(UCanvas* Canvas)
 	SaveFont  = Canvas->Font;
 }
 
-FORCEINLINE void UGUIComponent::RestoreCanvasState(UCanvas* Canvas)
+void UGUIComponent::RestoreCanvasState(UCanvas* Canvas)
 {
 	if (--SavedCanvasStateDepth > 0) return;
 	Canvas->CurX  = SaveX;

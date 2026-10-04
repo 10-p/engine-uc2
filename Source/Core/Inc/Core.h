@@ -83,10 +83,14 @@ public:
 #define CONSOLE 1
 #endif
 
+// The build may set this (CMakeLists.txt does): __LINUX__ is not defined yet at this point, it comes from
+// the compiler-specific header included below, so the test alone would turn packing off under GCC.
+#ifndef SUPPORTS_PRAGMA_PACK
 #if _MSC_VER || __ICC || __LINUX__
 	#define SUPPORTS_PRAGMA_PACK 1
 #else
 	#define SUPPORTS_PRAGMA_PACK 0
+#endif
 #endif
 
 // Compiler specific include.

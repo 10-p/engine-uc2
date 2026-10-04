@@ -46,3 +46,15 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
     matches for 8-byte members and wasm32 does not; null-`this` checks in `UObject::IsValid`/`GetFullName`.
   - Remaining warnings: `-Wwrite-strings` (1,128) and "invalid use of incomplete type" in `UnObjBas.h`/`UnClass.h`
     (accepted under `-fpermissive`; to be looked at if M3 misbehaves).
+- 2026-10-04 — **M2 gate green: Engine and the game natives compile, `ucc-bin` links** (commits `f700305`,
+  `482cfbb` and the one carrying this entry; notebooks `analysis/engine-baseline.md`, `analysis/engine-port.md`).
+  - Libraries on both toolchains, 0 errors: Core, Engine, IpDrv, UWeb, UnrealGame, UCElements, UCGameplay, GUI.
+  - `build-native/Source/UCC/ucc-bin` links with 0 undefined references and 0 multiple definitions; started
+    with no run tree it initialises and stops at Epic's missing-ini error.
+  - Size of the job: Engine needed changes in 20 of its files, the six smaller packages in 6 files, plus 13
+    misplaced inline markers found by the linker. Nothing was stubbed and no source file of the PC project was
+    left out (only `UnSVehicle.cpp` and `palette.cpp`, which are in no project).
+  - Fixed on the way: the package macro (`GPackage=G<pkg>Package`) and 4-byte struct packing
+    (`SUPPORTS_PRAGMA_PACK=1` on every target; it was silently off under GCC).
+  - Carried to M3: struct layout on wasm32/x86_64 for hand-written structs with 8-byte members; the
+    `FColor`→`FPlane` conversion assumption; a transient clang crash at `-j12` (re-run fixes it).

@@ -10,7 +10,7 @@
 supports() -
  returns true if it supports the requirements of aPawn.  Distance is not considered.
 */
-inline const UBOOL supports (INT iRadius, INT iHeight, INT moveFlags, INT iMaxFallVelocity) const;
+const UBOOL supports (INT iRadius, INT iHeight, INT moveFlags, INT iMaxFallVelocity) const;
 const UBOOL IsForced() const;
 
 UReachSpec* operator+ (const UReachSpec &Spec) const;

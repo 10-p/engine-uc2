@@ -14,7 +14,7 @@
 IMPLEMENT_CLASS(UUCTrailEmitter);
 
 // linear interpolation
-FORCEINLINE FLOAT FLinterp(FLOAT percent, FLOAT A, FLOAT B)
+FLOAT FLinterp(FLOAT percent, FLOAT A, FLOAT B)
 {
 	return A + percent*(B-A);
 }

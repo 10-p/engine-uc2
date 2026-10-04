@@ -107,6 +107,12 @@ add_definitions(-DNO_UNICODE_OS_SUPPORT=1)
 # Case-insensitive file lookup on case-sensitive file systems.
 add_definitions(-D__FILE_NOCASE=1)
 
+# The original projects compile everything with 4-byte struct packing (/Zp4) and the class headers generated
+# from script wrap themselves in #pragma pack(push,4) when this is set. The script VM computes property
+# offsets on that assumption, so it must hold on every target (wasm32 and x86_64 would otherwise align
+# 8-byte members to 8).
+add_definitions(-DSUPPORTS_PRAGMA_PACK=1)
+
 # Never define _XBOX, XBOX_ASSET_FORMAT, LIN_LOAD, LIN_SAVE or USE_LINEAR_LOADING: they select the Xbox
 # serialisation layouts and linear loading. The portable build loads the PC-format (licensee 0) packages.
 
@@ -156,7 +162,13 @@ set(UC2_PACKAGES
   Editor UCC
   SDL2Drv UC2GLDrv UC2GL4ESDrv UC2ALAudio WebRTCDrv SDLLaunch)
 
+# Native-only tools: the commandlet host is not part of the web build.
+set(UC2_NATIVE_ONLY_PACKAGES UCC Editor)
+
 foreach(pkg IN LISTS UC2_PACKAGES)
+  if(EMSCRIPTEN AND pkg IN_LIST UC2_NATIVE_ONLY_PACKAGES)
+    continue()
+  endif()
   if(EXISTS ${CMAKE_SOURCE_DIR}/Source/${pkg}/CMakeLists.txt)
     add_subdirectory(Source/${pkg})
   endif()

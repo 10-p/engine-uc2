@@ -108,7 +108,7 @@ void UFont::Serialize( FArchive& Ar )
 	unguardobj;
 }
 
-FORCEINLINE void UFont::GetCharSize(TCHAR InCh, FLOAT& Width, FLOAT& Height)
+void UFont::GetCharSize(TCHAR InCh, FLOAT& Width, FLOAT& Height)
 {
 	guardSlow(UFont::GetCharSize);
 

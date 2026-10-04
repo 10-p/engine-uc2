@@ -5128,7 +5128,7 @@ void ALevelInfo::execSetPauser(FFrame& Stack, RESULT_DECL)
 	unguard;
 }
 
-FORCEINLINE void ALevelInfo::NotifyPauseChange(UBOOL bNowPaused)
+void ALevelInfo::NotifyPauseChange(UBOOL bNowPaused)
 {
 	guard(ALevelInfo::NotifyPauseChange);
 	//jg -- Check the audio device before making calls on it

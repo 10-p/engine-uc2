@@ -26,7 +26,7 @@
 	// scion sz -
 	virtual void SetDynamicAtten( FLOAT AttenFactor );
 	// scion sz -
-	FORCEINLINE void UpdateRelativeRot( UBOOL bForce );
+	void UpdateRelativeRot( UBOOL bForce );
 
 	virtual void Serialize( FArchive& Ar );
 

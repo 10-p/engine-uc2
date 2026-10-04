@@ -141,7 +141,7 @@ static inline UBOOL NEQ(BYTE A[8], BYTE B[8], UPackageMap* Map,UActorChannel *Ch
 *
 * =====================================================
 */
-FORCEINLINE void AActor::AddToRecentMap(UProperty* It, BYTE* Default, TMap<_WORD, TArray<BYTE>*>& RecentMap)
+void AActor::AddToRecentMap(UProperty* It, BYTE* Default, TMap<_WORD, TArray<BYTE>*>& RecentMap)
 {
 	guardSlow(AActor::AddToRecentMap);
 
@@ -2783,7 +2783,7 @@ void AActor::SetBase(AActor* NewBase, const FVector& NewFloor, int bNotifyActor)
 //
 //	Same as IsBasedOn.  Nuke?
 //
-inline UBOOL AActor::IsJoinedTo( const AActor *Other) const
+UBOOL AActor::IsJoinedTo( const AActor *Other) const
 {
 	guard(AActor::IsJoinedTo);
 
