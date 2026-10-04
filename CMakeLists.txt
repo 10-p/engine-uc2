@@ -145,6 +145,12 @@ if(EMSCRIPTEN)
   add_compile_options(-pthread)
 endif()
 
+# --- M4w: web build additions (exception catching, SDL2 port); see cmake/UC2Web.cmake -------------------
+if(EMSCRIPTEN)
+  include(UC2Web)
+endif()
+# --- end M4w ---------------------------------------------------------------------------------------------
+
 #-----------------------------------------------------------------------------
 # Third-party libraries (vendored in Thirdparty/, never under Source/)
 #-----------------------------------------------------------------------------
@@ -204,6 +210,13 @@ set(UC2_PACKAGES
 # Native-only tools: the commandlet host is not part of the web build. SDL2Drv and SDLLaunch are native-only
 # until the web client is wired (M4w: -sUSE_SDL=2, Asyncify yield, preload).
 set(UC2_NATIVE_ONLY_PACKAGES UCC Editor SDL2Drv SDLLaunch)
+
+# --- M4w: the web build has the SDL2 client and launcher (browser), and ucc-bin (run under Node to check
+# the wasm32 layout and load maps without a browser) -------------------------------------------------------
+if(EMSCRIPTEN)
+  list(REMOVE_ITEM UC2_NATIVE_ONLY_PACKAGES UCC SDL2Drv SDLLaunch)
+endif()
+# --- end M4w ---------------------------------------------------------------------------------------------
 
 foreach(pkg IN LISTS UC2_PACKAGES)
   if(EMSCRIPTEN AND pkg IN_LIST UC2_NATIVE_ONLY_PACKAGES)
