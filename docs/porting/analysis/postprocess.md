@@ -414,3 +414,129 @@ Critical, 0 GL errors, 0 failed programs or shaders, nothing left running:
   Engine.NullRenderDevice (1280x720 windowed)`, menu level up, 0 Critical; `-nopostprocess` DM-Deadbolt frame
   against `logs/m6/coord-deadbolt-0.png`: **0 differing pixels for x >= 760** (520x720), 7.3% of the whole
   frame differ, all inside x 58-758, y 48-720 (pawn idle animation, pickup, HUD), as between two M6 runs.
+
+## P5c. More content: blended distortion, heat shimmer, energy field, player cam (probe runs, then in the script)
+
+Probe runs from the first PlayerStart (`logs/m7/probe-<map>-0/1.png`, off/on; programs linked in the run):
+
+- **DM-Decay** (`Distortion`, `DistortionAccum`, `ModulatedDistortion`): `probe-decay-icicles.png` (3x crop, off
+  left): the icicles hanging in the doorway are flat dark-blue shapes with post-processing off (their
+  distortion texture drawn as a colour, the same PC bug as the Praxis panes) and pale, translucent, textured
+  ice with it on: this is the blended distortion path, i.e. `PP_STAGE_RENDER_COLOR` with
+  `PS_ModulatedDistortion` after the accumulation and the full-screen distortion quad.
+  `probe-decay-torch.png`: the masonry joints above the torch flame are bent with post-processing on (heat
+  shimmer, `T_FX.Particles.Torch_Distortion_Shd` on the torch's emitter) and straight with it off; a faint
+  glow around the flame.
+- **DM-Undertow** (`Distortion`, `DistortionAccum`): `probe-undertow-tube.png`: the green energy column
+  (`UCP_Nakhti_Energy_Field_DIST01`) is brighter and bleeds light over its frame; the displacement itself is
+  not something I can point at in this view.
+- **CTF-Recoil** (`PlayerCam` linked: a `PSPlayerCamMaterial` was drawn): I could not find the surface in the
+  picture (`probe-CTF-Recoil-1.png`). The red pawn has a strong red halo (emissive team markings through
+  emissive select and bloom); **whether the Xbox halo is that strong I cannot tell.**
+- **TUT-AdvMovement**, **DM-Horizon**: `Distortion` and `DistortionAccum` link too (not looked at closely).
+
+## Per-effect status (final; supersedes the checkpoint table)
+
+Categories, as asked: **N+S** = numerically checked + seen on screen; **S** = seen on screen only (plausible,
+no reference); **H** = handler ported, never observed in content; **off** = off behind a hook.
+"Numerically checked" always means: the arithmetic of the primitive, by the driver self-test, and the GLSL of
+the pixel shader against the interpreter by M6's `--gputest`; never a comparison with an Xbox.
+
+| Effect | Shaders | Engine / game entry point | Where it appears | Status | How verified |
+|---|---|---|---|---|---|
+| Back-buffer as a texture (snapshot) | (driver copy program) | `GetBackBufferMaterial`, any `SetTextureInterface(RI->GetRenderTarget())` | every effect below | **N+S** | self-test `snapshot` (exact, orientation) |
+| Back-buffer copy target (half size, blurred) | `PS_Blur` | `UpdateBackBufferCopyTarget`, every frame (`UnRender.cpp` 2221) | read by `PSRefraction`, `PSBackBufferEffect`, `PSPlayerCam`, `PSColorRemap` (blurred copy) | **N** (its readers: see their rows) | self-test `bb-copy` |
+| Depth as a texture | (driver depth-encode program) | `RT_MATERIAL_USE_DEPTHBUFFER` | depth of field | **N+S** | self-test `depth-color`, `dof-ramp` |
+| `CopyDepthBuffer` | (driver depth-copy program) | `FPostProcessRender::Render` | distortion accumulation | **N+S** | self-test `depth-copy`; distortion hidden behind nearer geometry in the pictures |
+| Blur chains (`FilterCopyRenderTarget`) | `PS_Blur` | bloom, emissive, depth of field | everywhere | **N+S** | self-test `blur-h`, `blur-v`, `blur-box` |
+| Distortion, opaque (glass, energy fields, heat shimmer) | `PS_DistortionAccum`, `PS_Distortion`; `DistortionAccum.vsh`, `Distortion.vsh` | `FPostProcessRender::Render`; `UPSDistortion*::PreRender`; `IsPostProcess()` | DM-Praxis panes, DM-Decay torch, DM-Undertow column | **S** | `fx-praxis-panes`, `fx-decay`, `fx-undertow`; with `MaxDistortion` 0 the read is the identity (praxis-try2); the vertex-shader coordinates are not in the self-test |
+| Distortion, blended (colour pass) | `PS_ModulatedDistortion` (+ `Additive`, `Subtractive`: same handler, other blend) | same, `PP_STAGE_RENDER_COLOR` | DM-Decay icicles (modulated). Additive/subtractive: combo and weapon effects in `T_FX`, **not triggered** | modulated **S**; additive, subtractive **H** | `fx-decay` |
+| Emissive glow | `PS_EmissiveSelectBlur`, `PS_Blur` | `UUCScreenEmissive` (inside `UUCScreenEmissiveWithBloom`, always on) | every map with emissive materials | **S** | `fx-bloom`, `fx-octane`, `fx-undertow` |
+| Bloom | `PS_BloomSelect`, `PS_Blur` | `UUCScreenBloom` (always on) | bright areas | **S** | `fx-bloom`, `fx-azure` (faint) |
+| Depth of field, always on | `PS_DepthOfField`, `PS_Blur` | `UUCScreenDOF` (`AlwaysOnDOFOverlay`), `UpdateDOFRampLookupTexture` | every map, beyond z = 0.98 | **N+S** | self-test `dof-ramp`; `fx-azure`, `fx-dof-alpha` |
+| Depth of field, focus on actor / distance (matinee, sniper) | same, the `FocusType < 3` ramp | `USubActionDepthOfField`, `UUCScreenSniperOverlay` | cinematics; sniper zoom | **H** | the ramp code is Epic's, carried over; never run |
+| Screen blur | `PS_Blur` (four offsets from the material) | `UUCScreenBlur` (`BlurMe`, concussion, hit impact) | on hits | **S** | `fx-blur` |
+| Radial / speed blur | `PS_MotionBlur` | `UUCScreenRadialBlur` (speed, teleport, sniper) | sprinting, teleporting | **S** | `fx-radial` (held on by console) |
+| Motion blur with accumulation target | `PS_MotionBlur`, `PS_Mask` | `UUCScreenMotionBlur` | no script creates one | **H** | - |
+| Heat shimmer camera effect | `PS_Distortion` | `UUCScreenHeatShimmer` | creation commented out in `UCPlayerController` | **H** | - |
+| Colour remap: berserk | `PS_ColorRemap`; `ColorRemap.vsh` | `UUCScreenBerserk` | berserk adrenaline combo | **N+S** | self-test `remap`; `fx-berserk` |
+| Colour remap: pause menu, combo flash, sun flare | `PS_ColorRemap` | `UUCScreenMenuPause` and its two subclasses | pause; combos | pause **N+S** (looks odd, see P5b); the two subclasses **H** | `fx-pause` |
+| Colour remap: teleport | `PS_ColorRemap`, `PS_MotionBlur` | `UUCScreenTeleportOverlay` | on spawn and teleport (0.3-0.5 s) | **H** as a picture (it runs at every spawn: its programs link in every map run; no screenshot catches it) | - |
+| Colour remap, masked: sniper overlay | `PS_ColorRemapMasked`, `PS_DepthOfField`, `PS_MotionBlur` | `UUCScreenSniperOverlay`; `PSColorRemapMaterial` on the rifle | sniper rifle zoom | **H** | - |
+| Liandri overlay | `PS_ColorRemapGrayScale` | `UUCScreenLiandri` | Liandri characters' ability | **S** | `fx-liandri` |
+| Dynamic gamma | `PS_LuminanceTexIndex` | `UpdateDynamicGamma`, every frame | everywhere (display ramp) | **N+S** for the luminance pass, **S** for the ramp | self-test `luminance`; `fx-dyngamma` |
+| Player cam | `PS_PlayerCam`, `PlayerCamNoise`, `PlayerCamTwoNoise` | `UPSPlayerCamMaterial::PreRender` | CTF-Recoil; two static-mesh packages | **H** (drawn in CTF-Recoil, program links, not identified on screen) | `fx-recoil` |
+| Back-buffer effect (luminance of the scene on a surface) | `PS_MaskedLuminance`, `PS_LuminanceTexIndex` | `UPSBackBufferEffect::PreRender` | one material in `T_FX`, user not found | **H** | - |
+| Refraction | `PS_Refraction` | `UPSRefractionMaterial::PreRender` | no object in any package | **H** (unreachable) | - |
+| Texture-index materials | `PS_UseTexIndex`, `UseTexIndexMasked` | `PSUseTexIndexMaterial` | no object, no code | **H** (unreachable) | - |
+| Emissive select without blur | `PS_EmissiveSelect` | `#if 0` in `UUCScreenEmissive::PostRender` | - | **H** (compiled out by Epic) | - |
+| Depth swizzle | `PS_DepthSwizzleColor` | Xbox `CopyDepthBuffer` only | - | not used (replaced by the driver's depth copy) | - |
+| Shadow blur | `PS_ShadowBlur` | `_XBOX` branch of `UnShadowProjector.cpp` | every projected shadow | **off** (gate not lifted: not post-processing, would change every shadow; hook `UnShadowProjector.cpp` ~553-680, `BLUR_SHADOW` in `SetMatState_PS_Blur`) | - |
+| Projector batching | the 12 `PS_Projector_*` | `_XBOX` branches of `UnRenderBatch.cpp`, `UnRenderStaticMesh.cpp`, `UnRenderBSP.cpp`; `SetProjectorMultiMaterial` | every projector | **off** (not attempted, see Deferred) | - |
+| Three-layer terrain | `PS_Terrain3Layer` | `FRenderCaps::MaxSimultaneousTerrainLayers`, `UnTerrain.cpp` | every terrain | **off** (not attempted) | - |
+
+All 25 shaders of M6's waiting list are compiled and reachable by their materials when post-processing is on
+(`UC2GL_IsM7PixelShader` now only applies with it off). Drawn in a run of mine: `Blur`, `DepthOfField`,
+`MotionBlur`, `BloomSelect`, `EmissiveSelectBlur`, `LuminanceTexIndex`, `Distortion`, `DistortionAccum`,
+`ModulatedDistortion`, `PlayerCam`, `ColorRemap`, `ColorRemapGrayScale` (12). Never drawn: `Mask`, `Refraction`,
+`EmissiveSelect`, `UseTexIndex`, `UseTexIndexMasked`, `AdditiveDistortion`, `SubtractiveDistortion`,
+`MaskedLuminance`, `ShadowBlur`, `PlayerCamNoise`, `PlayerCamTwoNoise`, `ColorRemapMasked`,
+`DepthSwizzleColor` (13).
+
+## Deferred, with hooks
+
+- **Projector shaders (12)** and **`PS_Terrain3Layer`**: not attempted. The projector batching is not a gate
+  to lift but about 560 lines of Xbox renderer (`UnRenderBatch.cpp` 340-905: `FProjectorRenderBatchDef::Render`
+  with packed normals and push buffers) plus branches in `UnRenderStaticMesh.cpp` (18 `_XBOX` sites) and
+  `UnRenderBSP.cpp`, the driver's `SetProjectorMultiMaterial` body and three vertex-shader fragments
+  (`ProjectorAtten`, `ProjectorDistanceAtten`, `TexSourceTexKill3`). Three-layer terrain needs the caps change
+  and the `_XBOX` parts of `UnTerrain.cpp` (30 sites) and before/after pictures of every terrain map. I had
+  no budget left to do either with verification, so neither is touched. Hooks unchanged from M6:
+  `UC2GL_IsEngineGatedPixelShader` (`UC2GLShaders.cpp`), `UUC2GLRenderDevice::GetRenderCaps`.
+- **Shadow blur** (`PS_ShadowBlur`): see the table.
+- **`FD3DDynamicGamma::ShowDebug`** (histogram overlay, `bDebugShowGamma`): not ported.
+- **WebGL / GL4ES (M11)**: the copy programs use `#version 120`; the depth copy writes `gl_FragDepth`
+  (`EXT_frag_depth` on WebGL 1); the main depth attachment is a depth-stencil texture (`WEBGL_depth_texture`).
+  Without depth textures, `UUC2GLRenderDevice::UpdateSampledTexture` (depth usage) and `CopyDepthBuffer` are
+  the two places that need a "draw depth as colour" pass instead; nothing else reads depth.
+- **Split-screen**: every path takes the viewport's offset and scale as Epic's code does, but nothing was run
+  with more than one viewport. The always-on depth of field is off in split-screen by script.
+- **Performance**: one full-screen snapshot per draw that reads the back buffer after it changed. A frame
+  with all default effects makes three to four. Could be reduced (e.g. sharing one snapshot between the
+  depth-of-field blur and the back-buffer copy is not possible, the frame changes in between; rendering the
+  scene into a texture-backed target that can be sampled directly would need a second colour buffer anyway).
+  Not optimised.
+
+## Defects in Epic's code, complete list (behaviour kept unless said)
+
+1. `SetMatState_PS_Distortion` zeroes `InShader->PixelShaderType` in its "don't render" branches: changes the
+   material object for good. **Not carried over.**
+2. `FRenderTargetPool::~FRenderTargetPool` asserts on live references; at exit the camera effects still hold
+   theirs. The device hands such targets to their holders before the pool dies (`UUC2GLRenderDevice::Destroy`).
+3. `FScreenPrimUtil::DrawTile`, PC branch: quad-ordered corners as a triangle strip, a quarter of every tile
+   missing. **Fixed** (fan, one tile per draw). Only Xbox-only paths call it.
+4. `UClient::DynamicGamma` reads True on PC with nothing setting it. Not understood. Made deliberate by the
+   device when post-processing is on.
+5. PC `Default.ini` has no `MaxDistortion`: 0 = no displacement. Value added; device falls back to 35.
+6. `UUCScreenDOF`: the stale header (M3's finding); both readings selectable now.
+7. `HasPostProcessMaterial` decides an actor's draw list from its *first* material only; an actor mixing a
+   distortion material with ordinary ones is drawn entirely in the post-process passes (or not at all in
+   them). Kept.
+8. `DOF.psh` reads the encoded depth through whatever filter the stage has (bilinear): at a depth where the
+   middle byte wraps between neighbouring pixels the average is not a depth. Kept (Epic's state); for the
+   always-on mode the error is a few percent of alpha along thin lines; I did not find them in the pictures.
+9. Screen-space distortion reads foreground pixels (the pillars in front of the Praxis panes). Kept; inherent
+   to Epic's method.
+10. `set UCScreenMenuPause ...` hits `UCScreenComboFlash` and `UCScreenComboSunFlare` too (they extend it):
+    a trap for testers, not a defect.
+
+## Unsure / inferred, not verified
+
+- Everything about how an Xbox actually looks. In particular: strength of glow and bloom, the dynamic gamma on
+  dark maps, the size of the distortion (my height/480 scaling), the Praxis pillar artefact, the pause
+  negative, the berserk overlay on pawn attachments.
+- That NV2A resolves a point-sampled tie to the texel right and below (used for `CopyDepthBuffer` and the
+  point-sample nudge).
+- Opaque black for unset stages, fog factor 1 without fog (M6's inferences) also feed these shaders.
+- `POSTPROCESS 0` after it was on does not restore the exact M6 state of distortion materials (P2).
+- Nothing was run on a real GPU, with GL4ES, in split-screen, or in a cinematic.
