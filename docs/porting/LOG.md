@@ -136,3 +136,21 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   "Running anything" rules added to CLAUDE.md. State of the work: branch `m4w` has W0 and W1 committed
   (`8a232bd`, `5bd7f07`, `44932d1`, `45f7301`) and an uncommitted browser harness, none of it verified by the
   coordinator; branch `m6-shaders` has no commits (the agent had not written anything yet).
+- 2026-10-04 — **M4w, steps W0 and W1 green; W2 (browser run) not done** (branch `m4w` merged; commits `8a232bd`,
+  `5bd7f07`, `44932d1`, `45f7301`, `51a55f0`; notebook `analysis/web-smoke.md`). Verified by the coordinator
+  on the merged tree, every run inside `bin/capped`:
+  - W0: `node ucc-bin.js verifyclasses` (wasm32 under Node) → `all native class layouts match`. The known
+    web risk (8-byte members aligned to 8 on wasm32) needed 4-byte packing on two hand-written script
+    mirrors, `UnTex.h` and `UnParticleSystem.h`. `node ucc-bin.js server DM-Deadbolt` → `Game class is
+    'UCDeathmatch'`, `Bringing Level DM-Deadbolt.MyLevel up for play`, then stops because Node's socket
+    emulation has no `SO_BROADCAST` (the dedicated server cannot listen there; irrelevant to the client).
+  - W1: `cmake --build build-wasm` → `SDLLaunch.js` (0.8 MB), `SDLLaunch.wasm` (47 MB dev build),
+    `SDLLaunch.data`, `meta.json` (`targetId uc2`, UE2, `wasm-integrated`, ABI 1, three checksums). Explicit
+    `-sMAXIMUM_MEMORY` of 2 GB on both wasm targets.
+  - After the merge: native build, DM-Deadbolt with the GL device (1,800 frames, 0 GL errors, 2G ceiling),
+    native and wasm `verifyclasses` all pass. `UC2GLDrv` stays out of the web build until M11.
+  - W2 is the step that caused the memory incident. The agent's ad-hoc page (`tools/web-smoke/`, left
+    untracked in `../engine-uc2-m4w`, not merged) kept every fetched file whole in JavaScript memory in each
+    worker. It will not be used: the owner pointed to the frontend's own harness, which has the real
+    file-streaming glue and a machine-wide memory guard (`packages/e2e/tools/e2e-mem-guard.mjs`). W2 becomes
+    "minimal `uc2` target in the frontend clone, booted by its harness under that guard inside `bin/capped`".
