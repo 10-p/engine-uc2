@@ -291,7 +291,8 @@ How each effect is triggered from the console (bindable or through `-glexec`):
 - The pause-menu remap came out black. Either `T_FX.ColorRamps.UI_PauseMenuRamp` is that dark for a dark
   scene, or the remap lookup is wrong for this ramp (berserk's ramp works). To do: read the ramp's texels.
 - Dynamic gamma brightens DM-Deadbolt a lot (ramp[64,128,192] = 85,193,255 once settled: everything above
-  63% luminance becomes white). That is what Epic's formula gives for a dark frame with `LevelContrast` 1;
+  63% luminance becomes white). That is what Epic's formula gives for a dark frame (`LevelContrast` is 0.5: the white point cannot
+  drop below the histogram's midpoint + 0.5, here 0.63; the self-test's `luminance` line shows the same clamp);
   whether the Xbox looked like that I cannot check. On by default because it is the Xbox default.
 - Depth of field reads the encoded depth through a bilinear filter (Epic's stage state). At a depth where the
   middle byte wraps, the average of neighbouring texels is not a depth. Estimated error for the always-on
