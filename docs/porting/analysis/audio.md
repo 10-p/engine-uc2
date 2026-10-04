@@ -507,3 +507,41 @@ dry", so a run shows whether the player's zone changed at all.
 | level change: stop all incl. music, drop non-persistent banks | same, wave banks dropped when no persistent sound bank uses them | exercised at every map load (logged) |
 | category volumes from the default profile | same | Music/FX/Voice; VoiceChat stored only |
 | ambient: 5 nearest static AmbientSounds within their radius, every second | same | exercised: e.g. 6 ambient loops on DM-Deadbolt |
+
+## Step 7 - capture suite, zone change in game, EFX on/off pair (A4 (2)-(4))
+
+`tools/dev/audio-regression.sh m8` (committed; check + self-test + four captures, one `SUMMARY` line each in
+`logs/m8/audio-summary.txt`). The captures pin the spawn (`set UCDeathmatch NumPlayers 0` bound to F1 and
+pressed before Fire: the first PlayerStart) and inject a seeded input loop; bots and frame timing still vary
+(cue counts differ a little between runs). First suite run (before the Ghost change below), literally:
+```
+SUMMARY audio-check: 182 index files; waves: 7141 decoded to their exact length of 7141 cooked (19 entries have no cooked wave); music streams: 21 of 21; cues [int]: 2438 in 78 cue tables: 2417 resolve fully, 6 partly, 15 to no decodable wave (0 use a localised bank); UC2AudioCheck: 78 cue tables, 2438 cues, 0 failures
+SUMMARY audio-selftest: UC2AudioSelfTest: 39 checks, 0 failed; Pan3D -1.10 dB, Pan2D -1.52 dB
+SUMMARY audio-menu: 58.709333 s, peak -13.0 dBFS, RMS -28.5 dBFS, silent seconds 0; cue requests 1: played 1 (1 distinct), culled 0 (0 distinct), failed 0 (0 distinct); Critical 0
+SUMMARY audio-deadbolt: 83.797333 s, peak -3.0 dBFS, RMS -23.0 dBFS, silent seconds 0; cue requests 1105: played 497 (61 distinct), culled 608 (69 distinct), failed 0 (0 distinct); Critical 0
+SUMMARY audio-praxis-efx: 83.818667 s, peak -1.5 dBFS, RMS -20.4 dBFS, silent seconds 0; cue requests 1079: played 547 (56 distinct), culled 532 (62 distinct), failed 0 (0 distinct); Critical 0
+SUMMARY audio-praxis-dry: 83.797333 s, peak 0.3 dBFS, RMS -21.3 dBFS, silent seconds 0; cue requests 1067: played 606 (60 distinct), culled 461 (69 distinct), failed 0 (0 distinct); Critical 0
+```
+(The menu's "1 request" is `A_Gameplay.MenuPageOpened`; the menu music is not a cue request but a
+`PlayMusic`, logged as `music NuBattle: playing ...`. `audio-praxis-dry` peaks at +0.3 dBFS: the float wave
+writer does not clip; a 16-bit device would, see doubts.)
+
+Zone change in game: on the walk through DM-Praxis the player stayed in its spawn zone (no zone notification
+at all), on DM-Deadbolt one notification, `zone ZoneInfo8 (ZoneAudioEffect 0): reverb preset Default
+unchanged` (Deadbolt has only Default zones). `tools/dev/run-uc2-audio.sh` got `UC2_POSTCMD` (a console command
+bound to F2, pressed once after the spawn); with `Ghost` the same walk goes through walls. Literal log lines:
+```
+praxis-zone (EFX):      [  38.96] zone ZoneInfo2: reverb preset Underwater
+                        [  55.99] zone LevelInfo0: reverb preset Default
+praxis-zone-dry (-NOEFX): [  38.74] zone LevelInfo0 (ZoneAudioEffect 0): no EFX, sound stays dry
+                        [  39.23] zone ZoneInfo2 (ZoneAudioEffect 24): no EFX, sound stays dry
+                        [  56.16] zone LevelInfo0 (ZoneAudioEffect 0): no EFX, sound stays dry
+```
+The suite's Praxis pair now uses `Ghost`. The pair (`logs/m8/praxis-zone.wav` / `praxis-zone-dry.wav`, crops
+`praxis-zone-30to65.png` / `praxis-zone-dry-30to65.png`; the two runs are close to identical in timing thanks to
+the pinned spawn and seeded input): RMS with EFX minus without, by window:
+- 10-25 s (before the spawn: music and 3D ambients, Default preset): +0.9 dB
+- 39.5-55.5 s (in the Underwater zone): **+2.0 dB** (+2.3 dB below 1 kHz)
+- 60-80 s (back in a Default zone, gameplay): +0.1 dB
+This is log-correlated only (gameplay is not identical between the two runs); the reverb arithmetic itself is
+numerically checked in the self-test (decay times). The spectrogram crops look alike to the eye.

@@ -13,6 +13,8 @@
 # Environment: UC2_AUDIO_ENV="VAR=value ..." extra environment for uc2.bin.
 #              UC2_PRECMD="..." a console command bound to F1 (run tree's DefUser.ini) and pressed 4 s before
 #              Fire, e.g. "set UCDeathmatch NumPlayers 0" so the first PlayerStart is always the spawn (pinned).
+#              UC2_POSTCMD="..." a console command bound to F2 and pressed once after the spawn (e.g. "Ghost":
+#              the walk then goes through walls, from zone to zone).
 # What is fixed: duration, URL, the input script (its random generator is seeded), output names. What is not:
 # the game itself (bot AI, frame timing under software GL), so cue counts differ a little from run to run.
 # Last line: "SUMMARY <name>: ..." (duration, peak, RMS, silent seconds, cue requests by outcome).
@@ -26,6 +28,12 @@ out=$work/logs/$tree
 mkdir -p "$out"
 sed -i '/^Suppress=DevSound\r\?$/d' "$sys/Default.ini"
 rm -f "$sys/Avaris.ini" "$out/$name.wav"
+postcmd=0
+if [ -n "${UC2_POSTCMD:-}" ]; then
+  sed -i -E "s/^F2=.*/F2=${UC2_POSTCMD}/" "$sys/DefUser.ini"
+  rm -f "$sys/User.ini"
+  postcmd=1
+fi
 precmd=0
 if [ -n "${UC2_PRECMD:-}" ]; then
   sed -i -E "s/^F1=.*/F1=${UC2_PRECMD}/" "$sys/DefUser.ini"
@@ -40,7 +48,7 @@ env ${UC2_AUDIO_ENV:-} ./uc2.bin "$url" -log -audiowave="$out/$name.wav" "\$@" >
 pid=\$!
 if [ "$fire" != 0 ]; then
   sleep \$(( $fire - 4 ))
-  python3 - $(( secs - fire - 6 )) $precmd <<'PY'
+  python3 - $(( secs - fire - 6 )) $precmd $postcmd <<'PY'
 import ctypes, sys, time, random
 x = ctypes.CDLL("libX11.so.6"); t = ctypes.CDLL("libXtst.so.6")
 x.XOpenDisplay.restype = ctypes.c_void_p
@@ -62,6 +70,8 @@ t.XTestFakeMotionEvent(d, -1, 320, 240, 0); x.XFlush(d)
 for i in range(3):                      # Fire: start the match (as tools/dev/run-uc2-shot.sh)
     button(1, 1); time.sleep(0.2); button(1, 0); time.sleep(1.0)
 time.sleep(4)                           # spawn
+if sys.argv[3] == '1':                  # the F2 command (UC2_POSTCMD), once
+    key(b"F2", 1); time.sleep(0.15); key(b"F2", 0); time.sleep(0.5)
 end = time.time() + int(sys.argv[1])
 random.seed(7)
 while time.time() < end:                # walk forward, turn now and then, jump, fire in bursts
