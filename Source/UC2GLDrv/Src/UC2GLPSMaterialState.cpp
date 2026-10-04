@@ -366,7 +366,7 @@ void FOpenGLPSMaterialStateHandlers::SetMatState_PS_Distortion( UPixelShaderMate
 
 	// UC2GLDrv (M7): D3DDrv's "#ifdef _XBOX" is the device's post-process switch; the
 	// "#else" branch below is PC's (and M6's) state.
-	if( RI->RenDev->UsePostProcess )
+	if( RI->RenDev->PostProcessActive() )
 	{
 	// scion sz -
 	// current stage of post processing

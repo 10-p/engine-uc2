@@ -244,7 +244,10 @@ void UPSDistortionMaterial::PreRender(FRenderInterface* RI)
 {
 	guard(UPSDistortionBaseMaterial::PreRender);
 
-#ifdef _XBOX
+	// UC2 port (M7): was "#ifdef _XBOX" / "#else"; the Xbox branch runs when the render device
+	// has the post-process capability (FRenderCaps::XboxPostProcess), PC's otherwise.
+	if( RenDevHasXboxPostProcess() )
+	{
 	Super::PreRender(RI);
 
 	switch( RI->GetPostProcessStage() )
@@ -267,11 +270,13 @@ void UPSDistortionMaterial::PreRender(FRenderInterface* RI)
 		}
 		break;
 	}
-#else
+	}
+	else
+	{
 
 	TextureStage1 = Mask;
 
-#endif
+	}
 
 	unguard;
 }
@@ -290,7 +295,10 @@ void UPSBlendedDistortionMaterial::PreRender(FRenderInterface* RI)
 	guard(UPSBlendedDistortionMaterial::PreRender);
 	Super::PreRender(RI);
 
-#ifdef _XBOX
+	// UC2 port (M7): was "#ifdef _XBOX" / "#else"; the Xbox branch runs when the render device
+	// has the post-process capability (FRenderCaps::XboxPostProcess), PC's otherwise.
+	if( RenDevHasXboxPostProcess() )
+	{
 	switch( RI->GetPostProcessStage() )
 	{
 	case FRenderInterface::PP_STAGE_ACCUMULATE:
@@ -311,11 +319,13 @@ void UPSBlendedDistortionMaterial::PreRender(FRenderInterface* RI)
 		}
 		break;
 	}
-#else
+	}
+	else
+	{
 
 	TextureStage1 = Diffuse;
 
-#endif
+	}
 
 	unguard;
 }
@@ -334,7 +344,10 @@ void UPSDistortionBaseMaterial::PreRender(FRenderInterface* RI)
 	guard(UPSDistortionBaseMaterial::PreRender);
 	Super::PreRender(RI);
 
-#ifdef _XBOX
+	// UC2 port (M7): was "#ifdef _XBOX" / "#else"; the Xbox branch runs when the render device
+	// has the post-process capability (FRenderCaps::XboxPostProcess), PC's otherwise.
+	if( RenDevHasXboxPostProcess() )
+	{
 	switch( RI->GetPostProcessStage() )
 	{
 	case FRenderInterface::PP_STAGE_ACCUMULATE:
@@ -373,15 +386,39 @@ void UPSDistortionBaseMaterial::PreRender(FRenderInterface* RI)
 		break;
 		
 	}
-#else
+	}
+	else
+	{
 
 	TextureStage0 = DistortionMaterial;
 	//TextureStage1 - set by subclass
 
-#endif
+	}
 
 	unguard;
 }
+
+//
+// UC2 port (M7): PSDistortionBaseMaterial's cpptext declares these two outside _XBOX; they
+// give PC's answers ("so that something would be drawn on the PC": no post-process list,
+// always sorted as translucent) unless the render device has the post-process capability,
+// and then the Xbox ones (the inline body in the _XBOX branch of the class).
+//
+#ifndef _XBOX
+EPostProcessMaterialType UPSDistortionBaseMaterial::IsPostProcess()
+{
+	if( !RenDevHasXboxPostProcess() )
+		return POSTPROCESS_NONE;
+	return RequiresSorting() ? POSTPROCESS_BLEND : POSTPROCESS_NOBLEND; 
+}
+
+UBOOL UPSDistortionBaseMaterial::RequiresSorting()
+{
+	if( !RenDevHasXboxPostProcess() )
+		return 1;
+	return Super::RequiresSorting();
+}
+#endif
 
 //
 // UPSDistortionMaterial::Destroy
@@ -799,7 +836,10 @@ FORCEINLINE void ApplyViewportXForm( FMatrix& M, UViewport* Viewport )
 void UPSBackBufferEffect::PreRender(FRenderInterface* RI)
 {
 	guard(UPSBackBufferEffect::PreRender);
-#ifdef _XBOX
+	// UC2 port (M7): was "#ifdef _XBOX" / "#else"; the Xbox branch runs when the render device
+	// has the post-process capability (FRenderCaps::XboxPostProcess), PC's otherwise.
+	if( RenDevHasXboxPostProcess() )
+	{
 	// This allows the back buffer to use standard UV coords
 	DECLARE_STATIC_UOBJECT(UTexMatrix,BackBufferTexMatrix, 
 	{
@@ -817,10 +857,12 @@ void UPSBackBufferEffect::PreRender(FRenderInterface* RI)
 	BackBufferEnvMap->Material = BackBufferTexMatrix;
 	// Set the stages
 	TextureStage0 = BackBufferEnvMap;
-#else
+	}
+	else
+	{
 	// Set the stages
 	TextureStage0 = DefaultMaterial;
-#endif
+	}
 	TextureStage1 = Mask;
 	// Figure out which shader to use
 	PixelShaderType = Mask ? PS_MaskedLuminance : PS_LuminanceTexIndex;
@@ -838,7 +880,10 @@ void UPSBackBufferEffect::PreRender(FRenderInterface* RI)
 void UPSPlayerCamMaterial::PreRender(FRenderInterface* RI)
 {
 	guard(UPSPlayerCamMaterial::PreRender);
-#ifdef _XBOX
+	// UC2 port (M7): was "#ifdef _XBOX" / "#else"; the Xbox branch runs when the render device
+	// has the post-process capability (FRenderCaps::XboxPostProcess), PC's otherwise.
+	if( RenDevHasXboxPostProcess() )
+	{
 	// This allows the back buffer to use standard UV coords
 	DECLARE_STATIC_UOBJECT(UTexMatrix,PlayerCamMatrix, 
 	{
@@ -856,10 +901,12 @@ void UPSPlayerCamMaterial::PreRender(FRenderInterface* RI)
 	// Figure out which pixel shader to use
 	PixelShaderType = (NoiseMask == NULL) ? PS_PlayerCam :
 		(Noise2 == NULL) ? PS_PlayerCamNoise : PS_PlayerCamTwoNoise;
-#else
+	}
+	else
+	{
 	// Set the stages
 	TextureStage0 = DefaultMaterial;
-#endif
+	}
 	unguard;
 }
 
@@ -890,7 +937,10 @@ void UPSDiffuseOpacity::PreRender(FRenderInterface* RI)
 void UPSColorRemapMaterial::PreRender(FRenderInterface* RI)
 {
 	guard(UPSColorRemapMaterial::PreRender);
-#ifdef _XBOX
+	// UC2 port (M7): was "#ifdef _XBOX" / "#else"; the Xbox branch runs when the render device
+	// has the post-process capability (FRenderCaps::XboxPostProcess), PC's otherwise.
+	if( RenDevHasXboxPostProcess() )
+	{
 	// For effects that need to control the tex matrix
 	if (bSetBackbufferManually == 0)
 	{
@@ -907,10 +957,12 @@ void UPSColorRemapMaterial::PreRender(FRenderInterface* RI)
 		// The backbuffer to sample
 		TextureStage0 = BackBufferTexMatrix;
 	}
-#else
+	}
+	else
+	{
 	// Just use the default texture
 	TextureStage0 = DefaultMaterial;
-#endif
+	}
 	if (bGrayScaleOnly == FALSE)
 	{
 		// These are put in both stages since we are doing a texm3x2

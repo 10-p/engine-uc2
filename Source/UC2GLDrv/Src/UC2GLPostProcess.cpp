@@ -297,7 +297,7 @@ static void UC2GL_CreateColorTarget( UUC2GLRenderDevice* RenDev, GLuint& Texture
 //
 GLuint UUC2GLRenderDevice::GetSampledTexture( FOpenGLTexture* Texture )
 {
-	if( Texture->IsDefaultTarget && UsePostProcess )
+	if( Texture->IsDefaultTarget && PostProcessActive() )
 	{
 		GLuint Copy = Texture->DefaultUsage == FRenderTarget::RT_MATERIAL_USE_DEPTHBUFFER ? DepthColorTexture : SnapshotTexture;
 		return Copy ? Copy : NullTextureID;
@@ -313,7 +313,7 @@ void UUC2GLRenderDevice::UpdateSampledTexture( FOpenGLTexture* Texture )
 {
 	guard(UUC2GLRenderDevice::UpdateSampledTexture);
 
-	if( !Texture->IsDefaultTarget || !UsePostProcess || !PostCopyProgram )
+	if( !Texture->IsDefaultTarget || !PostProcessActive() )
 		return;
 
 	// The main framebuffer is bottom row first, the copy top row first.
@@ -405,7 +405,7 @@ void FOpenGLRenderInterface::RestoreAfterDeviceDraw()
 void FOpenGLRenderInterface::PrepareSampledTargets( FOpenGLMaterialState* MaterialState )
 {
 	UBOOL Nudge = 0;
-	if( RenDev->UsePostProcess )
+	if( RenDev->PostProcessActive() )
 	{
 		INT StagesUsed = Min<INT>( MaterialState->StagesUsed, RenDev->NumTextureUnits );
 		for( INT s=0; s<StagesUsed; s++ )
@@ -441,7 +441,7 @@ UMaterial* FOpenGLRenderInterface::GetBackBufferMaterial()
 	guard(FOpenGLRenderInterface::GetBackBufferMaterial);
 
 	// UC2GLDrv: D3DDrv's "#ifndef _XBOX return NULL;" is the device's switch.
-	if( !RenDev->UsePostProcess )
+	if( !RenDev->PostProcessActive() )
 		return NULL;
 
 	DECLARE_STATIC_UOBJECT(	UProxyBitmapMaterial, BackBufferMaterial, {});
@@ -466,7 +466,7 @@ FRenderTarget* FOpenGLRenderInterface::GetBackBufferCopyTarget()
 
 	// UC2GLDrv: PC's D3DDrv would dereference GetBackBufferMaterial()'s NULL here; nothing
 	// on PC calls it. Without post-processing: what M5 returned.
-	if( !RenDev->UsePostProcess )
+	if( !RenDev->PostProcessActive() )
 		return BackBufferCopyTarget;
 
 	// get a back buffer material
@@ -516,7 +516,7 @@ void FOpenGLRenderInterface::UpdateBackBufferCopyTarget( UViewport* InViewport )
 	guard(FOpenGLRenderInterface::UpdateBackBufferCopyTarget);
 
 	// UC2GLDrv: D3DDrv's "#ifndef _XBOX return;".
-	if( !RenDev->UsePostProcess || !RenDev->PixelShaderFamilyReady( PS_Blur ) )
+	if( !RenDev->PostProcessActive() || !RenDev->PixelShaderFamilyReady( PS_Blur ) )
 		return;
 
 	if( !InViewport )
@@ -623,7 +623,7 @@ UMaterial* FOpenGLRenderInterface::GetBackBufferCopyMaterial()
 	guard(FOpenGLRenderInterface::GetBackBufferCopyMaterial);
 
 	// UC2GLDrv: D3DDrv's "#ifndef _XBOX return NULL;".
-	if( !RenDev->UsePostProcess )
+	if( !RenDev->PostProcessActive() )
 		return NULL;
 
 	if( !BackBufferCopyTarget )
@@ -657,7 +657,7 @@ void FOpenGLRenderInterface::CopyDepthBuffer( FRenderTarget* DestTarget, FRender
 {
 	guard(FOpenGLRenderInterface::CopyDepthBuffer);
 
-	if( !RenDev->UsePostProcess || !RenDev->PostDepthCopyProgram || !DestTarget )
+	if( !RenDev->PostProcessActive() || !RenDev->PostDepthCopyProgram || !DestTarget )
 		return;
 	if( SrcTarget && SrcTarget != RenDev->DefaultRenderTarget )
 	{
@@ -1117,7 +1117,7 @@ void FOpenGLRenderInterface::UpdateDynamicGamma()
 	guard(FOpenGLRenderInterface::UpdateDynamicGamma);
 
 	// UC2GLDrv: D3DDrv's "#ifndef _XBOX return;".
-	if( !RenDev->UsePostProcess || !RenDev->PixelShaderFamilyReady( PS_LuminanceTexIndex ) )
+	if( !RenDev->PostProcessActive() || !RenDev->PixelShaderFamilyReady( PS_LuminanceTexIndex ) )
 		return;
 
 	if( !DynamicGamma )

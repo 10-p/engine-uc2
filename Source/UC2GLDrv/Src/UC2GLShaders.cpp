@@ -532,7 +532,7 @@ void UUC2GLRenderDevice::InitPixelShaders()
 	{
 		if( !GUC2GLPixelShaders[Type].Source )
 			PixelShaderState[Type] = PSS_None;
-		else if( UC2GL_IsM7PixelShader(Type) && !UsePostProcess )
+		else if( UC2GL_IsM7PixelShader(Type) && !(UsePostProcess && PostCopyProgram) )
 		{
 			PixelShaderState[Type] = PSS_M7;
 			M7++;

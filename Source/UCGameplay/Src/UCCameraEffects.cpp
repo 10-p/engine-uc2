@@ -62,7 +62,10 @@ void UUCScreenBlur::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenBlur::PostRender);
 #ifndef _XBOX
-	return;
+	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
+	if( !RenDevHasXboxPostProcess() )
+		return;
 #endif
 	// Bail if we are not rendering any more. Disable to prevent further calls
 	if (BlurMaterial == NULL || BlurTime <= 0.f)
@@ -119,19 +122,39 @@ UUCScreenDOF::UUCScreenDOF()
 {
 	guard(UUCScreenDOF::UUCScreenDOF);
 #ifdef _XBOX
+	InitSharedDOFResources();
+#else
+	// UC2 port (M7): Epic's Xbox-only construction (the shared material and its reference
+	// count). The render device may not exist yet when an effect object is constructed, and
+	// its capability can be switched while the game runs, so PreRender does it on first use
+	// instead (InitSharedDOFResources below; PixelShaderDOFMaterial says whether this object
+	// holds a reference). Without the capability nothing is allocated, as before.
+	PixelShaderDOFMaterial = NULL;
+	if( RenDevHasXboxPostProcess() )
+		InitSharedDOFResources();
+#endif
+	unguard;
+}
+
+//
+//	UUCScreenDOF::InitSharedDOFResources: the body of Epic's Xbox constructor.
+//
+void UUCScreenDOF::InitSharedDOFResources()
+{
+	guard(UUCScreenDOF::InitSharedDOFResources);
 	//jg -- Only initialize these once
 	if (DOFResourceRefCount == 0)
 	{
 		check(SharedPixelShaderDOFMaterial == NULL);
 		SharedPixelShaderDOFMaterial = ConstructObject<UPSDepthOfFieldMaterial>( UPSDepthOfFieldMaterial::StaticClass() );		
 	}
-	BlurTargets.AddZeroed( 2 );
+	if( BlurTargets.Num() < 2 )
+		BlurTargets.AddZeroed( 2 - BlurTargets.Num() );
 	// Keep this update to date with the number of instances
 	DOFResourceRefCount++;
 	// Get a pointer to the one and only material
 	PixelShaderDOFMaterial = SharedPixelShaderDOFMaterial;
 	PixelShaderDOFMaterial->AlphaRef = AlwaysOnAlphaRef;
-#endif
 	unguard;
 }
 
@@ -142,7 +165,11 @@ void UUCScreenDOF::Destroy()
 {
 	guard(UUCScreenDOF::Destroy);
 	Super::Destroy();
-#ifdef _XBOX
+#ifndef _XBOX
+	// UC2 port (M7): only an object that took its reference (see the constructor).
+	if( PixelShaderDOFMaterial != NULL )
+#endif
+	{
 	//jg -- Keep this update to date with the number of instances
 	check(DOFResourceRefCount > 0);
 	DOFResourceRefCount--;
@@ -155,8 +182,9 @@ void UUCScreenDOF::Destroy()
 			SharedPixelShaderDOFMaterial = NULL;
 		}		
 	}
+	PixelShaderDOFMaterial = NULL;
 	DestroyRenderTargets();
-#endif
+	}
 	unguard;
 }
 
@@ -183,7 +211,16 @@ void UUCScreenDOF::PreRender(UViewport* Viewport,FRenderInterface* RI)
 	guard(UUCScreenDOF::PreRender);
 
 #ifndef _XBOX
-	return;
+	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
+	if( !RenDevHasXboxPostProcess() )
+		return;
+#endif
+
+#ifndef _XBOX
+	// UC2 port (M7): see the constructor.
+	if( PixelShaderDOFMaterial == NULL )
+		InitSharedDOFResources();
 #endif
 
 	// use default render target for source
@@ -241,7 +278,10 @@ void UUCScreenDOF::PostRender(UViewport* Viewport,FRenderInterface* RI)
 	guard(UUCScreenDOF::PostRender);
 
 #ifndef _XBOX
-	return;
+	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
+	if( !RenDevHasXboxPostProcess() )
+		return;
 #endif
 
 	checkSlow( PixelShaderDOFMaterial );
@@ -264,6 +304,16 @@ void UUCScreenDOF::PostRender(UViewport* Viewport,FRenderInterface* RI)
 			bNeedsAbsoluteUpdate = 0;
 			ModulateBlurColor.A = AbsoluteBlurAlpha;
 		}
+#ifndef _XBOX
+		// UC2 port (M7), for the owner's review (docs/porting/analysis/runtime-port.md,
+		// "Deviation"): script puts ThirdPersonAlpha (100) or FirstPersonAlpha (65) into
+		// AbsoluteBlurAlpha per camera mode. Epic's header had fallen behind the script, so
+		// the shipped binary read the byte at FirstPersonAlpha's place here: always 65. We
+		// read what script intends; a device can ask for the shipped value
+		// (FRenderCaps::ShippedDOFBlurAlpha; UC2GLDrv: DOFShippedBlurAlpha / DOFSHIPPEDALPHA).
+		// Set on every frame so that the switch takes effect at once.
+		ModulateBlurColor.A = Viewport->RenDev->GetRenderCaps()->ShippedDOFBlurAlpha ? FirstPersonAlpha : AbsoluteBlurAlpha;
+#endif
 		break;
 	}
 	case DOF_Manual:
@@ -474,7 +524,10 @@ void UUCScreenMotionBlur::PreRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenMotionBlur::PreRender);
 #ifndef _XBOX
-	return;
+	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
+	if( !RenDevHasXboxPostProcess() )
+		return;
 #endif
 
 	// -- use default render target for source
@@ -499,7 +552,10 @@ void UUCScreenMotionBlur::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenMotionBlur::PostRender);
 #ifndef _XBOX
-	return;
+	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
+	if( !RenDevHasXboxPostProcess() )
+		return;
 #endif
 
 	if( !PixelShaderMotionBlurMaterial )
@@ -618,7 +674,10 @@ void UUCScreenHeatShimmer::PreRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenHeatShimmer::PreRender);
 #ifndef _XBOX
-	return;
+	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
+	if( !RenDevHasXboxPostProcess() )
+		return;
 #endif
 
 	unguard;
@@ -631,7 +690,10 @@ void UUCScreenHeatShimmer::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenHeatShimmer::PostRender);
 #ifndef _XBOX
-	return;
+	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
+	if( !RenDevHasXboxPostProcess() )
+		return;
 #endif
 
 	if( !PixelShaderDistortionMaterial )
@@ -678,7 +740,10 @@ void UUCScreenRadialBlur::PreRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenRadialBlur::PreRender);
 #ifndef _XBOX
-	return;
+	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
+	if( !RenDevHasXboxPostProcess() )
+		return;
 #endif
 	unguard;
 }
@@ -690,7 +755,10 @@ void UUCScreenRadialBlur::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenRadialBlur::PostRender);
 #ifndef _XBOX
-	return;
+	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
+	if( !RenDevHasXboxPostProcess() )
+		return;
 #endif
 
 	if( !PixelShaderMotionBlurMaterial )
@@ -817,7 +885,10 @@ void UUCScreenBloom::PreRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenBloom::PreRender);
 #ifndef _XBOX
-	return;
+	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
+	if( !RenDevHasXboxPostProcess() )
+		return;
 #endif
 
 	// use default render target for source
@@ -888,8 +959,11 @@ void UUCScreenBloom::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenBloom::PostRender);
 #ifndef _XBOX
-	return;
-#endif		
+	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
+	if( !RenDevHasXboxPostProcess() )
+		return;
+#endif
 
 	checkSlow( PixelShaderBloomMaterial );
 	checkSlow( SelectTarget && BlurTargets(0) && BlurTargets(1) );
@@ -1081,7 +1155,10 @@ void UUCScreenEmissive::PreRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenEmissive::PreRender);
 #ifndef _XBOX
-	return;
+	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
+	if( !RenDevHasXboxPostProcess() )
+		return;
 #endif
 
 	// use default render target for source
@@ -1178,7 +1255,10 @@ void UUCScreenEmissive::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenEmissive::PostRender);
 #ifndef _XBOX
-	return;
+	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
+	if( !RenDevHasXboxPostProcess() )
+		return;
 #endif
 
 	checkSlow( SelectTarget && BackBufferTarget && NumBlurTargets == BlurTargets.Num() );
@@ -1565,7 +1645,10 @@ void UUCScreenBerserk::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenBerserk::PostRender);
 #ifndef _XBOX
-	return;
+	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
+	if( !RenDevHasXboxPostProcess() )
+		return;
 #endif
 	// jg -- Use the global screen prim so we don't have to recalc the
 	// canvas to screen matrix unless there was a size change
@@ -1706,7 +1789,10 @@ void UUCScreenMenuPause::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenMenuPause::PostRender);
 #ifndef _XBOX
-	return;
+	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
+	if( !RenDevHasXboxPostProcess() )
+		return;
 #endif
 	// jg -- Use the global screen prim so we don't have to recalc the
 	// canvas to screen matrix unless there was a size change
@@ -1807,7 +1893,11 @@ IMPLEMENT_CLASS(UUCScreenSniperOverlay);
 void UUCScreenSniperOverlay::PreRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenSniperOverlay::PreRender);
-#ifdef _XBOX
+#ifndef _XBOX
+	// UC2 port (M7): Xbox-only until the render device can post-process (FRenderCaps::XboxPostProcess).
+	if( RenDevHasXboxPostProcess() )
+#endif
+	{
 	// Create our depth of field effect if not already created
 	if (DOFOverlay == NULL)
 	{
@@ -1828,7 +1918,7 @@ void UUCScreenSniperOverlay::PreRender(UViewport* Viewport,FRenderInterface* RI)
 	// Forward the call on to our aggregated effects
 	DOFOverlay->PreRender(Viewport,RI);
 	RadialBlurOverlay->PreRender(Viewport,RI);
-#endif
+	}
 	unguard;
 }
 
@@ -1847,7 +1937,12 @@ void UUCScreenSniperOverlay::PreRender(UViewport* Viewport,FRenderInterface* RI)
 void UUCScreenSniperOverlay::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenSniperOverlay::PostRender);
-#ifdef _XBOX
+#ifndef _XBOX
+	// UC2 port (M7): Xbox-only until the render device can post-process; the overlays exist
+	// once PreRender ran with the capability.
+	if( RenDevHasXboxPostProcess() && DOFOverlay != NULL && RadialBlurOverlay != NULL )
+#endif
+	{
 	checkSlow(DOFOverlay != NULL && RadialBlurOverlay != NULL);
 	// Update the global screen prim util
 	GScreenPrimUtil.Update(Viewport->SizeX,Viewport->SizeY,RI);
@@ -1859,7 +1954,7 @@ void UUCScreenSniperOverlay::PostRender(UViewport* Viewport,FRenderInterface* RI
 	RadialBlurOverlay->PostRender(Viewport,RI);
 	// Now render our color remapping
 	RenderEffect(Viewport,RI);
-#endif
+	}
 	unguard;
 }
 
@@ -2036,7 +2131,11 @@ UBOOL UUCScreenTeleportOverlay::UpdateFOVAndBlur(APlayerController* pPC)
 void UUCScreenTeleportOverlay::PreRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenTeleportOverlay::PreRender);
-#ifdef _XBOX
+#ifndef _XBOX
+	// UC2 port (M7): Xbox-only until the render device can post-process (FRenderCaps::XboxPostProcess).
+	if( RenDevHasXboxPostProcess() )
+#endif
+	{
 	// Create our radial blur effect if not already created
 	if (RadialBlurOverlay == NULL)
 	{
@@ -2064,7 +2163,7 @@ void UUCScreenTeleportOverlay::PreRender(UViewport* Viewport,FRenderInterface* R
 	LastTime = Viewport->Actor->Level->TimeSeconds;
 	// Forward the call on to our aggregated effects
 	RadialBlurOverlay->PreRender(Viewport,RI);
-#endif
+	}
 	unguard;
 }
 
@@ -2083,7 +2182,12 @@ void UUCScreenTeleportOverlay::PreRender(UViewport* Viewport,FRenderInterface* R
 void UUCScreenTeleportOverlay::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenTeleportOverlay::PostRender);
-#ifdef _XBOX
+#ifndef _XBOX
+	// UC2 port (M7): Xbox-only until the render device can post-process; the overlay exists
+	// once PreRender ran with the capability.
+	if( RenDevHasXboxPostProcess() && RadialBlurOverlay != NULL )
+#endif
+	{
 	checkSlow(RadialBlurOverlay != NULL);
 	// Update the global screen prim util
 	GScreenPrimUtil.Update(Viewport->SizeX,Viewport->SizeY,RI);
@@ -2091,7 +2195,7 @@ void UUCScreenTeleportOverlay::PostRender(UViewport* Viewport,FRenderInterface* 
 	RadialBlurOverlay->PostRender(Viewport,RI);
 	// Now render our color remapping
 	RenderEffect(Viewport,RI);
-#endif
+	}
 	unguard;
 }
 
@@ -2247,7 +2351,10 @@ void UUCScreenLiandri::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenLiandri::PostRender);
 #ifndef _XBOX
-	return;
+	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
+	if( !RenDevHasXboxPostProcess() )
+		return;
 #endif
 	// Render the effect everywhere Pawn's aren't
 	RI->SetStencilOp(CF_NotEqual,0xBE,0xFF,SO_Keep,SO_Keep,SO_Keep,

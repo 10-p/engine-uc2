@@ -64,6 +64,9 @@ public:
 	BYTE DefaultAlphaRef;
 
 	UUCScreenDOF();
+	// UC2 port (M7): the body of Epic's Xbox constructor, run on first use where the render
+	// device has the post-process capability (UCCameraEffects.cpp).
+	void InitSharedDOFResources();
 
 	// UObject interface.
 	void Destroy();

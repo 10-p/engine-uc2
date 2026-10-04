@@ -776,13 +776,17 @@ struct FRenderCaps
 	// the code that drives it for Xbox only; where this is set that code runs instead of the
 	// PC branch (RenDevHasXboxPostProcess below). 0 for every device that does not set it.
 	UBOOL	XboxPostProcess;
+	// UC2 port (M7): not a capability but a review switch a device can expose: 1 = the always-on
+	// depth of field takes its blur alpha as the shipped binary did (UUCScreenDOF::PostRender).
+	UBOOL	ShippedDOFBlurAlpha;
 
 	// set default render caps in constructor
 	FRenderCaps()
 	:	MaxSimultaneousTerrainLayers(1),
 		PixelShaderVersion(0),
 		HardwareTL(0),
-		XboxPostProcess(0)
+		XboxPostProcess(0),
+		ShippedDOFBlurAlpha(0)
 	{}
 };
 

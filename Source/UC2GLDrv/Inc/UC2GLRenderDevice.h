@@ -214,6 +214,9 @@ public:
 	void InitGLState();
 
 	// Post-processing (UC2GLPostProcess.cpp).
+	// The one condition for everything M7 added: the ini switch, pixel shaders (the
+	// post-process materials are pixel-shader materials) and the copy programs.
+	FORCEINLINE UBOOL PostProcessActive() { return UsePostProcess && UsePixelShaders && PostCopyProgram; }
 	UBOOL InitPostProcess();
 	void ExitPostProcess();
 	void DestroyPostProcessTargets();

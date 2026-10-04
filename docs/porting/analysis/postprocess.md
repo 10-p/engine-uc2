@@ -118,3 +118,61 @@ UC2_RES=1280x720 UC2_PRECMD="set UCDeathmatch NumPlayers 0" tools/dev/run-uc2-sh
 the two, and to M6's `coord-deadbolt-0.png`, are inside the box x 58-756, y 48-720 (the animated character,
 the spinning pickup, the HUD), which also differs between two M6 runs. Only the per-frame back-buffer copy and
 the luminance pass run at this point (programs `Blur`, `LuminanceTexIndex`).
+
+## P2. The engine and game gates, behind one capability
+
+**The capability**: `FRenderCaps::XboxPostProcess` (`Source/Engine/Inc/UnRenDev.h`; `FRenderCaps` is a plain C++
+struct, not mirrored in script), default 0, set by `UUC2GLRenderDevice::GetRenderCaps` when
+`PostProcessActive()` (ini switch on, pixel shaders on, copy programs built). The engine and the game ask
+through one function, `ENGINE_API UBOOL RenDevHasXboxPostProcess()` (`UnRenderResource.cpp`): false without a
+client or a render device (dedicated server, commandlets), for `Engine.NullRenderDevice` (its caps are the
+struct's defaults) and for any device that leaves the field unset. `_XBOX` is not defined anywhere; both
+branches of every lifted gate are kept; the Xbox branch is the body that runs with the capability.
+
+Design F1 names three places; reading the code there are five kinds of site. All of them:
+
+| # | File, function | Epic's gate | Now | Without the capability (null device, `UsePostProcess=False`, any other device) |
+|---|---|---|---|---|
+| 1 | `Engine/Inc/EngineClasses.h` + `Engine/Classes/PSDistortionBaseMaterial.uc` (cpptext), `UPSDistortionBaseMaterial::IsPostProcess`, `RequiresSorting` | `#ifdef _XBOX` inline: `RequiresSorting() ? BLEND : NOBLEND`; `#else` inline: `POSTPROCESS_NONE`, sorting 1 ("added so that something would be drawn on the PC") | the `#else` branch declares the two virtuals; `UnPixelShaderMaterial.cpp` defines them: with the capability the Xbox answers (`Super::RequiresSorting()`), otherwise PC's | `POSTPROCESS_NONE` and 1, as before: distortion materials are sorted as translucent and never enter the post-process list |
+| 2 | `Engine/Src/UnRender.cpp`, `FPostProcessRender::Render` | body after the `PPDrawList` test in `#ifdef _XBOX` | `#ifndef _XBOX  if( !RenDevHasXboxPostProcess() ) return;  #endif`, then the body | returns; and the list is empty anyway (site 1), so it returned at the test above, as before |
+| 3 | `Engine/Src/UnPixelShaderMaterial.cpp`: `UPSDistortionMaterial::PreRender`, `UPSBlendedDistortionMaterial::PreRender`, `UPSDistortionBaseMaterial::PreRender`, `UPSBackBufferEffect::PreRender`, `UPSPlayerCamMaterial::PreRender`, `UPSColorRemapMaterial::PreRender` | `#ifdef _XBOX` ... `#else` ... `#endif` | `if( RenDevHasXboxPostProcess() ) { Xbox branch } else { PC branch }` | the PC branch, text unchanged |
+| 4 | `UCGameplay/Src/UCCameraEffects.cpp`, 16 functions (`UUCScreenBlur::PostRender`; `PreRender` and `PostRender` of `UUCScreenDOF`, `MotionBlur`, `HeatShimmer`, `RadialBlur`, `Bloom`, `Emissive`; `PostRender` of `UUCScreenBerserk`, `MenuPause`, `Liandri`) | `#ifndef _XBOX  return;  #endif` | `#ifndef _XBOX  if( !RenDevHasXboxPostProcess() ) return;  #endif` | returns at the same place |
+| 5 | `UCCameraEffects.cpp`, `UUCScreenSniperOverlay::PreRender/PostRender`, `UUCScreenTeleportOverlay::PreRender/PostRender` | whole body in `#ifdef _XBOX` | `if( RenDevHasXboxPostProcess() ) { body }` (the two `PostRender`s also want their overlays to exist) | body skipped, as before |
+| 6 | `UCCameraEffects.cpp`, `UUCScreenDOF::UUCScreenDOF`, `Destroy` (+ `Inc/UCCameraEffects.h`: one non-virtual member function declared) | constructor and destructor bodies in `#ifdef _XBOX` (the shared `UPSDepthOfFieldMaterial` and its reference count) | the constructor body is `InitSharedDOFResources()`, called from the constructor if the capability is there at that moment and otherwise from `PreRender` on first use; `Destroy` releases only if this object took a reference (`PixelShaderDOFMaterial != NULL`) | nothing allocated; the only difference to before: the constructor writes `PixelShaderDOFMaterial = NULL` (it was the property default, None) |
+| 7 | `UCCameraEffects.cpp`, `UUCScreenDOF::PostRender` | (none; `RI->InsertFence()` stays `_XBOX`) | the review switch for the blur alpha, see P3 | not reached (site 4) |
+
+Not gates of the engine, and unchanged: `FLevelSceneNode::Render` calls `PreRender`/`PostRender` of the camera
+effects, `RI->UpdateBackBufferCopyTarget()` and `RI->UpdateDynamicGamma()` on every platform already
+(`UnRender.cpp` 2140-2225); on PC it was the D3D driver that returned early. `UPSRefractionMaterial::PreRender`,
+`FilterCopyRenderTarget`, `FRenderTargetPool`, `FAuxRenderTarget` were never gated. `UClient::Init`'s
+`#ifdef _XBOX DynamicGamma = 1; LuminosityBias = 1.0f;` is left alone (the device does not exist yet at that
+point); the driver treats a `LuminosityBias` of 0 as 1 (P3).
+
+Class layouts: no member added to any script-mirrored class (`verifyclasses` in the gate). `EngineClasses.h`
+and the `.uc` cpptext were changed together.
+
+**Switching at run time** (`POSTPROCESS [0|1]`, `-glpptoggle=`): the engine caches per actor which draw list it
+is on (`FDynamicActor::UpdateSorting`, `UParticleEmitter::HasPostProcessMaterial`), from `IsPostProcess()`.
+`UUC2GLRenderDevice::SetPostProcess` therefore sets `bSkinsChanged` on every actor and clears the emitters'
+cached value. The materials' `TextureStageN` are written by `PreRender` in both modes, but the PC branch of
+the distortion classes writes only stage 1 (it relies on the serialized stage 0), so **switching from on to
+off in one run does not restore the exact M6 state of a distortion material; off to on is clean**. A/B pictures
+are therefore taken with the run starting off (`-nopostprocess -glshot=a,b -glpptoggle=t`, a < t < b).
+
+### Evidence (P1 + P2)
+
+```
+UC2_RES=1280x720 UC2_PRECMD="set UCDeathmatch NumPlayers 0" tools/dev/run-uc2-shot.sh m7 p2-deadbolt 100 34 DM-Deadbolt -glerrors -nopostprocess -glshot=42,52 -glpptoggle=47
+  0 Critical; frame 1800, 0 GL errors so far; programs: 14 linked, 0 failed; fragment shaders 84 compiled, 0 failed
+  programs linked after the switch: Blur, DOF, MotionBlur, BloomSelect, EmissiveSelectBlur, LuminanceTexIndex, ColorRemap
+```
+
+- `p2-deadbolt-0.png` (off) against M6's `logs/m6/coord-deadbolt-0.png`: **0 differing pixels for x >= 760**
+  (the static half of the frame); the differences (5.3% of the frame) are all inside x 58-743, y 48-720, the
+  animated character, the spinning pickup and the HUD, which differ between any two runs.
+- `p2-deadbolt-1.png` (on, same run and camera): the lamps glow. `p2-deadbolt-lamp-off-on.png` (2x crop, off
+  left, on right): the four green lamps under the poster and the fluorescent tube have a soft halo that is
+  not there with post-processing off; nothing is displaced, mirrored or lagging. `p2-deadbolt-diff-x6.png`
+  (difference x6): glow around every emissive element (lamps, the bright parts of the poster, the light strip
+  along the floor edge) and the animation of the character. The always-on depth of field is active too (program
+  `DOF`); in this small room its effect is a slight softening of the far wall.

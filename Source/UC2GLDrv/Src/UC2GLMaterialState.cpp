@@ -1369,7 +1369,7 @@ void FOpenGLRenderInterface::UpdateDOFRampLookupTexture( UMaterial* DOFShader, B
 	// UC2GLDrv (M7): the same computation with the texture written the GL way
 	// (UC2GLPostProcess.cpp); PC's D3DDrv has no body here.
 	extern void UC2GL_UpdateDOFRampLookupTexture( FOpenGLRenderInterface* RI, UMaterial* DOFShader, BYTE FocusType );
-	if( RenDev->UsePostProcess )
+	if( RenDev->PostProcessActive() )
 		UC2GL_UpdateDOFRampLookupTexture( this, DOFShader, FocusType );
 #endif //_XBOX
 }
@@ -1384,7 +1384,7 @@ void FOpenGLRenderInterface::HandlePSVertexShader( UMaterial* InMaterial, FOpenG
 	// UC2GLDrv (M7): D3DDrv's "#ifndef _XBOX return;" is the device's post-process switch.
 	// The constants go to the interface (uniforms of the GLSL ports of Distortion.vsh,
 	// DistortionAccum.vsh and ColorRemap.vsh, UC2GLShaders.cpp) instead of VSC_* registers.
-	if( !RenDev->UsePostProcess )
+	if( !RenDev->PostProcessActive() )
 		return;
 
 	UPixelShaderMaterial* PixelShaderMaterial = MaterialCast<UPixelShaderMaterial,MRH_PixelShaderMaterial>(InMaterial);

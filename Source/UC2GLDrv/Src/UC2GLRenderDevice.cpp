@@ -441,12 +441,13 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
 		glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_BGRA, GL_UNSIGNED_BYTE, &Black );
 
+		// Render-target post-processing (M7): the copy programs. Before the pixel shaders:
+		// which of those are compiled depends on it.
+		InitPostProcess();
+
 		// Programmable materials (M6): fragment shaders of every integrated pixel shader,
 		// vertex shaders of the VertexShaderConfigs.ini list.
 		InitPixelShaders();
-
-		// Render-target post-processing (M7): the copy programs.
-		InitPostProcess();
 	}
 
 	if( !CreateMainFramebuffer( Viewport->SizeX, Viewport->SizeY ) )
@@ -687,7 +688,7 @@ void UUC2GLRenderDevice::DrawPresentPass( UViewport* Viewport )
 	glUniform1i( PresentTextureLoc, 0 );
 	FLOAT Gamma = Max( PresentGamma, 0.01f );
 	glUniform4f( PresentGammaLoc, 1.f / Gamma, PresentContrast + 0.5f, (PresentBrightness - 0.5f) * 0.5f - PresentContrast * 0.5f + 0.25f, ApplyGamma ? 1.f : 0.f );
-	UBOOL UseRamp = GammaRampActive && GammaRampTexture && ApplyGamma && UsePostProcess;
+	UBOOL UseRamp = GammaRampActive && GammaRampTexture && ApplyGamma && PostProcessActive();
 	glUniform1f( PresentUseRampLoc, UseRamp ? 1.f : 0.f );
 	glUniform1i( PresentRampLoc, 1 );
 	if( UseRamp )
@@ -1140,7 +1141,8 @@ FRenderCaps* UUC2GLRenderDevice::GetRenderCaps()
 	RenderCaps.MaxSimultaneousTerrainLayers	= 1;
 	// M7: the one capability that lifts the engine's and the game's Xbox-only post-process
 	// paths (docs/porting/analysis/postprocess.md, "Engine gates").
-	RenderCaps.XboxPostProcess				= (UsePostProcess && UsePixelShaders && PostCopyProgram) ? 1 : 0;
+	RenderCaps.XboxPostProcess				= PostProcessActive() ? 1 : 0;
+	RenderCaps.ShippedDOFBlurAlpha			= DOFShippedBlurAlpha ? 1 : 0;
 	return &RenderCaps;
 }
 
