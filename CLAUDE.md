@@ -59,6 +59,8 @@ out-of-memory killer took down the owner's desktop session. These rules exist be
   under 6G). A ceiling above 16G for a single run needs a written reason in the notebook. The sum of
   everything running at once stays under 24G. `<WorkUC2>/bin/mem-watchdog` (warn at 16 GB machine-wide,
   kill all capped runs at 24 GB) should be running; start it if `pgrep -f mem-watchdog` finds nothing.
+- The game has sound since M8. `capped` sets `ALSOFT_DRIVERS=null` unless the caller sets it, so test runs never
+  play through the owner's desktop; audio tests choose the wave writer (`tools/dev/run-uc2-audio.sh`).
 - Exit 137 from `capped` means the ceiling was hit. **Do not retry unchanged.** Find out what is using the
   memory first (the engine's own stats, a smaller map, a heap profile under a lower ceiling).
 - Three failed attempts at the same step without a new diagnosis: stop, write down what is known in the
