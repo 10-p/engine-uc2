@@ -10,8 +10,8 @@ Revision history:
 	  registration from Source/XboxLaunch/Src/Launch.cpp, as Source/UCC/Src/UCC.cpp does it.
 	  Epic's SDL 1.2 version of this file is in git history (7633696).
 
-	Not here yet, by milestone: the GL render devices and their -*RENDERER switches (M5),
-	OpenAL audio (M8), movies (M9), pads (M10), the Emscripten main loop (M4w).
+	Not here yet, by milestone: OpenAL audio (M8), movies (M9), pads (M10), the Emscripten
+	main loop (M4w). The OpenGL render device (UC2GLDrv) is in since M5.
 =============================================================================*/
 
 #include "SDLLaunchPrivate.h"
@@ -33,6 +33,9 @@ Revision history:
 #include "GUI.h"
 #define SDL2DRV_REGISTRATION_ONLY
 #include "SDL2Drv.h"
+#if UC2_WITH_UC2GLDRV
+#include "UC2GLDrv.h"
+#endif
 #endif
 
 /*-----------------------------------------------------------------------------
@@ -265,6 +268,7 @@ struct FRenderSwitch { const TCHAR* Param; const TCHAR* Device; };
 static const FRenderSwitch GRenderSwitches[] =
 {
 	{ TEXT("NULLRENDERER"), TEXT("Engine.NullRenderDevice") },
+	{ TEXT("OPENGL"),       TEXT("UC2GLDrv.UC2GLRenderDevice") },	// M5
 };
 
 static void SelectRenderDevice()
@@ -462,6 +466,9 @@ int main( int argc, char** argv )
 		GNativeLookupFuncs[Lookup++] = &FindCoreUCommandletNative;
 		AUTO_INITIALIZE_REGISTRANTS_ENGINE;
 		AUTO_INITIALIZE_REGISTRANTS_SDL2DRV;
+#if UC2_WITH_UC2GLDRV
+		AUTO_INITIALIZE_REGISTRANTS_UC2GLDRV;
+#endif
 		AUTO_INITIALIZE_REGISTRANTS_IPDRV;
 		AUTO_INITIALIZE_REGISTRANTS_UWEB;
 		// UWeb's hand-written static header registers its classes but not its native lookups.
