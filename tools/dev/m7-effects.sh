@@ -4,6 +4,7 @@
 #   tools/dev/m7-effects.sh [<tree>] [effect ...]        default tree: m7; default: every effect
 #   tools/dev/m7-effects.sh m7 bloom praxis-panes
 #   tools/dev/m7-effects.sh list
+#   tools/dev/m7-effects.sh m7 selftest                   only the numeric self-test of the primitives
 #
 # Every effect is one run of the native client through tools/dev/run-uc2-shot.sh, i.e. inside
 # <WorkUC2>/bin/capped 2G with a time limit, headless (Xvfb, software GL), 1280x720, the first PlayerStart
@@ -41,7 +42,7 @@ bloom|DM-Deadbolt|1|100|34|post-processing off (M6)|on: emissive glow and bloom 
 blur|DM-Deadbolt|1|100|34|off|on + BlurMe (UUCScreenBlur, ConcussionBlur: displaced ghost copies)|-nopostprocess -glshot=44,56 -glpptoggle=48 -glexec=52:BlurMe
 berserk|DM-Deadbolt|1|100|34|off|on + berserk colour remap (scene in the ramp colours, pawn excluded)|-nopostprocess -glshot=44,56 -glpptoggle=48 -glexec=40:set+UCScreenBerserk+Enabled+1
 liandri|DM-Deadbolt|1|100|34|off|on + Liandri overlay (grey scale with noise)|-nopostprocess -glshot=44,56 -glpptoggle=48 -glexec=40:set+UCScreenLiandri+Enabled+1
-pause|DM-Deadbolt|1|100|34|off|on + pause-menu colour remap|-nopostprocess -glshot=44,56 -glpptoggle=48 -glexec=40:set+UCScreenMenuPause+Enabled+1
+pause|DM-Deadbolt|1|100|34|off|on + pause-menu colour remap (UCScreenMenuPause alone; its two subclasses switched off again)|-nopostprocess -glshot=44,56 -glpptoggle=48 -glexec=40:set+UCScreenMenuPause+Enabled+1@40.2:set+UCScreenComboFlash+Enabled+0@40.4:set+UCScreenComboSunFlare+Enabled+0
 radial|DM-Deadbolt|1|100|34|off|on + radial blur held at distance 30|-nopostprocess -glshot=44,56 -glpptoggle=48 -glexec=38:set+UCPlayerController+RadialBlurSpeed+0@38.2:set+UCPlayerController+RadialBlurMinChange+-1@38.4:set+UCScreenRadialBlur+RadialBlurDistance+30@40:set+UCScreenRadialBlur+Enabled+1
 dyngamma|DM-Deadbolt|1|100|34|on, dynamic gamma ramp applied to the picture|on, DYNAMICGAMMA 0 (no ramp in the picture)|-glshotramp -glshot=50,60 -glexec=54:DYNAMICGAMMA+0
 dof-alpha|DM-Azure|1|120|42|on, depth-of-field blur alpha as script sets it (third person: 100)|on, DOFSHIPPEDALPHA 1 (as the shipped binary: 65)|-glshot=56,68 -glexec=61:DOFSHIPPEDALPHA+1
@@ -68,6 +69,13 @@ anyd=ImageChops.lighter(ImageChops.lighter(r,g),bl).point(lambda v: 255 if v els
 print('mean=%.3f changed=%.2f%%' % (sum(ImageStat.Stat(d).mean)/3, 100*ImageStat.Stat(anyd).sum[0]/255/(a.size[0]*a.size[1])))
 PY
 }
+
+# The numeric self-test of the primitives (UC2GLSelfTest.cpp), unless effects were named and it is not among them.
+if [ "$want" = "  " ] || [ "${want#* selftest }" != "$want" ]; then
+  UC2_RES=1280x720 UC2_PRECMD="set UCDeathmatch NumPlayers 0" "$shot" "$tree" fx-selftest 60 34 DM-Deadbolt -glerrors -glexec=44:POSTSELFTEST > "$out/fx-selftest.report" 2>&1
+  grep -a "UC2GLDrv: selftest" "$out/fx-selftest.out" | sed -E 's/^UC2GLDrv: //; s/;.*//' | sed 's/^/fx /'
+  grep -a -q "selftest summary" "$out/fx-selftest.out" || echo "fx selftest: FAILED to run (see $out/fx-selftest.out)"
+fi
 
 echo "$EFFECTS" | while IFS='|' read -r name map pinned secs fire la lb args; do
   [ -n "$name" ] || continue

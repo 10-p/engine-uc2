@@ -308,3 +308,51 @@ How each effect is triggered from the console (bindable or through `-glexec`):
    orientation, depth encoding, depth copy, blur taps, DOF ramp, colour remap lookup). 3. The remaining
    effects on content (blended distortion, player cam, sniper overlay). 4. Gate a-e. 5. Projectors and
    terrain only if time remains and they can be verified.
+
+## P5a. Numeric self-test of the primitives (`UC2GLSelfTest.cpp`, commit `4ed20bc`)
+
+Console `POSTSELFTEST` (runs at the start of the next frame), command line `-glselftest`; through the script:
+`tools/dev/m7-effects.sh m7 selftest`. Known patterns are written into the main framebuffer (colour or depth)
+or into a render target, the operation runs through the same engine and driver path the game uses, the result
+is read back and compared with a CPU computation of what Epic's code specifies. Result on Mesa llvmpipe 4.5,
+1280x720, DM-Deadbolt (`logs/m7/selftest.out`):
+
+| Test | Operation | What is compared | Result |
+|---|---|---|---|
+| `snapshot` | the copy bound when a stage samples the back buffer | all 921,600 pixels, exact, top row first | PASS, error 0 (255 against the same picture upside down) |
+| `depth-color` | depth as the Xbox's B8G8R8A8 view of D24S8 | the 24-bit value rebuilt from blue/green/red, every pixel | PASS, largest error 2 units of 2^24 (half the values are 1-2 units off: the depth passes through a 32-bit float; the depth of field reads bits 23..8) |
+| `depth-copy` | `CopyDepthBuffer` into a half-size target | target pixel (x,y) = depth of back-buffer pixel (2x+1, 2y+1), every pixel | PASS, largest error 1 unit of 2^24, 0 pixels from a different texel |
+| `blur-h`, `blur-v` | `FilterCopyRenderTarget` with Epic's 1-2-2-1 kernels (`PS_Blur`), halving width / height | every pixel against sum of weight x bilinear sample at ((x+0.5)/w, (y+0.5)/h) + tap offset (+-1, +-3 texels) | PASS, largest error 1.0 of 255 |
+| `blur-box` | the same with the box kernel, same size | as above, taps (+-1,+-1), 0.25 each | PASS, 0.5 |
+| `bb-copy` | `UpdateBackBufferCopyTarget` 1280x720 -> 640x360 | every pixel, four taps at (+-1,+-1) back-buffer texels, 0.25 each | PASS, 1.44 |
+| `dof-ramp` | `PS_DepthOfField` drawn as `UUCScreenDOF` draws it, absolute mode, StartZ 0.98 | blend alpha per 16x16 block of constant depth against a bilinear lookup of the ramp texture at (middle byte, high byte); and against alpha = (z - 0.98)/0.02 | PASS, 0.72; against the formula 1.8 |
+| `remap` | `PS_ColorRemap` + `ColorRemap.vsh` with a lookup texture that answers with its coordinates | lookup coordinate = luminance (0.30, 0.59, 0.11) of the back-buffer pixel, per 8x8 block | PASS, 0.5 (also with a 256x1 lookup, `-glselftest1d`) |
+
+`selftest summary: 9 passed, 0 failed`.
+
+Do the tests have teeth? Yes, they caught three things:
+
+1. **My own wrong model of the half-texel convention.** The first version of the expected values sampled at
+   (x/w, y/h); all four filter tests failed by 73 to 120 of 255. The driver was right, my note was wrong:
+   `FScreenPrimUtil` shifts its tiles by half a pixel (convention 4 above is the corrected text).
+2. **A real bug in the depth encoding**: a depth of exactly 1 (cleared buffer, sky, far plane) rounded up to
+   2^24 in the encode shader; the high byte saturated and the middle byte became 0, i.e. depth 0.9961 instead
+   of 1. The always-on depth of field would have blurred the sky with 80% of the intended alpha. Found by
+   `dof-ramp` (one block of 3,600 off by 49), fixed with a clamp.
+3. **`CopyDepthBuffer`'s sample position**: checked to be the texel Epic's quad addresses.
+
+What the self-test does not cover: the distortion vertex shader's coordinates (only seen on screen: with
+`MaxDistortion` 0 the panes of DM-Praxis show the scene behind them undisplaced), `PS_EmissiveSelectBlur`,
+`PS_BloomSelect`, `PS_MotionBlur`, `PS_LuminanceTexIndex` and the histogram (their GLSL is covered by M6's
+`--gputest` against the interpreter; their use in the effects is only seen on screen), the point-sample
+nudge, anything in a viewport that is not the whole screen (split-screen), and of course whether an Xbox
+shows the same.
+
+### The black pause picture was my test, not the renderer
+
+`set UCScreenMenuPause Enabled 1` also enables `UCScreenComboFlash` and `UCScreenComboSunFlare`, which extend
+`UCScreenMenuPause`: three colour remaps in a row. Probed with the new `GLTEXELS <texture>` command (size,
+format, texels and the device's own copy of level 0): `T_FX.ColorRamps.UI_PauseMenuRamp` is 256x1 and runs
+from teal (61,160,142) at luminance 0 to black at 1 (a negative), `BerserkRamp` from (0,29,23) to
+(255,254,149), `FX_ColorRamps_TeleportIn` from (0,5,4) to (0,215,249). The script now switches the two
+subclasses off again after enabling the pause overlay.
