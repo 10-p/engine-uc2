@@ -196,3 +196,15 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
 - 2026-10-04 — Memory policy from the owner replaces the first, stricter ceilings: up to 16 GB for one piece
   of work when the memory is useful, up to 24 GB machine-wide for parallel work, kill above 24 GB.
   `CLAUDE.md` and `bin/mem-watchdog` (warn 16, kill 24) updated.
+- 2026-10-04 — **M8 green (audio).** Merged `m8-audio` (9fdadf4). `tools/cook-audio.py` cooks `Avaris.xap` +
+  `SoundData` + `Music` to Ogg Vorbis packs and cue tables (182 wave banks, 2,438 cues, 182 MB against the
+  Xbox banks' 376 MB; 78/78 sound banks match the shipped `.xsb`, 181/182 wave banks match the `.xwb` entry by
+  entry; 19 source WAVs missing, 15 cues unplayable). `UC2ALAudio` on OpenAL Soft (EFX zone reverb, music
+  streaming, category volumes). Coordinator's re-run on a clean build of main, `tools/dev/audio-regression.sh
+  coord`: `UC2AudioCheck` 7141/7141 waves at exact length, 0 failures; `UC2AudioSelfTest` 39 checks, 0 failed
+  (gain, pan, pitch, loops, playlists, reverb decay); menu music identified as NuBattle at -19.02 dB (expected
+  -19.00); four captures with 0 silent seconds, 0 failed cues, 0 Critical; `verifyclasses` passes; no audio
+  device -> "sound is off" and the menu still comes up; a dedicated server opens no audio. Not established:
+  that it sounds like the Xbox (captures sent to the owner to listen). Open in BLOCKERS.md: the localised
+  taunt index defect in Epic's data, the 19 missing WAVs, absolute mix level against XACT. Headless runs must
+  keep `ALSOFT_DRIVERS=null` (or the wave writer) so tests never play through the owner's desktop.
