@@ -770,12 +770,19 @@ struct FRenderCaps
 	INT MaxSimultaneousTerrainLayers;
 	INT		PixelShaderVersion;	//!!powervr_aaron: Terrain optimisation code needs to know whether pixel shaders are being used
 	UBOOL	HardwareTL;			//!!powervr_aaron: Terrain optimisation code needs to know whether SW TnL is being used
+	// UC2 port (M7): the device implements the render-target post-processing interface the
+	// Xbox build uses (render-target pool, back-buffer copy and material, CopyDepthBuffer,
+	// post-process stages, depth-of-field ramp, the post-process pixel shaders). Epic compiled
+	// the code that drives it for Xbox only; where this is set that code runs instead of the
+	// PC branch (RenDevHasXboxPostProcess below). 0 for every device that does not set it.
+	UBOOL	XboxPostProcess;
 
 	// set default render caps in constructor
 	FRenderCaps()
 	:	MaxSimultaneousTerrainLayers(1),
 		PixelShaderVersion(0),
-		HardwareTL(0)
+		HardwareTL(0),
+		XboxPostProcess(0)
 	{}
 };
 
@@ -848,6 +855,16 @@ class ENGINE_API URenderDevice : public USubsystem
 	// load a vertex shader configuration and store it in this render device
 	virtual void LoadVertexShaderEnum( QWORD VertexShaderEnum ) = 0;
 };
+
+//
+// UC2 port (M7): does the engine's render device report FRenderCaps::XboxPostProcess?
+// The one test every lifted "#ifdef _XBOX" post-process gate uses (UnRender.cpp,
+// UnPixelShaderMaterial.cpp, PSDistortionBaseMaterial, UCCameraEffects.cpp,
+// USubActionDepthOfField.cpp). False without a client or a device (dedicated server,
+// commandlets), for the null device and for any device that leaves the capability unset:
+// those keep the PC branch, exactly as before.
+//
+ENGINE_API UBOOL RenDevHasXboxPostProcess();
 
 #endif
 /*------------------------------------------------------------------------------------

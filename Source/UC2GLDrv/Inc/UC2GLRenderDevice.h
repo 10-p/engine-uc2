@@ -39,7 +39,7 @@ enum EPixelShaderState
 	PSS_None		= 0,	// no Xbox shader for the enum value, or pixel shaders are off
 	PSS_Ready		= 1,	// translated, compiled, drawn with a program
 	PSS_Failed		= 2,	// did not compile: its materials take the stage-0 fallback
-	PSS_M7			= 3,	// needs a back-buffer copy, the depth buffer or a render target: M7
+	PSS_M7			= 3,	// needs a back-buffer copy, the depth buffer or a render target, and UsePostProcess is off
 	PSS_EngineGated	= 4,	// translated, but the PC engine path never asks for it
 };
 
@@ -54,7 +54,10 @@ struct FOpenGLProgram
 					AmbientLoc, LightDirLoc, LightColorLoc,
 					FogParamsLoc, FogColorLoc,
 					TexMatrixLoc[4],
-					ConstantLoc[8];
+					ConstantLoc[8],
+					DistortionScaleLoc,		// M7: VSC_DISTORTION_SCALE
+					DistortionScreenLoc,	// M7: clip space to back-buffer texture coordinates
+					ColorRemapLoc;			// M7: VSC_COLOR_REMAP
 };
 
 //
@@ -106,12 +109,45 @@ public:
 	D3DTEXTUREADDRESS				CubemapTextureAddressing;
 	UBOOL							IsGeForce;	// D3DDrv: GeForce1/2-class (2 textures); never true here
 
-	// The main framebuffer: the default render target.
+	// The main framebuffer: the default render target. Its depth/stencil attachment is a
+	// texture (M7), so a shader can read the scene's depth (depth of field).
 	GLuint							MainFramebuffer,
 									MainColorTexture,
 									MainDepthStencil;
 	INT								MainWidth,
 									MainHeight;
+
+	// Render-target post-processing (M7; UC2GLPostProcess.cpp, docs/porting/analysis/postprocess.md).
+	// UsePostProcess=False is exactly M6: no capability reported to the engine, the M7 pixel
+	// shaders stay on their fallback, the interface answers what PC's D3DDrv answers.
+	UBOOL							UsePostProcess,
+									DOFShippedBlurAlpha;	// UUCScreenDOF: the blur alpha byte the shipped binary read (65) instead of script's
+	// What a shader gets when a material samples the default render target: GL cannot sample
+	// the framebuffer it is drawing into, and the main framebuffer is stored bottom row first.
+	// Snapshot = its colour, DepthColor = its depth as the Xbox saw it through D3DFMT_LIN_B8G8R8A8
+	// (blue = most significant depth byte, green = middle, red = least); both top row first.
+	GLuint							PostCopyProgram,
+									PostDepthEncodeProgram,
+									PostDepthCopyProgram;
+	GLint							PostCopyRectLoc,
+									PostDepthEncodeRectLoc,
+									PostDepthCopyRectLoc;
+	GLuint							SnapshotTexture,
+									SnapshotFramebuffer,
+									DepthColorTexture,
+									DepthColorFramebuffer;
+	INT								SnapshotVersion,		// MainColorVersion the snapshot holds
+									DepthColorVersion,		// MainDepthVersion the depth colour holds
+									MainColorVersion,		// bumped by every draw and clear into the main framebuffer
+									MainDepthVersion;
+	INT								SnapshotCopies,
+									DepthColorCopies,
+									DepthBufferCopies;
+	// Dynamic gamma (FD3DDynamicGamma's ramp): a 256x1 lookup the present pass applies.
+	GLuint							GammaRampTexture;
+	UBOOL							GammaRampActive;
+	GLint							PresentRampLoc,
+									PresentUseRampLoc;
 
 	// Present pass.
 	GLuint							PresentProgram;
@@ -176,6 +212,16 @@ public:
 	UBOOL CreatePresentProgram();
 	void DrawPresentPass( UViewport* Viewport );
 	void InitGLState();
+
+	// Post-processing (UC2GLPostProcess.cpp).
+	UBOOL InitPostProcess();
+	void ExitPostProcess();
+	void DestroyPostProcessTargets();
+	void SetPostProcess( UBOOL Enable );
+	void DrawPostQuad( GLuint Program, GLint RectLoc, GLuint SourceTexture, GLuint DestFramebuffer, INT DestWidth, INT DestHeight, const FLOAT* Rect, UBOOL DepthOnly );
+	GLuint GetSampledTexture( FOpenGLTexture* Texture );
+	void UpdateSampledTexture( FOpenGLTexture* Texture );
+	void SetGammaRamp( const BYTE* Ramp );
 
 	// Programmable materials.
 	void InitPixelShaders();

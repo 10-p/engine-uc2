@@ -164,6 +164,11 @@ struct D3DMATRIX
 	D3DMATRIX& operator=( const FMatrix& Other ) { appMemcpy( this, &Other, sizeof(FMatrix) ); return *this; }
 };
 
+// The largest value of a 24-bit depth buffer (d3d8types.h, Xbox).
+#ifndef D3DZ_MAX_D24S8
+#define D3DZ_MAX_D24S8 0x00ffffff
+#endif
+
 #endif
 /*-----------------------------------------------------------------------------
 	The End.

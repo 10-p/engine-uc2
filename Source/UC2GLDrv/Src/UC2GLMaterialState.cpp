@@ -1365,6 +1365,12 @@ void FOpenGLRenderInterface::UpdateDOFRampLookupTexture( UMaterial* DOFShader, B
 	InDOFShader->bUpdateRampLookup = false;
 
 	unguard
+#else
+	// UC2GLDrv (M7): the same computation with the texture written the GL way
+	// (UC2GLPostProcess.cpp); PC's D3DDrv has no body here.
+	extern void UC2GL_UpdateDOFRampLookupTexture( FOpenGLRenderInterface* RI, UMaterial* DOFShader, BYTE FocusType );
+	if( RenDev->UsePostProcess )
+		UC2GL_UpdateDOFRampLookupTexture( this, DOFShader, FocusType );
 #endif //_XBOX
 }
 
@@ -1375,13 +1381,12 @@ void FOpenGLRenderInterface::HandlePSVertexShader( UMaterial* InMaterial, FOpenG
 {
 	guard(FOpenGLRenderInterface::HandlePSVertexShader);
 
-#ifndef _XBOX 
-	return;
-#endif
+	// UC2GLDrv (M7): D3DDrv's "#ifndef _XBOX return;" is the device's post-process switch.
+	// The constants go to the interface (uniforms of the GLSL ports of Distortion.vsh,
+	// DistortionAccum.vsh and ColorRemap.vsh, UC2GLShaders.cpp) instead of VSC_* registers.
+	if( !RenDev->UsePostProcess )
+		return;
 
-	// UC2GLDrv: the rest is the Xbox vertex shader setup (VSC_* constants exist only there).
-	// M6: the spliced GLSL vertex shaders take it over.
-#ifdef _XBOX
 	UPixelShaderMaterial* PixelShaderMaterial = MaterialCast<UPixelShaderMaterial,MRH_PixelShaderMaterial>(InMaterial);
 	if( !PixelShaderMaterial )
 		return;
@@ -1392,6 +1397,10 @@ void FOpenGLRenderInterface::HandlePSVertexShader( UMaterial* InMaterial, FOpenG
 	{
 		static FLOAT MAX_DISTORTION_AMT_CLAMP = (UTexture::__Client) ? UTexture::__Client->MaxDistortion : 20.f;
 		static FLOAT DISTORTION_CULL_DISTANCE = 5000.f;
+		// UC2GLDrv: an ini without MaxDistortion (PC's Default.ini has none) reads as 0, which
+		// would switch all distortion off and divide by zero below: Epic's no-client value.
+		if( MAX_DISTORTION_AMT_CLAMP <= 0.f )
+			MAX_DISTORTION_AMT_CLAMP = 20.f;
 
 		switch( PostProcessStage )
 		{
@@ -1410,7 +1419,7 @@ void FOpenGLRenderInterface::HandlePSVertexShader( UMaterial* InMaterial, FOpenG
 					0.f
 				};
 				// scion sz - set distortion scale constant
-				RenDev->SetVertexShaderConstant( VSC_DISTORTION_SCALE, DistortionScale, 1 );
+				appMemcpy( this->DistortionScale, DistortionScale, sizeof(DistortionScale) );
 				// scion sz - set vertex shader needed for distortion accumulation
 				MaterialState->MaterialVertexShaderEnum = VS_GETUNIQUESHADER_QWORD(VS_DistortionAccum);
 			}
@@ -1436,7 +1445,7 @@ void FOpenGLRenderInterface::HandlePSVertexShader( UMaterial* InMaterial, FOpenG
 					(FLOAT)BBMat->MaterialVSize() / (FLOAT)RenDev->DefaultRenderTarget->GetHeight()
 				};
 				// scion sz - set distortion scale constant
-				RenDev->SetVertexShaderConstant( VSC_DISTORTION_SCALE, DistortionScale, 1 );				
+				appMemcpy( this->DistortionScale, DistortionScale, sizeof(DistortionScale) );
 				//scion jg -- Set this separate from the vertex shader so that SetMaterial
 				// can be called before SetVertexStreams. 
 				// scion sz - set vertex shader needed for distortion
@@ -1458,12 +1467,11 @@ void FOpenGLRenderInterface::HandlePSVertexShader( UMaterial* InMaterial, FOpenG
 	{
 		// Luminance 3x1 matrix
 		static FLOAT flColor[] = { 0.30f, 0.59f, 0.11f, 1.0f };
-		RenDev->SetVertexShaderConstant(VSC_COLOR_REMAP,flColor,1);
+		appMemcpy( ColorRemapConstant, flColor, sizeof(ColorRemapConstant) );
 		//scion jg -- Set this separate from the vertex shader so that SetMaterial
 		// can be called before SetVertexStreams. 
 		MaterialState->MaterialVertexShaderEnum = VS_GETUNIQUESHADER_QWORD(VS_ColorRemap);
 	}
-#endif
 
 	unguard;
 }

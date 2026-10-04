@@ -36,6 +36,7 @@ void* UC2GL_GetProcAddress( const char* Name )
 // first frame (verification; the files are System/ShotNNNNN.bmp).
 static TArray<FLOAT>	GShotTimes;
 static TArray<FLOAT>	GPSToggleTimes;
+static TArray<FLOAT>	GPPToggleTimes;
 static DOUBLE			GFirstFrameTime = 0.0;
 
 /*-----------------------------------------------------------------------------
@@ -96,6 +97,18 @@ UUC2GLRenderDevice::UUC2GLRenderDevice()
 	PresentContrast			= 0.5f;
 	ApplyGamma				= 1;
 	NullTextureID			= 0;
+	PostCopyProgram = PostDepthEncodeProgram = PostDepthCopyProgram = 0;
+	PostCopyRectLoc = PostDepthEncodeRectLoc = PostDepthCopyRectLoc = -1;
+	SnapshotTexture = SnapshotFramebuffer = DepthColorTexture = DepthColorFramebuffer = 0;
+	SnapshotVersion = DepthColorVersion = -1;
+	MainColorVersion = MainDepthVersion = 0;
+	SnapshotCopies = DepthColorCopies = DepthBufferCopies = 0;
+	GammaRampTexture		= 0;
+	GammaRampActive			= 0;
+	PresentRampLoc			= -1;
+	PresentUseRampLoc		= -1;
+	// Epic sets these in XboxViewport.cpp; the engine's render-target helpers multiply by them.
+	FSAAScale[0] = FSAAScale[1] = 1.f;
 	ProgramsLinked = ProgramsFailed = 0;
 	VertexShadersCompiled = VertexShadersFailed = VertexShadersPrecompiled = 0;
 	FragmentShadersCompiled = FragmentShadersFailed = 0;
@@ -121,6 +134,8 @@ void UUC2GLRenderDevice::StaticConstructor()
 	new(GetClass(),TEXT("CheckGLErrors"),		RF_Public)UBoolProperty	( CPP_PROPERTY(CheckGLErrors		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("UsePixelShaders"),		RF_Public)UBoolProperty	( CPP_PROPERTY(UsePixelShaders		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("PrecompileVertexShaders"),RF_Public)UBoolProperty( CPP_PROPERTY(PrecompileVertexShaders), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("UsePostProcess"),		RF_Public)UBoolProperty	( CPP_PROPERTY(UsePostProcess		), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("DOFShippedBlurAlpha"),	RF_Public)UBoolProperty	( CPP_PROPERTY(DOFShippedBlurAlpha	), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("LevelOfAnisotropy"),	RF_Public)UIntProperty	( CPP_PROPERTY(LevelOfAnisotropy	), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("MaxTextureUnits"),		RF_Public)UIntProperty	( CPP_PROPERTY(MaxTextureUnits		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("DetailTexMipBias"),	RF_Public)UFloatProperty( CPP_PROPERTY(DetailTexMipBias		), TEXT("Options"), CPF_Config );
@@ -136,6 +151,8 @@ void UUC2GLRenderDevice::StaticConstructor()
 	CheckGLErrors			= 0;
 	UsePixelShaders			= 1;
 	PrecompileVertexShaders	= 1;
+	UsePostProcess			= 1;
+	DOFShippedBlurAlpha		= 0;
 	LevelOfAnisotropy		= 1;
 	MaxTextureUnits			= 8;
 	DetailTexMipBias		= 0.8f;
@@ -297,6 +314,14 @@ UBOOL UUC2GLRenderDevice::Init()
 		UsePixelShaders = 1;
 	ParseTimeList( TEXT("glpstoggle="), GPSToggleTimes );
 
+	// The same for render-target post-processing (M7): -nopostprocess / -postprocess, and
+	// -glpptoggle=<s>,... flips UsePostProcess at those times (console: POSTPROCESS [0|1]).
+	if( ParseParam( appCmdLine(), TEXT("nopostprocess") ) )
+		UsePostProcess = 0;
+	if( ParseParam( appCmdLine(), TEXT("postprocess") ) )
+		UsePostProcess = 1;
+	ParseTimeList( TEXT("glpptoggle="), GPPToggleTimes );
+
 
 	return 1;
 
@@ -318,6 +343,14 @@ void UUC2GLRenderDevice::Exit( UViewport* Viewport )
 			glDeleteProgram( PresentProgram );
 		PresentProgram = 0;
 		LogPixelShaderStats();
+		// M7: what the interface holds of the post-process path goes while the device can
+		// still flush the render targets.
+		extern void UC2GL_DeleteDynamicGamma( FOpenGLRenderInterface* RI );
+		UC2GL_DeleteDynamicGamma( &RenderInterface );
+		if( RenderInterface.BackBufferCopyTarget && RenderInterface.BackBufferCopyTarget != DefaultRenderTarget )
+			RenderInterface.BackBufferCopyTarget->RemovePoolRef();
+		RenderInterface.BackBufferCopyTarget = NULL;
+		ExitPostProcess();
 		ExitPixelShaders();
 		if( NullTextureID )
 			glDeleteTextures( 1, &NullTextureID );
@@ -411,6 +444,9 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 		// Programmable materials (M6): fragment shaders of every integrated pixel shader,
 		// vertex shaders of the VertexShaderConfigs.ini list.
 		InitPixelShaders();
+
+		// Render-target post-processing (M7): the copy programs.
+		InitPostProcess();
 	}
 
 	if( !CreateMainFramebuffer( Viewport->SizeX, Viewport->SizeY ) )
@@ -454,15 +490,24 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0 );
 	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8, Width, Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL );
 
-	glGenRenderbuffers( 1, &MainDepthStencil );
-	glBindRenderbuffer( GL_RENDERBUFFER, MainDepthStencil );
-	glRenderbufferStorage( GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, Width, Height );
+	// M7: depth and stencil live in a texture, not a renderbuffer, so the depth can be read
+	// by a shader (UUC2GLRenderDevice::UpdateSampledTexture, depth of field). GL 3.0 /
+	// EXT_packed_depth_stencil + ARB_depth_texture; on WebGL this needs WEBGL_depth_texture
+	// (M11: without it the depth colour has to come from a pass that writes depth as colour).
+	glGenTextures( 1, &MainDepthStencil );
+	glBindTexture( GL_TEXTURE_2D, MainDepthStencil );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0 );
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, Width, Height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL );
 
 	glGenFramebuffers( 1, &MainFramebuffer );
 	glBindFramebuffer( GL_FRAMEBUFFER, MainFramebuffer );
 	glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, MainColorTexture, 0 );
-	glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, MainDepthStencil );
-	glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, MainDepthStencil );
+	glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, MainDepthStencil, 0 );
+	glFramebufferTexture2D( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, MainDepthStencil, 0 );
 
 	GLenum Status = glCheckFramebufferStatus( GL_FRAMEBUFFER );
 	if( Status != GL_FRAMEBUFFER_COMPLETE )
@@ -473,7 +518,9 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 
 	MainWidth	= Width;
 	MainHeight	= Height;
-	debugf( NAME_Init, TEXT("UC2GLDrv: main framebuffer %ix%i (RGBA8 texture, depth 24 + stencil 8)"), Width, Height );
+	debugf( NAME_Init, TEXT("UC2GLDrv: main framebuffer %ix%i (RGBA8 texture, depth 24 + stencil 8 texture)"), Width, Height );
+	MainColorVersion++;
+	MainDepthVersion++;
 
 	// The engine's back buffer target now stands for this framebuffer.
 	if( DefaultRenderTarget )
@@ -497,6 +544,8 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 
 void UUC2GLRenderDevice::DestroyMainFramebuffer()
 {
+	// The snapshot and the depth colour have the main framebuffer's size.
+	DestroyPostProcessTargets();
 	if( !ContextAlive() )
 	{
 		MainFramebuffer = MainDepthStencil = MainColorTexture = 0;
@@ -507,7 +556,7 @@ void UUC2GLRenderDevice::DestroyMainFramebuffer()
 	if( MainFramebuffer )
 		glDeleteFramebuffers( 1, &MainFramebuffer );
 	if( MainDepthStencil )
-		glDeleteRenderbuffers( 1, &MainDepthStencil );
+		glDeleteTextures( 1, &MainDepthStencil );
 	if( MainColorTexture )
 		glDeleteTextures( 1, &MainColorTexture );
 	MainFramebuffer = MainDepthStencil = MainColorTexture = 0;
@@ -530,15 +579,25 @@ static const char* GPresentVertexShader =
 // UD3DRenderDevice::UpdateGamma's ramp, normalised:
 //   out = (Contrast+0.5) * in^(1/Gamma) + (Brightness-0.5)*0.5 - Contrast*0.5 + 0.25
 // uGamma = ( 1/Gamma, Contrast+0.5, (Brightness-0.5)*0.5 - Contrast*0.5 + 0.25, enabled ).
+// M7: with dynamic gamma the ramp is the 256-entry table FD3DDynamicGamma::UpdateDeviceGamma
+// computes (uRamp, one channel; uUseRamp 1), looked up per colour channel at texel centres.
 static const char* GPresentFragmentShader =
 	"uniform sampler2D uScene;\n"
+	"uniform sampler2D uRamp;\n"
+	"uniform float uUseRamp;\n"
 	"uniform vec4 uGamma;\n"
 	"varying vec2 vTexCoord;\n"
 	"void main()\n"
 	"{\n"
 	"	vec3 Scene = texture2D( uScene, vTexCoord ).rgb;\n"
 	"	vec3 Ramp = clamp( uGamma.y * pow( Scene, vec3( uGamma.x ) ) + vec3( uGamma.z ), 0.0, 1.0 );\n"
-	"	gl_FragColor = vec4( mix( Scene, Ramp, uGamma.w ), 1.0 );\n"
+	"	vec3 Result = mix( Scene, Ramp, uGamma.w );\n"
+	"	if( uUseRamp > 0.5 )\n"
+	"	{\n"
+	"		vec3 Index = Scene * (255.0 / 256.0) + vec3( 0.5 / 256.0 );\n"
+	"		Result = vec3( texture2D( uRamp, vec2( Index.r, 0.5 ) ).r, texture2D( uRamp, vec2( Index.g, 0.5 ) ).r, texture2D( uRamp, vec2( Index.b, 0.5 ) ).r );\n"
+	"	}\n"
+	"	gl_FragColor = vec4( Result, 1.0 );\n"
 	"}\n";
 
 static GLuint CompileShader( UUC2GLRenderDevice* RenDev, GLenum Type, const char* Body )
@@ -593,6 +652,8 @@ UBOOL UUC2GLRenderDevice::CreatePresentProgram()
 	}
 	PresentTextureLoc	= glGetUniformLocation( PresentProgram, "uScene" );
 	PresentGammaLoc		= glGetUniformLocation( PresentProgram, "uGamma" );
+	PresentRampLoc		= glGetUniformLocation( PresentProgram, "uRamp" );
+	PresentUseRampLoc	= glGetUniformLocation( PresentProgram, "uUseRamp" );
 	return 1;
 
 	unguard;
@@ -626,6 +687,15 @@ void UUC2GLRenderDevice::DrawPresentPass( UViewport* Viewport )
 	glUniform1i( PresentTextureLoc, 0 );
 	FLOAT Gamma = Max( PresentGamma, 0.01f );
 	glUniform4f( PresentGammaLoc, 1.f / Gamma, PresentContrast + 0.5f, (PresentBrightness - 0.5f) * 0.5f - PresentContrast * 0.5f + 0.25f, ApplyGamma ? 1.f : 0.f );
+	UBOOL UseRamp = GammaRampActive && GammaRampTexture && ApplyGamma && UsePostProcess;
+	glUniform1f( PresentUseRampLoc, UseRamp ? 1.f : 0.f );
+	glUniform1i( PresentRampLoc, 1 );
+	if( UseRamp )
+	{
+		glActiveTexture( GL_TEXTURE1 );
+		glBindTexture( GL_TEXTURE_2D, GammaRampTexture );
+		glActiveTexture( GL_TEXTURE0 );
+	}
 
 	static const FLOAT Quad[8] = { -1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, 1.f };
 	glBindBuffer( GL_ARRAY_BUFFER, 0 );
@@ -866,6 +936,8 @@ void UUC2GLRenderDevice::UpdateGamma( UViewport* Viewport )
 	PresentBrightness	= Viewport->GetOuterUClient()->Brightness;
 	PresentContrast		= Viewport->GetOuterUClient()->Contrast;
 	ApplyGamma			= !ParseParam( appCmdLine(), TEXT("NOGAMMA") );
+	// D3D's SetGammaRamp replaces whatever ramp the dynamic gamma had set.
+	GammaRampActive		= 0;
 	unguard;
 }
 
@@ -914,6 +986,23 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 			InitPixelShaders();
 		}
 		Ar.Logf( TEXT("UC2GLDrv: pixel shaders %s (frame %i)"), UsePixelShaders ? TEXT("on") : TEXT("off"), FrameCounter );
+		return 1;
+	}
+	else if( ParseCommand(&Cmd,TEXT("POSTPROCESS")) )
+	{
+		// POSTPROCESS [0|1]: switch render-target post-processing (no argument: toggle).
+		UBOOL Wanted = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !UsePostProcess;
+		if( Wanted != UsePostProcess && ValidContext && !LockedViewport )
+			SetPostProcess( Wanted );
+		Ar.Logf( TEXT("UC2GLDrv: post-processing %s (frame %i)"), UsePostProcess ? TEXT("on") : TEXT("off"), FrameCounter );
+		return 1;
+	}
+	else if( ParseCommand(&Cmd,TEXT("DOFSHIPPEDALPHA")) )
+	{
+		// DOFSHIPPEDALPHA [0|1]: UUCScreenDOF's blur alpha as the shipped binary read it
+		// (docs/porting/analysis/runtime-port.md, "Deviation"); no argument: toggle.
+		DOFShippedBlurAlpha = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !DOFShippedBlurAlpha;
+		Ar.Logf( TEXT("UC2GLDrv: depth-of-field blur alpha %s (frame %i)"), DOFShippedBlurAlpha ? TEXT("as the shipped binary read it") : TEXT("as script sets it"), FrameCounter );
 		return 1;
 	}
 	else if( ParseCommand(&Cmd,TEXT("SUPPORTEDRESOLUTION")) )
@@ -988,6 +1077,11 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 		GPSToggleTimes.Remove(0);
 		Exec( TEXT("PIXELSHADERS"), *GLog );
 	}
+	if( GPPToggleTimes.Num() && appSeconds() - GFirstFrameTime >= GPPToggleTimes(0) )
+	{
+		GPPToggleTimes.Remove(0);
+		Exec( TEXT("POSTPROCESS"), *GLog );
+	}
 	if( GShotTimes.Num() )
 	{
 		if( appSeconds() - GFirstFrameTime >= GShotTimes(0) )
@@ -1044,6 +1138,9 @@ FRenderCaps* UUC2GLRenderDevice::GetRenderCaps()
 	RenderCaps.HardwareTL					= 1;
 	RenderCaps.PixelShaderVersion			= 0;
 	RenderCaps.MaxSimultaneousTerrainLayers	= 1;
+	// M7: the one capability that lifts the engine's and the game's Xbox-only post-process
+	// paths (docs/porting/analysis/postprocess.md, "Engine gates").
+	RenderCaps.XboxPostProcess				= (UsePostProcess && UsePixelShaders && PostCopyProgram) ? 1 : 0;
 	return &RenderCaps;
 }
 

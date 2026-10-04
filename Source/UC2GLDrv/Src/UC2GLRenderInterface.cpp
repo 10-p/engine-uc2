@@ -97,6 +97,11 @@ FOpenGLRenderInterface::FOpenGLRenderInterface(UUC2GLRenderDevice* InRenDev)
 
 	BackBufferCopyTarget	= NULL;
 	PostProcessStage		= PP_STAGE_NONE;
+
+	DynamicGamma			= NULL;
+	appMemzero( DistortionScale, sizeof(DistortionScale) );
+	appMemzero( ColorRemapConstant, sizeof(ColorRemapConstant) );
+	PointSampleNudge		= 0;
 }
 
 FOpenGLRenderInterface::~FOpenGLRenderInterface()
@@ -441,6 +446,12 @@ void FOpenGLRenderInterface::Clear(UBOOL UseColor,FColor Color,UBOOL UseDepth,FL
 	}
 	if( ClearFlags )
 		RenDev->glClear( ClearFlags );
+
+	// M7: copies of the main framebuffer are stale now (UC2GLPostProcess.cpp).
+	if( UseColor && SavedRenderTargetState.GetCurrentState()->Framebuffer == RenDev->MainFramebuffer )
+		RenDev->MainColorVersion++;
+	if( UseDepth )
+		RenDev->MainDepthVersion++;
 
 	// Masks come back with the next pass and the stencil state.
 	ApplyStencilState();
@@ -1326,7 +1337,8 @@ void FOpenGLRenderInterface::SetMaterialBlending( FOpenGLMaterialState* NewMater
 			RenDev->glDisable( GL_TEXTURE_CUBE_MAP );
 			RenDev->glEnable( GL_TEXTURE_2D );
 		}
-		RenDev->glBindTexture( Target, Texture ? Texture->TextureID : RenDev->NullTextureID );
+		// M7: the default render target is sampled through its copy (UC2GLPostProcess.cpp).
+		RenDev->glBindTexture( Target, Texture ? RenDev->GetSampledTexture( Texture ) : RenDev->NullTextureID );
 
 		if( Texture )
 		{
@@ -1639,11 +1651,17 @@ void FOpenGLRenderInterface::GetGLMatrices( FMatrix& ModelView, FMatrix& Project
 			Width	= Max<INT>( VPState->ViewportWidth, 1 ),
 			Height	= Max<INT>( VPState->ViewportHeight, 1 );
 
+	// The half-pixel shift that puts D3D's pixel centres (integer coordinates) on GL's. M7:
+	// a pass that point-samples a render target is drawn 1/32 pixel short of it, so that a
+	// read on a texel boundary takes the texel to the right and below, as hardware does
+	// (UC2GLPostProcess.cpp, convention 4).
+	FLOAT	Shift	= PointSampleNudge ? (1.f - 1.f/16.f) : 1.f;
+
 	FMatrix Fixup = FMatrix::Identity;
 	Fixup.M[1][1] = FlipY;
 	Fixup.M[2][2] = 2.f;
-	Fixup.M[3][0] = 1.f / Width;
-	Fixup.M[3][1] = -FlipY / Height;
+	Fixup.M[3][0] = Shift / Width;
+	Fixup.M[3][1] = -FlipY * Shift / Height;
 	Fixup.M[3][2] = -1.f;
 
 	Projection = CurrentState->CameraToScreen * Fixup;
@@ -1953,6 +1971,11 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 
 	for( INT Pass=0; Pass<CurrentState->NumMaterialPasses; Pass++ )
 	{
+		// M7: a stage that samples the default render target gets an up-to-date copy of it.
+		PrepareSampledTargets( CurrentState->MaterialPasses[Pass] );
+		if( MatricesDirty )
+			CommitMatrices();
+
 		SetMaterialBlending( CurrentState->MaterialPasses[Pass], CurrentState->CullMode );
 
 		// Fog hacks needed for translucent objects.
@@ -1994,61 +2017,27 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 		}
 	}
 
+	// M7: copies of the main framebuffer are stale now (UC2GLPostProcess.cpp).
+	if( SavedRenderTargetState.GetCurrentState()->Framebuffer == RenDev->MainFramebuffer )
+		RenDev->MainColorVersion++;
+	RenDev->MainDepthVersion++;
+
 	unguard;
 }
 
 /*-----------------------------------------------------------------------------
-	What PC's D3DDrv does not implement (post-processing, Xbox paths).
-	M7: render targets for post-processing, back-buffer copy, depth copy, dynamic gamma.
+	What PC's D3DDrv does not implement (Xbox paths).
+	The post-process interface (back-buffer copy and material, CopyDepthBuffer, dynamic
+	gamma, the depth-of-field ramp) is in UC2GLPostProcess.cpp since M7.
 -----------------------------------------------------------------------------*/
-
-// PC: NULL (the PC D3DDrv returns before touching the back buffer).
-UMaterial* FOpenGLRenderInterface::GetBackBufferCopyMaterial()
-{
-	// M7: the back-buffer copy material (UProxyBitmapMaterial on BackBufferCopyTarget).
-	return NULL;
-}
-
-// PC's D3DDrv would dereference GetBackBufferMaterial()'s NULL here; nothing on PC calls it.
-FRenderTarget* FOpenGLRenderInterface::GetBackBufferCopyTarget()
-{
-	return BackBufferCopyTarget;
-}
-
-void FOpenGLRenderInterface::UpdateBackBufferCopyTarget( UViewport* InViewport )
-{
-	// M7: blit the viewport's part of the main framebuffer into BackBufferCopyTarget.
-}
-
-UMaterial* FOpenGLRenderInterface::GetBackBufferMaterial()
-{
-	// M7: a UProxyBitmapMaterial on DefaultRenderTarget (MainColorTexture).
-	return NULL;
-}
-
-void FOpenGLRenderInterface::CopyDepthBuffer( FRenderTarget* DestTarget, FRenderTarget* SrcTarget )
-{
-	// M7: copy depth between targets (Xbox-only in D3DDrv).
-}
-
-void FOpenGLRenderInterface::UpdateDynamicGamma()
-{
-	// M7: luminance histogram and dynamic gamma (Xbox-only in D3DDrv).
-}
-
-FLOAT FOpenGLRenderInterface::GetAverageSceneLuminosity()
-{
-	// D3DDrv's FD3DDynamicGamma starts at CurMinL 0, CurMaxL 1 and PC never updates it.
-	return (1.0f - 0.0f) * 0.5f;
-}
 
 // GPU skinning is Xbox-only; PC skins on the CPU (UsePCSkeletalShader=False).
 void FOpenGLRenderInterface::SetSkinBones( INT FirstBoneDestIndex, FCoords* FirstBone, INT BoneCount )
 {
 }
 
-// UpdateDOFRampLookupTexture is in UC2GLMaterialState.cpp, as in D3DDrv (Xbox-only body).
-// M7: the depth-of-field ramp texture.
+// UpdateDOFRampLookupTexture is in UC2GLMaterialState.cpp, as in D3DDrv; its GL body in
+// UC2GLPostProcess.cpp.
 
 void FOpenGLRenderInterface::SetTerrainTransform( FMatrix& WorldMat, INT HeightMapX, INT HeightMapY )
 {

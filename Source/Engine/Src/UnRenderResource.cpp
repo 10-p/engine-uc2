@@ -41,6 +41,19 @@ void UIndexBuffer::Serialize(FArchive& Ar)
 	unguard;
 }
 
+//
+// UC2 port (M7): the capability behind which the Xbox-only post-process paths run
+// (FRenderCaps::XboxPostProcess, UnRenDev.h).
+//
+ENGINE_API UBOOL RenDevHasXboxPostProcess()
+{
+	UClient* Client = UTexture::__Client;
+	if( !Client || !Client->Engine || !Client->Engine->GRenDev )
+		return 0;
+	FRenderCaps* Caps = Client->Engine->GRenDev->GetRenderCaps();
+	return Caps && Caps->XboxPostProcess;
+}
+
 /* scion ======================================================================
 * FRenderTarget::RemovePoolRef
 * Author: sz

@@ -129,6 +129,7 @@ public:
 							IsCubemap,
 							IsRenderTarget,
 							IsDefaultTarget;	// wraps the device's main framebuffer
+	INT						DefaultUsage;		// IsDefaultTarget: the FRenderTarget::RT_MATERIAL_USE_* it was cached for
 
 	INT						CachedWidth,
 							CachedHeight,
