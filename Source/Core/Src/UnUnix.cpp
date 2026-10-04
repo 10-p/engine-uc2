@@ -10,7 +10,7 @@
 		* Obfuscated by Daniel Vogel
 		* Peed on by Ryan C. Gordon
 =============================================================================*/
-#if __GNUG__ || (__INTEL_COMPILER && linux)
+#if __GNUC__ || (__INTEL_COMPILER && linux)
 
 // Standard includes.
 #include <stdio.h>
@@ -20,70 +20,244 @@
 #include <float.h>
 #include <time.h>
 #include <errno.h>
+#include <math.h>	// engine-uc2: appSqrt(FLOAT)
 
 // System includes.
+// ufront 2.33 (Windows/MinGW): this file is the platform layer for every non-MSVC target, Windows now
+// included. MinGW has unistd/dirent/utime/sys-time/sys-stat, but not the process, resource-limit or
+// name-resolution headers; Windows answers those through Win32 and WinSock.
+#ifdef _WIN32
+#include <winsock2.h>
+#include <windows.h>
+#include <exception>
+#include <signal.h>
+#include <process.h>	// _spawnv
+#include <unistd.h>
+#if defined(__ANDROID__)
+#include <sys/system_properties.h>   // __system_property_get for debug.ut2004.nofault
+#endif
+#include <dirent.h>
+#include <utime.h>
+#include <sys/time.h>
+#include <sys/stat.h>
+#include <pthread.h>	// winpthreads (the toolchain's `posix` thread model)
+#include <sys/types.h>
+#else
 #include <sys/param.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <utime.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <sys/resource.h>
 
-#ifndef MACOSX
-#include <dlfcn.h>
+#if MACOSX
+#  include <mach-o/dyld.h>
+#  include "dlfcn_macosx.h"
+#else
+#  include <dlfcn.h>
 #endif
 
 #include <netdb.h>
 //#include <fpu_control.h>
 
-#if __FILE_NOCASE
+#include <pthread.h>
 #include <sys/types.h>
+#include <sys/wait.h>
+#endif
+
+#if __FILE_NOCASE
 #include <dirent.h>
 #endif
 
-#define USE_FILESTREAM_THREAD
-
-#ifdef USE_FILESTREAM_THREAD
-#include <pthread.h>
+// Stack traces via C runtime...
+// ufront 2.33: MinGW has no <execinfo.h> either -- backtrace()/backtrace_symbols() are a glibc extension.
+#if ((MACOSX) || (__FreeBSD__) || defined(__EMSCRIPTEN__) || defined(_WIN32))
+#  define HAVE_EXECINFO_H 0
+#else
+#  define HAVE_EXECINFO_H 1
+#  include <execinfo.h>
 #endif
 
-#include <sys/wait.h>
+#ifdef __EMSCRIPTEN__
+#  include <emscripten.h>
+#endif
 
-#if ((!defined MACOSX) && (!defined __FreeBSD__))
-#include <execinfo.h>
+#if (defined(__i386__) || defined(__x86_64__)) && !defined(UT_NO_X86_INTRIN)
+#  include <cpuid.h>
+#endif
+
+#ifdef _WIN32
+// ufront 2.33: MAXPATHLEN is a BSD/glibc spelling; the Win32 equivalent is MAX_PATH.
+#  ifndef MAXPATHLEN
+#    define MAXPATHLEN MAX_PATH
+#  endif
 #endif
 
 // Core includes.
 #include "CorePrivate.h"
 
+#ifndef FINAL_RELEASE
+#include "FOutputDeviceFile.h"	// USystem DUMPNAMES (as in UnVcWin32.cpp)
+#endif
+
 // rcg04232002 Just to make sure this is sane...
 #if defined(NO_UNICODE_OS_SUPPORT)
-#if defined(UNICODE)
-#undef UNICODE
-#define UNICODE 0
-#endif
+#  if defined(UNICODE)
+#    undef UNICODE
+#    define UNICODE 0
+#  endif
 #endif
 
 #if UNICODE
-#include <locale.h>
-
-#ifndef MACOSX
-#  include <langinfo.h>
+#  include <locale.h>
+#  if !MACOSX
+#    include <langinfo.h>
+#  endif
 #endif
 
-#endif
-
-#ifdef MACOSX  // Carbon includes.  --ryan.
+#if MACOSX  // Carbon includes.  --ryan.
    // Carbon's headers define "check" and "verify", which we do, too,
-   //  so just predeclare functions we need here.
+   //  so just predeclare functions and types we need here.
 extern "C"
 {
-   signed int GetCPUSpeed(void);
+    #define noErr 0
+    typedef unsigned char Str255[256];
+    typedef unsigned char Str63[64];
+    typedef unsigned char Str32[33];
+    typedef unsigned char Str31[32];
+    typedef unsigned char Str27[28];
+    typedef unsigned char Str15[16];
+    typedef Str63 StrFileName;
+    typedef const unsigned char *ConstStr255Param;
+    typedef unsigned long OSType;
+    typedef signed int OSStatus;
+    typedef signed short OSErr;
+    signed int GetCPUSpeed(void);
+
+    typedef signed int CFIndex;
+    typedef unsigned int CFStringEncoding;
+                
+    // (This isn't accurate, but will do for our purposes...)
+    typedef void *CFURLRef;
+    typedef void *CFStringRef;
+    typedef void *CFAllocatorRef;
+
+    typedef enum {
+        kCFStringEncodingMacRoman = 0,
+        kCFStringEncodingWindowsLatin1 = 0x0500, /* ANSI codepage 1252 */
+        kCFStringEncodingISOLatin1 = 0x0201, /* ISO 8859-1 */
+        kCFStringEncodingNextStepLatin = 0x0B01, /* NextStep encoding*/
+        kCFStringEncodingASCII = 0x0600, /* 0..127 (in creating CFString, values greater than 0x7F are treated as corresponding Unicode value) */
+        kCFStringEncodingUnicode = 0x0100, /* kTextEncodingUnicodeDefault  + kTextEncodingDefaultFormat (aka kUnicode16BitFormat) */
+        kCFStringEncodingUTF8 = 0x08000100, /* kTextEncodingUnicodeDefault + kUnicodeUTF8Format */
+        kCFStringEncodingNonLossyASCII = 0x0BFF /* 7bit Unicode variants used by Cocoa & Java */
+    } CFStringBuiltInEncodings;
+
+    CFURLRef CFURLCreateWithBytes(CFAllocatorRef allocator,
+                                  const unsigned char *URLBytes,
+                                  CFIndex length,
+                                  CFStringEncoding encoding,
+                                  CFURLRef baseURL);
+    void LSOpenCFURLRef(CFURLRef urlref, void *something);
+
+    CFStringRef CFStringCreateWithBytes (
+        CFAllocatorRef alloc,
+        const BYTE /*UInt8*/ *bytes,
+        CFIndex numBytes,
+        CFStringEncoding encoding,
+        unsigned char /*Boolean*/ isExternalRepresentation
+    );
+
+    void CFRelease(void *ref);
+
+    OSErr Gestalt(OSType selector, long *response);
+
+    enum
+    {
+        gestaltCPU601                 = 0x0101, /* IBM 601 */
+        gestaltCPU603                 = 0x0103,
+        gestaltCPU604                 = 0x0104,
+        gestaltCPU603e                = 0x0106,
+        gestaltCPU603ev               = 0x0107,
+        gestaltCPU750                 = 0x0108, /* Also 740 - "G3" */
+        gestaltCPU604e                = 0x0109,
+        gestaltCPU604ev               = 0x010A, /* Mach 5, 250Mhz and up */
+        gestaltCPUG4                  = 0x010C, /* Max */
+        gestaltCPUG47450              = 0x0110 /* Vger , Altivec */
+    };
+
+    enum
+    {
+        gestaltNativeCPUType          = 'cput', /* processor type */
+        gestalt68000                  = 1,
+        gestalt68010                  = 2,
+        gestalt68020                  = 3,
+        gestalt68030                  = 4,
+        gestalt68040                  = 5
+    };
+
+    enum
+    {
+        gestaltSystemVersion = 'sysv'
+    };
+
+    enum
+    {
+        gestaltPowerPCProcessorFeatures = 'ppcf',
+        gestaltPowerPCHasGraphicsInstructions = 0,
+        gestaltPowerPCHasSTFIWXInstruction = 1,
+        gestaltPowerPCHasSquareRootInstructions = 2,
+        gestaltPowerPCHasDCBAInstruction = 3,
+        gestaltPowerPCHasVectorInstructions = 4,
+        gestaltPowerPCHasDataStreams = 5
+    };
+
+    enum
+    {
+        gestaltPhysicalRAMSize = 'ram '
+    };
+
+    enum
+    {
+        kAlertStopAlert = 0,
+        kAlertNoteAlert = 1,
+        kAlertCautionAlert = 2,
+        kAlertPlainAlert = 3
+    };
+
+    OSErr StandardAlert (
+       signed short inAlertType,
+       ConstStr255Param inError,
+       ConstStr255Param inExplanation,
+       void *inAlertParam,
+       signed short *outItemHit
+    );
+
+    OSStatus CreateStandardAlert (
+        signed short /*AlertType*/ alertType,
+        CFStringRef error,
+        CFStringRef explanation,
+        void /*const AlertStdCFStringAlertParamRec*/ * param,
+        void * /*DialogRef*/ * outAlert
+    );
+
+    OSStatus RunStandardAlert (
+        void * /*DialogRef*/ inAlert,
+        void * /*ModalFilterUPP*/ filterProc,
+        SWORD /*DialogItemIndex*/ * outItemHit
+    );
 }
+
+#if UNICODE
+    #define TCHAR_MAC_ENCODING kCFStringEncodingUnicode
+#else
+    #define TCHAR_MAC_ENCODING kCFStringEncodingISOLatin1
 #endif
 
-#include "vorbis/codec.h"
-#include "vorbis/vorbisfile.h"
+#endif
+
+// engine-uc2: no vorbis/codec.h here -- nothing in UC2's Core uses Ogg (the PC FFileStream Ogg cases are #if 0).
 
 /*-----------------------------------------------------------------------------
 	Globals
@@ -96,6 +270,14 @@ ANSICHAR GModule[32];
 extern char **environ;
 
 TCHAR *GUnixSpawnOnExit = NULL;
+
+#if MACOSX
+TCHAR *GMacOSAlertBoxOnExit = NULL;
+TCHAR *GMacOSLaunchURLOnExit = NULL;
+#endif
+
+// filler.  --ryan.
+HINSTANCE hInstance = 0;
 
 
 #if UNICODE
@@ -178,7 +360,7 @@ CORE_API INT unixGetSizeUNICODE( const ANSICHAR* InACh )
 		return (strlen(InACh) + 1) * sizeof(UNICHAR);
 	else
 		return sizeof(UNICHAR);
-    unguard;
+    unguardSlow;
 }
 
 
@@ -193,9 +375,11 @@ CORE_API UNICHAR* unixANSIToUNICODE(char* str)
 }
 
 
-CORE_API INT unixDetectUNICODE( void )
+CORE_API void unixDetectUNICODE( void )
 {
     guard(unixDetectUNICODE);
+
+#if 0
     errno = 0;
     if (!setlocale(LC_CTYPE, ""))
     {
@@ -204,31 +388,42 @@ CORE_API INT unixDetectUNICODE( void )
     }
     else
     {
-        char *encoding = nl_langinfo(_NL_CTYPE_CODESET_NAME);
+        char *encoding = "Unknown";
         if (getenv("UNREAL_UNICODE") != NULL)
             GUnicode = GUnicodeOS = 1;
         else
         {
-            char *unicode_encodings[] = { "UTF-8", "UTF8", NULL };
-            for (INT i = 0; unicode_encodings[i]; i++)
-            {
-                if (strcmp(encoding, unicode_encodings[i]) == 0)
+            #if MACOSX
+                debugf(TEXT("No locale detection on OS X at this moment."));
+            #else
+                encoding = nl_langinfo(_NL_CTYPE_CODESET_NAME);
+                char *unicode_encodings[] = { "UTF-8", "UTF8", NULL };
+                for (INT i = 0; unicode_encodings[i]; i++)
                 {
-                    GUnicode = GUnicodeOS = 1;
+                    if (strcmp(encoding, unicode_encodings[i]) == 0)
+                    {
+                        GUnicode = GUnicodeOS = 1;
+                    }
                 }
-            }
+            #endif
         }
 
         debugf(TEXT("Your locale: [%s].\n"), ANSI_TO_TCHAR(encoding));
         if (GUnicodeOS)
             debugf(TEXT("Enabled UNICODE support."));
     }
+#endif
+
     unguard;
 }
 #endif
 
 
 #if UNICODE_BY_HAND
+#ifndef __EMSCRIPTEN__
+// On Emscripten, system <wchar.h> provides standard wcs* functions.
+// Only compile the engine's custom implementations on native builds
+// where -fshort-wchar makes wchar_t 16-bit (incompatible with glibc).
 CORE_API UNICHAR* wcscpy( UNICHAR* _Dest, const UNICHAR* Src)
 {
     guardSlow(wcscpy)
@@ -344,6 +539,9 @@ CORE_API INT wcsncmp( const UNICHAR* Str1, const UNICHAR *Str2, INT max )
     unguardSlow;
 }
 
+// Engine-specific functions that don't conflict with system headers
+// (compiled on all platforms including Emscripten)
+#endif // !__EMSCRIPTEN__ (standard wcs* functions -- reopened below)
 
 CORE_API INT _wcsicmp( const UNICHAR* String1, const UNICHAR* String2 )
 {
@@ -417,6 +615,8 @@ CORE_API INT _wcsnicmp( const UNICHAR* Str1, const UNICHAR *Str2, INT max )
 }
 
 
+#ifndef __EMSCRIPTEN__
+// Standard wcs* functions (continued) -- provided by system <wchar.h> on Emscripten
 CORE_API UNICHAR* wcschr( const UNICHAR* String, const UNICHAR Find )
 {
     guardSlow(wcschr);
@@ -465,6 +665,7 @@ CORE_API UNICHAR* wcscat( UNICHAR* String, const UNICHAR *Add )
     unguardSlow;
 }
 
+#endif // !__EMSCRIPTEN__ (wcschr, wcsstr, wcscat)
 
 CORE_API UNICHAR* _wcsupr( UNICHAR* String )
 {
@@ -485,6 +686,8 @@ CORE_API INT _wtoi( const UNICHAR* Str )
 }
 
 
+#ifndef __EMSCRIPTEN__
+// wcstoul and swscanf conflict with system <wchar.h> on Emscripten
 CORE_API INT wcstoul( const TCHAR* Start, TCHAR** End, INT Base )
 {
     // !!! FIXME: This might be completely broken.
@@ -496,8 +699,10 @@ CORE_API INT swscanf( const UNICHAR* fmt, ... )
     debugf(TEXT("This is currently unimplemented on Unix."));
     appDebugBreak();
 }
+#endif // !__EMSCRIPTEN__
 
 // !!! FIXME: This can always be more robust.
+#ifndef __EMSCRIPTEN__
 CORE_API INT wvsnprintf( TCHAR *buf, INT max, const TCHAR *fmt, va_list args )
 {
     if (fmt == NULL)
@@ -566,6 +771,9 @@ CORE_API INT wvsnprintf( TCHAR *buf, INT max, const TCHAR *fmt, va_list args )
             src = ptr;
         }
 
+        if (*src == 'l')  /* might be meaningless; let it slide. */
+            src++;
+
         switch (*src)
         {
             case '%':
@@ -578,7 +786,7 @@ CORE_API INT wvsnprintf( TCHAR *buf, INT max, const TCHAR *fmt, va_list args )
 
             case 'c':
             {
-                TCHAR val = va_arg(args, TCHAR);
+                TCHAR val = (TCHAR) va_arg(args, int);
                 src++;
                 *dst = val;
                 dst++;
@@ -715,8 +923,11 @@ CORE_API INT wvsnprintf( TCHAR *buf, INT max, const TCHAR *fmt, va_list args )
     *dst = 0;  // null terminate the new string.
     return(dst - buf);
 }
+#endif // !__EMSCRIPTEN__ (wvsnprintf)
 
 
+#ifndef __EMSCRIPTEN__
+// wprintf conflicts with system <wchar.h> on Emscripten
 CORE_API INT wprintf( const TCHAR* fmt, ... )
 {
     va_list args;
@@ -733,23 +944,19 @@ CORE_API INT wprintf( const TCHAR* fmt, ... )
 
     return(rc);
 }
+#endif // !__EMSCRIPTEN__ (wprintf)
 
+#ifndef __EMSCRIPTEN__
+// wvsnprintf and iswspace are provided by system headers on Emscripten.
 CORE_API INT iswspace( UNICHAR ch  )
 {
     return((INT) isspace((int) ch));
 }
+#endif // !__EMSCRIPTEN__
 
-CORE_API TCHAR *_itow( const INT Num, TCHAR *Buffer, const INT BufSize )
+CORE_API TCHAR *_itow( const INT Num, TCHAR *Buffer, const INT Radix )
 {
-    if ((Buffer == NULL) || (BufSize <= 0))
-        return(Buffer);
-
-    char *ansistr = (char *) appAlloca(BufSize);
-    if (ansistr == NULL)
-        return(NULL);  // !!! FIXME: Is this right?
-
-    snprintf(ansistr, BufSize, "%d", Num);
-    return(unixToUNICODE(Buffer, ansistr));
+    return(_i64tow((SQWORD) Num, Buffer, Radix));
 }
 
 CORE_API QWORD _wcstoui64( const TCHAR* Start, TCHAR** End, INT Base )
@@ -798,6 +1005,7 @@ CORE_API QWORD _wcstoui64( const TCHAR* Start, TCHAR** End, INT Base )
     return(retval);
 }
 
+
 CORE_API TCHAR* _ui64tow( QWORD Num, TCHAR *Buffer, INT Base )
 {
     check((Base >= 2) && (Base <= 36));
@@ -809,6 +1017,35 @@ CORE_API TCHAR* _ui64tow( QWORD Num, TCHAR *Buffer, INT Base )
     Buffer[bufidx] = 0;  /* null terminate where the end will be. */
 
     while (--bufidx >= 0)
+    {
+        int val = (int) (Num % Base);
+        Buffer[bufidx] = ((val > 9) ? ('a' + (val - 10)) : ('0' + val));
+        Num /= Base;
+    }
+
+    return(Buffer);
+}
+
+CORE_API TCHAR* _i64tow( SQWORD Num, TCHAR *Buffer, INT Base )
+{
+    check((Base >= 2) && (Base <= 36));
+
+    int bufidx = 1;
+    int negative = 0;
+    if (Num < 0)
+    {
+        negative = 1;
+        Num = -Num;
+        bufidx++;
+        Buffer[0] = '-';
+    }
+
+    for (QWORD x = Num; x >= Base; x /= Base)
+        bufidx++;
+
+    Buffer[bufidx] = 0;  /* null terminate where the end will be. */
+
+    while ((--bufidx - negative) >= 0)
     {
         int val = (int) (Num % Base);
         Buffer[bufidx] = ((val > 9) ? ('a' + (val - 10)) : ('0' + val));
@@ -840,9 +1077,22 @@ char *strlwr(char *str)
 CORE_API const UBOOL appMsgf( INT Type, const TCHAR* Fmt, ... )
 {
 	TCHAR TempStr[4096]=TEXT("");
+
 	GET_VARARGS( TempStr, ARRAY_COUNT(TempStr), Fmt, Fmt );
+
+#if MACOSX
+    guard(MacOSX_appMsgf);
+    debugf( TEXT("appMsgf: %s"), TempStr );
+    INT len = appStrlen(TempStr);
+    GMacOSAlertBoxOnExit = new TCHAR[len + 1];
+    appStrcpy(GMacOSAlertBoxOnExit, TempStr);
+    appRequestExit(0);
+    unguard;
+#else
     printf("appMsgf(): %s\n", TCHAR_TO_ANSI(TempStr));
     appDebugBreak();
+#endif
+
     return 1;
 }
 
@@ -862,12 +1112,32 @@ CORE_API const void EdClearLoadErrors()
 //
 // System manager.
 //
-static void Recurse()
+// engine-uc2: UC2's USystem (UnCorObj.h) and its Exec commands are those of UC2's UnVcWin32.cpp; only the
+// Windows-specific bodies (MEMSTAT, RELAUNCH) are replaced, RELAUNCH by engine-ut2004's Unix version.
+//
+int CDECL StringCompare(const void *A, const void *B)
+{
+	return appStricmp( **(*(FString**)A), **(*(FString**)B) );
+}
+
+#ifndef FINAL_RELEASE
+static INT Compare( const FName& A, const FName& B )
+{
+	return appStricmp( *A, *B );
+}
+#endif
+
+#ifndef FINAL_RELEASE
+static void Recurse(UBOOL B)
 {
 	guard(Recurse);
-	Recurse();
+
+	if(B)
+		Recurse(B);
+
 	unguard;
 }
+#endif
 USystem::USystem()
 :	SavePath	( E_NoInit )
 ,	CachePath	( E_NoInit )
@@ -879,10 +1149,10 @@ void USystem::StaticConstructor()
 {
 	guard(USystem::StaticConstructor);
 
-	new(GetClass(),TEXT("PurgeCacheDays"),      RF_Public)UIntProperty   (CPP_PROPERTY(PurgeCacheDays     ), TEXT("Options"), CPF_Config );
-	new(GetClass(),TEXT("SavePath"),            RF_Public)UStrProperty   (CPP_PROPERTY(SavePath           ), TEXT("Options"), CPF_Config );
-	new(GetClass(),TEXT("CachePath"),           RF_Public)UStrProperty   (CPP_PROPERTY(CachePath          ), TEXT("Options"), CPF_Config );
-	new(GetClass(),TEXT("CacheExt"),            RF_Public)UStrProperty   (CPP_PROPERTY(CacheExt           ), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("PurgeCacheDays"),      RF_Public)UIntProperty   (CPP_PROPERTY(PurgeCacheDays    ), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("SavePath"),            RF_Public)UStrProperty   (CPP_PROPERTY(SavePath          ), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("CachePath"),           RF_Public)UStrProperty   (CPP_PROPERTY(CachePath         ), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("CacheExt"),            RF_Public)UStrProperty   (CPP_PROPERTY(CacheExt          ), TEXT("Options"), CPF_Config );
 
 	UArrayProperty* A = new(GetClass(),TEXT("Paths"),RF_Public)UArrayProperty( CPP_PROPERTY(Paths), TEXT("Options"), CPF_Config );
 	A->Inner = new(A,TEXT("StrProperty0"),RF_Public)UStrProperty;
@@ -903,16 +1173,19 @@ UBOOL USystem::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		Ar.Logf( TEXT("MEMSTAT command not available.") );
 		return 1;
 	}
-	else if( ParseCommand(&Cmd,TEXT("EXIT")) )
+	else if( ParseCommand(&Cmd,TEXT("CONFIGHASH")) )
 	{
-		Ar.Log( TEXT("Closing by request") );
-		appRequestExit( 0 );
+		GConfig->Dump( Ar );
 		return 1;
 	}
-	else if( ParseCommand(&Cmd,TEXT("APP")) )
+	else if( ParseCommand(&Cmd,TEXT("EXIT")) || ParseCommand(&Cmd,TEXT("QUIT")))
 	{
-		//!UNIX No APP command.
-		Ar.Logf( TEXT("APP command not available.") );
+		// Ignore these commands when running the editor
+		if( !GIsEditor )
+		{
+			Ar.Log( TEXT("Closing by request") );
+			appRequestExit( 0 );
+		}
 		return 1;
 	}
 	else if( ParseCommand( &Cmd, TEXT("RELAUNCH") ) )
@@ -920,51 +1193,37 @@ UBOOL USystem::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		debugf( TEXT("Relaunch: %s"), Cmd );
 		GConfig->Flush( 0 );
 
-		// Fork out a new process using Cmd as arguments.
+		// engine-ut2004's Unix relaunch: respawn as a dedicated server on exit (GUnixSpawnOnExit, run by
+		// appPlatformExit). The binary names are UT2004's until the launchers land (M2/M4).
 		TCHAR* EndArg0 = appStrstr( Cmd, TEXT(" ") );
 		INT CmdLen = appStrlen( Cmd );
 		INT RestLen = ((EndArg0 != NULL) ? appStrlen( EndArg0 ) : 0);
-        #define RELAUNCH_ARRAY 1024
+		#define RELAUNCH_ARRAY 1024
 		TCHAR Arg0[RELAUNCH_ARRAY];
-        INT max = (CmdLen - RestLen) + 1;
-        if (max > RELAUNCH_ARRAY)
-            max = RELAUNCH_ARRAY;
+		INT max = (CmdLen - RestLen) + 1;
+		if (max > RELAUNCH_ARRAY)
+			max = RELAUNCH_ARRAY;
 		appStrncpy( Arg0, Cmd, max );
-        Arg0[RELAUNCH_ARRAY - 1] = 0;  // just in case.
+		Arg0[RELAUNCH_ARRAY - 1] = 0;  // just in case.
 
-#if 1
-        INT arraylen = RELAUNCH_ARRAY + 32;
-        FString xterm(TEXT("xterm"));
-        if (FindBinaryInPath(xterm))
-        {
-            arraylen += xterm.Len();
-            xterm += TEXT(" -e ");
-        }
-        else
-        {
-            xterm = TEXT("");
-        }
-
-        GUnixSpawnOnExit = new TCHAR[arraylen];
-        appStrcpy(GUnixSpawnOnExit, *xterm);
-        appStrcat(GUnixSpawnOnExit, TEXT("./ucc-bin server "));
-        appStrcat(GUnixSpawnOnExit, Arg0);
-        appRequestExit( 0 );
-#else
-
-        char ansistr[RELAUNCH_ARRAY];
-        appToAnsi(Arg0, ansistr);
-
-		if (fork() == 0)
+		INT arraylen = RELAUNCH_ARRAY + 128;
+		FString xterm(TEXT("xterm"));
+		if (FindBinaryInPath(xterm))
 		{
-			appSleep(3);
-			INT error = execl("./ucc-bin", "./ucc-bin", "server", ansistr, NULL );
-			if (error == -1)
-				appErrorf( TEXT("Failed to launch process.") );
-		} else {
-			appRequestExit( 0 );
+			arraylen += xterm.Len();
+			xterm += TEXT(" -e ");
 		}
-#endif
+		else
+		{
+			xterm = TEXT("");
+		}
+
+		GUnixSpawnOnExit = new TCHAR[arraylen];
+		appStrcpy(GUnixSpawnOnExit, *xterm);
+		appStrcat(GUnixSpawnOnExit, TEXT("./ucc-bin server "));
+		appStrcat(GUnixSpawnOnExit, Arg0);
+
+		appRequestExit( 0 );
 		return 1;
 	}
 	else if( ParseCommand( &Cmd, TEXT("DEBUG") ) )
@@ -977,13 +1236,15 @@ UBOOL USystem::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		else if( ParseCommand( &Cmd, TEXT("GPF") ) )
 		{
 			Ar.Log( TEXT("Unreal crashing with voluntary GPF") );
-			*(int *)NULL = 123;
+			*(volatile int *)NULL = 123;
 			return 1;
 		}
 		else if( ParseCommand( &Cmd, TEXT("RECURSE") ) )
 		{
+#ifndef FINAL_RELEASE
 			Ar.Logf( TEXT("Recursing") );
-			Recurse();
+			Recurse(1);
+#endif
 			return 1;
 		}
 		else if( ParseCommand( &Cmd, TEXT("EATMEM") ) )
@@ -991,13 +1252,103 @@ UBOOL USystem::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 			Ar.Log( TEXT("Eating up all available memory") );
 			while( 1 )
 			{
-				void* Eat = appMalloc(65536,TEXT("EatMem"));
+				void* Eat = appMalloc(65536);
 				memset( Eat, 0, 65536 );
 			}
 			return 1;
 		}
 		else return 0;
 	}
+	else if( ParseCommand(&Cmd,TEXT("DIR")) )		// DIR [path\pattern]
+	{
+		TArray<FString> Files = GFileManager->FindFiles( Cmd, 1, 0 );
+		TArray<FString> Directories = GFileManager->FindFiles( Cmd, 0, 1 );
+
+		FString* Buffer[512];
+		INT Count;
+
+		//
+		// DIRECTORIES
+		//
+
+		// Sort
+		Count = Directories.Num();
+		for( INT x = 0 ; x < Count ; ++x )
+			Buffer[x] = &Directories(x);
+		appQsort( &Buffer[0], Count, sizeof(FString*), StringCompare );
+		// Display
+		for( INT x = 0 ; x < Count ; x++ )
+			Ar.Logf( TEXT("[%s]"), **Buffer[x] );
+
+		//
+		// FILES
+		//
+
+		// Sort
+		Count = Files.Num();
+		for( INT x = 0 ; x < Count ; ++x )
+			Buffer[x] = &Files(x);
+		appQsort( &Buffer[0], Count, sizeof(FString*), StringCompare );
+		// Display
+		for( INT x = 0 ; x < Count ; x++ )
+			Ar.Logf( TEXT("%s"), **Buffer[x] );
+		return 1;
+	}
+	//scion jg -- Added to view the name table hash size
+	else if( ParseCommand( &Cmd, TEXT("NAMEHASH") ) )
+	{
+		FName::DisplayHash(Ar);
+		return 1;
+	}
+	//scion jg -- Added to view the last N number of names
+	else if( ParseCommand( &Cmd, TEXT("VIEWNAMES") ) )
+	{
+		INT nNumNames = 0;
+		if (Parse(Cmd,TEXT("NUM="),nNumNames))
+		{
+			for (INT nNameIndex = FName::GetMaxNames() - nNumNames;
+				nNameIndex < FName::GetMaxNames(); nNameIndex++)
+			{
+				Ar.Logf(TEXT("%d->%s"),nNameIndex,*FName((EName)nNameIndex));
+			}
+		}
+		return 1;
+	}
+#ifndef FINAL_RELEASE
+	// scion sz - dump ALL FNames to file
+	else if( ParseCommand( &Cmd, TEXT("DUMPNAMES")))
+	{
+		TArray<FName> NamesCopy;
+		NamesCopy.Empty(FName::GetMaxNames());
+		for( INT nNameIndex=0; nNameIndex < FName::GetMaxNames(); nNameIndex++ )
+		{
+			FName PrintName((EName)nNameIndex);
+			if( PrintName.IsValid() )
+			{
+				NamesCopy.AddItem( PrintName );
+			}
+			else
+			{
+				NamesCopy.AddItem( NAME_None );
+			}
+		}
+
+		UBOOL bAlphaSort=0;
+		ParseUBOOL(Cmd, TEXT("AlphaSort="), bAlphaSort);
+		if( bAlphaSort )
+			Sort( &NamesCopy(0), NamesCopy.Num() );
+
+		FOutputDeviceFile LogFileAr;
+		static INT FileNum=0;
+		appStrcpy( LogFileAr.Filename, *FString::Printf(TEXT("%s%d-Names.log"),appBaseDir(),FileNum++ ) );
+		for( INT Idx=0; Idx < NamesCopy.Num(); Idx++ )
+		{
+			LogFileAr.Logf(TEXT("%s"), *NamesCopy(Idx) );
+		}
+		LogFileAr.Flush();
+		return 1;
+	}
+#endif
 	else return 0;
 }
 IMPLEMENT_CLASS(USystem);
@@ -1021,8 +1372,29 @@ CORE_API void appRequestExit( UBOOL Force )
 	else
 	{
 		// Tell the platform specific code we want to exit cleanly from the main loop.
-		//!UNIX No quit message in UNIX.
 		GIsRequestingExit = 1;
+#ifdef __EMSCRIPTEN__
+		// Notify the browser shell to return to the splash menu after cleanup.
+		// EM_ASM is a direct C++ -> JS call -- no console parsing needed.
+		//
+		// ufront 2.13.2: MAIN_THREAD_EM_ASM, not EM_ASM. Under -sPROXY_TO_PTHREAD this runs on the
+		// worker, where `window` does not exist and WorkerLocation is read-only -- the guard below would
+		// simply skip and the page would sit on a dead canvas forever (the E2E caught exactly that on
+		// unreal1: waitForURL timed out). Only the browser main thread can navigate. It is a plain
+		// EM_ASM on a non-threaded build, so both configurations keep working.
+#ifdef __EMSCRIPTEN_PTHREADS__
+		MAIN_THREAD_EM_ASM({
+#else
+		EM_ASM({
+#endif
+			if (typeof window !== 'undefined') {
+				console.log('[SHELL] Engine exit requested, returning to menu');
+				setTimeout(function() {
+					window.location.href = window.location.pathname;
+				}, 0);
+			}
+		});
+#endif
 	}
 	unguard;
 }
@@ -1056,33 +1428,87 @@ void* appGetDllHandle( const TCHAR* Filename )
 {
 	guard(appGetDllHandle);
 
-	#if __STATIC_LINK
-		INT* FalseHandle;
-		return (void*) FalseHandle;
+#ifdef __EMSCRIPTEN__
+	// All modules are statically linked on Emscripten -- no dlopen.
+	// Return sentinel meaning "symbol is in the main binary."
+	return (void*)-1;
+#endif
+
+#ifdef _WIN32
+	// The PACKAGE path -- UObject::BindPackage asking "is this native package available?". BUILD_STATIC
+	// is ON, so every package that exists IS the main binary, and the sentinel says so.
+	//
+	// ! ufront 2.37 tried to make this HONEST -- probe for the registrant GLoaded<Package> and answer
+	// NULL for packages this build does not contain, which is exactly what the POSIX path below does and
+	// which looked strictly more correct. It CRASHED AT STARTUP, deterministically, 3/3, before the main
+	// menu finished building (a garbage UObject::GetFName). So something on this path depends on
+	// BindPackage binding unconditionally and calling ProcessRegistrants for names that are not really
+	// packages. It was reverted rather than shipped; if it is revisited, the A/B is three wine runs and
+	// the tell is `MatchViewportsToActors: GUI2K4.UT2K4MainMenu` being the last line before the fault.
+	//
+	// ! And do NOT turn it into a LoadLibrary fallback either: a UT2004 asset tree ships all THIRTY
+	// retail 2004 DLLs (Core.dll, Engine.dll, D3DDrv.dll...), so that loads a 2004 binary into the
+	// process -- also tried, also an immediate crash. A genuine external library has its own entry
+	// point; see appGetSystemDllHandle.
+	return (void*)-1;
+#endif
+
+	void *Result = NULL;
+
+	#if 0 //__STATIC_LINK
+		return((void*) -1);
 	#endif
+
+#ifndef _WIN32	// ufront 2.33: unreachable on Windows (sentinel above), and dlfcn does not exist there.
 	check(Filename);
 	const TCHAR* PackageName = Filename;
 	TCHAR* Cur;
 	TCHAR* Test = appStaticString1024();
-	void* Result;
-	const char* Error;
+
+#if MACOSX
+    #define SYMPREPEND TEXT("_")
+#else
+    #define SYMPREPEND TEXT("")
+#endif
 
 	// Get GLoadedPackage symbol name from full path.
  	while( (Cur = appStrchr( PackageName, '/' )) != NULL )
 		PackageName = Cur + 1;
  	while( (Cur = appStrchr( PackageName, '\\' )) != NULL )
 		PackageName = Cur + 1;
-	appSprintf( Test, TEXT("GLoaded%s"), PackageName );
+	appSprintf( Test, TEXT("%sGLoaded%s"), SYMPREPEND, PackageName );
 	if( (Cur = appStrchr( Test, '.' )) != NULL )
 		*Cur = '\0';
 
+#if MACOSX
+    // written with guidance from OpenDarwin.org's "dlcompat".
+    //   http://opendarwin.org/cgi-bin/cvsweb.cgi/proj/dlcompat/
+
+    check(appStrlen(Filename) < 1000);
+
+    if (NSIsSymbolNameDefined(appToAnsi(Test)))
+        Result = (void *) -1;  // it's in the main binary.
+    else
+    {
+        char *path = appAnsiStaticString1024();
+        appToAnsi(Filename, path);
+
+        if (strstr(path, ".dylib") == NULL)
+            strcat(path, ".dylib");
+
+	Result = dlopen(path, RTLD_GLOBAL | RTLD_NOW);
+   }
+
+#else
+
+	const char* Error;
 	dlerror();	// Clear any error condition.
 
 	// Check if the library was linked to the executable.
 	Result = (void*)dlopen( NULL, RTLD_NOW | RTLD_GLOBAL );
 	Error = dlerror();
 	if( Error != NULL )
-		debugf( "dlerror(): %s", Error );
+		debugf( TEXT("dlerror(): %s"), Error );
 	else
 	{
 		(void*)dlsym( Result, appToAnsi(Test) );
@@ -1099,28 +1525,81 @@ void* appGetDllHandle( const TCHAR* Filename )
 		appStrcpy( Temp, Filename );
 		appStrcat( Temp, DLLEXT );
 		Result = (void*)dlopen( appToAnsi(Temp), RTLD_NOW | RTLD_GLOBAL );
-#ifdef LOOKING_FOR_UNDEFINED_SYMBOLS
-		Error = dlerror();
-		if( Error != NULL )
-		debugf( "dlerror(): %s", Error );
-#endif
+        #ifdef LOOKING_FOR_UNDEFINED_SYMBOLS
+    		Error = dlerror();
+    		if( Error != NULL )
+    		debugf( "dlerror(): %s", Error );
+        #endif
 	}
 
-#if 1
-    //printf("FIXME: Disable UNREAL_PAUSE_ON_DLOPEN before shipping!\n");
-    const char *envr = getenv("UNREAL_PAUSE_ON_DLOPEN");
-    if (envr)
-    {
-        const TCHAR *libname = ANSI_TO_TCHAR(envr);
-        if (appStrfind(Filename, libname))
-        {
-            printf("%s loaded. Sleeping ten seconds...\n", envr);
-            sleep(10);
-        } /* if */
-    } /* if */
+#endif // MACOSX vs. Linux
+
+	if (Result != NULL)
+	{
+		const char *envr = getenv("UNREAL_PAUSE_ON_DLOPEN");
+		if (envr)
+		{
+			const TCHAR *libname = ANSI_TO_TCHAR(envr);
+			if (appStrfind(Filename, libname))
+			{
+				printf("%s loaded. Sleeping ten seconds...\n", envr);
+				sleep(10);
+			}
+		}
+	}
+
+#if 0
+	if (Result == NULL)
+		debugf(TEXT("Failed to dynamically load [%s]."), Filename);
 #endif
 
 	return Result;
+#endif // !_WIN32
+	unguard;
+}
+
+//
+// Load a genuine external library -- NOT an engine package. See the note in UnFile.h for why the two
+// cannot share an entry point on a static Windows build.
+//
+void* appGetSystemDllHandle( const TCHAR* Filename )
+{
+	guard(appGetSystemDllHandle);
+	check(Filename);
+
+#ifdef __EMSCRIPTEN__
+	// Statically linked, and FindProcs binds straight to the in-binary symbols; the sentinel just has to
+	// be non-NULL so ALAudio's Init() proceeds.
+	return (void*)-1;
+#elif defined(_WIN32)
+	// * This is what Windows was missing, and why it had no sound. ALAudio is DYNAMIC_BIND: it asks for
+	// "OpenAL32.dll" by name and resolves every AL entry point out of the handle. appGetDllHandle answered
+	// with the "it is in the exe" sentinel, so the very first lookup failed ("Missing function 'alEnable'
+	// for '_AL' support"), Init() bailed, and InitAudio logged "Audio initialization failed." -- with no
+	// line anywhere saying a DLL was missing, because none was ever looked for.
+	{
+		HMODULE Module = LoadLibraryA( appToAnsi(Filename) );
+		if( !Module )
+		{
+			TCHAR Temp[256];
+			appStrcpy( Temp, Filename );
+			appStrcat( Temp, DLLEXT );
+			Module = LoadLibraryA( appToAnsi(Temp) );
+		}
+		return (void*)Module;
+	}
+#else
+	void* Result = (void*)dlopen( appToAnsi(Filename), RTLD_NOW | RTLD_GLOBAL );
+	if( !Result )
+	{
+		TCHAR Temp[256];
+		appStrcpy( Temp, Filename );
+		appStrcat( Temp, DLLEXT );
+		Result = (void*)dlopen( appToAnsi(Temp), RTLD_NOW | RTLD_GLOBAL );
+	}
+	return Result;
+#endif
+
 	unguard;
 }
 
@@ -1132,7 +1611,19 @@ void appFreeDllHandle( void* DllHandle )
 	guard(appFreeDllHandle);
 	check(DllHandle);
 
+	if (DllHandle == (void *) -1)
+		return;
+
+#ifdef _WIN32
+	// ufront 2.37: appGetDllHandle can hand back a real module now (it could only ever return the
+	// sentinel before, which is filtered out above), so release it properly.
+	FreeLibrary( (HMODULE)DllHandle );
+	return;
+#else
+	// remember that you can unload bundles,
+	//  but not .dylib files on Darwin! --ryan.
 	dlclose( DllHandle );
+#endif
 
 	unguard;
 }
@@ -1146,7 +1637,37 @@ void* appGetDllExport( void* DllHandle, const TCHAR* ProcName )
 	check(DllHandle);
 	check(ProcName);
 
-	void* Result;
+#ifdef __EMSCRIPTEN__
+	// On Emscripten, all modules are statically linked. The sentinel (void*)-1
+	// from appGetDllHandle means "in main binary." Look up symbols in the
+	// global scope using RTLD_DEFAULT (works for -lopenal linked functions).
+	if( DllHandle == (void*)-1 )
+	{
+		void* Result = dlsym( RTLD_DEFAULT, appToAnsi(ProcName) );
+		return Result;
+	}
+#endif
+
+#ifdef _WIN32
+	// ufront 2.33 -- the sentinel means "it is in the exe". GetProcAddress on the module handle is the
+	// Win32 spelling of dlsym(RTLD_DEFAULT), and it resolves only EXPORTED names -- so the launcher links
+	// with --export-all-symbols (see CMakeLists.txt), which is what makes the package registrants
+	// (GLoaded<Package>) visible to this lookup.
+	// ufront 2.37 -- appGetDllHandle can now return a REAL module (OpenAL32.dll), so honour it. The
+	// fall back to the exe keeps every pre-2.37 lookup answering exactly as it did: a library that
+	// loads but does not export the name behaves like the old sentinel rather than silently regressing.
+	{
+		HMODULE Module = (DllHandle == (void*)-1) ? GetModuleHandleA( NULL ) : (HMODULE)DllHandle;
+		void* Result = (void*)GetProcAddress( Module, appToAnsi(ProcName) );
+		if( !Result && Module != GetModuleHandleA( NULL ) )
+			Result = (void*)GetProcAddress( GetModuleHandleA( NULL ), appToAnsi(ProcName) );
+		return Result;
+	}
+#endif
+
+#ifndef _WIN32	// ufront 2.33: unreachable on Windows (GetProcAddress above).
+	void* Result = NULL;
+
 	const char *Error;
 
 	dlerror();	// Clear any error condition.
@@ -1154,8 +1675,10 @@ void* appGetDllExport( void* DllHandle, const TCHAR* ProcName )
 	Result = (void*)dlsym( DllHandle, appToAnsi(ProcName) );
 	Error = dlerror();
 	if( Error != NULL )
-		debugf( "dlerror: %s", ANSI_TO_TCHAR(Error) );
+		debugf( TEXT("dlerror: %s"), ANSI_TO_TCHAR(Error) );
+
 	return Result;
+#endif // !_WIN32
 
 	unguard;
 }
@@ -1166,8 +1689,10 @@ void* appGetDllExport( void* DllHandle, const TCHAR* ProcName )
 void appDebugBreak()
 {
 	guard(appDebugBreak);
-#ifdef ASMLINUX
+#if defined(ASMLINUX) && !defined(UT_NO_X86_INTRIN)
 	asm("int $03");
+#else
+	raise(SIGTRAP);
 #endif
 	unguard;
 }
@@ -1198,22 +1723,30 @@ void* appCreateProc( const TCHAR* URL, const TCHAR* Parms )
 	appStrcat(LocalParms, TEXT(" "));
 	appStrcat(LocalParms, Parms);
 
+#ifdef _WIN32
+	// ufront 2.33: _spawnlp via the shell is the Windows equivalent of fork-then-system. The returned
+	// handle is a process handle rather than a pid; appGetProcReturnCode's map is keyed on it either way.
+	intptr_t pid = _spawnlp( _P_NOWAIT, "cmd.exe", "cmd.exe", "/c", appToAnsi(LocalParms), (char*)NULL );
+	if( pid == -1 )
+		debugf( TEXT("appCreateProc: failed to launch %s"), LocalParms );
+#else
 	pid_t pid = fork();
 	if (pid == 0)
 		_exit( system( appToAnsi(LocalParms) ) );
+#endif
 
-	return (void*)pid;
+	return (void*) ((PTRINT) pid);
 	unguard;
 }
 
 UBOOL appGetProcReturnCode( void* ProcHandle, INT* ReturnCode )
 {
 	guard(appGetProcReturnCode);
-	int* p = ExitCodeMap->Find( (pid_t)ProcHandle );
+	int* p = ExitCodeMap->Find( (pid_t) ((PTRINT) ProcHandle) );
 	if(p)
 	{
 		*ReturnCode = *p;
-		ExitCodeMap->Remove( (pid_t)ProcHandle );
+		ExitCodeMap->Remove( (pid_t) ((PTRINT) ProcHandle) );
 		return 1;
 	}
 	return 0;
@@ -1226,10 +1759,15 @@ UBOOL appGetProcReturnCode( void* ProcHandle, INT* ReturnCode )
 
 static void HandleChild(int Signal)
 {
+#ifndef _WIN32
+	// ufront 2.33: SIGCHLD reaping is POSIX-only. Windows has no zombie processes to reap -- a spawned
+	// child's exit code is read from its handle -- and this is only ever installed by the sigaction block
+	// in appPlatformInit, which is itself POSIX-only.
 	int Status;
 	pid_t pid;
 	while( (pid=waitpid(-1, &Status, WNOHANG)) > 0 )
 		ExitCodeMap->Set( pid, WEXITSTATUS(Status) );
+#endif
 }
 
 static pid_t mainPID;
@@ -1242,30 +1780,40 @@ static void HandleSignal( int Signal )
 	char* sig_text;
 	switch (Signal)
 	{
+#ifndef _WIN32	// ufront 2.33: not defined by MinGW's <signal.h> -- no such signal on Windows.
 		case SIGHUP:
 			sig_text = "Signal: SIGHUP [hangup]";
 			SignalExit++;
 			break;
+#endif
+#ifndef _WIN32	// ufront 2.33: not defined by MinGW's <signal.h> -- no such signal on Windows.
 		case SIGQUIT:
 			sig_text = "Signal: SIGQUIT [quit]";
 			SignalExit++;
 			break;
+#endif
 		case SIGILL:
 			sig_text = "Signal: SIGILL [illegal instruction]";
 			SignalCritical++;
 			break;
+#ifndef _WIN32	// ufront 2.33: not defined by MinGW's <signal.h> -- no such signal on Windows.
 		case SIGTRAP:
 			sig_text = "Signal: SIGTRAP [trap]";
 			SignalCritical++;
 			break;
+#endif
+#ifndef _WIN32	// ufront 2.33: not defined by MinGW's <signal.h> -- no such signal on Windows.
 		case SIGIOT:
 			sig_text = "Signal: SIGIOT [iot trap]";
 			SignalCritical++;
 			break;
+#endif
+#ifndef _WIN32	// ufront 2.33: not defined by MinGW's <signal.h> -- no such signal on Windows.
 		case SIGBUS:
 			sig_text = "Signal: SIGBUS [bus error]";
 			SignalCritical++;
 			break;
+#endif
 		case SIGFPE:
 			sig_text = "Signal: SIGFPE [floating point exception]";
 			SignalCritical++;
@@ -1292,26 +1840,29 @@ static void HandleSignal( int Signal )
 	{
 		if (!AlreadyAborting)
 		{
-			void *aTrace[64];
-			char **tString;
-			int size, i;
-
-			#if (defined __FreeBSD__)
-			printf("!!! FIXME: No backtrace_symbols() on FreeBSD.\n");
-			#elif (defined MACOSX)
-			printf("!!! FIXME: No backtrace_symbols() on FreeBSD.\n");
-			#else
-			size = backtrace(aTrace, 64);
-			tString = backtrace_symbols(aTrace, size);
-			printf("\nBacktrace:\n");
-			for (i = 0; i < size; i++)
-				printf("[%2.i]  %s\n", i+1, tString[i]);
-  			#endif
-
 			// Avoid calling appExit again.
 			AlreadyAborting = true;
+
 			printf( "%s\n", sig_text );
-			printf( "Aborting.\n" );
+			printf( "Aborting.\n\n" );
+			printf( "\nCrash information will be saved to your logfile.\n" );
+
+			#if HAVE_EXECINFO_H && !defined(__ANDROID__)
+				void *aTrace[64];
+				char **tString;
+				int size = backtrace(aTrace, ARRAY_COUNT(aTrace));
+				tString = backtrace_symbols(aTrace, size);
+				debugf(TEXT("\nDeveloper Backtrace:"));
+				for (int i = 0; i < size; i++)
+					debugf(TEXT("[%2.i]  %s"), i+1, appFromAnsi(tString[i]));
+  			#endif
+
+			#if DO_PORTABLE_GUARD_BLOCKS
+				FString GuardBackTrace;
+				UnGuardBlock::GetBackTrace(GuardBackTrace);
+				debugf(TEXT("Unreal Call Stack: %s"), *GuardBackTrace);
+			#endif
+
 			appExit();
 		}
 		exit(1);
@@ -1410,7 +1961,6 @@ CORE_API DWORD appGetTime( const TCHAR* Filename )
 //
 CORE_API DOUBLE appSecondsSlow()
 {
-#if 1
 	static DOUBLE InitialTime = 0.0;
 	static DOUBLE TimeCounter = 0.0;
 	DOUBLE NewTime;
@@ -1428,10 +1978,8 @@ CORE_API DOUBLE appSecondsSlow()
 	InitialTime = NewTime;
 
 	return TimeCounter;
-#else
-	return appSeconds();
-#endif
 }
+
 
 #if !DEFINED_appCycles
 CORE_API DWORD appCycles()
@@ -1440,12 +1988,6 @@ CORE_API DWORD appCycles()
 }
 #endif
 
-#if !DEFINED_appCycles64
-CORE_API SQWORD appCycles64()
-{
-	return (SQWORD)appSeconds();
-}
-#endif
 
 //
 // Get time in seconds. Origin is arbitrary.
@@ -1456,6 +1998,60 @@ CORE_API DOUBLE appSeconds()
 	return appSecondsSlow();
 }
 #endif
+
+
+CORE_API void appArgv0(const char *argv0)
+{
+#if MACOSX
+    // MacOS X has this concept of "Application Bundles" which makes the whole
+    //  install tree look like a single icon in the Finder, which, when
+    //  launched, loads the game binary. They, however, totally fuck up your
+    //  game's filesystem...best thing to do is see if the binary is running
+    //  in a dir that appears to be embedded in an Application Bundle and
+    //  chdir to the game's System dir...  --ryan.
+    //
+    //  (FIXME: There _are_ Carbon APIs to determine this via process info...)
+
+    char buf[MAXPATHLEN];
+    if ((argv0 != NULL) && (strchr(argv0, '/') != NULL)) // no path specifed?
+        strncpy(buf, argv0, sizeof (buf));
+    else
+    {
+        // From the Finder, current working directory is "/", which sucks.
+        if ((getcwd(buf, sizeof (buf)) == NULL) || (strcmp(buf, "/") == 0))
+            return;  // hail mary...probably fail elsewhere.
+    }
+
+    buf[sizeof (buf) - 1] = '\0';  // null terminate, just in case.
+
+    char realbuf[MAXPATHLEN];
+#ifdef _WIN32	// ufront 2.33: _fullpath is the Win32 realpath (note the reversed argument order).
+    if (_fullpath(realbuf, buf, sizeof(realbuf)) == NULL)
+#else
+    if (realpath(buf, realbuf) == NULL)
+#endif
+        return;
+
+    char *ptr = strstr(realbuf, "/Contents/MacOS/");
+    if (ptr != NULL)
+    {
+        *ptr = '\0';  // chop off bundle bin dirs...
+        strcat(realbuf, "/System");   // add system dir to path...
+    }
+    else
+    {
+        // not an application bundle, but might be a symlink to elsewhere,
+        //  so chdir to there, just in case.
+        ptr = strrchr(realbuf, '/');  // chop off binary name.
+        if (ptr != NULL)
+            *ptr = '\0';
+    }
+
+    if (chdir(realbuf) == -1)  // go there.
+        return;
+#endif
+}
+
 
 //
 // Return the system time.
@@ -1488,8 +2084,18 @@ CORE_API void appSleep( FLOAT Seconds )
 {
 	guard(appSleep);
 
+#ifdef __EMSCRIPTEN__
+	// Yield to the browser event loop (Asyncify) instead of busy-waiting the
+	// single thread. EnforceTickRate calls this every frame as the frame-rate
+	// cap, so it doubles as the per-frame yield a networked client needs --
+	// WebRTC DataChannel messages, the reconnect watchdog and PeerJS signaling
+	// all run between engine frames. (A visible browser also yields on canvas
+	// present; headless has no display, so this is the reliable yield in both.)
+	emscripten_sleep( (unsigned int)(Seconds * 1000.0f) );
+#else
 	INT SleepTime = (INT) (Seconds * 1000000);
 	usleep( SleepTime );
+#endif
 
 	unguard;
 }
@@ -1528,7 +2134,11 @@ static bool FindBinaryInPath(FString &cmd)
         binpath += bin;
 
         char realized[MAXPATHLEN];
+#ifdef _WIN32	// ufront 2.33: see above.
+        if (_fullpath(realized, appToAnsi(*binpath), sizeof(realized)) != NULL)
+#else
         if (realpath(appToAnsi(*binpath), realized) != NULL)
+#endif
         {
             struct stat statbuf;
             if (stat(realized, &statbuf) != -1)
@@ -1562,6 +2172,19 @@ static bool FindBinaryInPath(FString &cmd)
 void appLaunchURL( const TCHAR* URL, const TCHAR* Parms, FString* Error )
 {
 	guard(appLaunchURL);
+
+#if MACOSX
+
+    // DO NOT MERGE INTO WARFARE    
+    // change hardcoded URL from Infogrames to MacSoft for Mac version...
+    if (appStrcmp(URL, TEXT("http://www.unrealtournament.com/")) == 0)
+        URL = TEXT("http://store.yahoo.com/boldgames/");
+    // DO NOT MERGE INTO WARFARE
+
+    GMacOSLaunchURLOnExit = new TCHAR[appStrlen(URL) + 1];
+    appStrcpy(GMacOSLaunchURLOnExit, URL);
+
+#else
 
     const char *_envr = getenv("BROWSER");
     if (!_envr)
@@ -1630,14 +2253,17 @@ void appLaunchURL( const TCHAR* URL, const TCHAR* Parms, FString* Error )
 
     if (!foundBrowser)
     {
-        debugf("Couldn't find any browser to launch!");
-        debugf("Please set the environment variable BROWSER next time.");
+        debugf(TEXT("Couldn't find any browser to launch!"));
+        debugf(TEXT("Please set the environment variable BROWSER next time."));
 
         fprintf(stderr, "Couldn't find any browser to launch!\n");
         fprintf(stderr, "Please set the environment variable BROWSER next time.\n");
     }
 
-    appRequestExit(0);
+#endif
+
+	appRequestExit(0);
+
 	unguard;
 }
 
@@ -1752,6 +2378,15 @@ CORE_API const TCHAR* appBaseDir()
 
 	if( !BaseDir[0] )
 	{
+#if defined(__ANDROID__)
+		// Android: the app shell's JNI bridge sets UT2004_ANDROID_BASEDIR to the on-storage
+		// System dir (and chdir's there) so the engine reads the game tree IN PLACE via its
+		// unchanged POSIX fopen layer (no copy). Re-chdir here defensively in case cwd moved
+		// during SDL/thread startup, then let getcwd below seed BaseDir. Falls through if unset.
+		const ANSICHAR* AndroidBaseDir = getenv("UT2004_ANDROID_BASEDIR");
+		if( AndroidBaseDir && AndroidBaseDir[0] )
+			chdir( AndroidBaseDir );
+#endif
 		// If the executable isn't launched from its own directory, then the
 		// dynamic linker won't be able to find the shared libraries.
 		getcwd( AnsiBaseDir, sizeof(AnsiBaseDir) );
@@ -1767,12 +2402,12 @@ CORE_API const TCHAR* appComputerName()
 {
 	guard(appComputerName);
 	static TCHAR Result[256]=TEXT("");
-    static ANSICHAR AnsiResult[256];
+	static ANSICHAR AnsiResult[256];
 	if( !Result[0] )
-    {
+	{
 		gethostname( AnsiResult, sizeof(AnsiResult) );
-        appStrcpy( Result, ANSI_TO_TCHAR(AnsiResult));
-    }
+		appStrcpy( Result, ANSI_TO_TCHAR(AnsiResult));
+	}
 	return Result;
 	unguard;
 }
@@ -1783,10 +2418,18 @@ CORE_API const TCHAR* appUserName()
 	guard(appUserName);
 	static TCHAR Result[256]=TEXT("");
 	if( !Result[0] )
-    {
-        ANSICHAR *str = getlogin();
+	{
+#ifdef _WIN32	// ufront 2.33: no getlogin() on Windows.
+		ANSICHAR NameBuf[256] = "";
+		DWORD NameLen = ARRAY_COUNT(NameBuf);
+		if( !GetUserNameA( NameBuf, &NameLen ) )
+			strcpy( NameBuf, "Player" );
+		ANSICHAR *str = NameBuf;
+#else
+		ANSICHAR *str = getlogin();
+#endif
 		appStrncpy( Result, ANSI_TO_TCHAR(str), sizeof(Result) );
-    }
+	}
 	return Result;
 	unguard;
 }
@@ -1795,9 +2438,11 @@ CORE_API const TCHAR* appUserName()
 CORE_API const TCHAR* appPackage()
 {
 	guard(appPackage);
-    return(appStrcpy(appStaticString1024(), ANSI_TO_TCHAR(GModule)));
+	return(appStrcpy(appStaticString1024(), ANSI_TO_TCHAR(GModule)));
 	unguard;
 }
+
+
 
 /*-----------------------------------------------------------------------------
 	App init/exit.
@@ -1813,12 +2458,45 @@ void appPlatformPreInit()
 #endif
 
 #if __LINUX_X86__
-    GRunningOS = OS_LINUX_X86;
+    #ifdef __x86_64__
+        GRunningOS = OS_LINUX_X86_64;
+        appSprintf(GMachineOS, TEXT("x86-64 Linux"));
+    #else
+        GRunningOS = OS_LINUX_X86;
+        appSprintf(GMachineOS, TEXT("x86 Linux"));
+    #endif
+
 #elif (defined __FreeBSD__)
     #error determine if x86 or Alpha or whatnot...
     GRunningOS = OS_FREEBSD_X86;
+    appSprintf(GMachineOS, TEXT("x86 FreeBSD"));
+
 #elif (defined MACOSX)
     GRunningOS = OS_MAC_OSX_PPC;
+
+    long osver = 0x0000;
+	OSErr err = Gestalt(gestaltSystemVersion, &osver);
+    TCHAR verstr[16];
+    appSprintf(verstr, TEXT("%X"), osver);
+
+    appSprintf(GMachineOS, TEXT("MacOS %c%c.%c.%c"),
+                verstr[0], verstr[1], verstr[2], verstr[3]);
+
+    GMacOSVer = (INT) osver;
+    check((long) GMacOSVer == osver);
+
+#elif defined(_WIN32)
+    // ufront 2.33 -- the engine only wants a human-readable OS string here.
+    {
+        OSVERSIONINFOA osvi;
+        appMemzero( &osvi, sizeof(osvi) );
+        osvi.dwOSVersionInfoSize = sizeof(osvi);
+        if( GetVersionExA( &osvi ) )
+            appSprintf( GMachineOS, TEXT("Windows %u.%u (build %u)"),
+                (unsigned) osvi.dwMajorVersion, (unsigned) osvi.dwMinorVersion, (unsigned) osvi.dwBuildNumber );
+        else
+            appStrcpy( GMachineOS, TEXT("Windows") );
+    }
 #else
     // (more to come. --ryan.)
     #error fill in your platform.
@@ -1827,139 +2505,256 @@ void appPlatformPreInit()
     mainPID = getpid();
 }
 
-#if (!defined USE_FILESTREAM_THREAD)
 
-FCriticalSection::FCriticalSection() {}
-FCriticalSection::~FCriticalSection() {}
-void FCriticalSection::Lock() {}
-void FCriticalSection::Unlock() [}
-FScopeCriticalSection::FScopeCriticalSection( FCriticalSection* InCriticalSection ) {}
-FScopeCriticalSection::~FScopeCriticalSection() {}
-
-#else
-
-FCriticalSection::FCriticalSection()
-{
-	guard(FCriticalSection::FCriticalSection);
-	Handle = new pthread_mutex_t;
-	int rc = pthread_mutex_init((pthread_mutex_t *) Handle, NULL);
-	check(rc == 0);
-	unguard;
-}
-
-FCriticalSection::~FCriticalSection()
-{
-	guard(FCriticalSection::~FCriticalSection);
-	int rc = pthread_mutex_destroy((pthread_mutex_t *) Handle);
-	check(rc == 0);
-	delete (pthread_mutex_t *) Handle;
-	unguard;
-}
-
-void FCriticalSection::Lock()
-{
-	int rc = pthread_mutex_lock((pthread_mutex_t *) Handle);
-	check(rc == 0);
-}
-
-void FCriticalSection::Unlock()
-{
-	int rc = pthread_mutex_unlock((pthread_mutex_t *) Handle);
-	check(rc == 0);
-}
-
-FScopeCriticalSection::FScopeCriticalSection( FCriticalSection* InCriticalSection )
-{
-	CriticalSection = InCriticalSection;
-	CriticalSection->Lock();
-}
-
-FScopeCriticalSection::~FScopeCriticalSection()
-{
-	CriticalSection->Unlock();
-}
-
-
-static pthread_t FileStreamingThreadId = 0;
-
-static void *FileStreamingThread( void* Arg )
-{
-	while (GFileStream->Destroyed == 0)
-	{
-		for (INT i=0; i<GFileStream->MaxStreams; i++)
-		{
-			FScopeCriticalSection Lock( GFileStream->CriticalSection );
-
-			if (GFileStream->Streams[i].Used && GFileStream->Streams[i].ChunksRequested )
-			{
-				GFileStream->Read( i, GFileStream->Streams[i].ChunkSize );
-				GFileStream->Streams[i].ChunksRequested--;
-				GFileStream->Streams[i].Data = ((BYTE*) GFileStream->Streams[i].Data) + GFileStream->Streams[i].ChunkSize;
-			}
-		}
-		usleep(1000);
-	}
-	for (INT i=0; i<GFileStream->MaxStreams; i++)
-	{
-		FScopeCriticalSection Lock( GFileStream->CriticalSection );
-
-		if (GFileStream->Streams[i].Handle)
-			GFileStream->Destroy(i);
-	}
-	GFileStream->Destroyed = 2;
-	return NULL;
-}
-#endif
-
+// engine-uc2: UC2's FCriticalSection is the abstract one in UnThreadingBase.h; the pthread implementation
+// (recursive, like a Win32 CRITICAL_SECTION) is FCriticalSectionPosix in UnThreadingPosix.cpp.
 
 static void DoCPUID( int i, DWORD *A, DWORD *B, DWORD *C, DWORD *D )
 {
-// EBX is used by the caller,
-//  who won't save it, and won't acknoledge we're clobbering it.
-//  Do a pushall/popall, just in case.
-#if __LINUX_X86__
-    DWORD buf[4];
-
- 	__asm__ __volatile__ (
-        "pushl %%eax           \n\n"
-        "pushl %%ebx           \n\n"
-        "pushl %%ecx           \n\n"
-        "pushl %%edx           \n\n"
-        "cpuid                  \n\t"
-        "movl  %%eax,  0(%%edi) \n\t"
-        "movl  %%ebx,  4(%%edi) \n\t"
-        "movl  %%ecx,  8(%%edi) \n\t"
-        "movl  %%edx, 12(%%edi) \n\t"
-        "popl  %%edx           \n\n"
-        "popl  %%ecx           \n\n"
-        "popl  %%ebx           \n\n"
-        "popl  %%eax           \n\n"
-            : /* output to memory directly. */
-            : "a" (i), "D" (buf)
-            : "memory"
-    );
-
-    *A = buf[0];
-    *B = buf[1];
-    *C = buf[2];
-    *D = buf[3];
+// engine-uc2: GCC's <cpuid.h> instead of the hand-written push/cpuid/pop block (which also needed the
+// UREG_* register-name macros); it is PIC-safe on i386 and correct on x86_64.
+#if (defined(__i386__) || defined(__x86_64__)) && !defined(UT_NO_X86_INTRIN)
+	unsigned int a=0, b=0, c=0, d=0;
+	__cpuid( i, a, b, c, d );
+	*A = a; *B = b; *C = c; *D = d;
 #else
 	*A=*B=*C=*D=0;
 #endif
 }
 
 
+#ifndef _WIN32
+// ufront 2.33: <winnt.h> already defines LARGE_INTEGER (as a union, with the members the other way
+// round). Nothing here uses it on Windows, so take the platform's rather than redefine it.
 typedef struct
 {
     DWORD HighPart;
     DWORD LowPart;
 } LARGE_INTEGER;
+#endif
+
+#define DESIRED_FILE_HANDLES 1024
+
+#ifdef _WIN32
+//
+// ufront 2.37 -- last-resort crash reporter for the Windows build.
+//
+// Windows had NO fault handler at all: the POSIX sigaction block below is skipped, and the guard/unguard
+// chain that 2.33 relied on only reports THROWN errors. A segfault therefore killed the process with no
+// output, leaving a log that stops mid-stream and looks like a clean exit. This makes a fault say so.
+//
+// ! It deliberately does NOT try to be a symbolising debugger. The exe carries DWARF, which dbghelp
+// cannot read (it wants PDBs), so printing names in-process would need a DWARF reader in the crash path --
+// the least safe place to run new code. Instead it prints the module base and the raw addresses, which
+// `addr2line -e ut2004.exe` turns into exact file:line on the machine that built it. * The base matters:
+// the image is ASLR'd, so a bare address is useless without it.
+//
+static LONG WINAPI appWinUnhandledException( EXCEPTION_POINTERS* Info )
+{
+	static UBOOL Reentered = 0;
+	if( Reentered )
+		return EXCEPTION_EXECUTE_HANDLER;	// a fault inside the reporter must not loop
+	Reentered = 1;
+
+	GIsCriticalError = 1;
+
+	const DWORD Code = Info && Info->ExceptionRecord ? Info->ExceptionRecord->ExceptionCode : 0;
+	const TCHAR* Name;
+	switch( Code )
+	{
+		case EXCEPTION_ACCESS_VIOLATION:      Name = TEXT("EXCEPTION_ACCESS_VIOLATION [segmentation fault]"); break;
+		case EXCEPTION_ILLEGAL_INSTRUCTION:   Name = TEXT("EXCEPTION_ILLEGAL_INSTRUCTION"); break;
+		case EXCEPTION_INT_DIVIDE_BY_ZERO:    Name = TEXT("EXCEPTION_INT_DIVIDE_BY_ZERO"); break;
+		case EXCEPTION_FLT_DIVIDE_BY_ZERO:    Name = TEXT("EXCEPTION_FLT_DIVIDE_BY_ZERO"); break;
+		case EXCEPTION_STACK_OVERFLOW:        Name = TEXT("EXCEPTION_STACK_OVERFLOW"); break;
+		case EXCEPTION_PRIV_INSTRUCTION:      Name = TEXT("EXCEPTION_PRIV_INSTRUCTION"); break;
+		case EXCEPTION_IN_PAGE_ERROR:         Name = TEXT("EXCEPTION_IN_PAGE_ERROR"); break;
+		default:                              Name = TEXT("EXCEPTION (see code)"); break;
+	}
+
+	const BYTE* Base = (const BYTE*)GetModuleHandleA( NULL );
+
+	debugf( NAME_Critical, TEXT("=== CRASH (unhandled exception) ===") );
+	debugf( NAME_Critical, TEXT("%s  code=0x%08x"), Name, (DWORD)Code );
+	// ! %08x TRUNCATES A 64-BIT BASE, and this is not cosmetic: on Win64 the PE's preferred base
+	// is 0x140000000, so the printed base was `0x40000000` and every rva computed from it sent
+	// addr2line to an address that resolves to nothing. Measured 2026-09-02 on the first x86-64
+	// Windows crash this engine has ever produced -- seven candidate frames, seven `?? ??:0`.
+	debugf( NAME_Critical, TEXT("Image base: 0x%016llx   (subtract this from the addresses below)"),
+	        (QWORD)(size_t)Base );
+
+	if( Info && Info->ExceptionRecord )
+	{
+		const BYTE* At = (const BYTE*)Info->ExceptionRecord->ExceptionAddress;
+		debugf( NAME_Critical, TEXT("Faulting address: 0x%016llx   rva=0x%08x"),
+		        (QWORD)(size_t)At, (DWORD)(At - Base) );
+		// An access violation records what it was doing and to which address -- usually the whole story
+		// (a read of 0x00000000 is a null deref, and the offset says which field).
+		if( Code == EXCEPTION_ACCESS_VIOLATION && Info->ExceptionRecord->NumberParameters >= 2 )
+		{
+			const ULONG_PTR Op = Info->ExceptionRecord->ExceptionInformation[0];
+			debugf( NAME_Critical, TEXT("Tried to %s address 0x%08x"),
+				Op == 0 ? TEXT("READ") : Op == 1 ? TEXT("WRITE") : TEXT("EXECUTE"),
+				(DWORD)Info->ExceptionRecord->ExceptionInformation[1] );
+		}
+	}
+
+	// ! Flush the header BEFORE attempting any call-path reconstruction. The first version of this
+	// reporter did the trace first and printed nothing but the header when the trace itself faulted --
+	// losing the one datum that always survives. Order the output by how reliably it can be produced.
+	if( GLog )
+		GLog->Flush();
+
+	// A raw scan of the stack for values that land inside this image. With -O2 there are no frame
+	// pointers on i686, so these ARE the return addresses, mixed with data -- noisy, but a noisy call
+	// path beats no call path, and addr2line discards the ones that do not resolve to a function.
+	// Cheapest and safest of the two techniques, so it goes first.
+	if( Info && Info->ContextRecord )
+	{
+		#ifdef _WIN64
+			const BYTE** Sp = (const BYTE**)Info->ContextRecord->Rsp;
+		#else
+			const BYTE** Sp = (const BYTE**)Info->ContextRecord->Esp;
+		#endif
+		// Image span straight out of the PE headers -- GetModuleInformation would drag in psapi for one
+		// field, and the headers are already mapped at Base.
+		SIZE_T Span = 0;
+		{
+			const IMAGE_DOS_HEADER* Dos = (const IMAGE_DOS_HEADER*)Base;
+			if( Dos->e_magic == IMAGE_DOS_SIGNATURE )
+			{
+				const IMAGE_NT_HEADERS* Nt = (const IMAGE_NT_HEADERS*)(Base + Dos->e_lfanew);
+				if( Nt->Signature == IMAGE_NT_SIGNATURE )
+					Span = Nt->OptionalHeader.SizeOfImage;
+			}
+		}
+		if( Span && Sp )
+		{
+			debugf( NAME_Critical, TEXT("Stack scan (candidate return addresses):") );
+			INT Printed = 0;
+			for( INT i = 0; i < 2048 && Printed < 48; i++ )
+			{
+				// IsBadReadPtr is deprecated but this is a crash path; a fault here would be worse.
+				if( IsBadReadPtr( Sp + i, sizeof(void*) ) )
+					break;
+				const BYTE* V = Sp[i];
+				if( V > Base && (SIZE_T)(V - Base) < Span )
+				{
+					debugf( NAME_Critical, TEXT("  0x%08x  rva=0x%08x"), (DWORD)(size_t)V, (DWORD)(V - Base) );
+					Printed++;
+				}
+			}
+		}
+	}
+
+	if( GLog )
+		GLog->Flush();
+
+	// * The frame-pointer walk comes FIRST and RtlCaptureStackBackTrace LAST, which is the opposite of
+	// the obvious order, for two measured reasons:
+	//   * on real Windows RtlCaptureStackBackTrace unwinds from HERE, inside the handler, and returns
+	//     `appWinUnhandledException <- ntdll <- ntdll` -- four exact frames, none of them the crash;
+	//   * under wine it FAULTS, and a fault in the reporter costs everything printed after it (observed:
+	//     the report stopped dead at the last stack-scan line).
+	// The walk needs no API and, with -fno-omit-frame-pointer, is the accurate one anyway.
+	if( Info && Info->ContextRecord )
+	{
+		#ifndef _WIN64
+		const DWORD** Fp = (const DWORD**)Info->ContextRecord->Ebp;
+		for( INT i = 0; i < 48 && Fp && !IsBadReadPtr( Fp, 2*sizeof(void*) ); i++ )
+		{
+			const BYTE* Ret = (const BYTE*)Fp[1];
+			if( !Ret )
+				break;
+			debugf( NAME_Critical, TEXT("  ebp[%02d] 0x%08x  rva=0x%08x"), i,
+				(DWORD)(size_t)Ret, (DWORD)(Ret - Base) );
+			const DWORD** Next = (const DWORD**)Fp[0];
+			if( Next <= Fp )		// the chain must climb, or it is not a chain
+				break;
+			Fp = Next;
+		}
+		#endif
+	}
+
+	if( GLog )
+		GLog->Flush();
+
+	{
+		void* Frames[62];
+		USHORT Count = RtlCaptureStackBackTrace( 0, 62, Frames, NULL );
+		for( USHORT i = 0; i < Count; i++ )
+			debugf( NAME_Critical, TEXT("  frame[%02d] 0x%08x  rva=0x%08x"), (INT)i,
+				(DWORD)(size_t)Frames[i], (DWORD)((const BYTE*)Frames[i] - Base) );
+	}
+
+	// ! Label this honestly: appInit SEEDS GErrorHist with "General protection fault!" and the guard
+	// chain appends to it, so a non-empty buffer does NOT mean an error just happened -- it is whatever
+	// the last unwind left there, possibly long ago and already handled.
+	if( GErrorHist[0] )
+		debugf( NAME_Critical, TEXT("Guard history (may be stale, not necessarily this crash): %s"), GErrorHist );
+
+	// The image base, not a literal: 0x400000 is the 32-bit PE default and is wrong by
+	// 0x13fc00000 on x86-64. Printing the number the reader must actually add removes the step
+	// where they guess it.
+	debugf( NAME_Critical,
+	        TEXT("Symbolise with: addr2line -f -C -e ut2004.exe <rva + 0x%016llx>"),
+	        (QWORD)(size_t)GetModuleHandleA( NULL ) );
+	debugf( NAME_Critical, TEXT("=== END CRASH ===") );
+
+	if( GLog )
+		GLog->Flush();
+
+	return EXCEPTION_EXECUTE_HANDLER;
+}
+
+// An uncaught C++ exception. The engine's own errors travel this way (appThrowf), so when one escapes
+// every catch the log must say so rather than just stopping.
+static void appWinTerminate()
+{
+	GIsCriticalError = 1;
+	debugf( NAME_Critical, TEXT("=== CRASH (std::terminate -- an exception escaped every handler) ===") );
+	if( GErrorHist[0] )
+		debugf( NAME_Critical, TEXT("Last engine error: %s"), GErrorHist );
+	if( GLog )
+		GLog->Flush();
+	abort();	// -> appWinAbort, which prints the call path
+}
+
+static void appWinAbort( int )
+{
+	static UBOOL Reentered = 0;
+	if( !Reentered )
+	{
+		Reentered = 1;
+		GIsCriticalError = 1;
+		debugf( NAME_Critical, TEXT("=== CRASH (abort) ===") );
+		debugf( NAME_Critical, TEXT("Image base: 0x%016llx"), (QWORD)(size_t)GetModuleHandleA( NULL ) );
+		if( GErrorHist[0] )
+			debugf( NAME_Critical, TEXT("Last engine error: %s"), GErrorHist );
+		{
+			const BYTE* Base = (const BYTE*)GetModuleHandleA( NULL );
+			void* Frames[62];
+			USHORT Count = RtlCaptureStackBackTrace( 0, 62, Frames, NULL );
+			for( USHORT i = 0; i < Count; i++ )
+				debugf( NAME_Critical, TEXT("  frame[%02d] 0x%08x  rva=0x%08x"), (INT)i,
+					(DWORD)(size_t)Frames[i], (DWORD)((const BYTE*)Frames[i] - Base) );
+		}
+		if( GLog )
+			GLog->Flush();
+	}
+	_exit( 3 );
+}
+#endif // _WIN32
+
+static void StartFileStreamingThread();	// engine-uc2, defined at the end of this file
 
 void appPlatformInit()
 {
 	guard(appPlatformInit);
 
-    //printf("GRunningOS is (%d). ENGINE_VERSION is (%d).\n", (int) GRunningOS, (int) ENGINE_VERSION);
+	FLOAT CpuSpeed = 0.0f;
+
+	//printf("GRunningOS is (%d). ENGINE_VERSION is (%d).\n", (int) GRunningOS, (int) ENGINE_VERSION);
 
 	// System initialization.
 	GSys = new USystem;
@@ -1973,6 +2768,11 @@ void appPlatformInit()
 	// Exit code handling
 	ExitCodeMap = new TMap<pid_t,int>;
 
+	debugf( NAME_Init, TEXT("OS Type=%s"), GMachineOS );
+
+	guard(UnixDetectCPU);
+
+#if ASMLINUX
 	// Check processor version with CPUID.
 	try
 	{
@@ -2001,85 +2801,200 @@ void appPlatformInit()
 			case 7:  Model=TEXT("P7-class processor");         break;
 			default: Model=TEXT("Unknown processor");          break;
 		}
-		if( (D & 0x00008000) ) {appStrcat( FeatStr, TEXT(" CMov") ); GIsPentiumPro=1; }
+		if( (D & 0x00008000) ) {appStrcat( FeatStr, TEXT(" CMov") );}
 		if( (D & 0x00000001) ) {appStrcat( FeatStr, TEXT(" FPU") );}
 		if( (D & 0x00000010) ) {appStrcat( FeatStr, TEXT(" RDTSC") );}
 		if( (D & 0x00000040) ) {appStrcat( FeatStr, TEXT(" PAE") );}
-		if( (D & 0x00800000) && !ParseParam(appCmdLine(),TEXT("NOMMX")) ) {appStrcat( FeatStr, TEXT(" MMX") ); GIsMMX=1;}
+
+        #ifdef __x86_64__  // Hammer always has these instruction sets.
+		appStrcat( FeatStr, TEXT(" MMX") );
+		appStrcat( FeatStr, TEXT(" SSE") );
+        #else
+		if( (D & 0x00800000) && !ParseParam(appCmdLine(),TEXT("NOMMX")) ) {appStrcat( FeatStr, TEXT(" MMX") );}	// engine-uc2: UC2 has no GIsMMX (as on PC)
 		if( (D & 0x02000000) && !ParseParam(appCmdLine(),TEXT("NOSSE")) ) {appStrcat( FeatStr, TEXT(" SSE") ); GIsSSE=1;}
+        #endif
 
 		// Print features.
 		debugf( NAME_Init, TEXT("CPU Detected: %s (%s)"), Model, Brand );
 		debugf( NAME_Init, TEXT("CPU Features:%s"), FeatStr );
 
-        appSprintf( GMachineCPU, TEXT("%s %s"), Brand, Model );
+		appSprintf( GMachineCPU, TEXT("%s %s"), Brand, Model ); // gam
+
+		// engine-uc2: UC2 has no GRunningCPU (UT2004's CPU_INTEL/CPU_AMD/CPU_AMD64 tagging dropped).
 	}
 	catch( ... )
 	{
 		debugf( NAME_Init, TEXT("Couldn't detect CPU: Probably 486 or non-Intel processor") );
-        appSprintf( GMachineCPU, TEXT("Unknown CPU") );
+		appSprintf( GMachineCPU, TEXT("Unknown CPU") ); // gam
 	}
+
+#elif MACOSX
+	long cputype = 0;
+	const TCHAR *cpuname = TEXT("Unknown CPU");
+
+	OSErr err = Gestalt(gestaltNativeCPUType, &cputype);
+	if (err)
+	{
+		debugf(NAME_Init, TEXT("gestaltNativeCPUType failure: err=%d"), (int) err);
+	}
+	else
+	{
+		typedef struct
+		{
+			int gestaltID;
+			const TCHAR *namestr;
+		} PowerPC_CPU_Info;
+
+		static PowerPC_CPU_Info ppcCPUs[] =
+		{
+			// shouldn't ever be a 680x0 chip, but it's here for completeness.
+			{ gestalt68000,     TEXT("68000")                   },
+			{ gestalt68010,     TEXT("68010")                   },
+			{ gestalt68020,     TEXT("68020")                   },
+			{ gestalt68030,     TEXT("68030")                   },
+			{ gestalt68040,     TEXT("68040")                   },
+			{ gestaltCPU601,    TEXT("PowerPC 601")             },
+			{ gestaltCPU603,    TEXT("PowerPC 603")             },
+			{ gestaltCPU604,    TEXT("PowerPC 604")             },
+			{ gestaltCPU603e,   TEXT("PowerPC 603e")            },
+			{ gestaltCPU603ev,  TEXT("PowerPC 603ev")           },
+			{ gestaltCPU750,    TEXT("PowerPC 740/750/G3")      },
+			{ gestaltCPU604e,   TEXT("PowerPC 604e")            },
+			{ gestaltCPU604ev,  TEXT("PowerPC 604ev")           },
+			{ gestaltCPUG4,     TEXT("PowerPC G4")              },
+			{ gestaltCPUG47450, TEXT("PowerPC G4/Vger/Altivec") },
+			{ 0, NULL }
+		};
+
+		for (int i = 0; ppcCPUs[i].namestr != NULL; i++)
+		{
+			if (ppcCPUs[i].gestaltID == cputype)
+			{
+				cpuname = ppcCPUs[i].namestr;
+				break;
+			}
+		}
+	}
+
+	appStrcpy( GMachineCPU, cpuname );
+	debugf( NAME_Init, TEXT("CPU Type=%s"), GMachineCPU );
+
+	GIsAltivec = 0;
+
+    long cpufeature = 0;
+    err = Gestalt(gestaltPowerPCProcessorFeatures, &cpufeature);
+    if (err != noErr)
+    {
+		debugf(NAME_Init, TEXT("gestaltPowerPCProcessorFeatures failure: err=%d"), (int) err);
+    }
+    else if ((1 << gestaltPowerPCHasVectorInstructions) & cpufeature)
+    {
+	    GIsAltivec = 1;
+    }
+
+    debugf( NAME_Init, TEXT("This CPU %s Altivec support."),
+            GIsAltivec ? TEXT("has") : TEXT("does not have") );
+
+    GPhysicalMemory = 0;
+
+    unsigned long ramsize = 0;
+    err = Gestalt(gestaltPhysicalRAMSize, (long *) &ramsize);
+    if (err != noErr)
+    {
+		debugf(NAME_Init, TEXT("gestaltPhysicalRAMSize failure: err=%d"), (int) err);
+    }
+    else
+    {
+        GPhysicalMemory = (DWORD) ramsize;
+		debugf( NAME_Init, TEXT("Physical RAM: %u bytes (%d megabytes)"),
+		        (unsigned int) ramsize, (int) ((ramsize / 1024.0f) / 1024.0f) );
+    }
+
+	GRunningCPU = CPU_PPC;
+
+#else
+	#warning Need CPU detection for this platform.
+	appStrcpy( GMachineCPU, TEXT("Unknown CPU (no detection code!)") );
+	debugf( NAME_Init, TEXT("No CPU type detection on this platform.") );
+
+#endif
+
+	unguard;
+
 
 	// CPU speed.
 	guard(CheckCpuSpeed);
-	FLOAT CpuSpeed;
-#if ASMLINUX
+
+#if ((ASMLINUX) || (MACOSX)) && !defined(UT_NO_X86_INTRIN)
 	try
 	{
 		GSecondsPerCycle = 1.f;
 
 		for( INT i=0; i<3; i++ )
 		{
-			LARGE_INTEGER	StartCycles,
-							EndCycles;
+			LARGE_INTEGER	StartCycles, EndCycles;
 			volatile DOUBLE	DoubleDummy = 0.0;
 			volatile INT	IntDummy	= 0;
-			__asm__ __volatile__ (
-                "rdtsc"
-                    : "=a" (StartCycles.LowPart), "=d" (StartCycles.HighPart)
-            );
+
+			#if  MACOSX
+			__asm__ __volatile__( "mftb %0" : "=r" (StartCycles.LowPart) );
+			__asm__ __volatile__( "mftbu %0" : "=r" (StartCycles.HighPart) );
+			#else
+			__asm__ __volatile__
+			(
+				"rdtsc"
+				: "=a" (StartCycles.LowPart), "=d" (StartCycles.HighPart)
+			);
+			#endif
 
 			struct timeval	StartMsec;
-            gettimeofday(&StartMsec, NULL);
+			gettimeofday(&StartMsec, NULL);
 			struct timeval EndMsec		= StartMsec;
 
-            int diff = (((EndMsec.tv_sec - StartMsec.tv_sec) * 1000) +
-                        ((EndMsec.tv_usec - StartMsec.tv_usec) / 1000));
+			int diff = (((EndMsec.tv_sec - StartMsec.tv_sec) * 1000) +
+			           ((EndMsec.tv_usec - StartMsec.tv_usec) / 1000));
 			while( diff < 200 )
 			{
 				DoubleDummy += appSqrt(DoubleDummy) + 3.14;
 				IntDummy	*= ((INT) (DoubleDummy) + 555) / 13;
 				gettimeofday(&EndMsec, NULL);
-                diff = (((EndMsec.tv_sec - StartMsec.tv_sec) * 1000) +
-                        ((EndMsec.tv_usec - StartMsec.tv_usec) / 1000));
+				diff = (((EndMsec.tv_sec - StartMsec.tv_sec) * 1000) +
+				       ((EndMsec.tv_usec - StartMsec.tv_usec) / 1000));
 			}
 
-			__asm__ __volatile__ (
-                "rdtsc"
-                    : "=a" (EndCycles.LowPart), "=d" (EndCycles.HighPart)
-            );
+			#if  MACOSX
+			__asm__ __volatile__( "mftb %0" : "=r" (EndCycles.LowPart) );
+			__asm__ __volatile__( "mftbu %0" : "=r" (EndCycles.HighPart) );
+			#else
+			__asm__ __volatile__
+			(
+				"rdtsc"
+				: "=a" (EndCycles.LowPart), "=d" (EndCycles.HighPart)
+			);
+			#endif
 
-			DOUBLE	C1	= (DOUBLE)(SQWORD)(((QWORD)StartCycles.LowPart) + ((QWORD)StartCycles.HighPart<<32)),
-					C2	= (DOUBLE)(SQWORD)(((QWORD)EndCycles.LowPart) + ((QWORD)EndCycles.HighPart<<32));
+			DOUBLE	C1	= (DOUBLE)(SQWORD)(((QWORD)StartCycles.LowPart) + ((QWORD)StartCycles.HighPart<<32));
+			DOUBLE  C2	= (DOUBLE)(SQWORD)(((QWORD)EndCycles.LowPart) + ((QWORD)EndCycles.HighPart<<32));
 
 			GSecondsPerCycle = Min( GSecondsPerCycle, 1.0 / (1000.f * ( C2 - C1 ) / (diff)) );
 		}
 
-		debugf( NAME_Init, TEXT("CPU Speed=%f MHz"), 0.000001 / GSecondsPerCycle );
-        appStrcat( GMachineCPU, *FString::Printf(TEXT(" @ %d MHz"), appRound(0.000001 / GSecondsPerCycle) ) );
+		DOUBLE mhz = 0.0;
+		#if MACOSX
+			mhz = (DOUBLE) GetCPUSpeed();  // (Carbon function.)
+		#else
+			mhz = ((DOUBLE) 0.000001) / ((DOUBLE) GSecondsPerCycle);
+		#endif
+
+		debugf( NAME_Init, TEXT("CPU Speed=%f MHz"), (float) mhz );
+		appStrcat( GMachineCPU, *FString::Printf(TEXT(" @ %d MHz"), appRound(mhz) ) ); // gam
 	}
 	catch( ... )
 	{
 		debugf( NAME_Init, TEXT("Timestamp not supported (Possibly 486 or Cyrix processor)") );
-        appStrcat( GMachineCPU, TEXT(" Unknown clock") );
+		appStrcat( GMachineCPU, TEXT(" Unknown clock") ); // gam
 		GSecondsPerCycle = 1;
 	}
-
-#elif (defined MACOSX)
-	int mhz = GetCPUSpeed();  // (Carbon function.)
-	GSecondsPerCycle = 0.000001 * ((float) mhz);
-	debugf( NAME_Init, TEXT("CPU Speed=%d MHz"), (int) mhz);
-        appStrcat( GMachineCPU, *FString::Printf(TEXT(" @ %d MHz"), (int) mhz) );
 
 #else
 	if( !Parse(appCmdLine(),TEXT("CPUSPEED="),CpuSpeed) )
@@ -2093,15 +3008,84 @@ void appPlatformInit()
 	{
 		GSecondsPerCycle = 0.000001/CpuSpeed;
 		debugf( NAME_Init, TEXT("CPU Speed Overridden=%f MHz"), 0.000001 / GSecondsPerCycle );
-        appStrcat( GMachineCPU, *FString::Printf(TEXT(" @ %d MHz"), appRound(0.000001 / GSecondsPerCycle) ) );
+		appStrcat( GMachineCPU, *FString::Printf(TEXT(" @ %d MHz"), appRound(0.000001 / GSecondsPerCycle) ) ); // gam
 	}
+
+#ifdef UT_NO_X86_INTRIN
+	// ** ufront 2.53 -- appCycles() COUNTS MICROSECONDS ON THIS PATH, so the conversion factor is fixed
+	// and the CPUSPEED= override above must not be allowed to scale it. Both are still needed:
+	// CPUSPEED= is what stops the `#else` branch a few lines up from appErrorf'ing out of the boot
+	// (there is no CPU-speed detection for wasm or arm), and it is what GMachineCPU reports -- but as a
+	// clock rate it is fiction, so applying it here turned a microsecond into 1/3000th of one.
+	//
+	// ! THIS IS ONLY SAFE BECAUSE NOTHING TIMES GAMEPLAY WITH IT, which was checked rather than assumed:
+	// the rdtsc appSeconds() in UnGnuG.h is `#if 0`'d, so the game loop runs on appSecondsSlow()
+	// wall-clock and never reads GSecondsPerCycle. Every remaining consumer in a wasm/arm build is a
+	// `stat` display, a debugf, or the -benchmark frame log -- and all of them read 0 today, so this can
+	// only make them correct. (The one arithmetic user, UnActor.cpp's SlowOverlapThreshTime, gates a
+	// debugf and nothing else. D3D's CPUSpeed readback is inside a `#if 0`.)
+	GSecondsPerCycle = 0.000001;
+	debugf( NAME_Init, TEXT("[ufront] appCycles() is a microsecond counter; GSecondsPerCycle pinned to %e"), GSecondsPerCycle );
+#endif
+
 	unguard;
 
+#ifdef _WIN32
+	// ufront 2.33 skipped the POSIX process plumbing here:
+	//   * setrlimit(RLIMIT_NOFILE) -- Windows has no per-process descriptor limit to raise; the CRT's
+	//     _setmaxstdio ceiling only applies to stdio streams, which the engine does not use for packages.
+	//     Still true, still skipped.
+	//   * sigaction() crash handlers -- skipped with the note that "the guard/unguard chain still reports
+	//     the call site". * ufront 2.37: that is only true for a THROWN error. A hardware fault does not
+	//     unwind, so on Windows a segfault killed the process with NO output whatsoever -- the log simply
+	//     stopped mid-line, which reads exactly like a hang or a clean exit and is undiagnosable. That is
+	//     how the first Settings-menu crash report arrived: a truncated log ending in an unrelated
+	//     warning. Install the Win32 equivalent so a fault at least says so.
+	SetUnhandledExceptionFilter( appWinUnhandledException );
+	// ! SetUnhandledExceptionFilter covers HARDWARE faults only. The other two ways this process can die
+	// are an uncaught C++ throw (std::terminate) and abort(), and BOTH bypass it entirely -- observed
+	// for real: a crash that reported nothing at all while the segfault path reported fine. The engine
+	// throws for a living (appThrowf is how a failed load unwinds), so an escaped throw is not exotic.
+	std::set_terminate( appWinTerminate );
+	signal( SIGABRT, appWinAbort );
+#endif
+#ifndef _WIN32
 	struct sigaction SigAction;
+
+	// * UT_NO_FAULT_HANDLER -- LET THE OS SEE THE FAULT. On Android this handler is
+	// the reason a Karma crash is undiagnosable: it catches SIGSEGV, writes a line
+	// to the log and exits, so `debuggerd` never runs and there is NO TOMBSTONE and
+	// NO BACKTRACE -- just "Signal: SIGSEGV" and a shutdown. On Linux gdb gets in
+	// first and this never matters; on a phone there is nothing to get in first.
+	//
+	// With the variable set, the six HARDWARE-FAULT signals are left at their
+	// default disposition and the platform's crash reporter produces a real
+	// backtrace (`logcat -s DEBUG`, then llvm-addr2line against the unstripped
+	// .so). The job-control signals below are still installed either way -- those
+	// are how the engine shuts down cleanly, and dropping them turns a clean exit
+	// into a kill.
+	//
+	// ! IT IS A DIAGNOSTIC, NOT A DEFAULT. Unset, behaviour is exactly as before.
+	// ! ANDROID HAS NO WAY TO SET AN ENVIRONMENT VARIABLE FOR AN APP. `adb shell`
+	// runs in a different process and the launcher is Java, so the variable that
+	// works everywhere else is unreachable exactly where this is needed. The
+	// system property is the idiomatic equivalent and `debug.*` is settable on a
+	// stock user build without root: `adb shell setprop debug.ut2004.nofault 1`.
+#if defined(__ANDROID__)
+	char NoFaultProp[128] = { 0 };   /* bionic's PROP_VALUE_MAX is 92 */
+	__system_property_get( "debug.ut2004.nofault", NoFaultProp );
+	const UBOOL bNoFaultHandler = (NoFaultProp[0] != 0 && NoFaultProp[0] != '0');
+#else
+	const UBOOL bNoFaultHandler = (getenv("UT_NO_FAULT_HANDLER") != NULL);
+#endif
+	if( bNoFaultHandler )
+		debugf( NAME_Init, TEXT("UT_NO_FAULT_HANDLER set: leaving SIGSEGV/SIGILL/SIGTRAP/SIGIOT/SIGBUS/SIGFPE to the OS.") );
 
 	// Only try once.
 	INT DefaultFlag			= SA_RESETHAND;
 
+	if( !bNoFaultHandler )
+	{
 	SigAction.sa_handler	= HandleSignal;
 	SigAction.sa_flags		= DefaultFlag;
 	sigemptyset( &SigAction.sa_mask );
@@ -2111,6 +3095,7 @@ void appPlatformInit()
 	SigAction.sa_flags		= DefaultFlag;
 	sigemptyset( &SigAction.sa_mask );
 	sigaction( SIGILL, &SigAction, 0 );
+	}
 
 	// Try multiple times.
 	DefaultFlag				= 0;
@@ -2130,25 +3115,37 @@ void appPlatformInit()
 	sigemptyset( &SigAction.sa_mask );
 	sigaction( SIGQUIT, &SigAction, 0 );
 
+	if( !bNoFaultHandler )
+	{
 	SigAction.sa_handler	= HandleSignal;
 	SigAction.sa_flags		= DefaultFlag;
 	sigemptyset( &SigAction.sa_mask );
 	sigaction( SIGTRAP, &SigAction, 0 );
+	}
 
+	if( !bNoFaultHandler )
+	{
 	SigAction.sa_handler	= HandleSignal;
 	SigAction.sa_flags		= DefaultFlag;
 	sigemptyset( &SigAction.sa_mask );
 	sigaction( SIGIOT, &SigAction, 0 );
+	}
 
+	if( !bNoFaultHandler )
+	{
 	SigAction.sa_handler	= HandleSignal;
 	SigAction.sa_flags		= DefaultFlag;
 	sigemptyset( &SigAction.sa_mask );
 	sigaction( SIGBUS, &SigAction, 0 );
+	}
 
+	if( !bNoFaultHandler )
+	{
 	SigAction.sa_handler	= HandleSignal;
 	SigAction.sa_flags		= DefaultFlag;
 	sigemptyset( &SigAction.sa_mask );
 	sigaction( SIGFPE, &SigAction, 0 );
+	}
 
 	SigAction.sa_handler	= HandleSignal;
 	SigAction.sa_flags		= DefaultFlag;
@@ -2162,13 +3159,46 @@ void appPlatformInit()
 
 	signal( SIGPIPE, SIG_IGN );
 
-#ifdef USE_FILESTREAM_THREAD
-	int rc = pthread_create(&FileStreamingThreadId, NULL,
-                            FileStreamingThread, NULL);
-	check(rc == 0);
-    if (rc == 0)
-        pthread_detach(FileStreamingThreadId);
-#endif
+    // attempt to change max file handles for this process...
+    struct rlimit rl;
+    if (getrlimit(RLIMIT_NOFILE, &rl) != -1)
+        debugf(NAME_Init, TEXT("File handle limit is soft=(%d), hard=(%d)."), (int) rl.rlim_cur, (int) rl.rlim_max);
+    else
+    {
+        rl.rlim_cur = DESIRED_FILE_HANDLES; // wing it.
+        rl.rlim_max = RLIM_INFINITY;
+    }
+
+    if ( ((rl.rlim_cur != RLIM_INFINITY) && (rl.rlim_cur < DESIRED_FILE_HANDLES)) ||
+         ((rl.rlim_max != RLIM_INFINITY) && (rl.rlim_max < DESIRED_FILE_HANDLES)) )
+    {
+        bool changed = false;
+
+        if ((rl.rlim_cur != RLIM_INFINITY) && (rl.rlim_cur < DESIRED_FILE_HANDLES))
+            rl.rlim_cur = DESIRED_FILE_HANDLES;
+        if ((rl.rlim_max != RLIM_INFINITY) && (rl.rlim_max < DESIRED_FILE_HANDLES))
+            rl.rlim_max = RLIM_INFINITY;
+
+        changed = (setrlimit(RLIMIT_NOFILE, &rl) != -1);
+        if (!changed)
+        {
+            debugf(NAME_Init, TEXT("failed to set open file limit to %d, %d."), (int) rl.rlim_cur, (int) rl.rlim_max);
+            rl.rlim_max = DESIRED_FILE_HANDLES;
+            changed = (setrlimit(RLIMIT_NOFILE, &rl) != -1);
+            if (!changed)
+                debugf(NAME_Init, TEXT("failed to set open file limit to %d, %d."), (int) rl.rlim_cur, (int) rl.rlim_max);
+        }
+
+        if (changed)
+        {
+            getrlimit(RLIMIT_NOFILE, &rl);
+            debugf(NAME_Init, TEXT("Changed file handle limit to soft=(%d), hard=(%d)."), (int) rl.rlim_cur, (int) rl.rlim_max);
+        }
+    }
+#endif // !_WIN32
+
+	// engine-uc2: create the file streaming thread, as UC2's PC appPlatformInit does.
+	StartFileStreamingThread();
 
 	unguard;
 }
@@ -2177,13 +3207,144 @@ void appPlatformPreExit()
 {
 }
 
+
+static void ShowAlertDialogOnExit(void)
+{
+    guard(ShowAlertDialogOnExit);
+
+#if MACOSX
+    if (GMacOSAlertBoxOnExit == NULL)
+        return;
+
+    bool failed = true;
+
+    CFStringRef msg = CFStringCreateWithBytes(NULL,
+                              (const BYTE *) GMacOSAlertBoxOnExit,
+                              appStrlen(GMacOSAlertBoxOnExit) * sizeof (TCHAR),
+                              TCHAR_MAC_ENCODING, 0);
+
+    FString str = LocalizeGeneral("Product", appPackage());
+    CFStringRef title = CFStringCreateWithBytes(NULL, (const BYTE *) *str,
+                                                str.Len() * sizeof (TCHAR),
+                                                TCHAR_MAC_ENCODING, 0);
+    if ((msg != NULL) && (title != NULL))
+    {
+        SWORD val = 0;  // Should be "DialogItemIndex".
+        void *dlg = NULL;  // Should be "DialogRef".
+
+        if (CreateStandardAlert(kAlertStopAlert, title, msg, NULL, &dlg) == noErr)
+        {
+            if (RunStandardAlert(dlg, NULL, &val) == noErr)
+                failed = false;
+        }
+    }
+
+    if (failed)  // oh well.
+        printf("\n\nMacOS Alert Box: %s\n\n\n", appToAnsi(GMacOSAlertBoxOnExit));
+
+    if (msg != NULL)
+        CFRelease(msg);
+
+    if (title != NULL)
+        CFRelease(title);
+
+    delete[] GMacOSAlertBoxOnExit;
+    GMacOSAlertBoxOnExit = NULL;
+#endif
+
+    unguard;
+}
+
+
+static void LaunchURLOnExit(void)
+{
+    guard(LaunchURLOnExit);
+
+#if MACOSX
+    if (GMacOSLaunchURLOnExit == NULL)
+        return;
+
+    CFURLRef cfurl = CFURLCreateWithBytes(NULL,
+                            (const unsigned char *) GMacOSLaunchURLOnExit,
+                            appStrlen(GMacOSLaunchURLOnExit) * sizeof (TCHAR),
+                            TCHAR_MAC_ENCODING, NULL);
+
+    LSOpenCFURLRef(cfurl, NULL);
+    CFRelease(cfurl);
+    delete[] GMacOSLaunchURLOnExit;
+    GMacOSLaunchURLOnExit = NULL;
+#endif
+
+    unguard;
+}
+
+
+#define DEBUG_HACKY_CMDLINE_PARSER 0
 void appPlatformExit()
 {
+    ShowAlertDialogOnExit();
+    LaunchURLOnExit();
+
     if (GUnixSpawnOnExit != NULL)
     {
         FString fstrcmd(GUnixSpawnOnExit);
         TArray<FString> args;
-        fstrcmd.ParseIntoArray(TEXT(" "), &args);
+
+        int startstr = 0;
+        int max = fstrcmd.Len();
+
+        #if DEBUG_HACKY_CMDLINE_PARSER
+            fprintf(stderr, "\nOriginal cmdline:\n[%s].\n\n", appToAnsi(*fstrcmd));
+        #endif
+
+        for (int i = 0; i < max; i++)
+        {
+            char ch = (char) fstrcmd[i];
+            if (ch == ' ')
+            {
+                if ( (i == 0) ||
+                     (fstrcmd[i-1] == ' ') ||
+                     (fstrcmd[i-1] == '\"') ||
+                     (fstrcmd[i-1] == '\'') )
+                {
+                    startstr = i + 1;
+                    continue;
+                }
+
+    		    new(args)FString( fstrcmd.Mid(startstr, i - startstr) );
+                startstr = i + 1;
+            }
+
+            else if ((ch == '\"') || (ch == '\''))
+            {
+                if (startstr != i)
+    		        new(args)FString( fstrcmd.Mid(startstr, i - startstr) );
+
+                int j = i + 1;
+                while ((j < max) && ((char) fstrcmd[j] != ch))
+                    j++;
+
+                startstr = j + 1;
+
+                if (j == max)  // uh...oh well.
+                {
+                    if (j > i + 1)
+			            new(args)FString( fstrcmd.Mid(i+1) );
+                    break;
+                }
+
+                if (j > i + 1)
+                {
+			        new(args)FString( fstrcmd.Mid(i+1, (j - i) - 1) );
+                    i = j;  // will increment past delimiter in next loop.
+                }
+            }
+        }
+
+        if (startstr < max)
+    	    new(args)FString( fstrcmd.Mid(startstr) );
+
+
         char *cmd = new char[args(0).Len() + 1];
         appToAnsi(*(args(0)), cmd);
         char **ansiargs = new char *[args.Num() + 1];
@@ -2191,22 +3352,48 @@ void appPlatformExit()
         {
             ansiargs[i] = new char[args(i).Len() + 1];
             appToAnsi(*args(i), ansiargs[i]);
-
-            // This is a total hack, but then again, so is GUnixSpawnOnExit.
-            char *str = ansiargs[i];
-            if (*str == '\"')
-                memmove(str, str + 1, strlen(str));
-            if (str[strlen(str) - 1] == '\"')
-                str[strlen(str) - 1] = '\0';
         }
         ansiargs[args.Num()] = NULL;
+
+#ifdef _WIN32
+        // ufront 2.33: this is the "respawn the game after exit" path (GUnixSpawnOnExit). fork-then-execv
+        // becomes one _spawnv, and the parent then exits as it did before.
+        _spawnv( _P_NOWAIT, cmd, ansiargs );
+        _exit(0);
+#else
+        int rc = fork();
+        if (rc == -1)
+        {
+            fprintf(stderr, "fork() failed!\n errno (%d) [%s].\n",
+	            errno, strerror(errno));
+            _exit(42);
+        }
+        else if (rc > 0)  // parent: die.
+        {
+            _exit(0);
+        }
+#endif
+
+        #if DEBUG_HACKY_CMDLINE_PARSER
+            for (int x = 0; ansiargs[x]; x++)
+                fprintf(stderr, "[%s]\n", ansiargs[x]);
+            fprintf(stderr, "\n\n");
+            fflush(stderr);
+        #endif
+
+        appSleep(1);
         execv(cmd, ansiargs);  // hail mary.
 
         // if you hit this...there were problems.
-        fprintf(stderr, "execv() failed. Command line:\n   ");
+        fprintf(stderr, "execv() failed.\nerrno (%d) [%s].\n Command line:\n  ",
+                errno, strerror(errno));
+
         for (int x = 0; ansiargs[x]; x++)
             fprintf(stderr, "%s ", ansiargs[x]);
         fprintf(stderr, "\n\n");
+
+        fflush(stderr);
+        _exit(42);
     }
 }
 
@@ -2314,10 +3501,10 @@ char* appUnixPath( const char* Path )
 	Networking.
 -----------------------------------------------------------------------------*/
 
-unsigned long appGetLocalIP( void )
+DWORD appGetLocalIP( void )
 {
 	static bool lookedUp = false;
-	static unsigned long LocalIP = 0;
+	static DWORD LocalIP = 0;
 
 	if( !lookedUp )
 	{
@@ -2330,7 +3517,7 @@ unsigned long appGetLocalIP( void )
 			gethostbyname_mutex->Lock();
 			struct hostent *Hostinfo = gethostbyname( Hostname );
 			if (Hostinfo != NULL)
-				LocalIP = *(unsigned long*)Hostinfo->h_addr_list[0];
+				LocalIP = *(DWORD*)Hostinfo->h_addr_list[0];
 			gethostbyname_mutex->Unlock();
 		}
 	}
@@ -2371,9 +3558,263 @@ char* strupr( char* s )
 	return s;
 }
 
+
 /*-----------------------------------------------------------------------------
-	File Streaming.
+	Stuff.
 -----------------------------------------------------------------------------*/
+
+// engine-uc2: UC2's PC body (UnVcWin32.cpp), which records the error; UT2004's Unix one was empty.
+CORE_API const void EdLoadErrorf( INT Type, const TCHAR* Fmt, ... )
+{
+	TCHAR TempStr[4096]=TEXT("");
+	GET_VARARGS( TempStr, ARRAY_COUNT(TempStr), Fmt, Fmt );
+
+	// Check to see if this error already exists ... if so, don't add it.
+	// NOTE : for some reason, I can't use AddUniqueItem here or it crashes
+	for( INT x = 0 ; x < GEdLoadErrors.Num() ; ++x )
+		if( GEdLoadErrors(x) == FEdLoadError( Type, TempStr ) )
+			return;
+
+	new( GEdLoadErrors )FEdLoadError( Type, TempStr );
+}
+
+
+/*-----------------------------------------------------------------------------
+	engine-uc2: the rest of UC2's platform contract.
+
+	Everything below is what UC2's UnVcWin32.cpp defines and UT2004's Unix
+	layer does not have (see docs/porting/analysis/core-port.md). Each body is
+	UnVcWin32.cpp's PC (non-_XBOX) branch, with the Win32 call replaced by its
+	POSIX equivalent.
+-----------------------------------------------------------------------------*/
+
+//
+// Get system error.
+//
+CORE_API const TCHAR* appGetSystemErrorMessage( INT Error )
+{
+	guard(appGetSystemErrorMessage);
+	static TCHAR Msg[1024];
+	*Msg = 0;
+	if( Error==0 )
+		Error = errno;
+	appStrncpy( Msg, ANSI_TO_TCHAR(strerror(Error)), ARRAY_COUNT(Msg) );
+	if( appStrchr(Msg,'\r') )
+		*appStrchr(Msg,'\r')=0;
+	if( appStrchr(Msg,'\n') )
+		*appStrchr(Msg,'\n')=0;
+	return Msg;
+	unguard;
+}
+
+// The PC build shows a message box; here the message goes to the log and stderr.
+CORE_API const void appDebugMessagef( const TCHAR* Fmt, ... )
+{
+	TCHAR TempStr[4096]=TEXT("");
+	GET_VARARGS( TempStr, ARRAY_COUNT(TempStr), Fmt, Fmt );
+	guard(appDebugMessagef);
+	debugf( NAME_Warning, TEXT("appDebugMessagef: %s"), TempStr );
+	fprintf( stderr, "appDebugMessagef: %s\n", TCHAR_TO_ANSI(TempStr) );
+	unguard;
+}
+
+CORE_API const void appGetLastError( void )
+{
+	guard(appGetLastError);
+	TCHAR TempStr[4096]=TEXT("");
+	appSprintf( TempStr, TEXT("GetLastError : %d\n\n%s"), errno, appGetSystemErrorMessage() );
+	debugf( NAME_Warning, TEXT("System Error: %s"), TempStr );
+	unguard;
+}
+
+//
+//	Return the system time as a 64-bit number: a Win32 FILETIME of the LOCAL time (100 ns units since
+//	1601-01-01), as UnVcWin32.cpp's GetLocalTime + SystemTimeToFileTime produce.
+//
+CORE_API SQWORD appSystemTime64()
+{
+	guard(appSystemTime64);
+	struct timeval Tv;
+	gettimeofday( &Tv, NULL );
+	time_t Now = Tv.tv_sec;
+	struct tm Local;
+	SQWORD GmtOffset = 0;
+	if( localtime_r( &Now, &Local ) != NULL )
+		GmtOffset = (SQWORD)Local.tm_gmtoff;
+	const SQWORD EpochDelta = 116444736000000000LL;	// 1601-01-01 to 1970-01-01 in 100 ns units
+	return EpochDelta + ((SQWORD)Tv.tv_sec + GmtOffset) * 10000000LL + (SQWORD)Tv.tv_usec * 10LL;
+	unguard;
+}
+
+//
+// Send an arbitrary system call to the command prompt
+// Just a little dangerous.
+//
+void appSystemCmd( const TCHAR* Cmd, const TCHAR* Parms, FString* Error )
+{
+	guard(appSystemCmd);
+
+	debugf( NAME_Log, TEXT("appSystemCmd %s %s"), Cmd, Parms?Parms:TEXT("") );
+
+	TCHAR str[1024];
+	appSprintf(str, TEXT("%s %s"), Cmd, Parms?Parms:TEXT("") );
+	INT Code = (INT)system(TCHAR_TO_ANSI(str));
+
+	if( Error )
+	{
+		// As on PC (copied from appLaunchURL's ShellExecute test; see "Suspected real bugs").
+		*Error = Code<=32 ? LocalizeError(TEXT("CmdFailed"),TEXT("Core")) : TEXT("");
+	}
+
+	unguard;
+}
+
+#ifndef USE_GCONTIG//jg -- We use the macros now
+//scion jg -- Contigous memory allocator for GPU objects. PC: plain GMalloc memory.
+CORE_API void* appContiguousMalloc(DWORD dwSize,DWORD dwAlign)
+{
+	check(dwAlign == 4);
+	return GMalloc->Malloc(dwSize);
+}
+
+//scion jg -- Contigous memory deallocator for GPU objects
+CORE_API void appContiguousFree(void* p)
+{
+	GMalloc->Free(p);
+}
+#endif
+
+// Changes the CPU access settings for a contiguous block (XPhysicalProtect); nothing to do off the Xbox.
+CORE_API void appMemCPUFastAccess(void* pAddr,DWORD dwSize,
+	DWORD dwOpts)
+{
+}
+
+CORE_API FLOAT appSqrt(FLOAT fl) { return sqrt(fl); }
+
+#ifdef DEBUG_LOGGING
+/* scion ======================================================================
+ * appLogva
+ * Author: jg
+ *
+ * Fills the buffer Dest with the resulting string generated by the var args
+ * ============================================================================
+ */
+INT appLogva(TCHAR* Dest,INT Count,const TCHAR* Fmt,va_list Args)
+{
+	INT Result = vsnprintf( Dest, Count, Fmt, Args );
+	return Result;
+}
+
+// Log a var arg set of information to an FOutputDevice (unnamed event, NAME_Log).
+void __cdecl FTraceLog::operator()(const TCHAR* pszFmt, ...) const
+{
+	if (pDev != NULL && !FName::SafeSuppressed(NAME_Log))
+	{
+		va_list ptr;
+		va_start(ptr, pszFmt);
+		TCHAR TempStr[4096];
+		// Build the string in the temp buffer
+		appLogva(TempStr,ARRAY_COUNT(TempStr),pszFmt,ptr);
+		va_end(ptr);
+		// Now that the string is built write it out
+		pDev->Serialize(TempStr,NAME_Log);
+	}
+}
+
+// Log a var arg set of information to an FOutputDevice with a specific FName.
+void __cdecl FTraceLog::operator()(enum EName Type,const TCHAR* pszFmt, ...) const
+{
+	if (pDev != NULL && !FName::SafeSuppressed(Type))
+	{
+		va_list ptr;
+		va_start(ptr, pszFmt);
+		TCHAR TempStr[4096];
+		// Build the string in the temp buffer
+		appLogva(TempStr,ARRAY_COUNT(TempStr),pszFmt,ptr);
+		va_end(ptr);
+		// Now that the string is built write it out
+		pDev->Serialize(TempStr,Type);
+	}
+}
+#endif
+
+//scion jg -- Wrapper around the xbox function for determining language. PC: the int language.
+CORE_API DWORD appGetLanguageID(void)
+{
+	return LC_INT;
+}
+
+//
+// For non-Unreal allocations
+//
+void* ExternalContigMalloc(DWORD Size,DWORD Align)
+{
+	guard(ExternalContigMalloc);
+	return appContiguousMalloc(Size,Align);
+	unguard;
+}
+
+//
+// Frees a contiguously allocated block of memory
+//
+void ExternalContigFree(void* Data)
+{
+	guard(ExternalContigFree);
+	appContiguousFree(Data);
+	unguard;
+}
+
+/*-----------------------------------------------------------------------------
+	File Streaming (UnVcWin32.cpp's PC version on stdio; the Ogg cases are #if 0 there too).
+-----------------------------------------------------------------------------*/
+
+static pthread_t FileStreamingThreadId;
+
+static void* FileStreamingThread( void* Arg )
+{
+	while (GFileStream->Destroyed == 0)
+	{
+		for (INT i=0; i<GFileStream->MaxStreams; i++)
+		{
+			FScopeLock sl( GFileStream->CriticalSection );
+
+			if (GFileStream->Streams[i].Used && GFileStream->Streams[i].ChunksRequested )
+			{
+				GFileStream->Read( i, GFileStream->Streams[i].ChunkSize );
+				GFileStream->Streams[i].ChunksRequested--;
+				GFileStream->Streams[i].Data = ((BYTE*) GFileStream->Streams[i].Data) + GFileStream->Streams[i].ChunkSize;
+			}
+		}
+		usleep(1000);
+	}
+	for (INT i=0; i<GFileStream->MaxStreams; i++)
+	{
+		FScopeLock sl( GFileStream->CriticalSection );
+
+		if (GFileStream->Streams[i].Handle)
+			GFileStream->Destroy(i);
+	}
+	GFileStream->Destroyed = 2;
+	return NULL;
+}
+
+// Started from appPlatformInit (after appInit created GFileStream), as on PC. FFileStream::Destroy()
+// waits for this thread to set Destroyed=2, so if it cannot start, the stream is marked destroyed now.
+static void StartFileStreamingThread()
+{
+	guard(StartFileStreamingThread);
+	if( GFileStream == NULL )
+		return;
+	if( pthread_create( &FileStreamingThreadId, NULL, FileStreamingThread, NULL ) == 0 )
+		pthread_detach( FileStreamingThreadId );
+	else
+	{
+		debugf( NAME_Warning, TEXT("Could not start the file streaming thread (%s); streaming disabled."), appGetSystemErrorMessage() );
+		FFileStream::Destroyed = 2;
+	}
+	unguard;
+}
 
 UBOOL FFileStream::Read( INT StreamId, INT Bytes )
 {
@@ -2383,73 +3824,33 @@ UBOOL FFileStream::Read( INT StreamId, INT Bytes )
 		{
 			case ST_Regular:
 			{
-                FILE *fp = (FILE *) Streams[StreamId].Handle;
-				UBOOL RetVal = fread( Streams[StreamId].Data, 1, Bytes, fp );
-				if (RetVal > 0)
-					Streams[StreamId].Data = (BYTE*)(Streams[StreamId].Data) + RetVal;
-				if (feof(fp))
+				FILE* fp = (FILE*) Streams[StreamId].Handle;
+				size_t Count = fread( Streams[StreamId].Data, 1, Bytes, fp );
+				// ReadFile succeeds at end of file, with a short count.
+				UBOOL RetVal = !ferror( fp );
+				if (RetVal)
+					Streams[StreamId].Data = (BYTE*)(Streams[StreamId].Data) + Count;
+				if ((INT)Count != Bytes)
 					Streams[StreamId].EndOfFile = 1;
 				return RetVal;
 			}
-			case ST_Ogg:
-			case ST_OggLooping:
-			{
-				long Count = 0;
-				while ( Count < Bytes )
-				{
-					long Read = ov_read(
-						(OggVorbis_File*) Streams[StreamId].TDD,
-						((char*) Streams[StreamId].Data) + Count,
-						Bytes - Count,
-						0,	//!! vogel: TODO: should be 1 for big endian machines
-						2,
-						1,
-						&Streams[StreamId].FileSeek
-					);
-
-					if ( Read == 0 )
-					{
-						if( Streams[StreamId].Type == ST_OggLooping )
-						{
-							//Rewind our stream
-							ov_time_seek( (OggVorbis_File*) Streams[StreamId].TDD, 0.0 );
-						}
-						else
-						{
-							// Filling the rest of the buffer with silence. Note that memset is used for reentrance reasons.
-							memset( ((char*) Streams[StreamId].Data) + Count, 0 , Bytes - Count );
-                            // !!! FIXME: This might be incorrect on a non-blocking file handle. --ryan.
-							Streams[StreamId].EndOfFile = 1;
-							return false;
-						}
-					}
-					else if ( Read < 0 )
-					{
-						return false;
-					}
-					else
-					{
-						Count += Read;
-					}
-				}
-				return true;
-			}
 			default:
-					return false;
+				return false;
 		}
 	}
-
-  	return false;
+	else
+	{
+		return false;
+	}
 }
 
 UBOOL FFileStream::Create( INT StreamId, const TCHAR* Filename )
 {
-    char *unixpath = appUnixPath(appToAnsi(Filename));
 	switch ( Streams[StreamId].Type )
 	{
 		case ST_Regular:
 		{
-            FILE *Handle = fopen(unixpath, "rb");
+			FILE* Handle = fopen( appUnixPath(TCHAR_TO_ANSI(Filename)), "rb" );
 			if( Handle == NULL )
 			{
 				Streams[StreamId].Handle = NULL;
@@ -2461,26 +3862,9 @@ UBOOL FFileStream::Create( INT StreamId, const TCHAR* Filename )
 				return true;
 			}
 		}
-		case ST_Ogg:
-		case ST_OggLooping:
-		{
-			void* Handle = fopen(unixpath, "rb");
-			if ( Handle == NULL )
-				return false;
-			INT Error = ov_open( (FILE*) Handle, (OggVorbis_File*) Streams[StreamId].TDD, NULL, 0 );
-			if (Error < 0)
-				return false;
-			else
-			{
-				Streams[StreamId].Handle = Handle;
-				return true;
-			}
-		}
 		default:
 			return false;
 	}
-
-    return false;
 }
 
 UBOOL FFileStream::Destroy( INT StreamId )
@@ -2490,17 +3874,7 @@ UBOOL FFileStream::Destroy( INT StreamId )
 		case ST_Regular:
 		{
 			if ( Streams[StreamId].Handle )
-				fclose( (FILE *) Streams[StreamId].Handle );
-			Streams[StreamId].TDD		= NULL;
-			Streams[StreamId].Handle	= NULL;
-			Streams[StreamId].Used		= 0;
-			return true;
-		}
-		case ST_Ogg:
-		case ST_OggLooping:
-		{
-			if ( Streams[StreamId].TDD )
-				ov_clear( (OggVorbis_File*) Streams[StreamId].TDD );
+				fclose( (FILE*) Streams[StreamId].Handle );
 			Streams[StreamId].TDD		= NULL;
 			Streams[StreamId].Handle	= NULL;
 			Streams[StreamId].Used		= 0;
@@ -2509,17 +3883,7 @@ UBOOL FFileStream::Destroy( INT StreamId )
 		default:
 			return false;
 	}
-
-    return false;
 }
-
-
-/*-----------------------------------------------------------------------------
-	Stuff.
------------------------------------------------------------------------------*/
-
-CORE_API const void EdLoadErrorf( INT Type, const TCHAR* Fmt, ... )
-{ }
 
 
 #endif

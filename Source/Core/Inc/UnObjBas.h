@@ -1435,7 +1435,7 @@ template< class T > T* GetDefault()
 {
 	// scion sz - DELTA_DEFAULTS
 	// use common accessor
-	return T::StaticClass()->GetDefaultObject<T>();
+	return T::StaticClass()->template GetDefaultObject<T>();
 }
 
 /*----------------------------------------------------------------------------

@@ -92,3 +92,50 @@ Per file (all minimal; MSVC/Xbox branches untouched):
   `NEW TCHAR[]` (array/scalar mismatch; harmless while both go to appFree).
 - `Src/UnObj.cpp` SUPPRESS/UNSUPPRESS exec passed an `FString` through `debugf`'s varargs (fixed: needed
   for clang, and it is the real fix).
+
+### Step 3 — platform layer: Src/UnUnix.cpp rebased, Src/UnThreadingPosix.cpp + Inc/UnThreadingPosix.h new
+State after this step: `cmake --build build-native --target Core` and `cmake --build build-wasm --target Core`
+both give `[100%] Built target Core`, 0 errors. Native warnings: only `-Wwrite-strings` (1095), 3
+`-Wendif-labels` (UnObj.cpp), 1 `-Wunused-result` (getcwd, UT2004 code); **no -fpermissive diagnostics
+left in Core** (the remaining two-phase-lookup spots in UnTemplate.h `TTransArray`, `TLazyArray::Unload`,
+`TMultiMap::AddUnique/RemovePair/FindPair` and UnObjBas.h `GetDefault<T>` got `this->`/`template`).
+
+`Src/UnUnix.cpp` = engine-ut2004 HEAD's UnUnix.cpp (UTF-8 punctuation in comments transliterated to ASCII:
+the tree is Latin-1) with these UC2 changes (`diff` vs that base: ~740 changed lines, almost all additions):
+- no `vorbis/codec.h` / `vorbisfile.h` (nothing in UC2's Core uses Ogg; UC2's PC FFileStream Ogg cases are
+  `#if 0`), `<math.h>`, `<cpuid.h>`, `FOutputDeviceFile.h` (non-final, for DUMPNAMES) added.
+- `USystem` block replaced by UC2's (UnCorObj.h has no CacheRecordPath/MusicPath/SpeechPath): UC2's
+  constructor/StaticConstructor and Exec commands (CONFIGHASH, EXIT/QUIT with !GIsEditor, DEBUG
+  CRASH/GPF/RECURSE/EATMEM, DIR, NAMEHASH, VIEWNAMES, DUMPNAMES) from UnVcWin32.cpp; MEMSTAT "not
+  available" and RELAUNCH = UT2004's Unix GUnixSpawnOnExit relaunch (binary name still `./ucc-bin`).
+  DIR passes `**Buffer[x]` (UnVcWin32.cpp passes an FString object through varargs).
+- UT2004's `FCriticalSection`/`FScopeCriticalSection` implementation removed (UC2's are the abstract
+  classes in UnThreadingBase.h; see UnThreadingPosix).
+- `DoCPUID` uses GCC `<cpuid.h>` `__cpuid` (PIC-safe; UT2004's version needed `UREG_*` macros).
+- `GIsMMX` / `GRunningCPU` assignments dropped (UC2 has neither; PC sets only GIsSSE).
+- `EdLoadErrorf` gets UC2's PC body (records into GEdLoadErrors); UT2004's Unix one was empty.
+- Added (UnVcWin32.cpp PC branches on POSIX): `appGetSystemErrorMessage` (strerror), `appDebugMessagef`
+  (log + stderr instead of a MessageBox), `appGetLastError` (log), `appSystemTime64` (local-time FILETIME,
+  100 ns since 1601), `appSystemCmd` (system()), `appContiguousMalloc/Free` (GMalloc, `check(dwAlign==4)`
+  as on PC), `appMemCPUFastAccess` (no-op), `FLOAT appSqrt(FLOAT)`, `appLogva` + `FTraceLog::operator()`
+  (DEBUG_LOGGING), `appGetLanguageID` (LC_INT), `ExternalContigMalloc/Free`, `FFileStream::Read/Create/
+  Destroy` on stdio + the file-streaming pthread started at the end of `appPlatformInit` (PC does the
+  same). If the thread cannot start, `FFileStream::Destroyed=2` so `appExit` does not wait forever.
+- Kept from UT2004 although UC2 headers do not declare them (harmless, eases later 3-way merges):
+  `ClipboardCopy/ClipboardPaste` (non-app), `appGetTime`, `appGetSystemDllHandle` (declared in UnUnix.h
+  in a later step), the MinGW/Android/MacOSX branches.
+
+`Inc/UnThreadingPosix.h`, `Src/UnThreadingPosix.cpp` (new, ~700 lines): FCriticalSectionPosix (recursive
+mutex), FEventPosix (manual/auto reset + PulseEvent via a pulse counter), FMutexPosix (recursive, names
+ignored), FSemaphorePosix (count 0..max, Win32 contract), FSynchronizeFactoryPosix, FQueuedThreadPosix,
+FQueuedThreadPoolPosix, FRunnableThreadPosix, FThreadFactoryPosix, plus `GSynchronizeFactory` and
+`GThreadFactory` (defined in UnThreadingWindows.cpp on Win32). Differences from Win32, by necessity:
+no TerminateThread (a thread that does not stop in time is detached, its handle leaked), no
+SuspendThread (logs a warning), priorities/affinity recorded only. A dying queued thread does not call
+`ReturnToPool` (the Win32 version does, while `FQueuedThreadPoolBase::Destroy` holds the thread-queue
+lock and waits INFINITE for it — looks like a deadlock; see suspected bugs). Compiles under em++ -pthread.
+
+Symbol check (scratch `syms.py` = nm of libCore.a, undefined-but-not-defined): only libc/libstdc++/pthread
+symbols remain. Every function UC2's UnVcWin32.cpp defines has a definition, except Windows-only helpers
+(`win*` Unicode helpers, `CtrlCHandler`, `GetDllHandleHelper`) and `appDecodeDmHRESULT` (Xbox-only on
+PC too).
