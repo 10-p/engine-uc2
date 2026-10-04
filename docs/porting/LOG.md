@@ -70,3 +70,26 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
     `strcpy`, three GCC header-tagging rules, a header behind its script, the first command-line argument
     being eaten, a privileged default port, and a clock race that made time run backwards.
   - Open: registry/commandlet short names (empty), layout check still to be run on wasm32 and x86_64.
+- 2026-10-04 — **M4 gate green: the client boots to the menu with the null render device and takes keyboard
+  input** (commits `dcf245f`, `e030ac7`, `49189ba`, `3d7e719`, `ab0e95c`; notebook `analysis/client-boot.md`).
+  Verified by the coordinator from a deleted build directory:
+  - `cmake --build build-native` links `uc2.bin` (SDL2 client + launcher) and `ucc-bin`, 0 undefined references.
+  - `SDL_AUDIODRIVER=dummy timeout 40 xvfb-run -a -s "-screen 0 1280x720x24" ./uc2.bin -log` → still running
+    at the timeout; `Avaris.log`: `SDL2 video driver: x11`, `Client initialized`,
+    `Bringing Level Entry.MyLevel up for play`, `Game class is 'UCMenuGame'`,
+    `Bringing Level Menu.MyLevel up for play`, `Opened viewport (SDL window 1, 640x480)`,
+    `Render device: Engine.NullRenderDevice`; 0 Critical, 1 Warning (the editor transaction buffer class).
+  - Real X key events (XTEST) into the window, GUI log un-suppressed in the run tree: the default menu is
+    `UCMenu.UC2MainMenu`; Down/Down/Up are handled as `XC_PadDown`/`XC_PadUp` by its selection panel, Return
+    opens `UCMenu.UC2Arena_Main`, Escape closes the message box.
+  - Regressions: `ucc-bin verifyclasses` passes; `ucc-bin server DM-Deadbolt` now works by short name; map
+    census 58/58; the eight web libraries build.
+  - Three defects fixed: the Unix file manager matched wildcards case-sensitively, so the registry and the
+    localisation lookup found no files (`*.INT` vs `*.int`); `appItoa` had no non-MSVC implementation; the
+    client's config properties had no compiled defaults.
+  - Config: `ViewportManager` → `SDL2Drv.SDL2Client`, `RenderDevice` → `Engine.NullRenderDevice`, new
+    `[SDL2Drv.SDL2Client]` section (`Engine/Config/README.md`).
+  - Not done here: gamepads (hook only, M10); anything drawn (M5); the web client (M4w). Open: blank
+    localised help strings for native commandlets (BLOCKERS).
+  - Also recorded: `analysis/package-format-v151.md`, the on-disk differences of UC2's packages that the
+    frontend's Node tools must learn (established on the shipped `Core.u`).
