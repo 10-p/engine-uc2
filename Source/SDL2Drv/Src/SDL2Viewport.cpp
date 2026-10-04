@@ -1031,6 +1031,12 @@ void USDL2Viewport::UpdateInput( UBOOL Reset, FLOAT DeltaSeconds )
 	if( !Input || !Window )
 		return;
 
+	// The pad bound to this viewport (UXboxViewport::UpdateInput). Only from the player tick
+	// (UViewport::ReadInput), whose DeltaSeconds the stick axes and rumble need; the launcher's
+	// once-a-frame pump passes 0.
+	if( DeltaSeconds > 0.f )
+		Client->UpdateBoundPad( this, DeltaSeconds );
+
 	BYTE Down[256];
 	appMemzero( Down, sizeof(Down) );
 	INT NumKeys = 0;

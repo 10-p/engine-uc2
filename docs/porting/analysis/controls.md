@@ -100,3 +100,52 @@ Notes on the table:
 
 ### Plan (scope C1-C4 of the brief)
 C1 pads in SDL2Drv; C2 GUI key table + mouse; C3 match bindings + mouse look; C4 `tools/dev/m10-controls.sh`.
+
+## Step 1 - C1: pads through SDL's GameController API (SDL2Drv)
+
+New files `Source/SDL2Drv/Src/SDL2Pads.cpp` (the driver side) and `SDL2InputTest.{h,cpp}` (the test channel);
+`SDL2Client.cpp`/`SDL2Viewport.cpp`/`SDL2Drv.h` wire them in. What it does, mapped to the Xbox code:
+
+| Xbox (XboxDrv) | SDL2Drv |
+|---|---|
+| `XGetDeviceChanges`, four fixed ports (`UXboxClient::DetectDevices`) | `SDL_CONTROLLERDEVICEADDED/REMOVED` in `PumpEvents`; first free port of four (`PadAdded/PadRemoved`); `IK_JoySlider1/2` press+release to the pad's viewport or the interaction master, `ActiveControllerId` = port meanwhile |
+| `XInputGetState` + 16-button edge test against `XINPUT_GAMEPAD_MAX_CROSSTALK` | `ReadPad` (state polled with `SDL_GameControllerGetButton/GetAxis`, mapped through `[SDL2Drv.PadMap]` to the 16 Xbox button positions 0..255 and four stick axes) + `SendButtonEdges` with `PadButtonThreshold` (default 30) |
+| bound pad read in `UXboxViewport::UpdateInput` | `USDL2Client::UpdateBoundPad`, called from `USDL2Viewport::UpdateInput` only when `DeltaSeconds>0` (the player tick's `UViewport::ReadInput`; the launcher's per-frame pump passes 0) |
+| sticks: `MasterProcessJoyInput` then `Input->DirectAxis` | same |
+| repeat 0.2 s then 0.1 s as `IST_Hold` | same, `PadRepeatDelay`/`PadRepeatRate` |
+| unbound pads -> `InteractionMaster->MasterProcessKeyEvent` | `UpdateUnboundPads` from `PollGamepads` (client tick) |
+| rumble `WaveformManager->GetRumbleState` -> `XInputSetState` | same -> `SDL_GameControllerRumble(low=left, high=right, 1000 ms)`, sent on change and refreshed every 0.5 s while non-zero; `PadRumble`, `PadRumbleScale` |
+| rumble zeroed in `SetClientTravel` | `USDL2Viewport::SetClientTravel` |
+| `SETDEADZONE` stores `JoyDeadZone` | same (`PadExec`); also `PADS` lists the ports |
+| `UPlayer::GetAnalogButtonAmount` = 255 on PC | `USDL2Viewport::GetAnalogButtonAmount`: bound pad's analog value, or 255 while a keyboard/mouse key is held whose binding equals that pad button's binding |
+
+Deviation from the Xbox, on purpose: when a pad is removed, the buttons it held are released first (the Xbox only
+cleared its table, leaving `UInput` keys down until a `ResetInput`).
+
+Not done: Start on an unbound pad does not call `UClient::BeginSplitScreen` (split screen is an owner question).
+For split screen the SDL client would need: one SDL window per viewport or one window with sub-viewports
+(`UXboxViewport::IsFullscreen` compares with the initial size), `AllowControllerJoin`/`BeginSplitScreen` from
+`UpdateUnboundPads` on Start, and `UXboxClient::Tick`'s "blit only the last viewport".
+
+Settings (`[SDL2Drv.SDL2Client]`, compiled defaults identical): `UseJoystick=True` (was the WinDrv copy's False),
+`PadButtonThreshold=30`, `PadStickDeadZone=0`, `PadRepeatDelay=0.2`, `PadRepeatRate=0.1`, `PadRumble=True`,
+`PadRumbleScale=1`, `JoyDeadZone=0.35`, `LogInput=False`. New section `[SDL2Drv.PadMap]` (SDL control name =
+`Joy1..16` or `JoyX/Y/U/V` [`Invert`]); the compiled default is the same table, used for any control the section
+does not name.
+
+Log name `SDL2Input` (quiet: only with `LogInput=True`, `-inputlog` or `-inputtest=`). Found while doing it: a
+name made at run time loses its slot when the garbage collector purges unreferenced names (`UnObj.cpp`
+`RemoveNames`), and the lines then came out as `Question:`; `SetFlags(RF_Native)` keeps it.
+
+Test channel `-inputtest=<file>` (`SDL2InputTest.h` lists the commands): a harness appends lines; `pad attach`
+creates a virtual game controller with `SDL_JoystickAttachVirtualEx` (type GAMECONTROLLER, button/axis masks so
+SDL's own virtual mapping makes joystick button i = controller button i), `pad button/axis` set its state,
+`probe <tag>` logs level, menu page, focused control and its text, pause, pawn location, controller rotation,
+weapon, ammo, GUI mouse position. The virtual device's `Rumble` callback logs the request SDL delivers.
+
+First run (scratch, `bin/capped 2G 60 -- xvfb-run ...`, menu level): attach -> `SDL2 pads: pad 0 connected: UC2 M10
+virtual pad (rumble)`, `pad 0 JoySlider1 press (bound)`; D-pad down -> `pad 0 Joy10 press (bound)` ->
+`UC2MainMenu->ItemSelectionPanel handled XC_PadDown for id 0`; left trigger 3700 (= 29/255) -> nothing, 4200
+(= 33/255) -> `pad 0 button 6 value 33 > 30`, `Joy7 press`, `UC2MainMenu handled XC_LeftTrigger`; A -> `GUILabelButton
+handled XC_A` -> `OpenMenu [UCMenu.UC2Profile]`; detach -> `JoySlider2`, `pad 0 disconnected`; re-attach -> connected
+again. A 0.5 s hold gives one press and two repeats (the 0.2/0.1 s Xbox repeat), so tests hold buttons ~0.15 s.
