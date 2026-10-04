@@ -120,3 +120,35 @@ be written out in full.
 - `-nullrenderer` persists into `Avaris.ini` (M4 behaviour); a later run without switches then stays null —
   use `-opengl` or a fresh run tree.
 - Gamma ramp is applied always (PC applied it only fullscreen); `-NOGAMMA` disables.
+
+## Gate evidence, run by the coordinator (2026-10-04)
+
+The agent stopped after the menu was verified. The coordinator ran the rest of the gate on this branch
+(`34dd131`), all under Xvfb (Mesa llvmpipe, GL 4.5 compatibility), from run tree `run/m5`:
+
+- Build from a configured tree: `[100%] Built target SDLLaunch`, `[100%] Built target UCC`.
+- `./uc2.bin -log -glerrors` (menu, 40 s): `Bringing Level Menu.MyLevel up for play`, still running at the
+  timeout, `frame 1200, 0 GL errors so far`, 0 Critical.
+- `./uc2.bin DM-Deadbolt -log -glerrors` (60 s): level up for play, `frame 2400, 0 GL errors so far`, 0 Critical.
+- `./uc2.bin -nullrenderer -log` (25 s, fresh run tree): `Render device: Engine.NullRenderDevice`, menu up.
+- `./ucc-bin verifyclasses` passes; `./ucc-bin server DM-Deadbolt` loads the map;
+  `tools/dev/map-census.sh build-native 15 4` → 58/58; the eight web libraries build (driver excluded there).
+
+Pictures in `<WorkUC2>/logs/m5/` (640x480, written by the engine's own `SHOT` path; Fire injected through the
+X test extension to start the match):
+
+| File | What is on it |
+|---|---|
+| `coord-menu.png`, `menu-shot15s.png` | the main menu: background art, title, the five items, prompts |
+| `coord-DM-Deadbolt-20s.png` | the level behind the pre-match overlay (title, frag limit, player row with portrait, "Press Fire") |
+| `coord-DM-Deadbolt-ingame.png` | in play: lit textured geometry, glass with the exterior behind it, pickups, the third-person character, full HUD |
+| `coord-CTF-Octane.png` | CTF: red-team HUD with radar and flag indicators, corridor, character |
+| `coord-DM-Praxis.png` | same spawn as the wine reference `logs/oracle/DM-Praxis.png`: doorway with two cyan discs, wall panels, floor pool, pickup, character, HUD all agree; differences seen are resolution and aspect only |
+| `coord-DM-Azure.png` | temple interior: stone textures, lighting, distant torches |
+
+Not yet compared: the flat-coloured window panes of DM-Praxis (other spawns), anything at 1280x720, and
+frame-exact poses (the wine script pins the spawn with `set UCDeathmatch NumPlayers 0`; ours does not yet).
+Under software GL the heavier maps need about 25 s before input is accepted.
+
+Carried to M6: pixel-shader materials are off (`UC2GL_PIXELSHADERS 0`), so the materials PC drew with its own
+DX8 pixel shaders (player skins among them) take the stage-0 fallback and will differ from PC until then.
