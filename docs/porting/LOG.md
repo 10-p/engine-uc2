@@ -58,3 +58,15 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
     (`SUPPORTS_PRAGMA_PACK=1` on every target; it was silently off under GCC).
   - Carried to M3: struct layout on wasm32/x86_64 for hand-written structs with 8-byte members; the
     `FColor`→`FPlane` conversion assumption; a transient clang crash at `-j12` (re-run fixes it).
+- 2026-10-04 — **M3 gate green: every map loads on a headless dedicated server** (commits `44f81c6`, `63bb34e`
+  and the one carrying this entry; notebook `analysis/runtime-port.md`).
+  - `ucc-bin verifyclasses`: 0 layout mismatches between the shipped script packages and our native classes
+    (713 checks over six packages; it started at about 120 mismatching classes).
+  - `tools/dev/map-census.sh build-native 15 4`: 58 of 58 maps brought up for play and still ticking after
+    15 s, twice in a row. `CTF-Octane` for 60 s: `Game class is 'CTFGame'`, up for play, clean shutdown.
+  - Gate as planned said `batchexport`; that commandlet lives in Editor, which is not built yet, so the
+    engine's own generated layout check lists were used instead (a more direct test of the same thing).
+  - Eight real defects fixed on the way, none by stubbing: object construction zero-filling, an overlapping
+    `strcpy`, three GCC header-tagging rules, a header behind its script, the first command-line argument
+    being eaten, a privileged default port, and a clock race that made time run backwards.
+  - Open: registry/commandlet short names (empty), layout check still to be run on wasm32 and x86_64.

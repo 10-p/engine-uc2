@@ -10,6 +10,9 @@ Newest first. Remove an entry when it is resolved and say how in `LOG.md`.
 - arm64 (M13): `sudo apt install g++-aarch64-linux-gnu qemu-user`.
 - Canonical config (M15): retail and leak disagree on `Characters.ini`, `Gametypes.ini`, `Maplists.ini` and 14
   localisation files; the owner should see the per-file diff before one side is chosen.
+- Depth-of-field alpha (visible from M7): we corrected a header that had fallen behind its script, which
+  changes one blur constant from what the shipped binary used (`analysis/runtime-port.md`, "Deviation").
+  The owner should confirm which behaviour to keep once the effect is on screen.
 - Scope, to decide when reached: split-screen on PC; web multiplayer visible at launch; arm64 hardware.
 
 ## Open technical questions
@@ -17,6 +20,8 @@ Newest first. Remove an entry when it is resolved and say how in `LOG.md`.
 - Does GL4ES accept fragment-only GLSL with fixed-function vertex processing? (spike at M5)
 - One GL driver source built twice, or two mirrored directories as in engine-ut2004? (decide at M5)
 - Per-bank packed OGG or one file per wave? (decide at M8)
+- Commandlet and registry short names (`ucc server`, game-type and mutator lists) come up empty: the registry
+  reads `.int` files from where UT2003 kept them, UC2 keeps them in `System/Localization/<lang>/`. (M4)
 - The community one-byte `Core.dll` patch (file offset 0x940c0, first byte of a non-exported routine near the
   end of `.text`, replaced by RET): which function is it? A hint at a PC-only crash; identify if a Core
   crash shows up at M3/M4.

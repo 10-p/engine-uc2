@@ -1961,23 +1961,15 @@ CORE_API DWORD appGetTime( const TCHAR* Filename )
 //
 CORE_API DOUBLE appSecondsSlow()
 {
-	static DOUBLE InitialTime = 0.0;
-	static DOUBLE TimeCounter = 0.0;
-	DOUBLE NewTime;
-	struct timeval TimeOfDay;
-
-	gettimeofday( &TimeOfDay, NULL );
-
-	// Initialize.
-	if( InitialTime == 0.0 )
-		 InitialTime = TimeOfDay.tv_sec + TimeOfDay.tv_usec / 1000000.0;
-
-	// Accumulate difference to prevent wraparound.
-	NewTime = TimeOfDay.tv_sec + TimeOfDay.tv_usec / 1000000.0;
-	TimeCounter += NewTime - InitialTime;
-	InitialTime = NewTime;
-
-	return TimeCounter;
+	// Monotonic, and no shared mutable state. This used to accumulate gettimeofday() differences in two
+	// statics; UC2's file streaming thread and the game thread raced on them, and a difference taken against
+	// the other thread's newer reading made the counter step backwards ("Negative delta time!" in roughly a
+	// quarter of dedicated-server runs). Wall-clock time can also be set back; CLOCK_MONOTONIC cannot.
+	struct timespec Now;
+	clock_gettime( CLOCK_MONOTONIC, &Now );
+	const DOUBLE Seconds = (DOUBLE)Now.tv_sec + (DOUBLE)Now.tv_nsec / 1000000000.0;
+	static const DOUBLE Origin = Seconds;	// first call; initialisation of a local static is thread-safe
+	return Seconds - Origin;
 }
 
 
