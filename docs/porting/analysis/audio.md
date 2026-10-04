@@ -272,3 +272,13 @@ single unit. UC2ALAudio adds the group volume to the sound volume.
   target specific option mismatch`). Fixed by setting `CMAKE_SIZEOF_VOID_P` to 4 for its configure only.
   Result: `build-native/_deps/openalsoft-build/libopenal.so.1.25.2: ELF 32-bit LSB shared object, Intel i386`.
 - `UC2ALAudio` added to `UC2_NATIVE_ONLY_PACKAGES` (web: M11).
+
+## Step 3 - `Source/UC2ALAudio` (A2, part 2): written, builds; not yet run
+
+Files: `Inc/UC2ALAudio.h` (classes `UC2ALAudio.UC2ALAudioSubsystem` and the check commandlet
+`UC2ALAudio.UC2AudioCheck`, nothing of OpenAL visible), `Src/UC2AudioData.cpp` (cue table and wave index
+readers, Vorbis from memory through vorbisfile callbacks), `Src/UC2ALDevice.cpp` (dlopen binding of
+`libopenal.so.1`, beside the binary first then the system's; the 26 I3DL2 presets of the XDK's `DSound.h` and
+their translation to EFX), `Src/UC2ALAudioSubsystem.cpp` (the XACT behaviour), `Src/UC2ALAudio.cpp` (package +
+commandlet). Root `CMakeLists.txt`: `UC2ALAudio` moved before `UCC` in `UC2_PACKAGES` (UCC links it for the
+commandlet and tests `if(TARGET UC2ALAudio)`).

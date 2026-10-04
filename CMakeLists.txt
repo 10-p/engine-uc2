@@ -259,8 +259,10 @@ endif()
 
 set(UC2_PACKAGES
   Core Engine IpDrv UWeb UnrealGame UCElements UCGameplay GUI
+  UC2ALAudio
   Editor UCC
-  SDL2Drv UC2GLDrv UC2GL4ESDrv UC2ALAudio WebRTCDrv SDLLaunch)
+  SDL2Drv UC2GLDrv UC2GL4ESDrv WebRTCDrv SDLLaunch)
+# (M8: UC2ALAudio comes before UCC, which links it for its check commandlet.)
 
 # Native-only tools: the commandlet host is not part of the web build. SDL2Drv and SDLLaunch are native-only
 # until the web client is wired (M4w: -sUSE_SDL=2, Asyncify yield, preload).
