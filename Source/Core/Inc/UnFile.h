@@ -303,6 +303,9 @@ CORE_API FString appGetGMTRef();
 -----------------------------------------------------------------------------*/
 
 CORE_API const TCHAR* appCmdLine();
+// True when a command-line token is a global option of the form Key=Value rather than a map URL
+// (a URL's own options follow a '?', so "DM-Map?Name=x" is a URL and "Name=x" is an option).
+CORE_API UBOOL appIsGlobalOptionToken( const TCHAR* Token );
 CORE_API const TCHAR* appBaseDir();
 CORE_API const TCHAR* appPackage();
 CORE_API const TCHAR* appComputerName();

@@ -302,7 +302,10 @@ void UGameEngine::Init()
 	if
 		(	!ParseToken( Tmp, Parm, ARRAY_COUNT(Parm), 0 )
 		||	(appStricmp(Parm,TEXT("SERVER"))==0 && !ParseToken( Tmp, Parm, ARRAY_COUNT(Parm), 0 ))
-		||	Parm[0]=='-' )
+		||	Parm[0]=='-'
+		// A launcher may pass global options first ("Name=Player"): that is not a map either. Without this the
+		// engine tried to load a package called "Name=Player" and exited (seen on the first browser boot).
+		||	appIsGlobalOptionToken(Parm) )
 		appStrcpy( Parm, *FURL::DefaultLocalMap );
 	FURL URL( &DefaultURL, Parm, TRAVEL_Partial );
 	if( !URL.Valid )

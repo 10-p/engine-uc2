@@ -1960,6 +1960,23 @@ CORE_API const TCHAR* appCmdLine()
 	return GCmdLine;
 }
 
+//
+// Is this command-line token a global option (Key=Value) rather than a map URL? See UnFile.h.
+//
+CORE_API UBOOL appIsGlobalOptionToken( const TCHAR* Token )
+{
+	if( !Token || !*Token )
+		return 0;
+	for( const TCHAR* P=Token; *P; P++ )
+	{
+		if( *P=='?' )
+			return 0;			// the URL's own options start here: the token is a URL
+		if( *P=='=' )
+			return P!=Token;	// Key=Value with a non-empty key
+	}
+	return 0;
+}
+
 CORE_API void appInit( const TCHAR* InPackage, const TCHAR* InCmdLine, FMalloc* InMalloc, FOutputDevice* InLog, FOutputDeviceError* InError, FFeedbackContext* InWarn, FFileManager* InFileManager, FConfigCache*(*ConfigFactory)(), UBOOL RequireConfig )
 {
 	guard(appInit);
