@@ -10,7 +10,12 @@
 # Writes <WorkUC2>/logs/<tree>/<name>.wav, .out (the game's log), .png (spectrogram), .report.txt.
 # The run tree's Default.ini gets DevSound unsuppressed (the cue log) and loses Avaris.ini/User.ini so the
 # change takes effect; nothing outside the run tree is touched.
-# Environment: UC2_AUDIO_ENV="ALSOFT_...=..." extra environment for uc2.bin (e.g. to test without EFX).
+# Environment: UC2_AUDIO_ENV="VAR=value ..." extra environment for uc2.bin.
+#              UC2_PRECMD="..." a console command bound to F1 (run tree's DefUser.ini) and pressed 4 s before
+#              Fire, e.g. "set UCDeathmatch NumPlayers 0" so the first PlayerStart is always the spawn (pinned).
+# What is fixed: duration, URL, the input script (its random generator is seeded), output names. What is not:
+# the game itself (bot AI, frame timing under software GL), so cue counts differ a little from run to run.
+# Last line: "SUMMARY <name>: ..." (duration, peak, RMS, silent seconds, cue requests by outcome).
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
@@ -21,6 +26,12 @@ out=$work/logs/$tree
 mkdir -p "$out"
 sed -i '/^Suppress=DevSound\r\?$/d' "$sys/Default.ini"
 rm -f "$sys/Avaris.ini" "$out/$name.wav"
+precmd=0
+if [ -n "${UC2_PRECMD:-}" ]; then
+  sed -i -E "s/^F1=.*/F1=${UC2_PRECMD}/" "$sys/DefUser.ini"
+  rm -f "$sys/User.ini"
+  precmd=1
+fi
 
 inner=$(mktemp)
 cat > "$inner" <<INNER
@@ -28,8 +39,8 @@ cd "$sys" || exit 1
 env ${UC2_AUDIO_ENV:-} ./uc2.bin "$url" -log -audiowave="$out/$name.wav" "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
 if [ "$fire" != 0 ]; then
-  sleep $fire
-  python3 - $(( secs - fire - 6 )) <<'PY'
+  sleep \$(( $fire - 4 ))
+  python3 - $(( secs - fire - 6 )) $precmd <<'PY'
 import ctypes, sys, time, random
 x = ctypes.CDLL("libX11.so.6"); t = ctypes.CDLL("libXtst.so.6")
 x.XOpenDisplay.restype = ctypes.c_void_p
@@ -41,6 +52,12 @@ def key(name, down):
     t.XTestFakeKeyEvent(d, x.XKeysymToKeycode(d, x.XStringToKeysym(name)), down, 0); x.XFlush(d)
 def button(b, down):
     t.XTestFakeButtonEvent(d, b, down, 0); x.XFlush(d)
+if sys.argv[2] == '1':                  # the F1 command (UC2_PRECMD), 4 s before Fire
+    for i in range(2):
+        key(b"F1", 1); time.sleep(0.15); key(b"F1", 0); time.sleep(0.6)
+    time.sleep(2.5)
+else:
+    time.sleep(4)
 t.XTestFakeMotionEvent(d, -1, 320, 240, 0); x.XFlush(d)
 for i in range(3):                      # Fire: start the match (as tools/dev/run-uc2-shot.sh)
     button(1, 1); time.sleep(0.2); button(1, 0); time.sleep(1.0)
@@ -74,6 +91,13 @@ grep -a -E "UC2Audio: \[ *[0-9.]+\] [^ ]+( on [^:]+)?: (played|culled|failed)" "
   | sed -E 's/.*UC2Audio: \[ *[0-9.]+\] ([^ ]+)( on [^:]+)?: (played|culled|failed).*/\3 \1/' | sort | uniq -c | sort -k2,2 -k1,1nr \
   > "$out/$name.cues.txt"
 echo "distinct cues: played $(grep -c ' played ' "$out/$name.cues.txt"), culled $(grep -c ' culled ' "$out/$name.cues.txt"), failed $(grep -c ' failed ' "$out/$name.cues.txt") (list: $out/$name.cues.txt)"
+sum() { awk -v k=" $1 " 'index($0,k){n+=$1; d++} END{printf "%d (%d distinct)", n, d}' "$out/$name.cues.txt"; }
+dur=$(grep -a -o "duration=[0-9.]*" "$out/$name.report.txt" | cut -d= -f2)
+peak=$(grep -a "Peak level dB" "$out/$name.report.txt" | awk '{printf "%.1f", $NF}')
+rms=$(grep -a "RMS level dB" "$out/$name.report.txt" | awk '{printf "%.1f", $NF}')
+silent=$(grep -a -o "silent (< -70 dBFS): [0-9]*" "$out/$name.report.txt" | awk '{print $NF}')
+req=$(awk '{n+=$1} END{print n+0}' "$out/$name.cues.txt")
+echo "SUMMARY $name: ${dur:-?} s, peak ${peak:-?} dBFS, RMS ${rms:-?} dBFS, silent seconds ${silent:-?}; cue requests $req: played $(sum played), culled $(sum culled), failed $(sum failed); Critical $(grep -a -c Critical "$out/$name.out")" | tee "$out/$name.summary.txt"
 for p in $(pgrep -x uc2.bin) $(pgrep -x Xvfb); do
   case "$(readlink /proc/$p/cwd 2>/dev/null)" in "$sys"*) echo "WARNING: process $p of this run tree still running";; esac
 done
