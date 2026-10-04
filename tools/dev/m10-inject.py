@@ -25,7 +25,8 @@ Scenario language, one command per line (# comments):
     seek <max> <expr> ;; <cmd>    probe (as '_') until <expr> holds, running <cmd> in between, at most <max> times
     shot <name>                   engine screenshot (SHOT); the shell renames it to <name>.png afterwards
     sleep <seconds>
-    check <name> <python expr>    record PASS/FAIL; the expression sees P (probes by tag), yawdiff(a,b), dist(a,b)
+    check <name> <python expr>    record PASS/FAIL; the expression sees P (probes by tag), yawdiff(a,b),
+                                  pitchdiff(a,b), dist(a,b), fwd(a,b), side(a,b) (displacement along/right of a's facing)
     fail_fast                     stop at the first failed check (default: keep going)
 """
 import ctypes, re, sys, time, os, math
@@ -192,19 +193,19 @@ def chan(line):
 
 PROBE_RX = re.compile(r'probe (\S+) level=(\S+) menu=(\S+) focus=(\S+) text="(.*)" item="(.*)" paused=(\d) pawn=(\d) '
                       r'loc=\(([-\d.]+),([-\d.]+),([-\d.]+)\) rot=\((-?\d+),(-?\d+),(-?\d+)\) weapon=(\S+) '
-                      r'ammo=([-\d.]+) mouse=\(([-\d.]+),([-\d.]+)\) pads=(\d+)')
+                      r'ammo=([-\d.]+) shots=(\d+) mouse=\(([-\d.]+),([-\d.]+)\) pads=(\d+)')
 
 
 class Probe:
     def __init__(self, m):
         (self.tag, self.level, self.menu, self.focus, self.text, self.item, paused, pawn, lx, ly, lz, rp, ry, rr,
-         self.weapon, ammo, mx, my, pads) = m.groups()
+         self.weapon, ammo, shots, mx, my, pads) = m.groups()
         self.paused = int(paused); self.pawn = int(pawn)
         self.loc = (float(lx), float(ly), float(lz)); self.rot = (int(rp), int(ry), int(rr))
-        self.ammo = float(ammo); self.mouse = (float(mx), float(my)); self.pads = int(pads)
+        self.ammo = float(ammo); self.shots = int(shots); self.mouse = (float(mx), float(my)); self.pads = int(pads)
 
     def __repr__(self):
-        return f"level={self.level} menu={self.menu} focus={self.focus} text={self.text!r} item={self.item!r} paused={self.paused} pawn={self.pawn} loc={self.loc} rot={self.rot} weapon={self.weapon} ammo={self.ammo}"
+        return f"level={self.level} menu={self.menu} focus={self.focus} text={self.text!r} item={self.item!r} paused={self.paused} pawn={self.pawn} loc={self.loc} rot={self.rot} weapon={self.weapon} ammo={self.ammo} shots={self.shots}"
 
 
 P = {}
@@ -237,6 +238,18 @@ def dist(a, b):
     return math.dist(P[a].loc, P[b].loc)
 
 
+def fwd(a, b):
+    """Horizontal displacement from probe a to b along a's facing (yaw)."""
+    yaw = P[a].rot[1] * math.pi / 32768.0
+    return (P[b].loc[0] - P[a].loc[0]) * math.cos(yaw) + (P[b].loc[1] - P[a].loc[1]) * math.sin(yaw)
+
+
+def side(a, b):
+    """Horizontal displacement from probe a to b to a's right."""
+    yaw = P[a].rot[1] * math.pi / 32768.0
+    return -(P[b].loc[0] - P[a].loc[0]) * math.sin(yaw) + (P[b].loc[1] - P[a].loc[1]) * math.cos(yaw)
+
+
 # ---------------------------------------------------------------- run the scenario
 results = []
 fail_fast = False
@@ -259,7 +272,8 @@ def run():
 
 
 def evaluate(expr):
-    return eval(expr, {'P': P, 'yawdiff': yawdiff, 'pitchdiff': pitchdiff, 'dist': dist, 'abs': abs})
+    return eval(expr, {'P': P, 'yawdiff': yawdiff, 'pitchdiff': pitchdiff, 'dist': dist, 'fwd': fwd, 'side': side,
+                       'abs': abs, 'min': min, 'max': max})
 
 
 def execute(line):

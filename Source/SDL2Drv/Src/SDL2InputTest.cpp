@@ -282,7 +282,7 @@ void FSDL2InputTest::Probe( USDL2Client* Client, const TCHAR* Tag )
 	FString Item = GetListItem( Focus );
 
 	debugf( SDL2INPUT,
-		TEXT("probe %s level=%s menu=%s focus=%s text=\"%s\" item=\"%s\" paused=%i pawn=%i loc=(%.1f,%.1f,%.1f) rot=(%i,%i,%i) weapon=%s ammo=%.1f mouse=(%.0f,%.0f) pads=%i"),
+		TEXT("probe %s level=%s menu=%s focus=%s text=\"%s\" item=\"%s\" paused=%i pawn=%i loc=(%.1f,%.1f,%.1f) rot=(%i,%i,%i) weapon=%s ammo=%.1f shots=%i mouse=(%.0f,%.0f) pads=%i"),
 		Tag,
 		Level && Level->GetOuter() ? Level->GetOuter()->GetName() : TEXT("None"),
 		Page ? Page->GetClass()->GetName() : TEXT("None"),
@@ -295,6 +295,7 @@ void FSDL2InputTest::Probe( USDL2Client* Client, const TCHAR* Tag )
 		PC->Rotation.Pitch, PC->Rotation.Yaw, PC->Rotation.Roll,
 		Weapon ? Weapon->GetClass()->GetName() : TEXT("None"),
 		Weapon ? Weapon->AmmoAmount : 0.f,
+		Weapon ? (INT)Weapon->FlashCount : 0,
 		GUI ? appAtof(*GetPropText(GUI,TEXT("MouseX"))) : 0.f,
 		GUI ? appAtof(*GetPropText(GUI,TEXT("MouseY"))) : 0.f,
 		(INT)Client->PadsInitialized ? SDL_NumJoysticks() : 0 );

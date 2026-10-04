@@ -218,3 +218,38 @@ static-link native lookup (`UnCoreNative.h`, `IMPLEMENT_NATIVE_HANDLER`) compare
 `appStrcmp`. Fix: `appStricmp` (all 788 native names are distinct without case; checked with
 `grep MAP_NATIVE ... | sort | uniq -di` = empty). Epic's own `DefUser.ini` has `Delete=LogInput`, but User.ini is
 read after the packages load, which is why nobody saw it.
+
+## Step 4 - C3 (first part) and C4: PC bindings, and the keyboard scenario passes
+
+`Engine/Config/DefUser.ini` `[Engine.Input]` (Epic's PC file = the community `User.ini`, identical; rows in
+`Engine/Config/README.md`): RightMouse gets the pad's left trigger command `AltFire | Shield 1 | onrelease
+Shield 0` (Epic's PC binding was `AltFire` only: no block/reflect on PC); MiddleMouse = lock-on (`Lock 1 |
+onrelease Lock 0`, the pad's right-stick click; Epic: `Zoom`, a UT2004 leftover with no UC2 meaning found); E =
+melee (pad B), Q = back to ranged (pad Y; Epic: `AllAmmo`, a cheat next to WASD), C = view 1P/3P (pad Black),
+V = taunt/voice (pad White; Epic: `CallForHelp`), Ctrl = `SmartJump 1` (pad left-stick click), Tab = scoreboard
+(pad Back; T stays chat), Left/Right arrows turn and PageUp/PageDown look (`Axis aMouseX/aMouseY Speed=2.5`:
+Epic's arrows strafed, and Epic's `LookUp/LookDown` aliases write `aLookUp`, which `UCPlayerInput` overwrites, so
+they never worked); debug/editor keys removed (P PlayersOnly, O ShowDebug, U, I d3d, M actor select, NumPad 0-6
+camera hacks, the ACTOR ALIGN on Home/End); Joy1..16/JoyX..V/JoySlider = KeyBinds.ini Layout_0 (so a pad works
+before a profile applies its layout; Epic's `DefUserXbox.ini` had Joy11/Joy12 swapped against the XInput bit
+order, `ControllerConfigurationBase.ButtonMap` and `GUIPrivate.h`, fixed here). Mouse:
+`MouseX/MouseY ... Speed=1.0` (was 6.0); `[UCGameplay.UCPlayerInput]` linear (`bNonlinearAccel=false`,
+`bAccelMultipliers=false`, limits 1,000,000 and 10,240,000 = the Xbox's 1024/100 ratio); `bAutoCenterPitch=false`.
+Why and the numbers: step 5.
+
+Test harness (C4): `tools/dev/m10-controls.sh` (entry; one capped Xvfb run per scenario, fresh inis, DevUI
+unsuppressed in the run tree's copy only) + `tools/dev/m10-inject.py` (XTEST keys/mouse, the engine test channel,
+waits on log lines, probe checks). The probe has `shots=` (`AWeapon::FlashCount`, +1 per shot): the race weapon a
+player starts with has unlimited ammo (`UCWeapon.GetAmmoAmount` returns 999 for `AC_Race`), so ammo cannot show a
+shot; `item=` shows a list's selected row (`Elements[Index].Item|ExtraStrData`).
+
+Menu path found by running: main menu Down (Instant Action) A -> `UC2Arena_Main` + "no profile" box (B = no) ->
+gametype list (seek `DeathMatch`) A -> rules (`CUSTOMIZE NO`) A -> map list (seek `DM-Deadbolt`) A ->
+`UC2Arena_Character` A -> `UC2Arena_Armory` A (explosive) A (energy) -> `ConfirmLaunchMenu` A -> travel; in the
+level Fire spawns the player. NextWeapon does not cycle ranged weapons at spawn (the explosive and energy weapons
+start without ammo, `UCPlayerController.NextWeapon` skips them), so the weapon test is melee (E) <-> ranged (Q).
+
+`tools/dev/m10-controls.sh keyboard` -> `PASS keyboard (16 checks, 0 Critical, capped exit 0)`: menu path (8
+log checks), spawned, W forward 600 units along the facing, Right arrow +13,018 yaw in 1 s, E melee
+(`UCWeap_Melee_Anubis`), Q back to `UCWeap_Race_Nakhti`, Alt fired (shots 0 -> 2), Escape opens
+`InGame_MainMenu` (paused=1), Escape closes it.
