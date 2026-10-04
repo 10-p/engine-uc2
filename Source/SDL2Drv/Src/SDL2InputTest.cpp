@@ -51,6 +51,31 @@ static FString GetPropText( UObject* Obj, const TCHAR* Name )
 	return Buffer;
 }
 
+//
+// The selected row of a GUI list (GUIList: Elements[Index].Item), "" for anything else.
+//
+static FString GetListItem( UObject* Obj )
+{
+	if( !Obj )
+		return TEXT("");
+	UArrayProperty* AP = FindField<UArrayProperty>( Obj->GetClass(), TEXT("Elements") );
+	UIntProperty* IP = FindField<UIntProperty>( Obj->GetClass(), TEXT("Index") );
+	UStructProperty* SP = AP ? Cast<UStructProperty>( AP->Inner ) : NULL;
+	UStrProperty* ItemP = SP ? FindField<UStrProperty>( SP->Struct, TEXT("Item") ) : NULL;
+	if( !ItemP || !IP )
+		return TEXT("");
+	FArray* Elements = (FArray*)((BYTE*)Obj + AP->Offset);
+	INT Index = *(INT*)((BYTE*)Obj + IP->Offset);
+	if( Index<0 || Index>=Elements->Num() )
+		return FString::Printf( TEXT("#%i/%i"), Index, Elements->Num() );
+	BYTE* Elem = (BYTE*)Elements->GetData() + Index*AP->Inner->ElementSize;
+	FString Result = *(FString*)(Elem + ItemP->Offset);
+	UStrProperty* ExtraP = FindField<UStrProperty>( SP->Struct, TEXT("ExtraStrData") );
+	if( ExtraP && ((FString*)(Elem + ExtraP->Offset))->Len() )
+		Result = Result + TEXT("|") + *(FString*)(Elem + ExtraP->Offset);
+	return Result;
+}
+
 /*-----------------------------------------------------------------------------
 	FSDL2InputTest.
 -----------------------------------------------------------------------------*/
@@ -254,14 +279,16 @@ void FSDL2InputTest::Probe( USDL2Client* Client, const TCHAR* Tag )
 		Focus = Next;
 	}
 	FString Text = GetPropText( Focus, TEXT("TextStr") );
+	FString Item = GetListItem( Focus );
 
 	debugf( SDL2INPUT,
-		TEXT("probe %s level=%s menu=%s focus=%s text=\"%s\" paused=%i pawn=%i loc=(%.1f,%.1f,%.1f) rot=(%i,%i,%i) weapon=%s ammo=%.1f mouse=(%.0f,%.0f) pads=%i"),
+		TEXT("probe %s level=%s menu=%s focus=%s text=\"%s\" item=\"%s\" paused=%i pawn=%i loc=(%.1f,%.1f,%.1f) rot=(%i,%i,%i) weapon=%s ammo=%.1f mouse=(%.0f,%.0f) pads=%i"),
 		Tag,
 		Level && Level->GetOuter() ? Level->GetOuter()->GetName() : TEXT("None"),
 		Page ? Page->GetClass()->GetName() : TEXT("None"),
-		Focus && Focus!=Page ? Focus->GetName() : TEXT("None"),
+		Focus && Focus!=Page ? *(FString(Focus->GetName())+TEXT(".")+Focus->GetClass()->GetName()) : TEXT("None"),
 		*Text,
+		*Item,
 		PC->Level && PC->Level->Pauser ? 1 : 0,
 		Pawn ? 1 : 0,
 		Pawn ? Pawn->Location.X : 0.f, Pawn ? Pawn->Location.Y : 0.f, Pawn ? Pawn->Location.Z : 0.f,
