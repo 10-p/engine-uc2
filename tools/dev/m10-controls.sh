@@ -94,13 +94,12 @@ fi
 # ---------------------------------------------------------------------------------------------------------------
 
 # From the start screen to a deathmatch on DM-Deadbolt. $1 = check prefix; $2..$5 = the commands for
-# "down", "accept" (A), "back" (B) and "start the match" (Fire).
+# "down", "accept" (A), "back" (B) and "start the match" (Fire); $6 = noboot when the caller already waited
+# for the main menu.
 menu_to_match() {
   local p=$1 down=$2 accept=$3 back=$4 fire=$5
+  [ "${6-}" = noboot ] || printf '%s\n' 'wait OpenMenu \[UCMenu.UC2MainMenu\] 90' 'sleep 3' 'focus'
   cat <<SCEN
-wait OpenMenu \[UCMenu.UC2MainMenu\] 90
-sleep 3
-focus
 $down
 sleep 0.5
 $accept
@@ -333,6 +332,116 @@ shot after
 SCEN
 }
 
+# The virtual pad (SDL virtual joystick through the engine's test channel): hot-plug after start, the same menu
+# path and match checks, trigger threshold and stick dead zone just below/above, rumble reaching the device,
+# unplug/replug in the match. SDL stick Y is positive down: lefty -32767 = stick up.
+scen_pad() {
+  cat <<'SCEN'
+wait OpenMenu \[UCMenu.UC2MainMenu\] 90
+sleep 2
+focus
+probe nopad
+check pd-no-pad-at-start P['nopad'].pads == 0
+pad attach
+expect pd-hotplug-attach-after-start SDL2 pads: pad 0 connected 10
+expect pd-attach-sends-joyslider1 pad 0 JoySlider1 press 5
+sleep 1
+SCEN
+  menu_to_match pd "padpress dpdown" "padpress a" "padpress b" "padtrigger righttrigger" noboot
+  cat <<'SCEN'
+probe f0
+pad axis lefty -32767
+sleep 1.5
+pad axis lefty 0
+sleep 0.5
+probe f1
+check pd-left-stick-moves-forward fwd('f0','f1') > 150 and abs(side('f0','f1')) < 0.5*fwd('f0','f1')
+probe h0
+pad axis lefty -19661
+sleep 1.5
+pad axis lefty 0
+sleep 0.5
+probe h1
+check pd-half-stick-moves-less 0 < fwd('h0','h1') < 0.85*fwd('f0','f1')
+probe z0
+pad axis leftx 6554
+sleep 1.2
+pad axis leftx 0
+sleep 0.3
+probe z1
+check pd-stick-inside-dead-zone-does-nothing dist('z0','z1') < 5
+pad axis leftx 9830
+sleep 1.2
+pad axis leftx 0
+sleep 0.3
+probe z2
+check pd-stick-just-outside-dead-zone-moves dist('z1','z2') > 5
+pad axis leftx 32767
+sleep 1.2
+pad axis leftx 0
+sleep 0.3
+probe z3
+check pd-left-stick-right-strafes-right side('z2','z3') > 100
+probe t0
+pad axis rightx 32767
+sleep 1
+pad axis rightx 0
+sleep 0.3
+probe t1
+check pd-right-stick-turns-right yawdiff('t0','t1') > 8000
+probe a0
+pad axis righttrigger 3700
+sleep 0.4
+pad axis righttrigger 0
+sleep 0.8
+probe a1
+check pd-trigger-below-threshold-does-not-fire P['a1'].shots == P['a0'].shots
+mark
+pad axis righttrigger 4200
+sleep 0.4
+pad axis righttrigger 0
+expect pd-trigger-above-threshold-pressed pad 0 button 7 value 3[1-9] > 30 5
+expect pd-rumble-reaches-the-device virtual pad: rumble request reached the device: low [1-9] 5
+expect pd-rumble-sent-to-sdl pad 0 rumble [1-9][0-9]* [0-9]+ -> SDL_GameControllerRumble 0 5
+sleep 0.8
+probe a2
+check pd-trigger-above-threshold-fires P['a2'].shots != P['a1'].shots
+probe w0
+padpress b
+sleep 2.5
+probe w1
+check pd-b-switches-to-melee P['w1'].weapon.startswith('UCWeap_Melee')
+padpress y
+sleep 2.5
+probe w2
+check pd-y-switches-back-to-ranged P['w2'].weapon == P['w0'].weapon
+padpress start
+expect pd-start-opens-pause-menu OpenMenu \[UCMenu.InGame_MainMenu\] 10
+sleep 1.5
+padpress b
+sleep 2
+probe p2
+check pd-b-closes-pause-menu P['p2'].menu == 'None'
+pad detach
+expect pd-unplug-sends-joyslider2 pad 0 JoySlider2 press 5
+expect pd-unplug-disconnects SDL2 pads: pad 0 disconnected 5
+sleep 3
+probe u1
+check pd-unplug-pauses-with-controller-removed-menu P['u1'].menu == 'ControllerRemovedMenu' and P['u1'].paused == 1
+shot unplugged
+pad attach
+expect pd-replug-connects SDL2 pads: pad 0 connected 5
+sleep 3
+probe u2
+check pd-alive-after-replug P['u2'].level == 'DM-Deadbolt'
+padpress start
+sleep 2
+probe u3
+check pd-start-after-replug-resumes P['u3'].menu == 'None' and P['u3'].paused == 0
+shot replugged
+SCEN
+}
+
 run_scenario() {
   local name=$1 secs=$2 f
   f=$(mktemp)
@@ -342,12 +451,13 @@ run_scenario() {
   rm -f "$f"
 }
 
-all="keyboard mouse text"
+all="keyboard mouse text pad"
 for s in ${@:-$all}; do
   case "$s" in
     keyboard) run_scenario keyboard 300 ;;
     mouse) run_scenario mouse 360 ;;
     text) run_scenario text 180 ;;
+    pad) run_scenario pad 360 ;;
     *) echo "unknown scenario $s (known: $all)" >&2 ;;
   esac
 done

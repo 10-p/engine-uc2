@@ -277,3 +277,27 @@ Sensitivity numbers (mouse look; "feels right" cannot be judged here): yaw per p
 with our defaults 65.5 x FOV/90 units/px (measured 52.4 at the default FOV: 0.29 deg/px; 16 cm per 360 deg at
 800 dpi). Change it with `MouseSensitivity_X/Y` (`[UCGameplay.UCPlayerInput]`, User.ini) or the bindings'
 `Speed=`. Keyboard turn (arrows): `Speed=2.5` -> 13,018 units/s measured (72 deg/s).
+
+## Step 6 - C1/C3/C4: the pad scenario passes; the left stick needed a binding change
+
+`pad` -> PASS, 32 checks (virtual pad attached at the main menu, so the hot-plug path is the start path):
+`pad 0 connected`, `JoySlider1` to the bound viewport; the whole menu path to DM-Deadbolt on D-pad/A/B, right
+trigger spawns; left stick up moves forward (614 units in 1.5 s), 0.6 deflection moves less (410), 0.2 (inside the
+binding's DeadZone 0.25) moves nothing, 0.3 moves, full right strafes right; right stick right turns right
+(+26,006 yaw in 1 s, 143 deg/s: the Xbox's full-deflection base rate 32 x 1024 x FOV/90); right trigger at 29/255
+does not fire, at 33/255 logs `pad 0 button 7 value 33 > 30` and fires; the race weapon's fire waveform reaches
+the virtual device (`virtual pad: rumble request reached the device: low 27390 high 41086`, then
+`pad 0 rumble 27390 41086 -> SDL_GameControllerRumble 0`); B melee, Y back; Start opens `InGame_MainMenu`, B
+closes it; unplug sends `JoySlider2` (script opens `ControllerRemovedMenu`, game paused), replug connects again,
+Start resumes (menu None, paused 0).
+
+Found by running: the left stick did not move the player at all. `UCPlayerController` `PlayerWalking.PlayerMove`
+(UCPlayerController.uc:3849-3864) multiplies `aForward/aStrafe` by 24000 only when `Level.IsXBox()` ("aForward
+range on PC is +/- 24000.0") and drops an acceleration under 1.0; on PC the stick's 0..1 never moved. Fixed as
+data: `JoyX/JoyY ... SpeedBase=2400000.0` (= 100 x 24000), which gives PlayerMove the Xbox's numbers. Side effect:
+`Ctrl_Move_Fwd_Pct/Stf_Pct` (UCPlayerInput.uc:375-376, the stick directions of the timed input sequences) now
+saturate at any deflection past the dead zone, as the keyboard does. If a profile with "swap sticks" applies
+`ControllerConfiguration.ApplyJoysticks` (ControllerConfiguration.uc:85-110), script writes SpeedBase 100 back:
+M14. Movement speed is not proportional to deflection past about 0.3 (0.3 moved 392 units in 1.2 s, full 484):
+the acceleration saturates the same way on the Xbox's numbers; this is the game's behaviour, not checked against
+an Xbox.

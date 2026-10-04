@@ -20,6 +20,8 @@ Scenario language, one command per line (# comments):
     rmove <dx> <dy> [steps]       relative pointer motion, split in <steps> events 20 ms apart
     click <button> [x y]          button 1 left, 2 middle, 3 right; 4/5 wheel up/down
     pad <channel command>         e.g. "pad button a 1" (written to the channel as is)
+    padpress <button> [hold]      virtual pad button down, hold (0.15 s), up
+    padtrigger <axis> [hold]      virtual pad trigger fully in, hold (0.2 s), out
     chan <channel command>        any channel line (exec ..., log ...)
     probe <tag>                   ask the engine for a probe line and keep its fields as <tag>
     seek <max> <expr> ;; <cmd>    probe (as '_') until <expr> holds, running <cmd> in between, at most <max> times
@@ -331,6 +333,14 @@ def execute(line):
             click(int(parts[0]))
         elif cmd == 'pad':
             chan('pad ' + rest)
+        elif cmd == 'padpress':
+            parts = rest.split()
+            chan(f'pad button {parts[0]} 1'); time.sleep(float(parts[1]) if len(parts) > 1 else 0.15)
+            chan(f'pad button {parts[0]} 0'); time.sleep(0.15)
+        elif cmd == 'padtrigger':
+            parts = rest.split()
+            chan(f'pad axis {parts[0]} 32767'); time.sleep(float(parts[1]) if len(parts) > 1 else 0.2)
+            chan(f'pad axis {parts[0]} 0'); time.sleep(0.15)
         elif cmd == 'chan':
             chan(rest)
         elif cmd == 'probe':
