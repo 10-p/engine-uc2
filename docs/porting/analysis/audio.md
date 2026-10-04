@@ -478,3 +478,32 @@ decay times are measured to match.
 
 `NotifyZoneChange` now logs every call in the cue log, including "preset unchanged" and "no EFX, sound stays
 dry", so a run shows whether the player's zone changed at all.
+
+## Runtime mapping: XACT behaviour -> UC2ALAudio on OpenAL Soft, with the known differences
+
+| XACT / Xbox (`XACTAudioSubsystem.cpp`) | UC2ALAudio | Difference, measured where possible |
+|---|---|---|
+| banks `..\Sounds\<Bank>[_<lang>].xwb` + `.xsb`, 23 persistent (:215-237) | `../Sounds/<Bank>.uc2cues`; wave index `<Bank>_<lang>.uc2wb` then `<Bank>.uc2wb`; the same 23 persistent; wave data (`.ogp`) read on first play; decoded per wave on first play and kept while the bank is | the Xbox could only play waves of banks registered under the sound bank's own name; we load any wave bank a cue names (more permissive; no cue in the data depends on the restriction failing) |
+| cue name `Bank.Group.Cue` -> `Bank\Cue` (:800-856) | same (`ResolveCue`), cached per FName, cache cleared at level change | - |
+| 2D if viewer's controller or owned by its view target, else 3D for the closest viewer (:2176-2203); cull if `radius < dist*(1+cues/15)` unless ambient or Volume>0 (:2205-2214) | same | `cues` counts our live cue instances (XACT counted its Cues list: the same thing) |
+| radius `2*Min + Min*2/Rolloff` (:2609-2636) | same; a non-3D sound reports DirectSound's defaults (Min 1, Rolloff 1) = 4 | for non-3D sounds the Xbox value is not known (XACT may have returned 0, giving 0*inf); with 4 such cues on a non-viewer actor are culled beyond 4 units, as they would be inaudible anyway (next row). Self-test: 5600 for RL_Fire, 4 for a non-3D cue |
+| volume: sound + group (baked into the .xsb) + variation + events + RPC, 6 dB voice headroom unless Headroom Boost, category master `1000*log10(v)` (:864), distance rolloff computed by XACT, sum clamped at 0 dB | same sum in mB, clamped at 0 dB, then `AL_GAIN`; OpenAL's distance model off (`AL_NONE`) | **numerically checked**: 0.00-0.16 dB from the formula over 18 cases. OpenAL Soft's own centred-source gain is -1.10 dB (3D) / -1.52 dB (2D), a constant the Xbox mixer need not share |
+| DirectSound rolloff `Min/(Min+Rolloff*(d-Min))`, d clamped to [Min,Max] | same formula in software | exact (checked to 0.00 dB at 6 distances incl. beyond Max) |
+| non-3D sound on a 3D source: DirectSound default 3D properties | Min 1, Max 1e9, Rolloff 1 | follows the XACT white paper; such sounds are near-silent unless the listener is on top of them |
+| 3D voice = mono submix (stereo waves downmixed) | stereo waves decoded once more as a mono downmix for 3D voices | - |
+| positional panning with HRTF on 3D voices ("full HRTF", :196) | OpenAL Soft stereo panning (no HRTF on the wave writer / loopback; on a real device OpenAL Soft decides) | the Xbox's HRTF colouring is not reproduced. Left/right checked: +/-16 dB for a source 2000 units to the side |
+| listener at view target, oriented by the controller (:1691-1696); split screen by transforming sources (:366) | each source is placed in its viewer's frame (Unreal X fwd, Y right, Z up -> OpenAL (Y, Z, -X)), listener fixed at the origin | split screen: implemented, never exercised in a run (no split-screen run) |
+| doppler: off for every source (:500) | `alDopplerFactor(0)` | - |
+| pitch: sound + variation + Set Pitch events, cents | `AL_PITCH = 2^(cents/1200)` | **numerically checked**: -0.4..+0.0 cents on 3 cues (+200, -300, -500) after the measuring method's bias |
+| playlist types | Random (weighted), Ordered (heaviest first), Shuffle, Parameter-controlled (first), Random no repeat, Ordered from random; state kept per play event across plays | **numerically checked** for types 4, 1, 0 (the only ones the data uses); 2, 3, 5 implemented, never exercised (no data) |
+| play event loops: count n = n+1 plays, 65535 = forever; new variation per loop; loop region | infinite on one wave: `AL_LOOPING` with `AL_SOFT_loop_points` for a partial region; finite or new-variation: one buffer queued per pass | finite loop **numerically checked** (6.231 s for 6.224 s expected); infinite loop checked still sounding after 3 wave lengths; a partial loop region: implemented, not measured (the checked loop is a whole-wave region) |
+| Set Volume / Set Pitch events (set, random, stepped fade) | same, evaluated each update | implemented; exercised in game runs (combo loops, weapons) but not measured |
+| "Volume" parameter control (:2302-2318) | the cue's RPC curve on its track, X = Volume*65535 | **numerically checked** incl. the step and the 0 dB clamp |
+| low-pass/LFO/EG/mix-bin/loop-start events, parametric EQ, LFE send, cones | carried in the cue table, not played (counted per sound) | 4 LPF, 1 multi LFO, 1 pitch LFO, 1 EG, 5 mix-bin, 1 loop-start events and 15 EQ sounds in the whole project are not reproduced. Cones have no effect in the data (outside volume 0) |
+| I3DL2 send level on 3D sounds; zone presets (`#if 0` on the Xbox) | EFX aux send gain = `10^(I3DL2/2000)` on 3D voices, none on 2D; one EAX-reverb slot loaded with the zone's preset (or Default with `ZoneReverb=False`) | decay times **numerically checked** (Hangar +0%, StoneRoom +8%, Default +13%); absolute reverb level vs the Xbox hardware unknown |
+| voice stealing: lower priority stolen, oldest at equal priority | 64 voices, priority value higher = less important | implemented; "no voice"/"takes the voice of" never logged in the runs so far (never exercised) |
+| music: streamed bank, A_Music cue, fade times ignored | streamed Ogg (4 x 32768 frames), A_Music cue's volume and loop, fades honoured (`MusicFades=True`; False = Xbox) | deliberate difference (brief): fades |
+| pause: all cue instances pause, music plays on | same, schedules shifted by the pause | implemented, never exercised in a run |
+| level change: stop all incl. music, drop non-persistent banks | same, wave banks dropped when no persistent sound bank uses them | exercised at every map load (logged) |
+| category volumes from the default profile | same | Music/FX/Voice; VoiceChat stored only |
+| ambient: 5 nearest static AmbientSounds within their radius, every second | same | exercised: e.g. 6 ambient loops on DM-Deadbolt |
