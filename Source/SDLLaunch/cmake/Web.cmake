@@ -12,7 +12,13 @@ set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME SDLLaunch SUFFIX ".
 if(UC2_WEB_PERF)
   target_link_options(${PROJECT_NAME} PRIVATE -O3 -g0 --emit-symbol-map -sASSERTIONS=0 -sSTACK_OVERFLOW_CHECK=0)
 else()
-  target_link_options(${PROJECT_NAME} PRIVATE -g -sASSERTIONS=2 -sSTACK_OVERFLOW_CHECK=2)
+  # Dev build: -O2 at link and names without DWARF (-g2). Measured on 2026-10-04 by compiling the module in
+  # full under a 3 GB ceiling: linked with plain -g and no -O it was 45 MiB and did not fit (binaryen leaves
+  # Asyncify's instrumentation unoptimised, functions have tens of thousands of locals; this is what took
+  # the first browser boot to the memory ceiling); -O1 -g2: 19 MiB, still did not fit; -O2 -g2: 9 MiB,
+  # about 0.5 GB, like the release build. Stack traces keep function names; assertions and stack checks stay
+  # on. For DWARF, build the wasm-debug preset and run it under Node, not in a browser.
+  target_link_options(${PROJECT_NAME} PRIVATE -O2 -g2 -sASSERTIONS=2 -sSTACK_OVERFLOW_CHECK=2)
 endif()
 
 target_link_options(${PROJECT_NAME} PRIVATE
