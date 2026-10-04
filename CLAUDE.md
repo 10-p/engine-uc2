@@ -49,8 +49,16 @@ out-of-memory killer took down the owner's desktop session. These rules exist be
 - Every run of the game, a browser, a wasm build under Node, a test harness or wine goes through
   `<WorkUC2>/bin/capped <memory> <seconds> -- <command>`. It puts the whole process tree in one cgroup with a
   hard memory ceiling and time limit, turns core dumps off, and kills whatever is left when it returns.
-  Ceilings: native game or `ucc-bin` 2G; Node/wasm 3G; a headless browser 4G; wine 3G. Never more than 6G for
-  anything, and never two capped runs at once whose ceilings add up to more than 12G.
+- The owner's memory policy for this 32 GB machine (2026-10-04): one piece of work (a compile, a test, a
+  browser run) may use **up to 16 GB as long as that memory is doing something useful**; parallel work (several
+  processes at once, for example multi-client network tests) may take the machine **up to 24 GB**. Above 16 GB,
+  stop and ask why and whether we are doing a good job; above 24 GB, kill it before the kernel's reaper kills
+  things senselessly.
+- In practice: give each run the ceiling it plausibly needs, not the maximum (measured so far: native game or
+  `ucc-bin` well under 2G; wasm under Node under 3G; one headless-browser boot 3.2G; a full parallel build
+  under 6G). A ceiling above 16G for a single run needs a written reason in the notebook. The sum of
+  everything running at once stays under 24G. `<WorkUC2>/bin/mem-watchdog` (warn at 16 GB machine-wide,
+  kill all capped runs at 24 GB) should be running; start it if `pgrep -f mem-watchdog` finds nothing.
 - Exit 137 from `capped` means the ceiling was hit. **Do not retry unchanged.** Find out what is using the
   memory first (the engine's own stats, a smaller map, a heap profile under a lower ceiling).
 - Three failed attempts at the same step without a new diagnosis: stop, write down what is known in the
