@@ -545,3 +545,37 @@ the pinned spawn and seeded input): RMS with EFX minus without, by window:
 - 60-80 s (back in a Default zone, gameplay): +0.1 dB
 This is log-correlated only (gameplay is not identical between the two runs); the reverb arithmetic itself is
 numerically checked in the self-test (decay times). The spectrogram crops look alike to the eye.
+
+### Music level checked in game
+
+Found while checking the menu capture's level: the music player left out the 6 dB voice headroom every other
+cue gets (XACT plays music as a cue of `A_Music`, `Headroom Boost` unset). Fixed. `tools/dev/audio-music-check.py`
+(in the suite) correlates the capture's 50 ms level envelope with the source track and measures the mix gain:
+```
+CHECK music NuBattle.wav in audio-menu.wav: envelope correlation 0.867 at 0.35 s, mix gain -19.02 dB (expected -19.00 dB, error -0.02 dB), control track Recoil.wav correlates 0.115: PASS
+```
+(-19.0 dB = -900 mB of the A_Music sound - 600 mB headroom + 1000*log10(0.40), the default profile's
+MusicVolume through XACT's category formula; the init line now logs the category volumes: `Music 0.40, FX 0.80,
+Voice 0.80`.) The cue log puts the music start at 0.23-0.29 s; the correlation finds it at 0.35 s.
+
+## Step 8 - gate runs (d), (e), (b)
+
+- (d) no device: `SDL_AUDIODRIVER=dummy ALSOFT_DRIVERS=nonexistent ./uc2.bin -log` (capped 2G 40, Xvfb) ->
+  `UC2ALAudio: OpenAL could not open an output device: sound is off` (the only audio line), `Bringing Level
+  Menu.MyLevel up for play (0)...`, running until the 40 s limit (`logs/m8/gate-d-nodevice.out`). `-nosound`:
+  no audio line, menu up (`gate-d-nosound.out`). `AudioDevice=Engine.NullAudioDevice` in the run tree's
+  `Default.ini`: menu up, no audio line, `Avaris.ini` derived with `AudioDevice=Engine.NullAudioDevice`
+  (`gate-d-nullaudio.out`; the run tree's ini restored afterwards). Note: this machine has a 32-bit system
+  `libopenal.so.1` (1.25.1), so "no library" cannot be produced here without hiding files; that path
+  (`UC2ALBind` fails) logs `...: sound is off` the same way, not exercised.
+- (e) `./ucc-bin verifyclasses` -> `All native class layouts match`; `timeout 20 ./ucc-bin server DM-Deadbolt
+  -log` -> `Game class is 'UCDeathmatch'`, `Bringing Level DM-Deadbolt.MyLevel up for play (0)...`, no audio
+  line (a dedicated server has `GIsClient` 0, `UEngine::InitAudio` never creates a device); `run-uc2-shot.sh m8
+  gate-e-deadbolt 60 0 DM-Deadbolt -glerrors` -> `UC2GLDrv: frame 2400, 0 GL errors so far`, 0 Critical, audio
+  device `"No Output"` (OpenAL Soft's null backend: `run-uc2-shot.sh` now sets `ALSOFT_DRIVERS=null` unless the
+  caller sets it, so headless runs never play through the desktop's sound server).
+- (b) `cmake --preset native && cmake --build build-native -j12` (capped 6G) -> `Built target UC2ALAudio`,
+  `Built target SDLLaunch` (uc2.bin contains `UUC2ALAudioSubsystem::PlaySoundCue`), `Built target UCC`.
+  `source env.sh && cmake --preset wasm && cmake --build build-wasm -j6` (capped 6G) -> `[100%] Built target
+  SDLLaunch`, rc 0; targets built: ogg, zlib, vorbis, Core, Engine, UnrealGame, UCElements, SDL2Drv, UWeb,
+  UCGameplay, IpDrv, GUI, UCC, SDLLaunch (UC2ALAudio excluded there).
