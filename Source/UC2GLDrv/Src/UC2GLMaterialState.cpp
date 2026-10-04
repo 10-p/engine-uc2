@@ -24,9 +24,6 @@
 //
 extern D3DTEXTUREOP DUMMY_MODULATE2X;
 
-// UC2GLDrv: pixel-shader materials are M6 (see SetPixelShaderMaterial).
-#define UC2GL_PIXELSHADERS 0
-
 // scion sz
 FORCEINLINE UBOOL IsTextureLinear( FOpenGLTexture* Texture )
 {
@@ -155,6 +152,9 @@ FOpenGLMaterialState::FOpenGLMaterialState()
 
 	// scion sz/jg - per material vertex shader fragment
 	MaterialVertexShaderEnum = 0;
+
+	// UC2GLDrv
+	UsePixelShaderProgram = 0;
 }
 
 /*----------------------------------------------------------------------------
@@ -1480,17 +1480,54 @@ UBOOL FOpenGLRenderInterface::SetPixelShaderMaterial( UPixelShaderMaterial* InSh
 	FOpenGLMaterialState*	MaterialState = CurrentState->MaterialPasses[PassesUsed];
 	FOpenGLModifierInfo TexModifiers[4];
 
+#ifndef _XBOX
+	// UC2GLDrv test switch, off unless -gldualdiffuse=<n> is on the command line. No package of
+	// the game contains a PSDualDiffuse material (tools/dev/ps-census.py), so the 32 DualDiffuse
+	// shaders and their handler cannot be seen on shipped content. With the switch, every
+	// PSEmissiveShader material that has a diffuse and a specular texture is drawn as a
+	// PSDualDiffuse built from those two textures: n = BlendMode (0 add, 1 modulate, 2 blend)
+	// + 10 * MaskMode (0 none, 1 first texture's alpha, 2 second texture's alpha).
+	static INT TestDualDiffuse = -2;
+	if( TestDualDiffuse == -2 && !Parse( appCmdLine(), TEXT("gldualdiffuse="), TestDualDiffuse ) )
+		TestDualDiffuse = -1;
+	if( TestDualDiffuse >= 0 && InShader->PixelShaderType >= PS_EmissiveShaderDiffuseOnly && InShader->PixelShaderType <= PS_EmissiveShaderSpecLight )
+	{
+		UPSEmissiveShader* Emissive = (UPSEmissiveShader*)InShader;
+		if( Emissive->Diffuse && Emissive->Specular )
+		{
+			DECLARE_STATIC_UOBJECT( UPSDualDiffuse, TestDualDiffuseMaterial, {} );
+			TestDualDiffuseMaterial->Diffuse					= Emissive->Diffuse;
+			TestDualDiffuseMaterial->Diffuse2					= Emissive->Specular;
+			TestDualDiffuseMaterial->Specular					= NULL;
+			TestDualDiffuseMaterial->SpecularMask				= NULL;
+			TestDualDiffuseMaterial->BlendMode					= TestDualDiffuse % 10;
+			TestDualDiffuseMaterial->MaskMode					= (TestDualDiffuse / 10) % 10;
+			TestDualDiffuseMaterial->bUseLightingForSpecular	= 0;
+			TestDualDiffuseMaterial->bIsTwoSided				= Emissive->bIsTwoSided;
+			TestDualDiffuseMaterial->bRebuild					= 1;
+			InShader = TestDualDiffuseMaterial;
+		}
+	}
+#endif
+
 	InShader->PreRender( this );
 	HandlePSVertexShader( InShader, MaterialState );
 
 #ifndef _XBOX
-	// UC2GLDrv (R1): there are no pixel shaders yet, so every pixel-shader material takes
-	// PC's Xbox-only fallback below (its texture stage 0 through SetSimpleMaterial, then the
-	// state handler). M6: set UC2GL_PIXELSHADERS once the .psh translations exist; the
-	// Xbox-only types then need their own branch here to be rendered for real.
-	if( UC2GL_PIXELSHADERS && InShader->IsXboxOnly() == 0 )
+	// UC2GLDrv (M6): PC's test here is InShader->IsXboxOnly() == 0, because PC had hand-written
+	// DX8 shaders for some types only. Ours is whether the material's whole shader family is
+	// translated, compiled and has its inputs at this milestone (UUC2GLRenderDevice::
+	// PixelShaderFamilyReady): then the Xbox branch below is taken, Xbox-only or not.
+	// Otherwise, and always with UsePixelShaders=False, PC's Xbox-only fallback: texture
+	// stage 0 through SetSimpleMaterial, then the state handler.
+	// M7: the families that stay on the fallback are those whose input is the back buffer, the
+	// depth buffer or another render target (distortion, blur, depth of field, bloom and emissive
+	// select, motion blur, luminance, player cam, colour remap): UC2GL_IsM7PixelShader.
+	if( RenDev->PixelShaderFamilyReady( InShader->PixelShaderType ) )
 #endif
 	{
+		MaterialState->UsePixelShaderProgram = 1;
+
 		// -- set the desired pixel shader 
 		MaterialState->PixelShader = (EPixelShader)InShader->PixelShaderType;	
 

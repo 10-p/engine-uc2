@@ -32,6 +32,32 @@ struct FOpenGLDeviceCaps
 #define D3DPMISCCAPS_TSSARGTEMP				0x00000400
 
 //
+//	Programmable materials (M6).
+//
+enum EPixelShaderState
+{
+	PSS_None		= 0,	// no Xbox shader for the enum value, or pixel shaders are off
+	PSS_Ready		= 1,	// translated, compiled, drawn with a program
+	PSS_Failed		= 2,	// did not compile: its materials take the stage-0 fallback
+	PSS_M7			= 3,	// needs a back-buffer copy, the depth buffer or a render target: M7
+	PSS_EngineGated	= 4,	// translated, but the PC engine path never asks for it
+};
+
+struct FOpenGLProgram
+{
+	GLuint			Program;			// 0: could not be built
+	QWORD			VertexShaderEnum;
+	DWORD			PSKey;
+	FOpenGLProgram*	Next;
+	UBOOL			Reported;
+	GLint			ClipLoc, ModelViewLoc, NormalMatrixLoc,
+					AmbientLoc, LightDirLoc, LightColorLoc,
+					FogParamsLoc, FogColorLoc,
+					TexMatrixLoc[4],
+					ConstantLoc[8];
+};
+
+//
 //	UUC2GLRenderDevice
 //
 class UUC2GLRenderDevice : public URenderDevice
@@ -98,6 +124,19 @@ public:
 
 	GLuint							NullTextureID;
 
+	// Programmable materials (M6; UC2GLShaders.cpp).
+	UBOOL							UsePixelShaders,
+									PrecompileVertexShaders;
+	BYTE							PixelShaderState[PS_MAX];	// EPixelShaderState
+	TMap<QWORD,GLuint>				VertexShaderObjects;		// by VertexShaderEnum; 0 = cannot be built
+	TMap<DWORD,GLuint>				FragmentShaderObjects;		// by EPixelShader | variant << 8
+	TMap<QWORD,FOpenGLProgram*>		Programs;					// hash chains
+	INT								ProgramsLinked, ProgramsFailed,
+									VertexShadersCompiled, VertexShadersFailed, VertexShadersPrecompiled,
+									FragmentShadersCompiled, FragmentShadersFailed,
+									PrecompileSeen, PrecompileNotApplicable,
+									ProgramDraws, ProgramFallbackDraws;
+
 	// GL error checking (CheckGLErrors=True or -glerrors).
 	INT								GLErrorFrames,
 									GLErrorCount;
@@ -137,6 +176,16 @@ public:
 	UBOOL CreatePresentProgram();
 	void DrawPresentPass( UViewport* Viewport );
 	void InitGLState();
+
+	// Programmable materials.
+	void InitPixelShaders();
+	void ExitPixelShaders();
+	void LogPixelShaderStats();
+	UBOOL PixelShaderFamilyReady( INT Type );
+	FString BuildVertexShaderSource( QWORD VertexShaderEnum );
+	GLuint GetVertexShaderObject( QWORD VertexShaderEnum );
+	GLuint GetFragmentShaderObject( INT PixelShader, DWORD Variant );
+	FOpenGLProgram* GetProgram( INT PixelShader, DWORD Variant, QWORD VertexShaderEnum );
 
 	// URenderDevice interface.
 	virtual UBOOL Init();
