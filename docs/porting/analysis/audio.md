@@ -445,3 +445,14 @@ OpenAL Soft's centred-source gain is -1.10 dB (3D, a mono voice straight ahead) 
 voice routing levels are not known here, so the absolute level of the whole mix differs from the Xbox by an
 unknown constant of this size. Left/right are the right way round (+/-16 dB for a source 2000 units to the
 side; HRTF is not used, plain stereo panning). Pitch after removing the method bias: -0.4 to +0.0 cents.
+
+### Cooked lengths against the Xbox banks
+
+`UC2AudioCheck` proved every cooked wave decodes to exactly its index's `frames` (the source's length). Against
+the shipped `.xwb` entry tables (`read_xwb` in the cook: Xbox ADPCM is 36 bytes per 64 frames per channel, PCM
+from the byte length), over all 7,161 entries with a cooked wave and a non-WMA Xbox entry (the 7,141 effects and
+speech waves of all languages plus 20 of the 21 music tracks; one Xbox music entry is WMA):
+cooked minus Xbox = 0 frames for 680 entries, -1..-63 frames for 6,479 (the Xbox rounds up to whole 64-frame
+ADPCM blocks: at most 2.9 ms at 22 kHz), +4 for one, and -137,664 frames (-6.2 s) for the one known different
+source (`A_ChemicalDawn` `Machine_Generator03`, see Defects). So every cooked wave has the Xbox wave's length to
+within one ADPCM block, except that one.
