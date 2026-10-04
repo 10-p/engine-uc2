@@ -149,3 +149,72 @@ virtual pad (rumble)`, `pad 0 JoySlider1 press (bound)`; D-pad down -> `pad 0 Jo
 (= 33/255) -> `pad 0 button 6 value 33 > 30`, `Joy7 press`, `UC2MainMenu handled XC_LeftTrigger`; A -> `GUILabelButton
 handled XC_A` -> `OpenMenu [UCMenu.UC2Profile]`; detach -> `JoySlider2`, `pad 0 disconnected`; re-attach -> connected
 again. A 0.5 s hold gives one press and two repeats (the 0.2/0.1 s Xbox repeat), so tests hold buttons ~0.15 s.
+
+## Step 2 - C1: the PC stick scaling defect (Engine, `UnIn.cpp`)
+
+`UInput::ReadInput` multiplies every axis by `20/DeltaSeconds` on PC (`#else` branch; 1 on the Xbox). Mouse
+and key axes are deltas and need that; a stick's `SpeedBase` contribution (DirectAxis, `IST_Hold`, once per
+tick) is a position. So on PC the stick was 20/dt times its Xbox strength and frame-rate dependent: at 60 fps
+any deflection past the dead zone saturated `UCPlayerInput`'s `aMouseX_Limit=100` (look) and moved at full
+speed (walk). Epic's PC joystick (WinDrv DirectInput, off by default) had the same problem; UT2004's tree fixed
+the same lines differently ("amb": multiply by the delta, PC values retuned). Fix, non-Xbox only: in the
+`SpeedBase` branch, when the action is `IST_Hold` with a positive delta, add `SpeedBase*Speed*Invert*dt/20`,
+so after `ReadInput` the axis holds exactly the Xbox value. Nothing else uses `SpeedBase` in our bindings.
+Verified in the pad scenario (step C4): a half and a full stick give proportionate movement.
+
+## Step 3 - C2: the GUI key table, mouse clicks, hover, typing into on-screen keyboards (GUI, `UnGUICore.cpp`)
+
+- `[GUI.EmulatedJoypad]` (system ini) replaces the hard-wired table in `GetXCode` and `NativeKeyEvent`:
+  `<engine key>=<pad code>[/<pad code while the active page has a text field>]`, codes `A B X Y Black White
+  LeftTrigger RightTrigger PadUp PadDown PadLeft PadRight Start Back LeftThumb RightThumb AltUp AltDown AltLeft
+  AltRight Type Raw`. No section = Epic's table (kept verbatim in `LoadEmulatedPad`), so an Epic or community
+  ini behaves as before. Loaded once, on the first menu key.
+- "Text field on the page" = the active page has a visible, enabled, writable `GUIEditBox` (`TextEntryTarget`).
+  Then keys whose second code is `Type`, and any other key that makes a character, type: on an on-screen
+  keyboard page (the field never has the focus, its key buttons do) the characters go to the field from
+  `NativeKeyType`, Backspace/Delete/Home/End to its `NativeKeyEvent`, and nothing else on the page sees them.
+- Left click: Epic's `MousePressed/MouseReleased` already give the item under the cursor the focus and call its
+  `OnClick` (that is how `GUIButton`/`GUILabelButton`, e.g. the main menu, work). Added: on press, a list selects
+  the row under the cursor (its own `InternalOnClick`, found by name; UC2 pages replace a list's `OnClick` with
+  their accept handler, which then used the previously selected row); on release over the same item, an item
+  with no `OnClick` but an `XControllerEvent` handler gets `XC_A`. Right click, wheel: table entries
+  (`RightMouse=B`, `MouseWheelUp/Down=PadUp/PadDown`).
+- Hover: `LookUnderCursor` (Epic's hover code is `#if 0`) gives the focus to a tab-stop item under the cursor
+  when the mouse actually moved, so a resting cursor never takes the focus back from keys or pad.
+- DevUI log lines for the test: `Mouse hover selects <path>`, `Mouse click selects the row under the cursor in
+  <path>`, `Mouse click is A on <path>`.
+
+Default table (Default.ini) and why:
+
+| Keys | Pad code | Why |
+|---|---|---|
+| arrows | D-pad | always; Epic's |
+| W A S D | D-pad / Type | navigation like the game's movement keys, but they type on pages with a text field |
+| Enter | A / Start | accept; on a text page Start = "done" (UC2KeyboardPanel/UC2PageBase `StartClicked`) |
+| Space | A / Type | accept; types a space in text |
+| Escape | B | back, always (cancels text entry too) |
+| Backspace | B / Type | back; deletes in text |
+| right mouse button | B | back |
+| X, Y | X, Y / Type | the letters the on-screen glyphs show |
+| Q, E | White, Black / Type | left/right of WASD, as the shoulders they replace |
+| PageUp, PageDown | LeftTrigger, RightTrigger | always (no character) |
+| `[` `]` | LeftTrigger, RightTrigger / Type | Epic's |
+| Tab | Start | 15 files act on `XC_Start` separately from A (`UC2PageBase.StartClicked`) |
+| F1 | Back | `XC_Back` is the scoreboard button in game, F1 is `ShowScores` |
+| Home, End | LeftThumb, RightThumb / Type | stick clicks (`XC_RightThumb` is used in 7 menu files) |
+| NumPad 8 2 4 6 | right stick | Epic's |
+| wheel | PadUp/PadDown | scrolls lists by moving the selection |
+| Delete | Raw / Type | edits text |
+
+Every pad code the menus act on (count of uses in UCMenu+GUI script: A 118, X 41, White 36, B 29, Y 28, PadLeft/Right
+27, Black 22, Start 18, RightThumb 16, triggers 15, Back 12, PadUp/Down 10-11, Alt* 9-12, LeftThumb 3) has a key.
+
+### Defect found on the way: `Delete` as a system-ini key stopped the engine (Core)
+
+With `Delete=...` in `[GUI.EmulatedJoypad]` both `uc2.bin` and `ucc-bin` stopped at startup with
+`Can't find 'intUObjectexecDelete' in 'Core.dll'`. The system ini is read before the script packages; its keys
+are FNames; an FName keeps the spelling of its first creator; UObject's script function is `delete`, and the
+static-link native lookup (`UnCoreNative.h`, `IMPLEMENT_NATIVE_HANDLER`) compared `"int"+class+"exec"+name` with
+`appStrcmp`. Fix: `appStricmp` (all 788 native names are distinct without case; checked with
+`grep MAP_NATIVE ... | sort | uniq -di` = empty). Epic's own `DefUser.ini` has `Delete=LogInput`, but User.ini is
+read after the packages load, which is why nobody saw it.
