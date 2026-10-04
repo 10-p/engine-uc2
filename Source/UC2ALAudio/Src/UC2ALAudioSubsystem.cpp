@@ -318,7 +318,7 @@ static ALuint EnsureBuffer( FUC2AudioState* S, FUC2WaveBank* Bank, FUC2Wave* W, 
 	TArray<SWORD> Pcm;
 	INT Channels = 0, Rate = 0;
 	FString Error;
-	if( !UC2DecodeVorbis( &Bank->Data(W->Offset), W->Size, Pcm, Channels, Rate, Error ) || !Channels )
+	if( !UC2DecodeVorbis( &Bank->Data(W->Offset), W->Size, Pcm, Channels, Rate, Error, W->Frames ) || !Channels )
 	{
 		W->bDecodeFailed = 1;
 		LogOnce( S, FString(TEXT("dec:")) + W->Name, FString::Printf( TEXT("%s: %s does not decode (%s)"), *Bank->File, *W->Name, *Error ) );
@@ -1445,6 +1445,7 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 	TArray<BYTE> Data;
 	FString File = S->SoundsDir + WB->DataFile, Error;
 	FUC2MusicSlot& M = S->Music[0];
+	M.Stream.Frames = W->Frames;
 	if( !appLoadFileToArray( Data, *File ) || !M.Stream.Open( Data, Error ) )
 	{
 		CUELOG(( NAME_DevSound, TEXT("UC2Audio: music %s: cannot play %s (%s)"), *Song, *File, Error.Len() ? *Error : TEXT("unreadable") ));

@@ -44,7 +44,7 @@ INT UUC2AudioCheckCommandlet::Main( const TCHAR* Parms )
 	TArray<FString> WbFiles = GFileManager->FindFiles( *(Dir + TEXT("*.uc2wb")), 1, 0 );
 	TMap<FString,INT> ByFile;
 	TArray<FCheckBank*> Banks;
-	INT Waves = 0, WavesOk = 0, WavesMissing = 0, Streams = 0, StreamsOk = 0;
+	INT Waves = 0, WavesOk = 0, WavesMissing = 0, Streams = 0, StreamsOk = 0, TrimmedWaves = 0, MaxTrim = 0;
 	for( INT i=0; i<WbFiles.Num(); i++ )
 	{
 		FCheckBank* B = new FCheckBank;
@@ -78,6 +78,7 @@ INT UUC2AudioCheckCommandlet::Main( const TCHAR* Parms )
 				// Music: stream the whole file, as the device does, and count its frames.
 				Streams++;
 				FUC2VorbisStream Stream;
+				Stream.Frames = W.Frames;
 				TArray<BYTE> Copy = B->Data;
 				FString Err;
 				INT Frames = 0;
@@ -105,11 +106,16 @@ INT UUC2AudioCheckCommandlet::Main( const TCHAR* Parms )
 			}
 			Waves++;
 			TArray<SWORD> Pcm;
-			INT Channels = 0, Rate = 0;
+			INT Channels = 0, Rate = 0, Trimmed = 0;
 			FString Err;
 			UBOOL bOk = W.Offset>=0 && W.Size>0 && W.Offset+W.Size<=B->Data.Num()
-				&& UC2DecodeVorbis( &B->Data(W.Offset), W.Size, Pcm, Channels, Rate, Err )
+				&& UC2DecodeVorbis( &B->Data(W.Offset), W.Size, Pcm, Channels, Rate, Err, W.Frames, &Trimmed )
 				&& Channels==W.Channels && Rate==W.Rate && Pcm.Num()==W.Frames*W.Channels;
+			if( bOk && Trimmed )
+			{
+				TrimmedWaves++;
+				MaxTrim = Max( MaxTrim, Trimmed );
+			}
 			if( bOk )
 			{
 				WavesOk++;
@@ -126,6 +132,8 @@ INT UUC2AudioCheckCommandlet::Main( const TCHAR* Parms )
 	}
 	GWarn->Logf( TEXT("wave banks: %d index files; waves: %d decoded to their exact length of %d cooked (%d entries have no cooked wave); music streams: %d of %d"),
 		Banks.Num(), WavesOk, Waves, WavesMissing, StreamsOk, Streams );
+	GWarn->Logf( TEXT("decoder end trim: %d waves decoded past their end-of-stream granule position (at most %d frames) and were cut to the source length"),
+		TrimmedWaves, MaxTrim );
 
 	// Every cue of every cue table, in every language: at least one variation decodes.
 	TArray<FString> CueFiles = GFileManager->FindFiles( *(Dir + TEXT("*.uc2cues")), 1, 0 );

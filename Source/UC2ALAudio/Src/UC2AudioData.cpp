@@ -428,7 +428,8 @@ static ov_callbacks MemCallbacks()
 	return C;
 }
 
-UBOOL UC2DecodeVorbis( const BYTE* Data, INT Size, TArray<SWORD>& Pcm, INT& Channels, INT& Rate, FString& Error )
+UBOOL UC2DecodeVorbis( const BYTE* Data, INT Size, TArray<SWORD>& Pcm, INT& Channels, INT& Rate, FString& Error,
+	INT Frames, INT* Trimmed )
 {
 	guard(UC2DecodeVorbis);
 	FMemSource Src = { Data, (size_t)Size, 0 };
@@ -460,6 +461,14 @@ UBOOL UC2DecodeVorbis( const BYTE* Data, INT Size, TArray<SWORD>& Pcm, INT& Chan
 		appMemcpy( &Pcm(Index), Buffer, Got );
 	}
 	ov_clear( &Vf );
+	if( Trimmed )
+		*Trimmed = 0;
+	if( Frames>0 && Channels>0 && Pcm.Num() > Frames*Channels )
+	{
+		if( Trimmed )
+			*Trimmed = Pcm.Num()/Channels - Frames;
+		Pcm.Remove( Frames*Channels, Pcm.Num() - Frames*Channels );
+	}
 	return 1;
 	unguard;
 }
@@ -489,6 +498,7 @@ UBOOL FUC2VorbisStream::Open( TArray<BYTE>& InData, FString& Error )
 	vorbis_info* Info = ov_info( &I->Vf, -1 );
 	Channels	= Info->channels;
 	Rate		= Info->rate;
+	Position	= 0;
 	Impl		= I;
 	return 1;
 	unguard;
@@ -499,6 +509,8 @@ INT FUC2VorbisStream::Read( SWORD* Out, INT MaxFrames )
 	if( !Impl )
 		return 0;
 	FUC2VorbisImpl* I = (FUC2VorbisImpl*)Impl;
+	if( Frames>0 )
+		MaxFrames = Clamp( Frames - Position, 0, MaxFrames );
 	INT Bytes = 0, Want = MaxFrames*Channels*2;
 	while( Bytes<Want )
 	{
@@ -508,12 +520,16 @@ INT FUC2VorbisStream::Read( SWORD* Out, INT MaxFrames )
 			break;
 		Bytes += Got;
 	}
+	Position += Bytes/(Channels*2);
 	return Bytes/(Channels*2);
 }
 
 UBOOL FUC2VorbisStream::Rewind()
 {
-	return Impl && ov_raw_seek( &((FUC2VorbisImpl*)Impl)->Vf, 0 )==0;
+	if( !Impl || ov_raw_seek( &((FUC2VorbisImpl*)Impl)->Vf, 0 )!=0 )
+		return 0;
+	Position = 0;
+	return 1;
 }
 
 void FUC2VorbisStream::Close()

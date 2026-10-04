@@ -213,14 +213,18 @@ struct FUC2SoundBank
 UBOOL UC2LoadSoundBank( const TCHAR* Path, FUC2SoundBank& Bank, FString& Error );
 UBOOL UC2LoadWaveBank( const TCHAR* Path, FUC2WaveBank& Bank, FString& Error );
 
-// Vorbis from memory.
-UBOOL UC2DecodeVorbis( const BYTE* Data, INT Size, TArray<SWORD>& Pcm, INT& Channels, INT& Rate, FString& Error );
+// Vorbis from memory. A wave decodes to whole Vorbis blocks when the decoder does not apply the end-of-stream
+// granule position (libvorbis 1.0's vorbisfile does not, for about one wave in ten of ours): Frames > 0 cuts
+// the result to the source's length from the index (Trimmed = frames removed).
+UBOOL UC2DecodeVorbis( const BYTE* Data, INT Size, TArray<SWORD>& Pcm, INT& Channels, INT& Rate, FString& Error,
+	INT Frames=0, INT* Trimmed=NULL );
 
 struct FUC2VorbisStream
 {
 	void*			Impl;
 	INT				Channels, Rate;
-	FUC2VorbisStream() : Impl(NULL), Channels(0), Rate(0) {}
+	INT				Frames, Position;	// Frames > 0: the stream ends there (see UC2DecodeVorbis)
+	FUC2VorbisStream() : Impl(NULL), Channels(0), Rate(0), Frames(0), Position(0) {}
 	~FUC2VorbisStream() { Close(); }
 	UBOOL Open( TArray<BYTE>& InData, FString& Error );	// takes over InData (swapped out)
 	INT Read( SWORD* Out, INT MaxFrames );				// frames read, 0 at the end

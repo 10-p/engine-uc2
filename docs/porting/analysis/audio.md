@@ -282,3 +282,27 @@ readers, Vorbis from memory through vorbisfile callbacks), `Src/UC2ALDevice.cpp`
 their translation to EFX), `Src/UC2ALAudioSubsystem.cpp` (the XACT behaviour), `Src/UC2ALAudio.cpp` (package +
 commandlet). Root `CMakeLists.txt`: `UC2ALAudio` moved before `UCC` in `UC2_PACKAGES` (UCC links it for the
 commandlet and tests `if(TARGET UC2ALAudio)`).
+
+## Step 4 - A4 (1): every cooked wave decodes, every cue resolves (`UC2ALAudio.UC2AudioCheck`)
+
+```sh
+tools/dev/mkrun-uc2.sh build-native m8          # run tree with libopenal.so.1, Sounds/ and Music/ hard-linked
+cd /home/ion/WorkUC2/run/m8/System && /home/ion/WorkUC2/bin/capped 2G 600 -- ./ucc-bin UC2ALAudio.UC2AudioCheck
+```
+First run (`logs/m8/audiocheck-1.out`): 687 failures, all "decoded N frames, index says M" with N > M and N a
+multiple of 128: libvorbis 1.0's vorbisfile (the vendored decoder) does not cut the last packet at the stream's
+end-of-stream granule position for those streams, although the granule is right (checked on `L1_Pain2`: last
+page granule 16,637 = source frames; ffmpeg's decoder over-reads the same files). Fix in the runtime: a wave is
+cut to its source length from the index (`frames=`), a music stream stops at its `frames`. Second run
+(`logs/m8/audiocheck-2.out`), literally:
+```
+wave banks: 182 index files; waves: 7141 decoded to their exact length of 7141 cooked (19 entries have no cooked wave); music streams: 21 of 21
+decoder end trim: 687 waves decoded past their end-of-stream granule position (at most 662 frames) and were cut to the source length
+cues [int]: 2438 in 78 cue tables: 2417 resolve fully, 6 partly, 15 to no decodable wave (0 use a localised bank)
+cues [deu]: 2438 in 78 cue tables: 2417 resolve fully, 6 partly, 15 to no decodable wave (1107 use a localised bank)
+cues [fra]: 2438 in 78 cue tables: 2417 resolve fully, 6 partly, 15 to no decodable wave (1107 use a localised bank)
+cues [ita]: 2438 in 78 cue tables: 2417 resolve fully, 6 partly, 15 to no decodable wave (1107 use a localised bank)
+cues [spa]: 2438 in 78 cue tables: 2414 resolve fully, 6 partly, 18 to no decodable wave (1107 use a localised bank)
+UC2AudioCheck: 78 cue tables, 2438 cues, 0 failures
+```
+The 15 (spa: 18, the three Spanish announcer lines without a source) are exactly the cook's list (Step 1).
