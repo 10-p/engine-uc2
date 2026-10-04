@@ -356,3 +356,61 @@ format, texels and the device's own copy of level 0): `T_FX.ColorRamps.UI_PauseM
 from teal (61,160,142) at luminance 0 to black at 1 (a negative), `BerserkRamp` from (0,29,23) to
 (255,254,149), `FX_ColorRamps_TeleportIn` from (0,5,4) to (0,215,249). The script now switches the two
 subclasses off again after enabling the pause overlay.
+
+## P5b. Pictures on content (all after the `FScreenPrimUtil` fix; `tools/dev/m7-effects.sh`)
+
+`tools/dev/m7-effects.sh [tree] [effect...]` regenerates every pair: one capped run per effect (pinned first
+PlayerStart, 1280x720, Fire injected, two engine screenshots at fixed times, post-processing switched on or a
+console command issued between them), stable names `logs/<tree>/fx-<effect>-a.png`, `-b.png`, `-ab.png`
+(side by side), `fx-<effect>.out`, and one line per effect (Critical count, GL errors, failed programs, mean
+and share of changed pixels between A and B, anything left running). `tools/dev/m7-effects.sh list` prints
+what A and B are. If `fx-<effect>-b.ref.png` exists the line also gives the difference of B to it (regression
+check for M11). DM-Praxis is the one effect whose camera is not the first PlayerStart (the panes are not in
+view from it): the run is repeated, at most six times, until picture A matches the wine reference
+`logs/oracle/DM-Praxis-windows-A.png` (mean difference below 8; the three tries of the last run: third hit).
+
+The line of each effect from the runs of 2026-10-04 (`logs/m7/fx-batch1.txt`, `fx-batch2.txt`); every run: 0
+Critical, 0 GL errors, 0 failed programs or shaders, nothing left running:
+
+| Effect (`fx-<name>`) | A | B | mean diff, changed | What I see in B, and what I cannot tell |
+|---|---|---|---|---|
+| `bloom` (DM-Deadbolt) | off = M6 | on | 1.92, 28% | The fluorescent tube, the four green lamps under the poster, the light strip along the floor edge, the pickup crystal and the bright parts of the poster have a soft halo (`fx-bloom-lamp.png` 2x crop, `fx-bloom-diff-x6.png`). Nothing shifted or mirrored; the halo is centred on its source. The glow is subtle; how strong it was on Xbox I cannot tell. The crosshair, a 3D HUD item drawn before the effects, is inside them, as the engine's order has it; the 2D HUD is drawn after and is untouched. |
+| `blur` | off | on + `BlurMe` | 9.34, 96% | Whole frame: four displaced ghost copies of the scene (concussion look). HUD sharp on top. |
+| `berserk` | off | on + berserk overlay | 23.0, 99.6% | Whole frame remapped through `BerserkRamp` (dark green to pale yellow by luminance: numerically the lookup is `remap`'s). The pawn's body keeps its colours (stencil 0xBE); the orb on its shoulder is remapped: an attachment that is not stencilled; **whether the Xbox does the same I cannot tell.** |
+| `liandri` | off | on + Liandri overlay | 7.9, 94% | Grey-scale frame with scan-line noise; pawn excluded as above. |
+| `pause` | off | on + pause overlay alone | 79.7, 99.8% | A teal negative of the scene: dark areas bright teal, lamps and poster highlights dark. That is what `UI_PauseMenuRamp` contains (61,160,142 at luminance 0, black at 1; read with `GLTEXELS`) and the lookup is checked numerically, so this is what Epic's data and code give. **It looks odd without the menu on top; I cannot tell whether the Xbox pause screen looks like this.** |
+| `radial` | off | on + radial blur held at 30 | 7.3, 85% | Zoom blur growing towards the frame's edges, centre sharp. |
+| `dyngamma` | on, ramp applied to the picture | on, `DYNAMICGAMMA 0` | 9.0, 88% | With the dynamic ramp the dark map is clearly brighter and the poster's highlights clip (ramp[64,128,192] = 85,193,255: everything above 63% becomes white). Epic's histogram formula on a dark frame; **on by default because it is the Xbox default; whether the Xbox looked this bright here I cannot tell.** The ramp is the display's: it is in screenshots only with `-glshotramp`. |
+| `azure` (DM-Azure) | off | on | 2.34, 55% | Depth of field: the mountains, the far temple and the sky behind the gap are softened, the near pillars and floor are sharp (`fx-azure-far-off-on-script-shipped.png`: off, on, on with the shipped alpha). No contour lines, no halo at the near/far boundary that I can see at 2x. Glow on the bright stone is faint. |
+| `dof-alpha` (DM-Azure) | on, alpha as script sets it (third person: 100) | on, `DOFSHIPPEDALPHA 1` (65) | 1.24, 44% | The far region is less softened with the shipped value (third panel of the crop above). Mean difference in the far region 1.4 of 255 between the two, 4.2 between off and on. This is the pair for the owner's decision. |
+| `octane` (CTF-Octane) | off | on | 2.5, 21% | Glow on the corridor lamps and on the pawn's red team markings. No distortion glass in view from this start (no `Distortion` program linked in the run). |
+| `praxis-panes` (DM-Praxis) | off: flat periwinkle panes, as the original PC binary under wine | on | 2.66, 28% | The sea is seen through the panes (rocks and plants at the bottom, lighter water above: upright), displaced and wobbling. Along the right edge of each pane the dark silhouette of the pillar in front is pulled into the pane in a wavy line (`fx-praxis-panes-crop.png`). Screen-space distortion reads the displaced back-buffer pixel whatever it belongs to, and `DistortionAccum.psh` displaces only right and down; **I believe the Xbox has the same artefact, I cannot check it, and its size depends on my height/480 scaling of the amounts.** |
+
+## Gate numbers (run by me; final binary of commit `4ed20bc` + notes; all through `bin/capped`)
+
+- (a) `capped 1G 300 -- python3 tools/psh2glsl.py --selftest`: `psh2glsl selftest: 100 shaders, 99 compared
+  with their definition words (6336 cases, max difference 0.00e+00), 1 without a .h, 0 failed, 0 lint warnings;
+  7 synthetic semantics checks, 0 failed`. `capped 2G 600 -- xvfb-run -a -s "-screen 0 640x480x24" python3
+  tools/psh2glsl.py --gputest`: `pshgpu: 107 shaders rendered, 6848 cases, 0 outside the tolerance of 1.00
+  8-bit steps (worst 0.500), 420 program variants linked, GLSL ES 1.00 compile 107/107, 0 shaders failed`.
+- (b) native: `[100%] Built target UCC`, `build exit 0` (`logs/m7/build-6.log`); web (tree at `6fa7758`; to be
+  repeated on the final tree): `[100%] Built target SDLLaunch`, exit 0.
+- (c) 60 s runs, 1280x720, `-glerrors`, frames counted between two markers 15 s apart
+  (`-glexec=30:GLINFO@45:GLINFO`):
+
+  | Run | Critical | GL errors (frames) | programs linked / failed | fragment shaders | frames/s on | off | off/on |
+  |---|---|---|---|---|---|---|---|
+  | menu | 0 | 0 (615) | 2 / 0 | 84 compiled, 0 failed | 12.5 | 11.8 | 0.94 |
+  | DM-Deadbolt | 0 | 0 (551) | 15 / 0 | 84, 0 | 7.9 | 30.1 | **3.8** |
+  | DM-Praxis | 0 | 0 (417) | 18 / 0 | 84, 0 | 6.6 | 21.5 | **3.3** |
+
+  Software GL at 1280x720: with post-processing on a frame has three or four full-screen copies (one per
+  draw that reads the back buffer after it changed: emissive select, depth-of-field blur, the back-buffer
+  copy, the distortion quad), the depth encode, four full-screen blends and about a dozen half- and
+  quarter-size passes. On llvmpipe that is about 95 ms a frame in a map. Not measured on a GPU.
+- (e) `./ucc-bin verifyclasses`: exit 0, `All native class layouts match`; `timeout 20 ./ucc-bin server
+  DM-Deadbolt -log`: `Game class is 'UCDeathmatch'`, `Bringing Level DM-Deadbolt.MyLevel up for play (0)...`,
+  0 Critical, still running at the limit; `./uc2.bin -nullrenderer -log`: `Render device:
+  Engine.NullRenderDevice (1280x720 windowed)`, menu level up, 0 Critical; `-nopostprocess` DM-Deadbolt frame
+  against `logs/m6/coord-deadbolt-0.png`: **0 differing pixels for x >= 760** (520x720), 7.3% of the whole
+  frame differ, all inside x 58-758, y 48-720 (pawn idle animation, pickup, HUD), as between two M6 runs.
