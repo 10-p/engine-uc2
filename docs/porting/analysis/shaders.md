@@ -426,3 +426,110 @@ Hooks (`grep -a -n "M7:" Source/UC2GLDrv/Src/*`): `UC2GL_IsM7PixelShader` and th
    reproduced (the generated shaders clamp constants).
 6. No shipped package contains a `PSDualDiffuse` (or `PSShenuSkin`, `PSEmissiveConstColor`,
    `PSTeamSkinShaderOpacity`) material: 37 of the 59 integrated shaders are unreachable from content.
+
+## S4. Verification on content (2026-10-04, Xvfb + Mesa llvmpipe, run tree `run/m6`)
+
+### What the content uses
+
+`python3 tools/dev/ps-census.py <WorkUC2>/assets/uc2` (name, import and export tables only): objects per class
+in the canonical tree: `PSEmissiveShader` 188, `PSSkinShader` 94, `PSEmissiveSkinShader` 81, `PSTeamSkinShader`
+68, `PSDistortionMaterial` 42 (M7), `PSEmissiveSpecular` 27, `PSAdditiveDistortion` 15 (M7), `PSTeamShader` 13,
+`PSModulatedDistortionMaterial` 12 (M7), `PSDiffuseOpacitySpecularMask` 10, `PSBlurMaterial` 5 and
+`PSMotionBlurMaterial` 5 (M7), `PSSkinShaderOpacity` 5, `PSDiffuseOpacity` 4, `PSPlayerCamMaterial` 3 (M7),
+`PSBackBufferEffect`, `PSColorRemapMaterial`, `PSSubtractiveDistortion` 1 each (M7). **No `PSDualDiffuse`,
+`PSShenuSkin`, `PSEmissiveConstColor` or `PSTeamSkinShaderOpacity` object exists in any package**, in
+`assets/uc2` or in the pristine tree. The tool also lists, per map, the pixel-shader materials it imports.
+
+### How the pictures are made
+
+`tools/dev/run-uc2-shot.sh <tree> <name> <seconds> <fire-at> <map> [args]`: the client under
+`bin/capped 2G` + `xvfb-run`, Fire injected through the X test extension, the engine's own screenshots
+converted to `logs/<tree>/<name>-N.png`, then the linked programs, the GL error line and the Critical count.
+`UC2_RES=1280x720` sets the resolution, `UC2_PRECMD="set UCDeathmatch NumPlayers 0"` pins the spawn as the
+wine reference script does (bound to F1, pressed before Fire). A/B from one camera in one run:
+`-glshot=56,64 -glpstoggle=60` = picture 0 with pixel shaders on, picture 1 off.
+
+```
+UC2_RES=1280x720 UC2_PRECMD="set UCDeathmatch NumPlayers 0" tools/dev/run-uc2-shot.sh m6 deadbolt-720-ab 100 34 DM-Deadbolt -glerrors -glshot=42,52 -glpstoggle=47
+UC2_RES=1280x720 UC2_PRECMD="set UCDeathmatch NumPlayers 0" tools/dev/run-uc2-shot.sh m6 octane-ab 125 38 CTF-Octane -glerrors -glshot=56,64 -glpstoggle=60
+... same for DM-AxonCompressor, CTF-ViperPit, CTF-Transistor (names ab-<map>), and with -gldualdiffuse=12
+```
+
+### Pictures (all in `<WorkUC2>/logs/m6/`; `-0` = pixel shaders on, `-1` = off, same camera)
+
+Every run below: 0 Critical, 0 GL errors, 0 programs failed.
+
+| Files | Shaders linked in the run | What is on them |
+|---|---|---|
+| `deadbolt-720-ab-0/1.png`, `deadbolt-720-skin-oracle-on-off.png` (wine, on, off) | SkinShader, SkinShaderSpecLight, EmissiveShader, EmissiveDiffuseOnly | **Player skin (`PSSkinShader`)** at the same spawn as `logs/oracle/DM-Deadbolt.png`. On: the helmet horns are grey metal with white highlights, the shoulder pieces pale and reflective, as in the wine picture. Off (M5): flat brown, no reflection. Mean absolute difference to the wine picture over the character region (330,440)-(760,720): **6.3 of 255 with shaders on, 16.7 off**; whole frame 1.8 / 3.3 (the rest is animation phase). PC drew this material with its own DX8 shader, so this is the "at least as correct as PC" check, and it holds. |
+| `octane-ab-0/1.png`, `octane-ab-on-off.png`, `octane-teamskin-oracle-on-off.png`, `octane-doorframe-oracle-on-off.png` | TeamSkinShader, TeamSkinShaderSpecLight, SkinShaderSpecLight, TeamShader, EmissiveShader, EmissiveDiffuseOnly | **Team skin (`PSTeamSkinShader`, Xbox-only)**, red team, same spawn as `logs/oracle/CTF-Octane.png`. On: the skin is lit normally with specular, and only the masked markings (back glyphs, belt) glow team red. Off: plain brown skin, no team colour. PC (wine): the whole body tinted orange-red, which is PC's stage-0 fallback, not the shader; so here ours intentionally differs from PC. It matches what `TeamSkinShader.psh` describes (team colour modulates the masked, emissive parts only); **there is no Xbox picture to check it against**. Door frame behind (static meshes with `PSEmissiveShader`/`PSTeamShader`, which PC drew with DX8 shaders): difference to the wine picture over (420,160)-(860,400) **0.39 of 255 on, 5.76 off**: the three crops show wine and ours-on indistinguishable, ours-off flatter with yellowish lamps and a missing lit panel. |
+| `ab-DM-AxonCompressor-0/1.png`, `...-on-off.png`, `...-glass-crop.png` | DiffuseOpacitySpecularMask2, SkinShader(SpecLight), EmissiveShader, EmissiveDiffuseOnly | **Specular mask (`PSDiffuseOpacitySpecularMask`)**: the wire-glass pane on the right. On: translucent, the machinery and green lamps behind it visible through it, a faint sheen. Off: its diffuse texture drawn as a grey film, lamps dim. Also the pickup base ring glows cyan and the weapon pickup has highlights with shaders on. Looks right to me; no PC picture of this spot was made (PC had a DX8 shader for this family). |
+| `ab-CTF-ViperPit-0/1.png`, `...-on-off.png` | DiffuseOpacitySpecularMask2, EmissiveSpecular, TeamSkinShader(SpecLight), EmissiveShader, EmissiveDiffuseOnly | **`PSEmissiveSpecular`** trims: the red strips on the pillar base and along the wall are brighter and saturated with shaders on; team skin as in Octane. The difference is small in this view (differences concentrate on the character). |
+| `ab-CTF-Transistor-0/1.png`, `...-on-off.png` | EmissiveSkinShader, EmissiveShader, TeamSkinShader(SpecLight), SkinShaderSpecLight | **Emissive skin (`PSEmissiveSkinShader`, Xbox-only)** is linked and drawn here (the map's `Transistor_Emissive_Skin*` materials) and the door-frame lamps (emissive) are white and bright with shaders on. **I could not tell which object in the view carries the emissive-skin material**, so this picture proves the path runs clean, not that it looks right. Weapon and character-head emissive skins (the bulk of the 81 objects) did not come into view in any run (`NextWeapon` after the start changed nothing visible). |
+| `dualdiffuse-DM-AxonCompressor-0/1.png`, `...-on-off.png` | DualDiffuse_M1_Blend_NSL (3 programs) + the above | **DualDiffuse**: not from content (none exists). `-gldualdiffuse=12` draws every `PSEmissiveShader` material that has diffuse and specular textures as a `PSDualDiffuse` (blend, mask 1) built from those two textures: the machine and the column on the left turn into the two textures blended by the first one's alpha. This shows `UPSDualDiffuse::PreRender`, the DualDiffuse handler and a DualDiffuse program working on real geometry with 0 errors; whether a real DualDiffuse material looks right cannot be shown. The numeric tests of S1 are the evidence for the 32 variants. |
+| `deadbolt-ab-0/1.png`, `deadbolt-ab-crop.png` | as the first row | first pair, 640x480, unpinned spawn: the player from behind, on: green emissive details and specular; off: flat. |
+
+Not shown by any picture: `PSSkinShaderOpacity` / multi-pass skins (5 objects), `PSDiffuseOpacity` (4),
+`PSTeamShader` on its own (it is linked in Octane; I did not isolate its object), anything in fog (no run had
+distance fog on a pixel-shader material that I could identify), cube-map variants (every program linked in
+these runs was variant 0: the specular maps in view are 2D with a camera-space reflection source).
+
+### Gate, literally
+
+(a) `bin/capped 1G 120 -- python3 tools/psh2glsl.py --selftest`:
+`psh2glsl selftest: 100 shaders, 99 compared with their definition words (6336 cases, max difference 0.00e+00),
+1 without a .h, 0 failed, 0 lint warnings; 7 synthetic semantics checks, 0 failed`.
+`bin/capped 2G 300 -- xvfb-run -a -s "-screen 0 640x480x24" python3 tools/psh2glsl.py --gputest`:
+`pshgpu: 107 shaders rendered, 6848 cases, 0 outside the tolerance of 1.00 8-bit steps (worst 0.500), 420
+program variants linked, GLSL ES 1.00 compile 107/107, 0 shaders failed`. Tolerance: 1.0 step of the 8-bit
+framebuffer against the interpreter's unrounded value.
+
+(b) `cmake --preset native && cmake --build build-native -j12`: `[100%] Built target UCC`, `[100%] Built
+target SDLLaunch` (`uc2.bin`). `source ../env.sh && cmake --preset wasm && cmake --build build-wasm -j6`: exit
+0, `libCore.a libEngine.a libGUI.a libIpDrv.a libUCElements.a libUCGameplay.a libUWeb.a libUnrealGame.a`
+(the driver stays excluded there).
+
+(c) 60 s runs, pixel shaders on, fresh run tree (`tools/dev/run-uc2-shot.sh m6 gate-menu 60 0 '' -glerrors`,
+`... gate-deadbolt 60 30 DM-Deadbolt -glerrors`):
+- menu: 0 Critical, `frame 2400, 0 GL errors so far`, `programs: 0 linked, 0 failed; fragment shaders 59
+  compiled, 0 failed; vertex shaders 405 compiled (405 from VertexShaderConfigs.ini), 0 failed; 0 program
+  draws` (the menu has no pixel-shader material).
+- DM-Deadbolt (match started): 0 Critical, `frame 2400, 0 GL errors so far`, `programs: 8 linked, 0 failed;
+  fragment shaders 59 compiled, 0 failed; vertex shaders 409 compiled (405 from VertexShaderConfigs.ini), 0
+  failed; 69557 program draws, 0 fixed-function draws of pixel-shader passes`.
+
+(e) from `run/m6/System`, each through `bin/capped 2G`: `./ucc-bin verifyclasses` -> exit 0, `All native class
+layouts match`; `timeout 20 ./ucc-bin server DM-Deadbolt -log` -> `Game class is 'UCDeathmatch'`, `Bringing
+Level DM-Deadbolt.MyLevel up for play (0)...`, still running at the time limit; `./uc2.bin -nullrenderer -log`
+-> `Render device: Engine.NullRenderDevice (640x480 windowed)`, menu level up. Logs: `logs/m6/gate-*.out`.
+
+## Deferred
+
+- **M7 (25 shaders)**: listed in S3; hooks `// M7:`.
+- **Projector shaders (12)**: need the engine's `_XBOX` projector batching and `SetProjectorMultiMaterial`
+  (an `_XBOX` body in the material compiler) plus `ProjectorAtten.vsh`/`TexSourceTexKill3.vsh`; PC's
+  multi-pass projectors keep working as at M5. Not an M7 item in PLAN.md: needs a decision.
+- **`PS_Terrain3Layer`**: the driver's terrain compiler already asks for it when the engine chooses
+  `RM_CombinedWeightMap`, which it does only if `GetRenderCaps()->MaxSimultaneousTerrainLayers` is 3 (ours
+  says 1, as at M5). Enabling it = caps 3 + the three mask constants of the `_XBOX` lines in
+  `SetTerrainMaterial` + un-gating it in `UC2GL_IsEngineGatedPixelShader`; the generic vertex shader covers
+  its texture coordinates (camera-space position source, m4x3). Not done: it changes how every terrain map
+  is drawn and I had no budget left to verify 20 terrain maps. Hook: `UUC2GLRenderDevice::GetRenderCaps`.
+- GLSL ES / GL4ES (M11): fragment bodies compile as ES 1.00; the vertex shaders use nothing beyond ES 1.00
+  but were not compiled as ES; alpha test stays fixed-function on desktop (`UC2_ALPHATEST` exists in the
+  fragment shaders, the driver does not use it yet).
+- Performance: uniforms are uploaded and the program is bound and unbound per draw; no state caching.
+
+## Unsure / inferred (not verified by running)
+
+- Fog factor 1 with fog off; opaque black for a stage the material leaves empty; the values of unwritten
+  vertex outputs; ambient-only colour for unlit, uncoloured geometry (the Xbox formula; PC gives white).
+- 8-bit combiner precision is not modelled (see S1).
+- Texture-coordinate sets above 3 on a pixel-shader pass fall back to fixed function for that draw (logged
+  once); not seen in the runs.
+- Pixel-shader constants are device-global as in D3D: a multi-pass material's passes share the last values
+  set. Same as Epic's code; not seen to matter.
+- With `UsePixelShaders=False` the team skin is untinted while PC's fallback tints it (wine picture): M5's
+  fallback is not exactly PC's for this material. Not investigated (it is the M5 path).
+- No Xbox reference exists here (no emulator): for every Xbox-only material the evidence is the numeric
+  tests plus the reading of the handlers, not a picture comparison.
