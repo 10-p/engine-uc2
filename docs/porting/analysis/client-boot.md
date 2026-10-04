@@ -173,3 +173,101 @@ Configuration (`Engine/Config/Default.ini`, rows in `Engine/Config/README.md`): 
 `SDL2Drv.SDL2Client`, `RenderDevice` -> `Engine.NullRenderDevice` (Epic's lines kept as comments), new
 section `[SDL2Drv.SDL2Client]` = copy of `[WinDrv.WindowsClient]`. `AudioDevice` was already
 `Engine.NullAudioDevice`. The file keeps its CRLF line endings (it is a byte copy of Epic's).
+
+## Step 6 - first boots, and what running found
+
+Run as in "Commands". Defects found by running, in order (each also described in its step above):
+
+1. `appError: Not implemented` right after `Input system initialized for SDL2Viewport`: `appItoa` off MSVC
+   (step 2).
+2. With Epic's own `Default.ini` as `Avaris.ini` (no `[SDL2Drv.SDL2Client]` section) the viewport got a
+   0x0 render size: `UClient`'s config properties have no compiled values (step 4, compiled defaults).
+3. Not a defect, but it hides the evidence: `Default.ini` suppresses the `DevUI` and `DevGUI` log names
+   (`[Core.System] Suppress=DevUI`), so the GUI's own lines (`OpenMenu [...]`, `... handled XC_PadDown for
+   id 0`) are not in the log by default. For the gate runs below a test-only `Avaris.ini` without those two
+   lines was written into the run tree; nothing committed changes. At run time `UNSUPPRESS EVENT=DevUI`
+   (console) does the same.
+
+Everything else ran first time: the menu level loads, `UCMenuGame.PostLogin` opens the main menu, the main
+loop ticks (gdb at 15 s: `CMainLoop::RunLoop -> UGameEngine::Tick -> USDL2Client::Tick ->
+USDL2Viewport::Repaint -> UGameEngine::Draw -> FPlayerSceneNode::Render`, i.e. the null device is being
+drawn to every frame), and SIGTERM gives a clean shutdown (`appRequestExit(0)`, `Closed viewport`,
+`SDL2 client shut down`, `Object subsystem successfully closed`).
+
+Which menu: `GUI.GUIController OpenMenu [UCMenu.UC2MainMenu]`. `UCMenuGame.PostLogin` opens
+`class'GameEngine'.default.MainMenuClass`, which is `UCMenu.UC2MainMenu` in `GameEngine.uc`'s defaults; no ini
+overrides it (`[Engine.GameEngine]` has no `MainMenuClass`). `UCMenu.StartMenu` (the Xbox "press Start"
+title) is not opened on this path; `GUIController` only refers to it in `ShowingTeaser`-related code.
+Nothing was changed there.
+
+### Input injection
+
+`xdotool` and `python3-xlib` are not installed. Keys and clicks were injected through the X server's XTEST
+extension from Python `ctypes` (`libXtst.so.6`, `libX11.so.6`, both present), in a test-only script in the
+agent's scratch directory (not committed): find the window titled `Avaris`, `XSetInputFocus` on it (what a
+window manager would do; Xvfb has none), then `XTestFakeKeyEvent` press/release pairs 1.65 s apart, or
+`XTestFakeMotionEvent` + `XTestFakeButtonEvent` for clicks. This drives the real path: X server -> SDL's X11
+backend -> `SDL_KEYDOWN` -> `USDL2Client::PumpEvents` -> `USDL2Viewport::HandleEvent` ->
+`UEngine::InputEvent` -> `UInteractionMaster::MasterProcessKeyEvent` -> `UGUIController::NativeKeyEvent`.
+
+Mouse, same way: clicking at screen (480,300) on the main menu (window at (320,120), 640x480) logged
+`GUI.GUIController OpenMenu [UCMenu.UC2Arena_Main]`, the same page Enter on the first item opens.
+
+### `ucc help` (open, cosmetic)
+
+`./ucc-bin help` now prints one line per registered commandlet whose class loads: four lines with an empty
+name and description, `ucc help <command>` and `ucc playerskill  Calculate player skill.` (the Editor-package
+commandlets with natives do not load: Editor is not built). The empty lines are native commandlet classes
+(`Engine.ServerCommandlet` is one, checked in gdb); their `HelpCmd`/`HelpOneLiner` are localized properties
+and are empty on the class default object that `UCC.cpp` reads. gdb showed `LoadLocalizedStruct(...,
+"ServerCommandlet")` reached only once, at static class registration (before `Core.u` provides the
+`UCommandlet` properties), and not again when `Engine.u` is loaded. Not followed further: it is Epic's UCC
+flow (packages are loaded under `GIsEditor=1`, and `UObject::LoadLocalized` returns at once under
+`GIsEditor`), not a platform issue, and the commandlets themselves run (`ucc server`). Whether the same
+holds for script reading `class'X'.default.<localized>` on a native class in the game is worth checking
+when menus are visible (M5).
+
+## Gate evidence (2026-10-04)
+
+a. `cmake --build build-native -j12` -> `[100%] Linking CXX executable uc2.bin`, `[100%] Built target
+   SDLLaunch`, no undefined reference, no multiple definition. Also from an empty build directory
+   (`cmake --preset native -B <scratch>/bn && cmake --build <scratch>/bn -j12`, SDL2 fetched afresh).
+b. `cd /home/ion/WorkUC2/run/native/System && SDL_AUDIODRIVER=dummy timeout 45 xvfb-run -a -s "-screen 0
+   1280x720x24" ./uc2.bin -log` with the committed configuration -> exit 124 (still running when the 45 s
+   timeout stopped it), `System/Avaris.log`:
+   `Init: SDL2 video driver: x11`, `Init: Client initialized`,
+   `Log: Bringing Level Entry.MyLevel up for play (0)...`, `Log: Game class is 'UCMenuGame'`,
+   `Log: Bringing Level Menu.MyLevel up for play (0)...`, `Log: Opened viewport (SDL window 1, 640x480)`,
+   `Init: Render device: Engine.NullRenderDevice (640x480 windowed)`, `Log: Startup time: 0.641201 seconds`,
+   then `Log: appRequestExit(0)` at the signal; 0 `Critical:` lines. Menu class (DevUI visible, see step 6):
+   `DevUI: GUI.GUIController OpenMenu [UCMenu.UC2MainMenu] () ()`.
+c. Same command line, keys injected 30 s after the window appeared (Down, Down, Up, Return, Escape at
+   32.5/34.2/35.8/37.5/39.1 s):
+   ```
+   DevUI: UC2MainMenu->ItemSelectionPanel handled XC_PadDown for id 0
+   DevUI: UC2MainMenu->ItemSelectionPanel handled XC_PadDown for id 0
+   DevUI: UC2MainMenu->ItemSelectionPanel handled XC_PadUp for id 0
+   DevUI: UC2MainMenu->ItemSelectionPanel->GUILabelButton handled XC_Start for id 0
+   DevUI: GUI.GUIController OpenMenu [UCMenu.UC2Arena_Main] () ()
+   DevUI: GUIController::BringMenuToTop NewTopMenu:'Package.UC2Arena_Main' bResult:'True'
+   DevUI: GUI.GUIController OpenMenu [GUI.GUIMessageBox] () ()
+   DevUI: GUI.GUIController CloseMenu [GUIMessageBox]
+   DevUI: GUIMessageBox handled XC_Back for id 0
+   ```
+   (the `handled ...` lines are `SHOWCODEHANDLER`, `GUI/Src/GUIPrivate.h`, logged as `DevUI`). This also
+   shows the process alive and ticking at 30-40 s.
+d. `./ucc-bin server DM-Deadbolt -log` -> `Executing Class Engine.ServerCommandlet`, `Game class is
+   'UCDeathmatch'`, `Bringing Level DM-Deadbolt.MyLevel up for play (0)...`, running at the 30 s timeout.
+   `./ucc-bin help` -> see above. `./ucc-bin verifyclasses` -> `VERIFY: all native class layouts match`.
+   `tools/dev/map-census.sh build-native 15 4` -> `maps: 58  PASS: 58  FAIL: 0`.
+e. `source /home/ion/WorkUC2/env.sh && cmake --preset wasm && cmake --build build-wasm -j6` -> the eight
+   libraries (`Built target` Core, Engine, UnrealGame, UCElements, UWeb, IpDrv, UCGameplay, GUI), exit 0.
+   SDL2Drv and SDLLaunch are excluded under Emscripten (native-only list) until M4w.
+
+## Deferred, and why
+
+- Pads: M10 (hook `USDL2Client::PollGamepads`). GL render devices and `SDL_WINDOW_OPENGL`: M5. OpenAL: M8.
+  Movies and the startup logos: M9. Web client: M4w.
+- Split screen on PC (one SDL window per viewport, as WinDrv): owner question, unchanged.
+- Ctrl+letter control characters, IME, the UnrealScript debugger, `consolecommand=` (needs an exec hook).
+- `ucc help` empty descriptions (above).

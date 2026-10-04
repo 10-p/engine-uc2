@@ -25,3 +25,16 @@ Newest first. Remove an entry when it is resolved and say how in `LOG.md`.
 - The community one-byte `Core.dll` patch (file offset 0x940c0, first byte of a non-exported routine near the
   end of `.text`, replaced by RET): which function is it? A hint at a PC-only crash; identify if a Core
   crash shows up at M3/M4.
+
+## M4 notes (client boot, 2026-10-04; details in `analysis/client-boot.md`)
+
+- Resolved, for the coordinator to remove above: "Commandlet and registry short names". The registry was
+  empty because the Unix file manager matched wildcards case-sensitively (`*.INT` vs `*.int`); fixed in
+  `Core/Inc/FFileManagerUnix.h`. `ucc server <map>` works by short name.
+- Open, cosmetic: `ucc help` prints empty names/descriptions for native commandlet classes (localized
+  defaults not on the class default object in UCC's flow). Check at M5 whether script reading
+  `class'X'.default.<localized>` of a native class sees the same.
+- Tools: `xdotool` and `python3-xlib` are not installed. Not blocking: input was injected through XTEST with
+  Python `ctypes` (`libXtst.so.6` is present). `sudo apt install xdotool` would make such tests one-liners.
+- `Default.ini` suppresses the `DevUI`/`DevGUI` log names, so menu activity is not in the log by default
+  (Epic's setting, kept). Tests that need it use a run-tree `Avaris.ini` without those lines.
