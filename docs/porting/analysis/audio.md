@@ -456,3 +456,25 @@ cooked minus Xbox = 0 frames for 680 entries, -1..-63 frames for 6,479 (the Xbox
 ADPCM blocks: at most 2.9 ms at 22 kHz), +4 for one, and -137,664 frames (-6.2 s) for the one known different
 source (`A_ChemicalDawn` `Machine_Generator03`, see Defects). So every cooked wave has the Xbox wave's length to
 within one ADPCM block, except that one.
+
+### Reverb checked numerically (self-test section "reverb"), and zone logging
+
+The self-test switches the zone preset (`UC2AUDIO ZONE <n>`, the same code `NotifyZoneChange` uses), plays
+`A_Weapon.RL_Fire` 400 units ahead, lets it finish, then renders the room alone for 2.5 x the preset's decay
+time and fits the tail's decay (dB/s between 5 and 35 dB below its start) as an RT60 (the I3DL2/EFX decay time
+is an RT60). Literal result:
+```
+PASS reverb Hangar     3D, send -300 mB (dry wave 1.83 s): tail energy -18.4 dB of the sound's; decay time measured 10.07 s, preset 10.05 s (+0%)
+PASS reverb Default    3D, send -300 mB (dry wave 1.83 s): tail energy -58.6 dB of the sound's; decay time measured 1.68 s, preset 1.49 s (+13%)
+PASS reverb StoneRoom  3D, send -300 mB (dry wave 1.83 s): tail energy -47.3 dB of the sound's; decay time measured 2.48 s, preset 2.31 s (+8%)
+PASS reverb NoReverb   3D, send -300 mB (dry wave 1.83 s): tail energy -233.6 dB of the sound's; no tail expected
+PASS reverb Hangar     2D (dry wave 1.83 s): tail energy -328.0 dB of the sound's; no tail expected
+UC2AudioSelfTest: 39 checks, 0 failed; Pan3D -1.10 dB, Pan2D -1.52 dB
+```
+(First attempt measured nothing: the test renderer stopped 50 ms after the last cue, so the "tail" was 50 ms
+long; it now renders a fixed time for tails.) Whether these EFX levels equal the Xbox's I3DL2 hardware output
+level for the same preset is not known: the parameters are carried over 1:1 (mB -> gain, % -> 0..1), the
+decay times are measured to match.
+
+`NotifyZoneChange` now logs every call in the cue log, including "preset unchanged" and "no EFX, sound stays
+dry", so a run shows whether the player's zone changed at all.

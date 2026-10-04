@@ -461,6 +461,70 @@ INT UUC2AudioSelfTestCommandlet::Main( const TCHAR* Parms )
 			VarCues[v], Playlist, Count, *Rule, *S, *H ) );
 	}
 
+	// --- 6. reverb: the zone presets through EFX. A 3D voice's send gets the preset's reverb tail, whose decay
+	// time is measured (slope of the tail's level between 5 and 35 dB below its start) against the preset's
+	// DecayTime (I3DL2 decay time = RT60); a 2D voice has no send; NoReverb has no tail.
+	GWarn->Logf( TEXT("--- reverb (EFX %s)"), Audio->State && GAL.alGenEffects ? TEXT("bound") : TEXT("missing") );
+	struct { INT Preset; UBOOL b2D; } Verbs[] = { { 12, 0 }, { 0, 0 }, { 7, 0 }, { 25, 0 }, { 12, 1 } };
+	for( INT v=0; v<ARRAY_COUNT(Verbs); v++ )
+	{
+		Audio->Exec( *FString::Printf( TEXT("UC2AUDIO ZONE %d"), Verbs[v].Preset ), *GNull );
+		const FUC2I3DL2& Pr = GUC2ZonePresets[Verbs[v].Preset];
+		Out.Empty();
+		UC2TestPlay( Audio, TEXT("A_Weapon.RL_Fire"), FVector( 400, 0, 0 ), Verbs[v].b2D, 0.f, P );
+		DOUBLE Dry = P.Wave ? (DOUBLE)P.Wave->Frames/P.Wave->Rate : 0.0;
+		UC2TestRender( Audio, 30.f, Out );				// until the voice stops
+		TArray<FLOAT> Tail;
+		UC2TestRender( Audio, (FLOAT)Min( 2.5*Pr.DecayTime + 0.5, 20.0 ), Tail, 0 );	// then the room alone
+		UC2TestStopAll( Audio );
+		Dump( Out, *FString::Printf( TEXT("reverb-%s%s"), Pr.Name, Verbs[v].b2D ? TEXT("-2D") : TEXT("") ) );
+		Dump( Tail, *FString::Printf( TEXT("reverb-%s%s-tail"), Pr.Name, Verbs[v].b2D ? TEXT("-2D") : TEXT("") ) );
+		DOUBLE L, R, TL, TR;
+		INT O0, O1, T0, T1;
+		DOUBLE E = OutputEnergy( Out, L, R, O0, O1 );
+		DOUBLE ET = OutputEnergy( Tail, TL, TR, T0, T1 );
+		DOUBLE TailDb = 10.0*Log10( Max( ET, 1e-30 ) / Max( E, 1e-30 ) );
+		// 20 ms levels of the tail; regression of dB on time between -5 and -35 dB from its first level.
+		TArray<DOUBLE> Pw, Env;
+		OutputPower( Tail, Pw );
+		Envelope( Pw, UC2_TEST_RATE/50, Env );
+		DOUBLE Rt60 = 0.0;
+		if( Env.Num()>4 && Env(0)>0.0 )
+		{
+			DOUBLE Start = 10.0*Log10( Env(0) );
+			DOUBLE Sx=0, Sy=0, Sxx=0, Sxy=0;
+			INT N = 0;
+			for( INT i=0; i<Env.Num(); i++ )
+			{
+				DOUBLE Db = 10.0*Log10( Max( Env(i), 1e-30 ) ) - Start;
+				if( Db < -35.0 ) break;
+				if( Db > -5.0 ) continue;
+				DOUBLE T = i*0.02;
+				Sx += T; Sy += Db; Sxx += T*T; Sxy += T*Db; N++;
+			}
+			if( N>=3 )
+			{
+				DOUBLE Slope = (N*Sxy - Sx*Sy) / (N*Sxx - Sx*Sx);
+				Rt60 = Slope<0.0 ? -60.0/Slope : 0.0;
+			}
+		}
+		UBOOL bOk;
+		FString What;
+		if( Verbs[v].b2D || Verbs[v].Preset==25 )
+		{
+			bOk = TailDb < -80.0;
+			What = TEXT("no tail expected");
+		}
+		else
+		{
+			bOk = TailDb > -80.0 && Rt60 > 0.7*Pr.DecayTime && Rt60 < 1.3*Pr.DecayTime;
+			What = FString::Printf( TEXT("decay time measured %.2f s, preset %.2f s (%+.0f%%)"), Rt60, Pr.DecayTime, 100.0*(Rt60/Pr.DecayTime-1.0) );
+		}
+		Check( bOk, FString::Printf( TEXT("reverb %-10s %s (dry wave %.2f s): tail energy %.1f dB of the sound's; %s"),
+			Pr.Name, Verbs[v].b2D ? TEXT("2D") : TEXT("3D, send -300 mB"), Dry, TailDb, *What ) );
+	}
+	Audio->Exec( TEXT("UC2AUDIO ZONE 0"), *GNull );
+
 	// --- 6. radius and duration as the engine asks for them (XACT GetSoundCueRadius / GetSoundCueDuration)
 	GWarn->Logf( TEXT("--- radius and duration") );
 	{

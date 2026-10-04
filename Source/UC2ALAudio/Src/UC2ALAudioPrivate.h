@@ -274,7 +274,8 @@ struct FUC2TestPlay
 	UBOOL			b3DVoice;
 };
 UBOOL UC2TestPlay( UUC2ALAudioSubsystem* Audio, const TCHAR* Cue, FVector Location, UBOOL b2D, FLOAT Volume, FUC2TestPlay& Out );
-INT UC2TestRender( UUC2ALAudioSubsystem* Audio, FLOAT MaxSeconds, TArray<FLOAT>& Out );	// stereo float, 48 kHz
+// Renders until every cue has stopped (+50 ms), or for MaxSeconds when bWhileSounding is 0. Stereo float, 48 kHz.
+INT UC2TestRender( UUC2ALAudioSubsystem* Audio, FLOAT MaxSeconds, TArray<FLOAT>& Out, UBOOL bWhileSounding=1 );
 void UC2TestStopAll( UUC2ALAudioSubsystem* Audio );
 enum { UC2_TEST_RATE = 48000 };
 

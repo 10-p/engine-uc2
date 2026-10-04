@@ -1788,13 +1788,23 @@ void UUC2ALAudioSubsystem::NotifyZoneChange( AZoneInfo* NewZone )
 {
 	guard(UUC2ALAudioSubsystem::NotifyZoneChange);
 	FUC2AudioState* S = State;
-	if( !S || !S->bEFX )
+	if( !S )
 		return;
+	if( !S->bEFX )
+	{
+		CueLogf( CueLog, S, TEXT("zone %s (ZoneAudioEffect %d): no EFX, sound stays dry"), NewZone ? NewZone->GetName() : TEXT("none"),
+			NewZone ? NewZone->ZoneAudioEffect : -1 );
+		return;
+	}
 	INT Preset = 0;
 	if( ZoneReverb && NewZone && NewZone->ZoneAudioEffect < UC2_NUM_ZONE_PRESETS )
 		Preset = NewZone->ZoneAudioEffect;
 	if( Preset==S->ZonePreset )
+	{
+		CueLogf( CueLog, S, TEXT("zone %s (ZoneAudioEffect %d): reverb preset %s unchanged"), NewZone ? NewZone->GetName() : TEXT("none"),
+			NewZone ? NewZone->ZoneAudioEffect : -1, GUC2ZonePresets[Preset].Name );
 		return;
+	}
 	S->ZonePreset = Preset;
 	UC2ALLoadReverb( S->Effect, S->bEAXReverb, GUC2ZonePresets[Preset] );
 	GAL.alAuxiliaryEffectSloti( S->Slot, AL_EFFECTSLOT_EFFECT, S->Effect );
@@ -1957,7 +1967,7 @@ UBOOL UC2TestPlay( UUC2ALAudioSubsystem* Audio, const TCHAR* Cue, FVector Locati
 	unguard;
 }
 
-INT UC2TestRender( UUC2ALAudioSubsystem* Audio, FLOAT MaxSeconds, TArray<FLOAT>& Out )
+INT UC2TestRender( UUC2ALAudioSubsystem* Audio, FLOAT MaxSeconds, TArray<FLOAT>& Out, UBOOL bWhileSounding )
 {
 	guard(UC2TestRender);
 	FUC2AudioState* S = Audio->State;
@@ -1971,7 +1981,7 @@ INT UC2TestRender( UUC2ALAudioSubsystem* Audio, FLOAT MaxSeconds, TArray<FLOAT>&
 		for( INT i=0; i<S->Insts.Num(); i++ )
 			if( !UpdateInst( Audio, S, S->Insts(i), S->TestClock ) )
 				RemoveInst( S, i-- );
-		if( !S->Insts.Num() && Tail<0 )
+		if( bWhileSounding && !S->Insts.Num() && Tail<0 )
 			Tail = 5;						// everything stopped: 50 ms more, then done
 		S->RenderSamples( S->Device, Tmp, Step );
 		INT At = Out.Add( Step*2 );
