@@ -22,6 +22,11 @@ if(TARGET UC2GLDrv)
   list(PREPEND LINK_PACKAGES UC2GLDrv)
   target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_UC2GLDRV=1)
 endif()
+# M8: the OpenAL audio device, where it is built (native; the web build adopts it at M11).
+if(TARGET UC2ALAudio)
+  list(PREPEND LINK_PACKAGES UC2ALAudio)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_UC2ALAUDIO=1)
+endif()
 target_link_libraries(${PROJECT_NAME} PRIVATE
   -Wl,--whole-archive ${LINK_PACKAGES} -Wl,--no-whole-archive
   SDL2::SDL2-static zlib dl pthread m

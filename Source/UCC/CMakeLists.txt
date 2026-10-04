@@ -16,6 +16,11 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 # Static link: every package whole, so the class registrants and native tables survive; exported dynamically
 # because appGetDllHandle finds a linked-in package by looking up its GLoaded<Package> symbol in the program.
 set(LINK_PACKAGES GUI UCGameplay UCElements UnrealGame UWeb IpDrv Engine Core)
+# M8: UC2ALAudio for its check commandlet (`ucc-bin UC2ALAudio.UC2AudioCheck`); no audio device runs in ucc.
+if(TARGET UC2ALAudio)
+  list(PREPEND LINK_PACKAGES UC2ALAudio)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_UC2ALAUDIO=1)
+endif()
 target_link_libraries(${PROJECT_NAME} PRIVATE
   -Wl,--whole-archive ${LINK_PACKAGES} -Wl,--no-whole-archive
   zlib dl pthread m

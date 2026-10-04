@@ -49,3 +49,18 @@ crash-notifier processes; both are the owner's to clear.
 - The community one-byte `Core.dll` patch (file offset 0x940c0, first byte of a non-exported routine near the
   end of `.text`, replaced by RET): which function is it? A hint at a PC-only crash; identify if a Core
   crash shows up at M3/M4.
+
+## M8 audio: owner decisions (2026-10-04, details in `analysis/audio.md`)
+
+- Zone reverb: Epic's Xbox code has the zone -> reverb preset switch inside `#if 0` (`XACTAudioSubsystem.cpp`
+  `NotifyZoneChange`), so the shipped game never changed reverb per zone. M8 implements it (the brief asks for
+  it) behind a setting; which should be the default?
+- Localised taunts in the wrong slots: in `A_TauntSapphire_{deu,fra,ita,spa}` (and one `A_Tutorial1_spa` line)
+  the localised wave sits at a different index than the English one, so the Xbox played the wrong line in those
+  languages. The cook keeps the Xbox order; `tools/cook-audio.py --relink-localised` repairs it by name.
+- 19 wave entries have no source WAV, but the shipped `.xwb` has them (ffmpeg decodes the Xbox ADPCM when it is
+  wrapped as WAVE format 0x69). Decode those 19 from the `.xwb` in the cook, or leave the variations out (now)?
+- M8 inferences without documentation, for whoever can check against an Xbox: XACT priority direction (we use
+  lower value = more important), the "Recurring" flag of volume/pitch events read as "fade", the cue radius of
+  non-3D sounds (we use DirectSound's defaults, 4 units: such cues on other actors are culled). Details and the
+  evidence in `analysis/audio.md`.
