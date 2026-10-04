@@ -153,6 +153,45 @@ add_definitions(-DZ_PREFIX)
 add_subdirectory(Thirdparty/zlib)
 
 #-----------------------------------------------------------------------------
+# Fetched libraries (never vendored). SDL2 for the native client (SDL2Drv, SDLLaunch); the arrangement is
+# engine-ut2004's. The web build will take SDL2 from Emscripten's -sUSE_SDL=2 port when its client is
+# added (M4w), so nothing is fetched there.
+#-----------------------------------------------------------------------------
+
+if(NOT EMSCRIPTEN)
+  include(FetchContent)
+  FetchContent_Declare(
+    SDL2
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG        release-2.32.x
+    GIT_SHALLOW    TRUE
+  )
+  set(SDL_TEST OFF CACHE BOOL "" FORCE)
+  set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+  set(SDL_STATIC ON CACHE BOOL "" FORCE)
+  # SDL2main is only a WinMain shim; the Windows build (M12) will want it, nothing else does.
+  if(MINGW)
+    set(SDL2_DISABLE_SDL2MAIN OFF CACHE BOOL "" FORCE)
+  else()
+    set(SDL2_DISABLE_SDL2MAIN ON CACHE BOOL "" FORCE)
+  endif()
+  if(NOT MINGW)
+    set(SDL_X11 ON CACHE BOOL "" FORCE)
+    set(SDL_WAYLAND OFF CACHE BOOL "" FORCE)
+    set(SDL_X11_SHARED OFF CACHE BOOL "" FORCE)
+  endif()
+  if(NOT MINGW AND UC2_PTR_BYTES EQUAL 4)
+    # -m32 on an x86_64 host: SDL2's X11 probes must find the i386 libraries. Without this they link
+    # 32-bit objects against 64-bit libs, every check fails silently and SDL_x11xinput2.h then emits a
+    # fallback XGenericEventCookie that collides with Xlib's (engine-ut2004's notes, same machine setup).
+    list(APPEND CMAKE_LIBRARY_PATH /usr/lib/i386-linux-gnu)
+    list(APPEND CMAKE_PREFIX_PATH /usr/lib/i386-linux-gnu)
+    set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)
+  endif()
+  FetchContent_MakeAvailable(SDL2)
+endif()
+
+#-----------------------------------------------------------------------------
 # Engine packages. A package joins the build when its CMakeLists.txt lands (docs/porting/PLAN.md lists
 # the order); everything else under Source/ is reference and is not compiled.
 #-----------------------------------------------------------------------------
@@ -162,8 +201,9 @@ set(UC2_PACKAGES
   Editor UCC
   SDL2Drv UC2GLDrv UC2GL4ESDrv UC2ALAudio WebRTCDrv SDLLaunch)
 
-# Native-only tools: the commandlet host is not part of the web build.
-set(UC2_NATIVE_ONLY_PACKAGES UCC Editor)
+# Native-only tools: the commandlet host is not part of the web build. SDL2Drv and SDLLaunch are native-only
+# until the web client is wired (M4w: -sUSE_SDL=2, Asyncify yield, preload).
+set(UC2_NATIVE_ONLY_PACKAGES UCC Editor SDL2Drv SDLLaunch)
 
 foreach(pkg IN LISTS UC2_PACKAGES)
   if(EMSCRIPTEN AND pkg IN_LIST UC2_NATIVE_ONLY_PACKAGES)

@@ -39,3 +39,9 @@ cmake --build build-native -j12
 - Static link of every package (`__STATIC_LINK=1`), as the Xbox build did.
 - ANSI `TCHAR` on every target (`NO_UNICODE_OS_SUPPORT=1`); no `-fshort-wchar`.
 - `_XBOX`, `XBOX_ASSET_FORMAT`, `LIN_LOAD`, `LIN_SAVE`, `USE_LINEAR_LOADING` are never defined.
+
+## Fetched libraries
+
+SDL2 (`release-2.32.x`) is fetched by CMake at configure time into `build-*/_deps/` (native builds only; the
+root `CMakeLists.txt` says why each option is set). The first `cmake --preset native` therefore needs network
+access; later configures reuse the checkout.

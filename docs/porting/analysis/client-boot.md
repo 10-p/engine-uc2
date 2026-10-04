@@ -50,3 +50,22 @@ First client run stopped with `appError called: Not implemented`. `Core/Src/UnMi
 `ULevel::SpawnPlayActor` (`URL.GetOption( "GAMEPADID=", appItoa(Actor->GamepadID) )`, `UnLevAct.cpp`); the
 dedicated server never spawns a play actor, which is why M3 did not see it. Non-MSVC branch now formats with
 `snprintf` into a static buffer (TCHAR is ANSI), as engine-ut2004's `UnAnsi.cpp` does on Unix.
+
+## Step 3 - SDL2, fetched: build
+
+Root `CMakeLists.txt`, two additions only:
+
+- An SDL2 `FetchContent` block (native builds only), copied from engine-ut2004's: `release-2.32.x`, shallow,
+  static library, no SDL tests, no SDL2main except on MinGW (it is only a `WinMain` shim), X11 on and
+  Wayland off, X11 linked rather than `dlopen`ed (`SDL_X11_SHARED OFF`). For the 32-bit build on an x86_64
+  host, `CMAKE_LIBRARY_PATH`/`CMAKE_PREFIX_PATH` get `/usr/lib/i386-linux-gnu`: otherwise SDL's X11 probes
+  link 32-bit objects against the 64-bit libraries, every check fails silently, and `SDL_x11xinput2.h`
+  then declares a fallback `XGenericEventCookie` that collides with Xlib's (engine-ut2004's finding on this
+  same machine). Configure output on this machine: X11, Xcursor, XDBE, XFixes, XInput, XRandR,
+  XScrnSaver, XShape all found, `/usr/lib/i386-linux-gnu/libX11.so` etc. in `EXTRA_LIBS`.
+- `SDL2Drv` and `SDLLaunch` added to `UC2_NATIVE_ONLY_PACKAGES`: the web build keeps building the eight
+  libraries it built at M3 and nothing else. The web client (Emscripten's `-sUSE_SDL=2` port, main loop
+  yield, preload) is M4w; until then neither target exists under Emscripten.
+
+The root `-fsigned-char -fno-strict-aliasing` and the engine `-D` definitions also reach SDL's sources (as
+in engine-ut2004); SDL builds cleanly with them.
