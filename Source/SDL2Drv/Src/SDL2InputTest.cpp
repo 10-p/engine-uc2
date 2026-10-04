@@ -76,6 +76,34 @@ static FString GetListItem( UObject* Obj )
 	return Result;
 }
 
+//
+// The text of the first GUIEditBox in a component tree (an on-screen keyboard page's field
+// never has the focus), "" if there is none.
+//
+static UBOOL IsAClassNamed( UObject* Obj, const TCHAR* Name )
+{
+	for( UClass* C = Obj ? Obj->GetClass() : NULL; C; C = C->GetSuperClass() )
+		if( appStricmp(C->GetName(), Name)==0 )
+			return 1;
+	return 0;
+}
+
+static UObject* FindEditBoxByName( UObject* Obj, INT Depth )
+{
+	if( !Obj || Depth > 32 )
+		return NULL;
+	if( IsAClassNamed(Obj, TEXT("GUIEditBox")) )
+		return Obj;
+	UArrayProperty* AP = FindField<UArrayProperty>( Obj->GetClass(), TEXT("Controls") );
+	if( !AP || !Cast<UObjectProperty>(AP->Inner) )
+		return NULL;
+	FArray* Controls = (FArray*)((BYTE*)Obj + AP->Offset);
+	for( INT i=0; i<Controls->Num(); i++ )
+		if( UObject* Found = FindEditBoxByName( ((UObject**)Controls->GetData())[i], Depth+1 ) )
+			return Found;
+	return NULL;
+}
+
 /*-----------------------------------------------------------------------------
 	FSDL2InputTest.
 -----------------------------------------------------------------------------*/
@@ -279,6 +307,8 @@ void FSDL2InputTest::Probe( USDL2Client* Client, const TCHAR* Tag )
 		Focus = Next;
 	}
 	FString Text = GetPropText( Focus, TEXT("TextStr") );
+	if( !Text.Len() && Page )
+		Text = GetPropText( FindEditBoxByName( Page, 0 ), TEXT("TextStr") );
 	FString Item = GetListItem( Focus );
 
 	debugf( SDL2INPUT,

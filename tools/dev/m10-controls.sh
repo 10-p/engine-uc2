@@ -185,6 +185,111 @@ check kb-escape-closes-pause-menu P['p2'].menu == 'None'
 SCEN
 }
 
+# Mouse in the menus (window 640x480: main menu items at x 140, y 146 Story, 184 Instant Action, 299 Options; Arena gametype rows y 90 CTF, 109 DeathMatch) and mouse look in the match.
+scen_mouse() {
+  cat <<'SCEN'
+wait OpenMenu \[UCMenu.UC2MainMenu\] 90
+sleep 3
+focus
+move 140 146
+sleep 0.5
+move 140 299
+expect ms-hover-selects-item Mouse hover selects UC2MainMenu 5
+sleep 0.5
+key Return
+expect ms-hovered-item-is-the-one-enter-opens OpenMenu \[UCMenu.UC2Settings_Main\] 15
+wait OpenMenu \[GUI.GUIMessageBox\] 20
+sleep 1.5
+click 3
+expect ms-right-click-answers-no CloseMenu \[GUIMessageBox\] 10
+sleep 1.5
+click 3
+expect ms-right-click-is-back CloseMenu \[UC2Settings_Main\] 10
+sleep 3
+mark
+click 1 140 184
+expect ms-click-opens-item-under-cursor OpenMenu \[UCMenu.UC2Arena_Main\] 15
+absent ms-click-does-not-open-focused-item OpenMenu \[UCMenu.UC2Settings_Main\]
+sleep 3
+probe g0
+move 130 90
+sleep 0.3
+click 1 130 109
+expect ms-click-selects-list-row Mouse click selects the row under the cursor in UC2Arena_Main 5
+sleep 2
+probe g1
+shot gametype-clicked
+key Escape
+sleep 1.5
+probe g2
+check ms-click-on-row-accepts-that-row P['g0'].item.startswith('Capture') and P['g1'].item == '' and P['g2'].item.startswith('DeathMatch|')
+shot gametype
+key Return
+sleep 2
+key Return
+sleep 2
+probe m0
+click 5
+sleep 0.5
+click 5
+sleep 0.5
+probe m1
+check ms-wheel-down-moves-list P['m1'].item != P['m0'].item and P['m0'].item != ''
+click 4
+sleep 0.5
+click 4
+sleep 0.5
+probe m2
+check ms-wheel-up-moves-back P['m2'].item == P['m0'].item
+seek 40 'DM-Deadbolt' in P['_'].item ;; click 5
+key Return
+wait OpenMenu \[UCMenu.UC2Arena_Character\] 15
+sleep 2
+key Return
+wait OpenMenu \[UCMenu.UC2Arena_Armory\] 15
+sleep 2
+key Return
+sleep 2
+key Return
+wait OpenMenu \[UCMenu.ConfirmLaunchMenu\] 15
+sleep 1.5
+key Return
+expect ms-deadbolt-up Bringing Level DM-Deadbolt.MyLevel up for play 120
+sleep 6
+click 1
+sleep 4
+probe spawn
+check ms-left-click-starts-match P['spawn'].pawn==1
+probe s0
+click 1 0.3
+sleep 1.5
+probe s1
+check ms-left-click-fires P['s1'].shots != P['s0'].shots
+probe l0
+rmove 200 0 20
+sleep 0.5
+probe l1
+check ms-mouse-right-turns-right yawdiff('l0','l1') > 0
+check ms-mouse-turn-amount 0.6*200*65.5*0.94 < yawdiff('l0','l1') < 1.4*200*65.5
+rmove -200 0 20
+sleep 0.5
+probe l2
+check ms-mouse-left-turns-back abs(yawdiff('l0','l2')) < 0.25*yawdiff('l0','l1')
+rmove 0 -100 10
+sleep 0.5
+probe l3
+check ms-mouse-up-looks-up pitchdiff('l2','l3') > 0
+chan exec set UCPlayerInput bInvertMouse True
+sleep 0.5
+rmove 0 -100 10
+sleep 0.5
+probe l4
+check ms-invert-option-flips-pitch pitchdiff('l3','l4') < 0
+chan exec set UCPlayerInput bInvertMouse False
+shot look
+SCEN
+}
+
 run_scenario() {
   local name=$1 secs=$2 f
   f=$(mktemp)
@@ -194,10 +299,11 @@ run_scenario() {
   rm -f "$f"
 }
 
-all="keyboard"
+all="keyboard mouse"
 for s in ${@:-$all}; do
   case "$s" in
     keyboard) run_scenario keyboard 300 ;;
+    mouse) run_scenario mouse 360 ;;
     *) echo "unknown scenario $s (known: $all)" >&2 ;;
   esac
 done
