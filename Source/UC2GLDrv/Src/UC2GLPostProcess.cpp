@@ -374,6 +374,8 @@ void UUC2GLRenderDevice::SetGammaRamp( const BYTE* Ramp )
 		glBindTexture( GL_TEXTURE_2D, GammaRampTexture );
 	glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
 	glTexImage2D( GL_TEXTURE_2D, 0, GL_LUMINANCE, 256, 1, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, Ramp );
+	extern void UC2GL_RememberGammaRamp( const BYTE* Ramp );
+	UC2GL_RememberGammaRamp( Ramp );
 	GammaRampActive = 1;
 	RenderInterface.InvalidateHardwareState();
 }
@@ -972,6 +974,11 @@ void FOpenGLDynamicGamma::UpdateHistogram()
 	BYTE* Bits = &Pixels(0);
 
 	FLOAT LuminosityBias = RI->Viewport->GetOuterUClient()->LuminosityBias;
+	// UC2GLDrv: UClient::Init sets LuminosityBias to 1 under _XBOX only and it is not a config
+	// property, so on PC it is 0 until the LUMINOSITYBIAS command is used; 0 would put every
+	// sample in the first histogram bucket. Unset means the Xbox value.
+	if( LuminosityBias <= 0.f )
+		LuminosityBias = 1.f;
 
 	// fill in the histogram with values from the Luminosity texture
 	Histogram.AvgL = 0.f;
@@ -1106,6 +1113,12 @@ void FOpenGLDynamicGamma::UpdateDeviceGamma()
 
 	RI->RenDev->SetGammaRamp( GammaRamp );
 	ForceUpdate = 0;
+
+	// UC2GLDrv: evidence for the log, every 200th ramp.
+	static INT RampCount = 0;
+	if( (RampCount++ % 200) == 0 )
+		debugf( NAME_Init, TEXT("UC2GLDrv: dynamic gamma ramp %i: luminance min %.3f max %.3f average %.3f (histogram %.3f %.3f %.3f), exponent %.3f, ramp[64,128,192] = %i %i %i"),
+			RampCount, CurMinL, CurMaxL, CurAvgL, Histogram.MinL, Histogram.MaxL, Histogram.AvgL, Power, GammaRamp[64], GammaRamp[128], GammaRamp[192] );
 
 	unguard;
 }

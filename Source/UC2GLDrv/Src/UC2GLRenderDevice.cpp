@@ -37,6 +37,16 @@ void* UC2GL_GetProcAddress( const char* Name )
 static TArray<FLOAT>	GShotTimes;
 static TArray<FLOAT>	GPSToggleTimes;
 static TArray<FLOAT>	GPPToggleTimes;
+// -glexec=<seconds>:<command>[@<seconds>:<command>...]: console commands run through the
+// viewport at those times after the first frame; '+' stands for a space in a command
+// (verification: "-glexec=40:BlurMe@50:set+UCScreenBerserk+Enabled+1"). Times ascending.
+static TArray<FLOAT>	GExecTimes;
+static TArray<FString>	GExecCommands;
+// -glshotramp: screenshots show the dynamic gamma ramp the present pass applies (they are
+// read before it otherwise, as D3D's are).
+static UBOOL			GShotRamp = 0;
+static BYTE				GLastGammaRamp[256];
+void UC2GL_RememberGammaRamp( const BYTE* Ramp ) { appMemcpy( GLastGammaRamp, Ramp, 256 ); }
 static DOUBLE			GFirstFrameTime = 0.0;
 
 /*-----------------------------------------------------------------------------
@@ -105,6 +115,7 @@ UUC2GLRenderDevice::UUC2GLRenderDevice()
 	SnapshotCopies = DepthColorCopies = DepthBufferCopies = 0;
 	GammaRampTexture		= 0;
 	GammaRampActive			= 0;
+	XboxClientDefaultsApplied = 0;
 	PresentRampLoc			= -1;
 	PresentUseRampLoc		= -1;
 	// Epic sets these in XboxViewport.cpp; the engine's render-target helpers multiply by them.
@@ -321,6 +332,33 @@ UBOOL UUC2GLRenderDevice::Init()
 	if( ParseParam( appCmdLine(), TEXT("postprocess") ) )
 		UsePostProcess = 1;
 	ParseTimeList( TEXT("glpptoggle="), GPPToggleTimes );
+	GShotRamp = ParseParam( appCmdLine(), TEXT("glshotramp") );
+	GExecTimes.Empty();
+	GExecCommands.Empty();
+	const TCHAR* ExecList = appStrfind( appCmdLine(), TEXT("glexec=") );
+	if( ExecList )
+	{
+		ExecList += 7;
+		while( *ExecList && *ExecList != ' ' && *ExecList != '\t' )
+		{
+			FLOAT Time = appAtof( ExecList );
+			while( *ExecList && *ExecList != ':' && *ExecList != ' ' )
+				ExecList++;
+			if( *ExecList != ':' )
+				break;
+			ExecList++;
+			FString Command;
+			while( *ExecList && *ExecList != '@' && *ExecList != ' ' && *ExecList != '\t' )
+			{
+				Command += FString::Printf( TEXT("%c"), *ExecList == '+' ? ' ' : *ExecList );
+				ExecList++;
+			}
+			GExecTimes.AddItem( Time );
+			new(GExecCommands) FString( Command );
+			if( *ExecList == '@' )
+				ExecList++;
+		}
+	}
 
 
 	return 1;
@@ -452,6 +490,7 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 
 	if( !CreateMainFramebuffer( Viewport->SizeX, Viewport->SizeY ) )
 		return 0;
+
 
 	SDL_GL_SetSwapInterval( UseVSync ? 1 : 0 );
 
@@ -1033,6 +1072,27 @@ FRenderInterface* UUC2GLRenderDevice::Lock( UViewport* Viewport, BYTE* HitData, 
 	if( Viewport->SizeX != MainWidth || Viewport->SizeY != MainHeight )
 		CreateMainFramebuffer( Viewport->SizeX, Viewport->SizeY );
 
+	// M7: the client settings the Xbox build has and PC's ini and UClient::Init do not give,
+	// applied the first time a frame is drawn with post-processing on.
+	// - UClient::MaxDistortion (pixels of screen-space distortion; DefaultXbox.ini: 35) is what
+	//   the engine gives its full-screen distortion quad. An ini without the key reads 0,
+	//   which would leave every distortion without displacement.
+	// - UClient::Init sets DynamicGamma = 1 and LuminosityBias = 1 under _XBOX. (DynamicGamma
+	//   already reads True on this build, see the notebook; this makes it deliberate.)
+	//   DYNAMICGAMMA 0 / LUMINOSITYBIAS on the console change them afterwards.
+	if( PostProcessActive() && !XboxClientDefaultsApplied )
+	{
+		XboxClientDefaultsApplied = 1;
+		UClient* Client = Viewport->GetOuterUClient();
+		if( Client->MaxDistortion <= 0.f )
+		{
+			Client->MaxDistortion = 35.f;
+			debugf( NAME_Init, TEXT("UC2GLDrv: MaxDistortion is not set in the client's ini section; using the Xbox value, 35") );
+		}
+		Client->DynamicGamma	= 1;
+		Client->LuminosityBias	= 1.0f;
+	}
+
 	RenderInterface.Locked( Viewport, HitData, HitSize );
 
 	return &RenderInterface;
@@ -1083,6 +1143,14 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 		GPPToggleTimes.Remove(0);
 		Exec( TEXT("POSTPROCESS"), *GLog );
 	}
+	while( GExecTimes.Num() && appSeconds() - GFirstFrameTime >= GExecTimes(0) )
+	{
+		FString Command = GExecCommands(0);
+		debugf( NAME_Init, TEXT("UC2GLDrv: -glexec at %.1f s (frame %i): %s"), GExecTimes(0), FrameCounter, *Command );
+		GExecTimes.Remove(0);
+		GExecCommands.Remove(0);
+		Viewport->Exec( *Command, *GLog );
+	}
 	if( GShotTimes.Num() )
 	{
 		if( appSeconds() - GFirstFrameTime >= GShotTimes(0) )
@@ -1119,6 +1187,12 @@ void UUC2GLRenderDevice::ReadPixels( UViewport* Viewport, FColor* Pixels )
 		{
 			FColor C = Rows( (Height - 1 - y) * Width + x );
 			C.A = 255;
+			if( GShotRamp && GammaRampActive && PostProcessActive() )
+			{
+				C.R = GLastGammaRamp[C.R];
+				C.G = GLastGammaRamp[C.G];
+				C.B = GLastGammaRamp[C.B];
+			}
 			Pixels[ y * Viewport->SizeX + x ] = C;
 		}
 	glBindFramebuffer( GL_FRAMEBUFFER, RenderInterface.SavedRenderTargetState.GetCurrentState()->Framebuffer ? RenderInterface.SavedRenderTargetState.GetCurrentState()->Framebuffer : MainFramebuffer );

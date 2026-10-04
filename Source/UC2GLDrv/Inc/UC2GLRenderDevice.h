@@ -145,7 +145,8 @@ public:
 									DepthBufferCopies;
 	// Dynamic gamma (FD3DDynamicGamma's ramp): a 256x1 lookup the present pass applies.
 	GLuint							GammaRampTexture;
-	UBOOL							GammaRampActive;
+	UBOOL							GammaRampActive,
+									XboxClientDefaultsApplied;
 	GLint							PresentRampLoc,
 									PresentUseRampLoc;
 
