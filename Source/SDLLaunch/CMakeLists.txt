@@ -22,3 +22,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   SDL2::SDL2-static zlib dl pthread m
 )
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,-export-dynamic)
+
+# --- M4w: the browser build (SDLLaunch.js/.wasm/.data + meta.json); see cmake/Web.cmake ---------------------
+if(EMSCRIPTEN)
+  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Web.cmake)
+endif()
+# --- end M4w ---------------------------------------------------------------------------------------------

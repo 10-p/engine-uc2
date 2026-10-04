@@ -128,3 +128,36 @@ tools/dev/layout-diff.py build-wasm -j 8               # i386 vs wasm32 record l
 
 W0 done (verifyclasses passes on wasm32; map loads and BeginPlay runs under Node; listen fails as
 explained). W1/W2 not started. Next: W1 (SDL2Drv + SDLLaunch under Emscripten; web inis; meta.json).
+
+## W1 - the client as WebAssembly (SDLLaunch.js/.wasm/.data + meta.json)
+
+Commit after this entry. Built, not yet run (W2 runs it).
+
+- `Source/SDL2Drv` compiles under Emscripten unchanged: SDL2 is Emscripten's port (`-sUSE_SDL=2`, brought
+  in through the `SDL2::SDL2-static` interface target of `cmake/UC2Web.cmake`).
+- `Source/SDLLaunch`:
+  - `Src/SDLLaunchWeb.cpp/.h` (new, web only): `UC2WebYieldFrame()` = EM_ASYNC_JS awaiting
+    `setTimeout(0)` (engine-ut2004's ufront 2.43 choice: a timer task, not a MessagePort task, so later a
+    worker-owned canvas gets composited); `ue_exec_command` (frozen ABI export, TCHAR is ANSI so no
+    conversion); `UC2WebSetEngine`.
+  - `Src/SDLLaunch.cpp`: three `#ifdef __EMSCRIPTEN__` blocks only (include of SDLLaunchWeb.h, the yield
+    in `CMainLoop::RunLoop` after the tick limiter - skipped when the limiter slept, the engine pointer set
+    after InitEngine and cleared before shutdown). main()'s try/catch stays (JS exceptions + Asyncify).
+  - `cmake/Web.cmake` (new) included from `CMakeLists.txt` in one delimited block: output name
+    `SDLLaunch` + `.js` (fixed artifact names), link flags: dev `-g -sASSERTIONS=2 -sSTACK_OVERFLOW_CHECK=2`
+    (perf: `-O3 -g0 --emit-symbol-map`, no assertions); `-sENVIRONMENT=web,worker`, `-pthread
+    -sPROXY_TO_PTHREAD -sPTHREAD_POOL_SIZE=2` (main + file-streaming thread), `-sASYNCIFY
+    -sASYNCIFY_STACK_SIZE=262144`, `-sSTACK_SIZE=2MB`, 256 MB initial memory + growth,
+    `-sOFFSCREENCANVAS_SUPPORT -sOFFSCREENCANVASES_TO_PTHREAD=#canvas` (as the sibling: the GL device will
+    need its context on the worker), `-sFORCE_FILESYSTEM -sWASMFS` + `vendor/glue/wasmfs-shim.js` with the
+    exported functions the host needs to stand up the JSImpl backend, `$ueWorkerBoot` force-included,
+    runtime methods incl. `PThread` and `FS`; preloaded `Engine/Config/web/{Default,DefUser}.ini` ->
+    `/System/`. Not linked (vs engine-ut2004): OpenAL, `-sFULL_ES2`, `webrtc-shim.js`
+    (`_webrtc_deferred_open` export) - no GL/audio/WebRTC driver yet. `ASYNCIFY_IMPORTS` is NOT set:
+    the default list carries `env.invoke_*`, which JS exceptions under Asyncify need.
+  - `cmake/emit-artifact-meta.mjs`: engine-ut2004's, targetId `uc2`, repo `engine-uc2`, buildFlags as above,
+    no toolchain deps besides emscripten (nothing fetched for the web build).
+- `Engine/Config/web/{Default,DefUser}.ini`: byte copies, no change needed (README table).
+- Result: `cmake --build build-wasm --target SDLLaunch` -> `SDLLaunch.js` 782 KB, `SDLLaunch.wasm` 47 MB
+  (dev, DWARF), `SDLLaunch.data` 18 KB, `meta.json` (`targetId uc2`, abi 1, `wasm-integrated`,
+  `global-module`, sha256 of the three files).

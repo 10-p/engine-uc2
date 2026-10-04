@@ -18,4 +18,14 @@ build does not contain (`WinDrv.WindowsClient`, `D3DDrv.D3DRenderDevice`, `XboxD
 PC or Xbox release still boots. `-nullrenderer` selects `Engine.NullRenderDevice` (also written to
 `Avaris.ini`, like any setting changed at run time).
 
-`web/` will hold the web build's boot inis (M4w).
+## `web/` - the browser build's boot inis (M4w)
+
+`web/Default.ini` and `web/DefUser.ini` are preloaded into the web build as `/System/Default.ini` and
+`/System/DefUser.ini` (`Source/SDLLaunch/cmake/Web.cmake`); `appInit` derives `Avaris.ini` and `User.ini`
+from them in the browser. A host must therefore not serve the asset tree's copies of these four names.
+They are byte copies of the two files above: the null-device web smoke needs no change from them. Every
+web-only change (GL device, WebRTC net driver, M11) goes here as a row:
+
+| File | Setting | `Engine/Config` value | Web value | Why |
+|---|---|---|---|---|
+| (none yet) | | | | |
