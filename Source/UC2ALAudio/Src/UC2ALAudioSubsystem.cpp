@@ -132,6 +132,9 @@ struct FUC2AudioState
 	TMap<FString,INT>		LoggedOnce;
 
 	DOUBLE					T0;				// appSeconds() when the device opened (capture time 0)
+	UBOOL					bTest;			// loopback self-test: simulated clock, listener at the origin
+	DOUBLE					TestClock;
+	LPALCRENDERSAMPLESSOFT	RenderSamples;
 
 	// Play state
 	UViewport*				Viewport;
@@ -149,7 +152,7 @@ struct FUC2AudioState
 
 	FUC2AudioState() : bDevice(0), Device(NULL), Context(NULL), bEFX(0), bEAXReverb(0), bLoopPoints(0), Slot(0),
 		Effect(0), ZonePreset(-1), NextMusicHandle(1), Viewport(NULL), NextInstId(1), bPaused(0), PauseStart(0),
-		LastAmbientUpdate(-1.f), bAmbientsListed(0), T0(0.0)
+		LastAmbientUpdate(-1.f), bAmbientsListed(0), T0(0.0), bTest(0), TestClock(0.0), RenderSamples(NULL)
 	{
 		for( INT i=0; i<UAudioSubsystem::VOLUME_Max; i++ )
 			CategoryVolumes[i] = 1.f;
@@ -160,13 +163,19 @@ struct FUC2AudioState
 	Helpers.
 -----------------------------------------------------------------------------*/
 
+// The device's clock: wall time, or the self-test's simulated time.
+static DOUBLE NowOf( FUC2AudioState* S )
+{
+	return S->bTest ? S->TestClock : appSeconds();
+}
+
 static void CueLogf( UBOOL bOn, FUC2AudioState* S, const TCHAR* Fmt, ... )
 {
 	if( !bOn || FName::SafeSuppressed(NAME_DevSound) )
 		return;
 	TCHAR Buf[1024];
 	GET_VARARGS( Buf, ARRAY_COUNT(Buf), Fmt, Fmt );
-	debugf( NAME_DevSound, TEXT("UC2Audio: [%7.2f] %s"), S->T0>0.0 ? (FLOAT)(appSeconds() - S->T0) : 0.f, Buf );
+	debugf( NAME_DevSound, TEXT("UC2Audio: [%7.2f] %s"), (FLOAT)(NowOf(S) - S->T0), Buf );
 }
 
 static FLOAT MBToGain( FLOAT MB )
@@ -486,14 +495,26 @@ UBOOL UUC2ALAudioSubsystem::Init()
 		debugf( NAME_Init, TEXT("UC2ALAudio: %s: sound is off"), *Why );
 		return 1;
 	}
-	S->Device = GAL.alcOpenDevice( OutputDevice.Len() ? appToAnsi(*OutputDevice) : NULL );
+	ALCint Attribs[] = { ALC_MAX_AUXILIARY_SENDS, 1, 0, 0, 0, 0, 0, 0, 0 };
+	if( LoopbackTest )
+	{
+		// Self-test: mix into memory, 48 kHz stereo float, at a simulated time (ALC_SOFT_loopback).
+		LPALCLOOPBACKOPENDEVICESOFT LoopbackOpen = (LPALCLOOPBACKOPENDEVICESOFT)GAL.alcGetProcAddress( NULL, "alcLoopbackOpenDeviceSOFT" );
+		S->RenderSamples = (LPALCRENDERSAMPLESSOFT)GAL.alcGetProcAddress( NULL, "alcRenderSamplesSOFT" );
+		S->Device = LoopbackOpen && S->RenderSamples ? LoopbackOpen( NULL ) : NULL;
+		ALCint Loop[] = { ALC_MAX_AUXILIARY_SENDS, 1, ALC_FORMAT_CHANNELS_SOFT, ALC_STEREO_SOFT, ALC_FORMAT_TYPE_SOFT,
+			ALC_FLOAT_SOFT, ALC_FREQUENCY, UC2_TEST_RATE, 0 };
+		appMemcpy( Attribs, Loop, sizeof(Loop) );
+		S->bTest = 1;
+	}
+	else
+		S->Device = GAL.alcOpenDevice( OutputDevice.Len() ? appToAnsi(*OutputDevice) : NULL );
 	if( !S->Device )
 	{
 		debugf( NAME_Init, TEXT("UC2ALAudio: OpenAL could not open %s: sound is off"),
 			OutputDevice.Len() ? *FString::Printf(TEXT("device \"%s\""), *OutputDevice) : TEXT("an output device") );
 		return 1;
 	}
-	ALCint Attribs[] = { ALC_MAX_AUXILIARY_SENDS, 1, 0 };
 	S->Context = GAL.alcCreateContext( S->Device, Attribs );
 	if( !S->Context || !GAL.alcMakeContextCurrent( S->Context ) )
 	{
@@ -506,7 +527,7 @@ UBOOL UUC2ALAudioSubsystem::Init()
 		return 1;
 	}
 	S->bDevice = 1;
-	S->T0 = appSeconds();
+	S->T0 = NowOf( S );
 	GAL.alDistanceModel( AL_NONE );		// distance attenuation is XACT's, computed in UpdateVoice
 	GAL.alDopplerFactor( 0.f );			// XACT :500: no source ever dopplers
 	S->bLoopPoints = GAL.alIsExtensionPresent( "AL_SOFT_loop_points" );
@@ -869,13 +890,14 @@ static void UpdateVoice( UUC2ALAudioSubsystem* Audio, FUC2AudioState* S, FUC2Cue
 	{
 		FUC2Emitter& E = S->Emitters(Inst.Emitter);
 		APlayerController* Viewer = NULL;
-		if( FindViewer( S->Viewport, E.ListenerViewport, Viewer ) )
+		if( S->bTest || FindViewer( S->Viewport, E.ListenerViewport, Viewer ) )
 		{
 			// The listener: the view target's location, the controller's rotation (XACT :1691-1696). The
 			// source is placed in the listener's frame, so split-screen viewers each hear their own sources
-			// (what MakeRelativeToViewport, XACT :366, achieves with its one real listener).
-			FVector Delta = E.Location - Viewer->ViewTarget->Location;
-			FVector Local = Delta.TransformVectorBy( GMath.UnitCoords / Viewer->Rotation );
+			// (what MakeRelativeToViewport, XACT :366, achieves with its one real listener). Self-test: the
+			// listener is at the origin with no rotation.
+			FVector Delta = S->bTest ? E.Location : E.Location - Viewer->ViewTarget->Location;
+			FVector Local = S->bTest ? Delta : Delta.TransformVectorBy( GMath.UnitCoords / Viewer->Rotation );
 			Pos = FVector( Local.Y, Local.Z, -Local.X );	// Unreal (X fwd, Y right, Z up) -> OpenAL
 			// A sound without 3D settings on a 3D source gets DirectSound's defaults (min distance 1, rolloff
 			// 1: XACT white paper "Mixing and Matching 2D/3D Sounds").
@@ -1234,7 +1256,7 @@ void UUC2ALAudioSubsystem::PlaySoundCue( AActor* srcActor, FName soundCue, UBOOL
 	}
 	if( !S->bDevice )
 		return;
-	DOUBLE Now = appSeconds();
+	DOUBLE Now = NowOf( S );
 
 	// Fire and forget (XACT :2164-2172).
 	if( !srcActor )
@@ -1663,7 +1685,7 @@ void UUC2ALAudioSubsystem::Update()
 	if( !S || !S->bDevice )
 		return;
 	static DOUBLE LastTime = 0.0;
-	DOUBLE Now = appSeconds();
+	DOUBLE Now = NowOf( S );
 	FLOAT DeltaTime = LastTime>0.0 ? Clamp( (FLOAT)(Now-LastTime), 0.f, 1.f ) : 0.f;
 	LastTime = Now;
 
@@ -1788,7 +1810,7 @@ void UUC2ALAudioSubsystem::NotifyPauseChange( UBOOL bNowPaused )
 	if( !S || !S->bDevice || !!S->bPaused==!!bNowPaused )
 		return;
 	S->bPaused = bNowPaused;
-	DOUBLE Now = appSeconds();
+	DOUBLE Now = NowOf( S );
 	if( bNowPaused )
 		S->PauseStart = Now;
 	FLOAT Shift = bNowPaused ? 0.f : (FLOAT)(Now - S->PauseStart);
@@ -1887,6 +1909,90 @@ UBOOL UUC2ALAudioSubsystem::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	}
 	return 0;
 	unguard;
+}
+
+/*-----------------------------------------------------------------------------
+	Offline test hooks (UC2AudioSelfTest). The cue goes through PlaySoundCue's own path
+	from StartInst on; only the actor is replaced by a location.
+-----------------------------------------------------------------------------*/
+
+UBOOL UC2TestPlay( UUC2ALAudioSubsystem* Audio, const TCHAR* Cue, FVector Location, UBOOL b2D, FLOAT Volume, FUC2TestPlay& Out )
+{
+	guard(UC2TestPlay);
+	FUC2AudioState* S = Audio->State;
+	appMemzero( &Out, sizeof(Out) );
+	if( !S || !S->bTest )
+		return 0;
+	INT Packed = ResolveCue( S, FName(Cue) );
+	if( Packed<0 )
+		return 0;
+	INT E = -1;
+	if( !b2D )
+	{
+		E = S->Emitters.Num();
+		S->Emitters.AddZeroed();
+		FUC2Emitter& Em	= S->Emitters(E);
+		Em.Location		= Location;
+		Em.bValid		= 1;
+	}
+	INT Id = StartInst( Audio, S, Packed, Cue, E, b2D, 0, Volume, NowOf(S) );
+	if( !Id )
+		return 0;
+	if( E>=0 )
+		S->Emitters(E).ActiveCues++;
+	FUC2CueInst* Inst = FindInst( S, Id );
+	Out.Inst	= Id;
+	Out.Sound	= &S->SoundBanks(Inst->Bank)->Sounds(Inst->Sound);
+	if( Inst->Tracks.Num() )
+	{
+		FUC2TrackPlay& P = Inst->Tracks(0);
+		Out.Variation	= P.Variation;
+		Out.VarVolume	= P.VarVolume;
+		Out.VarPitch	= P.VarPitch;
+		if( P.Variation>=0 )
+			Out.Wave = ResolveVariation( S, Out.Sound->Tracks(0).Variations(P.Variation), &Out.WaveBank );
+	}
+	Out.b3DVoice = !b2D;
+	return 1;
+	unguard;
+}
+
+INT UC2TestRender( UUC2ALAudioSubsystem* Audio, FLOAT MaxSeconds, TArray<FLOAT>& Out )
+{
+	guard(UC2TestRender);
+	FUC2AudioState* S = Audio->State;
+	if( !S || !S->bTest || !S->RenderSamples )
+		return 0;
+	const INT Step = UC2_TEST_RATE/100;		// 10 ms: the device updates its cues between steps, as once a frame
+	FLOAT Tmp[UC2_TEST_RATE/100*2];
+	INT Frames = 0, Tail = -1;
+	while( Frames < MaxSeconds*UC2_TEST_RATE )
+	{
+		for( INT i=0; i<S->Insts.Num(); i++ )
+			if( !UpdateInst( Audio, S, S->Insts(i), S->TestClock ) )
+				RemoveInst( S, i-- );
+		if( !S->Insts.Num() && Tail<0 )
+			Tail = 5;						// everything stopped: 50 ms more, then done
+		S->RenderSamples( S->Device, Tmp, Step );
+		INT At = Out.Add( Step*2 );
+		appMemcpy( &Out(At), Tmp, sizeof(Tmp) );
+		Frames += Step;
+		S->TestClock += (DOUBLE)Step/UC2_TEST_RATE;
+		if( Tail>=0 && Tail-- == 0 )
+			break;
+	}
+	return Frames;
+	unguard;
+}
+
+void UC2TestStopAll( UUC2ALAudioSubsystem* Audio )
+{
+	FUC2AudioState* S = Audio->State;
+	if( !S )
+		return;
+	while( S->Insts.Num() )
+		RemoveInst( S, S->Insts.Num()-1 );
+	S->Emitters.Empty();
 }
 
 /*-----------------------------------------------------------------------------

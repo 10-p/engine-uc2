@@ -357,3 +357,91 @@ log line carries `[seconds since the device opened]` = the time in the capture.
   measurement (left/right).
 - Priority direction, the default of an unset variation weight (one event mixes them) and "Recurring = fade"
   are inferences (Step 1 table).
+
+## Step 6 - numeric self-test without ears: `UC2ALAudio.UC2AudioSelfTest` (owner's request after the cut-off)
+
+The device can be initialised in **loopback mode** (`LoopbackTest`, set only by this commandlet): OpenAL Soft's
+`ALC_SOFT_loopback` device mixes into memory (48 kHz stereo float), time is simulated in 10 ms steps (the device
+updates its cue instances between steps, as it does once a frame), and the listener sits at the origin looking
+down +X with no rotation. Cues are started through the device's own code from `StartInst` on (variation choice,
+voice allocation, source set-up, `UpdateVoice` gain/pitch/position, queueing for loops); only the actor is
+replaced by a location (`UC2TestPlay`, `UC2TestRender`, `UC2TestStopAll` in `UC2ALAudioSubsystem.cpp`).
+The expected values are computed **independently** in `UC2AudioSelfTest.cpp` from the documented rules.
+
+What is checked, and how:
+- gain: total output energy / energy of the decoded wave (mono downmix for a 3D voice) against
+  `Pan * 10^(mB/1000) / PitchRatio * 48000/SourceRate`, with `mB = Volume(+group) + variation volume - 600
+  (headroom) + 1000*log10(clamp(category,0.1,1)) + Volume-parameter curve - 2000*log10(1+Rolloff*(clamp(d,Min,
+  Max)-Min)/Min)`, clamped at 0. `Pan` (OpenAL Soft's own gain for a centred source, which XACT's mixer need not
+  share) is measured on one reference case per kind (3D, 2D) and reported; every other case is an independent
+  check of the arithmetic. A unit mistake (linear vs mB, dB vs mB, the category formula) shows up as dB of error.
+- pan direction: a source at +Y / -Y must be louder in the right / left channel.
+- pitch: the playback-rate ratio is fitted from the output's 2 ms power envelope against the source's (least
+  variance of the log ratio over time scales 0.5..2 in steps of 0.0005), compared with `2^(cents/1200)`. Two
+  simpler measures were tried and dropped: first-to-last audible sample (the resampler rings for a few ms after
+  a wave that ends on a non-zero sample: -16 cents on `Lift_Tech_Start02`), 10-90% energy span (sensitive to
+  onset detail: +232 cents on the same cue). The fit has a constant +4.3 cents bias (the output's onset sits
+  about 2 ms after the source's), measured on the 0-cent control and taken off; raw errors are printed too.
+  Cents vs semitones vs the runtime's 4096/12 unit would be errors of 100x or 0.29x.
+- loops: active duration of a Loop Count 1 cue = 2 x the wave (pitch included); an infinite loop still sounds
+  after three wave lengths.
+- variation picker: 60 plays of a playlist-4 cue (no immediate repeat), the only playlist-1 cue (order), and a
+  14-wave playlist-0 cue (all drawn, none above 3x its share).
+- `GetSoundCueRadius` / `GetSoundCueDuration` against the formulas.
+
+Command and result (`logs/m8/selftest.out`; `DUMP=<dir>` also writes every rendered case as a .wav):
+```sh
+cd /home/ion/WorkUC2/run/m8/System && /home/ion/WorkUC2/bin/capped 2G 600 -- ./ucc-bin UC2ALAudio.UC2AudioSelfTest
+```
+```
+--- gain: measured energy against Pan * 10^(mB/1000) / pitch ratio (Pan measured on the first case of each kind)
+REF  gain A_Weapon.RL_Fire                   3D d=   400 cat=1.00 Volume=0.00: expected  -900.0 mB, measured  -900.0 mB, error -0.00 dB (defines Pan3D = -1.10 dB)
+REF  gain A_Weapon.RL_Fire                   2D d=  5000 cat=1.00 Volume=0.00: expected  -900.0 mB, measured  -900.0 mB, error +0.00 dB (defines Pan2D = -1.52 dB)
+PASS gain A_Weapon.RL_Fire                   3D d=   800 cat=1.00 Volume=0.00: expected  -900.0 mB, measured  -900.0 mB, error -0.00 dB
+PASS gain A_Weapon.RL_Fire                   3D d=  1600 cat=1.00 Volume=0.00: expected -1192.3 mB, measured -1192.2 mB, error +0.00 dB
+PASS gain A_Weapon.RL_Fire                   3D d=  3200 cat=1.00 Volume=0.00: expected -1584.8 mB, measured -1584.8 mB, error +0.00 dB
+PASS gain A_Weapon.RL_Fire                   3D d=  8000 cat=1.00 Volume=0.00: expected -2225.5 mB, measured -2225.4 mB, error +0.00 dB
+PASS gain A_Weapon.RL_Fire                   3D d= 32000 cat=1.00 Volume=0.00: expected -3340.2 mB, measured -3340.1 mB, error +0.00 dB
+PASS gain A_Weapon.RL_Fire                   3D d= 99000 cat=1.00 Volume=0.00: expected -4299.7 mB, measured -4299.6 mB, error +0.00 dB
+PASS gain A_Weapon.RL_Fire                   3D d=200000 cat=1.00 Volume=0.00: expected -4308.3 mB, measured -4308.3 mB, error +0.00 dB
+PASS gain A_Gameplay.CampFireBombExplosion   3D d=   275 cat=1.00 Volume=0.00: expected -1200.0 mB, measured -1204.2 mB, error -0.04 dB
+PASS gain A_Gameplay.CampFireBombExplosion   3D d=   550 cat=1.00 Volume=0.00: expected -1200.0 mB, measured -1204.2 mB, error -0.04 dB
+PASS gain A_Gameplay.CampFireBombExplosion   3D d=  1100 cat=1.00 Volume=0.00: expected -2404.1 mB, measured -2408.1 mB, error -0.04 dB
+PASS gain A_Gameplay.CampFireBombExplosion   3D d=  5500 cat=1.00 Volume=0.00: expected -4094.3 mB, measured -4098.2 mB, error -0.04 dB
+PASS gain A_Weapon.RL_Fire                   3D d=   400 cat=0.50 Volume=0.00: expected -1201.0 mB, measured -1201.0 mB, error +0.00 dB
+PASS gain A_Weapon.RL_Fire                   3D d=   400 cat=0.20 Volume=0.00: expected -1599.0 mB, measured -1598.9 mB, error +0.00 dB
+PASS gain A_Weapon.RL_Fire                   3D d=   400 cat=0.05 Volume=0.00: expected -1900.0 mB, measured -1899.9 mB, error +0.00 dB
+PASS gain A_Character.NK_Sobek_Death         3D d=  3000 cat=1.00 Volume=0.00: expected -1602.1 mB, measured -1590.5 mB, error +0.12 dB
+PASS gain A_Character.NK_Sobek_Death         3D d=  3000 cat=1.00 Volume=0.25: expected -1602.1 mB, measured -1609.8 mB, error -0.08 dB
+PASS gain A_Character.NK_Sobek_Death         3D d= 60000 cat=1.00 Volume=1.00: expected  -204.1 mB, measured  -211.1 mB, error -0.07 dB
+PASS gain A_Character.NK_Sobek_Death         3D d=  3000 cat=1.00 Volume=1.00: expected     0.0 mB, measured     4.7 mB, error +0.05 dB
+--- pan: a source 2000 units to the right / left of a listener looking down +X
+PASS pan left : right minus left channel energy -16.2 dB
+PASS pan right: right minus left channel energy +15.8 dB
+--- pitch: playback rate ratio fitted from the output's envelope against the source's, against 2^(cents/1200)
+PASS pitch A_Weapon.RL_Fire               expected    +0 cents (x1.0000), measured    +4.3 cents (x1.0025), error +4.3 cents, +0.0 after the method bias of the 0-cent control
+PASS pitch A_Pickup.Adren_Pickup          expected  -300 cents (x0.8409), measured  -295.7 cents (x0.8430), error +4.3 cents, +0.0 after the method bias of the 0-cent control
+PASS pitch A_Pickup.Adren_SuperClose      expected  -500 cents (x0.7492), measured  -495.7 cents (x0.7510), error +4.3 cents, -0.1 after the method bias of the 0-cent control
+PASS pitch A_Octane.Lift_Tech_Start02     expected  +200 cents (x1.1225), measured  +203.9 cents (x1.1250), error +3.9 cents, -0.4 after the method bias of the 0-cent control
+--- loops
+PASS loop count 1 (STF_JumpChargeEthereal): plays 6.231 s, expected 6.224 s active (6.224 s total, 68617 frames x 2 at 22050 Hz)
+PASS infinite loop (Powerup_Invis_Loop, wave 2.032 s, loop region 0+44800 of 44800 frames): still sounding at 6.100 s (last sample 0.000 s from the end)
+--- variations
+PASS variations A_Character.Footstep_Metal (playlist 4, 6 waves): random, no immediate repeat: 0 repeats; sequence 305314104041324025130154210230524215120301425040531512141342; counts 11,13,10,8,10,8
+PASS variations A_Combo.Combo_EMP (playlist 1, 3 waves): ordered (all weights unset: index order): 0 out of order; sequence 012012012012012012012012012012012012012012012012012012012012; counts 20,20,20
+PASS variations A_Weapon.Generic_BulletWhip (playlist 0, 14 waves): random: counts min 1 max 7 (fair share 4.3), 5 immediate repeats; sequence 11486851212944121113231121829100128106469101182697051135411249102112228121199; counts 2,5,7,2,6,3,4,1,6,7,4,5,7,1
+--- radius and duration
+PASS radius A_Weapon.RL_Fire = 5600.0 (2*800 + 800*2/0.4 = 5600)
+PASS radius of a non-3D cue (A_Combo.Combo_Generic_Activate) = 4.00 (DirectSound defaults: 4)
+PASS duration A_Weapon.RL_Fire = 1.828 s (cue table: 1828 ms)
+PASS duration of an infinite loop = 4294968 s (XACT: 0xFFFFFFFF ms)
+PASS duration of an unknown cue = 0.0
+UC2AudioSelfTest: 34 checks, 0 failed; Pan3D -1.10 dB, Pan2D -1.52 dB
+```
+Reading of the numbers: distance attenuation, category volume, headroom, group volume and the Volume-parameter
+curve and its 0 dB clamp agree with the documented arithmetic to 0.00-0.16 dB (the largest, -0.16 dB and +0.11 dB,
+are on the cue with a random -40..+40 cent pitch variation, whose resampled energy is not exactly 1/ratio).
+OpenAL Soft's centred-source gain is -1.10 dB (3D, a mono voice straight ahead) and -1.52 dB (2D); XACT's own
+voice routing levels are not known here, so the absolute level of the whole mix differs from the Xbox by an
+unknown constant of this size. Left/right are the right way round (+/-16 dB for a source 2000 units to the
+side; HRTF is not used, plain stereo panning). Pitch after removing the method bias: -0.4 to +0.0 cents.

@@ -37,6 +37,7 @@
 	X(alcGetString, LPALCGETSTRING) \
 	X(alcGetIntegerv, LPALCGETINTEGERV) \
 	X(alcIsExtensionPresent, LPALCISEXTENSIONPRESENT) \
+	X(alcGetProcAddress, LPALCGETPROCADDRESS) \
 	X(alGetString, LPALGETSTRING) \
 	X(alGetError, LPALGETERROR) \
 	X(alIsExtensionPresent, LPALISEXTENSIONPRESENT) \
@@ -255,6 +256,27 @@ struct FUC2I3DL2
 enum { UC2_NUM_ZONE_PRESETS = 26 };
 extern const FUC2I3DL2 GUC2ZonePresets[UC2_NUM_ZONE_PRESETS];
 void UC2ALLoadReverb( ALuint Effect, UBOOL bEAX, const FUC2I3DL2& P );
+
+/*-----------------------------------------------------------------------------
+	Offline test hooks (UC2ALAudioSubsystem.cpp), used by UC2AudioSelfTest with a device
+	initialised with LoopbackTest: the listener sits at the origin looking down +X (Unreal
+	axes), time is simulated, the mix is rendered into memory.
+-----------------------------------------------------------------------------*/
+
+struct FUC2TestPlay
+{
+	INT				Inst;			// cue instance id (0: nothing started)
+	FUC2Sound*		Sound;
+	FUC2Wave*		Wave;			// the variation of track 0
+	FUC2WaveBank*	WaveBank;
+	INT				Variation;
+	FLOAT			VarVolume, VarPitch;
+	UBOOL			b3DVoice;
+};
+UBOOL UC2TestPlay( UUC2ALAudioSubsystem* Audio, const TCHAR* Cue, FVector Location, UBOOL b2D, FLOAT Volume, FUC2TestPlay& Out );
+INT UC2TestRender( UUC2ALAudioSubsystem* Audio, FLOAT MaxSeconds, TArray<FLOAT>& Out );	// stereo float, 48 kHz
+void UC2TestStopAll( UUC2ALAudioSubsystem* Audio );
+enum { UC2_TEST_RATE = 48000 };
 
 #endif // _INC_UC2ALAUDIOPRIVATE
 

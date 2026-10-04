@@ -35,6 +35,10 @@ class UUC2ALAudioSubsystem : public UAudioSubsystem
 	UBOOL			MusicFades;			// honour PlayMusic/StopMusic fade times (the Xbox ignored them)
 	UBOOL			CueLog;					// one DevSound line per cue request (DevSound is suppressed by default)
 
+	// Not configuration: set by UC2AudioSelfTest before Init() to mix into memory (OpenAL Soft's loopback
+	// device, a simulated clock, a fixed listener) instead of opening an output device.
+	UBOOL			LoopbackTest;
+
 	// Everything else (OpenAL objects, cooked data, cue instances).
 	FUC2AudioState*	State;
 
@@ -81,9 +85,25 @@ class UUC2AudioCheckCommandlet : public UCommandlet
 	INT Main( const TCHAR* Parms );
 };
 
+/*-----------------------------------------------------------------------------
+	UUC2AudioSelfTestCommandlet: `ucc-bin UC2ALAudio.UC2AudioSelfTest` plays known cues
+	alone through the device's own code into memory (OpenAL Soft loopback) and compares
+	what comes out with what the XACT parameters say: gain (volume, group, headroom,
+	category, distance, the Volume parameter), pan direction, pitch, loop counts and the
+	variation playlists. Prints the error per case.
+-----------------------------------------------------------------------------*/
+
+class UUC2AudioSelfTestCommandlet : public UCommandlet
+{
+	DECLARE_CLASS(UUC2AudioSelfTestCommandlet,UCommandlet,CLASS_Transient,UC2ALAudio)
+	void StaticConstructor();
+	INT Main( const TCHAR* Parms );
+};
+
 #define AUTO_INITIALIZE_REGISTRANTS_UC2ALAUDIO \
 	UUC2ALAudioSubsystem::StaticClass(); \
-	UUC2AudioCheckCommandlet::StaticClass();
+	UUC2AudioCheckCommandlet::StaticClass(); \
+	UUC2AudioSelfTestCommandlet::StaticClass();
 
 #endif // _INC_UC2ALAUDIO
 
