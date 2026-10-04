@@ -42,6 +42,9 @@ Revision history:
 #include "UCElements.h"
 #include "UCGameplay.h"
 #include "GUI.h"
+#if UC2_WITH_UC2ALAUDIO	// M8: the cooked-audio check commandlet (UC2ALAudio.UC2AudioCheck)
+#include "UC2ALAudio.h"
+#endif
 #endif
 
 #endif
@@ -246,6 +249,9 @@ int main( int argc, char* argv[] )
 			AUTO_INITIALIZE_REGISTRANTS_UCELEMENTS;
 			AUTO_INITIALIZE_REGISTRANTS_UCGAMEPLAY;
 			AUTO_INITIALIZE_REGISTRANTS_GUI;
+#if UC2_WITH_UC2ALAUDIO	// M8
+			AUTO_INITIALIZE_REGISTRANTS_UC2ALAUDIO;
+#endif
 			check( Lookup < ARRAY_COUNT(GNativeLookupFuncs) );
 			RegisterNamesGUI();
 			RegisterNamesUCElements();

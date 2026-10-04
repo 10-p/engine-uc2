@@ -10,8 +10,9 @@ Revision history:
 	  registration from Source/XboxLaunch/Src/Launch.cpp, as Source/UCC/Src/UCC.cpp does it.
 	  Epic's SDL 1.2 version of this file is in git history (7633696).
 
-	Not here yet, by milestone: OpenAL audio (M8), movies (M9), pads (M10), the Emscripten
-	main loop (M4w). The OpenGL render device (UC2GLDrv) is in since M5.
+	Not here yet, by milestone: movies (M9), pads (M10), the Emscripten main loop (M4w).
+	The OpenGL render device (UC2GLDrv) is in since M5, the OpenAL audio device (UC2ALAudio)
+	since M8.
 =============================================================================*/
 
 #include "SDLLaunchPrivate.h"
@@ -36,6 +37,9 @@ Revision history:
 #include "SDL2Drv.h"
 #if UC2_WITH_UC2GLDRV
 #include "UC2GLDrv.h"
+#endif
+#if UC2_WITH_UC2ALAUDIO	// M8
+#include "UC2ALAudio.h"
 #endif
 #endif
 
@@ -476,6 +480,9 @@ int main( int argc, char** argv )
 		AUTO_INITIALIZE_REGISTRANTS_SDL2DRV;
 #if UC2_WITH_UC2GLDRV
 		AUTO_INITIALIZE_REGISTRANTS_UC2GLDRV;
+#endif
+#if UC2_WITH_UC2ALAUDIO	// M8
+		AUTO_INITIALIZE_REGISTRANTS_UC2ALAUDIO;
 #endif
 		AUTO_INITIALIZE_REGISTRANTS_IPDRV;
 		AUTO_INITIALIZE_REGISTRANTS_UWEB;

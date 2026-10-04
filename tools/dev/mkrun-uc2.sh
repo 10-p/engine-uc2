@@ -31,6 +31,18 @@ done
 cp -a "$assets/System" "$run/System"
 chmod -R u+w "$run/System"
 
+# M8: the cooked audio (tools/cook-audio.py: Sounds/ and Music/), hard-linked like the content folders. The
+# audio device reads ../Sounds and ../Music from System/, as the Xbox read ..\Sounds. A missing cooked tree
+# only means a silent game.
+cooked=${UC2_COOKED_DIR:-$work/assets/uc2-cooked}
+for d in Sounds Music; do
+  if [ -d "$cooked/$d" ]; then
+    cp -al "$cooked/$d" "$run/$d"
+  else
+    echo "note: no cooked $d at $cooked (tools/cook-audio.py makes it); the game runs silent" >&2
+  fi
+done
+
 # Our tracked configuration wins over the asset tree's (identical until we start changing defaults).
 cp -f "$repo"/Engine/Config/*.ini "$run/System/"
 
@@ -38,6 +50,10 @@ copy_bins() {
   for bin in "$1"/Source/UCC/ucc-bin "$1"/Source/SDLLaunch/uc2*; do
     [ -f "$bin" ] && [ -x "$bin" ] && cp -f "$bin" "$run/System/"
   done
+  # M8: the OpenAL Soft the build fetched; UC2ALAudio loads it from beside uc2.bin (dlopen).
+  if [ -f "$1"/_deps/openalsoft-build/libopenal.so.1 ]; then
+    cp -fL "$1"/_deps/openalsoft-build/libopenal.so.1 "$run/System/libopenal.so.1"
+  fi
   # An Emscripten build: ucc-bin.js/.wasm run under Node from System/ (the browser build's SDLLaunch.* is
   # served from the build directory, not from here).
   for bin in "$1"/Source/UCC/ucc-bin.js "$1"/Source/UCC/ucc-bin.wasm; do
