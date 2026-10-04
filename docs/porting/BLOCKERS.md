@@ -60,3 +60,7 @@ crash-notifier processes; both are the owner's to clear.
   languages. The cook keeps the Xbox order; `tools/cook-audio.py --relink-localised` repairs it by name.
 - 19 wave entries have no source WAV, but the shipped `.xwb` has them (ffmpeg decodes the Xbox ADPCM when it is
   wrapped as WAVE format 0x69). Decode those 19 from the `.xwb` in the cook, or leave the variations out (now)?
+- M8 inferences without documentation, for whoever can check against an Xbox: XACT priority direction (we use
+  lower value = more important), the "Recurring" flag of volume/pitch events read as "fade", the cue radius of
+  non-3D sounds (we use DirectSound's defaults, 4 units: such cues on other actors are culled). Details and the
+  evidence in `analysis/audio.md`.

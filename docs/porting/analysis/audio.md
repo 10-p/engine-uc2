@@ -579,3 +579,36 @@ Voice 0.80`.) The cue log puts the music start at 0.23-0.29 s; the correlation f
   `source env.sh && cmake --preset wasm && cmake --build build-wasm -j6` (capped 6G) -> `[100%] Built target
   SDLLaunch`, rc 0; targets built: ogg, zlib, vorbis, Core, Engine, UnrealGame, UCElements, SDL2Drv, UWeb,
   UCGameplay, IpDrv, GUI, UCC, SDLLaunch (UC2ALAudio excluded there).
+
+## Status at the end of M8 (2026-10-04, ~22:10)
+
+Final suite run (`tools/dev/audio-regression.sh m8` on the final binary, `logs/m8/audio-summary.txt`):
+```
+SUMMARY audio-check: 182 index files; waves: 7141 decoded to their exact length of 7141 cooked (19 entries have no cooked wave); music streams: 21 of 21; cues [int]: 2438 in 78 cue tables: 2417 resolve fully, 6 partly, 15 to no decodable wave (0 use a localised bank); UC2AudioCheck: 78 cue tables, 2438 cues, 0 failures
+SUMMARY audio-selftest: UC2AudioSelfTest: 39 checks, 0 failed; Pan3D -1.10 dB, Pan2D -1.52 dB
+SUMMARY audio-menu-music: music NuBattle.wav in audio-menu.wav: envelope correlation 0.861 at 0.30 s, mix gain -19.02 dB (expected -19.00 dB, error -0.02 dB), control track Recoil.wav correlates 0.115: PASS
+SUMMARY audio-menu: 58.816000 s, peak -19.0 dBFS, RMS -34.5 dBFS, silent seconds 0; cue requests 1: played 1 (1 distinct), culled 0 (0 distinct), failed 0 (0 distinct); Critical 0
+SUMMARY audio-deadbolt: 83.861333 s, peak -4.0 dBFS, RMS -24.1 dBFS, silent seconds 0; cue requests 998: played 510 (60 distinct), culled 488 (64 distinct), failed 0 (0 distinct); Critical 0
+SUMMARY audio-praxis-efx: 83.776000 s, peak -0.8 dBFS, RMS -23.0 dBFS, silent seconds 0; cue requests 1053: played 346 (45 distinct), culled 707 (87 distinct), failed 0 (0 distinct); Critical 0
+SUMMARY audio-praxis-dry: 83.264000 s, peak -3.1 dBFS, RMS -25.3 dBFS, silent seconds 0; cue requests 936: played 230 (39 distinct), culled 706 (81 distinct), failed 0 (0 distinct); Critical 0
+```
+Zone lines of that run: EFX `[41.46] zone ZoneInfo2: reverb preset Underwater`, `[57.14] zone LevelInfo0:
+reverb preset Default`; dry `[41.48] zone ZoneInfo2 (ZoneAudioEffect 24): no EFX, sound stays dry`.
+
+Deferred: runtime `.xsb/.xwb` loading (M16; the readers in the cook got far enough for the cross-checks: header,
+cue names, sound records' volume/priority, wave bank entry formats and lengths); the web build of the package
+(M11: openal-soft's Web Audio backend; the code reads files through `GFileManager`, binds OpenAL through one
+table, uses no threads of its own); the Xbox voice-processor events (LPF, LFOs, EG, mix bins, loop start,
+parametric EQ, LFE) and HRTF; split screen (implemented as on the Xbox, never run).
+
+Doubts (also in BLOCKERS.md where the owner decides):
+- Priority direction (lower = more important) and the default of an unset variation weight are inferred; voice
+  stealing never happened in any run (64 voices were enough), so it is untested in practice.
+- OpenAL Soft's centred gain (-1.10 dB 3D, -1.52 dB 2D) and XACT's 5-speaker/HRTF routing differ by an unknown
+  constant; the absolute mix level is therefore only "right to within a dB or two" against the Xbox.
+- One capture peaked at +0.3 dBFS (float wave writer, no clipping there); on a 16-bit device OpenAL Soft's output
+  limiter applies. The Xbox would have had its own headroom behaviour; not compared.
+- Non-3D cues on world actors are culled beyond 4 units (DirectSound defaults per the XACT white paper). If the
+  Xbox reported a different radius for them, some sounds of other players (e.g. their combo activations) that
+  are silent here were audible there.
+- `Recurring = 1` read as "fade" rests on the data pattern, not on documentation.
