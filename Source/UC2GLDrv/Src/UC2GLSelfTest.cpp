@@ -16,6 +16,7 @@
 	  bb-copy      UpdateBackBufferCopyTarget: the half-size four-tap copy of the back buffer
 	  dof-ramp     PS_DepthOfField: depth -> ramp texture -> blend alpha (absolute mode)
 	  remap        PS_ColorRemap + ColorRemap.vsh: luminance -> lookup coordinate
+	  luminance    PS_LuminanceTexIndex into the 16x16 target the dynamic gamma reads
 
 	Console: POSTSELFTEST (runs at the start of the next frame). Command line: -glselftest
 	(runs once, at the tenth frame with a player). Results: one log line per test,
@@ -453,6 +454,42 @@ struct FSelfTest
 		delete Dest;
 	}
 
+	/*-------------------------------------------------------------------------
+		luminance: the pass the dynamic gamma's histogram is made from.
+	-------------------------------------------------------------------------*/
+
+	void TestLuminance()
+	{
+		if( !RenDev->PixelShaderFamilyReady( PS_LuminanceTexIndex ) )
+		{
+			Report( TEXT("luminance"), 0, 255.f, 0.f, TEXT("PS_LuminanceTexIndex is not available") );
+			return;
+		}
+		INT W = RenDev->MainWidth, H = RenDev->MainHeight;
+		FTestImage Pattern( W, H );
+		Pattern.Randomize( 9, 4 );
+		SetMainColor( Pattern );
+
+		extern FRenderTarget* UC2GL_TestLuminancePass( FOpenGLRenderInterface* RI, FLOAT& MinL, FLOAT& MaxL, FLOAT& AvgL );
+		FLOAT MinL = 0.f, MaxL = 0.f, AvgL = 0.f;
+		FRenderTarget* Target = UC2GL_TestLuminancePass( RI, MinL, MaxL, AvgL );
+		FTestImage Got( Target->GetWidth(), Target->GetHeight() );
+		ReadTarget( Target, Got );
+		// One bilinear sample of the back buffer per target pixel (the 16x16 target does not
+		// average the frame: Epic's pass samples it sparsely), then dp3 with (0.30, 0.59, 0.11).
+		FLOAT MaxError = 0.f, Sum = 0.f;
+		for( INT y=0; y<Got.H; y++ )
+			for( INT x=0; x<Got.W; x++ )
+			{
+				FLOAT U = (x + 0.5f) / Got.W, V = (y + 0.5f) / Got.H;
+				FLOAT Expected = 0.30f * Pattern.Bilinear(U,V,0) + 0.59f * Pattern.Bilinear(U,V,1) + 0.11f * Pattern.Bilinear(U,V,2);
+				MaxError = Max( MaxError, Abs( Expected - (FLOAT)Got.At(x,y,2) ) );	// the histogram reads the blue byte
+				Sum += Expected;
+			}
+		FLOAT ExpectedAvg = Sum / (Got.W * Got.H) / 255.f;
+		Report( TEXT("luminance"), Got.W*Got.H, MaxError, 2.f, *FString::Printf( TEXT("back buffer -> %ix%i luminance target (0.30, 0.59, 0.11), one bilinear sample per pixel; histogram of it: min %.3f max %.3f average %.3f (average of the expected values %.3f)"), Got.W, Got.H, MinL, MaxL, AvgL, ExpectedAvg ) );
+	}
+
 	void Run()
 	{
 		Passed = Failed = 0;
@@ -471,6 +508,7 @@ struct FSelfTest
 		TestBackBufferCopy();
 		TestDOFRamp();
 		TestRemap();
+		TestLuminance();
 		RI->PopState();
 
 		// Leave a defined frame behind.

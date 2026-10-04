@@ -1183,6 +1183,22 @@ FLOAT FOpenGLRenderInterface::GetAverageSceneLuminosity()
 }
 
 //
+// For the self-test (UC2GLSelfTest.cpp): run the luminance pass now, whatever the update
+// rate, and hand out the target it drew and the histogram's result.
+//
+FRenderTarget* UC2GL_TestLuminancePass( FOpenGLRenderInterface* RI, FLOAT& MinL, FLOAT& MaxL, FLOAT& AvgL )
+{
+	if( !RI->DynamicGamma )
+		RI->DynamicGamma = new FOpenGLDynamicGamma(RI);
+	RI->DynamicGamma->LastUpdateTime = -1000.f;
+	RI->DynamicGamma->UpdateLuminanceTarget();
+	MinL = RI->DynamicGamma->Histogram.MinL;
+	MaxL = RI->DynamicGamma->Histogram.MaxL;
+	AvgL = RI->DynamicGamma->Histogram.AvgL;
+	return RI->DynamicGamma->LuminanceTarget;
+}
+
+//
 // Called by the device when the context goes away or post-processing is switched.
 //
 void UC2GL_DeleteDynamicGamma( FOpenGLRenderInterface* RI )
