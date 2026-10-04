@@ -204,6 +204,8 @@ set(UC2_PACKAGES
 # Native-only tools: the commandlet host is not part of the web build. SDL2Drv and SDLLaunch are native-only
 # until the web client is wired (M4w: -sUSE_SDL=2, Asyncify yield, preload).
 set(UC2_NATIVE_ONLY_PACKAGES UCC Editor SDL2Drv SDLLaunch)
+# M5: the desktop-GL binding of UC2GLDrv is native-only; the web build gets the same source through GL4ES later.
+list(APPEND UC2_NATIVE_ONLY_PACKAGES UC2GLDrv)
 
 foreach(pkg IN LISTS UC2_PACKAGES)
   if(EMSCRIPTEN AND pkg IN_LIST UC2_NATIVE_ONLY_PACKAGES)
