@@ -11,7 +11,13 @@
 =============================================================================*/
 
 // for compression
+#if _MSC_VER
 #include "../../zlib/zlib.h"
+#else
+// engine-uc2 (as engine-ut2004): the vendored zlib, by path -- consumers include this header without
+// linking zlib, and <zlib.h> would pick a system copy natively and is absent under Emscripten.
+#include "../../../Thirdparty/zlib/zlib.h"
+#endif
 //scion bcl -- for _stat
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -277,6 +283,7 @@ public:
 	{
 		guard(FFileManagerGeneric::CompareFileTimes);
 
+#if _MSC_VER
 		struct _stat StatA, StatB;
 
 		if( _stat( appToAnsi( FileA ), &StatA ) != 0 )
@@ -284,6 +291,15 @@ public:
 
 		if( _stat( appToAnsi( FileB ), &StatB ) != 0 )
 			return 0;
+#else
+		struct stat StatA, StatB;	// POSIX spelling of _stat
+
+		if( stat( appToAnsi( FileA ), &StatA ) != 0 )
+			return 0;
+
+		if( stat( appToAnsi( FileB ), &StatB ) != 0 )
+			return 0;
+#endif
 
 		return( INT(StatB.st_mtime - StatA.st_mtime) );
 

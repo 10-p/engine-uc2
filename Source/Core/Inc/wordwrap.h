@@ -1,11 +1,25 @@
 #pragma once
 
-#ifndef _XBOX
+#if !defined(_XBOX) && defined(_MSC_VER)
 #undef TEXT
 #undef HINSTANCE
 #undef HANDLE
 #undef INFINITE
 #include <windows.h>
+#elif !defined(_XBOX)
+// engine-uc2: the Win32 types this interface uses, for builds without <windows.h> (GCC, Emscripten).
+// WCHAR is 16 bits as on Windows -- UCanvas::WrapStringToArray passes appToUnicode() UNICHARs.
+typedef UNICHAR			WCHAR;
+typedef char			CHAR;
+typedef int				BOOL;
+typedef unsigned int	UINT;
+typedef const WCHAR*	LPCWSTR;
+typedef WCHAR*			LPWSTR;
+typedef const CHAR*		LPCSTR;
+typedef CHAR*			LPSTR;
+#ifndef VOID
+#define VOID void
+#endif
 #endif
 
 //

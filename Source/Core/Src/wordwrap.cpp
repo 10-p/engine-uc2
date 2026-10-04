@@ -8,11 +8,33 @@
 
 #ifdef _XBOX
 #include <xtl.h>
-#else
+#elif defined(_MSC_VER)
 #include <windows.h>
+#else
+// engine-uc2: portable build (GCC, Emscripten). Core's types (FLOAT, UNICHAR, CORE_API) instead of
+// <windows.h>; the Win32 code-page functions (ANSI variants, GetCPInfoEx) are left out, as on the Xbox.
+#include "Core.h"
 #endif
+#if defined(_MSC_VER)
 #include <malloc.h>
+#endif
 #include "wordwrap.h"
+
+// WW_WIN32_API: the Win32 PC build, which has the code-page API (GetVersionEx, GetCPInfoEx,
+// MultiByteToWideChar, CharNextExA). The Xbox and the portable build do without it.
+#if defined(_MSC_VER) && !defined(_XBOX)
+	#define WW_WIN32_API 1
+#else
+	#define WW_WIN32_API 0
+#endif
+
+#if !defined(_MSC_VER)
+// WCHAR is 16 bits here, wchar_t is not: the two wide-string helpers TokenizeW needs, for WCHAR.
+static inline int WW_wcslen( LPCWSTR s ) { int n = 0; while( s[n] ) n++; return n; }
+static inline LPWSTR WW_wcsncpy( LPWSTR d, LPCWSTR s, int n ) { int i = 0; for( ; i < n && s[i]; i++ ) d[i] = s[i]; for( ; i < n; i++ ) d[i] = 0; return d; }
+#define wcslen  WW_wcslen
+#define wcsncpy WW_wcsncpy
+#endif
 
 //-----------------------------------------------------------------------------
 // defines
@@ -31,7 +53,11 @@ CB_Reserved		Reserved	= NULL;
 UINT	g_uCP				= 1252;
 UINT	g_uOption			= 0;
 BOOL	g_bIsNT				= FALSE;
+#if defined(_MSC_VER)
 WCHAR	g_szUniErrChar[2]	= L"";
+#else
+WCHAR	g_szUniErrChar[2]	= { 0, 0 };	// L"" is a 32-bit wchar_t string here
+#endif
 CHAR	g_szMBErrChar[3] 	= "";
 
 //-----------------------------------------------------------------------------
@@ -53,7 +79,7 @@ void WordWrap_SetOption( UINT uCP, UINT uOption )
 	g_uCP = uCP;
 	g_uOption = uOption;
 	
-#ifndef _XBOX
+#if WW_WIN32_API
 	// Check NT
 	OSVERSIONINFO verinfo;
 	verinfo.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
@@ -65,7 +91,7 @@ void WordWrap_SetOption( UINT uCP, UINT uOption )
 //	OutputDebugString( TEXT("'g_bIsNT' initialized\r\n") ); // DEBUG
 	
 	// Check Unicode Error Char
-#ifndef _XBOX
+#if WW_WIN32_API
 	CPINFOEX cpinfo;
 	if ( GetCPInfoEx( g_uCP, 0, &cpinfo ) == 0 ){ // FAIL ?
 		cpinfo.UnicodeDefaultChar = 0;
@@ -78,7 +104,9 @@ void WordWrap_SetOption( UINT uCP, UINT uOption )
 #endif
 	g_szUniErrChar[1] = 0;
 	g_szMBErrChar[0] = g_szMBErrChar[1] = g_szMBErrChar[2] = 0;
+#if defined(_MSC_VER)
 	WideCharToMultiByte( g_uCP, 0, g_szUniErrChar, -1, g_szMBErrChar, sizeof(g_szMBErrChar), NULL, &bError );
+#endif
 //	TCHAR buf[128]; // DEBUG
 //	wsprintf( buf, TEXT("g_szUniErrChar=%04X\r\n"), cpinfo.UnicodeDefaultChar ); // DEBUG
 //	OutputDebugString( buf ); // DEBUG
@@ -405,7 +433,7 @@ LPCWSTR WordWrap_FindNextLineW( LPCWSTR pszSource, UINT uWidth, LPCWSTR* ppszEOL
 }
 
 #pragma warning( disable : 4244 )
-#ifndef _XBOX
+#if WW_WIN32_API
 LPCSTR WordWrap_FindNextLineA( LPCSTR pszSource, UINT uWidth, LPCSTR* ppszEOL )
 {
 	if ( GetWidthW == NULL || pszSource == NULL || !pszSource[0] )
@@ -594,7 +622,7 @@ int WordWrap_TokenizeW( LPCWSTR pszSource, LPWSTR* ppszDest)
 	return iTokens;
 }
 
-#ifndef _XBOX
+#if WW_WIN32_API
 // ANSI version of the above function
 //
 int WordWrap_TokenizeA( LPCSTR pszSource, LPSTR* ppszDest)

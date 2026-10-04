@@ -10,6 +10,10 @@
 #define PATH(s) appUnixPath( s )
 char* appUnixPath( const char* Path );
 
+// Load a genuine external library (OpenAL, a driver), as opposed to an engine package: defined in
+// UnUnix.cpp (engine-ut2004 2.37, declared in its UnFile.h). NULL when the library is absent.
+CORE_API void* appGetSystemDllHandle( const ANSICHAR* DllName );	// ANSICHAR == TCHAR (not yet typedef'd here)
+
 // Networking.
 DWORD appGetLocalIP( void );	// engine-ut2004: an IPv4 address is 32 bits on LP64 too
 

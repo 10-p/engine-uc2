@@ -28,6 +28,9 @@ set(SRC_FILES
   "Src/UnName.cpp"
   "Src/UnObj.cpp"
   "Src/UnProp.cpp"
+  # Unicode word wrap behind UCanvas::WrapStringToArray (Engine); the Win32 code-page parts are compiled
+  # out on non-MSVC builds, as on the Xbox.
+  "Src/wordwrap.cpp"
   # Platform layer for every non-MSVC target (replaces UnVcWin32.cpp / UnThreadingWindows.cpp).
   "Src/UnUnix.cpp"
   "Src/UnThreadingPosix.cpp"
