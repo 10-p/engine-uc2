@@ -331,3 +331,59 @@ an Xbox.
    Row hover would be `GUIVertList` script (`Source/GUI/Classes/GUIVertList.uc:17-34` has the row maths).
 9. Not script, for the owner's split-screen decision: Start on a second, unbound pad does not join
    (`UXboxClient::UpdateGamepadUnboundInput` -> `UClient::BeginSplitScreen`; `SDL2Pads.cpp` header).
+
+## Step 7 - both-at-once, and the gate
+
+`both` -> PASS, 14 checks: menu steps alternate keyboard Down / pad A, Escape, pad D-pad seek, Enter, pad A,
+keyboard seek, pad A, Enter, pad A, Enter, pad A; in the match the keyboard moves while the pad sits idle (the pad
+still sends its zero sticks every tick), keyboard W and pad right stick together move and turn, pad left stick +
+mouse turn + keyboard fire together all take effect, Escape opens the pause menu and pad B closes it.
+`pad`'s strafe check once failed because a wall stopped the right strafe beside a random spawn point; it now
+strafes both ways and requires one to move the right way and neither the wrong way. Spawn points and bots differ
+between runs (the inputs are deterministic, the world is not); the movement checks are written with that slack.
+
+Gate commands (all from this worktree / run tree m10, every run inside `bin/capped`):
+- a. `bin/capped 6G 3000 -- cmake --build build-native -j8` -> `uc2.bin`, `ucc-bin` linked;
+  `bin/capped 6G 3000 -- bash -c 'source ../env.sh && cmake --preset wasm && cmake --build build-wasm -j6'` -> rc 0,
+  `[ 89%] Built target SDL2Drv`, `[100%] Built target SDLLaunch` (SDL2 2.32.10 Emscripten port; 0 `error:`).
+- b. `tools/dev/m10-controls.sh` -> one line per scenario (logs/m10/all-scenarios.txt).
+- c. every scenario line reports `0 Critical`; gate runs below have 0 too.
+- d. `bin/capped 2G 300 -- ./ucc-bin verifyclasses` -> `All native class layouts match`; `bin/capped 2G 40 --
+  timeout 20 ./ucc-bin server DM-Deadbolt -log` -> `Executing Class Engine.ServerCommandlet`, `Game class is
+  'UCDeathmatch'`, `Bringing Level DM-Deadbolt.MyLevel up for play (0)...`; `uc2.bin -nullrenderer -log` under
+  Xvfb (capped 2G) -> `SDL2 pads: GameController API up`, `Bringing Level Menu.MyLevel up for play (0)...`,
+  `Render device: Engine.NullRenderDevice (640x480 windowed)`, exit by the 30 s timeout, `appRequestExit(0)`.
+  No class mirrored in script changed layout (new settings live on `USDL2Client`, C++ only, and in plain ini
+  sections read with `GConfig`).
+
+Memory: ceilings used 6G (builds), 2G (every game/ucc run); none was hit (no exit 137).
+
+## Labelled behaviour list
+
+Asserted by the script (`tools/dev/m10-controls.sh`): keyboard menu navigation (arrows, Enter = A, Escape = B)
+through Instant Action to DM-Deadbolt and the travel; Fire (Alt or left mouse or pad right trigger) starts the
+match; W forward, Right arrow turns right, E melee, Q ranged, Alt fires, Escape opens/closes the pause menu; mouse
+hover selects, a click opens the item under the cursor (not the focused one), right click = B, a click on a list row
+selects and accepts that row, wheel moves a list both ways, left click fires, mouse look sign and amount (within
+-40/+40 % of the computed 65.5 x FOV/90 per pixel), mouse up looks up, the invert option flips it; typing
+`WaSdKxYb` into the on-screen keyboard gives exactly that text with no menu navigation, Backspace deletes, Enter
+finishes; pad hot-plug at the menu and in the match (JoySlider1/2, ControllerRemovedMenu, resume with Start), the
+whole menu path on the pad, both sticks (forward, less at 0.6, nothing at 0.2, moves at 0.3, strafe sign, turn
+right), trigger threshold (29/255 no, 33/255 yes), rumble from the weapon's waveform reaching SDL and the
+virtual device, B/Y weapons, Start/B pause; keyboard, mouse and pad interleaved without fighting.
+
+Seen in a screenshot only: the menus with the new keys look unchanged (`logs/m10/*-maplist.png`), the typed name in
+the field (`text-typed.png`), the in-game views after each step (`*-match.png`, `*-pause.png`, `pad-unplugged.png`).
+
+Implemented, never exercised: a real pad (SDL's own mapping of physical devices, real motors); a second pad (port
+1, unbound: buttons go to the interaction master only); `[SDL2Drv.PadMap]` overrides from the ini (the default table
+was used, and the ini copy is identical); `PadStickDeadZone` > 0; `PadRumble=False`/`PadRumbleScale`; rumble zeroed
+on travel; `GetAnalogButtonAmount` (timed input sequences); key repeat on held pad buttons (seen in the first smoke
+run: 0.5 s hold gave a press and two repeats, not asserted); fullscreen software cursor (`bHideMouseCursor=False`);
+scoreboard (Tab/F1/Back), console key, jump/dodge (Space/Ctrl), lock-on (middle mouse, L, right-stick click),
+taunt/voice and view keys, adrenaline combo key (X) and NextSkill/PrevSkill on the wheel; Epic's fallback key
+table (no `[GUI.EmulatedJoypad]` section); the Windows build of this code (not built here); the web build running
+it (only compiled).
+
+Needs script -> M14: the list above (mouse/stick separation, adhesion, stick scale in PlayerMove, auto-centre,
+lock-on with a mouse, glyphs, keyboard rebinding menu, list-row hover).
