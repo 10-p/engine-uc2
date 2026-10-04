@@ -97,3 +97,16 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   binding selectable at build time (desktop GL through the SDL proc table; GL4ES for GLES2/WebGL), instead
   of two mirrored directories as engine-ut2004 has for historical reasons. M4w and M5 run in parallel in
   worktrees `../engine-uc2-m4w` (branch `m4w`) and `../engine-uc2-m5` (branch `m5-gl`); the coordinator merges.
+- 2026-10-04 — **Visual reference ready** (not a plan milestone; input to M5–M7). Epic's unmodified `avaris.exe`
+  renders under wine 10 + Xvfb (Mesa software GL) with Epic's own unpatched `Core.dll`.
+  `<WorkUC2>/bin/oracle-shot.sh <name> [map] [seconds]` writes `<WorkUC2>/logs/oracle/<name>.png` plus the game
+  and wine logs; ten reference pictures are there (title, main menu at 1280x720 and 640x480, DM-Deadbolt,
+  DM-Praxis ×3, DM-Undertow, DM-Azure, CTF-Octane), described in `logs/oracle/README.md`. Run tree
+  `run/oracle`, prefix `.cache/wine-oracle`. Reported by the agent, pictures not yet reviewed by the
+  coordinator. Limits: no gamma ramp under Xvfb, UI laid out for 640x480, no real-Windows render to compare
+  against, about 776 Mesa shader-cache files were written to `~/.cache/mesa_shader_cache` before the cache was
+  redirected into the prefix.
+- 2026-10-04 — **Session stopped at the usage limit with M4w and M5 in progress.** Their agents were asked to
+  commit at a clean state and stop. Resume from the notebooks in the worktrees: `../engine-uc2-m4w`
+  (`docs/porting/analysis/web-smoke.md`, branch `m4w`) and `../engine-uc2-m5`
+  (`docs/porting/analysis/gl-renderer.md`, branch `m5-gl`). Neither branch has been verified or merged.
