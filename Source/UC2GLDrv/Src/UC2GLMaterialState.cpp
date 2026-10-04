@@ -24,9 +24,6 @@
 //
 extern D3DTEXTUREOP DUMMY_MODULATE2X;
 
-// UC2GLDrv: pixel-shader materials are M6 (see SetPixelShaderMaterial).
-#define UC2GL_PIXELSHADERS 0
-
 // scion sz
 FORCEINLINE UBOOL IsTextureLinear( FOpenGLTexture* Texture )
 {
@@ -155,6 +152,9 @@ FOpenGLMaterialState::FOpenGLMaterialState()
 
 	// scion sz/jg - per material vertex shader fragment
 	MaterialVertexShaderEnum = 0;
+
+	// UC2GLDrv
+	UsePixelShaderProgram = 0;
 }
 
 /*----------------------------------------------------------------------------
@@ -1484,13 +1484,20 @@ UBOOL FOpenGLRenderInterface::SetPixelShaderMaterial( UPixelShaderMaterial* InSh
 	HandlePSVertexShader( InShader, MaterialState );
 
 #ifndef _XBOX
-	// UC2GLDrv (R1): there are no pixel shaders yet, so every pixel-shader material takes
-	// PC's Xbox-only fallback below (its texture stage 0 through SetSimpleMaterial, then the
-	// state handler). M6: set UC2GL_PIXELSHADERS once the .psh translations exist; the
-	// Xbox-only types then need their own branch here to be rendered for real.
-	if( UC2GL_PIXELSHADERS && InShader->IsXboxOnly() == 0 )
+	// UC2GLDrv (M6): PC's test here is InShader->IsXboxOnly() == 0, because PC had hand-written
+	// DX8 shaders for some types only. Ours is whether the material's whole shader family is
+	// translated, compiled and has its inputs at this milestone (UUC2GLRenderDevice::
+	// PixelShaderFamilyReady): then the Xbox branch below is taken, Xbox-only or not.
+	// Otherwise, and always with UsePixelShaders=False, PC's Xbox-only fallback: texture
+	// stage 0 through SetSimpleMaterial, then the state handler.
+	// M7: the families that stay on the fallback are those whose input is the back buffer, the
+	// depth buffer or another render target (distortion, blur, depth of field, bloom and emissive
+	// select, motion blur, luminance, player cam, colour remap): UC2GL_IsM7PixelShader.
+	if( RenDev->PixelShaderFamilyReady( InShader->PixelShaderType ) )
 #endif
 	{
+		MaterialState->UsePixelShaderProgram = 1;
+
 		// -- set the desired pixel shader 
 		MaterialState->PixelShader = (EPixelShader)InShader->PixelShaderType;	
 

@@ -1275,10 +1275,8 @@ void FOpenGLRenderInterface::SetMaterialBlending( FOpenGLMaterialState* NewMater
 	if( CurrentState->CurrentMaterialState == NewMaterialState )
 		return;
 
-	// M6: pixel shaders. At R1 no pass asks for one (SetPixelShaderMaterial takes PC's
-	// fallback); terrain asks only when the caps say so, and ours say no.
-	if( NewMaterialState->PixelShader != PS_None )
-		UC2GL_LOG_ONCE( TEXT("UC2GLDrv: pass wants pixel shader %i (M6); drawn with its fixed-function stages"), (INT)NewMaterialState->PixelShader );
+	// Passes of pixel-shader materials get their program in DrawPrimitive (BeginProgramPass);
+	// everything below is state both paths share (the combiner set-up is simply unused then).
 
 	// Blending.
 	if( NewMaterialState->AlphaBlending )
@@ -1631,13 +1629,9 @@ void FOpenGLRenderInterface::CommitLights()
 // Modelview = LocalToWorld * WorldToCamera; projection = CameraToScreen * the D3D-to-GL
 // clip fix-up (see the file header).
 //
-void FOpenGLRenderInterface::CommitMatrices()
+void FOpenGLRenderInterface::GetGLMatrices( FMatrix& ModelView, FMatrix& Projection )
 {
-	guard(FOpenGLRenderInterface::CommitMatrices);
-
-	FMatrix ModelView = CurrentState->LocalToWorld * CurrentState->WorldToCamera;
-	RenDev->glMatrixMode( GL_MODELVIEW );
-	RenDev->glLoadMatrixf( (GLfloat*)&ModelView );
+	ModelView = CurrentState->LocalToWorld * CurrentState->WorldToCamera;
 
 	FOpenGLRenderTargetState*	RTState = SavedRenderTargetState.GetCurrentState();
 	FOpenGLViewportState*		VPState = SavedViewportState.GetCurrentState();
@@ -1652,7 +1646,17 @@ void FOpenGLRenderInterface::CommitMatrices()
 	Fixup.M[3][1] = -FlipY / Height;
 	Fixup.M[3][2] = -1.f;
 
-	FMatrix Projection = CurrentState->CameraToScreen * Fixup;
+	Projection = CurrentState->CameraToScreen * Fixup;
+}
+
+void FOpenGLRenderInterface::CommitMatrices()
+{
+	guard(FOpenGLRenderInterface::CommitMatrices);
+
+	FMatrix ModelView, Projection;
+	GetGLMatrices( ModelView, Projection );
+	RenDev->glMatrixMode( GL_MODELVIEW );
+	RenDev->glLoadMatrixf( (GLfloat*)&ModelView );
 	RenDev->glMatrixMode( GL_PROJECTION );
 	RenDev->glLoadMatrixf( (GLfloat*)&Projection );
 	RenDev->glMatrixMode( GL_MODELVIEW );
@@ -1960,8 +1964,13 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 			RestoreFogColor = 1;
 		}
 
-		CommitStreams( FirstIndex );
-		CommitTexCoords( Pass );
+		// Pixel-shader materials: program, uniforms and generic attributes (UC2GLShaders.cpp).
+		UBOOL Programmed = BeginProgramPass( Pass, FirstIndex );
+		if( !Programmed )
+		{
+			CommitStreams( FirstIndex );
+			CommitTexCoords( Pass );
+		}
 
 		if( CurrentState->IndexBuffer )
 		{
@@ -1974,6 +1983,9 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 		}
 		else
 			RenDev->glDrawArrays( Type, 0, Count );
+
+		if( Programmed )
+			EndProgramPass();
 
 		if( RestoreFogColor )
 		{

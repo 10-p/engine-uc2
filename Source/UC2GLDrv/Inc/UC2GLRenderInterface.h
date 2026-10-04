@@ -112,7 +112,8 @@ public:
 	D3DBLENDOP			BlendOp;
 	FColor				OverriddenFogColor;
 	DWORD				ColorWriteMask;
-	QWORD				MaterialVertexShaderEnum;	// recorded, ignored (M6: vertex shader splicing)
+	QWORD				MaterialVertexShaderEnum;	// the unique vertex shader a material asks for (all M7)
+	BYTE				UsePixelShaderProgram;		// UC2GLDrv: the pass was set up for its pixel shader (SetPixelShaderMaterial's real branch)
 
 	BYTE					StagesUsed;
 	FOpenGLMaterialStateStage	Stages[MAX_STAGES];
@@ -428,7 +429,7 @@ public:
 	FOpenGLTexture* CacheTexture(FBaseTexture* Texture);
 
 	// Pixel shader constants the PS material handlers set (D3D's SetPixelShaderConstant).
-	// M6: recorded here for the GLSL translations of the .psh shaders; unused at R1.
+	// Uniforms u_c0..7 of the GLSL translations of the .psh shaders (UC2GLShaders.cpp).
 	FLOAT					PixelShaderConstants[8][4];
 	void SetPixelShaderConstant( INT Register, const void* Data, INT Count );
 
@@ -441,6 +442,12 @@ private:
 	void CommitMatrices();
 	void CommitStreams( INT FirstIndex );
 	void CommitTexCoords( INT Pass );
+
+	// Programmable materials (UC2GLShaders.cpp).
+	void GetGLMatrices( FMatrix& ModelView, FMatrix& Projection );
+	QWORD GetStateVertexShaderEnum( FOpenGLMaterialState* MaterialState, UBOOL HasDiffuse, UBOOL HasSpecular );
+	UBOOL BeginProgramPass( INT Pass, INT FirstIndex );
+	void EndProgramPass();
 
 	// Various material handlers (UC2GLMaterialState.cpp; UC2's D3DMaterialState.cpp).
 	UBOOL SetMultiPassMaterial( UMultiPassMaterial* MultiPassMaterial, FOpenGLModifierInfo BaseModifierInfo, FString* ErrorString, UMaterial** ErrorMaterial );
@@ -486,6 +493,9 @@ private:
 	static PSMatFuncPtr PSMatFuncPtrArray[];
 
 public:
+	// UC2GLDrv: two pixel shader types belong to one family when one state handler serves both.
+	static UBOOL SameHandler( INT A, INT B ) { return PSMatFuncPtrArray[A] != NULL && PSMatFuncPtrArray[A] == PSMatFuncPtrArray[B]; }
+
 	static void HandlePSMaterialState( UPixelShaderMaterial* InShader, FOpenGLModifierInfo* InModifierInfo, FOpenGLMaterialState* InMaterialState, FOpenGLRenderInterface* RI )
 	{
 		if( PSMatFuncPtrArray[InShader->PixelShaderType] != NULL )

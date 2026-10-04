@@ -35,6 +35,7 @@ void* UC2GL_GetProcAddress( const char* Name )
 // -glshot=<seconds>[,<seconds>...]: run the engine's SHOT exec at those times after the
 // first frame (verification; the files are System/ShotNNNNN.bmp).
 static TArray<FLOAT>	GShotTimes;
+static TArray<FLOAT>	GPSToggleTimes;
 static DOUBLE			GFirstFrameTime = 0.0;
 
 /*-----------------------------------------------------------------------------
@@ -42,6 +43,25 @@ static DOUBLE			GFirstFrameTime = 0.0;
 -----------------------------------------------------------------------------*/
 
 IMPLEMENT_CLASS(UUC2GLRenderDevice);
+
+
+// -name=<seconds>,<seconds>,... on the command line.
+static void ParseTimeList( const TCHAR* Key, TArray<FLOAT>& Times )
+{
+	Times.Empty();
+	const TCHAR* Found = appStrfind( appCmdLine(), Key );
+	if( !Found )
+		return;
+	Found += appStrlen( Key );
+	while( *Found && *Found != ' ' && *Found != '\t' )
+	{
+		Times.AddItem( appAtof( Found ) );
+		while( *Found && *Found != ',' && *Found != ' ' && *Found != '\t' )
+			Found++;
+		if( *Found == ',' )
+			Found++;
+	}
+}
 
 UUC2GLRenderDevice::UUC2GLRenderDevice()
 :	RenderInterface(this)
@@ -76,6 +96,12 @@ UUC2GLRenderDevice::UUC2GLRenderDevice()
 	PresentContrast			= 0.5f;
 	ApplyGamma				= 1;
 	NullTextureID			= 0;
+	ProgramsLinked = ProgramsFailed = 0;
+	VertexShadersCompiled = VertexShadersFailed = VertexShadersPrecompiled = 0;
+	FragmentShadersCompiled = FragmentShadersFailed = 0;
+	PrecompileSeen = PrecompileNotApplicable = 0;
+	ProgramDraws = ProgramFallbackDraws = 0;
+	appMemzero( PixelShaderState, sizeof(PixelShaderState) );
 	GLErrorFrames			= 0;
 	GLErrorCount			= 0;
 	appMemzero( &DeviceCaps, sizeof(DeviceCaps) );
@@ -93,6 +119,8 @@ void UUC2GLRenderDevice::StaticConstructor()
 	new(GetClass(),TEXT("UseVSync"),			RF_Public)UBoolProperty	( CPP_PROPERTY(UseVSync				), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("UseCubemaps"),			RF_Public)UBoolProperty	( CPP_PROPERTY(UseCubemaps			), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("CheckGLErrors"),		RF_Public)UBoolProperty	( CPP_PROPERTY(CheckGLErrors		), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("UsePixelShaders"),		RF_Public)UBoolProperty	( CPP_PROPERTY(UsePixelShaders		), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("PrecompileVertexShaders"),RF_Public)UBoolProperty( CPP_PROPERTY(PrecompileVertexShaders), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("LevelOfAnisotropy"),	RF_Public)UIntProperty	( CPP_PROPERTY(LevelOfAnisotropy	), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("MaxTextureUnits"),		RF_Public)UIntProperty	( CPP_PROPERTY(MaxTextureUnits		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("DetailTexMipBias"),	RF_Public)UFloatProperty( CPP_PROPERTY(DetailTexMipBias		), TEXT("Options"), CPF_Config );
@@ -106,6 +134,8 @@ void UUC2GLRenderDevice::StaticConstructor()
 	UseVSync				= 0;
 	UseCubemaps				= 1;
 	CheckGLErrors			= 0;
+	UsePixelShaders			= 1;
+	PrecompileVertexShaders	= 1;
 	LevelOfAnisotropy		= 1;
 	MaxTextureUnits			= 8;
 	DetailTexMipBias		= 0.8f;
@@ -255,15 +285,17 @@ UBOOL UUC2GLRenderDevice::Init()
 
 	// Verification switches.
 	CheckGLErrors |= ParseParam( appCmdLine(), TEXT("glerrors") );
-	FString Shots;
-	if( Parse( appCmdLine(), TEXT("glshot="), Shots ) )
-	{
-		GShotTimes.Empty();
-		TArray<FString> Parts;
-		Shots.ParseIntoArray( TEXT(","), &Parts );
-		for( INT i=0; i<Parts.Num(); i++ )
-			GShotTimes.AddItem( appAtof(*Parts(i)) );
-	}
+	// (Parse() stops at a comma, so a list of times is read by hand.)
+	ParseTimeList( TEXT("glshot="), GShotTimes );
+
+	// A/B switches for the programmable materials (M6): the command line wins over the ini,
+	// and -glpstoggle=<s>,... flips UsePixelShaders at those times (seconds after the first
+	// frame, like -glshot), so one run can take both pictures from the same camera.
+	if( ParseParam( appCmdLine(), TEXT("nopixelshaders") ) )
+		UsePixelShaders = 0;
+	if( ParseParam( appCmdLine(), TEXT("pixelshaders") ) )
+		UsePixelShaders = 1;
+	ParseTimeList( TEXT("glpstoggle="), GPSToggleTimes );
 
 
 	return 1;
@@ -285,6 +317,8 @@ void UUC2GLRenderDevice::Exit( UViewport* Viewport )
 		if( PresentProgram )
 			glDeleteProgram( PresentProgram );
 		PresentProgram = 0;
+		LogPixelShaderStats();
+		ExitPixelShaders();
 		if( NullTextureID )
 			glDeleteTextures( 1, &NullTextureID );
 		NullTextureID = 0;
@@ -373,6 +407,10 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
 		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
 		glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_BGRA, GL_UNSIGNED_BYTE, &Black );
+
+		// Programmable materials (M6): fragment shaders of every integrated pixel shader,
+		// vertex shaders of the VertexShaderConfigs.ini list.
+		InitPixelShaders();
 	}
 
 	if( !CreateMainFramebuffer( Viewport->SizeX, Viewport->SizeY ) )
@@ -865,6 +903,19 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		Ar.Logf( TEXT("Textures %i (%i bytes), vertex streams %i (%i bytes), index buffers %i (%i bytes)"), Counts[0], Bytes[0], Counts[1], Bytes[1], Counts[2], Bytes[2] );
 		return 1;
 	}
+	else if( ParseCommand(&Cmd,TEXT("PIXELSHADERS")) )
+	{
+		// PIXELSHADERS [0|1]: switch the programmable materials (no argument: toggle).
+		UBOOL Wanted = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !UsePixelShaders;
+		if( Wanted != UsePixelShaders && ValidContext && !LockedViewport )
+		{
+			LogPixelShaderStats();
+			UsePixelShaders = Wanted;
+			InitPixelShaders();
+		}
+		Ar.Logf( TEXT("UC2GLDrv: pixel shaders %s (frame %i)"), UsePixelShaders ? TEXT("on") : TEXT("off"), FrameCounter );
+		return 1;
+	}
 	else if( ParseCommand(&Cmd,TEXT("SUPPORTEDRESOLUTION")) )
 	{
 		Ar.Logf( TEXT("1") );
@@ -921,16 +972,24 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 		if( CheckGLError( TEXT("frame") ) )
 			GLErrorFrames++;
 		if( FrameCounter % 600 == 0 )
+		{
 			debugf( NAME_Init, TEXT("UC2GLDrv: frame %i, %i GL errors so far"), FrameCounter, GLErrorCount );
+			LogPixelShaderStats();
+		}
 	}
 
 	SDL_GL_SwapWindow( (SDL_Window*)Viewport->GetWindow() );
 
 	// -glshot: the engine's own SHOT exec (ReadPixels -> appCreateBitmap).
+	if( GFirstFrameTime == 0.0 )
+		GFirstFrameTime = appSeconds();
+	if( GPSToggleTimes.Num() && appSeconds() - GFirstFrameTime >= GPSToggleTimes(0) )
+	{
+		GPSToggleTimes.Remove(0);
+		Exec( TEXT("PIXELSHADERS"), *GLog );
+	}
 	if( GShotTimes.Num() )
 	{
-		if( GFirstFrameTime == 0.0 )
-			GFirstFrameTime = appSeconds();
 		if( appSeconds() - GFirstFrameTime >= GShotTimes(0) )
 		{
 			debugf( NAME_Init, TEXT("UC2GLDrv: -glshot at %.1f s (frame %i)"), GShotTimes(0), FrameCounter );
@@ -978,18 +1037,16 @@ void UUC2GLRenderDevice::SetEmulationMode( EHardwareEmulationMode Mode )
 
 FRenderCaps* UUC2GLRenderDevice::GetRenderCaps()
 {
-	// R1: fixed function only, so the engine takes its non-pixel-shader paths (one terrain
-	// layer at a time). M6 raises PixelShaderVersion when the .psh translations exist.
+	// The caps stay those of M5: the engine's terrain code picks its render method from them
+	// (one layer per pass, no pixel shader). PS_Terrain3Layer is translated; asking for it
+	// means MaxSimultaneousTerrainLayers = 3 here and the Xbox mask constants in
+	// SetTerrainMaterial (see docs/porting/analysis/shaders.md, deferred).
 	RenderCaps.HardwareTL					= 1;
 	RenderCaps.PixelShaderVersion			= 0;
 	RenderCaps.MaxSimultaneousTerrainLayers	= 1;
 	return &RenderCaps;
 }
 
-void UUC2GLRenderDevice::LoadVertexShaderEnum( QWORD VertexShaderEnum )
-{
-	// M6: precompile the spliced GLSL vertex shader for this enum. Fixed function needs nothing.
-}
 
 /*-----------------------------------------------------------------------------
 	The End.
