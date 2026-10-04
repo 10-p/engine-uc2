@@ -1976,8 +1976,9 @@ CORE_API void appInit( const TCHAR* InPackage, const TCHAR* InCmdLine, FMalloc* 
 	}}
 
 	// Command line.
-#ifndef _XBOX
-// #if _MSC_VER
+	// Only the Windows command line starts with the executable's name; the portable launchers pass the
+	// arguments alone, so skipping a token there would eat the first argument (the map URL).
+#if !defined(_XBOX) && defined(_MSC_VER)
 	if( *InCmdLine=='\"' )
 	{
 		InCmdLine++;
