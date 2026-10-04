@@ -23,7 +23,9 @@
 	Run-time state.
 -----------------------------------------------------------------------------*/
 
-enum { UC2_MUSIC_SLOTS = 2, UC2_MUSIC_BUFFERS = 4, UC2_MUSIC_BUFFER_FRAMES = 8192 };
+// Music is refilled from the game thread once a frame: 4 x 32768 frames (3 s at 44.1 kHz) ride out the long frames
+// of a first-time load (8192-frame buffers left audible gaps under software GL: logs/m8/deadbolt-2).
+enum { UC2_MUSIC_SLOTS = 2, UC2_MUSIC_BUFFERS = 4, UC2_MUSIC_BUFFER_FRAMES = 32768 };
 
 // XACT :64 - an actor must move this far (squared) before its sound sources are moved.
 #define UC2_MIN_UPDATE_DELTA	32.f
@@ -129,6 +131,8 @@ struct FUC2AudioState
 	TMap<FName,INT>			CueMap;			// requested name -> (bank << 16) | cue, or -1
 	TMap<FString,INT>		LoggedOnce;
 
+	DOUBLE					T0;				// appSeconds() when the device opened (capture time 0)
+
 	// Play state
 	UViewport*				Viewport;
 	TArray<FUC2Emitter>		Emitters;
@@ -139,12 +143,13 @@ struct FUC2AudioState
 	FLOAT					CategoryVolumes[UAudioSubsystem::VOLUME_Max];
 	FLOAT					LastAmbientUpdate;
 	TArray<AAmbientSound*>	StaticAmbients;
+	UBOOL					bAmbientsListed;
 	TArray<INT>				ActiveAmbients;
 	TMap<FString,FUC2CueStats> Stats;
 
 	FUC2AudioState() : bDevice(0), Device(NULL), Context(NULL), bEFX(0), bEAXReverb(0), bLoopPoints(0), Slot(0),
 		Effect(0), ZonePreset(-1), NextMusicHandle(1), Viewport(NULL), NextInstId(1), bPaused(0), PauseStart(0),
-		LastAmbientUpdate(-1.f)
+		LastAmbientUpdate(-1.f), bAmbientsListed(0), T0(0.0)
 	{
 		for( INT i=0; i<UAudioSubsystem::VOLUME_Max; i++ )
 			CategoryVolumes[i] = 1.f;
@@ -154,6 +159,15 @@ struct FUC2AudioState
 /*-----------------------------------------------------------------------------
 	Helpers.
 -----------------------------------------------------------------------------*/
+
+static void CueLogf( UBOOL bOn, FUC2AudioState* S, const TCHAR* Fmt, ... )
+{
+	if( !bOn || FName::SafeSuppressed(NAME_DevSound) )
+		return;
+	TCHAR Buf[1024];
+	GET_VARARGS( Buf, ARRAY_COUNT(Buf), Fmt, Fmt );
+	debugf( NAME_DevSound, TEXT("UC2Audio: [%7.2f] %s"), S->T0>0.0 ? (FLOAT)(appSeconds() - S->T0) : 0.f, Buf );
+}
 
 static FLOAT MBToGain( FLOAT MB )
 {
@@ -182,8 +196,10 @@ static FLOAT RandRange( INT Low, INT High )
 	return Low==High ? (FLOAT)Low : Low + appFrand() * (High - Low);
 }
 
-#define CUELOG(Fmt) \
-	if( CueLog && !FName::SafeSuppressed(NAME_DevSound) ) debugf Fmt
+// The cue log (DevSound, quiet by default): one line per cue request and outcome, stamped with the seconds
+// since the device opened, which is also the time in a capture written by the wave writer.
+struct FUC2AudioState;
+static void CueLogf( UBOOL bOn, FUC2AudioState* S, const TCHAR* Fmt, ... );
 
 /*-----------------------------------------------------------------------------
 	Banks.
@@ -490,6 +506,7 @@ UBOOL UUC2ALAudioSubsystem::Init()
 		return 1;
 	}
 	S->bDevice = 1;
+	S->T0 = appSeconds();
 	GAL.alDistanceModel( AL_NONE );		// distance attenuation is XACT's, computed in UpdateVoice
 	GAL.alDopplerFactor( 0.f );			// XACT :500: no source ever dopplers
 	S->bLoopPoints = GAL.alIsExtensionPresent( "AL_SOFT_loop_points" );
@@ -517,14 +534,22 @@ UBOOL UUC2ALAudioSubsystem::Init()
 	}
 
 	// Environmental reverb (the Xbox's I3DL2 listener) through EFX, if the device has it.
-	if( UseEFX && GAL.alcIsExtensionPresent( S->Device, "ALC_EXT_EFX" ) && UC2ALBindEFX() )
+	// (-NOEFX: dry sound for comparison, as on a device without EFX.)
+	UBOOL bWantEFX = UseEFX && !ParseParam( appCmdLine(), TEXT("NOEFX") );
+	if( bWantEFX && GAL.alcIsExtensionPresent( S->Device, "ALC_EXT_EFX" ) && UC2ALBindEFX() )
 	{
 		GAL.alGetError();
 		GAL.alGenAuxiliaryEffectSlots( 1, &S->Slot );
 		GAL.alGenEffects( 1, &S->Effect );
 		GAL.alEffecti( S->Effect, AL_EFFECT_TYPE, AL_EFFECT_EAXREVERB );
 		S->bEAXReverb = GAL.alGetError()==AL_NO_ERROR;
-		S->bEFX = S->Slot && S->Effect;
+		UBOOL bReverb = S->bEAXReverb;
+		if( !bReverb )
+		{
+			GAL.alEffecti( S->Effect, AL_EFFECT_TYPE, AL_EFFECT_REVERB );
+			bReverb = GAL.alGetError()==AL_NO_ERROR;
+		}
+		S->bEFX = S->Slot && S->Effect && bReverb;
 		if( S->bEFX )
 		{
 			UC2ALLoadReverb( S->Effect, S->bEAXReverb, GUC2ZonePresets[0] );
@@ -542,8 +567,9 @@ UBOOL UUC2ALAudioSubsystem::Init()
 		S->Voices.Num(), !S->bEFX ? TEXT("off (no EFX: dry sound)") : S->bEAXReverb ? TEXT("EFX (EAX reverb)") : TEXT("EFX (standard reverb)"),
 		S->bLoopPoints ? TEXT("yes") : TEXT("no"),
 		Wave.Len() ? *FString::Printf( TEXT(", writing %s"), *Wave ) : TEXT("") );
-	if( UseEFX && !S->bEFX )
-		debugf( NAME_Init, TEXT("UC2ALAudio: the device has no EFX: zone reverb is off") );
+	if( !S->bEFX )
+		debugf( NAME_Init, TEXT("UC2ALAudio: %s: zone reverb is off, sound is dry"),
+			bWantEFX ? TEXT("the device has no EFX reverb") : TEXT("EFX switched off (UseEFX=False or -NOEFX)") );
 
 	// The persistent banks (XACT :215-237). Only their cue tables load now; wave data loads on first play.
 	for( INT i=0; i<ARRAY_COUNT(GPersistentBanks); i++ )
@@ -898,13 +924,13 @@ static void StartTrack( UUC2ALAudioSubsystem* Audio, FUC2AudioState* S, FUC2CueI
 		FUC2CueStats* St = S->Stats.Find( Inst.Name );
 		if( St ) St->NoVoice++;
 		UBOOL CueLog = Audio->CueLog;
-		CUELOG(( NAME_DevSound, TEXT("UC2Audio: %s: no voice (all %d busy with more important sounds)"), *Inst.Name, S->Voices.Num() ));
+		CueLogf( CueLog, S, TEXT("%s: no voice (all %d busy with more important sounds)"), *Inst.Name, S->Voices.Num() );
 		return;
 	}
 	if( Stolen.Len() )
 	{
 		UBOOL CueLog = Audio->CueLog;
-		CUELOG(( NAME_DevSound, TEXT("UC2Audio: %s takes the voice of %s"), *Inst.Name, *Stolen ));
+		CueLogf( CueLog, S, TEXT("%s takes the voice of %s"), *Inst.Name, *Stolen );
 	}
 	FUC2Voice& V = S->Voices(VoiceIndex);
 	V.Inst		= Inst.Id;
@@ -1202,8 +1228,8 @@ void UUC2ALAudioSubsystem::PlaySoundCue( AActor* srcActor, FName soundCue, UBOOL
 	if( Packed<0 )
 	{
 		St->Failed++;
-		CUELOG(( NAME_DevSound, TEXT("UC2Audio: %s on %s%s: failed (no such cue)"), *Name,
-			srcActor ? srcActor->GetName() : TEXT("none"), bAmbient ? TEXT(" (ambient)") : TEXT("") ));
+		CueLogf( CueLog, S, TEXT("%s on %s%s: failed (no such cue)"), *Name,
+			srcActor ? srcActor->GetName() : TEXT("none"), bAmbient ? TEXT(" (ambient)") : TEXT("") );
 		return;
 	}
 	if( !S->bDevice )
@@ -1216,12 +1242,12 @@ void UUC2ALAudioSubsystem::PlaySoundCue( AActor* srcActor, FName soundCue, UBOOL
 		if( StartInst( this, S, Packed, Name, -1, 1, 0, Volume, Now ) )
 		{
 			St->Played++;
-			CUELOG(( NAME_DevSound, TEXT("UC2Audio: %s: played 2D (no actor)"), *Name ));
+			CueLogf( CueLog, S, TEXT("%s: played 2D (no actor)"), *Name );
 		}
 		else
 		{
 			St->Failed++;
-			CUELOG(( NAME_DevSound, TEXT("UC2Audio: %s: failed (nothing playable)"), *Name ));
+			CueLogf( CueLog, S, TEXT("%s: failed (nothing playable)"), *Name );
 		}
 		return;
 	}
@@ -1258,8 +1284,8 @@ void UUC2ALAudioSubsystem::PlaySoundCue( AActor* srcActor, FName soundCue, UBOOL
 		if( Radius < Fudged )
 		{
 			St->Culled++;
-			CUELOG(( NAME_DevSound, TEXT("UC2Audio: %s on %s: culled (distance %.0f, x%.2f for %d cues, radius %.0f)"),
-				*Name, srcActor->GetName(), ClosestDistance, 1.f + S->Insts.Num()/15.f, S->Insts.Num(), Radius ));
+			CueLogf( CueLog, S, TEXT("%s on %s: culled (distance %.0f, x%.2f for %d cues, radius %.0f)"),
+				*Name, srcActor->GetName(), ClosestDistance, 1.f + S->Insts.Num()/15.f, S->Insts.Num(), Radius );
 			return;
 		}
 	}
@@ -1272,7 +1298,7 @@ void UUC2ALAudioSubsystem::PlaySoundCue( AActor* srcActor, FName soundCue, UBOOL
 	if( !Id )
 	{
 		St->Failed++;
-		CUELOG(( NAME_DevSound, TEXT("UC2Audio: %s on %s: failed (nothing playable)"), *Name, srcActor->GetName() ));
+		CueLogf( CueLog, S, TEXT("%s on %s: failed (nothing playable)"), *Name, srcActor->GetName() );
 		return;
 	}
 	if( bAmbient )
@@ -1280,10 +1306,10 @@ void UUC2ALAudioSubsystem::PlaySoundCue( AActor* srcActor, FName soundCue, UBOOL
 	else
 		S->Emitters(E).ActiveCues++;
 	St->Played++;
-	CUELOG(( NAME_DevSound, TEXT("UC2Audio: %s on %s: played %s%s%s"), *Name, srcActor->GetName(),
+	CueLogf( CueLog, S, TEXT("%s on %s: played %s%s%s"), *Name, srcActor->GetName(),
 		b2D ? TEXT("2D") : *FString::Printf( TEXT("3D (distance %.0f)"), ClosestDistance ),
 		bAmbient ? TEXT(", ambient") : TEXT(""),
-		Volume>0.f ? *FString::Printf( TEXT(", Volume %.2f"), Volume ) : TEXT("") ));
+		Volume>0.f ? *FString::Printf( TEXT(", Volume %.2f"), Volume ) : TEXT("") );
 	unguardf(( TEXT("SoundCue: %s"), *soundCue ));
 }
 
@@ -1307,7 +1333,7 @@ void UUC2ALAudioSubsystem::StopSoundCue( AActor* srcActor, FName soundCue )
 		FUC2CueInst& Inst = S->Insts(i);
 		if( Inst.Emitter==E && Inst.Bank==(Packed>>16) && Inst.Cue==(Packed & 0xffff) )
 		{
-			CUELOG(( NAME_DevSound, TEXT("UC2Audio: %s on %s: stopped"), *Inst.Name, srcActor->GetName() ));
+			CueLogf( CueLog, S, TEXT("%s on %s: stopped"), *Inst.Name, srcActor->GetName() );
 			RemoveInst( S, i );
 		}
 	}
@@ -1428,7 +1454,7 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 	const INT* CueIndex = BankIndex>=0 ? S->SoundBanks(BankIndex)->CueIndex.Find( Song ) : NULL;
 	if( !CueIndex || !S->SoundBanks(BankIndex)->Cues(*CueIndex).Sounds.Num() )
 	{
-		CUELOG(( NAME_DevSound, TEXT("UC2Audio: music %s: no such cue in A_Music"), *Song ));
+		CueLogf( CueLog, S, TEXT("music %s: no such cue in A_Music"), *Song );
 		return 0;
 	}
 	FUC2SoundBank* Bank = S->SoundBanks(BankIndex);
@@ -1439,7 +1465,7 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 		W = ResolveVariation( S, Snd.Tracks(0).Variations(0), &WB );
 	if( !W )
 	{
-		CUELOG(( NAME_DevSound, TEXT("UC2Audio: music %s: its wave bank is not cooked"), *Song ));
+		CueLogf( CueLog, S, TEXT("music %s: its wave bank is not cooked"), *Song );
 		return 0;
 	}
 	TArray<BYTE> Data;
@@ -1448,7 +1474,7 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 	M.Stream.Frames = W->Frames;
 	if( !appLoadFileToArray( Data, *File ) || !M.Stream.Open( Data, Error ) )
 	{
-		CUELOG(( NAME_DevSound, TEXT("UC2Audio: music %s: cannot play %s (%s)"), *Song, *File, Error.Len() ? *Error : TEXT("unreadable") ));
+		CueLogf( CueLog, S, TEXT("music %s: cannot play %s (%s)"), *Song, *File, Error.Len() ? *Error : TEXT("unreadable") );
 		return 0;
 	}
 	M.Handle		= S->NextMusicHandle++;
@@ -1472,8 +1498,8 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 	FLOAT MB = M.Volume + CategoryMB( S->CategoryVolumes[VOLUME_Music] );
 	GAL.alSourcef( M.Source, AL_GAIN, MBToGain( Clamp( MB, -10000.f, 0.f ) ) * M.Fade );
 	GAL.alSourcePlay( M.Source );
-	CUELOG(( NAME_DevSound, TEXT("UC2Audio: music %s: playing %s (%d Hz, %d ch, %s, volume %d mB, fade in %.1f s)"),
-		*Song, *File, M.Stream.Rate, M.Stream.Channels, M.bLoop ? TEXT("looping") : TEXT("once"), M.Volume, bFade ? FadeInTime : 0.f ));
+	CueLogf( CueLog, S, TEXT("music %s: playing %s (%d Hz, %d ch, %s, volume %d mB, fade in %.1f s)"),
+		*Song, *File, M.Stream.Rate, M.Stream.Channels, M.bLoop ? TEXT("looping") : TEXT("once"), M.Volume, bFade ? FadeInTime : 0.f );
 	return M.Handle;
 	unguard;
 }
@@ -1490,7 +1516,7 @@ UBOOL UUC2ALAudioSubsystem::StopMusic( INT SongHandle, FLOAT FadeOutTime )
 		FUC2MusicSlot& M = S->Music[i];
 		if( !M.Handle || (SongHandle>0 && SongHandle!=M.Handle) )
 			continue;
-		CUELOG(( NAME_DevSound, TEXT("UC2Audio: music %s: stop (fade out %.1f s)"), *M.Song, MusicFades ? FadeOutTime : 0.f ));
+		CueLogf( CueLog, S, TEXT("music %s: stop (fade out %.1f s)"), *M.Song, MusicFades ? FadeOutTime : 0.f );
 		if( MusicFades && FadeOutTime>0.f )
 		{
 			M.FadeTarget = 0.f;
@@ -1561,19 +1587,30 @@ static void UpdateAmbientCues( UUC2ALAudioSubsystem* Audio, FUC2AudioState* S )
 {
 	guard(UpdateAmbientCues);
 	APlayerController* PC = S->Viewport->Actor;
-	if( S->StaticAmbients.Num()==0 )
+	if( !S->bAmbientsListed )
 	{
+		S->bAmbientsListed = 1;
 		ULevel* Level = PC->GetLevel();
+		INT ZonePresets[UC2_NUM_ZONE_PRESETS];
+		appMemzero( ZonePresets, sizeof(ZonePresets) );
 		for( INT i=0; i<Level->Actors.Num(); i++ )
 		{
 			AAmbientSound* Amb = Cast<AAmbientSound>( Level->Actors(i) );
 			if( Amb && Amb->bStatic )
 				S->StaticAmbients.AddItem( Amb );
+			AZoneInfo* Zone = Cast<AZoneInfo>( Level->Actors(i) );
+			if( Zone && Zone->ZoneAudioEffect < UC2_NUM_ZONE_PRESETS )
+				ZonePresets[Zone->ZoneAudioEffect]++;
 		}
-		debugf( NAME_DevSound, TEXT("UC2Audio: %d static ambient sounds"), S->StaticAmbients.Num() );
-		if( !S->StaticAmbients.Num() )
-			return;
+		FString Zones;
+		for( INT i=0; i<UC2_NUM_ZONE_PRESETS; i++ )
+			if( ZonePresets[i] )
+				Zones += FString::Printf( TEXT(" %s x%d"), GUC2ZonePresets[i].Name, ZonePresets[i] );
+		debugf( NAME_DevSound, TEXT("UC2Audio: %d static ambient sounds; zone reverb presets in this level:%s"),
+			S->StaticAmbients.Num(), *Zones );
 	}
+	if( !S->StaticAmbients.Num() )
+		return;
 	AActor* Listener = PC->Pawn ? (AActor*)PC->Pawn : (AActor*)PC;
 	TArray<INT> Order;
 	TArray<FLOAT> Prio;
@@ -1682,6 +1719,7 @@ void UUC2ALAudioSubsystem::NotifyLevelChange()
 	debugf( NAME_DevSound, TEXT("UC2Audio: level change: stopping %d cues, releasing %d emitters"), S->Insts.Num(), S->Emitters.Num() );
 	S->LastAmbientUpdate = -1.f;
 	S->StaticAmbients.Empty();
+	S->bAmbientsListed = 0;
 	S->ActiveAmbients.Empty();
 	StopAllMusic( 0.f );
 	while( S->Insts.Num() )
@@ -1700,7 +1738,12 @@ void UUC2ALAudioSubsystem::NotifyLevelChange()
 		for( INT s=0; s<S->SoundBanks(i)->Sounds.Num(); s++ )
 			for( INT t=0; t<S->SoundBanks(i)->Sounds(s).Tracks.Num(); t++ )
 				for( INT v=0; v<S->SoundBanks(i)->Sounds(s).Tracks(t).Variations.Num(); v++ )
-					Keep.AddUniqueItem( S->SoundBanks(i)->Sounds(s).Tracks(t).Variations(v).BankName );
+				{
+					// (not AddUniqueItem: TArray::AddItem assigns into unconstructed memory, wrong for FString)
+					const FString& Name = S->SoundBanks(i)->Sounds(s).Tracks(t).Variations(v).BankName;
+					if( Keep.FindItemIndex( Name )==INDEX_NONE )
+						new(Keep) FString( Name );
+				}
 	for( INT i=S->WaveBanks.Num()-1; i>=0; i-- )
 		if( Keep.FindItemIndex( S->WaveBanks(i)->Name )==INDEX_NONE )
 		{
@@ -1733,8 +1776,7 @@ void UUC2ALAudioSubsystem::NotifyZoneChange( AZoneInfo* NewZone )
 	S->ZonePreset = Preset;
 	UC2ALLoadReverb( S->Effect, S->bEAXReverb, GUC2ZonePresets[Preset] );
 	GAL.alAuxiliaryEffectSloti( S->Slot, AL_EFFECTSLOT_EFFECT, S->Effect );
-	debugf( NAME_DevSound, TEXT("UC2Audio: zone %s: reverb preset %s"), NewZone ? NewZone->GetName() : TEXT("none"),
-		GUC2ZonePresets[Preset].Name );
+	CueLogf( 1, S, TEXT("zone %s: reverb preset %s"), NewZone ? NewZone->GetName() : TEXT("none"), GUC2ZonePresets[Preset].Name );
 	unguard;
 }
 

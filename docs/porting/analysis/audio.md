@@ -306,3 +306,54 @@ cues [spa]: 2438 in 78 cue tables: 2414 resolve fully, 6 partly, 18 to no decoda
 UC2AudioCheck: 78 cue tables, 2438 cues, 0 failures
 ```
 The 15 (spa: 18, the three Spanish announcer lines without a source) are exactly the cook's list (Step 1).
+
+## Step 5 - first game runs with sound rendered to a file (A4 (2), in progress; written after a usage-limit cut)
+
+### How a capture is made
+
+`uc2.bin -audiowave=<file.wav>` (or `WaveFile=` in `[UC2ALAudio.UC2ALAudioSubsystem]`): before libopenal is
+loaded, the device writes `System/UC2ALAudio-wave.conf` = `[general] drivers=wave` + `[wave] file=<file>` and
+sets `ALSOFT_CONF` to it and `ALSOFT_DRIVERS=wave`. OpenAL Soft's wave writer then renders the mix in real time
+(48 kHz, stereo, 32-bit float WAV) from the moment the device opens. The cue log (`DevSound`, suppressed by
+Epic's `Default.ini`) is unsuppressed **in the run tree only** by the test scripts. Since this step every cue
+log line carries `[seconds since the device opened]` = the time in the capture.
+
+- `tools/dev/run-uc2-audio.sh <tree> <name> <seconds> <fire-at> <url>`: capped 2G, Xvfb, `-audiowave=`, at
+  `<fire-at>` the same three Fire clicks as `run-uc2-shot.sh` (start the match), then a fixed input loop
+  (random generator seeded 7): hold Up (walk) and Fire 1.2 s, sometimes Space, turn the mouse, AltFire. Writes
+  `logs/<tree>/<name>.{wav,out,png,report.txt,cues.txt}`.
+- `tools/dev/audio-capture-report.sh <wav>`: duration, ffmpeg `astats` peak/RMS, RMS per second, silent seconds,
+  RMS per octave band, spectrogram PNG.
+
+### What the runs found and what was fixed
+
+1. Crash at the first level change (`realloc(): invalid pointer`, found with gdb + glibc's
+   `libc_malloc_debug.so.0`): `TArray<FString>::AddUniqueItem` -> UE2's `AddItem` assigns into unconstructed
+   memory (it is only for types without destructors). Fixed (construct with `new(Array) FString`). Every other
+   `AddItem` in the package is on ints/pointers/PODs (audited).
+2. `logs/m8/menu-2.wav`: 58.7 s, peak -13.0 dBFS, RMS -28.5 dBFS, 0 silent seconds; log: `music NuBattle:
+   playing ../Sounds/../Music/NuBattle.ogg (44100 Hz, 2 ch, looping, volume -900 mB, fade in 3.0 s)` and
+   `A_Gameplay.MenuPageOpened ... played 2D`. RMS per second rises -40, -39, -34, -31, -28 over the first 4 s
+   (the 3 s fade-in of `ClientSetMusic`).
+3. `DM-Deadbolt` without bots (`deadbolt-1`): only countdown, `A_Ann_Female.Play`, spawn and 6 ambients: nobody
+   fires. Runs now use `DM-Deadbolt?NumBots=3` and the input loop.
+4. `deadbolt-2.wav`: music dropped out for 0.3-0.8 s several times (high band -72 dBFS in 100 ms windows at
+   32.4-33.2, 35.3-35.7, 38.2-38.9, 41.1-41.6 s ...): the music stream is refilled from the game thread and its
+   4 x 8192-frame buffers (0.74 s) ran dry during long first-load frames under software GL. Fixed: 4 x 32768
+   frames (3 s). `deadbolt-3.wav`: no such gaps in the spectrogram.
+5. Uncommitted change committed with this step (`UC2ALAudioSubsystem.cpp`): the static-ambient list is built
+   once per level (it was rebuilt, and logged, every second when a level has none: menu spam); the music buffer
+   size above; the timestamped cue log (`CueLogf`); `-NOEFX` (dry comparison runs) and a correct "no EFX" test
+   (the device counts as having EFX only if an EAX or standard reverb effect can actually be created); the
+   level's zone presets listed once per level, e.g. DM-Praxis: `zone reverb presets in this level: Default x2
+   Auditorium x2 Hangar x1 Hallway x9 Underwater x1`.
+
+### Open doubts at this point
+
+- No zone change has been logged yet: DM-Deadbolt's zones are all Default (the string `ZoneAudioEffect` is not
+  in its name table at all); in DM-Praxis the player stayed in a Default zone. A4 (4) needs a spawn or walk into
+  a Hallway/Auditorium zone, or a deliberate zone change.
+- The listener orientation mapping (Unreal X fwd, Y right, Z up -> OpenAL (Y, Z, -X)) has not been checked by
+  measurement (left/right).
+- Priority direction, the default of an unset variation weight (one event mixes them) and "Recurring = fade"
+  are inferences (Step 1 table).
