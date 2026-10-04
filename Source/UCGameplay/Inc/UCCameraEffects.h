@@ -46,16 +46,21 @@ public:
 	//scion jg -- Used by matinee to toggle off the stencil masking
     BITFIELD bUseStencilMask:1;
 	
-	FColor	ModulateBlurColor;
+	FColor	ModulateBlurColor GCC_PACK(4);
 
 	//scion jg -- For all the time on DOF
 	// Start Z is where in the depth buffer the effect starts blending in
 	FLOAT StartZ;
+	// UCScreenDOF.uc declares these two before AbsoluteBlurAlpha and picks one of them into it per camera mode.
+	// This header had fallen behind the script: without them AbsoluteBlurAlpha sat at FirstPersonAlpha's offset
+	// (the class size still matched under MSVC, so the engine's size check never noticed).
+	BYTE FirstPersonAlpha;
+	BYTE ThirdPersonAlpha;
 	// The max amount to blend the blur in at a Z-depth of 1
 	BYTE AbsoluteBlurAlpha;
-	BITFIELD bNeedsAbsoluteUpdate:1;
+	BITFIELD bNeedsAbsoluteUpdate:1 GCC_PACK(4);
 	// min alpha ref for drawing to save fill
-	BYTE AlwaysOnAlphaRef;
+	BYTE AlwaysOnAlphaRef GCC_PACK(4);
 	BYTE DefaultAlphaRef;
 
 	UUCScreenDOF();

@@ -3542,7 +3542,10 @@ UBOOL UObject::ResolveName( UObject*& InPackage, const TCHAR* InName, TCHAR* Out
 			}
 			InPackage = NewPackage;
 		}
-		appStrcpy( OutName, appStrstr(OutName,TEXT("."))+1 );
+		// The source lies inside the destination buffer. strcpy on overlapping strings is undefined (glibc's
+		// corrupts the result); MSVC's byte-by-byte copy happened to work. Move the tail down instead.
+		const TCHAR* Rest = appStrstr(OutName,TEXT("."))+1;
+		appMemmove( OutName, Rest, (appStrlen(Rest)+1)*sizeof(TCHAR) );
 	}
 	return 1;
 	unguard;

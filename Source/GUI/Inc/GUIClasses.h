@@ -328,7 +328,7 @@ struct GUI_API FMultiColumnHeaderData
 class GUI_API UGUI : public UObject
 {
 public:
-    class UGUIController* Controller;
+    class UGUIController* Controller GCC_PACK(4);
     DECLARE_FUNCTION(execAllObjectProperties);
     DECLARE_CLASS(UGUI,UObject,0,GUI)
     NO_DEFAULT_CONSTRUCTOR(UGUI)
@@ -751,7 +751,7 @@ struct UGUIComponent_eventOnPreRender_Parms
 class GUI_API UGUIComponent : public UGUI
 {
 public:
-    class UGUIPage* PageOwner;
+    class UGUIPage* PageOwner GCC_PACK(4);
     class UGUIComponent* MenuOwner;
     class UGUIComponent* FocusInstead;
     TArrayNoInit<class UGUIComponent*> FriendlyComponentList;
@@ -1440,7 +1440,7 @@ struct UGUIButton_eventOnPressStart_Parms
 class GUI_API UGUIButton : public UGUIComponent
 {
 public:
-    FStringNoInit Caption;
+    FStringNoInit Caption GCC_PACK(4);
     class UMaterial* Graphic;
     BYTE Position;
     BYTE Alignment;
@@ -1484,7 +1484,7 @@ struct UGUIEditBox_eventSetText_Parms
 class GUI_API UGUIEditBox : public UGUIButton
 {
 public:
-    FStringNoInit TextStr;
+    FStringNoInit TextStr GCC_PACK(4);
     FStringNoInit AllowedCharSet;
     BITFIELD bMaskText:1 GCC_PACK(4);
     BITFIELD bIntOnly:1;
@@ -1537,7 +1537,7 @@ public:
 class GUI_API UGUIImage : public UGUIComponent
 {
 public:
-    class UMaterial* Image;
+    class UMaterial* Image GCC_PACK(4);
     BYTE ImageStyle;
     BYTE ImageRenderStyle;
     BYTE ImageAlign;
@@ -1556,7 +1556,7 @@ public:
 class GUI_API UGUILabel : public UGUIComponent
 {
 public:
-    FStringNoInit Caption;
+    FStringNoInit Caption GCC_PACK(4);
     BYTE TextAlign;
     BYTE TextStyle;
     FStringNoInit TextFont GCC_PACK(4);
@@ -1631,7 +1631,7 @@ struct UGUIListBase_eventCompareItem_Parms
 class GUI_API UGUIListBase : public UGUIComponent
 {
 public:
-    FStringNoInit ItemStyleName;
+    FStringNoInit ItemStyleName GCC_PACK(4);
     class UGUIStyles* ItemStyle;
     INT Top;
     INT Index;
@@ -1771,7 +1771,7 @@ struct UGUIMultiColumnList_eventOnColumnSized_Parms
 class GUI_API UGUIMultiColumnList : public UGUIVertList
 {
 public:
-    TArrayNoInit<FMultiColumnSortData> SortData;
+    TArrayNoInit<FMultiColumnSortData> SortData GCC_PACK(4);
     TArrayNoInit<INT> InvSortData;
     TArrayNoInit<FMultiColumnHeaderData> Columns;
     TArrayNoInit<FLOAT> ColumnWidths;
@@ -1832,7 +1832,7 @@ struct UGUIScrollText_eventOnEndOfLine_Parms
 class GUI_API UGUIScrollText : public UGUIVertList
 {
 public:
-    BYTE ScrollState;
+    BYTE ScrollState GCC_PACK(4);
     FStringNoInit Content GCC_PACK(4);
     FStringNoInit Separator;
     INT VisibleLines;
@@ -1867,7 +1867,7 @@ public:
 class GUI_API UGUIMultiColumnListHeader : public UGUIComponent
 {
 public:
-    class UGUIMultiColumnList* MyList;
+    class UGUIMultiColumnList* MyList GCC_PACK(4);
     INT SizingCol;
     INT ClickingCol;
     DECLARE_CLASS(UGUIMultiColumnListHeader,UGUIComponent,0|CLASS_Config,GUI)
@@ -1921,7 +1921,7 @@ struct UGUIMultiComponent_eventOnCreateControl_Parms
 class GUI_API UGUIMultiComponent : public UGUIComponent
 {
 public:
-    TArrayNoInit<class UGUIComponent*> Controls;
+    TArrayNoInit<class UGUIComponent*> Controls GCC_PACK(4);
     TArrayNoInit<class UGUIComponent*> Components;
     class UGUIComponent* FocusedControl[2];
     INT AnimationCount;
@@ -2021,7 +2021,7 @@ public:
 class GUI_API UGUIListBoxBase : public UGUIMultiComponent
 {
 public:
-    class UGUIScrollBarBase* MyScrollBar;
+    class UGUIScrollBarBase* MyScrollBar GCC_PACK(4);
     class UGUIListBase* MyList;
     BITFIELD bVisibleWhenEmpty:1 GCC_PACK(4);
     BITFIELD bUseStart:1;
@@ -2035,7 +2035,7 @@ public:
 class GUI_API UGUIListBox : public UGUIListBoxBase
 {
 public:
-    class UGUIListBase* List;
+    class UGUIListBase* List GCC_PACK(4);
     DECLARE_CLASS(UGUIListBox,UGUIListBoxBase,0|CLASS_Config,GUI)
     NO_DEFAULT_CONSTRUCTOR(UGUIListBox)
 };
@@ -2044,7 +2044,7 @@ public:
 class GUI_API UGUIMultiColumnListBox : public UGUIListBoxBase
 {
 public:
-    class UGUIMultiColumnListHeader* Header;
+    class UGUIMultiColumnListHeader* Header GCC_PACK(4);
     BITFIELD bDisplayHeader:1 GCC_PACK(4);
     class UGUIMultiColumnList* List GCC_PACK(4);
     FStringNoInit DefaultListClass;
@@ -2059,7 +2059,7 @@ public:
 class GUI_API UGUIScrollTextBox : public UGUIListBoxBase
 {
 public:
-    class UGUIScrollText* MyScrollText;
+    class UGUIScrollText* MyScrollText GCC_PACK(4);
     BITFIELD bRepeat:1 GCC_PACK(4);
     BITFIELD bNoTeletype:1;
     BITFIELD bStripColors:1;
@@ -2084,7 +2084,7 @@ struct UGUIMenuOption_eventGetMinimumSize_Parms
 class GUI_API UGUIMenuOption : public UGUIMultiComponent
 {
 public:
-    class UGUILabel* MyLabel;
+    class UGUILabel* MyLabel GCC_PACK(4);
     class UGUIComponent* MyComponent;
     FStringNoInit Caption;
     FStringNoInit ComponentClassName;
@@ -2209,7 +2209,7 @@ public:
     BITFIELD bRestorable:1;
     BITFIELD bRequiresLive:1;
     BITFIELD bRequiresNetwork:1;
-    BITFIELD bPendingGameInvite:1 GCC_PACK(4);
+    BITFIELD bPendingGameInvite:1;
     BITFIELD bPendingFriendInvite:1;
     class UGUIPage* ParentPage GCC_PACK(4);
     FName OpenSound;
@@ -2343,7 +2343,7 @@ public:
 class GUI_API UGUIScrollingPanel : public UGUIPanel
 {
 public:
-    class UGUIScrollFrame* pnl_Frame;
+    class UGUIScrollFrame* pnl_Frame GCC_PACK(4);
     class UGUIVertScrollZone* zone_Scroll;
     class UGUIVertScrollButton* btn_Up;
     class UGUIVertScrollButton* btn_Down;
@@ -2359,7 +2359,7 @@ public:
     FLOAT ButtonOffsetY;
     BITFIELD bStepByPanelCount:1 GCC_PACK(4);
     BITFIELD bUpdateLayout:1;
-    BITFIELD bScrollbarVisible:1 GCC_PACK(4);
+    BITFIELD bScrollbarVisible:1;
     DECLARE_CLASS(UGUIScrollingPanel,UGUIPanel,0|CLASS_Config,GUI)
 	void Draw( UCanvas* Canvas );
 };
@@ -2371,7 +2371,7 @@ struct UGUIScrollBarBase_eventAlignThumb_Parms
 class GUI_API UGUIScrollBarBase : public UGUIMultiComponent
 {
 public:
-    class UGUIListBase* MyList;
+    class UGUIListBase* MyList GCC_PACK(4);
     void eventAlignThumb()
     {
         ProcessEvent(FindFunctionChecked(GUI_AlignThumb),NULL);
@@ -2384,7 +2384,7 @@ public:
 class GUI_API UGUIVertScrollBar : public UGUIScrollBarBase
 {
 public:
-    class UGUIVertScrollZone* MyScrollZone;
+    class UGUIVertScrollZone* MyScrollZone GCC_PACK(4);
     class UGUIVertScrollButton* MyUpButton;
     class UGUIVertScrollButton* MyDownButton;
     class UGUIVertGripButton* MyGripButton;
@@ -2403,7 +2403,7 @@ struct UGUIVertScrollZone_eventOnScrollZoneClick_Parms
 class GUI_API UGUIVertScrollZone : public UGUIComponent
 {
 public:
-    FScriptDelegate __OnScrollZoneClick__Delegate;
+    FScriptDelegate __OnScrollZoneClick__Delegate GCC_PACK(4);
     void delegateOnScrollZoneClick(FLOAT Delta)
     {
         UGUIVertScrollZone_eventOnScrollZoneClick_Parms Parms;
@@ -2423,7 +2423,7 @@ struct UGUIFont_eventGetFont_Parms
 class GUI_API UGUIFont : public UGUI
 {
 public:
-    FStringNoInit KeyName;
+    FStringNoInit KeyName GCC_PACK(4);
     BITFIELD bFixedSize:1 GCC_PACK(4);
     TArrayNoInit<FString> FontArrayNames GCC_PACK(4);
     TArrayNoInit<class UFont*> FontArrayFonts;
@@ -2469,7 +2469,7 @@ struct UGUIStyles_eventOnDraw_Parms
 class GUI_API UGUIStyles : public UGUI
 {
 public:
-    FStringNoInit KeyName;
+    FStringNoInit KeyName GCC_PACK(4);
     BYTE RStyles[5];
     class UMaterial* Images[5] GCC_PACK(4);
     BYTE ImgStyle[5];
@@ -2774,7 +2774,7 @@ struct UGUIController_eventGetViewport_Parms
 class GUI_API UGUIController : public UBaseGUIController
 {
 public:
-    BYTE RepeatKey[4];
+    BYTE RepeatKey[4] GCC_PACK(4);
     BYTE ControllerMask;
     BYTE ControllerId;
     BITFIELD bIgnoreNextRelease:1 GCC_PACK(4);
@@ -2800,7 +2800,7 @@ public:
     BITFIELD bUnlockRaiden:1;
     BITFIELD bIgnoreTeaser:1;
     BITFIELD bShowAllMuts:1;
-    BITFIELD bPendingServerTravel:1 GCC_PACK(4);
+    BITFIELD bPendingServerTravel:1;
     BITFIELD bAttractEnabled:1;
     BITFIELD bDebugViewports:1;
     BITFIELD bOverlayDisabled:1;
@@ -3235,7 +3235,7 @@ public:
 class GUI_API UPropertyManagerBase : public UObject
 {
 public:
-    class UGUIController* Parent;
+    class UGUIController* Parent GCC_PACK(4);
     DECLARE_CLASS(UPropertyManagerBase,UObject,0,GUI)
 	virtual void SetParent( UGUIController* InParent ) {}
 	virtual void SetCurrent( UObject** InCurrent )     {}
@@ -3274,7 +3274,7 @@ struct UXboxLiveInterface_eventOnQueryCompletion_Parms
 class GUI_API UXboxLiveInterface : public UObject
 {
 public:
-    TArrayNoInit<FbeaconInformation> allBeacons;
+    TArrayNoInit<FbeaconInformation> allBeacons GCC_PACK(4);
     BITFIELD bUseOptimatch:1 GCC_PACK(4);
     INT GameTypeNdx GCC_PACK(4);
     INT MinPlayers;

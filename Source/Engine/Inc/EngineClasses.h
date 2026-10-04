@@ -743,7 +743,7 @@ public:
     BITFIELD bDebug:1;
     BITFIELD bDebugAnim:1;
     BITFIELD bNetDebug:1;
-    BITFIELD bTicked:1 GCC_PACK(4);
+    BITFIELD bTicked:1;
     BITFIELD bShouldStopKarma:1;
     BITFIELD bNetDirty:1;
     BITFIELD bEdSnap:1;
@@ -1304,7 +1304,7 @@ enum ECsgOper
 class ENGINE_API ABrush : public AActor
 {
 public:
-    BYTE CsgOper;
+    BYTE CsgOper GCC_PACK(4);
     class UObject* UnusedLightMesh GCC_PACK(4);
     FVector PostPivot;
     FScale MainScale;
@@ -1321,7 +1321,7 @@ public:
 class ENGINE_API AVolume : public ABrush
 {
 public:
-    class AActor* AssociatedActor;
+    class AActor* AssociatedActor GCC_PACK(4);
     FName AssociatedActorTag;
     INT LocationPriority;
     FStringNoInit LocationName;
@@ -1571,7 +1571,7 @@ struct AController_eventMayFall_Parms
 class ENGINE_API AController : public AActor
 {
 public:
-    class APawn* Pawn;
+    class APawn* Pawn GCC_PACK(4);
     class APawn* OldPawn;
     INT PlayerNum;
     FLOAT SightCounter;
@@ -2139,10 +2139,10 @@ public:
     BITFIELD bThirdPerson:1;
     BITFIELD bTransThirdToFirst:1;
     BITFIELD bVisionModeActive:1;
-    BITFIELD bWasInvited:1 GCC_PACK(4);
+    BITFIELD bWasInvited:1;
     BITFIELD bCheckedDisconnect:1;
     BITFIELD bAdmin:1;
-    BITFIELD PendingTravelbItems:1 GCC_PACK(4);
+    BITFIELD PendingTravelbItems:1;
     FStringNoInit PendingTravelURL GCC_PACK(4);
     BYTE PendingTravelType;
     BYTE AnnouncerLevel;
@@ -2563,7 +2563,7 @@ public:
 class ENGINE_API ADecoration : public AActor
 {
 public:
-    class UClass* EffectWhenDestroyed;
+    class UClass* EffectWhenDestroyed GCC_PACK(4);
     BITFIELD bPushable:1 GCC_PACK(4);
     BITFIELD bDamageable:1;
     BITFIELD bPushSoundPlaying:1;
@@ -2582,7 +2582,7 @@ public:
 class ENGINE_API AEmitter : public AActor
 {
 public:
-    TArrayNoInit<class UParticleEmitter*> Emitters;
+    TArrayNoInit<class UParticleEmitter*> Emitters GCC_PACK(4);
     BITFIELD AutoDestroy:1 GCC_PACK(4);
     BITFIELD AutoReset:1;
     BITFIELD DisableFogging:1;
@@ -2611,7 +2611,7 @@ public:
 class ENGINE_API AFluidSurfaceOscillator : public AActor
 {
 public:
-    class AFluidSurfaceInfo* FluidInfo;
+    class AFluidSurfaceInfo* FluidInfo GCC_PACK(4);
     FLOAT Frequency;
     BYTE Phase;
     FLOAT Strength GCC_PACK(4);
@@ -2687,7 +2687,7 @@ struct AHUD_eventWorldSpaceOverlays_Parms
 class ENGINE_API AHUD : public AActor
 {
 public:
-    class UFont* SmallFont;
+    class UFont* SmallFont GCC_PACK(4);
     class UFont* MedFont;
     class UFont* BigFont;
     class UFont* LargeFont;
@@ -2835,7 +2835,7 @@ public:
 class ENGINE_API AFileLog : public AInfo
 {
 public:
-    INT LogAr;
+    INT LogAr GCC_PACK(4);
     FStringNoInit LogFileName;
     DECLARE_FUNCTION(execLogf);
     DECLARE_FUNCTION(execCloseLog);
@@ -2963,7 +2963,7 @@ public:
     BITFIELD bNoAdrenForBots:1;
     BITFIELD bRegisterGameOnline:1;
     BITFIELD bScoreSuicides:1;
-    BITFIELD bStatsLocked:1 GCC_PACK(4);
+    BITFIELD bStatsLocked:1;
     FLOAT GameDifficulty GCC_PACK(4);
     INT GoreLevel;
     FLOAT AutoAim;
@@ -3150,7 +3150,7 @@ public:
 class ENGINE_API AMutator : public AInfo
 {
 public:
-    class AMutator* NextMutator;
+    class AMutator* NextMutator GCC_PACK(4);
     class UClass* DefaultWeapon;
     FStringNoInit GroupName;
     FStringNoInit FriendlyName;
@@ -3209,7 +3209,7 @@ public:
 class ENGINE_API AExtraPlayerReplicationInfo : public AReplicationInfo
 {
 public:
-    class AExtraPlayerReplicationInfo* NextExtraPRI;
+    class AExtraPlayerReplicationInfo* NextExtraPRI GCC_PACK(4);
     DECLARE_CLASS(AExtraPlayerReplicationInfo,AReplicationInfo,0|CLASS_Config|CLASS_NativeReplication,Engine)
 	INT* GetOptimizedRepList(BYTE* InDefault, FPropertyRetirement* Retire, INT* Ptr, UPackageMap* Map, UActorChannel* Channel);
 };
@@ -3230,7 +3230,7 @@ struct AGameReplicationInfo_eventGetServerName_Parms
 class ENGINE_API AGameReplicationInfo : public AReplicationInfo
 {
 public:
-    class UClass* GameClass;
+    class UClass* GameClass GCC_PACK(4);
     BITFIELD bTeamGame:1 GCC_PACK(4);
     BITFIELD bStopCountDown:1;
     BITFIELD bMatchHasBegun:1;
@@ -3293,7 +3293,7 @@ struct APlayerReplicationInfo_eventClientNameChange_Parms
 class ENGINE_API APlayerReplicationInfo : public AReplicationInfo
 {
 public:
-    FLOAT Score;
+    FLOAT Score GCC_PACK(4);
     FLOAT Deaths;
     class ACarriedObject* HasFlag;
     INT Ping;
@@ -3323,7 +3323,7 @@ public:
     BITFIELD bDoneLoading:1;
     BITFIELD bRespawnWhenDelayExpires:1;
     BITFIELD bTeamChat:1;
-    BITFIELD bRegisteredUIX:1 GCC_PACK(4);
+    BITFIELD bRegisteredUIX:1;
     class UPlayerStatCache* StatCache GCC_PACK(4);
     class AExtraPlayerReplicationInfo* ExtraPRI;
     class UClass* PawnClass;
@@ -3382,7 +3382,7 @@ struct ENGINE_API FTeamColorsScheme
 class ENGINE_API ATeamInfo : public AReplicationInfo
 {
 public:
-    FStringNoInit TeamName;
+    FStringNoInit TeamName GCC_PACK(4);
     INT Size;
     FLOAT Score;
     INT TeamIndex;
@@ -3398,7 +3398,7 @@ public:
 class ENGINE_API ASavedMove : public AInfo
 {
 public:
-    class ASavedMove* NextMove;
+    class ASavedMove* NextMove GCC_PACK(4);
     FLOAT TimeStamp;
     FLOAT Delta;
     BITFIELD bPressedJump:1 GCC_PACK(4);
@@ -3568,7 +3568,7 @@ struct ALevelInfo_eventLevelDetailChange_Parms
 class ENGINE_API ALevelInfo : public AZoneInfo
 {
 public:
-    FLOAT TimeDilation;
+    FLOAT TimeDilation GCC_PACK(4);
     FLOAT TimeSeconds;
     INT Year;
     INT Month;
@@ -3787,7 +3787,7 @@ enum EAmmoCategory
 class ENGINE_API AAmmunition : public AInventory
 {
 public:
-    BYTE AmmoType;
+    BYTE AmmoType GCC_PACK(4);
     FLOAT MaxAmmo GCC_PACK(4);
     FLOAT AmmoAmount;
     INT PickupAmmo;
@@ -3846,7 +3846,7 @@ struct AWeapon_eventAmmoStatus_Parms
 class ENGINE_API AWeapon : public AInventory
 {
 public:
-    class UClass* AmmoClass;
+    class UClass* AmmoClass GCC_PACK(4);
     INT PickupAmmoCount;
     FLOAT AmmoAmount;
     BITFIELD bPointing:1 GCC_PACK(4);
@@ -3968,7 +3968,7 @@ struct AWeaponAttachment_eventPendingDestroy_Parms
 class ENGINE_API AWeaponAttachment : public AInventoryAttachment
 {
 public:
-    BYTE FlashCount;
+    BYTE FlashCount GCC_PACK(4);
     FName FiringMode GCC_PACK(4);
     FLOAT FiringSpeed;
     BITFIELD bReplicateToAll:1 GCC_PACK(4);
@@ -3997,7 +3997,7 @@ public:
 class ENGINE_API AAIScript : public AKeypoint
 {
 public:
-    class UClass* ControllerClass;
+    class UClass* ControllerClass GCC_PACK(4);
     BITFIELD bNavigate:1 GCC_PACK(4);
     BITFIELD bLoggingEnabled:1;
     class AAIMarker* myMarker GCC_PACK(4);
@@ -4050,7 +4050,7 @@ public:
 class ENGINE_API ALight : public AActor
 {
 public:
-    FLOAT MinCoronaSize;
+    FLOAT MinCoronaSize GCC_PACK(4);
     FLOAT MaxCoronaSize;
     FLOAT CoronaRotation;
     FLOAT CoronaRotationOffset;
@@ -4202,7 +4202,7 @@ struct ANavigationPoint_eventSpecialCost_Parms
 class ENGINE_API ANavigationPoint : public AActor
 {
 public:
-    TArrayNoInit<class UReachSpec*> PathList;
+    TArrayNoInit<class UReachSpec*> PathList GCC_PACK(4);
     FName ProscribedPaths[4];
     FName ForcedPaths[4];
     INT visitedWeight;
@@ -4232,7 +4232,7 @@ public:
     BITFIELD bSpecialForced:1;
     BITFIELD bMustBeReachable:1;
     BITFIELD bAcceptRaidenTeleport:1;
-    BITFIELD bEndPoint:1 GCC_PACK(4);
+    BITFIELD bEndPoint:1;
     BITFIELD bTransientEndPoint:1;
     class APickup* InventoryCache GCC_PACK(4);
     TArrayNoInit<FLOAT> ObjectiveDist;
@@ -4283,7 +4283,7 @@ public:
 class ENGINE_API ADoor : public ANavigationPoint
 {
 public:
-    FName DoorTag;
+    FName DoorTag GCC_PACK(4);
     class AMover* MyDoor;
     FName DoorTrigger;
     class AActor* RecommendedTrigger;
@@ -4314,7 +4314,7 @@ public:
 class ENGINE_API AJumpPad : public ANavigationPoint
 {
 public:
-    FVector JumpVelocity;
+    FVector JumpVelocity GCC_PACK(4);
     class AActor* JumpTarget;
     FLOAT JumpZModifier;
     FName JumpSound;
@@ -4329,7 +4329,7 @@ public:
 class ENGINE_API ALiftCenter : public ANavigationPoint
 {
 public:
-    FName LiftTag;
+    FName LiftTag GCC_PACK(4);
     class AMover* MyLift;
     FName LiftTrigger;
     class ATrigger* RecommendedTrigger;
@@ -4375,7 +4375,7 @@ public:
 class ENGINE_API AAIMarker : public ASmallNavigationPoint
 {
 public:
-    class AAIScript* markedScript;
+    class AAIScript* markedScript GCC_PACK(4);
     DECLARE_CLASS(AAIMarker,ASmallNavigationPoint,0|CLASS_Config,Engine)
 	virtual UBOOL IsIdentifiedAs(FName ActorName);
 };
@@ -4384,7 +4384,7 @@ public:
 class ENGINE_API AInventorySpot : public ASmallNavigationPoint
 {
 public:
-    class APickup* markedItem;
+    class APickup* markedItem GCC_PACK(4);
     DECLARE_CLASS(AInventorySpot,ASmallNavigationPoint,0|CLASS_Config,Engine)
 	virtual UBOOL IsIdentifiedAs(FName ActorName);
     virtual AInventorySpot* GetAInventorySpot() { return this; }
@@ -4394,7 +4394,7 @@ public:
 class ENGINE_API APlayerStart : public ASmallNavigationPoint
 {
 public:
-    BYTE TeamNumber;
+    BYTE TeamNumber GCC_PACK(4);
     BITFIELD bSinglePlayerStart:1 GCC_PACK(4);
     BITFIELD bCoopStart:1;
     BITFIELD bEnabled:1;
@@ -4409,7 +4409,7 @@ public:
 class ENGINE_API ATeleporter : public ASmallNavigationPoint
 {
 public:
-    FStringNoInit URL;
+    FStringNoInit URL GCC_PACK(4);
     FName ProductRequired;
     BITFIELD bChangesVelocity:1 GCC_PACK(4);
     BITFIELD bChangesYaw:1;
@@ -4429,7 +4429,7 @@ public:
 class ENGINE_API ANote : public AActor
 {
 public:
-    FStringNoInit Text;
+    FStringNoInit Text GCC_PACK(4);
     DECLARE_CLASS(ANote,AActor,0|CLASS_Config,Engine)
     #include "ANote.h"
 };
@@ -4534,7 +4534,7 @@ struct APawn_eventTraceHitExtendedCyl_Parms
 class ENGINE_API APawn : public AActor
 {
 public:
-    class AController* Controller;
+    class AController* Controller GCC_PACK(4);
     class APawn* NextPawn;
     FLOAT NetRelevancyTime;
     class APlayerController* LastRealViewer;
@@ -4869,7 +4869,7 @@ public:
 class ENGINE_API AScout : public APawn
 {
 public:
-    FLOAT MaxLandingVelocity;
+    FLOAT MaxLandingVelocity GCC_PACK(4);
     DECLARE_CLASS(AScout,APawn,0|CLASS_Config,Engine)
     #include "AScout.h"
 };
@@ -4919,7 +4919,7 @@ public:
 class ENGINE_API AAmmo : public APickup
 {
 public:
-    INT AmmoAmount;
+    INT AmmoAmount GCC_PACK(4);
     DECLARE_CLASS(AAmmo,APickup,0|CLASS_Config,Engine)
     NO_DEFAULT_CONSTRUCTOR(AAmmo)
 };
@@ -4973,7 +4973,7 @@ enum EProjectorBlending
 class ENGINE_API AProjector : public AActor
 {
 public:
-    BYTE MaterialBlendingOp;
+    BYTE MaterialBlendingOp GCC_PACK(4);
     BYTE FrameBufferBlendingOp;
     class UMaterial* ProjTexture GCC_PACK(4);
     INT FOV;
@@ -5025,7 +5025,7 @@ enum EShadowDetail
 class ENGINE_API AShadowProjector : public AProjector
 {
 public:
-    class AActor* ShadowActor;
+    class AActor* ShadowActor GCC_PACK(4);
     FVector LightDirection;
     FLOAT LightDistance;
     BITFIELD RootMotion:1 GCC_PACK(4);
@@ -5052,7 +5052,7 @@ enum ERootMotionMode
 class ENGINE_API ARootMotionActor : public AActor
 {
 public:
-    BYTE RootMotionMode;
+    BYTE RootMotionMode GCC_PACK(4);
     FVector LastRootPosition GCC_PACK(4);
     DECLARE_CLASS(ARootMotionActor,AActor,0|CLASS_Config,Engine)
     NO_DEFAULT_CONSTRUCTOR(ARootMotionActor)
@@ -5074,7 +5074,7 @@ struct ASceneManager_eventSceneStarted_Parms
 class ENGINE_API ASceneManager : public AActor
 {
 public:
-    TArrayNoInit<class UMatAction*> Actions;
+    TArrayNoInit<class UMatAction*> Actions GCC_PACK(4);
     BYTE Affect;
     class AActor* TriggerActor GCC_PACK(4);
     class AActor* AffectedActor;
@@ -5126,7 +5126,7 @@ struct ENGINE_API FRelativePositionRotation
 class ENGINE_API AUCComboSceneManager : public ASceneManager
 {
 public:
-    TArrayNoInit<FRelativePositionRotation> IPSpawnPositions;
+    TArrayNoInit<FRelativePositionRotation> IPSpawnPositions GCC_PACK(4);
     TArrayNoInit<class AInterpolationPoint*> InterpolationPoints;
     TArrayNoInit<FRelativePositionRotation> ActorSpawnPositions;
     TArrayNoInit<class AActor*> ActorList;
@@ -5176,7 +5176,7 @@ struct ALineOfSightTrigger_eventPlayerSeesMe_Parms
 class ENGINE_API ALineOfSightTrigger : public ATriggers
 {
 public:
-    FLOAT MaxViewDist;
+    FLOAT MaxViewDist GCC_PACK(4);
     FLOAT OldTickTime;
     BITFIELD bEnabled:1 GCC_PACK(4);
     BITFIELD bTriggered:1;
@@ -5208,7 +5208,7 @@ enum ETriggerType
 class ENGINE_API ATrigger : public ATriggers
 {
 public:
-    BYTE TriggerType;
+    BYTE TriggerType GCC_PACK(4);
     FStringNoInit Message GCC_PACK(4);
     BITFIELD bTriggerOnceOnly:1 GCC_PACK(4);
     BITFIELD bInitiallyActive:1;
@@ -5259,7 +5259,7 @@ struct ENGINE_API FWeatherPcl
 class ENGINE_API AxWeatherEffect : public AActor
 {
 public:
-    BYTE WeatherType;
+    BYTE WeatherType GCC_PACK(4);
     INT numParticles GCC_PACK(4);
     INT numActive;
     FBox Box;
@@ -5309,7 +5309,7 @@ public:
 class ENGINE_API UAnimNotify : public UObject
 {
 public:
-    INT Revision;
+    INT Revision GCC_PACK(4);
     DECLARE_CLASS(UAnimNotify,UObject,0,Engine)
 	
 	virtual void Notify( UMeshInstance *Instance, AActor *Owner ) {};
@@ -5321,7 +5321,7 @@ public:
 class ENGINE_API UAnimNotify_DestroyEffect : public UAnimNotify
 {
 public:
-    FName DestroyTag;
+    FName DestroyTag GCC_PACK(4);
     BITFIELD bExpireParticles:1 GCC_PACK(4);
     DECLARE_CLASS(UAnimNotify_DestroyEffect,UAnimNotify,0,Engine)
 	
@@ -5332,7 +5332,7 @@ public:
 class ENGINE_API UAnimNotify_Effect : public UAnimNotify
 {
 public:
-    class UClass* EffectClass;
+    class UClass* EffectClass GCC_PACK(4);
     FName Bone;
     FVector OffsetLocation;
     FRotator OffsetRotation;
@@ -5350,7 +5350,7 @@ public:
 class ENGINE_API UAnimNotify_LIPSinc : public UAnimNotify
 {
 public:
-    FName LIPSincAnimName;
+    FName LIPSincAnimName GCC_PACK(4);
     FLOAT Volume;
     INT Radius;
     FLOAT Pitch;
@@ -5363,7 +5363,7 @@ public:
 class ENGINE_API UAnimNotify_MatSubAction : public UAnimNotify
 {
 public:
-    class UMatSubAction* SubAction;
+    class UMatSubAction* SubAction GCC_PACK(4);
     DECLARE_CLASS(UAnimNotify_MatSubAction,UAnimNotify,0,Engine)
 	
 	virtual void Notify( UMeshInstance *Instance, AActor *Owner );
@@ -5373,7 +5373,7 @@ public:
 class ENGINE_API UAnimNotify_Script : public UAnimNotify
 {
 public:
-    FName NotifyName;
+    FName NotifyName GCC_PACK(4);
     class UFunction* FuncCache;
     DECLARE_CLASS(UAnimNotify_Script,UAnimNotify,0,Engine)
 	
@@ -5403,7 +5403,7 @@ public:
 class ENGINE_API UAnimNotify_Sound : public UAnimNotify
 {
 public:
-    FName Sound;
+    FName Sound GCC_PACK(4);
     FLOAT Volume;
     INT Radius;
     DECLARE_CLASS(UAnimNotify_Sound,UAnimNotify,0,Engine)
@@ -5415,7 +5415,7 @@ public:
 class ENGINE_API UCameraEffect : public UObject
 {
 public:
-    FLOAT Alpha;
+    FLOAT Alpha GCC_PACK(4);
     BITFIELD FinalEffect:1 GCC_PACK(4);
     BITFIELD Reset:1;
     BYTE Enabled GCC_PACK(4);
@@ -5431,7 +5431,7 @@ public:
 class ENGINE_API UScreenFade : public UCameraEffect
 {
 public:
-    FColor FadeColor;
+    FColor FadeColor GCC_PACK(4);
     BITFIELD bFadeOut:1 GCC_PACK(4);
     FLOAT FadeTime GCC_PACK(4);
     BITFIELD bDisableOnComplete:1 GCC_PACK(4);
@@ -5446,7 +5446,7 @@ public:
 class ENGINE_API UScreenFlash : public UCameraEffect
 {
 public:
-    FVector FlashScale;
+    FVector FlashScale GCC_PACK(4);
     FVector FlashFog;
     BITFIELD bIsThirdPerson:1 GCC_PACK(4);
     BITFIELD bAllowThirdPersonFlash:1;
@@ -5459,7 +5459,7 @@ public:
 class ENGINE_API UCheatManager : public UObject
 {
 public:
-    FRotator LockedRotation;
+    FRotator LockedRotation GCC_PACK(4);
     BITFIELD bAllowCheating:1 GCC_PACK(4);
     DECLARE_CLASS(UCheatManager,UObject,0,Engine)
     NO_DEFAULT_CONSTRUCTOR(UCheatManager)
@@ -5483,7 +5483,7 @@ enum EDmgType
 class ENGINE_API UDamageType : public UObject
 {
 public:
-    FStringNoInit DeathString;
+    FStringNoInit DeathString GCC_PACK(4);
     FStringNoInit FemaleSuicide;
     FStringNoInit MaleSuicide;
     BITFIELD bArmorStops:1 GCC_PACK(4);
@@ -6108,7 +6108,7 @@ struct UBaseGUIController_eventOnAdminReply_Parms
 class ENGINE_API UBaseGUIController : public UInteraction
 {
 public:
-    class UMaterial* DefaultPens[3];
+    class UMaterial* DefaultPens[3] GCC_PACK(4);
     BITFIELD bIsConsole:1 GCC_PACK(4);
     BITFIELD bLostConnection:1;
     FScriptDelegate __OnAdminReply__Delegate GCC_PACK(4);
@@ -6237,7 +6237,7 @@ public:
 class ENGINE_API UConsole : public UInteraction
 {
 public:
-    class UFont* ConsoleFont;
+    class UFont* ConsoleFont GCC_PACK(4);
     BYTE ConsoleKey;
     INT HistoryTop GCC_PACK(4);
     INT HistoryBot;
@@ -6312,7 +6312,7 @@ struct UInteractionMaster_eventAddInteraction_Parms
 class ENGINE_API UInteractionMaster : public UInteractions
 {
 public:
-    class UClient* Client;
+    class UClient* Client GCC_PACK(4);
     class UInteraction* Console;
     class UAbstractUIXInteraction* UIX;
     TArrayNoInit<class UInteraction*> GlobalInteractions;
@@ -6407,7 +6407,7 @@ public:
 class ENGINE_API ULevelSummary : public UObject
 {
 public:
-    FStringNoInit Title;
+    FStringNoInit Title GCC_PACK(4);
     FStringNoInit Author;
     INT IdealPlayerCount;
     FStringNoInit LevelEnterText;
@@ -6443,7 +6443,7 @@ struct UMatAction_eventBeginAction_Parms
 class ENGINE_API UMatAction : public UMatObject
 {
 public:
-    class AInterpolationPoint* IntPoint;
+    class AInterpolationPoint* IntPoint GCC_PACK(4);
     FStringNoInit Comment;
     FLOAT Duration;
     TArrayNoInit<class UMatSubAction*> SubActions;
@@ -6480,7 +6480,7 @@ public:
 class ENGINE_API UActionAttachCameraToBone : public UMatAction
 {
 public:
-    class AActor* AttachTo;
+    class AActor* AttachTo GCC_PACK(4);
     FName BoneName;
     FVector OffsetBy;
     FRotator RotateBy;
@@ -6502,7 +6502,7 @@ enum EPathStyle
 class ENGINE_API UActionMoveCamera : public UMatAction
 {
 public:
-    BYTE PathStyle;
+    BYTE PathStyle GCC_PACK(4);
     DECLARE_CLASS(UActionMoveCamera,UMatAction,0|CLASS_Config,Engine)
     NO_DEFAULT_CONSTRUCTOR(UActionMoveCamera)
 };
@@ -6527,7 +6527,7 @@ struct UMatSubAction_eventBeginSubAction_Parms
 class ENGINE_API UMatSubAction : public UMatObject
 {
 public:
-    FLOAT Delay;
+    FLOAT Delay GCC_PACK(4);
     FLOAT Duration;
     class UTexture* Icon;
     BYTE Status;
@@ -6555,7 +6555,7 @@ public:
 class ENGINE_API USubActionCameraShake : public UMatSubAction
 {
 public:
-    FRangeVector Shake;
+    FRangeVector Shake GCC_PACK(4);
     DECLARE_CLASS(USubActionCameraShake,UMatSubAction,0,Engine)
     #include "USubActionCameraShake.h"
 };
@@ -6564,7 +6564,7 @@ public:
 class ENGINE_API USubActionFOV : public UMatSubAction
 {
 public:
-    FRange FOV;
+    FRange FOV GCC_PACK(4);
     DECLARE_CLASS(USubActionFOV,UMatSubAction,0,Engine)
     #include "USubActionFOV.h"
 };
@@ -6573,7 +6573,7 @@ public:
 class ENGINE_API USubActionFade : public UMatSubAction
 {
 public:
-    FColor FadeColor;
+    FColor FadeColor GCC_PACK(4);
     BITFIELD bFadeOut:1 GCC_PACK(4);
     DECLARE_CLASS(USubActionFade,UMatSubAction,0,Engine)
     #include "USubActionFade.h"
@@ -6583,7 +6583,7 @@ public:
 class ENGINE_API USubActionGameSpeed : public UMatSubAction
 {
 public:
-    FRange GameSpeed;
+    FRange GameSpeed GCC_PACK(4);
     DECLARE_CLASS(USubActionGameSpeed,UMatSubAction,0,Engine)
     #include "USubActionGameSpeed.h"
 };
@@ -6592,7 +6592,7 @@ public:
 class ENGINE_API USubActionOrientation : public UMatSubAction
 {
 public:
-    FOrientation CamOrientation;
+    FOrientation CamOrientation GCC_PACK(4);
     DECLARE_CLASS(USubActionOrientation,UMatSubAction,0,Engine)
     #include "USubActionOrientation.h"
 };
@@ -6601,7 +6601,7 @@ public:
 class ENGINE_API USubActionSceneSpeed : public UMatSubAction
 {
 public:
-    FRange SceneSpeed;
+    FRange SceneSpeed GCC_PACK(4);
     DECLARE_CLASS(USubActionSceneSpeed,UMatSubAction,0,Engine)
     #include "USubActionSceneSpeed.h"
 };
@@ -6610,7 +6610,7 @@ public:
 class ENGINE_API USubActionTrigger : public UMatSubAction
 {
 public:
-    FName EventName;
+    FName EventName GCC_PACK(4);
     DECLARE_CLASS(USubActionTrigger,UMatSubAction,0,Engine)
     #include "USubActionTrigger.h"
 };
@@ -6640,7 +6640,7 @@ enum EColorOperation
 class ENGINE_API UCombiner : public UMaterial
 {
 public:
-    BYTE CombineOperation;
+    BYTE CombineOperation GCC_PACK(4);
     BYTE AlphaOperation;
     class UMaterial* Material1 GCC_PACK(4);
     class UMaterial* Material2;
@@ -6656,7 +6656,7 @@ public:
 class ENGINE_API UModifier : public UMaterial
 {
 public:
-    class UMaterial* Material;
+    class UMaterial* Material GCC_PACK(4);
     DECLARE_CLASS(UModifier,UMaterial,0,Engine)
     #include "UModifier.h"
 };
@@ -6674,7 +6674,7 @@ enum EColorInterpMode
 class ENGINE_API UColorModifier : public UModifier
 {
 public:
-    FColor StartColor;
+    FColor StartColor GCC_PACK(4);
     FColor EndColor;
     FLOAT InterpolationTime;
     FLOAT ElapsedTime;
@@ -6745,7 +6745,7 @@ struct ENGINE_API FMaterialSequenceItem
 class ENGINE_API UMaterialSequence : public UModifier
 {
 public:
-    TArrayNoInit<FMaterialSequenceItem> SequenceItems;
+    TArrayNoInit<FMaterialSequenceItem> SequenceItems GCC_PACK(4);
     BYTE TriggerAction;
     BITFIELD Loop:1 GCC_PACK(4);
     BITFIELD Paused:1;
@@ -6763,7 +6763,7 @@ public:
 class ENGINE_API UMaterialSwitch : public UModifier
 {
 public:
-    INT Current;
+    INT Current GCC_PACK(4);
     TArrayNoInit<class UMaterial*> Materials;
     DECLARE_CLASS(UMaterialSwitch,UModifier,0,Engine)
 	virtual void PostEditChange();
@@ -6774,7 +6774,7 @@ public:
 class ENGINE_API UOpacityModifier : public UModifier
 {
 public:
-    class UMaterial* Opacity;
+    class UMaterial* Opacity GCC_PACK(4);
     BITFIELD bOverrideTexModifier:1 GCC_PACK(4);
     DECLARE_CLASS(UOpacityModifier,UModifier,0,Engine)
     NO_DEFAULT_CONSTRUCTOR(UOpacityModifier)
@@ -6812,7 +6812,7 @@ enum ETexCoordSrc
 class ENGINE_API UTexModifier : public UModifier
 {
 public:
-    BYTE TexCoordSource;
+    BYTE TexCoordSource GCC_PACK(4);
     BYTE TexCoordCount;
     BITFIELD TexCoordProjected:1 GCC_PACK(4);
     DECLARE_CLASS(UTexModifier,UModifier,0,Engine)
@@ -6831,7 +6831,7 @@ public:
 class ENGINE_API UTexCoordSource : public UTexModifier
 {
 public:
-    INT SourceChannel;
+    INT SourceChannel GCC_PACK(4);
     DECLARE_CLASS(UTexCoordSource,UTexModifier,0,Engine)
 	void PostEditChange();
 };
@@ -6849,7 +6849,7 @@ enum ETexEnvMapType
 class ENGINE_API UTexEnvMap : public UTexModifier
 {
 public:
-    BYTE EnvMapType;
+    BYTE EnvMapType GCC_PACK(4);
     DECLARE_CLASS(UTexEnvMap,UTexModifier,0,Engine)
 	
 	virtual FMatrix* GetMatrix(FLOAT TimeSeconds);
@@ -6859,7 +6859,7 @@ public:
 class ENGINE_API UTexMatrix : public UTexModifier
 {
 public:
-    FMatrix Matrix;
+    FMatrix Matrix GCC_PACK(4);
     DECLARE_CLASS(UTexMatrix,UTexModifier,0,Engine)
 	
 	virtual FMatrix* GetMatrix(FLOAT TimeSeconds) { return &Matrix; }
@@ -6877,7 +6877,7 @@ enum ETexOscillationType
 class ENGINE_API UTexOscillator : public UTexModifier
 {
 public:
-    FLOAT UOscillationRate;
+    FLOAT UOscillationRate GCC_PACK(4);
     FLOAT VOscillationRate;
     FLOAT UOscillationPhase;
     FLOAT VOscillationPhase;
@@ -6911,7 +6911,7 @@ enum ERetriggerAction
 class ENGINE_API UTexOscillatorTriggered : public UTexOscillator
 {
 public:
-    BYTE RetriggerAction;
+    BYTE RetriggerAction GCC_PACK(4);
     FLOAT StopAfterPeriod GCC_PACK(4);
     FLOAT TriggeredTime;
     BITFIELD Reverse:1 GCC_PACK(4);
@@ -6925,7 +6925,7 @@ public:
 class ENGINE_API UTexPanner : public UTexModifier
 {
 public:
-    FRotator PanDirection;
+    FRotator PanDirection GCC_PACK(4);
     FLOAT PanRate;
     FMatrix M;
     DECLARE_CLASS(UTexPanner,UTexModifier,0,Engine)
@@ -6937,7 +6937,7 @@ public:
 class ENGINE_API UTexPannerTriggered : public UTexPanner
 {
 public:
-    BYTE RetriggerAction;
+    BYTE RetriggerAction GCC_PACK(4);
     FLOAT StopAfterPeriod GCC_PACK(4);
     FLOAT TriggeredTime;
     BITFIELD Reverse:1 GCC_PACK(4);
@@ -6958,7 +6958,7 @@ enum ETexRotationType
 class ENGINE_API UTexRotator : public UTexModifier
 {
 public:
-    FMatrix M;
+    FMatrix M GCC_PACK(4);
     BYTE TexRotationType;
     FRotator Rotation GCC_PACK(4);
     BITFIELD ConstantRotation:1 GCC_PACK(4);
@@ -6986,7 +6986,7 @@ public:
 class ENGINE_API UTexScaler : public UTexModifier
 {
 public:
-    FMatrix M;
+    FMatrix M GCC_PACK(4);
     FLOAT UScale;
     FLOAT VScale;
     FLOAT UOffset;
@@ -7003,7 +7003,7 @@ struct UMovieMaterial_eventOnDonePlaying_Parms
 class ENGINE_API UMovieMaterial : public UBitmapMaterial
 {
 public:
-    FStringNoInit MovieFileName;
+    FStringNoInit MovieFileName GCC_PACK(4);
     INT MovieDecoder;
     INT RenderInterface;
     INT InMemoryDecodingBlock;
@@ -7094,7 +7094,7 @@ public:
 class ENGINE_API UScriptedTexture : public UBitmapMaterial
 {
 public:
-    INT RenderTarget;
+    INT RenderTarget GCC_PACK(4);
     class UViewport* RenderViewport;
     class AActor* Client;
     INT Revision;
@@ -7117,7 +7117,7 @@ public:
 class ENGINE_API UShadowBitmapMaterial : public UBitmapMaterial
 {
 public:
-    INT TextureInterfaces[3];
+    INT TextureInterfaces[3] GCC_PACK(4);
     class AActor* ShadowActor;
     FVector LightDirection;
     FLOAT LightDistance;
@@ -7156,7 +7156,7 @@ public:
 class ENGINE_API UConstantColor : public UConstantMaterial
 {
 public:
-    FColor Color;
+    FColor Color GCC_PACK(4);
     DECLARE_CLASS(UConstantColor,UConstantMaterial,0,Engine)
 	
 	
@@ -7174,7 +7174,7 @@ enum EColorFadeType
 class ENGINE_API UFadeColor : public UConstantMaterial
 {
 public:
-    FColor Color1;
+    FColor Color1 GCC_PACK(4);
     FColor Color2;
     FLOAT FadePeriod;
     FLOAT FadePhase;
@@ -7198,7 +7198,7 @@ struct ENGINE_API FMaterialPassItem
 class ENGINE_API UMultiPassMaterial : public URenderedMaterial
 {
 public:
-    TArrayNoInit<FMaterialPassItem> MaterialPasses;
+    TArrayNoInit<FMaterialPassItem> MaterialPasses GCC_PACK(4);
     DECLARE_CLASS(UMultiPassMaterial,URenderedMaterial,0,Engine)
 	virtual INT MaterialUSize()
 	{
@@ -7243,7 +7243,7 @@ public:
 class ENGINE_API UParticleMaterial : public URenderedMaterial
 {
 public:
-    INT ParticleBlending;
+    INT ParticleBlending GCC_PACK(4);
     INT BlendBetweenSubdivisions;
     INT RenderTwoSided;
     INT UseTFactor;
@@ -7367,7 +7367,7 @@ enum EPixelShader
 class ENGINE_API UPixelShaderMaterial : public URenderedMaterial
 {
 public:
-    class UMaterial* TextureStage0;
+    class UMaterial* TextureStage0 GCC_PACK(4);
     class UMaterial* TextureStage1;
     class UMaterial* TextureStage2;
     class UMaterial* TextureStage3;
@@ -7394,7 +7394,7 @@ enum EBBEffect
 class ENGINE_API UPSBackBufferEffect : public UPixelShaderMaterial
 {
 public:
-    class UMaterial* Mask;
+    class UMaterial* Mask GCC_PACK(4);
     BYTE BackBufferEffect;
     BITFIELD bIsTwoSided:1 GCC_PACK(4);
     DECLARE_CLASS(UPSBackBufferEffect,UPixelShaderMaterial,0,Engine)
@@ -7433,7 +7433,7 @@ enum EBaseBlendOp
 class ENGINE_API UPSBaseShader : public UPixelShaderMaterial
 {
 public:
-    class UMaterial* Diffuse;
+    class UMaterial* Diffuse GCC_PACK(4);
     class UMaterial* Specular;
     BITFIELD bUseLightingForSpecular:1 GCC_PACK(4);
     BITFIELD bIsTwoSided:1;
@@ -7481,7 +7481,7 @@ public:
 class ENGINE_API UPSDiffuseOpacitySpecularMask : public UPSBaseShader
 {
 public:
-    class UMaterial* SpecMask;
+    class UMaterial* SpecMask GCC_PACK(4);
     DECLARE_CLASS(UPSDiffuseOpacitySpecularMask,UPSBaseShader,0,Engine)
 	
 	void PreRender(FRenderInterface* RI);
@@ -7496,7 +7496,7 @@ public:
 class ENGINE_API UPSShenuSkin : public UPSDiffuseOpacitySpecularMask
 {
 public:
-    class UMaterial* SelfIlluminationMask;
+    class UMaterial* SelfIlluminationMask GCC_PACK(4);
     DECLARE_CLASS(UPSShenuSkin,UPSDiffuseOpacitySpecularMask,0,Engine)
 	
 	void PreRender(FRenderInterface* RI);
@@ -7511,7 +7511,7 @@ public:
 class ENGINE_API UPSDualDiffuse : public UPSBaseShader
 {
 public:
-    class UMaterial* Diffuse2;
+    class UMaterial* Diffuse2 GCC_PACK(4);
     class UMaterial* SpecularMask;
     BYTE BlendMode;
     BYTE MaskMode;
@@ -7530,7 +7530,7 @@ public:
 class ENGINE_API UPSTeamShader : public UPSBaseShader
 {
 public:
-    class UMaterial* SpecularMask;
+    class UMaterial* SpecularMask GCC_PACK(4);
     class UMaterial* TeamMask;
     FColor Color;
     BITFIELD bIsUsedForBSP:1 GCC_PACK(4);
@@ -7549,7 +7549,7 @@ public:
 class ENGINE_API UPSBloomSelectMaterial : public UPixelShaderMaterial
 {
 public:
-    class UTexMatrix* SourceMaterial;
+    class UTexMatrix* SourceMaterial GCC_PACK(4);
     FLOAT FalloffRate;
     FLOAT LuminosityThreshold;
     DECLARE_CLASS(UPSBloomSelectMaterial,UPixelShaderMaterial,0,Engine)
@@ -7578,7 +7578,7 @@ struct ENGINE_API FColorFloat
 class ENGINE_API UPSBlurMaterial : public UPixelShaderMaterial
 {
 public:
-    class UMaterial* BlurSourceMaterial;
+    class UMaterial* BlurSourceMaterial GCC_PACK(4);
     class UTexModifier* BlurSourceOffset0;
     class UTexModifier* BlurSourceOffset1;
     class UTexModifier* BlurSourceOffset2;
@@ -7605,7 +7605,7 @@ public:
 class ENGINE_API UPSColorRemapMaterial : public UPixelShaderMaterial
 {
 public:
-    class UMaterial* RemapTexture;
+    class UMaterial* RemapTexture GCC_PACK(4);
     class UMaterial* Mask;
     FLOAT BlendAmount;
     BITFIELD bUseBlurredCopy:1 GCC_PACK(4);
@@ -7623,7 +7623,7 @@ public:
 class ENGINE_API UPSDepthOfFieldMaterial : public UPixelShaderMaterial
 {
 public:
-    FVector FocusWorldNear;
+    FVector FocusWorldNear GCC_PACK(4);
     FVector FocusWorldFar;
     FLOAT FocusNear;
     FLOAT FocusFar;
@@ -7645,7 +7645,7 @@ public:
 class ENGINE_API UPSDiffuseOpacity : public UPixelShaderMaterial
 {
 public:
-    class UMaterial* Diffuse;
+    class UMaterial* Diffuse GCC_PACK(4);
     class UMaterial* Opacity;
     BITFIELD bIsTwoSided:1 GCC_PACK(4);
     DECLARE_CLASS(UPSDiffuseOpacity,UPixelShaderMaterial,0,Engine)
@@ -7663,7 +7663,7 @@ public:
 class ENGINE_API UPSDistortionBaseMaterial : public UPixelShaderMaterial
 {
 public:
-    class UMaterial* DistortionMaterial;
+    class UMaterial* DistortionMaterial GCC_PACK(4);
     FLOAT DistortionAmount;
     class UTexMatrix* BackBufferMaterial;
     class UTexMatrix* BackBufferMaterial2;
@@ -7704,7 +7704,7 @@ enum EDistortionBlendMode
 class ENGINE_API UPSBlendedDistortionMaterial : public UPSDistortionBaseMaterial
 {
 public:
-    class UMaterial* Diffuse;
+    class UMaterial* Diffuse GCC_PACK(4);
     FColor ConstantColor;
     BYTE DiffuseBlendMode;
     DECLARE_CLASS(UPSBlendedDistortionMaterial,UPSDistortionBaseMaterial,0,Engine)
@@ -7744,7 +7744,7 @@ public:
 class ENGINE_API UPSDistortionMaterial : public UPSDistortionBaseMaterial
 {
 public:
-    class UMaterial* Mask;
+    class UMaterial* Mask GCC_PACK(4);
     DECLARE_CLASS(UPSDistortionMaterial,UPSDistortionBaseMaterial,0,Engine)
 	virtual void PreRender(FRenderInterface* RI);
 };
@@ -7753,7 +7753,7 @@ public:
 class ENGINE_API UPSEmissiveConstColor : public UPixelShaderMaterial
 {
 public:
-    FColor Color;
+    FColor Color GCC_PACK(4);
     DECLARE_CLASS(UPSEmissiveConstColor,UPixelShaderMaterial,0,Engine)
 	virtual UBOOL IsXboxOnly(void) { return 0; }
 	virtual UBOOL IsEmissive(void) { return 1; }
@@ -7771,7 +7771,7 @@ enum EEmissiveBlendMode
 class ENGINE_API UPSEmissiveShader : public UPixelShaderMaterial
 {
 public:
-    class UMaterial* Diffuse;
+    class UMaterial* Diffuse GCC_PACK(4);
     class UMaterial* Specular;
     class UMaterial* SpecularMask;
     class UMaterial* EmissiveMask;
@@ -7840,7 +7840,7 @@ public:
 class ENGINE_API UPSMotionBlurMaterial : public UPixelShaderMaterial
 {
 public:
-    class UTexModifier* BackBufferModifier;
+    class UTexModifier* BackBufferModifier GCC_PACK(4);
     class UMaterial* SourceMask;
     class UMaterial* FinalMask;
     FLOAT FalloffRate;
@@ -7886,7 +7886,7 @@ public:
 class ENGINE_API UPSRefractionMaterial : public UPixelShaderMaterial
 {
 public:
-    FLOAT IndexOfRefraction;
+    FLOAT IndexOfRefraction GCC_PACK(4);
     class UTexMatrix* BackBufferMaterial;
     FMatrix MatTextureSpace;
     DECLARE_CLASS(UPSRefractionMaterial,UPixelShaderMaterial,0,Engine)
@@ -7901,7 +7901,7 @@ public:
 class ENGINE_API UPSSkinShader : public UPixelShaderMaterial
 {
 public:
-    class UMaterial* Diffuse;
+    class UMaterial* Diffuse GCC_PACK(4);
     class UMaterial* Specular;
     class UMaterial* RimLight;
     BITFIELD bUseLightingForSpecular:1 GCC_PACK(4);
@@ -7938,7 +7938,7 @@ public:
 class ENGINE_API UPSEmissiveSkinShader : public UPSSkinShader
 {
 public:
-    class UMaterial* EmissiveMask;
+    class UMaterial* EmissiveMask GCC_PACK(4);
     DECLARE_CLASS(UPSEmissiveSkinShader,UPSSkinShader,0,Engine)
 	
 	void PreRender(FRenderInterface* RI);
@@ -7962,7 +7962,7 @@ public:
 class ENGINE_API UPSSkinShaderOpacity : public UPSSkinShader
 {
 public:
-    class UMaterial* Opacity;
+    class UMaterial* Opacity GCC_PACK(4);
     DECLARE_CLASS(UPSSkinShaderOpacity,UPSSkinShader,0,Engine)
 	
 	void PreRender(FRenderInterface* RI);
@@ -7986,7 +7986,7 @@ public:
 class ENGINE_API UPSTeamSkinShaderOpacity : public UPSSkinShaderOpacity
 {
 public:
-    class UMaterial* TeamMask;
+    class UMaterial* TeamMask GCC_PACK(4);
     class UMaterial* SpecularMask;
     DECLARE_CLASS(UPSTeamSkinShaderOpacity,UPSSkinShaderOpacity,0,Engine)
 	
@@ -7999,7 +7999,7 @@ public:
 class ENGINE_API UPSTeamSkinShader : public UPSSkinShader
 {
 public:
-    class UMaterial* TeamMask;
+    class UMaterial* TeamMask GCC_PACK(4);
     class UMaterial* SpecularMask;
     DECLARE_CLASS(UPSTeamSkinShader,UPSSkinShader,0,Engine)
 	
@@ -8026,7 +8026,7 @@ public:
 class ENGINE_API UPSUseTexIndexMaterial : public UPixelShaderMaterial
 {
 public:
-    class UMaterial* Mask;
+    class UMaterial* Mask GCC_PACK(4);
     class UMaterial* RemapTexture;
     DECLARE_CLASS(UPSUseTexIndexMaterial,UPixelShaderMaterial,0,Engine)
 	
@@ -8055,7 +8055,7 @@ public:
 class ENGINE_API UProjectorMaterial : public URenderedMaterial
 {
 public:
-    class UBitmapMaterial* Gradient;
+    class UBitmapMaterial* Gradient GCC_PACK(4);
     class UMaterial* Projected;
     class UMaterial* BaseMaterial;
     BYTE BaseMaterialBlending;
@@ -8077,7 +8077,7 @@ public:
 class ENGINE_API UProjectorMultiMaterial : public URenderedMaterial
 {
 public:
-    TArrayNoInit<FProjectorRenderInfoPtr> RenderEntries;
+    TArrayNoInit<FProjectorRenderInfoPtr> RenderEntries GCC_PACK(4);
     class UMaterial* BaseMaterial;
     BYTE FrameBufferBlending;
     BITFIELD bFrustumClipPixels:1 GCC_PACK(4);
@@ -8102,7 +8102,7 @@ enum EOutputBlending
 class ENGINE_API UShader : public URenderedMaterial
 {
 public:
-    class UMaterial* Diffuse;
+    class UMaterial* Diffuse GCC_PACK(4);
     class UMaterial* Opacity;
     class UMaterial* Specular;
     class UMaterial* SpecularityMask;
@@ -8131,7 +8131,7 @@ struct ENGINE_API FTerrainMaterialLayer
 class ENGINE_API UTerrainMaterial : public URenderedMaterial
 {
 public:
-    TArrayNoInit<FTerrainMaterialLayer> Layers;
+    TArrayNoInit<FTerrainMaterialLayer> Layers GCC_PACK(4);
     BYTE RenderMethod;
     BITFIELD FirstPass:1 GCC_PACK(4);
     DECLARE_CLASS(UTerrainMaterial,URenderedMaterial,0,Engine)
@@ -8483,7 +8483,7 @@ enum EBeamEndPointType
 class ENGINE_API UBeamEmitter : public UParticleEmitter
 {
 public:
-    FRange BeamDistanceRange;
+    FRange BeamDistanceRange GCC_PACK(4);
     TArrayNoInit<FParticleBeamEndPoint> BeamEndPoints;
     BYTE DetermineEndPointBy;
     FLOAT BeamTextureUScale GCC_PACK(4);
@@ -8527,7 +8527,7 @@ public:
 class ENGINE_API UMeshEmitter : public UParticleEmitter
 {
 public:
-    class UStaticMesh* StaticMesh;
+    class UStaticMesh* StaticMesh GCC_PACK(4);
     TArrayNoInit<class UMaterial*> Skins;
     BITFIELD UseMeshBlendMode:1 GCC_PACK(4);
     BITFIELD RenderTwoSided:1;
@@ -8543,7 +8543,7 @@ public:
 class ENGINE_API USparkEmitter : public UParticleEmitter
 {
 public:
-    FRange LineSegmentsRange;
+    FRange LineSegmentsRange GCC_PACK(4);
     FRange TimeBeforeVisibleRange;
     FRange TimeBetweenSegmentsRange;
     TArrayNoInit<FParticleSparkData> SparkData;
@@ -8575,7 +8575,7 @@ enum EParticleDirectionUsage
 class ENGINE_API USpriteEmitter : public UParticleEmitter
 {
 public:
-    BYTE UseDirectionAs;
+    BYTE UseDirectionAs GCC_PACK(4);
     FVector ProjectionNormal GCC_PACK(4);
     FVector RealProjectionNormal;
     DECLARE_CLASS(USpriteEmitter,UParticleEmitter,0,Engine)
@@ -8611,7 +8611,7 @@ struct ENGINE_API FRibbonPoint
 class ENGINE_API UUCRibbonEmitter : public UParticleEmitter
 {
 public:
-    FLOAT SampleRate;
+    FLOAT SampleRate GCC_PACK(4);
     FLOAT DecayRate;
     INT NumPoints;
     FLOAT RibbonWidth;
@@ -8671,7 +8671,7 @@ enum EUCTrailShadeType
 class ENGINE_API UUCTrailEmitter : public UParticleEmitter
 {
 public:
-    BYTE TrailShadeType;
+    BYTE TrailShadeType GCC_PACK(4);
     BYTE TrailLocation;
     INT MaxPointsPerTrail GCC_PACK(4);
     FLOAT DistanceThreshold;
@@ -8821,7 +8821,7 @@ struct UPlayerProfile_eventUpdateOnlineState_Parms
 class ENGINE_API UPlayerProfile : public UObject
 {
 public:
-    BYTE DirtyMask;
+    BYTE DirtyMask GCC_PACK(4);
     FStringNoInit CustomText GCC_PACK(4);
     FStringNoInit MaplistText;
     class APlayerController* thePlayerController;
@@ -8876,7 +8876,7 @@ public:
     BITFIELD bAppearOffline:1;
     BITFIELD bVoiceOverSpeakers:1;
     BITFIELD bAlternateAnnouncer:1;
-    BITFIELD bDisableBotRosters:1 GCC_PACK(4);
+    BITFIELD bDisableBotRosters:1;
     BITFIELD bUseVariantCharacter:1;
     BYTE VoiceMaskingType GCC_PACK(4);
     BYTE GoreLevel;
@@ -9011,7 +9011,7 @@ class ENGINE_API UPlayerStatCache : public UPlayerStats
 public:
     BITFIELD bQueryStarted:1 GCC_PACK(4);
     BITFIELD bQueryComplete:1;
-    BITFIELD bNetOwner:1 GCC_PACK(4);
+    BITFIELD bNetOwner:1;
     BITFIELD bRefreshCache:1;
     FScriptDelegate __OnQueryComplete__Delegate GCC_PACK(4);
     DECLARE_FUNCTION(execGetQueriedStats);
@@ -9044,7 +9044,7 @@ public:
 class ENGINE_API UReachSpec : public UObject
 {
 public:
-    INT Distance;
+    INT Distance GCC_PACK(4);
     class ANavigationPoint* Start;
     class ANavigationPoint* End;
     INT CollisionRadius;
@@ -9084,7 +9084,7 @@ struct USplitScreenMgr_eventNotifyLevelChange_Parms
 class ENGINE_API USplitScreenMgr : public UObject
 {
 public:
-    TArrayNoInit<FSplitScreenDetailLevel> SSDetailLevels;
+    TArrayNoInit<FSplitScreenDetailLevel> SSDetailLevels GCC_PACK(4);
     FColor BorderColor;
     INT BorderThickness;
     INT MaxSplitScreens;
@@ -9112,7 +9112,7 @@ struct ENGINE_API FVertexShader
 class ENGINE_API UVertexShaderCache : public UObject
 {
 public:
-    TArrayNoInit<FVertexShader> VertexShaders;
+    TArrayNoInit<FVertexShader> VertexShaders GCC_PACK(4);
     DECLARE_CLASS(UVertexShaderCache,UObject,0,Engine)
 	
 	void AddToCache(QWORD VSEnum,void* VSByteCode,DWORD SizeInBytes);
@@ -9122,7 +9122,7 @@ public:
 class ENGINE_API UVertexShaderConfigs : public UObject
 {
 public:
-    TArrayNoInit<FString> VertexShaderEnums;
+    TArrayNoInit<FString> VertexShaderEnums GCC_PACK(4);
     DECLARE_CLASS(UVertexShaderConfigs,UObject,0|CLASS_Config,Engine)
 	
 	void PrecacheVertexShaderEnums( URenderDevice* RenDev );
@@ -9153,7 +9153,7 @@ struct ENGINE_API FViewportEntry
 class ENGINE_API UViewportMgr : public UObject
 {
 public:
-    TArrayNoInit<FViewportEntry> ViewportEntries;
+    TArrayNoInit<FViewportEntry> ViewportEntries GCC_PACK(4);
     DECLARE_FUNCTION(execRemoveViewport);
     DECLARE_FUNCTION(execAddViewport);
     DECLARE_CLASS(UViewportMgr,UObject,0|CLASS_Transient,Engine)

@@ -16,7 +16,7 @@ class ENGINE_API UMotionBlur : public UCameraEffect
 
 public:
 
-    BYTE				BlurAlpha;
+    BYTE				BlurAlpha GCC_PACK(4);	// first member: keep it out of the parent's tail padding under GCC
 	FAuxRenderTarget*	RenderTargets[2];
 	FLOAT				LastFrameTime;
 
@@ -44,7 +44,7 @@ public:
 	FLOAT			StartAlpha,
 					EndAlpha;
 	BITFIELD		DisableAfterDuration : 1 GCC_PACK(4);
-	BITFIELD		AllowDuplicate : 1 GCC_PACK(4);
+	BITFIELD		AllowDuplicate : 1;
 
 	// UMatSubAction interface.
 

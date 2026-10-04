@@ -291,9 +291,10 @@ UBOOL UClassExporterH::ExportText( UObject* Object, const TCHAR* Type, FOutputDe
 						((ItS->StructFlags&STRUCT_Export) || (ItS->StructFlags&STRUCT_Transient)) ? 1 : 0 );
 					if (It2->IsA(UBoolProperty::StaticClass()))
 					{
-						if( !LastIt || !LastIt->IsA(UBoolProperty::StaticClass()) ||
-							// do not allow transient/non-transient bools to be packed together
-							((LastIt->PropertyFlags & CPF_Transient) != (It2->PropertyFlags & CPF_Transient)))
+						// Tag only the first bool of a run. A rule here also tagged a bool whose CPF_Transient differed from the
+						// previous bool's, but UBoolProperty::Link packs those together and MSVC ignores GCC_PACK, so the tag only
+						// split the run under GCC and shifted every later member (tools/dev/fix-bitfield-pack.py fixed the headers).
+						if( !LastIt || !LastIt->IsA(UBoolProperty::StaticClass()) )
 							Ar.Logf( TEXT(" GCC_PACK(%i)"), PROPERTY_ALIGNMENT );
 					}
 					else
@@ -390,21 +391,23 @@ UBOOL UClassExporterH::ExportText( UObject* Object, const TCHAR* Type, FOutputDe
 				It->ExportCpp( Ar, 0, 0, 0, 0 );
 				if (It->IsA(UBoolProperty::StaticClass()))
 				{
-					if (LastIt == NULL || !LastIt->IsA(UBoolProperty::StaticClass()) ||
-						// do not allow transient/non-transient bools to be packed together
-						((It->PropertyFlags & CPF_Transient) != (LastIt->PropertyFlags & CPF_Transient)))
+					// Tag only the first bool of a run. A rule here also tagged a bool whose CPF_Transient differed from the
+					// previous bool's, but UBoolProperty::Link packs those together and MSVC ignores GCC_PACK, so the tag only
+					// split the run under GCC and shifted every later member (tools/dev/fix-bitfield-pack.py fixed the headers).
+					if (LastIt == NULL || !LastIt->IsA(UBoolProperty::StaticClass()))
 						Ar.Logf( TEXT(" GCC_PACK(%i)"), PROPERTY_ALIGNMENT );
 				}
 				else
 				{
-					if ( LastIt != NULL )
+					// The first property of a class is tagged too (as engine-ut2004's exporter does): without it GCC
+					// places a small first member in the unused tail bytes of the parent class, which MSVC and the
+					// script linker never do.
+					if ( LastIt == NULL ||
+					     (LastIt->IsA(UBoolProperty::StaticClass())) ||
+					     (LastIt->IsA(UByteProperty::StaticClass()) && !It->IsA(UByteProperty::StaticClass()))
+					   )
 					{
-						if ( (LastIt->IsA(UBoolProperty::StaticClass())) ||
-						     (LastIt->IsA(UByteProperty::StaticClass()) && !It->IsA(UByteProperty::StaticClass()))
-						   )
-						{
-							Ar.Logf( TEXT(" GCC_PACK(%i)"), PROPERTY_ALIGNMENT );
-						}
+						Ar.Logf( TEXT(" GCC_PACK(%i)"), PROPERTY_ALIGNMENT );
 					}
 				}
 				Ar.Logf( TEXT(";\r\n") );

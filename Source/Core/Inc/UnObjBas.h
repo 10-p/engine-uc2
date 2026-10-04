@@ -443,6 +443,9 @@ public: \
 #endif
 
 // Declare a concrete class.
+// InternalConstructor uses `new(...) TClass` without parentheses on purpose: `TClass()` is value-initialisation,
+// which zero-fills the object first when the class has no user-provided constructor and so wipes the
+// Class/Name/Outer/Index that StaticAllocateObject has just stored. MSVC 7.1 did not zero-fill; ISO C++ does.
 #define DECLARE_CLASS( TClass, TSuperClass, TStaticFlags, TPackage ) \
 	DECLARE_BASE_CLASS( TClass, TSuperClass, TStaticFlags, TPackage ) \
 	friend FArchive &operator<<( FArchive& Ar, TClass*& Res ) \
@@ -450,7 +453,7 @@ public: \
 	virtual ~TClass() \
 		{ ConditionalDestroy(); } \
 	static void InternalConstructor( void* X ) \
-		{ new( (EInternal*)X )TClass(); } \
+		{ new( (EInternal*)X )TClass; } \
 
 // Declare an abstract class.
 #define DECLARE_ABSTRACT_CLASS( TClass, TSuperClass, TStaticFlags, TPackage ) \

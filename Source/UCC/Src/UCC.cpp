@@ -138,6 +138,39 @@ extern "C"
 }
 #endif
 
+#if __STATIC_LINK && !defined(_MSC_VER)
+// "ucc verifyclasses": compare the script layout of every native class with the C++ layout, using the lists the
+// generated class headers carry for the check in UGameEngine::LoadMap. That check only runs once a map has
+// loaded, which is too late to diagnose a layout problem that breaks loading itself. Returns the mismatch count
+// as seen in the log ("VERIFY: ..." lines).
+static UBOOL VerifyNativeClasses()
+{
+	static const TCHAR* Packages[] = { TEXT("Engine"), TEXT("IpDrv"), TEXT("UnrealGame"), TEXT("UCElements"), TEXT("UCGameplay"), TEXT("GUI") };
+	for( INT i=0; i<ARRAY_COUNT(Packages); i++ )
+	{
+		debugf( TEXT("VERIFY: loading package %s"), Packages[i] );
+		UObject::LoadPackage( NULL, Packages[i], LOAD_NoFail );
+	}
+	UBOOL Mismatch = false;
+	#define VERIFY_CLASS_SIZES
+	#define NAMES_ONLY
+	#define AUTOGENERATE_NAME(name)
+	#define AUTOGENERATE_FUNCTION(cls,idx,name)
+	#include "EngineClasses.h"
+	#include "IpDrvClasses.h"
+	#include "UnrealGameClasses.h"
+	#include "UCElementsClasses.h"
+	#include "UCGameplayClasses.h"
+	#include "GUIClasses.h"
+	#undef AUTOGENERATE_FUNCTION
+	#undef AUTOGENERATE_NAME
+	#undef NAMES_ONLY
+	#undef VERIFY_CLASS_SIZES
+	debugf( TEXT("VERIFY: %s"), Mismatch ? TEXT("C++ / script class layout MISMATCH") : TEXT("all native class layouts match") );
+	return !Mismatch;
+}
+#endif
+
 int main( int argc, char* argv[] )
 {
     #if __LINUX__
@@ -206,6 +239,9 @@ int main( int argc, char* argv[] )
 		#if !defined(_MSC_VER)
 			AUTO_INITIALIZE_REGISTRANTS_IPDRV;
 			AUTO_INITIALIZE_REGISTRANTS_UWEB;
+			// UWeb's hand-written static header registers its classes but not its native lookups.
+			GNativeLookupFuncs[Lookup++] = &FindUWebUWebResponseNative;
+			GNativeLookupFuncs[Lookup++] = &FindUWebUWebRequestNative;
 			AUTO_INITIALIZE_REGISTRANTS_UNREALGAME;
 			AUTO_INITIALIZE_REGISTRANTS_UCELEMENTS;
 			AUTO_INITIALIZE_REGISTRANTS_UCGAMEPLAY;
@@ -238,6 +274,14 @@ int main( int argc, char* argv[] )
 			ShowBanner( Warn );
 			Warn.Logf( TEXT("Use \"ucc help\" for help") );
 		}
+#if __STATIC_LINK && !defined(_MSC_VER)
+		else if( Token==TEXT("VERIFYCLASSES") )
+		{
+			UBOOL Ok = VerifyNativeClasses();
+			Warn.Logf( TEXT("%s (details: the VERIFY lines in the log)"), Ok ? TEXT("All native class layouts match") : TEXT("Class layout mismatches found") );
+			ErrorLevel = Ok ? 0 : 1;
+		}
+#endif
 		else if( Token==TEXT("HELP") )
 		{
 			ShowBanner( Warn );

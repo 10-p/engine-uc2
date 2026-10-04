@@ -33,7 +33,7 @@ enum EDrawMethod
 class UCELEMENTS_API UCanvasElement : public UObject
 {
 public:
-    BYTE DrawMethod;
+    BYTE DrawMethod GCC_PACK(4);
     FName ElementName GCC_PACK(4);
     FName InitialColorName;
     FColor DrawColor;
@@ -118,7 +118,7 @@ public:
 class UCELEMENTS_API UElement_Text : public UCanvasElement
 {
 public:
-    FStringNoInit Text;
+    FStringNoInit Text GCC_PACK(4);
     class UFont* Font;
     FLOAT TextScale;
     FLOAT TextOffsetX;
@@ -165,7 +165,7 @@ struct UElementAction_eventActivate_Parms
 class UCELEMENTS_API UElementAction : public UObject
 {
 public:
-    TArrayNoInit<FName> ElementNames;
+    TArrayNoInit<FName> ElementNames GCC_PACK(4);
     TArrayNoInit<class UCanvasElement*> Elements;
     FLOAT InitDelay;
     FLOAT Duration;
@@ -175,7 +175,7 @@ public:
     BITFIELD bFinished:1;
     BITFIELD bTransient:1;
     BITFIELD bActive:1;
-    BITFIELD bDelayActions:1 GCC_PACK(4);
+    BITFIELD bDelayActions:1;
     BITFIELD bDebugActions:1;
     void eventTickAction(FLOAT DeltaTime)
     {

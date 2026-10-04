@@ -470,7 +470,7 @@ class ENGINE_API ATerrainInfo : public AInfo
 	FLOAT						DecoLayerOffset;
     BITFIELD					Inverted:1		GCC_PACK(4);
     BITFIELD					bKCollisionHalfRes:1;
-	BYTE						DecoDetailLevel;
+	BYTE						DecoDetailLevel	GCC_PACK(4);
 
 	// Variables.
 	UBOOL						JustLoaded		GCC_PACK(4);

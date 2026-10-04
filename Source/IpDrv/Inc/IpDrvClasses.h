@@ -60,7 +60,7 @@ struct AInternetLink_eventResolved_Parms
 class IPDRV_API AInternetLink : public AInternetInfo
 {
 public:
-    BYTE LinkMode;
+    BYTE LinkMode GCC_PACK(4);
     FStringNoInit LocalSessionID GCC_PACK(4);
     FStringNoInit LocalExchangeKey;
     FStringNoInit LocalHostAddr;
@@ -142,7 +142,7 @@ struct ATcpLink_eventAccepted_Parms
 class IPDRV_API ATcpLink : public AInternetLink
 {
 public:
-    BYTE LinkState;
+    BYTE LinkState GCC_PACK(4);
     FIpAddr RemoteAddr GCC_PACK(4);
     class UClass* AcceptClass;
     TArrayNoInit<BYTE> SendFIFO;
@@ -219,7 +219,7 @@ struct AUdpLink_eventReceivedText_Parms
 class IPDRV_API AUdpLink : public AInternetLink
 {
 public:
-    INT BroadcastAddr;
+    INT BroadcastAddr GCC_PACK(4);
     DECLARE_FUNCTION(execReadBinary);
     DECLARE_FUNCTION(execReadText);
     DECLARE_FUNCTION(execSendBinary);
@@ -263,7 +263,7 @@ struct AMasterServerLink_eventGetMasterServer_Parms
 class IPDRV_API AMasterServerLink : public AInfo
 {
 public:
-    INT LinkPtr;
+    INT LinkPtr GCC_PACK(4);
     INT LANPort;
     INT LANServerPort;
     INT CurrentMasterServer;
@@ -322,7 +322,7 @@ struct AMasterServerUplink_eventConnectionFailed_Parms
 class IPDRV_API AMasterServerUplink : public AMasterServerLink
 {
 public:
-    FServerResponseLine ServerState;
+    FServerResponseLine ServerState GCC_PACK(4);
     class AUdpLink* GamespyQueryLink;
     INT MatchID;
     FLOAT ReconnectTime;
@@ -486,7 +486,7 @@ struct AMasterServerClient_eventOnQueryFinished_Parms
 class IPDRV_API AMasterServerClient : public AServerQueryClient
 {
 public:
-    INT MSLinkPtr;
+    INT MSLinkPtr GCC_PACK(4);
     TArrayNoInit<FQueryData> Query;
     INT ResultCount;
     FScriptDelegate __OnQueryFinished__Delegate;

@@ -41,7 +41,7 @@ AUTOGENERATE_NAME(SpawnExtraFX)
 class UCGAMEPLAY_API AUCAIController : public AAIController
 {
 public:
-    INT LockedMovementCount;
+    INT LockedMovementCount GCC_PACK(4);
     FVector DesiredDodgeDir;
     FLOAT DesiredDodgeIntensity;
     BYTE WallDodgeDir;
@@ -496,7 +496,7 @@ struct UCGAMEPLAY_API FCameraInfoItem
 class UCGAMEPLAY_API AUCPlayerController : public AUnrealPlayer
 {
 public:
-    TArrayNoInit<FName> SoundTestCues;
+    TArrayNoInit<FName> SoundTestCues GCC_PACK(4);
     BITFIELD bWantsToDodge:1 GCC_PACK(4);
     BITFIELD bWantsToLock:1;
     BITFIELD bUnlockOnRelease:1;
@@ -753,8 +753,8 @@ public:
     BITFIELD bShowSafeZone:1;
     BITFIELD bDrawElements:1;
     BITFIELD bSelectorInitialized:1;
-    BITFIELD bControllerUnplugged:1 GCC_PACK(4);
-    BITFIELD bDoNotDrawHud:1 GCC_PACK(4);
+    BITFIELD bControllerUnplugged:1;
+    BITFIELD bDoNotDrawHud:1;
     BITFIELD bDrawCompass:1;
     BITFIELD bDebugNumbers:1;
     BITFIELD bDebugDeadHUD:1;
@@ -1298,7 +1298,7 @@ public:
 class UCGAMEPLAY_API AUCWeaponAttachment : public AWeaponAttachment
 {
 public:
-    class UClass* InventoryClass;
+    class UClass* InventoryClass GCC_PACK(4);
     BITFIELD bReplicateFXVars:1 GCC_PACK(4);
     BITFIELD bPersistentEmitter:1;
     BITFIELD bServerOnlyEmitter:1;
@@ -1776,7 +1776,7 @@ public:
 class UCGAMEPLAY_API APickupNotifier : public AActor
 {
 public:
-    class APickup* Pickup;
+    class APickup* Pickup GCC_PACK(4);
     DECLARE_CLASS(APickupNotifier,AActor,0|CLASS_Config,UCGameplay)
     NO_DEFAULT_CONSTRUCTOR(APickupNotifier)
 };
@@ -1796,7 +1796,7 @@ struct AUCProjectile_eventSpawnExtraFX_Parms
 class UCGAMEPLAY_API AUCProjectile : public AProjectile
 {
 public:
-    BYTE ProjType;
+    BYTE ProjType GCC_PACK(4);
     BITFIELD bEMPDestroys:1 GCC_PACK(4);
     BITFIELD bEMPExplode:1;
     BITFIELD bRepulsable:1;
@@ -1895,7 +1895,7 @@ public:
 class UCGAMEPLAY_API AUCAmbient_Creature : public ARootMotionActor
 {
 public:
-    FName LoopAnimation;
+    FName LoopAnimation GCC_PACK(4);
     FLOAT Rate;
     FLOAT InitialDelay;
     class AUCAmbient_Creature* AnimationInstance;
@@ -2025,7 +2025,7 @@ public:
 class UCGAMEPLAY_API AUCHead : public AActor
 {
 public:
-    class AUCTeleport* HeadTeleport;
+    class AUCTeleport* HeadTeleport GCC_PACK(4);
     class UMaterial* HeadDissolveMaterial;
     FLOAT DeResTime;
     class UClass* TeleportClass;
@@ -2038,7 +2038,7 @@ public:
 class UCGAMEPLAY_API AUCManualJumpPad : public AActor
 {
 public:
-    TArrayNoInit<FName> JumpTargets;
+    TArrayNoInit<FName> JumpTargets GCC_PACK(4);
     FVector JumpVelocity;
     FName JumpSound;
     BITFIELD bAutomaticJumpVelocity:1 GCC_PACK(4);
@@ -2052,7 +2052,7 @@ public:
 class UCGAMEPLAY_API AUCShield : public AActor
 {
 public:
-    class UClass* OnEffectClass;
+    class UClass* OnEffectClass GCC_PACK(4);
     class AEmitter* OnEffect;
     class UClass* HandEffectClass;
     class AEmitter* HandEffect[2];
@@ -2077,7 +2077,7 @@ public:
 class UCGAMEPLAY_API UUCScreenBerserk : public UCameraEffect
 {
 public:
-    FLOAT LastFrameTime;
+    FLOAT LastFrameTime GCC_PACK(4);
     FLOAT ElapsedTime;
     class UMaterial* RemapTexture;
     class UMaterial* RemapMask;
@@ -2097,7 +2097,7 @@ public:
 class UCGAMEPLAY_API UUCScreenBlur : public UCameraEffect
 {
 public:
-    class UPSBlurMaterial* BlurMaterial;
+    class UPSBlurMaterial* BlurMaterial GCC_PACK(4);
     FLOAT BlurTime;
     FLOAT LastBlurTime;
     DECLARE_CLASS(UUCScreenBlur,UCameraEffect,0,UCGameplay)
@@ -2109,7 +2109,7 @@ public:
 class UCGAMEPLAY_API UUCScreenLiandri : public UCameraEffect
 {
 public:
-    class UMaterial* Noise1;
+    class UMaterial* Noise1 GCC_PACK(4);
     class UMaterial* Noise2;
     class UMaterial* Noise3;
     FLOAT LastFrameTime;
@@ -2136,7 +2136,7 @@ enum EMenuPauseFadeMode
 class UCGAMEPLAY_API UUCScreenMenuPause : public UCameraEffect
 {
 public:
-    class UMaterial* RemapTexture;
+    class UMaterial* RemapTexture GCC_PACK(4);
     FLOAT FadeTime;
     BITFIELD bUseAlphaWhileFading:1 GCC_PACK(4);
     FLOAT ElapsedFadeTime GCC_PACK(4);
@@ -2154,7 +2154,7 @@ public:
 class UCGAMEPLAY_API UUCScreenSniperOverlay : public UCameraEffect
 {
 public:
-    class UUCScreenDOF* DOFOverlay;
+    class UUCScreenDOF* DOFOverlay GCC_PACK(4);
     class UUCScreenRadialBlur* RadialBlurOverlay;
     class UMaterial* RemapTexture;
     class UMaterial* RemapMask;
@@ -2182,7 +2182,7 @@ enum ETeleportType
 class UCGAMEPLAY_API UUCScreenTeleportOverlay : public UCameraEffect
 {
 public:
-    class UUCScreenRadialBlur* RadialBlurOverlay;
+    class UUCScreenRadialBlur* RadialBlurOverlay GCC_PACK(4);
     class UMaterial* RemapTexture;
     FLOAT MinRadialBlurAmount;
     FLOAT MaxRadialBlurAmount;
@@ -2222,7 +2222,7 @@ public:
 class UCGAMEPLAY_API USubActionDepthOfField : public USubActionCameraEffect
 {
 public:
-    class AActor* FirstTarget;
+    class AActor* FirstTarget GCC_PACK(4);
     class AActor* SecondTarget;
     FLOAT InterpolateTime;
     FLOAT ElapsedInterpTime;
@@ -2239,7 +2239,7 @@ public:
 class UCGAMEPLAY_API UContactEffectsModifier : public UModifier
 {
 public:
-    class UClass* FootEmitters[3];
+    class UClass* FootEmitters[3] GCC_PACK(4);
     class UClass* ImpactEmitters[3];
     class UClass* FootProjectors[3];
     class UClass* ImpactProjectors[3];
@@ -2267,7 +2267,7 @@ struct UTournamentLadderRung_eventAddBot_Parms
 class UCGAMEPLAY_API UTournamentLadderRung : public UObject
 {
 public:
-    FStringNoInit GameClassName;
+    FStringNoInit GameClassName GCC_PACK(4);
     FStringNoInit Map;
     FStringNoInit CharacterClassName;
     TArrayNoInit<FString> MutatorClassNames;
@@ -2296,10 +2296,10 @@ public:
     BITFIELD bQuickStart:1;
     BITFIELD bBotsTeamUp:1;
     BITFIELD bForceRespawn:1;
-    BITFIELD bPlayerWonMatch:1 GCC_PACK(4);
+    BITFIELD bPlayerWonMatch:1;
     BITFIELD bPlayerAdvanced:1;
     BITFIELD bAllowRestartMatch:1;
-    BITFIELD bDebug:1 GCC_PACK(4);
+    BITFIELD bDebug:1;
     TArrayNoInit<FString> ValidEnergyWeapons GCC_PACK(4);
     TArrayNoInit<FString> ValidExplosiveWeapons;
     FStringNoInit RungName;
