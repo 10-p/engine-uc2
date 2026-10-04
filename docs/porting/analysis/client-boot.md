@@ -69,3 +69,72 @@ Root `CMakeLists.txt`, two additions only:
 
 The root `-fsigned-char -fno-strict-aliasing` and the engine `-D` definitions also reach SDL's sources (as
 in engine-ut2004); SDL builds cleanly with them.
+
+## Step 4 - `Source/SDL2Drv`: the SDL2 client and viewport
+
+New package, about 1,200 lines: `Inc/SDL2Drv.h`, `Src/SDL2Drv.cpp` (package), `Src/SDL2Client.cpp`,
+`Src/SDL2Viewport.cpp`, `CMakeLists.txt`. Classes `SDL2Drv.SDL2Client` (`USDL2Client : UClient`) and
+`SDL2Drv.SDL2Viewport` (`USDL2Viewport : UViewport`); C++ only, no `.u` (like WinDrv on PC).
+
+Sources used, and how:
+- **Interface**: UC2's `Engine/Inc/UnCamera.h`. It differs from UT2004's where it matters here:
+  `UClient::Tick(FLOAT)`, `GetInitScreenSize`, `UViewport::Repaint(UBOOL, FLOAT)`, `OpenWindow(DWORD...)`,
+  `TryRenderDevice` returns `void`, `UpdateMousePosition` is a viewport virtual, `LastCurrent` lives in
+  `UClient`, and `UClient::Init` creates the `SplitScreenMgr`, `ViewportMgr` and `LoadSaveManager`.
+  engine-ut2004's driver could therefore not be copied: its signatures are UT2004's.
+- **Behaviour**: Epic's `WinDrv` (`WinClient.cpp`, `WinViewport.cpp`), PC paths only (the editor branches,
+  IME, debugger, DirectInput joystick are left out). What maps to what:
+
+  | PC (WinDrv) | SDL2Drv |
+  |---|---|
+  | `WM_KEYDOWN`/`WM_SYSKEYDOWN` (incl. auto-repeat) -> `InputEvent(VK, IST_Press)` | `SDL_KEYDOWN` -> scancode table -> `IST_Press` (repeats too) |
+  | `WM_KEYUP` -> `IST_Release`, then re-capture if the menu closed | `SDL_KEYUP`, same |
+  | `WM_CHAR` -> `Engine->Key(Key, Char)`, never Enter | `SDL_TEXTINPUT` (UTF-8 -> Latin-1, code points < 256), plus Backspace/Tab/Escape on key-down, the control characters `WM_CHAR` delivers for them |
+  | Alt+Enter -> `ToggleFullscreen` | same |
+  | DirectInput mouse: `IK_MouseX` `+dx*MouseXMultiplier`, `IK_MouseY` `-dy*MouseYMultiplier`, wheel `IK_MouseW` (120/notch) + `IK_MouseWheelUp/Down` press+release, buttons 0..7 | SDL motion `xrel/yrel`, wheel, buttons 1..5 -> the same calls |
+  | `UpdateMousePosition` (`GetCursorPos`) -> `WindowsMouseX/Y` (the GUI reads this in a window) | `SDL_GetMouseState` |
+  | `SetMouseCapture`: `SetCapture`+hidden cursor+`ClipCursor` | `SDL_SetRelativeMouseMode` + `SDL_SetWindowGrab` |
+  | `WM_SETFOCUS`/`WM_KILLFOCUS`: capture, `ResetInput` of GUI and `UInput`, gamma | `SDL_WINDOWEVENT_FOCUS_GAINED/LOST`, same |
+  | `WM_SIZE` -> `RenDev->SetRes` / `ResizeViewport(NoWindowChange)` | `SDL_WINDOWEVENT_SIZE_CHANGED`, same |
+  | `UpdateInput`: `GetKeyState` resync (release keys that are up; on Reset press keys that are down) | `SDL_GetKeyboardState` resync, same rule |
+  | Windows message pump in `CMainLoop` | `USDL2Client::PumpEvents`, called from `UpdateInput` (the launcher's loop and `UViewport::ReadInput` both reach it); each event goes to the viewport whose SDL window it names |
+
+  Shift/Ctrl/Alt map to `IK_Shift`/`IK_Ctrl`/`IK_Alt` (what `WM_KEYDOWN` reports as `VK_SHIFT`...), not to
+  the left/right codes engine-ut2004 uses: UC2's bindings and `GUIController` test `IK_Shift`.
+- **SDL calls and the scancode table**: engine-ut2004's `SDL2Viewport.cpp`; its Android/web/GL parts are not
+  taken.
+- **No rendering context.** `OpenWindow` creates a plain SDL window (no `SDL_WINDOW_OPENGL`), then
+  `TryRenderDevice("ini:Engine.Engine.RenderDevice")` as `UWindowsViewport::OpenWindow` does. The null device
+  (`UnNullRenderDevice.h`) needs nothing from the window: its `SetRes` only calls
+  `Viewport->ResizeViewport(BLIT_Direct3D, X, Y)`. A GL device (M5) will need `SDL_WINDOW_OPENGL` at window
+  creation (or the window re-created when such a device is selected); `GetWindow()` returns the
+  `SDL_Window*`.
+- **Gamepads**: not implemented (M10). `USDL2Client::PollGamepads` is the marked hook, called from `Tick`;
+  its comment lists what the Xbox driver does (pad slots and hot-plug as `IK_JoySlider1/2`, bound pads read
+  per viewport with `Engine->ActiveControllerId`, unbound pads to `InteractionMaster` only, Start on an
+  unbound pad joining split screen through `UClient::BeginSplitScreen`, rumble). `SDL_INIT_GAMECONTROLLER`
+  is not initialised.
+- **Keyboard routing in UC2's GUI** (why keys reach the menu without any pad logic): `UGUIController::
+  NativeKeyEvent` accepts input only for `Engine->ActiveControllerId` (0) and the viewport whose
+  `GamepadID` equals it. `ULevel::SpawnPlayActor` sets the first viewport's `GamepadID` to 0 on every
+  non-Xbox build ("For development on the PC, fake the GamepadID", `UnLevAct.cpp`), so keyboard and mouse
+  are pad 0. With `[GUI.GUIController] bEmulatedJoypad=True` (Default.ini) the GUI turns arrows into the
+  pad's D-pad codes, Enter into Start, Escape into Back (`UGUIController::GetXCode`).
+- **Compiled defaults**: `USDL2Client::StaticConstructor` gives the inherited `UClient` settings the values
+  of Default.ini's `[SDL2Drv.SDL2Client]`. Found by running with Epic's original `Default.ini` (no section
+  for this client): the window opened but the render device got 0x0, so nothing would draw. Same trap
+  engine-ut2004 documented.
+- **Config keys** of the client: those of `[WinDrv.WindowsClient]` (`UseJoystick`, `StartupFullscreen`,
+  `MouseXMultiplier`, `MouseYMultiplier`) plus `UClient`'s.
+
+Exec commands kept from WinDrv: `GETSYSTEMLANGUAGE` (from `$LANG`), `ENDFULLSCREEN`, `TOGGLEFULLSCREEN`,
+`GETCURRENTRES`, `GETCURRENTCOLORDEPTH`, `GETCOLORDEPTHS`, `GETCURRENTRENDERDEVICE`, `SETRES`, `TEMPSETRES`,
+`SETMOUSE`, `LOADWINDOWPOSITION` (window position saved under `[WindowPositions]` on close, as on PC).
+Not ported: `TOGGLEIME`, `SHOWDEBUGGER`/`HIDEDEBUGGER`/`BREAK` (Windows-only UnrealScript debugger).
+
+Not done / known differences:
+- Ctrl+letter does not produce the control characters `WM_CHAR` gives on Windows (Ctrl+C = 3...).
+- Fullscreen uses `SDL_WINDOW_FULLSCREEN` with the configured size; untested beyond Xvfb (no display mode
+  change happens under the null device anyway).
+- One SDL window per viewport, as WinDrv creates one Windows window per viewport. Split screen on PC is an
+  owner question (BLOCKERS.md); nothing was done for it.
