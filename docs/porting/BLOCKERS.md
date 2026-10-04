@@ -8,6 +8,8 @@ Newest first. Remove an entry when it is resolved and say how in `LOG.md`.
   Only needed if it says more than `reference/community/uc2-test-suite/README_TESTER.md`.
 - Xbox-look visual oracle (wanted at M6/M7): xemu plus its MCPX ROM, BIOS and HDD image.
 - arm64 (M13): `sudo apt install g++-aarch64-linux-gnu qemu-user`.
+- Canonical config (M15): retail and leak disagree on `Characters.ini`, `Gametypes.ini`, `Maplists.ini` and 14
+  localisation files; the owner should see the per-file diff before one side is chosen.
 - Scope, to decide when reached: split-screen on PC; web multiplayer visible at launch; arm64 hardware.
 
 ## Open technical questions
