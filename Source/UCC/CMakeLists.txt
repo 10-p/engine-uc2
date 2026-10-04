@@ -39,7 +39,7 @@ else()
     -sSTACK_SIZE=2097152              # engine-ut2004's value (the Emscripten default is 64 KB)
     -sINITIAL_MEMORY=268435456
     -sALLOW_MEMORY_GROWTH=1
-    -sMAXIMUM_MEMORY=4294967296
+    -sMAXIMUM_MEMORY=2147483648
     # No Emscripten runtime assertions: the one that matters here is SOCKFS's "select() assumes fd < 64",
     # which aborts `ucc-bin.js server` when it opens its socket (NODERAWFS hands out real descriptors and
     # the packages hold dozens). Without it the engine's own error path runs ("Dedicated server can't

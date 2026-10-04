@@ -28,6 +28,9 @@ target_link_options(${PROJECT_NAME} PRIVATE
   -sSTACK_SIZE=2097152
   -sINITIAL_MEMORY=268435456
   -sALLOW_MEMORY_GROWTH=1
+  # An explicit ceiling (CLAUDE.md, "Running anything"): growth stops at 2 GB instead of whatever the
+  # toolchain's default happens to be. Raise it deliberately, with a measurement, never by removing it.
+  -sMAXIMUM_MEMORY=2147483648
   # The canvas goes to the engine worker now, so the GL device (M5/M11) can create its context there.
   -sOFFSCREENCANVAS_SUPPORT
   "-sOFFSCREENCANVASES_TO_PTHREAD=#canvas"     # quoted: CMake would read '#' as a comment
