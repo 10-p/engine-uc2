@@ -354,7 +354,7 @@ public:
 		appMemswap((BYTE*)Data+(ElementSize*A),(BYTE*)Data+(ElementSize*B),ElementSize);
 	}
 protected:
-	FORCEINLINE FArray::Realloc( INT ElementSize )
+	FORCEINLINE void Realloc( INT ElementSize )
 	{
 		guardSlow(FArray::Realloc);
 		Data = appRealloc( Data, ArrayMax*ElementSize );
@@ -2042,7 +2042,7 @@ public:
 	int Num()
 	{
 		guardSlow(TMap::Num);
-		return Pairs.Num();
+		return this->Pairs.Num();
 		unguardSlow;
 	}
 };
@@ -2058,11 +2058,11 @@ public:
 	void MultiFind( const TK& Key, TArray<TI>& Values )
 	{
 		guardSlow(TMap::MultiFind);
-		if(Hash)
+		if(this->Hash)
 		{
-			for( INT i=Hash[(GetTypeHash(Key) & (HashCount-1))]; i!=INDEX_NONE; i=Pairs(i).HashNext )
-				if( Pairs(i).Key==Key )
-					new(Values)TI(Pairs(i).Value);
+			for( INT i=this->Hash[(GetTypeHash(Key) & (this->HashCount-1))]; i!=INDEX_NONE; i=this->Pairs(i).HashNext )
+				if( this->Pairs(i).Key==Key )
+					new(Values)TI(this->Pairs(i).Value);
 		}
 		unguardSlow;
 	}
@@ -2284,7 +2284,7 @@ template<class T> class TScopePointer
 
 	// Don't allow this
 	TScopePointer(TScopePointer&) {}
-	operator=(T*) {}
+	void operator=(T*) {}
 	// Deletes the pointer
 	FORCEINLINE void Release(void)
 	{
@@ -2306,7 +2306,7 @@ public:
 	// Operators for getting at the data member
 	FORCEINLINE operator T* () { return pPointer; }
 	FORCEINLINE operator T** () { return &pPointer; }
-	FORCEINLINE operator&()  { return &pPointer; }
+	FORCEINLINE T** operator&()  { return &pPointer; }
 	// Accessors
 	FORCEINLINE T* Get(void) { return pPointer; }
 	FORCEINLINE void Set(T* pNew,UBOOL bRelease = 0)
@@ -2714,19 +2714,21 @@ UBOOL GetTUmaArrayFromXPR(const TCHAR* ArrayName,INT& OutCount,void*& OutData);
 template <class TYPE,DWORD BlockSize = 256> class TPooledList
 {
 	// The singleton instance for memory book keeping
-	template <class TYPE> struct TPoolInstance
+	// (GCC/clang: the nested parameters are renamed; C++ forbids shadowing TYPE. Always instantiated
+	// as TPoolInstance<TYPE> and TBlockAllocationList<TPooledList<TYPE> >, so the meaning is unchanged.)
+	template <class PTYPE> struct TPoolInstance
 	{
 		// Maintains the list of block allocations. These blocks are freed not
 		// the individual items in the block
-		template <class TYPE> struct TBlockAllocationList
+		template <class BTYPE> struct TBlockAllocationList
 		{
 			// The start of memory contained in this block
-			TYPE* pStart;
+			BTYPE* pStart;
 			// The next block in the chain
 			TBlockAllocationList* pNext;
 			// Simple constructor
-			TBlockAllocationList<TYPE>(TYPE* Start,
-				TBlockAllocationList<TYPE>* Next)
+			TBlockAllocationList(BTYPE* Start,
+				TBlockAllocationList<BTYPE>* Next)
 			{
 				pStart = Start;
 				pNext = Next;
@@ -2791,7 +2793,7 @@ template <class TYPE,DWORD BlockSize = 256> class TPooledList
 		}
 		// Create a new block list entry and place at the front of the list
 		PoolInstance.BlockList = NEW
-			TPoolInstance<TYPE>::TBlockAllocationList<TPooledList<TYPE> > (pMem,
+			typename TPoolInstance<TYPE>::template TBlockAllocationList<TPooledList<TYPE> > (pMem,
 			PoolInstance.BlockList);
 		// Now set the list pool as the newly allocated block
 		PoolInstance.ListPool = pMem;
@@ -2907,7 +2909,7 @@ public:
 		while (PoolInstance.BlockList != NULL)
 		{
 			// Snip off the first block in the chain
-			TPoolInstance<TYPE>::TBlockAllocationList<TPooledList<TYPE> >* pDel =
+			typename TPoolInstance<TYPE>::template TBlockAllocationList<TPooledList<TYPE> >* pDel =
 				PoolInstance.BlockList;
 			PoolInstance.BlockList = PoolInstance.BlockList->pNext;
 			// Free the memory contained in that block

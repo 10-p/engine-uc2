@@ -155,7 +155,11 @@ CORE_API void VARARGS appThrowf( const TCHAR* Fmt, ... );
 	#define check(expr)  {if(!(expr)) appFailAssert( #expr, __FILE__, __LINE__ );}
 	#define verify(expr) {if(!(expr)) appFailAssert( #expr, __FILE__, __LINE__ );}
 #else
+#if defined(_MSC_VER)
 	#define check __noop
+#else
+	#define check(...) ((void)0) /* __noop is an MSVC intrinsic: the argument is not evaluated */
+#endif
 	#define verify(expr) if(expr){}
 #endif
 
@@ -166,7 +170,11 @@ CORE_API void VARARGS appThrowf( const TCHAR* Fmt, ... );
 	#define checkSlow(expr)  {if(!(expr)) appFailAssert( #expr, __FILE__, __LINE__ );}
 	#define verifySlow(expr) {if(!(expr)) appFailAssert( #expr, __FILE__, __LINE__ );}
 #else
+#if defined(_MSC_VER)
 	#define checkSlow __noop
+#else
+	#define checkSlow(...) ((void)0) /* __noop is an MSVC intrinsic: the argument is not evaluated */
+#endif
 	#define verifySlow(expr) if(expr){}
 #endif
 
@@ -704,36 +712,76 @@ inline void* operator new( size_t Size,const ANSICHAR* File, INT Line = __LINE__
 	return appMalloc( Size, File, Line );
 	unguardSlow;
 }
+#if !defined(_MSC_VER)
+// NEW T[n]: MSVC 7.1 falls back to the placement operator new above; standard C++ looks for new[].
+inline void* operator new[]( size_t Size,const ANSICHAR* File, INT Line = __LINE__ )
+{
+	guardSlow(new[]);
+	return appMalloc( Size, File, Line );
+	unguardSlow;
+}
+#endif
 #endif
 
-inline void* operator new( size_t Size )
+// UT_REPLACEMENT_ALLOC (engine-ut2004 2.19c): these replace the global allocation functions. GCC/clang
+// emit an inline replacement out of line (weak) wherever it is not inlined -- always at -O0 -- and the
+// linker then routes the WHOLE program's operator new through GMalloc, including Emscripten's own static
+// initialisers that run before appInit (GMalloc is still the error allocator then). Forcing the inline
+// keeps engine allocations on GMalloc and system allocations on the C++ runtime at every -O level.
+#if defined(__GNUC__) || defined(__clang__)
+#define UT_REPLACEMENT_ALLOC __attribute__((always_inline))
+#else
+#define UT_REPLACEMENT_ALLOC
+#endif
+
+UT_REPLACEMENT_ALLOC inline void* operator new( size_t Size )
 {
 	guardSlow(new);
 	return appMalloc( Size );
 	unguardSlow;
 }
 
-inline void operator delete( void* Ptr )
+UT_REPLACEMENT_ALLOC inline void operator delete( void* Ptr )
 {
 	guardSlow(delete);
 	appFree( Ptr );
 	unguardSlow;
 }
 
+#if !defined(_MSC_VER)
+// C++14 sized deallocation: without these the compiler calls the C++ runtime's sized operator delete,
+// which hands memory that came from GMalloc to free(). (engine-ut2004 defines the same pair.)
+UT_REPLACEMENT_ALLOC inline void operator delete( void* Ptr, size_t )
+{
+	guardSlow(delete);
+	appFree( Ptr );
+	unguardSlow;
+}
+#endif
+
 #if PLATFORM_NEEDS_ARRAY_NEW
-inline void* operator new[]( size_t Size )
+UT_REPLACEMENT_ALLOC inline void* operator new[]( size_t Size )
 {
 	guardSlow(new[]);
 	return appMalloc( Size );
 	unguardSlow;
 }
 
-inline void operator delete[]( void* Ptr )
+UT_REPLACEMENT_ALLOC inline void operator delete[]( void* Ptr )
 {
 	guardSlow(delete);
 	appFree( Ptr );
 	unguardSlow;
 }
+
+#if !defined(_MSC_VER)
+UT_REPLACEMENT_ALLOC inline void operator delete[]( void* Ptr, size_t )
+{
+	guardSlow(delete);
+	appFree( Ptr );
+	unguardSlow;
+}
+#endif
 #endif
 
 #ifndef FINAL_RELEASE

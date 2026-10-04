@@ -1094,7 +1094,7 @@ public:
 	FVector TransformVectorByTranspose( const FCoords& Coords ) const;
 
 	//scion jg -- Faster version for xbox
-	FORCEINLINE FVector FVector::SafeNormal() const
+	FORCEINLINE FVector SafeNormal() const
 	{
 		FLOAT SquareSum = X*X + Y*Y + Z*Z;
 		if( SquareSum < SMALL_NUMBER )
@@ -2732,7 +2732,7 @@ inline void ASMTransformPoint(const FCoords &Coords, const FVector &InVector, FV
         fstp    dword ptr [edi+8]
 	}
 }
-#elif ASMLINUX
+#elif ASMLINUX && !defined(UT_NO_X86_INTRIN)
 inline void ASMTransformPoint(const FCoords &Coords, const FVector &InVector, FVector &OutVector)
 {
 	__asm__ __volatile__ (
@@ -2856,7 +2856,7 @@ inline void ASMTransformVector(const FCoords &Coords, const FVector &InVector, F
 }
 #endif
 
-#if ASMLINUX
+#if ASMLINUX && !defined(UT_NO_X86_INTRIN)
 inline void ASMTransformVector(const FCoords &Coords, const FVector &InVector, FVector &OutVector)
 {
 	asm volatile(
@@ -2925,7 +2925,7 @@ inline FVector FVector::TransformPointBy( const FCoords &Coords ) const
 	FVector Temp;
 	ASMTransformPoint( Coords, *this, Temp);
 	return Temp;
-#elif ASMLINUX
+#elif 0 //ASMLINUX -- the C path below on GCC, as in UT2004's Linux build (static temp, no x87 clobbers)
 	static FVector Temp;
 	ASMTransformPoint( Coords, *this, Temp);
 	return Temp;
@@ -2945,7 +2945,7 @@ inline FVector FVector::TransformVectorBy( const FCoords &Coords ) const
 	FVector Temp;
 	ASMTransformVector( Coords, *this, Temp);
 	return Temp;
-#elif ASMLINUX
+#elif 0 //ASMLINUX -- the C path below on GCC, as in UT2004's Linux build ("apparently broken. --ryan.")
 	FVector Temp;
 	ASMTransformVector( Coords, *this, Temp);
 	return Temp;

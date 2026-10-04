@@ -602,6 +602,9 @@ class CORE_API UDelegateProperty : public UProperty
 	Field templates.
 -----------------------------------------------------------------------------*/
 
+// Declared ahead of FindField, which uses it (two-phase lookup).
+template<class T> FORCEINLINE T* FindFieldNamed(UStruct* Owner, const FName& Name);
+
 //
 // Find a typed field in a struct.
 //

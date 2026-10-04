@@ -59,9 +59,9 @@ public:
 
 	// Friends.
 	friend class FMemMark;
-	friend void* operator new( size_t Size, FMemStack& Mem, INT Count=1, INT Align=DEFAULT_ALIGNMENT );
-	friend void* operator new( size_t Size, FMemStack& Mem, EMemZeroed Tag, INT Count=1, INT Align=DEFAULT_ALIGNMENT );
-	friend void* operator new( size_t Size, FMemStack& Mem, EMemOned Tag, INT Count=1, INT Align=DEFAULT_ALIGNMENT );
+	friend void* operator new( size_t Size, FMemStack& Mem, INT Count, INT Align );
+	friend void* operator new( size_t Size, FMemStack& Mem, EMemZeroed Tag, INT Count, INT Align );
+	friend void* operator new( size_t Size, FMemStack& Mem, EMemOned Tag, INT Count, INT Align );
 
 	// Types.
 	struct FTaggedMemory
@@ -122,14 +122,14 @@ template <class T> inline T* NewOned( FMemStack& Mem, INT Count=1, INT Align=DEF
 -----------------------------------------------------------------------------*/
 
 // Operator new for typesafe memory stack allocation.
-inline void* operator new( size_t Size, FMemStack& Mem, INT Count, INT Align )
+inline void* operator new( size_t Size, FMemStack& Mem, INT Count=1, INT Align=DEFAULT_ALIGNMENT )
 {
 	// Get uninitialized memory.
 	guardSlow(FMemStack::New1);
 	return Mem.PushBytes( Size*Count, Align );
 	unguardSlow;
 }
-inline void* operator new( size_t Size, FMemStack& Mem, EMemZeroed Tag, INT Count, INT Align )
+inline void* operator new( size_t Size, FMemStack& Mem, EMemZeroed Tag, INT Count=1, INT Align=DEFAULT_ALIGNMENT )
 {
 	// Get zero-filled memory.
 	guardSlow(FMemStack::New2);
@@ -138,7 +138,7 @@ inline void* operator new( size_t Size, FMemStack& Mem, EMemZeroed Tag, INT Coun
 	return Result;
 	unguardSlow;
 }
-inline void* operator new( size_t Size, FMemStack& Mem, EMemOned Tag, INT Count, INT Align )
+inline void* operator new( size_t Size, FMemStack& Mem, EMemOned Tag, INT Count=1, INT Align=DEFAULT_ALIGNMENT )
 {
 	// Get one-filled memory.
 	guardSlow(FMemStack::New3);

@@ -100,7 +100,7 @@ public:
 	// Returns the ansi string
 	FORCEINLINE CORE_API const ANSICHAR* GetRawName(void) { return Name; }
 	// Returns the string in FString form
-	FORCEINLINE CORE_API GetName(FString& String)
+	FORCEINLINE CORE_API void GetName(FString& String)
 	{
 		String = Name;
 	}

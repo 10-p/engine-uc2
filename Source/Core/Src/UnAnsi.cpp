@@ -264,7 +264,11 @@ CORE_API FLOAT appFractional( FLOAT Value )
 #endif
 CORE_API DOUBLE appCopySign( DOUBLE A, DOUBLE B )
 {
+#if _MSC_VER
 	return _copysign(A, B);
+#else
+	return copysign(A, B);
+#endif
 }
 
 /*-----------------------------------------------------------------------------
@@ -427,7 +431,7 @@ CORE_API TCHAR* appStrstr( const TCHAR* String, const TCHAR* Find )
 #if UNICODE
 	return wcsstr( String, Find );
 #else
-	return strstr( String, Find );
+	return (TCHAR*) strstr( String, Find );
 #endif
 }
 
@@ -436,7 +440,7 @@ CORE_API TCHAR* appStrchr( const TCHAR* String, int c )
 #if UNICODE
 	return wcschr( String, c );
 #else
-	return strchr( String, c );
+	return (TCHAR*) strchr( String, c );
 #endif
 }
 
@@ -445,7 +449,7 @@ CORE_API TCHAR* appStrrchr( const TCHAR* String, int c )
 #if UNICODE
 	return wcsrchr( String, c );
 #else
-	return strrchr( String, c );
+	return (TCHAR*) strrchr( String, c );
 #endif
 }
 
@@ -516,8 +520,10 @@ CORE_API SQWORD appAtoi64( const TCHAR* Str )
 {
 #if UNICODE
 	return _wtoi64( Str );
-#else
+#elif _MSC_VER
 	return _atoi64( Str );
+#else
+	return atoll( Str );
 #endif
 }
 

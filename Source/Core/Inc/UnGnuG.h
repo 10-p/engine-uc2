@@ -1,6 +1,13 @@
 /*=============================================================================
 	UnGnuG.h: Unreal definitions for Gnu G++. Unfinished. Unsupported.
 	Copyright 1997-1999 Epic Games, Inc. All Rights Reserved.
+
+	engine-uc2 (M1): rebased on engine-ut2004's UnGnuG.h (GCC 15 / Emscripten / MinGW port of the UT2004
+	header), then given back UC2's platform contract, which is UnVcWin32.h's: ANSI-only TCHAR conversions,
+	appTrunc, appSqrt(FLOAT), appInvSqrt, appCycles64, LARGEINT, FMovieThread/FMoviePlayer,
+	appGetLanguageID. UC2's own copy of this file was a stale UT2003 leftover. The math intrinsics and
+	timer-reset parts of the UT2004 header are NOT here: UC2 declares its math in UnFile.h and defines it in
+	UnAnsi.cpp. See docs/porting/analysis/core-port.md.
 =============================================================================*/
 
 /*----------------------------------------------------------------------------
@@ -8,6 +15,9 @@
 ----------------------------------------------------------------------------*/
 #ifndef _INCL_UNGNUG_H_
 #define _INCL_UNGNUG_H_
+
+#include <stdio.h>
+#include <stdarg.h>
 
 #if ((defined __LINUX_X86__) || (defined __FreeBSD__))
 	#define __UNIX__  1
@@ -25,14 +35,19 @@
 		#undef ASM3DNOW
 		#undef ASMKNI
 		#define ASMLINUX 1
-		#define COMPILER "Compiled with GNU g++ ("__VERSION__")"
+		#define COMPILER "Compiled with GNU g++ (" __VERSION__ ")"
+	#endif
+	// Emscripten: keep ASMLINUX=1 for the preprocessor paths (UT_NO_X86_INTRIN below removes the asm itself).
+	#ifdef __EMSCRIPTEN__
+		#undef COMPILER
+		#define COMPILER "Compiled with Emscripten"
 	#endif
 #elif (defined MACOSX)
 	#define __UNIX__  1
 	#undef ASM
 	#undef ASM3DNOW
 	#undef ASMKNI
-	#define COMPILER "Compiled with MacOS X GNU g++ ("__VERSION__")"
+	#define COMPILER "Compiled with MacOS X GNU g++ (" __VERSION__ ")"
 #elif __PSX2_EE__
 	#define __UNIX__ 1
 	#define __LINUX__ 1
@@ -43,7 +58,7 @@
 	#undef ASMKNI
 	#undef ASMLINUX
 	#define ASMPSX2 1
-	#define COMPILER "Compiled with PSX2-EE g++ ("__VERSION__")"
+	#define COMPILER "Compiled with PSX2-EE g++ (" __VERSION__ ")"
 	// Force use single precision
 	#define tanh(x) tanhf(x)
 	#define ceil(x) ceilf(x)
@@ -75,9 +90,25 @@
 	#undef ASMKNI
 	#undef ASMLINUX
 	#undef ASMPSX2
-	#define COMPILER "Compiled for GCN ("__VERSION__")"
+	#define COMPILER "Compiled for GCN (" __VERSION__ ")"
+#elif defined(__MINGW32__)
+	// Windows built with GCC (engine-ut2004 2.33). ASMLINUX means "GCC asm", not "Linux"; what must NOT
+	// come with it is the Unix identity (__UNIX__/__LINUX__ select the POSIX file/socket/loader paths).
+	#define __INTEL__ 1
+	#define __INTEL_BYTE_ORDER__ 1
+	#undef ASM
+	#undef ASM3DNOW
+	#undef ASMKNI
+	#define ASMLINUX 1
+	#define COMPILER "Compiled with MinGW g++ (" __VERSION__ ")"
 #else
 	#error Unsupported platform.
+#endif
+
+// Non-x86 targets (Emscripten/wasm, arm) have no x86 inline asm (rdtsc/rorl/roll/cpuid) and no SSE. They
+// share the portable-C fallbacks below. Only __i386__/__x86_64__ keep the x86 inline asm.
+#if !defined(__i386__) && !defined(__x86_64__)
+	#define UT_NO_X86_INTRIN 1
 #endif
 
 // alloca
@@ -94,6 +125,12 @@
 	Platform specifics types and defines.
 ----------------------------------------------------------------------------*/
 
+// Windows/MinGW: the Win32 headers already declare DWORD and SIZE_T; take the platform's.
+#ifdef _WIN32
+#include <minwindef.h>
+#include <basetsd.h>
+#endif
+
 // Undo any Windows defines.
 #undef BYTE
 #undef WORD
@@ -104,32 +141,37 @@
 #undef MAXWORD
 #undef MAXDWORD
 #undef MAXINT
+#ifndef _WIN32
 #undef VOID
+#endif
 #undef CDECL
 
-// Make sure HANDLE is defined.
-#define HANDLE DWORD
-#define HINSTANCE DWORD
+// Make sure HANDLE is defined. UC2: pointer-sized, as on UC2's PC build (UnVcWin32.h), not the DWORD of
+// the old Unix header -- nothing portable stores one in an int.
+#ifndef _WIN32
+#define HANDLE void*
+#define HINSTANCE void*
+#endif
 
 // Sizes.
 enum {DEFAULT_ALIGNMENT = 8 }; // Default boundary to align memory allocations on.
 enum {CACHE_LINE_SIZE   = 32}; // Cache line size.
 
+// Member alignment. aligned(n) only (no `packed`), as in UT2004's shipped Linux header: GCC honours the
+// engine's own #pragma pack blocks. Struct layout against the shipped .u files is checked at M3.
 #if __GNUG__
-#define GCC_PACK(n)  __attribute__((packed,aligned(n)))
+#define GCC_PACK(n)  __attribute__((aligned(n)))
 #define GCC_ALIGN(n) __attribute__((aligned(n)))
-#define GCC_MOVE_ALIGN(n) 
+#define GCC_MOVE_ALIGN(n)
 #else
-#define GCC_PACK(n) 
-#define GCC_ALIGN(n) 
-#define GCC_MOVE_ALIGN(n) 
+#define GCC_PACK(n)
+#define GCC_ALIGN(n)
+#define GCC_MOVE_ALIGN(n)
 #endif
 
-//#define GCC_MOVE_ALIGN(n) __attribute__((aligned(n))) __attribute__((section (".bss")))
-
 // Optimization macros
-#define DISABLE_OPTIMIZATION  
-#define ENABLE_OPTIMIZATION  
+#define DISABLE_OPTIMIZATION
+#define ENABLE_OPTIMIZATION
 
 // Function type macros.
 #define DLL_IMPORT
@@ -141,23 +183,35 @@ enum {CACHE_LINE_SIZE   = 32}; // Cache line size.
 #define DLL_EXPORT_CLASS
 #define VARARGS
 #define CDECL
+// On Windows STDCALL is a real calling convention (Win32 callback typedefs carry it).
+#ifdef _WIN32
+#define STDCALL __stdcall
+#else
 #define STDCALL
+#endif
 #define FORCEINLINE inline
 #define ZEROARRAY 0 /* Zero-length arrays in structs */
 #define __cdecl
 
-#if defined(NO_UNICODE_OS_SUPPORT) || !defined(UNICODE)
-#define VSNPRINTF vsnprintf
-#else
-#define VSNPRINTF wvsnprintf
-#endif
+#define __forceinline inline
 
-// Variable arguments.
+// Variable arguments. UC2's MSVC build routes these through appGetVarArgs(), which reads the stack
+// directly; here they are the plain va_list forms.
+#define VSNPRINTF vsnprintf
+
 #define GET_VARARGS(msg,len,lastarg,fmt)	\
 {	\
 	va_list ArgPtr;	\
 	va_start( ArgPtr, lastarg );	\
 	VSNPRINTF( msg, len, fmt, ArgPtr );	\
+	va_end( ArgPtr );	\
+}
+
+#define GET_VARARGS_ANSI(msg,len,lastarg,fmt)	\
+{	\
+	va_list ArgPtr;	\
+	va_start( ArgPtr, lastarg );	\
+	vsnprintf( msg, len, fmt, ArgPtr );	\
 	va_end( ArgPtr );	\
 }
 
@@ -169,16 +223,13 @@ enum {CACHE_LINE_SIZE   = 32}; // Cache line size.
 	va_end( ArgPtr );	\
 }
 
-
 // Unsigned base types.
 typedef unsigned char		BYTE;		// 8-bit  unsigned.
 typedef unsigned short		_WORD;		// 16-bit unsigned.
+#ifndef _WIN32
 typedef unsigned int		DWORD;		// 32-bit unsigned.
-typedef unsigned long long	QWORD;		// 64-bit unsigned.
-#if __GNUC__
-//!!vogel: ???
-//typedef unsigned int		OWORD __attribute__ ((mode (TI)));
 #endif
+typedef unsigned long long	QWORD;		// 64-bit unsigned.
 
 // Signed base types.
 typedef	signed char			SBYTE;		// 8-bit  signed.
@@ -189,14 +240,8 @@ typedef signed long long	SQWORD;		// 64-bit signed.
 // Character types.
 typedef char			    ANSICHAR;	// An ANSI character.
 typedef unsigned char		ANSICHARU;	// An ANSI character.
-
-#if defined(NO_UNICODE_OS_SUPPORT) || !defined(UNICODE)
-typedef unsigned short      UNICHAR;	// A unicode character.
+typedef unsigned short      UNICHAR;	// A unicode character (UC2: storage type only, TCHAR is ANSI).
 typedef unsigned short      UNICHARU;	// A unicode character.
-#else
-typedef wchar_t             UNICHAR;	// A unicode character.
-typedef wchar_t             UNICHARU;	// A unicode character.
-#endif
 
 // Other base types.
 typedef signed int			UBOOL;		// Boolean 0 (false) or 1 (true).
@@ -206,16 +251,32 @@ typedef float				DOUBLE;		// 32-bit IEEE floating point.
 #else
 typedef double				DOUBLE;		// 64-bit IEEE double.
 #endif
+#ifndef _WIN32
 typedef unsigned int        SIZE_T;     // Corresponds to C SIZE_T.
+#endif
 
 // Bitfield type.
 #if FORCE_EXTREME_PACKING
 typedef BYTE                BITFIELD;	// For bitfields.
+#elif defined(_WIN32)
+typedef DWORD				BITFIELD;	// Same TYPE as DWORD, so `Ar << Bitfield` picks the DWORD overload.
 #else
 typedef unsigned int		BITFIELD;	// For bitfields.
 #endif
 
-#ifndef MACOSX
+// An unsigned integer as wide as a pointer. UC2's own code does not use it yet (UT2004 added it for
+// 64-bit); it is here for the ports of drivers and for M13. `unsigned long` everywhere except LLP64
+// (Win64), where long is 4 bytes. On every 32-bit target this is 4 bytes and is NOT DWORD's type.
+#if defined(_WIN64) || \
+    (defined(__SIZEOF_POINTER__) && defined(__SIZEOF_LONG__) && \
+     __SIZEOF_POINTER__ > __SIZEOF_LONG__)
+typedef unsigned long long PTRINT;
+#else
+typedef unsigned long PTRINT;
+#endif
+
+// !!! FIXME: This should really just include a header.
+#if ((!defined MACOSX) && (!defined __x86_64__) && (!defined __SIZE_TYPE__))
 typedef unsigned int size_t;
 #endif
 
@@ -239,7 +300,8 @@ typedef unsigned int size_t;
 #undef NULL
 #define NULL 0
 
-// Package implementation.
+// Package implementation. With __STATIC_LINK, appGetDllHandle() looks this symbol up (dlsym) to answer
+// "is package X linked into this binary?".
 #define IMPLEMENT_PACKAGE_PLATFORM(pkgname) \
 	BYTE GLoaded##pkgname;
 
@@ -247,83 +309,30 @@ typedef unsigned int size_t;
 #define PLATFORM_NEEDS_ARRAY_NEW 1
 #define FORCE_ANSI_LOG           0
 
-#if defined(NO_UNICODE_OS_SUPPORT) || !defined(UNICODE)
+// OS string conversion. UC2 removed Unicode ("jg -- Removed unicode support", Core.h): TCHAR is ANSICHAR
+// on every target, so these are the casts of UC2's PC build (UnVcWin32.h), which also drop const.
+#if defined(UNICODE) && !defined(NO_UNICODE_OS_SUPPORT)
+	#error "UC2 is ANSI-only: TCHAR is ANSICHAR. Do not define UNICODE (build with NO_UNICODE_OS_SUPPORT)."
+#endif
 #define TCHAR_CALL_OS(funcW,funcA) (funcA)
-#define TCHAR_TO_ANSI(str) strcpy((char *) appAlloca(strlen(str)+1),str)
-#define ANSI_TO_TCHAR(str) strcpy((char *) appAlloca(strlen(str)+1),str)
-inline ANSICHAR *unixToANSI(ANSICHAR* ACh, const ANSICHAR* InUCh )
-{
-    if (InUCh)
-        strcpy(ACh, InUCh);
-    else
-        ACh[0] = '\0';
-
-    return(ACh);
-}
-#else
-
-    CORE_API ANSICHAR* unixToANSI( ANSICHAR* ACh, const UNICHAR* InUCh );
-    CORE_API INT unixGetSizeANSI( const UNICHAR* InUCh );
-    CORE_API UNICHAR* unixToUNICODE( UNICHAR* UCh, const ANSICHAR* InACh );
-    CORE_API INT unixGetSizeUNICODE( const ANSICHAR* InACh );
-    CORE_API UNICHAR* unixANSIToUNICODE(char* str);
-    CORE_API INT unixDetectUNICODE( void );
-    #define UNICODE_BY_HAND 1
-    #define _UNICODE 1
-
-    #if defined(NO_ANSI_OS_SUPPORT)
-	    #define TCHAR_CALL_OS(funcW,funcA) (funcW)
-        #define TCHAR_TO_ANSI(str) str
-	    #define ANSI_TO_TCHAR(str) str
-    #else
-	    #define TCHAR_CALL_OS(funcW,funcA) (GUnicodeOS ? (funcW) : (funcA))
-    	#define TCHAR_TO_ANSI(str) unixToANSI((ANSICHAR*)appAlloca(unixGetSizeANSI(str)),str)
-    	#define ANSI_TO_TCHAR(str) unixToUNICODE((TCHAR*)appAlloca(unixGetSizeUNICODE(str)),str)
-    #endif
-
-#endif
-
-
-#if UNICODE_BY_HAND
-
-CORE_API void unicode_str_to_stdout(const UNICHAR *str);
-
-// These are implemented as portable C in Core/Src/UnUnix.cpp. You should
-//  use these if your platform doesn't supply them, or your platform does
-//  something dumb like make you use four byte unicode (like GNU).
-//  Chances are that the versions supplied with your platform are going to
-//  be much, much more optimized. You have been warned.
-CORE_API UNICHAR* wcscpy( UNICHAR* Dest, const UNICHAR* Src);
-CORE_API UNICHAR* wcsncpy( UNICHAR* Dest, const UNICHAR* Src, INT MaxLen );
-CORE_API UNICHAR* wcscat( UNICHAR* String, const UNICHAR *Add );
-CORE_API INT wcslen( const UNICHAR* String );
-CORE_API INT wcscmp( const UNICHAR* Str1, const UNICHAR *Str2 );
-CORE_API INT wcsncmp( const UNICHAR* Str1, const UNICHAR *Str2, INT max );
-CORE_API UNICHAR* wcschr( const UNICHAR* String, const UNICHAR Find );
-CORE_API UNICHAR* wcsstr( const UNICHAR* String, const UNICHAR* Find );
-CORE_API INT _wcsicmp( const UNICHAR* String1, const UNICHAR* String2 );
-CORE_API UNICHAR* _wcsupr( UNICHAR* String );
-CORE_API INT wcstoul( const UNICHAR* Start, UNICHAR** End, INT Base );
-CORE_API INT _wtoi( const UNICHAR* Str );
-CORE_API INT _wcsnicmp( const UNICHAR* Str1, const UNICHAR *Str2, INT max );
-CORE_API INT wprintf( const UNICHAR* fmt, ... );
-CORE_API INT swscanf( const UNICHAR* fmt, ... );
-CORE_API INT wvsnprintf( UNICHAR *buf, INT max, const UNICHAR *fmt, va_list args );
-CORE_API INT iswspace( UNICHAR ch  );
-CORE_API UNICHAR *_itow( const INT Num, UNICHAR *Buffer, const INT BufSize );
-CORE_API QWORD _wcstoui64( const UNICHAR* Start, UNICHAR** End, INT Base );
-CORE_API UNICHAR* _ui64tow( QWORD Num, UNICHAR *Buffer, INT Base );
-CORE_API FLOAT _wtof( const UNICHAR* Str );
-#endif
+#define TCHAR_TO_ANSI(str) (ANSICHAR*)(str)
+#define TCHAR_TO_OEM(str) (ANSICHAR*)(str)
+#define ANSI_TO_TCHAR(str) (ANSICHAR*)(str)
+// The Unix file manager's helpers (engine-ut2004 FFileManagerUnix.h); with ANSI TCHAR they copy.
+inline char* unixToANSI( char* out, const char* in ) { char* ret = out; if(out != in) { while((*out++ = *in++)); } return ret; }
+inline int unixGetSizeANSI( const char* str ) { int len=0; while(str[len]) len++; return len+1; }
+inline char* unixToUNICODE( char* out, const char* in ) { char* ret = out; if(out != in) { while((*out++ = *in++)); } return ret; }
+inline int unixGetSizeUNICODE( const char* str ) { int len=0; while(str[len]) len++; return len+1; }
+inline char* unixANSIToUNICODE( char* str ) { return str; }
 
 // Memory
 #define appAlloca(size) ((size==0) ? 0 : alloca((size+7)&~7))
-//#define appAlloca(size) ((size==0) ? 0 : malloc((size+7)&~7))
 
 // System identification.
 extern "C"
 {
 	extern HINSTANCE      hInstance;
+	extern CORE_API UBOOL GIsSSE;
 }
 
 // Module name
@@ -332,93 +341,73 @@ extern CORE_API DOUBLE GSecondsPerCycle;
 
 char *strlwr(char *str);
 
-
 CORE_API DOUBLE appSecondsSlow();
 
-//!!vogel: sync with UnVcWin32.h.
-//
-// JP: Commented out these functions as they don't work reliably for some numbers
-// eg appFloor(113) returns 112!
-// This is due to the rounding for multiples of 0.5 depending on other bits of the number!
-//
-#if 0
-/*
-#define DEFINED_appRound 1
-inline INT appRound( FLOAT F )
-{
-#if (defined __GNUC__) && (defined __i386__) && (defined ASMLINUX)
-	static INT temp;
-	__asm__ __volatile__( 
-		"flds %1    \n\t"
-		"fistpl %0  \n\t"
-		: "=m" (temp)
-		: "m" (F)
-	);
-	return temp;
-#else
-	return (INT)(F);
-#endif
-}
+/*----------------------------------------------------------------------------
+	Functions (UC2 contract, mirrors UnVcWin32.h's PC branch).
+----------------------------------------------------------------------------*/
 
-//
-// Converts to integer equal to or less than.
-//
-#define DEFINED_appFloor 1
-inline INT appFloor( FLOAT F )
+// Converts to an integer with truncation towards zero.
+#define appTrunc(x) (INT)(x)
+
+// Single-precision square root, defined in UnUnix.cpp (UnAnsi.cpp has the DOUBLE overload).
+CORE_API FLOAT appSqrt(FLOAT fl);
+
+// Inverse square root. The Xbox build uses rsqrtss + one Newton-Raphson step; the PC build divides.
+inline FLOAT appInvSqrt( FLOAT F ) { return 1.f / appSqrt(F); }
+
+// Defined in UnUnix.cpp; launchers call it with argv[0] to locate the binary.
+#define DEFINED_appArgv0 1
+CORE_API void appArgv0(const char *argv0);
+
+// A win32 LARGE_INTEGER.
+typedef union _LARGEINT
 {
-#if (defined __GNUC__) && (defined __i386__) && (defined ASMLINUX)
-	static INT temp;
-	F -= 0.5f;
-	__asm__ __volatile__( 
-		"flds %1    \n\t"
-		"fistpl %0  \n\t"
-		: "=m" (temp)
-		: "m" (F)
-	);
-	return temp;
-#else
-	static FLOAT Half=0.5;
-	return (INT)(F - Half);
-#endif
-}
-*/
-#endif
+	struct
+	{
+		DWORD LowPart;
+		DWORD HighPart;
+	};
+	QWORD QuadPart;
+} LARGEINT;
 
 //
 // CPU cycles, related to GSecondsPerCycle.
+//
+// x86: the time-stamp counter. Elsewhere (UT_NO_X86_INTRIN) a microsecond counter built on
+// appSecondsSlow(); appPlatformInit() pins GSecondsPerCycle to 1e-6 on that path so the two agree.
+// Callers only ever take unsigned differences, which stay right across a wrap.
 //
 #if ASMLINUX
 #define DEFINED_appCycles 1
 inline DWORD appCycles()
 {
 	DWORD r;
-	asm("rdtsc" : "=a" (r) : "d" (r));
+#ifdef UT_NO_X86_INTRIN
+	r = (DWORD)(appSecondsSlow() * 1000000.0);
+#else
+	asm volatile("rdtsc" : "=a" (r) : : "edx");
+#endif
 	return r;
 }
-#endif
 
-#if ASMLINUX
 #define DEFINED_appCycles64 1
 inline SQWORD appCycles64()
 {
+#ifdef UT_NO_X86_INTRIN
+	return (SQWORD)(appSecondsSlow() * 1000000.0);
+#else
 	DWORD L,H;
-	asm("rdtsc" : "=a" (L), "=d" (H));
+	asm volatile("rdtsc" : "=a" (L), "=d" (H));
 	return ((SQWORD)L +  ((SQWORD)H<<32));
+#endif
 }
 #endif
 
 //
-// Seconds, arbitrarily based.
+// Seconds, arbitrarily based: out of line in UnUnix.cpp (gettimeofday based, as in engine-ut2004 --
+// the rdtsc version drifts with CPU frequency scaling).
 //
-#if ASMLINUX
-#define DEFINED_appSeconds 1
-inline DOUBLE appSeconds()
-{
-	DWORD L,H;
-	asm("rdtsc" : "=a" (L), "=d" (H));
-	return ((DOUBLE)L +  4294967296.0 * (DOUBLE)H) * GSecondsPerCycle;
-}
-#endif
 
 //
 // Memory copy.
@@ -426,7 +415,6 @@ inline DOUBLE appSeconds()
 #define DEFINED_appMemcpy 1
 inline void appMemcpy( void* Dest, const void* Src, INT Count )
 {
-	//!!vogel: TODO
 	memcpy( Dest, Src, Count );
 }
 
@@ -436,32 +424,67 @@ inline void appMemcpy( void* Dest, const void* Src, INT Count )
 #define DEFINED_appMemzero 1
 inline void appMemzero( void* Dest, INT Count )
 {
-	//!!vogel: TODO
 	memset( Dest, 0, Count );
 }
 
 #if ASMLINUX
+#ifndef _rotr
 inline DWORD _rotr(DWORD val, INT shift)
 {
+#ifdef UT_NO_X86_INTRIN
+	shift &= 31;
+	return shift ? ((val >> shift) | (val << (32 - shift))) : val;
+#else
 	DWORD retval;
-    asm("rorl %%cl, %%eax" : "=a" (retval) : "a" (val), "c" (shift));
+	asm("rorl %%cl, %%eax" : "=a" (retval) : "a" (val), "c" (shift));
 	return retval;
+#endif
 }
 #endif
 
-
-#if ASMLINUX
+#ifndef _rotl
 inline DWORD _rotl(DWORD val, INT shift)
 {
+#ifdef UT_NO_X86_INTRIN
+	shift &= 31;
+	return shift ? ((val << shift) | (val >> (32 - shift))) : val;
+#else
 	DWORD retval;
-    asm("roll %%cl, %%eax" : "=a" (retval) : "a" (val), "c" (shift));
+	asm("roll %%cl, %%eax" : "=a" (retval) : "a" (val), "c" (shift));
 	return retval;
+#endif
 }
 #endif
+#endif
+
+/*----------------------------------------------------------------------------
+	UC2 platform classes (UnVcWin32.h:792-819 on the MSVC build).
+----------------------------------------------------------------------------*/
+
+//scion jg -- Base class of movie thread for correct delete operation
+class FMovieThread
+{
+public:
+	// Must be defined by child class
+	virtual void Exit(void) = 0;
+};
+
+//scion jg -- Base class for the CXMVPlayer so we can delete it correctly
+class FMoviePlayer
+{
+public:
+	FMoviePlayer() {}
+	virtual ~FMoviePlayer() {}
+};
+
+//scion jg -- Wrapper around the xbox function for determining language (UnUnix.cpp: LC_INT, as on PC)
+CORE_API DWORD appGetLanguageID(void);
+
+//epic bcl -- The player list item type (needs to be at the global scope)
+class AvarisPlayerItem;
 
 #endif  // include-once blocker.
 
 /*----------------------------------------------------------------------------
 	The End.
 ----------------------------------------------------------------------------*/
-

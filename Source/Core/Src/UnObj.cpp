@@ -3262,7 +3262,7 @@ UBOOL UObject::StaticExec( const TCHAR* Cmd, FOutputDevice& Ar )
 		if (Parse(Str,TEXT("EVENT="),EventName))
 		{
 			FName(*EventName).SetFlags(RF_Suppress);
-			debugf(TEXT("Suppressed event %s"),EventName);
+			debugf(TEXT("Suppressed event %s"),*EventName);
 		}
 		else
 		{
@@ -3276,7 +3276,7 @@ UBOOL UObject::StaticExec( const TCHAR* Cmd, FOutputDevice& Ar )
 		if (Parse(Str,TEXT("EVENT="),EventName))
 		{
 			FName(*EventName).ClearFlags(RF_Suppress);
-			debugf(TEXT("Unsuppressed event %s"),EventName);
+			debugf(TEXT("Unsuppressed event %s"),*EventName);
 		}
 		else
 		{
@@ -5344,7 +5344,7 @@ void UObject::ParseParms( const TCHAR* Parms )
 void UObject::CacheDrivers( UBOOL ForceRefresh )
 {
 	guard(UObject::CacheDrivers);
-	const BUFF_SIZE = 32 * 1024;
+	const INT BUFF_SIZE = 32 * 1024;
 	//jg -- This is a bit weak, but it keeps the stack small
 	TCHAR* Buffer = NEW TCHAR[BUFF_SIZE];
 	// Auto delete the pointer on scope change
@@ -6069,7 +6069,8 @@ void UObject::Precache(UObject *src,TMap<UObject*,BYTE> *masterPrecacheList)
 // Singleton object pool
 FObjectPool UObject::GObjPool;
 // Singleton list node pool
-FObjList::TPoolInstance<UObject*> FObjList::PoolInstance;
+// (An explicit specialisation needs template<>, and is only a definition with an initialiser.)
+template<> FObjList::TPoolInstance<UObject*> FObjList::PoolInstance = FObjList::TPoolInstance<UObject*>();
 
 /* scion ======================================================================
  * UObject::operator delete

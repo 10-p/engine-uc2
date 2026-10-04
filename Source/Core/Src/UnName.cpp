@@ -8,6 +8,9 @@
 
 #include "CorePrivate.h"
 
+// Only declared as a friend of FNameEntry, which ordinary lookup does not find (engine-ut2004 does the same).
+CORE_API FNameEntry* AllocateNameEntry( const ANSICHAR* Name, DWORD Index, DWORD Flags, FNameEntry* HashNext );
+
 /*-----------------------------------------------------------------------------
 	FName statics.
 -----------------------------------------------------------------------------*/

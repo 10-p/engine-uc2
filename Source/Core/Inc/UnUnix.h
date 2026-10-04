@@ -11,7 +11,7 @@
 char* appUnixPath( const char* Path );
 
 // Networking.
-unsigned long appGetLocalIP( void );
+DWORD appGetLocalIP( void );	// engine-ut2004: an IPv4 address is 32 bits on LP64 too
 
 // String functions.
 int stricmp( const char* s, const char* t );

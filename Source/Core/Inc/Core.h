@@ -118,8 +118,9 @@ public:
 #endif
 
 
-// OS specific include.
-#if __UNIX__
+// OS specific include. (engine-ut2004: UnUnix.cpp is the platform layer of every non-MSVC target,
+// MinGW included, so its prototypes must be visible there too.)
+#if __UNIX__ || defined(__MINGW32__)
 	#include "UnUnix.h"
 #ifndef __MWERKS__
 	#include <signal.h>
