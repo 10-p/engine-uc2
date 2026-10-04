@@ -6,6 +6,14 @@
 		* Created by Daniel Vogel
 =============================================================================*/
 
+// engine-uc2 (M4w): this header mirrors script classes/structs by hand (it is not generated), so it gets the
+// 4-byte packing the original projects compiled everything with (/Zp4), exactly as the generated *Classes.h
+// headers do. It changes nothing on i386; on wasm32 (and x86_64) it keeps DOUBLE members at the 4-byte
+// alignment the script layout assumes (UTexture::__LastUpdateTime; the particle trail structs).
+#if SUPPORTS_PRAGMA_PACK
+#pragma pack (push,4)
+#endif
+
 enum EParticleFlags
 {
 	PTF_None			= 0,
@@ -350,6 +358,10 @@ public:
 		*Dest = &Vertices(FirstVertex);
 	}
 };
+
+#if SUPPORTS_PRAGMA_PACK
+#pragma pack (pop)
+#endif
 
 /*----------------------------------------------------------------------------
 	The End.

@@ -2083,7 +2083,14 @@ CORE_API void appSleep( FLOAT Seconds )
 	// WebRTC DataChannel messages, the reconnect watchdog and PeerJS signaling
 	// all run between engine frames. (A visible browser also yields on canvas
 	// present; headless has no display, so this is the reliable yield in both.)
-	emscripten_sleep( (unsigned int)(Seconds * 1000.0f) );
+	//
+	// engine-uc2 (M4w): only where the program is linked with Asyncify (the browser client). A build
+	// without it (ucc-bin under Node) runs every engine thread on a worker, where blocking is allowed,
+	// and emscripten_sleep would abort there ("compile your program with async support").
+	if( emscripten_has_asyncify() )
+		emscripten_sleep( (unsigned int)(Seconds * 1000.0f) );
+	else
+		usleep( (useconds_t)(Seconds * 1000000) );
 #else
 	INT SleepTime = (INT) (Seconds * 1000000);
 	usleep( SleepTime );
@@ -2988,6 +2995,10 @@ void appPlatformInit()
 		GSecondsPerCycle = 1;
 	}
 
+#elif defined(UT_NO_X86_INTRIN)
+	// engine-uc2 (M4w): no cycle counter to calibrate here, and none is needed: appCycles() counts
+	// microseconds on this path and GSecondsPerCycle is pinned below, whatever CPUSPEED= says. A launch
+	// without CPUSPEED= (ucc-bin under Node, any web host that does not pass it) is therefore fine.
 #else
 	if( !Parse(appCmdLine(),TEXT("CPUSPEED="),CpuSpeed) )
 	{

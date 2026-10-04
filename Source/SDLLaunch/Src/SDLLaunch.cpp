@@ -15,6 +15,7 @@ Revision history:
 =============================================================================*/
 
 #include "SDLLaunchPrivate.h"
+#include "SDLLaunchWeb.h"	// M4w: empty off Emscripten
 
 #if __STATIC_LINK
 // Every package linked into uc2.bin, as XboxLaunch/Src/Launch.cpp does for the static XBE.
@@ -212,6 +213,13 @@ void CMainLoop::RunLoop()
 		}
 	}
 	unguard;
+
+#ifdef __EMSCRIPTEN__
+	// M4w: give the engine worker's event loop one turn per frame (input, host commands); the limiter
+	// above already did when it slept. SDLLaunchWeb.cpp says why.
+	if( GIsBenchmarking || !IncludeMessaging || Engine->GetMaxTickRate() <= 0.f )
+		UC2WebYieldFrame();
+#endif
 
 	// Handle all incoming messages.
 	if( IncludeMessaging && Engine->Client && Engine->Client->Viewports.Num() )
@@ -520,6 +528,9 @@ int main( int argc, char** argv )
 		if( Engine )
 		{
 			ExitSplash();
+#ifdef __EMSCRIPTEN__
+			UC2WebSetEngine( Engine );	// M4w: ue_exec_command
+#endif
 
 			UViewport* InitialViewport = NULL;
 			if( Engine->Client && Engine->Client->Viewports.Num() && Engine->Client->Viewports(0) )
@@ -541,6 +552,9 @@ int main( int argc, char** argv )
 
 			if( Engine->GRenDev )
 				Engine->GRenDev->Flush( NULL );
+#ifdef __EMSCRIPTEN__
+			UC2WebSetEngine( NULL );
+#endif
 		}
 
 		// Clean shutdown.
