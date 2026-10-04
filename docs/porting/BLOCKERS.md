@@ -14,7 +14,14 @@ Newest first. Remove an entry when it is resolved and say how in `LOG.md`.
   changes one blur constant from what the shipped binary used (`analysis/runtime-port.md`, "Deviation").
   The owner should confirm which behaviour to keep once the effect is on screen.
 - Optional tool: `sudo apt install xdotool` would make input-injection tests one-liners. Not blocking: key
-  and mouse events are injected through the X test extension with a few lines of Python.
+  and mouse events are injected through the X test extension with a few lines of Python (M10's
+  `tools/dev/m10-inject.py`; `python3-xlib` is not installed either, ctypes is used).
+- M10, pads: no physical pad on this machine. The tests use SDL's virtual game controller, so everything after
+  SDL is exercised, but SDL's own device mapping of a real pad (and real rumble motors) is not. `/dev/uinput`
+  is writable for user ion (seat ACL), so a kernel-level virtual pad would be possible, but it would appear on
+  the owner's whole desktop session while a test runs; not used. Wanted from the owner: one session with a real
+  pad (any XInput/PlayStation pad SDL knows): menu with D-pad/A/B, a match with sticks/triggers, unplug and
+  replug, and whether rumble is felt; `uc2.bin -inputlog` logs every pad event as `SDL2Input:` lines.
 - Scope, to decide when reached: split-screen on PC; web multiplayer visible at launch; arm64 hardware.
 
 ## Incident, 2026-10-04: test run exhausted the machine's memory
