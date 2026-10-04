@@ -176,3 +176,129 @@ UC2_RES=1280x720 UC2_PRECMD="set UCDeathmatch NumPlayers 0" tools/dev/run-uc2-sh
   (difference x6): glow around every emissive element (lamps, the bright parts of the poster, the light strip
   along the floor edge) and the animation of the character. The always-on depth of field is active too (program
   `DOF`); in this small room its effect is a slight softening of the far wall.
+
+## Checkpoint, 2026-10-04 21:30 (written after an interruption; everything known so far, verified or not)
+
+Commits so far: `47d3b6d` P1, `94654e2` P2, `4be1bb8` Xbox client defaults + verification switches, `6fa7758`
+`FScreenPrimUtil` fix + P4 config, `dd3f362` pool at exit + run script. Web build (`cmake --preset wasm &&
+cmake --build build-wasm -j6`, capped 6G) of the tree at `6fa7758`: `[100%] Built target SDLLaunch`, exit 0.
+`python3 tools/psh2glsl.py --selftest`: `100 shaders, 99 compared ... 0 failed`; `--check-emitted`: `0 differ`.
+
+### P3 as it stands: which of the 25 waiting shaders are drawn, by which handler
+
+With `UsePostProcess` every one of the 25 is compiled and its material takes the Xbox branch of
+`SetPixelShaderMaterial` (`UC2GL_IsM7PixelShader` only applies with post-processing off). The state handlers
+are M5's line-for-line port of `D3DPSMaterialState.cpp`; the only one with an `_XBOX` branch,
+`SetMatState_PS_Distortion`, now takes it at run time. What has actually been drawn (a program linked in a
+run) and what has not:
+
+| Shader(s) | Handler | Driven by | Seen linked in a run | Status at this checkpoint |
+|---|---|---|---|---|
+| `PS_Blur` | `SetMatState_PS_Blur` | `UpdateBackBufferCopyTarget` (every frame), `FilterCopyRenderTarget` (bloom, emissive, DOF blur chains), `UUCScreenBlur` (console `BlurMe`) | yes | drawn; picture pre-fix only |
+| `PS_EmissiveSelectBlur` | `PS_Blur` handler with `BLUR_EMISSIVE` | `UUCScreenEmissive::PostRender` | yes | drawn (lamp glow on DM-Deadbolt) |
+| `PS_BloomSelect` | `SetMatState_PS_BloomSelect` | `UUCScreenBloom::PostRender` | yes | drawn |
+| `PS_DepthOfField` | `SetMatState_PS_DepthOfField` | `UUCScreenDOF::PostRender` (the always-on overlay) | yes | drawn; effect small in the pictures taken, not yet isolated |
+| `PS_MotionBlur` | `SetMatState_PS_MotionBlur` | `UUCScreenRadialBlur::PostRender` (speed blur, teleport, sniper) | yes | linked at spawn (teleport-in); no picture shows it yet |
+| `PS_ColorRemap` | `SetMatState_PS_ColorRemap` + `VS_ColorRemap` | `UUCScreenBerserk`, `MenuPause`, `Teleport` | yes | drawn (berserk: green ramp); pause ramp gives black, see doubts |
+| `PS_ColorRemapMasked` | same | `UUCScreenSniperOverlay` (needs the sniper rifle zoomed), `PSColorRemapMaterial` on the sniper rifle skin | no | not yet observed |
+| `PS_ColorRemapGrayScale` | `SetMatState_PS_ColorRemapGrayScale` | `UUCScreenLiandri` | yes | drawn (grey picture with scan-line noise) |
+| `PS_LuminanceTexIndex` | `SetMatState_PS_LuminanceTexIndex` | dynamic gamma (every 0.05 s) | yes | drawn; its output is only read back |
+| `PS_Distortion`, `PS_DistortionAccum` | `SetMatState_PS_Distortion` + `VS_Distortion`, `VS_DistortionAccum` | `FPostProcessRender::Render` | yes | drawn (DM-Praxis panes) |
+| `PS_ModulatedDistortion`, `PS_AdditiveDistortion`, `PS_SubtractiveDistortion` | same handler, `PP_STAGE_RENDER_COLOR` | blended distortion materials (icicles: DM-Decay; combo and weapon effects in `T_FX`) | no | not yet observed |
+| `PS_Mask` | `SetMatState_PS_Mask` | `UUCScreenMotionBlur` with a `FinalMask`; no script creates a `UCScreenMotionBlur` | no | handler ported, no trigger found |
+| `PS_PlayerCam`, `PlayerCamNoise`, `PlayerCamTwoNoise` | `SetMatState_PS_PlayerCam` | `PSPlayerCamMaterial` (CTF-Recoil; two static-mesh packages) | no | not yet observed |
+| `PS_MaskedLuminance` | `SetMatState_PS_MaskedLuminance` | `PSBackBufferEffect` (one object, in `T_FX`) | no | not yet observed |
+| `PS_Refraction` | `SetMatState_PS_Refraction` | `PSRefractionMaterial`: no object in any package | no | unreachable from content |
+| `PS_UseTexIndex`, `PS_UseTexIndexMasked` | `SetMatState_PS_UseTexIndex` | `PSUseTexIndexMaterial`: no object in any package, no code creates one | no | unreachable from content |
+| `PS_EmissiveSelect` | `SetMatState_PS_EmissiveSelect` | only an `#if 0` block of `UUCScreenEmissive::PostRender` | no | unreachable (Epic compiled it out) |
+| `PS_ShadowBlur` | `PS_Blur` handler with `BLUR_SHADOW` | the `_XBOX` branch of `UnShadowProjector.cpp` (shadow textures blurred by a pixel shader; PC blurs them with nine canvas tiles) | no | **gate not lifted**: it would change every shadow and is not post-processing; hook: `UnShadowProjector.cpp` ~553-680 |
+| `PS_DepthSwizzleColor` | `SetMatState_PS_DepthSwizzleColor` | only `CopyDepthBuffer` on Xbox | no | not used: the depth copy has its own shader (P1) |
+
+### Verification switches added to the device (all in `UC2GLRenderDevice.cpp`)
+
+- `-nopostprocess` / `-postprocess`, console `POSTPROCESS [0|1]`, `-glpptoggle=<s>,...` (flip at those times
+  after the first frame). A/B from one camera in one run: `-nopostprocess -glshot=a,b -glpptoggle=t`, a < t < b:
+  picture 0 = off (clean M6 state), picture 1 = on.
+- `-glexec=<s>:<command>[@<s>:<command>...]`: console commands through the viewport at those times; `+` stands
+  for a space. Log line `UC2GLDrv: -glexec at <s> s (frame N): <command>`.
+- `-glshotramp`: screenshots include the dynamic gamma ramp (they are read before the present pass otherwise).
+- console `DOFSHIPPEDALPHA [0|1]`, ini `DOFShippedBlurAlpha`.
+
+How each effect is triggered from the console (bindable or through `-glexec`):
+
+| Effect | Command(s) | Notes |
+|---|---|---|
+| emissive glow + bloom, always-on depth of field | none: `UCPlayerController.CreateOverlays` enables both for every player | |
+| screen blur | `BlurMe` (`UCPixelShaderEffects.MotionBlurs.ConcussionBlur`, 5 s); `BlurMe2` (0.2 s) | the timer only runs while the effect draws |
+| berserk colour remap | `set UCScreenBerserk Enabled 1` | fades in over 1.25 s; pawns are excluded by stencil 0xBE |
+| Liandri overlay (grey + noise) | `set UCScreenLiandri Enabled 1` | fades in over 0.3 s |
+| pause-menu remap | `set UCScreenMenuPause Enabled 1` | |
+| radial (speed) blur | `set UCScreenRadialBlur Enabled 1` alone shows nothing: `UCPlayerController.PlayerTick` drives `RadialBlurDistance` to 0 for a standing pawn. To hold it: `set UCPlayerController RadialBlurSpeed 0`, `set UCPlayerController RadialBlurMinChange -1`, `set UCScreenRadialBlur RadialBlurDistance 30`, then `Enabled 1` | not yet run |
+| dynamic gamma | on with post-processing; `DYNAMICGAMMA 0` / `1` | visible in screenshots only with `-glshotramp` |
+| depth-of-field alpha, shipped vs script | `DOFSHIPPEDALPHA 1` / `0` | third person: 65 vs 100 |
+| distortion | content: DM-Praxis panes (unpinned spawn), CTF-Octane glass, DM-Azure water, torches (`UCEffects`), invisibility pickup | |
+
+### Pictures so far (`<WorkUC2>/logs/m7`), all 1280x720, `-0` = off, `-1` = on unless said otherwise
+
+- `p1-deadbolt-*`, `p2-deadbolt-*`: see P1/P2.
+- `praxis-try1-0/1.png`, `praxis-try1-panes-off-on.png`: DM-Praxis, unpinned spawn, looking through a doorway
+  at the round room. Off: the three window panes are flat periwinkle (128,128,255: their distortion texture
+  drawn as a colour, the PC bug of `logs/oracle/DM-Praxis-windows-A.png`). On: the panes are transparent and
+  the underwater exterior is seen through them (sea floor with rocks at the bottom, light from above:
+  upright). In this run `MaxDistortion` was still 0, so nothing was displaced.
+- `praxis-try2-0/1/2.png`, `praxis-try2-panes.png`: the spawn of the wine picture `DM-Praxis-windows-A.png`
+  (same room, same camera). 0 = off, 1 = on with the dynamic gamma ramp applied to the screenshot
+  (`-glshotramp`), 2 = on after `DYNAMICGAMMA 0`. Panes as in try1. Picture 1 is visibly brighter than 2.
+- `praxis-try3-0/1.png`, `praxis-try3-panes.png` (try2 without displacement left, try3 with it right): with
+  `MaxDistortion` 35 the view through the panes is shifted and wobbled; at the right edge of the third pane
+  dark shapes of the pillar in front of the window are pulled into the pane. Screen-space distortion reads
+  whatever is at the displaced position, foreground included, and `DistortionAccum.psh` only ever displaces
+  towards the lower right; **I believe the Xbox shows the same, I cannot check it.**
+- `fx-blur`, `fx-berserk`, `fx-radial`, `fx-liandri`, `fx-pause` (`-0` off, `-1` on): **taken before the
+  `FScreenPrimUtil` fix (`6fa7758`) and therefore all wrong in the same way**: every full-screen effect covers
+  the frame except a triangle between the left edge and the centre (corners top-left, bottom-left, centre).
+  That is how the bug was found: Epic's PC branch of `FScreenPrimUtil::DrawTile` queues quad-ordered corners
+  as a triangle strip. It also means the P2 and praxis pictures above had bloom, glow, depth of field and the
+  distortion quad missing in that triangle (the panes there were see-through but not distorted: with no quad
+  drawn over them nothing is drawn at all). All pictures have to be retaken.
+  What they do show outside the triangle: blur = four displaced ghost copies of the scene (concussion);
+  berserk = the scene remapped to greens and yellows, the pawn's body left in its own colours (stencil);
+  liandri = grey picture with faint horizontal noise; pause = **black**; radial = no visible change (the
+  script had driven the blur distance to 0).
+
+### Defects found since P1
+
+4. `FScreenPrimUtil::DrawTile` (PC branch): corners in quad order drawn as a strip; a quarter of each tile is
+   missing. Fixed (`6fa7758`): a fan, one tile per draw. Only Xbox-only paths call it, so nothing changes for
+   a device without the capability. One tile per draw also makes each quad of the radial blur read the back
+   buffer as the previous quad left it, as on Xbox.
+5. `UClient::DynamicGamma` reads True on PC although only the `_XBOX` code sets it (`get SDL2Drv.SDL2Client
+   DynamicGamma` -> `True` with no such key in the ini). Suspected: the bool property registered right after
+   it (`CaptureMouse`) shares its storage; not proven. With post-processing on the device now sets
+   `DynamicGamma = 1` and `LuminosityBias = 1` itself once (what `UClient::Init` does on Xbox), so the default
+   is deliberate; `LuminosityBias` 0 is treated as 1.
+6. PC's ini has no `MaxDistortion`; 0 means no displacement at all. Our `Default.ini` now has the Xbox value
+   (35) and the device uses 35 when it finds 0.
+
+### Open doubts (nothing here is settled)
+
+- The pause-menu remap came out black. Either `T_FX.ColorRamps.UI_PauseMenuRamp` is that dark for a dark
+  scene, or the remap lookup is wrong for this ramp (berserk's ramp works). To do: read the ramp's texels.
+- Dynamic gamma brightens DM-Deadbolt a lot (ramp[64,128,192] = 85,193,255 once settled: everything above
+  63% luminance becomes white). That is what Epic's formula gives for a dark frame with `LevelContrast` 1;
+  whether the Xbox looked like that I cannot check. On by default because it is the Xbox default.
+- Depth of field reads the encoded depth through a bilinear filter (Epic's stage state). At a depth where the
+  middle byte wraps, the average of neighbouring texels is not a depth. Estimated error for the always-on
+  mode: about 2% alpha along thin contour lines; not yet looked for in a picture.
+- Distortion amounts scale with height/480 (my decision, P1).
+- Performance under software GL: DM-Praxis ran at about 20 frames/s off and 9 on in one run (to be measured
+  properly for the gate).
+- Projector shaders (12) and `PS_Terrain3Layer`: not started.
+
+### Next, in this order
+
+1. Retake every picture with the fixed binary; a committed script that regenerates them
+   (`tools/dev/m7-effects.sh`). 2. Numeric self-tests in the driver for the primitive operations (snapshot
+   orientation, depth encoding, depth copy, blur taps, DOF ramp, colour remap lookup). 3. The remaining
+   effects on content (blended distortion, player cam, sniper overlay). 4. Gate a-e. 5. Projectors and
+   terrain only if time remains and they can be verified.
