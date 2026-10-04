@@ -146,3 +146,283 @@ define it) and the comment header naming the `.psh` and the enum values.
   (its include is commented out), `LuminanceTransform.psh`. They are translated and tested like the others.
 - `UseTexIndex`, `LuminanceTexIndex`, `UseTexIndexMasked` are `ps.1.1`, not `xps.1.1`; the Xbox assembler
   accepts both and their `.h` files agree with path A.
+
+## S2. The vertex side
+
+### What the Xbox build does (the specification)
+
+Nothing on Xbox is fixed function (`VERTEXSHADERS_ALWAYS_ON`). `FD3DDeferredState::Commit`
+(`D3DRenderState.cpp` 470-660) turns the *fixed-function render state* into a 64-bit `VertexShaderEnum`
+(`UnRenDev.h` 116-256) and into shader constants, and `FD3DCombinedVertexShader` (`D3DResource.cpp` 2230-2620)
+splices the `.vsh` fragments that enum names:
+
+- position: `DefaultPosition` or `UnpackPosition`; `NotBoned` / `SkelThreeBoned` / `TerrainSpecial`;
+- colour: `InitRGB` (0), `LightAmbient` (always), `LightHardDirectional5` when `RS_LIGHTING`
+  (`HARDCODED_VS_LIGHTS`: five directional lights, direction in local space, colour; nothing else), then, when
+  `RS_COLORVERTEX`: static meshes `MulVertexSpec` (* SPECULAR) and, with an instance colour stream,
+  `AddVertexRGB` (+ DIFFUSE); everything else `AddVertexRGB`; `OutLightRGB`;
+- per texture stage with a texture: the source (`TEXCOORDn`, camera-space position / normal / reflection
+  vector) and the transform (`none`, `m4x2`, `m4x3`, `m4x3 projected`), from `TSS_TEXCOORDINDEX` and
+  `TSS_TEXTURETRANSFORMFLAGS` (`GetTexStageVertexShader`);
+- `Fog` when `RS_FOGENABLE`: `oFog = (End - z_camera) / (End - Start)`;
+- unique shaders a material asks for: distortion, distortion accumulation, colour remap, projector attenuation.
+
+### What ours does (`Source/UC2GLDrv/Src/UC2GLShaders.cpp`)
+
+The same two steps, for passes of pixel-shader materials only (everything else stays on the fixed-function path
+of M5):
+
+1. `FOpenGLRenderInterface::GetStateVertexShaderEnum` builds **Epic's enum, same bit layout**, from the same
+   state: `UseDynamicLighting` -> `VS_Lit`, `UseStaticLighting` -> `VS_VertexColored`, the pass's stages ->
+   `VS_Tex*_Source` / `VS_Tex*_Transform` by the rules of `GetTexStageVertexShader`, distance fog -> `VS_Fog`.
+2. `UUC2GLRenderDevice::BuildVertexShaderSource` writes one GLSL 1.20 vertex shader for an enum: GLSL snippets
+   hand-ported from the fragments, emitted in the order `FD3DCombinedVertexShader` splices them, each under a
+   comment naming its `.vsh` file. Shader objects are cached per enum (`VertexShaderObjects`), programs per
+   (pixel shader, variant, enum) (`Programs`), linked on first use.
+
+Ported fragments (19 of the 67 files, counting the per-stage copies once): `DefaultPosition`, `NotBoned`,
+`InitRGB`, `LightAmbient`, `LightHardDirectional5`, `MulVertexSpec`, `AddVertexRGB`, `OutLightRGB`,
+`TexCamPosition`, `TexCamNormal`, `TexCamReflect`, `TexSourceN`, `TexSourceCamPos/CamNorm/CamRef`, `TexPassN`,
+`TexSourcePassN`, `TexTransformN`, `TexSourceTransformN_m4x2/_m4x3z/_m4x3w`, `Fog`. `Screenspace` is GL's own
+viewport transform. Not ported, with the reason: `UnpackPosition`, `SkelOne..FourBoned`, `TerrainSpecial`,
+`TexSourceTerrainSpec` need `XBOX_ASSET_FORMAT` vertex data (packed positions, GPU skinning: never defined
+here; skeletal meshes stay CPU-skinned as on PC); `Distortion`, `DistortionAccum`, `ColorRemap` belong to M7
+shaders; `ProjectorAtten*`, `ProjectorDistanceAtten`, `TexSourceTexKill3` belong to the projector batching
+the engine does only under `_XBOX`; `LightDirectional`, `LightPoint`, `LightSpot`, `InitLighting`, `NextLight`
+are the non-hard-coded light path Epic compiled out (`HARDCODED_VS_LIGHTS`); `OutVertexRGB`, `AddVertexSpec`
+are not referenced by the splicer.
+
+Vertex attributes are generic (`a_position, a_normal, a_diffuse, a_specular, a_tex0..3` at locations 0-7, the
+roles of `ShaderRegisters.vsh`); uniforms are the constants of `ShaderConstants.vsh` (`u_clip`,
+`u_modelView`, `u_normalMatrix`, `u_ambient`, `u_lightDir[5]`, `u_lightColor[5]`, `u_fogParams`,
+`u_texMatrix0..3`). `u_clip` includes M5's D3D-to-GL clip fix-up. No fixed-function built-in is used on
+either side, so the pair is ES 1.00 material after the header swap (vertex side not yet compiled as ES).
+
+### How lighting reaches these materials, and why
+
+Decision: **the vertex colour of a pixel-shader pass is computed by the GLSL port of Epic's Xbox fragments**,
+from the lights and ambient the engine hands the driver, not by fixed-function T&L.
+
+Justification from the code:
+
+- The light *selection* is already the Xbox one on PC: `SetLight` (ported at M5 from UC2's
+  `FD3DRenderInterface::SetLight`) admits `VS_Lights_Directional_MAX` = 5 directional and
+  `VS_Lights_Point_MAX` = 0 point lights and approximates every other light by a directional one scaled by
+  `SampleLightAtten`. So both platforms light with at most five directional lights plus ambient.
+- The *formula* of the fragments is, by Epic's own comment in `FD3DCombinedVertexShader`, the D3D reflectance
+  model with the material sources PC sets (`EMISSIVEMATERIALSOURCE = COLOR1`, `DIFFUSE/AMBIENTMATERIALSOURCE
+  = COLOR2`): `oD0 = (GlobalAmbient + Sum(light colour * max(N.-L, 0))) [* VertexSpecular] [+ VertexDiffuse]`.
+  For lit geometry the two platforms therefore agree, and the port gives PC's result as well as Xbox's.
+- Fixed-function GL cannot express the static-mesh case (diffuse and ambient material taken from the
+  *secondary* colour); M5's fixed path uses the primary colour as emissive only. The GLSL path has no such
+  limit, so for pixel-shader materials on static meshes ours is closer to both originals than M5 was.
+- The Xbox engine passes `VS_StaticMeshVertexColor[Diffuse]` from `UnRenderStaticMesh.cpp` (an `_XBOX`
+  branch); PC's passes `VS_FixedFunction`. The driver reads the same fact off the streams instead: with
+  `RS_COLORVERTEX`, a stream declaring `FVF_Specular` (only static meshes do: their colour/alpha stream) gives
+  `VS_StaticMeshVertexColor`, plus `...Diffuse` when an `FVF_Diffuse` stream (the instance's) is bound too.
+  This is D3D's own rule (a material source falls back to the material when the vertex lacks the colour).
+- Where the platforms differ, Xbox wins as the brief asks: with lighting off and no vertex colours the
+  fragments output the ambient colour (alpha 1), where D3D's fixed function outputs white.
+  **Not verified on content**: I found no pixel-shader material drawn that way in the runs below.
+- Light directions: `HandleVertexShaderLights` transforms the world direction by the transpose of the world
+  matrix and normalises (exact for rotations and uniform scale, Epic's approximation otherwise); reproduced.
+- Skeletal meshes: PC skins on the CPU and hands world/local-space positions and normals to the driver;
+  `VS_NotBoned` with `DefaultPosition` is then exactly right.
+
+Inferred, not from the code: the value of registers nothing writes (`v_color1` = (0,0,0,1), `v_texN` =
+(0,0,0,1), `v_fog` = 1, a missing DIFFUSE stream = (0,0,0,1), missing SPECULAR = 1): chosen so that they add
+nothing; none of them is read in a combination I saw in use. Output colours and fog are clamped to [0,1] per
+vertex (D3D vertex-shader outputs), and again per fragment by the generated shaders.
+
+### `VertexShaderConfigs.ini` as a precompile list
+
+`InitPixelShaders` constructs Epic's `UVertexShaderConfigs` and calls `PrecacheVertexShaderEnums`, which calls
+our `LoadVertexShaderEnum` per entry (this is the Xbox device's start-up path, `D3DRenderDevice.cpp` 765-800).
+`VS_UnpackPosition` is dropped from each entry (PC streams are not packed); entries needing GPU skinning,
+packed terrain or a unique (M7 / projector) shader are counted and skipped. Measured (llvmpipe):
+`VertexShaderConfigs.ini: 555 combinations, 405 vertex shaders compiled (0 failed), 137 need the Xbox asset
+format (GPU skinning, packed terrain) or an M7 shader, 0.20 s` (the remaining 13 collapse onto others once
+`VS_UnpackPosition` is dropped). Honest value of the list on PC data: in the runs below 2 to 4 of the vertex
+shaders actually used were *not* in it (the periodic log line gives both numbers), so it removes most, not
+all, first-use compiles. Programs are still linked on first use. Switch: `PrecompileVertexShaders`.
+
+## S3. Driver integration
+
+- **Programs** (`UC2GLShaders.cpp`): fragment shader objects per (EPixelShader, variant); variants are the
+  cube-map mask of the bound textures (`UC2_TEXn_CUBE`, the Xbox `TEXMODE_ADJUST`) and `UC2_SPECULARENABLE`.
+  The base variant of every integrated shader is compiled at start-up; a shader that fails is logged once
+  (`pixel shader N (name.psh) is not usable; its materials are drawn with their first texture stage`) and its
+  whole family takes the M5 fallback. A program that cannot be built at draw time is logged once and that
+  draw uses the fixed-function path. Counters are logged every 600 frames with the GL error line and at exit.
+- **`SetPixelShaderMaterial`** (`UC2GLMaterialState.cpp`): PC's condition `IsXboxOnly() == 0` is replaced by
+  `RenDev->PixelShaderFamilyReady(type)`: the Xbox branch (all four texture stages, then the state handler) is
+  taken when every shader the material's state handler can select is compiled and has its inputs. A family =
+  the enum values sharing one handler in `D3DPSMaterialState.cpp`'s table. Materials flagged Xbox-only
+  (`PSTeamSkinShader`, `PSEmissiveSkinShader`, `PSTeamShader`...) no longer fall back.
+- **State handlers** (`UC2GLPSMaterialState.cpp`): unchanged from M5, which carried Epic's file over line for
+  line. The only `_XBOX` branch in it is in `SetMatState_PS_Distortion` (M7). Constants go through
+  `SetPixelShaderConstant` into `u_c0..7`.
+- **Draw** (`DrawPrimitive` -> `BeginProgramPass` / `EndProgramPass`): per pass, vertex streams as generic
+  attributes, the state's vertex shader enum, program, uniforms. Blending, depth, alpha test, culling, colour
+  mask, texture binding and filtering are M5's `SetMaterialBlending`, shared by both paths. A stage the shader
+  samples but the material leaves empty gets the opaque black texture (D3D's answer for an unset texture;
+  **inferred** for Xbox). Fog: the program does it (per vertex, as on Xbox); GL's fixed fog does not apply
+  to programs.
+- **Switches**: `[UC2GLDrv.UC2GLRenderDevice] UsePixelShaders` (default True), `-nopixelshaders` /
+  `-pixelshaders`, console `PIXELSHADERS [0|1]`, `-glpstoggle=<s>,...` (flip at those times after the first
+  frame; with `-glshot=<s>,...` one run gives both pictures from one camera), `PrecompileVertexShaders`.
+  `-gldualdiffuse=<n>` is a test switch (see S4). Found on the way: `-glshot=a,b` only ever took the first
+  time (the engine's `Parse` stops at a comma); the list is now read by hand.
+
+### Per-shader table
+
+`integrated` = translated, numerically tested (S1) and drawn by programs when a material asks for it.
+`M7` = translated and tested, stays on the M5 fallback behind `// M7:` hooks. `gated` = translated and tested,
+nothing in the PC code path asks for it. "reads" lists constants, v0/v1 and fog; "(no xfc)" = final combiner
+from render states.
+
+| # | EPixelShader | .psh | t0-t3 | reads | status |
+|---|---|---|---|---|---|
+| 0 | None | - | | |  |
+| 1 | Terrain3Layer | terrain3layer | tex tex tex tex | c0 c1 c2 fog v0 v1 (no xfc) | gated |
+| 2 | Terrain4Layer | - | | | no Xbox shader |
+| 3 | Blur | Blur | tex tex tex tex | c0 c1 c2 c3 | M7 |
+| 4 | DepthOfField | DOF | tex tex reg2gb - | v0 | M7 |
+| 5 | Mask | Mask | tex tex - - | fog v0 v1 (no xfc) | M7 |
+| 6 | MotionBlur | MotionBlur | tex tex - - | v0 | M7 |
+| 7 | Refraction | Refraction | tex - - - |  | M7 |
+| 8 | BloomSelect | BloomSelect | tex - - - | c0 v0 | M7 |
+| 9 | EmissiveSelect | EmissiveSelect | tex - - - | v0 | M7 |
+| 10 | EmissiveSelectBlur | EmissiveSelectBlur | tex tex tex tex | c0 c1 c2 c3 v0 | M7 |
+| 11 | LuminanceTexIndex | LuminanceTexIndex | tex - - - | c0 fog v1 (no xfc) | M7 |
+| 12 | UseTexIndex | UseTexIndex | tex reg2gb - - | fog v1 (no xfc) | M7 |
+| 13 | Distortion | Distortion | tex m3x2pad m3x2tex tex |  | M7 |
+| 14 | ModulatedDistortion | ModulatedDistortion | tex - - - | c0 v0 | M7 |
+| 15 | AdditiveDistortion | AdditiveDistortion | tex - - - | c0 v0 | M7 |
+| 16 | SubtractiveDistortion | SubtractiveDistortion | tex - - - | c0 v0 | M7 |
+| 17 | DistortionAccum | DistortionAccum | tex tex coord - |  | M7 |
+| 18 | SkinShader | SkinShader | tex tex tex - | c0 fog v0 | integrated |
+| 19 | SkinShaderSpecLight | SkinShaderSpecLight | tex tex tex - | c0 fog v0 | integrated |
+| 20 | TeamSkinShader | TeamSkinShader | tex tex tex tex | c0 c1 fog v0 | integrated |
+| 21 | TeamSkinShaderSpecLight | TeamSkinShaderSpecLight | tex tex tex tex | c0 c1 fog v0 | integrated |
+| 22 | TeamSkinShaderSpecLightAlpha | TeamSkinSpecLightAlpha | tex tex tex tex | c0 c1 fog v0 | integrated |
+| 23 | SkinShaderOpacity | SkinShaderOpacity | tex tex tex tex | c0 fog v0 | integrated |
+| 24 | SkinShaderSpecLightOpacity | SkinShaderSpecLightOpacity | tex tex tex tex | c0 fog v0 | integrated |
+| 25 | TeamSkinShaderOpacity | TeamSkinShaderOpacity | tex tex tex tex | c0 c1 fog v0 | integrated |
+| 26 | TeamSkinShaderSpecLightOpacity | TeamSkinShaderSpecLightOpacity | tex tex tex tex | c0 c1 fog v0 | integrated |
+| 27 | TeamShader | TeamShader | tex tex tex tex | c0 fog v0 | integrated |
+| 28 | TeamShaderSpecLight | TeamShaderSpecLight | tex tex tex tex | c0 fog v0 | integrated |
+| 29 | TeamShaderNoSpec | TeamShaderNoSpec | tex tex - - | c0 fog v0 | integrated |
+| 30 | TeamBSPShader | TeamBSPShader | tex tex tex - | c0 fog | integrated |
+| 31 | DualDiffuse_NM_Add_NSL | DualDiffuse_NM_Add_NSL | tex tex tex - | fog v0 v1 (no xfc) | integrated |
+| 32 | DualDiffuse_NM_Add_SL | DualDiffuse_NM_Add_SL | tex tex tex - | fog v0 v1 (no xfc) | integrated |
+| 33 | DualDiffuse_NM_Mod_NSL | DualDiffuse_NM_Mod_NSL | tex tex tex - | fog v0 v1 (no xfc) | integrated |
+| 34 | DualDiffuse_NM_Mod_SL | DualDiffuse_NM_Mod_SL | tex tex tex - | fog v0 v1 (no xfc) | integrated |
+| 35 | DualDiffuse_M1_Add_NSL | DualDiffuse_M1_Add_NSL | tex tex tex - | fog v0 v1 (no xfc) | integrated |
+| 36 | DualDiffuse_M1_Add_SL | DualDiffuse_M1_Add_SL | tex tex tex - | fog v0 v1 (no xfc) | integrated |
+| 37 | DualDiffuse_M1_Mod_NSL | DualDiffuse_M1_Mod_NSL | tex tex tex - | fog v0 v1 (no xfc) | integrated |
+| 38 | DualDiffuse_M1_Mod_SL | DualDiffuse_M1_Mod_SL | tex tex tex - | fog v0 v1 (no xfc) | integrated |
+| 39 | DualDiffuse_M1_Blend_NSL | DualDiffuse_M1_Blend_NSL | tex tex tex - | fog v0 v1 (no xfc) | integrated |
+| 40 | DualDiffuse_M1_Blend_SL | DualDiffuse_M1_Blend_SL | tex tex tex - | fog v0 v1 (no xfc) | integrated |
+| 41 | DualDiffuse_M2_Add_NSL | DualDiffuse_M2_Add_NSL | tex tex tex - | fog v0 v1 (no xfc) | integrated |
+| 42 | DualDiffuse_M2_Add_SL | DualDiffuse_M2_Add_SL | tex tex tex - | fog v0 v1 (no xfc) | integrated |
+| 43 | DualDiffuse_M2_Mod_NSL | DualDiffuse_M2_Mod_NSL | tex tex tex - | fog v0 v1 (no xfc) | integrated |
+| 44 | DualDiffuse_M2_Mod_SL | DualDiffuse_M2_Mod_SL | tex tex tex - | fog v0 v1 (no xfc) | integrated |
+| 45 | DualDiffuse_M2_Blend_NSL | DualDiffuse_M2_Blend_NSL | tex tex tex - | fog v0 v1 (no xfc) | integrated |
+| 46 | DualDiffuse_M2_Blend_SL | DualDiffuse_M2_Blend_SL | tex tex tex - | fog v0 v1 (no xfc) | integrated |
+| 47 | DualDiffuse_NM_Add_NSL_SM | DualDiffuse_NM_Add_NSL_SM | tex tex tex tex | fog v0 v1 (no xfc) | integrated |
+| 48 | DualDiffuse_NM_Add_SL_SM | DualDiffuse_NM_Add_SL_SM | tex tex tex tex | fog v0 v1 (no xfc) | integrated |
+| 49 | DualDiffuse_NM_Mod_NSL_SM | DualDiffuse_NM_Mod_NSL_SM | tex tex tex tex | fog v0 v1 (no xfc) | integrated |
+| 50 | DualDiffuse_NM_Mod_SL_SM | DualDiffuse_NM_Mod_SL_SM | tex tex tex tex | fog v0 v1 (no xfc) | integrated |
+| 51 | DualDiffuse_M1_Add_NSL_SM | DualDiffuse_M1_Add_NSL_SM | tex tex tex tex | fog v0 v1 (no xfc) | integrated |
+| 52 | DualDiffuse_M1_Add_SL_SM | DualDiffuse_M1_Add_SL_SM | tex tex tex tex | fog v0 v1 (no xfc) | integrated |
+| 53 | DualDiffuse_M1_Mod_NSL_SM | DualDiffuse_M1_Mod_NSL_SM | tex tex tex tex | fog v0 v1 (no xfc) | integrated |
+| 54 | DualDiffuse_M1_Mod_SL_SM | DualDiffuse_M1_Mod_SL_SM | tex tex tex tex | fog v0 v1 (no xfc) | integrated |
+| 55 | DualDiffuse_M1_Blend_NSL_SM | DualDiffuse_M1_Blend_NSL_SM | tex tex tex tex | fog v0 v1 (no xfc) | integrated |
+| 56 | DualDiffuse_M1_Blend_SL_SM | DualDiffuse_M1_Blend_SL_SM | tex tex tex tex | fog v0 v1 (no xfc) | integrated |
+| 57 | DualDiffuse_M2_Add_NSL_SM | DualDiffuse_M2_Add_NSL_SM | tex tex tex tex | fog v0 v1 (no xfc) | integrated |
+| 58 | DualDiffuse_M2_Add_SL_SM | DualDiffuse_M2_Add_SL_SM | tex tex tex tex | fog v0 v1 (no xfc) | integrated |
+| 59 | DualDiffuse_M2_Mod_NSL_SM | DualDiffuse_M2_Mod_NSL_SM | tex tex tex tex | fog v0 v1 (no xfc) | integrated |
+| 60 | DualDiffuse_M2_Mod_SL_SM | DualDiffuse_M2_Mod_SL_SM | tex tex tex tex | fog v0 v1 (no xfc) | integrated |
+| 61 | DualDiffuse_M2_Blend_NSL_SM | DualDiffuse_M2_Blend_NSL_SM | tex tex tex tex | fog v0 v1 (no xfc) | integrated |
+| 62 | DualDiffuse_M2_Blend_SL_SM | DualDiffuse_M2_Blend_SL_SM | tex tex tex tex | fog v0 v1 (no xfc) | integrated |
+| 63 | DiffuseOpacitySpecularMask | DiffuseOpacitySpecularMask | tex tex - - | fog v0 | integrated |
+| 64 | DiffuseOpacitySpecularMaskSpecLight | DiffuseOpacitySpecularMaskSpecLight | tex tex - - | fog v0 | integrated |
+| 65 | DiffuseOpacitySpecularMask2 | DiffuseOpacitySpecularMask2 | tex tex tex - | fog v0 | integrated |
+| 66 | DiffuseOpacitySpecularMaskSpecLight2 | DiffuseOpacitySpecularMaskSpecLight2 | tex tex tex - | fog v0 | integrated |
+| 67 | ShenuSkin | ShenuSkin | tex tex tex - | fog | integrated |
+| 68 | EmissiveSkinShader | EmissiveSkinShader | tex tex tex tex | c0 c1 fog v0 | integrated |
+| 69 | EmissiveSkinShaderSpecLight | EmissiveSkinShaderSpecLight | tex tex tex tex | c0 c1 fog v0 | integrated |
+| 70 | EmissiveSkinShaderSpecLightAlpha | EmissiveSkinShaderSpecLightAlpha | tex tex tex tex | c0 c1 fog v0 | integrated |
+| 71 | EmissiveShaderDiffuseOnly | EmissiveDiffuseOnly | tex tex - - | c0 c1 fog v0 | integrated |
+| 72 | EmissiveShaderSpec | EmissiveShader | tex tex tex tex | c0 c1 fog v0 | integrated |
+| 73 | EmissiveShaderSpecLight | EmissiveShaderSpecLight | tex tex tex tex | c0 c1 fog v0 | integrated |
+| 74 | EmissiveSpecular | EmissiveSpecular | tex tex tex - | c0 c1 fog v0 | integrated |
+| 75 | EmissiveConstColor | EmissiveConstColor | - - - - | c0 fog | integrated |
+| 76 | Projector_Add_1 | Proj_Add_1 | tex tex - - | v0 | gated |
+| 77 | Projector_Add_2 | Proj_Add_2 | tex tex tex - | v0 v1 | gated |
+| 78 | Projector_Add_3 | Proj_Add_3 | tex tex tex tex | v0 v1 | gated |
+| 79 | Projector_AlphaBlend_1 | Proj_AlphaBlend_1 | tex tex - - | v0 | gated |
+| 80 | Projector_AlphaBlend_2 | Proj_AlphaBlend_2 | tex tex tex - | v0 v1 | gated |
+| 81 | Projector_AlphaBlend_3 | Proj_AlphaBlend_3 | tex tex tex tex | v0 v1 | gated |
+| 82 | Projector_Modulate_1 | Proj_Modulate_1 | tex tex - - | c0 v0 | gated |
+| 83 | Projector_Modulate_2 | Proj_Modulate_2 | tex tex tex - | c0 v0 v1 | gated |
+| 84 | Projector_Modulate_3 | Proj_Modulate_3 | tex tex tex tex | c0 v0 v1 | gated |
+| 85 | Projector_Add_Clip | Proj_Add_Clip | tex tex - kill | v0 | gated |
+| 86 | Projector_AlphaBlend_Clip | Proj_AlphaBlend_Clip | tex tex - kill | v0 | gated |
+| 87 | Projector_Modulate_Clip | Proj_Modulate_Clip | tex tex - kill | c0 v0 | gated |
+| 88 | MaskedLuminance | MaskedLuminance | tex tex - - | c0 fog | M7 |
+| 89 | ShadowBlur | ShadowBlur | tex tex tex tex | c0 c1 c2 c3 | M7 |
+| 90 | UseTexIndexMasked | UseTexIndexMasked | tex tex reg2gb - | fog v1 (no xfc) | M7 |
+| 91 | PlayerCam | PlayerCam | tex - - - | fog | M7 |
+| 92 | PlayerCamNoise | PlayerCamNoise | tex tex tex - | fog | M7 |
+| 93 | PlayerCamTwoNoise | PlayerCamTwoNoise | tex tex tex tex | fog | M7 |
+| 94 | DiffuseOpacity | DiffuseOpacity | tex tex - - | fog v0 | integrated |
+| 95 | ColorRemap | ColorRemap | tex m3x2pad m3x2tex - | c0 fog v1 (no xfc) | M7 |
+| 96 | ColorRemapMasked | ColorRemapMasked | tex m3x2pad m3x2tex tex | c0 fog v1 (no xfc) | M7 |
+| 97 | DepthSwizzleColor | DepthSwizzleColor | tex - - - |  | M7 |
+| 98 | ColorRemapGrayScale | ColorRemapGrayScale | tex tex tex tex | c0 c1 fog v1 (no xfc) | M7 |
+
+Counts: 100 sources translated and tested (97 mapped to enum values + 3 unmapped); **59 integrated**; **25
+wait for M7**; **13 gated** (12 projector shaders: the engine batches projectors into `UProjectorMultiMaterial`
+only under `_XBOX`, and `SetProjectorMultiMaterial` is an `_XBOX` body, so PC keeps drawing projectors with
+`SetProjectorMaterial` as at M5; `PS_Terrain3Layer`: see Deferred). Problematic: none found by the tests;
+one without a second source of truth (`ColorRemapGrayScale`).
+
+M7 list by enum: `PS_Blur, PS_DepthOfField, PS_Mask, PS_MotionBlur, PS_Refraction, PS_BloomSelect,
+PS_EmissiveSelect, PS_EmissiveSelectBlur, PS_LuminanceTexIndex, PS_UseTexIndex, PS_Distortion,
+PS_ModulatedDistortion, PS_AdditiveDistortion, PS_SubtractiveDistortion, PS_DistortionAccum,
+PS_MaskedLuminance, PS_ShadowBlur, PS_UseTexIndexMasked, PS_PlayerCam, PS_PlayerCamNoise,
+PS_PlayerCamTwoNoise, PS_ColorRemap, PS_ColorRemapMasked, PS_DepthSwizzleColor, PS_ColorRemapGrayScale`.
+Hooks (`grep -a -n "M7:" Source/UC2GLDrv/Src/*`): `UC2GL_IsM7PixelShader` and the unique vertex shaders in
+`BuildVertexShaderSource` (`UC2GLShaders.cpp`), the fallback branch of `SetPixelShaderMaterial`
+(`UC2GLMaterialState.cpp`), plus M5's existing M7 stubs. The engine's `_XBOX` post-process gates are untouched.
+
+### Engine-side and configuration changes
+
+- `Source/Engine`, `Source/Core`: **none**.
+- `Engine/Config/Default.ini`: two lines in our own `[UC2GLDrv.UC2GLRenderDevice]` section
+  (`UsePixelShaders=True`, `PrecompileVertexShaders=True`; both are also the compiled defaults).
+  `Engine/Config/README.md`: one table row. (That folder is shared with the web work: the edit is this small.)
+- `Source/UC2GLDrv/CMakeLists.txt`: `Shaders/` added to the include path. Root `CMakeLists.txt`: untouched.
+
+### Defects found in Epic's shaders and handlers (behaviour kept, not fixed)
+
+1. **One-call lag in the skin handlers.** `SetPixelShaderMaterial` copies `InShader->PixelShaderType` into the
+   pass *before* the handler runs; `SetMatState_PS_SkinShader` then writes `pMaterial->PixelShaderType = Base
+   (+1 with bUseLightingForSpecular)` but not `InMaterialState->PixelShader`. The first time a `PSSkinShader`
+   with `bUseLightingForSpecular` is set it is drawn with `SkinShader`, afterwards with `SkinShaderSpecLight`
+   (seen in our log: both programs get linked for the same vertex shader). Same code on Xbox.
+2. **Stage compaction.** `SetPixelShaderMaterial` packs the non-NULL `TextureStage0..3` into consecutive
+   stages. A material whose stage 1 or 2 is NULL (a `PSSkinShader` without specular but with a rim light,
+   say) gets its later textures one stage early, where the shader reads them as something else.
+3. **`ColorRemapGrayScale.h` is missing** from the tree though included and used (S1).
+4. `PSEmissiveSkinShader.uc` sets `BaseShaderType=PS_SkinShader` (unused by its own handler);
+   `FSkinShaderOpacity` and three sibling PC shader classes register themselves as `PS_SkinShader`
+   (`D3DRenderDevice.cpp` 3837-3914): PC-only, irrelevant to us, noted.
+5. `SetMatState_PS_SkinShader` and the team/emissive handlers pass 16.0 as a pixel-shader constant ("a crazy
+   constant"); on the hardware constants are 8-bit [0,1], so it is 1.0 and `xmma_x4 (t.a*c + t.a*c)` is an
+   8x gain: the "all or nothing" mask is all only where the mask alpha is at least 1/8. Intentional or not,
+   reproduced (the generated shaders clamp constants).
+6. No shipped package contains a `PSDualDiffuse` (or `PSShenuSkin`, `PSEmissiveConstColor`,
+   `PSTeamSkinShaderOpacity`) material: 37 of the 59 integrated shaders are unreachable from content.

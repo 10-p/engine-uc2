@@ -10,6 +10,13 @@
 # <seconds>   wall-clock limit of the run
 # <fire-at>   seconds after launch at which the left mouse button (Fire) is clicked three times; 0 = never
 #
+# Environment:
+#   UC2_RES=1280x720     windowed resolution (edits the run tree's Default.ini; default: what the tree has)
+#   UC2_POSTCMD="..."    a console command bound to F2 and pressed 3 s after Fire (e.g. "NextWeapon")
+#   UC2_PRECMD="..."     a console command bound to F1 in the run tree's DefUser.ini and pressed 4 s before
+#                        Fire, e.g. "set UCDeathmatch NumPlayers 0" (the first PlayerStart is then always
+#                        chosen: the wine reference script does the same)
+#
 # Everything runs inside <WorkUC2>/bin/capped 2G (CLAUDE.md, "Running anything: memory ceiling, always").
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -20,6 +27,22 @@ sys=$work/run/$tree/System
 out=$work/logs/$tree
 mkdir -p "$out"
 rm -f "$sys"/Shot*.bmp
+if [ -n "${UC2_RES:-}" ]; then
+  sed -i -E "s/^(WindowedViewportX|FullscreenViewportX)=.*/\\1=${UC2_RES%x*}/; s/^(WindowedViewportY|FullscreenViewportY)=.*/\\1=${UC2_RES#*x}/" "$sys/Default.ini"
+  rm -f "$sys/Avaris.ini"
+fi
+precmd=0
+if [ -n "${UC2_PRECMD:-}" ]; then
+  sed -i -E "s/^F1=.*/F1=${UC2_PRECMD}/" "$sys/DefUser.ini"
+  rm -f "$sys/User.ini"
+  precmd=1
+fi
+postcmd=0
+if [ -n "${UC2_POSTCMD:-}" ]; then
+  sed -i -E "s/^F2=.*/F2=${UC2_POSTCMD}/" "$sys/DefUser.ini"
+  rm -f "$sys/User.ini"
+  postcmd=1
+fi
 
 inner=$(mktemp)
 cat > "$inner" <<INNER
@@ -27,16 +50,31 @@ cd "$sys" || exit 1
 SDL_AUDIODRIVER=dummy ./uc2.bin $map -log "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
 if [ "$fire" != 0 ]; then
-  sleep "$fire"
-  python3 - <<'PY'
-import ctypes, time
+  sleep \$(( $fire - 4 ))
+  python3 - $precmd $postcmd <<'PY'
+import ctypes, sys, time
 x = ctypes.CDLL("libX11.so.6"); t = ctypes.CDLL("libXtst.so.6")
 x.XOpenDisplay.restype = ctypes.c_void_p
+x.XStringToKeysym.restype = ctypes.c_ulong
+x.XKeysymToKeycode.restype = ctypes.c_ubyte
+x.XKeysymToKeycode.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
 d = ctypes.c_void_p(x.XOpenDisplay(None))
+if sys.argv[1] == '1':
+    kc = x.XKeysymToKeycode(d, x.XStringToKeysym(b"F1"))
+    for i in range(2):
+        t.XTestFakeKeyEvent(d, kc, 1, 0); x.XFlush(d); time.sleep(0.15)
+        t.XTestFakeKeyEvent(d, kc, 0, 0); x.XFlush(d); time.sleep(0.6)
+    time.sleep(2.5)
+else:
+    time.sleep(4)
 t.XTestFakeMotionEvent(d, -1, 320, 240, 0); x.XFlush(d)
 for i in range(3):
     t.XTestFakeButtonEvent(d, 1, 1, 0); x.XFlush(d); time.sleep(0.2)
     t.XTestFakeButtonEvent(d, 1, 0, 0); x.XFlush(d); time.sleep(1.0)
+if sys.argv[2] == '1':
+    kc = x.XKeysymToKeycode(d, x.XStringToKeysym(b"F2"))
+    t.XTestFakeKeyEvent(d, kc, 1, 0); x.XFlush(d); time.sleep(0.15)
+    t.XTestFakeKeyEvent(d, kc, 0, 0); x.XFlush(d)
 PY
 fi
 wait \$pid
@@ -51,6 +89,7 @@ for bmp in "$sys"/Shot*.bmp; do
 done
 echo "run-uc2-shot: exit $rc, $n screenshots, log $out/$name.out"
 grep -a -c "Critical" "$out/$name.out" | sed 's/^/Critical lines: /'
-grep -a "GL errors\|UC2GLDrv: programs\|UC2GLDrv: pixel shaders\|VertexShaderConfigs\|does not\|not usable\|no program" "$out/$name.out" | tail -12
+grep -a "UC2GLDrv: program [0-9]" "$out/$name.out" | sed -E 's/.*pixel shader ([0-9]+) \(([A-Za-z0-9_]+)\.psh\).*/\1 \2/' | sort -n | uniq -c | tr '\n' ';'; echo
+grep -a "GL errors\|UC2GLDrv: programs\|does not\|not usable\|no program" "$out/$name.out" | tail -3
 pgrep -x uc2.bin >/dev/null && echo "WARNING: uc2.bin still running"; pgrep -x Xvfb >/dev/null && echo "WARNING: Xvfb still running"
 exit 0
