@@ -197,6 +197,61 @@ if(NOT EMSCRIPTEN)
   FetchContent_MakeAvailable(SDL2)
 endif()
 
+# --- M8: audio. Ogg/Vorbis vendored (engine-ut2004's copy); OpenAL Soft fetched from the same fork the sibling
+# port uses everywhere (openal-soft 1.25 + a Web Audio backend for M11). Native: a SHARED libopenal that
+# UC2ALAudio loads with dlopen when the audio device starts (never DT_NEEDED: no sound library at all must
+# still boot, and nothing of OpenAL runs before the engine's allocator exists), copied beside uc2.bin by
+# tools/dev/mkrun-uc2.sh. Built as C++20 without the engine's C++ flags (engine-ut2004's finding: its
+# static tables miscompile with the engine's), with the wave-file writer backend for capture tests. --------
+add_subdirectory(Thirdparty/Vorbis/ogg)
+add_subdirectory(Thirdparty/Vorbis/vorbis)
+if(NOT EMSCRIPTEN AND NOT WIN32)
+  set(OPENALSOFT_GIT_REPOSITORY "https://github.com/10-p/openal-soft-web.git"
+      CACHE STRING "openal-soft git remote; its ufront/web branch carries the Web Audio backend")
+  set(OPENALSOFT_GIT_TAG "ufront/web" CACHE STRING "openal-soft git ref")
+  set(_UC2_SAVED_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+  set(_UC2_SAVED_CXX_STANDARD "${CMAKE_CXX_STANDARD}")
+  set(CMAKE_CXX_STANDARD 20)
+  FetchContent_Declare(
+    OpenALSoft
+    GIT_REPOSITORY ${OPENALSOFT_GIT_REPOSITORY}
+    GIT_TAG        ${OPENALSOFT_GIT_TAG}
+    GIT_SHALLOW    TRUE
+  )
+  set(LIBTYPE SHARED CACHE STRING "" FORCE)
+  foreach(opt ALSOFT_UTILS ALSOFT_EXAMPLES ALSOFT_TESTS ALSOFT_INSTALL ALSOFT_INSTALL_CONFIG
+              ALSOFT_INSTALL_HRTF_DATA ALSOFT_INSTALL_AMBDEC_PRESETS ALSOFT_UPDATE_BUILD_VERSION)
+    set(${opt} OFF CACHE BOOL "" FORCE)
+  endforeach()
+  set(ALSOFT_EAX OFF CACHE BOOL "" FORCE)            # UC2 uses EFX (zone reverb), not EAX
+  set(ALSOFT_BACKEND_WAVE ON CACHE BOOL "" FORCE)    # ALSOFT_DRIVERS=wave: render to a .wav (tests)
+  set(ALSOFT_BACKEND_NULL ON CACHE BOOL "" FORCE)
+  set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
+  # The engine's directory-wide definitions and -fpermissive are not openal-soft's business.
+  get_directory_property(_UC2_SAVED_DEFS COMPILE_DEFINITIONS)
+  get_directory_property(_UC2_SAVED_OPTS COMPILE_OPTIONS)
+  set_directory_properties(PROPERTIES COMPILE_DEFINITIONS "" COMPILE_OPTIONS "")
+  # openal-soft decides "32-bit x86: build with -msse2 -mfpmath=sse and realign the stack at its entry points"
+  # from CMAKE_SIZEOF_VOID_P, which does not see our -m32 demotion (see UC2_PTR_BYTES above): without this it
+  # uses SSE intrinsics in code compiled for plain i686 and does not build.
+  set(_UC2_SAVED_SIZEOF_VOID_P "${CMAKE_SIZEOF_VOID_P}")
+  if(UC2_PTR_BYTES EQUAL 4)
+    add_compile_options(-m32)
+    set(CMAKE_SIZEOF_VOID_P 4)
+  endif()
+  FetchContent_MakeAvailable(OpenALSoft)
+  set(CMAKE_SIZEOF_VOID_P "${_UC2_SAVED_SIZEOF_VOID_P}")
+  set_directory_properties(PROPERTIES COMPILE_DEFINITIONS "${_UC2_SAVED_DEFS}" COMPILE_OPTIONS "${_UC2_SAVED_OPTS}")
+  unset(CMAKE_POLICY_VERSION_MINIMUM)
+  set(CMAKE_CXX_FLAGS "${_UC2_SAVED_CXX_FLAGS}")
+  set(CMAKE_CXX_STANDARD "${_UC2_SAVED_CXX_STANDARD}")
+  if(NOT TARGET OpenAL)
+    message(FATAL_ERROR "openal-soft: expected target 'OpenAL' was not created")
+  endif()
+  message(STATUS "openal-soft (shared, wave writer on): ${OPENALSOFT_GIT_REPOSITORY}@${OPENALSOFT_GIT_TAG}")
+endif()
+# --- end M8 --------------------------------------------------------------------------------------------------
+
 #-----------------------------------------------------------------------------
 # Engine packages. A package joins the build when its CMakeLists.txt lands (docs/porting/PLAN.md lists
 # the order); everything else under Source/ is reference and is not compiled.
@@ -212,6 +267,8 @@ set(UC2_PACKAGES
 set(UC2_NATIVE_ONLY_PACKAGES UCC Editor SDL2Drv SDLLaunch)
 # M5: the desktop-GL binding of UC2GLDrv is native-only; the web build gets the same source through GL4ES later.
 list(APPEND UC2_NATIVE_ONLY_PACKAGES UC2GLDrv)
+# M8: the OpenAL audio device is native-only until the web build adopts it (M11: openal-soft's Web Audio backend).
+list(APPEND UC2_NATIVE_ONLY_PACKAGES UC2ALAudio)
 
 # --- M4w: the web build has the SDL2 client and launcher (browser), and ucc-bin (run under Node to check
 # the wasm32 layout and load maps without a browser) -------------------------------------------------------

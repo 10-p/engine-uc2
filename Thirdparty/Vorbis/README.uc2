@@ -1,0 +1,5 @@
+libogg and libvorbis ("Xiphophorus libVorbis I 20011231", the 1.0 release) as vendored by engine-ut2004
+(/home/ion/WorkUnreal/engine-ut2004/Thirdparty/Vorbis, which took them from Epic's UT2004 tree and added
+CMakeLists.txt and a MinGW branch in ogg/include/ogg/os_types.h). Copied byte for byte (CRLF kept) on
+2026-10-04 for M8; only the build-relevant parts: ogg/{include,src}, vorbis/{include,lib}, the licences and
+READMEs. UC2ALAudio decodes the cooked Ogg Vorbis with vorbisfile from memory (ov_open_callbacks).

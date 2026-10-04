@@ -247,3 +247,28 @@ cd /home/ion/WorkUC2/engine-uc2-m8
   difference is `A_ChemicalDawn` entry 7 (`Machine_Generator03`, see Defects). `A_Vehicle.xwb` ships without
   project data.
 - Playlist types used: 0 (Random) 2,515, 4 (Random, no immediate repeats) 43, 1 (Ordered) 1.
+
+### More evidence from the shipped `.xsb` sound records (found while building the runtime)
+
+The sound table of an `.xsb` follows its cue table (20-byte records). Bytes 4-5 hold the sound's volume and
+byte 14 its priority (150 for every footstep, 180 for combos: equal to the project's values). Over all 2,428
+sounds the stored volume is exactly `-512 - (Volume + group Volume)/16`: e.g. (0, group 0) -> -512,
+(-200, 0) and (0, group -200) -> -500, (-6400, 0) -> -112, (-600, -400) -> -450. So **a sound group's volume is
+baked into each of its sounds** (not only a mixing-window control), and the project's volumes are linear in a
+single unit. UC2ALAudio adds the group volume to the sound volume.
+
+## Step 2 - build: Ogg/Vorbis vendored, OpenAL Soft fetched (A2, part 1)
+
+- `Thirdparty/Vorbis/{ogg,vorbis}`: engine-ut2004's copy (libVorbis 1.0), see `Thirdparty/Vorbis/README.uc2`.
+- Root `CMakeLists.txt`, one delimited block ("M8") after SDL2: the two vendored libraries (all targets), and
+  on native non-Windows builds openal-soft from `10-p/openal-soft-web` branch `ufront/web` (the sibling's fork:
+  openal-soft 1.25.2 + Web Audio backend for M11), SHARED, EAX off (we use EFX), **wave-file backend on**, built
+  as C++20 with the engine's directory-wide definitions and options removed for its scope. Configure on this
+  machine: backends PulseAudio, ALSA, OSS, WaveFile, Null (PipeWire headers are not installed for i386; PulseAudio
+  covers PipeWire through its pulse server).
+- Problem found: openal-soft decides "32-bit: compile with `-msse2 -mfpmath=sse`, realign the stack at entry
+  points" from `CMAKE_SIZEOF_VOID_P`, which is 8 here (our `-m32` demotion happens after `project()`), so it
+  compiled SSE intrinsics for plain i686 and failed (`inlining failed in call to always_inline _mm_set_ss:
+  target specific option mismatch`). Fixed by setting `CMAKE_SIZEOF_VOID_P` to 4 for its configure only.
+  Result: `build-native/_deps/openalsoft-build/libopenal.so.1.25.2: ELF 32-bit LSB shared object, Intel i386`.
+- `UC2ALAudio` added to `UC2_NATIVE_ONLY_PACKAGES` (web: M11).
