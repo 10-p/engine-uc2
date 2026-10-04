@@ -2303,9 +2303,15 @@ UBOOL UGUIController::NativeKeyType(BYTE& iKey, TCHAR Unicode )
 
 #ifndef _XBOX
 		// M10: an on-screen keyboard page's field takes what a real keyboard types.
+		// (Its delegate directly: the field is display-only for focus purposes, bAcceptsInput false,
+		// so UGUIComponent::NativeKeyType would refuse; UC2KeyboardPanel calls the same handler for
+		// its own key buttons.)
 		UGUIEditBox* TextBox = bEmulatedJoypad ? TextEntryTarget( this ) : NULL;
-		if ( TextBox && TextBox != eventGetFocusedControl() && Unicode >= 32 )
-			TextBox->NativeKeyType( iKey, Unicode );
+		if ( TextBox && TextBox != eventGetFocusedControl() && (BYTE)Unicode >= 32 && OBJ_DELEGATE_IS_SET(TextBox,OnKeyType) )
+		{
+			debugf( NAME_DevUI, TEXT("Typed '%c' into %s"), Unicode, TextBox->GetMenuPath() );
+			TextBox->delegateOnKeyType( iKey, FString::Printf(TEXT("%c"), Unicode) );
+		}
 #endif
 	}
 

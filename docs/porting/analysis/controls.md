@@ -253,3 +253,27 @@ start without ammo, `UCPlayerController.NextWeapon` skips them), so the weapon t
 log checks), spawned, W forward 600 units along the facing, Right arrow +13,018 yaw in 1 s, E melee
 (`UCWeap_Melee_Anubis`), Q back to `UCWeap_Race_Nakhti`, Alt fired (shots 0 -> 2), Escape opens
 `InGame_MainMenu` (paused=1), Escape closes it.
+
+## Step 5 - C2/C4: mouse and text scenarios pass
+
+- `mouse` -> PASS, 18 checks. Hover over OPTIONS logs `Mouse hover selects ...` and Enter then opens
+  `UC2Settings_Main` (hover moved the focus); right click answers the "no profile" box with B and leaves the page;
+  a click on INSTANT ACTION while OPTIONS has the focus opens `UC2Arena_Main` and not Settings; a click on the
+  DeathMatch row while CTF is selected selects that row and accepts it (the focus moves on to the rules; Escape
+  back shows `DeathMatch` selected); wheel down x2 moves the map list (Acid Rain -> Ascension), up x2 back; left
+  click starts the match and fires (shots 0 -> 1); mouse look: +200 px -> +10,480 yaw (52.4 units/px; linear:
+  -200 px returns to exactly the start yaw), 100 px up -> pitch +5,240, `set UCPlayerInput bInvertMouse True` ->
+  the same motion lowers the pitch.
+- `text` -> PASS, 7 checks: Profiles -> "create?" box (A) -> `UC2ProfileKeyboard` with "Player" preselected;
+  typing `WaSdKxYb` on the real keyboard puts exactly `WaSdKxYb` into the field (probe reads the page's
+  GUIEditBox), no `handled XC_*` line while typing, Backspace deletes one, Enter (= Start on a text page) closes
+  the keyboard page (UC2KeyboardPanel's done). Screenshot `logs/m10/text-typed.png` shows the name in the field.
+  The first attempt delivered characters through `UGUIComponent::NativeKeyType`, which refuses because the
+  field has `bAcceptsInput` false (it is display-only for focus purposes); now its `OnKeyType` delegate is called,
+  the same handler `UC2KeyboardPanel.KeyboardOnClick` calls for its own key buttons.
+
+Sensitivity numbers (mouse look; "feels right" cannot be judged here): yaw per pixel = 6.4 x binding `Speed` x
+(`aTurn_Limit`/`aMouseX_Limit` = 10.24) x `MouseSensitivity_X` x FOV/90, x `[SDL2Drv.SDL2Client] MouseXMultiplier`;
+with our defaults 65.5 x FOV/90 units/px (measured 52.4 at the default FOV: 0.29 deg/px; 16 cm per 360 deg at
+800 dpi). Change it with `MouseSensitivity_X/Y` (`[UCGameplay.UCPlayerInput]`, User.ini) or the bindings'
+`Speed=`. Keyboard turn (arrows): `Speed=2.5` -> 13,018 units/s measured (72 deg/s).

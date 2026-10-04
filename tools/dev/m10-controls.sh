@@ -290,6 +290,49 @@ shot look
 SCEN
 }
 
+# Text entry: a new profile's name on the on-screen keyboard page (UC2ProfileKeyboard), typed on the real keyboard.
+# The letters are the ones the menus otherwise use as pad keys (W A S D) or Epic's table used (K X Y B).
+scen_text() {
+  cat <<'SCEN'
+wait OpenMenu \[UCMenu.UC2MainMenu\] 90
+sleep 3
+focus
+key Down
+key Down
+key Down
+sleep 0.5
+key Return
+expect tx-profiles-opens OpenMenu \[UCMenu.UC2Profile\] 15
+wait OpenMenu \[GUI.GUIMessageBox\] 20
+sleep 1.5
+key Return
+expect tx-on-screen-keyboard-opens OpenMenu \[UCMenu.UC2ProfileKeyboard\] 15
+sleep 3
+probe k0
+shot keyboard
+mark
+type WaSdKxYb
+sleep 1
+probe k1
+check tx-typed-exactly-those-characters P['k1'].text == 'WaSdKxYb'
+absent tx-typing-does-not-navigate handled XC_
+key BackSpace
+sleep 0.5
+probe k2
+check tx-backspace-deletes-one P['k2'].text == 'WaSdKxY'
+key b
+sleep 0.5
+probe k3
+check tx-typing-again P['k3'].text == 'WaSdKxYb'
+shot typed
+key Return
+expect tx-enter-finishes-entry CloseMenu \[UC2ProfileKeyboard\] 10
+sleep 3
+probe k4
+shot after
+SCEN
+}
+
 run_scenario() {
   local name=$1 secs=$2 f
   f=$(mktemp)
@@ -299,11 +342,12 @@ run_scenario() {
   rm -f "$f"
 }
 
-all="keyboard mouse"
+all="keyboard mouse text"
 for s in ${@:-$all}; do
   case "$s" in
     keyboard) run_scenario keyboard 300 ;;
     mouse) run_scenario mouse 360 ;;
+    text) run_scenario text 180 ;;
     *) echo "unknown scenario $s (known: $all)" >&2 ;;
   esac
 done
