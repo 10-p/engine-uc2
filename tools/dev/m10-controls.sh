@@ -442,6 +442,86 @@ shot replugged
 SCEN
 }
 
+# Keyboard, mouse and pad interleaved: menu steps alternate between them, then in the match each one's input
+# must survive the other's (the pad sends its sticks every tick even at rest).
+scen_both() {
+  cat <<'SCEN'
+wait OpenMenu \[UCMenu.UC2MainMenu\] 90
+sleep 2
+focus
+pad attach
+wait SDL2 pads: pad 0 connected 10
+sleep 1
+key Down
+sleep 0.5
+padpress a
+expect both-key-down-then-pad-a-opens-arena OpenMenu \[UCMenu.UC2Arena_Main\] 15
+wait OpenMenu \[GUI.GUIMessageBox\] 20
+sleep 1.5
+key Escape
+expect both-escape-closes-dialog CloseMenu \[GUIMessageBox\] 10
+sleep 1.5
+seek 10 P['_'].item.startswith('DeathMatch|') ;; padpress dpdown
+key Return
+sleep 2
+padpress a
+sleep 2
+seek 40 'DM-Deadbolt' in P['_'].item ;; key Down
+padpress a
+expect both-pad-a-opens-character OpenMenu \[UCMenu.UC2Arena_Character\] 15
+sleep 2
+key Return
+expect both-enter-opens-armory OpenMenu \[UCMenu.UC2Arena_Armory\] 15
+sleep 2
+padpress a
+sleep 2
+key Return
+expect both-launch-confirm OpenMenu \[UCMenu.ConfirmLaunchMenu\] 15
+sleep 1.5
+padpress a
+expect both-deadbolt-up Bringing Level DM-Deadbolt.MyLevel up for play 120
+sleep 6
+padtrigger righttrigger
+sleep 4
+probe spawn
+check both-match-started P['spawn'].pawn==1
+probe b0
+keydown w
+sleep 1.5
+keyup w
+sleep 0.4
+probe b1
+check both-keyboard-moves-while-pad-idle fwd('b0','b1') > 150
+probe b2
+pad axis rightx 32767
+keydown w
+sleep 1
+keyup w
+pad axis rightx 0
+sleep 0.4
+probe b3
+check both-keyboard-move-and-pad-turn-together dist('b2','b3') > 100 and yawdiff('b2','b3') > 4000
+probe b4
+pad axis lefty -32767
+rmove 150 0 15
+key Alt_L 0.3
+sleep 0.5
+pad axis lefty 0
+sleep 0.4
+probe b5
+check both-pad-stick-moves-during-mouse-and-keys dist('b4','b5') > 30
+check both-mouse-turns-during-pad-move yawdiff('b4','b5') > 3000
+check both-keyboard-fires-during-pad-move P['b5'].shots != P['b4'].shots
+key Escape
+expect both-escape-opens-pause-menu OpenMenu \[UCMenu.InGame_MainMenu\] 10
+sleep 1.5
+padpress b
+sleep 2
+probe p1
+check both-pad-b-closes-it P['p1'].menu == 'None'
+SCEN
+}
+
 run_scenario() {
   local name=$1 secs=$2 f
   f=$(mktemp)
@@ -451,13 +531,14 @@ run_scenario() {
   rm -f "$f"
 }
 
-all="keyboard mouse text pad"
+all="keyboard mouse text pad both"
 for s in ${@:-$all}; do
   case "$s" in
     keyboard) run_scenario keyboard 300 ;;
     mouse) run_scenario mouse 360 ;;
     text) run_scenario text 180 ;;
     pad) run_scenario pad 360 ;;
+    both) run_scenario both 300 ;;
     *) echo "unknown scenario $s (known: $all)" >&2 ;;
   esac
 done
