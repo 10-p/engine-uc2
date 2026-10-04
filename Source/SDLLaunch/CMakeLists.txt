@@ -17,6 +17,11 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 # native tables survive, and exported dynamically, because appGetDllHandle finds a linked-in package by its
 # GLoaded<Package> symbol.
 set(LINK_PACKAGES SDL2Drv GUI UCGameplay UCElements UnrealGame UWeb IpDrv Engine Core)
+# M5: the OpenGL render device, where it is built (native; the web build gets it with GL4ES later).
+if(TARGET UC2GLDrv)
+  list(PREPEND LINK_PACKAGES UC2GLDrv)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_UC2GLDRV=1)
+endif()
 target_link_libraries(${PROJECT_NAME} PRIVATE
   -Wl,--whole-archive ${LINK_PACKAGES} -Wl,--no-whole-archive
   SDL2::SDL2-static zlib dl pthread m

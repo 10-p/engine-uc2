@@ -15,7 +15,9 @@
 	    buttons and wheel likewise; the absolute cursor is read on demand through
 	    UpdateMousePosition (GetCursorPos), which is what the GUI uses in a window;
 	  - Shift/Ctrl/Alt are IK_Shift/IK_Ctrl/IK_Alt (Windows' VK_SHIFT/VK_CONTROL/VK_MENU).
-	No rendering context is created: the render device gets the SDL window from GetWindow().
+	The null device needs nothing but the window. An OpenGL device (UC2GLDrv, M5) asks for
+	BLIT_OpenGL in SetRes; ResizeViewport then makes the window an OpenGL window with a GL
+	context (EnsureGLContext), and the device draws into it through GetWindow().
 =============================================================================*/
 
 #include "SDL2Drv.h"
@@ -133,6 +135,7 @@ USDL2Viewport::USDL2Viewport()
 {
 	guard(USDL2Viewport::USDL2Viewport);
 	Window				= NULL;
+	GLContext			= NULL;
 	BlitFlags			= 0;
 	ViewportButtonFlags	= 0;
 	Captured			= 0;
@@ -161,6 +164,7 @@ void USDL2Viewport::ShutdownAfterError()
 {
 	if( RenDev )
 		RenDev->RestoreGamma();
+	DestroyGLContext();
 	if( Window )
 	{
 		SDL_SetRelativeMouseMode( SDL_FALSE );
@@ -390,6 +394,7 @@ void USDL2Viewport::CloseWindow()
 		}
 		if( Captured )
 			SDL_SetRelativeMouseMode( SDL_FALSE );
+		DestroyGLContext();
 		SDL_DestroyWindow( Window );
 		Window = NULL;
 		debugf( NAME_Log, TEXT("Closed viewport") );
@@ -631,6 +636,10 @@ UBOOL USDL2Viewport::ResizeViewport( DWORD NewBlitFlags, INT InNewX, INT InNewY,
 		}
 	}
 
+	// M5: an OpenGL render device needs a GL window and context.
+	if( (NewBlitFlags & BLIT_OpenGL) && !(NewBlitFlags & BLIT_Temporary) && !EnsureGLContext() )
+		return 0;
+
 	// Update audio.
 	if( SavedViewport && SavedViewport!=Client->Engine->Audio->GetViewport() )
 		Client->Engine->Audio->SetViewport( SavedViewport );
@@ -656,6 +665,67 @@ UBOOL USDL2Viewport::ResizeViewport( DWORD NewBlitFlags, INT InNewX, INT InNewY,
 	}
 	return 1;
 	unguard;
+}
+
+/*-----------------------------------------------------------------------------
+	OpenGL context (M5).
+-----------------------------------------------------------------------------*/
+
+//
+// Make this viewport's window an OpenGL window with a current GL context. OpenWindow
+// creates a plain window before the render device is known, so a GL device's first SetRes
+// re-creates it (same title, position and size) with SDL_WINDOW_OPENGL. The pixel format
+// attributes are the device's (SDL_GL_SetAttribute before ResizeViewport). Compatibility
+// profile: the fixed-function pipeline is what R1 draws with.
+//
+UBOOL USDL2Viewport::EnsureGLContext()
+{
+	guard(USDL2Viewport::EnsureGLContext);
+	if( GLContext )
+	{
+		SDL_GL_MakeCurrent( Window, (SDL_GLContext)GLContext );
+		return 1;
+	}
+	if( !Window )
+		return 0;
+	if( !(SDL_GetWindowFlags(Window) & SDL_WINDOW_OPENGL) )
+	{
+		INT X=0, Y=0, W=0, H=0;
+		SDL_GetWindowPosition( Window, &X, &Y );
+		SDL_GetWindowSize( Window, &W, &H );
+		ANSICHAR Title[256];
+		strncpy( Title, SDL_GetWindowTitle(Window), ARRAY_COUNT(Title)-1 );
+		Title[ARRAY_COUNT(Title)-1] = 0;
+		Uint32 Flags = SDL_WINDOW_OPENGL | (SDL_GetWindowFlags(Window) & (SDL_WINDOW_RESIZABLE|SDL_WINDOW_FULLSCREEN|SDL_WINDOW_HIDDEN));
+		if( Captured )
+			SDL_SetRelativeMouseMode( SDL_FALSE );
+		SDL_DestroyWindow( Window );
+		Window = SDL_CreateWindow( Title, X, Y, W, H, Flags );
+		if( !Window )
+			appErrorf( TEXT("SDL_CreateWindow (OpenGL) failed: %s"), appFromAnsi(SDL_GetError()) );
+		debugf( NAME_Log, TEXT("Re-created viewport window for OpenGL (SDL window %u, %ix%i)"), SDL_GetWindowID(Window), W, H );
+		SDL_RaiseWindow( Window );
+		if( Captured )
+			SDL_SetRelativeMouseMode( SDL_TRUE );
+	}
+	GLContext = SDL_GL_CreateContext( Window );
+	if( !GLContext )
+	{
+		debugf( NAME_Init, TEXT("SDL_GL_CreateContext failed: %s"), appFromAnsi(SDL_GetError()) );
+		return 0;
+	}
+	SDL_GL_MakeCurrent( Window, (SDL_GLContext)GLContext );
+	return 1;
+	unguard;
+}
+
+void USDL2Viewport::DestroyGLContext()
+{
+	if( GLContext )
+	{
+		SDL_GL_DeleteContext( (SDL_GLContext)GLContext );
+		GLContext = NULL;
+	}
 }
 
 /*-----------------------------------------------------------------------------

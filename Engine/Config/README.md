@@ -9,7 +9,8 @@ file is listed here with its reason; `git log -p Engine/Config` has the exact di
 |---|---|---|---|---|
 | `Default.ini` | `[URL] Port` | 1000 | 7777 | 1000 is the Xbox system-link port and is privileged (below 1024) on Linux, so a server could not listen. 7777 is the Unreal Engine 2 default. |
 | `Default.ini` | `[Engine.Engine] ViewportManager` | `WinDrv.WindowsClient` | `SDL2Drv.SDL2Client` | WinDrv is Win32-only and not built; SDL2Drv is the portable client (M4). Epic's value is kept as a comment line. |
-| `Default.ini` | `[Engine.Engine] RenderDevice` | `D3DDrv.D3DRenderDevice` | `Engine.NullRenderDevice` | D3DDrv is not built; the null device is the only one until the GL driver (M5). The two lines swapped places: Epic's file already had the null device as a comment. |
+| `Default.ini` | `[Engine.Engine] RenderDevice` | `D3DDrv.D3DRenderDevice` | `UC2GLDrv.UC2GLRenderDevice` | D3DDrv is Direct3D 8 and not built. UC2GLDrv is our OpenGL device (M5); `Engine.NullRenderDevice` stays available as a commented line and through `-nullrenderer`. |
+| `Default.ini` | new section `[UC2GLDrv.UC2GLRenderDevice]` | (none) | the device's settings, with the values Epic's `[D3DDrv.D3DRenderDevice]` section has where the setting exists there, plus `MaxTextureUnits`, mip biases and `CheckGLErrors=False` | The device reads its settings from its own class section. |
 | `Default.ini` | new section `[SDL2Drv.SDL2Client]` | (none) | copy of `[WinDrv.WindowsClient]` | The client reads its settings from its own class section; same values as the PC client's (640x480 windowed, gamma, detail). `MenuViewportX/Y` and `ScaleHUDX` came along with the copy; UC2's `UClient` does not read them. |
 
 `uc2.bin` also replaces, for the current run and in the derived `Avaris.ini`, a driver the ini names that this
