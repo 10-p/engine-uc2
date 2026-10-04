@@ -114,3 +114,18 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   layout, the Xbox "A" prompt), `DM-Deadbolt.png` is a proper lit in-game frame with HUD, and
   `DM-Praxis-windows-A.png` shows the known PC bug on the original binary (the round room's window panes are
   flat periwinkle with nothing behind them): the before-picture for M6/M7.
+- 2026-10-04 — **M5 gate green: maps render with our OpenGL device** (branch `m5-gl` merged as `18224d9`;
+  commits `f107ffb`, `1700520`, `34dd131`, `b0aac24`; notebook `analysis/gl-renderer.md`).
+  - `Source/UC2GLDrv` (about 11k lines): the three-way merge planned in `analysis/design.md`, desktop OpenGL
+    through SDL's proc table, default render target is a framebuffer object presented through a small shader
+    that applies brightness and gamma. UC2's material compiler is carried over function for function with its
+    stages kept in Direct3D terms and translated to GL in one place, so it stays diffable against Epic's file.
+  - Verified by the coordinator under Xvfb (Mesa software GL): menu 1,200 frames and DM-Deadbolt 2,400 frames
+    with 0 GL errors and 0 Critical; `-nullrenderer` still boots; after the merge `main` builds from clean,
+    renders DM-Deadbolt, `verifyclasses` passes. On the branch: census 58/58, web libraries build.
+  - Pictures in `<WorkUC2>/logs/m5/`: menu, DM-Deadbolt (pre-match and in play), CTF-Octane, DM-Praxis,
+    DM-Azure. `coord-DM-Praxis.png` is from the same spawn as the wine reference `logs/oracle/DM-Praxis.png`
+    and agrees with it in geometry, textures, lighting, pickups, character and HUD.
+  - Not yet: pixel-shader materials (off until M6, so player skins and other materials PC drew with its DX8
+    shaders take the stage-0 fallback), post-processing (M7), movies (M9), GL4ES/WebGL build of the driver
+    (M11), a run on the real GPU, 1280x720 comparisons with a pinned spawn.
