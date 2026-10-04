@@ -264,8 +264,11 @@ TCHAR* SocketError( INT Code )
 		case ESTALE:				return TEXT("ESTALE");
 		case EREMOTE:				return TEXT("EREMOTE");
 		case HOST_NOT_FOUND:		return TEXT("HOST_NOT_FOUND");
+#if !defined(__EMSCRIPTEN__)
+		// On Emscripten these resolver codes (2, 3) have the same values as errno constants listed above.
 		case TRY_AGAIN:				return TEXT("TRY_AGAIN");
 		case NO_RECOVERY:			return TEXT("NO_RECOVERY");
+#endif
 		case 0:						return TEXT("NO_ERROR");
 		default:					return TEXT("Unknown");
 	}

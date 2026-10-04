@@ -140,7 +140,7 @@ void UCanvasElement::RenderElement(UCanvas *C,FLOAT relativeDrawX,FLOAT relative
 
 		if ( Image != NULL )
 		{
-			FPlane ElementColor( C->Color );
+			FPlane ElementColor( C->Color.operator FPlane() );
 			ElementColor.W *= DrawAlpha;
 
 			// draw the actual image (scaled);

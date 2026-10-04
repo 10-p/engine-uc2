@@ -7,7 +7,7 @@ Revision history:
 	* Revised by Ron Prestenback
 =============================================================================*/
 #if __STATIC_LINK
-#ifndef _XBOX
+#if !defined(_XBOX) && defined(_WIN32)
 #include <wtypes.h>
 #endif
 #endif

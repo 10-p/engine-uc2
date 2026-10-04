@@ -524,7 +524,7 @@ public:
 		unguard;
 	}
 
-	UBOOL FMasterServerUplinkLink::SendStatLine( const TCHAR* StatLine )
+	UBOOL SendStatLine( const TCHAR* StatLine )
 	{
 		guard(SendStatLine);
 		if( UplinkState == MSUS_ChannelOpen )

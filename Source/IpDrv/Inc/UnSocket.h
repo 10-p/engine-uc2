@@ -43,6 +43,7 @@
 	#define WSANO_DATA			NO_ADDRESS
 	#define LPSOCKADDR			sockaddr*
     #define WSAECONNRESET		ECONNRESET
+    #define WSAEHOSTUNREACH		EHOSTUNREACH
 
 	#define closesocket			close
 	#define ioctlsocket			ioctl

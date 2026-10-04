@@ -73,3 +73,24 @@ there `Localize()` defaulted to the Avaris package everywhere; per-library is wh
 
 - clang `-Wstring-plus-int` on `IMPLEMENT_CLASS` (`TEXT(#TClass)+1` skips the class prefix letter: intended).
 - GCC "invalid use of incomplete type" in `UnObjBas.h`/`UnClass.h` (accepted under `-fpermissive`).
+
+## The smaller native packages (same day)
+
+`IpDrv`, `UWeb`, `UnrealGame`, `UCElements`, `UCGameplay`, `GUI`: one generated-pattern `CMakeLists.txt` each (all
+`Src/*.cpp`, `GPackage=G<pkg>Package`, `ThisPackage=<pkg>`). Link dependencies follow the Visual Studio
+projects: GUI → UCGameplay, UnrealGame, IpDrv; UCGameplay → UnrealGame; everything → Engine → Core.
+Gate: `cmake --build build-native` and `cmake --build build-wasm` produce all eight `lib*.a` with 0 errors.
+
+They were nearly clean; the whole list of changes:
+
+| File | Change | Why |
+|---|---|---|
+| `IpDrv/Inc/UnSocket.h` | `WSAEHOSTUNREACH` → `EHOSTUNREACH` alias | used by `TcpNetDriverXbox.cpp` outside its `_XBOX` blocks |
+| `IpDrv/Src/UnSocket.cpp` | `TRY_AGAIN`/`NO_RECOVERY` cases not on Emscripten | their values (2, 3) equal errno constants there (same guard as engine-ut2004) |
+| `IpDrv/Src/MasterServerUplink.cpp` | dropped `Class::` on an in-class declaration | extra qualification |
+| `UCElements/Src/UCElements.cpp` | `C->Color.operator FPlane()` | same `FColor`→`FPlane` ambiguity as in Engine |
+| `GUI/Src/GUI.cpp` | `<wtypes.h>` only on Windows | Windows header |
+| `GUI/Inc/UnUIXInteraction.h` | `ULONGLONG`, `HRESULT`, `BOOL`, `S_OK` for non-Windows | the PC (non-Xbox) branch of the Xbox Live UI declarations borrowed them from `<wtypes.h>` |
+
+`TcpNetDriverXbox.cpp` is built (it is in `IpDrv.vcproj` for PC and its Xbox-only parts are `_XBOX`-gated), so
+the native class the shipped `IpDrv.u` declares exists.

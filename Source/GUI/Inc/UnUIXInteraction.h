@@ -22,6 +22,15 @@ struct _XONLINE_USER;
 struct XONLINE_FRIEND;
 struct LiveFriendsList;
 class CXBFont;
+#if !defined(_WIN32)
+// Off Windows there is no <wtypes.h> to borrow these from.
+typedef QWORD ULONGLONG;
+typedef INT   HRESULT;
+typedef INT   BOOL;
+#ifndef S_OK
+#define S_OK ((HRESULT)0)
+#endif
+#endif
 //bcl epic -- Have a TArray of these things...need a definition for the type on PC
 typedef struct
 {
