@@ -1,0 +1,120 @@
+Macros: UnrealScrip Preprocessor (UPP)
+
+Macro processing happens _before_ UnrealScript compilation. Since it
+is a separate phase it is not connected to the lexical conventions of
+UnrealScript.
+
+A macro is invited using the ` (backtick character) before the name of
+the macro. So, to expand the "hello" macro with no parameters, the
+following line would work:
+
+`hello
+
+Equivalently, the name of the macro can be enclosed in { } after the
+tick as in 
+
+`{hello}
+
+This makes it possible to "insert" the expansion of a macro into the
+middle of text that does not have conveniently place whitespace:
+
+hippo`{hello}potamus
+
+But how does the "hello" macro get defined? The built-in macro, define
+takes two parameters: the name of the new macro and the definition of
+the body of the macro. So "hello" is defined with:
+
+`define(hello, "Hello, World!")
+
+Thereafter, `hello is replaced with "Hello, World!" (complete with
+quotes). All results of macro expansion are, again, scanned for
+opportunities to expand macros. Macro expansions can include macros
+that will, in turn, be expanded; also means that "infinitely
+recursive" macros can be written.
+
+Macro parameters
+
+Macro parameters are passed positionally, in a comma separated list
+between parentheses right after the name of the macro. The opening
+parenthesis of this list MUST come immeadiately after the calling
+macro name. In the body of the macro, the parameters are refered to
+positionally with numbered macros: `1 is the first parameter, `2 the
+second and so on. So a macro, "show", to show the value of a variable
+in an UnrealScript log statement (including the name of the variable
+to make the output self-documenting) would be defined as:
+
+`define(show, "`1 = "$`1)
+
+Or rather it would be nice if it could be defined as the above. It
+cannot because ` invites macro expansion. We need to quote the body of
+the macro so that it is not expanded during definition but rather
+during expansion. In UPP "macro parentheses" are used: `( and `). 
+Digraphs are annoying but necessary since most single characters have
+meaning in UnrealScript and the opening and closing characters must be
+distinguishable. 
+
+So, the correct definition of our "show" macro is
+
+`define(show, `("`1 = "$`1`))
+
+Built-in Macros
+
+`define(<macroname>[, <macrodefinition>])
+Defines the named macro to expand to the given definition. If no
+definition is provided, the macro is defined but expands to the empty
+string. In the macro definition, parameters to the macro are indicated
+usint `n where n is the positional number of the parameter in the
+invoking call. `0 is the name of the macro being expanded and `# is
+the number of macros passed in. 
+
+`if(<string>)
+`else
+`endif
+These three macros together support conditional compilation. The
+<string> parameter to the if macro is evaluated and if it is the empty
+string then it is considered false; if it is any other string it is
+considered true.
+
+The text between `if and either `else (if present) or `endif are
+emitted into the processed output if the condition is true; if the
+condition is not true, only the end-of-line characters are emitted so
+that the line numbers in the processed text match up with those in the
+original text. 
+
+The text between the (optional) `else and `endif are emitted if the
+original condition is false. 
+
+Note that macros in non-emitted code are not evaluated (except for `if
+groupings which are processed only for nesting purposes). 
+
+`include(<fname>)
+Includes the text of the file <fname> at the current location. <fname>
+is relative to the directory where the compiler is running (typically
+System). 
+
+`isdefined(<macroname>)
+`notdefined(<macroname>)
+Evaluate to the string "1" if the macro is (is not) defined,
+regardless of the definition. Useful with conditional compilation
+
+`undefine(<macroname>)
+Remove the current definition of <macroname>. Will not work for macro
+parameter names (`0, `1, `#, etc).
+
+Command-line Interactions
+
+UPP uses the -debug flag to determine whether or not the `debug macro
+is defined. UPP also adds two new command-line parameters:
+-nopreprocess and -intermediate.
+
+-nopreprocess turns off all macro and comment preprocessing, passing
+ the exact text from the input file to the class factory. This is
+ primarily for timing and speed testing but if some required text file
+ contains the macro invitation character outside macros, it is
+ possible to use this to compile that file. 
+
+-intermediated tells UPP to save the processed versions of the files
+ it compiles. This can be time and space consuming for the entire
+ source tree but it can be invaluable when tracking down macro
+ errors. The files are stored in
+ System/PreprocessedFiles/<package>/<class>.PUC (Processed UC)

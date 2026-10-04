@@ -1,0 +1,24 @@
+/* scion ======================================================================
+ * Author: jg
+ * ============================================================================
+ *
+ * This pixel shader combines the back buffer with various materials to create
+ * a video feed effect. It alpha blends a noise texture into the back buffer
+ * material using a noise mask.
+ *
+ * ============================================================================
+ */
+
+xps.1.1
+
+// Load the back buffer texture
+tex t0
+// Load the noise mask
+tex t1
+// Load the noise texture
+tex t2
+
+// Blend between the noise texture and the back buffer using the mask
+lrp r0, t1.a, t2, t0
+
+xfc fog.a, r0, fog.rgb, zero, zero, zero, 1 - zero

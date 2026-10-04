@@ -1,0 +1,34 @@
+/* scion ======================================================================
+ * Author: jg
+ * ============================================================================
+ *
+ * This material is an optimized version of the original Unreal Shader class
+ * used for character skins. It takes materials that would have been 2 passes
+ * using the fixed function pipeline and makes them single pass materials. This
+ * code assumes that the Alpha channel of the diffuse is the mask to use for
+ * the specular. It also applies the mesh lighting to both the specular and the
+ * diffuse textures. Note: c0 contains a color to modulate with.
+ *
+ * ============================================================================
+ */
+
+xps.1.1
+
+// Diffuse
+tex t0
+// Specular
+tex t1
+// RimLight
+tex t2
+
+// Mask the specular and add the rim light
+mad r1, t1, t0.a, t2
+// Modulate the specular with the lighting
+mul r1, r1, v0
+// Modulate the diffuse with the lighting and add the spec
+mad r0, t0, v0, r1
+// Now modulate with the constant color
+mul_x2 r0, r0, c0
+
+// Use the XFC to specify alpha
+xfc fog.a, r0, fog.rgb, zero, zero, zero, c0.a

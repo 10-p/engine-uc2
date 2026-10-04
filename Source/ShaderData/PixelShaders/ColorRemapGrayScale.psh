@@ -1,0 +1,31 @@
+/* scion ======================================================================
+ * Author: jg
+ * ============================================================================
+ *
+ * This material performs color remapping in a single pass. c0 contains the
+ * amount to blend between the remapped color and the original backbuffer
+ *
+ * ============================================================================
+ */
+
+xps.1.1
+
+// Diffuse (backbuffer)
+tex t0
+// Noise
+tex t1
+// Noise 2
+tex t2
+// Mask
+tex t3
+
+// Turn the image grayscale
+dp3 r0, t0, c1
+// Add the textures together and modulate with the alpha
+xmma discard, discard, r1, t3.a, t1, t3.a, t2
+// Modulate the final noise texture and add to the other modulated noise textures
+mad r1, t3.a, t3, r1
+// Add the noise to the desaturated results
+add r0, r1, r0
+// Now blend between the original backbuffer and the desaturated
+lrp r0, c0.a, r0, t0

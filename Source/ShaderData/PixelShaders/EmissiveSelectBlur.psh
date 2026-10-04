@@ -1,0 +1,42 @@
+/* scion ======================================================================
+ * Author: sz
+ * ============================================================================
+ *
+ * Used specifically for blurring emissive pixels and selecting them at the 
+ * same time.
+ *
+ * PS_EmissiveSelectBlur
+ *
+ * Final Color = (t0.a * t0.rgb * c0) + (t1.a * t1.rgb * c1) + (t2.a * t2.rgb * c2) + (t3.a * t3.rgb * c3)
+ * Final Alpha = v0.a
+ * ============================================================================
+ */
+
+xps.1.1
+
+//-----------------------------------------------------------------------------
+// texture stages
+
+tex t0	// back buffer copy 0
+tex t1	// back buffer copy 1
+tex t2	// back buffer copy 2
+tex t3	// back buffer copy 3
+
+//-----------------------------------------------------------------------------
+// blend stages
+
+// r0 = c0 * t0.a
+// r1 = c1 * t1.a
+xmma r0, r1, discard, c0, t0.a, c1, t1.a
+// r0 = (t0.a * t0.rgb * c0) + (t1.a * t1.rgb * c1)
+xmma discard, discard, r0, t0, r0, t1, r1
+
+// r0 = r0 + (t2.a * t2.rgb * c2) = (t0.a * t0.rgb * c0) + (t1.a * t1.rgb * c1) + (t2.a * t2.rgb * c2)
+mul r1, c2, t2.a
+xmma discard, discard, r0, 1-zero, r0, r1, t2
+
+// r0 = r0 + (t3.a * t3.rgb * c3) = (t0.a * t0.rgb * c0) + (t1.a * t1.rgb * c1) + (t2.a * t2.rgb * c2) + (t3.a * t3.rgb * c3)
+mul r1, c3, t3.a
+xmma discard, discard, r0, 1-zero, r0, r1, t3
+
+xfc zero, zero, zero, r0.rgb, zero, zero, v0.a

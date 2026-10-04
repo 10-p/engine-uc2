@@ -1,0 +1,42 @@
+// FNameDebugCOM.idl : IDL source for FNameDebugCOM.dll
+//
+
+// This file will be processed by the MIDL tool to
+// produce the type library (FNameDebugCOM.tlb) and marshalling code.
+
+import "oaidl.idl";
+import "ocidl.idl";
+	
+	[
+		object,
+		uuid(2FFAD760-4E7C-4472-BA61-462B8EBE0FCF),
+		dual,
+		helpstring("IFNameDebug Interface"),
+		pointer_default(unique)
+	]
+	interface IFNameDebug : IDispatch
+	{
+		[propget, id(1), helpstring("property FName")] HRESULT FName(DWORD dwID, [out, retval] BSTR *pVal);
+		[propput, id(1), helpstring("property FName")] HRESULT FName(DWORD dwID, [in] BSTR newVal);
+	};
+
+[
+	uuid(47D11202-B410-49F6-BE2F-91D85F234C45),
+	version(1.0),
+	helpstring("FNameDebugCOM 1.0 Type Library")
+]
+library FNAMEDEBUGCOMLib
+{
+	importlib("stdole32.tlb");
+	importlib("stdole2.tlb");
+
+	
+	[
+		uuid(53E96B9B-3784-4EDC-A80D-268CB5B5EC0D),
+		helpstring("FNameDebug Class")
+	]
+	coclass FNameDebug
+	{
+		[default] interface IFNameDebug;
+	};
+};

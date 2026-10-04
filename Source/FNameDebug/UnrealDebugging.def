@@ -1,0 +1,7 @@
+LIBRARY	UnrealDebugging
+
+EXPORTS
+	DebugHelpFString
+	DebugHelpFName
+	DebugHelpFArray
+	DebugHelpUObject

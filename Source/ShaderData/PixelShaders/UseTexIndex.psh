@@ -1,0 +1,20 @@
+/* scion ======================================================================
+ * Author: jg
+ * ============================================================================
+ *
+ * This pixel shader uses the green and blue from texture stage0 to lookup the
+ * correct texel in texture stage1.
+ *
+ * ============================================================================
+ */
+
+ps.1.1
+
+// Load the texture to modify		
+tex t0
+
+// Index into the next texture stage
+texreg2gb t1, t0
+
+// Copy the texel into the output color
+mov r0, t1

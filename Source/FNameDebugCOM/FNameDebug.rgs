@@ -1,0 +1,21 @@
+HKCR
+{
+	FNameDebugCOM.FNameDebug.1 = s 'FNameDebug Class'
+	{
+		CLSID = s '{53E96B9B-3784-4EDC-A80D-268CB5B5EC0D}'
+	}
+	FNameDebugCOM.FNameDebug = s 'FNameDebug Class'
+	{
+		CLSID = s '{53E96B9B-3784-4EDC-A80D-268CB5B5EC0D}'
+	}
+	NoRemove CLSID
+	{
+		ForceRemove {53E96B9B-3784-4EDC-A80D-268CB5B5EC0D} = s 'FNameDebug Class'
+		{
+			ProgID = s 'FNameDebugCOM.FNameDebug.1'
+			VersionIndependentProgID = s 'FNameDebugCOM.FNameDebug'
+			val AppID = s '{4D415F01-E849-45E0-AE9F-990C76956AEF}'
+			LocalServer32 = s '%Module%'
+		}
+	}
+}

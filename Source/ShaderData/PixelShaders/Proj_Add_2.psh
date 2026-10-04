@@ -1,0 +1,37 @@
+/* scion ======================================================================
+ * Author: sz
+ * ============================================================================
+ * Additive projector pixel shader (PS_Projector_Add_2).
+ * The alpha from the opacity bitmap is used to mask out areas where the projector
+ * should not be applied.  The diffuse/specular colors are used to attenuate each 
+ * projected texture.  The values are set based off of the dot product from the
+ * vertex normal to the projector direction.  This is done in a vertex shader.
+ *
+* Additive Mode:
+ *		r0.rgb	= ((t1.rgb * v0.a) + (t2.rgb * v1.a)) * t0.a
+ *		r0.a	= 1
+ *
+ * Assumes:
+ *		SrcBlend = D3DBLEND_ONE
+ *		DestBlend = D3DBLEND_ONE
+ *
+ * Only Alpha/Blue channels can be replicated to all other channels, so:
+ *			v0.a = t1 attenuation
+ *			v1.a = t2 attenuation
+ *
+ * ============================================================================
+ */
+
+xps.1.1
+
+tex t0		// opacity bitmap from base material
+tex t1		// projected texture 1
+tex t2		// projected texture 2
+
+// r0.rgb	= (t1.rgb * v0.a) + (t2.rgb * v1.a)
+xmma discard, discard, r0, t1, v0.a, t2, v1.a
+
+// r0.rgb	= (r0.rgb * t0.a)
+mul r0.rgb, r0, t0.a
+
+xfc zero, zero, r0.rgb, zero, zero, zero, r0.a

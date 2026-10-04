@@ -1,0 +1,17 @@
+#!/bin/sh
+
+if [ "$1" != "" ]; then
+	cd $1
+fi
+
+for ii in `find . -name "*.cpp" -print; find . -name "*.h" -print; find . -name "*.c" -print; find . -name "?akefile*" -print`; do
+	FILETIME=`stat $ii | grep "Modify"  | cut -c 13-32`
+	mv -f $ii $ii.old
+	sed -e 's/
+//g' < $ii.old > $ii
+	touch -t `date -d "$FILETIME" "+%Y%m%d%H%M.%S"` $ii
+	chmod --reference=$ii.old $ii
+#	chown vogel.users $ii
+	chmod u+w $ii
+	rm -f $ii.old
+done

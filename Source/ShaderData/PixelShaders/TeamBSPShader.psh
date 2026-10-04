@@ -1,0 +1,31 @@
+/* scion ======================================================================
+ * Author: jg
+ * ============================================================================
+ *
+ * This material blends in a team color based upon mask. It does not support a
+ * specular channel/mask. It modulates the light map with the non-masked
+ * portion of the diffuse, keeping the team color from going super bright.
+ *
+ * ============================================================================
+ */
+
+xps.1.1
+
+// Diffuse
+tex t0
+// TeamMask
+tex t1
+// Light map
+tex t2
+
+// Modulate diffuse with lighting
+mov r0, t0
+// Modulate the color with the diffuse w/lighting
+mul r1, c0.rgb, r0
+// Now lerp between the diffuse w/lighting with the team color
+lrp r0, t1.a, r1, r0
+// Modulate the light map with the diffuse
+mul r0, t2, r0
+
+// Use the XFC to specify alpha
+xfc fog.a, r0, fog.rgb, zero, zero, zero, 1 - zero

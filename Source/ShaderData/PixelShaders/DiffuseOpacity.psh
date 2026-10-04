@@ -1,0 +1,21 @@
+/* scion ======================================================================
+ * Author: jg
+ * ============================================================================
+ *
+ * This material is a simple diffuse texture masked by an opacity map.
+ *
+ * ============================================================================
+ */
+
+xps.1.1
+
+// Diffuse
+tex t0
+// Opacity
+tex t1
+
+// Modulate in lighting with the diffuse
+mul_x2 r0, t0, v0
+
+// Now mask the whole thing with the opacity mask
+xfc fog.a, r0, fog.rgb, zero, zero, zero, t1.a

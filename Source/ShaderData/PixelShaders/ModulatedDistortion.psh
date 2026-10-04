@@ -1,0 +1,45 @@
+/* scion ======================================================================
+ * Author: jg
+ * ============================================================================
+ *
+ * This material uses a distortion material and a diffuse material to create a
+ * layered effect. The distortion part is largely stolen from Sam's distortion
+ * shader. c0 contains any color modifier that may have been used.
+ *
+ * ============================================================================
+ */
+
+xps.1.1
+
+// diffuse texture
+tex t0		
+
+// Modulate the blend material with the specified constant color
+// Modulate by the diffuse alpha
+// r0=t0*c0, r1=t0.a*v0.a 
+xmma r0,r1,discard, t0,c0, t0.a,v0.a
+lrp r0, 1-zero, r0, r1
+
+// use alpha only for alphatest
+xfc zero, zero, r0.rgb, zero, zero, zero, r0.a
+
+////-----------------------------------------------------------------------------
+//// texture stages
+//
+//tex t0					// distortion texture
+//texm3x2pad t1, t0_bx2	// first row of matrix multiply
+//texm3x2tex t2, t0_bx2	// second row of matrix multiply and fetch back buffer
+//tex t3					// blend material
+//
+////-----------------------------------------------------------------------------
+////  
+//
+//// Modulate the blend material with the specified constant color
+//mul r0, t3, c0
+//// Modulate the distorted back buffer with the blend material
+//mul_x2 r0.rgb, t2, r0
+//// Modulate the alpha by the diffuse alpha
+//+mul r0.a, t3.a, v0.a
+//
+//// Use the alpha from the blend material + diffuse
+//xfc zero, zero, r0, zero, zero, zero, r0.a

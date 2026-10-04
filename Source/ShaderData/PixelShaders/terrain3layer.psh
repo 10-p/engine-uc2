@@ -1,0 +1,35 @@
+/* scion ======================================================================
+ * Author: jg
+ * ============================================================================
+ *
+ * Terrain rendering uses a weightmap that controls how much of each layer
+ * contributes to the final pixel color. c0-c2 contain the constants for
+ * masking the weight map values.
+ *
+ * ============================================================================
+ */
+
+xps.1.1
+
+//-----------------------------------------------------------------------------
+// texture stages
+
+tex t0							// weightmaps in R, G, B
+tex t1							// layer 1
+tex t2							// layer 2
+tex t3							// layer 3
+
+//-----------------------------------------------------------------------------
+// 3 layer blending with weights
+// Use the xbox specific instructions for a faster shader
+
+// Calculate weight 1 & 2 simultaneously (T0 dot C0), (T1 dot C1)
+xdd r0, r1, t0, c0, t0, c1
+// Calculate the contribution from t1 & t2 (W1 * T1) + (W2 * T2)
+xmma discard, discard, r1, t1, r0, t2, r1
+// Calculate weight 3 (T0 dot C2)
+xdd r0, discard, t0, c2, discard, discard
+// Calculate the contribution from t3 & previous stages (W3 * T3) + (Prev)
+xmma discard, discard, r0, t3, r0, r1, 1 - zero
+// Now modulate by lighting
+mul_x2 r0, r0, v0

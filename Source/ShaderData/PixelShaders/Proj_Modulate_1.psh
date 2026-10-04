@@ -1,0 +1,40 @@
+/* scion ======================================================================
+ * Author: sz
+ * ============================================================================
+ * Additive projector pixel shader (PS_Projector_Modulate_1).
+ * The alpha from the opacity bitmap is used to mask out areas where the projector
+ * should not be applied.  The diffuse/specular colors are used to attenuate each 
+ * projected texture.  The values are set based off of the dot product from the
+ * vertex normal to the projector direction.  This is done in a vertex shader.
+ *
+ * Constant[0] = {0.5,0.5,0.5,0)
+ *
+ * Modulate Mode:
+ *		r0.rgb	=	((t1.rgb * v0.a) + (c0.rgb * (1-v0.a)))
+ *		r0.a	= t0.a
+ *
+ * Assumes:
+ *		SrcBlend = D3DBLEND_DESTCOLOR
+ *		DestBlend = D3DBLEND_SRCCOLOR
+ *
+ * Only Alpha/Blue channels can be replicated to all other channels, so:
+ *			v0.a = t1 attenuation
+ *
+ * NOTE:	Modulated projected textures can brighten up to 2x and darken up to
+ *			2x.  A value of 127/255 in a modulated texture has no effect.
+ *			A value of 255/255 brightens a pixel by 2x.  A value of 0/255 darkens
+ *			a pixel by 2x.
+ * 
+ * ============================================================================
+ */
+
+xps.1.1
+
+tex t0		// opacity bitmap from base material
+tex t1		// projected texture 1
+
+// r0.rgb	=	((t1.rgb * v0.a) + (c0.rgb * (1-v0.a))
+lrp r0.rgb, v0.a, t1.rgb, c0.rgb
++ mov r0.a, t0.a
+
+xfc zero, zero, r0.rgb, zero, zero, zero, r0.a

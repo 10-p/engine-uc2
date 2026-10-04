@@ -1,0 +1,58 @@
+XMV Doc
+------------------------------------------------------------
+
+VIDEO ONLY-----------------------------------------------------------------------------------------
+
+c:\wm8\wm8eutil.exe -input (1)u:\xxx.avi -output (2)U:\xxx.wmv -v_mode 2 -v_bitrate 14000000 -v_buffer 1000 -v_quality 100 -v_keydist 10
+
+xmvtool -v (3)U:\xxx.wmv -o (4)U:\xxx.xmv
+
+pause
+
+(1): This is the source avi file, uncompressed with audio
+(2): the WMV util compesses to window media player file
+(3): the WMV - for XMV compression
+(4): the output'ed XMV file.
+
+other settings:
+
+-v_mode 2 -v_bitrate 13000000 -v_buffer 2000 -v_quality 60 -v_keydist 10 (really low quality)
+-v_mode 2 -v_bitrate 13000000 -v_buffer 2000 -v_quality 94 -v_keydist 10
+-v_mode 3 -v_bitrate 1200000 -v_buffer 2000 -v_quality 95 -v_keydist 10 (bit rate determines size, must be below 1.3Mbps to run real time)
+
+
+
+VIDEO + AUDIO(Compressed)-----------------------------------------------------------------------------------------
+
+
+c:\wm8\wm8eutil.exe -input (1)u:\xxx.avi -output (2)U:\xxx.wmv -v_mode 2 -v_bitrate 14000000 -v_buffer 1000 -v_quality 100 -v_keydist 10
+
+xmvtool -ic (3)U:\xxx.wmv -o (4)U:\xxx.xmv
+
+pause
+
+(1): This is the source avi file, uncompressed with audio
+(2): the WMV util compesses to window media player file
+(3): the WMV - for XMV compression
+(4): the output'ed XMV file.
+
+
+VIDEO + AUDIO(UnCompressed)-----------------------------------------------------------------------------------------
+
+
+c:\wm8\wm8eutil.exe -input (1)c:\mov\xxx.avi -output (2)c:\mov\xxx.wmv -v_mode 2 -v_bitrate 13000000 -v_buffer 2000 -v_quality 100 -v_keydist 10
+
+xmvtool -a (3)c:\mov\xxx.avi -v (4)c:\mov\xxx.wmv -o (5)c:\mov\xxx.xmv
+
+pause
+
+
+(1): uncompressed avi
+(2): WMV export
+(3): uncompressed avi, with audio - Nothing else is read from this, just uncompressed audio. 
+     can be a plain avi, maybe wav or mp3 (havent tried yet).
+(4): WMV reference
+(5): XMV output, with audio
+
+the files will be much larger with this method, because the WMV util is not touching 
+the audio (yay). 

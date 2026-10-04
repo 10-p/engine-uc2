@@ -1,0 +1,26 @@
+/* scion ======================================================================
+ * Author: jg
+ * ============================================================================
+ *
+ * This material is the optimized version of a shader that uses a mask from the
+ * diffuse texture for opacity and specularity. It has a diffuse and specular
+ * texture only. Instead of being 2 passes it is only a single pass. This one
+ * modulates the specular with lighting too.
+ *
+ * ============================================================================
+ */
+
+xps.1.1
+
+// Diffuse
+tex t0
+// Specular
+tex t1
+
+// Mask the specular color and add it with the diffuse
+add r0, t1, t0
+// Modulate in lighting on the whole thing
+mul_x2 r0, r0, v0
+
+// Now mask the whole thing with the diffuse alpha
+xfc fog.a, r0, fog.rgb, zero, zero, zero, t0.a

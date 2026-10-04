@@ -1,0 +1,233 @@
+'------------------------------------------------------------------------------
+'FILE DESCRIPTION: New Macro File
+'------------------------------------------------------------------------------
+
+Option Explicit
+
+Sub ClassHeader()
+'DESCRIPTION: Creates a new class header.
+
+
+'Begin Recording
+	ActiveDocument.Selection = "/* ======================================================================================"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = " * scion class //unknown"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "* Author:  //unknown"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "* ======================================================================================"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "* "
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "*"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "* ======================================================================================"
+	ActiveDocument.Selection.EndOfLine
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "*/"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection.BackSpace 1
+	ActiveDocument.Selection = "// public variables  //unknown"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "// protected variables  //unknown"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "// private variables  //unknown"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "defaultproperties { "
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "// inherited variables  //unknown"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "// class variables  //unknown"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "}"
+	ActiveDocument.Selection.LineUp dsMove, 30
+	ActiveDocument.Selection.EndOfLine
+'End Recording
+End Sub
+
+Sub MethodHeader()
+'DESCRIPTION: Header for a new method
+
+
+'Begin Recording
+	ActiveDocument.Selection = "/* ======================================================================================"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = " * scion function  //unknown"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "*"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "*"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "* input:  //unknown"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "* output:  //unknown"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "* effects: //unknown"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "* notes:   //unknown"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "* last modified by:  //unknown"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "* ======================================================================================"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "*/"
+	ActiveDocument.Selection.LineUp dsMove, 9
+	ActiveDocument.Selection.EndOfLine
+'End Recording
+End Sub
+
+Sub StateHeader()
+'DESCRIPTION: Header for a new state
+
+
+'Begin Recording
+	ActiveDocument.Selection = "/* ======================================================================================"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = " * scion state   //unknown"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "*"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = " "
+	ActiveDocument.Selection.Backspace
+	ActiveDocument.Selection = "*"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "* notes:  //unknown"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "* last modified by:  //unknown"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "* ======================================================================================"
+	ActiveDocument.Selection.NewLine
+	ActiveDocument.Selection = "*/"
+	ActiveDocument.Selection.LineUp dsMove, 6
+	ActiveDocument.Selection.EndOfLine
+'End Recording
+End Sub
+
+
+
+
+Sub RBrace()
+'DESCRIPTION: adds a right brace "]" and checks for a left brace "["
+	ActiveDocument.Selection.Text = "]"
+	
+		'set position of the cusor
+	dim nLine
+	nLine = ActiveDocument.Selection.CurrentLine
+	dim nCol
+	nCol = ActiveDocument.Selection.CurrentColumn
+
+		'checks to see if left brace is there
+	ExecuteCommand "LevelUp"
+		'moves cursor to the right of the brace
+	ActiveDocument.Selection.CharRight dsMove	
+		'hightlights the brace
+	ActiveDocument.Selection.CharLeft dsExtend
+	
+		'pause for three tenths of a second
+	Dim PauseTime, Start
+		PauseTime = .3  ' Set duration.
+		Start = Timer   ' Set start time.
+	Do While Timer < Start + PauseTime
+	Loop
+
+		'move back to the set position
+	ActiveDocument.Selection.MoveTo nLine, nCol		
+		'hightlights the brace
+	ActiveDocument.Selection.CharLeft dsExtend
+		'AutoFormat the braket into position
+	ExecuteCommand "SelectionFormat"
+		'move back to the set position
+	ActiveDocument.Selection.MoveTo nLine, nCol		
+
+
+End Sub
+
+Sub RParen()
+'DESCRIPTION: Adds a right paren ")" and checks for a left "("
+		'adds a right brace
+	ActiveDocument.Selection.Text = ")"
+	
+		'set position of the cusor
+	dim nLine
+	nLine = ActiveDocument.Selection.CurrentLine
+	dim nCol
+	nCol = ActiveDocument.Selection.CurrentColumn
+
+		'checks to see if left brace is there
+	ExecuteCommand "LevelUp"
+		'moves cursor to the right of the brace
+	ActiveDocument.Selection.CharRight dsMove	
+		'hightlights the brace
+	ActiveDocument.Selection.CharLeft dsExtend
+	
+		'pause for three tenths of a second
+	Dim PauseTime, Start
+		PauseTime = .3  ' Set duration.
+		Start = Timer   ' Set start time.
+	Do While Timer < Start + PauseTime
+	Loop
+
+		'move back to the set position
+	ActiveDocument.Selection.MoveTo nLine, nCol		
+		'hightlights the brace
+	ActiveDocument.Selection.CharLeft dsExtend
+		'AutoFormat the braket into position
+	ExecuteCommand "SelectionFormat"
+		'move back to the set position
+	ActiveDocument.Selection.MoveTo nLine, nCol		
+
+
+End Sub
+
+Sub RBraket()
+'DESCRIPTION: Adds a right braket "}" and checks for a matchng left "{"
+	ActiveDocument.Selection.Text = "}"
+	
+		'set position of the cusor
+	dim nLine
+	nLine = ActiveDocument.Selection.CurrentLine
+	dim nCol
+	nCol = ActiveDocument.Selection.CurrentColumn
+
+		'checks to see if left brace is there
+	ExecuteCommand "LevelUp"
+		'moves cursor to the right of the brace
+	ActiveDocument.Selection.CharRight dsMove	
+		'hightlights the brace
+	ActiveDocument.Selection.CharLeft dsExtend
+	
+		'pause for three tenths of a second
+	Dim PauseTime, Start
+		PauseTime = .3  ' Set duration.
+		Start = Timer   ' Set start time.
+	Do While Timer < Start + PauseTime
+	Loop
+
+		'move back to the set position
+	ActiveDocument.Selection.MoveTo nLine, nCol		
+		'hightlights the brace
+	ActiveDocument.Selection.CharLeft dsExtend
+		'AutoFormat the braket into position
+	ExecuteCommand "SelectionFormat"
+		'move back to the set position
+	ActiveDocument.Selection.MoveTo nLine, nCol		
+
+
+End Sub

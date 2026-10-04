@@ -1,0 +1,16 @@
+/* scion ======================================================================
+ * Author: jg
+ * ============================================================================
+ *
+ * This pixel shader converts the source texture to a luminance value.
+ *
+ * ============================================================================
+ */
+
+ps.1.1
+
+// Load the texture to modify
+tex t0
+
+// Apply a luminance filter
+dp3 r0, t0, c0

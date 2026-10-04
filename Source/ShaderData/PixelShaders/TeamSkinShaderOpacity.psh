@@ -1,0 +1,71 @@
+/* scion ======================================================================
+ * Author: sz
+ * ============================================================================
+ * PS_TeamSkinShaderOpacity
+ *
+ * Same as TeamSkinShader.psh but with an opacity channel.
+ * Emissive is disabled.
+ * Also the alpha color modifier value is biased by -127 
+ * (similar to HandleOpacityBitmap).
+ *
+ * Emissive is not used since we are masking with an opacity texture.
+ *
+ * Final Color = ((t0 * v0 * 2) + (t3.a * t1)) + (t0.a * c0)
+ * Final Alpha = (t2.a + (c0.a - 0.5) )
+ *
+ * ============================================================================
+ */
+
+xps.1.1
+
+// Diffuse (team mask in alpha)
+tex t0
+// Specular
+tex t1
+// Opacity
+tex t2
+// Specular mask
+tex t3
+
+// Determine whether or not there is a mask being used for an emissive material
+// This is an all or nothing operation in terms of choosing the color portion
+// of what gets written to the back buffer.
+xmma_x4 discard, discard, r1, t0.a, c1, t0.a, c1
+// Copy the saturated alpha into both r0 & r1
+xmma r0, r1, discard, r1_sat, 1 - zero, r1_sat, 1 - zero
+// Modulate the diffuse with the lighting
+mul_x2 r0.rgb, t0, v0
+// Modulate the diffuse with the team color
+mul r1.rgb, c0.rgb, t0
+// Now blend the original diffuse/specular mess all or nothing with the
+// emissive diffuse
+xmma discard, discard, r0, r0, 1 - r1.a, r1, r1.a
+// Mask the specular and add the rim light
+mad r1.rgb, t1, t3.a, t2
+// Mask the specular and add to diffuse
+mad r0.rgb, t1.rgb, t3.a, r0.rgb
+// r0.a = (t2.a + (c0.a - 0.5) )
++ add r0.a, t2.a, c0_bias.a
+
+/*
+// Mask the specular
+// r1 = (t3.a * t1)
+mul r1, t1, t3.a
+
+// Modulate the diffuse by lighting and * 2
+// r0 = (t0 * v0 * 2)
+mul_x2 r0, t0, v0
+
+// Add the diffuse + specular and modulate with lighting
+// r0 = ((t0 * v0 * 2) + (t3.a * t1))
+// r0.a = (t2.a + (c0.a - 0.5) )
+add r0.rgb, r0, r1
++ add r0.a, t2.a, c0_bias.a
+
+// Modulate the team color by the team mask and add to the diffuse
+// r0 = (t0 * v0 * 2) + (t3.a * t1) + (t0.a * c0)
+mul r1, c0, t0.a
+add r0.rgb, r1, r0
+*/
+
+xfc fog.a, r0, fog.rgb, zero, zero, zero, r0.a

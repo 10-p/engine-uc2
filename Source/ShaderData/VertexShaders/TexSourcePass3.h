@@ -1,0 +1,4 @@
+DWORD dwTexSourcePass3VertexShader[] = {
+	0x00012078,
+	0x00000000, 0x0020001b, 0x8436106c, 0x2070f861
+};

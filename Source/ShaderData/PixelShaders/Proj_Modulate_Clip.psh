@@ -1,0 +1,25 @@
+/* scion ======================================================================
+ * Author: sz
+ * ============================================================================
+ * (PS_Projector_Modulate_Clip)
+ *
+ * See Proj_Modulate_1.psh
+ * Same color ops as Proj_Modulate_1 except that the pixel is clipped (texkill)
+ * if it is outside of the the projector frsutum planes 
+ *
+ * ============================================================================
+ */
+
+xps.1.1
+
+tex t0		// opacity bitmap from base material
+tex t1		// projected texture 1
+texkill t3	// reject pixel if we are outside of projector frustum
+			// see VS_Texcoord3_Source_Texkill_Code vertex shader
+			// for tex coords
+
+// r0.rgb	=	((t1.rgb * v0.a) + (c0.rgb * (1-v0.a))
+lrp r0.rgb, v0.a, t1.rgb, c0.rgb
++ mov r0.a, t0.a
+
+xfc zero, zero, r0.rgb, zero, zero, zero, r0.a

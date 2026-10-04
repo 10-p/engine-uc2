@@ -1,0 +1,3 @@
+# Line endings were normalised once at import (tools/dev/import-epic-sources.py); git must not touch them.
+# The sources are Latin-1, not UTF-8.
+* -text

@@ -1,0 +1,48 @@
+/* scion ======================================================================
+ * Author: jg
+ * ============================================================================
+ *
+ * This material is a specialized skin material that selectively blooms portions
+ * of the diffuse texture. It uses the alpha channel of the diffuse to determine
+ * which parts to team color. Team coloring is done by modulating a team color
+ * against a masked portion of the diffuse. This lets us use the same texture
+ * for each team saving memory. Each team colored section is also emissive. The
+ * amount of emissive-ness is controlled by the alpha channel of t0.
+ *
+ * c0 - The team color to modulate with
+ * c1 - The constant used to help select the team/emissive portion
+ *
+ * ============================================================================
+ */
+
+xps.1.1
+
+// Diffuse (alpha channel is emissive/team mask)
+tex t0
+// Specular
+tex t1
+// RimLight
+tex t2
+// Specular mask
+tex t3
+
+// Determine whether or not there is a mask being used for an emissive material
+// This is an all or nothing operation in terms of choosing the color portion
+// of what gets written to the back buffer.
+xmma_x4 discard, discard, r1, t0.a, c1, t0.a, c1
+// Copy the saturated alpha into both r0 & r1
+xmma r0, r1, discard, r1_sat, 1 - zero, r1_sat, 1 - zero
+// Modulate the diffuse with the lighting
+mul_x2 r0.rgb, t0, v0
+// Modulate the diffuse with the team color
+mul r1.rgb, c0.rgb, t0
+// Now blend the original diffuse/specular mess all or nothing with the
+// emissive diffuse
+xmma discard, discard, r0, r0, 1 - r1.a, r1, r1.a
+// Mask the specular and add the rim light
+mad r1.rgb, t1, t3.a, t2
+// Add the specular to the diffuse
+add r0, r0, r1
+
+// Apply all or nothing light bloom (0 or 1)
+xfc fog.a, r0, fog.rgb, zero, zero, zero, r0.a

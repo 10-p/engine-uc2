@@ -1,0 +1,4 @@
+DWORD dwTexPass2VertexShader[] = {
+	0x00012078,
+	0x00000000, 0x0020161b, 0x0836106c, 0x2070f859
+};

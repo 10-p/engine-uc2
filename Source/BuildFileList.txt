@@ -1,0 +1,5 @@
+System\*.dll
+System\Localization\int\Core.int
+System\*.exe
+System\default*.xbe
+Engine\Inc\ScriptPatches.h

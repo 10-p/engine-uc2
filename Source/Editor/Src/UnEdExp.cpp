@@ -1,0 +1,2387 @@
+/*=============================================================================
+	UnEdExp.cpp: Editor exporters.
+	Copyright 1997-1999 Epic Games, Inc. All Rights Reserved.
+=============================================================================*/
+
+#include "EditorPrivate.h"
+#include "../../Engine/Inc/UnDDraw.h" //!!
+
+#define _SCION_SORTCLASSES_
+#ifdef _SCION_SORTCLASSES_
+//scion capps Compares for AUTOGENERATE ordering
+static int Compare(UClass* A, UClass* B)
+{
+    return (appStrcmp(A->GetName(), B->GetName()));
+}
+static int Compare(FNameEntry* A, FNameEntry* B)
+{
+//    return (appStrcmp(A->GetRawName(), B->GetRawName()));
+    return (strcmp(A->GetRawName(), B->GetRawName()));
+}
+
+//jg -- Sort by CPP name so that APlayerController comes before UPlayer
+static INT CDECL ClassCPPNameSort( const void* A, const void* B )
+{
+	UClass* pA = *(UClass**)A;
+	UClass* pB = *(UClass**)B;
+	return appStrcmp(pA->GetNameCPP(),pB->GetNameCPP());
+}
+#endif
+
+/*------------------------------------------------------------------------------
+	UTextBufferExporterTXT implementation.
+------------------------------------------------------------------------------*/
+
+void UTextBufferExporterTXT::StaticConstructor()
+{
+	guard(UTextBufferExporterTXT::StaticConstructor);
+
+	SupportedClass = UTextBuffer::StaticClass();
+	bText = 1;
+	new(Formats)FString(TEXT("TXT"));
+
+	unguard;
+}
+UBOOL UTextBufferExporterTXT::ExportText( UObject* Object, const TCHAR* Type, FOutputDevice& Ar, FFeedbackContext* Warn )
+{
+	guard(UTextBufferExporterTXT::ExportText);
+	UTextBuffer* TextBuffer = CastChecked<UTextBuffer>( Object );
+	FString Str( TextBuffer->Text );
+
+	TCHAR* Start = const_cast<TCHAR*>(*Str);
+	TCHAR* End   = Start + Str.Len();
+	while( Start<End && (Start[0]=='\r' || Start[0]=='\n' || Start[0]==' ') )
+		Start++;
+	while( End>Start && (End [-1]=='\r' || End [-1]=='\n' || End [-1]==' ') )
+		End--;
+	*End = 0;
+
+	Ar.Log( Start );
+
+	return 1;
+	unguard;
+}
+IMPLEMENT_CLASS(UTextBufferExporterTXT);
+
+/*------------------------------------------------------------------------------
+	USoundExporterWAV implementation.
+------------------------------------------------------------------------------*/
+
+void USoundExporterWAV::StaticConstructor()
+{
+	guard(USoundExporterWAV::StaticConstructor);
+
+	SupportedClass = USound::StaticClass();
+	bText = 0;
+	new(Formats)FString(TEXT("WAV"));
+
+	unguard;
+}
+UBOOL USoundExporterWAV::ExportBinary( UObject* Object, const TCHAR* Type, FArchive& Ar, FFeedbackContext* Warn )
+{
+	guard(USoundExporterWAV::ExportBinary);
+	USound* Sound = CastChecked<USound>( Object );
+	Sound->Data.Load();
+	Ar.Serialize( &Sound->Data(0), Sound->Data.Num() );
+	return 1;
+	unguard;
+}
+IMPLEMENT_CLASS(USoundExporterWAV);
+
+/*------------------------------------------------------------------------------
+	UClassExporterH implementation.
+------------------------------------------------------------------------------*/
+
+static void RecursiveTagNames( UClass* Class )
+{
+	guard(RecursiveTagNames);
+#if 0 /* Old version */
+	if( (Class->GetFlags() & RF_TagExp) && (Class->GetFlags() & RF_Native) )
+		for( TFieldIterator<UFunction,CLASS_IsAUFunction> Function(Class); Function && Function.GetStruct()==Class; ++Function )
+			if
+			(	(Function->FunctionFlags & (FUNC_Event|FUNC_Delegate))
+			&&	!Function->GetSuperFunction() )
+				Function->GetFName().SetFlags( RF_TagExp );
+	for( TObjectIterator<UClass> It; It; ++It )
+		if( It->GetSuperClass()==Class )
+			RecursiveTagNames( *It );
+#else /* Faster version */
+	for( TObjectIterator<UClass> It; It; ++It )
+	{
+		UClass* C=*It;
+		if(C->IsChildOf(Class) && (C->GetFlags() & RF_TagExp) && (C->GetFlags() & RF_Native))
+			for(TFieldIterator<UFunction,CLASS_IsAUFunction> Function(C); Function && Function.GetStruct()==C; ++Function)
+				if( (Function->FunctionFlags & (FUNC_Event|FUNC_Delegate)) && !Function->GetSuperFunction() )
+					Function->GetFName().SetFlags(RF_TagExp);
+	}
+#endif
+	unguard;
+}
+
+void UClassExporterH::StaticConstructor()
+{
+	guard(UClassExporterH::StaticConstructor);
+
+	SupportedClass = UClass::StaticClass();
+	bText = 1;
+	new(Formats)FString(TEXT("H"));
+
+	unguard;
+}
+
+UBOOL UClassExporterH::ExportText( UObject* Object, const TCHAR* Type, FOutputDevice& Ar, FFeedbackContext* Warn )
+{
+	guard(UClassExporterH::ExportText);
+	UClass* Class = CastChecked<UClass>( Object );
+
+	TCHAR API[256];
+	appStrcpy( API, Class->GetOuter()->GetName() );
+	appStrupr( API );
+
+	// Export as C++ header.
+	if( RecursionDepth==0 )
+	{
+		DidTop = 0;
+		RecursiveTagNames( Class );
+	}
+
+	// Export this.
+	if( Class->GetFlags() & RF_TagExp )
+	{
+		// Top of file.
+		if( !DidTop )
+		{
+			DidTop = 1;
+			Ar.Logf
+			(
+				TEXT("/*===========================================================================\r\n")
+				TEXT("    C++ class definitions exported from UnrealScript.\r\n")
+				TEXT("    This is automatically generated by the tools.\r\n")
+				TEXT("    DO NOT modify this manually! Edit the corresponding .uc files instead!\r\n")
+				TEXT("===========================================================================*/\r\n")
+				TEXT("#if SUPPORTS_PRAGMA_PACK\r\n")
+				TEXT("#pragma pack (push,%i)\r\n")
+				TEXT("#endif\r\n")
+				TEXT("\r\n")
+				TEXT("#ifndef %s_API\r\n")
+				TEXT("#define %s_API DLL_IMPORT\r\n")
+				TEXT("#endif\r\n")
+				TEXT("\r\n")
+				TEXT("#ifndef NAMES_ONLY\r\n")
+				TEXT("#define AUTOGENERATE_NAME(name) extern %s_API FName %s_##name;\r\n")
+				TEXT("#define AUTOGENERATE_FUNCTION(cls,idx,name)\r\n")
+				TEXT("#endif\r\n")
+				TEXT("\r\n"),
+				PROPERTY_ALIGNMENT,
+				API,
+				API,
+				API,
+				API
+			);
+#ifdef _SCION_SORTCLASSES_
+//scion capps Sorted name handling
+            TArray<FNameEntry*> SortedNames;
+            for( INT i=0; i<FName::GetMaxNames(); i++ )
+                if( FName::GetEntry(i) && (FName::GetEntry(i)->Flags & RF_TagExp) )
+                    SortedNames.AddItem(FName::GetEntry(i));
+            Sort<FNameEntry*>( &SortedNames(0), SortedNames.Num() );
+            for( TArray<FNameEntry*>::TIterator ItN(SortedNames); ItN; ++ItN ) {
+                Ar.Logf( TEXT("AUTOGENERATE_NAME(%s)\r\n"), (*ItN)->GetName() );
+            }
+#else
+			for( INT i=0; i<FName::GetMaxNames(); i++ )
+				if( FName::GetEntry(i) && (FName::GetEntry(i)->Flags & RF_TagExp) )
+					Ar.Logf( TEXT("AUTOGENERATE_NAME(%s)\r\n"), *FName((EName)(i)) );
+#endif
+			for( INT i=0; i<FName::GetMaxNames(); i++ )
+				if( FName::GetEntry(i) )
+					FName::GetEntry(i)->Flags &= ~RF_TagExp;
+			Ar.Logf( TEXT("\r\n#ifndef NAMES_ONLY\r\n\r\n") );
+		}
+
+		// Enum definitions.
+		for( TFieldIterator<UEnum> ItE(Class); ItE && ItE.GetStruct()==Class; ++ItE )
+		{
+			// Export enum.
+			if( ItE->GetOuter()==Class )
+			{
+				Ar.Logf( TEXT("%senum %s\r\n{\r\n"), appSpc(TextIndent), ItE->GetName() );
+				INT i;
+				for( i=0; i<ItE->Names.Num(); i++ )
+					Ar.Logf( TEXT("%s    %-24s=%i,\r\n"), appSpc(TextIndent), *ItE->Names(i), i );
+				
+				// Find the longest common prefix of all items in the enumeration.
+				const TArray<FName>& Names = ItE->Names;
+				if (Names.Num() > 0)
+				{
+					FString Prefix = *Names(0);
+
+					// For each item in the enumeration, trim the prefix as much as necessary to keep it a prefix.
+					// This ensures that once all items have been processed, a common prefix will have been constructed.
+					// This will be the longest common prefix since as little as possible is trimmed at each step.
+					for (INT NameIdx = 1; NameIdx < Names.Num(); NameIdx++)
+					{
+						const FString& EnumItemName = *Names(NameIdx);
+						
+						// Find the length of the longest common prefix of Prefix and EnumItemName.
+						INT PrefixIdx = 0;
+						while (PrefixIdx < Prefix.Len() && PrefixIdx < EnumItemName.Len() && Prefix[PrefixIdx] == EnumItemName[PrefixIdx])
+						{
+							PrefixIdx++;
+						}
+
+						// Trim the prefix to the length of the common prefix.
+						Prefix = Prefix.Left(PrefixIdx);
+					}
+
+					// Find the index of the rightmost underscore in the prefix.
+					INT UnderscoreIdx = Prefix.InStr(TEXT("_"), true);
+
+					// If an underscore was found, trim the prefix so only the part before the rightmost underscore is included.
+					if (UnderscoreIdx > 0)
+					{
+						Prefix = Prefix.Left(UnderscoreIdx);
+					}
+
+					// Print out the MAX enumeration item using the prefix.
+					FString MaxEnumItem = Prefix + FString("_MAX");
+					Ar.Logf( TEXT("%s    %-24s=%i,\r\n"), appSpc(TextIndent), *MaxEnumItem, i );
+				}
+
+// Old prefix-finding code. This was replaced by the previous block of code.
+#if 0
+				if( appStrchr(*ItE->Names(0),'_') )
+				{
+					// Include tag_MAX enumeration.
+					TCHAR Temp[256];
+					appStrcpy( Temp, *ItE->Names(0) );
+					appStrcpy( appStrchr(Temp,'_'),TEXT("_MAX"));
+					Ar.Logf( TEXT("%s    %-24s=%i,\r\n"), appSpc(TextIndent), Temp, i );
+				}
+#endif
+				Ar.Logf( TEXT("};\r\n") );
+			}
+			else Ar.Logf( TEXT("%senum %s;\r\n"), appSpc(TextIndent), ItE->GetName() );
+		}
+
+		// Struct definitions.
+		TArray<UStruct*> NativeStructs;
+		for( TFieldIterator<UStruct> ItS(Class); ItS && ItS.GetStruct()==Class; ++ItS )
+		{
+			if( ( ItS->GetFlags() & RF_Native) || (ItS->StructFlags & STRUCT_Native) )
+				NativeStructs.AddItem(*ItS);
+		}
+		// reverse the order.
+		for( INT i=NativeStructs.Num()-1; i>=0; --i )
+		{
+			UStruct* ItS = NativeStructs(i);
+
+			// Export struct.
+			Ar.Logf( TEXT("struct %s_API %s"), API, ItS->GetNameCPP() );
+			if( ItS->SuperField )
+				Ar.Logf(TEXT(" : public %s\r\n"), ItS->GetSuperStruct()->GetNameCPP() );
+			Ar.Logf( TEXT("\r\n{\r\n") );
+			TFieldIterator<UProperty,CLASS_IsAUProperty> LastIt = NULL;
+			for( TFieldIterator<UProperty,CLASS_IsAUProperty> It2(ItS); It2; ++It2 )
+			{
+				if( It2.GetStruct()==ItS && It2->ElementSize )
+				{
+					Ar.Logf( appSpc(TextIndent+4) );
+					It2->ExportCpp( Ar, 0, 0, 0,
+						((ItS->StructFlags&STRUCT_Export) || (ItS->StructFlags&STRUCT_Transient)) ? 1 : 0 );
+					if (It2->IsA(UBoolProperty::StaticClass()))
+					{
+						if( !LastIt || !LastIt->IsA(UBoolProperty::StaticClass()) ||
+							// do not allow transient/non-transient bools to be packed together
+							((LastIt->PropertyFlags & CPF_Transient) != (It2->PropertyFlags & CPF_Transient)))
+							Ar.Logf( TEXT(" GCC_PACK(%i)"), PROPERTY_ALIGNMENT );
+					}
+					else
+					{
+						if ( LastIt != NULL )
+						{
+							if ( (LastIt->IsA(UBoolProperty::StaticClass())) ||
+							     (LastIt->IsA(UByteProperty::StaticClass()) && !It2->IsA(UByteProperty::StaticClass()))
+							   )
+							{
+								Ar.Logf( TEXT(" GCC_PACK(%i)"), PROPERTY_ALIGNMENT );
+							}
+						}
+					}
+					LastIt = It2;
+					Ar.Logf(TEXT(";\r\n"));
+				}
+			}
+
+			// Export serializer
+			if( ItS->StructFlags&STRUCT_Export )
+			{
+				Ar.Logf( TEXT("%sfriend %s_API FArchive& operator<<(FArchive& Ar,%s& My%s)\r\n"), appSpc(TextIndent+4), API, ItS->GetNameCPP(), ItS->GetName() );
+				Ar.Logf( TEXT("%s{\r\n"), appSpc(TextIndent+4) );
+				Ar.Logf( TEXT("%sreturn Ar"), appSpc(TextIndent+8) );
+				for( TFieldIterator<UProperty,CLASS_IsAUProperty> It2(ItS); It2; ++It2 )
+				{
+					if( It2.GetStruct()==ItS && It2->ElementSize )
+					{
+						if( It2->ArrayDim > 1 )
+						{
+							for( INT i=0;i<It2->ArrayDim;i++ )
+                                Ar.Logf( TEXT(" << My%s.%s[%d]"), ItS->GetName(), It2->GetName(), i );
+						}
+						else
+						{
+							Ar.Logf( TEXT(" << My%s.%s"), ItS->GetName(), It2->GetName() );
+						}
+					}
+				}
+				Ar.Logf( TEXT(";\r\n%s}\r\n"), appSpc(TextIndent+4) );
+			}
+
+			Ar.Logf( TEXT("};\r\n\r\n") );
+		}
+	
+		// Constants.
+		for( TFieldIterator<UConst> ItC(Class); ItC && ItC.GetStruct()==Class; ++ItC )
+		{
+			FString V = ItC->Value;
+			while( V.Left(1)==TEXT(" ") )
+				V=V.Mid(1);
+			if( V.Len()>1 && V.Left(1)==TEXT("'") && V.Right(1)==TEXT("'") )
+				V = V.Mid(1,V.Len()-2);
+			Ar.Logf( TEXT("#define UCONST_%s %s\r\n"), ItC->GetName(), *V );
+		}
+		if( TFieldIterator<UConst>(Class) )
+			Ar.Logf( TEXT("\r\n") );
+
+		// Parms struct definitions.
+		TFieldIterator<UFunction,CLASS_IsAUFunction> Function(Class);
+		TFieldIterator<UProperty,CLASS_IsAUProperty> It(Class);
+		for( Function = TFieldIterator<UFunction,CLASS_IsAUFunction>(Class); Function && Function.GetStruct()==Class; ++Function )
+		{
+			if
+			(	(Function->FunctionFlags & (FUNC_Event|FUNC_Delegate))
+			&&	(!Function->GetSuperFunction()) )
+			{
+				Ar.Logf( TEXT("struct %s_event%s_Parms\r\n"), Class->GetNameCPP(), Function->GetName() );
+				Ar.Log( TEXT("{\r\n") );
+					for( It=TFieldIterator<UProperty,CLASS_IsAUProperty>(*Function); It && (It->PropertyFlags&CPF_Parm); ++It )
+				{
+					Ar.Log( TEXT("    ") );
+					It->ExportCpp( Ar, 1, 0, 1, 0 );
+					Ar.Log( TEXT(";\r\n") );
+				}
+				Ar.Log( TEXT("};\r\n") );
+			}
+		}
+		
+		// Class definition.
+		Ar.Logf( TEXT("class %s_API %s"), API, Class->GetNameCPP() );
+		if( Class->GetSuperClass() )
+			Ar.Logf( TEXT(" : public %s\r\n"), Class->GetSuperClass()->GetNameCPP() );
+		Ar.Logf( TEXT("{\r\npublic:\r\n") );
+
+		// All per-object properties defined in this class.
+		TFieldIterator<UProperty,CLASS_IsAUProperty> LastIt = NULL;
+		for( TFieldIterator<UProperty,CLASS_IsAUProperty> It = TFieldIterator<UProperty,CLASS_IsAUProperty>(Class); It; ++It )
+		{
+			if( It.GetStruct()==Class && It->ElementSize )
+			{
+				Ar.Logf( appSpc(TextIndent+4) );
+				It->ExportCpp( Ar, 0, 0, 0, 0 );
+				if (It->IsA(UBoolProperty::StaticClass()))
+				{
+					if (LastIt == NULL || !LastIt->IsA(UBoolProperty::StaticClass()) ||
+						// do not allow transient/non-transient bools to be packed together
+						((It->PropertyFlags & CPF_Transient) != (LastIt->PropertyFlags & CPF_Transient)))
+						Ar.Logf( TEXT(" GCC_PACK(%i)"), PROPERTY_ALIGNMENT );
+				}
+				else
+				{
+					if ( LastIt != NULL )
+					{
+						if ( (LastIt->IsA(UBoolProperty::StaticClass())) ||
+						     (LastIt->IsA(UByteProperty::StaticClass()) && !It->IsA(UByteProperty::StaticClass()))
+						   )
+						{
+							Ar.Logf( TEXT(" GCC_PACK(%i)"), PROPERTY_ALIGNMENT );
+						}
+					}
+				}
+				Ar.Logf( TEXT(";\r\n") );
+			}
+			LastIt = It;
+		}
+
+		// C++ -> UnrealScript stubs.
+		for( TFieldIterator<UFunction,CLASS_IsAUFunction> Function = TFieldIterator<UFunction,CLASS_IsAUFunction>(Class); Function && Function.GetStruct()==Class; ++Function )
+			if( Function->FunctionFlags & FUNC_Native )
+				Ar.Logf( TEXT("    DECLARE_FUNCTION(exec%s);\r\n"), Function->GetName() );
+
+		// UnrealScript -> C++ proxies.
+		for( TFieldIterator<UFunction,CLASS_IsAUFunction> Function = TFieldIterator<UFunction,CLASS_IsAUFunction>(Class); Function && Function.GetStruct()==Class; ++Function )
+		{
+			if
+			(	(Function->FunctionFlags & (FUNC_Event|FUNC_Delegate))
+			&&	(!Function->GetSuperFunction()) )
+			{
+				// Return type.
+				UProperty* Return = Function->GetReturnProperty();
+				Ar.Log( TEXT("    ") );
+				if( !Return )
+					Ar.Log( TEXT("void") );
+				else
+					Return->ExportCppItem( Ar );
+
+				// Function name and parms.
+				INT ParmCount=0;
+				if( Function->FunctionFlags & FUNC_Delegate )
+					Ar.Logf( TEXT(" delegate%s("), Function->GetName() );
+				else
+					Ar.Logf( TEXT(" event%s("), Function->GetName() );
+				for( TFieldIterator<UProperty,CLASS_IsAUProperty> It(*Function); It && (It->PropertyFlags&(CPF_Parm|CPF_ReturnParm))==CPF_Parm; ++It )
+				{
+					if( ParmCount++ )
+						Ar.Log(TEXT(", "));
+					It->ExportCpp( Ar, 0, 1, 1, 0 );
+				}
+				Ar.Log( TEXT(")\r\n") );
+
+				// Function call.
+				Ar.Log( TEXT("    {\r\n") );
+				UBOOL ProbeOptimization = (Function->GetFName().GetIndex()>=NAME_PROBEMIN && Function->GetFName().GetIndex()<NAME_PROBEMAX);
+				if( ParmCount || Return )
+				{
+					Ar.Logf( TEXT("        %s_event%s_Parms Parms;\r\n"), Class->GetNameCPP(), Function->GetName() );
+					if( Return && !Cast<UStrProperty>(Return) )
+						Ar.Logf( TEXT("        Parms.%s=0;\r\n"), Return->GetName() );
+				}
+				if( ProbeOptimization )
+					Ar.Logf(TEXT("        if(IsProbing(NAME_%s)) {\r\n"),Function->GetName());
+				if( ParmCount || Return )
+				{
+					// Parms struct initialization.
+					for( TFieldIterator<UProperty,CLASS_IsAUProperty> It=TFieldIterator<UProperty,CLASS_IsAUProperty>(*Function); It && (It->PropertyFlags&(CPF_Parm|CPF_ReturnParm))==CPF_Parm; ++It )
+					{
+						if( It->ArrayDim>1 )
+							Ar.Logf( TEXT("        appMemcpy(&Parms.%s,&%s,sizeof(Parms.%s));\r\n"), It->GetName(), It->GetName(), It->GetName() );
+						else
+							Ar.Logf( TEXT("        Parms.%s=%s;\r\n"), It->GetName(), It->GetName() );
+					}
+					if( Function->FunctionFlags & FUNC_Delegate )
+						Ar.Logf( TEXT("        ProcessDelegate(%s_%s,&__%s__Delegate,&Parms);\r\n"), API, Function->GetName(), Function->GetName() );
+					else
+						Ar.Logf( TEXT("        ProcessEvent(FindFunctionChecked(%s_%s),&Parms);\r\n"), API, Function->GetName() );
+				}
+				else
+				{
+					if( Function->FunctionFlags & FUNC_Delegate )
+						Ar.Logf( TEXT("        ProcessDelegate(%s_%s,&__%s__Delegate,NULL);\r\n"), API, Function->GetName(), Function->GetName() );
+					else
+						Ar.Logf( TEXT("        ProcessEvent(FindFunctionChecked(%s_%s),NULL);\r\n"), API, Function->GetName() );
+				}
+				if( ProbeOptimization )
+					Ar.Logf(TEXT("        }\r\n"));
+
+				// Out parm copying.
+				for( TFieldIterator<UProperty,CLASS_IsAUProperty> It=TFieldIterator<UProperty,CLASS_IsAUProperty>(*Function); It && (It->PropertyFlags&(CPF_Parm|CPF_ReturnParm))==CPF_Parm; ++It )
+				{
+					if( It->PropertyFlags & CPF_OutParm )
+					{
+						if( It->ArrayDim>1 )
+							Ar.Logf( TEXT("        appMemcpy(&%s,&Parms.%s,sizeof(%s));\r\n"), It->GetName(), It->GetName(), It->GetName() );
+						else
+							Ar.Logf( TEXT("        %s=Parms.%s;\r\n"), It->GetName(), It->GetName() );
+					}
+				}
+
+				// Return value.
+				if( Return )
+					Ar.Logf( TEXT("        return Parms.%s;\r\n"), Return->GetName() );
+				Ar.Log( TEXT("    }\r\n") );
+			}
+		}
+
+		// Code.
+		Ar.Logf( TEXT("    DECLARE_CLASS(%s,"), Class->GetNameCPP() ); //warning: GetNameCPP uses static storage.
+		Ar.Logf( TEXT("%s,0"), Class->GetSuperClass()->GetNameCPP() );
+		if( Class->ClassFlags & CLASS_Transient      )
+			Ar.Log( TEXT("|CLASS_Transient") );
+		if( Class->ClassFlags & CLASS_Config )
+			Ar.Log( TEXT("|CLASS_Config") );
+		if( Class->ClassFlags & CLASS_NativeReplication )
+			Ar.Log( TEXT("|CLASS_NativeReplication") );
+		Ar.Logf( TEXT(",%s)\r\n"), Class->GetOuter()->GetName() );
+		FString Filename = FString(TEXT("..")) * Class->GetOuter()->GetName() * TEXT("Inc") * Class->GetNameCPP() + TEXT(".h");
+		if( Class->CppText )
+			Ar.Log( *Class->CppText->Text );
+		else
+		if( GFileManager->FileSize(*Filename) > 0 )
+			Ar.Logf( TEXT("    #include \"%s.h\"\r\n"), Class->GetNameCPP() );
+		else
+			Ar.Logf( TEXT("    NO_DEFAULT_CONSTRUCTOR(%s)\r\n"), Class->GetNameCPP() );
+
+		// End of class.
+		Ar.Logf( TEXT("};\r\n") );
+
+		// End.
+		Ar.Logf( TEXT("\r\n") );
+	}
+
+	// Export all child classes that are tagged for export.
+	RecursionDepth++;
+#ifdef _SCION_SORTCLASSES_
+//scion capps sorted export of classes in *classes.h file
+// This does a search of all the classes (DFS?BFS? Who cares.)
+// It finds all subclasses of a given class; sorts the
+// subclasses; and outputs all the ones defined in this
+// script package.
+    TArray<UClass*> TmpClassArray;
+	for( TObjectIterator<UClass> It; It; ++It ){
+		if( It->GetSuperClass()==Class ){
+			TmpClassArray.AddItem(*It);
+		}
+	}
+	
+    Sort<UClass*>( &TmpClassArray(0), TmpClassArray.Num() );
+
+    for( TArray<UClass*>::TIterator ItC(TmpClassArray); ItC; ++ItC ) {
+        check((*ItC)->GetSuperClass()==Class);
+        UExporter::ExportToOutputDevice( *ItC, this, Ar, TEXT("H"), TextIndent );
+    }
+#else
+	for( TObjectIterator<UClass> It; It; ++It )
+		if( It->GetSuperClass()==Class )
+			UExporter::ExportToOutputDevice( *It, this, Ar, TEXT("H"), TextIndent );
+#endif
+	RecursionDepth--;
+
+	// Finish C++ header.
+	if( RecursionDepth==0 )
+	{
+		Ar.Logf( TEXT("#endif\r\n") );
+		Ar.Logf( TEXT("\r\n") );
+
+		//jg -- Moved this up in the process
+		UObject* ExportOuter = NULL;
+		for( TObjectIterator<UClass> It; It; ++It )
+		{
+			if( (It->GetFlags() & RF_TagExp) && (It->GetFlags() & RF_Native) )
+			{
+				appStrcpy(API, It->GetOuter()->GetName());
+				ExportOuter = It->GetOuter();
+				break;
+			}
+		}
+
+//jg -- Why wasn't this defined?
+#define _SCION_CLASSES_
+#ifdef _SCION_CLASSES_
+//scion capps sorted export of functions
+
+		TArray<UClass*> TmpClassArray2;
+
+		for( TObjectIterator<UClass> ItO; ItO; ++ItO )
+		{
+            if( ItO->GetFlags() & RF_TagExp ||
+				ItO->HasNativesToExport(ExportOuter) ||
+				ItO->GetFlags() & RF_Native)
+			{
+                TmpClassArray2.AddItem(*ItO);
+			}
+		}
+
+		appQsort( &TmpClassArray2(0), TmpClassArray2.Num(), sizeof(UClass*), ClassCPPNameSort);
+
+		for( TArray<UClass*>::TIterator ItC(TmpClassArray2); ItC; ++ItC ){
+			UClass* c = *ItC;
+			if (c->HasNativesToExport(ExportOuter) && c->GetFlags() & RF_TagExp)
+			{
+				for( TFieldIterator<UFunction,CLASS_IsAUFunction> Function(c); Function && Function.GetStruct()==c; ++Function ){
+					if( Function->FunctionFlags & FUNC_Native ){
+						Ar.Logf( TEXT("AUTOGENERATE_FUNCTION(%s,%i,exec%s);\r\n"), c->GetNameCPP(), Function->iNative ? Function->iNative : -1, Function->GetName() );
+					}
+				}
+			}
+		}
+#else
+		for( TObjectIterator<UClass> It; It; ++It )
+			if( It->GetFlags() & RF_TagExp )
+				for( TFieldIterator<UFunction,CLASS_IsAUFunction> Function(*It); Function && Function.GetStruct()==*It; ++Function )
+					if( Function->FunctionFlags & FUNC_Native )
+						Ar.Logf( TEXT("AUTOGENERATE_FUNCTION(%s,%i,exec%s);\r\n"), It->GetNameCPP(), Function->iNative ? Function->iNative : -1, Function->GetName() );
+#endif
+
+		Ar.Logf( TEXT("\r\n") );
+		Ar.Logf( TEXT("#ifndef NAMES_ONLY\r\n") );
+		Ar.Logf( TEXT("#undef AUTOGENERATE_NAME\r\n") );
+		Ar.Logf( TEXT("#undef AUTOGENERATE_FUNCTION\r\n") );
+		Ar.Logf( TEXT("#endif\r\n") );
+
+		Ar.Logf( TEXT("\r\n") );
+		Ar.Logf( TEXT("#if SUPPORTS_PRAGMA_PACK\r\n") );
+		Ar.Logf( TEXT("#pragma pack (pop)\r\n") );
+		Ar.Logf( TEXT("#endif\r\n") );
+
+		TCHAR SuperAPI[1024];
+		appStrcpy(SuperAPI, API);
+		appStrupr(SuperAPI);
+
+		Ar.Logf( TEXT("\r\n") );
+		Ar.Logf( TEXT("#if __STATIC_LINK\r\n"));
+
+		Ar.Logf( TEXT("#ifndef %s_NATIVE_DEFS\r\n"), SuperAPI);
+		Ar.Logf( TEXT("#define %s_NATIVE_DEFS\r\n"), SuperAPI);
+		Ar.Logf( TEXT("\r\n") );
+
+		//jg -- Fix retarded ordering problems causing headers to be
+		// regenerated all the time. Sort all classes by their name so they
+		// are always exported in the same order.
+#ifdef _SCION_SORTCLASSES_
+		// Use the sorted array of classes that need exporting
+		for (INT Index = 0; Index < TmpClassArray2.Num(); Index++)
+		{
+			UClass* pClass = TmpClassArray2(Index);
+			if (pClass->HasNativesToExport(ExportOuter))
+			{
+				Ar.Logf( TEXT("DECLARE_NATIVE_TYPE(%s,%s);\r\n"), API, pClass->GetNameCPP() );
+			}
+		}
+
+		Ar.Logf( TEXT("\r\n") );
+
+        Ar.Logf( TEXT("#define AUTO_INITIALIZE_REGISTRANTS_%s \\\r\n"), SuperAPI );
+		// Use the sorted array of classes that need exporting
+		for (INT Index = 0; Index < TmpClassArray2.Num(); Index++)
+		{
+			UClass* pClass = TmpClassArray2(Index);
+            if( (pClass->GetOuter() == ExportOuter) && (pClass->GetFlags() & RF_Native) )
+            {
+                Ar.Logf( TEXT("\t%s::StaticClass(); \\\r\n"), pClass->GetNameCPP() );
+				Ar.Logf( TEXT("VERIFY_CLASS_SIZE(%s);\\\r\n"), pClass->GetNameCPP() );
+                if( pClass->HasNativesToExport( ExportOuter ) )
+				{
+					for( TFieldIterator<UFunction,CLASS_IsAUFunction> Function(pClass); Function && Function.GetStruct()==pClass; ++Function )
+					{
+						if( Function->FunctionFlags & FUNC_Native )
+                        {
+                            Ar.Logf( TEXT("\tGNativeLookupFuncs[Lookup++] = &Find%s%sNative; \\\r\n"), API, pClass->GetNameCPP() );
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        Ar.Logf( TEXT("\r\n") );
+
+        Ar.Logf( TEXT("#endif // %s_NATIVE_DEFS\r\n"), API ); // #endif // s_NATIVE_DEFS
+        Ar.Logf( TEXT("\r\n") );
+
+		Ar.Logf( TEXT("#ifdef NATIVES_ONLY\r\n") ); // #if // __STATIC_LINK
+		// Use the sorted array of classes that need exporting
+		for (INT Index = 0; Index < TmpClassArray2.Num(); Index++)
+		{
+			UClass* pClass = TmpClassArray2(Index);
+			if( pClass->HasNativesToExport( ExportOuter ) )
+			{
+				INT NumNatives = 0;
+				for( TFieldIterator<UFunction,CLASS_IsAUFunction> Function(pClass); Function && Function.GetStruct()==pClass; ++Function )
+				{
+					if( Function->FunctionFlags & FUNC_Native )
+					{
+						NumNatives++;
+						break;
+					}
+				}
+
+				if( NumNatives )
+				{
+					Ar.Logf( TEXT("NATIVE_INFO(%s) G%s%sNatives[] = \r\n"), pClass->GetNameCPP(), API, pClass->GetNameCPP() );
+					Ar.Logf( TEXT("{ \r\n"));
+					for( TFieldIterator<UFunction,CLASS_IsAUFunction> Function(pClass); Function && Function.GetStruct()==pClass; ++Function )
+					{
+						if( Function->FunctionFlags & FUNC_Native )
+							Ar.Logf( TEXT("\tMAP_NATIVE(%s,exec%s)\r\n"), pClass->GetNameCPP(), Function->GetName() );
+					}
+					Ar.Logf( TEXT("\t{NULL,NULL}\r\n") );
+					Ar.Logf( TEXT("};\r\n") );
+					Ar.Logf( TEXT("IMPLEMENT_NATIVE_HANDLER(%s,%s);\r\n"), API, pClass->GetNameCPP() );
+					Ar.Logf( TEXT("\r\n") );
+				}
+			}
+		}
+		Ar.Logf( TEXT("#endif // NATIVES_ONLY\r\n"), API ); // #endif // NAMES_ONLY
+		Ar.Logf( TEXT("#endif // __STATIC_LINK\r\n"), API ); // #endif // __STATIC_LINK
+
+		// Generate code to automatically verify class offsets and size.
+		Ar.Logf( TEXT("\r\n#ifdef VERIFY_CLASS_SIZES\r\n") ); // #ifdef VERIFY_CLASS_SIZES
+		// Use mike's sorted array of classes that need exporting
+		for (INT Index = 0; Index < TmpClassArray2.Num(); Index++)
+		{
+			UClass* Class = TmpClassArray2(Index);
+			if ( (Class->GetFlags() & RF_TagExp) ||
+				((Class->GetFlags() & RF_Native) && (Class->GetOuter() == ExportOuter) && (Class->ClassFlags & CLASS_NoExport)) )
+			{
+				Ar.Logf( TEXT("VERIFY_CLASS_SIZE_NODIE(%s)\r\n"), Class->GetNameCPP() );
+			}
+		}
+		Ar.Logf( TEXT("#endif // VERIFY_CLASS_SIZES\r\n") ); // #endif // VERIFY_CLASS_SIZES
+#else
+		for( TObjectIterator<UClass> It; It; ++It )
+			if( (*It)->HasNativesToExport( ExportOuter ) )
+				Ar.Logf( TEXT("DECLARE_NATIVE_TYPE(%s,%s);\r\n"), API, It->GetNameCPP() );
+		Ar.Logf( TEXT("\r\n") );
+
+        Ar.Logf( TEXT("#define AUTO_INITIALIZE_REGISTRANTS_%s \\\r\n"), SuperAPI );
+        for( TObjectIterator<UClass> It; It; ++It )
+        {
+            if( (It->GetOuter() == ExportOuter) && (It->GetFlags() & RF_Native) )
+            {
+                Ar.Logf( TEXT("\t%s::StaticClass(); \\\r\n"), It->GetNameCPP() );
+                if( (*It)->HasNativesToExport( ExportOuter ) )
+				{
+					for( TFieldIterator<UFunction,CLASS_IsAUFunction> Function(*It); Function && Function.GetStruct()==*It; ++Function )
+					{
+						if( Function->FunctionFlags & FUNC_Native )
+                        {
+                            Ar.Logf( TEXT("\tGNativeLookupFuncs[Lookup++] = &Find%s%sNative; \\\r\n"), API, It->GetNameCPP() );
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        Ar.Logf( TEXT("\r\n") );
+
+        Ar.Logf( TEXT("#endif // %s_NATIVE_DEFS\r\n"), API ); // #endif // s_NATIVE_DEFS
+        Ar.Logf( TEXT("\r\n") );
+
+		Ar.Logf( TEXT("#ifdef NATIVES_ONLY\r\n") ); // #if // __STATIC_LINK
+		for( TObjectIterator<UClass> It; It; ++It )
+		{
+			if( (*It)->HasNativesToExport( ExportOuter ) )
+			{
+				INT NumNatives = 0;
+				for( TFieldIterator<UFunction,CLASS_IsAUFunction> Function(*It); Function && Function.GetStruct()==*It; ++Function )
+				{
+					if( Function->FunctionFlags & FUNC_Native )
+					{
+						NumNatives++;
+						break;
+					}
+				}
+
+				if( NumNatives )
+				{
+					Ar.Logf( TEXT("NATIVE_INFO(%s) G%s%sNatives[] = \r\n"), It->GetNameCPP(), API, It->GetNameCPP() );
+					Ar.Logf( TEXT("{ \r\n"));
+					for( TFieldIterator<UFunction,CLASS_IsAUFunction> Function(*It); Function && Function.GetStruct()==*It; ++Function )
+					{
+						if( Function->FunctionFlags & FUNC_Native )
+							Ar.Logf( TEXT("\tMAP_NATIVE(%s,exec%s)\r\n"), It->GetNameCPP(), Function->GetName() );
+					}
+					Ar.Logf( TEXT("\t{NULL,NULL}\r\n") );
+					Ar.Logf( TEXT("};\r\n") );
+					Ar.Logf( TEXT("IMPLEMENT_NATIVE_HANDLER(%s,%s);\r\n"), API, It->GetNameCPP() );
+					Ar.Logf( TEXT("\r\n") );
+				}
+			}
+		}
+		Ar.Logf( TEXT("#endif // NATIVES_ONLY\r\n"), API ); // #endif // NAMES_ONLY
+		Ar.Logf( TEXT("#endif // __STATIC_LINK\r\n"), API ); // #endif // __STATIC_LINK
+
+		// Generate code to automatically verify class offsets and size.
+		Ar.Logf( TEXT("\r\n#ifdef VERIFY_CLASS_SIZES\r\n") ); // #ifdef VERIFY_CLASS_SIZES
+		for( TObjectIterator<UClass> ClassIt; ClassIt; ++ClassIt )
+		{		
+			UClass* Class = *ClassIt;
+			if( Class->GetFlags() & RF_TagExp )
+			{	
+#if 0
+				// #ifdef'ed out due to compiler limitation
+				for( TFieldIterator<UProperty,CLASS_IsAUProperty> PropIt = TFieldIterator<UProperty,CLASS_IsAUProperty>(Class); PropIt; ++PropIt )
+				{
+					if( PropIt.GetStruct()==Class && PropIt->ElementSize && !PropIt->IsA(UBoolProperty::StaticClass()) )
+						Ar.Logf( TEXT("VERIFY_CLASS_OFFSET_NODIE(%s,%s,%s)\r\n"),*FString(Class->GetNameCPP()).Left(1),*FString(Class->GetNameCPP()).Mid(1),PropIt->GetName());
+				}
+#endif
+				Ar.Logf( TEXT("VERIFY_CLASS_SIZE_NODIE(%s)\r\n"), Class->GetNameCPP() );
+			}
+		}
+		Ar.Logf( TEXT("#endif // VERIFY_CLASS_SIZES\r\n") ); // #endif // VERIFY_CLASS_SIZES
+#endif
+	}
+
+	return 1;
+	unguard;
+}
+IMPLEMENT_CLASS(UClassExporterH);
+
+/*------------------------------------------------------------------------------
+	UClassExporterUC implementation.
+------------------------------------------------------------------------------*/
+
+void UClassExporterUC::StaticConstructor()
+{
+	guard(UClassExporterUC::StaticConstructor);
+
+	SupportedClass = UClass::StaticClass();
+	bText = 1;
+	new(Formats)FString(TEXT("UC"));
+
+	unguard;
+}
+UBOOL UClassExporterUC::ExportText( UObject* Object, const TCHAR* Type, FOutputDevice& Ar, FFeedbackContext* Warn )
+{
+	guard(UClassExporterUC::ExportText);
+	UClass* Class = CastChecked<UClass>( Object );
+
+	// Export script text.
+	check(Class->Defaults.Num());
+	check(Class->ScriptText);
+	UExporter::ExportToOutputDevice( Class->ScriptText, NULL, Ar, TEXT("txt"), TextIndent );
+
+	// Export cpptext.
+	if( Class->CppText )
+	{
+		Ar.Log( TEXT("\r\n\r\ncpptext\r\n{\r\n") );
+		Ar.Log( *Class->CppText->Text );
+		Ar.Log( TEXT("\r\n}\r\n") );
+	}
+
+	// Export default properties that differ from parent's.
+	Ar.Log( TEXT("\r\n\r\ndefaultproperties\r\n{\r\n") );
+	ExportProperties
+	(
+		Ar,
+		Class,
+		&Class->Defaults(0),
+		TextIndent+4,
+		Class->GetSuperClass(),
+		Class->GetSuperClass() ? &Class->GetSuperClass()->Defaults(0) : NULL
+	);
+	Ar.Log( TEXT("}\r\n") );
+
+	return 1;
+	unguard;
+}
+IMPLEMENT_CLASS(UClassExporterUC);
+
+/*------------------------------------------------------------------------------
+	USoundExporterWAV implementation.
+------------------------------------------------------------------------------*/
+
+void UPolysExporterT3D::StaticConstructor()
+{
+	guard(UPolysExporterT3D::StaticConstructor);
+
+	SupportedClass = UPolys::StaticClass();
+	bText = 1;
+	new(Formats)FString(TEXT("T3D"));
+
+	unguard;
+}
+UBOOL UPolysExporterT3D::ExportText( UObject* Object, const TCHAR* Type, FOutputDevice& Ar, FFeedbackContext* Warn )
+{
+	guard(UPolysExporterT3D::ExportText);
+	UPolys* Polys = CastChecked<UPolys>( Object );
+
+	Ar.Logf( TEXT("%sBegin PolyList\r\n"), appSpc(TextIndent) );
+	for( INT i=0; i<Polys->Element.Num(); i++ )
+	{
+		FPoly* Poly = &Polys->Element(i);
+		TCHAR TempStr[256];
+
+		// Start of polygon plus group/item name if applicable.
+		Ar.Logf( TEXT("%s   Begin Polygon"), appSpc(TextIndent) );
+		if( Poly->ItemName != NAME_None )
+			Ar.Logf( TEXT(" Item=%s"), *Poly->ItemName );
+		if( Poly->Material )
+			Ar.Logf( TEXT(" Texture=%s"), Poly->Material->GetPathName() );
+		if( Poly->PolyFlags != 0 )
+			Ar.Logf( TEXT(" Flags=%i"), Poly->PolyFlags );
+		if( Poly->iLink != INDEX_NONE )
+			Ar.Logf( TEXT(" Link=%i"), Poly->iLink );
+		Ar.Logf( TEXT("\r\n") );
+
+		// All coordinates.
+		Ar.Logf( TEXT("%s      Origin   %s\r\n"), appSpc(TextIndent), SetFVECTOR(TempStr,&Poly->Base) );
+		Ar.Logf( TEXT("%s      Normal   %s\r\n"), appSpc(TextIndent), SetFVECTOR(TempStr,&Poly->Normal) );
+		Ar.Logf( TEXT("%s      TextureU %s\r\n"), appSpc(TextIndent), SetFVECTOR(TempStr,&Poly->TextureU) );
+		Ar.Logf( TEXT("%s      TextureV %s\r\n"), appSpc(TextIndent), SetFVECTOR(TempStr,&Poly->TextureV) );
+		for( INT j=0; j<Poly->NumVertices; j++ )
+			Ar.Logf( TEXT("%s      Vertex   %s\r\n"), appSpc(TextIndent), SetFVECTOR(TempStr,&Poly->Vertex[j]) );
+
+		// scion sz - export the lightmap scale
+		Ar.Logf( TEXT("%s      LightMapScale %f\r\n"), appSpc(TextIndent), Poly->LightMapScale );
+
+		Ar.Logf( TEXT("%s   End Polygon\r\n"), appSpc(TextIndent) );
+	}
+	Ar.Logf( TEXT("%sEnd PolyList\r\n"), appSpc(TextIndent) );
+
+	return 1;
+	unguard;
+}
+IMPLEMENT_CLASS(UPolysExporterT3D);
+
+/*------------------------------------------------------------------------------
+	UModelExporterT3D implementation.
+------------------------------------------------------------------------------*/
+
+void UModelExporterT3D::StaticConstructor()
+{
+	guard(UModelExporterT3D::StaticConstructor);
+
+	SupportedClass = UModel::StaticClass();
+	bText = 1;
+	new(Formats)FString(TEXT("T3D"));
+
+	unguard;
+}
+UBOOL UModelExporterT3D::ExportText( UObject* Object, const TCHAR* Type, FOutputDevice& Ar, FFeedbackContext* Warn )
+{
+	guard(UModelExporterT3D::ExportText);
+	UModel* Model = CastChecked<UModel>( Object );
+
+	Ar.Logf( TEXT("%sBegin Brush Name=%s\r\n"), appSpc(TextIndent), Model->GetName() );
+	UExporter::ExportToOutputDevice( Model->Polys, NULL, Ar, Type, TextIndent+3 );
+	Ar.Logf( TEXT("%sEnd Brush\r\n"), appSpc(TextIndent) );
+
+	return 1;
+	unguard;
+}
+IMPLEMENT_CLASS(UModelExporterT3D);
+
+/*------------------------------------------------------------------------------
+	ULevelExporterT3D implementation.
+------------------------------------------------------------------------------*/
+
+void ULevelExporterT3D::StaticConstructor()
+{
+	guard(ULevelExporterT3D::StaticConstructor);
+
+	SupportedClass = ULevel::StaticClass();
+	bText = 1;
+	new(Formats)FString(TEXT("T3D"));
+	new(Formats)FString(TEXT("COPY"));
+
+	unguard;
+}
+UBOOL ULevelExporterT3D::ExportText( UObject* Object, const TCHAR* Type, FOutputDevice& Ar, FFeedbackContext* Warn )
+{
+	guard(ULevelExporterT3D::ExportText);
+	ULevel* Level = CastChecked<ULevel>( Object );
+
+	for( FObjectIterator It; It; ++It )
+		It->ClearFlags( RF_TagImp | RF_TagExp );
+
+	Ar.Logf( TEXT("%sBegin Map\r\n"), appSpc(TextIndent) );
+	UBOOL AllSelected = appStricmp(Type,TEXT("COPY"))!=0;
+	for( INT iActor=0; iActor<Level->Actors.Num(); iActor++ )
+	{
+		AActor* Actor = Level->Actors(iActor);
+		if( Actor && !Cast<ACamera>(Actor) && (AllSelected ||Actor->bSelected) )
+		{
+			Ar.Logf( TEXT("%sBegin Actor Class=%s Name=%s\r\n"), appSpc(TextIndent), Actor->GetClass()->GetName(), Actor->GetName() );
+			ExportProperties( Ar, Actor->GetClass(), (BYTE*)Actor, TextIndent+3, Actor->GetClass(), Actor->GetClass()->GetDefaultsSafe(0) );
+			Ar.Logf( TEXT("%sEnd Actor\r\n"), appSpc(TextIndent) );
+		}
+	}
+
+	// Export information about the first selected surface in the map.  Used for copying/pasting
+	// information from poly to poly.
+	Ar.Logf( TEXT("%sBegin Surface\r\n"), appSpc(TextIndent) );
+	TCHAR TempStr[256];
+	for( INT i=0; i<Level->Model->Surfs.Num(); i++ )
+	{		
+		FBspSurf *Poly = &Level->Model->Surfs(i);
+		if( Poly->PolyFlags&PF_Selected )
+		{
+			Ar.Logf( TEXT("%sTEXTURE=%s\r\n"), appSpc(TextIndent+3), Poly->Material->GetPathName() );
+			Ar.Logf( TEXT("%sBASE      %s\r\n"), appSpc(TextIndent+3), SetFVECTOR(TempStr,&(Level->Model->Points(Poly->pBase))) );
+			Ar.Logf( TEXT("%sTEXTUREU  %s\r\n"), appSpc(TextIndent+3), SetFVECTOR(TempStr,&(Level->Model->Vectors(Poly->vTextureU))) );
+			Ar.Logf( TEXT("%sTEXTUREV  %s\r\n"), appSpc(TextIndent+3), SetFVECTOR(TempStr,&(Level->Model->Vectors(Poly->vTextureV))) );
+			Ar.Logf( TEXT("%sNORMAL    %s\r\n"), appSpc(TextIndent+3), SetFVECTOR(TempStr,&(Level->Model->Vectors(Poly->vNormal))) );
+			Ar.Logf( TEXT("%sPOLYFLAGS=%d\r\n"), appSpc(TextIndent+3), Poly->PolyFlags );			
+			break;
+		}
+	}
+	Ar.Logf( TEXT("%sEnd Surface\r\n"), appSpc(TextIndent) );
+	
+	Ar.Logf( TEXT("%sEnd Map\r\n"), appSpc(TextIndent) );
+
+
+	return 1;
+	unguard;
+}
+IMPLEMENT_CLASS(ULevelExporterT3D);
+
+/*------------------------------------------------------------------------------
+	ULevelExporterSTL implementation.
+------------------------------------------------------------------------------*/
+
+void ULevelExporterSTL::StaticConstructor()
+{
+	guard(ULevelExporterSTL::StaticConstructor);
+
+	SupportedClass = ULevel::StaticClass();
+	bText = 1;
+	new(Formats)FString(TEXT("STL"));
+
+	unguard;
+}
+UBOOL ULevelExporterSTL::ExportText( UObject* Object, const TCHAR* Type, FOutputDevice& Ar, FFeedbackContext* Warn )
+{
+	guard(ULevelExporterSTL::ExportText);
+	ULevel* Level = CastChecked<ULevel>( Object );
+
+	for( FObjectIterator It; It; ++It )
+		It->ClearFlags( RF_TagImp | RF_TagExp );
+
+	//
+	// GATHER TRIANGLES
+	//
+
+	TArray<FVector> Triangles;
+
+	// Specific actors can be exported
+	for( INT iActor=0; iActor<Level->Actors.Num(); iActor++ )
+	{
+		ATerrainInfo* TI = Cast<ATerrainInfo>(Level->Actors(iActor));
+		if( TI && TI->bSelected )
+		{
+			for( int y=0;y<TI->HeightmapY-1;y++ )
+				for( int x=0;x<TI->HeightmapX-1;x++ )
+				{
+					FVector P1	= TI->Vertices(TI->GetGlobalVertex(x,y));
+					FVector P2	= TI->Vertices(TI->GetGlobalVertex(x,y+1));
+					FVector P3	= TI->Vertices(TI->GetGlobalVertex(x+1,y+1));
+					FVector P4	= TI->Vertices(TI->GetGlobalVertex(x+1,y));
+
+					if( TI->GetQuadVisibilityBitmap( x, y ) )
+						if( TI->GetEdgeTurnBitmap( x, y ) )
+						{
+							Triangles.AddItem( P1 );
+							Triangles.AddItem( P4 );
+							Triangles.AddItem( P2 );
+
+							Triangles.AddItem( P4 );
+							Triangles.AddItem( P3 );
+							Triangles.AddItem( P2 );
+						}
+						else
+						{
+							Triangles.AddItem( P1 );
+							Triangles.AddItem( P4 );
+							Triangles.AddItem( P3 );
+
+							Triangles.AddItem( P1 );
+							Triangles.AddItem( P3 );
+							Triangles.AddItem( P2 );
+						}
+				}
+		}
+
+		AActor* Actor = Cast<AActor>(Level->Actors(iActor));
+		if( Actor && Actor->bSelected && Actor->StaticMesh )
+		{
+			if(!Actor->StaticMesh->RawTriangles.Num())
+				Actor->StaticMesh->RawTriangles.Load();
+
+			for( INT tri = 0 ; tri < Actor->StaticMesh->RawTriangles.Num() ; tri++ )
+			{
+				FStaticMeshTriangle* smt = &Actor->StaticMesh->RawTriangles(tri);
+
+				for( INT v = 2 ; v > -1 ; v-- )
+				{
+					FVector vtx = Actor->LocalToWorld().TransformFVector( smt->Vertices[v] );
+					Triangles.AddItem( vtx );
+				}
+			}
+		}
+	}
+
+	// Selected BSP surfaces
+	for( INT i=0;i<Level->Model->Nodes.Num();i++ )
+	{
+		FBspNode* Node = &Level->Model->Nodes(i);
+		if( Level->Model->Surfs(Node->iSurf).PolyFlags&PF_Selected )
+		{
+			if( Node->NumVertices > 2 )
+			{
+				FVector vtx1(Level->Model->Points(Level->Model->Verts(Node->iVertPool+0).pVertex)),
+					vtx2(Level->Model->Points(Level->Model->Verts(Node->iVertPool+1).pVertex)),
+					vtx3;
+
+				for( INT v = 2 ; v < Node->NumVertices ; v++ )
+				{
+					vtx3 = Level->Model->Points(Level->Model->Verts(Node->iVertPool+v).pVertex);
+
+					Triangles.AddItem( vtx1 );
+					Triangles.AddItem( vtx2 );
+					Triangles.AddItem( vtx3 );
+
+					vtx2 = vtx3;
+				}
+			}
+		}
+	}
+
+	//
+	// WRITE THE FILE
+	//
+
+	Ar.Logf( TEXT("%ssolid LevelBSP\r\n"), appSpc(TextIndent) );
+
+	for( INT tri = 0 ; tri < Triangles.Num() ; tri += 3 )
+	{
+		FVector vtx[3];
+		vtx[0] = Triangles(tri);
+		vtx[1] = Triangles(tri+1);
+		vtx[2] = Triangles(tri+2);
+
+		FPlane Normal( vtx[0], vtx[1], vtx[2] );
+
+		Ar.Logf( TEXT("%sfacet normal %1.6f %1.6f %1.6f\r\n"), appSpc(TextIndent+2), Normal.X, Normal.Y, Normal.Z );
+		Ar.Logf( TEXT("%souter loop\r\n"), appSpc(TextIndent+4) );
+
+		Ar.Logf( TEXT("%svertex %1.6f %1.6f %1.6f\r\n"), appSpc(TextIndent+6), vtx[0].X, vtx[0].Y, vtx[0].Z );
+		Ar.Logf( TEXT("%svertex %1.6f %1.6f %1.6f\r\n"), appSpc(TextIndent+6), vtx[1].X, vtx[1].Y, vtx[1].Z );
+		Ar.Logf( TEXT("%svertex %1.6f %1.6f %1.6f\r\n"), appSpc(TextIndent+6), vtx[2].X, vtx[2].Y, vtx[2].Z );
+
+		Ar.Logf( TEXT("%sendloop\r\n"), appSpc(TextIndent+4) );
+		Ar.Logf( TEXT("%sendfacet\r\n"), appSpc(TextIndent+2) );
+	}
+
+	Ar.Logf( TEXT("%sendsolid LevelBSP\r\n"), appSpc(TextIndent) );
+
+	Triangles.Empty();
+
+	return 1;
+	unguard;
+}
+IMPLEMENT_CLASS(ULevelExporterSTL);
+
+/*------------------------------------------------------------------------------
+	UPrefabExporterT3D implementation.
+------------------------------------------------------------------------------*/
+
+void UPrefabExporterT3D::StaticConstructor()
+{
+	guard(UPrefabExporterT3D::StaticConstructor);
+
+	SupportedClass = UPrefab::StaticClass();
+	bText = 1;
+	new(Formats)FString(TEXT("T3D"));
+
+	unguard;
+}
+UBOOL UPrefabExporterT3D::ExportText( UObject* Object, const TCHAR* Type, FOutputDevice& Ar, FFeedbackContext* Warn )
+{
+	guard(UPrefabExporterT3D::ExportText);
+	UPrefab* Prefab = CastChecked<UPrefab>( Object );
+
+	Ar.Logf( TEXT("%s"), *Prefab->T3DText );
+
+	return 1;
+	unguard;
+}
+IMPLEMENT_CLASS(UPrefabExporterT3D);
+
+/*------------------------------------------------------------------------------
+	UTextureExporterDDS implementation. - sjs
+------------------------------------------------------------------------------*/
+struct FDDSFileHeader
+{
+	DWORD Magic;
+	DDSURFACEDESC2  desc;
+};
+void UTextureExporterDDS::StaticConstructor()
+{
+	guard(UTextureExporterDDS::StaticConstructor);
+
+	SupportedClass = UTexture::StaticClass();
+	new(Formats)FString(TEXT("DDS"));
+
+	unguard;
+}
+
+#ifndef DDSD_MIPMAPCOUNT
+#define DDSD_MIPMAPCOUNT 131072
+#define DDSCAPS_TEXTURE                         0x00001000l
+#define DDSCAPS_MIPMAP                          0x00400000l
+#define DDSCAPS_COMPLEX                         0x00000008l
+#define DDPF_ALPHA                              0x00000002l
+#define DDSD_PITCH              0x00000008l
+#define DDPF_BUMPDUDV                           0x00080000l
+#define DDPF_BUMPLUMINANCE                      0x00040000l
+#endif
+UBOOL UTextureExporterDDS::ExportBinary( UObject* Object, const TCHAR* Type, FArchive& Ar, FFeedbackContext* Warn )
+{
+	guard(UTextureExporterDDS::ExportBinary);
+	UTexture* Texture = CastChecked<UTexture>( Object );
+
+	if ( !(Texture->Format == TEXF_DXT1 ||
+		Texture->Format == TEXF_DXT3 ||
+		Texture->Format == TEXF_DXT5 ||
+		Texture->Format == TEXF_A8 ||
+		Texture->Format == TEXF_L8 ||
+		Texture->Format == TEXF_V8U8 ||
+		Texture->Format == TEXF_L6V5U5) )
+	{
+		return 0;
+	}
+
+	FDDSFileHeader hdr;
+	appMemset( &hdr.desc, 0, sizeof(DDSURFACEDESC2) );
+
+	hdr.Magic				= 0x20534444;
+	hdr.desc.dwFlags		= DDSD_WIDTH | DDSD_HEIGHT | DDSD_PIXELFORMAT | DDSD_MIPMAPCOUNT | DDSD_CAPS;
+	hdr.desc.dwSize			= sizeof(DDSURFACEDESC2);
+
+	hdr.desc.dwWidth		= Texture->USize;
+	hdr.desc.dwHeight		= Texture->VSize;
+
+	//jg -- If non-square texture, then figure out the max mip count
+	hdr.desc.dwMipMapCount = Texture->GetMinNumMips();
+
+	if (hdr.desc.dwMipMapCount > 1)
+	{
+		// Has mipmaps
+		hdr.desc.ddsCaps.dwCaps = DDSCAPS_TEXTURE | DDSCAPS_MIPMAP | DDSCAPS_COMPLEX;
+	}
+	else
+	{
+		hdr.desc.ddsCaps.dwCaps = DDSCAPS_TEXTURE;
+	}
+
+	hdr.desc.ddpfPixelFormat.dwSize = 32; // Always 32 according to MSDN
+	if ( (Texture->Format == TEXF_DXT1 || Texture->Format == TEXF_DXT3 ||
+		Texture->Format == TEXF_DXT5) )
+	{
+		hdr.desc.ddpfPixelFormat.dwFlags = DDPF_FOURCC;
+	if ( Texture->Format == TEXF_DXT1 )
+		hdr.desc.ddpfPixelFormat.dwFourCC = ('D' | 'X'<<8 | 'T'<<16 | '1'<<24 );
+	else if ( Texture->Format == TEXF_DXT3 )
+		hdr.desc.ddpfPixelFormat.dwFourCC = ('D' | 'X'<<8 | 'T'<<16 | '3'<<24 );
+	else if ( Texture->Format == TEXF_DXT5 )
+		hdr.desc.ddpfPixelFormat.dwFourCC = ('D' | 'X'<<8 | 'T'<<16 | '5'<<24 );
+	}
+	//jg -- Handle exporting A8/L8 formats
+	else if (Texture->Format == TEXF_A8 || Texture->Format == TEXF_L8)
+	{
+		// Mark these files as only having ALPHA channels
+		hdr.desc.ddpfPixelFormat.dwFlags = DDPF_ALPHA;
+		hdr.desc.ddpfPixelFormat.dwAlphaBitDepth = 8;
+		hdr.desc.ddpfPixelFormat.dwRGBAlphaBitMask = 0xFF;
+	}
+	//jg -- Handle exporting V8U8 format
+	else if (Texture->Format == TEXF_V8U8)
+	{
+		// Mark these as 16 bit bump map format
+		hdr.desc.ddpfPixelFormat.dwFlags = DDPF_BUMPDUDV;
+		hdr.desc.ddpfPixelFormat.dwBumpBitCount = 16;
+		hdr.desc.ddpfPixelFormat.dwBumpDuBitMask = 0x00FF;
+		hdr.desc.ddpfPixelFormat.dwBumpDvBitMask = 0xFF00;
+	}
+	//jg -- Handle exporting L6V5U5 format
+	else if (Texture->Format == TEXF_L6V5U5)
+	{
+		// Mark these as 16 bit bump map format
+		hdr.desc.ddpfPixelFormat.dwFlags = DDPF_BUMPLUMINANCE;
+		hdr.desc.ddpfPixelFormat.dwBumpBitCount = 16;
+		hdr.desc.ddpfPixelFormat.dwBumpDuBitMask = 0x001F;
+		hdr.desc.ddpfPixelFormat.dwBumpDvBitMask = 0x03E0;
+		hdr.desc.ddpfPixelFormat.dwBumpLuminanceBitMask = 0xFC00;
+	}
+
+	Ar.Serialize( &hdr, sizeof(hdr) );
+
+	for(DWORD m=0; m<hdr.desc.dwMipMapCount; m++ )
+	{
+		Texture->Mips(m).DataArray.Load();
+		Ar.Serialize( &Texture->Mips(m).DataArray(0), Texture->Mips(m).DataArray.Num() );
+		Texture->Mips(m).DataArray.Unload();
+	}
+
+	Ar.Close();
+
+	return 1;
+	
+	unguard;
+}
+IMPLEMENT_CLASS(UTextureExporterDDS);
+
+/**
+ * Registers the supported export type
+ */
+void UMaterialExporterRDF::StaticConstructor(void)
+{
+	guard(UMaterialExporterRDF::StaticConstructor);
+	SupportedClass = UObject::StaticClass();
+	bText = 1;
+	new(Formats)FString(TEXT("RDF"));
+	unguard;
+}
+
+/**
+ * Determines the file extension for the texture format type
+ *
+ * @param	Format -- The texture format enum to convert to a file extension
+ *
+ * @return	The file extension to use for this format
+ */
+const TCHAR* UMaterialExporterRDF::ExtensionFromFormat(ETextureFormat Format)
+{
+	guard(UMaterialExporterRDF::ExtensionFromFormat);
+	TCHAR* Ret = NULL;
+	// Choose the right extension for the specified format
+	switch (Format)
+	{
+		case TEXF_DXT1:
+		case TEXF_DXT3:
+		case TEXF_DXT5:
+		case TEXF_L8:
+		case TEXF_A8:
+			Ret = TEXT("DDS");
+			break;
+
+		case TEXF_RGB8:
+		case TEXF_RGBA8:
+			Ret = TEXT("TGA");
+			break;
+
+		// Unsupported so far
+		case TEXF_P8:
+		case TEXF_G16:
+		case TEXF_RRRGGGBBB:
+		case TEXF_V8U8:
+		case TEXF_L6V5U5:
+		case TEXF_V16U16:
+		default:
+//			Ret = TEXT(".BROKE");
+			break;
+	}
+	return Ret;
+	unguard;
+}
+
+/**
+ * Exports the specified texure to the archive
+ *
+ * @param pTexture the texture to export
+ * @param Ar the output device to write to
+ */
+void UMaterialExporterRDF::AddTexture(UTexture* pTexture,FOutputDevice& Ar)
+{
+	guard(UMaterialExporterRDF::AddTexture);
+	// Get the render interface so we can query properties
+	FBaseTexture* pTex = pTexture->GetRenderInterface();
+	// Map the texture type to its corresponding file extension
+	const TCHAR* Ext = ExtensionFromFormat(pTex->GetFormat());
+	if (Ext != NULL)
+	{
+		// Start the texture declaration block
+		Ar.Logf(TEXT("Texture %s\r\n"),pTexture->GetName());
+		Ar.Log(TEXT("{\r\n"));
+		// Output the D3D format we want
+		Ar.Logf(TEXT("\tFormat %s\r\n"),GetD3DFormat(pTex->GetFormat()));
+		// Output the filtering type
+		if (pTex->GetUClamp() == TC_Clamp || pTex->GetVClamp() == TC_Clamp)
+		{
+			Ar.Log(TEXT("\tFilter LINEAR|CLAMP\r\n"));
+		}
+		else
+		{
+			Ar.Log(TEXT("\tFilter LINEAR\r\n"));
+		}
+		// Output width/height info
+		Ar.Logf(TEXT("\tWidth %d\r\n\tHeight %d\r\n"),pTex->GetWidth(),
+			pTex->GetHeight());
+		// Output the number of mips if needed
+		if (pTex->GetNumMips() != 1)
+		{
+			Ar.Logf(TEXT("\tLevels %d\r\n"),pTexture->GetMinNumMips());
+		}
+		// Don't generate mips for compressed textures
+		if (pTex->GetFormat() == TEXF_DXT1 || pTex->GetFormat() == TEXF_DXT3 ||
+			pTex->GetFormat() == TEXF_DXT5)
+		{
+			Ar.Logf(TEXT("\tRaw 1\r\n"));
+		}
+		// Now output the source file for this texture
+		Ar.Logf(OUT_TEXTURES_RDF_SRC_PF,pTexture->GetName(),Ext);
+		// Terminate this texture definition
+		Ar.Log(TEXT("}\r\n\r\n"));
+		// Create the binary file name for export
+		FString BinName(FString::Printf(OUT_TEXTURES_EXPORT_PF,
+			pTexture->GetName(),Ext));
+		// Now export the binary image of the texture
+		UExporter::ExportToFile(pTexture,NULL,*BinName,0,0,1);
+		// Add this texture to the list
+		ProcessedList.AddItem(pTexture->GetFName());
+	}
+	unguard;
+}
+
+/**
+ * Exports the text information for the texture header to an archive
+ *
+ * @param Object
+ & @param Type ignored
+ * @param Ar The archive to output the text to
+ * @param Warn the device to write warnings to
+ *
+ * @return True if sucessful false otherwise
+ */
+UBOOL UMaterialExporterRDF::ExportText(UObject* Object,const TCHAR*,
+	FOutputDevice& Ar,FFeedbackContext* Warn)
+{
+	guard(UMaterialExporterRDF::ExportText);
+	// Find all the textures that are loaded and add them to the RDF file
+	for (TObjectIterator<UTexture> It; It; ++It)
+	{
+		// Don't export ones on the ignore list and don't export two items
+		// with the same name
+		if (IgnoreList.FindItemIndex(It->GetFName()) == INDEX_NONE &&
+			ProcessedList.FindItemIndex(It->GetFName()) == INDEX_NONE)
+		{
+			// Handle cubemaps differently from texture
+			if (It->IsA(UCubemap::StaticClass()))
+			{
+				AddCubemap((UCubemap*)*It,Ar);
+			}
+			else
+			{
+				AddTexture(*It,Ar);
+			}
+		}
+	}
+	return 1;
+	unguard;
+}
+
+/**
+ * Returns a string indicating the D3D format
+ *
+ * @param Format The texture format to find the extension for
+ *
+ * @return The desired D3D format
+ */
+const TCHAR* UMaterialExporterRDF::GetD3DFormat(ETextureFormat Format)
+{
+	guard(UMaterialExporterRDF::GetD3DFormat);
+	TCHAR* Ret = NULL;
+	// Choose the right D3D format
+	switch (Format)
+	{
+		case TEXF_DXT1:
+			Ret = TEXT("D3DFMT_DXT1");
+			break;
+		case TEXF_DXT3:
+			Ret = TEXT("D3DFMT_DXT3");
+			break;
+		case TEXF_DXT5:
+			Ret = TEXT("D3DFMT_DXT5");
+			break;
+		case TEXF_R5G6B5:
+			Ret = TEXT("D3DFMT_R5G5B5A1");
+			break;
+		case TEXF_P8:
+			Ret = TEXT("D3DFMT_P8");
+			break;
+		case TEXF_G16:
+			Ret = TEXT("D3DFMT_L16");
+			break;
+		case TEXF_L8:
+			Ret = TEXT("D3DFMT_L8");
+			break;
+		case TEXF_V8U8:
+			Ret = TEXT("D3DFMT_V8U8");
+			break;
+		case TEXF_L6V5U5:
+			Ret = TEXT("D3DFMT_L6V5U5");
+			break;
+		case TEXF_V16U16:
+			Ret = TEXT("D3DFMT_V16U16");
+			break;
+		case TEXF_A8:
+			Ret = TEXT("D3DFMT_A8");
+			break;
+		case TEXF_RGB8:
+		case TEXF_RGBA8:
+		// If we can't match the type default to RGBA
+		default:
+			Ret = TEXT("D3DFMT_B8G8R8A8");
+			break;
+	}
+	return Ret;
+	unguard;
+}
+
+/**
+ * Sets the list of textures to ignore
+ *
+ * @param InIgnoreList The list of textures to skip exporting on
+ */
+void UMaterialExporterRDF::SetIgnoreList(const TArray<FName>& InIgnoreList)
+{
+	guard(UMaterialExporterRDF::GetProcessedList);
+	// Copy the passed in ones
+	IgnoreList = InIgnoreList;
+	unguard;
+}
+
+/**
+ * Returns the set of materials that were processed
+ *
+ * @param CopyTo The list of textures that were just processed
+ */
+void UMaterialExporterRDF::GetProcessedList(TArray<FName>& CopyTo)
+{
+	guard(UMaterialExporterRDF::GetProcessedList);
+	// Make a copy of the processed item
+	CopyTo = ProcessedList;
+	unguard;
+}
+
+/**
+ * Exports the specified cubemap to the archive
+ *
+ * @param pCubemap the cubemap to export
+ * @param Ar the output device to write to
+ */
+void UMaterialExporterRDF::AddCubemap(UCubemap* pCubemap,FOutputDevice& Ar)
+{
+	guard(UMaterialExporterRDF::AddCubemap);
+	// Get the render interface so we can query properties
+	FBaseTexture* pTex = pCubemap->GetRenderInterface();
+	// Map the texture type to its corresponding file extension
+	const TCHAR* Ext = ExtensionFromFormat(pTex->GetFormat());
+	if (Ext != NULL)
+	{
+		// Start the texture declaration block
+		Ar.Logf(TEXT("Cubemap %s\r\n"),pCubemap->GetName());
+		Ar.Log(TEXT("{\r\n"));
+		// Output the D3D format we want
+		Ar.Logf(TEXT("\tFormat %s\r\n"),GetD3DFormat(pTex->GetFormat()));
+		// Output size
+		Ar.Logf(TEXT("\tSize %d\r\n"),pTex->GetWidth());
+		// Don't generate mips for compressed textures
+		if (pTex->GetFormat() == TEXF_DXT1 || pTex->GetFormat() == TEXF_DXT3 ||
+			pTex->GetFormat() == TEXF_DXT5)
+		{
+			Ar.Logf(TEXT("\tRaw 1\r\n"));
+		}
+		// Output the number of mips if needed
+		if (pTex->GetNumMips() != 1)
+		{
+			Ar.Logf(TEXT("\tLevels %d\r\n"),pCubemap->GetMinNumMips());
+		}
+		UTexture* pFace = pCubemap->Faces[0] ? pCubemap->Faces[0] :
+			(UTexture*)pCubemap->DefaultMaterial;
+		// Output the names of the 6 faces
+		// Output & export face 0 (XP)
+		Ar.Logf(OUT_CUBEMAP_RDF_XP_PF,pFace->GetName(),Ext);
+		UExporter::ExportToFile(pFace,NULL,
+			*FString::Printf(OUT_TEXTURES_EXPORT_PF,pFace->GetName(),Ext),0,0,1);
+		// Output & export face 1 (XN)
+		pFace = pCubemap->Faces[1] ? pCubemap->Faces[1] :
+			(UTexture*)pCubemap->DefaultMaterial;
+		Ar.Logf(OUT_CUBEMAP_RDF_XN_PF,pFace->GetName(),Ext);
+		UExporter::ExportToFile(pFace,NULL,
+			*FString::Printf(OUT_TEXTURES_EXPORT_PF,pFace->GetName(),Ext),0,0,1);
+		// Output & export face 2 (YP)
+		pFace = pCubemap->Faces[2] ? pCubemap->Faces[2] :
+			(UTexture*)pCubemap->DefaultMaterial;
+		Ar.Logf(OUT_CUBEMAP_RDF_YP_PF,pFace->GetName(),Ext);
+		UExporter::ExportToFile(pFace,NULL,
+			*FString::Printf(OUT_TEXTURES_EXPORT_PF,pFace->GetName(),Ext),0,0,1);
+		// Output & export face 3 (YN)
+		pFace = pCubemap->Faces[3] ? pCubemap->Faces[3] :
+			(UTexture*)pCubemap->DefaultMaterial;
+		Ar.Logf(OUT_CUBEMAP_RDF_YN_PF,pFace->GetName(),Ext);
+		UExporter::ExportToFile(pFace,NULL,
+			*FString::Printf(OUT_TEXTURES_EXPORT_PF,pFace->GetName(),Ext),0,0,1);
+		// Output & export face 4 (ZP)
+		pFace = pCubemap->Faces[4] ? pCubemap->Faces[4] :
+			(UTexture*)pCubemap->DefaultMaterial;
+		Ar.Logf(OUT_CUBEMAP_RDF_ZP_PF,pFace->GetName(),Ext);
+		UExporter::ExportToFile(pFace,NULL,
+			*FString::Printf(OUT_TEXTURES_EXPORT_PF,pFace->GetName(),Ext),0,0,1);
+		// Output & export face 5 (ZN)
+		pFace = pCubemap->Faces[5] ? pCubemap->Faces[5] :
+			(UTexture*)pCubemap->DefaultMaterial;
+		Ar.Logf(OUT_CUBEMAP_RDF_ZN_PF,pFace->GetName(),Ext);
+		UExporter::ExportToFile(pFace,NULL,
+			*FString::Printf(OUT_TEXTURES_EXPORT_PF,pFace->GetName(),Ext),0,0,1);
+		// Terminate this cubemap definition
+		Ar.Log(TEXT("}\r\n\r\n"));
+		// Add this texture to the list
+		ProcessedList.AddItem(pCubemap->GetFName());
+	}
+	unguard;
+}
+
+IMPLEMENT_CLASS(UMaterialExporterRDF);
+
+#include "UnLinker.h"
+
+/**
+ * Registers the supported export type
+ */
+void UBulkDataExporterRDF::StaticConstructor(void)
+{
+	guard(UBulkDataExporterRDF::StaticConstructor);
+	SupportedClass = UObject::StaticClass();
+	bText = 1;
+	new(Formats)FString(TEXT("_RDF"));
+	unguard;
+}
+
+/**
+ * Creates the file and fills it with the passed in data
+ *
+ * @param FileName the name of the file to create
+ * @param NumBytes the number of bytes to write out
+ * @param Data the data to write to the file
+ */
+UBOOL UBulkDataExporterRDF::ExportBinaryArray(const TCHAR* FileName,
+	DWORD NumBytes,void* Data)
+{
+	guard(UBulkDataExporterRDF::ExportBinaryArray);
+	FBufferArchive Buffer;
+	// Copy to the archive the raw data
+	Buffer.Serialize(Data,NumBytes);
+	// Now save that out to disk
+	return appSaveArrayToFile(Buffer,FileName);
+	unguard;
+}
+
+/**
+ * Exports the text information for the TUmaArrays to a archive. This iterates
+ * all skeletal and static meshes exporting each in turn
+ *
+ * @param Object the object to export
+ * @param Type ignored
+ * @param Ar The archive to output the text to
+ * @param Warn the device to write warnings to
+ *
+ * @return True if sucessful false otherwise
+ */
+UBOOL UBulkDataExporterRDF::ExportText(UObject* Object,const TCHAR* Type,
+	FOutputDevice& Ar,FFeedbackContext* Warn)
+{
+	guard(UBulkDataExporterRDF::ExportText);
+	// If we are using the export map, route it that way
+	if (ExportMap != NULL)
+	{
+		ExportViaExportMap(Ar);
+	}
+	// Check for animation exporting
+	else if (AnimSet != NULL)
+	{
+		AddMeshAnimation(AnimSet,Ar);
+	}
+	// Check for skeletal mesh exporting
+	else if (SkeletalMesh != NULL)
+	{
+		AddSkeletalMesh(SkeletalMesh,Ar);
+	}
+	// otherwise use an object iterator
+	else
+	{
+		ExportViaIterator(Ar);
+	}
+	// Iterate through the awlays export list static meshes
+	for (INT Index = 0; Index < AlwaysExport.Num(); Index++)
+	{
+		// Don't add if on the ignore list
+		if (Cast<UStaticMesh>(AlwaysExport(Index)))
+		{
+			AddStaticMesh((UStaticMesh*)AlwaysExport(Index),Ar);
+			// Add this item to the list
+			ProcessedList.AddItem(AlwaysExport(Index)->GetFName());
+		}
+		else if (Cast<USkeletalMesh>(AlwaysExport(Index)))
+		{
+			AddSkeletalMesh((USkeletalMesh*)AlwaysExport(Index),Ar);
+			// Add this item to the list
+			ProcessedList.AddItem(AlwaysExport(Index)->GetFName());
+		}
+	}
+	return 1;
+	unguard;
+}
+
+/**
+ * Exports all of the objects in the export map in dependency order
+ *
+ * @param Ar the archive to write text information to
+ */
+void UBulkDataExporterRDF::ExportViaExportMap(FOutputDevice& Ar)
+{
+	guard(UBulkDataExporterRDF::ExportViaExportMap);
+#ifdef XBOX_ASSET_FORMAT
+	// Use the export table of the package to export the data in the same
+	// order that it will be loaded in
+	for (INT Index = 0; Index < ExportMap->Num(); Index++)
+	{
+		// Get the object because I am lazy and don't want to type extra
+		UObject* Object = (*ExportMap)(Index)._Object;
+		if (Object != NULL)
+		{
+			// Check for a static mesh instance
+			if (Object->IsA(UStaticMeshInstance::StaticClass()))
+			{
+				AddStaticMeshInstance((UStaticMeshInstance*)Object,Ar);
+				// Add this item to the list
+				ProcessedList.AddItem(Object->GetFName());
+			}
+			// Check for a static mesh
+			else if (Object->IsA(UStaticMesh::StaticClass()))
+			{
+				AddStaticMesh((UStaticMesh*)Object,Ar);
+				// Add this item to the list
+				ProcessedList.AddItem(Object->GetFName());
+			}
+			// Check for a skeletal mesh
+			else if (Object->IsA(USkeletalMesh::StaticClass()))
+			{
+				AddSkeletalMesh((USkeletalMesh*)Object,Ar);
+				// Add this item to the list
+				ProcessedList.AddItem(Object->GetFName());
+			}
+			// Check for BSP
+			else if (Object->IsA(UModel::StaticClass()))
+			{
+				AddModel((UModel*)Object,Ar);
+				// Add this item to the list
+				ProcessedList.AddItem(Object->GetFName());
+			}
+			// Check for projector to export
+			else if (Object->IsA(UStaticProjectorClippedPrim::StaticClass()))
+			{
+				AddProjectorPrimitive((UStaticProjectorClippedPrim*)Object,Ar);
+				// Add this item to the list
+				ProcessedList.AddItem(Object->GetFName());
+			}
+			// Check for animation data
+			else if (Object->IsA(UMeshAnimation::StaticClass()) &&
+				bIgnoreAnimSets == FALSE)
+			{
+				AddMeshAnimation((UMeshAnimation*)Object,Ar);
+				// Add this item to the list
+				ProcessedList.AddItem(Object->GetFName());
+			}
+		}
+		else
+		{
+			debugf(TEXT("NULL object at index (%d)"),Index);
+		}
+	}
+#endif
+	unguard;
+}
+
+/**
+ * Exports all of the skeletal and static mesh objects and animations
+ *
+ * @param Ar the archive to write text information to
+ */
+void UBulkDataExporterRDF::ExportViaIterator(FOutputDevice& Ar)
+{
+	guard(UBulkDataExporterRDF::ExportViaIterator);
+#ifdef XBOX_ASSET_FORMAT
+	// Iterate through exporting static meshes
+	for (TObjectIterator<UStaticMesh> It; It; ++It)
+	{
+		// Don't add if on the ignore list
+		if (IgnoreList.FindItemIndex(It->GetFName()) == INDEX_NONE)
+		{
+			AddStaticMesh(*It,Ar);
+			// Add this item to the list
+			ProcessedList.AddItem(It->GetFName());
+		}
+	}
+	// Iterate through exporting skeletal meshes
+	for (TObjectIterator<USkeletalMesh> It; It; ++It)
+	{
+		// Don't add if on the ignore list
+		if (IgnoreList.FindItemIndex(It->GetFName()) == INDEX_NONE)
+		{
+			AddSkeletalMesh(*It,Ar);
+			// Add this item to the list
+			ProcessedList.AddItem(It->GetFName());
+		}
+	}
+	// Iterate through exporting animation data
+	for (TObjectIterator<UMeshAnimation> It; It; ++It)
+	{
+		// Don't add if on the ignore list
+		if (IgnoreList.FindItemIndex(It->GetFName()) == INDEX_NONE &&
+			bIgnoreAnimSets == FALSE)
+		{
+			AddMeshAnimation(*It,Ar);
+			// Add this item to the list
+			ProcessedList.AddItem(It->GetFName());
+		}
+	}
+#endif
+	unguard;
+}
+
+/**
+ * Generic routine for dumping the array to the files
+ *
+ * @param ArrayName the name of the array being added
+ * @param ArrayCount the number of items in the array
+ * @param ElementSize the size in bytes of the contained entity
+ * @param Data pointer to the data for exporting
+ * @param Ar the archive to write to
+ */
+void UBulkDataExporterRDF::AddNamedArray(const FString& ArrayName,
+	DWORD ArrayCount,DWORD ElementSize,void* Data,FOutputDevice& Ar)
+{
+	guard(UBulkDataExporterRDF::AddNamedArray);
+	// Start the pushbuffer declaration block
+	Ar.Logf(TEXT("TUmaArray %s\r\n"),*ArrayName);
+	Ar.Log(TEXT("{\r\n"));
+	// Indicate the number of elements
+	Ar.Logf(TEXT("\tCount %d\r\n"),ArrayCount);
+	// Build the file name
+	const FString& FileName = FString::Printf(OUT_ARRAY_EXPORT_PF,
+		*ArrayName);
+	// Now output the source file for this array
+	Ar.Logf(TEXT("\tData %s\r\n"),*FString::Printf(OUT_ARRAY_EXPORT_RDF_PF,
+		*ArrayName));
+	Ar.Log(TEXT("}\r\n\r\n"));
+	// Now write out the file of the data
+	ExportBinaryArray(*FileName,ArrayCount * ElementSize,Data);
+	unguard;
+}
+
+/**
+ * Adds a static mesh's arrays to the RDF file and gets them all exported
+ *
+ * @param StaticMesh the static mesh to add
+ * @param Ar the archive we are writing to
+ */
+void UBulkDataExporterRDF::AddStaticMesh(UStaticMesh* StaticMesh,
+	FOutputDevice& Ar)
+{
+	guard(UBulkDataExporterRDF::AddStaticMesh);
+#ifdef XBOX_ASSET_FORMAT
+	// Make sure the array is valid
+	if (StaticMesh->VertexStream.Vertices.Num() > 0)
+	{
+		// Add the vertex stream
+		AddNamedArray(FString::Printf(VERTEXSTREAM_PF,StaticMesh->GetName()),
+			StaticMesh->VertexStream.Vertices.Num(),sizeof(FStaticMeshVertex),
+			&StaticMesh->VertexStream.Vertices(0),Ar);
+		// Tell the TUmaArray that the data will come from an XPR
+		StaticMesh->VertexStream.Vertices.MarkAsInXPR();
+	}
+	// Make sure the array is valid
+	if (StaticMesh->ColorStream.Colors.Num() > 0)
+	{
+		// Add the color stream
+		AddNamedArray(FString::Printf(COLORSTREAM_PF,StaticMesh->GetName()),
+			StaticMesh->ColorStream.Colors.Num(),sizeof(FColor),
+			&StaticMesh->ColorStream.Colors(0),Ar);
+		// Tell the TUmaArray that the data will come from an XPR
+		StaticMesh->ColorStream.Colors.MarkAsInXPR();
+	}
+	// Make sure the array is valid
+	if (StaticMesh->AlphaStream.Colors.Num() > 0)
+	{
+		// Add the alpha stream
+		AddNamedArray(FString::Printf(ALPHASTREAM_PF,StaticMesh->GetName()),
+			StaticMesh->AlphaStream.Colors.Num(),sizeof(FColor),
+			&StaticMesh->AlphaStream.Colors(0),Ar);
+		// Tell the TUmaArray that the data will come from an XPR
+		StaticMesh->AlphaStream.Colors.MarkAsInXPR();
+	}
+	// Add each of the UV streams
+	for (INT Index = 0; Index < StaticMesh->UVStreams.Num(); Index++)
+	{
+		// Make sure the array is valid
+		if (StaticMesh->UVStreams(Index).UVs.Num() > 0)
+		{
+			AddNamedArray(
+				FString::Printf(UVSTREAM_PF,StaticMesh->GetName(),Index),
+				StaticMesh->UVStreams(Index).UVs.Num(),sizeof(FStaticMeshUV),
+				&StaticMesh->UVStreams(Index).UVs(0),Ar);
+			// Tell the TUmaArray that the data will come from an XPR
+			StaticMesh->UVStreams(Index).UVs.MarkAsInXPR();
+		}
+	}
+#endif
+	unguard;
+}
+
+
+/**
+ * Adds a static mesh instance to the RDF file
+ *
+ * @param StaticMeshInst the static mesh instance to add
+ * @param Ar the archive we are writing to
+ */
+void UBulkDataExporterRDF::AddStaticMeshInstance(
+	UStaticMeshInstance* StaticMeshInst,FOutputDevice& Ar)
+{
+	guard(UBulkDataExporterRDF::AddStaticMeshInstance);
+#ifdef XBOX_ASSET_FORMAT
+	// Don't export if the LDs haven't rebuilt lighting
+	if (StaticMeshInst->ColorStream.Colors.Num() > 0)
+	{
+		// Add the color stream
+		AddNamedArray(FString::Printf(COLORSTREAM_PF,StaticMeshInst->GetName()),
+			StaticMeshInst->ColorStream.Colors.Num(),sizeof(FColor),
+			&StaticMeshInst->ColorStream.Colors(0),Ar);
+		// Tell the TUmaArray that the data will come from an XPR
+		StaticMeshInst->ColorStream.Colors.MarkAsInXPR();
+	}
+#endif
+	unguard;
+}
+
+/**
+ * Adds a skeletal mesh to the RDF file and gets it all of its sections
+ * exported
+ *
+ * @param SkeletalMesh the skeletal mesh to add
+ * @param Ar the archive we are writing to
+ */
+void UBulkDataExporterRDF::AddSkeletalMesh(USkeletalMesh* SkeletalMesh,
+	FOutputDevice& Ar)
+{
+	guard(UBulkDataExporterRDF::AddSkeletalMesh);
+#ifdef XBOX_ASSET_FORMAT
+	// Export each of the skeletal mesh LOD vertex streams
+	for (INT Index = 0; Index < SkeletalMesh->LODModels.Num(); Index++)
+	{
+		// Make sure the array is valid
+		if (SkeletalMesh->LODModels(Index).GPUVertexStream.Vertices.Num() > 0)
+		{
+			// Export this bsp section's vert stream
+			AddNamedArray(FString::Printf(SKELMESH_VS_PF,SkeletalMesh->GetName(),Index),
+				SkeletalMesh->LODModels(Index).GPUVertexStream.Vertices.Num(),
+				sizeof(FSkinGPUVertex),
+				&SkeletalMesh->LODModels(Index).GPUVertexStream.Vertices(0),Ar);
+			// Tell the TUmaArray that the data will come from an XPR
+			SkeletalMesh->LODModels(Index).GPUVertexStream.Vertices.MarkAsInXPR();
+		}
+	}
+#endif
+	unguard;
+}
+
+/**
+ * Adds a UModel's BSP vertex stream to the RDF file
+ *
+ * @param Model the model to export BSP verts for
+ * @param Ar the archive we are writing to
+ */
+void UBulkDataExporterRDF::AddModel(UModel* Model,FOutputDevice& Ar)
+{
+	guard(UBulkDataExporterRDF::AddModel);
+#ifdef XBOX_ASSET_FORMAT
+	// Export each of the bsp sections
+	for (INT Index = 0; Index < Model->Sections.Num(); Index++)
+	{
+		// Make sure the array is valid
+		if (Model->Sections(Index).Vertices.Vertices.Num() > 0)
+		{
+			// Export this bsp section's vert stream
+			AddNamedArray(FString::Printf(UMODEL_BSP_VS_PF,Model->GetName(),Index),
+				Model->Sections(Index).Vertices.Vertices.Num(),sizeof(FBspVertex),
+				&Model->Sections(Index).Vertices.Vertices(0),Ar);
+			// Tell the TUmaArray that the data will come from an XPR
+			Model->Sections(Index).Vertices.Vertices.MarkAsInXPR();
+		}
+	}
+#endif
+	unguard;
+}
+
+/**
+ * Adds a static projector primitive to the RDF file and gets all of its
+ * arrays exported
+ *
+ * @param Prim the static projector to export
+ * @param Ar the archive we are writing to
+ */
+void UBulkDataExporterRDF::AddProjectorPrimitive(
+	UStaticProjectorClippedPrim* Prim,FOutputDevice& Ar)
+{
+	guard(UBulkDataExporterRDF::AddProjectorPrimitive);
+#ifdef XBOX_ASSET_FORMAT
+	// Make sure the array is valid
+	if (Prim->VertexStream.XboxVertices.Num() > 0)
+	{
+		// Export this bsp section's vert stream
+		AddNamedArray(FString::Printf(PROJECTOR_VS_PF,Prim->GetName()),
+			Prim->VertexStream.XboxVertices.Num(),sizeof(FStaticProjectorVertex),
+			&Prim->VertexStream.XboxVertices(0),Ar);
+		// Tell the TUmaArray that the data will come from an XPR
+		Prim->VertexStream.XboxVertices.MarkAsInXPR();
+	}
+#endif
+	unguard;
+}
+
+/**
+ * Adds an animation set to the RDF file
+ *
+ * @param Anim the animation set to export
+ * @param Ar the archive we are writing to
+ */
+void UBulkDataExporterRDF::AddMeshAnimation(UMeshAnimation* Anim,FOutputDevice& Ar)
+{
+	guard(UBulkDataExporterRDF::AddMeshAnimation);
+#ifdef XBOX_ASSET_FORMAT
+	// Make sure the array is valid
+	if (Anim->RawMotionDataBlock.dwSize > 0)
+	{
+		// Export animation's data
+		AddNamedArray(FString::Printf(ANIM_SET_PF,Anim->GetName()),
+			Anim->RawMotionDataBlock.dwSize,
+			sizeof(BYTE),Anim->RawMotionDataBlock.pData,Ar);
+		// Tell the animation that the data will come from an XPR
+		Anim->RawMotionDataBlock.bIsInXPR = TRUE;
+	}
+#endif
+	unguard;
+}
+IMPLEMENT_CLASS(UBulkDataExporterRDF);
+
+#ifdef XBOX_ASSET_FORMAT
+//jg -- Include the pushbuffer definitions so we can compile them on the PC
+#include "D3DPushBuffer.h"
+#endif
+
+/**
+ * Registers the supported export type
+ */
+void UPushbufferExporterRDF::StaticConstructor(void)
+{
+	guard(UPushbufferExporterRDF::StaticConstructor);
+	SupportedClass = UObject::StaticClass();
+	bText = 1;
+	new(Formats)FString(TEXT("_RDF"));
+	unguard;
+}
+
+/**
+ * Creates the file and fills it with the passed in data
+ *
+ * @param FileName the name of the file to create
+ * @param NumBytes the number of bytes to write out
+ * @param Data the data to write to the file
+ */
+UBOOL UPushbufferExporterRDF::ExportPushbuffer(const TCHAR* FileName,
+	DWORD NumBytes,void* Data)
+{
+	guard(UPushbufferExporterRDF::ExportPushbuffer);
+	FBufferArchive Buffer;
+	// Copy to the archive the raw data
+	Buffer.Serialize(Data,NumBytes);
+	// Now save that out to disk
+	return appSaveArrayToFile(Buffer,FileName);
+	unguard;
+}
+
+/**
+ * Exports the text information for the pushbuffers to a archive. It uses the
+ * export map of the package to make sure that things are exported in the
+ * order they are loaded in. This makes for faster fixup time on the xbox
+ *
+ * @param Object the object to export
+ * @param Type ignored
+ * @param Ar The archive to output the text to
+ * @param Warn the device to write warnings to
+ *
+ * @return True if sucessful false otherwise
+ */
+UBOOL UPushbufferExporterRDF::ExportText(UObject* Object,const TCHAR* Type,
+	FOutputDevice& Ar,FFeedbackContext* Warn)
+{
+	guard(UPushbufferExporterRDF::ExportText);
+	// If we are using the export map, route it that way
+	if (ExportMap != NULL)
+	{
+		ExportViaExportMap(Ar);
+	}
+	// Check for skeletal mesh exporting
+	else if (SkeletalMesh != NULL)
+	{
+		AddSkeletalMesh(SkeletalMesh,Ar);
+	}
+	// otherwise use an object iterator
+	else
+	{
+		ExportViaIterator(Ar);
+	}
+	// Iterate through the always export list
+	for (INT Index = 0; Index < AlwaysExport.Num(); Index++)
+	{
+		// Don't add if on the ignore list
+		if (Cast<UStaticMesh>(AlwaysExport(Index)))
+		{
+			AddStaticMesh((UStaticMesh*)AlwaysExport(Index),Ar);
+			// Add this item to the list
+			ProcessedList.AddItem(AlwaysExport(Index)->GetFName());
+		}
+		else if (Cast<USkeletalMesh>(AlwaysExport(Index)))
+		{
+			AddSkeletalMesh((USkeletalMesh*)AlwaysExport(Index),Ar);
+			// Add this item to the list
+			ProcessedList.AddItem(AlwaysExport(Index)->GetFName());
+		}
+	}
+	return 1;
+	unguard;
+}
+
+/**
+ * Exports all of the objects in the export map in dependency order
+ *
+ * @param Ar the archive to write text information to
+ */
+void UPushbufferExporterRDF::ExportViaExportMap(FOutputDevice& Ar)
+{
+	guard(UPushbufferExporterRDF::ExportViaExportMap);
+#ifdef XBOX_ASSET_FORMAT
+	// Use the export table of the package to export the data in the same
+	// order that it will be loaded in
+	for (INT Index = 0; Index < ExportMap->Num(); Index++)
+	{
+		// Get the object because I am lazy and don't want to type extra
+		UObject* Object = (*ExportMap)(Index)._Object;
+		if (Object != NULL)
+		{
+			// Check for a static mesh
+			if (Object->IsA(UStaticMesh::StaticClass()))
+			{
+				AddStaticMesh((UStaticMesh*)Object,Ar);
+			}
+			// Check for a skeletal mesh
+			else if (Object->IsA(USkeletalMesh::StaticClass()))
+			{
+				AddSkeletalMesh((USkeletalMesh*)Object,Ar);
+			}
+			// Check for projector to export
+			else if (Object->IsA(UStaticProjectorClippedPrim::StaticClass()))
+			{
+				AddProjectorPrimitive((UStaticProjectorClippedPrim*)Object,Ar);
+			}
+		}
+		else
+		{
+			debugf(TEXT("NULL object at index (%d)"),Index);
+		}
+	}
+#endif
+	unguard;
+}
+
+/**
+ * Exports all of the objects in the export map in dependency order
+ *
+ * @param Ar the archive to write text information to
+ */
+void UPushbufferExporterRDF::ExportViaIterator(FOutputDevice& Ar)
+{
+	guard(UPushbufferExporterRDF::ExportViaIterator);
+#ifdef XBOX_ASSET_FORMAT
+	// Iterate through exporting static meshes
+	for (TObjectIterator<UStaticMesh> It; It; ++It)
+	{
+		// Don't add if on the ignore list
+		if (IgnoreList.FindItemIndex(It->GetFName()) == INDEX_NONE)
+		{
+			AddStaticMesh(*It,Ar);
+			// Add this item to the list
+			ProcessedList.AddItem(It->GetFName());
+		}
+	}
+	// Iterate through exporting skeletal meshes
+	for (TObjectIterator<USkeletalMesh> It; It; ++It)
+	{
+		// Don't add if on the ignore list
+		if (IgnoreList.FindItemIndex(It->GetFName()) == INDEX_NONE)
+		{
+			AddSkeletalMesh(*It,Ar);
+			// Add this item to the list
+			ProcessedList.AddItem(It->GetFName());
+		}
+	}
+#endif
+	unguard;
+}
+
+/**
+ * Generic routine for dumping the array to the files
+ *
+ * @param ArrayName the name of the array being added
+ * @param ArrayCount the number of items in the array
+ * @param ElementSize the size in bytes of the contained entity
+ * @param Data pointer to the data for exporting
+ * @param Ar the archive to write to
+ */
+void UPushbufferExporterRDF::AddNamedPB(const FString& PBName,
+	FPushBuffer* PushBuffer,FOutputDevice& Ar)
+{
+	guard(UPushbufferExporterRDF::AddNamedPB);
+	// Start the pushbuffer declaration block
+	Ar.Logf(TEXT("Pushbuffer %s\r\n"),*PBName);
+	Ar.Log(TEXT("{\r\n"));
+	// Indicate the render size of the PB
+	Ar.Logf(TEXT("\tPBSize %d\r\n"),PushBuffer->GetSize());
+	// Indicate the allocated size of the PB for runnable ones
+	Ar.Logf(TEXT("\tAllocationSize %d\r\n"),PushBuffer->GetAllocatedSize());
+	// Build the file name
+	const FString& FileName = FString::Printf(OUT_PB_EXPORT_PF,*PBName);
+	// Now output the source file for this array
+	Ar.Logf(TEXT("\tPBFile %s\r\n"),*FString::Printf(OUT_PB_EXPORT_RDF_PF,
+		*PBName));
+	Ar.Log(TEXT("}\r\n\r\n"));
+	// Now write out the the data to the file
+	ExportPushbuffer(*FileName,
+		Max<DWORD>(PushBuffer->GetSize(),PushBuffer->GetAllocatedSize()),
+		PushBuffer->GetPushBufferData());
+	unguard;
+}
+
+/**
+ * Adds a static mesh's arrays to the RDF file and gets them all exported
+ *
+ * @param StaticMesh the static mesh to add
+ * @param Ar the archive we are writing to
+ */
+void UPushbufferExporterRDF::AddStaticMesh(UStaticMesh* StaticMesh,
+	FOutputDevice& Ar)
+{
+	guard(UPushbufferExporterRDF::AddStaticMesh);
+#ifdef XBOX_ASSET_FORMAT
+	// Compile each section's indices
+	for (INT nSection = 0; nSection < StaticMesh->Sections.Num();
+		nSection++)
+	{
+		FStaticMeshSection& Section = StaticMesh->Sections(nSection);
+		if (Section.NumPrimitives > 0)
+		{
+			FPushBuffer* PushBuffer = NULL;
+			// Compile differently if strips or not
+			if (Section.IsStrip)
+			{
+				PushBuffer = appCompileIndicesToPushBuffer(
+					PT_TriangleStrip,Section.NumPrimitives + 2,
+					&StaticMesh->IndexBuffer.Indices(Section.FirstIndex),0);
+			}
+			else
+			{
+				PushBuffer = appCompileIndicesToPushBuffer(
+					PT_TriangleList,Section.NumPrimitives * 3,
+					&StaticMesh->IndexBuffer.Indices(Section.FirstIndex),0);
+			}
+			// Now export the pushbuffer
+			AddNamedPB(
+				*FString::Printf(STATICMESH_PB_PF,StaticMesh->GetName(),nSection),
+				PushBuffer,Ar);
+			// Clean up so we don't run out of ram
+			delete PushBuffer;
+		}
+	}
+	// We don't need these anymore
+	StaticMesh->IndexBuffer.Indices.Empty();
+#endif
+	unguard;
+}
+
+/**
+ * Adds a skeletal mesh to the RDF file and gets it all of its sections
+ * exported
+ *
+ * @param SkeletalMesh the skeletal mesh to add
+ * @param Ar the archive we are writing to
+ */
+void UPushbufferExporterRDF::AddSkeletalMesh(USkeletalMesh* SkeletalMesh,
+	FOutputDevice& Ar)
+{
+	guard(UPushbufferExporterRDF::AddSkeletalMesh);
+#ifdef XBOX_ASSET_FORMAT
+	// Build a static push buffer for each section of each LOD
+	// Work through each LOD
+	for (INT nLOD = 0; nLOD < SkeletalMesh->LODModels.Num(); nLOD++)
+	{
+		FStaticLODModel& LOD = SkeletalMesh->LODModels(nLOD);
+		// Now work through each section for this LOD
+		for (INT nSection = 0; nSection < LOD.GPUMultiBoneSections.Num();
+			nSection++)
+		{
+			FPushBuffer* PushBuffer = NULL;
+			FSkelMeshSection& Section = LOD.GPUMultiBoneSections(nSection);
+			// Don't bother building for an empty section
+			if (Section.TotalFaces > 0 && LOD.GPUIndexBuffer.Indices.Num() > 0)
+			{
+				if (SkeletalMesh->bIsTristripped)
+				{
+					PushBuffer = appCompileIndicesToPushBuffer(
+						PT_TriangleStrip,Section.TotalFaces + 2,
+						&LOD.GPUIndexBuffer.Indices(Section.FirstIndex),0);
+				}
+				else
+				{
+					PushBuffer = appCompileIndicesToPushBuffer(
+						PT_TriangleList,Section.TotalFaces * 3,
+						&LOD.GPUIndexBuffer.Indices(Section.FirstIndex),0);
+				}
+				// Now export the pushbuffer
+				AddNamedPB(
+					*FString::Printf(SKELMESH_PB_PF,SkeletalMesh->GetName(),nLOD,nSection),
+					PushBuffer,Ar);
+				// Clean up so we don't run out of ram
+				delete PushBuffer;
+			}
+		}
+		// Now empty the indices for this LOD
+		LOD.GPUIndexBuffer.Indices.Empty();
+	}
+#endif
+	unguard;
+}
+
+/**
+ * Adds a static projector primitive to the RDF file and gets all of its
+ * arrays exported
+ *
+ * @param Prim the static projector to export
+ * @param Ar the archive we are writing to
+ */
+void UPushbufferExporterRDF::AddProjectorPrimitive(
+	UStaticProjectorClippedPrim* Prim,FOutputDevice& Ar)
+{
+	guard(UPushbufferExporterRDF::AddProjectorPrimitive);
+#ifdef XBOX_ASSET_FORMAT
+	if (Prim->IndexBuffer.Indices.Num() > 2)
+	{
+		// Compile it
+		FPushBuffer* PushBuffer = appCompileIndicesToPushBuffer(PT_TriangleList,
+			Prim->IndexBuffer.Indices.Num(),&Prim->IndexBuffer.Indices(0),0);
+		// Now export the pushbuffer
+		AddNamedPB(*FString::Printf(PROJECTOR_PB_PF,Prim->GetName()),
+			PushBuffer,Ar);
+		// Clean up so we don't run out of ram
+		delete PushBuffer;
+		// Empty the indices as they are no longer needed
+		Prim->IndexBuffer.Indices.Empty();
+	}
+#endif
+	unguard;
+}
+IMPLEMENT_CLASS(UPushbufferExporterRDF);
+
+/*------------------------------------------------------------------------------
+	The end.
+------------------------------------------------------------------------------*/

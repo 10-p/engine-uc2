@@ -1,0 +1,33 @@
+/* scion ======================================================================
+ * Author: jg
+ * ============================================================================
+ *
+ * This material is the optimized version of a shader that uses a mask from the
+ * diffuse texture for opacity and specularity. It uses a separate mask for the
+ * self illumination. It alpha blends between the lit diffuse + specular and
+ * the unlit diffuse + specular.
+ *
+ * ============================================================================
+ */
+
+xps.1.1
+
+// Diffuse
+tex t0
+// Specular
+tex t1
+// Self illumination mask
+tex t2
+
+// Create the self illumination portion
+add r1, t0, t1
+// Now maks with the diffuse
+xmma r0, r1, discard, r1, t0.a, r1, t0.a
+// Mask the self illumination
+mul r1, r1, t2.a
+// Now add the two together
+add r0, r0, r1
+// Figure out the alpha
+mad r0.a, t0.a, t0.a, t0.a
+
+xfc fog.a, r0, fog.rgb, zero, zero, zero, r0.a

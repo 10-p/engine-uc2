@@ -1,0 +1,4 @@
+DWORD dwFogVertexShader[] = {
+	0x00012078,
+	0x00000000, 0x0085e1aa, 0x74001954, 0x30708829
+};

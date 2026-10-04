@@ -1,0 +1,24 @@
+//=============================================================================
+//	scion sz -- 
+//	Blur Pixel Shader - (PS_Blur)
+//
+//=============================================================================
+
+xps.1.1
+
+//-----------------------------------------------------------------------------
+// texture stages
+
+tex t0	;back buffer
+tex t1	;back buffer
+tex t2	;back buffer
+tex t3	;back buffer
+
+//-----------------------------------------------------------------------------
+// This pixel shader can be used to blur the screen
+
+xmma_x2 discard, discard, r0, c0, t0, c1, t1	; 2 * (c0 * t0 + c1 * t1)
+xmma_x2 discard, discard, r1, c2, t2, c3, t3	; 2 * (c2 * t2 + c3 * t3)
+add_d2 r0, r0, r1
+
+xfc zero, zero, zero, r0.rgb, zero, zero, 1-zero

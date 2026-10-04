@@ -1,0 +1,376 @@
+<?xml version="1.0" encoding="Windows-1252"?>
+<VisualStudioProject
+	ProjectType="Visual C++"
+	Version="7.10"
+	Name="UIX"
+	ProjectGUID="{F3E712D4-E54D-4739-9350-EE71365791B5}"
+	Keyword="CustomAppWizProj">
+	<Platforms>
+		<Platform
+			Name="Win32"/>
+		<Platform
+			Name="Xbox"/>
+	</Platforms>
+	<Configurations>
+		<Configuration
+			Name="Debug|Win32"
+			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
+			IntermediateDirectory="$(ConfigurationName)"
+			ConfigurationType="1">
+			<Tool
+				Name="VCCLCompilerTool"/>
+			<Tool
+				Name="VCCustomBuildTool"/>
+			<Tool
+				Name="VCLinkerTool"/>
+			<Tool
+				Name="VCMIDLTool"/>
+			<Tool
+				Name="VCPostBuildEventTool"/>
+			<Tool
+				Name="VCPreBuildEventTool"/>
+			<Tool
+				Name="VCPreLinkEventTool"/>
+			<Tool
+				Name="VCResourceCompilerTool"/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"/>
+			<Tool
+				Name="VCWebDeploymentTool"/>
+			<Tool
+				Name="VCManagedWrapperGeneratorTool"/>
+			<Tool
+				Name="VCAuxiliaryManagedWrapperGeneratorTool"/>
+		</Configuration>
+		<Configuration
+			Name="Release|Win32"
+			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
+			IntermediateDirectory="$(ConfigurationName)"
+			ConfigurationType="1">
+			<Tool
+				Name="VCCLCompilerTool"/>
+			<Tool
+				Name="VCCustomBuildTool"/>
+			<Tool
+				Name="VCLinkerTool"/>
+			<Tool
+				Name="VCMIDLTool"/>
+			<Tool
+				Name="VCPostBuildEventTool"/>
+			<Tool
+				Name="VCPreBuildEventTool"/>
+			<Tool
+				Name="VCPreLinkEventTool"/>
+			<Tool
+				Name="VCResourceCompilerTool"/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"/>
+			<Tool
+				Name="VCWebDeploymentTool"/>
+			<Tool
+				Name="VCManagedWrapperGeneratorTool"/>
+			<Tool
+				Name="VCAuxiliaryManagedWrapperGeneratorTool"/>
+		</Configuration>
+		<Configuration
+			Name="Debug|Xbox"
+			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
+			IntermediateDirectory="$(ConfigurationName)"
+			ConfigurationType="1">
+			<Tool
+				Name="VCCLCompilerTool"/>
+			<Tool
+				Name="VCCustomBuildTool"/>
+			<Tool
+				Name="VCLinkerTool"/>
+			<Tool
+				Name="VCPostBuildEventTool"/>
+			<Tool
+				Name="VCPreBuildEventTool"/>
+			<Tool
+				Name="VCPreLinkEventTool"/>
+			<Tool
+				Name="XboxDeploymentTool"/>
+			<Tool
+				Name="XboxImageTool"/>
+		</Configuration>
+		<Configuration
+			Name="Release|Xbox"
+			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
+			IntermediateDirectory="$(ConfigurationName)"
+			ConfigurationType="1">
+			<Tool
+				Name="VCCLCompilerTool"/>
+			<Tool
+				Name="VCCustomBuildTool"/>
+			<Tool
+				Name="VCLinkerTool"/>
+			<Tool
+				Name="VCPostBuildEventTool"/>
+			<Tool
+				Name="VCPreBuildEventTool"/>
+			<Tool
+				Name="VCPreLinkEventTool"/>
+			<Tool
+				Name="XboxDeploymentTool"/>
+			<Tool
+				Name="XboxImageTool"/>
+		</Configuration>
+		<Configuration
+			Name="Debug|Xbox"
+			ConfigurationType="1">
+			<Tool
+				Name="VCCLCompilerTool"/>
+			<Tool
+				Name="VCCustomBuildTool"/>
+			<Tool
+				Name="VCLinkerTool"/>
+			<Tool
+				Name="VCPostBuildEventTool"/>
+			<Tool
+				Name="VCPreBuildEventTool"/>
+			<Tool
+				Name="VCPreLinkEventTool"/>
+			<Tool
+				Name="XboxDeploymentTool"/>
+			<Tool
+				Name="XboxImageTool"/>
+		</Configuration>
+	</Configurations>
+	<References>
+	</References>
+	<Files>
+		<Filter
+			Name="Src"
+			Filter="">
+		</Filter>
+		<Filter
+			Name="Inc"
+			Filter="">
+		</Filter>
+		<Filter
+			Name="Resources"
+			Filter="">
+			<File
+				RelativePath=".\Avaris.inx">
+				<FileConfiguration
+					Name="Debug|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="skinbld &quot;$(InputPath)&quot; ..\Textures\$(InputName).uix"
+						CommandLine="skinbld &quot;$(InputPath)&quot; ..\Textures\$(InputName).uix"
+						AdditionalDependencies="srcmedia\*"
+						Outputs="..\Textures\$(InputName).uix"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="skinbld &quot;$(InputPath)&quot; ..\Textures\$(InputName).uix"
+						CommandLine="skinbld &quot;$(InputPath)&quot; ..\Textures\$(InputName).uix"
+						AdditionalDependencies="srcmedia\*"
+						Outputs="..\Textures\$(InputName).uix"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Debug|Xbox">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="skinbld &quot;$(InputPath)&quot; ..\Textures\$(InputName).uix"
+						CommandLine="skinbld &quot;$(InputPath)&quot; ..\Textures\$(InputName).uix"
+						AdditionalDependencies="srcmedia\*"
+						Outputs="..\Textures\$(InputName).uix"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Xbox">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="skinbld &quot;$(InputPath)&quot; ..\Textures\$(InputName).uix"
+						CommandLine="skinbld &quot;$(InputPath)&quot; ..\Textures\$(InputName).uix"
+						AdditionalDependencies="srcmedia\*"
+						Outputs="..\Textures\$(InputName).uix"/>
+				</FileConfiguration>
+			</File>
+			<File
+				RelativePath=".\Font.rdf">
+				<FileConfiguration
+					Name="Debug|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Debug|Xbox">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Xbox">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+			</File>
+			<File
+				RelativePath=".\Font_cht.rdf">
+				<FileConfiguration
+					Name="Debug|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Debug|Xbox">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Xbox">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+			</File>
+			<File
+				RelativePath=".\Font_jpn.rdf">
+				<FileConfiguration
+					Name="Debug|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Debug|Xbox">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Xbox">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+			</File>
+			<File
+				RelativePath=".\Font_kor.rdf">
+				<FileConfiguration
+					Name="Debug|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Debug|Xbox">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Xbox">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+			</File>
+			<File
+				RelativePath=".\Gamepad.rdf">
+				<FileConfiguration
+					Name="Debug|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Win32">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Debug|Xbox">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Xbox">
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="bundler &quot;$(InputPath)&quot;"
+						CommandLine="bundler &quot;$(InputPath)&quot;"
+						Outputs="$(ProjectDir)\..\Textures\$(InputName).xpr;$(ProjectDir)\Inc\$(InputName).h"/>
+				</FileConfiguration>
+			</File>
+		</Filter>
+	</Files>
+	<Globals>
+	</Globals>
+</VisualStudioProject>

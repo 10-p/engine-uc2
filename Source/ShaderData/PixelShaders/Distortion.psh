@@ -1,0 +1,37 @@
+/* scion ======================================================================
+ * Author: sz
+ * Distortion Pixel Shader - (PS_Distortion)
+ * ============================================================================
+ * 
+ * This pixel shader offsets the screen coordinates by a distortion texture
+ * and uses this to output the back buffer pixel 
+ *
+ * (t0-0.5)*2 * 3x2 matrix = screen space distortion coordinate used 
+ * to look up t2 = back buffer material.
+ *
+ * the 3x2 matrix looks like this 
+ * [distortion scale X, 0, screen space X]
+ * [distortion scale Y, 0, screen space Y]
+ * 
+ * ============================================================================
+ */
+
+xps.1.1
+
+//-----------------------------------------------------------------------------
+// texture stages
+
+tex t0					// distortion texture
+texm3x2pad t1, t0		// first row of matrix multiply
+texm3x2tex t2, t0		// second row of matrix multiply and fetch back buffer
+tex t3					// mask	(required)
+
+//-----------------------------------------------------------------------------
+// 
+ 
+// fetch offset texel from the back buffer
+mov r0.rgb, t2
+// alpha is affected by masked area
++ mov r0.a, t3.a
+
+xfc zero, zero, r0, zero, zero, zero, r0.a

@@ -1,0 +1,27 @@
+/* scion ======================================================================
+ * Author: jg
+ * ============================================================================
+ *
+ * This material is an optimized version of a combiner in the diffuse channel of
+ * a UShader. This shader is 2 diffuse, no mask, modulated blending, and no
+ * lighting on the specular.
+ * The formula is ((T0 * T1) * V0) + T2
+ *
+ * ============================================================================
+ */
+
+xps.1.1
+
+// Diffuse
+tex t0
+// Diffuse2
+tex t1
+// Specular
+tex t2
+
+// Modulate the two diffuse textures together
+mul r0, t0, t1
+// Now modulate the diffuse with the lighting
+mul_x2 r0, r0, v0
+// Finally add in the specular
+add r0, r0, t2

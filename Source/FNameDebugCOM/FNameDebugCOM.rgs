@@ -1,0 +1,11 @@
+HKCR
+{
+	NoRemove AppID
+	{
+		{4D415F01-E849-45E0-AE9F-990C76956AEF} = s 'FNameDebugCOM'
+		'FNameDebugCOM.EXE'
+		{
+			val AppID = s {4D415F01-E849-45E0-AE9F-990C76956AEF}
+		}
+	}
+}

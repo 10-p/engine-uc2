@@ -1,0 +1,24 @@
+//=============================================================================
+//	scion sz -- 
+//	RGB to Luminance transform - (PS_LuminanceTransform)
+//
+//  Takes an RGB8 value and outputs L8 luminance color (grayscale)
+//
+//=============================================================================
+
+xps.1.1
+
+//-----------------------------------------------------------------------------
+// constants
+
+//	def c0, 0.3f, 0.59f, 0.11f, 0.0f	; Luminance transform
+
+//-----------------------------------------------------------------------------
+// texture stages
+
+tex t0					// source RGB texture
+
+// transform source texture into a single luminance value
+dp3 r0, c0, t0
+
+xfc zero, zero, zero, r0, zero, zero, zero

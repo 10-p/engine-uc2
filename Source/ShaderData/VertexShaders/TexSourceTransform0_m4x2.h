@@ -1,0 +1,5 @@
+DWORD dwTexSourceTransform0_m4x2VertexShader[] = {
+	0x00022078,
+	0x00000000, 0x00e0c01f, 0x8436186c, 0x20708848,
+	0x00000000, 0x00e0e01f, 0x8436186c, 0x20704849
+};

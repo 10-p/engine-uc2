@@ -1,0 +1,42 @@
+/* scion ======================================================================
+ * Author: sz
+ * Distortion Accumulation Pixel Shader - (PS_DistortionAccum)
+ * ============================================================================
+ * 
+ * In order to have multiple overlapping layers of distortion, this pixel shader
+ * is used to accumulate the offset vectors.  Unfortunately, we can't have 
+ * offsets that are negative (up or left in screenspace).  This is because the
+ * same back buffer will be used to render these distortion values and we would
+ * be recursing the distortion.  
+ *
+ * The accumulated result is added to the accumulation buffer using
+ * SrcBlend=D3DBLEND_ONE DestBlend=D3DBLEND_ONE
+ * 
+ * ============================================================================
+ */
+
+xps.1.1
+
+//-----------------------------------------------------------------------------
+// texture stages
+
+tex t0					// distortion texture (rg values are xy distortion amount)
+tex t1					// mask	(required)
+texcoord t2				// interpolated vertex distortion amount
+
+//-----------------------------------------------------------------------------
+//  
+
+// distortion amount 
+// r0 = t2 * (t0 - 0.5) * 2
+mul r0, t2, t0_bx2
+// get absolute value of r0
+add r1, r0_sat, -r0
+add r0, r0_sat, r1
+// scale distortion amount by mask alpha also
+mul r0, r0, t1.a
+
+// alpha must always =1 since it is used to mask out distortion areas
+// in the accumulation target. This is a fill-rate optimization for the
+// last pass when we draw the full screen distortion quad
+xfc zero, zero, r0.rgb, zero, zero, zero, 1-zero

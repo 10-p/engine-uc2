@@ -1,0 +1,39 @@
+//=============================================================================
+//	scion sz -- 
+//	Depth of Field Blurring Pixel Shader - (PS_DepthOfField)
+//
+//	TODOSZ - possibly get rid of the the ramp texture as it has to be updated
+//	in real-time and use w-buffering to do the DOF calculations directly in the
+//	pixel shader.
+//
+//=============================================================================
+
+xps.1.1
+
+//-----------------------------------------------------------------------------
+// texture stages
+
+tex t0					// blur texture (back buffer blurred)
+tex t1					// depth texture encoded as D3DFMT_LIN_B8G8R8A8 (B8G8 16bit z)
+texreg2gb t2, t1		// ramp lookup
+//tex t3				// blur texture 2 (more blur)
+		  
+//-----------------------------------------------------------------------------
+//  Ramp lookup stores an alpha ramp in D3DFMT_A8 (dynamically generated based on Near/Far)
+
+mul r0.rgb, t0.rgb, v0.rgb
++ mul r0.a, t2.a, v0.a
+
+
+/*
+// TEMPSZ -
+// test to blend with 2 blur sources
+//
+mul r1, t2.a, t2.a
+mul r1, r1, r1
+lrp r0.rgb, r1, t3, t0
++ mov r0.a, t2.a
+*/
+
+xfc zero, zero, zero, r0, zero, zero, r0.a
+

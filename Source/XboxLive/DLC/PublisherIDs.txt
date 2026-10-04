@@ -1,0 +1,17 @@
+Name:		Publisher ID:
+
+Syzygy		1000000
+Kraag		1000001
+Jackhammer	1000002
+Apophis		1000003
+Merc Anubis	1000004
+Lilith		1000005
+Calypso		1000006
+Necris Selket	1000007
+Garek		1000008
+Judas		1000009
+
+DM-EvilHands	2000000
+CTF-Monoxide	2000001
+OD-Ascension	2000002
+DM-Sever	2000003

@@ -1,0 +1,17 @@
+// List of resources to bundle.
+//
+// The output will be a header file (.h) used at compile time,
+// and a packed resource file (.xpr) used at runtime.
+
+//out_header		   Inc\Gamepad.h
+out_packedresource ..\Textures\Gamepad.xpr
+out_error          Gamepad.err
+
+
+Texture GamepadTexture
+{
+   Source Fonts\Gamepad.tga
+   Format D3DFMT_LIN_A8R8G8B8
+   Levels 1
+}
+

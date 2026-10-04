@@ -1,0 +1,23 @@
+/* scion ======================================================================
+ * Author: jg
+ * ============================================================================
+ *
+ * Blurs 4 textures and negates the results. This mimics the darken blend mode
+ *
+ * ============================================================================
+ */
+
+xps.1.1
+
+// Four samples
+tex t0
+tex t1
+tex t2
+tex t3
+
+xmma_x2 discard, discard, r0, c0, t0, c1, t1	; 2 * (c0 * t0 + c1 * t1)
+xmma_x2 discard, discard, r1, c2, t2, c3, t3	; 2 * (c2 * t2 + c3 * t3)
+add_d2 r0, r0, r1
+
+// Negate the output and write a constant alpha of 1
+xfc zero, zero, zero, 1-r0, zero, zero, 1-zero

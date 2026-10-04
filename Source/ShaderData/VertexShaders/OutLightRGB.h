@@ -1,0 +1,4 @@
+DWORD dwOutLightRGBVertexShader[] = {
+	0x00012078,
+	0x00000000, 0x0020001b, 0xb436106c, 0x2070f819
+};

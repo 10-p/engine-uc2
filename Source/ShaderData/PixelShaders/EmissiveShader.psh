@@ -1,0 +1,46 @@
+/* scion ======================================================================
+ * Author: jg
+ * ============================================================================
+ *
+ * This material is a diffuse material that emits light. The emissive mask is
+ * used to either wholly use the modulated diffuse or the diffuse without any
+ * lighting modulation. Note that the alpha value written to the back buffer
+ * is the amount of light bloom to apply. c0 contains a constant that I use
+ * to wildly scale the alpha. This lets me do things as if I had a conditional
+ * without having one by having a value be 0 or 1. c1 contains the emissive
+ * color modifier
+ *
+ * ============================================================================
+ */
+
+xps.1.1
+
+// Diffuse
+tex t0
+// Specular
+tex t1
+// Specular mask
+tex t2
+// Emissive mask
+tex t3
+
+// Modulate the diffuse with the lighting
+mul_x2 r0, t0, v0
+// Mask the specular and add it to the diffuse
+mad r0, t1, t2.a, r0
+// Determine whether or not there is a mask being used for an emissive material
+// This is an all or nothing operation in terms of choosing the color portion
+// of what gets written to the back buffer. The alpha comes from t3.a and is
+// modulated (post pixel selection) by the color in c1
+xmma_x4 discard, discard, r1, t3.a, c0, t3.a, c0
+// This is annoying but waste an instruction purely to saturate the result
+mov r1, r1_sat
+// Modulate the emissive material with the emissive color
+mul r1.rgb, t0, c1
+// Now blend the original diffusemess all or nothing with the emissive diffuse
+xmma discard, discard, r0, r0, 1 - r1.a, r1, r1.a
+// Now modulate the amount light bloom to apply
+mul r1.a, t3.a, c1.a
+
+// Use the XFC to specify how much light bloom to apply
+xfc fog.a, r0, fog.rgb, zero, zero, zero, r1.a

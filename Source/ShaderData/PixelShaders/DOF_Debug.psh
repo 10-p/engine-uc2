@@ -1,0 +1,23 @@
+//=============================================================================
+//	scion sz -- 
+//	Depth of Field Blurring Pixel Shader for DEBUG - (PS_DepthOfField)
+//
+//=============================================================================
+
+xps.1.1
+
+//-----------------------------------------------------------------------------
+// texture stages
+
+tex t0					// blur texture
+tex t1					// depth texture
+texreg2gb t2, t1		// ramp lookup
+tex t3					// mask	(not used)
+		  
+//-----------------------------------------------------------------------------
+//  Just spits out alpha of ramp lookup texture as grayscale
+
+mul r0, 1-zero, t2.a
+
+xfc zero, zero, zero, r0, zero, zero, 1-zero
+

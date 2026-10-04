@@ -1,0 +1,24 @@
+/* scion ======================================================================
+ * Author: jg
+ * ============================================================================
+ *
+ * This pixel shader converts the source texture to a luminance value and then
+ * blends that with the original texture color using the mask.
+ *
+ * ============================================================================
+ */
+
+xps.1.1
+
+// Load the texture to modify
+tex t0
+// Load the mask to tweak with
+tex t1
+
+// Apply a luminance filter
+dp3 r1, t0, c0
+// Now blend between the two values
+xmma discard, discard, r0, r1, t1.a, t0, 1 - t1.a
+
+// Use the XFC to specify alpha
+xfc fog.a, r0, fog.rgb, zero, zero, zero, t1.a
