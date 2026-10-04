@@ -847,6 +847,171 @@ void  UGUIController::NativeTick(FLOAT DeltaTime)
 	unguard;
 }
 
+/*-----------------------------------------------------------------------------
+	M10: keyboard and mouse as a pad in the menus.
+
+	The menus act on pad codes (XControllerEvent). Epic's PC build turned some keys into
+	those codes with a hard-wired table (letters A B X Y K W, Enter = Start, Escape = Back),
+	which collided with WASD and with typing. The table is now ini data, section
+	[GUI.EmulatedJoypad] of the system ini:
+	    <engine key>=<pad code>[/<pad code while a text field is on the page>]
+	pad codes: A B X Y Black White LeftTrigger RightTrigger PadUp PadDown PadLeft PadRight
+	Start Back LeftThumb RightThumb, AltUp AltDown AltLeft AltRight (right stick), Type (the
+	key types or edits text), Raw (not converted). Without the section, Epic's table applies.
+	docs/porting/analysis/controls.md has the defaults and the reasons.
+-----------------------------------------------------------------------------*/
+
+enum EEmulatedPadSpecial
+{
+	EJP_Raw		= 0,	// the key reaches the menus as itself
+	EJP_Type	= 1,	// text entry: characters arrive through NativeKeyType, editing keys edit
+	EJP_AltUp	= 2,
+	EJP_AltDown	= 3,
+	EJP_AltLeft	= 4,
+	EJP_AltRight= 5,
+	EJP_Invalid	= 255,
+};
+
+struct FEmulatedPadKey
+{
+	BYTE Code;		// XBC_A..XBC_RightThumb or EJP_*
+	BYTE TextCode;	// the same while the active page has a text field
+};
+
+static FEmulatedPadKey	GEmulatedPad[IK_MAX];
+static UBOOL			GEmulatedPadLoaded = 0;
+
+static BYTE ParseEmulatedPadCode( const TCHAR* Name )
+{
+	static const struct { const TCHAR* Name; BYTE Code; } Codes[] =
+	{
+		{ TEXT("A"), XBC_A }, { TEXT("B"), XBC_B }, { TEXT("X"), XBC_X }, { TEXT("Y"), XBC_Y },
+		{ TEXT("Black"), XBC_Black }, { TEXT("White"), XBC_White },
+		{ TEXT("LeftTrigger"), XBC_LeftTrigger }, { TEXT("RightTrigger"), XBC_RightTrigger },
+		{ TEXT("PadUp"), XBC_PadUp }, { TEXT("PadDown"), XBC_PadDown }, { TEXT("PadLeft"), XBC_PadLeft }, { TEXT("PadRight"), XBC_PadRight },
+		{ TEXT("Start"), XBC_Start }, { TEXT("Back"), XBC_Back },
+		{ TEXT("LeftThumb"), XBC_LeftThumb }, { TEXT("RightThumb"), XBC_RightThumb },
+		{ TEXT("AltUp"), EJP_AltUp }, { TEXT("AltDown"), EJP_AltDown }, { TEXT("AltLeft"), EJP_AltLeft }, { TEXT("AltRight"), EJP_AltRight },
+		{ TEXT("Type"), EJP_Type }, { TEXT("Raw"), EJP_Raw },
+	};
+	for( INT i=0; i<ARRAY_COUNT(Codes); i++ )
+		if( appStricmp(Name, Codes[i].Name)==0 )
+			return Codes[i].Code;
+	return EJP_Invalid;
+}
+
+// An engine key by its EInputKey name without "IK_" ("Enter", "W", "LeftMouse"...).
+static UBOOL FindEmulatedPadKey( const TCHAR* Name, BYTE& Key )
+{
+	UEnum* InputKeys = FindObject<UEnum>( ANY_PACKAGE, TEXT("EInputKey") );
+	if( !InputKeys )
+		return 0;
+	for( INT i=0; i<InputKeys->Names.Num() && i<IK_MAX; i++ )
+	{
+		const TCHAR* KeyName = *InputKeys->Names(i);
+		if( appStrnicmp(KeyName, TEXT("IK_"), 3)==0 && appStricmp(KeyName+3, Name)==0 )
+		{
+			Key = (BYTE)i;
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static void LoadEmulatedPad()
+{
+	guard(LoadEmulatedPad);
+	GEmulatedPadLoaded = 1;
+	appMemzero( GEmulatedPad, sizeof(GEmulatedPad) );
+
+	TMultiMap<FName,FString>* Section = GConfig->GetSectionPrivate( TEXT("GUI.EmulatedJoypad"), 0, 1 );
+	if( Section )
+	{
+		TMultiMap<FName,FString>::TIterator First(*Section);
+		if( !First )
+			Section = NULL;
+	}
+	if( !Section )
+	{
+		// Epic's PC table (UnGUICore.cpp before M10).
+		static const BYTE Epic[][2] =
+		{
+			{ IK_Up, XBC_PadUp }, { IK_Down, XBC_PadDown }, { IK_Left, XBC_PadLeft }, { IK_Right, XBC_PadRight },
+			{ IK_A, XBC_A }, { IK_B, XBC_B }, { IK_X, XBC_X }, { IK_Y, XBC_Y }, { IK_K, XBC_Black }, { IK_W, XBC_White },
+			{ IK_LeftBracket, XBC_LeftTrigger }, { IK_RightBracket, XBC_RightTrigger },
+			{ IK_Semicolon, XBC_LeftThumb }, { IK_SingleQuote, XBC_RightThumb }, { IK_Enter, XBC_Start }, { IK_Escape, XBC_Back },
+			{ IK_NumPad8, EJP_AltUp }, { IK_NumPad2, EJP_AltDown }, { IK_NumPad4, EJP_AltLeft }, { IK_NumPad6, EJP_AltRight },
+		};
+		for( INT i=0; i<ARRAY_COUNT(Epic); i++ )
+			GEmulatedPad[Epic[i][0]].Code = GEmulatedPad[Epic[i][0]].TextCode = Epic[i][1];
+		debugf( NAME_Init, TEXT("GUI: no [GUI.EmulatedJoypad] section, using Epic's key table") );
+		return;
+	}
+
+	INT Count = 0;
+	for( TMultiMap<FName,FString>::TIterator It(*Section); It; ++It )
+	{
+		BYTE Key = 0;
+		FString Value = It.Value(), Normal, Text;
+		if( !Value.Split( TEXT("/"), &Normal, &Text ) )
+			Normal = Text = Value;
+		BYTE Code = ParseEmulatedPadCode( *Normal ), TextCode = ParseEmulatedPadCode( *Text );
+		if( !FindEmulatedPadKey( *It.Key(), Key ) || Code==EJP_Invalid || TextCode==EJP_Invalid )
+		{
+			debugf( NAME_Warning, TEXT("[GUI.EmulatedJoypad] %s=%s: unknown key or pad code, ignored"), *It.Key(), *Value );
+			continue;
+		}
+		GEmulatedPad[Key].Code     = Code;
+		GEmulatedPad[Key].TextCode = TextCode;
+		Count++;
+	}
+	debugf( NAME_Init, TEXT("GUI: %i keys from [GUI.EmulatedJoypad]"), Count );
+	unguard;
+}
+
+//
+// The text field of the active page, if it has one that can be typed into: either the focused
+// control (Epic's edit boxes) or the field of an on-screen keyboard page (UC2KeyboardPanel's
+// ed_Text, which never has the focus: its key buttons do).
+//
+static UGUIEditBox* FindEditBox( UGUIComponent* C, INT Depth )
+{
+	if( !C || Depth > 32 || !C->bVisible || C->MenuState==MSAT_Disabled )
+		return NULL;
+	UGUIEditBox* Edit = Cast<UGUIEditBox>( C );
+	if( Edit )
+		return Edit->bReadOnly ? NULL : Edit;
+	UGUIMultiComponent* Multi = Cast<UGUIMultiComponent>( C );
+	if( Multi )
+		for( INT i=0; i<Multi->Controls.Num(); i++ )
+			if( (Edit = FindEditBox( Multi->Controls(i), Depth+1 )) != NULL )
+				return Edit;
+	return NULL;
+}
+
+static UGUIEditBox* TextEntryTarget( UGUIController* C )
+{
+	return C->ActivePage ? FindEditBox( C->ActivePage, 0 ) : NULL;
+}
+
+static UBOOL IsTypingKey( BYTE iKey )
+{
+	return iKey==IK_Space || iKey==IK_Backspace || iKey==IK_Delete
+		|| (iKey>=IK_0 && iKey<=IK_9) || (iKey>=IK_A && iKey<=IK_Z)
+		|| (iKey>=IK_NumPad0 && iKey<=IK_GreySlash)
+		|| (iKey>=IK_Semicolon && iKey<=IK_Tilde) || (iKey>=IK_LeftBracket && iKey<=IK_SingleQuote);
+}
+
+static void MouseClickPress( UGUIController* C );
+static void MouseClickRelease( UGUIController* C );
+
+static BYTE EmulatedPadCode( BYTE iKey, UBOOL TextEntry )
+{
+	if( !GEmulatedPadLoaded )
+		LoadEmulatedPad();
+	return TextEntry ? GEmulatedPad[iKey].TextCode : GEmulatedPad[iKey].Code;
+}
+
 /*
 	NativeKeyEvent returns true when it has processed the keystroke (which it does
 	any time that it is active).
@@ -860,29 +1025,9 @@ BYTE UGUIController::GetXCode( BYTE iKey )
 #ifndef _XBOX
 	if ( bEmulatedJoypad )
 	{
-		switch (iKey)
-		{
-		case IK_Up:				return  XBC_PadUp;
-		case IK_Down:			return  XBC_PadDown;
-		case IK_Left:			return  XBC_PadLeft;
-		case IK_Right:			return  XBC_PadRight;
-
-		case IK_A:				return XBC_A;
-		case IK_B:				return XBC_B;
-		case IK_X:				return XBC_X;
-		case IK_Y:				return XBC_Y;
-
-		case IK_K:				return XBC_Black;
-		case IK_W:				return XBC_White;
-
-		case IK_LeftBracket:	return XBC_LeftTrigger;
-		case IK_RightBracket:	return XBC_RightTrigger;
-
-		case IK_Semicolon:		return XBC_LeftThumb;
-		case IK_SingleQuote:	return XBC_RightThumb;
-		case IK_Enter:			return XBC_Start;
-		case IK_Escape:			return XBC_Back;
-		}
+		BYTE Code = EmulatedPadCode( iKey, TextEntryTarget(this)!=NULL );
+		if ( Code >= XBC_A && Code <= XBC_RightThumb )
+			return Code;
 	}
 #endif
 
@@ -1024,44 +1169,33 @@ UBOOL UGUIController::NativeKeyEvent(BYTE& iKey, BYTE& State, FLOAT Delta )
 #ifndef _XBOX
 	if ( bEmulatedJoypad )
 	{
-		switch (iKey)
+		// M10: [GUI.EmulatedJoypad] (see LoadEmulatedPad).
+		UGUIEditBox* TextBox = TextEntryTarget( this );
+		BYTE Code = EmulatedPadCode( iKey, TextBox!=NULL );
+		if ( TextBox && Code == EJP_Raw && IsTypingKey(iKey) )
+			Code = EJP_Type;	// a key that makes a character types it while there is a text field
+		if ( Code >= XBC_A && Code <= XBC_RightThumb )
+			iKey = Code;
+		else if ( Code >= EJP_AltUp && Code <= EJP_AltRight )
 		{
-		case IK_A:				iKey = XBC_A;			break;	// A Button
-		case IK_B:				iKey = XBC_B;			break;	// B Button
-		case IK_X:				iKey = XBC_X;			break;	// X Button
-		case IK_Y:				iKey = XBC_Y;			break;	// Y Button
-		case IK_K:				iKey = XBC_Black;		break;	// Black Button
-		case IK_W:				iKey = XBC_White;		break;	// White Button
-		case IK_LeftBracket:	iKey = XBC_LeftTrigger;	break;	// Left Trigger
-		case IK_RightBracket:	iKey = XBC_RightTrigger;break;	// Right Trigger
-		case IK_Up:				iKey = XBC_PadUp;		break;	// Pad Up
-		case IK_Down:			iKey = XBC_PadDown;		break;	// Pad Down
-		case IK_Left:			iKey = XBC_PadLeft;		break;	// Pad Left
-		case IK_Right:			iKey = XBC_PadRight;	break;	// Pad Right
-		case IK_Enter:			iKey = XBC_Start;		break;	// Start Button
-		case IK_Escape:			iKey = XBC_Back;		break;	// Back Button
-		case IK_Semicolon:		iKey = XBC_LeftThumb;	break;	// Left Thumb Button
-		case IK_SingleQuote:	iKey = XBC_RightThumb;	break;	// Right Thum Button
-		case IK_NumPad8:	// Right Thumbstick Up
-			Delta = 1.f;
+			// Right thumbstick, as Epic's NumPad 8/2/4/6.
+			Delta = (Code==EJP_AltUp || Code==EJP_AltRight) ? 1.f : -1.f;
 			bValidDelta = State == IST_Press;
-			iKey = XBC_RightStickY;
-			break;
-		case IK_NumPad6:	// Right Thumbstick Right
-			Delta = 1.f;
-			bValidDelta = State == IST_Press;
-			iKey = XBC_RightStickX;
-			break;
-		case IK_NumPad2:	// Right Thumbstick Down
-			Delta = -1.f;
-			bValidDelta = State == IST_Press;
-			iKey = XBC_RightStickY;
-			break;
-		case IK_NumPad4:	// Right Thumbstick Left
-			Delta = -1.f;
-			bValidDelta = State == IST_Press;
-			iKey = XBC_RightStickX;
-			break;
+			iKey = (Code==EJP_AltUp || Code==EJP_AltDown) ? XBC_RightStickY : XBC_RightStickX;
+		}
+		else if ( Code == EJP_Type && TextBox && TextBox != eventGetFocusedControl() )
+		{
+			// An on-screen keyboard page: the field is not the focused control (its key buttons
+			// are), so editing keys go to it directly; characters come through NativeKeyType.
+			// Nothing else on the page sees a typing key.
+			if ( iKey==IK_Backspace || iKey==IK_Delete || iKey==IK_Home || iKey==IK_End )
+			{
+				BYTE K = iKey, S = State;
+				TextBox->NativeKeyEvent( K, S, Delta );
+			}
+			if ( DeleteStack.Num() )
+				eventClearDeleteStack();
+			return true;
 		}
 	}
 #endif
@@ -1264,6 +1398,10 @@ UBOOL UGUIController::NativeKeyEvent(BYTE& iKey, BYTE& State, FLOAT Delta )
 	{
 		if (State==IST_Press  || State==IST_Repeat)			// Process Mouse Presses
 		{
+#ifndef _XBOX
+			if ( State==IST_Press )
+				MouseClickPress( this );
+#endif
 			MousePressed(0);
 		}
 		else if (State==IST_Repeat)		// Process Mouse Repeat
@@ -1276,6 +1414,9 @@ UBOOL UGUIController::NativeKeyEvent(BYTE& iKey, BYTE& State, FLOAT Delta )
 			if (!bIgnoreNextRelease)
 			{
 				MouseReleased();
+#ifndef _XBOX
+				MouseClickRelease( this );
+#endif
 			}
 			bIgnoreNextRelease=false;
 		}
@@ -2159,6 +2300,13 @@ UBOOL UGUIController::NativeKeyType(BYTE& iKey, TCHAR Unicode )
 					return true;
 			}
 		}
+
+#ifndef _XBOX
+		// M10: an on-screen keyboard page's field takes what a real keyboard types.
+		UGUIEditBox* TextBox = bEmulatedJoypad ? TextEntryTarget( this ) : NULL;
+		if ( TextBox && TextBox != eventGetFocusedControl() && Unicode >= 32 )
+			TextBox->NativeKeyType( iKey, Unicode );
+#endif
 	}
 
 	return true;
@@ -2299,8 +2447,71 @@ void UGUIController::LookUnderCursor(FLOAT dX, FLOAT dY)
 	}
 #else
 	ActiveControl = UnderCursor(MouseX, MouseY);
+
+#ifndef _XBOX
+	// M10: moving the mouse over a menu item selects it, as the D-pad would (only on real
+	// motion, so a resting cursor never takes the focus back from keyboard or pad navigation).
+	if ( (dX != 0.f || dY != 0.f) && ActiveControl && ActiveControl->bTabStop && ActiveControl->bAcceptsInput &&
+		ActiveControl->MenuState == MSAT_Blurry && ActiveControl->PageOwner == ActivePage &&
+		ActiveControl != eventGetFocusedControl() && ActiveControl->eventCanAcceptFocus(0) )
+	{
+		debugf( NAME_DevUI, TEXT("Mouse hover selects %s"), ActiveControl->GetMenuPath() );
+		ActiveControl->eventSetFocus( NULL );
+	}
+#endif
 #endif
 }
+
+#ifndef _XBOX
+//
+// M10: a left click is A on the item under the cursor. Epic's MousePressed/MouseReleased give the
+// item the focus and call its OnClick; UC2's pad-driven items have no OnClick (they act on
+// XControllerEvent), and its lists act on their selected row, not the row under the cursor.
+// So: on press, a list selects the row under the cursor (its own InternalOnClick, which Epic
+// binds to OnClick but UC2 pages replace); on release over the same item, an item that has no
+// OnClick but an XControllerEvent handler gets XC_A.
+//
+static UGUIComponent* GClickTarget = NULL;
+
+static void MouseClickPress( UGUIController* C )
+{
+	GClickTarget = NULL;
+	if ( !C->bEmulatedJoypad )
+		return;
+	UGUIComponent* Under = C->UnderCursor( C->MouseX, C->MouseY );
+	if ( !Under || Under->PageOwner != C->ActivePage )
+		return;
+	GClickTarget = Under;
+	if ( Under->IsA(UGUIListBase::StaticClass()) )
+	{
+		UFunction* Select = Under->FindFunction( FName(TEXT("InternalOnClick"), FNAME_Find) );
+		if ( Select && Select->ParmsSize >= (INT)sizeof(UGUIComponent*) )
+		{
+			BYTE* Parms = (BYTE*)appAlloca( Select->ParmsSize );
+			appMemzero( Parms, Select->ParmsSize );
+			*(UGUIComponent**)Parms = Under;
+			Under->ProcessEvent( Select, Parms );
+			debugf( NAME_DevUI, TEXT("Mouse click selects the row under the cursor in %s"), Under->GetMenuPath() );
+		}
+	}
+}
+
+static void MouseClickRelease( UGUIController* C )
+{
+	UGUIComponent* Target = GClickTarget;
+	GClickTarget = NULL;
+	if ( !C->bEmulatedJoypad || !Target || !IsValidObject(Target) || Target->PageOwner != C->ActivePage )
+		return;
+	if ( C->UnderCursor( C->MouseX, C->MouseY ) != Target )
+		return;
+	if ( OBJ_DELEGATE_IS_SET(Target,OnClick) || !OBJ_DELEGATE_IS_SET(Target,OnXControllerEvent) )
+		return;		// Epic's OnClick did it, or nothing would react to A either
+	if ( Target != C->eventGetFocusedControl() )
+		Target->eventSetFocus( NULL );
+	debugf( NAME_DevUI, TEXT("Mouse click is A on %s"), Target->GetMenuPath() );
+	C->DistributeXControllerEvent( C->ControllerId, XC_A );
+}
+#endif
 
 UBOOL UGUIController::HasMouseMoved( FLOAT ErrorMargin )
 {
