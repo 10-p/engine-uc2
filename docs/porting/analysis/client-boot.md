@@ -138,3 +138,38 @@ Not done / known differences:
   change happens under the null device anyway).
 - One SDL window per viewport, as WinDrv creates one Windows window per viewport. Split screen on PC is an
   owner question (BLOCKERS.md); nothing was done for it.
+
+## Step 5 - `Source/SDLLaunch`: `uc2.bin`
+
+Epic's SDL 1.2 launcher (`Src/SDLLaunch.cpp`, `SDLLaunchPrivate.h`) is rewritten; the original stays in git
+history (import commit 7633696) and in `epic-sources`. `Src/makefile` is left as it was (reference).
+- **Structure** from engine-ut2004's launcher: globals, `CMainLoop`, `InitEngine`, `-*RENDERER` selection,
+  driver normalisation, `main`. Its Emscripten, WebRTC, Android, Pixomatic and GL parts are not here yet;
+  the places they go are the same functions.
+- **What UC2 does at startup** from the PC `WinMain` (`Launch/Src/Launch.cpp`) and `UnEngineWin.h`
+  (`InitEngine`, `CMainLoop`): `GPackage = appPackage()`, `GIsClient/GIsServer/GIsScriptable/GLazyLoad`,
+  `-BENCHMARK`, the `-640x480`-style switches (written to the active client's section instead of
+  `[WinDrv.WindowsClient]`), `Running.ini`, `FirstRun`, `UEngine::GEngine = Engine` before `Engine->Init()`
+  (UC2-specific, as the PC and Xbox launchers do), `EXEC=`, `LOADWINDOWPOSITION`, `GRenDev->Flush` before
+  exit. Left out: config wizard, log window, installer mutex, the D3D hardware probe of
+  `SetInitialConfiguration`, the exec hook with property windows; `consolecommand=` logs that it is not
+  available. Benchmark CSV output is reduced to one average line.
+- **Static registration**: exactly `UCC.cpp`'s (the XboxLaunch order) plus `AUTO_INITIALIZE_REGISTRANTS_SDL2DRV`,
+  including UWeb's two native lookups, and the POSIX synchronisation/thread factories set before `appInit`.
+- **Module name** `Avaris` (`GModule`), so the ini, the log and the product strings are the PC game's
+  (`Avaris.ini`, `Avaris.log`, `avaris.int`).
+- **Message pump**: `Engine->Client->Viewports(0)->UpdateInput(0,0)` once per frame (engine-ut2004's
+  arrangement), which pumps SDL events through the client.
+- **Driver choice**: `-NULLRENDERER` sets `[Engine.Engine] RenderDevice=Engine.NullRenderDevice`
+  (engine-ut2004's `SelectRenderDevice`, table cut to the one device we have). `ReplaceMissingDrivers`
+  replaces a `ViewportManager`, `RenderDevice` or `AudioDevice` that the ini names but this binary does not
+  contain, and logs it; tested with Epic's original `Default.ini` as `Avaris.ini`:
+  `ViewportManager=WinDrv.WindowsClient is not in this build: using SDL2Drv.SDL2Client`,
+  `RenderDevice=D3DDrv.D3DRenderDevice is not in this build: using Engine.NullRenderDevice`, menu up.
+- **Link**: `CMakeLists.txt` as for `ucc-bin`: whole-archive of every package (SDL2Drv first), SDL2 static,
+  `-Wl,-export-dynamic`. Output `build-native/Source/SDLLaunch/uc2.bin`, which `mkrun-uc2.sh` already copies.
+
+Configuration (`Engine/Config/Default.ini`, rows in `Engine/Config/README.md`): `ViewportManager` ->
+`SDL2Drv.SDL2Client`, `RenderDevice` -> `Engine.NullRenderDevice` (Epic's lines kept as comments), new
+section `[SDL2Drv.SDL2Client]` = copy of `[WinDrv.WindowsClient]`. `AudioDevice` was already
+`Engine.NullAudioDevice`. The file keeps its CRLF line endings (it is a byte copy of Epic's).
