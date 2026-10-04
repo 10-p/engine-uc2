@@ -176,3 +176,23 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
     integrated shaders are not reachable from shipped content at all (no DualDiffuse material exists in any
     package), so for those the numeric tests are the only evidence.
   - New ini switch `UsePixelShaders` (default True) restores the M5 behaviour for comparison.
+- 2026-10-04 — **M4w complete: the game boots in a browser** (W2, through the frontend's own harness, as the
+  owner directed). In the frontend clone `<WorkUC2>/ufrontend`, branch `uc2` (commits `2f4e39d`, `b244955`,
+  `15ede5e`, `b5b0eb9`, local only): the package reader handles versions 145–151 (all 208 packages of the uc2
+  tree parse to their exact length; other targets' output byte-identical), a minimal `targets/uc2` with
+  neutral placeholder branding, and `packages/e2e/uc2-wasm-boot.spec.js`.
+  - Coordinator's runs: `bin/capped 4G 420 -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=12 --
+    --target uc2 uc2-wasm-boot.spec.js` → `1 passed (11.1s)`; `crossOriginIsolated: true`,
+    `Bringing Level Entry.MyLevel up for play`, `Bringing Level Menu.MyLevel up for play`,
+    `Render device: Engine.NullRenderDevice`; browser peak 1.5 GB, run peak 3.2 GB (ceiling 4 GB), machine peak
+    9.4 GB (budget 12 GB), no profiles or processes left. Passed before and after the two engine fixes below.
+  - Engine fixes it surfaced: `604a8a3` (a leading `Key=Value` token is a global option, not the map: the
+    launcher passes the player name first and the engine tried to load a package of that name) and `429c17b`
+    (the dev web build links at `-O2 -g2`: 9 MiB and about 0.5 GB to compile, instead of 45 MiB that did not
+    compile within 3 GB).
+  - Still to do on the web side (M11): the GL driver through GL4ES, audio, the network driver, removing the
+    spec's `?map=Menu` workaround now that the engine fix is in, a real precache (the menu boot currently
+    pulls 390 MiB through the dependency prefetch), and the tagged-property codec for version 148+.
+- 2026-10-04 — Memory policy from the owner replaces the first, stricter ceilings: up to 16 GB for one piece
+  of work when the memory is useful, up to 24 GB machine-wide for parallel work, kill above 24 GB.
+  `CLAUDE.md` and `bin/mem-watchdog` (warn 16, kill 24) updated.
