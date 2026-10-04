@@ -301,3 +301,33 @@ saturate at any deflection past the dead zone, as the keyboard does. If a profil
 M14. Movement speed is not proportional to deflection past about 0.3 (0.3 moved 392 units in 1.2 s, full 484):
 the acceleration saturates the same way on the Xbox's numbers; this is the game's behaviour, not checked against
 an Xbox.
+
+## The M14 list (needs script; nothing here was changed in script)
+
+1. **Mouse vs stick in `UCPlayerInput.PlayerInput`** (`Source/UCGameplay/Classes/UCPlayerInput.uc:338-368`): one
+   variable (`aMouseX/aMouseY`) carries both, then clamp, squared fall-off, hold-acceleration and aim friction
+   (`GetTurnFriction`, :456; `GetLookUpFriction`) apply to it. M10 made it linear in `DefUser.ini` so the mouse is
+   proportional; the pad lost its Xbox curve and acceleration. Script should apply the curve, acceleration and
+   friction to the stick part only and add the mouse delta linearly; then the Xbox values can come back.
+2. **Aim adhesion on the mouse** (`UCPlayerController.uc:2740-2741` `GetTurnAdhesion/GetLookUpAdhesion`,
+   `UCPlayerInput.uc:522,569`): pad aim assist also pulls the mouse; should be stick-only.
+3. **Stick movement scale** (`UCPlayerController.uc:3849-3857` and `:4027-4035`, `Level.IsXBox()` x 24000): M10
+   works around it with `JoyX/JoyY SpeedBase=2400000`; `ControllerConfiguration.ApplyJoysticks`
+   (`Source/Engine/Classes/ControllerConfiguration.uc:85-110`) writes `SpeedBase=100` back when a profile swaps
+   the sticks, which then breaks movement on PC again. Scale in PlayerMove on every platform instead.
+4. **Auto-centre pitch** (`UCPlayerController.uc:2935`): M10 turned it off in the ini (it fights mouse look);
+   script could keep it for the pad only.
+5. **Lock-on with a mouse**: break-away compares `aMouseX/aMouseY` with `LockPullOffStrength` 98 in stick units
+   (`UCPlayerController.uc:2857`), so a mouse breaks a lock with ordinary aiming motion; target switching while
+   locked reads the left stick (`Lock`, `UCPlayerController.uc:2064-2110`, "PlayerTick scans for enemies by
+   thumb stick direction"). A PC lock toggle and a mouse-specific pull-off threshold need script.
+6. **Button glyphs**: footers and hints draw Xbox buttons (`GUIController.XBoxButtonChars`,
+   `Source/GUI/Classes/GUIController.uc:218,3861-3876`; `Footer.AddStandardButton`,
+   `Source/UCMenu/Classes/Footer.uc:35`; `ButtonPanel.AddStandardButton`, `ButtonPanel.uc:54`). A keyboard player
+   sees "A SELECT" and has to know Enter = A (`[GUI.EmulatedJoypad]`). Showing the bound key needs script.
+7. **Keyboard rebinding menu**: the controls menu edits pad layouts only (`UC2ControllerLayoutMenu.uc`,
+   `UC2Settings_Controller.uc`); keyboard/mouse bindings are only editable in `User.ini`.
+8. **Hover in lists**: hovering selects menu items (native) but not list rows; a row is selected by clicking.
+   Row hover would be `GUIVertList` script (`Source/GUI/Classes/GUIVertList.uc:17-34` has the row maths).
+9. Not script, for the owner's split-screen decision: Start on a second, unbound pad does not join
+   (`UXboxClient::UpdateGamepadUnboundInput` -> `UClient::BeginSplitScreen`; `SDL2Pads.cpp` header).
