@@ -20,7 +20,6 @@ Newest first. Remove an entry when it is resolved and say how in `LOG.md`.
 ## Open technical questions
 
 - Does GL4ES accept fragment-only GLSL with fixed-function vertex processing? (spike at M5)
-- One GL driver source built twice, or two mirrored directories as in engine-ut2004? (decide at M5)
 - Per-bank packed OGG or one file per wave? (decide at M8)
 - Localised defaults of native classes look empty in one place: `ucc help` prints blank names and descriptions
   for native commandlets. Unknown whether script reading `class'X'.default.<localized property>` of a native

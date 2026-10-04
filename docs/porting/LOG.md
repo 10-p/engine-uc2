@@ -93,3 +93,7 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
     localised help strings for native commandlets (BLOCKERS).
   - Also recorded: `analysis/package-format-v151.md`, the on-disk differences of UC2's packages that the
     frontend's Node tools must learn (established on the shipped `Core.u`).
+- 2026-10-04 — Decision for M5 (was open in BLOCKERS): **one GL driver source**, `Source/UC2GLDrv`, with the GL
+  binding selectable at build time (desktop GL through the SDL proc table; GL4ES for GLES2/WebGL), instead
+  of two mirrored directories as engine-ut2004 has for historical reasons. M4w and M5 run in parallel in
+  worktrees `../engine-uc2-m4w` (branch `m4w`) and `../engine-uc2-m5` (branch `m5-gl`); the coordinator merges.
