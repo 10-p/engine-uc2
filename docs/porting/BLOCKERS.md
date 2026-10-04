@@ -34,7 +34,12 @@ crash-notifier processes; both are the owner's to clear.
 
 ## Open technical questions
 
-- Does GL4ES accept fragment-only GLSL with fixed-function vertex processing? (spike at M5)
+- M6 leftovers: the 12 projector pixel shaders need the engine's `_XBOX`-only projector batching lifted behind a
+  capability (same kind of change as M7's post-process gates; do it with M7); `PS_Terrain3Layer` needs the
+  device to report three simultaneous terrain layers, which changes every terrain map and wants its own
+  before/after pictures. Both are translated and tested numerically, neither is drawn yet.
+- GL4ES and the M6 shaders: every generated fragment shader compiles as GLSL ES 1.00 on Mesa; the vertex
+  shaders are not yet compiled as ES and nothing has run through GL4ES itself (M11).
 - Per-bank packed OGG or one file per wave? (decide at M8)
 - Localised defaults of native classes look empty in one place: `ucc help` prints blank names and descriptions
   for native commandlets. Unknown whether script reading `class'X'.default.<localized property>` of a native

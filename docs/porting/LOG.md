@@ -154,3 +154,25 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
     worker. It will not be used: the owner pointed to the frontend's own harness, which has the real
     file-streaming glue and a machine-wide memory guard (`packages/e2e/tools/e2e-mem-guard.mjs`). W2 becomes
     "minimal `uc2` target in the frontend clone, booted by its harness under that guard inside `bin/capped`".
+- 2026-10-04 — **M6 gate green with two recorded gaps: Epic's Xbox shaders run as GLSL** (branch `m6-shaders`
+  merged as `787c8c7`; commits `8289fbf`, `cf8330e`, `bd6a4e2`, `5cad7fd`; notebook `analysis/shaders.md`).
+  Re-run by the coordinator, every run inside `bin/capped`:
+  - `python3 tools/psh2glsl.py --selftest` → 100 shaders, 99 compared with Epic's compiled definition words
+    (6,336 cases, maximum difference 0), 0 failed. `--gputest` under Xvfb → 107 shaders rendered, 6,848
+    cases, 0 outside one 8-bit step (worst 0.5), all 107 also compile as GLSL ES 1.00.
+  - DM-Deadbolt with shaders on: 59 fragment shaders compiled, 0 failed; 8 programs linked, 0 failed; about
+    20,000 program draws; 0 GL errors over 1,800 frames. On/off pair from the pinned spawn
+    (`<WorkUC2>/logs/m6/coord-deadbolt-0.png`, `-1.png`): with shaders on the player's helmet and shoulder
+    pieces have the metal highlights the original PC binary shows in `logs/oracle/DM-Deadbolt.png`; off, they
+    are flat as at M5; nothing else in the frame changes.
+  - Merged tree: native build, null renderer, `verifyclasses`, census 58/58, wasm build all pass.
+  - How it is verified, by class: numerically for all 100 shaders (source vs assembler output, GLSL vs
+    interpreter); on screen against the original PC binary for the materials PC implemented (player skin,
+    emissive/team shader on static meshes); on screen only as "runs clean and looks plausible" for the
+    Xbox-only ones (team skin, specular-mask glass, emissive specular). There is no Xbox picture to compare.
+  - Integrated 59 shaders; 25 wait for M7 (they need a back-buffer or depth copy). **Gaps against the gate:**
+    the 12 projector shaders (the engine batches projectors only under `_XBOX`) and `PS_Terrain3Layer` (needs
+    a render-caps change that alters how every terrain is drawn) are translated but not used. 37 of the 59
+    integrated shaders are not reachable from shipped content at all (no DualDiffuse material exists in any
+    package), so for those the numeric tests are the only evidence.
+  - New ini switch `UsePixelShaders` (default True) restores the M5 behaviour for comparison.
