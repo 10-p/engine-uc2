@@ -17,6 +17,21 @@ Newest first. Remove an entry when it is resolved and say how in `LOG.md`.
   and mouse events are injected through the X test extension with a few lines of Python.
 - Scope, to decide when reached: split-screen on PC; web multiplayer visible at launch; arm64 hardware.
 
+## Incident, 2026-10-04: test run exhausted the machine's memory
+
+The M4w agent's browser smoke test (W2) ran the WebAssembly client in headless Chromium, and at least once in
+the Claude desktop app's browser pane, with no memory limit. Browser processes reached 6-9 GB each (kernel
+log: three at once, about 24 GB), crashed repeatedly with V8's out-of-memory abort, were retried, and the
+kernel killed the desktop app. Two harness servers and one headless Chromium were still running afterwards
+and were stopped by hand. Cause in the brief: no ceiling, no retry limit, no ban on the desktop's own browser,
+although the sibling workspace's notes already describe a memory guard for its browser tests. Fixed by
+`<WorkUC2>/bin/capped` and the "Running anything" rules in `CLAUDE.md`.
+Still to do before W2 is attempted again: find where the memory goes (the uncommitted harness in
+`../engine-uc2-m4w/tools/web-smoke/ufront-glue.js` fetches each game file whole and keeps it in JavaScript
+memory; the build allows unbounded wasm memory growth), under a 4G ceiling.
+Left on the machine: 1.4 GB of compressed core dumps in `/var/lib/systemd/coredump` (root-owned) and 16 KDE
+crash-notifier processes; both are the owner's to clear.
+
 ## Open technical questions
 
 - Does GL4ES accept fragment-only GLSL with fixed-function vertex processing? (spike at M5)

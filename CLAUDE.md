@@ -40,6 +40,29 @@ Read in this order: `docs/porting/PLAN.md` (milestones and gates), `docs/porting
 - If you cannot access something or a tool is missing, say so in `BLOCKERS.md` and tell the owner; do not
   work around it silently.
 
+## Running anything: memory ceiling, always
+
+On 2026-10-04 an agent's headless-browser test of the WebAssembly build grew to 6-9 GB per browser process,
+was retried in a loop, was also opened in the Claude desktop app's own browser pane, and the kernel's
+out-of-memory killer took down the owner's desktop session. These rules exist because of that.
+
+- Every run of the game, a browser, a wasm build under Node, a test harness or wine goes through
+  `<WorkUC2>/bin/capped <memory> <seconds> -- <command>`. It puts the whole process tree in one cgroup with a
+  hard memory ceiling and time limit, turns core dumps off, and kills whatever is left when it returns.
+  Ceilings: native game or `ucc-bin` 2G; Node/wasm 3G; a headless browser 4G; wine 3G. Never more than 6G for
+  anything, and never two capped runs at once whose ceilings add up to more than 12G.
+- Exit 137 from `capped` means the ceiling was hit. **Do not retry unchanged.** Find out what is using the
+  memory first (the engine's own stats, a smaller map, a heap profile under a lower ceiling).
+- Three failed attempts at the same step without a new diagnosis: stop, write down what is known in the
+  notebook and BLOCKERS.md, and report.
+- Never load the game or any test page in the Claude desktop app's built-in browser pane, in Claude in Chrome,
+  or in the owner's own browser. Browser tests use a separate headless Chromium with a throwaway profile,
+  started through `capped`.
+- One browser instance at a time. Stop servers and browsers you started before you finish (`capped` does it
+  for what runs inside it; check with `pgrep` for anything started outside it).
+- The web build sets an explicit `-sMAXIMUM_MEMORY` (no unbounded growth), and a test harness must not keep
+  whole game files in JavaScript memory per worker.
+
 ## Build
 
 `BUILD.md`. Short version: `cmake --preset native && cmake --build build-native -j12`.

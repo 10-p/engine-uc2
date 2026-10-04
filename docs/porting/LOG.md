@@ -129,3 +129,10 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   - Not yet: pixel-shader materials (off until M6, so player skins and other materials PC drew with its DX8
     shaders take the stage-0 fallback), post-processing (M7), movies (M9), GL4ES/WebGL build of the driver
     (M11), a run on the real GPU, 1280x720 comparisons with a pinned spawn.
+- 2026-10-04 — **Incident: an unbounded browser test exhausted memory and the kernel killed the owner's desktop
+  session** (details and cause in BLOCKERS.md). Both running agents (M4w, M6) died with it. Recovery:
+  leftover harness servers and headless Chromium stopped; `bin/capped` (hard memory ceiling + time limit per
+  process tree, verified: over-ceiling run killed in 0.25 s inside its own cgroup, nothing left behind);
+  "Running anything" rules added to CLAUDE.md. State of the work: branch `m4w` has W0 and W1 committed
+  (`8a232bd`, `5bd7f07`, `44932d1`, `45f7301`) and an uncommitted browser harness, none of it verified by the
+  coordinator; branch `m6-shaders` has no commits (the agent had not written anything yet).
