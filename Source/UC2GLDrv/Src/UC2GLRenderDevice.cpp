@@ -44,6 +44,9 @@ static TArray<FLOAT>	GExecTimes;
 static TArray<FString>	GExecCommands;
 // -glshotramp: screenshots show the dynamic gamma ramp the present pass applies (they are
 // read before it otherwise, as D3D's are).
+// POSTSELFTEST / -glselftest: the numeric checks of UC2GLSelfTest.cpp, run at the start of a
+// frame (0 = no, 1 = at the next frame with a player, n = n frames from now).
+static INT				GSelfTestPending = 0;
 static UBOOL			GShotRamp = 0;
 static BYTE				GLastGammaRamp[256];
 void UC2GL_RememberGammaRamp( const BYTE* Ramp ) { appMemcpy( GLastGammaRamp, Ramp, 256 ); }
@@ -352,6 +355,8 @@ UBOOL UUC2GLRenderDevice::Init()
 		UsePostProcess = 1;
 	ParseTimeList( TEXT("glpptoggle="), GPPToggleTimes );
 	GShotRamp = ParseParam( appCmdLine(), TEXT("glshotramp") );
+	if( ParseParam( appCmdLine(), TEXT("glselftest") ) )
+		GSelfTestPending = 10;
 	GExecTimes.Empty();
 	GExecCommands.Empty();
 	const TCHAR* ExecList = appStrfind( appCmdLine(), TEXT("glexec=") );
@@ -1056,6 +1061,74 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		Ar.Logf( TEXT("UC2GLDrv: post-processing %s (frame %i)"), UsePostProcess ? TEXT("on") : TEXT("off"), FrameCounter );
 		return 1;
 	}
+	else if( ParseCommand(&Cmd,TEXT("GLTEXELS")) )
+	{
+		// GLTEXELS <Package.Group.Texture>: size, format and nine texels (corners, edge
+		// midpoints, centre) of a texture, as R,G,B,A (verification: colour ramps).
+		UTexture* Texture = Cast<UTexture>( UObject::StaticLoadObject( UTexture::StaticClass(), NULL, Cmd, NULL, LOAD_NoWarn, NULL ) );
+		if( !Texture )
+			Ar.Logf( TEXT("UC2GLDrv: GLTEXELS: no texture '%s'"), Cmd );
+		else
+		{
+			FBaseTexture*	Base	= Texture->Get( 0, NULL )->GetRenderInterface();
+			FTexture*		Tex		= Base ? Base->GetTextureInterface() : NULL;
+			INT				W		= Texture->USize, H = Texture->VSize;
+			if( Tex && W > 0 && H > 0 )
+			{
+				TArray<FColor> Texels( W * H );
+				Tex->GetTextureData( 0, &Texels(0), W * sizeof(FColor), TEXF_RGBA8, 0 );
+				FString Line;
+				for( INT j=0; j<3; j++ )
+					for( INT i=0; i<3; i++ )
+					{
+						FColor C = Texels( (j*(H-1)/2) * W + i*(W-1)/2 );
+						Line += FString::Printf( TEXT(" (%i,%i)=%i,%i,%i,%i"), i*(W-1)/2, j*(H-1)/2, C.R, C.G, C.B, C.A );
+					}
+				Ar.Logf( TEXT("UC2GLDrv: GLTEXELS %s: %ix%i format %i:%s"), Texture->GetFullName(), W, H, (INT)Texture->Format, *Line );
+				// The mip chain as the device will upload it: first texel and middle texel of each level.
+				FString MipLine;
+				for( INT m=Tex->GetFirstMip(); m<Tex->GetNumMips(); m++ )
+				{
+					INT MW = Max( W >> m, 1 ), MH = Max( H >> m, 1 );
+					TArray<FColor> MipTexels( MW * MH );
+					appMemzero( &MipTexels(0), MW * MH * sizeof(FColor) );
+					Tex->GetTextureData( m, &MipTexels(0), MW * sizeof(FColor), TEXF_RGBA8, 0 );
+					FColor A = MipTexels(0), B = MipTexels( MW/2 );
+					MipLine += FString::Printf( TEXT(" mip %i %ix%i: %i,%i,%i / %i,%i,%i;"), m, MW, MH, A.R, A.G, A.B, B.R, B.G, B.B );
+				}
+				// And what the device holds for it: level 0 read back from GL.
+				FOpenGLTexture* GLTexture = RenderInterface.CacheTexture( Base );
+				if( GLTexture && GLTexture->TextureID && !GLTexture->IsCubemap )
+				{
+					GLuint Framebuffer = 0;
+					FColor Read[2];
+					appMemzero( Read, sizeof(Read) );
+					glGenFramebuffers( 1, &Framebuffer );
+					glBindFramebuffer( GL_FRAMEBUFFER, Framebuffer );
+					glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, GLTexture->TextureID, 0 );
+					GLenum Status = glCheckFramebufferStatus( GL_FRAMEBUFFER );
+					glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+					glReadPixels( 0, 0, 1, 1, GL_BGRA, GL_UNSIGNED_BYTE, &Read[0] );
+					glReadPixels( GLTexture->CachedWidth/2, 0, 1, 1, GL_BGRA, GL_UNSIGNED_BYTE, &Read[1] );
+					glBindFramebuffer( GL_FRAMEBUFFER, RenderInterface.SavedRenderTargetState.GetCurrentState()->Framebuffer ? RenderInterface.SavedRenderTargetState.GetCurrentState()->Framebuffer : MainFramebuffer );
+					glDeleteFramebuffers( 1, &Framebuffer );
+					Ar.Logf( TEXT("UC2GLDrv: GLTEXELS %s: GL texture %i, %ix%i, mips %i..%i, internal format 0x%04x, framebuffer status 0x%04x, level 0 first / middle texel: %i,%i,%i,%i / %i,%i,%i,%i"),
+						Texture->GetName(), GLTexture->TextureID, GLTexture->CachedWidth, GLTexture->CachedHeight, GLTexture->CachedFirstMip, GLTexture->CachedNumMips, GLTexture->CachedGLFormat, Status,
+						Read[0].R, Read[0].G, Read[0].B, Read[0].A, Read[1].R, Read[1].G, Read[1].B, Read[1].A );
+				}
+				else
+					Ar.Logf( TEXT("UC2GLDrv: GLTEXELS %s: the device has no GL texture for it"), Texture->GetName() );
+				Ar.Logf( TEXT("UC2GLDrv: GLTEXELS %s: first mip %i of %i, LODSet %i, clamp %i/%i:%s"), Texture->GetName(), Tex->GetFirstMip(), Tex->GetNumMips(), (INT)Texture->LODSet, (INT)Texture->UClampMode, (INT)Texture->VClampMode, *MipLine );
+			}
+		}
+		return 1;
+	}
+	else if( ParseCommand(&Cmd,TEXT("POSTSELFTEST")) )
+	{
+		GSelfTestPending = 1;
+		Ar.Logf( TEXT("UC2GLDrv: the post-process self-test runs at the start of the next frame; results in the log") );
+		return 1;
+	}
 	else if( ParseCommand(&Cmd,TEXT("DOFSHIPPEDALPHA")) )
 	{
 		// DOFSHIPPEDALPHA [0|1]: UUCScreenDOF's blur alpha as the shipped binary read it
@@ -1113,6 +1186,12 @@ FRenderInterface* UUC2GLRenderDevice::Lock( UViewport* Viewport, BYTE* HitData, 
 	}
 
 	RenderInterface.Locked( Viewport, HitData, HitSize );
+
+	if( GSelfTestPending && Viewport->Actor && Viewport->Actor->Level && --GSelfTestPending == 0 )
+	{
+		extern void UC2GL_RunPostProcessSelfTest( UUC2GLRenderDevice* RenDev, UViewport* Viewport );
+		UC2GL_RunPostProcessSelfTest( this, Viewport );
+	}
 
 	return &RenderInterface;
 

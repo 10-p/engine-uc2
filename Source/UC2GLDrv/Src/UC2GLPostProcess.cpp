@@ -31,14 +31,21 @@
 	   buffer). The copy pass writes the 24-bit depth into the bytes that view showed:
 	   blue = bits 23..16, green = 15..8, red = 7..0. GL's window depth equals D3D's z here
 	   (M5's clip fix-up maps z to 2z-w and the depth range is 0..1).
-	4. Direct3D 8 samples a texture at pixel centres that sit on integer coordinates, so a
-	   full-target quad with coordinates 0..1 reads texel BOUNDARIES of a same-size texture
-	   (the "half-texel offset"). M5's clip fix-up reproduces D3D's rasterisation, so this
-	   comes out the same here: bilinear reads average two (four) texels exactly as on the
-	   Xbox. Point-filtered reads on a boundary are a tie; hardware resolves it downwards
-	   (texel i for coordinate i), GL leaves it to rounding noise. For passes with a
-	   point-filtered render-target stage the interface therefore samples 1/32 pixel
-	   further right and down (FOpenGLRenderInterface::GetGLMatrices, PointSampleNudge).
+	4. Half-texel offset. Direct3D 8 puts pixel centres on integer coordinates, so a
+	   full-target quad drawn at 0..size with texture coordinates 0..1 would read a
+	   same-size texture on texel boundaries. Epic's screen tiles do not do that:
+	   FScreenPrimUtil's canvas matrix moves every tile half a pixel up and left
+	   (UnRenderUtil.h, "- 0.5f"), so destination pixel (x,y) samples at ((x+0.5)/w,
+	   (y+0.5)/h): texel centres for a same-size copy, the shared corner of 2x2 texels for
+	   a half-size one. M5's clip fix-up makes GL rasterise exactly as D3D does, so the same
+	   holds here with no further correction; the self-test (UC2GLSelfTest.cpp: blur-h,
+	   blur-v, blur-box, bb-copy) checks it against a CPU computation, and fails by 70 to
+	   120 of 255 if the half pixel is left out. A point-filtered read that lands exactly on
+	   a texel boundary is a tie; hardware takes the texel to the right and below, GL leaves
+	   it to rounding noise. For a pass with a point-filtered render-target stage the
+	   interface therefore samples 1/32 pixel further right and down
+	   (FOpenGLRenderInterface::GetGLMatrices, PointSampleNudge), and CopyDepthBuffer adds a
+	   quarter texel for the same reason.
 	5. The distortion vertex shader computes the coordinate of "this pixel in the back
 	   buffer" itself (Distortion.vsh); its GLSL port takes it from GL's own window
 	   coordinates, so no offset convention is involved (UC2GLShaders.cpp).
@@ -74,12 +81,15 @@ static const char* GPostCopyFragmentShader =
 
 // Depth as the Xbox's D3DFMT_LIN_B8G8R8A8 view of a D24S8 buffer shows it. Alpha was the
 // stencil byte there; no shader of the game reads it (DOF.psh uses green and blue only).
+// The depth arrives as a 32-bit float: the 24-bit value is reproduced to within two units
+// (self-test "depth-color"), and without the min() a depth of exactly 1 (the cleared buffer,
+// the sky) rounds up to 2^24, whose high byte does not exist: found by self-test "dof-ramp".
 static const char* GPostDepthEncodeFragmentShader =
 	"uniform sampler2D uSource;\n"
 	"varying vec2 vTexCoord;\n"
 	"void main()\n"
 	"{\n"
-	"	float Z = floor( texture2D( uSource, vTexCoord ).r * 16777215.0 + 0.5 );\n"
+	"	float Z = min( floor( texture2D( uSource, vTexCoord ).r * 16777215.0 + 0.5 ), 16777215.0 );\n"
 	"	float High = floor( Z / 65536.0 );\n"
 	"	float Middle = floor( (Z - High * 65536.0) / 256.0 );\n"
 	"	float Low = Z - High * 65536.0 - Middle * 256.0;\n"
@@ -679,15 +689,22 @@ void FOpenGLRenderInterface::CopyDepthBuffer( FRenderTarget* DestTarget, FRender
 	// so that we only blit the desired portion of the back buffer
 	FLOAT OffsetX = (FLOAT)Viewport->OffsetX / (FLOAT)RenDev->MainWidth;
 	FLOAT OffsetY = (FLOAT)Viewport->OffsetY / (FLOAT)RenDev->MainHeight;
-	// D3D coordinates (v down) of the source rectangle, onto a destination stored top row
-	// first, from a source stored bottom row first; a quarter texel inside the 2x2 block a
-	// half-size destination pixel covers, so the point sample is not a tie.
+	// The Xbox quad is an FScreenPrimUtil tile over the whole destination with texture
+	// coordinates (Offset, Offset + Scale), point filtered. That canvas puts pixel centres on
+	// texel centres, so destination pixel (x,y) samples at Offset + Scale * (x+0.5, y+0.5) /
+	// size, exactly as this quad does. For a half-size destination that is the corner shared
+	// by four source texels: a tie, which hardware resolves to the texel right and below
+	// ((2x+1, 2y+1)) and GL leaves to rounding. A quarter source texel is added to make it
+	// that texel always. The source is stored bottom row first, the destination top row
+	// first: v is mirrored.
+	FLOAT	U0		= OffsetX + 0.25f / RenDev->MainWidth,
+			V0		= OffsetY + 0.25f / RenDev->MainHeight;
 	FLOAT Rect[4] =
 	{
 		Viewport->ScaleX,
 		-Viewport->ScaleY,
-		OffsetX + 0.25f / RenDev->MainWidth,
-		1.f - OffsetY - 0.25f / RenDev->MainHeight
+		U0,
+		1.f - V0
 	};
 	RenDev->DrawPostQuad( RenDev->PostDepthCopyProgram, RenDev->PostDepthCopyRectLoc, RenDev->MainDepthStencil, DestTexture->FramebufferID, DestTexture->CachedWidth, DestTexture->CachedHeight, Rect, 1 );
 	RenDev->DepthBufferCopies++;

@@ -46,14 +46,20 @@ created on first use), a 256x1 ramp texture for the dynamic gamma. No new GL ent
    place where a vertical flip is decided.
 3. **Depth**: GL window depth equals D3D z (M5's clip fix-up maps z to 2z-w, depth range 0..1), so the 24-bit
    value in the depth texture is the value the Xbox ramp formula expects (`dwUV / D3DZ_MAX_D24S8`).
-4. **Half-texel offset**: Direct3D 8 puts pixel centres on integer coordinates, so a full-target quad with
-   coordinates 0..1 samples a same-size texture on texel *boundaries*. M5's clip fix-up makes GL rasterise as
-   D3D does, so this is reproduced, not corrected: bilinear reads average two by two texels exactly as on the
-   Xbox (the blur chain's half-texel shifts included). A **point-filtered** read on a boundary is a tie; hardware
-   takes the texel to the right/below (texel i for coordinate i), GL leaves it to rounding noise (which would
-   show as torn columns). For a pass with a point-filtered render-target stage the interface therefore shifts
-   the geometry 1/32 pixel less than the half pixel (`PointSampleNudge` in `GetGLMatrices`), i.e. samples
-   1/32 pixel further right and down. Nothing else changes; passes without such a stage are bit-identical to M6.
+4. **Half-texel offset** (corrected after the self-test; my first reading was wrong). Direct3D 8 puts pixel
+   centres on integer coordinates, so a full-target quad at 0..size with coordinates 0..1 would read a
+   same-size texture on texel *boundaries*. Epic's screen tiles do not: `FScreenPrimUtil`'s canvas matrix moves
+   every tile half a pixel up and left (`UnRenderUtil.h`, the `- 0.5f`), so destination pixel (x,y) samples at
+   ((x+0.5)/w, (y+0.5)/h): texel centres for a same-size copy, the shared corner of 2x2 texels for a half-size
+   one. M5's clip fix-up makes GL rasterise as D3D does, so the same holds here with no further correction.
+   Checked numerically (self-test `blur-h`, `blur-v`, `blur-box`, `bb-copy`; with the half pixel left out of
+   the expected values the same tests are off by 70 to 120 of 255). A **point-filtered** read exactly on a
+   texel boundary is a tie; hardware takes the texel to the right/below, GL leaves it to rounding noise. For a
+   pass with a point-filtered render-target stage the interface samples 1/32 pixel further right and down
+   (`PointSampleNudge` in `GetGLMatrices`), and `CopyDepthBuffer` adds a quarter source texel for the same
+   reason (a half-size target pixel (x,y) gets the depth of back-buffer pixel (2x+1, 2y+1): the tie of Epic's
+   quad resolved the hardware way; **that NV2A resolves it this way is my assumption**). Passes without such
+   a stage are bit-identical to M6.
 5. **Distortion** computes "this pixel in the back buffer" in its vertex shader. The Xbox fragment takes the
    screen position after its own viewport transform, minus 0.5 (Xbox pixel centres sit at +0.53); the port
    takes GL's window coordinates divided by the framebuffer size (`u_distortionScreen`), which lands exactly on
