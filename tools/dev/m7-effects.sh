@@ -48,6 +48,9 @@ dyngamma|DM-Deadbolt|1|100|34|on, dynamic gamma ramp applied to the picture|on, 
 dof-alpha|DM-Azure|1|120|42|on, depth-of-field blur alpha as script sets it (third person: 100)|on, DOFSHIPPEDALPHA 1 (as the shipped binary: 65)|-glshot=56,68 -glexec=61:DOFSHIPPEDALPHA+1
 azure|DM-Azure|1|120|42|off|on: depth of field on the distance, glow, water and torch distortion if in view|-nopostprocess -glshot=56,68 -glpptoggle=61
 octane|CTF-Octane|1|125|38|off|on: glow on the corridor lamps and on the emissive team markings of the pawn (no distortion glass is in view from this start)|-nopostprocess -glshot=56,68 -glpptoggle=61
+decay|DM-Decay|1|100|38|off: the icicles in the doorway are flat dark blue shapes|on: translucent ice (blended distortion, colour pass), heat shimmer over the torch on the right|-nopostprocess -glshot=50,62 -glpptoggle=55
+undertow|DM-Undertow|1|100|38|off|on: the green energy column (distortion material) glows|-nopostprocess -glshot=50,62 -glpptoggle=55
+recoil|CTF-Recoil|1|100|38|off|on: glow; a PSPlayerCamMaterial is drawn in this view (program PlayerCam links) but I could not point at it|-nopostprocess -glshot=50,62 -glpptoggle=55
 praxis-panes|DM-Praxis|0|115|40|off: flat periwinkle panes (the PC bug)|on: the sea seen through the panes, distorted|-nopostprocess -glshot=52,66 -glpptoggle=58
 '
 
