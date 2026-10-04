@@ -1,0 +1,44 @@
+# engine-uc2 holds the PORT SOURCE only. Game content lives out of tree in <WorkUC2>/assets/uc2
+# (UC2_ASSETS_DIR) and is never tracked here.
+
+# CMake build trees, one per preset. Regenerable; includes FetchContent checkouts under build-*/_deps/.
+/build/
+/build-*/
+
+*.o
+__pycache__/
+*.pyc
+/node_modules/
+
+# Game content must never enter this repo. These guard against an accidental in-tree drop.
+*.u
+*.unr
+*.utx
+*.usx
+*.ukx
+*.uax
+*.umx
+*.uix
+*.xpr
+*.xwb
+*.xsb
+*.xmv
+*.ogg
+*.ogv
+*.lin
+/Assets/
+/System/
+/Maps/
+/Textures/
+/StaticMeshes/
+/Animations/
+/Sounds/
+/Music/
+/Movies/
+/Save/
+/Cache/
+
+# Do NOT add a blanket *.a / *.lib / *.dll rule: a vendored prebuilt would be silently masked.
+
+# Per-machine local overrides.
+.claude/settings.local.json

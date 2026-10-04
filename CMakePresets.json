@@ -1,0 +1,81 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+    "configurePresets": [
+        {
+            "name": "native-base",
+            "hidden": true,
+            "generator": "Unix Makefiles",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
+        },
+        {
+            "name": "native",
+            "displayName": "Native Linux x86 (32-bit, the default)",
+            "description": "32-bit native build: the same pointer width and struct layout as wasm32, so it is the reference for the web build. Builds in build-native/.",
+            "inherits": "native-base",
+            "binaryDir": "${sourceDir}/build-native"
+        },
+        {
+            "name": "native64",
+            "displayName": "Native Linux x86_64",
+            "description": "64-bit native build (LP64). Builds in build-native64/.",
+            "inherits": "native-base",
+            "binaryDir": "${sourceDir}/build-native64",
+            "cacheVariables": { "UC2_ALLOW_64BIT": "ON" }
+        },
+        {
+            "name": "wasm",
+            "displayName": "Web (Emscripten/WASM) -- dev default",
+            "description": "-O2 with DWARF and assertions. Builds in build-wasm/. Source <WorkUC2>/env.sh first (sets EMSDK).",
+            "generator": "Unix Makefiles",
+            "binaryDir": "${sourceDir}/build-wasm",
+            "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+            "cacheVariables": { "UC2_WEB_PERF": "OFF", "UC2_WEB_DEBUG": "OFF" }
+        },
+        {
+            "name": "wasm-debug",
+            "displayName": "Web (Emscripten/WASM) -- -O0, last resort",
+            "inherits": "wasm",
+            "binaryDir": "${sourceDir}/build-wasm-debug",
+            "cacheVariables": { "UC2_WEB_DEBUG": "ON" }
+        },
+        {
+            "name": "wasm-perf",
+            "displayName": "Web (Emscripten/WASM) -- shipping",
+            "description": "-O3, no assertions, no debug info. Builds in build-wasm-perf/.",
+            "inherits": "wasm",
+            "binaryDir": "${sourceDir}/build-wasm-perf",
+            "cacheVariables": { "UC2_WEB_PERF": "ON", "CMAKE_BUILD_TYPE": "Release" }
+        },
+        {
+            "name": "windows",
+            "displayName": "Windows x86 (MinGW-w64 cross)",
+            "generator": "Unix Makefiles",
+            "binaryDir": "${sourceDir}/build-windows",
+            "toolchainFile": "${sourceDir}/cmake/toolchain-mingw-w64.cmake",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_C_FLAGS": "-fno-omit-frame-pointer",
+                "CMAKE_CXX_FLAGS": "-fno-omit-frame-pointer",
+                "MINGW_TARGET_ARCH": "i686",
+                "MINGW_THREAD_MODEL": "posix"
+            }
+        },
+        {
+            "name": "windows64",
+            "displayName": "Windows x86_64 (MinGW-w64 cross)",
+            "inherits": "windows",
+            "binaryDir": "${sourceDir}/build-windows64",
+            "cacheVariables": { "MINGW_TARGET_ARCH": "x86_64", "UC2_ALLOW_64BIT": "ON" }
+        }
+    ],
+    "buildPresets": [
+        { "name": "native", "configurePreset": "native" },
+        { "name": "native64", "configurePreset": "native64" },
+        { "name": "wasm", "configurePreset": "wasm" },
+        { "name": "wasm-debug", "configurePreset": "wasm-debug" },
+        { "name": "wasm-perf", "configurePreset": "wasm-perf" },
+        { "name": "windows", "configurePreset": "windows" },
+        { "name": "windows64", "configurePreset": "windows64" }
+    ]
+}
