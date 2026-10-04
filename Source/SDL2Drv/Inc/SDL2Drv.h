@@ -98,6 +98,7 @@ class USDL2Viewport : public UViewport
 
 	// Variables.
 	SDL_Window*			Window;
+	void*				GLContext;		// M5: SDL_GLContext, created for BLIT_OpenGL render devices
 	DWORD				BlitFlags;
 	DWORD				ViewportButtonFlags;
 	UBOOL				Captured;
@@ -140,6 +141,8 @@ class USDL2Viewport : public UViewport
 	void HandleEvent( const SDL_Event& Ev );
 #endif
 	void FocusChanged( UBOOL Gained );
+	UBOOL EnsureGLContext();
+	void DestroyGLContext();
 };
 
 #define AUTO_INITIALIZE_REGISTRANTS_SDL2DRV \
