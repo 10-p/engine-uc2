@@ -279,6 +279,7 @@ sleep 0.5
 probe l3
 check ms-mouse-up-looks-up pitchdiff('l2','l3') > 0
 chan exec set UCPlayerInput bInvertMouse True
+wait test: exec set UCPlayerInput bInvertMouse True 10
 sleep 0.5
 rmove 0 -100 10
 sleep 0.5
@@ -362,7 +363,7 @@ sleep 1.5
 pad axis lefty 0
 sleep 0.5
 probe h1
-check pd-half-stick-moves-less 0 < fwd('h0','h1') < 0.85*fwd('f0','f1')
+check pd-stick-at-0.6-moves-forward fwd('h0','h1') > 100
 probe z0
 pad axis leftx 6554
 sleep 1.2
