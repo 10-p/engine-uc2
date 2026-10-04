@@ -184,6 +184,25 @@ void UUC2GLRenderDevice::Destroy()
 	guard(UUC2GLRenderDevice::Destroy);
 	Super::Destroy();
 	Flush( NULL );
+
+	// M7: the render-target pool dies with this object, and FRenderTargetPool's destructor
+	// asserts that no reference is left. The camera effects release theirs when they are
+	// destroyed, which at exit can be after the device (on Xbox the game never exits). The
+	// targets still held are handed to their holders: no longer the pool's, so their
+	// RemovePoolRef does nothing (they are leaked, at exit).
+	FRenderTargetPool& Pool = RenderInterface.RenderTargetPool;
+	for( INT i=0; i<Pool.RenderTargets.Num(); i++ )
+	{
+		FRenderTarget* Held = Pool.RenderTargets(i);
+		if( Held && Pool.RefCounts(i) > 0 )
+		{
+			Held->RenderTargetPool	= NULL;
+			Held->PoolIndex			= INDEX_NONE;
+			Pool.RenderTargets(i)	= NULL;
+		}
+		Pool.RefCounts(i) = 0;
+	}
+
 	if( DefaultRenderTarget )
 	{
 		delete DefaultRenderTarget;
