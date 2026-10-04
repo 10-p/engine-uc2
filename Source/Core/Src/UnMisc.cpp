@@ -368,8 +368,10 @@ CORE_API TCHAR* appItoa( const INT Num )
 	return _itoa( Num, Buffer, 10 );
 #endif
 #else
-	appErrorf(TEXT("Not implemented"));
-	return TEXT("Not implemented");
+	// TCHAR is ANSI off MSVC (as engine-ut2004's UnAnsi.cpp does on Unix).
+	static TCHAR Buffer[20];
+	snprintf( Buffer, sizeof(Buffer), "%d", Num );
+	return Buffer;
 #endif
 }
 
@@ -389,8 +391,9 @@ CORE_API TCHAR* appI64toa( const SQWORD Num )
 	return _i64toa( Num, Buffer, 10 );
 #endif
 #else
-	appErrorf(TEXT("Not implemented"));
-	return TEXT("Not implemented");
+	static TCHAR Buffer[24];
+	snprintf( Buffer, sizeof(Buffer), "%lld", (long long)Num );
+	return Buffer;
 #endif
 }
 
