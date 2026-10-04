@@ -106,7 +106,11 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   coordinator. Limits: no gamma ramp under Xvfb, UI laid out for 640x480, no real-Windows render to compare
   against, about 776 Mesa shader-cache files were written to `~/.cache/mesa_shader_cache` before the cache was
   redirected into the prefix.
-- 2026-10-04 — **Session stopped at the usage limit with M4w and M5 in progress.** Their agents were asked to
-  commit at a clean state and stop. Resume from the notebooks in the worktrees: `../engine-uc2-m4w`
-  (`docs/porting/analysis/web-smoke.md`, branch `m4w`) and `../engine-uc2-m5`
-  (`docs/porting/analysis/gl-renderer.md`, branch `m5-gl`). Neither branch has been verified or merged.
+- 2026-10-04 — Work was interrupted with M4w and M5 in progress: both agents were cut off mid-edit with nothing
+  committed and no notebook yet (their changes survived as uncommitted edits in `../engine-uc2-m4w` and
+  `../engine-uc2-m5`). They were resumed with their context and told to checkpoint first. Lesson applied to
+  every later brief: commit and write the notebook after the first step, not at the end.
+- 2026-10-04 — Coordinator reviewed the wine reference pictures: the 640x480 main menu is complete (text,
+  layout, the Xbox "A" prompt), `DM-Deadbolt.png` is a proper lit in-game frame with HUD, and
+  `DM-Praxis-windows-A.png` shows the known PC bug on the original binary (the round room's window panes are
+  flat periwinkle with nothing behind them): the before-picture for M6/M7.
