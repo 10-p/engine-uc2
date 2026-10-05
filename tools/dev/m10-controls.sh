@@ -135,6 +135,8 @@ $fire
 sleep 4
 probe spawn
 check $p-match-started-pawn-spawned P['spawn'].pawn==1 and P['spawn'].level=='DM-Deadbolt'
+chan exec God
+wait test: exec God 10
 shot match
 SCEN
 }

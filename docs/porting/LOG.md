@@ -208,3 +208,15 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   that it sounds like the Xbox (captures sent to the owner to listen). Open in BLOCKERS.md: the localised
   taunt index defect in Epic's data, the 19 missing WAVs, absolute mix level against XACT. Headless runs must
   keep `ALSOFT_DRIVERS=null` (or the wave writer) so tests never play through the owner's desktop.
+- 2026-10-05 — **M10 green (controls), native code and ini data only; no script edited.** Merged
+  `m10-controls`. Game pads through SDL's GameController API after the Xbox driver (four ports, hot-plug,
+  thresholds, rumble); the menus' key table is ini data (`[GUI.EmulatedJoypad]`), mouse hover/click/right
+  click/wheel in the GUI, typing into on-screen keyboards; PC keyboard+mouse bindings in `DefUser.ini` next
+  to the pad layout. Shared-code fixes: static native lookup ignores case (an ini key `Delete` broke
+  UObject's `delete`), stick `SpeedBase` axes on PC no longer scaled by 20/dt. Coordinator's re-run on merged
+  main (with audio), `tools/dev/m10-controls.sh`: keyboard 16, mouse 18, text 7, pad 33, both 14 checks, all
+  PASS twice, 0 Critical; `verifyclasses` passes; audio self-test still 39/39. One check failed on the first
+  re-run because a bot killed the test player: the scenarios now make the player invulnerable (`God`) after
+  the spawn. The pad is SDL's virtual controller: no physical pad has been tried (owner). Script-side list
+  for M14 in `analysis/controls.md` (mouse/stick separation in `UCPlayerInput`, aim adhesion, lock-on with a
+  mouse, button glyphs, rebinding menu).
