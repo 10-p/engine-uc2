@@ -342,7 +342,27 @@ void UUC2GLRenderDevice::UpdateSampledTexture( FOpenGLTexture* Texture )
 			UC2GL_CreateColorTarget( this, DepthColorTexture, DepthColorFramebuffer, MainWidth, MainHeight );
 			DepthColorVersion = -1;
 		}
-		if( DepthColorVersion != MainDepthVersion )
+		if( !MainDepthStencil )
+		{
+			// M11, NOT IMPLEMENTED YET: a context without depth textures (CapDepthTexture; WebGL 1
+			// without WEBGL_depth_texture). The plan is a second draw of every depth-writing
+			// primitive into this target (docs/porting/analysis/web-renderer.md, "Fallbacks").
+			// Until then the depth colour says "near" everywhere: the depth of field, its only
+			// reader, then leaves the picture sharp instead of blurring all of it.
+			UC2GL_LOG_ONCE( TEXT("UC2GLDrv: no depth textures on this context: the depth of field has no depth to read and stays off (fallback not implemented)") );
+			if( DepthColorVersion == -1 )
+			{
+				glBindFramebuffer( GL_FRAMEBUFFER, DepthColorFramebuffer );
+				glDisable( GL_SCISSOR_TEST );
+				glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+				glClearColor( 0.f, 0.f, 0.f, 0.f );
+				glClear( GL_COLOR_BUFFER_BIT );
+				glEnable( GL_SCISSOR_TEST );
+				RenderInterface.RestoreAfterDeviceDraw();
+				DepthColorVersion = 0;
+			}
+		}
+		else if( DepthColorVersion != MainDepthVersion )
 		{
 			DrawPostQuad( PostDepthEncodeProgram, PostDepthEncodeRectLoc, MainDepthStencil, DepthColorFramebuffer, MainWidth, MainHeight, FlipRect, 0 );
 			DepthColorVersion = MainDepthVersion;
@@ -685,6 +705,24 @@ void FOpenGLRenderInterface::CopyDepthBuffer( FRenderTarget* DestTarget, FRender
 	if( !DestTexture || !DestTexture->FramebufferID || !DestTexture->DepthStencilID )
 	{
 		UC2GL_LOG_ONCE( TEXT("UC2GLDrv: CopyDepthBuffer into a render target without its own depth buffer is not supported") );
+		return;
+	}
+
+	if( !RenDev->MainDepthStencil || !RenDev->CapFragDepth )
+	{
+		// M11, NOT IMPLEMENTED YET: without depth textures there is nothing to copy from, and
+		// without gl_FragDepth (EXT_frag_depth) no way to write it. The plan is a depth test
+		// in the accumulation shaders against the scene's depth (web-renderer.md,
+		// "Fallbacks"). Until then the target's depth is cleared: what is drawn into it (the
+		// distortion accumulation) is not hidden by nearer scene geometry.
+		UC2GL_LOG_ONCE( TEXT("UC2GLDrv: no %s on this context: the scene's depth is not copied into the distortion accumulation target, distortion shows through nearer geometry (fallback not implemented)"), RenDev->MainDepthStencil ? TEXT("gl_FragDepth") : TEXT("depth textures") );
+		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, DestTexture->FramebufferID );
+		RenDev->glDisable( GL_SCISSOR_TEST );
+		RenDev->glDepthMask( GL_TRUE );
+		RenDev->glClearDepth( 1.0 );
+		RenDev->glClear( GL_DEPTH_BUFFER_BIT );
+		RenDev->glEnable( GL_SCISSOR_TEST );
+		RestoreAfterDeviceDraw();
 		return;
 	}
 

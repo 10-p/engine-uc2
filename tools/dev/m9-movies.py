@@ -108,6 +108,10 @@ def run_game(tree, name, secs, args, inject='', binary='./uc2.bin', xvfb=True, a
     cmd = [capped, '2G', str(secs), '--']
     if xvfb:
         cmd += ['xvfb-run', '-a', '-s', '-screen 0 1280x720x24']
+    if binary == './uc2.bin':
+        # M11: UC2_GLARGS="-gl4es" runs every scenario on the GL4ES/GLES2 twin of the driver
+        # (a -nullrenderer on the command line still wins: the launcher takes the first switch of its table)
+        args = args + os.environ.get('UC2_GLARGS', '').split()
     cmd += ['python3', inner, log, inject, binary] + args
     env = dict(os.environ, ALSOFT_DRIVERS=alsoft)
     t0 = time.time()
