@@ -308,3 +308,10 @@ table entry), C 22 casts (cast census 119 diagnostic lines -> 0), U 6, L 16 head
   10/10; **pinned: 64-bit and 32-bit at the same loc=(1531.9,3111.5,-34.1) rot=(0,-40880,0), static part
   100.000% within 2 levels**, whole frame 89.7% bit-identical, 0 GL errors.
 - New check `saves` (profiletest on both trees, files compared byte for byte, cross loads).
+
+Reading for what the compiler cannot see (2026-10-05): `long` in built code is only in Ogg callbacks
+(UC2AudioData.cpp, the API's own type), UnUnix.cpp's Mac branch, and `Engine/Src/palette.cpp`, a texture
+quantiser that reads 32-bit pixels as `unsigned long*` (8 bytes at LP64: it would read pixel pairs and run past
+the image). It has **no caller** in the tree (`HeckbertQuantize` is referenced nowhere; Engine's CMakeLists calls
+the file "a leftover tool source"), so it is left as Epic wrote it and listed here. Pointer hashes use object
+indices (`GetTypeHash(UObject*)`); literal `*4` sizes in memcpy are pixel rows.
