@@ -85,7 +85,7 @@ class Proc:
         elif self.kind == "server":
             argv = ["./ucc-bin", "server", self.url, "PORT=%d" % PORT] + common
         else:
-            argv = ["xvfb-run", "-a", "-s", "-screen 0 1024x768x24", "./uc2.bin", self.url, "-log"] + common
+            argv = ["xvfb-run", "-a", "-s", "-screen 0 1024x768x24", "./uc2.bin"] + ([self.url] if self.url else []) + ["-log"] + common
             argv += ["-inputtest=" + os.path.basename(self.inputcmd)]
             if self.kind == "listen":
                 argv += ["PORT=%d" % PORT]
@@ -232,7 +232,18 @@ def server(check, url="DM-Deadbolt", extra=(), wine=False):
 
 
 def client(check, name, render="null", extra=(), host="127.0.0.1"):
-    return Proc(check, name, "client", "%s:%d?Name=%s" % (host, PORT, name), render=render, extra=extra).start()
+    url = "%s:%d?Name=%s" % (host, PORT, name)
+    if render != "gl":
+        return Proc(check, name, "client", url, render=render, extra=extra).start()
+    # A GL client under Xvfb's software GL can stall for 20 s and more while it starts up (shader compiles; seen
+    # in a full-suite run under load): connecting from the command line then puts that stall into the handshake,
+    # where the server's InitialConnectTimeout drops the silent connection. Start it in the menu and connect
+    # once it renders, as a player does (the console OPEN command, here through -nettest).
+    c = Proc(check, name, "client", "", render=render, extra=extra).start()
+    c.wait(r"Bringing Level Menu\.MyLevel up for play", 180)
+    time.sleep(5)
+    c.send("exec open " + url)
+    return c
 
 
 def spawn_all(cs, tag, tries=12):
@@ -431,7 +442,10 @@ def check_dedicated2(ck="dedicated2", srv_extra=(), cli_extra=()):
         d2 = dist(sA["loc"], bA["loc"]) if sA and bA else 1e9
         result(d1 < 40 and d2 < 40, ck + ".seeother", "NetA sees NetB %.1f units from the server's NetB; NetB sees NetA %.1f from the server's"
                % (d1, d2))
-        # Movement of B changes what A sees.
+        # Movement of B changes what A sees. B first faces A (its view rotation is its own client's, not the
+        # placement's), so it walks along the path place_near checked clear instead of into a wall.
+        b.send("exec netaim NetA")
+        time.sleep(0.3)
         b.input("pad axis lefty -32768")
         time.sleep(1.2)
         b.input("pad axis lefty 0")
@@ -512,6 +526,8 @@ def check_listen():
         d1 = dist(pawn_of(lp, "NetB")["loc"], pawn_of(bp, "NetB")["loc"]) if pawn_of(lp, "NetB") and pawn_of(bp, "NetB") else 1e9
         d2 = dist(pawn_of(lp, "NetL")["loc"], pawn_of(bp, "NetL")["loc"]) if pawn_of(lp, "NetL") and pawn_of(bp, "NetL") else 1e9
         result(d1 < 40 and d2 < 40, ck + ".seeother", "NetB: client vs listen server %.1f units; NetL: %.1f" % (d1, d2))
+        b.send("exec netaim NetL")   # walk along the checked path (see dedicated2)
+        time.sleep(0.3)
         b.input("pad axis lefty -32768")
         time.sleep(1.2)
         b.input("pad axis lefty 0")

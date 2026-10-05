@@ -572,3 +572,19 @@ has them, polled for up to 10 s. An 8-minute soak passes the packet-id wrap (~16
   (server 3): property updates lost after the wrap are never resent, so a client's view of the game silently
   goes stale minutes into any lossy match. alive/rss/clean still PASS (nothing crashes or times out), which is
   why the earlier soak (no loss) could not see it.
+
+### Step L6: full suite on the fix -- 86 PASS, 3 FAIL; my first give-up was wrong; two harness weaknesses
+
+`NET_SOAK_MIN=10 tools/dev/net-test.sh` (fresh tree, `logs/net/loss-full-run.txt`): 86 PASS (dedicated1,
+dedicated2, handshake-loss 10/10, handshake-compat 6/6, travel, disconnect, lag, soak incl. `.views`); FAIL:
+- glshot.spawn/.screenshot: the GL client gave up its handshake ("no WELCOME after 20 s") -- MY step-L2 give-up
+  fired wrongly. The software-GL client stalled for 20+ s right after HELLO (its NetDriver->Time read 0.000003
+  when it processed the CHALLENGE, then jumped past 20 in one frame); the check ran before that tick's packets
+  were processed and measured from the start of the connection. Fixed (UnPenLev.cpp): the give-up is measured
+  from the last control message received (`GUC2HandshakeProgress`, updated in NotifyReceivedText) and checked
+  after TickDispatch, so a long frame on our side never counts. (The server's own Epic InitialConnectTimeout
+  also dropped that silent client after 20 s; the harness now starts a GL client in the menu and connects
+  with the console `OPEN` once it renders, as a player does.)
+- listen.clientmoves 56.5 units: NetB walked into a wall -- its view rotation is its own client's, not the
+  placement's. The harness now turns the walker to face the other player first (NETAIM), along the path
+  place_near checked clear (dedicated2/lag the same).
