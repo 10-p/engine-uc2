@@ -82,8 +82,8 @@ check_verify() {
   layout_of "$sys" "$repo/$build/Source/UCC/ucc-bin" "$p" 3G; rc=$?
   layout_of "$rsys" "$repo/$refbuild/Source/UCC/ucc-bin" "$r" 2G > /dev/null
   # Mismatch lines without their numbers, 64-bit ones the 32-bit build does not have.
-  new=$(comm -23 <(grep -a '^SIZE\|^OFFSET' "$p.check.txt" | sed -E 's/:.*//' | sort -u) \
-                 <(grep -a '^SIZE\|^OFFSET' "$r.check.txt" | sed -E 's/:.*//' | sort -u))
+  new=$(LC_ALL=C comm -23 <(grep -a '^SIZE\|^OFFSET' "$p.check.txt" | sed -E 's/:.*//' | LC_ALL=C sort -u) \
+                 <(grep -a '^SIZE\|^OFFSET' "$r.check.txt" | sed -E 's/:.*//' | LC_ALL=C sort -u))
   local nat scan ph m64 m32
   nat=$(grep -a -o "64-bit native size check: [0-9]* classes, [0-9]* mismatches while linking" "$p.log")
   scan=$(grep -a -o "bytecode scan: [0-9]* scripts read" "$p.log")
