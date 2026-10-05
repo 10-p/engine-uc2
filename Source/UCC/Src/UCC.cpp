@@ -321,6 +321,65 @@ static UBOOL VerifyNativeClasses()
 }
 #endif
 
+#if __STATIC_LINK && !defined(_MSC_VER)
+// M13: "ucc profiletest save|load <profile> <export.txt>": the save game format across pointer widths.
+// save: a profile of the configured class with a deterministic non-default value in every plain property
+// (ints, floats, bytes, bools, names, strings), written through ULoadSaveManager as the game does
+// (System/Profiles/<profile>/AVARIS_PROFILE.PRO); load: read it back. Either way every property is exported as
+// text to <export.txt>, so a profile saved by one build and loaded by another can be compared with the values
+// it was saved with (tools/dev/m13-64bit.sh `saves`). Returns success.
+static UBOOL ProfileTest( const TCHAR* Parms )
+{
+	FString Mode, Name, OutFile;
+	if( !ParseToken(Parms,Mode,0) || !ParseToken(Parms,Name,0) || !ParseToken(Parms,OutFile,0) )
+		return 0;
+	UObject::LoadPackage( NULL, TEXT("Engine"), LOAD_NoFail );
+	ULoadSaveManager* Manager = ConstructObject<ULoadSaveManager>( ULoadSaveManager::StaticClass() );
+	Manager->Init( NULL );
+	UClass* Cls = Manager->getGameProfileClass() ? Manager->getGameProfileClass() : UPlayerProfile::StaticClass();
+	UPlayerProfile* Profile = ConstructObject<UPlayerProfile>( Cls );
+	UBOOL Ok;
+	if( Mode==TEXT("SAVE") )
+	{
+		INT n = 0;
+		for( TFieldIterator<UProperty,CLASS_IsAUProperty> It(Cls); It; ++It, n++ )
+		{
+			if( It->PropertyFlags & (CPF_Transient|CPF_Native) )
+				continue;
+			for( INT j=0; j<It->ArrayDim; j++ )
+			{
+				BYTE* Data = (BYTE*)Profile + It->Offset + j*It->ElementSize;
+				if( Cast<UIntProperty>(*It) )
+					*(INT*)Data = 1000 + 7*n + j;
+				else if( Cast<UFloatProperty>(*It) )
+					*(FLOAT*)Data = n + 0.25f*j + 0.5f;
+				else if( Cast<UByteProperty>(*It) )
+				{
+					UEnum* Enum = ((UByteProperty*)*It)->Enum;
+					*Data = (BYTE)(Enum && Enum->Names.Num() ? (n+j) % Enum->Names.Num() : (3*n+j) & 0x7f);
+				}
+				else if( Cast<UBoolProperty>(*It) )
+					*(BITFIELD*)Data ^= ((UBoolProperty*)*It)->BitMask;
+				else if( Cast<UNameProperty>(*It) )
+					*(FName*)Data = FName( It->GetName() );
+				else if( Cast<UStrProperty>(*It) )
+					*(FString*)Data = FString::Printf( TEXT("%s%i"), It->GetName(), j );
+			}
+		}
+		Profile->ProfileName = Name;
+		Profile->SetDirty();
+		Profile->SetTransient( false );
+		Ok = Profile->SaveProfile();
+	}
+	else
+		Ok = Profile->LoadProfile( Name );
+	FStringOutputDevice Out;
+	UObject::ExportProperties( Out, Cls, (BYTE*)Profile, 0, NULL, NULL );
+	appSaveStringToFile( Out, *OutFile );
+	return Ok;
+}
+#endif
+
 int main( int argc, char* argv[] )
 {
     #if __LINUX__ || defined(__MINGW32__)
@@ -440,6 +499,15 @@ int main( int argc, char* argv[] )
 		{
 			UBOOL Ok = VerifyNativeClasses();
 			Warn.Logf( TEXT("%s (details: the VERIFY lines in the log)"), Ok ? TEXT("All native class layouts match") : TEXT("Class layout mismatches found") );
+			ErrorLevel = Ok ? 0 : 1;
+		}
+#endif
+#if __STATIC_LINK && !defined(_MSC_VER)
+		else if( Token==TEXT("PROFILETEST") )	// M13
+		{
+			const TCHAR* Parms = appCmdLine();
+			UBOOL Ok = ProfileTest( Parms );
+			Warn.Logf( TEXT("PROFILETEST: %s"), Ok ? TEXT("ok") : TEXT("FAILED") );
 			ErrorLevel = Ok ? 0 : 1;
 		}
 #endif

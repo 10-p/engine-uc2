@@ -126,6 +126,14 @@ add_definitions(-DSUPPORTS_PRAGMA_PACK=1)
 
 # char is signed on x86 and unsigned on arm (and the code was written for signed char). The audit build
 # (preset native64-uchar) inverts it to show the code does not depend on it (M13, docs/porting/analysis/64bit.md).
+# M13: sanitizer builds (preset native64-asan). -fno-sanitize=vptr,alignment: UE's placement construction of
+# objects trips UBSan's vptr check at start-up, and the script mirrors are pack(4) on purpose (8-byte pointers on
+# 4-byte boundaries). The engine allocator is plain malloc on Linux (FMallocAnsi), so ASan sees every block.
+set(UC2_SANITIZE "" CACHE STRING "-fsanitize= list for every target, e.g. address,undefined (empty: none)")
+if(UC2_SANITIZE)
+  add_compile_options(-fsanitize=${UC2_SANITIZE} -fno-sanitize=vptr,alignment -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=${UC2_SANITIZE} -fno-sanitize=vptr,alignment)
+endif()
 option(UC2_UNSIGNED_CHAR_AUDIT "Build with -funsigned-char (arm64's char) instead of -fsigned-char" OFF)
 if(UC2_UNSIGNED_CHAR_AUDIT)
   add_compile_options(-pipe -funsigned-char -fno-strict-aliasing)
@@ -135,6 +143,12 @@ else()
 endif()
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fpermissive> -fno-lifetime-dse)
+  if(UC2_PTR_BYTES EQUAL 8)
+    # M13: an integer widened into a pointer is an error on 64-bit targets. (A pointer narrowed into an int is
+    # already an error in C++, but -fpermissive turns it into a warning and GCC has no switch to make only that
+    # one an error again: tools/dev/m13-cast-census.sh counts it in a build log; 0 since M13.)
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Werror=int-to-pointer-cast>)
+  endif()
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-register>)
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fdelayed-template-parsing>

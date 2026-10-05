@@ -2,12 +2,24 @@
 
 Newest first. Remove an entry when it is resolved and say how in `LOG.md`.
 
+## Open (M13, 2026-10-05)
+
+- A dedicated server hung once on exit after SIGTERM (64-bit census, OD-Prism: "Preparing to exit." then a futex
+  wait for minutes); not reproduced in 6 retries. The SIGTERM handler formats and logs from inside the signal
+  handler (`Core/Src/UnUnix.cpp` `HandleSignal` -> `appRequestExit` -> `debugf`), which is not async-signal-safe on
+  any width. `tools/dev/map-census.sh` cannot see such a hang (its `timeout` has no `-k`). Details:
+  `analysis/64bit.md` step 8.
+
 ## Needs the owner
 
 - Reddit thread by VBelov_UZ (`/r/unrealtournament/comments/1t9dn3v`): blocked for the agent's fetch tools.
   Only needed if it says more than `reference/community/uc2-test-suite/README_TESTER.md`.
 - Xbox-look visual oracle (wanted at M6/M7): xemu plus its MCPX ROM, BIOS and HDD image.
-- arm64 (M13): `sudo apt install g++-aarch64-linux-gnu qemu-user`.
+- arm64 (M13): `sudo apt install g++-aarch64-linux-gnu qemu-user qemu-user-binfmt` for `cmake --preset arm64`
+  (toolchain file and preset exist since M13, never configured: no compiler here). `ucc-bin` needs nothing more; the
+  client additionally needs the arm64 X11/GL development packages through multiarch (`sudo dpkg --add-architecture
+  arm64`, then `libx11-dev:arm64 libxext-dev:arm64 libxrandr-dev:arm64 libxcursor-dev:arm64 libxi-dev:arm64
+  libxss-dev:arm64 libgl-dev:arm64 libasound2-dev:arm64 libpulse-dev:arm64`) because SDL2 is built from source.
 - Canonical config (M15): retail and leak disagree on `Characters.ini`, `Gametypes.ini`, `Maplists.ini` and 14
   localisation files; the owner should see the per-file diff before one side is chosen.
 - Depth-of-field alpha (visible from M7): we corrected a header that had fallen behind its script, which

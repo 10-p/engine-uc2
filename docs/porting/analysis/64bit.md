@@ -231,3 +231,20 @@ declared in the opposite order in C++ and script — to compare with the 32-bit 
   audio, movies, glselftest, effects, pinned, psh2glsl, soak, leftovers; `M13_TREE`/`M13_BUILD` select the
   `-funsigned-char` build. Logs under `logs/m13` (other trees: `logs/m13/<tree>`, with `logs/<tree>` a link,
   because the suites write to `logs/<tree>`).
+
+### Step 8 — first census, an exit hang seen once, test hooks (2026-10-05)
+
+- 64-bit census (`CENSUS_NAME=m13-census CENSUS_PORT=7880 bin/capped 8G 1800 -- tools/dev/map-census.sh
+  build-native64 15 4`): **maps 58, PASS 58, FAIL 0** (`logs/m13-census/summary.tsv`).
+- Seen once in that census: the OD-Prism server got its SIGTERM at 15 s, logged `appRequestExit(0)` and
+  `Exit: Preparing to exit.`, then hung (main thread in a futex wait, the file-stream thread sleeping) until I
+  killed it by PID minutes later; the census still says PASS because `timeout` without `-k` reports 124 whatever
+  happens after the TERM. Six more runs of the same map exited in 16-17 s. Not reproduced, not diagnosed (gdb
+  cannot attach here: ptrace_scope 1). Candidates, both width-independent: the SIGTERM handler is not
+  async-signal-safe (`HandleSignal` -> `appRequestExit` -> `debugf`, formatting and the log lock from inside a
+  signal handler), or a lock taken in `UObject::StaticExit`. Left for the owner's list (BLOCKERS.md).
+- `CMakeLists.txt`: `-Werror=int-to-pointer-cast` (C++) on 64-bit targets; `UC2_SANITIZE` + preset
+  `native64-asan` (`address,undefined`, minus `vptr`/`alignment`).
+- `ucc-bin profiletest save|load <profile> <export.txt>` (UCC.cpp): writes a profile with a deterministic value
+  in every plain property through `ULoadSaveManager` (the game's own save path) or loads one, and exports every
+  property as text: the cross-width save test.
