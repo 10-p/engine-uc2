@@ -142,15 +142,20 @@ public:
 
 		if ( bSerializeObject )
 		{
+			// M13: a saved object reference is always written as None in 4 bytes, the size it had in every
+			// shipped build: sizeof(UObject*) would make a 64-bit profile unreadable by a 32-bit game (and every
+			// property tag after it misplaced). Loading reads the 4 bytes and gives None, as before.
 			if ( IsSaving() )
 			{
 				// null out object references before saving.
-				UObject* Obj = NULL;
-				Serialize( &Obj, sizeof(UObject*) );
+				INT Obj = 0;
+				Serialize( &Obj, sizeof(INT) );
 			}
 			else
 			{
-				Serialize( &Res, sizeof(UObject*) );
+				INT Obj = 0;
+				Serialize( &Obj, sizeof(INT) );
+				Res = NULL;
 			}
 		}
 

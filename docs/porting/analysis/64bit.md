@@ -219,3 +219,15 @@ declared in the opposite order in C++ and script — to compare with the 32-bit 
   windows64. Its picture comparison moved to `tools/dev/pinned-compare.py` (unchanged code) so M13 reuses it.
 - `tools/dev/m10-controls.sh`/`m12-wine-smoke.sh`: main's `b367ae0` hunks (`-nostartupmovies`, the 1 s click)
   applied verbatim, so the merge sees one version.
+
+### Step 7 — saved data is width-independent; the verification script (2026-10-05)
+
+- **Save games** (`FArchiveSaveGame`, Engine/Inc/ULoadSaveManager.h; profiles in `System/Profiles/<name>/`):
+  object references are always saved as None, but in `sizeof(UObject*)` bytes — 4 in every shipped build, 8 at
+  64-bit, so a 64-bit profile would not load in a 32-bit game (and vice versa: every later byte misplaced). Now
+  always 4 bytes (an INT 0) on save; load reads 4 bytes and sets None. Byte-for-byte the old format at 32-bit.
+  The rest of the format is fixed-width (`<<` of INT/FLOAT/FString/FName index; name table at the end).
+- `tools/dev/m13-64bit.sh` (new): the gate's checks as one script (see its header): verify, census, controls,
+  audio, movies, glselftest, effects, pinned, psh2glsl, soak, leftovers; `M13_TREE`/`M13_BUILD` select the
+  `-funsigned-char` build. Logs under `logs/m13` (other trees: `logs/m13/<tree>`, with `logs/<tree>` a link,
+  because the suites write to `logs/<tree>`).
