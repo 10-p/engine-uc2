@@ -40,6 +40,8 @@
 #              controls keyboard+pad, audio self-test 39/0, movie self-test 96/0, glselftest 10/10, and the pinned
 #              picture against main's 32-bit build (M13_BASEBUILD, default <WorkUC2>/engine-uc2/build-native, read
 #              only, copied into run tree M13_BASE=m13-main32): same view, static part >= 99.9% within 2 levels
+#   asan       (not in the default list) the native64-asan build (tree m13-asan): verifyclasses, a server with
+#              bots, the menu and a map with bots; 0 AddressSanitizer reports; UBSan sites listed
 #   leftovers  no uc2.bin/ucc-bin/Xvfb of the m13 trees running
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -105,16 +107,27 @@ check_verify() {
 
 check_census() {
   local c64=m13-census-$tree c32=m13-census-$ref s64 s32 n64 p64 diffs
+  # A server that crashes while exiting after its TERM hangs (BLOCKERS.md: exit-time crash) and map-census.sh's
+  # timeout has no -k: kill such a server of these trees 60 s after its TERM and count it.
+  : > "$out/census-hung.txt"
+  ( while :; do
+      for p in $(pgrep -x ucc-bin); do
+        case "$(readlink /proc/$p/cwd 2>/dev/null)" in "$work"/run/m13-census-*) ;; *) continue;; esac
+        local age; age=$(ps -o etimes= -p $p 2>/dev/null | tr -d ' ')
+        [ -n "$age" ] && [ "$age" -gt 75 ] && { echo "$(tr '\0' ' ' < /proc/$p/cmdline) in $(readlink /proc/$p/cwd)" >> "$out/census-hung.txt"; kill -KILL $p; }
+      done; sleep 10; done ) &
+  local watcher=$!
   for c in "$c64:$build:7880" "$c32:$refbuild:7890"; do
     local name=${c%%:*} rest=${c#*:}; local b=${rest%%:*} port=${rest#*:}
     mkdir -p "$out/$name"; [ -L "$work/logs/$name" ] || { rm -rf "$work/logs/$name"; ln -sfn "$out/$name" "$work/logs/$name"; }
     CENSUS_NAME=$name CENSUS_PORT=$port "$capped" 8G 1800 -- "$repo/tools/dev/map-census.sh" "$repo/$b" 15 4 > "$out/$name.out" 2>&1
   done
+  kill $watcher 2>/dev/null; wait $watcher 2>/dev/null
   s64=$out/$c64/summary.tsv; s32=$out/$c32/summary.tsv
   n64=$(wc -l < "$s64" 2>/dev/null || echo 0); p64=$(grep -c '^PASS' "$s64" 2>/dev/null || echo 0)
   diffs=$(diff <(cut -f1,2 "$s64" 2>/dev/null) <(cut -f1,2 "$s32" 2>/dev/null) | grep '^[<>]' | tr '\n' ' ')
   if [ "$n64" = 58 ] && [ "$p64" = 58 ] && [ -z "$diffs" ]; then
-    result PASS census "58 maps, 58 PASS at 64-bit, the same per-map result as the 32-bit build ($(grep -c '^PASS' "$s32") PASS); $s64"
+    result PASS census "58 maps, 58 PASS at 64-bit, the same per-map result as the 32-bit build ($(grep -c '^PASS' "$s32") PASS); servers hung on exit and killed: $(grep -E -c "m13-census-$tree-[0-9]+/" "$out/census-hung.txt") at 64-bit, $(grep -E -c "m13-census-$ref-[0-9]+/" "$out/census-hung.txt") at 32-bit (BLOCKERS.md); $s64"
   else
     result FAIL census "maps $n64, PASS $p64; differences to 32-bit: ${diffs:-none}; $s64"
   fi
@@ -241,7 +254,7 @@ SCEN
         printf '%s\t%s\n' $(( $(date +%s) - t0 )) "$(awk '/^VmRSS/{print $2}' /proc/$p/status 2>/dev/null)" >> "$rss"
       done; sleep 30; done ) &
   pid=$!
-  M10_TREE=$tree M10_OUT=$out/soak M10_MEM=3G "$repo/tools/dev/m10-controls.sh" --file "$scen" soak -glerrors > "$out/soak.line" 2>&1
+  M10_TREE=$tree M10_OUT=$out/soak M10_MEM=3G M10_SECS=$((soak + 300)) "$repo/tools/dev/m10-controls.sh" --file "$scen" soak -glerrors > "$out/soak.line" 2>&1
   kill $pid 2>/dev/null; wait $pid 2>/dev/null
   local line; line=$(tail -1 "$out/soak.line")
   # Flat RSS: over the second map (from 3 min after it came up to the end) the growth stays under 5%.
@@ -313,6 +326,26 @@ check_base32() {	# gate (c): the 32-bit build after M13 behaves as before (tree 
     result PASS base32 "32-bit after M13: verifyclasses '$v'; controls $ctl $st; $mv; $gl; pinned vs main's build ($base) at the same $vr: static part ${2}% within 2 levels, whole frame ${3}% bit-identical"
   else
     result FAIL base32 "verify rc $rc '$v'; controls $ctl; '$st'; '$mv'; '$gl'; pinned '$vr' vs '$vb': $cmp"
+  fi
+}
+
+check_asan() {	# not in the default list: the sanitizer build (preset native64-asan) on a menu and a map
+  local t=${M13_ASAN_TREE:-m13-asan} b=${M13_ASAN_BUILD:-build-native64-asan} o=$out/asan s n asan ub
+  s=$work/run/$t/System; mkdir -p "$o"
+  "$repo/tools/dev/mkrun-uc2.sh" "$repo/$b" "$t" > /dev/null || { result FAIL asan "no tree from $b"; return; }
+  export ASAN_OPTIONS=${ASAN_OPTIONS:-detect_leaks=0:alloc_dealloc_mismatch=0:abort_on_error=0:halt_on_error=0}
+  export UBSAN_OPTIONS=${UBSAN_OPTIONS:-print_stacktrace=1:halt_on_error=0}
+  ( cd "$s" && "$capped" 6G 900 -- ./ucc-bin verifyclasses > "$o/verify.out" 2>&1 )
+  ( cd "$s" && "$capped" 6G 120 -- timeout -s INT 60 ./ucc-bin Engine.ServerCommandlet 'DM-Deadbolt?NumBots=4' -log > "$o/server.out" 2>&1 )
+  ( cd "$s" && "$capped" 6G 200 -- xvfb-run -a -s "-screen 0 1280x720x24" timeout -s INT 90 ./uc2.bin -log -nostartupmovies -glerrors > "$o/menu.out" 2>&1 )
+  ( cd "$s" && "$capped" 6G 300 -- xvfb-run -a -s "-screen 0 1280x720x24" timeout -s INT 150 ./uc2.bin 'DM-Deadbolt?NumBots=4' -log -nostartupmovies -glerrors > "$o/map.out" 2>&1 )
+  asan=$(cat "$o"/*.out | grep -a -c 'ERROR: AddressSanitizer')
+  ub=$(cat "$o"/*.out | grep -a 'runtime error:' | sed -E 's/^.*\/Source\///' | sort -u | tee "$o/ubsan-unique.txt" | wc -l)
+  n=$(grep -a -h -c 'Bringing Level' "$o"/server.out "$o"/menu.out "$o"/map.out | paste -sd+ | bc)
+  if [ "$asan" = 0 ] && grep -a -q 'all native class layouts match' "$o/verify.out" "$s/ucc.log" 2>/dev/null; then
+    result PASS asan "ASan: 0 reports over verifyclasses, a 60 s server, the menu and DM-Deadbolt with bots ($n level loads); UBSan: $ub distinct runtime-error sites ($o/ubsan-unique.txt)"
+  else
+    result FAIL asan "ASan reports: $asan; UBSan sites: $ub; see $o"
   fi
 }
 

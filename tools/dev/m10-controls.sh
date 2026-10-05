@@ -22,6 +22,7 @@
 #   M10_STOPSIG=INT         signal that ends the game after the scenario (default TERM)
 #   M10_MEM=3G              capped's ceiling (default 2G)
 #   M10_PROC=uc2.exe        process name for the "left running" check (default uc2.bin)
+#   M10_SECS=1500          --file only: the run's time limit in seconds (default 240; M13's soak is longer)
 #   M10_URL=<url>           map URL given to the game as its first argument (default none: the menu)
 #   M10_SETTLE=12           seconds between "level up for play" and the Fire that starts the match (default 6;
 #                           under wine the first frames of the level come later and an early Fire is lost)
@@ -102,7 +103,7 @@ INNER
 
 if [ "${1-}" = "--file" ]; then
   scen=$(cd "$(dirname "$2")" && pwd)/$(basename "$2"); name=$3; shift 3
-  run_one "$name" "$scen" 240 "$@"
+  run_one "$name" "$scen" "${M10_SECS:-240}" "$@"
   exit 0
 fi
 

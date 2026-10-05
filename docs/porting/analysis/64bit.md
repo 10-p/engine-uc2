@@ -388,3 +388,27 @@ the engine: only `TimeToDie` in UnThreadingPosix.cpp, a naturally aligned member
   32-bit, no exit hang this time), controls FAIL: pad 30/33 (`pd-b-closes-pause-menu` again, and the two rumble
   checks) — run while the wasm and windows builds were compiling on the same machine. Pad in isolation passed
   33/33 at both widths earlier; repeated after the run without load (step 13).
+
+### Step 13 — checkpoint after the second cut-off (2026-10-05 12:30)
+
+Full run 1 (`logs/m13/full-run1.txt`, 08:51-10:20, completed before the cut-off) — observed:
+verify PASS; census PASS (58/58, same as 32-bit, no exit hang); controls FAIL (pad 30/33 under build load; the
+other four PASS); audio PASS (self-test 39/0, menu music -19.02 dB, 4 captures clean); movies PASS (96/0,
+m9-movies 19/0); glselftest PASS 10/10; effects PASS (14 effects, critical=0 glerrors=0 programs_failed=0+0);
+pinned PASS (64 vs 32, same view, static 99.997% within 2 levels); psh2glsl PASS; **saves FAIL**; **soak FAIL**;
+leftovers PASS.
+
+- **saves FAIL = a real, width-independent bug**: the same build cannot load the profile it just saved
+  (`profiletest save T1` then `load T1` on 64-bit: "Unable to load profile"). `ULoadSaveManager::ExistsGameObject`
+  asks `GFileManager->Exists(<profile directory>/)`; Core's default `Exists` is `FileSize()>=0`, and the POSIX file
+  manager (used on Linux, the web and MinGW) returns -1 for a directory. So no saved profile ever loaded outside
+  Epic's Windows file manager — the "Unable to load profile" lines in M10's logs on main are this. Fix:
+  `FFileManagerUnix::Exists` also answers for directories (`stat`). Behaviour change on every GCC target (profiles
+  load now), deliberately.
+- **soak FAIL = harness**: `m10-controls.sh --file` gives every scenario 240 s; the 1200 s soak was cut at 210 s
+  (RSS 267 -> 329 MB over the first 3.5 min of the first map, still loading/precaching). New `M10_SECS` (default
+  240) for `--file`; the soak passes `soak + 300`.
+- Pad failures (two runs under build load) to be rerun without load.
+- Script: census now kills (and counts) servers that hang on exit (the exit-time crash), `asan` check added
+  (not in the default list). Never edit `m13-64bit.sh` while it runs (bash reads the file as it goes; it happened
+  once at 08:55 and the running copy was restored through `/proc/<pid>/fd/255`).
