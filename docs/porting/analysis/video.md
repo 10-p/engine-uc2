@@ -304,7 +304,7 @@ warning.
   (256x256), Portrait_Char_Anubis (256x512), Reactor_01 (128x128, 15 fps), TVDisplaySelket2 (128x96, 15 fps).
   Per case: frame count = packet count; a new picture exactly at ffmpeg's decoded pictures (03_AscPre3: 1,310 new
   + 13 held of 1,323); **every picture identical** to ffmpeg's decode (Adler-32 of the Y'CbCr planes = ffmpeg
-  `framecrc`; e.g. 1310/1310, 600/600-of-593 decoded...); BGRA of two pictures vs ffmpeg swscale BT.601 limited
+  `framecrc`; e.g. 03_AscPre3 1310 of 1310 decoded pictures); BGRA of two pictures vs ffmpeg swscale BT.601 limited
   range with replicated chroma: **max difference 1** (0 values differ by more than 1); the fixed-point matrix vs
   the float formula: max 1; loop by frame steps (frame 0's picture after the last), loop on the real-time clock
   (two wraps, 0 wrong), random 5-40 ms real-time steps (frame error 0, ends at the length); with sound (simulated
