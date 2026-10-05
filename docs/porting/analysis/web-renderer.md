@@ -401,3 +401,19 @@ Two more gl4es defects found here, both worked around in the driver:
 
 Note for G5: gl4es keeps a CPU copy of every buffer's contents (`buff->data`), so vertex and index data
 exist twice in the process (three times with the engine's own copy).
+
+## Order of work from here, and the two fallbacks that are NOT implemented (2026-10-05)
+
+`tools/dev/m11-twin.sh` exists (checks: shaders, gputest, boot, selftest, progtest, pinned, effects, m6,
+fallbacks, movies); it has not been run end to end yet. Decision on order: the Emscripten build and the
+browser run (G3, G4) come before the two missing fallbacks, because they are the product and because both
+capabilities exist on every WebGL 1 implementation this is likely to meet (ANGLE on desktop GPUs; to be
+confirmed by the extension list of the browser run). The fallbacks stay on the list, not dropped.
+
+| Capability | Status | What happens today without it (`-glno...` on the twin) | Planned implementation, hook |
+|---|---|---|---|
+| S3TC (`-glnos3tc`) | fallback implemented | the engine's DXT decoder, RGBA8 upload (both bindings) | - |
+| texture max level (`-glnomaxlevel` on desktop; always on GLES) | implemented | mip chains completed by the driver | - |
+| depth textures (`-glnodepthtexture`) | **NOT implemented** | main depth is a renderbuffer; the depth of field gets a constant "near" depth colour and leaves the picture sharp (log line); the distortion accumulation target's depth is cleared, so distortion is not hidden by nearer geometry | `UUC2GLRenderDevice::UpdateSampledTexture` (depth usage): maintain the depth colour by a second draw of every depth-writing primitive from `DrawPrimitive` into a target of its own (position-only program writing `gl_FragCoord.z` as three bytes; alpha-tested passes need stage 0's alpha) |
+| `gl_FragDepth` (`-glnofragdepth`) | **NOT implemented** | `CopyDepthBuffer` clears the destination's depth instead of copying: distortion shows through nearer geometry | a depth test inside the fragment shader of program passes drawn into that target (sample the scene depth at `gl_FragCoord`, `discard`); needs a hook at the top of `main` in the generated shaders (`tools/psh2glsl.py`) |
+| 32-bit indices (`-glnouintindex`) | **NOT implemented, not even guarded** | gl4es converts the indices to 16 bits (wrong above 65535 vertices) | split the draw by vertex range; hook `FOpenGLRenderInterface::DrawPrimitive` |
