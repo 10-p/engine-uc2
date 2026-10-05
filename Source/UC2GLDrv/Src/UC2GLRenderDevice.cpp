@@ -27,10 +27,9 @@ D3DTEXTUREOP DUMMY_MODULATE2X = D3DTOP_MODULATE2X;
 #undef GL_EXT
 #undef GL_PROC
 
-void* UC2GL_GetProcAddress( const char* Name )
-{
-	return SDL_GL_GetProcAddress( Name );
-}
+#define GL_RAW(ret,func,parms) ret (APIENTRY *UUC2GLRenderDevice::Raw_##func)parms = NULL;
+#include "UC2GLRawFuncs.h"
+#undef GL_RAW
 
 // -glshot=<seconds>[,<seconds>...]: run the engine's SHOT exec at those times after the
 // first frame (verification; the files are System/ShotNNNNN.bmp).
@@ -132,6 +131,10 @@ UUC2GLRenderDevice::UUC2GLRenderDevice()
 	GLErrorFrames			= 0;
 	GLErrorCount			= 0;
 	appMemzero( &DeviceCaps, sizeof(DeviceCaps) );
+	IsGLES					= 0;
+	CapDepthTexture = CapFragDepth = CapUIntIndex = CapTextureMaxLevel = CapFragmentHighp = 1;
+	MainDepthRenderbuffer	= 0;
+	QuadBuffer				= 0;
 
 	unguard;
 }
@@ -232,7 +235,7 @@ UBOOL UUC2GLRenderDevice::FindExt( const char* Name )
 
 void UUC2GLRenderDevice::FindProc( void*& ProcAddress, const char* Name, const char* SupportName, UBOOL& Supports )
 {
-	ProcAddress = UC2GL_GetProcAddress( Name );
+	ProcAddress = BindingGetProcAddress( Name );
 	if( !ProcAddress && Supports )
 	{
 		debugf( NAME_Init, TEXT("UC2GLDrv: missing function '%s' for '%s'"), appFromAnsi(Name), appFromAnsi(SupportName) );
@@ -272,12 +275,130 @@ void UUC2GLRenderDevice::FindProcs()
 	#undef GL_EXT
 	#undef GL_PROC
 
+	// The library under the binding.
+	#define GL_RAW(ret,func,parms) *(void**)&Raw_##func = BindingGetRawProcAddress( #func );
+	#include "UC2GLRawFuncs.h"
+	#undef GL_RAW
+
 	unguard;
+}
+
+//
+// The hardware's own extension list. WebGL names its extensions without the GL_ prefix and
+// with its own vendor part (WEBGL_depth_texture for OES_depth_texture): callers ask for each
+// spelling they accept.
+//
+UBOOL UUC2GLRenderDevice::FindRawExt( const char* Name )
+{
+	const char* Extensions = Raw_glGetString ? (const char*)Raw_glGetString( GL_EXTENSIONS ) : NULL;
+	if( !Extensions )
+		return 0;
+	INT Len = strlen( Name );
+	for( const char* At = strstr( Extensions, Name ); At; At = strstr( At + 1, Name ) )
+		if( (At == Extensions || At[-1] == ' ') && (At[Len] == ' ' || At[Len] == 0) )
+			return 1;
+	return 0;
+}
+
+/*-----------------------------------------------------------------------------
+	The desktop binding: OpenGL through SDL (UC2GL4ESDrv overrides all of these).
+-----------------------------------------------------------------------------*/
+
+const TCHAR* UUC2GLRenderDevice::BindingName()
+{
+	return TEXT("desktop GL through SDL");
+}
+
+void UUC2GLRenderDevice::BindingSetContextAttributes()
+{
+#if UC2GL_HAS_DESKTOP_BINDING
+	// The window's own framebuffer only receives the present pass.
+	SDL_GL_SetAttribute( SDL_GL_RED_SIZE, 8 );
+	SDL_GL_SetAttribute( SDL_GL_GREEN_SIZE, 8 );
+	SDL_GL_SetAttribute( SDL_GL_BLUE_SIZE, 8 );
+	SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 0 );
+	SDL_GL_SetAttribute( SDL_GL_STENCIL_SIZE, 0 );
+	SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
+	// The platform's default profile (compatibility): the fixed-function pipeline is what R1
+	// draws with. Said explicitly because the attributes are process-wide and the GL4ES
+	// binding asks for an ES profile.
+	SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, 0 );
+	SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 2 );
+	SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 1 );
+#endif
+}
+
+UBOOL UUC2GLRenderDevice::BindingCreateContext( UViewport* Viewport, UBOOL Fullscreen, INT NewX, INT NewY, UBOOL bSaveSize )
+{
+#if UC2GL_HAS_DESKTOP_BINDING
+	// SDL2Drv creates the GL window and context for BLIT_OpenGL.
+	return Viewport->ResizeViewport( (Fullscreen ? BLIT_Fullscreen : 0) | BLIT_OpenGL, NewX, NewY, bSaveSize );
+#else
+	debugf( NAME_Init, TEXT("UC2GLDrv: this platform has no desktop OpenGL; use UC2GL4ESDrv.UC2GL4ESRenderDevice") );
+	return 0;
+#endif
+}
+
+UBOOL UUC2GLRenderDevice::BindingInit()
+{
+	return 1;
+}
+
+void* UUC2GLRenderDevice::BindingGetProcAddress( const char* Name )
+{
+#if UC2GL_HAS_DESKTOP_BINDING
+	return SDL_GL_GetProcAddress( Name );
+#else
+	return NULL;
+#endif
+}
+
+void* UUC2GLRenderDevice::BindingGetRawProcAddress( const char* Name )
+{
+	return BindingGetProcAddress( Name );
+}
+
+UBOOL UUC2GLRenderDevice::BindingContextAlive()
+{
+	return SDL_GL_GetCurrentContext() != NULL;
+}
+
+void UUC2GLRenderDevice::BindingGetDrawableSize( UViewport* Viewport, INT& Width, INT& Height )
+{
+	SDL_Window* Window = (SDL_Window*)Viewport->GetWindow();
+	if( Window )
+		SDL_GL_GetDrawableSize( Window, &Width, &Height );
+}
+
+void UUC2GLRenderDevice::BindingSetSwapInterval( INT Interval )
+{
+	SDL_GL_SetSwapInterval( Interval );
+}
+
+void UUC2GLRenderDevice::BindingSwap( UViewport* Viewport )
+{
+	SDL_GL_SwapWindow( (SDL_Window*)Viewport->GetWindow() );
+}
+
+//
+// The first lines of every GLSL source the driver compiles. All of them are written in the
+// common subset of GLSL 1.20 and GLSL ES 1.00 (explicit attributes, varyings and uniforms, no
+// fixed-function built-ins). On GLES the default precision is highp where the hardware has
+// it in fragment shaders, because the post-process shaders rebuild 24-bit depth values and
+// address 1280-texel targets; gl4es replaces these lines by the same choice of its own.
+//
+const ANSICHAR* UUC2GLRenderDevice::ShaderPrologue( UBOOL Fragment )
+{
+	if( !IsGLES )
+		return "#version 120\n";
+	if( Fragment && !CapFragmentHighp )
+		return "#version 100\nprecision mediump float;\n";
+	return "#version 100\nprecision highp float;\n";
 }
 
 UBOOL UUC2GLRenderDevice::ContextAlive()
 {
-	return ValidContext && SDL_GL_GetCurrentContext() != NULL;
+	return ValidContext && BindingContextAlive();
 }
 
 //
@@ -317,7 +438,7 @@ UBOOL UUC2GLRenderDevice::Init()
 {
 	guard(UUC2GLRenderDevice::Init);
 
-	debugf( NAME_Init, TEXT("Initializing UC2GLDrv (OpenGL, fixed function; binding: desktop GL through SDL)") );
+	debugf( NAME_Init, TEXT("Initializing UC2GLDrv (class %s; binding: %s)"), GetClass()->GetPathName(), BindingName() );
 
 	// The engine's conventions stay D3D's (BGRA colours, D3D canvas pixel offset); the
 	// driver converts (see UC2GLRenderInterface.cpp).
@@ -417,6 +538,9 @@ void UUC2GLRenderDevice::Exit( UViewport* Viewport )
 		if( NullTextureID )
 			glDeleteTextures( 1, &NullTextureID );
 		NullTextureID = 0;
+		if( QuadBuffer )
+			glDeleteBuffers( 1, &QuadBuffer );
+		QuadBuffer = 0;
 	}
 	ValidContext = 0;
 
@@ -432,23 +556,17 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 
 	debugf( NAME_Init, TEXT("UC2GLDrv: SetRes %ix%i %s"), NewX, NewY, Fullscreen ? TEXT("fullscreen") : TEXT("windowed") );
 
-	// The window's own framebuffer only receives the present pass.
-	SDL_GL_SetAttribute( SDL_GL_RED_SIZE, 8 );
-	SDL_GL_SetAttribute( SDL_GL_GREEN_SIZE, 8 );
-	SDL_GL_SetAttribute( SDL_GL_BLUE_SIZE, 8 );
-	SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 0 );
-	SDL_GL_SetAttribute( SDL_GL_STENCIL_SIZE, 0 );
-	SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
-
-	// SDL2Drv creates the GL window and context for BLIT_OpenGL.
-	if( !Viewport->ResizeViewport( (Fullscreen ? BLIT_Fullscreen : 0) | BLIT_OpenGL, NewX, NewY, bSaveSize ) )
+	BindingSetContextAttributes();
+	if( !BindingCreateContext( Viewport, Fullscreen, NewX, NewY, bSaveSize ) )
 	{
-		debugf( NAME_Init, TEXT("UC2GLDrv: the viewport could not provide an OpenGL context") );
+		debugf( NAME_Init, TEXT("UC2GLDrv: the viewport could not provide an OpenGL context (%s)"), BindingName() );
 		return 0;
 	}
 
 	if( !ValidContext )
 	{
+		if( !BindingInit() )
+			return 0;
 		FindProcs();
 
 		debugf( NAME_Init, TEXT("GL_VENDOR     : %s"), appFromAnsi((ANSICHAR*)glGetString(GL_VENDOR)) );
@@ -465,6 +583,8 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 		ValidContext = 1;
 
 		appSprintf( GMachineVideo, TEXT("%s"), appFromAnsi((ANSICHAR*)glGetString(GL_RENDERER)) );
+
+		DetectCapabilities();
 
 		// Capabilities.
 		GLint Units = 0, MaxSize = 0;
@@ -503,6 +623,13 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
 		glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_BGRA, GL_UNSIGNED_BYTE, &Black );
 
+		// The full-screen strip of the present and copy passes.
+		static const FLOAT Quad[8] = { -1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, 1.f };
+		glGenBuffers( 1, &QuadBuffer );
+		glBindBuffer( GL_ARRAY_BUFFER, QuadBuffer );
+		glBufferData( GL_ARRAY_BUFFER, sizeof(Quad), Quad, GL_STATIC_DRAW );
+		glBindBuffer( GL_ARRAY_BUFFER, 0 );
+
 		// Render-target post-processing (M7): the copy programs. Before the pixel shaders:
 		// which of those are compiled depends on it.
 		InitPostProcess();
@@ -516,7 +643,7 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 		return 0;
 
 
-	SDL_GL_SetSwapInterval( UseVSync ? 1 : 0 );
+	BindingSetSwapInterval( UseVSync ? 1 : 0 );
 
 	ResetRenderStates();
 	UpdateGamma( Viewport );
@@ -558,20 +685,17 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 	// by a shader (UUC2GLRenderDevice::UpdateSampledTexture, depth of field). GL 3.0 /
 	// EXT_packed_depth_stencil + ARB_depth_texture; on WebGL this needs WEBGL_depth_texture
 	// (M11: without it the depth colour has to come from a pass that writes depth as colour).
-	glGenTextures( 1, &MainDepthStencil );
-	glBindTexture( GL_TEXTURE_2D, MainDepthStencil );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0 );
-	glTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, Width, Height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL );
+	// M11: where the context has no depth textures (CapDepthTexture) it is a renderbuffer,
+	// and the two readers of depth take their fallbacks (UC2GLPostProcess.cpp).
+	if( CapDepthTexture )
+		MainDepthStencil = CreateDepthStencilTexture( Width, Height );
+	else
+		MainDepthRenderbuffer = CreateDepthStencilRenderbuffer( Width, Height );
 
 	glGenFramebuffers( 1, &MainFramebuffer );
 	glBindFramebuffer( GL_FRAMEBUFFER, MainFramebuffer );
 	glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, MainColorTexture, 0 );
-	glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, MainDepthStencil, 0 );
-	glFramebufferTexture2D( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, MainDepthStencil, 0 );
+	AttachMainDepthStencil();
 
 	GLenum Status = glCheckFramebufferStatus( GL_FRAMEBUFFER );
 	if( Status != GL_FRAMEBUFFER_COMPLETE )
@@ -582,7 +706,7 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 
 	MainWidth	= Width;
 	MainHeight	= Height;
-	debugf( NAME_Init, TEXT("UC2GLDrv: main framebuffer %ix%i (RGBA8 texture, depth 24 + stencil 8 texture)"), Width, Height );
+	debugf( NAME_Init, TEXT("UC2GLDrv: main framebuffer %ix%i (RGBA8 texture, depth 24 + stencil 8 %s)"), Width, Height, MainDepthStencil ? TEXT("texture") : TEXT("renderbuffer") );
 	MainColorVersion++;
 	MainDepthVersion++;
 
@@ -612,7 +736,7 @@ void UUC2GLRenderDevice::DestroyMainFramebuffer()
 	DestroyPostProcessTargets();
 	if( !ContextAlive() )
 	{
-		MainFramebuffer = MainDepthStencil = MainColorTexture = 0;
+		MainFramebuffer = MainDepthStencil = MainDepthRenderbuffer = MainColorTexture = 0;
 		MainWidth = MainHeight = 0;
 		return;
 	}
@@ -621,10 +745,186 @@ void UUC2GLRenderDevice::DestroyMainFramebuffer()
 		glDeleteFramebuffers( 1, &MainFramebuffer );
 	if( MainDepthStencil )
 		glDeleteTextures( 1, &MainDepthStencil );
+	DeleteDepthStencilRenderbuffer( MainDepthRenderbuffer );
 	if( MainColorTexture )
 		glDeleteTextures( 1, &MainColorTexture );
 	MainFramebuffer = MainDepthStencil = MainColorTexture = 0;
 	MainWidth = MainHeight = 0;
+}
+
+/*-----------------------------------------------------------------------------
+	Depth-stencil storage (M11).
+
+	Desktop GL: a GL_DEPTH24_STENCIL8 texture or renderbuffer on the depth and the stencil
+	attachment points, as since M7.
+
+	GLES2 behind gl4es: done with the raw library, around gl4es, because gl4es decides from
+	the OpenGL ES extension names (OES_depth_texture, OES_packed_depth_stencil, OES_depth24)
+	which WebGL 1 does not have under those names, and then gives a depth attachment a 16-bit
+	renderbuffer plus a separate stencil renderbuffer, a combination WebGL 1 rejects. What
+	WebGL 1 has: the DEPTH_STENCIL renderbuffer format in core, and with WEBGL_depth_texture a
+	DEPTH_STENCIL / UNSIGNED_INT_24_8 texture; either goes on the one DEPTH_STENCIL_ATTACHMENT
+	point. OpenGL ES 2 proper (the native twin) has the same storage through
+	OES_packed_depth_stencil (+ OES_depth_texture) but no combined attachment point: the image
+	goes on both points. That attachment call is the one place where the twin and the browser
+	run different lines.
+
+	gl4es caches texture and renderbuffer bindings, so the raw calls put back what was bound.
+	The texture NAME is gl4es' (it tracks names, and the texture is later bound for sampling
+	through it); renderbuffers are raw throughout (the driver uses no other renderbuffers).
+-----------------------------------------------------------------------------*/
+
+GLuint UUC2GLRenderDevice::CreateDepthStencilTexture( INT Width, INT Height )
+{
+	GLuint Texture = 0;
+	glGenTextures( 1, &Texture );
+	if( !IsGLES )
+	{
+		glBindTexture( GL_TEXTURE_2D, Texture );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0 );
+		glTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, Width, Height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL );
+		return Texture;
+	}
+	GLint Bound = 0;
+	Raw_glGetIntegerv( GL_TEXTURE_BINDING_2D, &Bound );
+	Raw_glBindTexture( GL_TEXTURE_2D, Texture );
+	Raw_glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	Raw_glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+	Raw_glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+	Raw_glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+	Raw_glTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_STENCIL_OES, Width, Height, 0, GL_DEPTH_STENCIL_OES, GL_UNSIGNED_INT_24_8_OES, NULL );
+	Raw_glBindTexture( GL_TEXTURE_2D, Bound );
+	// gl4es' own record of the texture: the same sampling state, so that it has nothing to
+	// "correct" when the texture is bound for a copy pass.
+	glBindTexture( GL_TEXTURE_2D, Texture );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+	glBindTexture( GL_TEXTURE_2D, 0 );
+	return Texture;
+}
+
+GLuint UUC2GLRenderDevice::CreateDepthStencilRenderbuffer( INT Width, INT Height )
+{
+	GLuint Renderbuffer = 0;
+	if( !IsGLES )
+	{
+		glGenRenderbuffers( 1, &Renderbuffer );
+		glBindRenderbuffer( GL_RENDERBUFFER, Renderbuffer );
+		glRenderbufferStorage( GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, Width, Height );
+		glBindRenderbuffer( GL_RENDERBUFFER, 0 );
+		return Renderbuffer;
+	}
+	Raw_glGenRenderbuffers( 1, &Renderbuffer );
+	Raw_glBindRenderbuffer( GL_RENDERBUFFER, Renderbuffer );
+#ifdef __EMSCRIPTEN__
+	Raw_glRenderbufferStorage( GL_RENDERBUFFER, GL_DEPTH_STENCIL_OES, Width, Height );		// WebGL 1: DEPTH_STENCIL, core
+#else
+	Raw_glRenderbufferStorage( GL_RENDERBUFFER, GL_DEPTH24_STENCIL8_OES, Width, Height );	// OES_packed_depth_stencil
+#endif
+	Raw_glBindRenderbuffer( GL_RENDERBUFFER, 0 );
+	return Renderbuffer;
+}
+
+void UUC2GLRenderDevice::DeleteDepthStencilRenderbuffer( GLuint& Renderbuffer )
+{
+	if( Renderbuffer )
+	{
+		if( IsGLES )
+			Raw_glDeleteRenderbuffers( 1, &Renderbuffer );
+		else
+			glDeleteRenderbuffers( 1, &Renderbuffer );
+	}
+	Renderbuffer = 0;
+}
+
+void UUC2GLRenderDevice::AttachDepthStencilTexture( GLuint Texture )
+{
+	if( !IsGLES )
+	{
+		glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, Texture, 0 );
+		glFramebufferTexture2D( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, Texture, 0 );
+		return;
+	}
+#ifdef __EMSCRIPTEN__
+	Raw_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, Texture, 0 );
+#else
+	Raw_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, Texture, 0 );
+	Raw_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, Texture, 0 );
+#endif
+}
+
+void UUC2GLRenderDevice::AttachDepthStencilRenderbuffer( GLuint Renderbuffer )
+{
+	if( !IsGLES )
+	{
+		glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, Renderbuffer );
+		glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, Renderbuffer );
+		return;
+	}
+#ifdef __EMSCRIPTEN__
+	Raw_glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, Renderbuffer );
+#else
+	Raw_glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, Renderbuffer );
+	Raw_glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, Renderbuffer );
+#endif
+}
+
+// The main framebuffer's depth-stencil image on the framebuffer bound to GL_FRAMEBUFFER
+// (render targets without a depth buffer of their own borrow it, as D3DDrv's do).
+void UUC2GLRenderDevice::AttachMainDepthStencil()
+{
+	if( MainDepthStencil )
+		AttachDepthStencilTexture( MainDepthStencil );
+	else
+		AttachDepthStencilRenderbuffer( MainDepthRenderbuffer );
+}
+
+void UUC2GLRenderDevice::BindQuadBuffer()
+{
+	glBindBuffer( GL_ARRAY_BUFFER, QuadBuffer );
+}
+
+//
+// What the context can do (see the Cap* members). Desktop GL 2.0 + FBO has all of it.
+//
+void UUC2GLRenderDevice::DetectCapabilities()
+{
+	CapDepthTexture = CapFragDepth = CapUIntIndex = CapTextureMaxLevel = CapFragmentHighp = 1;
+	if( IsGLES )
+	{
+		CapDepthTexture		= ( FindRawExt("GL_OES_depth_texture") || FindRawExt("WEBGL_depth_texture") || FindRawExt("GL_WEBGL_depth_texture") )
+#ifndef __EMSCRIPTEN__
+							&& FindRawExt("GL_OES_packed_depth_stencil")
+#endif
+							;
+		CapFragDepth		= FindRawExt("GL_EXT_frag_depth") || FindRawExt("EXT_frag_depth");
+		CapUIntIndex		= FindRawExt("GL_OES_element_index_uint") || FindRawExt("OES_element_index_uint");
+		CapTextureMaxLevel	= 0;
+		GLint Range[2] = { 0, 0 }, Precision = 0;
+		if( Raw_glGetShaderPrecisionFormat )
+			Raw_glGetShaderPrecisionFormat( GL_FRAGMENT_SHADER, GL_HIGH_FLOAT, Range, &Precision );
+		CapFragmentHighp	= Precision >= 23;
+		debugf( NAME_Init, TEXT("UC2GLDrv: GLES hardware: %s / %s"), appFromAnsi((ANSICHAR*)Raw_glGetString(GL_RENDERER)), appFromAnsi((ANSICHAR*)Raw_glGetString(GL_VERSION)) );
+		debugf( NAME_Init, TEXT("UC2GLDrv: GLES extensions: %s"), appFromAnsi((ANSICHAR*)Raw_glGetString(GL_EXTENSIONS)) );
+		debugf( NAME_Init, TEXT("UC2GLDrv: GLES fragment highp float: %i bits of precision (range 2^-%i..2^%i)"), Precision, Range[0], Range[1] );
+	}
+	// Masks, to exercise each fallback where the capability exists.
+	if( ParseParam( appCmdLine(), TEXT("glnodepthtexture") ) )	CapDepthTexture = 0;
+	if( ParseParam( appCmdLine(), TEXT("glnofragdepth") ) )		CapFragDepth = 0;
+	if( ParseParam( appCmdLine(), TEXT("glnouintindex") ) )		CapUIntIndex = 0;
+	if( ParseParam( appCmdLine(), TEXT("glnomaxlevel") ) )		CapTextureMaxLevel = 0;
+	debugf( NAME_Init, TEXT("UC2GLDrv: capabilities: depth texture %s, gl_FragDepth %s, 32-bit indices %s, texture max level %s, fragment highp %s"),
+		CapDepthTexture ? TEXT("yes") : TEXT("NO (fallback: depth drawn as colour)"),
+		CapFragDepth ? TEXT("yes") : TEXT("NO (fallback: depth test in the shader)"),
+		CapUIntIndex ? TEXT("yes") : TEXT("NO (fallback: 16-bit index ranges)"),
+		CapTextureMaxLevel ? TEXT("yes") : TEXT("no (mip chains are completed to 1x1)"),
+		CapFragmentHighp ? TEXT("yes") : TEXT("NO (mediump)") );
 }
 
 //
@@ -666,12 +966,7 @@ static const char* GPresentFragmentShader =
 
 static GLuint CompileShader( UUC2GLRenderDevice* RenDev, GLenum Type, const char* Body )
 {
-#if UC2GL_GLES
-	const char* Prologue = "#version 100\nprecision mediump float;\n";
-#else
-	const char* Prologue = "#version 120\n";
-#endif
-	const char* Sources[2] = { Prologue, Body };
+	const char* Sources[2] = { RenDev->ShaderPrologue( Type == GL_FRAGMENT_SHADER ), Body };
 	GLuint Shader = RenDev->glCreateShader( Type );
 	RenDev->glShaderSource( Shader, 2, Sources, NULL );
 	RenDev->glCompileShader( Shader );
@@ -727,10 +1022,8 @@ void UUC2GLRenderDevice::DrawPresentPass( UViewport* Viewport )
 {
 	guard(UUC2GLRenderDevice::DrawPresentPass);
 
-	SDL_Window* Window = (SDL_Window*)Viewport->GetWindow();
 	INT DrawableX = MainWidth, DrawableY = MainHeight;
-	if( Window )
-		SDL_GL_GetDrawableSize( Window, &DrawableX, &DrawableY );
+	BindingGetDrawableSize( Viewport, DrawableX, DrawableY );
 
 	glBindFramebuffer( GL_FRAMEBUFFER, 0 );
 	glViewport( 0, 0, DrawableX, DrawableY );
@@ -761,12 +1054,12 @@ void UUC2GLRenderDevice::DrawPresentPass( UViewport* Viewport )
 		glActiveTexture( GL_TEXTURE0 );
 	}
 
-	static const FLOAT Quad[8] = { -1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, 1.f };
-	glBindBuffer( GL_ARRAY_BUFFER, 0 );
-	glVertexAttribPointer( 0, 2, GL_FLOAT, GL_FALSE, 0, Quad );
+	BindQuadBuffer();
+	glVertexAttribPointer( 0, 2, GL_FLOAT, GL_FALSE, 0, NULL );
 	glEnableVertexAttribArray( 0 );
 	glDrawArrays( GL_TRIANGLE_STRIP, 0, 4 );
 	glDisableVertexAttribArray( 0 );
+	glBindBuffer( GL_ARRAY_BUFFER, 0 );
 	glUseProgram( 0 );
 
 	// Back to the engine's state.
@@ -1226,7 +1519,7 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 		}
 	}
 
-	SDL_GL_SwapWindow( (SDL_Window*)Viewport->GetWindow() );
+	BindingSwap( Viewport );
 
 	// -glshot: the engine's own SHOT exec (ReadPixels -> appCreateBitmap).
 	if( GFirstFrameTime == 0.0 )

@@ -1,35 +1,38 @@
 /*=============================================================================
-	UC2GLBinding.h: which OpenGL this build of UC2GLDrv talks to.
+	UC2GLBinding.h: which OpenGL UC2GLDrv talks to.
 
-	One driver source, two bindings chosen at build time:
+	One driver source, compiled once. The binding is a property of the render device
+	OBJECT, chosen by its class (M11; docs/porting/analysis/web-renderer.md, decision 1):
 
-	  UC2GL_BINDING_DESKTOP (default)  desktop OpenGL (2.0+ compatibility profile with
-	                                   framebuffer objects). The context comes from SDL2Drv
-	                                   (SDL_GL_CreateContext); every entry point is looked up
-	                                   with SDL_GL_GetProcAddress into the device's pointer
-	                                   table (UC2GLFuncs.h). libGL is never linked.
-	  UC2GL_BINDING_GL4ES              (not built yet) GL4ES translating the same fixed-
-	                                   function calls to GLES2/WebGL. The pointer table is
-	                                   filled from gl4es' own lookup instead of SDL's, and the
-	                                   present shader is compiled as GLSL ES 1.00. Everything
-	                                   that differs is behind UC2GL_GLES.
+	  UC2GLDrv.UC2GLRenderDevice         desktop OpenGL (2.0+ compatibility profile with
+	                                     framebuffer objects). The context comes from SDL2Drv
+	                                     (SDL_GL_CreateContext); every entry point is looked
+	                                     up with SDL_GL_GetProcAddress into the device's
+	                                     pointer table (UC2GLFuncs.h). libGL is never linked.
+	  UC2GL4ESDrv.UC2GL4ESRenderDevice   a subclass in its own small package
+	                                     (Source/UC2GL4ESDrv): an OpenGL ES 2 context (SDL/EGL
+	                                     on Linux, WebGL 1 on the web) behind GL4ES, which
+	                                     translates the same fixed-function and GLSL calls.
+	                                     The pointer table is filled from gl4es' lookup; the
+	                                     few calls that must reach GLES2 itself (depth-stencil
+	                                     storage and attachment) go through a second, "raw"
+	                                     table filled from the library under gl4es.
 
-	Nothing outside this header and UC2GLRenderDevice.cpp (FindProcs, shader prologue)
-	depends on the binding.
+	The device's Binding* virtuals are the whole interface between the two; everything else
+	in the driver asks UUC2GLRenderDevice::IsGLES (and the Cap* flags) at run time, so both
+	bindings run the same object code and a renderer fix reaches the web by itself.
+
+	UC2GL_HAS_DESKTOP_BINDING is 0 where no desktop OpenGL exists (Emscripten): the base
+	class then cannot create a context and says so.
 =============================================================================*/
 
 #ifndef _INC_UC2GLBINDING
 #define _INC_UC2GLBINDING
 
-#if !defined(UC2GL_BINDING_DESKTOP) && !defined(UC2GL_BINDING_GL4ES)
-	#define UC2GL_BINDING_DESKTOP 1
-#endif
-
-#ifdef UC2GL_BINDING_GL4ES
-	#define UC2GL_GLES 1
-	#error "UC2GL_BINDING_GL4ES: not built at M5 (see docs/porting/analysis/gl-renderer.md)"
+#ifdef __EMSCRIPTEN__
+	#define UC2GL_HAS_DESKTOP_BINDING 0
 #else
-	#define UC2GL_GLES 0
+	#define UC2GL_HAS_DESKTOP_BINDING 1
 #endif
 
 #ifdef WIN32
@@ -40,7 +43,7 @@
 
 // Prototypes are deliberately NOT requested: every call goes through the device's pointer
 // table, so a stray direct call to a GL function fails to link instead of silently binding
-// to a libGL nobody loaded.
+// to a libGL nobody loaded (or, in a build with gl4es, to gl4es behind the device's back).
 #ifdef GL_GLEXT_PROTOTYPES
 	#undef GL_GLEXT_PROTOTYPES
 #endif
@@ -51,8 +54,24 @@
 	#define APIENTRY
 #endif
 
-// Look up one entry point of the bound GL.
-void* UC2GL_GetProcAddress( const char* Name );
+// OpenGL ES 2 / WebGL 1 names the desktop headers may not have.
+#ifndef GL_DEPTH_STENCIL_OES
+	#define GL_DEPTH_STENCIL_OES			0x84F9
+#endif
+#ifndef GL_UNSIGNED_INT_24_8_OES
+	#define GL_UNSIGNED_INT_24_8_OES		0x84FA
+#endif
+#ifndef GL_DEPTH24_STENCIL8_OES
+	#define GL_DEPTH24_STENCIL8_OES			0x88F0
+#endif
+#ifndef GL_DEPTH_STENCIL_ATTACHMENT
+	#define GL_DEPTH_STENCIL_ATTACHMENT		0x821A
+#endif
+#ifndef GL_HIGH_FLOAT
+	#define GL_LOW_FLOAT					0x8DF0
+	#define GL_MEDIUM_FLOAT					0x8DF1
+	#define GL_HIGH_FLOAT					0x8DF2
+#endif
 
 #endif
 /*-----------------------------------------------------------------------------

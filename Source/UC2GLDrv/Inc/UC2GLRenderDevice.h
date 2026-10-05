@@ -113,7 +113,8 @@ public:
 	// texture (M7), so a shader can read the scene's depth (depth of field).
 	GLuint							MainFramebuffer,
 									MainColorTexture,
-									MainDepthStencil;
+									MainDepthStencil,		// texture (CapDepthTexture) ...
+									MainDepthRenderbuffer;	// ... or renderbuffer (M11: no depth textures)
 	INT								MainWidth,
 									MainHeight;
 
@@ -186,6 +187,54 @@ public:
 	#include "UC2GLFuncs.h"
 	#undef GL_EXT
 	#undef GL_PROC
+	// The library under the binding (UC2GLRawFuncs.h): the same functions on desktop GL,
+	// OpenGL ES 2 / WebGL itself under GL4ES.
+	#define GL_RAW(ret,func,parms) static ret (APIENTRY *Raw_##func)parms;
+	#include "UC2GLRawFuncs.h"
+	#undef GL_RAW
+
+	// The GL binding (UC2GLBinding.h; M11). This class binds desktop OpenGL through SDL;
+	// UC2GL4ESDrv.UC2GL4ESRenderDevice overrides the Binding* virtuals to bind OpenGL ES 2 /
+	// WebGL 1 through GL4ES. Everything else is the same object code for both.
+	UBOOL							IsGLES;				// the context is OpenGL ES 2 / WebGL 1 (behind GL4ES)
+	// What the context can do; all true on desktop GL. Each has its fallback, and a switch
+	// that masks it so the fallback can be tested where the capability exists
+	// (-glnodepthtexture, -glnofragdepth, -glnos3tc, -glnouintindex).
+	UBOOL							CapDepthTexture,	// a depth-stencil texture can be a framebuffer attachment and be sampled
+									CapFragDepth,		// a fragment shader can write gl_FragDepth
+									CapUIntIndex,		// 32-bit index buffers
+									CapTextureMaxLevel,	// GL_TEXTURE_MAX_LEVEL: a mip chain may stop before 1x1
+									CapFragmentHighp;	// highp float in fragment shaders
+	virtual const TCHAR* BindingName();
+	// SDL_GL_SetAttribute for the context this binding wants; before the window is (re)created.
+	virtual void BindingSetContextAttributes();
+	// The viewport's window with a current context of this binding.
+	virtual UBOOL BindingCreateContext( UViewport* Viewport, UBOOL Fullscreen, INT NewX, INT NewY, UBOOL bSaveSize );
+	// Once, with the context current, before the pointer table is filled.
+	virtual UBOOL BindingInit();
+	virtual void* BindingGetProcAddress( const char* Name );
+	virtual void* BindingGetRawProcAddress( const char* Name );
+	virtual UBOOL BindingContextAlive();
+	virtual void BindingGetDrawableSize( UViewport* Viewport, INT& Width, INT& Height );
+	virtual void BindingSetSwapInterval( INT Interval );
+	virtual void BindingSwap( UViewport* Viewport );
+	// The hardware's extension string (GLES: not gl4es' emulated one), space separated.
+	UBOOL FindRawExt( const char* Name );
+	// The first lines of every GLSL source this driver compiles.
+	const ANSICHAR* ShaderPrologue( UBOOL Fragment );
+
+	// Depth-stencil storage for framebuffers, and its attachment to the framebuffer bound to
+	// GL_FRAMEBUFFER (UC2GLRenderDevice.cpp; around gl4es on GLES).
+	GLuint CreateDepthStencilTexture( INT Width, INT Height );
+	GLuint CreateDepthStencilRenderbuffer( INT Width, INT Height );
+	void DeleteDepthStencilRenderbuffer( GLuint& Renderbuffer );
+	void AttachDepthStencilTexture( GLuint Texture );
+	void AttachDepthStencilRenderbuffer( GLuint Renderbuffer );
+	void AttachMainDepthStencil();
+	void DetectCapabilities();
+	// A static full-screen strip (-1..1) in a buffer object: WebGL has no client-side arrays.
+	GLuint							QuadBuffer;
+	void BindQuadBuffer();
 
 	// Constructors.
 	UUC2GLRenderDevice();
