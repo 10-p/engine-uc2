@@ -495,8 +495,13 @@ def check_travel():
                "client probe level=%s" % (lv and lv["summary"].get("level")))
         p2 = spawn(a, "Aspawn2")
         sp = s.probe("T2")
-        result(bool(p2) and bool(pawn_of(sp, "NetA")), ck + ".spawn2", "client localpawn=%s, server pawn NetA at %s"
-               % (bool(p2), pawn_of(sp, "NetA") and pawn_of(sp, "NetA").get("loc")))
+        # After the travel the client logs in under the name its own settings give (UC2: the character's,
+        # "Anubis"), not the command line's ?Name=NetA (network.md step 6): look it up from its own probe.
+        me = p2["summary"].get("local") if p2 else None
+        sv = pawn_of(sp, me) if me else None
+        cv = pawn_of(p2, me) if me else None
+        result(bool(p2) and bool(sv), ck + ".spawn2", "client %s localpawn=%s, server pawn %s at %s"
+               % (me, bool(p2), me, sv and sv.get("loc")))
     finally:
         finish(ck, procs, allow_invalid_class=2)
 
