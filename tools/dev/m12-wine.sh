@@ -41,14 +41,15 @@ cd "$dir" || exit 1
 # stopped and the prefix's wineserver killed (the EXIT trap) before capped's own KILL.
 wine "./$prog" "$@" &
 pid=$!
-trap 'kill -TERM $pid 2>/dev/null; exit 143' TERM INT
+# TERM (capped's time limit): stop now. INT: passed on as a Ctrl+C (clean exit), and we keep waiting.
+trap 'kill -TERM $pid 2>/dev/null; exit 143' TERM
+trap 'kill -INT $pid 2>/dev/null' INT
 # UC2_WINE_STOP_AFTER=<s>: after that many seconds press Ctrl+C (wine turns SIGINT into a CTRL_C_EVENT; the
 # engine's console handler requests a clean exit), then wait up to 20 s for the program to finish by itself.
 if [ -n "${UC2_WINE_STOP_AFTER:-}" ]; then
   ( sleep "$UC2_WINE_STOP_AFTER"; kill -INT $pid 2>/dev/null; sleep 20; kill -TERM $pid 2>/dev/null ) &
   stopper=$!
 fi
-wait $pid
-rc=$?
+while :; do wait $pid; rc=$?; kill -0 $pid 2>/dev/null || break; done
 [ -n "${stopper:-}" ] && kill $stopper 2>/dev/null
 exit $rc
