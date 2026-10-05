@@ -36,6 +36,10 @@
 #              build loads the other's file back to the values it was saved with (ULoadSaveManager, the game's path)
 #   soak       M13_SOAK s: menu -> DM-Deadbolt with 4 bots -> menu -> DM-Azure with 4 bots; 0 Critical, the
 #              resident size sampled every 30 s does not grow over the second map (flat RSS)
+#   base32     (not in the default list) the 32-bit build after M13, tree M13_REF: verifyclasses as before,
+#              controls keyboard+pad, audio self-test 39/0, movie self-test 96/0, glselftest 10/10, and the pinned
+#              picture against main's 32-bit build (M13_BASEBUILD, default <WorkUC2>/engine-uc2/build-native, read
+#              only, copied into run tree M13_BASE=m13-main32): same view, static part >= 99.9% within 2 levels
 #   leftovers  no uc2.bin/ucc-bin/Xvfb of the m13 trees running
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -279,6 +283,36 @@ check_saves() {	# a profile saved by the 64-bit build loads in the 32-bit one an
     result PASS saves "profile files written by the 64-bit and the 32-bit build are byte-identical ($(stat -c %s "$f64") bytes); each build loads the other's and exports the same $(wc -l < "$out/saves-64-saved.txt") property lines it was saved with"
   else
     result FAIL saves "$r; files $(cmp "$f64" "$f32" 2>&1 | head -1); see $out/saves-*"
+  fi
+}
+
+check_base32() {	# gate (c): the 32-bit build after M13 behaves as before (tree M13_REF; main's build as M13_BASE)
+  local o=$out/base32 base=${M13_BASE:-m13-main32} basebuild=${M13_BASEBUILD:-$work/engine-uc2/build-native} rc v ctl st mv gl cmp vb vr
+  mkdir -p "$o"
+  [ -x "$work/run/$base/System/uc2.bin" ] || "$repo/tools/dev/mkrun-uc2.sh" "$basebuild" "$base" > /dev/null
+  ( cd "$rsys" && "$capped" 2G 300 -- ./ucc-bin verifyclasses > "$o/verify.out" 2>&1 ); rc=$?
+  v=$(tail -1 "$o/verify.out")
+  ctl=$(M10_TREE=$ref M10_OUT=$o/controls "$repo/tools/dev/m10-controls.sh" keyboard pad 2>&1 | grep -a '^PASS\|^FAIL\|WARNING' | tr '\n' ';')
+  ( cd "$rsys" && "$capped" 2G 900 -- ./ucc-bin UC2ALAudio.UC2AudioSelfTest > "$o/audio-selftest.out" 2>&1 )
+  st=$(grep -a '^UC2AudioSelfTest:' "$o/audio-selftest.out" | tail -1)
+  "$repo/tools/dev/movie-selftest.sh" "$ref" > "$o/movie-selftest.out" 2>&1
+  mv=$(grep -a 'UC2MovieSelfTest:' "$o/movie-selftest.out" | tail -1)
+  gl=$("$repo/tools/dev/m7-effects.sh" "$ref" selftest 2>&1 | grep -a 'selftest summary')
+  for t in "$ref" "$base"; do
+    rm -rf "$o/pinned-$t"
+    M10_URL='DM-Deadbolt?NumBots=0' M10_TREE=$t M10_OUT=$o/pinned-$t \
+      "$repo/tools/dev/m10-controls.sh" --file "$repo/tools/dev/m12/deadbolt-pinned.scen" pinned -glerrors -nopostprocess > /dev/null 2>&1
+  done
+  vr=$(grep -a "^probe view" "$o/pinned-$ref/pinned.out" | grep -a -o "loc=([^)]*) rot=([^)]*)")
+  vb=$(grep -a "^probe view" "$o/pinned-$base/pinned.out" | grep -a -o "loc=([^)]*) rot=([^)]*)")
+  cmp=$(python3 "$repo/tools/dev/pinned-compare.py" "$o/pinned-$base/pinned-pinned.png" "$o/pinned-$ref/pinned-pinned.png" "$o/pinned-diff.png" 2>&1)
+  set -- $cmp
+  if [ $rc = 0 ] && [[ "$v" == *"All native class layouts match"* ]] && [ "$(echo "$ctl" | grep -o 'PASS' | wc -l)" = 2 ] \
+     && [[ "$st" == *"39 checks, 0 failed"* ]] && [[ "$mv" == *"96 checks, 0 failed"* ]] && [[ "$gl" == *"10 passed, 0 failed"* ]] \
+     && [ "${1-}" = OK ] && [ -n "$vr" ] && [ "$vr" = "$vb" ] && awk -v s="$2" 'BEGIN{exit !(s>=99.9)}'; then
+    result PASS base32 "32-bit after M13: verifyclasses '$v'; controls $ctl $st; $mv; $gl; pinned vs main's build ($base) at the same $vr: static part ${2}% within 2 levels, whole frame ${3}% bit-identical"
+  else
+    result FAIL base32 "verify rc $rc '$v'; controls $ctl; '$st'; '$mv'; '$gl'; pinned '$vr' vs '$vb': $cmp"
   fi
 }
 
