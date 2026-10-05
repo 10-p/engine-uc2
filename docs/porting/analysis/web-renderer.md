@@ -236,3 +236,57 @@ tools/dev/mkrun-uc2.sh build-native m11
   need their alpha in that pass. Design not final.
 - 32-bit index fallback: not designed.
 - The headless browser on the owner's GPU shares 2 GB of video memory with the desktop.
+
+## G1, step 1: the twin draws the menu (2026-10-05)
+
+Built: `capped 6G 3000 -- bash -c 'cmake --preset native && cmake --build build-native -j6'` ->
+`-- gl4es (static, GLES2): https://github.com/10-p/gl4es.git@fix/cubemap-bind-active-unit`,
+`[100%] Built target SDLLaunch`, exit 0 (`logs/m11/build-native-1.log`); `build-native/lib/libGL.a` is gl4es.
+
+Desktop regression first (same binary, default device): `tools/dev/m7-effects.sh m11 selftest` ->
+`selftest summary: 10 passed, 0 failed`, log line `Initializing UC2GLDrv (class UC2GLDrv.UC2GLRenderDevice;
+binding: desktop GL through SDL)`.
+
+Twin: `UC2_RES=1280x720 tools/dev/run-uc2-shot.sh m11 twin-menu-2 45 0 '' -gl4es -glerrors -glshot=15,25`
+(`logs/m11/twin-menu-2.out`):
+
+```
+-GL4ES selects render device UC2GL4ESDrv.UC2GL4ESRenderDevice
+Initializing UC2GLDrv (class UC2GL4ESDrv.UC2GL4ESRenderDevice; binding: OpenGL ES 2 through GL4ES)
+GL_VENDOR : GL4ES wrapping Mesa / GL_RENDERER : GL4ES using llvmpipe / GL_VERSION : 2.1 gl4es wrapper 1.1.7
+UC2GLDrv: GLES hardware: llvmpipe (LLVM 21.1.8, 256 bits) / OpenGL ES 3.2 Mesa 26.0.8-1ubuntu0.3
+UC2GLDrv: GLES fragment highp float: 23 bits of precision (range 2^-127..2^127)
+UC2GLDrv: capabilities: depth texture yes, gl_FragDepth yes, 32-bit indices yes, texture max level no (mip chains are completed to 1x1), fragment highp yes
+UC2GLDrv: pixel shaders on: 84 fragment shaders compiled, 0 failed
+UC2GLDrv: VertexShaderConfigs.ini: 555 combinations, 405 vertex shaders compiled (0 failed), ... 0.92 s
+UC2GLDrv: main framebuffer 1280x720 (RGBA8 texture, depth 24 + stencil 8 texture)
+UC2GLDrv: frame 304, 0 GL errors so far;  programs: 2 linked, 0 failed
+```
+
+So: every fragment body and every vertex shader of Epic's precompile list compiles **through gl4es's
+converter as ESSL 1.00** (the first time the vertex side is compiled as ES at all), the raw depth-stencil
+texture is accepted as an attachment next to gl4es's colour attachment, and the menu is drawn with 0 GL
+errors. Picture `logs/m11/cmp-menu-2-1.png` (desktop left, twin right): the same menu; the numeric difference
+(mean 3.9 of 255) is not yet separated from the animation of the menu background (two desktop runs differ
+too): the G2 script will measure the noise floor first.
+
+Facts found on the way:
+
+- **Mesa answers an ES 2.0 request with an ES 3.2 context** (`GL_VERSION` of the raw library). So the twin's
+  "GLES2" is the ES 2 API on a context that would also accept ES 3 calls: an ES-2-only restriction that the
+  driver violates would not be caught here, only in the browser (WebGL 1 is strict). The driver's own
+  capability flags come from the extension strings and are honest either way.
+- **gl4es's wireframe emulation crashes with real buffer objects**: the first frame of the menu died with
+  SIGSEGV inside Mesa, called from gl4es `draw_renderlist` <- `gl4es_glDrawRangeElements` <-
+  `FOcclusionQueryManager::RenderQuery`. gl4es turns a draw into a "render list" when the polygon mode is
+  `GL_LINE` (`should_intercept_render`), and that path hands GLES client pointers. Two changes, both in
+  `UC2GLRenderInterface.cpp`:
+  1. `BeginOcclusionQuery`/`EndOcclusionQuery` set a flag and `DrawPrimitive` draws nothing in between. The
+     engine's query geometry is wireframe boxes with colour, depth and stencil writes off; without a real
+     query (PC and here: answered "visible") those draws have no effect at all. Also saves the draws on the
+     desktop (G5).
+  2. On GLES `glPolygonMode` is never called; a pass with `FM_Wireframe` is drawn as a line list built from
+     the triangle indices (`DrawWireframe`; the indices come from the engine's index buffer, or from a CPU
+     copy of the last dynamic indices). **Not exercised yet by any content I have run** (the occlusion boxes
+     were the only wireframe draw in the menu): status "written, never drawn".
+- gl4es reports 16 texture image units; the driver uses 8 as on the desktop.

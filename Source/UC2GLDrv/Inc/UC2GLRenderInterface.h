@@ -340,6 +340,11 @@ public:
 	FLOAT					DistortionScale[4];			// VSC_DISTORTION_SCALE (HandlePSVertexShader)
 	FLOAT					ColorRemapConstant[4];		// VSC_COLOR_REMAP
 	UBOOL					PointSampleNudge;			// see GetGLMatrices
+	// M11. Between BeginOcclusionQuery and EndOcclusionQuery nothing is drawn: the engine's
+	// query geometry writes neither colour nor depth nor stencil, and there is no query to count for.
+	UBOOL					InOcclusionQuery;
+	GLuint					WireIndexBuffer;			// GLES: wireframe passes drawn as lines (DrawWireframe)
+	UBOOL DrawWireframe( GLenum Type, INT FirstIndex, INT Count );
 
 	FOpenGLRenderInterface(UUC2GLRenderDevice* InRenDev);
 	~FOpenGLRenderInterface();

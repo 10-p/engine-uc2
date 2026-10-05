@@ -314,6 +314,10 @@ class FOpenGLDynamicIndexBuffer : public FOpenGLIndexBuffer
 {
 public:
 	INT		Tail;
+	// M11: the indices added last, kept on the CPU where wireframe is drawn as lines by the
+	// driver (GLES has no polygon mode); ShadowBase is the buffer index of its first element.
+	TArray<BYTE>	Shadow;
+	INT				ShadowBase;
 
 	FOpenGLDynamicIndexBuffer(UUC2GLRenderDevice* InRenDev,INT InIndexSize);
 

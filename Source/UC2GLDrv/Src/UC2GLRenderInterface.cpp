@@ -102,6 +102,8 @@ FOpenGLRenderInterface::FOpenGLRenderInterface(UUC2GLRenderDevice* InRenDev)
 	appMemzero( DistortionScale, sizeof(DistortionScale) );
 	appMemzero( ColorRemapConstant, sizeof(ColorRemapConstant) );
 	PointSampleNudge		= 0;
+	InOcclusionQuery		= 0;
+	WireIndexBuffer			= 0;
 }
 
 FOpenGLRenderInterface::~FOpenGLRenderInterface()
@@ -1306,7 +1308,10 @@ void FOpenGLRenderInterface::SetMaterialBlending( FOpenGLMaterialState* NewMater
 	else
 		RenDev->glDisable( GL_ALPHA_TEST );
 
-	RenDev->glPolygonMode( GL_FRONT_AND_BACK, NewMaterialState->FillMode == FM_Wireframe ? GL_LINE : GL_FILL );
+	// (GLES has no polygon mode, and gl4es' emulation of it does not survive real buffer
+	// objects: wireframe passes are drawn as lines by DrawPrimitive there.)
+	if( !RenDev->IsGLES )
+		RenDev->glPolygonMode( GL_FRONT_AND_BACK, NewMaterialState->FillMode == FM_Wireframe ? GL_LINE : GL_FILL );
 
 	// Depth.
 	RenDev->glDepthFunc( NewMaterialState->ZTest ? GL_LEQUAL : GL_ALWAYS );
@@ -1946,7 +1951,7 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 {
 	guard(FOpenGLRenderInterface::DrawPrimitive);
 
-	if( NumPrimitives <= 0 || !CurrentState->VertexShader )
+	if( NumPrimitives <= 0 || !CurrentState->VertexShader || InOcclusionQuery )
 		return;
 
 	GLenum	Type;
@@ -1995,7 +2000,9 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 			CommitTexCoords( Pass );
 		}
 
-		if( CurrentState->IndexBuffer )
+		if( RenDev->IsGLES && CurrentState->CurrentMaterialState->FillMode == FM_Wireframe && Type >= GL_TRIANGLES && DrawWireframe( Type, FirstIndex, Count ) )
+			;
+		else if( CurrentState->IndexBuffer )
 		{
 			INT IndexSize = CurrentState->IndexBuffer->IndexSize;
 			RenDev->glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, CurrentState->IndexBuffer->BufferID );
@@ -2025,6 +2032,84 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 	unguard;
 }
 
+//
+// M11: a wireframe pass on GLES. The edges of the triangles the draw call describes, as a
+// line list in a scratch index buffer (D3DFILL_WIREFRAME draws every edge; shared edges are
+// drawn twice here as there). Returns 0 if the indices are not at hand; the caller then
+// draws the triangles filled.
+//
+UBOOL FOpenGLRenderInterface::DrawWireframe( GLenum Type, INT FirstIndex, INT Count )
+{
+	TArray<DWORD> Lines;
+	FOpenGLIndexBuffer* IndexBuffer = CurrentState->IndexBuffer;
+	const BYTE*	Source		= NULL;
+	INT			IndexSize	= 0;
+	if( IndexBuffer )
+	{
+		IndexSize = IndexBuffer->IndexSize;
+		if( IndexBuffer == RenDev->DynamicIndexBuffer16 || IndexBuffer == RenDev->DynamicIndexBuffer32 )
+		{
+			FOpenGLDynamicIndexBuffer* Dynamic = (FOpenGLDynamicIndexBuffer*)IndexBuffer;
+			INT First = FirstIndex - Dynamic->ShadowBase;
+			if( First < 0 || (First + Count) * IndexSize > Dynamic->Shadow.Num() )
+				return 0;
+			Source = &Dynamic->Shadow( First * IndexSize );
+		}
+		else
+		{
+			FIndexBuffer* Engine = (FIndexBuffer*)IndexBuffer->RenderResource;
+			if( !Engine || Engine->GetSize() < (FirstIndex + Count) * IndexSize || Engine->GetIndexSize() != IndexSize )
+				return 0;
+			if( RenDev->ScratchBuffer.Num() < Engine->GetSize() )
+				RenDev->ScratchBuffer.Add( Engine->GetSize() - RenDev->ScratchBuffer.Num() );
+			Engine->GetContents( &RenDev->ScratchBuffer(0) );
+			Source = &RenDev->ScratchBuffer( FirstIndex * IndexSize );
+		}
+	}
+	#define UC2GL_WIRE_INDEX(i) ( Source ? (IndexSize == 4 ? ((const DWORD*)Source)[i] : (DWORD)((const _WORD*)Source)[i]) : (DWORD)(i) )
+	DWORD MaxIndex = 0;
+	INT Triangles = Type == GL_TRIANGLES ? Count / 3 : Count - 2;
+	for( INT t=0; t<Triangles; t++ )
+	{
+		DWORD V[3];
+		if( Type == GL_TRIANGLES )
+			{ V[0] = UC2GL_WIRE_INDEX(t*3); V[1] = UC2GL_WIRE_INDEX(t*3+1); V[2] = UC2GL_WIRE_INDEX(t*3+2); }
+		else if( Type == GL_TRIANGLE_STRIP )
+			{ V[0] = UC2GL_WIRE_INDEX(t); V[1] = UC2GL_WIRE_INDEX(t+1); V[2] = UC2GL_WIRE_INDEX(t+2); }
+		else
+			{ V[0] = UC2GL_WIRE_INDEX(0); V[1] = UC2GL_WIRE_INDEX(t+1); V[2] = UC2GL_WIRE_INDEX(t+2); }
+		if( V[0] == V[1] || V[1] == V[2] || V[0] == V[2] )
+			continue;	// degenerate (strip stitching)
+		for( INT e=0; e<3; e++ )
+		{
+			Lines.AddItem( V[e] );
+			Lines.AddItem( V[(e+1)%3] );
+			MaxIndex = Max( MaxIndex, V[e] );
+		}
+	}
+	#undef UC2GL_WIRE_INDEX
+	if( !Lines.Num() )
+		return 1;
+	if( !WireIndexBuffer )
+		RenDev->glGenBuffers( 1, &WireIndexBuffer );
+	RenDev->glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, WireIndexBuffer );
+	if( MaxIndex < 65536 )
+	{
+		TArray<_WORD> Short;
+		Short.Add( Lines.Num() );
+		for( INT i=0; i<Lines.Num(); i++ )
+			Short(i) = (_WORD)Lines(i);
+		RenDev->glBufferData( GL_ELEMENT_ARRAY_BUFFER, Short.Num() * sizeof(_WORD), &Short(0), GL_STREAM_DRAW );
+		RenDev->glDrawElements( GL_LINES, Lines.Num(), GL_UNSIGNED_SHORT, NULL );
+	}
+	else if( RenDev->CapUIntIndex )
+	{
+		RenDev->glBufferData( GL_ELEMENT_ARRAY_BUFFER, Lines.Num() * sizeof(DWORD), &Lines(0), GL_STREAM_DRAW );
+		RenDev->glDrawElements( GL_LINES, Lines.Num(), GL_UNSIGNED_INT, NULL );
+	}
+	return 1;
+}
+
 /*-----------------------------------------------------------------------------
 	What PC's D3DDrv does not implement (Xbox paths).
 	The post-process interface (back-buffer copy and material, CopyDepthBuffer, dynamic
@@ -2050,11 +2135,15 @@ void FOpenGLRenderInterface::SetTerrainTransform( FMatrix& WorldMat, INT HeightM
 //
 UBOOL FOpenGLRenderInterface::BeginOcclusionQuery(void)
 {
+	// M11: the engine's query geometry (wireframe boxes with every write off) is not drawn
+	// while there is nothing to count for it: see DrawPrimitive.
+	InOcclusionQuery = 1;
 	return 1;
 }
 
 UBOOL FOpenGLRenderInterface::EndOcclusionQuery(DWORD QueryNum)
 {
+	InOcclusionQuery = 0;
 	return 1;
 }
 

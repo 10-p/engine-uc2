@@ -753,6 +753,7 @@ FOpenGLDynamicIndexBuffer::FOpenGLDynamicIndexBuffer(UUC2GLRenderDevice* InRenDe
 {
 	IndexSize	= InIndexSize;
 	Tail		= 0;
+	ShadowBase	= 0;
 	Reallocate( INITIAL_DYNAMIC_INDEXBUFFER_SIZE );
 }
 
@@ -795,6 +796,13 @@ INT FOpenGLDynamicIndexBuffer::AddIndices(FIndexBuffer* Indices)
 
 	INT	BaseIndex = Tail / IndexSize;
 	Tail += Size;
+	if( RenDev->IsGLES )
+	{
+		Shadow.Empty( Size );
+		Shadow.Add( Size );
+		appMemcpy( &Shadow(0), &RenDev->ScratchBuffer(0), Size );
+		ShadowBase = BaseIndex;
+	}
 	return BaseIndex;
 
 	unguard;
