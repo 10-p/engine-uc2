@@ -241,9 +241,14 @@ static void ParseMovieShots()
 	if( Parsed )
 		return;
 	Parsed = 1;
-	FString List;
-	if( !Parse( appCmdLine(), TEXT("MOVIESHOT="), List ) )
+	// (Parse() stops at a comma, so the list is read by hand up to the next space.)
+	FString Cmd = FString(appCmdLine()).Caps();
+	INT At = Cmd.InStr( TEXT("MOVIESHOT=") );
+	if( At < 0 )
 		return;
+	FString List = Cmd.Mid( At + 10 );
+	if( List.InStr( TEXT(" ") ) >= 0 )
+		List = List.Left( List.InStr( TEXT(" ") ) );
 	while( List.Len() )
 	{
 		INT Comma = List.InStr( TEXT(",") );
@@ -297,6 +302,9 @@ static void DrawMovieFrame( UViewport* Viewport, UMovieMaterial* M, FPortableMov
 		Canvas->Color = FColor(150,150,150,255);
 		Canvas->ClippedPrint( Canvas->SmallFont, 1.f, 1.f, 0, Message );
 	}
+	// The canvas batches its tiles: draw them before the frame ends (UGameEngine::Draw does the same).
+	if( Canvas->pCanvasUtil )
+		Canvas->pCanvasUtil->Flush();
 	Viewport->Unlock();
 	Viewport->Present();
 }
@@ -313,8 +321,11 @@ UBOOL appPlayMovieFullscreen( const TCHAR* Name, EFullscreenMovieKind Kind, UBOO
 		return 0;
 	ParseMovieShots();
 	UMovieMaterial* M = WrapPlayer( Player, Name );
-	// XboxMovieThread::Start: the credits keep their bands (bIsCreditsMovie).
-	UBOOL bHideSubtitles = !GShowSubtitles && !appStrstr( Name, TEXT("UC2_Credits") );
+	// Only XboxMovieThread (cinematics, credits) hid the bands, and never for the credits (bIsCreditsMovie);
+	// the start-up logos went through FInitialMovieThread, which drew the whole picture.
+	UBOOL bHideSubtitles = Kind == FSMOVIE_Cinematic && !GShowSubtitles && !appStrstr( Name, TEXT("UC2_Credits") );
+	debugf( NAME_Log, TEXT("UC2Movie: subtitles %s (SUBTITLES; the profile's cinematic captions)%s"), GShowSubtitles ? TEXT("on") : TEXT("off"),
+		bHideSubtitles ? TEXT(": the subtitle bands are hidden") : TEXT("") );
 
 	GFullscreenMovie = 1;
 	GMovieSkipRequested = 0;
