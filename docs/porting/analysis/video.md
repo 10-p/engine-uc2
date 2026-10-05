@@ -392,3 +392,52 @@ into the run tree). `UC2ALAudio`: `OpenMovieAudio` + stream class (Step 3).
 - MovieMaterial: `bDecodeFromMemory` streams from the file (no background whole-file load); OnDonePlaying fires
   once at the end (the Xbox decoder answered ENDOFFILE on every later call); a material nobody draws for more
   than a second continues from its picture (real-time clock re-based) instead of decoding the gap.
+
+## Step 5 - V5 in the running game: `tools/dev/m9-movies.py` (2026-10-05)
+
+`python3 tools/dev/m9-movies.py` (rebuilds `run/m9` with mkrun-uc2.sh, then every scenario under
+`bin/capped 2G`, Xvfb 1280x720, the game window 640x480; outputs `logs/m9/m9-<scenario>.{out,png,wav}`,
+summary `logs/m9/m9-summary.txt`). Full run, literally:
+```
+PASS m9-logos-start: UC2Movie: full-screen ..\Movies\UC2_Logos.xmv (640x480, 600 frames
+PASS m9-logos-advance: screenshots at movie time 4.011 s (frame 120) and 12.011 s (frame 360) differ: PSNR between them 10.4 dB
+PASS m9-logos-match: each screenshot matches the cooked frame shown at its time (decoded picture 120 / 360, 640x480 quad): PSNR 79.7 / 65.8 dB against its own frame, 10.4 / 10.4 dB against the other one
+PASS m9-logos-end: UC2Movie: ..\Movies\UC2_Logos.xmv ended at movie time 20.000 s, frame 599 of 600, 1097 pictures presented in 20.002 s
+PASS m9-logos-clean: 0 Critical, 0 GL errors, 0 processes left
+PASS m9-logos-skip: UC2Movie: ..\Movies\UC2_Logos.xmv skipped by a key or button at movie time 2.987 s, frame 89; the menu runs on; 0 Critical
+PASS m9-menu-movie-log: MovieMaterials drawn: T_Portrait.GameType.Portrait_Gametype_CTF; advancing: T_Portrait.GameType.Portrait_Gametype_CTF [0, 60, 120, 181, 243, 304]
+PASS m9-menu-movie-shots: two screenshots 2 s apart: the portrait (412, 96, 565, 176) differs (PSNR between them 12.2 dB), the title (495, 40, 600, 68) and the list (60, 82, 360, 110) do not (37.3, 34.0 dB)
+PASS m9-menu-movie-clean: 0 Critical, 0 GL errors, 0 processes left
+PASS m9-cinematic-loading-screen: UC2Movie: loading screen for DM-Deadbolt (static: the first picture of UI_LoadingMovie, "LOADING...")
+PASS m9-cinematic-start: UC2Movie: opened ../Movies/04a_AscPre5.ogv for D:\Movies\04a_AscPre5.xmv: Theora 640x480, 621 frames at 30 fps, Vorbis 44100 Hz 2 ch from ../Movies/04a_AscPre5.ogv (911296 frames, padded to 912870); language int: international track 0
+PASS m9-cinematic-advance: screenshots at movie time 5.003 s (frame 150) and 14.005 s (frame 420) differ: PSNR between them 14.7 dB
+PASS m9-cinematic-match: each screenshot matches the cooked frame shown at its time (decoded picture 150 / 420, 640x480 quad): PSNR 66.6 / 67.3 dB against its own frame, 14.7 / 14.7 dB against the other one (subtitles off: the reference has the HideSubtitles bands black too)
+PASS m9-cinematic-end: UC2Movie: D:\Movies\04a_AscPre5.xmv ended at movie time 20.700 s, frame 620 of 621, 1207 pictures presented in 20.717 s; the level renders afterwards (UC2GLDrv frame lines follow)
+PASS m9-cinematic-sound: stream opened at 0.86 s of the capture; CHECK music cine-src.wav in cine-cut.wav: envelope correlation 0.997 at 0.85 s, mix gain 0.00 dB (expected 0.00 dB, error +0.00 dB), control track ctrl-src.wav correlates 0.212: PASS
+PASS m9-cinematic-clean: 0 Critical, 0 GL errors, 0 processes left; UC2Audio: movie sound stream closed after 20.700 s played
+PASS m9-cinematic-skip: UC2Movie: D:\Movies\04a_AscPre5.xmv skipped by a key or button at movie time 3.093 s, frame 92 of 621, 169 pictures presented in 3.116 s; the level renders afterwards; 0 Critical
+PASS m9-nullrenderer: render device null: True; level up: True; movie lines: 0 []
+PASS m9-server: level up: True; movie lines: 0 []
+```
+How the decisions are made: screenshots by `-movieshot=<t>` (the engine's SHOT exec right after presenting the
+picture whose movie time first passes t; the log names that frame), compared over the movie's quad with the
+cooked file's picture for that frame (ffmpeg -threads 1, the last decoded picture with pts <= frame, BT.601
+limited range with replicated chroma, bilinear scaling to the quad, which is 1:1 here): its own frame >= 30 dB
+and >= 3 dB better than the other frame (measured 65.8-79.7 dB, i.e. nearly bit-identical; the rest is GL
+filtering). The sound: `-audiowave=` capture cut 1 s before the stream's logged start, `tools/dev/audio-music-
+check.py` (M8's, unchanged) against the cooked track, expected gain 0 dB (no category, no headroom: XMV sound
+went outside XACT); control = UC2_Logos's track. Menu: `Down, Return` 10 s after start-up opens INSTANT ACTION
+(UCMenu's arena page) with the CTF portrait behind the "no profile" dialog; fixed regions of the 640x480 layout.
+Skips: an XTest Return key 3 s after the movie's start line.
+
+Fixed on the way (found by running): (1) the full-screen draw showed nothing - the canvas batches tiles and
+`UGameEngine::Draw` flushes `pCanvasUtil` before unlocking; our loop now does too; (2) `-movieshot=4,12` took one
+shot - `Parse()` stops at a comma; (3) the logos showed the subtitle bands - the profile sends `SUBTITLES False`
+at start-up (our new command works) and the bands belong to XboxMovieThread only (cinematics), never to the
+logos (FInitialMovieThread); (4) a map on the command line loads inside `UGameEngine::Init` before the window
+exists, so no movie can show there: the cinematic scenarios travel from the menu with `EXEC=` + `open`, as the
+ladder does.
+
+Looked at (sanity): `m9-logos-0/1.png` (upright, correct colours, whole picture), `m9-cinematic-1.png`
+(letterboxed scene with the black bands, colours plausible, no tint), `m9-menu-movie-1.png` (CTF portrait
+playing in its frame behind the dialog).
