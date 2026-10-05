@@ -22,6 +22,8 @@
 #   M10_STOPSIG=INT         signal that ends the game after the scenario (default TERM)
 #   M10_MEM=3G              capped's ceiling (default 2G)
 #   M10_PROC=uc2.exe        process name for the "left running" check (default uc2.bin)
+#   M10_SETTLE=12           seconds between "level up for play" and the Fire that starts the match (default 6;
+#                           under wine the first frames of the level come later and an early Fire is lost)
 # The game is also given UC2_WINE_DISPLAY=$DISPLAY (Xvfb's), which tools/dev/m12-wine.sh needs.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -144,7 +146,7 @@ sleep 1.5
 $accept
 expect $p-travel-to-deathmatch Game class is 'UCDeathmatch' 120
 expect $p-deadbolt-up Bringing Level DM-Deadbolt.MyLevel up for play 60
-sleep 6
+sleep ${M10_SETTLE:-6}
 $fire
 sleep 4
 probe spawn
