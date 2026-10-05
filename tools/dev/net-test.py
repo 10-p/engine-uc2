@@ -326,6 +326,28 @@ def check_dedicated1():
         finish(ck, procs, allow_invalid_class=1)
 
 
+def place_near(srv, name, other, d=450, tag="PL"):
+    """NETPLACENEAR, then check on the server 1.5 s later that the pawn stayed (a spot can be on a jump pad or a
+    slope: in the first runs B ended 700 units from where it was put); next heading if not. Returns the
+    log line of the accepted placement or None."""
+    first = 0
+    for attempt in range(16):
+        srv.send("exec netplacenear %s %s %d %d" % (name, other, d, first))
+        m = srv.wait(r"^NetProbe: placenear %s (ok loc=\(([-0-9.]+),([-0-9.]+),([-0-9.]+)\) heading=\d+ index=(\d+)|failed.*)$" % name, 15)
+        if not m or not m.group(1).startswith("ok"):
+            return None
+        placed = (float(m.group(2)), float(m.group(3)), float(m.group(4)))
+        time.sleep(1.5)
+        p = srv.probe("%s%d" % (tag, attempt))
+        now = pawn_of(p, name)
+        if now and dist(now["loc"], placed) < 30:
+            return m.group(0)
+        first = int(m.group(5)) + 1
+        if first >= 16:
+            return None
+    return None
+
+
 def fight(ck, srvproc, attacker, victim, aname, vname, max_shots=40):
     """attacker aims at victim and fires until the victim dies on the server; returns (first-hit, kill) dicts."""
     sp0 = srvproc.probe("F0")
@@ -366,10 +388,8 @@ def check_dedicated2(ck="dedicated2", srv_extra=(), cli_extra=()):
         pa, pb = spawn_all([a, b], "spawn")
         result(bool(pa and pb), ck + ".spawn", "NetA localpawn=%s, NetB localpawn=%s"
                % (bool(pa), bool(pb)))
-        s.send("exec netplacenear NetB NetA 450")
-        pl = s.wait(r"^NetProbe: placenear NetB (ok|failed.*)", 15)
-        result(bool(pl) and pl.group(1).startswith("ok"), ck + ".place", "server: %s" % (pl.group(0) if pl else None))
-        time.sleep(1.5)
+        pl = place_near(s, "NetB", "NetA")
+        result(bool(pl), ck + ".place", "server: %s (and still there 1.5 s later)" % pl)
         sp, ap, bp = s.probe("P1"), a.probe("P1"), b.probe("P1")
         sB, aB = pawn_of(sp, "NetB"), pawn_of(ap, "NetB")
         sA, bA = pawn_of(sp, "NetA"), pawn_of(bp, "NetA")
@@ -389,9 +409,7 @@ def check_dedicated2(ck="dedicated2", srv_extra=(), cli_extra=()):
         result(mv > 100 and d3 < 40, ck + ".othermoves", "NetB walked: NetA's view of NetB moved %.1f units, %.1f from the server's"
                % (mv, d3))
         # Put B back in front of A and shoot it.
-        s.send("exec netplacenear NetB NetA 450")
-        s.wait(r"^NetProbe: placenear NetB", 15)
-        time.sleep(1.0)
+        place_near(s, "NetB", "NetA", tag="PK")
         first, kill = fight(ck, s, a, b, "NetA", "NetB")
         time.sleep(1.0)
         ap3, bp3 = a.probe("K1"), b.probe("K1")
@@ -408,9 +426,7 @@ def check_dedicated2(ck="dedicated2", srv_extra=(), cli_extra=()):
         # Health seen by the victim's own client and by the attacker: compared in a separate shot sequence after respawn.
         pb2 = spawn(b, "Brespawn")
         if pb2:
-            s.send("exec netplacenear NetB NetA 450")
-            s.wait(r"^NetProbe: placenear NetB", 15)
-            time.sleep(1.0)
+            place_near(s, "NetB", "NetA", tag="PH")
             h_before = pawn_of(s.probe("H0"), "NetB")
             got = None
             for i in range(20):
@@ -444,10 +460,8 @@ def check_listen():
         result(bool(j), ck + ".join", "listen server: %s" % (j.group(0) if j else "no join in 60 s"))
         pl, pb = spawn_all([l, b], "spawn")
         result(bool(pl and pb), ck + ".spawn", "NetL localpawn=%s NetB localpawn=%s" % (bool(pl), bool(pb)))
-        l.send("exec netplacenear NetB NetL 450")
-        pm = l.wait(r"^NetProbe: placenear NetB (ok|failed.*)", 15)
-        result(bool(pm) and pm.group(1).startswith("ok"), ck + ".place", pm.group(0) if pm else "no answer")
-        time.sleep(1.5)
+        pm = place_near(l, "NetB", "NetL")
+        result(bool(pm), ck + ".place", "%s (and still there 1.5 s later)" % pm)
         lp, bp = l.probe("P1"), b.probe("P1")
         d1 = dist(pawn_of(lp, "NetB")["loc"], pawn_of(bp, "NetB")["loc"]) if pawn_of(lp, "NetB") and pawn_of(bp, "NetB") else 1e9
         d2 = dist(pawn_of(lp, "NetL")["loc"], pawn_of(bp, "NetL")["loc"]) if pawn_of(lp, "NetL") and pawn_of(bp, "NetL") else 1e9
@@ -459,9 +473,7 @@ def check_listen():
         lp2 = l.probe("P2")
         mv = dist(pawn_of(lp, "NetB")["loc"], pawn_of(lp2, "NetB")["loc"]) if pawn_of(lp, "NetB") and pawn_of(lp2, "NetB") else 0
         result(mv > 100, ck + ".clientmoves", "the listen server sees NetB move %.1f units" % mv)
-        l.send("exec netplacenear NetB NetL 450")
-        l.wait(r"^NetProbe: placenear NetB", 15)
-        time.sleep(1.0)
+        place_near(l, "NetB", "NetL", tag="PK")
         first, kill = fight(ck, l, l, b, "NetL", "NetB")
         time.sleep(1.0)
         bp3 = b.probe("K1")
@@ -646,9 +658,7 @@ def check_glshot():
         s.wait(r"Join succeeded: ", 90)
         pa, pb = spawn_all([a, b], "spawn", tries=20)
         result(bool(pa and pb), ck + ".spawn", "NetA (GL) localpawn=%s, NetB localpawn=%s" % (bool(pa), bool(pb)))
-        s.send("exec netplacenear NetB NetA 350")
-        s.wait(r"^NetProbe: placenear NetB", 15)
-        time.sleep(2.0)
+        place_near(s, "NetB", "NetA", 350)
         a.send("exec netaim NetB")
         time.sleep(2.0)
         for f in os.listdir(SYS):

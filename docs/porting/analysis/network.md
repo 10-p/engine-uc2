@@ -319,3 +319,17 @@ What the Xbox build did differently (from the source, not observed): FINAL_RELEA
   must agree on; a fixed client against an unfixed server (e.g. the old wine `ucc.exe`) can desync.
 - The test harness carries over: `-nettest=`/NETPROBE work over any driver; only the URL and the server start
   differ.
+
+### Step 10: full run from a fresh tree; a harness weakness found (placement did not stick)
+
+`NET_SOAK_MIN=10 tools/dev/net-test.sh` (fresh `run/net`, commit 1b2b... see `logs/net/full-run.txt`):
+dedicated1, dedicated2, listen, travel, disconnect, glshot all PASS, 0 Critical anywhere; lag `.hit/.kill/
+.healthseen` FAILED this time (no damage in 40 shots), `.clean` PASS. Cause (from the logs, not a net defect):
+NETPLACENEAR's spot was not where NetB stayed -- server probe 1.5 s after `placenear NetB ok
+loc=(255.7,3574.3,-386.1)` shows NetB at (-638,1645) under lag and at (605,2967) even in the passing
+dedicated2 run (DM-Deadbolt has jump pads/slopes near there; server-authoritative ServerMove,
+UnController.cpp:369, keeps the server's position, so the pawn itself moved). In the passing runs NetA still
+hit NetB at the new distance; under lag NetB ended 811 units away and the race weapon did not reach. Fix
+(harness + test command): NETPLACENEAR takes an optional first heading index and reports the index it used;
+`place_near()` in net-test.py re-probes 1.5 s later and moves on to the next heading until the pawn stays
+within 30 units. `.place` now means "placed and still there".

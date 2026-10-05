@@ -7,7 +7,7 @@
 	                                     pawn and one per PlayerReplicationInfo in this process's level
 	  NETPLACE <name> <x> <y> <z> <yaw>  server/listen server: move that player's pawn there (the
 	                                     client follows through the engine's own position correction)
-	  NETPLACENEAR <name> <other> <dist> server: put that player's pawn <dist> units from the
+	  NETPLACENEAR <name> <other> <dist> [<first>] server: put that player's pawn <dist> units from the
 	                                     other's, at the first of 16 headings with a clear path for
 	                                     a pawn-sized box between them, facing the other
 	  NETAIM <name>                      a player's own process: turn the local player controller
@@ -177,6 +177,7 @@ static void PlaceNear( UGameEngine* Engine, const TCHAR* Cmd )
 	ParseToken( Cmd, Name, 0 );
 	ParseToken( Cmd, Other, 0 );
 	FLOAT Dist = appAtof( *ParseToken(Cmd,0) );
+	INT First = appAtoi( *ParseToken(Cmd,0) );	// optional: the first of the 16 headings to try
 	ULevel* Level = Engine->GLevel;
 	if( !Level || !Level->GetLevelInfo() || Level->GetLevelInfo()->NetMode==NM_Client )
 	{
@@ -193,7 +194,7 @@ static void PlaceNear( UGameEngine* Engine, const TCHAR* Cmd )
 	APawn* P = C->Pawn;
 	FVector From = O->Pawn->Location;
 	FVector Extent( P->CollisionRadius, P->CollisionRadius, P->CollisionHeight );
-	for( INT k=0; k<16; k++ )
+	for( INT k=Clamp(First,0,16); k<16; k++ )
 	{
 		FVector Dir = FRotator( 0, k*4096, 0 ).Vector();
 		FVector To = From + Dir * Dist;
@@ -213,7 +214,7 @@ static void PlaceNear( UGameEngine* Engine, const TCHAR* Cmd )
 		P->Velocity = P->Acceleration = FVector(0,0,0);
 		P->Rotation = R;
 		C->Rotation = R;
-		debugf( NETPROBE, TEXT("placenear %s ok loc=(%.1f,%.1f,%.1f) heading=%i"), *Name, P->Location.X, P->Location.Y, P->Location.Z, k*4096 );
+		debugf( NETPROBE, TEXT("placenear %s ok loc=(%.1f,%.1f,%.1f) heading=%i index=%i"), *Name, P->Location.X, P->Location.Y, P->Location.Z, k*4096, k );
 		return;
 	}
 	debugf( NETPROBE, TEXT("placenear %s failed: no clear spot at %.0f"), *Name, Dist );
