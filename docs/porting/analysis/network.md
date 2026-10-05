@@ -333,3 +333,22 @@ hit NetB at the new distance; under lag NetB ended 811 units away and the race w
 (harness + test command): NETPLACENEAR takes an optional first heading index and reports the index it used;
 `place_near()` in net-test.py re-probes 1.5 s later and moves on to the next heading until the pawn stays
 within 30 units. `.place` now means "placed and still there".
+
+### Step 11: why placements slid back -- UC2's ServerMove rewind; NETPLACE fixed; full suite green
+
+With the verifying `place_near` (step 10) the lag and listen runs still failed `.place`: after EVERY placement
+the server pawn was back at the same spot 1.5 s later (`logs/net/lag-srv.log`: six headings tried, NetB always
+back at (-1281.2,3483.7,-34.2)). Cause: UC2 (Epic "moelfke") returns the pawn to `LastServerMoveLocation` at the
+start of every ServerMove (UnController.cpp:413) and in the server's pawn tick (UnLevTic.cpp:401), to undo
+physics run between client moves; a server-side FarMoveActor that does not also update that field is undone by
+the next move. NETPLACE/NETPLACENEAR now record the new spot there (`KeepServerMoveSpot`, UC2NetTest.cpp), as a
+client move would. Rerun (`tools/dev/net-test.sh dedicated2 listen lag`): all items PASS, placements stick
+(`... (and still there 1.5 s later)`).
+
+Open question for gameplay (not tested, not changed): any other server-side teleport of a live player pawn
+(script `SetLocation` from a Teleporter or a kismet-style event) would be undone the same way unless that
+code also resets `LastServerMoveLocation` (PlayerController.Restart does, UnrealScript line 3323). Respawns
+are fine (Restart). Worth a look when maps with teleporters are played online.
+
+Full suite before this fix (`logs/net/full-run2.txt`, fresh tree): dedicated1, dedicated2, travel, disconnect,
+glshot PASS; listen and lag failed only `.place` (the cause above), their hit/kill/health items PASS.

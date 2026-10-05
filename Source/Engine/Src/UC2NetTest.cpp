@@ -125,6 +125,8 @@ static void Probe( UGameEngine* Engine, const TCHAR* Tag )
 	}
 }
 
+static void KeepServerMoveSpot( AController* C );
+
 static void Place( UGameEngine* Engine, const TCHAR* Cmd )
 {
 	FString Name;
@@ -156,11 +158,26 @@ static void Place( UGameEngine* Engine, const TCHAR* Cmd )
 		P->Acceleration = FVector(0,0,0);
 		P->Rotation = R;
 		C->Rotation = R;
+		KeepServerMoveSpot( C );
 		debugf( NETPROBE, TEXT("place %s %s loc=(%.1f,%.1f,%.1f) yaw=%i"), *Name, Moved ? TEXT("ok") : TEXT("failed"),
 			P->Location.X, P->Location.Y, P->Location.Z, Yaw );
 		return;
 	}
 	debugf( NETPROBE, TEXT("place %s failed: no such player"), *Name );
+}
+
+// After a server-side move of a player's pawn: UC2's ServerMove first returns the pawn to where the last
+// ServerMove left it (UnController.cpp:413, "epic moelfke"; also ULevel tick, UnLevTic.cpp:401), which would
+// undo the move at once. Record the new spot there, as a move by the client would have.
+static void KeepServerMoveSpot( AController* C )
+{
+	APlayerController* PC = Cast<APlayerController>( C );
+	if( PC && C->Pawn && !PC->LastServerMoveLocation.IsZero() )
+	{
+		PC->LastServerMoveLocation = C->Pawn->Location;
+		PC->LastServerMoveBase = C->Pawn->Base;
+		PC->PredictedVelocity = FVector(0,0,0);
+	}
 }
 
 static AController* FindPlayer( ULevel* Level, const TCHAR* Name )
@@ -214,6 +231,7 @@ static void PlaceNear( UGameEngine* Engine, const TCHAR* Cmd )
 		P->Velocity = P->Acceleration = FVector(0,0,0);
 		P->Rotation = R;
 		C->Rotation = R;
+		KeepServerMoveSpot( C );
 		debugf( NETPROBE, TEXT("placenear %s ok loc=(%.1f,%.1f,%.1f) heading=%i index=%i"), *Name, P->Location.X, P->Location.Y, P->Location.Z, k*4096, k );
 		return;
 	}
