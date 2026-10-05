@@ -369,3 +369,25 @@ UC2_WINEPREFIX=.cache/wine-net tools/dev/m12-wine-smoke.sh netjoin` -> `PASS net
 succeeded: Player-1', client pawn=1 loc=(1977.8,583.7,-34.1); 0 assertions; server shut down cleanly,
 Critical 0`. With the default trees it needs both run/m12 and run/m12-native rebuilt from a branch with these
 fixes.
+
+### Step 13 (checkpoint after the second cut-off): gate state
+
+Done before the cut-off (logs under `<WorkUC2>/logs/net/`):
+- Final fresh-tree run of every check except soak, at b78b396 (`final-run.txt`, finished 09:30, rc=0):
+  dedicated1 (8 items), dedicated2 (9), listen (8), travel (6), disconnect (6), lag (9), glshot (3), wine (5),
+  leftovers: ALL PASS. glshot picture looked at again (NetB with its label and lock-on reticle in a
+  DM-Deadbolt corridor, scoreboard NetA 0 / NetB 0).
+- Soak (10 min, 2 clients + 2 bots): PASS twice (`full-run.txt` 09:03 and step 8), on code before 7bb4b53 /
+  3047b6e, which changed only the test placement command (soak does not place). Rerun at the tip below.
+- Gate (a) native: `capped 5G -- cmake --preset native && cmake --build build-native -j6` rc 0
+  (`gate-native-*.log`, 09:17, tip). wasm: `source env.sh && cmake --preset wasm && cmake --build build-wasm
+  -j6` rc 0 at 09:01 (before 3047b6e, a test-command change in Engine/Src/UC2NetTest.cpp): rebuilt below.
+- Gate (d) on a fresh tree `run/netreg`: `ucc-bin verifyclasses` exit 0, `VERIFY: all native class layouts
+  match`; `ucc-bin UC2ALAudio.UC2AudioSelfTest` -> `39 checks, 0 failed`; `M10_TREE=netreg
+  M10_OUT=logs/net/m10 tools/dev/m10-controls.sh keyboard`: first run FAIL 14/16 (`kb-q-switches-back-to-ranged`,
+  `kb-alt-fires`), second run PASS 16/16, and PASS 16/16 with the pre-branch m12 uc2.bin in the same tree
+  (M10_LAUNCH) -> recorded as a flaky first run under machine load, not a regression (not proven);
+  `tools/dev/run-uc2-shot.sh net gate-deadbolt 150 0 DM-Deadbolt -glerrors` -> `UC2GLDrv: frame 1200, 0 GL
+  errors so far`, 0 Critical (a 60 s run reaches only ~400 frames under llvmpipe, before the first count line).
+- Gate (c): every `.clean` item PASS in the final runs = 0 Critical/assert/overflow/bunch lines in every
+  process's log.
