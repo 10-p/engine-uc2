@@ -331,3 +331,8 @@ indices (`GetTypeHash(UObject*)`); literal `*4` sizes in memcpy are pixel rows.
 - Under wine (own prefix `.cache/wine-m13`; `M12_TREE=m13-win64 M12_REF=m13 M12_OUT=logs/m13/win64
   UC2_WINEPREFIX=<WorkUC2>/.cache/wine-m13 tools/dev/m12-wine-smoke.sh verify server`): **verify PASS** (the 64-bit
   mode: 400 classes 0 mismatches, 6,578 scripts scanned), **server PASS** (DM-Deadbolt up, clean Ctrl+C).
+- Rest of the wine smoke on windows64 (`... m12-wine-smoke.sh null gl pinned audiocheck selftest capture keyboard
+  pad nosound leftovers`): **10 PASS, 0 FAIL** — null, gl (0 GL errors in 663 frames), **pinned: windows64 under
+  wine vs Linux x86_64 at the same view, static part 100.000% within 2 levels**, audiocheck 0 failures, selftest
+  39/0, capture (menu music -19.01 dB), keyboard 16, pad 33, nosound, leftovers (`logs/m13/win64/smoke-summary.txt`).
+  `netjoin` not run (the join does not complete on any platform: net-join branch). wine is not Windows.
