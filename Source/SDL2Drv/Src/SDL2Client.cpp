@@ -8,6 +8,7 @@
 =============================================================================*/
 
 #include "SDL2Drv.h"
+#include "SDL2InputTest.h"
 
 /*-----------------------------------------------------------------------------
 	Class implementation.
@@ -23,6 +24,8 @@ USDL2Client::USDL2Client()
 {
 	guard(USDL2Client::USDL2Client);
 	InMenuLoop = 0;
+	PadsInitialized = 0;
+	InputTest = NULL;
 	unguard;
 }
 
@@ -37,6 +40,16 @@ void USDL2Client::StaticConstructor()
 	new(GetClass(),TEXT("StartupFullscreen"), RF_Public)UBoolProperty(CPP_PROPERTY(StartupFullscreen), TEXT("Display"),  CPF_Config );
 	new(GetClass(),TEXT("MouseXMultiplier"),  RF_Public)UFloatProperty(CPP_PROPERTY(MouseXMultiplier),  TEXT("Display"),  CPF_Config );
 	new(GetClass(),TEXT("MouseYMultiplier"),  RF_Public)UFloatProperty(CPP_PROPERTY(MouseYMultiplier),  TEXT("Display"),  CPF_Config );
+
+	// M10 pads: what the Xbox driver hard-codes, as settings (SDL2Pads.cpp, controls.md).
+	new(GetClass(),TEXT("PadButtonThreshold"),RF_Public)UIntProperty  (CPP_PROPERTY(PadButtonThreshold),TEXT("Input"),    CPF_Config );
+	new(GetClass(),TEXT("PadStickDeadZone"),  RF_Public)UFloatProperty(CPP_PROPERTY(PadStickDeadZone),  TEXT("Input"),    CPF_Config );
+	new(GetClass(),TEXT("PadRepeatDelay"),    RF_Public)UFloatProperty(CPP_PROPERTY(PadRepeatDelay),    TEXT("Input"),    CPF_Config );
+	new(GetClass(),TEXT("PadRepeatRate"),     RF_Public)UFloatProperty(CPP_PROPERTY(PadRepeatRate),     TEXT("Input"),    CPF_Config );
+	new(GetClass(),TEXT("PadRumble"),         RF_Public)UBoolProperty (CPP_PROPERTY(PadRumble),         TEXT("Input"),    CPF_Config );
+	new(GetClass(),TEXT("PadRumbleScale"),    RF_Public)UFloatProperty(CPP_PROPERTY(PadRumbleScale),    TEXT("Input"),    CPF_Config );
+	new(GetClass(),TEXT("JoyDeadZone"),       RF_Public)UFloatProperty(CPP_PROPERTY(JoyDeadZone),       TEXT("Input"),    CPF_Config );
+	new(GetClass(),TEXT("LogInput"),          RF_Public)UBoolProperty (CPP_PROPERTY(LogInput),          TEXT("Input"),    CPF_Config );
 
 	// Compiled defaults for the inherited UClient settings, equal to Default.ini's [SDL2Drv.SDL2Client]
 	// (a copy of [WinDrv.WindowsClient]). UClient::StaticConstructor registers them without values, so
@@ -63,10 +76,18 @@ void USDL2Client::StaticConstructor()
 	for( INT i=0; i<LODSET_MAX; i++ )
 		TextureLODSet[i] = 4;					// "Normal" in UClient's ETextureDetail list
 	TextureLODSet[LODSET_Lightmap] = 0;			// "UltraHigh"
-	UseJoystick			= 0;
+	UseJoystick			= 1;		// M10: pads on (WinDrv's DirectInput joystick was off by default)
 	StartupFullscreen	= 0;
 	MouseXMultiplier	= 1.0f;
 	MouseYMultiplier	= 1.0f;
+	PadButtonThreshold	= 30;		// XINPUT_GAMEPAD_MAX_CROSSTALK (XDK Xbox.h)
+	PadStickDeadZone	= 0.0f;		// the Xbox driver passes sticks raw; the bindings have DeadZone=
+	PadRepeatDelay		= 0.2f;		// XboxViewport.cpp:469
+	PadRepeatRate		= 0.1f;		// XboxViewport.cpp:497
+	PadRumble			= 1;
+	PadRumbleScale		= 1.0f;
+	JoyDeadZone			= 0.35f;	// [XboxDrv.XboxClient] JoyDeadZone in Epic's inis
+	LogInput			= 0;
 
 	unguard;
 }
@@ -83,10 +104,20 @@ void USDL2Client::Init( UEngine* InEngine )
 	// Init base.
 	UClient::Init( InEngine );
 
-	// Video only. Pads (SDL_INIT_GAMECONTROLLER) join at M10, see PollGamepads.
+	// Our log name. RF_Native keeps it out of the purge of unreferenced names (UnObj.cpp RemoveNames),
+	// which would otherwise hand its index to another name and the lines to that name's suppression.
+	NAME_SDL2Input = FName( TEXT("SDL2Input") );
+	NAME_SDL2Input.SetFlags( RF_Native );
+
 	if( SDL_InitSubSystem( SDL_INIT_VIDEO ) != 0 )
 		appErrorf( TEXT("Couldn't initialize SDL2 video: %s"), appFromAnsi(SDL_GetError()) );
 	debugf( NAME_Init, TEXT("SDL2 video driver: %s"), appFromAnsi(SDL_GetCurrentVideoDriver()) );
+
+	// Pads (M10, SDL2Pads.cpp), and the test channel that drives a virtual one (SDL2InputTest.h).
+	InitPads();
+	FString TestFile;
+	if( Parse( appCmdLine(), TEXT("INPUTTEST="), TestFile ) && PadsInitialized )
+		InputTest = new FSDL2InputTest( *TestFile );
 
 	// Text input (WM_CHAR's role). SDL enables it on desktop by default; say so explicitly.
 	SDL_StartTextInput();
@@ -123,6 +154,12 @@ void USDL2Client::Destroy()
 	if( Engine && Engine->GRenDev )
 		Engine->GRenDev->Exit(NULL);
 
+	if( InputTest )
+	{
+		delete InputTest;
+		InputTest = NULL;
+	}
+	ExitPads();
 	SDL_QuitSubSystem( SDL_INIT_VIDEO );
 
 	debugf( NAME_Exit, TEXT("SDL2 client shut down") );
@@ -162,6 +199,8 @@ UBOOL USDL2Client::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	guard(USDL2Client::Exec);
 	if( UClient::Exec( Cmd, Ar ) )
 		return 1;
+	if( PadExec( Cmd, Ar ) )
+		return 1;
 	return 0;
 	unguard;
 }
@@ -193,6 +232,12 @@ void USDL2Client::PumpEvents()
 			case SDL_MOUSEBUTTONDOWN:
 			case SDL_MOUSEBUTTONUP:		WindowID = Ev.button.windowID;	break;
 			case SDL_MOUSEWHEEL:		WindowID = Ev.wheel.windowID;	break;
+			case SDL_CONTROLLERDEVICEADDED:
+				PadAdded( Ev.cdevice.which );		// a device index
+				continue;
+			case SDL_CONTROLLERDEVICEREMOVED:
+				PadRemoved( Ev.cdevice.which );		// an instance id
+				continue;
 			default:
 				continue;
 		}
@@ -221,25 +266,9 @@ USDL2Viewport* USDL2Client::FindViewport( DWORD WindowID )
 	unguard;
 }
 
-//
-// M10 HOOK -- game pads. Deliberately empty at M4.
-//
-// What belongs here (spec: Source/XboxDrv/Src/XboxClient.cpp and XboxViewport.cpp):
-//  - SDL_INIT_GAMECONTROLLER in Init, SDL_CONTROLLERDEVICEADDED/REMOVED in PumpEvents, mapped to
-//    pad slots 0..3 and announced as IK_JoySlider1/IK_JoySlider2 (UXboxClient::DetectDevices).
-//  - Pads bound to a viewport (UViewport::GamepadID) are read by that viewport's UpdateInput with
-//    Engine->ActiveControllerId set to the pad, buttons through GamepadButtonMap, sticks as
-//    IK_JoyX/Y/U/V axes (UXboxViewport::UpdateInput).
-//  - Pads bound to no viewport go to InteractionMaster->MasterProcessKeyEvent / MasterProcessJoyInput
-//    only, and Start on an unbound pad may join a split-screen player (UClient::BeginSplitScreen,
-//    UXboxClient::UpdateGamepadUnboundInput).
-//  - Rumble from APlayerController::WaveformManager (UXboxViewport::UpdateGamepadRumble).
-// Keyboard and mouse never change Engine->ActiveControllerId: on PC they are pad 0, the id
-// ULevel::SpawnPlayActor gives the first viewport ("fake the GamepadID", UnLevAct.cpp).
-//
-void USDL2Client::PollGamepads( FLOAT DeltaSeconds )
-{
-}
+// Game pads: SDL2Pads.cpp (USDL2Client::PollGamepads and the rest). Keyboard and mouse never
+// change Engine->ActiveControllerId: on PC they are pad 0, the id ULevel::SpawnPlayActor gives the
+// first viewport ("fake the GamepadID", UnLevAct.cpp), so they and the first pad drive player one.
 
 //
 // Perform timer-tick processing on all visible viewports.  This causes

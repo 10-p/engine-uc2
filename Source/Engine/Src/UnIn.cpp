@@ -311,6 +311,16 @@ UBOOL UInput::Exec( const TCHAR* Str, FOutputDevice& Ar )
 					else
 						Speed = -(-Speed-DeadZone)/(1.f-DeadZone);
 
+#if !defined(_XBOX)
+					// M10: a stick's per-tick input (DirectAxis: IST_Hold with the tick's DeltaSeconds) is a
+					// position, not a delta, but ReadInput scales every axis by 20/DeltaSeconds on PC (by 1 on
+					// the Xbox), which made the stick 20/dt times stronger than on the Xbox and frame-rate
+					// dependent. Pre-divide here so the Xbox-tuned SpeedBase/limits mean the same on PC.
+					// (UT2004 fixed this path by multiplying by the delta instead and retuned its values.)
+					if( GetInputAction()==IST_Hold && GetInputDelta()>0.f )
+						*Axis += SpeedBase * Speed * Invert * GetInputDelta() / 20.f;
+					else
+#endif
 					*Axis += SpeedBase * Speed * Invert;
 				}
 			} else {

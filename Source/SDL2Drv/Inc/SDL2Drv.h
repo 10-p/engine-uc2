@@ -33,10 +33,44 @@
 
 class USDL2Viewport;
 class USDL2Client;
+class FSDL2InputTest;
 
 /*-----------------------------------------------------------------------------
-	USDL2Client.
+	Game pads (M10).
 -----------------------------------------------------------------------------*/
+
+// The Xbox build has four pad ports, and a pad's button i is sent as IK_Joy1+i
+// (XboxViewport.cpp GamepadButtonMap): 0-7 are the analog buttons A B X Y Black White
+// LeftTrigger RightTrigger, 8-15 the digital ones DPadUp DPadDown DPadLeft DPadRight
+// Start Back LeftThumb RightThumb. Sticks are IK_JoyX/JoyY (left) and IK_JoyU/JoyV (right).
+enum
+{
+	SDL2DRV_MAX_PADS		= 4,	// NUM_GAMEPADS
+	SDL2DRV_PAD_BUTTONS		= 16,	// XboxViewport.cpp polls 16 buttons
+	SDL2DRV_PAD_STICKAXES	= 4,	// LeftX, LeftY, RightX, RightY
+	SDL2DRV_PAD_SOURCES		= 64,	// SDL buttons (0..31) and SDL axes (32..63)
+};
+
+// One entry of the SDL control -> Xbox control table ([SDL2Drv.PadMap] in the ini).
+struct FSDL2PadMapEntry
+{
+	INT		Target;		// -1 = unmapped; 0..15 = Xbox button index; 16..19 = stick axis 0..3
+	UBOOL	Invert;		// axis sign flip (SDL's stick Y is positive down, the Xbox's up)
+};
+
+// One pad port.
+struct FSDL2Pad
+{
+	void*	Controller;							// SDL_GameController*, NULL when the port is empty
+	INT		InstanceID;							// SDL_JoystickID
+	BYTE	Position[SDL2DRV_PAD_BUTTONS];		// last value per Xbox button, 0..255 (XInput's ButtonPosition)
+	FLOAT	Axes[SDL2DRV_PAD_STICKAXES];		// -1..1, Xbox convention (up = +)
+	INT		RepeatKey;							// IK_* being auto-repeated, IK_None if none
+	DOUBLE	NextRepeatTime;
+	_WORD	RumbleLeft, RumbleRight;			// last motor speeds sent
+	DOUBLE	RumbleSentTime;
+	TCHAR	Name[64];
+};
 
 //
 // SDL2 implementation of the client (UWindowsClient's role).
@@ -51,8 +85,22 @@ class USDL2Client : public UClient, public FNotifyHook
 	FLOAT				MouseXMultiplier,
 						MouseYMultiplier;
 
+	// Pad configuration (M10; [SDL2Drv.SDL2Client], Epic's Xbox values as defaults).
+	INT					PadButtonThreshold;		// XINPUT_GAMEPAD_MAX_CROSSTALK: pressed above this (0..255)
+	FLOAT				PadStickDeadZone;		// radial, applied before the bindings' own DeadZone= (Xbox: 0)
+	FLOAT				PadRepeatDelay,			// first IST_Hold after (Xbox: 0.2 s)
+						PadRepeatRate;			// then every (Xbox: 0.1 s)
+	BITFIELD			PadRumble;				// drive the pad motors from the player's WaveformManager
+	FLOAT				PadRumbleScale;
+	FLOAT				JoyDeadZone;			// stored by SETDEADZONE, as UXboxClient (nothing reads it there either)
+	BITFIELD			LogInput;				// SDL2Input log lines for every pad event (also -inputlog)
+
 	// Variables.
 	UBOOL				InMenuLoop;
+	FSDL2Pad			Pads[SDL2DRV_MAX_PADS];
+	FSDL2PadMapEntry	PadMap[SDL2DRV_PAD_SOURCES];
+	UBOOL				PadsInitialized;
+	FSDL2InputTest*		InputTest;				// -inputtest=<file>: the M10 test channel
 
 	// Constructors.
 	USDL2Client();
@@ -81,6 +129,23 @@ class USDL2Client : public UClient, public FNotifyHook
 	void PumpEvents();
 	USDL2Viewport* FindViewport( DWORD WindowID );
 	void PollGamepads( FLOAT DeltaSeconds );
+
+	// Pads (SDL2Pads.cpp).
+	void InitPads();
+	void ExitPads();
+	void LoadPadMap();
+	void PadAdded( INT DeviceIndex );
+	void PadRemoved( INT InstanceID );
+	INT FindPadSlot( INT InstanceID );
+	UViewport* GetPadViewport( INT Slot );
+	void ReadPad( INT Slot, BYTE* NewPosition );
+	void UpdateBoundPad( USDL2Viewport* Viewport, FLOAT DeltaSeconds );
+	void UpdateUnboundPads();
+	void SendPadKey( INT Slot, UViewport* Viewport, EInputKey Key, EInputAction Action );
+	void SetPadRumble( INT Slot, _WORD Left, _WORD Right );
+	BYTE GetPadAnalogButton( INT Slot, INT ButtonIndex );
+	UBOOL LoggingInput();
+	UBOOL PadExec( const TCHAR* Cmd, FOutputDevice& Ar );
 };
 
 /*-----------------------------------------------------------------------------
@@ -143,7 +208,15 @@ class USDL2Viewport : public UViewport
 	void FocusChanged( UBOOL Gained );
 	UBOOL EnsureGLContext();
 	void DestroyGLContext();
+
+	// UPlayer/UViewport pad hooks (M10).
+	BYTE GetAnalogButtonAmount( INT ButtonIndex );
+	void SetClientTravel( const TCHAR* NextURL, UBOOL bItems, ETravelType NextTravelType );
 };
+
+// SDL2Input: the log name of every M10 input line (quiet unless LogInput/-inputlog/-inputtest).
+extern FName NAME_SDL2Input;
+#define SDL2INPUT ((EName)NAME_SDL2Input.GetIndex())
 
 #define AUTO_INITIALIZE_REGISTRANTS_SDL2DRV \
 	USDL2Viewport::StaticClass(); \
