@@ -367,8 +367,23 @@ def place_near(srv, name, other, d=450, tag="PL"):
     return None
 
 
+def ranged(attacker, aname, tag):
+    """Make sure the attacker holds its race weapon (unlimited ammo). Under simulated loss a player sometimes
+    came out of the spawn holding the melee weapon or the energy weapon (UCWeap_SniperRifle, which starts without
+    ammo) -- the same on server and client, see network.md step L3; neither can hit at 450 units. NextWeapon
+    (the Q binding) cycles to it."""
+    for k in range(5):
+        p = attacker.probe("%s%d" % (tag, k))
+        w = pawn_of(p, aname)
+        if not w or "Race" in w.get("weapon", ""):
+            return
+        attacker.input("exec NextWeapon")
+        time.sleep(1.0)
+
+
 def fight(ck, srvproc, attacker, victim, aname, vname, max_shots=40):
     """attacker aims at victim and fires until the victim dies on the server; returns (first-hit, kill) dicts."""
+    ranged(attacker, aname, "RW")
     sp0 = srvproc.probe("F0")
     v0 = pawn_of(sp0, vname)
     h0 = int(v0["health"]) if v0 else None
@@ -430,22 +445,26 @@ def check_dedicated2(ck="dedicated2", srv_extra=(), cli_extra=()):
         # Put B back in front of A and shoot it.
         place_near(s, "NetB", "NetA", tag="PK")
         first, kill = fight(ck, s, a, b, "NetA", "NetB")
-        time.sleep(1.0)
-        ap3, bp3 = a.probe("K1"), b.probe("K1")
         result(bool(first), ck + ".hit", "NetB health on the server: %s" % first)
-        if first and first["health"] > 0:
-            pass
         sp3 = kill["probe"] if kill else s.probe("K1s")
         def sc(p, who, field):
             return num(p["pris"].get(who, {}).get(field)) if p else None
-        scores = [(sc(x, "NetA", "score"), sc(x, "NetB", "deaths")) for x in (sp3, ap3, bp3)]
-        ok = bool(kill) and all(sa is not None and sa >= 1 and db is not None and db >= 1 for sa, db in scores)
+        # The clients' PlayerReplicationInfos follow within a few updates; under loss a lost update is resent
+        # after the NAK, so poll up to 6 s (a lag run once had NetB's own deaths=0 at 1 s and =1 later).
+        for k in range(6):
+            time.sleep(1.0)
+            ap3, bp3 = a.probe("K%d" % (k + 1)), b.probe("K%d" % (k + 1))
+            scores = [(sc(x, "NetA", "score"), sc(x, "NetB", "deaths")) for x in (sp3, ap3, bp3)]
+            ok = bool(kill) and all(sa is not None and sa >= 1 and db is not None and db >= 1 for sa, db in scores)
+            if ok or not kill:
+                break
         result(ok, ck + ".kill", "after %s shots: (NetA score, NetB deaths) server %s, NetA's view %s, NetB's view %s"
                % (kill and kill["shot"], scores[0], scores[1], scores[2]))
         # Health seen by the victim's own client and by the attacker: compared in a separate shot sequence after respawn.
         pb2 = spawn(b, "Brespawn")
         if pb2:
             place_near(s, "NetB", "NetA", tag="PH")
+            ranged(a, "NetA", "RH")
             h_before = pawn_of(s.probe("H0"), "NetB")
             got = None
             for i in range(20):
@@ -457,6 +476,14 @@ def check_dedicated2(ck="dedicated2", srv_extra=(), cli_extra=()):
                 hs, ha, hb = (pawn_of(x, "NetB") for x in (sv, av, bv))
                 if hs and h_before and 0 < int(hs["health"]) < int(h_before["health"]):
                     got = (int(h_before["health"]), int(hs["health"]), ha and int(ha["health"]), hb and int(hb["health"]))
+                    # the clients follow within a few updates (resent after a NAK under loss): up to 5 s
+                    for k in range(5):
+                        if got[1] == got[2] == got[3]:
+                            break
+                        time.sleep(1.0)
+                        sv, av, bv = (x.probe("HC%d-%d" % (i, k)) for x in (s, a, b))
+                        hs, ha, hb = (pawn_of(x, "NetB") for x in (sv, av, bv))
+                        got = (got[0], hs and int(hs["health"]), ha and int(ha["health"]), hb and int(hb["health"]))
                     break
             result(bool(got) and got[1] == got[2] == got[3], ck + ".healthseen",
                    "NetB health before %s; after a hit: server %s, NetA's view %s, NetB's own %s" % got if got else

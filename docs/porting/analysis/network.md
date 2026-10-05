@@ -537,3 +537,20 @@ unfixed client can still lose its own; both ends of a game should run the fix (t
   `net-test.py handshake-loss` against the WebRTC driver; they test the engine's side regardless of transport.
 - A data channel that closes must close the UNetConnection (State=USOCK_Closed) at once; otherwise only the 30 s
   ConnectionTimeout ends it, and a pending client now gives up after 20 s without WELCOME.
+
+### Step L3: `lag` ten times after the fix -- first series 7/10, all three failures in the test, not the net
+
+`logs/net/lag10/` (fix in, harness as before): runs 1,4-9 PASS 9/9; run 2: `.kill` failed only because NetB's
+own client showed deaths=0 one second after the kill (its next probe showed deaths=1: a lost PRI update resent
+after the NAK, i.e. the fix at work, but the harness probed once); runs 3 and 10: no hit at all -- the attacker
+held the melee weapon (run 3) or UCWeap_SniperRifle with no ammo (run 10, already in its spawn probe; server
+and client agreed on the weapon), neither reaches or fires at 450 units. PktLoss=20 information run: same
+no-hit pattern (melee). The joins, the movement and the mutual views passed in all eleven runs; no hang, no
+Critical.
+Harness fixes: `ranged()` cycles NextWeapon (the Q binding) until the attacker holds its race weapon before
+shooting; the kill and health comparisons on the clients poll up to 6 s / 5 s instead of one probe. A PktLoss=20
+run with them: 9/9 PASS.
+Observation, not chased (gameplay, UC2 script): under simulated loss a player sometimes comes out of a spawn
+holding the melee weapon or an empty energy weapon instead of the race weapon. Server and client agree, so it is
+not a desync; probably the order of inventory replication vs the client's weapon choice at spawn. Untested
+whether it happens on a real lossy link; noted for the script milestone.
