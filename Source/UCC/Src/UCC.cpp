@@ -45,6 +45,9 @@ Revision history:
 #if UC2_WITH_UC2ALAUDIO	// M8: the cooked-audio check commandlet (UC2ALAudio.UC2AudioCheck)
 #include "UC2ALAudio.h"
 #endif
+#if UC2_WITH_UC2MOVIE	// M9: the movie player and its self-test commandlet (UC2Movie.UC2MovieSelfTest)
+#include "UC2Movie.h"
+#endif
 #endif
 
 #endif
@@ -251,6 +254,9 @@ int main( int argc, char* argv[] )
 			AUTO_INITIALIZE_REGISTRANTS_GUI;
 #if UC2_WITH_UC2ALAUDIO	// M8
 			AUTO_INITIALIZE_REGISTRANTS_UC2ALAUDIO;
+#endif
+#if UC2_WITH_UC2MOVIE	// M9
+			AUTO_INITIALIZE_REGISTRANTS_UC2MOVIE;
 #endif
 			check( Lookup < ARRAY_COUNT(GNativeLookupFuncs) );
 			RegisterNamesGUI();

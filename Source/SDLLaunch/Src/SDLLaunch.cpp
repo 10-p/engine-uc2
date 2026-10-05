@@ -41,6 +41,9 @@ Revision history:
 #if UC2_WITH_UC2ALAUDIO	// M8
 #include "UC2ALAudio.h"
 #endif
+#if UC2_WITH_UC2MOVIE	// M9
+#include "UC2Movie.h"
+#endif
 #endif
 
 /*-----------------------------------------------------------------------------
@@ -483,6 +486,9 @@ int main( int argc, char** argv )
 #endif
 #if UC2_WITH_UC2ALAUDIO	// M8
 		AUTO_INITIALIZE_REGISTRANTS_UC2ALAUDIO;
+#endif
+#if UC2_WITH_UC2MOVIE	// M9
+		AUTO_INITIALIZE_REGISTRANTS_UC2MOVIE;
 #endif
 		AUTO_INITIALIZE_REGISTRANTS_IPDRV;
 		AUTO_INITIALIZE_REGISTRANTS_UWEB;

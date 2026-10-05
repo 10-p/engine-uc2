@@ -21,6 +21,11 @@ if(TARGET UC2ALAudio)
   list(PREPEND LINK_PACKAGES UC2ALAudio)
   target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_UC2ALAUDIO=1)
 endif()
+# M9: the movie player (factory + `ucc-bin UC2Movie.UC2MovieSelfTest`).
+if(TARGET UC2Movie)
+  list(PREPEND LINK_PACKAGES UC2Movie)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_UC2MOVIE=1)
+endif()
 target_link_libraries(${PROJECT_NAME} PRIVATE
   -Wl,--whole-archive ${LINK_PACKAGES} -Wl,--no-whole-archive
   zlib dl pthread m

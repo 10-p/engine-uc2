@@ -252,6 +252,10 @@ if(NOT EMSCRIPTEN AND NOT WIN32)
 endif()
 # --- end M8 --------------------------------------------------------------------------------------------------
 
+# --- M9: video. libtheora 1.2.0, decoder only, vendored (Thirdparty/Theora/README.uc2); every target. ---------
+add_subdirectory(Thirdparty/Theora)
+# --- end M9 --------------------------------------------------------------------------------------------------
+
 #-----------------------------------------------------------------------------
 # Engine packages. A package joins the build when its CMakeLists.txt lands (docs/porting/PLAN.md lists
 # the order); everything else under Source/ is reference and is not compiled.
@@ -259,10 +263,10 @@ endif()
 
 set(UC2_PACKAGES
   Core Engine IpDrv UWeb UnrealGame UCElements UCGameplay GUI
-  UC2ALAudio
+  UC2ALAudio UC2Movie
   Editor UCC
   SDL2Drv UC2GLDrv UC2GL4ESDrv WebRTCDrv SDLLaunch)
-# (M8: UC2ALAudio comes before UCC, which links it for its check commandlet.)
+# (M8: UC2ALAudio comes before UCC, which links it for its check commandlet. M9: UC2Movie likewise.)
 
 # Native-only tools: the commandlet host is not part of the web build. SDL2Drv and SDLLaunch are native-only
 # until the web client is wired (M4w: -sUSE_SDL=2, Asyncify yield, preload).
