@@ -412,3 +412,14 @@ leftovers PASS.
 - Script: census now kills (and counts) servers that hang on exit (the exit-time crash), `asan` check added
   (not in the default list). Never edit `m13-64bit.sh` while it runs (bash reads the file as it goes; it happened
   once at 08:55 and the running copy was restored through `/proc/<pid>/fd/255`).
+
+### Step 14 — saves PASS; pad without load; full run 2 started (2026-10-05)
+
+- `m13-64bit.sh saves` after the Exists fix: **PASS** — `AVARIS_PROFILE.PRO` written by the 64-bit and the 32-bit
+  build are byte-identical (845 bytes); 32<-64, 64<-32, 64<-64, 32<-32 loads all export the same text; 76 of 80
+  exported property lines come back as saved, the other 4 (`CustomText`, `MaplistText` localized; `PlayerName`,
+  `ProfileName` set by the loader) are the same for every load. The check compares loads with loads.
+  Not shown by running: that the old `sizeof(UObject*)` writer would have broken it (this profile's tagged
+  properties may contain no object reference); the fix is by reading (step 7).
+- Pad scenario at 64-bit three times in a row without other load: 33/33, 33/33, 33/33 (`logs/m13/pad64-r{1,2,3}`).
+- Full run 2 (`logs/m13/full-run2.txt`) started on the rebuilt trees, nothing else running.
