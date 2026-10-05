@@ -423,3 +423,24 @@ leftovers PASS.
   properties may contain no object reference); the fix is by reading (step 7).
 - Pad scenario at 64-bit three times in a row without other load: 33/33, 33/33, 33/33 (`logs/m13/pad64-r{1,2,3}`).
 - Full run 2 (`logs/m13/full-run2.txt`) started on the rebuilt trees, nothing else running.
+
+### Step 15 — full run 2: every check PASS (2026-10-05)
+
+`tools/dev/m13-64bit.sh` on run/m13 (64-bit) with run/m13-32 as reference, nothing else running (`logs/m13/full-run2.txt`, `m13-summary-run2.txt`):
+
+```
+PASS verify: exit 0, 'VERIFY: all native class layouts match'; 64-bit native size check: 400 classes, 0 mismatches while linking; 50 placeholders linked at their C++ size; bytecode scan: 6578 scripts read, 0 placeholder references; DWARF layout-check: 2 mismatches at 64-bit, layout-check: 2 mismatches at 32-bit, none new
+PASS census: 58 maps, 58 PASS at 64-bit, the same per-map result as the 32-bit build (58 PASS); servers hung on exit and killed: 0 at 64-bit, 0 at 32-bit (BLOCKERS.md); /home/ion/WorkUC2/logs/m13/m13-census-m13/summary.tsv
+PASS controls: PASS keyboard 16,PASS mouse 18,PASS text 7,PASS pad 33,PASS both 14 (scenario: checks), 0 Critical
+PASS audio: UC2AudioSelfTest: 39 checks, 0 failed; mix gain -19.02 dB (expected -19.00); 4 captures: 0 silent seconds, 0 failed cues, 0 Critical; /home/ion/WorkUC2/logs/m13/audio-summary.txt
+PASS movies: UC2MovieSelfTest: 96 checks, 0 failed; m9-movies.py 19 PASS, 0 FAIL
+PASS glselftest: fx selftest summary: 10 passed, 0 failed
+PASS effects: 14 effects, every one critical=0 glerrors=0 programs_failed=0+0 (/home/ion/WorkUC2/logs/m13/effects.txt)
+PASS pinned: 64-bit and 32-bit at the same loc=(1531.9,3111.5,-34.1) rot=(0,-40880,0); static part 100.000% within 2 levels, whole frame 91.5% bit-identical, PSNR 38.94 dB (pinned-diff.png); 64-bit 0 GL errors in 1285 frames, Critical 0
+PASS psh2glsl: psh2glsl selftest: 100 shaders, 99 compared with their definition words (6336 cases, max difference 0.00e+00), 1 without a .h, 0 failed, 0 lint warnings; 7 synthetic semantics checks, 0 failed
+PASS saves: profiles written by the 64-bit and the 32-bit build are byte-identical (845 bytes); each build loads its own and the other's file to the same values (76 of 80 exported lines as saved; the rest are localized texts and names the loader sets)
+PASS soak: 1200 s, two maps with 4 bots and the menu between, 0 Critical; RSS over the second map 386 -> 399 MiB (+3.2%), peak 399 MiB, 37 samples; UC2GLDrv: 0 GL errors in 35700 frames
+PASS leftovers: no uc2.bin/ucc-bin/Xvfb of the m13 trees running
+```
+
+RSS of the soak: 267 MB after the first map loaded, 386 -> 399 MiB over the second map (+3.2%, from 3 min after it came up), peak 399 MiB; samples in `logs/m13/soak-rss.tsv`.
