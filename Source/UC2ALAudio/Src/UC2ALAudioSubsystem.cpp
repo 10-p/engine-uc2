@@ -2069,8 +2069,9 @@ public:
 			}
 		}
 		S->MovieStreams.AddItem( this );
-		debugf( NAME_DevSound, TEXT("UC2Audio: movie sound stream opened (%i Hz, %i ch%s)"), Rate, Channels,
-			bExclusive ? TEXT(", exclusive: other sounds paused") : TEXT("") );
+		// Log, not DevSound: the time is where the movie's sound starts in a -audiowave capture.
+		debugf( NAME_Log, TEXT("UC2Audio: [%7.2f] movie sound stream opened (%i Hz, %i ch%s)"), (FLOAT)(NowOf(S) - S->T0),
+			Rate, Channels, bExclusive ? TEXT(", exclusive: other sounds paused") : TEXT("") );
 	}
 	void Detach()
 	{
@@ -2097,7 +2098,7 @@ public:
 			if( bPausedCues )
 				Audio->NotifyPauseChange( 0 );
 		}
-		debugf( NAME_DevSound, TEXT("UC2Audio: movie sound stream closed after %.3f s played"), LastPlayed / Rate );
+		debugf( NAME_Log, TEXT("UC2Audio: movie sound stream closed after %.3f s played"), LastPlayed / Rate );
 	}
 	// Take back the buffers that have played.
 	void Service()

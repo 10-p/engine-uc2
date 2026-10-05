@@ -427,6 +427,16 @@ FPortableMoviePlayer* appUpdateMovieMaterial( UMovieMaterial* M, UBOOL& bOutFall
 		return NULL;
 	M->USize = Player->GetWidth();
 	M->VSize = Player->GetHeight();
+	// Evidence for the logs: each material's frame, at most every 2 s.
+	static TMap<INT,DOUBLE> LastLogged;
+	DOUBLE Now = appSeconds();
+	DOUBLE* Last = LastLogged.Find( (INT)M );
+	if( !Last || Now - *Last >= 2.0 )
+	{
+		LastLogged.Set( (INT)M, Now );
+		debugf( NAME_Log, TEXT("UC2Movie: MovieMaterial %s frame %i of %i (pass %s, revision %i)"), M->GetPathName(),
+			Player->GetFrame(), Player->GetFrameCount(), Player->HasEnded() ? TEXT("ended") : TEXT("playing"), Player->GetRevision() );
+	}
 	return Player;
 	unguard;
 }
