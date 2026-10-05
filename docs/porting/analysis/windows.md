@@ -53,8 +53,35 @@ and `wineserver -k` after every run. Logs: `<WorkUC2>/logs/m12/`. Run trees: `<W
      rule works; the MS one is the layout MSVC 7.1 gave the shipped Windows binary and the one the Windows
      headers (SDL, WinSock, OpenAL's) are written for. `-mno-ms-bitfields` would only buy "same as Linux" for
      those five classes, at the price of a non-Windows ABI for every system struct with bitfields.
-3. Calling conventions / DLL_EXPORT under static link: _pending_
-4. `long` / `wchar_t` / `time_t` widths: _pending_
+3. **Calling conventions, DLL_EXPORT/DLL_IMPORT under static link.** UnGnuG.h: `DLL_IMPORT` empty,
+   `DLL_EXPORT` = `extern "C"`, `DLL_EXPORT_CLASS` empty, so `CORE_API`/`ENGINE_API`/... carry no
+   `__declspec(dllimport/dllexport)` (nothing is a DLL; `-static`, no export table, decision in Step 1). `VARARGS`,
+   `CDECL` empty (GCC's default is cdecl), `STDCALL` = `__stdcall` on `_WIN32` (only Win32 callbacks use it:
+   IpDrv's `ResolveThreadEntry` for `CreateThread`, the console handler as `WINAPI`). Member functions use GCC's
+   i686-mingw `thiscall` default; everything engine-side is one compiler, so no cross-compiler ABI exists. The
+   two foreign interfaces: OpenAL (function-pointer types from OpenAL Soft's own headers, `AL_APIENTRY` =
+   `__cdecl` on `_WIN32`, same headers the DLL was built with; a cdecl/stdcall mix-up would unbalance the stack
+   on the first call, and the 39-check self-test runs thousands of calls) and SDL2 (static, `SDLCALL` = cdecl).
+4. **Type widths** (measured with `sizeof` in both compilers): `long` 4 / 4 (Win32 is LLP64-like at 32 bits:
+   same as Linux i386), pointers 4 / 4, `time_t` 4 / 4 (this mingw-w64's i686 default), `wchar_t` **2** on
+   Windows / 4 on Linux, `long double` 12 / 12. `wchar_t` is in no engine structure (TCHAR is ANSI, UNICHAR is
+   `unsigned short`); its only effect was wordwrap.h's WCHAR (Step 1). `time_t`/`struct stat` only feed local
+   time/file-date arithmetic, never a file or the network. `DWORD` is `unsigned long` on Windows (from
+   `<minwindef.h>`) vs `unsigned int` on Linux: same size, a different C++ type (it surfaced once, xbstrip.cpp).
+   **The one real ABI difference is alignment: MinGW (MS ABI) aligns `double`/`QWORD`/`SQWORD` members to 8, Linux
+   i386 to 4** (MSVC 7.1 with Epic's `/Zp4` also 4). That is the wasm32 situation M4w already met: the generated
+   class headers are `#pragma pack(push,4)` and the two hand-written script mirrors with 8-byte members
+   (UnTex.h, UnParticleSystem.h) got 4-byte packing then; `verifyclasses` passes. The whole-engine DWARF comparison
+   (`tools/dev/dwarf-layouts.py` over every package object of `build-native` and `build-windows`;
+   `<WorkUC2>/logs/m12/layouts-{linux-native,windows}.txt`) lists 39 types of different size, all C++-only:
+   Core's `UState`/`UClass` (+8/+4: `QWORD ProbeMask`, `IgnoreMask`; the engine only logs `sizeof(UClass)`,
+   "Class size: 279" vs 275), `ULevel`, `UViewport`, `USkeletalMeshInstance`, `UDemoRecDriver`, the net channels
+   (bitfields, decision 2), render caches (`FActorLightCache`, `FCoronaRender`, `FDynamicActor`,
+   `FProjectorRenderInfo`, `FSortedStaticMeshBatchIndexBuffer`), UC2ALAudio's and libvorbis' private state, the
+   platform's own structs (`stat`, `tm`, `hostent`, `linger`, pthread types) and our Posix threading objects.
+   None is mirrored by script or written to disk/network as a block (the only bulk `Ar.Serialize` of an array in
+   Core/Engine is of DWORDs, UnCorSc.cpp). `-mno-align-double` / `-fpack-struct=4` were not used: they would put
+   every Windows/SDL header structure with 8-byte members out of the platform ABI.
 5. **Runtime DLL policy**: libgcc/libstdc++/winpthread linked statically (`-static` at the root, which also
    reaches OpenAL32.dll); SDL2 static; OpenAL Soft built from the fetched source as `OpenAL32.dll`, shipped
    beside the exe, LoadLibrary'd when the audio device starts (absent → `UC2ALAudio: no OpenAL library
