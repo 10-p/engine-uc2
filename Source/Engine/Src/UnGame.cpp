@@ -414,9 +414,15 @@ static INT Compare( const FItem& A, const FItem& B )
 // This always going to be the last exec handler in the chain. It
 // handles passing the command to all other global handlers.
 //
+// uc2 port: the network tests' commands (UC2NetTest.cpp).
+ENGINE_API UBOOL UC2NetTestExec( UGameEngine* Engine, const TCHAR* Cmd, FOutputDevice& Ar );
+ENGINE_API void UC2NetTestTick( UGameEngine* Engine );
+
 UBOOL UGameEngine::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UGameEngine::Exec);
+	if( UC2NetTestExec( this, Cmd, Ar ) )	// uc2 port: NETPROBE/NETPLACE/NETAIM
+		return 1;
 	const TCHAR* Str=Cmd;
 #if WITH_PORTABLE_MOVIES
 	// engine-uc2 (M9): the Xbox client's SUBTITLES command (XboxClient.cpp:169-180), which the profile sends
@@ -3397,6 +3403,7 @@ void UGameEngine::Tick( FLOAT DeltaSeconds )
 {
 	guard(UGameEngine::Tick);
 	FUNC_CLOCK(TiCyc,TickCycles);
+	UC2NetTestTick( this );	// uc2 port: the -nettest=<file> command file (UC2NetTest.cpp); nothing without it
 
     if( DeltaSeconds < 0.0f )
         appErrorf(TEXT("Negative delta time!"));

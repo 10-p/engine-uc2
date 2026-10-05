@@ -29,9 +29,9 @@
 #              -19.0 dB (tools/dev/audio-music-check.py, Recoil as control), 0 Critical
 #   keyboard   the M10 keyboard scenario (real X key events through wine; tools/dev/m10-controls.sh)
 #   pad        the M10 pad scenario (SDL's virtual controller through the engine's test channel)
-#   netjoin    the Linux client (run/m12-native) connects to a ucc.exe server under wine on 127.0.0.1:7797: the
-#              server logs "Login request", the client "Welcomed by server: LEVEL=DM-Deadbolt", the server then
-#              shuts down cleanly (SKIP without the tree). The join does not complete on any platform yet (BLOCKERS.md).
+#   netjoin    the Linux client (run/m12-native) joins a ucc.exe server under wine on 127.0.0.1:7797 and spawns
+#              (Fire on SDL2Drv's virtual pad): server "Join succeeded", client probe pawn=1, no assertion, the
+#              server then shuts down cleanly (SKIP without the tree). Both builds need the net-join fixes.
 #   nosound    OpenAL32.dll moved aside for one run: "sound is off", the menu still comes up, exit 0
 #   leftovers  no wineserver of the M12 prefix, no uc2.exe/ucc.exe left running
 set -u
@@ -39,10 +39,10 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 capped=$work/bin/capped
 wine=$repo/tools/dev/m12-wine.sh
-tree=$work/run/m12
+tree=${M12_TREE:-$work/run/m12}	# M12_TREE/M12_REF/M12_OUT: other trees (the net-join check ran on run/netwin + run/net)
 sys=$tree/System
-ref=$work/run/m12-native/System
-out=$work/logs/m12
+ref=${M12_REF:-$work/run/m12-native}/System
+out=${M12_OUT:-$work/logs/m12}
 summary=$out/smoke-summary.txt
 prefix=${UC2_WINEPREFIX:-$work/.cache/wine-m12}
 mkdir -p "$out"
@@ -201,27 +201,31 @@ check_nosound() {	# no OpenAL32.dll anywhere: the game must still come up, silen
   fi
 }
 
-check_netjoin() {	# the Linux client joins the server running under wine (UDP on 127.0.0.1, port 7797)
+check_netjoin() {	# the Linux client joins the server running under wine (UDP on 127.0.0.1, port M12_NETPORT, default 7797) and spawns
   local so=$out/smoke-netjoin-server.out sl=$out/smoke-netjoin-server.log co=$out/smoke-netjoin-client.out spid
+  local cmd=$ref/netjoin-input.cmd np=${M12_NETPORT:-7797}
   if [ ! -x "$ref/uc2.bin" ]; then result SKIP netjoin "no Linux reference tree at $ref"; return; fi
-  rm -f "$sys/ucc.log"
-  UC2_WINE_STOP_AFTER=75 "$capped" 3G 150 -- "$wine" "$sys" ucc.exe server DM-Deadbolt PORT=7797 -log > "$so" 2>&1 &
+  rm -f "$sys/ucc.log"; : > "$cmd"
+  UC2_WINE_STOP_AFTER=75 "$capped" 3G 150 -- "$wine" "$sys" ucc.exe server DM-Deadbolt PORT=$np -log > "$so" 2>&1 &
   spid=$!
   sleep 25
+  # Fire (the virtual pad's right trigger, SDL2Drv's -inputtest= channel) a few times once joined: the player
+  # spawns; the SDL2 probe then shows pawn=1. (network.md: the join completes since the net-join fixes.)
+  ( sleep 15; echo "pad attach" >> "$cmd"; sleep 1
+    for i in 1 2 3 4; do echo "pad axis righttrigger 32767" >> "$cmd"; sleep 0.3; echo "pad axis righttrigger 0" >> "$cmd"; sleep 2; done
+    echo "probe NJ" >> "$cmd" ) &
   ( cd "$ref" && "$capped" 2G 70 -- xvfb-run -a -s "-screen 0 1280x720x24" \
-      env SDL_AUDIODRIVER=dummy timeout -s INT 40 ./uc2.bin 127.0.0.1:7797 -log -nullrenderer ) > "$co" 2>&1
+      env SDL_AUDIODRIVER=dummy timeout -s INT 40 ./uc2.bin 127.0.0.1:$np -log -nullrenderer -inputtest=netjoin-input.cmd ) > "$co" 2>&1
   wait $spid
   cp -f "$sys/ucc.log" "$sl" 2>/dev/null
-  # PASS = the handshake through the wine server's WinSock (HELLO, CHALLENGE, LOGIN, WELCOME) and a clean server
-  # shutdown afterwards. The join itself does not complete yet on ANY platform: the client then fails
-  # check(GObjBeginLoadCount) in UObject::GetPackageLinker (the same between two Linux builds; BLOCKERS.md), which
-  # the result line reports.
-  local asrt; asrt=$(grep -a -c "Assertion failed: GObjBeginLoadCount" "$co")
-  if grep -a -q "Login request: " "$sl" && grep -a -q "Welcomed by server: LEVEL=DM-Deadbolt" "$co" \
+  # PASS = joined (server 'Join succeeded'), spawned (client probe pawn=1), no assertion, clean server shutdown.
+  local asrt; asrt=$(grep -a -c "Assertion failed" "$co")
+  local probe; probe=$(grep -a -o "probe NJ .* pawn=[01] loc=([^)]*)" "$co" | tail -1)
+  if grep -a -q "Join succeeded: " "$sl" && grep -a -q "pawn=1" <<< "$probe" && [ "$asrt" = 0 ] \
      && grep -a -q "Log file closed" "$sl" && [ "$(crit "$sl")" = 0 ]; then
-    result PASS netjoin "handshake Linux uc2.bin -> wine ucc.exe server over WinSock: server 'Login request', client 'Welcomed by server: LEVEL=DM-Deadbolt'; server shut down cleanly, Critical 0; join then stops at the known client assertion (GObjBeginLoadCount, $asrt lines; same Linux<->Linux)"
+    result PASS netjoin "Linux uc2.bin -> wine ucc.exe server over WinSock: server '$(grep -a -o 'Join succeeded: [^ ]*' "$sl" | head -1)', client $(grep -a -o 'pawn=1 loc=([^)]*)' <<< "$probe"); 0 assertions; server shut down cleanly, Critical 0"
   else
-    result FAIL netjoin "server: $(grep -a -c 'Login request' "$sl" 2>/dev/null) login requests, client: $(grep -a -c 'Welcomed by server' "$co") welcomes, server Critical $(crit "$sl"); see $sl, $co"
+    result FAIL netjoin "server: $(grep -a -c 'Join succeeded' "$sl" 2>/dev/null) joins, client probe '${probe:-none}', assertions $asrt, server Critical $(crit "$sl"); see $sl, $co"
   fi
 }
 

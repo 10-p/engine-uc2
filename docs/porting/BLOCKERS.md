@@ -62,13 +62,14 @@ crash-notifier processes; both are the owner's to clear.
   Also not lifted: the pixel-shader shadow blur (`PS_ShadowBlur`, `UnShadowProjector.cpp`), which is not
   post-processing and would change every shadow.
 
-- Network join does not complete (found at M12, 2026-10-05; not Windows-specific). A client connecting to a
-  dedicated server gets `Welcomed by server: LEVEL=DM-Deadbolt ...` and then fails
-  `check(GObjBeginLoadCount)` in `UObject::GetPackageLinker` (Core/Src/UnObj.cpp:3361, twice), i.e. the pending
-  level asks for a package linker outside a BeginLoad/EndLoad pair. Reproduced Linux client -> Linux `ucc-bin
-  server` (`<WorkUC2>/logs/m12/linux-netjoin-*.out`) and Linux client -> `ucc.exe server` under wine. Not looked
-  into further (networking is outside M12). Candidates: engine-ut2004's deferred `GObjPreloading`/load-in-progress
-  delta (core-port.md), or a path the Xbox only survived because its shipped build compiled `check` out.
+- CLOSED 2026-10-05 (branch `net-join`, `analysis/network.md`): network join. The client's
+  `check(GObjBeginLoadCount)` in `UObject::GetPackageLinker` came from Epic's FScriptPatcher (AppendImport outside
+  BeginLoad on a client's USES placeholder packages; latent on the FINAL_RELEASE Xbox build). Fixed with the next
+  defects on the join path (package-map counts vs patched-in exports/names, exit-time channel use-after-free, UCC
+  commandlet freed under its Main). `tools/dev/net-test.sh` (dedicated server + 1/2 clients, listen server, travel,
+  disconnect/timeout, lag/loss, GL screenshot, 10-min soak) passes. Not done: real Windows / wine server against the
+  fixed client (the wine `netjoin` smoke check needs a Windows build of this branch on the server side too, since
+  both ends must count the package map the same way).
 
 - M6 leftovers: the 12 projector pixel shaders need the engine's `_XBOX`-only projector batching lifted behind a
   capability (same kind of change as M7's post-process gates; do it with M7); `PS_Terrain3Layer` needs the

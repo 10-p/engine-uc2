@@ -276,6 +276,19 @@ void UPackageMap::Compute()
 			Info.ObjectCount      = Info.Linker->ExportMap.Num();
 			Info.NameCount        = Info.Linker->NameMap.Num();
 			Info.LocalGeneration  = Info.Linker->Summary.Generations.Num();
+			// uc2 port: count only what the package FILE holds (its last generation), not the names and exports the
+			// FScriptPatcher appends to a loaded linker (Engine/Src/UnScriptPatcher.cpp). Whether a package is
+			// patched before this Compute depends on when it was loaded, which differs between a server (patches
+			// what it has loaded at LoadMap, the rest after Listen) and a client (patches every USES package
+			// before its Compute), so the counts disagreed (UCMutators: 765 names on the server, 766 on the client)
+			// and with them every later ObjectBase/NameBase and the bit width of the name index. Patched-in
+			// objects are function locals and the patched-in names exist in other packages, so nothing that
+			// replicates needs them. For an unpatched file the last generation equals the counts.
+			if( Info.LocalGeneration>0 )
+			{
+				Info.ObjectCount  = Min( Info.ObjectCount, Info.Linker->Summary.Generations(Info.LocalGeneration-1).ExportCount );
+				Info.NameCount    = Min( Info.NameCount,   Info.Linker->Summary.Generations(Info.LocalGeneration-1).NameCount   );
+			}
 			if( Info.RemoteGeneration==0 )
 			{
 				Info.RemoteGeneration = Info.LocalGeneration;
@@ -288,6 +301,8 @@ void UPackageMap::Compute()
 			MaxObjectIndex       += Info.ObjectCount;
 			MaxNameIndex         += Info.NameCount;
 			//debugf( TEXT("** Package %s: %i objs, %i names, gen %i-%i"), *Info.URL. Info.ObjectCount, Info.NameCount, Info.LocalGeneration, Info.RemoveGeneration );
+			// uc2 port: Epic's line above, revived under DevNet (a client and a server must print the same table).
+			debugf( NAME_DevNet, TEXT("PackageMap %i %s: base %i, %i objs (file %i), %i names (file %i), gen %i-%i"), i, Info.Parent ? Info.Parent->GetName() : TEXT("None"), Info.ObjectBase, Info.ObjectCount, Info.Linker->Summary.Generations.Num() ? Info.Linker->Summary.Generations.Last().ExportCount : -1, Info.NameCount, Info.Linker->Summary.Generations.Num() ? Info.Linker->Summary.Generations.Last().NameCount : -1, Info.LocalGeneration, Info.RemoteGeneration );
 			for( INT j=0; j<Min(Info.Linker->NameMap.Num(),Info.NameCount); j++ )
 				if( (*NameIndices)(Info.Linker->NameMap(j).GetIndex()) == -1 )
 					(*NameIndices)(Info.Linker->NameMap(j).GetIndex()) = Info.NameBase + j;

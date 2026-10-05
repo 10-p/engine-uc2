@@ -8,6 +8,7 @@
 
 #include "EnginePrivate.h"
 #include "UnNet.h"
+#include "UnLinker.h"	// uc2 port: the static-index diagnostic in UPackageMapLevel::SerializeObject
 
 /*-----------------------------------------------------------------------------
 	UPackageMapLevel implementation.
@@ -57,6 +58,21 @@ UBOOL UPackageMapLevel::SerializeObject( FArchive& Ar, UClass* Class, UObject*& 
 			Ar.SerializeInt( Index, MaxObjectIndex );
 			if( !Ar.IsError() )
 				Object = IndexToObject( Index, 1 );
+			// uc2 port: diagnostic, which export a static index named when it resolves to nothing here.
+			if( !Object && !Ar.IsError() )
+			{
+				INT Rest = Index;
+				for( INT i=0; i<List->Num(); i++ )
+				{
+					FPackageInfo& Info = (*List)(i);
+					if( Rest < Info.ObjectCount )
+					{
+						debugf( NAME_DevNet, TEXT("Static object index %i = %s export %i (%s %s) not available"), Index, Info.Parent ? Info.Parent->GetName() : TEXT("None"), Rest, *Info.Linker->GetExportClassName(Rest), *Info.Linker->ExportMap(Rest).ObjectName );
+						break;
+					}
+					Rest -= Info.ObjectCount;
+				}
+			}
 		}
 		if( Object && !Object->IsA(Class) )
 		{

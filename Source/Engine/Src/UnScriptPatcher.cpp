@@ -140,11 +140,18 @@ UBOOL FLinkerPatchData::Apply( ULinkerLoad* Loader, FPatchReader& Ar, UBOOL bCre
 	}
 
 	// add any new imports to the linker's import table
+	// uc2 port: AppendImport -> VerifyImport may have to find or create the linker of the new import's
+	// package (GetPackageLinker, which checks GObjBeginLoadCount): that happens when ApplyPatches made this
+	// linker with LOAD_NoVerify for a package that so far existed only as the empty UPackage a network client
+	// creates for each USES line (UNetPendingLevel::NotifyReceivedText). Epic's shipped build compiled check()
+	// out (FINAL_RELEASE). Only linkers are made here, no objects, so this EndLoad has nothing else to load.
+	UObject::BeginLoad();
 	for ( INT i = 0; i < Imports.Num(); i++ )
 	{
 		Loader->AppendImport(Imports(i));
 		Imports.Remove(i--);
 	}
+	UObject::EndLoad();
 
 	if ( Exports.Num() )
 	{

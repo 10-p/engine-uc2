@@ -175,7 +175,15 @@ INT UChannel::RouteDestroy()
 	{
 		ClearFlags( RF_Destroyed );
 		if( Connection->ConditionalDestroy() )
+		{
+			// uc2 port: this channel was destroyed (UObject::Destroy ran) inside the connection's Destroy, in a
+			// nested ConditionalDestroy that restores the flags it found, i.e. without RF_DebugDestroy, so the
+			// ConditionalDestroy up the stack reported "failed to route Destroy" (non-final builds only; the
+			// Xbox build skipped that check). The object is still allocated here: UNetConnection::Destroy
+			// leaves the deleting to the garbage collector.
+			SetFlags( RF_DebugDestroy );
 			return 1;
+		}
 		SetFlags( RF_Destroyed );
 	}
 	return 0;
@@ -990,6 +998,8 @@ void UActorChannel::ReceivedBunch( FInBunch& Bunch )
 			{
 				// We are unsynchronized. Instead of crashing, let's try to recover.
 				warnf(TEXT("Received invalid actor class"));
+				// uc2 port: say what arrived instead (diagnostic).
+				debugf( NAME_DevNet, TEXT("  channel %i: got %s (bunch error %i, bits %i, reliable %i, seq %i)"), ChIndex, Object ? Object->GetFullName() : TEXT("None"), Bunch.IsError(), Bunch.GetNumBits(), Bunch.GetbReliable(), Bunch.ChSequence );
 				bBroken = true;
 				return;
 			}
@@ -1420,11 +1430,18 @@ void UActorChannel::ReplicateActor()
 		if( Actor->bStatic || Actor->bNoDelete )
 		{
 			// Persistent actor.
+			// uc2 port: diagnostic, a persistent actor the level spawned at run time (no linker, e.g. the
+			// DefaultPhysicsVolume when the map file has none) has no package-map index and goes out as None.
+			if( Connection->PackageMap->ObjectToIndex(Actor)==INDEX_NONE )
+				debugf( NAME_DevNet, TEXT("Channel %i: persistent actor %s has no package-map index"), ChIndex, Actor->GetFullName() );
 			Bunch << Actor;
 		}
 		else
 		{
 			// Transient actor.
+			// uc2 port: diagnostic, a class the client cannot resolve goes out as None.
+			if( Connection->PackageMap->ObjectToIndex(ActorClass)==INDEX_NONE )
+				debugf( NAME_DevNet, TEXT("Channel %i: actor %s has unmapped class %s"), ChIndex, Actor->GetName(), ActorClass ? ActorClass->GetPathName() : TEXT("None") );
             Bunch << ActorClass;
             SerializeCompressedInitial( Bunch, Actor->Location, Actor->Rotation, Actor->bNetInitialRotation, this );
 		}

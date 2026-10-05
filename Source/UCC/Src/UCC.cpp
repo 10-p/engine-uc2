@@ -394,6 +394,10 @@ int main( int argc, char* argv[] )
 					GIsEditor = Default->IsEditor;
 					GLazyLoad = Default->LazyLoad;
 					UCommandlet* Commandlet = ConstructObject<UCommandlet>( Class );
+					// uc2 port: keep it alive while it runs. Nothing references the commandlet object, so the garbage
+					// collection in the server's LoadMap freed it under its own Main() (AddressSanitizer:
+					// heap-use-after-free on Commandlet->ShowErrorCount below). Epic's and UT2004's UCC have the same.
+					Commandlet->AddToRoot();
 					Commandlet->InitExecution();
 					Commandlet->ParseParms( appCmdLine() );
 					Commandlet->Main( appCmdLine() );
