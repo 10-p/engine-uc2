@@ -647,9 +647,8 @@ UBOOL FUC2MoviePlayer::Advance()
 		Time = bEnded ? PassLen : T;
 		Frame = (INT)appFloor( T * Fps + 1e-6 );
 	}
+	// Within a pass the picture never goes back (a pass change restarts the decoder above).
 	Frame = Clamp( Frame, 0, FrameCount - 1 );
-	if( Frame < DecodedFrame )
-		RestartVideo();
 	DecodeTo( Frame );
 	ShownFrame = DecodedFrame;
 	if( bPictureDirty )

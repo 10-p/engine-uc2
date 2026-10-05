@@ -14,6 +14,7 @@
 =============================================================================*/
 
 #include "UC2ALAudioPrivate.h"
+#include "UnMovie.h"		// M9: FMovieAudioStream
 
 #ifndef __EMSCRIPTEN__
 #include <stdlib.h>		// setenv for the wave writer
@@ -149,6 +150,7 @@ struct FUC2AudioState
 	UBOOL					bAmbientsListed;
 	TArray<INT>				ActiveAmbients;
 	TMap<FString,FUC2CueStats> Stats;
+	TArray<class FUC2ALMovieStream*> MovieStreams;	// M9: movie sound streams alive (detached on Destroy)
 
 	FUC2AudioState() : bDevice(0), Device(NULL), Context(NULL), bEFX(0), bEAXReverb(0), bLoopPoints(0), Slot(0),
 		Effect(0), ZonePreset(-1), NextMusicHandle(1), Viewport(NULL), NextInstId(1), bPaused(0), PauseStart(0),
@@ -601,12 +603,15 @@ UBOOL UUC2ALAudioSubsystem::Init()
 	unguard;
 }
 
+static void DetachMovieStreams( FUC2AudioState* S );
+
 void UUC2ALAudioSubsystem::Destroy()
 {
 	guard(UUC2ALAudioSubsystem::Destroy);
 	if( State )
 	{
 		FUC2AudioState* S = State;
+		DetachMovieStreams( S );
 		if( S->bDevice )
 		{
 			for( INT i=0; i<S->Voices.Num(); i++ )
@@ -2005,6 +2010,185 @@ void UC2TestStopAll( UUC2ALAudioSubsystem* Audio )
 	while( S->Insts.Num() )
 		RemoveInst( S, S->Insts.Num()-1 );
 	S->Emitters.Empty();
+}
+
+/*-----------------------------------------------------------------------------
+	M9: a movie's sound (Engine/Inc/UnMovie.h, FMovieAudioStream).
+
+	One 2D source with a queue of small buffers the movie player fills from its own Advance(); the played
+	frames (processed buffers + AL_SAMPLE_OFFSET) are the clock the movie's pictures follow. Gain 0 dB in no
+	volume category: the Xbox played XMV sound through DirectSound, outside XACT's categories and headroom.
+	A full-screen movie is exclusive: every cue and the music pause while it plays, as nothing else ran
+	beside a full-screen movie on the Xbox.
+-----------------------------------------------------------------------------*/
+
+enum { UC2_MOVIE_BUFFER_FRAMES = 4096, UC2_MOVIE_BUFFERS = 12 };	// 12 x 4096 = 1.1 s at 44.1 kHz
+
+class FUC2ALMovieStream : public FMovieAudioStream
+{
+public:
+	UUC2ALAudioSubsystem*	Audio;
+	FUC2AudioState*			S;			// NULL once the device is gone
+	ALuint					Source;
+	ALuint					Buffers[UC2_MOVIE_BUFFERS];
+	TArray<ALuint>			Free;
+	TArray<INT>				QueuedSizes;	// frames of each queued buffer, oldest first
+	INT						Rate, Channels;
+	DOUBLE					PlayedBase, LastPlayed;
+	INT						Queued;
+	UBOOL					bPaused, bExclusive, bPausedCues;
+	TArray<INT>				PausedMusic;
+
+	FUC2ALMovieStream( UUC2ALAudioSubsystem* InAudio, INT InRate, INT InChannels, UBOOL bInExclusive )
+	:	Audio(InAudio), S(InAudio->State), Source(0), Rate(InRate), Channels(InChannels), PlayedBase(0.0),
+		LastPlayed(0.0), Queued(0), bPaused(0), bExclusive(bInExclusive), bPausedCues(0)
+	{
+		GAL.alGenSources( 1, &Source );
+		GAL.alGenBuffers( UC2_MOVIE_BUFFERS, Buffers );
+		for( INT i=0; i<UC2_MOVIE_BUFFERS; i++ )
+			Free.AddItem( Buffers[i] );
+		GAL.alSourcei( Source, AL_SOURCE_RELATIVE, AL_TRUE );
+		GAL.alSource3f( Source, AL_POSITION, 0.f, 0.f, 0.f );
+		GAL.alSourcef( Source, AL_GAIN, 1.f );
+		if( bExclusive )
+		{
+			if( !S->bPaused )
+			{
+				Audio->NotifyPauseChange( 1 );
+				bPausedCues = 1;
+			}
+			for( INT i=0; i<UC2_MUSIC_SLOTS; i++ )
+			{
+				ALint St = AL_STOPPED;
+				GAL.alGetSourcei( S->Music[i].Source, AL_SOURCE_STATE, &St );
+				if( S->Music[i].Handle && St == AL_PLAYING )
+				{
+					GAL.alSourcePause( S->Music[i].Source );
+					PausedMusic.AddItem( i );
+				}
+			}
+		}
+		S->MovieStreams.AddItem( this );
+		debugf( NAME_DevSound, TEXT("UC2Audio: movie sound stream opened (%i Hz, %i ch%s)"), Rate, Channels,
+			bExclusive ? TEXT(", exclusive: other sounds paused") : TEXT("") );
+	}
+	void Detach()
+	{
+		if( !S )
+			return;
+		GAL.alSourceStop( Source );
+		GAL.alSourcei( Source, AL_BUFFER, 0 );
+		GAL.alDeleteSources( 1, &Source );
+		GAL.alDeleteBuffers( UC2_MOVIE_BUFFERS, Buffers );
+		S->MovieStreams.RemoveItem( this );
+		S = NULL;
+	}
+	~FUC2ALMovieStream()
+	{
+		if( !S )
+			return;
+		FUC2AudioState* St = S;
+		Detach();
+		if( bExclusive )
+		{
+			for( INT i=0; i<PausedMusic.Num(); i++ )
+				if( St->Music[PausedMusic(i)].Handle )
+					GAL.alSourcePlay( St->Music[PausedMusic(i)].Source );
+			if( bPausedCues )
+				Audio->NotifyPauseChange( 0 );
+		}
+		debugf( NAME_DevSound, TEXT("UC2Audio: movie sound stream closed after %.3f s played"), LastPlayed / Rate );
+	}
+	// Take back the buffers that have played.
+	void Service()
+	{
+		if( !S )
+			return;
+		ALint Processed = 0;
+		GAL.alGetSourcei( Source, AL_BUFFERS_PROCESSED, &Processed );
+		while( Processed-- > 0 && QueuedSizes.Num() )
+		{
+			ALuint B = 0;
+			GAL.alSourceUnqueueBuffers( Source, 1, &B );
+			PlayedBase += QueuedSizes(0);
+			Queued -= QueuedSizes(0);
+			QueuedSizes.Remove( 0 );
+			Free.AddItem( B );
+		}
+	}
+	INT FreeFrames()
+	{
+		Service();
+		return S ? Free.Num() * UC2_MOVIE_BUFFER_FRAMES : 0;
+	}
+	void Write( const SWORD* Pcm, INT Frames )
+	{
+		Service();
+		while( S && Frames > 0 && Free.Num() )
+		{
+			INT N = Min<INT>( Frames, UC2_MOVIE_BUFFER_FRAMES );
+			ALuint B = Free.Pop();
+			GAL.alBufferData( B, UC2ALFormat(Channels), Pcm, N * Channels * sizeof(SWORD), Rate );
+			GAL.alSourceQueueBuffers( Source, 1, &B );
+			QueuedSizes.AddItem( N );
+			Queued += N;
+			Pcm += N * Channels;
+			Frames -= N;
+		}
+		Kick();
+	}
+	void Kick()
+	{
+		if( !S || bPaused )
+			return;
+		ALint St = AL_STOPPED;
+		GAL.alGetSourcei( Source, AL_SOURCE_STATE, &St );
+		if( St != AL_PLAYING && Queued > 0 )
+			GAL.alSourcePlay( Source );		// first data, or starved by a long frame: carry on
+	}
+	DOUBLE PlayedFrames()
+	{
+		Service();
+		if( !S )
+			return LastPlayed;
+		ALint Offset = 0;
+		GAL.alGetSourcei( Source, AL_SAMPLE_OFFSET, &Offset );
+		DOUBLE P = PlayedBase + (QueuedSizes.Num() ? Min<INT>( Offset, QueuedSizes(0) ) : 0);
+		// Never backwards (a buffer can finish between the two queries above).
+		LastPlayed = Max( LastPlayed, P );
+		Kick();
+		return LastPlayed;
+	}
+	INT QueuedFrames()
+	{
+		Service();
+		return Queued;
+	}
+	void Pause( UBOOL bPause )
+	{
+		bPaused = bPause;
+		if( !S )
+			return;
+		if( bPause )
+			GAL.alSourcePause( Source );
+		else
+			Kick();
+	}
+};
+
+static void DetachMovieStreams( FUC2AudioState* S )
+{
+	while( S->MovieStreams.Num() )
+		S->MovieStreams.Last()->Detach();
+}
+
+FMovieAudioStream* UUC2ALAudioSubsystem::OpenMovieAudio( INT Rate, INT Channels, UBOOL bExclusive )
+{
+	guard(UUC2ALAudioSubsystem::OpenMovieAudio);
+	if( !State || !State->bDevice || Rate <= 0 || Channels < 1 || Channels > 2 )
+		return NULL;
+	return new FUC2ALMovieStream( this, Rate, Channels, bExclusive );
+	unguard;
 }
 
 /*-----------------------------------------------------------------------------
