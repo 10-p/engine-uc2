@@ -10,8 +10,44 @@ and `wineserver -k` after every run. Logs: `<WorkUC2>/logs/m12/`. Run trees: `<W
 
 ## Decisions (with evidence) — filled in as they are made
 
-1. Platform layer for MinGW: _pending_
-2. Struct layout (`-mms-bitfields` vs `-mno-ms-bitfields`): _pending (decided by `ucc.exe verifyclasses`)_
+1. **Platform layer for MinGW: the GCC/Unix-style Core layer with `_WIN32` branches, as engine-ut2004.**
+   `Core.h` picks `UnGnuG.h` by compiler (`__GNUG__`) and `UnUnix.h` for `__UNIX__ || __MINGW32__`; `UnGnuG.h`
+   has a MinGW block (no `__UNIX__`/`__LINUX__`, `<minwindef.h>`/`<basetsd.h>` for DWORD/SIZE_T, real
+   `__stdcall`, `\r\n` and `\` separators, `.dll`). Epic's `UnVcWin32.h/.cpp` stay MSVC-only (inline
+   `__asm`, `#pragma`s, SEH, the UNICODE-era helpers). Piece by piece:
+   - file manager: `FFileManagerUnix.h` (ucc and uc2), with its `_WIN32` branches (`_mkdir`, `O_BINARY`,
+     `_fullpath`, `USERPROFILE`); `__FILE_NOCASE` case folding is harmless on a case-insensitive file system
+     (it only adds a directory scan when the exact name is missing); `\` and `/` both accepted by Windows.
+   - time: `appSeconds` = `clock_gettime(CLOCK_MONOTONIC)` (winpthreads provides it: QueryPerformanceCounter);
+     `appSystemTime64` = UnVcWin32.cpp's GetLocalTime/SystemTimeToFileTime (W1).
+   - threads: `UnThreadingPosix.cpp` on winpthreads (MinGW posix thread model, linked statically), not
+     `UnThreadingWindows.cpp` (not built; the template's reasoning: the recursive-mutex/event semantics are
+     already proven on Linux and web).
+   - dynamic libraries: `LoadLibraryA`/`GetProcAddress` (`appGetSystemDllHandle`, `appGetDllExport`) for
+     OpenAL32.dll; engine packages answer the static "linked in" sentinel as Epic's static builds did.
+   - console/log: stdout (unbuffered in ucc) + `Avaris.log`/`ucc.log` through `FOutputDeviceFile`; uc2.exe is a
+     Windows-subsystem program, `-log` still echoes to an attached console (wine passes its stdout).
+   - crash handling: the template's Win32 reporter (`SetUnhandledExceptionFilter`, `std::set_terminate`,
+     SIGABRT) prints image base + rva for `addr2line`; plus Epic's Ctrl+C console handler (W2).
+   - clipboard: SDL2's (`SDL_SetClipboardText`) in SDL2Drv, same code as Linux.
+   - `appBaseDir`: UnUnix.cpp's (`_fullpath` of the exe's directory on `_WIN32`).
+   - sockets: WinSock (`__WINSOCK__` chosen by `_WIN32`).
+2. **Struct layout: MinGW's default `-mms-bitfields` stays** (no flag). Evidence, both by running:
+   - `i686-w64-mingw32-gcc -Q --help=target` → `-mms-bitfields [enabled]`; a probe struct
+     `{unsigned long a:1; unsigned char b;}` is 8 bytes with it, 4 without, so the switch is real here.
+   - `ucc.exe verifyclasses` under wine → `all native class layouts match` with the default (run/m12) AND
+     with a second build configured `-DCMAKE_CXX_FLAGS="-fno-omit-frame-pointer -mno-ms-bitfields"`
+     (`build-windows-nomsbf`, run/m12-nomsbf, `logs/m12/verifyclasses-nomsbf.out`). The 713 checks cannot tell
+     the two apart: every script-visible bitfield run is already fenced by the `GCC_PACK(4)` tags M3 added
+     for GCC (a member after a run, the first member of a class), which force the same offsets in both rules.
+   - Whole-engine comparison: `tools/dev/dwarf-layouts.py` over every package object of both builds (11,781
+     size/offset facts each) → the only differences are `UChannel`, `UControlChannel`, `UActorChannel`,
+     `UFileChannel` (UnChan.h: a `BITFIELD` run followed by `_WORD`/`BYTE` members; MS rules start a new 4-byte
+     unit, SysV packs into the bitfield's unit; 4 bytes larger with MS) and `FDynamicActor` (render-side). All
+     five are C++-only (built with `sizeof`, never laid out by script, never serialised as a block), so either
+     rule works; the MS one is the layout MSVC 7.1 gave the shipped Windows binary and the one the Windows
+     headers (SDL, WinSock, OpenAL's) are written for. `-mno-ms-bitfields` would only buy "same as Linux" for
+     those five classes, at the price of a non-Windows ABI for every system struct with bitfields.
 3. Calling conventions / DLL_EXPORT under static link: _pending_
 4. `long` / `wchar_t` / `time_t` widths: _pending_
 5. Runtime DLL policy: _pending_
@@ -102,3 +138,23 @@ Next: run tree with the .exe/.dll (mkrun-uc2.sh), wine prefix, `ucc.exe verifycl
   "Symbolise with: addr2line -e ut2004.exe" (template text) now names the running exe (GetModuleFileNameA).
   `m12-wine.sh` gets `UC2_WINE_STOP_AFTER=<s>`: SIGINT to the wine process (wine turns it into CTRL_C_EVENT),
   then 20 s grace.
+
+### Step 3 — layout A/B and a clean server shutdown (2026-10-05)
+- Layout A/B: decision 2 above. Commands:
+  `bin/capped 4G 600 -- cmake --preset windows -B build-windows-nomsbf -DCMAKE_CXX_FLAGS="-fno-omit-frame-pointer
+  -mno-ms-bitfields" -DFETCHCONTENT_SOURCE_DIR_SDL2=… -DFETCHCONTENT_SOURCE_DIR_OPENALSOFT=…`,
+  `bin/capped 6G 2400 -- cmake --build build-windows-nomsbf --target UCC -j8`, `tools/dev/mkrun-uc2.sh
+  build-windows-nomsbf m12-nomsbf`, verifyclasses under wine; then `tools/dev/dwarf-layouts.py` (new, committed)
+  over all package objects of both builds and `diff`.
+- Server: `UC2_WINE_STOP_AFTER=30 bin/capped 3G 90 -- tools/dev/m12-wine.sh run/m12/System ucc.exe server
+  DM-Deadbolt -log` → map up as before, then at 30 s the Ctrl+C: ucc.log `Exit: Preparing to exit.`,
+  `29029.2ms Unloading: Package Engine` ... `Log file closed`; i.e. the server loop ran 29 s after the load and
+  shut down cleanly through the new console handler. Exit code 1 = UCC's ErrorLevel for "1 warning"
+  (the TransBuffer warning; Linux reports the same `1 warning(s)`).
+- First client run (old exe, null renderer): `bin/capped 3G 100 -- xvfb-run -a -s "-screen 0 1280x720x24" bash -c
+  'SDL_AUDIODRIVER=dummy UC2_WINE_DISPLAY=$DISPLAY UC2_WINE_STOP_AFTER=60 tools/dev/m12-wine.sh run/m12/System
+  uc2.exe -log -nullrenderer'` (`logs/m12/client-null-1.out`): `SDL2 video driver: windows`, `UC2ALAudio: 1.1
+  ALSOFT 1.25.2 on "OpenAL Soft on No Output"` (our OpenAL32.dll, null backend from capped's ALSOFT_DRIVERS),
+  `Bringing Level Menu.MyLevel up for play`, `Opened viewport (SDL window 1, 640x480)`, then the Ctrl+C →
+  `SDL_QUIT received`, `appRequestExit(0)`, clean shutdown, exit 0. stdout of the GUI-subsystem exe reaches the
+  terminal under wine.
