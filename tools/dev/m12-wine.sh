@@ -8,7 +8,7 @@
 #
 # - Prefix: $UC2_WINEPREFIX, default <WorkUC2>/.cache/wine-m12 (created on first use). Never ~/.wine.
 # - No desktop integration and nothing installed: winemenubuilder, mscoree (Mono) and mshtml (Gecko) are
-#   disabled, so wine never asks to download anything.
+#   disabled, so wine never asks to download anything; winedbg too (no crash dialog).
 # - Display: the owner's DISPLAY/WAYLAND_DISPLAY are dropped. The program sees an X display only when the
 #   caller sets UC2_WINE_DISPLAY (an Xvfb started by the caller, e.g. ":97").
 # - WINEDEBUG=-all unless the caller set WINEDEBUG.
@@ -23,7 +23,9 @@ export WINEPREFIX=${UC2_WINEPREFIX:-$work/.cache/wine-m12}
 # wine 10 here is a WoW64 build: one 64-bit prefix runs the 32-bit exe (WINEARCH=win32 is refused).
 unset WINEARCH
 export WINEDEBUG=${WINEDEBUG:--all}
-export WINEDLLOVERRIDES="winemenubuilder.exe=d;mscoree=d;mshtml=d${UC2_WINEDLLOVERRIDES:+;$UC2_WINEDLLOVERRIDES}"
+# winedbg disabled too: a crash must end the process (the engine prints its own report first), never open a
+# crash dialog that would wait on the (Xvfb) display until the time limit.
+export WINEDLLOVERRIDES="winemenubuilder.exe=d;mscoree=d;mshtml=d;winedbg.exe=d${UC2_WINEDLLOVERRIDES:+;$UC2_WINEDLLOVERRIDES}"
 unset WAYLAND_DISPLAY
 if [ -n "${UC2_WINE_DISPLAY:-}" ]; then export DISPLAY=$UC2_WINE_DISPLAY; else unset DISPLAY; fi
 
