@@ -567,3 +567,55 @@ State of things that were only in my head:
   number of frames. So: **the Praxis camera is repeatable, the number of runs it takes is not.**
   Command: `tools/dev/m7-effects.sh m7 praxis-panes`.
 - The half-texel note, the three bugs the self-test found and the pause-overlay trap are in P5a.
+
+## Final runs, 2026-10-05 (binary of commit `efd22ef`; tree `6c7ea1e`)
+
+**From a fresh run tree** (`tools/dev/mkrun-uc2.sh build-native m7`, then `tools/dev/m7-effects.sh m7`;
+`logs/m7/fx-final-clean.txt`): self-test `10 passed, 0 failed` (the nine of P5a plus `luminance`: back buffer
+-> 16x16 luminance target, largest error 0.92 of 255), then
+
+```
+fx bloom: critical=0 glerrors=0 programs_failed=0+0 diff(A,B) mean=1.603 changed=26.73% left_behind=0 tries=1
+fx blur: ... mean=9.262 changed=96.10% ...          fx berserk: ... mean=23.047 changed=99.65% ...
+fx liandri: ... mean=8.197 changed=95.35% ...       fx pause: ... mean=79.586 changed=99.82% ...
+fx radial: ... mean=7.273 changed=84.88% ...        fx dyngamma: ... mean=9.864 changed=86.24% ...
+fx dof-alpha: ... mean=1.247 changed=44.15% ...     fx azure: ... mean=2.164 changed=54.47% ...
+fx octane: ... mean=2.899 changed=24.01% ...        fx decay: ... mean=0.617 changed=18.30% ...
+fx undertow: ... mean=1.770 changed=41.98% ...      fx recoil: ... mean=1.621 changed=26.58% ...
+fx praxis-panes: critical=0 glerrors=0 programs_failed=0+0 diff(A,B) mean=2.504 changed=28.54% left_behind=0 tries=4
+```
+
+(every line: `critical=0 glerrors=0 programs_failed=0+0 left_behind=0`). The numbers move by a few tenths
+between runs (animation, particles, glow accumulating over frames); the pictures of this run are the ones in
+`logs/m7/fx-*-a.png`, `-b.png`, `-ab.png`, with the crops `fx-<effect>-crop-<what>.png` the script writes at
+the end (`bloom` lamp, `azure` and `dof-alpha` far, `decay` icicles and torch, `undertow` column,
+`praxis-panes` panes). I looked at the crops of this run for `decay` and `praxis-panes` and at the whole
+pictures of the 23:07 run for the rest; they show what P5b and P5c describe.
+
+**Gate (c) and (e) repeated on the final binary** (`logs/m7/gate-runs-final.txt`): menu, DM-Deadbolt,
+DM-Praxis, on and off: 0 Critical in all six; GL errors 0 (menu 649 frames, DM-Deadbolt 240, DM-Praxis 147
+with post-processing on); programs 2 / 15 / 18 linked, 0 failed; 84 fragment shaders compiled, 0 failed (59
+with it off). `verifyclasses`: `All native class layouts match`, exit 0. Server: `Game class is
+'UCDeathmatch'`, `Bringing Level DM-Deadbolt.MyLevel up for play (0)...`. Null renderer: `Render device:
+Engine.NullRenderDevice (1280x720 windowed)`, menu up, 0 Critical. `-nopostprocess` frame against M6's
+`coord-deadbolt-0.png`: 0 differing pixels for x >= 760; 7.3% of the frame differ, all in the animated box.
+
+**Frame rates: no clean measurement.** The machine was shared during every run of mine (another agent's
+`uc2.bin` under software GL took seven cores during the final gate runs; load average 15-20).
+
+| Measurement | DM-Deadbolt off / on (frames/s) | DM-Praxis off / on | others |
+|---|---|---|---|
+| separate 60 s runs, 22:05 (first gate run) | 30.1 / 7.9 = 3.8 | 21.5 / 6.6 = 3.3 | menu 11.8 / 12.5 |
+| separate 60 s runs, 03:08 (final gate run, machine loaded) | 7.1 / 5.1 = 1.4 | 11.7 / 3.1 = 3.7 | menu 10.9 / 13.7 |
+| same run, before and after the switch (effect runs of 02:40-03:05) | 18.2 / 10.0 = 1.8 | 13.3 / 5.6 = 2.4 | DM-Azure 8.0 / 5.9, DM-Decay 10.2 / 3.9, DM-Undertow 20.2 / 9.6, CTF-Octane 20.0 / 13.4, CTF-Recoil 20.2 / 13.6 |
+
+So with software GL at 1280x720 post-processing costs between 1.4 and 3.8 times the frame time in a map and
+nothing in the menu; the spread is the machine, not the renderer. It has not been run on a GPU.
+
+**Web build** of the final tree: `cmake --preset wasm && cmake --build build-wasm -j6` (capped 6G): `[100%]
+Built target SDLLaunch`, `wasm build exit 0`. (Nothing was rebuilt compared to the build at `6fa7758`: every
+change since is in `UC2GLDrv`, which stays out of the web build, in tools or in docs.)
+
+**Memory**: every run through `bin/capped`: game and `ucc-bin` 2G, builds 6G, `psh2glsl` 1G/2G. No run hit
+its ceiling (no exit 137). Nothing of mine is left running (`run-uc2-shot.sh` now checks only its own tree's
+`uc2.bin` and its own Xvfb; its earlier warnings were another agent's processes).
