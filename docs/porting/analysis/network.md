@@ -85,3 +85,35 @@ ApplyPatches is back to Epic's text.
 Result (repro3, `logs/net/repro3-*`): client `UCPlayerController0 got player SDL2Viewport` / `setplayer`,
 server `Join request`, `UCPlayerController0 got player TcpipConnection`, `Join succeeded: Player-1`. One
 `Received invalid actor class` on the client -> next step (package map agreement).
+
+### Step 3: client and server package maps must agree -- count only the file's exports/names
+
+Diagnostic: `UPackageMap::Compute` now prints Epic's own commented-out per-package line under DevNet
+(`PackageMap <i> <pkg>: base, objs (file), names (file), gen local-remote`), Core/Src/UnCoreNet.cpp. Before the
+fix (repro4) the 67-line tables of server and client differed in one line: `UCMutators ... 765 names` (server)
+vs `766 names` (client). The patcher had appended its name `Reset` on the client (USES placeholder, patched
+before the client's Compute) but not yet on the server (UCMutators is loaded during InitGame, after the
+server's first ApplyPatches; its second pass runs after Listen/Compute). Patched packages: Engine 12641 objs
+(file 12640, both sides patched before Compute), UCGameplay 8030 names (file 8029), Editor 360 (file 359),
+UCMutators. With different counts every later ObjectBase/NameBase and the bit width of the name index
+(`SerializeInt(Index, MaxNameIndex+1)`) differ between the ends. Here UCMutators was the last entry, so only the
+name width could differ; with another package order objects would be misidentified.
+
+Whose bug: Epic's (both ends run the same patcher; the shipped Xbox listen-server/client pair had the same
+timing). Fix (Core/Src/UnCoreNet.cpp `UPackageMap::Compute`): ObjectCount/NameCount are clamped to the package
+file's last generation (`Summary.Generations(LocalGeneration-1)`), which equals the counts for every unpatched
+file (all 61 other lines of the table). Patched-in objects (function locals: Engine `...EndState.P`, UCMenu
+locals) and names (`Reset`, `bPauseable`, `CacheSizeMegs`, ... all present in other packages' name tables) are
+not addressable over the net afterwards, which nothing replicated needs. After the fix (repro5) the tables are
+identical (`diff` empty).
+
+Remaining: one `Received invalid actor class` per join. Diagnostics added (DevNet, UnChan.cpp: what the client
+got, and on the server any persistent actor without package-map index; UnNetDrv.cpp: which export a static index
+named when it resolves to nothing). Result (repro6): client `channel 17: got None (bunch error 0, bits 45,
+reliable 1, seq 1)`, server `persistent DefaultPhysicsVolume DM-Deadbolt.DefaultPhysicsVolume0 ... index -1
+linker 0`: the default physics volume is spawned at run time on both ends (`ALevelInfo::GetDefaultPhysicsVolume`,
+UnLevAct.cpp:2447, sets bNoDelete), DM-Deadbolt's file has none, PhysicsVolume is bAlwaysRelevant, so the
+server opens a channel for an actor it can only name as None. The client marks that channel broken and keeps its
+own volume. Same code in UT2004 (UnLevAct.cpp:2139); Epic's behaviour, harmless here (default gravity etc. are
+the same on both ends). Left as is for now; candidate fix noted: skip bNoDelete/bStatic actors with no
+package-map index in `ULevel::ServerTickClients` (UnLevTic.cpp:1455) as it already skips unmapped classes.
