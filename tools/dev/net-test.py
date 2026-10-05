@@ -858,7 +858,7 @@ def check_handshake_loss(compat=False):
                 a.input("probe NOJOIN")
                 m = a.wait(r"probe NOJOIN (.*)$", 10)
                 menu = parse_kv(m.group(1)).get("menu") if m else None
-                gave_up = a.count(r"Pending connection: no WELCOME after")
+                gave_up = a.count(r"Pending connection: no message from the server for .* before WELCOME, giving up")
                 det = "NO JOIN within %.0f s (%d packet(s) lost by %s); client's last handshake line: %s; client gave up: %s, menu now %s" % (
                     limit, lost, side, last[-1][:80] if last else "none", bool(gave_up), menu)
                 if expect == "nojoin":
