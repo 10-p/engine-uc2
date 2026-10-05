@@ -331,3 +331,64 @@ warning.
      with replicated chroma (neighbor to 4:4:4, then the BT.601 matrix) it is at most 1. Replication is a
      choice: it is what a 4:2:0 texture shows without filtering, and cheaper. (The Xbox decoder's choice is not
      documented in the XDK.)
+
+## Step 4 - V4 integration code (2026-10-05; run evidence in Step 5)
+
+### Every change outside the new files, for the hand merge
+
+**Source/UC2GLDrv (M7 is rewriting the driver; these are ALL our driver hunks):**
+1. NEW file `Source/UC2GLDrv/Src/UC2GLMovie.cpp`: `FOpenGLRenderInterface::SetMovieMaterial` for `!_XBOX`
+   (picked up by the driver's `file(GLOB Src/*.cpp)`, no CMake change). Uses only members that already exist:
+   `CurrentState`, `SetShaderBitmap`, `ApplyTexModifier`, `CheckMaterial`, `SetMaterial`, `RenDev->gl*`,
+   `RenDev->RenderInterface.InvalidateHardwareState()`, `FOpenGLTexture::{TextureID,Cached*}`.
+2. `Source/UC2GLDrv/Src/UC2GLMaterialState.cpp`, ONE hunk at the end of the file (around line 4818, the
+   `#else` branch after the Xbox `SetMovieMaterial`): Epic's PC stub (`return 0`, 20 lines with its comment
+   block) deleted and replaced by the one comment line
+   `// UC2GLDrv (M9): the PC branch (Epic's returned 0 here: no movies on PC) is Src/UC2GLMovie.cpp.`
+   Nothing else in the driver changed (no header change: `SetMovieMaterial` was already declared).
+   How the upload works without touching the texture cache: the engine's `FMovieTexture` has revision 0
+   forever, so `CacheTexture` creates the cache entry and never calls `Cache` on it; `UC2GLMovie.cpp` owns that
+   entry's GL texture: `glTexImage2D` when it is new or the size changed, else `glTexSubImage2D`, only when the
+   material is being set (= drawn) and the player's picture revision differs from the one uploaded (stored in
+   the material's transient `LastD3DTexture`, the Xbox's "last D3D texture" slot). Level 0 only
+   (`GL_TEXTURE_MAX_LEVEL 0`), BGRA bytes as `GL_BGRA`/`GL_UNSIGNED_BYTE`.
+
+**Engine (Epic files, small delimited hunks):**
+- `Engine/Inc/UnAudio.h`: + `OpenMovieAudio` virtual (Step 2).
+- `Engine/Src/UnEngine.cpp`: `#include "UnMovie.h"`; first statement of `UEngine::InputEvent`:
+  `if( appMovieInputEvent( iKey, State ) ) return 1;` (a full-screen movie owns the input).
+- `Engine/Src/UnGame.cpp`: `#include "UnMovie.h"`; four `#if` lines lifted from `_XBOX` to
+  `(defined(_XBOX) || WITH_PORTABLE_MOVIES)` (the extern block of the movie functions, `bWasMenu`, the LoadMap
+  start block, the intro block at the end of LoadMap); inside the start block the condition of
+  `GRenDev->ResetRenderStates()` gains `&& GLevel && GLevel->Engine->GRenDev` (the Xbox always had a loading
+  movie playing during the first LoadMap, so it never reached that line with `GLevel` NULL; on PC the first
+  LoadMap has no level and a dedicated server has no render device); `UGameEngine::Exec` handles `SUBTITLES`
+  (the Xbox client's command, sent by the profile's cinematic-captions option) under `WITH_PORTABLE_MOVIES`.
+  Not lifted: `PaintProgress` and `Draw`'s `IsPlayingMovie`/`SetEngineReady` blocks (no background movie
+  exists here, so they would be no-ops).
+- `Core/Inc/UnGnuG.h`, `Core/Inc/UnVcWin32.h`: the movie base classes moved to `Core/Inc/UnMovieBase.h`.
+
+**Launcher / build / tools:** `Source/SDLLaunch/Src/SDLLaunch.cpp` (include `UC2Movie.h` + `UnMovie.h`,
+registrant line, and after `LOADWINDOWPOSITION`: `appPlayMovieFullscreen("..\Movies\UC2_Logos.xmv",
+FSMOVIE_Startup, 1)`); `Source/UCC/Src/UCC.cpp` (include + registrant); `Source/UCC/CMakeLists.txt`,
+`Source/SDLLaunch/CMakeLists.txt` (link UC2Movie, `UC2_WITH_UC2MOVIE`); root `CMakeLists.txt` (M9 block:
+`add_subdirectory(Thirdparty/Theora)`; `UC2Movie` in `UC2_PACKAGES`); `tools/dev/mkrun-uc2.sh` (cooked movies
+into the run tree). `UC2ALAudio`: `OpenMovieAudio` + stream class (Step 3).
+
+### Behaviour decisions in the integration
+- Start-up logos play **after** `Engine->Init()`: the window only opens at the end of Init (after the menu map
+  has loaded), so unlike the Xbox (logos while files were being cached, before the engine) the menu is already
+  loaded when they play; its music is paused by the exclusive movie sound and resumes after. The Xbox's legal and
+  rating screens (`Startup/UC2Startup.xpr`, 5 s + 4.9 s) are not shown: deferred (they are XPR textures, not
+  movies).
+- Switches: `-NOMOVIE` (no full-screen movies), `-NOSTARTUPMOVIES` (no logos) - UE3's names, UE2 had no such
+  switch; ini `[UC2Movie] StartupMovies=, Cinematics=, LoadingMovie=` (default True when absent; no ini row added
+  because nothing is written to the inis).
+- Cinematics: the Xbox flow exactly (outro at the start of LoadMap when the previous map was not the menu,
+  intro at the end of LoadMap), blocking, skippable after 0.5 s, sound in the game's language.
+- Loading movie: **off behind its hook** (`PlayLoadingMovie`), replaced by a static loading screen: the first
+  picture of `UI_LoadingMovie` with "LOADING..." drawn once at the start of LoadMap. Not during the first load
+  in `UGameEngine::Init` (no window yet).
+- MovieMaterial: `bDecodeFromMemory` streams from the file (no background whole-file load); OnDonePlaying fires
+  once at the end (the Xbox decoder answered ENDOFFILE on every later call); a material nobody draws for more
+  than a second continues from its picture (real-time clock re-based) instead of decoding the gap.
