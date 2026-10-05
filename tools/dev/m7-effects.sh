@@ -84,10 +84,13 @@ echo "$EFFECTS" | while IFS='|' read -r name map pinned secs fire la lb args; do
   [ -n "$name" ] || continue
   if [ "$want" != "  " ] && [ "${want#* $name }" = "$want" ]; then continue; fi
   tries=1
-  # DM-Praxis: the panes are not in view from the first PlayerStart. The start is then random; the run is
-  # repeated (at most 6 times) until picture A shows the view of the wine reference logs/oracle/
-  # DM-Praxis-windows-A.png (mean difference below 8 of 255; another start gives more than 20).
-  [ "$name" = praxis-panes ] && tries=6
+  # DM-Praxis: the panes are not in view from the first PlayerStart, and no console command moves the player
+  # to a chosen start. The start is left random (srand(time)) and the run is repeated, at most 10 times,
+  # until picture A shows the view of the wine reference logs/oracle/DM-Praxis-windows-A.png (mean
+  # difference below 8 of 255; any other start gives more than 20). About one start in four is that one,
+  # so this is the one effect that is repeatable in its camera but not in how many runs it needs; if no run
+  # hits the view the line says FAILED instead of showing a picture of another room.
+  [ "$name" = praxis-panes ] && tries=10
   try=0; ok=0
   while [ $try -lt $tries ] && [ $ok = 0 ]; do
     try=$((try+1))
@@ -108,7 +111,10 @@ echo "$EFFECTS" | while IFS='|' read -r name map pinned secs fire la lb args; do
   glerr=$(grep -a "GL errors so far" "$log" 2>/dev/null | tail -1 | sed -E 's/.*, ([0-9]+) GL errors.*/\1/')
   pfail=$(grep -a "UC2GLDrv: programs:" "$log" 2>/dev/null | tail -1 | sed -E 's/.*linked, ([0-9]+) failed; fragment shaders [0-9]+ compiled, ([0-9]+) failed.*/\1+\2/')
   left=$(echo "$report" | grep -c "WARNING")
-  if [ -f "$out/fx-$name-0.png" ] && [ -f "$out/fx-$name-1.png" ]; then
+  if [ $ok = 0 ]; then
+    rm -f "$out/fx-$name-0.png" "$out/fx-$name-1.png"
+    echo "fx $name: FAILED, the reference view was not reached in $try runs (random PlayerStart); run it again. critical=${crit:-?} left_behind=$left"
+  elif [ -f "$out/fx-$name-0.png" ] && [ -f "$out/fx-$name-1.png" ]; then
     mv -f "$out/fx-$name-0.png" "$out/fx-$name-a.png"; mv -f "$out/fx-$name-1.png" "$out/fx-$name-b.png"
     python3 -c "
 import sys
