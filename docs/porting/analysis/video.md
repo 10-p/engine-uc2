@@ -179,3 +179,104 @@ quality vs decoded XMV: PSNR-Y min 35.50 median 40.14 max 45.13 dB; SSIM(all) mi
   layout). **0 decode errors**, 0 unrecognised warnings.
 - Command: `python3 tools/cook-movies.py --jobs 4` (each ffmpeg/ffprobe inside `bin/capped 2G`, at most 4 at a
   time; 4 encoders + the orchestrator). Wall time about 25 min.
+
+### Language-track evidence (`tools/dev/movie-lang-evidence.py`, `logs/m9/lang-evidence*.out`)
+
+- First attempt (`lang-evidence.out`): 50 ms **level envelopes** of each XMV track against the English voice
+  stem in `TestMaps/` (`*-voice.wav`). Not discriminative: 1 of 4 cinematics picked track 0 (03_AscPre3 0.436 vs
+  0.304-0.380); 04_AscPre6, 05_AscPre7, 07_Asc02 picked deu/fra with all five tracks within 0.05 of each other.
+  Reason: dubbing keeps each line's timing and loudness, so the envelopes of all languages look alike.
+- Second (`lang-evidence-2.out`): **waveform** cross-correlation in the voice band (200-3400 Hz, 8 kHz mono),
+  envelope only for the coarse lag, then +-100 ms of sample lags (`tools/dev/xcorr.c`, compiled on the fly).
+  Only the mix that contains the English recording correlates. Literally:
+  ```
+  03_AscPre3 track 0 (int) 0.067 | deu 0.013 | fra 0.014 | ita 0.011 | spa 0.010   (sfx-stem control 0.147-0.170 for all)
+  04_AscPre6 track 0 (int) 0.619 | deu 0.009 | fra 0.009 | ita 0.009 | spa 0.007   (control 0.378-0.485)
+  05_AscPre7 track 0 (int) 0.248 | deu 0.013 | fra 0.010 | ita 0.010 | spa 0.014   (control 0.339-0.382)
+  07_Asc02   track 0 (int) 0.668 | deu 0.025 | fra 0.024 | ita 0.026 | spa 0.025   (control 0.413-0.462)
+  ```
+  The cooked `.ogv` gives the same numbers as XMV track 0 (0.067/0.613/0.251/0.664). So **track 0 = English is
+  established from the content** (4 of 4 cinematics with a stem, 10-60 x the other tracks), and the sfx control
+  shows all five tracks share the effects bed. **Tracks 1-4 = deu, fra, ita, spa rests on the Xbox code alone**
+  (`XMVHelper.cpp:160-189`): no German/French/Italian/Spanish reference recording exists in the tree. 03_AscPre3's
+  English correlation is weak (0.067) but still 5x the others: its voice stem is probably not the final mix's
+  take/processing.
+- Note: the Theora vendoring (`Thirdparty/Theora`, see V2 below) went into commit 76259e5 with the docs by
+  accident of staging; nothing else is in it.
+
+## Step 2 - V2: player, interface, audio stream (WIP; state at the 2026-10-04 22:50 cut-off, written 2026-10-05)
+
+### Vendored decoder
+`Thirdparty/Theora`: libtheora **1.2.0** from the official Xiph release tarball
+`https://downloads.xiph.org/releases/theora/libtheora-1.2.0.tar.xz`, SHA-256
+`ebdf77a8f5c0a8f7a9e42323844fa09502b34eb1d1fece7b5f54da41fe2122ec` (= Xiph's SHA256SUMS). Decoder sources only,
+no legacy `theora_*` wrapper, no assembly; byte-identical copies (README.uc2 lists them). The vendored libogg is
+1.0 (from M8), which lacks `ogg_uint16_t`/`ogg_uint64_t`: the Theora CMake file defines both as PUBLIC macros.
+Checked by hand before wiring: every decoder file compiles with `gcc -m32 -O2 -Wall` and with `emcc -O2`, no
+warning.
+
+### Code written (committed WIP, nothing of it built yet)
+- `Core/Inc/UnMovieBase.h`: `FMovieThread`, `FMoviePlayer` moved unchanged; `UnVcWin32.h` and `UnGnuG.h` include
+  it instead of each defining them (two small hunks).
+- `Engine/Inc/UnAudio.h`: one virtual appended to `UAudioSubsystem`:
+  `OpenMovieAudio(Rate, Channels, bExclusive)` returning an `FMovieAudioStream*` (default NULL). Why: the movie's
+  sound must go through the game's audio device (one OpenAL context, the wave-writer capture, the device's
+  volume and pause handling) and the video must follow that sound's clock; the engine interface had no way to
+  stream PCM. A virtual appended at the end changes no object size (verifyclasses unaffected: to be checked).
+  NullAudioDevice inherits NULL -> movies run silent on real time.
+- `Engine/Inc/UnMovie.h`, `Engine/Src/UnMovie.cpp` (new, ours): `FMovieAudioStream` (FreeFrames/Write/
+  PlayedFrames/QueuedFrames/Pause, deleted to close), `FPortableMoviePlayer : FMoviePlayer` (Open/Advance/
+  IsPlaying/HasEnded/Pause/Rewind/frame, revision, BGRA), `GCreateMoviePlayer` factory (NULL = no movies),
+  `WITH_PORTABLE_MOVIES` (the named capability that will lift the `_XBOX` gates in UnGame.cpp);
+  `appFindMovie` (Xbox names `D:\Movies\..`, `D:\Textures\Movies\..`, `..\Movies\..` -> `../Movies` or
+  `../Textures/Movies` `.ogv`, case-insensitive match because the content says `Portrait_Gametype_NS`, and the
+  language rule), `appOpenMovie`, `appCanPlayFullscreenMovie` (client, viewport, not NullRenderDevice; `-NOMOVIE`
+  all, `-NOSTARTUPMOVIES` logos: Epic's UE3 switch names, UE2 had none; ini `[UC2Movie] StartupMovies,
+  Cinematics, LoadingMovie`), `appPlayMovieFullscreen` (blocking loop: pump input via `Viewport->UpdateInput`,
+  Advance, draw a transient MovieMaterial wrapping the player with Canvas->DrawTile keeping aspect, the
+  HideSubtitles bands with a black ConstantColor when `GShowSubtitles` is off, present, `-movieshot=<t>,..`
+  for verification screenshots at movie times, one log line a second), `appMovieInputEvent` (to be called first
+  in UEngine::InputEvent: swallows all input during a full-screen movie, any press after 0.5 s skips),
+  `appUpdateMovieMaterial` (the Xbox SetMovieMaterial logic minus D3D: bReset, open on first use, advance when
+  bNeedsFrameUpdate, OnDonePlaying once at the end, USize/VSize), and the UnGame.cpp hook functions with the Xbox
+  names (PlayIntroCinematic/PlayOutroCinematic/PlayLoadingMovie/SetEngineReady/IsPlayingMovie).
+- `Source/UC2Movie/Src/UC2MoviePrivate.h`, `UC2MoviePlayer.cpp`: `FUC2OggReader` and `FUC2MoviePlayer`.
+
+### Design decisions taken
+- **Threading: none.** Decoding happens in `Advance()` on the calling thread (render device for materials, the
+  full-screen loop otherwise). Works the same natively and in the single-threaded web build. The Xbox's thread
+  only existed to keep the loading movie running during a blocking load; see the loading-movie decision below.
+- **Sync**: with sound, the clock is the sound stream's played frames (`PlayedFrames`, OpenAL buffer accounting +
+  `AL_SAMPLE_OFFSET`), as the XMV decoder synced to the chosen audio stream. Picture n is shown for clock in
+  [n/fps,(n+1)/fps), computed as floor(played*fps/rate) (1470 sound frames per picture at 44.1 kHz/30 fps).
+  The sound is padded with silence to the video length (cooked sound ends one frame early), so a pass is
+  exactly FrameCount/fps for both and a loop is seamless; when the sound queue starves, the picture waits.
+  Without sound or audio device: real time (appSeconds, pause excluded); a material not drawn for > 1 s
+  continues from its picture instead of decoding the whole gap. `MOVIE_ManualSync` = one frame per Advance.
+- **Memory bounds**: one `FArchive` per stream (video and audio each open their own reader on the file, even
+  when it is the same .ogv), 16 KB reads, only the selected stream's pages enter libogg, so the buffered data is
+  one page plus one packet whatever the interleaving; the sound queue is bounded by the device (planned 6 x 8192
+  frames); one BGRA picture (640x480x4 = 1.2 MB) plus libtheora's reference frames. No whole-file loads (the
+  Xbox's `bDecodeFromMemory` background load is not needed and not done).
+- **Texture format**: BGRA bytes (`TEXF_RGBA8`, what `FMovieTexture` declares and the GL driver uploads as
+  GL_BGRA), top row first, alpha 255; BT.601 limited-range matrix in 8.8 fixed point, chroma replicated per 2x2.
+  To check numerically against ffmpeg in V3.
+- **Frame count**: from the last page's granule (`th_granule_frame`+1), so zero-byte duplicate packets count
+  as frames (the cook's convention); decoding uses `th_decode_packetin` (TH_DUPFRAME keeps the picture).
+- **Vorbis end trim**: decoding stops at the end-of-stream granule (from the file's tail).
+- **Loading movie**: no thread, and drawing from inside the loader would re-enter the renderer while the level is
+  being replaced, so the animated version stays off behind its hook; `PlayLoadingMovie` draws the movie's first
+  picture with "LOADING..." once before the load (static loading screen). To measure: it must not slow loading.
+- **Exclusive sound** for full-screen movies: the device pauses cues and music while the stream lives (the Xbox
+  played full-screen movies with nothing else running). Movie sound gain 0 dB, no category: XMV sound went
+  through DirectSound directly, outside XACT's categories (to state in the final report).
+
+### Builds: nothing of the WIP has been compiled yet. Next, in order
+1. `Source/UC2Movie/{CMakeLists.txt, Inc/UC2Movie.h, Src/UC2Movie.cpp}` (package, factory registration in
+   `AUTO_INITIALIZE_REGISTRANTS_UC2MOVIE`), root CMakeLists M9 block (Theora + UC2Movie in UC2_PACKAGES, also on
+   the web), UCC + SDLLaunch registration.
+2. UC2ALAudio: `OpenMovieAudio` + the stream class (source + 6 buffers, played-frame accounting, exclusive
+   pause/resume, detach on device destroy).
+3. Build native; then the self-test commandlet (V3) with ffmpeg `framecrc` references.
+4. V4: GL driver `SetMovieMaterial` PC body in a NEW file `UC2GLDrv/Src/UC2GLMovie.cpp` + deleting the PC stub in
+   `UC2GLMaterialState.cpp` (one hunk); launcher logos; UnGame.cpp gates; UnEngine.cpp input hook.
