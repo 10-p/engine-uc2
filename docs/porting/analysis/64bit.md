@@ -181,7 +181,9 @@ declared in the opposite order in C++ and script — to compare with the 32-bit 
 - **32-bit unchanged, measured**: `dwarf-layouts.py` of main's 32-bit `ucc-bin` (776ed23,
   `engine-uc2/build-native`) against this branch's: the only differences are 4 new template instantiations
   (`TArray<unsigned long>`, `TArrayNoInit<unsigned long>`, `TObjectIterator<UStruct>`, `TTypeInfoBase<unsigned
-  long>`); every existing type has the same size and member offsets (`logs/m13/dwarf32-*.txt`).
+  long>`); every existing type has the same size and member offsets (`logs/m13/dwarf32-*.txt`). Repeated later for
+  the client `uc2.bin` (GL driver, SDL2Drv, audio, movies included; 16,033 facts): 3 new template
+  instantiations, nothing else (`logs/m13/dwarf32-main-uc2.txt` vs `dwarf32-uc2.txt`).
 - `verifyclasses`: 32-bit `All native class layouts match` (exit 0, unchanged output), 64-bit the same plus
   the 64-bit checks (exit 0). m13-layout-check at 32-bit gives the same 2 `Texture.__LastUpdateTime`/`MemUsage`
   lines as at 64-bit: **pre-existing** (C++ declares MemUsage before __LastUpdateTime, script after; Epic's
