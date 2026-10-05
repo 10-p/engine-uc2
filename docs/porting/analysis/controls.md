@@ -429,3 +429,20 @@ Two shared-code changes, stated for the coordinator:
   (`SpeedBase=100`): before = 100 x 20/dt = 120,000 at 60 fps, 60,000 at 30 fps (frame-rate dependent, 1,200x the
   Xbox); after = 100 at any frame rate (the Xbox's value, `ReadInput` scales by 1 there). With our `JoyX/JoyY
   SpeedBase=2400000`: 2,400,000 -> 24,000 after UCPlayerInput's /100, the keyboard's value.
+
+## Step 9 - final gate (2026-10-05, after the resume; code at caf1ce8)
+
+- a. `bin/capped 6G 3000 -- bash -c 'cmake --preset native && cmake --build build-native -j8'` -> rc 0, `[100%] Built
+  target UCC`, `[100%] Built target SDLLaunch`; `bin/capped 6G 3000 -- bash -c 'source ../env.sh && cmake --preset
+  wasm && cmake --build build-wasm -j6'` -> rc 0, `Built target SDL2Drv`, `[100%] Built target SDLLaunch`.
+- Run tree made fresh: `tools/dev/mkrun-uc2.sh build-native m10`.
+- b. `tools/dev/m10-controls.sh` (logs/m10/all-scenarios.txt):
+  `PASS keyboard (16 checks)`, `PASS mouse (18 checks)`, `PASS text (7 checks)`, `PASS pad (33 checks)`,
+  `PASS both (14 checks)`, each `0 Critical, capped exit 0`; nothing left running.
+- c. 0 `Critical` in every scenario log and in the gate-d logs.
+- d. `verifyclasses` -> `All native class layouts match`; `timeout 20 ./ucc-bin server DM-Deadbolt -log` ->
+  `Executing Class Engine.ServerCommandlet`, `Game class is 'UCDeathmatch'`, `Bringing Level
+  DM-Deadbolt.MyLevel up for play (0)...` (stopped by the timeout, rc 124 as before); `uc2.bin -nullrenderer -log`
+  -> `Bringing Level Menu.MyLevel up for play (0)...`, `Render device: Engine.NullRenderDevice (640x480 windowed)`,
+  `appRequestExit(0)` at the 30 s timeout.
+- Ceilings: 6G for builds, 2G for every game/ucc run; none hit.
