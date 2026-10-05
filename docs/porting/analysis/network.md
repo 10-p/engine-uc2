@@ -233,3 +233,39 @@ bots fight and kill the wandering clients, so damage/death/respawn ran for 10 mi
 first ~2 min (new effects/sounds) then +1-3 MB per 5 min, flattening. `.clean`: 0 Critical/assert/overflow/bunch
 lines in all three logs (the exit-time Critical of step 6 did not occur here), 2 invalid-class lines both
 explained. Not a leak test at hour scale.
+
+### Step 9: the exit-time "failed to route Destroy" -- cause and fix (ASan with -fsanitize-recover)
+
+ASan (`-fsanitize=address -fsanitize-recover=address`, `halt_on_error=0`), server + client, servertravel,
+~2 min of play, Ctrl+C (scratch travelasan.sh). Findings, in order:
+1. heap-use-after-free in `main` (UCC.cpp after `Commandlet->Main`): the commandlet object is referenced by
+   nothing, so the garbage collection inside the server's LoadMap (UnGame.cpp:2133) freed it while its Main()
+   ran (freed by `~UServerCommandlet` from `RemoveObjects`). Epic's UCC.cpp and UT2004's have the same lines.
+   Fix: `Commandlet->AddToRoot()` after ConstructObject (UCC/Src/UCC.cpp); StaticExit tags everything
+   unreachable, so it is still purged at exit.
+2. heap-use-after-free in `UObject::ConditionalDestroy` (UnObj.cpp:408) during StaticExit's purge, freed by
+   `~UActorChannel` from `UNetConnection::Destroy` (UnConn.cpp:125), called from `UChannel::RouteDestroy`
+   (UnChan.cpp:178), called from `UActorChannel::Destroy`, called from the purge's ConditionalDestroy of THAT
+   SAME channel. When the collector reaches a channel before its connection (after a travel or under packet
+   loss the new connection's channels reuse lower object indices), RouteDestroy destroys the connection, whose
+   Destroy `delete`s all its channels -- including the one whose Destroy is still on the stack. Epic's
+   allocator left freed memory readable, glibc's does not -> the outer ConditionalDestroy read garbage flags
+   -> `Critical: ActorChannel ... failed to route Destroy` (and in general, undefined behaviour).
+   Fix (Engine/Src/UnConn.cpp `UNetConnection::Destroy`): while `GIsGarbageCollecting`, ConditionalDestroy the
+   channels instead of deleting them; the collector deletes them in its second pass (they are unreachable
+   with their connection). Outside garbage collection unchanged (`delete`).
+3. With 2 fixed, no more use-after-free, but still `failed to route Destroy`: the nested ConditionalDestroy
+   (connection -> channel) restores the flags it found, which the outer call had cleared of RF_DebugDestroy,
+   so the outer check fails although UObject::Destroy did run. Epic's routed-destroy design and its
+   non-final debug check (`#ifndef FINAL_RELEASE`, UnObj.cpp:403) do not fit together; the Xbox build skipped
+   the check. Fix (Engine/Src/UnChan.cpp `UChannel::RouteDestroy`): after the connection's ConditionalDestroy
+   destroyed this channel, set RF_DebugDestroy before returning 1 (the object is still allocated thanks to 2).
+   Result: ASan run ends with `Log file closed`, 0 Critical, 0 use-after-free.
+4. Remaining ASan reports, all 1-byte heap over-READS in Epic's script interpreter, left alone (benign: they
+   read a byte of FArray slack; noted for the script milestone): `ProcessInternal` peeking `EX_DebugInfo`
+   after a function's last byte (UnCorSc.cpp:5382), and `execLess_IntInt`/`execEqualEqual_IntInt`
+   `P_FINISH` reading past the end of a class's Script when evaluating a replication condition from
+   `AActor::ProcessRemoteFunction` (UnScript.cpp:3582: `FFrame(..., RepOffset).Step`).
+Whose: 1 Epic (UCC, also UT2004); 2 and 3 Epic's net code, latent on the shipped Xbox build (FINAL_RELEASE,
+Epic's allocator); the GMachineCPU overflow of step 7 the port's (UT2004 base). Removed the temporary
+RouteDestroy diagnostic.

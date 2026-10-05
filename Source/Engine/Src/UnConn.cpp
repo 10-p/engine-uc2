@@ -121,8 +121,19 @@ void UNetConnection::Destroy()
 	State = USOCK_Closed;
 
 	// Kill all channels.
+	// uc2 port: during garbage collection only destroy them; the collector deletes them afterwards (they are
+	// unreachable with this connection). The collector may have reached a channel first: its Destroy then
+	// routes here through UChannel::RouteDestroy, and deleting it here freed the very object whose Destroy and
+	// ConditionalDestroy were still running up the stack (they read its flags on return). Epic's allocator left
+	// freed memory readable; glibc's does not ("<channel> failed to route Destroy" at exit, AddressSanitizer:
+	// heap-use-after-free in UObject::ConditionalDestroy, freed by ~UActorChannel from here).
 	for( INT i=OpenChannels.Num()-1; i>=0; i-- )
-		delete OpenChannels(i);
+	{
+		if( GIsGarbageCollecting )
+			OpenChannels(i)->ConditionalDestroy();
+		else
+			delete OpenChannels(i);
+	}
 
 	// Kill package map.
 	delete PackageMap;

@@ -175,7 +175,15 @@ INT UChannel::RouteDestroy()
 	{
 		ClearFlags( RF_Destroyed );
 		if( Connection->ConditionalDestroy() )
+		{
+			// uc2 port: this channel was destroyed (UObject::Destroy ran) inside the connection's Destroy, in a
+			// nested ConditionalDestroy that restores the flags it found, i.e. without RF_DebugDestroy, so the
+			// ConditionalDestroy up the stack reported "failed to route Destroy" (non-final builds only; the
+			// Xbox build skipped that check). The object is still allocated here: UNetConnection::Destroy
+			// leaves the deleting to the garbage collector.
+			SetFlags( RF_DebugDestroy );
 			return 1;
+		}
 		SetFlags( RF_Destroyed );
 	}
 	return 0;
