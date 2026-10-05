@@ -391,3 +391,34 @@ Done before the cut-off (logs under `<WorkUC2>/logs/net/`):
   errors so far`, 0 Critical (a 60 s run reaches only ~400 frames under llvmpipe, before the first count line).
 - Gate (c): every `.clean` item PASS in the final runs = 0 Critical/assert/overflow/bunch lines in every
   process's log.
+
+### Step 14: gate completed at the tip (15374da)
+
+- wasm rebuilt at the tip: `source env.sh && cmake --preset wasm && cmake --build build-wasm -j6` (capped 5G)
+  rc 0, `[100%] Built target SDLLaunch` (`wasm-build2.log`; UC2NetTest.cpp recompiled).
+- Soak at the tip, fresh `run/net` (`final-soak.txt`): bots, alive (10.0 min, all 3 processes; server PRIs
+  Sobek 6/2, Jackhammer 6/2, NetA -2/9, NetB 0/1), rss (server 38->38 MB, NetA 83->99, NetB 82->96, flat after
+  ~2 min), clean, leftovers: PASS. Memory ceilings used: tests 6G (one scope per run), builds 5G, single runs
+  2G; none hit (no exit 137 in any run).
+- After the run nothing of mine listens on 78xx; the four ucc-bin servers on 7880-7883 belong to another agent
+  (`run/m13-census-*`), not touched.
+
+## Behaviour list (labels as the brief asks)
+
+Asserted by the script (net-test.sh, final runs): join to a dedicated server (1 and 2 clients), level up on the
+client, spawn on Fire (all players must press before the match starts), UC2 URL options reaching the server
+PRI, server sees client movement, client/server positions agree (<1 unit at rest), each client sees the other
+at the server's position, movement of one changes what the other sees, a hit lowers health identically on
+server/attacker/victim, a kill changes score/deaths everywhere, listen server + client (same items), servertravel
+to DM-Sever with the client following, rejoining and respawning, clean disconnect, frozen client dropped after
+ConnectionTimeout (31 s), killed client dropped (0-3 s via ICMP), rejoin afterwards, all of that under 100 ms RTT
++ 5 % loss each way (Epic's PktLag/PktLoss), 10-min soak with 2 bots (alive, RSS flat, clean), Linux client vs
+this branch's MinGW ucc.exe under wine (join, spawn, move, identical package maps), 0 Critical in every log.
+Seen in a screenshot only: the GL client rendering the other player (label, reticle, scoreboard).
+Implemented/unchanged, never exercised: file download of a missing package (ChannelDownload), HTTP redirect
+download (class missing in UC2's IpDrv.u), team games/CTF online, splitscreen child connections, voice, LAN
+beacon/server browser, admin login, match end by frag/time limit (travel was tested via servertravel only),
+more than 3 clients, teleporters with players online (see step 11).
+Not working / observations: one `Received invalid actor class` per connection (run-time DefaultPhysicsVolume
+has no package-map index; Epic's behaviour, harmless); after a travel the client logs in with its character
+name ("Anubis"), not the command line's `?Name=`.
