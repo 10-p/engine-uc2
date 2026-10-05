@@ -554,3 +554,9 @@ Observation, not chased (gameplay, UC2 script): under simulated loss a player so
 holding the melee weapon or an empty energy weapon instead of the race weapon. Server and client agree, so it is
 not a desync; probably the order of inventory replication vs the client's weapon choice at spawn. Untested
 whether it happens on a real lossy link; noted for the script milestone.
+
+### Step L4: `lag` ten times with the final harness: 10/10; PktLoss=20: PASS
+
+`logs/net/lag10b/summary.txt`: runs 1-10 each 9/9 PASS (join, spawn, place, seeother, othermoves, hit, kill,
+healthseen, clean); one information run at PktLag=50 PktLoss=20: 9/9 PASS. Together with step L3's series:
+all 21 runs joined; no hang. The race-weapon guard had to act once in the ten (run 4: one NextWeapon).
