@@ -22,6 +22,11 @@ if(TARGET UC2GLDrv)
   list(PREPEND LINK_PACKAGES UC2GLDrv)
   target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_UC2GLDRV=1)
 endif()
+# M11: its GL4ES binding (Linux: the native twin of the web renderer; Emscripten: the web renderer).
+if(TARGET UC2GL4ESDrv)
+  list(PREPEND LINK_PACKAGES UC2GL4ESDrv)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_UC2GL4ESDRV=1)
+endif()
 # M8: the OpenAL audio device, where it is built (native; the web build adopts it at M11).
 if(TARGET UC2ALAudio)
   list(PREPEND LINK_PACKAGES UC2ALAudio)
