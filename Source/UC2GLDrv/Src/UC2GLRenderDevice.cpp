@@ -598,6 +598,7 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 		appSprintf( GMachineVideo, TEXT("%s"), appFromAnsi((ANSICHAR*)glGetString(GL_RENDERER)) );
 
 		DetectCapabilities();
+		if( CheckGLErrors ) CheckGLError( TEXT("SetRes: binding and capabilities") );
 
 		// Capabilities.
 		GLint Units = 0, MaxSize = 0;
@@ -627,6 +628,7 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 
 		if( !CreatePresentProgram() )
 			return 0;
+		if( CheckGLErrors ) CheckGLError( TEXT("SetRes: present program") );
 
 		// A black opaque texture for stages that have no texture.
 		FColor Black(0,0,0,255);
@@ -643,17 +645,22 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 		glBufferData( GL_ARRAY_BUFFER, sizeof(Quad), Quad, GL_STATIC_DRAW );
 		glBindBuffer( GL_ARRAY_BUFFER, 0 );
 
+		if( CheckGLErrors ) CheckGLError( TEXT("SetRes: device textures and buffers") );
+
 		// Render-target post-processing (M7): the copy programs. Before the pixel shaders:
 		// which of those are compiled depends on it.
 		InitPostProcess();
+		if( CheckGLErrors ) CheckGLError( TEXT("SetRes: post-process programs") );
 
 		// Programmable materials (M6): fragment shaders of every integrated pixel shader,
 		// vertex shaders of the VertexShaderConfigs.ini list.
 		InitPixelShaders();
+		if( CheckGLErrors ) CheckGLError( TEXT("SetRes: pixel and vertex shaders") );
 	}
 
 	if( !CreateMainFramebuffer( Viewport->SizeX, Viewport->SizeY ) )
 		return 0;
+	if( CheckGLErrors ) CheckGLError( TEXT("SetRes: main framebuffer") );
 
 
 	BindingSetSwapInterval( UseVSync ? 1 : 0 );

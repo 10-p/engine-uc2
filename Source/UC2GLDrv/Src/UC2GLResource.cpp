@@ -615,7 +615,14 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 				{
 					// Without RT_CREATE_DEPTH, D3DDrv borrows the back buffer's depth surface
 					// (a texture since M7: UUC2GLRenderDevice::CreateMainFramebuffer).
-					RenDev->AttachMainDepthStencil();
+					// M11: OpenGL ES 2 and WebGL 1 want every attachment of a framebuffer to
+					// have the same size (WebGL: FRAMEBUFFER_INCOMPLETE_DIMENSIONS for the 16x16
+					// luminance target with the 640x480 depth), where D3D and desktop GL use the
+					// corner of a larger depth buffer. A smaller target gets no depth buffer
+					// there: what the engine draws into such targets (filter and copy tiles)
+					// does not depth-test, and without a depth buffer the test passes anyway.
+					if( !RenDev->IsGLES || (USize == RenDev->MainWidth && VSize == RenDev->MainHeight) )
+						RenDev->AttachMainDepthStencil();
 				}
 
 				GLenum Status = RenDev->glCheckFramebufferStatus( GL_FRAMEBUFFER );
