@@ -97,7 +97,11 @@ if(NOT WIN32)
 endif()
 
 if(MINGW)
-  add_link_options(-static-libgcc -static-libstdc++)
+  # M12: no MinGW runtime DLL beside the exe (libgcc_s_dw2-1, libstdc++-6, libwinpthread-1 are not part of a
+  # Windows install). -static takes the static archive of every -l library that has one (winpthread
+  # included); the Windows system libraries only exist as import libraries, so they stay DLL imports. Also
+  # applies to the OpenAL32.dll built below.
+  add_link_options(-static -static-libgcc -static-libstdc++)
 endif()
 
 # TCHAR is ANSI on every target. UC2 removed Unicode at the source ("jg -- Removed unicode support",
@@ -205,7 +209,10 @@ endif()
 # static tables miscompile with the engine's), with the wave-file writer backend for capture tests. --------
 add_subdirectory(Thirdparty/Vorbis/ogg)
 add_subdirectory(Thirdparty/Vorbis/vorbis)
-if(NOT EMSCRIPTEN AND NOT WIN32)
+# M12: Windows (MinGW) builds the same source as a DLL, `OpenAL32.dll` (openal-soft's own name on Windows), which
+# UC2ALAudio loads with LoadLibrary; nothing binary is downloaded. Its backends there are WASAPI/DirectSound/
+# WinMM plus the same null and wave writer.
+if(NOT EMSCRIPTEN)
   set(OPENALSOFT_GIT_REPOSITORY "https://github.com/10-p/openal-soft-web.git"
       CACHE STRING "openal-soft git remote; its ufront/web branch carries the Web Audio backend")
   set(OPENALSOFT_GIT_TAG "ufront/web" CACHE STRING "openal-soft git ref")
