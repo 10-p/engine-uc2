@@ -178,3 +178,29 @@ each uc2.bin on its own Xvfb, virtual pad per client, all decisions from NetProb
 Not yet run: disconnect, lag, glshot, soak. Open doubts: the DefaultPhysicsVolume channel (candidate fix in
 ULevel::ServerTickClients, not applied); whether the patch-name clamp could ever hide a replicated FName
 (the patched names all exist in other packages' tables, so NameIndices still finds them).
+
+### Step 6: listen, travel, disconnect, lag runs; a shutdown use-after-free ("failed to route Destroy")
+
+- listen: all items PASS (step 5).
+- travel (`exec servertravel DM-Sever` on the dedicated server): the server brings DM-Sever up, the client
+  follows (`Welcomed by server: LEVEL=DM-Sever`, its probe shows DM-Sever), rejoins and spawns again; the
+  server's probe shows its pawn. Observation: after the travel the client logs in as `Name=Anubis` (its
+  travel URL is rebuilt from its own settings, the command-line `?Name=NetA` is not kept), so the check
+  accepts any name. Then, on Ctrl+C of the server, `Critical: ActorChannel Package.ActorChannel failed to
+  route Destroy` from `UObject::StaticExit` -> `PurgeGarbage` -> `ConditionalDestroy` (gdb, scratch
+  travelgdb.sh, breakpoint on `FTraceLog::operator()` with `pDev==GError` armed only after the SIGINT --
+  armed from the start it slows the server too much). Needs >= ~2 min of play after the travel; a quick exit
+  is clean. gdb on the object: the vtable pointer is not a vtable (gdb prints a raw value, no `<vtable for
+  ...>`), `Index` is garbage, `Connection == NULL`, `bClosing=1`, RelevantTime = the last seconds of the run:
+  GObjObjects still holds a pointer to a FREED actor channel of the live connection (glibc reused its first
+  words). Same Critical on both clients at exit in the lag run. Being chased with an AddressSanitizer build of
+  ucc-bin (build-asan, `cmake --preset native -B build-asan` + `-fsanitize=address`).
+- disconnect: PASS: `exec disconnect` on NetA -> server conns 2 -> 1, NetA's PRI gone; NetB frozen with
+  SIGSTOP (socket open, no ICMP) dropped by the server after 31 s (ConnectionTimeout 30); a client killed
+  outright is dropped after 3 s (the closed socket's ICMP port-unreachable, TcpNetDriver); NetC joins and
+  spawns afterwards. `Received invalid actor class` lines are now required to be explained one-for-one by
+  server-side `persistent actor DefaultPhysicsVolume ... has no package-map index` lines.
+- lag (Epic's DO_ENABLE_NET_TEST switches `PktLag=50 PktLoss=5` on server and both clients, i.e. ~100 ms
+  round trip, 5 % loss each way): every gameplay item PASS (join, spawn, place, seeother 0.1/0.5, othermoves
+  500.8, hit 140->124, kill after 9 shots with scores agreeing everywhere, health seen 124 on all three);
+  `.clean` FAILS only on the exit-time Critical above, on both clients.
