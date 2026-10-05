@@ -364,7 +364,10 @@ void FOpenGLPSMaterialStateHandlers::SetMatState_PS_Distortion( UPixelShaderMate
 	InMaterialState->ZTest = 1;
 	InMaterialState->ZWrite = 0;	
 
-#ifdef _XBOX
+	// UC2GLDrv (M7): D3DDrv's "#ifdef _XBOX" is the device's post-process switch; the
+	// "#else" branch below is PC's (and M6's) state.
+	if( RI->RenDev->PostProcessActive() )
+	{
 	// scion sz -
 	// current stage of post processing
 	switch( RI->GetPostProcessStage() )
@@ -449,20 +452,25 @@ void FOpenGLPSMaterialStateHandlers::SetMatState_PS_Distortion( UPixelShaderMate
 			else
 			{
 				// don't render anything
-				InShader->PixelShaderType = NULL;
+				// UC2GLDrv: Epic also writes "InShader->PixelShaderType = NULL" here and in the
+				// default case: that changes the material object for good (its PreRender,
+				// vertex shader and state handler are chosen by this value on every later
+				// use, so it would be drawn as a fixed-function material from then on).
+				// Not carried over; the colour write mask alone draws nothing.
 				InMaterialState->ColorWriteMask = CWM_COLORWRITEENABLE_NONE;
 			}
 		}
 		break;	
 	default:
 		// don't render anything
-		InShader->PixelShaderType = NULL;
 		InMaterialState->ColorWriteMask = CWM_COLORWRITEENABLE_NONE;
 	}
-#else
+	}
+	else
+	{
 	InMaterialState->SrcBlend = D3DBLEND_ONE;
 	InMaterialState->DestBlend = D3DBLEND_ZERO;
-#endif
+	}
 
 	unguardSlow
 }

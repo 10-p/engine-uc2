@@ -69,6 +69,7 @@ FOpenGLTexture::FOpenGLTexture(UUC2GLRenderDevice* InRenDev,FRenderResource* InR
 	IsCubemap		= 0;
 	IsRenderTarget	= 0;
 	IsDefaultTarget	= 0;
+	DefaultUsage	= FRenderTarget::RT_MATERIAL_USE_BACKBUFFER;
 	CachedWidth		= 0;
 	CachedHeight	= 0;
 	CachedFirstMip	= 0;
@@ -339,6 +340,10 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 			// The main framebuffer: not owned (UD3DRenderDevice's back buffer surfaces).
 			DeleteGLObjects();
 			IsDefaultTarget	= 1;
+			// M7: which of the main framebuffer's buffers a material sees through this texture
+			// (the default target has one cache id per usage). What is bound when a stage
+			// samples it is decided in UUC2GLRenderDevice::GetSampledTexture.
+			DefaultUsage	= RenderTarget->MaterialUsageFlag;
 			OwnsTexture		= 0;
 			TextureID		= RenDev->MainColorTexture;
 			FramebufferID	= 0;
@@ -365,17 +370,21 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 				RenDev->glBindFramebuffer( GL_FRAMEBUFFER, FramebufferID );
 				RenDev->glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, TextureID, 0 );
 
-				GLuint Depth = RenDev->MainDepthStencil;
 				if( RenderTarget->CreationFlags & FRenderTarget::RT_CREATE_DEPTH )
 				{
 					RenDev->glGenRenderbuffers( 1, &DepthStencilID );
 					RenDev->glBindRenderbuffer( GL_RENDERBUFFER, DepthStencilID );
 					RenDev->glRenderbufferStorage( GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, USize, VSize );
-					Depth = DepthStencilID;
+					RenDev->glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, DepthStencilID );
+					RenDev->glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, DepthStencilID );
 				}
-				// Without RT_CREATE_DEPTH, D3DDrv borrows the back buffer's depth surface.
-				RenDev->glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, Depth );
-				RenDev->glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, Depth );
+				else
+				{
+					// Without RT_CREATE_DEPTH, D3DDrv borrows the back buffer's depth surface
+					// (a texture since M7: UUC2GLRenderDevice::CreateMainFramebuffer).
+					RenDev->glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, RenDev->MainDepthStencil, 0 );
+					RenDev->glFramebufferTexture2D( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, RenDev->MainDepthStencil, 0 );
+				}
 
 				GLenum Status = RenDev->glCheckFramebufferStatus( GL_FRAMEBUFFER );
 				if( Status != GL_FRAMEBUFFER_COMPLETE )

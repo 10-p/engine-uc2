@@ -335,6 +335,12 @@ public:
 	FRenderTargetPool		RenderTargetPool;
 	EPostProcessStage		PostProcessStage;
 
+	// M7 (UC2GLPostProcess.cpp).
+	class FOpenGLDynamicGamma*	DynamicGamma;			// FD3DDynamicGamma
+	FLOAT					DistortionScale[4];			// VSC_DISTORTION_SCALE (HandlePSVertexShader)
+	FLOAT					ColorRemapConstant[4];		// VSC_COLOR_REMAP
+	UBOOL					PointSampleNudge;			// see GetGLMatrices
+
 	FOpenGLRenderInterface(UUC2GLRenderDevice* InRenDev);
 	~FOpenGLRenderInterface();
 
@@ -398,8 +404,8 @@ public:
 
 	virtual DWORD GetStageCountForPass(INT Pass);
 
-	// Post-processing: what PC's D3DDrv returns (nothing). M7: render-target pool use,
-	// back-buffer copy, depth copy and post-process stages are implemented there.
+	// Post-processing (UC2GLPostProcess.cpp): the Xbox bodies of FD3DRenderInterface when the
+	// device has UsePostProcess, what PC's D3DDrv returns (nothing) when it has not.
 	virtual UMaterial* GetBackBufferCopyMaterial();
 	virtual FRenderTarget* GetBackBufferCopyTarget();
 	virtual void SetBackBufferCopyTarget(FRenderTarget* RenderTarget) { BackBufferCopyTarget = RenderTarget; }
@@ -425,6 +431,12 @@ public:
 	void Locked( UViewport* InViewport, BYTE* InHitData, INT* InHitSize );
 	void Unlocked();
 	void InvalidateHardwareState();
+	// After the device drew something of its own (a copy pass) while the interface is locked:
+	// framebuffer, viewport and the enables the passes do not set come back.
+	void RestoreAfterDeviceDraw();
+	// Before a pass is committed: bring the copies up to date that stand in for the default
+	// render target when a stage samples it (UUC2GLRenderDevice::UpdateSampledTexture).
+	void PrepareSampledTargets( FOpenGLMaterialState* MaterialState );
 
 	FOpenGLTexture* CacheTexture(FBaseTexture* Texture);
 

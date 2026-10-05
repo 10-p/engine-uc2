@@ -3070,7 +3070,13 @@ void FPostProcessRender::Render()
 	if( !PPDrawList )
 		return;
 
-#ifdef _XBOX
+	// UC2 port (M7): the rest of this function was "#ifdef _XBOX". It runs when the render
+	// device has the post-process capability (FRenderCaps::XboxPostProcess). Without it the
+	// list is empty anyway: no material answers IsPostProcess() (PSDistortionBaseMaterial).
+#ifndef _XBOX
+	if( !RenDevHasXboxPostProcess() )
+		return;
+#endif
 #if OLD_DISTORT_METHOD 
 	// old technique - renders distortion in-place
 
@@ -3223,8 +3229,6 @@ void FPostProcessRender::Render()
 		DebugDrawRenderTarget( 20,20,150,120,BBColor,BBCopyTarget,SceneNode,RI );
 	}
 	
-#endif
-
 #endif
 
 	unguard;

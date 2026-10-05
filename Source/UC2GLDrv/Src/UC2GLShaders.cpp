@@ -51,9 +51,10 @@ enum
 -----------------------------------------------------------------------------*/
 
 //
-// M7: these read a copy of the back buffer, the depth buffer or another render target, or
-// belong to the post-process chain the engine still gates with _XBOX. They stay on the
-// stage-0 fallback (SetPixelShaderMaterial) until the render-target work of M7.
+// These read a copy of the back buffer, the depth buffer or another render target, or belong
+// to the post-process chain the engine runs only for a device with the XboxPostProcess
+// capability. With UsePostProcess (M7) they are drawn like every other shader; without it
+// they stay on the stage-0 fallback (SetPixelShaderMaterial), which is the M6 behaviour.
 //
 static UBOOL UC2GL_IsM7PixelShader( INT Type )
 {
@@ -134,12 +135,35 @@ static GLuint UC2GL_CompileShader( UUC2GLRenderDevice* RenDev, GLenum Type, cons
 //
 FString UUC2GLRenderDevice::BuildVertexShaderSource( QWORD Enum )
 {
-	// GPU skinning and the packed terrain vertices exist only with XBOX_ASSET_FORMAT; the
-	// unique shaders (distortion, colour remap, projector attenuation) are M7 / engine-gated.
-	// M7: VS_Distortion, VS_DistortionAccum, VS_ColorRemap fragments (Distortion.vsh,
-	// DistortionAccum.vsh, ColorRemap.vsh) are composed here once their pixel shaders are drawn.
-	if( (Enum & (VS_SkeletalSkin | VS_TerrainSpecial)) || VS_GETUNIQUESHADER(Enum) )
+	// GPU skinning and the packed terrain vertices exist only with XBOX_ASSET_FORMAT; of the
+	// unique shaders the projector attenuation ones are engine-gated (projector batching).
+	// M7: VS_Distortion, VS_DistortionAccum and VS_ColorRemap (Distortion.vsh,
+	// DistortionAccum.vsh, ColorRemap.vsh) are composed below, with what
+	// FD3DCombinedVertexShader skips for each of them.
+	DWORD Unique = VS_GETUNIQUESHADER(Enum);
+	if( (Enum & (VS_SkeletalSkin | VS_TerrainSpecial)) || (Unique && Unique != VS_Distortion && Unique != VS_DistortionAccum && Unique != VS_ColorRemap) )
 		return FString();
+	UBOOL	SkipTexStage[4]	= { 0, 0, 0, 0 },
+			SkipLighting	= 0,
+			SkipOutputColor	= 0;
+	if( Unique == VS_Distortion )
+	{
+		// stage 1 and 2 used for 3x2 matrix multiply in pixel shader when doing distortion, so skip
+		SkipTexStage[1] = SkipTexStage[2] = 1;
+		SkipLighting = 1;
+	}
+	else if( Unique == VS_DistortionAccum )
+	{
+		// stage 2 used for texcoord that represents distoriton amount
+		SkipTexStage[2] = 1;
+		SkipLighting = 1;
+	}
+	else if( Unique == VS_ColorRemap )
+	{
+		SkipTexStage[1] = SkipTexStage[2] = 1;
+		SkipLighting = 1;
+		SkipOutputColor = 1;
+	}
 
 	FString S;
 	S += TEXT("// VertexShaderEnum ");
@@ -164,6 +188,9 @@ FString UUC2GLRenderDevice::BuildVertexShaderSource( QWORD Enum )
 		TEXT("uniform mat4 u_texMatrix1;\n")
 		TEXT("uniform mat4 u_texMatrix2;\n")
 		TEXT("uniform mat4 u_texMatrix3;\n")
+		TEXT("uniform vec4 u_distortionScale;\n")	// VSC_DISTORTION_SCALE
+		TEXT("uniform vec4 u_distortionScreen;\n")	// clip space xy to back-buffer texture coordinates (scale, offset)
+		TEXT("uniform vec4 u_colorRemap;\n")		// VSC_COLOR_REMAP
 		TEXT("varying vec4 v_color0;\n")			// oD0
 		TEXT("varying vec4 v_color1;\n")			// oD1
 		TEXT("varying float v_fog;\n")				// oFog
@@ -201,7 +228,12 @@ FString UUC2GLRenderDevice::BuildVertexShaderSource( QWORD Enum )
 			TEXT("\t// LightAmbient.vsh\n")
 			TEXT("\tfinalColor += u_ambient;\n");
 
-	if( Enum & VS_Lit )
+	if( Unique == VS_ColorRemap )
+		S +=	TEXT("\t// ColorRemap.vsh\n")
+				TEXT("\tv_tex1 = u_colorRemap;\n")
+				TEXT("\tv_tex2 = u_colorRemap;\n");
+
+	if( !SkipLighting && (Enum & VS_Lit) )
 	{
 		S +=	TEXT("\t// LightHardDirectional5.vsh\n")
 				TEXT("\tlocalNormal = localNormal * inversesqrt(dot(localNormal, localNormal));\n");
@@ -209,7 +241,10 @@ FString UUC2GLRenderDevice::BuildVertexShaderSource( QWORD Enum )
 			S += FString::Printf( TEXT("\tfinalColor.xyz += u_lightColor[%i] * max(dot(localNormal, -u_lightDir[%i]), 0.0);\n"), i, i );
 	}
 
-	if( Enum & VS_VertexColored )
+	if( SkipOutputColor )
+		S +=	TEXT("\t// (no colour output fragment: oD0 is not written; nothing reads it)\n")
+				TEXT("\tfinalColor = vec4(0.0, 0.0, 0.0, 1.0);\n");
+	else if( Enum & VS_VertexColored )
 	{
 		if( Enum & VS_StaticMeshVertexColor )
 		{
@@ -228,8 +263,42 @@ FString UUC2GLRenderDevice::BuildVertexShaderSource( QWORD Enum )
 
 	UBOOL CameraSpacePositionInit = 0, CameraSpaceNormalInit = 0, CameraSpaceReflectInit = 0;
 
+	// since the distortion amount is modulated by vertex alpha color
+	// then we have to add the fragments here AFTER vertex color calcs
+	if( Unique == VS_Distortion )
+	{
+		// Distortion.vsh. The Xbox fragment replaces Screenspace.vsh: it computes the screen
+		// position itself, sets oPos.w to +-1 (so everything interpolates linearly on screen)
+		// and writes the rows of the 3x2 matrix Distortion.psh multiplies the distortion
+		// texel with: ( scale * vertex alpha, 0, back-buffer x ) and ( 0, scale * alpha,
+		// back-buffer y ). There the back buffer is a linear texture addressed in pixels;
+		// here its copy is addressed 0..1, so the pixel amounts are divided by its size and
+		// the position comes from the clip-space position through u_distortionScreen (GL's
+		// own window transform: exact texel centres whatever the half-pixel conventions).
+		S +=	TEXT("\t// Distortion.vsh\n")
+				TEXT("\tgl_Position = gl_Position / max(abs(gl_Position.w), 0.000001);\n")
+				TEXT("\tt.xy = u_distortionScale.xy * finalColor.w;\n")
+				TEXT("\tv_tex1 = vec4(t.x, 0.0, gl_Position.x * gl_Position.w * u_distortionScreen.x + u_distortionScreen.z, 1.0);\n")
+				TEXT("\tv_tex2 = vec4(0.0, t.y, gl_Position.y * gl_Position.w * u_distortionScreen.y + u_distortionScreen.w, 1.0);\n");
+	}
+	else if( Unique == VS_DistortionAccum )
+	{
+		S +=	TEXT("\t// TexCamPosition.vsh\n")
+				TEXT("\tcamPosition = u_modelView * localPosition;\n");
+		CameraSpacePositionInit = 1;
+		S +=	TEXT("\t// DistortionAccum.vsh\n")
+				TEXT("\tt.x = u_distortionScale.x * finalColor.w;\n")						// scale by distortion amount and vertex alpha
+				TEXT("\tt.y = clamp(u_distortionScale.z * camPosition.z, 0.0, 1.0);\n")	// distance attenuate distortion
+				TEXT("\tt.y = 1.0 - t.y * t.y;\n")											// exponential falloff, 1 - result
+				TEXT("\tv_tex2 = vec4(t.y * t.x, t.y * t.x, 0.0, 1.0);\n");
+	}
+
 	for( INT StageIndex=0; StageIndex<4; StageIndex++ )
 	{
+		// skip flagged texture stages (some special case unique shaders require this)
+		if( SkipTexStage[StageIndex] )
+			continue;
+
 		DWORD TexSource = VS_GETTEXSOURCE(StageIndex,Enum);
 		if( TexSource == VS_Tex_Source_None )
 			continue;
@@ -416,6 +485,9 @@ FOpenGLProgram* UUC2GLRenderDevice::GetProgram( INT PixelShader, DWORD Variant, 
 				appSprintf( Name, "u_c%i", i );
 				P->ConstantLoc[i] = glGetUniformLocation( Program, Name );
 			}
+			P->DistortionScaleLoc	= glGetUniformLocation( Program, "u_distortionScale" );
+			P->DistortionScreenLoc	= glGetUniformLocation( Program, "u_distortionScreen" );
+			P->ColorRemapLoc		= glGetUniformLocation( Program, "u_colorRemap" );
 			// Samplers never change: stage n is texture unit n.
 			glUseProgram( Program );
 			for( INT i=0; i<4; i++ )
@@ -460,7 +532,7 @@ void UUC2GLRenderDevice::InitPixelShaders()
 	{
 		if( !GUC2GLPixelShaders[Type].Source )
 			PixelShaderState[Type] = PSS_None;
-		else if( UC2GL_IsM7PixelShader(Type) )
+		else if( UC2GL_IsM7PixelShader(Type) && !(UsePostProcess && PostCopyProgram) )
 		{
 			PixelShaderState[Type] = PSS_M7;
 			M7++;
@@ -487,7 +559,7 @@ void UUC2GLRenderDevice::InitPixelShaders()
 	}
 
 	if( UsePixelShaders )
-		debugf( NAME_Init, TEXT("UC2GLDrv: pixel shaders on: %i fragment shaders compiled, %i failed; %i wait for M7 (render targets), %i are not reachable on PC (engine gates)"), Ready, Failed, M7, Gated );
+		debugf( NAME_Init, TEXT("UC2GLDrv: pixel shaders on: %i fragment shaders compiled, %i failed; %i need post-processing, which is off (UsePostProcess), %i are not reachable on PC (engine gates)"), Ready, Failed, M7, Gated );
 	else
 		debugf( NAME_Init, TEXT("UC2GLDrv: pixel shaders off (UsePixelShaders=False): every pixel-shader material is drawn with its first texture stage, as at M5") );
 
@@ -580,6 +652,7 @@ void UUC2GLRenderDevice::LoadVertexShaderEnum( QWORD VertexShaderEnum )
 		return;
 	if( (Enum & (VS_SkeletalSkin | VS_TerrainSpecial)) || VS_GETUNIQUESHADER(Enum) )
 	{
+		// (The unique shaders, distortion and colour remap included, are compiled on first use.)
 		PrecompileNotApplicable++;
 		return;
 	}
@@ -879,6 +952,36 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 		}
 	}
 	RenDev->glActiveTexture( GL_TEXTURE0 );
+
+	// M7: the unique vertex shaders' constants (HandlePSVertexShader).
+	if( Program->DistortionScaleLoc >= 0 || Program->DistortionScreenLoc >= 0 )
+	{
+		FOpenGLRenderTargetState*	RTState = SavedRenderTargetState.GetCurrentState();
+		FOpenGLViewportState*		VPState = SavedViewportState.GetCurrentState();
+		FLOAT	MainW	= Max<INT>( RenDev->MainWidth, 1 ),
+				MainH	= Max<INT>( RenDev->MainHeight, 1 );
+		if( VS_GETUNIQUESHADER(Enum) == VS_Distortion )
+		{
+			// Xbox: x and y are pixels of a 640x480 back buffer, z and w the ratio of the
+			// back-buffer texture to the back buffer (1). Here: the same fraction of the
+			// picture, in texture coordinates of the back-buffer copy.
+			FLOAT PixelScale = MainH / 480.f;
+			RenDev->glUniform4f( Program->DistortionScaleLoc, DistortionScale[0] * PixelScale / MainW, DistortionScale[1] * PixelScale / MainH, 0.f, 0.f );
+			// GL window coordinates of the current viewport, as coordinates of the copy (top row first).
+			FLOAT	VPX	= VPState->ViewportX,
+					VPW	= VPState->ViewportWidth,
+					VPH	= VPState->ViewportHeight,
+					VPY	= RTState->Flipped ? VPState->ViewportY : RTState->Height - VPState->ViewportY - VPH;
+			if( RTState->Flipped )
+				RenDev->glUniform4f( Program->DistortionScreenLoc, 0.5f * VPW / MainW, 0.5f * VPH / MainH, (VPX + 0.5f * VPW) / MainW, (VPY + 0.5f * VPH) / MainH );
+			else
+				RenDev->glUniform4f( Program->DistortionScreenLoc, 0.5f * VPW / MainW, -0.5f * VPH / MainH, (VPX + 0.5f * VPW) / MainW, 1.f - (VPY + 0.5f * VPH) / MainH );
+		}
+		else
+			RenDev->glUniform4fv( Program->DistortionScaleLoc, 1, DistortionScale );
+	}
+	if( Program->ColorRemapLoc >= 0 )
+		RenDev->glUniform4fv( Program->ColorRemapLoc, 1, ColorRemapConstant );
 
 	// Pixel shader constants (D3D's SetPixelShaderConstant; the shader clamps them to [0,1]).
 	for( INT i=0; i<8; i++ )

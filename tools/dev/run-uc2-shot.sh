@@ -47,6 +47,7 @@ fi
 inner=$(mktemp)
 cat > "$inner" <<INNER
 cd "$sys" || exit 1
+echo "\$DISPLAY" > "$out/$name.display"
 # M8: OpenAL Soft renders to its null backend unless ALSOFT_DRIVERS says otherwise (headless runs stay quiet).
 SDL_AUDIODRIVER=dummy ALSOFT_DRIVERS=${ALSOFT_DRIVERS:-null} ./uc2.bin $map -log "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
@@ -92,5 +93,13 @@ echo "run-uc2-shot: exit $rc, $n screenshots, log $out/$name.out"
 grep -a -c "Critical" "$out/$name.out" | sed 's/^/Critical lines: /'
 grep -a "UC2GLDrv: program [0-9]" "$out/$name.out" | sed -E 's/.*pixel shader ([0-9]+) \(([A-Za-z0-9_]+)\.psh\).*/\1 \2/' | sort -n | uniq -c | tr '\n' ';'; echo
 grep -a "GL errors\|UC2GLDrv: programs\|does not\|not usable\|no program" "$out/$name.out" | tail -3
-pgrep -x uc2.bin >/dev/null && echo "WARNING: uc2.bin still running"; pgrep -x Xvfb >/dev/null && echo "WARNING: Xvfb still running"
+# Nothing of this run may be left behind. Other run trees (other agents) have their own uc2.bin and Xvfb:
+# only a uc2.bin whose working directory is this tree's System and the Xvfb of this run's display count.
+left=0
+for pid in $(pgrep -x uc2.bin); do
+  [ "$(readlink /proc/$pid/cwd 2>/dev/null)" = "$sys" ] && { echo "WARNING: uc2.bin $pid of this run tree is still running"; left=1; }
+done
+disp=$(cat "$out/$name.display" 2>/dev/null); rm -f "$out/$name.display"
+if [ -n "$disp" ] && pgrep -f "Xvfb $disp " >/dev/null; then echo "WARNING: this run's Xvfb ($disp) is still running"; left=1; fi
+[ $left = 0 ] && echo "nothing left running"
 exit 0
