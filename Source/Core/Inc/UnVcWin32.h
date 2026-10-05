@@ -789,21 +789,8 @@ extern "C" void* __cdecl _alloca(size_t);
 //#define appAlloca(size) _alloca((size+7)&~7)
 #define appAlloca(size) ((size==0) ? 0 : _alloca((size+7)&~7))
 
-//scion jg -- Base class of movie thread for correct delete operation
-class FMovieThread
-{
-public:
-	// Must be defined by child class
-	virtual void Exit(void) = 0;
-};
-
-//scion jg -- Base class for the CXMVPlayer so we can delete it correctly
-class FMoviePlayer
-{
-public:
-	FMoviePlayer() {}
-	virtual ~FMoviePlayer() {}
-};
+//scion jg -- FMovieThread and FMoviePlayer: moved unchanged to UnMovieBase.h (engine-uc2 M9: every platform)
+#include "UnMovieBase.h"
 
 #ifdef _DEBUG
 #define XBE_NAME "D:\\defaultd.xbe"
