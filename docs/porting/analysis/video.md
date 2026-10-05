@@ -280,3 +280,54 @@ warning.
 3. Build native; then the self-test commandlet (V3) with ffmpeg `framecrc` references.
 4. V4: GL driver `SetMovieMaterial` PC body in a NEW file `UC2GLDrv/Src/UC2GLMovie.cpp` + deleting the PC stub in
    `UC2GLMaterialState.cpp` (one hunk); launcher logos; UnGame.cpp gates; UnEngine.cpp input hook.
+
+## Step 3 - V2 built, V3 self-test green (2026-10-05)
+
+- Build: `bin/capped 6G 3000 -- bash -c 'cmake --preset native && cmake --build build-native -j8'` -> rc 0,
+  `uc2.bin` and `ucc-bin` contain the player (`UC2CreateMoviePlayer`, `appPlayMovieFullscreen`). No warning in
+  our files beyond the engine's own DECLARE_CLASS `-Wwrite-strings` pattern. Packages: `Thirdparty/Theora`
+  (root CMakeLists, M9 block), `Source/UC2Movie` in `UC2_PACKAGES` before UCC (not native-only: it compiles for
+  the web too), registered in `UCC.cpp` and `SDLLaunch.cpp` (`UC2_WITH_UC2MOVIE`, one include + one registrant
+  line each, like UC2ALAudio). `tools/dev/mkrun-uc2.sh` hard-links `Movies/` and `Textures/Movies/` from the
+  cooked tree into the run tree.
+- UC2ALAudio: `OpenMovieAudio` (one line in `UC2ALAudio.h`) and `FUC2ALMovieStream` appended to
+  `UC2ALAudioSubsystem.cpp` (+1 member in `FUC2AudioState`, +2 lines in `Destroy`): one relative 2D source, 12
+  buffers x 4096 frames (1.1 s at 44.1 kHz), played frames = unqueued buffers + `AL_SAMPLE_OFFSET`, made
+  monotonic (a buffer can finish between the two queries); a starved source restarts when data arrives;
+  exclusive: `NotifyPauseChange(1)` for the cues and `alSourcePause` for playing music, undone on delete; the
+  device detaches live streams in `Destroy` so a stream deleted after the device does nothing.
+- Defect found in our own first draft: `TArray<FString>::AddItem` (UE2's AddItem assigns into unconstructed
+  memory, the M8 finding) crashed the commandlet in `realloc`; `new(Array) FString(...)` instead.
+- **Self-test** `tools/dev/movie-selftest.sh m9` (ffmpeg references into `logs/m9/selftest/`, then
+  `bin/capped 2G 900 -- ./ucc-bin UC2Movie.UC2MovieSelfTest REF=...`): **96 checks, 0 failed**, 12 s.
+  Cases: UC2_Logos (sound int), 03_AscPre3 with the `deu` track, UI_LoadingMovie (640x480), Portrait_Arena_Deadbolt
+  (256x256), Portrait_Char_Anubis (256x512), Reactor_01 (128x128, 15 fps), TVDisplaySelket2 (128x96, 15 fps).
+  Per case: frame count = packet count; a new picture exactly at ffmpeg's decoded pictures (03_AscPre3: 1,310 new
+  + 13 held of 1,323); **every picture identical** to ffmpeg's decode (Adler-32 of the Y'CbCr planes = ffmpeg
+  `framecrc`; e.g. 1310/1310, 600/600-of-593 decoded...); BGRA of two pictures vs ffmpeg swscale BT.601 limited
+  range with replicated chroma: **max difference 1** (0 values differ by more than 1); the fixed-point matrix vs
+  the float formula: max 1; loop by frame steps (frame 0's picture after the last), loop on the real-time clock
+  (two wraps, 0 wrong), random 5-40 ms real-time steps (frame error 0, ends at the length); with sound (simulated
+  device, the player's own feed path): **A/V sync error 0 frames** over the whole movie (03_AscPre3: 1,943
+  random steps; ends when 1,944,810 = 1,323 x 1,470 frames have played), sound length = granule = cook's
+  XMV-decoded count (1,943,296), **sound values vs ffmpeg's Vorbis decoder max difference 1** (16-bit steps; 0
+  differ by more than 1; libvorbis 1.0 vs ffmpeg's own float decoder: within rounding), the padding (1,514
+  frames) is silence, loop with sound: one wrap N-1 -> 0, no skipped frame, second pass's first second of sound
+  identical to the first. Language: int/deu/fra/ita/spa/jpn for 03_AscPre3 give `.ogv`/`_deu`/`_fra`/`_ita`/
+  `_spa`/`.ogv`; deu for UC2_Logos falls back to the `.ogv` ("no track 1 of its own"); `Portrait_Gametype_NS`
+  (the content's spelling) finds `Portrait_GameType_NS.ogv`; `CH_Flak_Fire` (referenced, never shipped) finds
+  nothing. Literal summary line: `UC2MovieSelfTest: 96 checks, 0 failed`.
+- Two things the first run taught (both fixed in the references, not in the player):
+  1. **ffmpeg's frame-threaded Theora decoder is not deterministic.** TVDisplaySelket2: two `framecrc` runs with
+     default threads gave two different checksum lists (md5 of the lists de8e6c48... / 0837f9a9...); with
+     `-threads 1` both runs agree, and agree with libtheora on all 400 frames (also checked with libtheora's own
+     `examples/dump_video.c` built from the vendored sources: 0 of 400 differ). In a threaded run some frames
+     came out with Cb=Cr=0 (MSE 5212 against the XMV source; libtheora 11). Every ffmpeg decode in the self-test
+     now runs `-threads 1`, and so does the cook's quality measurement (the first cook's chroma figures for
+     TVDisplaySelket2, u 26.3 dB / min 10.7, were this artefact: single-threaded u 47.6, min 37.2). The whole cook
+     is re-running with that change (`logs/m9/cook-2.out`) so every PSNR/SSIM in the report is single-threaded.
+  2. The default swscale conversion interpolates chroma; the player replicates each chroma sample over its 2x2
+     block. Against swscale's interpolation the difference reaches 18-36 levels at colour edges; against swscale
+     with replicated chroma (neighbor to 4:4:4, then the BT.601 matrix) it is at most 1. Replication is a
+     choice: it is what a 4:2:0 texture shows without filtering, and cheaper. (The Xbox decoder's choice is not
+     documented in the XDK.)
