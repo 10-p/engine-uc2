@@ -743,22 +743,39 @@ HANDSHAKE_DROPS = [
     # The server's packet ids start just before the wrap (NETPKTID=16375; ids run 0..16382), so its WELCOME
     # goes out after the wrap: a loss there needs the ack logic to work across the wrap.
     ("wrap", "server", "WELCOME", "NETPKTID=16375"),
-    ("wraponly", "server", "NOSUCHTEXT", "NETPKTID=16375"),   # diagnostic: the wrap alone, nothing lost
+    ("wraponly", "server", "NOSUCHTEXT", "NETPKTID=16375"),   # the wrap alone, nothing lost
+    # The client's ids start at 16381: its JOIN goes out as packet 0 after the wrap.
+    ("wrapclient", "client", "JOIN", "c:NETPKTID=16381"),
+]
+# Compatibility (check handshake-compat): one end keeps Epic's UC2 ack logic (NETOLDACKS, test switch in UnConn.cpp).
+# Expected: "join", or "fail" = the unfixed end lost the packet, which it never resends; the fixed client then
+# gives up after InitialConnectTimeout (20 s) and shows ConnectionFailureMenu instead of waiting forever.
+HANDSHAKE_COMPAT = [
+    ("oldclient-challenge", "server", "CHALLENGE", [], ["-NETOLDACKS"], "join"),   # fixed server, unfixed client
+    ("oldserver-challenge", "server", "CHALLENGE", ["-NETOLDACKS"], [], "fail"),   # unfixed server, fixed client
+    ("oldclient-login", "client", "LOGIN", [], ["-NETOLDACKS"], "join"),
+    ("oldserver-login", "client", "LOGIN", ["-NETOLDACKS"], [], "join"),
+    # Unfixed client whose JOIN is its packet 0 after the wrap: it never resends it, a fixed server cannot help;
+    # the client sits in the level without a player (it is past WELCOME, so no handshake timeout either).
+    ("oldclient-wrap", "client", "JOIN", [], ["-NETOLDACKS", "NETPKTID=16381"], "nojoin"),
+    ("oldserver-wrap", "server", "WELCOME", ["-NETOLDACKS", "NETPKTID=16375"], [], "fail"),
 ]
 
 
-def check_handshake_loss():
-    ck = "handshake-loss"
+def check_handshake_loss(compat=False):
+    ck = "handshake-compat" if compat else "handshake-loss"
     limit = float(os.environ.get("NET_DROP_LIMIT", "60"))
     only = os.environ.get("NET_DROP_CASES")
-    for entry in HANDSHAKE_DROPS:
-        case, side, spec = entry[:3]
-        more = list(entry[3:])
+    cases = [(e[0], e[1], e[2], [x for x in e[3:] if not x.startswith("c:")], [x[2:] for x in e[3:] if x.startswith("c:")], "join")
+             for e in HANDSHAKE_DROPS]
+    if compat:
+        cases = list(HANDSHAKE_COMPAT)
+    for case, side, spec, sextra, cextra, expect in cases:
         if only and case not in only.split(","):
             continue
         sub = "hsloss-" + case
-        s = server(sub, extra=(["NETDROP=" + spec] + more if side == "server" else []))
-        a = client(sub, "NetA", extra=(["NETDROP=" + spec] if side == "client" else []))
+        s = server(sub, extra=(["NETDROP=" + spec] if side == "server" else []) + sextra)
+        a = client(sub, "NetA", extra=(["NETDROP=" + spec] if side == "client" else []) + cextra)
         procs = [s, a]
         try:
             j = s.wait(r"Join succeeded: NetA", limit)
@@ -767,14 +784,25 @@ def check_handshake_loss():
             lost = dropper.count(r"^NetProbe: netdrop: lost packet")
             p = spawn(a, "spawn") if j else None
             sp = s.probe("H1") if j else None
-            ok = bool(j) and lost >= 1 and bool(p) and bool(pawn_of(sp, "NetA"))
+            ok = bool(j) and (lost >= 1 or spec == "NOSUCHTEXT") and bool(p) and bool(pawn_of(sp, "NetA"))
+            menu = None
             if j:
                 det = "joined %.1f s after the client started, spawned=%s, %d packet(s) lost by %s" % (took, bool(p), lost, side)
             else:
                 cl = a.text()
                 last = [l for l in cl.splitlines() if "PendingLevel received" in l or "sending text" in l]
-                det = "NO JOIN within %.0f s (%d packet(s) lost by %s); client's last handshake line: %s" % (
-                    limit, lost, side, last[-1][:100] if last else "none")
+                a.input("probe NOJOIN")
+                m = a.wait(r"probe NOJOIN (.*)$", 10)
+                menu = parse_kv(m.group(1)).get("menu") if m else None
+                gave_up = a.count(r"Pending connection: no WELCOME after")
+                det = "NO JOIN within %.0f s (%d packet(s) lost by %s); client's last handshake line: %s; client gave up: %s, menu now %s" % (
+                    limit, lost, side, last[-1][:80] if last else "none", bool(gave_up), menu)
+                if expect == "nojoin":
+                    ok = lost >= 1
+                    det = "expected no join (unfixed client lost it): " + det
+                if expect == "fail":
+                    ok = lost >= 1 and bool(gave_up) and menu == "ConnectionFailureMenu"
+                    det = "expected no join (unfixed end lost it): " + det
             result(ok, "%s.%s" % (ck, case), "%s drops %s: %s" % (side, spec, det))
         finally:
             finish(sub, procs)
@@ -783,7 +811,7 @@ def check_handshake_loss():
 ALL = {"dedicated1": check_dedicated1, "dedicated2": check_dedicated2, "listen": check_listen,
        "travel": check_travel, "disconnect": check_disconnect, "soak": check_soak, "lag": check_lag,
        "glshot": check_glshot, "wine": check_wine,
-       "handshake-loss": check_handshake_loss}
+       "handshake-loss": check_handshake_loss, "handshake-compat": lambda: check_handshake_loss(True)}
 
 if __name__ == "__main__":
     for c in CHECKS:

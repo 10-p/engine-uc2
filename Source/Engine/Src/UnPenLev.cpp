@@ -624,6 +624,16 @@ void UNetPendingLevel::Tick( FLOAT DeltaTime )
 	if( NetDriver->ServerConnection->State==USOCK_Closed && Error==TEXT("") )
 		Error = LocalizeError(TEXT("ConnectionFailed"),TEXT("Engine"));
 
+	// uc2 port: a handshake that never gets as far as WELCOME fails after InitialConnectTimeout. The server's
+	// acks of our keep-alives keep the connection from timing out, so a server that lost its CHALLENGE and never
+	// resends it (Epic's UC2 ack logic, fixed in UnConn.cpp; an unfixed server still does it) left the client
+	// waiting in the menu forever. Downloads start only after WELCOME, so they are not limited by this.
+	if( !Success && Error==TEXT("") && NetDriver->Time > NetDriver->InitialConnectTimeout )
+	{
+		debugf( NAME_DevNet, TEXT("Pending connection: no WELCOME after %.0f s, giving up"), NetDriver->InitialConnectTimeout );
+		Error = LocalizeError(TEXT("ConnectionFailed"),TEXT("Engine"));
+	}
+
 	if ( Error != TEXT("") )
 		return;
 

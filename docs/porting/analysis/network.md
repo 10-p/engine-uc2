@@ -485,3 +485,38 @@ Mechanism (UnConn.cpp, all Epic's UC2 code; the port changed nothing in UnConn.c
   `UNetConnection::Tick` for every connection (UNetDriver::TickFlush), so it is not starved.
 - Whose: Epic's UC2 protocol code (both causes), not the port. On a LAN/system link (the Xbox's main case) loss
   is rare; over the internet 5 % loss on the first server packet hangs 1 join in 20.
+
+### Step L2: the fix (wrap-aware acks, packet 0 NAK-able) and a handshake give-up; compatibility
+
+Fix (Engine/Src/UnConn.cpp):
+- `PacketIdDelta(A,B)`: signed distance modulo `MAX_PACKETID-1` (the range FlushNet wraps ids in), used for the
+  incoming packet order (`ReceivedPacket`, loss statistics only) and for the ack/NAK decision; NAK ids are
+  computed modulo the same range. UT2004 reaches the same with INT ids + `MakeRelative`.
+- `OutAckPacketId` and `InPacketId` start at `MAX_PACKETID-2`, "the id before 0" (UT2004: -1), so a lost packet
+  0 lies in the first NAK range.
+- Wire format unchanged; the change is local to the side that SENDS a lost packet (it decides from incoming acks
+  what to resend).
+Defence (Engine/Src/UnPenLev.cpp `UNetPendingLevel::Tick`): a pending connection that has not got WELCOME after
+`InitialConnectTimeout` (20 s, [IpDrv.TcpNetDriver]) fails through the engine's normal path (`Error` =
+ConnectionFailed -> `Pending connect ... failed` -> UCMenu.ConnectionFailureMenu). It matters only against an
+unfixed server; downloads start after WELCOME and are not limited by it.
+Test switch for the matrix: `-NETOLDACKS` (UnConn.cpp, DO_ENABLE_NET_TEST): this process keeps Epic's UC2 ack
+logic (OutAckPacketId 0, plain comparisons).
+
+`tools/dev/net-test.sh handshake-loss handshake-compat` after the fix: every handshake-loss case joins (2.0-2.6 s
+after the client started, i.e. no slower than without loss): hello, challenge, netspeed, login, uses, welcome,
+join, afterjoin, wrap (server's WELCOME as packet 10 after its wrap), wraponly, wrapclient (client's JOIN as its
+packet 0 after its wrap). Compatibility (`handshake-compat`):
+
+| case | result |
+|---|---|
+| fixed server, unfixed client, server loses CHALLENGE | joins 2.2 s |
+| unfixed server, fixed client, server loses CHALLENGE | no join; client gives up after 20 s, ConnectionFailureMenu |
+| fixed server, unfixed client, client loses LOGIN | joins |
+| unfixed server, fixed client, client loses LOGIN | joins |
+| unfixed client, its JOIN = its packet 0 after its wrap | no join, client stays in the level without a player |
+| unfixed server, server loses WELCOME after its wrap | no join; client gives up after 20 s, ConnectionFailureMenu |
+
+So: each end's fix covers the packets that end sends. A fixed client against an unfixed server can still lose
+the server's packet 0 or post-wrap packets (now ending in the failure menu instead of a silent hang), and an
+unfixed client can still lose its own; both ends of a game should run the fix (they are the same build here).
