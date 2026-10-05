@@ -602,14 +602,14 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 
 				RenDev->glGenFramebuffers( 1, &FramebufferID );
 				RenDev->glBindFramebuffer( GL_FRAMEBUFFER, FramebufferID );
-				RenDev->glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, TextureID, 0 );
+				RenDev->AttachColorTexture( TextureID );
 
 				if( RenderTarget->CreationFlags & FRenderTarget::RT_CREATE_DEPTH )
 				{
 					// (M11: storage and attachment through the device's helpers, which go
 					// around gl4es on GLES.)
 					DepthStencilID = RenDev->CreateDepthStencilRenderbuffer( USize, VSize );
-					RenDev->AttachDepthStencilRenderbuffer( DepthStencilID );
+					RenDev->AttachDepthStencilRenderbuffer( FramebufferID, DepthStencilID );
 				}
 				else
 				{
@@ -622,7 +622,7 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 					// there: what the engine draws into such targets (filter and copy tiles)
 					// does not depth-test, and without a depth buffer the test passes anyway.
 					if( !RenDev->IsGLES || (USize == RenDev->MainWidth && VSize == RenDev->MainHeight) )
-						RenDev->AttachMainDepthStencil();
+						RenDev->AttachMainDepthStencil( FramebufferID );
 				}
 
 				GLenum Status = RenDev->glCheckFramebufferStatus( GL_FRAMEBUFFER );

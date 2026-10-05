@@ -100,6 +100,7 @@ public:
 	FRenderCaps						RenderCaps;
 	FOpenGLDeviceCaps				DeviceCaps;
 	UViewport*						LockedViewport;
+	UViewport*						LastViewport;		// the viewport of the last frame (GLPROBE)
 	INT								FrameCounter;
 	INT								NumTextureUnits;
 	FLOAT							MaxAnisotropy;
@@ -236,9 +237,12 @@ public:
 	GLuint CreateDepthStencilTexture( INT Width, INT Height );
 	GLuint CreateDepthStencilRenderbuffer( INT Width, INT Height );
 	void DeleteDepthStencilRenderbuffer( GLuint& Renderbuffer );
-	void AttachDepthStencilTexture( GLuint Texture );
-	void AttachDepthStencilRenderbuffer( GLuint Renderbuffer );
-	void AttachMainDepthStencil();
+	void AttachDepthStencilTexture( GLuint Framebuffer, GLuint Texture );
+	void AttachDepthStencilRenderbuffer( GLuint Framebuffer, GLuint Renderbuffer );
+	void AttachMainDepthStencil( GLuint Framebuffer );
+	GLint RawBindFramebuffer( GLuint Framebuffer );
+	// A 2D texture as colour attachment 0 of the framebuffer bound to GL_FRAMEBUFFER.
+	void AttachColorTexture( GLuint Texture );
 	// Verification (UC2GLSelfTest.cpp): writes the main depth buffer from D24S8 words, bottom
 	// row first. Returns 0 where the context cannot do that (no depth texture).
 	UBOOL UploadMainDepth( const DWORD* Rows, INT Width, INT Height );

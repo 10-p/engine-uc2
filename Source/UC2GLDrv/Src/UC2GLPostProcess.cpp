@@ -298,7 +298,7 @@ static void UC2GL_CreateColorTarget( UUC2GLRenderDevice* RenDev, GLuint& Texture
 	RenDev->glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8, Width, Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL );
 	RenDev->glGenFramebuffers( 1, &Framebuffer );
 	RenDev->glBindFramebuffer( GL_FRAMEBUFFER, Framebuffer );
-	RenDev->glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, Texture, 0 );
+	RenDev->AttachColorTexture( Texture );
 	GLenum Status = RenDev->glCheckFramebufferStatus( GL_FRAMEBUFFER );
 	if( Status != GL_FRAMEBUFFER_COMPLETE )
 		debugf( NAME_Warning, TEXT("UC2GLDrv: post-process copy target %ix%i incomplete (0x%04x)"), Width, Height, Status );

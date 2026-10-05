@@ -86,6 +86,26 @@ void UUC2GL4ESRenderDevice::BindingSetContextAttributes()
 UBOOL UUC2GL4ESRenderDevice::BindingCreateContext( UViewport* Viewport, UBOOL Fullscreen, INT NewX, INT NewY, UBOOL bSaveSize )
 {
 #if defined(__EMSCRIPTEN__)
+	// The engine draws at the canvas's size in DEVICE pixels, whatever the ini or the caller
+	// asks for: the canvas's CSS box is the page's business, and a frame of another size would
+	// be resampled by the browser (the first browser picture was the 640x480 of the ini
+	// stretched over a 1024x768 box). The template does the same in its viewport (ufront 2.71).
+	// Both calls are answered by the browser's main thread.
+	{
+		double CssW = 0.0, CssH = 0.0;
+		if( emscripten_get_element_css_size( "#canvas", &CssW, &CssH ) == EMSCRIPTEN_RESULT_SUCCESS )
+		{
+			double	Ratio	= emscripten_get_device_pixel_ratio();
+			INT		W		= (INT)(CssW * Ratio + 0.5) & ~1,	// the viewport keeps the width even
+					H		= (INT)(CssH * Ratio + 0.5);
+			if( W >= 320 && H >= 200 && (W != NewX || H != NewY) )
+			{
+				debugf( NAME_Init, TEXT("UC2GL4ESDrv: the canvas is %ix%i device pixels (CSS %.0fx%.0f, ratio %.2f): drawing at that size instead of %ix%i"), W, H, CssW, CssH, Ratio, NewX, NewY );
+				NewX = W;
+				NewY = H;
+			}
+		}
+	}
 	// SDL: the window (the canvas) and its size, no GL.
 	if( !Viewport->ResizeViewport( Fullscreen ? BLIT_Fullscreen : 0, NewX, NewY, bSaveSize ) )
 		return 0;

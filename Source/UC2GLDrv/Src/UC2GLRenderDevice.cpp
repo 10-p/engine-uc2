@@ -57,6 +57,8 @@ static DOUBLE			GFirstFrameTime = 0.0;
 
 IMPLEMENT_CLASS(UUC2GLRenderDevice);
 
+#define UC2GL_LOG_ONCE_INIT(...) { static UBOOL Logged = 0; if( !Logged ) { Logged = 1; debugf( NAME_Init, __VA_ARGS__ ); } }
+
 
 // -name=<seconds>,<seconds>,... on the command line.
 static void ParseTimeList( const TCHAR* Key, TArray<FLOAT>& Times )
@@ -88,6 +90,7 @@ UUC2GLRenderDevice::UUC2GLRenderDevice()
 	DynamicIndexBuffer32	= NULL;
 	DefaultRenderTarget		= NULL;
 	LockedViewport			= NULL;
+	LastViewport			= NULL;
 	FrameCounter			= 0;
 	NumTextureUnits			= 0;
 	MaxAnisotropy			= 1.f;
@@ -531,6 +534,7 @@ void UUC2GLRenderDevice::Exit( UViewport* Viewport )
 	if( CheckGLErrors )
 		debugf( NAME_Init, TEXT("UC2GLDrv: %i GL errors in %i frames (%i frames with errors)"), GLErrorCount, FrameCounter, GLErrorFrames );
 
+	LastViewport = NULL;
 	Flush( Viewport );
 	if( ContextAlive() )
 	{
@@ -700,6 +704,7 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0 );
 	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8, Width, Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL );
+	if( CheckGLErrors ) CheckGLError( TEXT("main framebuffer: colour texture") );
 
 	// M7: depth and stencil live in a texture, not a renderbuffer, so the depth can be read
 	// by a shader (UUC2GLRenderDevice::UpdateSampledTexture, depth of field). GL 3.0 /
@@ -711,11 +716,16 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 		MainDepthStencil = CreateDepthStencilTexture( Width, Height );
 	else
 		MainDepthRenderbuffer = CreateDepthStencilRenderbuffer( Width, Height );
+	if( CheckGLErrors ) CheckGLError( TEXT("main framebuffer: depth-stencil storage") );
 
 	glGenFramebuffers( 1, &MainFramebuffer );
+	if( CheckGLErrors ) CheckGLError( TEXT("main framebuffer: glGenFramebuffers") );
 	glBindFramebuffer( GL_FRAMEBUFFER, MainFramebuffer );
-	glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, MainColorTexture, 0 );
-	AttachMainDepthStencil();
+	if( CheckGLErrors ) CheckGLError( TEXT("main framebuffer: glBindFramebuffer") );
+	AttachColorTexture( MainColorTexture );
+	if( CheckGLErrors ) CheckGLError( TEXT("main framebuffer: colour attachment") );
+	AttachMainDepthStencil( MainFramebuffer );
+	if( CheckGLErrors ) CheckGLError( TEXT("main framebuffer: attachments") );
 
 	GLenum Status = glCheckFramebufferStatus( GL_FRAMEBUFFER );
 	if( Status != GL_FRAMEBUFFER_COMPLETE )
@@ -867,7 +877,49 @@ void UUC2GLRenderDevice::DeleteDepthStencilRenderbuffer( GLuint& Renderbuffer )
 	Renderbuffer = 0;
 }
 
-void UUC2GLRenderDevice::AttachDepthStencilTexture( GLuint Texture )
+//
+// GLES: makes Framebuffer the one OpenGL ES itself has bound and returns what was. gl4es
+// keeps its own idea of the bound framebuffer and makes it real when it needs it, which is
+// not necessarily when the driver's glBindFramebuffer returns (first browser run with
+// frames: the raw attachment call answered GL_INVALID_OPERATION, i.e. no framebuffer bound).
+//
+GLint UUC2GLRenderDevice::RawBindFramebuffer( GLuint Framebuffer )
+{
+	GLint Bound = 0;
+	Raw_glGetIntegerv( GL_FRAMEBUFFER_BINDING, &Bound );
+	if( (GLuint)Bound != Framebuffer )
+	{
+		UC2GL_LOG_ONCE_INIT( TEXT("UC2GLDrv: (GLES) OpenGL ES had framebuffer %i bound where gl4es was told %i: raw calls bind what they need themselves"), Bound, Framebuffer );
+		Raw_glBindFramebuffer( GL_FRAMEBUFFER, Framebuffer );
+	}
+	return Bound;
+}
+
+//
+// The colour attachment goes through gl4es (it tracks colour attachments). While attaching,
+// gl4es sets sampling parameters of the texture on whatever GLES has bound at that moment;
+// with nothing bound WebGL answers GL_INVALID_OPERATION where OpenGL ES silently takes
+// texture 0 (the one GL error of the first browser runs, at the creation of the main
+// framebuffer). So on GLES the texture is bound for the duration of the call.
+//
+void UUC2GLRenderDevice::AttachColorTexture( GLuint Texture )
+{
+	if( !IsGLES )
+	{
+		glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, Texture, 0 );
+		return;
+	}
+	GLint Bound = 0;
+	Raw_glGetIntegerv( GL_TEXTURE_BINDING_2D, &Bound );
+	Raw_glBindTexture( GL_TEXTURE_2D, Texture );
+	if( CheckGLErrors ) CheckGLError( TEXT("colour attachment: raw texture bind") );
+	glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, Texture, 0 );
+	if( CheckGLErrors ) CheckGLError( TEXT("colour attachment: glFramebufferTexture2D through gl4es") );
+	Raw_glBindTexture( GL_TEXTURE_2D, Bound );
+}
+
+// Framebuffer is the one bound through glBindFramebuffer by the caller.
+void UUC2GLRenderDevice::AttachDepthStencilTexture( GLuint Framebuffer, GLuint Texture )
 {
 	if( !IsGLES )
 	{
@@ -875,15 +927,18 @@ void UUC2GLRenderDevice::AttachDepthStencilTexture( GLuint Texture )
 		glFramebufferTexture2D( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, Texture, 0 );
 		return;
 	}
+	GLint Bound = RawBindFramebuffer( Framebuffer );
 #ifdef __EMSCRIPTEN__
 	Raw_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, Texture, 0 );
 #else
 	Raw_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, Texture, 0 );
 	Raw_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, Texture, 0 );
 #endif
+	if( (GLuint)Bound != Framebuffer )
+		Raw_glBindFramebuffer( GL_FRAMEBUFFER, Bound );
 }
 
-void UUC2GLRenderDevice::AttachDepthStencilRenderbuffer( GLuint Renderbuffer )
+void UUC2GLRenderDevice::AttachDepthStencilRenderbuffer( GLuint Framebuffer, GLuint Renderbuffer )
 {
 	if( !IsGLES )
 	{
@@ -891,22 +946,25 @@ void UUC2GLRenderDevice::AttachDepthStencilRenderbuffer( GLuint Renderbuffer )
 		glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, Renderbuffer );
 		return;
 	}
+	GLint Bound = RawBindFramebuffer( Framebuffer );
 #ifdef __EMSCRIPTEN__
 	Raw_glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, Renderbuffer );
 #else
 	Raw_glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, Renderbuffer );
 	Raw_glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, Renderbuffer );
 #endif
+	if( (GLuint)Bound != Framebuffer )
+		Raw_glBindFramebuffer( GL_FRAMEBUFFER, Bound );
 }
 
-// The main framebuffer's depth-stencil image on the framebuffer bound to GL_FRAMEBUFFER
-// (render targets without a depth buffer of their own borrow it, as D3DDrv's do).
-void UUC2GLRenderDevice::AttachMainDepthStencil()
+// The main framebuffer's depth-stencil image on Framebuffer (render targets without a depth
+// buffer of their own borrow it, as D3DDrv's do).
+void UUC2GLRenderDevice::AttachMainDepthStencil( GLuint Framebuffer )
 {
 	if( MainDepthStencil )
-		AttachDepthStencilTexture( MainDepthStencil );
+		AttachDepthStencilTexture( Framebuffer, MainDepthStencil );
 	else
-		AttachDepthStencilRenderbuffer( MainDepthRenderbuffer );
+		AttachDepthStencilRenderbuffer( Framebuffer, MainDepthRenderbuffer );
 }
 
 UBOOL UUC2GLRenderDevice::UploadMainDepth( const DWORD* Rows, INT Width, INT Height )
@@ -1616,6 +1674,26 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		}
 		return 1;
 	}
+	else if( ParseCommand(&Cmd,TEXT("GLPROBE")) )
+	{
+		// GLPROBE <tag>: one log line with where the player is (verification of input in the
+		// browser, where the native test channel of SDL2Drv does not exist: M11).
+		while( *Cmd == ' ' )
+			Cmd++;
+		APlayerController*	Player	= LastViewport ? LastViewport->Actor : NULL;
+		APawn*				Pawn	= Player ? Player->Pawn : NULL;
+		AActor*				Where	= Pawn ? (AActor*)Pawn : (AActor*)Player;
+		FString Line = FString::Printf( TEXT("UC2GLDrv: probe %s frame=%i level=%s pawn=%i loc=(%.1f,%.1f,%.1f) rot=(%i,%i,%i) size=%ix%i"),
+			Cmd, FrameCounter,
+			(Player && Player->GetLevel()) ? Player->GetLevel()->GetOuter()->GetName() : TEXT("None"),
+			Pawn ? 1 : 0,
+			Where ? Where->Location.X : 0.f, Where ? Where->Location.Y : 0.f, Where ? Where->Location.Z : 0.f,
+			Player ? Player->Rotation.Pitch : 0, Player ? Player->Rotation.Yaw : 0, Player ? Player->Rotation.Roll : 0,
+			MainWidth, MainHeight );
+		debugf( NAME_Init, TEXT("%s"), *Line );
+		Ar.Log( *Line );
+		return 1;
+	}
 	else if( ParseCommand(&Cmd,TEXT("POSTSELFTEST")) )
 	{
 		GSelfTestPending = 1;
@@ -1651,6 +1729,7 @@ FRenderInterface* UUC2GLRenderDevice::Lock( UViewport* Viewport, BYTE* HitData, 
 	check(Viewport);
 	FrameCounter++;
 	LockedViewport = Viewport;
+	LastViewport = Viewport;
 
 	// The window may have been resized without SetRes (SDL2Drv calls SetRes for that, but
 	// keep the framebuffer honest either way).
