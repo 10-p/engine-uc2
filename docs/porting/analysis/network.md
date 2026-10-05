@@ -204,3 +204,21 @@ ULevel::ServerTickClients, not applied); whether the patch-name clamp could ever
   round trip, 5 % loss each way): every gameplay item PASS (join, spawn, place, seeother 0.1/0.5, othermoves
   500.8, hit 140->124, kill after 9 shots with scores agreeing everywhere, health seen 124 on all three);
   `.clean` FAILS only on the exit-time Critical above, on both clients.
+
+### Step 7: glshot PASS (looked at); AddressSanitizer build; two findings on the way
+
+- glshot (NetA with the GL renderer under Xvfb/llvmpipe, NetB null; NETPLACENEAR NetB 350 units from NetA,
+  NETAIM on NetA, `shot`): PASS; `logs/net/glshot-NetA-sees-NetB.png` LOOKED AT: third-person NetA in a
+  DM-Deadbolt corridor, NetB's character standing ahead with its name label "NetB" and the lock-on reticle on
+  it, scoreboard "NetA 0 / NetB 0", HUD health/adrenaline bars and the three weapon slots.
+- ASan ucc-bin (`cmake --preset native -B build-asan -DCMAKE_CXX_FLAGS="-fsanitize=address ..."`, target UCC,
+  run as `System/ucc-bin-asan`, `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:...`), first findings, both before
+  the network part:
+  1. global-buffer-overflow at startup: `appPlatformInit` (Core/Src/UnUnix.cpp, from the UT2004 base)
+     `appSprintf(GMachineCPU, "%s %s", Brand, Model)` + `appStrcat(" @ N MHz")` into UC2's
+     `GMachineCPU[32]` (Core.cpp:232; UT2004's is 1024). Port defect (UT2004 code over UC2's smaller
+     buffer), overwrote the next global. Fixed: bounded `appStrncpy`/`appStrncat` (5 sites).
+  2. heap-buffer-overflow READ of 1 byte in `UObject::ProcessInternal` (Core/Src/UnCorSc.cpp:5382, Epic's
+     interpreter): after the return expression it peeks `*Stack.Code == EX_DebugInfo` one byte past the end
+     of a function's Script array. Epic's (non-Xbox block), benign (heap slack), left alone and recorded;
+     the ASan build is being rebuilt with `-fsanitize-recover=address` so it keeps going past it.

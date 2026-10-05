@@ -2832,7 +2832,8 @@ void appPlatformInit()
 		debugf( NAME_Init, TEXT("CPU Detected: %s (%s)"), Model, Brand );
 		debugf( NAME_Init, TEXT("CPU Features:%s"), FeatStr );
 
-		appSprintf( GMachineCPU, TEXT("%s %s"), Brand, Model ); // gam
+		// engine-uc2: UC2's GMachineCPU is 32 characters (Core.cpp), UT2004's was 1024: bounded writes here.
+		appStrncpy( GMachineCPU, *FString::Printf(TEXT("%s %s"), Brand, Model), ARRAY_COUNT(GMachineCPU) ); // gam
 
 		// engine-uc2: UC2 has no GRunningCPU (UT2004's CPU_INTEL/CPU_AMD/CPU_AMD64 tagging dropped).
 	}
@@ -2928,7 +2929,7 @@ void appPlatformInit()
 
 #else
 	#warning Need CPU detection for this platform.
-	appStrcpy( GMachineCPU, TEXT("Unknown CPU (no detection code!)") );
+	appStrncpy( GMachineCPU, TEXT("Unknown CPU (no detection code!)"), ARRAY_COUNT(GMachineCPU) );
 	debugf( NAME_Init, TEXT("No CPU type detection on this platform.") );
 
 #endif
@@ -3001,12 +3002,12 @@ void appPlatformInit()
 		#endif
 
 		debugf( NAME_Init, TEXT("CPU Speed=%f MHz"), (float) mhz );
-		appStrcat( GMachineCPU, *FString::Printf(TEXT(" @ %d MHz"), appRound(mhz) ) ); // gam
+		appStrncat( GMachineCPU, *FString::Printf(TEXT(" @ %d MHz"), appRound(mhz) ), ARRAY_COUNT(GMachineCPU) ); // gam
 	}
 	catch( ... )
 	{
 		debugf( NAME_Init, TEXT("Timestamp not supported (Possibly 486 or Cyrix processor)") );
-		appStrcat( GMachineCPU, TEXT(" Unknown clock") ); // gam
+		appStrncat( GMachineCPU, TEXT(" Unknown clock"), ARRAY_COUNT(GMachineCPU) ); // gam
 		GSecondsPerCycle = 1;
 	}
 
@@ -3026,7 +3027,7 @@ void appPlatformInit()
 	{
 		GSecondsPerCycle = 0.000001/CpuSpeed;
 		debugf( NAME_Init, TEXT("CPU Speed Overridden=%f MHz"), 0.000001 / GSecondsPerCycle );
-		appStrcat( GMachineCPU, *FString::Printf(TEXT(" @ %d MHz"), appRound(0.000001 / GSecondsPerCycle) ) ); // gam
+		appStrncat( GMachineCPU, *FString::Printf(TEXT(" @ %d MHz"), appRound(0.000001 / GSecondsPerCycle) ), ARRAY_COUNT(GMachineCPU) ); // gam
 	}
 
 #ifdef UT_NO_X86_INTRIN
