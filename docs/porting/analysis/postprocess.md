@@ -560,7 +560,7 @@ State of things that were only in my head:
   one of the wine picture `DM-Praxis-windows-A.png`. Hits so far: 2 of my 3 manual runs, the 3rd try of the
   22:10 run, **none of the 6 tries of the 23:07 run, which then printed a normal line for a picture of another
   room** (its `fx-praxis-panes-a.png` differs from the reference by 25 of 255). That was a bug of the script,
-  fixed in `28b…` (it now tries up to 10 times and prints `FAILED` if the view is not reached). Things I tried
+  fixed in `9a181ef` (it now tries up to 10 times and prints `FAILED` if the view is not reached). Things I tried
   to make the start deterministic, none of which works: `suicide` + console `Fire` (the exec does not
   respawn; it needs the button), `set PlayerStart ...` (the `set` command is per class, not per object). A
   seed option would not help either: how many random numbers are drawn before the spawn depends on the
