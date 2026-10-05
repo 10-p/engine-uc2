@@ -4826,26 +4826,7 @@ UBOOL FOpenGLRenderInterface::SetMovieMaterial(UMovieMaterial* pMovieMaterial,
 
 #else
 
-/* scion ======================================================================
- * FOpenGLRenderInterface::SetMovieMaterial
- * Author: jg
- * 
- * Always returns not found on the PC
- *
- * input:	ignored
- *			ignored
- *			ignored
- *			ignored
- *
- * ============================================================================
- */
-UBOOL FOpenGLRenderInterface::SetMovieMaterial(UMovieMaterial*,FOpenGLModifierInfo,
-	FString*,UMaterial**)
-{
-	guard(FOpenGLRenderInterface::SetMovieMaterial);
-	return 0;
-	unguard;
-}
+// UC2GLDrv (M9): the PC branch (Epic's returned 0 here: no movies on PC) is Src/UC2GLMovie.cpp.
 
 #endif
 /*----------------------------------------------------------------------------

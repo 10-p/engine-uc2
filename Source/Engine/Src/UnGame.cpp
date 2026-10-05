@@ -21,6 +21,7 @@
 #endif // _XBOX
 
 #include "UnScriptPatcher.h"
+#include "UnMovie.h"	// engine-uc2 (M9): WITH_PORTABLE_MOVIES lifts the Xbox-only movie hooks below
 
 /*-----------------------------------------------------------------------------
 	Object class implementation.
@@ -417,6 +418,15 @@ UBOOL UGameEngine::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UGameEngine::Exec);
 	const TCHAR* Str=Cmd;
+#if WITH_PORTABLE_MOVIES
+	// engine-uc2 (M9): the Xbox client's SUBTITLES command (XboxClient.cpp:169-180), which the profile sends
+	// when "cinematic captions" changes; off hides the cinematics' burnt-in subtitle bands (UnMovie.cpp).
+	if( ParseCommand( &Str, TEXT("SUBTITLES") ) )
+	{
+		GShowSubtitles = ParseCommand(&Str,TEXT("TRUE")) || ParseCommand(&Str,GTrue);
+		return 1;
+	}
+#endif
 	if( ParseCommand( &Str, TEXT("OPEN") ) )
 	{
 		FString Error;
@@ -1745,7 +1755,7 @@ void UGameEngine::UnloadMap()
 }
 
 
-#ifdef _XBOX
+#if defined(_XBOX) || WITH_PORTABLE_MOVIES
 	//scion jg -- Returns a pointer to the movie thread that runs for this URL
 	FMovieThread* CreateLoadingMovie(const FURL& URL,const TCHAR* URLOpt,
 		UBOOL bWaitForComplete,UBOOL bUseDefault);
@@ -1780,16 +1790,16 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 #if USE_LINEAR_LOADING
 	UBOOL bIsMenu = appStrnicmp(*URL.Map,TEXT("menu"),4) == 0;
 #endif
-#if !defined(LIN_SAVE) && defined(_XBOX)
+#if !defined(LIN_SAVE) && (defined(_XBOX) || WITH_PORTABLE_MOVIES)
 	UBOOL bWasMenu = appStrnicmp(*LastURL.Map,TEXT("menu"),4) == 0;
 #endif
 
-#if defined(_XBOX) && !defined(_DEBUG) && !defined(LIN_SAVE)
+#if (defined(_XBOX) || WITH_PORTABLE_MOVIES) && !defined(_DEBUG) && !defined(LIN_SAVE)
 	// Check to see if we have intro or outr movies to show
 	UBOOL bHasIntroMovie = URL.GetOption(TEXT("StartCinematic"),NULL) != NULL;
 	UBOOL bHasOutroMovie = URL.GetOption(TEXT("EndCinematic"),NULL) != NULL;
 	// Reset the render states so that there are no textures/vbs set
-	if (IsPlayingMovie() == FALSE)
+	if (IsPlayingMovie() == FALSE && GLevel && GLevel->Engine->GRenDev)	// engine-uc2 (M9): no level or device on the first load / a server
 	{
 		// Flush render states
 		GLevel->Engine->GRenDev->ResetRenderStates();
@@ -2911,7 +2921,7 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 	debugf(TEXT("Loading of %s took %f seconds"),*URL.Map,TotalTime);
 #endif
 
-#if defined(_XBOX) && !defined(_DEBUG) && !defined(LIN_SAVE)
+#if (defined(_XBOX) || WITH_PORTABLE_MOVIES) && !defined(_DEBUG) && !defined(LIN_SAVE)
 	// If there was a specified cinematic, stop the loading movie
 	// and play it instead
 	if (bHasIntroMovie == TRUE)

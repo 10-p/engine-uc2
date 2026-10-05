@@ -461,21 +461,8 @@ inline DWORD _rotl(DWORD val, INT shift)
 	UC2 platform classes (UnVcWin32.h:792-819 on the MSVC build).
 ----------------------------------------------------------------------------*/
 
-//scion jg -- Base class of movie thread for correct delete operation
-class FMovieThread
-{
-public:
-	// Must be defined by child class
-	virtual void Exit(void) = 0;
-};
-
-//scion jg -- Base class for the CXMVPlayer so we can delete it correctly
-class FMoviePlayer
-{
-public:
-	FMoviePlayer() {}
-	virtual ~FMoviePlayer() {}
-};
+// FMovieThread, FMoviePlayer (UnVcWin32.h:792-806 on the MSVC build): one portable definition (M9).
+#include "UnMovieBase.h"
 
 //scion jg -- Wrapper around the xbox function for determining language (UnUnix.cpp: LC_INT, as on PC)
 CORE_API DWORD appGetLanguageID(void);

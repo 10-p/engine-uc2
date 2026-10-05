@@ -41,7 +41,11 @@ Revision history:
 #if UC2_WITH_UC2ALAUDIO	// M8
 #include "UC2ALAudio.h"
 #endif
+#if UC2_WITH_UC2MOVIE	// M9
+#include "UC2Movie.h"
 #endif
+#endif
+#include "UnMovie.h"	// M9: appPlayMovieFullscreen (Engine)
 
 /*-----------------------------------------------------------------------------
 	Global variables.
@@ -484,6 +488,9 @@ int main( int argc, char** argv )
 #if UC2_WITH_UC2ALAUDIO	// M8
 		AUTO_INITIALIZE_REGISTRANTS_UC2ALAUDIO;
 #endif
+#if UC2_WITH_UC2MOVIE	// M9
+		AUTO_INITIALIZE_REGISTRANTS_UC2MOVIE;
+#endif
 		AUTO_INITIALIZE_REGISTRANTS_IPDRV;
 		AUTO_INITIALIZE_REGISTRANTS_UWEB;
 		// UWeb's hand-written static header registers its classes but not its native lookups.
@@ -552,6 +559,13 @@ int main( int argc, char** argv )
 			}
 			if( InitialViewport )
 				InitialViewport->Exec( TEXT("LOADWINDOWPOSITION") );
+
+			// M9: the start-up logos, as the Xbox launcher played Movies/UC2_Logos.xmv (Launch.cpp:402,
+			// XboxMovieThread.cpp:1049): full screen, skippable by a key or button. Nothing plays with the null
+			// renderer, on a dedicated server, with -NOMOVIE or -NOSTARTUPMOVIES, or with
+			// [UC2Movie] StartupMovies=False (UnMovie.cpp, appCanPlayFullscreenMovie).
+			if( !GIsRequestingExit )
+				appPlayMovieFullscreen( TEXT("..\\Movies\\UC2_Logos.xmv"), FSMOVIE_Startup, 1 );
 
 			// Start main engine loop.
 			if( !GIsRequestingExit )

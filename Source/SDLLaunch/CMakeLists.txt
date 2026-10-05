@@ -27,6 +27,11 @@ if(TARGET UC2ALAudio)
   list(PREPEND LINK_PACKAGES UC2ALAudio)
   target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_UC2ALAUDIO=1)
 endif()
+# M9: the movie player (factory + `ucc-bin UC2Movie.UC2MovieSelfTest`).
+if(TARGET UC2Movie)
+  list(PREPEND LINK_PACKAGES UC2Movie)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_UC2MOVIE=1)
+endif()
 if(MINGW)
   # M12: uc2.exe. A Windows-subsystem program like Epic's Avaris.exe (no console window; the log is
   # System/Avaris.log, -log still echoes to a console if one is attached). MinGW's CRT calls our main()

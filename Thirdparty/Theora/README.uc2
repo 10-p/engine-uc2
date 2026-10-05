@@ -1,0 +1,19 @@
+libtheora 1.2.0, decoder only, for the UC2 movie player (Source/UC2Movie, milestone M9).
+
+Source: the official Xiph.Org release tarball
+  https://downloads.xiph.org/releases/theora/libtheora-1.2.0.tar.xz
+  SHA-256 ebdf77a8f5c0a8f7a9e42323844fa09502b34eb1d1fece7b5f54da41fe2122ec
+  (matches https://downloads.xiph.org/releases/theora/SHA256SUMS), fetched 2026-10-04.
+
+Copied byte for byte, nothing edited:
+  include/theora/codec.h, theoradec.h, theora.h (lib/internal.h includes theora.h)
+  lib/: the decoder sources of lib/Makefile.am's decoder_sources without the legacy theora_* API wrapper
+        (apiwrapper.c, decapiwrapper.c, apiwrapper.h) and without the x86/ARM/C64x assembly:
+        bitpack decinfo decode dequant fragment huffdec idct info internal quant state (.c and their .h),
+        plus dct.h decint.h huffman.h modedec.h ocintrin.h
+  COPYING, LICENSE, AUTHORS, README.md
+
+Ours: CMakeLists.txt (static library `theora`, links the vendored libogg) and this file. Neither OC_X86_ASM nor
+OC_ARM_ASM is defined, so the plain C paths are built on every target (32-bit native, MinGW, Emscripten).
+The vendored libogg is 1.0, which lacks ogg_uint16_t and ogg_uint64_t: CMakeLists.txt defines both as
+macros for this library and everything that links it.

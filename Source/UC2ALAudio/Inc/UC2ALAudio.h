@@ -71,6 +71,7 @@ class UUC2ALAudioSubsystem : public UAudioSubsystem
 	void NotifyLevelChange();
 	void NotifyZoneChange( AZoneInfo* NewZone );
 	void NotifyPauseChange( UBOOL bNowPaused );
+	class FMovieAudioStream* OpenMovieAudio( INT Rate, INT Channels, UBOOL bExclusive );	// M9
 };
 
 /*-----------------------------------------------------------------------------
