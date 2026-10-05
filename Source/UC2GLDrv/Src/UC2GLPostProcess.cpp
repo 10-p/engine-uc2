@@ -84,12 +84,16 @@ static const char* GPostCopyFragmentShader =
 // The depth arrives as a 32-bit float: the 24-bit value is reproduced to within two units
 // (self-test "depth-color"), and without the min() a depth of exactly 1 (the cleared buffer,
 // the sky) rounds up to 2^24, whose high byte does not exist: found by self-test "dof-ramp".
+// M11: 2^24-1 is written as a product because gl4es reprints every float literal of a shader
+// with six significant digits (16777215.0 became 1.67772e+07 = 16777200; found by self-test
+// "depth-color" on the twin). No literal in any shader of the driver may need more than six.
 static const char* GPostDepthEncodeFragmentShader =
-	"uniform sampler2D uSource;\n"
+	"uniform UC2_HIGHP sampler2D uSource;\n"
 	"varying vec2 vTexCoord;\n"
 	"void main()\n"
 	"{\n"
-	"	float Z = min( floor( texture2D( uSource, vTexCoord ).r * 16777215.0 + 0.5 ), 16777215.0 );\n"
+	"	float ZMax = 4096.0 * 4096.0 - 1.0;\n"
+	"	float Z = min( floor( texture2D( uSource, vTexCoord ).r * ZMax + 0.5 ), ZMax );\n"
 	"	float High = floor( Z / 65536.0 );\n"
 	"	float Middle = floor( (Z - High * 65536.0) / 256.0 );\n"
 	"	float Low = Z - High * 65536.0 - Middle * 256.0;\n"
@@ -97,7 +101,7 @@ static const char* GPostDepthEncodeFragmentShader =
 	"}\n";
 
 static const char* GPostDepthCopyFragmentShader =
-	"uniform sampler2D uSource;\n"
+	"uniform UC2_HIGHP sampler2D uSource;\n"
 	"varying vec2 vTexCoord;\n"
 	"void main()\n"
 	"{\n"

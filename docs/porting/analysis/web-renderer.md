@@ -290,3 +290,68 @@ Facts found on the way:
      copy of the last dynamic indices). **Not exercised yet by any content I have run** (the occlusion boxes
      were the only wireframe draw in the menu): status "written, never drawn".
 - gl4es reports 16 texture image units; the driver uses 8 as on the desktop.
+
+## G1, step 2: DM-Deadbolt on the twin; what gl4es does to textures and shaders (2026-10-05)
+
+`run-uc2-shot.sh m11t dead-twin 75 34 DM-Deadbolt -gl4es -glerrors -nopostprocess -glshot=44` (pinned first
+PlayerStart): 0 Critical, `frame 600, 0 GL errors so far`, 8 programs linked, 0 failed. With post-processing
+on (`-glpptoggle`): 14 programs, 0 failed; picture `logs/m11t/cmp-dead-1.png` (desktop left, twin right).
+
+Five things found by comparing with the desktop driver and by the self-test, in the order they showed up:
+
+1. **`-glerrors` was blind on the twin.** gl4es answers `glGetError` from its own record of what *it*
+   rejected; an error raised by OpenGL ES for a call gl4es passed on stays in the hardware's flag. The first
+   "0 GL errors" of the twin was therefore worth nothing. `CheckGLError` now also drains the raw library's
+   `glGetError`; `-glerrorsdraw` checks after every draw call and texture upload and names the material
+   (slow; to locate an error). With `MESA_DEBUG=1` in the environment Mesa names the failing call.
+2. **gl4es regenerates mipmaps.** At the first draw with a mipmap filter it calls `glGenerateMipmap` on any
+   texture whose levels it has not seen arrive down to 1x1 (`realize_textures`, `mipmap_need &&
+   !mipmap_done`): the engine's own mip levels would be replaced by a box filter of level 0, for every
+   texture. And it always decodes DXT in software to RGBA8.
+   **Decision 2 extended: the storage of every ENGINE texture goes around gl4es** (`UUC2GLRenderDevice::
+   TexImage2D`, `CompressedTexImage2D`; raw bind, upload, restore of the raw binding and unpack alignment).
+   gl4es is given a one-texel RGBA storage per texture, flagged `GL_GENERATE_MIPMAP`, before anything else is
+   said about the texture (`FOpenGLTexture::PrepareStorage`): its fixed-function emulation only samples a
+   texture whose storage it has seen ("valid"; without it the world was white, `logs/m11t/small.png` of that
+   run), and the flag makes it consider the mipmaps done. Consequences, all in the driver now:
+   - DXT goes to the hardware compressed where the hardware takes it (`CapRawS3TC`: the WebGL extension or
+     EXT_s3tc + the two ANGLE ones), else the engine's decoder is used as on the desktop: gl4es's decoder is
+     never used. Switch `-glnos3tc` masks it on either binding.
+   - D3DCOLOR data is reordered to RGBA on the CPU on GLES (WebGL has no BGRA; one path for twin and web).
+   - **Mip chains are completed by the driver** where there is no `GL_TEXTURE_MAX_LEVEL`
+     (`CompleteChain`, `CompleteCompressedChain`): box filter from the engine's last level; for hardware DXT
+     each missing level is one block of the average colour. `-glnomaxlevel` runs this on the desktop too.
+   - Render targets, the movie texture, the gamma ramp and the 1x1 black texture stay with gl4es.
+3. **gl4es reprints every float literal of a shader with six significant digits.** `16777215.0` in the
+   depth-encode shader became `1.67772e+07` (= 16777200). Found by self-test `depth-color` (error 16.7
+   million units). Fixed by writing 2^24-1 as `4096.0 * 4096.0 - 1.0`. Audit of every shader source of the
+   driver (generated `.glsl` files and the C++ strings) for literals needing more than six digits: this
+   was the only one. **Rule for every later shader: no literal with more than six significant digits.**
+4. **A sampler's default precision in GLSL ES is `lowp`**, and Mesa computes lowp in 16-bit floats: the
+   24-bit depth arrived with 11 bits (self-test `depth-color` error 8190 units). The two samplers that read
+   depth are declared `UC2_HIGHP sampler2D` (`highp` on GLES, nothing on desktop GLSL 1.20; the prologue
+   defines it). Colour samplers stay lowp (8-bit data).
+5. **Texture LOD bias does not exist on this path.** gl4es stores `GL_TEXTURE_LOD_BIAS` and never applies
+   it (GLES 2 has none for the fixed pipeline; a program could pass a bias to `texture2D`). The desktop
+   driver draws with `DefaultTexMipBias=-0.5` (Epic's PC default), so far textures are slightly crisper
+   there: `logs/m11t/crop-dead-0.png` (desktop, twin, difference x8). **Open, not fixed.** The measure of
+   it, pinned view, static part of the frame (x >= 760), post-processing off:
+
+   | Compared | mean of 255 | pixels above 2 / 8 / 32 levels |
+   |---|---|---|
+   | desktop vs desktop (two runs) | 0.000 | 0 / 0 / 0 % (bit-identical) |
+   | desktop vs twin | 1.415 | 21.1 / 2.3 / 0.06 % |
+   | desktop with `-glnolodbias` vs twin (gl4es decoding DXT) | 0.570 | 6.5 / 0.25 / 0 % |
+   | desktop with `-glnolodbias` vs twin (hardware DXT, storage around gl4es) | 0.374 | 4.5 / 0.20 / 0 % |
+
+   What is left after the LOD bias (`logs/m11t/crop-dead-nb2.png`, difference x32 left): low blotchy
+   differences of 1-3 levels on some surfaces and thin lines on the floor grating and at one polygon edge.
+   Not explained yet (candidates: per-stage clamping and rounding in gl4es's generated combiner shader against
+   Mesa's fixed-function code, perspective interpolation of its varyings).
+
+Self-test on the twin after 1-4 (`logs/m11t/fx-selftest.out`): 9 of 10 pass with the desktop's tolerances and
+the desktop's error values (`depth-color` 2.00 units, `dof-ramp` 0.72, `snapshot` 0, `bb-copy` 1.38,
+`luminance` 1.04, `remap` 0.60); `depth-copy` fails (next step: the copy or my point probe).
+
+Also: `LIBGL_NOPSA=1` (gl4es would keep its generated programs in `~/.gl4es.psa` where the hardware has
+program binaries; the twin must not write into the home directory and should build programs as WebGL has to).

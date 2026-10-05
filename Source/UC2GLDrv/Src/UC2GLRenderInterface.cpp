@@ -2024,6 +2024,14 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 		}
 	}
 
+	if( RenDev->CheckGLErrorsPerDraw )
+	{
+		FOpenGLMaterialState* Last = CurrentState->NumMaterialPasses ? CurrentState->MaterialPasses[CurrentState->NumMaterialPasses-1] : NULL;
+		RenDev->CheckGLError( *FString::Printf( TEXT("draw: primitive type %i, %i primitives, %i passes, last pass: pixel shader %i, %i stages, wireframe %i, material %s"),
+			(INT)PrimitiveType, NumPrimitives, CurrentState->NumMaterialPasses, Last ? (INT)Last->PixelShader : -1, Last ? Last->StagesUsed : 0, Last ? (INT)(Last->FillMode == FM_Wireframe) : 0,
+			GetLastMaterial() ? GetLastMaterial()->GetPathName() : TEXT("None") ) );
+	}
+
 	// M7: copies of the main framebuffer are stale now (UC2GLPostProcess.cpp).
 	if( SavedRenderTargetState.GetCurrentState()->Framebuffer == RenDev->MainFramebuffer )
 		RenDev->MainColorVersion++;

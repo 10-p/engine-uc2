@@ -208,6 +208,11 @@ UBOOL UUC2GL4ESRenderDevice::BindingInit()
 	setenv( "LIBGL_FPS",			"0", 1 );
 	setenv( "LIBGL_SILENTSTUB",		"1", 1 );
 	setenv( "LIBGL_NOTEXRECT",		"1", 1 );
+	// No "precompiled shader archive": where the hardware has program binaries (Mesa has)
+	// gl4es keeps its generated fixed-function programs in ~/.gl4es.psa. A test vehicle does
+	// not write into the user's home directory, and the twin should build its programs the
+	// way the browser has to (WebGL has no program binaries).
+	setenv( "LIBGL_NOPSA",			"1", 1 );
 	// -gl4esdebug: gl4es logs every shader it converts (before and after).
 	if( ParseParam( appCmdLine(), TEXT("gl4esdebug") ) )
 	{

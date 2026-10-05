@@ -125,6 +125,12 @@ public:
 	GLuint					TextureID;			// GL texture (not owned when it is the main framebuffer's)
 	GLuint					FramebufferID;		// render targets only
 	GLuint					DepthStencilID;		// render targets with their own depth buffer only
+	GLenum					UploadBindTarget;	// GL_TEXTURE_2D or GL_TEXTURE_CUBE_MAP while Cache uploads
+	GLuint					StorageSeenID;		// the texture name gl4es has seen a storage of (PrepareStorage)
+	void PrepareStorage();
+	// M11: OpenGL ES has no GL_TEXTURE_MAX_LEVEL, so a mip chain must go down to 1x1.
+	void CompleteCompressedChain( GLenum Target, FTexture* Texture, ETextureFormat ActualFormat, INT LastMipIndex, INT FirstMip, INT Width, INT Height );
+	void CompleteChain( GLenum Target, FTexture* Texture, ETextureFormat ActualFormat, INT LastMipIndex, INT FirstMip, INT Width, INT Height );
 	UBOOL					OwnsTexture,
 							IsCubemap,
 							IsRenderTarget,

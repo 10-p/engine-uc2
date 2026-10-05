@@ -20,6 +20,7 @@ GL_RAW(void,glTexImage2D,(GLenum,GLint,GLint,GLsizei,GLsizei,GLint,GLenum,GLenum
 GL_RAW(void,glTexParameteri,(GLenum,GLenum,GLint))
 GL_RAW(void,glTexSubImage2D,(GLenum,GLint,GLint,GLint,GLsizei,GLsizei,GLenum,GLenum,const GLvoid*))
 GL_RAW(void,glPixelStorei,(GLenum,GLint))
+GL_RAW(void,glCompressedTexImage2D,(GLenum,GLint,GLenum,GLsizei,GLsizei,GLint,GLsizei,const GLvoid*))
 GL_RAW(void,glGenRenderbuffers,(GLsizei,GLuint*))
 GL_RAW(void,glDeleteRenderbuffers,(GLsizei,const GLuint*))
 GL_RAW(void,glBindRenderbuffer,(GLenum,GLuint))

@@ -204,7 +204,15 @@ public:
 									CapFragDepth,		// a fragment shader can write gl_FragDepth
 									CapUIntIndex,		// 32-bit index buffers
 									CapTextureMaxLevel,	// GL_TEXTURE_MAX_LEVEL: a mip chain may stop before 1x1
-									CapFragmentHighp;	// highp float in fragment shaders
+									CapFragmentHighp,	// highp float in fragment shaders
+									CapRawS3TC;			// GLES: the hardware takes DXT data (gl4es itself always decodes it in software)
+	// A compressed image for a texture, handed to the library under the binding (GLES: gl4es
+	// would decode it to RGBA8 on the CPU). BindTarget is GL_TEXTURE_2D or GL_TEXTURE_CUBE_MAP.
+	void CompressedTexImage2D( GLenum BindTarget, GLuint Texture, GLenum Target, INT Level, GLenum Format, INT Width, INT Height, INT Size, const BYTE* Data, UBOOL FirstStorage );
+	UBOOL UseHardwareS3TC() { return IsGLES ? CapRawS3TC : SUPPORTS_GL_EXT_texture_compression_s3tc; }
+	// The same for uncompressed data of an engine texture (Format GL_BGRA, GL_LUMINANCE,
+	// GL_ALPHA or GL_RGB with 5-6-5; tightly packed rows).
+	void TexImage2D( GLenum BindTarget, GLuint Texture, GLenum Target, INT Level, GLint Internal, INT Width, INT Height, GLenum Format, GLenum Type, const BYTE* Data );
 	virtual const TCHAR* BindingName();
 	// SDL_GL_SetAttribute for the context this binding wants; before the window is (re)created.
 	virtual void BindingSetContextAttributes();
@@ -240,6 +248,8 @@ public:
 	// -glnolodbias: every texture LOD bias is 0 (verification: GLES has no LOD bias for the
 	// fixed-function path, so this is what the desktop driver is compared with).
 	UBOOL							NoLODBias;
+	// -glerrorsdraw: glGetError after every draw call and texture upload, with what it was (slow; to find the call behind an error -glerrors reports).
+	UBOOL							CheckGLErrorsPerDraw;
 	void BindQuadBuffer();
 
 	// Constructors.
