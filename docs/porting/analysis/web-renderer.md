@@ -355,3 +355,49 @@ the desktop's error values (`depth-color` 2.00 units, `dof-ramp` 0.72, `snapshot
 
 Also: `LIBGL_NOPSA=1` (gl4es would keep its generated programs in `~/.gl4es.psa` where the hardware has
 program binaries; the twin must not write into the home directory and should build programs as WebGL has to).
+
+## G2, step 1: self-test 10/10 and the program test on the twin (2026-10-05)
+
+Commands (two run trees so both bindings run at once; `@150:exit` ends the run cleanly):
+
+```sh
+UC2_RES=1280x720 UC2_PRECMD="set UCDeathmatch NumPlayers 0" tools/dev/run-uc2-shot.sh m11p fx-selftest 200 34 DM-Deadbolt -opengl -glerrors -glexec=44:POSTSELFTEST@150:exit
+UC2_RES=1280x720 UC2_PRECMD="set UCDeathmatch NumPlayers 0" tools/dev/run-uc2-shot.sh m11t fx-selftest 200 34 DM-Deadbolt -gl4es  -glerrors -glexec=44:POSTSELFTEST@150:exit
+tools/dev/m11-progcmp.py <WorkUC2>/logs/m11p/fx-selftest.out <WorkUC2>/logs/m11t/fx-selftest.out
+```
+
+Result: desktop `selftest summary: 10 passed, 0 failed`, `0 GL errors in 311 frames`; twin `selftest summary:
+10 passed, 0 failed`, `0 GL errors in 415 frames` (the count includes the raw library's errors now). Every
+check passes on the twin **with the desktop's tolerance**; none was loosened.
+
+- `depth-copy` on OpenGL ES: a depth buffer cannot be read back there, so each target pixel is probed with
+  two depth-tested triangles at the expected depth +N and -N units (the framebuffer's colour is the tally).
+  The same probe also runs on the desktop binding next to the real read-back and agrees with it ("every
+  pixel within 1 units"), and the twin's copy is within 1 unit too.
+- **Program test** (new, `UC2GL_RunProgramTest` in `UC2GLShaders.cpp`, part of `POSTSELFTEST`): every usable
+  pixel shader (84) with five vertex-shader enums (texture coordinates passed through; + vertex colours;
+  + the five directional lights; + fog; + 4x2 texture transforms) = 420 complete programs of the driver,
+  each drawn with four sets of pseudo-random constants, lights, matrices, colours and coordinates over four
+  bilinear textures; the centre pixel is logged. `m11-progcmp.py` compares the two logs:
+  `progtest: 420 programs on side A, 420 on side B, 6720 values compared, 6418 identical, largest
+  difference 1 of 255 (tolerance 2), ... 0 programs outside the tolerance or missing`.
+  This is the "complete programs, vertex side included, compiled and run as ES 1.00 through the path the web
+  uses": the desktop side is tied to the reference interpreter by `psh2glsl.py --gputest` (fragment bodies),
+  the twin side is the same program text after gl4es's conversion, on OpenGL ES. Not covered: the three
+  unique vertex shaders (distortion, accumulation, colour remap; they are exercised by the effect pictures
+  and `remap`), cube-map variants, the specular variant.
+
+Two more gl4es defects found here, both worked around in the driver:
+
+6. **gl4es draws one pixel for `GL_POINTS` with a user program** (first version of the probe). Triangles
+   are used. The engine's `PT_PointList` goes the same way: not fixed, nothing I have run draws points.
+7. **A deleted buffer's name coming back breaks the next draw.** gl4es remembers per vertex attribute which
+   buffer and offset it last sent to GLES and skips the call when asked for the same again; deleting the
+   buffer does not clear that record, GLES hands the name out again at once, and GLES itself has reset the
+   attribute to "no buffer": the draw reads nothing (the probe's second draw; non-deterministic until
+   understood: one binary passed, the next failed). On WebGL that would be an INVALID_OPERATION and a missing
+   object after any resource flush. `UUC2GLRenderDevice::NewBuffer` / `FreeBuffer`: on GLES a freed buffer
+   name is emptied and reused, never deleted, per target.
+
+Note for G5: gl4es keeps a CPU copy of every buffer's contents (`buff->data`), so vertex and index data
+exist twice in the process (three times with the engine's own copy).

@@ -184,8 +184,7 @@ struct FSelfTest
 					V[2] = (FLOAT)( D * 2.0 - 1.0 );
 				}
 			}
-		GLuint Buffer = 0;
-		RenDev->glGenBuffers( 1, &Buffer );
+		GLuint Buffer = RenDev->NewBuffer( GL_ARRAY_BUFFER );
 		RenDev->glBindBuffer( GL_ARRAY_BUFFER, Buffer );
 		RenDev->glBufferData( GL_ARRAY_BUFFER, Vertices.Num() * sizeof(FLOAT), &Vertices(0), GL_STATIC_DRAW );
 		RenDev->glUseProgram( PointProgram );
@@ -196,7 +195,7 @@ struct FSelfTest
 		RenDev->glDisableVertexAttribArray( 0 );
 		RenDev->glUseProgram( 0 );
 		RenDev->glBindBuffer( GL_ARRAY_BUFFER, 0 );
-		RenDev->glDeleteBuffers( 1, &Buffer );
+		RenDev->FreeBuffer( GL_ARRAY_BUFFER, Buffer );
 	}
 	// How many pixels of a framebuffer's depth buffer are NOT within Bound units of Expected:
 	// a point at Expected+Bound must pass "greater or equal", one at Expected-Bound "less or
@@ -676,6 +675,12 @@ struct FSelfTest
 		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, RenDev->MainFramebuffer );
 		RI->Clear( 1, FColor(0,0,0,0), 1, 1.f, 1, 0 );
 		debugf( NAME_Init, TEXT("UC2GLDrv: selftest summary: %i passed, %i failed"), Passed, Failed );
+
+		// M11: complete programs, to be compared between the bindings (UC2GLShaders.cpp).
+		extern void UC2GL_RunProgramTest( UUC2GLRenderDevice* RenDev );
+		UC2GL_RunProgramTest( RenDev );
+		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, RenDev->MainFramebuffer );
+		RI->Clear( 1, FColor(0,0,0,0), 1, 1.f, 1, 0 );
 	}
 };
 

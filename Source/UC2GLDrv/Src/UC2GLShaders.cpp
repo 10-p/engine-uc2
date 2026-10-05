@@ -1001,5 +1001,209 @@ void FOpenGLRenderInterface::EndProgramPass()
 }
 
 /*-----------------------------------------------------------------------------
+	Program test (M11): complete programs, vertex side included, drawn and read back.
+
+	For every usable pixel shader and five vertex shader enums (texture coordinates passed
+	through; + vertex colours; + five directional lights; + fog; + 4x2 texture transforms on
+	stages 0 and 1) the real program of the driver is linked and a quad is drawn with four
+	sets of pseudo-random constants, lights, matrices, colours and coordinates, over four
+	small bilinear textures; the centre pixel is logged. The numbers mean nothing by
+	themselves: tools/dev/m11-twin.sh compares the lines of the desktop binding (whose
+	fragment shaders tools/psh2glsl.py --gputest ties to the reference interpreter) with the
+	lines of the GL4ES binding, i.e. the same programs after gl4es' conversion to GLSL ES
+	1.00 on OpenGL ES. Part of POSTSELFTEST / -glselftest.
+-----------------------------------------------------------------------------*/
+
+static DWORD UC2GL_ProgTestHash( DWORD A, DWORD B, DWORD C )
+{
+	DWORD H = A * 0x9E3779B1u ^ (B + 0x7F4A7C15u) * 0x85EBCA6Bu ^ (C + 0x165667B1u) * 0xC2B2AE35u;
+	H ^= H >> 15; H *= 0x2C1B3C6Du; H ^= H >> 12; H *= 0x297A2D39u; H ^= H >> 15;
+	return H;
+}
+// A value on the 8-bit grid in [0,1].
+static FLOAT UC2GL_ProgTestUnit( DWORD A, DWORD B, DWORD C )
+{
+	return (UC2GL_ProgTestHash( A, B, C ) & 255) / 255.f;
+}
+
+void UC2GL_RunProgramTest( UUC2GLRenderDevice* RenDev )
+{
+	guard(UC2GL_RunProgramTest);
+
+	enum { Size = 8, Cases = 4, Enums = 5 };
+	QWORD EnumList[Enums];
+	for( INT e=0; e<Enums; e++ )
+	{
+		QWORD Enum = VS_Normal;
+		for( INT s=0; s<4; s++ )
+			VS_SETTEXSOURCE( s, s, Enum )
+		if( e == 1 )	Enum |= VS_VertexColored;
+		if( e == 2 )	Enum |= VS_Lit;
+		if( e == 3 )	Enum |= VS_Fog;
+		if( e == 4 )	{ VS_SETTEXTRANSFORM( 0, VS_Tex_Transform_m4x2, Enum ) VS_SETTEXTRANSFORM( 1, VS_Tex_Transform_m4x2, Enum ) }
+		EnumList[e] = Enum;
+	}
+
+	// Target and textures (through the binding's ordinary texture path; bilinear, repeating).
+	GLuint Target = 0, Framebuffer = 0, Textures[4];
+	RenDev->glGenTextures( 1, &Target );
+	RenDev->glBindTexture( GL_TEXTURE_2D, Target );
+	RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+	RenDev->glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, Size, Size, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL );
+	RenDev->glGenFramebuffers( 1, &Framebuffer );
+	RenDev->glBindFramebuffer( GL_FRAMEBUFFER, Framebuffer );
+	RenDev->glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, Target, 0 );
+	RenDev->glGenTextures( 4, Textures );
+	for( INT t=0; t<4; t++ )
+	{
+		BYTE Texels[4*4*4];
+		for( INT i=0; i<4*4*4; i++ )
+			Texels[i] = UC2GL_ProgTestHash( t, i, 99 ) & 255;
+		RenDev->glActiveTexture( GL_TEXTURE0 + t );
+		RenDev->glBindTexture( GL_TEXTURE_2D, Textures[t] );
+		RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+		RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+		RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
+		RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
+		RenDev->glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
+		RenDev->glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, 4, 4, 0, GL_RGBA, GL_UNSIGNED_BYTE, Texels );
+	}
+	RenDev->glActiveTexture( GL_TEXTURE0 );
+
+	RenDev->glViewport( 0, 0, Size, Size );
+	RenDev->glDisable( GL_SCISSOR_TEST );
+	RenDev->glDisable( GL_STENCIL_TEST );
+	RenDev->glDisable( GL_DEPTH_TEST );
+	RenDev->glDisable( GL_BLEND );
+	RenDev->glDisable( GL_ALPHA_TEST );
+	RenDev->glDisable( GL_CULL_FACE );
+	RenDev->glDepthMask( GL_FALSE );
+	RenDev->glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+
+	INT Shaders = 0, Lines = 0, NoProgram = 0;
+	for( INT Type=0; Type<PS_MAX; Type++ )
+	{
+		if( RenDev->PixelShaderState[Type] != PSS_Ready )
+			continue;
+		Shaders++;
+		for( INT e=0; e<Enums; e++ )
+		{
+			FOpenGLProgram* Program = RenDev->GetProgram( Type, 0, EnumList[e] );
+			if( !Program->Program )
+			{
+				NoProgram++;
+				debugf( NAME_Init, TEXT("UC2GLDrv: progtest %i %s v%i: NO PROGRAM"), Type, appFromAnsi(GUC2GLPixelShaders[Type].Name), e );
+				continue;
+			}
+			FString Line;
+			for( INT c=0; c<Cases; c++ )
+			{
+				DWORD Seed = Type * 1000 + e * 10 + c;
+				#define U(n) UC2GL_ProgTestUnit( Seed, n, 7 )
+				RenDev->glClearColor( 128/255.f, 64/255.f, 192/255.f, 32/255.f );	// what a discarding shader leaves
+				RenDev->glClear( GL_COLOR_BUFFER_BIT );
+				RenDev->glUseProgram( Program->Program );
+
+				FMatrix Identity = FMatrix::Identity;
+				RenDev->glUniformMatrix4fv( Program->ClipLoc, 1, GL_FALSE, (GLfloat*)&Identity );
+				if( Program->ModelViewLoc >= 0 )
+				{
+					// Camera-space z between -100 and -1100 for the fog.
+					FMatrix ModelView = FMatrix::Identity;
+					ModelView.M[3][2] = -100.f - 1000.f * U(1);
+					RenDev->glUniformMatrix4fv( Program->ModelViewLoc, 1, GL_FALSE, (GLfloat*)&ModelView );
+				}
+				if( Program->NormalMatrixLoc >= 0 )
+				{
+					static const FLOAT M3[9] = { 1,0,0, 0,1,0, 0,0,1 };
+					RenDev->glUniformMatrix3fv( Program->NormalMatrixLoc, 1, GL_FALSE, M3 );
+				}
+				if( Program->AmbientLoc >= 0 )
+					RenDev->glUniform4f( Program->AmbientLoc, U(2) * 0.5f, U(3) * 0.5f, U(4) * 0.5f, U(5) );
+				if( Program->LightDirLoc >= 0 || Program->LightColorLoc >= 0 )
+				{
+					FLOAT Dirs[15], Colors[15];
+					for( INT i=0; i<5; i++ )
+					{
+						FVector D = FVector( U(10+i*3) - 0.5f, U(11+i*3) - 0.5f, -0.25f - U(12+i*3) ).SafeNormal();
+						Dirs[i*3] = D.X; Dirs[i*3+1] = D.Y; Dirs[i*3+2] = D.Z;
+						for( INT k=0; k<3; k++ )
+							Colors[i*3+k] = U(30+i*3+k) * 0.25f;
+					}
+					if( Program->LightDirLoc >= 0 )
+						RenDev->glUniform3fv( Program->LightDirLoc, 5, Dirs );
+					if( Program->LightColorLoc >= 0 )
+						RenDev->glUniform3fv( Program->LightColorLoc, 5, Colors );
+				}
+				if( Program->FogParamsLoc >= 0 )
+					RenDev->glUniform4f( Program->FogParamsLoc, 1.f / 1000.f, 1200.f / 1000.f, 0.f, 0.f );
+				if( Program->FogColorLoc >= 0 )
+					RenDev->glUniform4f( Program->FogColorLoc, U(50), U(51), U(52), 1.f );
+				for( INT s=0; s<4; s++ )
+					if( Program->TexMatrixLoc[s] >= 0 )
+					{
+						FMatrix M = FMatrix::Identity;
+						M.M[0][0] = 0.5f + U(60+s);
+						M.M[1][1] = 0.5f + U(64+s);
+						M.M[3][0] = U(68+s) * 0.25f;
+						M.M[3][1] = U(72+s) * 0.25f;
+						RenDev->glUniformMatrix4fv( Program->TexMatrixLoc[s], 1, GL_FALSE, (GLfloat*)&M );
+					}
+				for( INT i=0; i<8; i++ )
+					if( Program->ConstantLoc[i] >= 0 )
+						RenDev->glUniform4f( Program->ConstantLoc[i], U(80+i*4), U(81+i*4), U(82+i*4), U(83+i*4) );
+				if( Program->DistortionScaleLoc >= 0 )
+					RenDev->glUniform4f( Program->DistortionScaleLoc, 0.01f, 0.01f, 0.f, 0.f );
+				if( Program->DistortionScreenLoc >= 0 )
+					RenDev->glUniform4f( Program->DistortionScreenLoc, 0.5f, 0.5f, 0.5f, 0.5f );
+				if( Program->ColorRemapLoc >= 0 )
+					RenDev->glUniform4f( Program->ColorRemapLoc, 0.30f, 0.59f, 0.11f, 1.f );
+
+				for( INT t=0; t<4; t++ )
+				{
+					RenDev->glActiveTexture( GL_TEXTURE0 + t );
+					RenDev->glBindTexture( GL_TEXTURE_2D, Textures[t] );
+				}
+				RenDev->glActiveTexture( GL_TEXTURE0 );
+
+				RenDev->BindQuadBuffer();
+				RenDev->glVertexAttribPointer( VA_Position, 2, GL_FLOAT, GL_FALSE, 0, NULL );
+				RenDev->glEnableVertexAttribArray( VA_Position );
+				for( INT a=1; a<VA_MAX; a++ )
+					RenDev->glDisableVertexAttribArray( a );
+				RenDev->glVertexAttrib4f( VA_Normal, 0.f, 0.f, 1.f, 0.f );
+				RenDev->glVertexAttrib4f( VA_Diffuse, U(110) * 0.5f, U(111) * 0.5f, U(112) * 0.5f, U(113) );
+				RenDev->glVertexAttrib4f( VA_Specular, U(114), U(115), U(116), U(117) );
+				for( INT s=0; s<4; s++ )
+					RenDev->glVertexAttrib4f( VA_TexCoord0+s, U(120+s*4), U(121+s*4), U(122+s*4), 1.f );
+				RenDev->glDrawArrays( GL_TRIANGLE_STRIP, 0, 4 );
+				RenDev->glDisableVertexAttribArray( VA_Position );
+				RenDev->glBindBuffer( GL_ARRAY_BUFFER, 0 );
+				RenDev->glUseProgram( 0 );
+				#undef U
+
+				BYTE Pixel[4] = { 0, 0, 0, 0 };
+				RenDev->glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+				RenDev->glReadPixels( Size/2, Size/2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, Pixel );
+				Line += FString::Printf( TEXT(" %02x%02x%02x%02x"), Pixel[0], Pixel[1], Pixel[2], Pixel[3] );
+			}
+			debugf( NAME_Init, TEXT("UC2GLDrv: progtest %i %s v%i:%s"), Type, appFromAnsi(GUC2GLPixelShaders[Type].Name), e, *Line );
+			Lines++;
+		}
+	}
+	debugf( NAME_Init, TEXT("UC2GLDrv: progtest summary: %i pixel shaders x %i vertex shader enums, %i programs drawn (%i cases each), %i could not be built"), Shaders, Enums, Lines, Cases, NoProgram );
+
+	RenDev->glBindFramebuffer( GL_FRAMEBUFFER, RenDev->MainFramebuffer );
+	RenDev->glDeleteFramebuffers( 1, &Framebuffer );
+	RenDev->glDeleteTextures( 1, &Target );
+	RenDev->glDeleteTextures( 4, Textures );
+	RenDev->glEnable( GL_SCISSOR_TEST );
+	RenDev->RenderInterface.RestoreAfterDeviceDraw();
+
+	unguard;
+}
+
+/*-----------------------------------------------------------------------------
 	The End.
 -----------------------------------------------------------------------------*/

@@ -245,6 +245,11 @@ public:
 	void DetectCapabilities();
 	// A static full-screen strip (-1..1) in a buffer object: WebGL has no client-side arrays.
 	GLuint							QuadBuffer;
+	// Buffer object names. On GLES a freed name is kept and handed out again instead of
+	// being deleted (NewBuffer / FreeBuffer in UC2GLRenderDevice.cpp say why).
+	TArray<GLuint>					FreeArrayBuffers, FreeElementBuffers;
+	GLuint NewBuffer( GLenum Target );
+	void FreeBuffer( GLenum Target, GLuint& Buffer );
 	// -glnolodbias: every texture LOD bias is 0 (verification: GLES has no LOD bias for the
 	// fixed-function path, so this is what the desktop driver is compared with).
 	UBOOL							NoLODBias;

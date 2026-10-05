@@ -1004,6 +1004,43 @@ void UUC2GLRenderDevice::TexImage2D( GLenum BindTarget, GLuint Texture, GLenum T
 	Raw_glBindTexture( BindTarget, Bound );
 }
 
+//
+// M11. gl4es remembers, per vertex attribute, which buffer and offset it last sent to
+// OpenGL ES and skips the call when the next draw asks for the same. It does not forget that
+// when the buffer is deleted: a new buffer that gets the old one's name (GLES hands names
+// out again at once) with the same layout is taken for "already sent", while GLES has reset
+// the attribute to no buffer at the deletion. The draw then reads nothing (found by the
+// self-test's depth probe: its second draw from a freshly created buffer drew no pixel).
+// So on GLES buffer names are never deleted while the device lives: a freed one is emptied
+// and reused, by target (a WebGL buffer keeps the target it was first bound to).
+//
+GLuint UUC2GLRenderDevice::NewBuffer( GLenum Target )
+{
+	TArray<GLuint>& Free = Target == GL_ELEMENT_ARRAY_BUFFER ? FreeElementBuffers : FreeArrayBuffers;
+	GLuint Buffer = 0;
+	if( IsGLES && Free.Num() )
+		Buffer = Free.Pop();
+	else
+		glGenBuffers( 1, &Buffer );
+	return Buffer;
+}
+
+void UUC2GLRenderDevice::FreeBuffer( GLenum Target, GLuint& Buffer )
+{
+	if( !Buffer )
+		return;
+	if( IsGLES )
+	{
+		glBindBuffer( Target, Buffer );
+		glBufferData( Target, 4, NULL, GL_STATIC_DRAW );
+		glBindBuffer( Target, 0 );
+		(Target == GL_ELEMENT_ARRAY_BUFFER ? FreeElementBuffers : FreeArrayBuffers).AddItem( Buffer );
+	}
+	else
+		glDeleteBuffers( 1, &Buffer );
+	Buffer = 0;
+}
+
 void UUC2GLRenderDevice::BindQuadBuffer()
 {
 	glBindBuffer( GL_ARRAY_BUFFER, QuadBuffer );

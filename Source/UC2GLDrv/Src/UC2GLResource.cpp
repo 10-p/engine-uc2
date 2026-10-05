@@ -816,7 +816,7 @@ FOpenGLVertexStream::~FOpenGLVertexStream()
 	if( BufferID && RenDev->ContextAlive() )
 	{
 		RenDev->RenderInterface.InvalidateHardwareState();
-		RenDev->glDeleteBuffers( 1, &BufferID );
+		RenDev->FreeBuffer( GL_ARRAY_BUFFER, BufferID );
 	}
 	BufferID = 0;
 	unguard;
@@ -829,7 +829,7 @@ void FOpenGLVertexStream::Cache(FVertexStream* SourceStream)
 	INT	Size = SourceStream->GetSize();
 
 	if( !BufferID )
-		RenDev->glGenBuffers( 1, &BufferID );
+		BufferID = RenDev->NewBuffer( GL_ARRAY_BUFFER );
 
 	if( RenDev->ScratchBuffer.Num() < Size*2 )
 		RenDev->ScratchBuffer.Add( Size*2 - RenDev->ScratchBuffer.Num() );
@@ -867,7 +867,7 @@ void FOpenGLDynamicVertexStream::Reallocate(INT NewSize)
 {
 	guard(FOpenGLDynamicVertexStream::Reallocate);
 	if( !BufferID )
-		RenDev->glGenBuffers( 1, &BufferID );
+		BufferID = RenDev->NewBuffer( GL_ARRAY_BUFFER );
 	RenDev->glBindBuffer( GL_ARRAY_BUFFER, BufferID );
 	RenDev->glBufferData( GL_ARRAY_BUFFER, NewSize, NULL, GL_STREAM_DRAW );
 	RenDev->RenderInterface.InvalidateHardwareState();
@@ -966,7 +966,7 @@ FOpenGLIndexBuffer::~FOpenGLIndexBuffer()
 	if( BufferID && RenDev->ContextAlive() )
 	{
 		RenDev->RenderInterface.InvalidateHardwareState();
-		RenDev->glDeleteBuffers( 1, &BufferID );
+		RenDev->FreeBuffer( GL_ELEMENT_ARRAY_BUFFER, BufferID );
 	}
 	BufferID = 0;
 	unguard;
@@ -980,7 +980,7 @@ void FOpenGLIndexBuffer::Cache(FIndexBuffer* SourceIndexBuffer)
 	IndexSize = SourceIndexBuffer->GetIndexSize();
 
 	if( !BufferID )
-		RenDev->glGenBuffers( 1, &BufferID );
+		BufferID = RenDev->NewBuffer( GL_ELEMENT_ARRAY_BUFFER );
 
 	if( RenDev->ScratchBuffer.Num() < Size )
 		RenDev->ScratchBuffer.Add( Size - RenDev->ScratchBuffer.Num() );
@@ -1013,7 +1013,7 @@ void FOpenGLDynamicIndexBuffer::Reallocate(INT NewSize)
 {
 	guard(FOpenGLDynamicIndexBuffer::Reallocate);
 	if( !BufferID )
-		RenDev->glGenBuffers( 1, &BufferID );
+		BufferID = RenDev->NewBuffer( GL_ELEMENT_ARRAY_BUFFER );
 	RenDev->glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, BufferID );
 	RenDev->glBufferData( GL_ELEMENT_ARRAY_BUFFER, NewSize, NULL, GL_STREAM_DRAW );
 	RenDev->RenderInterface.InvalidateHardwareState();
