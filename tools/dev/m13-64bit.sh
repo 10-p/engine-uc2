@@ -280,7 +280,7 @@ PY
 }
 
 check_saves() {	# a profile saved by the 64-bit build loads in the 32-bit one and the other way round
-  local rc64 rc32 r a b c d f64 f32
+  local rc64 rc32 r a b c d f64 f32 kept
   rm -rf "$sys/Profiles/M13Save" "$rsys/Profiles/M13Save" "$sys/Profiles/M13From32" "$rsys/Profiles/M13From64"
   ( cd "$sys" && "$capped" 3G 120 -- ./ucc-bin profiletest save M13Save "$out/saves-64-saved.txt" > "$out/saves-64-save.out" 2>&1 ); rc64=$?
   ( cd "$rsys" && "$capped" 2G 120 -- ./ucc-bin profiletest save M13Save "$out/saves-32-saved.txt" > "$out/saves-32-save.out" 2>&1 ); rc32=$?
@@ -289,13 +289,19 @@ check_saves() {	# a profile saved by the 64-bit build loads in the 32-bit one an
   cp -f "$f64" "$rsys/Profiles/M13From64/" 2>/dev/null; cp -f "$f32" "$sys/Profiles/M13From32/" 2>/dev/null
   ( cd "$rsys" && "$capped" 2G 120 -- ./ucc-bin profiletest load M13From64 "$out/saves-32-loaded-64.txt" > "$out/saves-32-load.out" 2>&1 ); a=$?
   ( cd "$sys" && "$capped" 3G 120 -- ./ucc-bin profiletest load M13From32 "$out/saves-64-loaded-32.txt" > "$out/saves-64-load.out" 2>&1 ); b=$?
-  r="64 save rc $rc64, 32 save rc $rc32, 32 loads 64's rc $a, 64 loads 32's rc $b"
-  if [ $rc64 = 0 ] && [ $rc32 = 0 ] && [ $a = 0 ] && [ $b = 0 ] && cmp -s "$f64" "$f32" \
-     && cmp -s "$out/saves-64-saved.txt" "$out/saves-32-loaded-64.txt" && cmp -s "$out/saves-32-saved.txt" "$out/saves-64-loaded-32.txt" \
-     && cmp -s "$out/saves-64-saved.txt" "$out/saves-32-saved.txt"; then
-    result PASS saves "profile files written by the 64-bit and the 32-bit build are byte-identical ($(stat -c %s "$f64") bytes); each build loads the other's and exports the same $(wc -l < "$out/saves-64-saved.txt") property lines it was saved with"
+  ( cd "$sys" && "$capped" 3G 120 -- ./ucc-bin profiletest load M13Save "$out/saves-64-loaded-64.txt" > "$out/saves-64-load-own.out" 2>&1 ); c=$?
+  ( cd "$rsys" && "$capped" 2G 120 -- ./ucc-bin profiletest load M13Save "$out/saves-32-loaded-32.txt" > "$out/saves-32-load-own.out" 2>&1 ); d=$?
+  # What a load gives back: the same text whichever width wrote or reads the file. (Localized texts and the
+  # profile/player names are not taken from the file - the loader sets them - so a load is compared with loads.)
+  kept=$(( $(wc -l < "$out/saves-64-saved.txt") - $(diff "$out/saves-64-saved.txt" "$out/saves-64-loaded-64.txt" | grep -c '^<') ))
+  r="64 save rc $rc64, 32 save rc $rc32, loads: 32<-64 rc $a, 64<-32 rc $b, 64<-64 rc $c, 32<-32 rc $d"
+  if [ $rc64 = 0 ] && [ $rc32 = 0 ] && [ $a = 0 ] && [ $b = 0 ] && [ $c = 0 ] && [ $d = 0 ] && cmp -s "$f64" "$f32" \
+     && cmp -s "$out/saves-64-saved.txt" "$out/saves-32-saved.txt" \
+     && cmp -s "$out/saves-32-loaded-64.txt" "$out/saves-32-loaded-32.txt" && cmp -s "$out/saves-64-loaded-32.txt" "$out/saves-64-loaded-64.txt" \
+     && cmp -s "$out/saves-32-loaded-64.txt" "$out/saves-64-loaded-64.txt"; then
+    result PASS saves "profiles written by the 64-bit and the 32-bit build are byte-identical ($(stat -c %s "$f64") bytes); each build loads its own and the other's file to the same values ($kept of $(wc -l < "$out/saves-64-saved.txt") exported lines as saved; the rest are localized texts and names the loader sets)"
   else
-    result FAIL saves "$r; files $(cmp "$f64" "$f32" 2>&1 | head -1); see $out/saves-*"
+    result FAIL saves "$r; profile files: $(cmp "$f64" "$f32" 2>&1 | head -1); see $out/saves-*"
   fi
 }
 
