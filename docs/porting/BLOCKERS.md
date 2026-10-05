@@ -41,6 +41,14 @@ crash-notifier processes; both are the owner's to clear.
 
 ## Open technical questions
 
+- Network join does not complete (found at M12, 2026-10-05; not Windows-specific). A client connecting to a
+  dedicated server gets `Welcomed by server: LEVEL=DM-Deadbolt ...` and then fails
+  `check(GObjBeginLoadCount)` in `UObject::GetPackageLinker` (Core/Src/UnObj.cpp:3361, twice), i.e. the pending
+  level asks for a package linker outside a BeginLoad/EndLoad pair. Reproduced Linux client -> Linux `ucc-bin
+  server` (`<WorkUC2>/logs/m12/linux-netjoin-*.out`) and Linux client -> `ucc.exe server` under wine. Not looked
+  into further (networking is outside M12). Candidates: engine-ut2004's deferred `GObjPreloading`/load-in-progress
+  delta (core-port.md), or a path the Xbox only survived because its shipped build compiled `check` out.
+
 - M6 leftovers: the 12 projector pixel shaders need the engine's `_XBOX`-only projector batching lifted behind a
   capability (same kind of change as M7's post-process gates; do it with M7); `PS_Terrain3Layer` needs the
   device to report three simultaneous terrain layers, which changes every terrain map and wants its own

@@ -28,6 +28,9 @@
 #              -19.0 dB (tools/dev/audio-music-check.py, Recoil as control), 0 Critical
 #   keyboard   the M10 keyboard scenario (real X key events through wine; tools/dev/m10-controls.sh)
 #   pad        the M10 pad scenario (SDL's virtual controller through the engine's test channel)
+#   netjoin    the Linux client (run/m12-native) connects to a ucc.exe server under wine on 127.0.0.1:7797: the
+#              server logs "Login request", the client "Welcomed by server: LEVEL=DM-Deadbolt", the server then
+#              shuts down cleanly (SKIP without the tree). The join does not complete on any platform yet (BLOCKERS.md).
 #   nosound    OpenAL32.dll moved aside for one run: "sound is off", the menu still comes up, exit 0
 #   leftovers  no wineserver of the M12 prefix, no uc2.exe/ucc.exe left running
 set -u
@@ -195,6 +198,30 @@ check_nosound() {	# no OpenAL32.dll anywhere: the game must still come up, silen
   fi
 }
 
+check_netjoin() {	# the Linux client joins the server running under wine (UDP on 127.0.0.1, port 7797)
+  local so=$out/smoke-netjoin-server.out sl=$out/smoke-netjoin-server.log co=$out/smoke-netjoin-client.out spid
+  if [ ! -x "$ref/uc2.bin" ]; then result SKIP netjoin "no Linux reference tree at $ref"; return; fi
+  rm -f "$sys/ucc.log"
+  UC2_WINE_STOP_AFTER=75 "$capped" 3G 150 -- "$wine" "$sys" ucc.exe server DM-Deadbolt PORT=7797 -log > "$so" 2>&1 &
+  spid=$!
+  sleep 25
+  ( cd "$ref" && "$capped" 2G 70 -- xvfb-run -a -s "-screen 0 1280x720x24" \
+      env SDL_AUDIODRIVER=dummy timeout -s INT 40 ./uc2.bin 127.0.0.1:7797 -log -nullrenderer ) > "$co" 2>&1
+  wait $spid
+  cp -f "$sys/ucc.log" "$sl" 2>/dev/null
+  # PASS = the handshake through the wine server's WinSock (HELLO, CHALLENGE, LOGIN, WELCOME) and a clean server
+  # shutdown afterwards. The join itself does not complete yet on ANY platform: the client then fails
+  # check(GObjBeginLoadCount) in UObject::GetPackageLinker (the same between two Linux builds; BLOCKERS.md), which
+  # the result line reports.
+  local asrt; asrt=$(grep -a -c "Assertion failed: GObjBeginLoadCount" "$co")
+  if grep -a -q "Login request: " "$sl" && grep -a -q "Welcomed by server: LEVEL=DM-Deadbolt" "$co" \
+     && grep -a -q "Log file closed" "$sl" && [ "$(crit "$sl")" = 0 ]; then
+    result PASS netjoin "handshake Linux uc2.bin -> wine ucc.exe server over WinSock: server 'Login request', client 'Welcomed by server: LEVEL=DM-Deadbolt'; server shut down cleanly, Critical 0; join then stops at the known client assertion (GObjBeginLoadCount, $asrt lines; same Linux<->Linux)"
+  else
+    result FAIL netjoin "server: $(grep -a -c 'Login request' "$sl" 2>/dev/null) login requests, client: $(grep -a -c 'Welcomed by server' "$co") welcomes, server Critical $(crit "$sl"); see $sl, $co"
+  fi
+}
+
 check_audiocheck() {
   local o=$out/smoke-audiocheck.out rc
   "$capped" 3G 900 -- "$wine" "$sys" ucc.exe UC2ALAudio.UC2AudioCheck > "$o" 2>&1; rc=$?
@@ -250,11 +277,11 @@ check_leftovers() {
   else result FAIL leftovers "still running:$left"; fi
 }
 
-all="verify server null gl pinned audiocheck selftest capture nosound keyboard pad leftovers"
+all="verify server netjoin null gl pinned audiocheck selftest capture nosound keyboard pad leftovers"
 : > "$summary"
 for c in ${@:-$all}; do
   case "$c" in
-    verify|server|null|gl|pinned|audiocheck|selftest|capture|nosound|leftovers) "check_$c" ;;
+    verify|server|netjoin|null|gl|pinned|audiocheck|selftest|capture|nosound|leftovers) "check_$c" ;;
     keyboard|pad) check_controls "$c" ;;
     *) echo "unknown check $c (known: $all)" >&2 ;;
   esac
