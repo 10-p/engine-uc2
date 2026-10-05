@@ -128,11 +128,12 @@ struct FSelfTest
 
 	GLuint PointProgram;
 	GLint  PointColorLoc;
+	INT    LastProbeRed, LastProbeGreen;	// pixels whose upper / lower bound held in the last probe
 	UBOOL BuildPointProgram()
 	{
 		if( PointProgram )
 			return 1;
-		static const char* VS = "attribute vec3 aPosition;\nvoid main()\n{\n\tgl_Position = vec4( aPosition, 1.0 );\n\tgl_PointSize = 1.0;\n}\n";
+		static const char* VS = "attribute vec3 aPosition;\nvoid main()\n{\n\tgl_Position = vec4( aPosition, 1.0 );\n}\n";
 		static const char* FS = "uniform vec4 uColor;\nvoid main()\n{\n\tgl_FragColor = uColor;\n}\n";
 		GLuint Shaders[2];
 		for( INT i=0; i<2; i++ )
@@ -160,19 +161,28 @@ struct FSelfTest
 		PointColorLoc = RenDev->glGetUniformLocation( PointProgram, "uColor" );
 		return 1;
 	}
-	// One point per pixel of a W x H framebuffer, at 24-bit depth Z(top row first) + Offset.
-	void DrawDepthPoints( INT W, INT H, const TArray<DWORD>& Z, INT Offset, const FLOAT* Color )
+	// One point per pixel of a W x H framebuffer, at 24-bit depth Z + Offset. Z is the picture
+	// top row first; BottomUp says the framebuffer stores it the GL way (the main framebuffer),
+	// otherwise row 0 of the picture is row 0 of the framebuffer (render targets).
+	void DrawDepthPoints( INT W, INT H, const TArray<DWORD>& Z, INT Offset, const FLOAT* Color, UBOOL BottomUp )
 	{
+		// (One small triangle around each pixel centre rather than a point: point rasterisation
+		// through gl4es drew a single pixel.)
 		TArray<FLOAT> Vertices;
-		Vertices.Add( W * H * 3 );
+		Vertices.Add( W * H * 9 );
+		static const FLOAT Corner[3][2] = { { 0.1f, 0.1f }, { 0.9f, 0.1f }, { 0.5f, 0.9f } };
 		for( INT y=0; y<H; y++ )
 			for( INT x=0; x<W; x++ )
 			{
-				FLOAT* V = &Vertices( (y*W+x) * 3 );
-				V[0] = (x + 0.5f) / W * 2.f - 1.f;
-				V[1] = ((H-1-y) + 0.5f) / H * 2.f - 1.f;
-				DOUBLE D = Clamp<DOUBLE>( ((DOUBLE)Z(y*W+x) + Offset) / 16777215.0, 0.0, 1.0 );
-				V[2] = (FLOAT)( D * 2.0 - 1.0 );
+				DOUBLE	D	= Clamp<DOUBLE>( ((DOUBLE)Z(y*W+x) + Offset) / 16777215.0, 0.0, 1.0 );
+				INT		Row	= BottomUp ? H-1-y : y;
+				for( INT c=0; c<3; c++ )
+				{
+					FLOAT* V = &Vertices( ((y*W+x) * 3 + c) * 3 );
+					V[0] = (x + Corner[c][0]) / W * 2.f - 1.f;
+					V[1] = (Row + Corner[c][1]) / H * 2.f - 1.f;
+					V[2] = (FLOAT)( D * 2.0 - 1.0 );
+				}
 			}
 		GLuint Buffer = 0;
 		RenDev->glGenBuffers( 1, &Buffer );
@@ -182,7 +192,7 @@ struct FSelfTest
 		RenDev->glUniform4fv( PointColorLoc, 1, Color );
 		RenDev->glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, 0, NULL );
 		RenDev->glEnableVertexAttribArray( 0 );
-		RenDev->glDrawArrays( GL_POINTS, 0, W * H );
+		RenDev->glDrawArrays( GL_TRIANGLES, 0, W * H * 3 );
 		RenDev->glDisableVertexAttribArray( 0 );
 		RenDev->glUseProgram( 0 );
 		RenDev->glBindBuffer( GL_ARRAY_BUFFER, 0 );
@@ -191,7 +201,7 @@ struct FSelfTest
 	// How many pixels of a framebuffer's depth buffer are NOT within Bound units of Expected:
 	// a point at Expected+Bound must pass "greater or equal", one at Expected-Bound "less or
 	// equal". Nothing is written to depth; the framebuffer's colour is used as the tally.
-	INT ProbeDepth( GLuint Framebuffer, INT W, INT H, const TArray<DWORD>& Expected, INT Bound )
+	INT ProbeDepth( GLuint Framebuffer, INT W, INT H, const TArray<DWORD>& Expected, INT Bound, UBOOL BottomUp )
 	{
 		if( !BuildPointProgram() )
 			return W * H;
@@ -210,10 +220,10 @@ struct FSelfTest
 		static const FLOAT Red[4] = { 1.f, 0.f, 0.f, 0.f }, Green[4] = { 0.f, 1.f, 0.f, 0.f };
 		RenDev->glColorMask( GL_TRUE, GL_FALSE, GL_FALSE, GL_FALSE );
 		RenDev->glDepthFunc( GL_GEQUAL );
-		DrawDepthPoints( W, H, Expected, Bound, Red );
+		DrawDepthPoints( W, H, Expected, Bound, Red, BottomUp );
 		RenDev->glColorMask( GL_FALSE, GL_TRUE, GL_FALSE, GL_FALSE );
 		RenDev->glDepthFunc( GL_LEQUAL );
-		DrawDepthPoints( W, H, Expected, -Bound, Green );
+		DrawDepthPoints( W, H, Expected, -Bound, Green, BottomUp );
 		RenDev->glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
 		RenDev->glDepthFunc( GL_LEQUAL );
 		RenDev->glEnable( GL_SCISSOR_TEST );
@@ -224,6 +234,12 @@ struct FSelfTest
 		for( INT i=0; i<W*H; i++ )
 			if( Tally.Data(i*4) != 255 || Tally.Data(i*4+1) != 255 )
 				Wrong++;
+		LastProbeRed = LastProbeGreen = 0;
+		for( INT i=0; i<W*H; i++ )
+		{
+			LastProbeRed	+= Tally.Data(i*4) == 255;
+			LastProbeGreen	+= Tally.Data(i*4+1) == 255;
+		}
 		RI->RestoreAfterDeviceDraw();
 		return Wrong;
 	}
@@ -304,13 +320,13 @@ struct FSelfTest
 			for( INT b=0; b<ARRAY_COUNT(Bounds); b++ )
 			{
 				Bound			= Bounds[b];
-				WrongAtBound	= ProbeDepth( RI->CacheTexture( Half )->FramebufferID, HW, HH, Expected, Bound );
+				WrongAtBound	= ProbeDepth( RI->CacheTexture( Half )->FramebufferID, HW, HH, Expected, Bound, 0 );
 				if( b == 0 )
 					WrongAt1 = WrongAtBound;
 				if( WrongAtBound == 0 )
 					break;
 			}
-			Report( TEXT("depth-copy"), HW*HH, WrongAtBound ? 16777215.f : (FLOAT)Bound, 3.f, *FString::Printf( TEXT("CopyDepthBuffer into %ix%i: target pixel (x,y) holds the depth of back-buffer pixel (2x+1,2y+1); OpenGL ES cannot read depth back, so each pixel is probed with two depth-tested points at the expected depth +/- N units: every pixel is within %i units (%i pixels are not within 1; the probe's own depth goes through a float); tolerance 3 instead of the desktop's 1 for that reason"), HW, HH, Bound, WrongAt1 ) );
+			Report( TEXT("depth-copy"), HW*HH, WrongAtBound ? 16777215.f : (FLOAT)Bound, 1.f, *FString::Printf( TEXT("CopyDepthBuffer into %ix%i: target pixel (x,y) holds the depth of back-buffer pixel (2x+1,2y+1); OpenGL ES cannot read depth back, so each pixel is probed with two depth-tested triangles at the expected depth +/- N units: every pixel is within %i units (%i pixels are not within 1); the same probe on desktop GL agrees with the read-back there; last probe: upper bound held for %i pixels, lower bound for %i"), HW, HH, Bound, WrongAt1, LastProbeRed, LastProbeGreen ) );
 			delete Half;
 			return;
 		}
@@ -337,7 +353,22 @@ struct FSelfTest
 							Others[k]++;
 				}
 			}
-		Report( TEXT("depth-copy"), HW*HH, MaxZError, 1.f, *FString::Printf( TEXT("CopyDepthBuffer into %ix%i: target pixel (x,y) holds the depth of back-buffer pixel (2x+1,2y+1); error in units of the 24-bit depth; %i pixels wrong (of those, matching texel (2x,2y) %i, (2x+1,2y) %i, (2x,2y+1) %i)"), HW, HH, Wrong, Others[0], Others[1], Others[2] ) );
+		// M11: the point probe that stands in for the read-back on OpenGL ES, run here too, where the truth is known.
+		TArray<DWORD> Expected;
+		Expected.Add( HW * HH );
+		for( INT y=0; y<HH; y++ )
+			for( INT x=0; x<HW; x++ )
+				Expected(y*HW+x) = Z( (2*y+1)*W + 2*x+1 );
+		INT ProbeBound = 0, ProbeWrong = 0;
+		static const INT Bounds[] = { 1, 2, 3, 4, 8, 16, 256, 65536 };
+		for( INT b=0; b<ARRAY_COUNT(Bounds); b++ )
+		{
+			ProbeBound = Bounds[b];
+			ProbeWrong = ProbeDepth( RI->CacheTexture( Half )->FramebufferID, HW, HH, Expected, ProbeBound, 0 );
+			if( !ProbeWrong )
+				break;
+		}
+		Report( TEXT("depth-copy"), HW*HH, MaxZError, 1.f, *FString::Printf( TEXT("CopyDepthBuffer into %ix%i: target pixel (x,y) holds the depth of back-buffer pixel (2x+1,2y+1); error in units of the 24-bit depth; %i pixels wrong (of those, matching texel (2x,2y) %i, (2x+1,2y) %i, (2x,2y+1) %i); the triangle probe used on OpenGL ES says: %s within %i units (last probe: upper bound held for %i pixels, lower bound for %i)"), HW, HH, Wrong, Others[0], Others[1], Others[2], ProbeWrong ? TEXT("NOT every pixel") : TEXT("every pixel"), ProbeBound, LastProbeRed, LastProbeGreen ) );
 		delete Half;
 	}
 
