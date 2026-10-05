@@ -222,3 +222,14 @@ ULevel::ServerTickClients, not applied); whether the patch-name clamp could ever
      interpreter): after the return expression it peeks `*Stack.Code == EX_DebugInfo` one byte past the end
      of a function's Script array. Epic's (non-Xbox block), benign (heap slack), left alone and recorded;
      the ASan build is being rebuilt with `-fsanitize-recover=address` so it keeps going past it.
+
+### Step 8: soak PASS (10 min, 2 clients + 2 bots)
+
+`NET_SOAK_MIN=10 tools/dev/net-test.sh soak`: server `DM-Deadbolt?NumBots=2` (bots Brock and Jackhammer),
+NetA and NetB wander (pad forward + right stick turning + Fire every 3 s; Fire also respawns). After 10.0 min all
+three processes alive; server PRIs (score, deaths) Brock (7,8), Jackhammer (9,3), NetB (-1,5), NetA (0,5) -- the
+bots fight and kill the wandering clients, so damage/death/respawn ran for 10 minutes. RSS sampled every ~35 s
+(`logs/net/soak-rss.txt`): server 37.3 -> 38.0 MB; NetA 86.6 -> 97.5, NetB 85.6 -> 99.0 MB, rising fast in the
+first ~2 min (new effects/sounds) then +1-3 MB per 5 min, flattening. `.clean`: 0 Critical/assert/overflow/bunch
+lines in all three logs (the exit-time Critical of step 6 did not occur here), 2 invalid-class lines both
+explained. Not a leak test at hour scale.
