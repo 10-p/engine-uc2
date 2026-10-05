@@ -11,8 +11,8 @@ under stable names (m9-<scenario>.*). Decisions come from log lines and measurem
                   file's frame shown at that time: PSNR against its own frame and against the other's), end on
                   their own at the last frame
   logos-skip      a key 3 s into the logos ends them, the menu runs on
-  menu-movie      a menu page with a MovieMaterial (UCMenu's arena page: map portraits): the material plays
-                  (log) and two screenshots 2 s apart differ inside the movie's rectangle and match nowhere else
+  menu-movie      the arena page (INSTANT ACTION) with its game-type portrait, a MovieMaterial: the material's frame
+                  advances (log), and two screenshots 2 s apart differ inside the portrait, not in static parts
   cinematic       DM-Deadbolt?StartCinematic=04a_AscPre5: static loading screen, the cinematic full screen
                   with its international sound (capture: envelope correlation and gain against the cooked
                   track, tools/dev/audio-music-check.py), a screenshot matched to its frame, the level after it
@@ -46,7 +46,8 @@ log, keyspec, args = sys.argv[1], sys.argv[2], sys.argv[3:]
 env = dict(os.environ, SDL_AUDIODRIVER='dummy')
 out = open(log, 'wb')
 p = subprocess.Popen(args, stdout=out, stderr=subprocess.STDOUT, env=env)
-# keyspec: "" or "<pattern>|<delay>|<keysym>": press the key <delay> s after <pattern> appears in the log;
+# keyspec: "" or "<pattern>|<delay>|<keysym>[,<keysym>...]": press the keys (1.5 s apart) <delay> s after
+# <pattern> appears in the log;
 # "click|<pattern>|<delay>|x,y": click there instead
 if keyspec:
     parts = keyspec.split('|')
@@ -77,9 +78,12 @@ if keyspec:
             t.XTestFakeButtonEvent(d, 1, 1, 0); x.XFlush(d); time.sleep(0.2)
             t.XTestFakeButtonEvent(d, 1, 0, 0); x.XFlush(d)
         else:
-            kc = x.XKeysymToKeycode(d, x.XStringToKeysym(what.encode()))
-            t.XTestFakeKeyEvent(d, kc, 1, 0); x.XFlush(d); time.sleep(0.15)
-            t.XTestFakeKeyEvent(d, kc, 0, 0); x.XFlush(d)
+            for i, key in enumerate(what.split(',')):
+                if i:
+                    time.sleep(1.5)
+                kc = x.XKeysymToKeycode(d, x.XStringToKeysym(key.encode()))
+                t.XTestFakeKeyEvent(d, kc, 1, 0); x.XFlush(d); time.sleep(0.15)
+                t.XTestFakeKeyEvent(d, kc, 0, 0); x.XFlush(d)
         open(log + '.inject', 'w').write('%s at %.3f\n' % (what, time.time()))
 p.wait()
 '''
@@ -229,8 +233,8 @@ def scen_logos_skip(a, tmp):
 
 
 def scen_menu(a, tmp):
-    # the arena page: the main menu's first item with Return twice (STORY MODE -> ...). Found by exploration;
-    # see docs/porting/analysis/video.md (V5).
+    # the arena page: Down to INSTANT ACTION, Return (10 s after start-up: the menu takes input after a few
+    # seconds under software GL); it opens with the CTF portrait movie. See docs/porting/analysis/video.md (V5).
     text, shots, dt, left = run_game(a.tree, 'menu-movie', 90, ['-log', '-nostartupmovies', '-glerrors'] + a.menu_args,
                                      inject=a.menu_inject)
     mats = re.findall(r'UC2Movie: MovieMaterial (\S+) frame (\d+) of (\d+)', text)
@@ -243,17 +247,15 @@ def scen_menu(a, tmp):
                                                                                       ', '.join('%s %s' % (n, frames[n][:6]) for n in moving) or 'none'))
     if len(shots) >= 2:
         (size, x), (_, y) = load_rgb(shots[0]), load_rgb(shots[1])
-        w, h = size
-        changed = [(i % w, i // w) for i in range(w * h) if abs(x[3 * i] - y[3 * i]) + abs(x[3 * i + 1] - y[3 * i + 1]) + abs(x[3 * i + 2] - y[3 * i + 2]) > 24]
-        if changed:
-            xs, ys = [c[0] for c in changed], [c[1] for c in changed]
-            box = (min(xs), min(ys), max(xs) + 1, max(ys) + 1)
-            area = (box[2] - box[0]) * (box[3] - box[1])
-        else:
-            box, area = None, 0
-        result('menu-movie-shots', bool(changed) and area < w * h // 2,
-               'two screenshots 2 s apart: %d pixels changed, all inside %s (%d%% of the screen)'
-               % (len(changed), box, 100 * area // (w * h)))
+        # Regions of the 640x480 arena page (UCMenu.UC2Arena_Main, behind the "no profile" dialog): the game
+        # type portrait (a MovieMaterial) and two parts that do not move (the page title, the list).
+        # The page's background animates everywhere else.
+        regions = {'portrait': (412, 96, 565, 176), 'title': (495, 40, 600, 68), 'list': (60, 82, 360, 110)}
+        p = {k: psnr(crop(x, size, v), crop(y, size, v)) for k, v in regions.items()}
+        result('menu-movie-shots', size == (640, 480) and p['portrait'] < 20.0 and p['title'] > 30.0 and p['list'] > 30.0,
+               'two screenshots 2 s apart: the portrait %s differs (PSNR between them %.1f dB), the title %s and the '
+               'list %s do not (%.1f, %.1f dB)' % (regions['portrait'], p['portrait'], regions['title'], regions['list'],
+                                                   p['title'], p['list']))
     else:
         result('menu-movie-shots', False, '%d screenshots' % len(shots))
     result('menu-movie-clean', criticals(text) == 0 and gl_errors(text) == 0 and not left,
@@ -348,8 +350,8 @@ def main():
     ap.add_argument('--only', default='')
     ap.add_argument('--no-mkrun', action='store_true')
     # the menu page with a MovieMaterial and how to reach it (see the notebook, V5)
-    ap.add_argument('--menu-inject', default='UC2GLDrv: frame 600|1.0|click|480,300')
-    ap.add_argument('--menu-args', default='-glshot=40,42')
+    ap.add_argument('--menu-inject', default='Startup time|10.0|Down,Return')
+    ap.add_argument('--menu-args', default='-glshot=26,28')
     # expected level of the movie's sound in the capture: 0 dB at the source (no category, no headroom: the
     # Xbox played XMV sound outside XACT) plus OpenAL Soft's gain for a centred 2D stereo source (measured, see
     # the notebook)
