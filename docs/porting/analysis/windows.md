@@ -74,3 +74,31 @@ not make). The Linux build answers honestly per package (dlsym `GLoaded<Pkg>`); 
 Windows "binds" package names that have no native code, exactly like Avaris.exe/the XBE.
 
 Next: run tree with the .exe/.dll (mkrun-uc2.sh), wine prefix, `ucc.exe verifyclasses`.
+
+### Step 2 (W2) — first runs under wine (2026-10-05)
+- Run tree: `tools/dev/mkrun-uc2.sh build-windows m12` now also copies `ucc.exe`, `uc2.exe` and the build's
+  `OpenAL32.dll` into `System/` (→ `<WorkUC2>/run/m12`).
+- Wrapper `tools/dev/m12-wine.sh <dir> <prog.exe> [args]` (always inside `capped`): own prefix
+  `.cache/wine-m12`, `WINEDEBUG=-all`, `WINEDLLOVERRIDES=winemenubuilder.exe=d;mscoree=d;mshtml=d`, the owner's
+  DISPLAY/WAYLAND_DISPLAY removed (a display only through `UC2_WINE_DISPLAY`, i.e. our own Xvfb), `wineserver
+  -k` + `-w` on exit, a TERM from capped stops the program first. **wine 10 on this machine is a WoW64 build:**
+  `WINEARCH=win32` is refused ("not supported in wow64 mode"); the default 64-bit prefix runs the i686 exe.
+- `capped 3G 300 -- tools/dev/m12-wine.sh run/m12/System ucc.exe` → Epic's banner (exit 1 = UCC's default
+  ErrorLevel with no commandlet; Linux does the same).
+- **`capped 3G 600 -- tools/dev/m12-wine.sh run/m12/System ucc.exe verifyclasses` → exit 0, console
+  `All native class layouts match`, ucc.log `VERIFY: all native class layouts match`** — first try, with
+  MinGW's default `-mms-bitfields` (the same 713 size/offset checks over Engine, IpDrv, UnrealGame, UCElements,
+  UCGameplay, GUI as on Linux). See decision 2 for the A/B with `-mno-ms-bitfields`.
+- `capped 3G 60 -- tools/dev/m12-wine.sh run/m12/System ucc.exe server DM-Deadbolt -log`
+  (`logs/m12/server-1.out`): `Game class is 'UCDeathmatch'`, `Bringing Level DM-Deadbolt.MyLevel up for
+  play (0)...`, `WinSock: version 1.1 (2.2)`, `TcpNetDriver on port 7777`, `Loading of DM-Deadbolt took 0.40 s`,
+  then silent until capped's 60 s limit (exit 124). The only warning is the Linux one (`Missing Class
+  Editor.TransBuffer`). Not yet proven: that it keeps ticking, and a clean shutdown — there was no way to stop
+  it cleanly: the POSIX SIGTERM/SIGINT handlers are `#ifndef _WIN32`, and the Windows build had no console
+  handler at all.
+- Fix: Epic's `CtrlCHandler` (UnVcWin32.cpp: `SetConsoleCtrlHandler`, first Ctrl+C sets `GIsRequestingExit`)
+  ported into UnUnix.cpp's `_WIN32` block as `appWinCtrlHandler` (second Ctrl+C: Windows' default
+  termination, where Epic threw `appErrorf("Aborted!")` on the handler thread). Also the crash reporter's
+  "Symbolise with: addr2line -e ut2004.exe" (template text) now names the running exe (GetModuleFileNameA).
+  `m12-wine.sh` gets `UC2_WINE_STOP_AFTER=<s>`: SIGINT to the wine process (wine turns it into CTRL_C_EVENT),
+  then 20 s grace.

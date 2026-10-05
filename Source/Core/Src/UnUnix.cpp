@@ -2695,9 +2695,11 @@ static LONG WINAPI appWinUnhandledException( EXCEPTION_POINTERS* Info )
 	// The image base, not a literal: 0x400000 is the 32-bit PE default and is wrong by
 	// 0x13fc00000 on x86-64. Printing the number the reader must actually add removes the step
 	// where they guess it.
+	ANSICHAR ExeName[MAX_PATH] = "";
+	GetModuleFileNameA( NULL, ExeName, ARRAY_COUNT(ExeName) );
 	debugf( NAME_Critical,
-	        TEXT("Symbolise with: addr2line -f -C -e ut2004.exe <rva + 0x%016llx>"),
-	        (QWORD)(size_t)GetModuleHandleA( NULL ) );
+	        TEXT("Symbolise with: addr2line -f -C -e %s <rva + 0x%016llx>"),
+	        ExeName, (QWORD)(size_t)GetModuleHandleA( NULL ) );
 	debugf( NAME_Critical, TEXT("=== END CRASH ===") );
 
 	if( GLog )
@@ -2742,6 +2744,19 @@ static void appWinAbort( int )
 			GLog->Flush();
 	}
 	_exit( 3 );
+}
+
+// engine-uc2 (M12): UnVcWin32.cpp's CtrlCHandler. Ctrl+C / Ctrl+Break / closing the console asks the engine to
+// exit cleanly, as Epic's ucc.exe did; a second one is left to Windows' default handler (Epic called
+// appErrorf("Aborted!") here, which would throw on this handler thread).
+static BOOL WINAPI appWinCtrlHandler( DWORD CtrlType )
+{
+	if( !GIsRequestingExit )
+	{
+		GIsRequestingExit = 1;
+		return TRUE;
+	}
+	return FALSE;
 }
 #endif // _WIN32
 
@@ -3051,6 +3066,7 @@ void appPlatformInit()
 	// throws for a living (appThrowf is how a failed load unwinds), so an escaped throw is not exotic.
 	std::set_terminate( appWinTerminate );
 	signal( SIGABRT, appWinAbort );
+	SetConsoleCtrlHandler( appWinCtrlHandler, TRUE );
 #endif
 #ifndef _WIN32
 	struct sigaction SigAction;
