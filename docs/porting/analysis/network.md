@@ -269,3 +269,53 @@ ASan (`-fsanitize=address -fsanitize-recover=address`, `halt_on_error=0`), serve
 Whose: 1 Epic (UCC, also UT2004); 2 and 3 Epic's net code, latent on the shipped Xbox build (FINAL_RELEASE,
 Epic's allocator); the GMachineCPU overflow of step 7 the port's (UT2004 base). Removed the temporary
 RouteDestroy diagnostic.
+
+## The join sequence as this build does it (file:line, this branch)
+
+1. Client `UGameEngine::Browse` (UnGame.cpp ~1391, network URL) -> `new UNetPendingLevel` (UnPenLev.cpp:34):
+   loads `ini:Engine.Engine.NetworkDevice` (= IpDrv.TcpNetDriver), `InitConnect`, sends `HELLO REVISION=0
+   MINVER VER`; `TryPreloadingLevel` loads the map early only when reconnecting to the same host (UC2/Epic
+   "moelfke" addition; used by the travel path).
+2. Server `ULevel::NotifyReceivedText` (UnLevel.cpp:1059): `HELLO` (1120) -> `CHALLENGE`; client
+   `NotifyReceivedText` (UnPenLev.cpp) answers `NETSPEED` + `LOGIN RESPONSE URL=<options>` (`?Name ?Class
+   ?Team ?EnergyWeapon ?ExplosiveWeapon ?ThirdPerson ?NumClients`); server `LOGIN` (1197) -> GameInfo
+   PreLogin -> `WelcomePlayer` (1017): one `USES GUID PKG FLAGS SIZE GEN FNAME` per package of its map
+   (67 for DM-Deadbolt, incl. Editor and UCMutators), `DLMGR`, UC2's `LOAD CLASS=` (assets the client must
+   DLO before joining), `WELCOME LEVEL GAME LONE`.
+3. Client on `USES`: `CreatePackage` placeholder + FPackageInfo; on `WELCOME`: checks each package is
+   present (`appFindPackageFile` with GUID), else download (ChannelDownload; `IpDrv.HTTPDownload` does not
+   exist in UC2's IpDrv.u: warning on the server, harmless).
+4. Client `UGameEngine::Tick` AttemptLoadPending (UnGame.cpp ~3632) -> `LoadMap(URL, Pending)`: level load,
+   `FScriptPatcher::ApplyPatches` (step 1/2 fix), BeginPlay, client-side actor cull, then VerifyPackages
+   (`GetPackageLinker` per USES entry with the GUID, `VerifyLinker`), `PackageMap->Compute()` (step 3 fix),
+   `HAVE` for generation mismatches; then `SendJoin` (UnPenLev.cpp:665) once UC2's dynamic loads finished.
+5. Server `JOIN` (UnLevel.cpp:1232) -> GameInfo Login -> PlayerController spawned (`UCPlayerControllerN got
+   player TcpipConnection`, `Join succeeded: <name>`); the client is a spectator until Fire; before the
+   match starts the DM waits for every connected player to press Fire (`UCDeathmatch0: START MATCH`).
+6. Actor replication: `ULevel::ServerTickClients` (UnLevTic.cpp ~1455) opens actor channels (class must be in
+   the package map); `UActorChannel::ReplicateActor` (UnChan.cpp ~1420) sends persistent actors by package-map
+   index and transient ones by class + compressed location.
+
+What the Xbox build did differently (from the source, not observed): FINAL_RELEASE (no check(), no
+"route Destroy" check), Epic's allocator (freed memory readable), XNet/system-link addressing
+(`TcpNetDriverXbox.cpp`, `RETRY_XNET`/`TRY_LAST_MATCH`, voice): all `_XBOX`-only and compiled out here.
+
+## Notes for the WebRTC net driver (M11)
+
+- The interface to implement is UNetDriver (`InitConnect`, `InitListen`, `TickDispatch`, `LowLevelDestroy`,
+  `LowLevelGetNetworkNumber`) + UNetConnection (`LowLevelSend`, `LowLevelGetRemoteAddress`, `LowLevelDescribe`),
+  as UTcpNetDriver/UTcpipConnection do (IpDrv/Src/TcpNetDriver.cpp). Packets are unreliable datagrams up to
+  `MaxPacket` (WINSOCK_MAX_PACKET) with the engine's own reliability on top: an unordered, unreliable WebRTC
+  data channel (`ordered:false, maxRetransmits:0`) is the matching transport.
+- Address assumptions in the join path: `UNetPendingLevel` compares `LastURL.Host == URL.Host` to decide on
+  preloading (UnPenLev.cpp:63); TcpNetDriver identifies connections by `sockaddr_in` and rate-limits logins by IP
+  (`MaxConnPerIPPerMinute`, default 5 -- all test clients come from 127.0.0.1, and every peer of a WebRTC
+  relay/signalling setup may share one pseudo-address: give each peer a distinct id string); a closed client
+  socket is dropped at once through ICMP port-unreachable (TcpNetDriver), a WebRTC driver must turn a data
+  channel close into the same; otherwise the 30 s ConnectionTimeout applies.
+- `UdpBeacon` (LAN discovery, ServerActors line commented out in Default.ini) and master-server code are IP
+  only and not on the join path.
+- Both ends must run this branch's fixes: the package-map count (step 3) changes what a client and a server
+  must agree on; a fixed client against an unfixed server (e.g. the old wine `ucc.exe`) can desync.
+- The test harness carries over: `-nettest=`/NETPROBE work over any driver; only the URL and the server start
+  differ.
