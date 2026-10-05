@@ -55,7 +55,11 @@ and `wineserver -k` after every run. Logs: `<WorkUC2>/logs/m12/`. Run trees: `<W
      those five classes, at the price of a non-Windows ABI for every system struct with bitfields.
 3. Calling conventions / DLL_EXPORT under static link: _pending_
 4. `long` / `wchar_t` / `time_t` widths: _pending_
-5. Runtime DLL policy: _pending_
+5. **Runtime DLL policy**: libgcc/libstdc++/winpthread linked statically (`-static` at the root, which also
+   reaches OpenAL32.dll); SDL2 static; OpenAL Soft built from the fetched source as `OpenAL32.dll`, shipped
+   beside the exe, LoadLibrary'd when the audio device starts (absent → `UC2ALAudio: no OpenAL library
+   (OpenAL32.dll) beside the game or on the system: sound is off`). Both exes import only Windows system
+   DLLs (Step 7 has the list).
 
 ## Log
 
@@ -226,3 +230,24 @@ Next: run tree with the .exe/.dll (mkrun-uc2.sh), wine prefix, `ucc.exe verifycl
   static part 100.000 % within 2 levels, 90.8 % of the frame bit-identical, PSNR 29.5 dB).
 - `m12-wine.sh` also disables winedbg (`winedbg.exe=d`): a crash ends the process after the engine's own report
   instead of opening a dialog on the Xvfb display.
+
+### Step 7 (W4) — packaging, DLL policy (2026-10-05)
+- `tools/dev/package-windows.sh [build-dir [dest]]` → `<WorkUC2>/run/m12-package`: `System/` = the asset tree's
+  System (script packages, localisation) + our inis + `uc2.exe`, `ucc.exe`, `OpenAL32.dll`, `README-Windows.txt`,
+  `DLLS.txt`; the content folders hard-linked from `assets/uc2` and the cooked `Sounds`/`Music` (a copy to
+  another disk copies the data). `UC2_PACKAGE_CONTENT=0` → System only (to put over an existing tree),
+  `UC2_PACKAGE_STRIP=1` → debug info stripped from the copies. It fails unless every imported DLL of the three
+  binaries is a Windows system DLL or OpenAL32.dll.
+- **DLL list** (`objdump -p`, `DLL Name`):
+  - `uc2.exe`: ADVAPI32, GDI32, IMM32, KERNEL32, msvcrt, ole32, OLEAUT32, SETUPAPI, SHELL32, USER32, VERSION,
+    WINMM, WS2_32 (SDL2: window, input, IME, device enumeration; IpDrv: WinSock; Core: registry/user name).
+  - `ucc.exe`: ADVAPI32, KERNEL32, msvcrt, WS2_32.
+  - `OpenAL32.dll` (shipped): AVRT, KERNEL32, msvcrt, ole32, SHELL32, USER32, WINMM.
+  - Loaded at run time, seen with `WINEDEBUG=+loaddll` on the menu from the package: `OpenAL32.dll` (from the
+    package folder), `OPENGL32.DLL`, `XInput1_4.dll`, `hid.dll`, plus Windows' own dependencies of the above.
+  - Not needed: libgcc_s_dw2-1, libstdc++-6, libwinpthread-1 (`-static`), SDL2.dll (static), zlib (static).
+  - Decision 5: runtime libraries static; SDL2 static (as engine-ut2004); OpenAL Soft as a DLL loaded at run time
+    (as on Linux: no sound library still boots; built from the same fetched source, not downloaded).
+- The package's `uc2.exe` under wine (`logs/m12/package-run.out`): menu up, GL, `"OpenAL Soft on No Output"` from
+  the package's OpenAL32.dll, Ctrl+C → exit 0.
+- `BUILD.md`: Windows section (commands, prerequisites `g++-mingw-w64-i686-posix`, wine, xvfb).
