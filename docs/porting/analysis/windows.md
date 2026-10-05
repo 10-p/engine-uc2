@@ -278,3 +278,63 @@ Next: run tree with the .exe/.dll (mkrun-uc2.sh), wine prefix, `ucc.exe verifycl
 - The package's `uc2.exe` under wine (`logs/m12/package-run.out`): menu up, GL, `"OpenAL Soft on No Output"` from
   the package's OpenAL32.dll, Ctrl+C → exit 0.
 - `BUILD.md`: Windows section (commands, prerequisites `g++-mingw-w64-i686-posix`, wine, xvfb).
+
+## Every change to shared code, with its guard (vs main 520b8a2)
+
+| File | Change | Guard / effect elsewhere |
+|---|---|---|
+| `CMakeLists.txt` | MinGW link options `-static` added; OpenAL Soft fetch `if(NOT EMSCRIPTEN AND NOT WIN32)` → `if(NOT EMSCRIPTEN)` | `if(MINGW)`; the OpenAL condition is unchanged for Linux/web |
+| `Source/Core/Inc/wordwrap.h` | new `!_XBOX && _WIN32` branch (WW_WCHAR...) before the portable one | MSVC takes the first branch; Linux/web the old portable one |
+| `Source/Core/Src/UnUnix.cpp` | `appSystemTime64` Win32 body; `appWinCtrlHandler` + `SetConsoleCtrlHandler`; crash text names the exe | all inside `#ifdef _WIN32` |
+| `Source/Engine/Src/UnModelLight.cpp` | `CompressLightmaps` block also needs `_MSC_VER` | Linux already excluded by `!__LINUX__` |
+| `Source/Engine/Src/xbstrip.cpp` | `#elif defined(_WIN32)` branch with `<windows.h>` | MinGW only |
+| `Source/IpDrv/Inc/UnIpDrv.h` | WinSock by `_WIN32` (was `_MSC_VER`); `ws2tcpip.h` + `#undef MM_MAX/CreateEvent/CreateSemaphore/CreateMutex`; resolver `CreateThread` by `_WIN32` | `_WIN32`, `!_MSC_VER`; identical for MSVC and Linux |
+| `Source/IpDrv/Src/UnSocket.cpp` | setsockopt cast by `_WIN32` | same |
+| `Source/UC2ALAudio/Src/UC2ALDevice.cpp` | Windows library names; the error message names the first one | `_WIN32`; Linux message text unchanged (`libopenal.so.1`) |
+| `Source/UC2ALAudio/Src/UC2ALAudioSubsystem.cpp` | `_putenv` | `_WIN32` |
+| `Source/SDL2Drv/Src/SDL2InputTest.cpp` | `fseek(File,0,SEEK_CUR)` after `clearerr` at EOF | **all platforms** (test channel only; Linux keyboard/pad scenarios re-run: PASS) |
+| `Source/UCC/Src/UCC.cpp` | `WIN32` → `_MSC_VER` at 4 places; FFileManagerLinux also for `__MINGW32__`; unbuffered stdout for MinGW | MSVC/Linux unchanged |
+| `Source/UCC/CMakeLists.txt` | `if(MINGW)` link block (ucc.exe) | Linux/web unchanged |
+| `Source/SDLLaunch/CMakeLists.txt` | `if(MINGW)` link block (uc2.exe, WIN32_EXECUTABLE) around the existing one | Linux/web unchanged |
+| `tools/dev/m10-controls.sh` | M10_* variables (defaults = old behaviour); pad right-stick hold 1 s → 0.5 s; stop grace 5 → 10 s | Linux keyboard + pad re-run: PASS |
+| `tools/dev/mkrun-uc2.sh` | also copies ucc.exe, uc2.exe, OpenAL32.dll | no effect on other trees |
+
+New files: `tools/dev/m12-wine.sh`, `tools/dev/m12-wine-smoke.sh`, `tools/dev/m12/deadbolt-pinned.scen`,
+`tools/dev/package-windows.sh`, `tools/dev/dwarf-layouts.py`, this notebook.
+
+### Hunks in files the other running agents edit (for the coordinator's hand merge)
+- m7 (UC2GLDrv, UnRender.cpp, UnPixelShaderMaterial.cpp, UCCameraEffects.cpp): **none**. `Source/UC2GLDrv`
+  compiled for Windows unchanged.
+- m9 (UnVcWin32.h, UnGnuG.h, UnAudio.h, movie package, Theora, the launcher's startup): **UnVcWin32.h, UnGnuG.h,
+  UnAudio.h, SDLLaunch.cpp untouched.** Possible overlap only in build files:
+  1. `Source/SDLLaunch/CMakeLists.txt`, one hunk: the `target_link_libraries(...)` + `-export-dynamic` lines are
+     wrapped in `if(MINGW) … else() … endif()`; a package m9 adds to `LINK_PACKAGES` reaches both branches; a
+     library m9 adds to the link line (Theora/Ogg) must be added to the MinGW branch too.
+  2. Root `CMakeLists.txt`, two hunks: the `if(MINGW) add_link_options(...)` line, and the OpenAL fetch condition
+     (`if(NOT EMSCRIPTEN)` + 3 comment lines). If m9 adds `add_subdirectory(Thirdparty/Theora)` or a package to
+     `UC2_PACKAGES`, no textual overlap expected.
+  3. If the m9 movie package uses POSIX-only calls, the Windows build will need the same kind of `_WIN32`
+     guards (it was not available to compile here).
+
+## Real-Windows checklist (what wine cannot confirm)
+wine is not Windows. One session on a real Windows 10/11 PC with `tools/dev/package-windows.sh` copied over:
+1. Double-click `System\uc2.exe`: the menu comes up, no console window, no missing-DLL dialog (any
+   "VCRUNTIME/libstdc++/libwinpthread missing" message would contradict the static-link finding).
+2. GL: the real GPU driver's OpenGL (Avaris.log `GL_VENDOR/GL_RENDERER/GL_VERSION`), then DM-Deadbolt with
+   `-glerrors`: "0 GL errors"; does it look like the Linux build (shaders on the player)? Under wine only Mesa
+   llvmpipe was exercised. Try one NVIDIA/AMD/Intel if possible.
+3. Sound through a real device (WASAPI): menu music and in-match sounds audible; Avaris.log `UC2ALAudio: ... on
+   "OpenAL Soft on <device name>"`. Wine runs used only the null and wave-file backends.
+4. A real XInput pad (Xbox controller): menu with D-pad/A/B, a match with sticks/triggers, unplug/replug, rumble.
+   Wine runs used SDL's virtual controller only.
+5. Keyboard and mouse in a match (mouse capture in a window, Alt+Enter fullscreen toggle and back, Alt+Tab
+   out and in), fullscreen at the desktop resolution, high-DPI scaling (125/150 %): is the window the right
+   size, is the mouse mapped right in the menus?
+6. A path with spaces and with non-ASCII characters (e.g. `C:\Jeux\Unreal Championship 2\` and `C:\Users\Zoë\…`):
+   does it start, load maps, write Avaris.log/Avaris.ini? (TCHAR is ANSI: non-ASCII paths depend on the code page.)
+7. Antivirus/SmartScreen: an unsigned 81 MB exe from a USB stick may be blocked or scanned slowly; note what
+   Windows Defender says.
+8. `cmd.exe` in System: `ucc.exe verifyclasses` (must print "All native class layouts match"), `ucc.exe server
+   DM-Deadbolt`, Ctrl+C stops it cleanly; Windows Firewall prompt on first listen (UDP 7777).
+9. A client on the Linux build joining the Windows server (or the reverse) on the LAN: never tried here.
+10. Exit from the menu (Quit): process gone, no "has stopped working" dialog; Avaris.log ends with "Log file closed".
