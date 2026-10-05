@@ -4,11 +4,14 @@ Newest first. Remove an entry when it is resolved and say how in `LOG.md`.
 
 ## Open (M13, 2026-10-05)
 
-- A dedicated server hung once on exit after SIGTERM (64-bit census, OD-Prism: "Preparing to exit." then a futex
-  wait for minutes); not reproduced in 6 retries. The SIGTERM handler formats and logs from inside the signal
-  handler (`Core/Src/UnUnix.cpp` `HandleSignal` -> `appRequestExit` -> `debugf`), which is not async-signal-safe on
-  any width. `tools/dev/map-census.sh` cannot see such a hang (its `timeout` has no `-k`). Details:
-  `analysis/64bit.md` step 8.
+- Exit-time crash on a dedicated server after SIGTERM, both widths (found by M13's censuses, which only notice it
+  as a server that does not end): `UObject::StaticExit` -> `PurgeGarbage` -> `ConditionalDestroy` crashes in
+  `ULinkerLoad::DetachExport` (64-bit OD-Overflow; 32-bit ACT-HallwayAmbush, `UObject::IsValid` on a destroyed
+  export) or in `realloc` from `UClass::Destroy` (32-bit DM-Nexus: heap already corrupt); about 2 maps in 58 per
+  census. The crash handler then calls `appExit`, whose `FFileStream::Destroy` waits for the file-stream thread
+  forever, so the process hangs (two seen, killed by PID). `map-census.sh` reports PASS anyway (its `timeout`
+  has no `-k`). Linker teardown is the net-join branch's area; not changed by M13. Logs:
+  `logs/m13-census/OD-Overflow.log`, `logs/m13-census32/{ACT-HallwayAmbush,DM-Nexus}.log`.
 
 ## Needs the owner
 

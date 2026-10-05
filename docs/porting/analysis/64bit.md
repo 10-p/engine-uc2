@@ -119,7 +119,7 @@ declaration. Checked three ways:
 **Native placeholders** (`GNativePlaceholders`, UnClass.cpp; ut99 `NativePlaceholderSize`, by string): a
 script `int` standing in for C++ data advances the layout by the C++ size (`PH_Member`), or gives an
 `array<int>` the pointer stride (`PH_ArrayElement`); the property itself stays a 4-byte int. Identical sizes
-at 32-bit (the code is `#if PLATFORM_64BITS` anyway). 47 entries:
+at 32-bit (the code is `#if PLATFORM_64BITS` anyway). 48 entries at step 3, 50 since step 6 (see the site table):
 
 | Script (package.struct.property) | C++ | kind |
 |---|---|---|
@@ -165,7 +165,7 @@ object index, **native class config name** stashed in a side table (UClass is pa
 
 **Result** (`logs/m13/verify64-6.out`, `ucc.log`): `VERIFY: 64-bit native size check: 400 classes, 0
 mismatches while linking`, `bytecode scan: 6578 scripts read for placeholder references` (0 references),
-all 47 placeholders found, `All native class layouts match`, exit 0. Cast census of a full rebuild:
+all 48 placeholders found, `All native class layouts match`, exit 0. Cast census of a full rebuild:
 **0 ptr-to-int, 0 int-to-ptr** (`logs/m13/build64-3.log`). m13-layout-check: 5,697 properties, 400 classes,
 122 structs, 202 event parm structs checked; 2 mismatches left: `Texture.__LastUpdateTime`/`MemUsage` are
 declared in the opposite order in C++ and script — to compare with the 32-bit dump (expected pre-existing).
@@ -248,3 +248,48 @@ declared in the opposite order in C++ and script — to compare with the 32-bit 
 - `ucc-bin profiletest save|load <profile> <export.txt>` (UCC.cpp): writes a profile with a deterministic value
   in every plain property through `ULoadSaveManager` (the game's own save path) or loads one, and exports every
   property as text: the cross-width save test.
+
+## Site table (every pointer-width site fixed in M13)
+
+Kinds: **P** = script int/array standing in for C++ data (placeholder, UnClass.cpp), **C** = pointer through an
+integer in C++ (cast census), **U** = type pun / literal size the compiler cannot see, **L** = layout (pack),
+**F** = file format, **V** = script VM. "Exercised" = a check of tools/dev/m13-64bit.sh reaches the code at run
+time (verify reaches every layout; listed here is what *runs* the C++ that uses the field).
+
+| Site | What was stored where | Fix | Kind | Exercised by |
+|---|---|---|---|---|
+| UnObjBas.h/UnScript.h/UnClass.cpp/UnCorSc.cpp bytecode object slots | `UObject*` in 4-byte script slots | object index (`SerialPointerIndex`) | V | every run |
+| UnObj.cpp native registration | `TCHAR*` name in `FName`, chain in `_LinkerIndex` | `StateFrame`/`_Linker` | U | every run (start-up) |
+| UnClass.cpp UClass config name | `TCHAR*` in `FName ClassConfigName` (pack 1) | side table | U | every run |
+| UnObj.cpp `FArchiveTagUsed` | GC copied 4 bytes of each reference | `sizeof(UObject*)` | U | every run (GC) |
+| UnTemplate.h `Align`, UnMem.h `FMemStack` | heap addresses through DWORD/INT | PTRINT | C | every run |
+| UnTemplate.h `STRUCT_OFFSET`, UnIn.cpp bindings | offsets via pointer->INT | `(INT)(PTRINT)` | C | every run |
+| UnObj.cpp outer hash | pointer as hash input (DWORD) | `(DWORD)(PTRINT)` (hash) | C | every run |
+| UnIn.cpp `UInput` alias struct | `sizeof(FName)+sizeof(FString)`, Command at 4 | `sizeof(FAlias)`, `STRUCT_OFFSET` | U | client (controls: key aliases) |
+| UnProp.cpp object property alignment | aligned to 8 | 4 (pack 4) | L | every run |
+| Object.ObjectInternal, Subsystem.ExecVtbl, Player.vfOut/vfExec | header, vtables | P | P | every run |
+| Orientation.MA (FOrientation) | `UMatSubAction*` | P | P | **none** (matinee/cinematics: SceneManager not in any check) |
+| Actor *RenderDataPtr / *ProjectorRenderInfoPtr structs | render caches | P | P | client GL runs |
+| Actor.OctreeNodes | `FOctreeNode*` in array<int> | PTRINT + P(array) | C,P | every map run |
+| StateInfo Node/StateNode/Code | Controller state stack | PTRINT + P | C,P | **none known** (PushState/PopState: AI scripts; not asserted) |
+| FileLog.LogAr | `FArchive*` | PTRINT + P | C,P | **none** (stat/file logging) |
+| MovieMaterial 5 fields | player, texture, buffer, lock, thread | PTRINT + P | C,P | movies (menu movie materials); in-memory decode thread: **none** |
+| ParticleEmitter.Particles | `FParticle*` in array<int> | PTRINT + P(array) | C,P | maps with emitters (census, client) |
+| Texture.RenderInterface, Cubemap.CubemapRenderInterface | render resources | P | P | client GL |
+| Canvas.pCanvasUtil, MotionBlur.RenderTargets[2], FluidSurfaceInfo.Indices | renderer pointers | P | P | client GL (MotionBlur: effects only if used) |
+| ScriptedTexture.RenderTarget, ShadowBitmapMaterial.TextureInterfaces[3] | punned pointers | PTRINT + P | U,P | shadows/scripted textures: effects runs only if in view; **not asserted** |
+| UCScreen* render targets (6 classes) | `FRenderTarget*` | P | P | effects (post-processing) |
+| GUIController.Designer | `UPropertyManagerBase*` | PTRINT + P | C,P | **none** (GUI designer, editor-only) |
+| UIXInteraction 5 pointers | Xbox Live UI | P + pack | P,L | **none** (Xbox Live) |
+| InternetLink.PrivateResolveInfo, MasterServerLink.LinkPtr, MasterServerClient.MSLinkPtr | resolver/links | PTRINT + P (IpDrv) | C,P | **none** (no DNS resolve / master server in tests) |
+| WebResponse.ReplacementMap, WebRequest.VariableMap | TMap/TMultiMap | P + pack | P,L | **none** (web admin) |
+| Hand-written mirrors (13 headers + FLiveUser, FOrientation, UUIXInteraction) | natural alignment | pack(4) | L | every run (verify), per class as above |
+| UnAudio.cpp RIFF bound, UnStats.cpp memset length | pointer arithmetic via INT/DWORD | PTRINT | C | wave import: **none**; stats: every run |
+| UnMovie.cpp log map key | `(INT)M` | object index | C | movies |
+| UnOctree.cpp CompareArray | debug check | PTRINT | C | **none** (debug path) |
+| UnCorSc.cpp None-context fill, switch | 4 of 8 bytes zeroed/compared | full width | V | scripts that hit None (any run; not asserted) |
+| ULoadSaveManager.h save games | object ref as `sizeof(UObject*)` | 4 bytes | F | `saves` check (profiletest) |
+| UnArc.h `<< PTRINT` | (new) counting archives over PTRINT arrays | operator | C | GC/memory stats |
+
+Counts: P 50 placeholder entries (46 members — 8 of them script-struct members — and 4 array strides; one per
+table entry), C 22 casts (cast census 119 diagnostic lines -> 0), U 6, L 16 headers/structs, V 2, F 1.
