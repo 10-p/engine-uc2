@@ -1,8 +1,8 @@
 /*=============================================================================
 	UC2MoviePrivate.h: the cooked-movie player (Ogg Theora video, Ogg Vorbis sound).
 
-	One FUC2MoviePlayer plays one movie: a Theora stream (Textures/Movies/*.ogv, Movies/*.ogv) and,
-	optionally, a Vorbis stream (the same .ogv, or a per-language Movies/*_<lang>.oga). Each stream has its own
+	One FUC2MoviePlayer plays one movie: a Theora stream (Textures/Movies/<Name>.ogv, Movies/<Name>.ogv) and,
+	optionally, a Vorbis stream (the same .ogv, or a per-language Movies/<Name>_<lang>.oga). Each stream has its own
 	reader on its own file handle and pulls only its own pages, so memory stays bounded (one 16 KB read
 	buffer, the pages of one stream, one decoded picture) whatever the interleaving of the file.
 	No thread: everything happens in Advance(), called by the render device or the full-screen loop.
