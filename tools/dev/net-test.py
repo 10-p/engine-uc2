@@ -18,6 +18,8 @@ import os, re, signal, subprocess, sys, time
 SYS, OUT = sys.argv[1], sys.argv[2]
 CHECKS = sys.argv[3:]
 SUMMARY = os.path.join(OUT, "net-summary.txt")
+REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+WINSYS = os.environ.get("NET_WIN_SYS", os.path.join(os.path.dirname(os.path.dirname(SYS)), "netwin", "System"))
 PORT = int(os.environ.get("NET_PORT", "7850"))
 results = []
 
@@ -55,26 +57,32 @@ def dist(a, b):
 class Proc:
     """One engine process: kind 'server' (ucc-bin server), 'listen' (uc2.bin <map>?Listen) or 'client'."""
 
-    def __init__(self, check, name, kind, url, render="null", extra=()):
+    def __init__(self, check, name, kind, url, render="null", extra=(), sysdir=None, wine=False):
         self.check, self.name, self.kind, self.url = check, name, kind, url
         self.render, self.extra = render, list(extra)
+        self.wine = wine
+        self.sys = sysdir or SYS
         self.logname = "Net%s.log" % name
-        self.log = os.path.join(SYS, self.logname)
-        self.netcmd = os.path.join(SYS, "net-%s.cmd" % name)
-        self.inputcmd = os.path.join(SYS, "net-%s-input.cmd" % name)
+        self.log = os.path.join(self.sys, self.logname)
+        self.netcmd = os.path.join(self.sys, "net-%s.cmd" % name)
+        self.inputcmd = os.path.join(self.sys, "net-%s-input.cmd" % name)
         self.pos = 0
         self.popen = None
 
     def start(self):
         for f in ("Net%s.ini" % self.name, "Net%sUser.ini" % self.name, self.logname):
-            p = os.path.join(SYS, f)
+            p = os.path.join(self.sys, f)
             if os.path.exists(p):
                 os.remove(p)
         open(self.netcmd, "w").close()
         open(self.inputcmd, "w").close()
         common = ["INI=Net%s.ini" % self.name, "USERINI=Net%sUser.ini" % self.name, "LOG=" + self.logname,
                   "-nettest=" + os.path.basename(self.netcmd)]
-        if self.kind == "server":
+        if self.kind == "server" and self.wine:
+            # The MinGW ucc.exe under wine (tools/dev/m12-wine.sh: own prefix, nothing left running).
+            argv = [os.path.join(REPO, "tools/dev/m12-wine.sh"), self.sys, "ucc.exe", "server", self.url,
+                    "PORT=%d" % PORT] + common
+        elif self.kind == "server":
             argv = ["./ucc-bin", "server", self.url, "PORT=%d" % PORT] + common
         else:
             argv = ["xvfb-run", "-a", "-s", "-screen 0 1024x768x24", "./uc2.bin", self.url, "-log"] + common
@@ -86,7 +94,7 @@ class Proc:
         argv += self.extra
         env = dict(os.environ, SDL_AUDIODRIVER="dummy")
         self.out = open(os.path.join(OUT, "%s-%s.out" % (self.check, self.name)), "w")
-        self.popen = subprocess.Popen(argv, cwd=SYS, stdout=self.out, stderr=subprocess.STDOUT, env=env,
+        self.popen = subprocess.Popen(argv, cwd=self.sys, stdout=self.out, stderr=subprocess.STDOUT, env=env,
                                       start_new_session=True)
         self.started = time.time()
         return self
@@ -178,6 +186,17 @@ class Proc:
     def stop(self, sig=signal.SIGINT, grace=10):
         if not self.popen:
             return None
+        if self.popen.poll() is None and self.wine:
+            # m12-wine.sh passes USR1 on to ucc.exe as a Ctrl+C and kills its wineserver at the end.
+            try:
+                os.kill(self.popen.pid, signal.SIGUSR1 if sig == signal.SIGINT else sig)
+            except OSError:
+                pass
+            try:
+                self.popen.wait(grace + 20)
+            except subprocess.TimeoutExpired:
+                os.killpg(self.popen.pid, signal.SIGKILL)
+                self.popen.wait(5)
         if self.popen.poll() is None:
             pid = self.engine_pid()
             try:
@@ -204,11 +223,11 @@ class Proc:
         return self.popen.returncode
 
 
-def server(check, url="DM-Deadbolt", extra=()):
-    s = Proc(check, "srv", "server", url, extra=extra).start()
-    if not s.wait(r"TcpNetDriver on port|Bringing Level .* up for play", 60):
+def server(check, url="DM-Deadbolt", extra=(), wine=False):
+    s = Proc(check, "srv", "server", url, extra=extra, sysdir=WINSYS if wine else None, wine=wine).start()
+    if not s.wait(r"TcpNetDriver on port|Bringing Level .* up for play", 180 if wine else 60):
         return s
-    s.wait(r"TcpNetDriver on port", 20, from_start=True)
+    s.wait(r"TcpNetDriver on port", 60 if wine else 20, from_start=True)
     return s
 
 
@@ -678,9 +697,42 @@ def check_glshot():
         finish(ck, procs, allow_invalid_class=2)
 
 
+def check_wine():
+    """N4: the Linux client against the Windows (MinGW) ucc.exe server of this branch under wine."""
+    ck = "wine"
+    if not os.path.exists(os.path.join(WINSYS, "ucc.exe")):
+        result(False, ck + ".tree", "no ucc.exe in %s (tools/dev/mkrun-uc2.sh build-windows netwin)" % WINSYS)
+        return
+    s = server(ck, wine=True)
+    a = client(ck, "NetA")
+    procs = [s, a]
+    try:
+        j = s.wait(r"Join succeeded: (\S+)", 120)
+        result(bool(j), ck + ".join", "wine server: %s" % (j.group(0) if j else "no join in 120 s"))
+        p = spawn(a, "Aspawn")
+        sp = s.probe("W1", timeout=30)
+        sa = pawn_of(sp, "NetA")
+        result(bool(p) and bool(sa), ck + ".spawn", "client localpawn=%s, wine server pawn NetA at %s" % (bool(p), sa and sa.get("loc")))
+        a.input("pad axis lefty -32768")
+        time.sleep(1.5)
+        a.input("pad axis lefty 0")
+        time.sleep(1.0)
+        sp2, ap2 = s.probe("W2", timeout=30), a.probe("W2")
+        sa2, aa2 = pawn_of(sp2, "NetA"), pawn_of(ap2, "NetA")
+        moved = dist(sa["loc"], sa2["loc"]) if sa and sa2 else 0
+        agree = dist(sa2["loc"], aa2["loc"]) if sa2 and aa2 else 1e9
+        result(moved > 150 and agree < 30, ck + ".move", "wine server sees NetA move %.1f units; client vs server %.1f units" % (moved, agree))
+        pm = [l for l in s.text().splitlines() if l.startswith("DevNet: PackageMap ")]
+        cm = [l for l in a.text().splitlines() if l.startswith("DevNet: PackageMap ")]
+        result(bool(pm) and pm == cm[:len(pm)], ck + ".packagemap", "package-map tables: wine server %d lines, client %d, identical=%s"
+               % (len(pm), len(cm), pm == cm[:len(pm)]))
+    finally:
+        finish(ck, procs)
+
+
 ALL = {"dedicated1": check_dedicated1, "dedicated2": check_dedicated2, "listen": check_listen,
        "travel": check_travel, "disconnect": check_disconnect, "soak": check_soak, "lag": check_lag,
-       "glshot": check_glshot}
+       "glshot": check_glshot, "wine": check_wine}
 
 if __name__ == "__main__":
     for c in CHECKS:

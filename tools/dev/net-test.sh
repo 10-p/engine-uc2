@@ -4,6 +4,8 @@
 #
 #   tools/dev/net-test.sh [--keep-tree] [check ...]
 #   checks: dedicated1 dedicated2 listen travel disconnect lag glshot soak   (default: all of them)
+#           wine   (opt-in) the Linux client against this branch's ucc.exe server under wine; needs
+#                  <WorkUC2>/run/netwin (tools/dev/mkrun-uc2.sh build-windows netwin); prefix .cache/wine-net
 #
 # Builds a fresh run tree <WorkUC2>/run/net from build-native (tools/dev/mkrun-uc2.sh) unless --keep-tree,
 # then runs tools/dev/net-test.py. Results: one PASS/FAIL line per item, also in
@@ -32,9 +34,9 @@ if ss -lun 2>/dev/null | grep -a -q ":$port "; then echo "port $port is busy" >&
 echo "net-test $(date -Is) checks: ${checks[*]} commit $(git -C "$repo" rev-parse --short HEAD)" >> "$out/net-summary.txt"
 secs=600
 for c in "${checks[@]}"; do
-  case "$c" in soak) secs=$(( secs + ${NET_SOAK_MIN:-10} * 60 + 240 ));; glshot) secs=$(( secs + 600 ));; *) secs=$(( secs + 300 ));; esac
+  case "$c" in soak) secs=$(( secs + ${NET_SOAK_MIN:-10} * 60 + 240 ));; wine) secs=$(( secs + 600 ));; glshot) secs=$(( secs + 600 ));; *) secs=$(( secs + 300 ));; esac
 done
-"$work/bin/capped" 6G "$secs" -- env NET_PORT="$port" python3 "$repo/tools/dev/net-test.py" "$sys" "$out" "${checks[@]}"
+"$work/bin/capped" 6G "$secs" -- env NET_PORT="$port" UC2_WINEPREFIX="${UC2_WINEPREFIX:-$work/.cache/wine-net}" python3 "$repo/tools/dev/net-test.py" "$sys" "$out" "${checks[@]}"
 rc=$?
 # Screenshots to PNG (PIL), for looking at; the checks never read pictures.
 for b in "$out"/*.bmp; do
