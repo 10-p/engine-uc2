@@ -83,7 +83,7 @@ static UBOOL LoadText( const FString& Path, TArray<FString>& Lines )
 		FString Line = Nl >= 0 ? Text.Left(Nl) : Text;
 		Text = Nl >= 0 ? Text.Mid(Nl+1) : FString();
 		if( Line.Len() )
-			Lines.AddItem( Line );
+			new(Lines) FString( Line );	// not AddItem: it assigns into unconstructed memory (M8 finding)
 	}
 	return 1;
 }
@@ -100,7 +100,7 @@ static void SplitWords( const FString& Line, TArray<FString>& Words, const TCHAR
 		while( W.Len() && W[0] == ' ' )
 			W = W.Mid(1);
 		if( W.Len() )
-			Words.AddItem( W );
+			new(Words) FString( W );
 	}
 }
 
@@ -151,7 +151,7 @@ static void ColourChecks( const FString& Case, FUC2MoviePlayer* P, INT Frame, co
 		if( D > 1 )
 			Over1++;
 	}
-	Check( MaxDiff <= 2, FString::Printf( TEXT("%s colour frame %i vs ffmpeg swscale (bt601, tv range): max difference %i, %i of %i values differ by more than 1"),
+	Check( MaxDiff <= 1, FString::Printf( TEXT("%s colour frame %i vs ffmpeg swscale (bt601, tv range, chroma replicated): max difference %i, %i of %i values differ by more than 1"),
 		*Case, Frame, MaxDiff, Over1, W*H*4 ) );
 }
 

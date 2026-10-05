@@ -219,7 +219,9 @@ def measure(src, fps, out, warnings):
     """PSNR and SSIM of the cooked video against the XMV decoded through the same frame-rate filter."""
     res = {}
     for metric in ('psnr', 'ssim'):
-        rc, _, err = run(['ffmpeg', '-v', 'info', '-nostats', '-i', src, '-i', out, '-lavfi',
+        # -threads 1 for the Theora side: ffmpeg's frame-threaded Theora decoder is not deterministic
+        # (TVDisplaySelket2 decoded differently in two runs; single-threaded it agrees with libtheora).
+        rc, _, err = run(['ffmpeg', '-v', 'info', '-nostats', '-i', src, '-threads', '1', '-i', out, '-lavfi',
                           '[0:v]fps=%d[r];[r][1:v]%s' % (fps, metric), '-f', 'null', '-'])
         line = [l for l in err if ('PSNR y:' in l or 'SSIM Y:' in l)]
         if line:
