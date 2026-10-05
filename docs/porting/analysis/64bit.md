@@ -368,3 +368,10 @@ indices (`GetTypeHash(UObject*)`); literal `*4` sizes in memcpy are pixel rows.
 - **coordinator's tools**: `tools/dev/m10-controls.sh`/`m12-wine-smoke.sh` carry main's `b367ae0` hunks verbatim;
   `m12-wine-smoke.sh` also gained `M12_TREE`/`M12_REF`/`M12_OUT` and calls `tools/dev/pinned-compare.py` (its
   comparison code moved there unchanged); `map-census.sh` gained `CENSUS_NAME`/`CENSUS_PORT` (defaults unchanged).
+
+arm64-specific reading: bytecode operands are read as `*(INT*)Code`/`*(FLOAT*)Code` at unaligned addresses (the
+VM's readers, `execVectorConst` ...). x86_64 and AArch64 both allow unaligned normal loads (LDR/LDP fault only
+with SCTLR.A or for exclusive/atomic accesses, which these are not), so this is the same code path that runs on
+x86_64; armv7 (not a target) would need the ut99 `ba023f3` copy-read treatment. Object pointers in pack(4)
+mirrors are likewise 4-aligned 8-byte loads. No atomics on such members (`grep __sync|__atomic|std::atomic` in
+the engine: only `TimeToDie` in UnThreadingPosix.cpp, a naturally aligned member of a C++-only class).
