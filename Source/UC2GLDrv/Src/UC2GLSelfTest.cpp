@@ -244,6 +244,99 @@ struct FSelfTest
 	}
 
 	/*-------------------------------------------------------------------------
+		M11: fixed-function distance fog (gl4es emulates it in a shader).
+	-------------------------------------------------------------------------*/
+
+	// A black, untextured quad at camera-space depth Z (D3D camera space: z forward) through
+	// the fixed-function path with the device's fog set-up; returns the red byte it comes out as.
+	INT FogProbe( FLOAT Start, FLOAT End, FLOAT Z, FLOAT Tilt, FLOAT Scale=1.f, FLOAT OffAxis=0.f )
+	{
+		static const FLOAT White[4] = { 1.f, 1.f, 1.f, 1.f };
+		// Camera-space positions: a quad around the view axis, its top edge Tilt times farther than its bottom edge.
+		FLOAT V[16] = { -Z, -Z, Z, 1.f,   Z, -Z, Z, 1.f,   -Z*Tilt, Z*Tilt, Z*Tilt, 1.f,   Z*Tilt, Z*Tilt, Z*Tilt, 1.f };
+		// A model-view matrix with a scale (the vertices are divided by it) and a sideways shift
+		// of the quad (OffAxis times its depth: the centre pixel then looks at it off the view axis).
+		for( INT i=0; i<4; i++ )
+		{
+			V[i*4] += OffAxis * V[i*4+2];
+			for( INT k=0; k<3; k++ )
+				V[i*4+k] /= Scale;
+		}
+		FLOAT M[16] = { Scale,0,0,0,  0,Scale,0,0,  0,0,Scale,0,  0,0,0,1 };
+		M[12] = -OffAxis * Z;
+		FLOAT P[16] = { 1,0,0,0,  0,1,0,0,  0,0,0,1,  0,0,0,0 };	// x/z, y/z; depth 0
+		GLuint Buffer = RenDev->NewBuffer( GL_ARRAY_BUFFER );
+		RenDev->glBindBuffer( GL_ARRAY_BUFFER, Buffer );
+		RenDev->glBufferData( GL_ARRAY_BUFFER, sizeof(V), V, GL_STATIC_DRAW );
+		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, RenDev->MainFramebuffer );
+		RenDev->glViewport( 0, 0, 64, 64 );
+		RenDev->glDisable( GL_SCISSOR_TEST );
+		RenDev->glDisable( GL_STENCIL_TEST );
+		RenDev->glDisable( GL_DEPTH_TEST );
+		RenDev->glDisable( GL_BLEND );
+		RenDev->glDisable( GL_ALPHA_TEST );
+		RenDev->glDisable( GL_CULL_FACE );
+		RenDev->glDisable( GL_LIGHTING );
+		RenDev->glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+		for( INT s=0; s<RenDev->NumTextureUnits; s++ )
+		{
+			RenDev->glActiveTexture( GL_TEXTURE0 + s );
+			RenDev->glClientActiveTexture( GL_TEXTURE0 + s );
+			RenDev->glDisable( GL_TEXTURE_2D );
+			RenDev->glDisable( GL_TEXTURE_CUBE_MAP );
+			RenDev->glDisableClientState( GL_TEXTURE_COORD_ARRAY );
+		}
+		RenDev->glActiveTexture( GL_TEXTURE0 );
+		RenDev->glClientActiveTexture( GL_TEXTURE0 );
+		RenDev->glMatrixMode( GL_PROJECTION );
+		RenDev->glLoadMatrixf( P );
+		RenDev->glMatrixMode( GL_MODELVIEW );
+		RenDev->glLoadMatrixf( M );
+		RenDev->glEnable( GL_FOG );
+		RenDev->glFogf( GL_FOG_START, Start );
+		RenDev->glFogf( GL_FOG_END, End );
+		RenDev->glFogfv( GL_FOG_COLOR, White );
+		RenDev->glDisableClientState( GL_NORMAL_ARRAY );
+		RenDev->glDisableClientState( GL_COLOR_ARRAY );
+		RenDev->glDisableClientState( GL_SECONDARY_COLOR_ARRAY );
+		RenDev->glDisable( GL_COLOR_SUM );
+		RenDev->glColor4f( 0.f, 0.f, 0.f, 1.f );
+		RenDev->glVertexPointer( 4, GL_FLOAT, 0, NULL );
+		RenDev->glEnableClientState( GL_VERTEX_ARRAY );
+		RenDev->glDrawArrays( GL_TRIANGLE_STRIP, 0, 4 );
+		RenDev->glDisable( GL_FOG );
+		RenDev->glBindBuffer( GL_ARRAY_BUFFER, 0 );
+		RenDev->FreeBuffer( GL_ARRAY_BUFFER, Buffer );
+		BYTE Pixel[4] = { 0, 0, 0, 0 };
+		RenDev->glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+		RenDev->glReadPixels( 32, 32, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, Pixel );
+		RenDev->glEnable( GL_SCISSOR_TEST );
+		RI->LightsDirty = RI->MatricesDirty = 1;
+		RI->RestoreAfterDeviceDraw();
+		return Pixel[0];
+	}
+	void TestFog()
+	{
+		// The fog factor is (End - z) / (End - Start) on the camera-space depth z; the quad is
+		// black and the fog white, so the red byte is 255 * (1 - factor).
+		static const FLOAT Cases[][6] = { { 0.f, 1000.f, 250.f, 1.f, 1.f, 0.f }, { 0.f, 1000.f, 750.f, 1.f, 1.f, 0.f }, { 230.f, 1600.f, 900.f, 1.f, 1.f, 0.f }, { 0.f, 120000.f, 60000.f, 1.f, 1.f, 0.f }, { 0.f, 120000.f, 30000.f, 3.f, 1.f, 0.f }, { 230.f, 1600.f, 5000.f, 1.f, 1.f, 0.f },
+			{ 0.f, 120000.f, 60000.f, 1.f, 1.65f, 0.f }, { 0.f, 1000.f, 500.f, 1.f, 0.25f, 0.f }, { 0.f, 120000.f, 90000.f, 1.f, 1.f, 0.f } };
+		FLOAT	MaxError = 0.f;
+		FString	Detail;
+		for( INT c=0; c<ARRAY_COUNT(Cases); c++ )
+		{
+			// At the centre of a tilted quad z is the perspective interpolation of its edges: 2ab/(a+b).
+			FLOAT	Near		= Cases[c][2], Far = Cases[c][2] * Cases[c][3],
+					Z			= 2.f * Near * Far / (Near + Far),
+					Expected	= 255.f * Clamp( 1.f - (Cases[c][1] - Z) / (Cases[c][1] - Cases[c][0]), 0.f, 1.f );
+			INT		Got			= FogProbe( Cases[c][0], Cases[c][1], Cases[c][2], Cases[c][3], Cases[c][4], Cases[c][5] );
+			MaxError = Max( MaxError, Abs( Got - Expected ) );
+			Detail += FString::Printf( TEXT(" [%g..%g at z %g, model scale %g: %i, expected %.1f]"), Cases[c][0], Cases[c][1], Z, Cases[c][4], Got, Expected );
+		}
+		Report( TEXT("fog"), ARRAY_COUNT(Cases), MaxError, 2.f, *FString::Printf( TEXT("fixed-function linear fog on camera-space depth, white fog over a black quad:%s"), *Detail ) );
+	}
+
+	/*-------------------------------------------------------------------------
 		snapshot, depth-color, depth-copy: the driver's own copies.
 	-------------------------------------------------------------------------*/
 
@@ -669,6 +762,7 @@ struct FSelfTest
 		TestDOFRamp();
 		TestRemap();
 		TestLuminance();
+		TestFog();
 		RI->PopState();
 
 		// Leave a defined frame behind.

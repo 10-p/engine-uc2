@@ -737,6 +737,13 @@ void FOpenGLRenderInterface::SetDistanceFog(UBOOL Enable,FLOAT FogStart,FLOAT Fo
 {
 	guard(FOpenGLRenderInterface::SetDistanceFog);
 
+	// -glnofog (verification): no distance fog at all, to tell what fog hides from what is not drawn.
+	static INT NoFog = -1;
+	if( NoFog < 0 )
+		NoFog = ParseParam( appCmdLine(), TEXT("glnofog") );
+	if( NoFog )
+		Enable = 0;
+
 	if( Enable )
 	{
 		CurrentState->DistanceFogEnabled	= 1;
