@@ -129,3 +129,28 @@ o=Image.new('RGB',(a.size[0]+b.size[0]+8,max(a.size[1],b.size[1])),(255,0,255));
     echo "fx $name: FAILED, no pair of pictures (see $log) critical=${crit:-?} left_behind=$left tries=$try"
   fi
 done
+
+# Enlarged crops of the places the notebook describes (A left, B right), for the pairs that exist.
+python3 - "$out" <<'PY'
+import os, sys
+from PIL import Image
+out = sys.argv[1]
+crops = {  # effect: (name, (x0, y0, x1, y1), scale)
+    'bloom':        [('lamp',    (700, 100, 1060, 400), 2)],
+    'azure':        [('far',     (560, 200, 900, 400), 2)],
+    'dof-alpha':    [('far',     (560, 200, 900, 400), 2)],
+    'decay':        [('icicles', (500, 240, 800, 420), 3), ('torch', (1120, 180, 1280, 420), 3)],
+    'undertow':     [('column',  (1060, 120, 1280, 480), 2)],
+    'praxis-panes': [('panes',   (120, 300, 760, 470), 2)],
+}
+for effect, items in crops.items():
+    a, b = (os.path.join(out, 'fx-%s-%s.png' % (effect, side)) for side in 'ab')
+    if not (os.path.exists(a) and os.path.exists(b)):
+        continue
+    for name, box, scale in items:
+        w, h = (box[2] - box[0]) * scale, (box[3] - box[1]) * scale
+        img = Image.new('RGB', (w * 2 + 8, h), (255, 0, 255))
+        for i, f in enumerate((a, b)):
+            img.paste(Image.open(f).convert('RGB').crop(box).resize((w, h), Image.NEAREST), (i * (w + 8), 0))
+        img.save(os.path.join(out, 'fx-%s-crop-%s.png' % (effect, name)))
+PY
