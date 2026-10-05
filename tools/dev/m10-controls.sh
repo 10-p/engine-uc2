@@ -410,8 +410,10 @@ probe z4
 check pd-left-stick-x-strafes-the-right-way side('z2','z3') > 100 or side('z3','z4') < -100
 check pd-left-stick-x-never-strafes-the-wrong-way side('z2','z3') > -20 and side('z3','z4') < 20
 probe t0
+# Half a second: a full stick turns about 26000 units a second (Linux), and a turn past 180 degrees (32768)
+# wraps and reads as a left turn. Under wine the release arrives a few frames later; 1 s once gave 34320.
 pad axis rightx 32767
-sleep 1
+sleep 0.5
 pad axis rightx 0
 sleep 0.3
 probe t1
