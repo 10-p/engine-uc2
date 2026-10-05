@@ -352,3 +352,20 @@ are fine (Restart). Worth a look when maps with teleporters are played online.
 
 Full suite before this fix (`logs/net/full-run2.txt`, fresh tree): dedicated1, dedicated2, travel, disconnect,
 glshot PASS; listen and lag failed only `.place` (the cause above), their hit/kill/health items PASS.
+
+### Step 12: N4 -- Linux client against this branch's Windows ucc.exe under wine: PASS
+
+`cmake --preset windows && cmake --build build-windows -j4` (capped 5G), `tools/dev/mkrun-uc2.sh build-windows
+netwin`, `tools/dev/net-test.sh wine` (prefix `<WorkUC2>/.cache/wine-net`, created by m12-wine.sh's wineboot;
+the wine-m12 prefix untouched): `wine.join` (server `Join succeeded: NetA`), `wine.spawn` (server pawn at
+(1229.6,-672.9,-130.1)), `wine.move` (the wine server sees NetA move 630.0 units, client vs server 0.1),
+`wine.packagemap` (the 67-line PackageMap tables of the MinGW server and the Linux client identical),
+`wine.clean`; nothing left listening, no wineserver left.
+The M12 smoke check `netjoin` (tools/dev/m12-wine-smoke.sh) upgraded from "handshake seen" to "joined and
+spawned" (pad Fire through `-inputtest=`, SDL2 probe pawn=1, server `Join succeeded`, 0 assertions); trees,
+output folder and port made overridable (M12_TREE, M12_REF, M12_OUT, M12_NETPORT; defaults unchanged). Run on my
+trees: `M12_TREE=run/netwin M12_REF=run/net M12_OUT=logs/net/m12smoke M12_NETPORT=7851
+UC2_WINEPREFIX=.cache/wine-net tools/dev/m12-wine-smoke.sh netjoin` -> `PASS netjoin: ... server 'Join
+succeeded: Player-1', client pawn=1 loc=(1977.8,583.7,-34.1); 0 assertions; server shut down cleanly,
+Critical 0`. With the default trees it needs both run/m12 and run/m12-native rebuilt from a branch with these
+fixes.
