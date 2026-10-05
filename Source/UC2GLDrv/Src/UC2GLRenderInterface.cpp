@@ -1371,7 +1371,7 @@ void FOpenGLRenderInterface::SetMaterialBlending( FOpenGLMaterialState* NewMater
 
 		if( Stage.TextureMipLODBias < -100.f )
 			Stage.TextureMipLODBias = RenDev->DefaultTexMipBias;
-		RenDev->glTexEnvf( GL_TEXTURE_FILTER_CONTROL, GL_TEXTURE_LOD_BIAS, Stage.TextureMipLODBias );
+		RenDev->glTexEnvf( GL_TEXTURE_FILTER_CONTROL, GL_TEXTURE_LOD_BIAS, RenDev->NoLODBias ? 0.f : Stage.TextureMipLODBias );
 
 		// Combiner.
 		GLint			ColorMode, AlphaMode;

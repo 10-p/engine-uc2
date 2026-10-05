@@ -237,6 +237,9 @@ public:
 	void DetectCapabilities();
 	// A static full-screen strip (-1..1) in a buffer object: WebGL has no client-side arrays.
 	GLuint							QuadBuffer;
+	// -glnolodbias: every texture LOD bias is 0 (verification: GLES has no LOD bias for the
+	// fixed-function path, so this is what the desktop driver is compared with).
+	UBOOL							NoLODBias;
 	void BindQuadBuffer();
 
 	// Constructors.

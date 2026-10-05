@@ -476,6 +476,7 @@ UBOOL UUC2GLRenderDevice::Init()
 		UsePostProcess = 1;
 	ParseTimeList( TEXT("glpptoggle="), GPPToggleTimes );
 	GShotRamp = ParseParam( appCmdLine(), TEXT("glshotramp") );
+	NoLODBias = ParseParam( appCmdLine(), TEXT("glnolodbias") );
 	if( ParseParam( appCmdLine(), TEXT("glselftest") ) )
 		GSelfTestPending = 10;
 	GExecTimes.Empty();
