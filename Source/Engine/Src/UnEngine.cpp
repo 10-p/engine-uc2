@@ -7,6 +7,7 @@
 =============================================================================*/
 
 #include "EnginePrivate.h"
+#include "UnMovie.h"	// engine-uc2 (M9)
 #include "UnLinker.h"
 /*-----------------------------------------------------------------------------
 	Object class implementation.
@@ -628,6 +629,11 @@ UBOOL UEngine::Key( UViewport* Viewport, EInputKey Key, TCHAR Unicode )
 UBOOL UEngine::InputEvent( UViewport* Viewport, EInputKey iKey, EInputAction State, FLOAT Delta)
 {
 	guard(UEngine::InputEvent);
+
+	// engine-uc2 (M9): while a full-screen movie plays it owns the input, as XboxMovieThread read the pads
+	// itself and nothing else saw them (UnMovie.cpp, appMovieInputEvent).
+	if( appMovieInputEvent( iKey, State ) )
+		return 1;
 
 
 	// Allow the Interaction Master to process the event.  If it doesn't for right now
