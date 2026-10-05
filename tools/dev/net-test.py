@@ -603,9 +603,12 @@ def check_disconnect():
 
 def check_soak(minutes=float(os.environ.get("NET_SOAK_MIN", "10"))):
     ck = "soak"
-    s = server(ck, url="DM-Deadbolt?NumBots=2")
-    a = client(ck, "NetA")
-    b = client(ck, "NetB")
+    # NET_SOAK_SIM="PktLag=50 PktLoss=5": the soak under simulated lag/loss on every process (long enough to
+    # cross the packet-id wrap, ~16k packets).
+    sim = tuple(os.environ.get("NET_SOAK_SIM", "").split())
+    s = server(ck, url="DM-Deadbolt?NumBots=2", extra=sim)
+    a = client(ck, "NetA", extra=sim)
+    b = client(ck, "NetB", extra=sim)
     procs = [s, a, b]
     try:
         s.wait(r"Join succeeded: ", 60)
@@ -663,7 +666,10 @@ def check_soak(minutes=float(os.environ.get("NET_SOAK_MIN", "10"))):
 def check_lag():
     # Epic's own net test switches (Engine/Inc/UnConn.h DO_ENABLE_NET_TEST): every process delays its outgoing
     # packets by 50 ms (=> 100 ms round trip) and drops 5 % of them.
-    check_dedicated2("lag", srv_extra=("PktLag=50", "PktLoss=5"), cli_extra=("PktLag=50", "PktLoss=5"))
+    # NET_LAG_LOSS overrides the loss percentage (information runs at 20 %).
+    loss = os.environ.get("NET_LAG_LOSS", "5")
+    sim = ("PktLag=50", "PktLoss=" + loss)
+    check_dedicated2("lag", srv_extra=sim, cli_extra=sim)
 
 
 def check_glshot():
