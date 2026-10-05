@@ -117,3 +117,27 @@ server opens a channel for an actor it can only name as None. The client marks t
 own volume. Same code in UT2004 (UnLevAct.cpp:2139); Epic's behaviour, harmless here (default gravity etc. are
 the same on both ends). Left as is for now; candidate fix noted: skip bNoDelete/bStatic actors with no
 package-map index in `ULevel::ServerTickClients` (UnLevTic.cpp:1455) as it already skips unmapped classes.
+
+### Step 4: test commands (our code) and the first look at a joined client
+
+New file Engine/Src/UC2NetTest.cpp (ours, test-only, quiet unless used), hooked by two delimited lines in
+UnGame.cpp (`UGameEngine::Exec` start, `UGameEngine::Tick` start):
+- console commands `NETPROBE <tag>` (log name `NetProbe`: a summary line with net mode, level, time,
+  connections, local player, GRI, pawn/PRI counts; one line per pawn with name, location, health, local, role,
+  class, weapon, FlashCount; one per PRI with name, id, score, deaths, kills, bot, spectator, pawn class and the
+  UC2 loadout strings), `NETPLACE <name> x y z yaw` (server: FarMoveActor of that player's pawn; the client
+  follows by the engine's own ClientAdjustPosition), `NETAIM <name>` (a player's own process: turn the local
+  controller to face that pawn). UC2's PlayerController has no ClientSetLocation/ClientSetRotation, so the
+  client's view rotation is set on the client (NETAIM), which is also what a player does.
+- `-nettest=<file>` command file for any process (the dedicated server has no other input): `exec <cmd>`
+  (UGameEngine::Exec, one per tick), `log <text>`. Clients keep using SDL2Drv's `-inputtest=` channel (virtual
+  pad, `probe`, `exec`).
+
+First run (scratch try1.sh, `logs/net/try1-*`): dedicated server + 1 client (null renderer, own Xvfb), pad
+attached, right trigger (Fire) pressed twice. Client and server agree:
+`C3 pawn name=Player-1 loc=(-1908.7,-1097.8,-130.1) health=140 local=1 role=3 ...weapon=UCWeap_Race_Nakhti`
+and `S3 pawn name=Player-1 loc=(-1908.7,-1097.8,-130.1) health=140 local=0 role=4`; PRI before Fire
+`spectator=1`, after `spectator=0`; `pawnclass=UCPawn_Nakhti_Anubis energy=UCInventory.UCWeap_SniperRifle
+explosive=UCInventory.UCWeap_RocketLauncher` on the server = the client's URL options arrived. The first Fire
+(1 s after attaching the pad, ~4 s after the join) did not spawn; the second did. `-name=` is not an option;
+the player name comes from the URL (`?Name=`).
