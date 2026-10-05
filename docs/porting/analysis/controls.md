@@ -394,3 +394,37 @@ mouse before the engine had executed the `set ... bInvertMouse` line (a frame st
 mouse events are read before the test channel in a frame), so the script now waits for the channel's own
 `test: exec ...` log line; and "half stick moves less" is not a property of the game (full 630, 0.6 623 units in
 that run), so the check is now "0.6 moves forward".
+
+## Step 8 - resumed after the usage-limit cut-off (2026-10-05)
+
+State at the cut-off (22:50): last commit 2a357e4 (the two script fixes above); the full run that found them
+(keyboard PASS, mouse FAIL on the invert race, text PASS, pad FAIL on "half stick moves less", both PASS) was
+before those fixes, so it does not count. The pad fix had passed alone (`pad` 33 checks). Gate a and d had been run
+(evidence in step 7) on the same binaries; the scripts changed after that, not the code. Now: fresh run tree `m10`,
+rebuild native + wasm, all scenarios, gate d again.
+
+Two shared-code changes, stated for the coordinator:
+
+- **Core, `UnCoreNative.h` (75e4258)**. What broke: with `Delete=Raw/Type` in `[GUI.EmulatedJoypad]`, `uc2.bin` and
+  `ucc-bin` both stopped at startup with `Can't find 'intUObjectexecDelete' in 'Core.dll'`. The system ini is read
+  before `Core.u` loads; its keys become FNames; an FName keeps the spelling of its first creator; UObject's script
+  function is `delete` (lower case), whose native is registered as `intUObjectexecdelete`; the function binder
+  builds `"int"+Class+"exec"+FName` (`UnClass.cpp:2577`) and the static-link table compared with `appStrcmp`.
+  Callers of the lookup (`UPackage::GetDllExport` under `__STATIC_LINK`): the native function binder
+  (`UnClass.cpp:2579`) and the `autoclass` class registration (`UnClass.cpp:1325`). Both look up names derived from
+  FNames, i.e. names that UnrealScript and the engine already treat case-insensitively; all 788 `MAP_NATIVE` names
+  in `Source/` are distinct without case (`grep MAP_NATIVE | tr A-Z a-z | sort | uniq -d` = empty), so a
+  case-insensitive match can never pick another entry; it runs only at bind time. The shipped builds have the
+  same weakness: the Xbox build is static-link with the same table (case-sensitive), the PC build resolves through
+  `GetProcAddress` (case-sensitive). They never met it because no system-ini key in Epic's files spells a native
+  function name in another case (`Delete=LogInput` in `DefUser.ini` is in User.ini, read after the packages load).
+- **Engine, `UnIn.cpp` (de94c55)**. Only the `SpeedBase` branch of the `AXIS` command changes, and only for
+  `IST_Hold` with a positive delta (DirectAxis, or a held key whose binding has `SpeedBase`). No keyboard or mouse
+  binding anywhere uses `SpeedBase` (Epic's `DefUser.ini`, the community `User.ini`, our `DefUser.ini`, all script:
+  only the `Joy*` stick lines and `ControllerConfiguration.ApplyJoysticks` do), so keyboard and mouse numbers are
+  unchanged, before = after: `MoveForward` (`Axis aBaseY Speed=+1200`, held) gives aBaseY = 1200 x dt x 20/dt =
+  24,000 at any frame rate; the mouse (`Axis aMouseX Speed=1.0`, IST_Axis) gives 0.01 x 1.0 x pixels x 20/dt
+  (1.2 x pixels/frame... = 72 per pixel moved in a frame at 60 fps), identical before and after. A full stick
+  (`SpeedBase=100`): before = 100 x 20/dt = 120,000 at 60 fps, 60,000 at 30 fps (frame-rate dependent, 1,200x the
+  Xbox); after = 100 at any frame rate (the Xbox's value, `ReadInput` scales by 1 there). With our `JoyX/JoyY
+  SpeedBase=2400000`: 2,400,000 -> 24,000 after UCPlayerInput's /100, the keyboard's value.
