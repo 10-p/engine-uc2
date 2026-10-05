@@ -11,6 +11,12 @@ Revision history:
 =============================================================================*/
 
 #include "CorePrivate.h"
+
+#if PLATFORM_64BITS
+// M13 (ufront 2.83, engine-ut99 253aaf2): the last None-context zero-fill, where it wrote and how many bytes.
+static BYTE* GNullContextResult = NULL;
+static INT   GNullContextSize   = 0;
+#endif
 #include "UnColor.h" //scion bcl -- need FColor to define ColorLerp
 
 #ifndef _XBOX
@@ -604,7 +610,13 @@ void UObject::execClassContext( FFrame& Stack, RESULT_DECL )
 		GPropObject = NULL;
 		GProperty = NULL;
 		if( Result )
+		{
 			appMemzero( Result, bSize );
+#if PLATFORM_64BITS
+			GNullContextResult = (BYTE*)Result;
+			GNullContextSize   = bSize;
+#endif
+		}
 	}
 	unguardexec;
 }
@@ -1026,7 +1038,13 @@ void UObject::execSwitch( FFrame& Stack, RESULT_DECL )
 		Stack.Step( Stack.Object, Buffer );
 
 		// Compare.
+#if PLATFORM_64BITS
+		// M13: the compiled size is the 32-bit one (4 for an object); compare at least a pointer's width. Both
+		// buffers are zeroed past it above, so smaller values compare as before (engine-ut99 253aaf2).
+		if( bSize ? (appMemcmp(SwitchBuffer,Buffer,Max<INT>(bSize,sizeof(UObject*)))==0) : (*(FString*)SwitchBuffer==*(FString*)Buffer) )
+#else
 		if( bSize ? (appMemcmp(SwitchBuffer,Buffer,bSize)==0) : (*(FString*)SwitchBuffer==*(FString*)Buffer) )
+#endif
 			break;
 
 		// Jump to next handler.
@@ -1177,7 +1195,23 @@ void UObject::execLet( FFrame& Stack, RESULT_DECL )
 			Array->Remove(NewSize, Array->Num()-NewSize, ArrayProp->Inner->ElementSize );
 		}
 	} else
+#if PLATFORM_64BITS
+	{
+		// M13: `X = None.Y` zero-fills X with the compiler's byte count, the value's size in the 32-bit
+		// packages (4 for any object, 32-bit struct sizes). Where X is bigger in memory (an 8-byte pointer, a
+		// struct holding one) the rest kept its old bytes: the high half of the previous pointer. When the
+		// fill landed exactly on this variable and fell short, zero all of it (ufront 2.83, engine-ut99 253aaf2).
+		UProperty* DestProperty = GProperty;
+		BYTE* Dest = GPropAddr;
+		GNullContextResult = NULL;
 		Stack.Step( Stack.Object, GPropAddr ); // Evaluate expression into variable.
+		if( GNullContextResult==Dest && DestProperty && GNullContextSize>0 && GNullContextSize<DestProperty->ElementSize )
+			appMemzero( Dest, DestProperty->ElementSize );
+		GNullContextResult = NULL;
+	}
+#else
+		Stack.Step( Stack.Object, GPropAddr ); // Evaluate expression into variable.
+#endif
 	unguardexecSlow;
 }
 IMPLEMENT_FUNCTION( UObject, EX_Let, execLet );
@@ -1263,7 +1297,13 @@ void UObject::execContext( FFrame& Stack, RESULT_DECL )
 		GProperty = NULL;
 		GPropObject = NULL;
 		if( Result )
+		{
 			appMemzero( Result, bSize );
+#if PLATFORM_64BITS
+			GNullContextResult = (BYTE*)Result;
+			GNullContextSize   = bSize;
+#endif
+		}
 	}
 	unguardexecSlow;
 }

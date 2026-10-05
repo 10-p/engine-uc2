@@ -169,3 +169,20 @@ all 47 placeholders found, `All native class layouts match`, exit 0. Cast census
 **0 ptr-to-int, 0 int-to-ptr** (`logs/m13/build64-3.log`). m13-layout-check: 5,697 properties, 400 classes,
 122 structs, 202 event parm structs checked; 2 mismatches left: `Texture.__LastUpdateTime`/`MemUsage` are
 declared in the opposite order in C++ and script — to compare with the 32-bit dump (expected pre-existing).
+
+### Step 4 — VM: None-context fill and switch width; both widths verified (2026-10-05)
+
+- `UnCorSc.cpp` (64-bit only, `#if PLATFORM_64BITS`): engine-ut99 `253aaf2` ported. `execContext`/
+  `execClassContext` record where a None-context zero-fill went and how many bytes (the compiler's 32-bit
+  size); `execLet` zeroes the destination's full `ElementSize` when exactly it got a short fill (else the high
+  half of an old pointer survives `X = None.Y`). `execSwitch` compares at least `sizeof(UObject*)` bytes.
+  UE2's `execStructMember` already zeroes its whole (linked-size) buffer and `P_GET_OBJECT` starts at NULL, so
+  Unreal-1's P1/P3 do not apply.
+- **32-bit unchanged, measured**: `dwarf-layouts.py` of main's 32-bit `ucc-bin` (776ed23,
+  `engine-uc2/build-native`) against this branch's: the only differences are 4 new template instantiations
+  (`TArray<unsigned long>`, `TArrayNoInit<unsigned long>`, `TObjectIterator<UStruct>`, `TTypeInfoBase<unsigned
+  long>`); every existing type has the same size and member offsets (`logs/m13/dwarf32-*.txt`).
+- `verifyclasses`: 32-bit `All native class layouts match` (exit 0, unchanged output), 64-bit the same plus
+  the 64-bit checks (exit 0). m13-layout-check at 32-bit gives the same 2 `Texture.__LastUpdateTime`/`MemUsage`
+  lines as at 64-bit: **pre-existing** (C++ declares MemUsage before __LastUpdateTime, script after; Epic's
+  shipped PC/Xbox builds have the same order; script never reads either). Not changed.
