@@ -29,8 +29,13 @@ and `wineserver -k` after every run. Logs: `<WorkUC2>/logs/m12/`. Run trees: `<W
      Windows-subsystem program, `-log` still echoes to an attached console (wine passes its stdout).
    - crash handling: the template's Win32 reporter (`SetUnhandledExceptionFilter`, `std::set_terminate`,
      SIGABRT) prints image base + rva for `addr2line`; plus Epic's Ctrl+C console handler (W2).
-   - clipboard: SDL2's (`SDL_SetClipboardText`) in SDL2Drv, same code as Linux.
-   - `appBaseDir`: UnUnix.cpp's (`_fullpath` of the exe's directory on `_WIN32`).
+   - clipboard: UnUnix.cpp's process-local string (`appClipboardCopy/Paste`), the same as on Linux; the
+     Windows clipboard is not used (Epic's used it; only the GUI designer and `CopyToClipboard` script need it).
+   - `appBaseDir`: UnUnix.cpp's: the **working directory** + `/`, as on Linux (Epic's Windows one is the exe's
+     directory from GetModuleFileName). Left so on purpose: every content path in the inis (`../Maps/*.unr`) is
+     relative to the working directory anyway, so the game must be started with `System\` as working
+     directory on Windows too (Explorer double-click does that; a shortcut needs "Start in"). OpenAL32.dll is
+     still found when it is not (LoadLibrary searches the exe's directory first).
    - sockets: WinSock (`__WINSOCK__` chosen by `_WIN32`).
 2. **Struct layout: MinGW's default `-mms-bitfields` stays** (no flag). Evidence, both by running:
    - `i686-w64-mingw32-gcc -Q --help=target` → `-mms-bitfields [enabled]`; a probe struct
