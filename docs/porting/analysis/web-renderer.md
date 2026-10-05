@@ -483,3 +483,115 @@ Run 4: **stopped by the mem guard, not by the test** (exit 3): `9.5 GB in use at
 killed at 12.0 GB machine-wide. Other work on the machine (compiles of other agents, my own twin effect
 series, the owner's desktop) held 9.5-10.5 GB; the browser run itself peaks at 2.8-3.3 GB in its cgroup
 (runs 1 and 3). Not retried until the machine has less in use (the budget is machine-wide and stays 12).
+
+## Checkpoint, 2026-10-05 12:30 (after a second interruption): everything known that was not on disk
+
+Engine branch: 17 commits up to "self-test check 'fog'". Frontend clone, branch `uc2`: `b1e7ef6` (target data,
+spec with two tests, profile, both READMEs; committed through its gates: doc-sync and prettier passed).
+
+### G2 as it stands (the script `tools/dev/m11-twin.sh` has NOT been run end to end yet)
+
+Run by hand so far, all with the current driver except where said:
+
+| Check | Result | Evidence |
+|---|---|---|
+| self-test, desktop | 11 passed, 0 failed (M7's ten + `fog`) | `logs/m11p/fogtest-opengl.out` |
+| self-test, twin | 11 passed, 0 failed, the desktop's tolerances | `logs/m11p/fogtest-gl4es.out` |
+| program test | 420 programs, 6720 values, largest difference 1 of 255 | `logs/m11p/fx-selftest.out` vs `logs/m11t/fx-selftest.out` |
+| effects, desktop (binary of commit `0d7cf34`) | 14 of 14: `critical=0 glerrors=0 programs_failed=0+0` | `logs/m11/fx-desktop-1.txt` |
+| effects, twin (binary of `2235081` minus the fog check) | 13 of 14 the same three zeros (GL errors include the raw library's); `praxis-panes`: the reference view was not reached in 10 runs (random PlayerStart, about one in four; nothing about the renderer, to be rerun) | `logs/m11t/fx-twin-1.txt` |
+| pinned DM-Deadbolt, static part, post-processing off | see the table in "G1, step 2" (0.374 mean against the desktop without LOD bias) | `logs/m11t/crop-dead-nb2.png` |
+
+B picture of each effect, twin against desktop (`logs/m11t/fx-<effect>-b-desktop-twin.png`, desktop left), next
+to the noise floor (the same desktop picture against M7's run of it, `logs/m7`):
+
+| Effect | desktop vs desktop (mean) | desktop vs twin (mean, above 32 levels) | Looked at | Reading |
+|---|---|---|---|---|
+| bloom | 1.29 | 2.69, 1.0% | no | - |
+| blur | 1.01 | 4.59, 2.0% | yes | same ghost copies; the effect fades over its 5 s and the two shots catch it at different strength |
+| berserk | 1.45 | 2.57, 2.3% | no | - |
+| liandri | 8.76 | 8.74, 2.2% | no | the effect's scan-line noise is random: twin no further from desktop than desktop from itself |
+| pause | 0.79 | 1.92, 1.3% | no | - |
+| radial | 1.77 | 2.60, 1.5% | no | - |
+| dyngamma | 2.14 | 2.81, 1.2% | no | - |
+| dof-alpha | 0.54 | 2.87, 2.3% | no (same view as azure) | see azure |
+| azure | 0.72 | 2.77, 2.3% | yes | **the sky differs** (below); the rest of the frame matches |
+| octane | 0.31 | 1.89, 1.1% | no | - |
+| decay | 0.54 | 2.77, 1.5% | no | - |
+| undertow | 0.38 | 1.89, 0.2% | no | - |
+| recoil | 0.68 | 2.34, 0.8% | no | - |
+
+Everything is 1 to 2 above the noise floor, which is the size of the texture LOD bias difference measured on
+the static part (1.4). **Ten of the thirteen pairs I have not looked at yet**; that is owed before the gate.
+
+### Open difference: the sky zone of DM-Azure is hazier on the desktop than on the twin
+
+`logs/m11t/crop-azure-sky.png` (desktop off, twin off, desktop on, twin on), `logs/m11p/fogdbg-sky.png`
+(pre-match view: desktop left, twin right), `logs/m11p/nofog-sky.png` (desktop with `-glnofog` left).
+The desktop shows the sky nearly flat in the fog colour (149,163,176), as the original PC binary under wine
+does (`logs/oracle/DM-Azure.png`); the twin shows the clouds through it. With fog off (`-glnofog`) both show
+the same dark clouds, so the difference depends on fog. Measured over the sky (area means): fog share 0.88-0.91
+on the desktop, 0.54-0.57 on the twin; the far mountains differ the same way; near geometry does not.
+What it is NOT: the fog formula (self-test `fog`: fixed-function linear fog on camera-space depth, nine cases
+incl. a scaled model-view matrix and the two ranges this map uses, equal on both bindings to 0.5 of 255).
+What the draws are (dumped once): the sky zone is drawn with fog 230..1600 and consists of a grey base
+(`DM-Azure.Misc.FourByFourGrey`), a panning cloud layer drawn ONE / INVSRCCOLOR **with the fog colour
+overridden** (`OverrideFogColor`: the driver sets `GL_FOG_COLOR` before that draw and puts it back after),
+and two alpha-blended skybox meshes; the level itself has fog 0..120000. Suspect, not proven: something in how
+gl4es applies a fog colour that changes between two consecutive draws, or fog on its blended passes. Next
+step when resumed: a self-test case that draws two quads with different fog colours back to back, and one
+blended with the override, on both bindings. **Status: not working like the desktop; visible on outdoor
+maps with a fogged sky zone.**
+
+### The unexplained residue on the static part (DM-Deadbolt)
+
+After LOD bias and DXT decoding are taken out: mean 0.374, 4.5% of the pixels above 2 levels, none above 32
+(`logs/m11t/crop-dead-nb2.png`): blotchy 1-3 level differences on a wall panel and a pillar, lines on the
+floor grating, one polygon edge. Not explained.
+
+### Fallbacks: what is implemented, what is not, and the plan (the brief wants a correct alternative for each)
+
+Seen in the one browser this ran in (ANGLE on Vulkan, NVIDIA): `WEBGL_depth_texture`, `EXT_frag_depth`,
+`OES_element_index_uint`, `WEBGL_compressed_texture_s3tc`, fragment highp: **all present, no fallback active**.
+
+- S3TC missing: implemented and tested once by hand is still owed (`-glnos3tc` in the script's `fallbacks`).
+- Mip chains without max level: implemented, always active on GLES; the desktop mask `-glnomaxlevel` runs it
+  on desktop GL (owed: the script's run).
+- **Depth textures missing: NOT implemented.** What is lost today on such a context (WebGL 1 without
+  `WEBGL_depth_texture`: old or blocklisted mobile GPUs; none seen here): the always-on depth of field is off
+  (the picture stays sharp) and distortion is not hidden by nearer geometry. Plan (unchanged from the table
+  above): second draw of depth-writing primitives into a depth-colour target from `DrawPrimitive`.
+  Why not done now: it needs its own program for fixed-function geometry (gl4es generates the real one),
+  mirrored culling for the top-row-first target, and the alpha of stage 0 for masked materials; about a
+  day with verification, and no context that needs it is at hand to test against except the mask.
+- **`gl_FragDepth` missing: NOT implemented.** Lost today (WebGL 1 without `EXT_frag_depth`): distortion
+  (glass, heat shimmer, energy fields) is drawn over nearer geometry instead of being hidden by it. Plan:
+  depth test in the fragment shader of program passes into the accumulation target (hook at the top of
+  `main` in the generated shaders).
+- **32-bit indices missing: NOT implemented, not guarded.**
+- Fragment highp missing: not handled (the depth encode needs it); the log says "fragment highp NO".
+
+### G4 state
+
+Four browser runs so far (section above). The spec is committed but has not passed yet. Findings so far:
+real GPU in the harness; WebGL 1 context on the worker with every capability; 84 fragment shaders compile
+in the browser; one WebGL-only framebuffer error fixed; one `GL_INVALID_OPERATION` in `SetRes` not located
+(checkpoints added). Not yet seen: a single frame of the browser's canvas. Open design point: the engine
+renders at the ini's 640x480 whatever the canvas is; the template sizes the engine to the canvas's device
+pixels (in its SDL2Viewport).
+
+### G5 state
+
+`-glstats` exists. One sample (twin, DM-Deadbolt, llvmpipe on a loaded machine, so only the counts mean
+anything): 82 draw calls, 25,700 primitives, 79 material state applications, 48 buffer uploads (63 KB),
+3.05 back-buffer snapshots and 1 depth-as-colour copy per frame. Waste that is ours, seen while reading,
+none removed yet except the occlusion-query boxes: every dynamic vertex/index upload invalidates the
+material state, so nearly every draw re-sends the whole fixed-function state (79 of 82); gl4es keeps a second
+copy of every buffer.
+
+### Test scripts on main since I branched
+
+`tools/dev/m10-controls.sh` and `m12-wine-smoke.sh` gained `-nostartupmovies` on main; not merged here. For
+the regression part of the gate I will make the same one-line change in my copy of `m10-controls.sh` or run
+the `pad` scenario only, and say which. Note for the web: a press and release inside one engine tick can be
+lost (the main fix holds the click 1 s).
