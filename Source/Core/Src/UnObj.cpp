@@ -114,18 +114,20 @@ UObject::UObject( ENativeConstructor, UClass* InClass, const TCHAR* InName, cons
 
 	// Setup registration info, for processing now (if inited) or later (if starting up).
 	check(sizeof(Outer       )>=sizeof(InPackageName));
-	check(sizeof(_LinkerIndex)>=sizeof(GAutoRegister));
-
 #if SERIAL_POINTER_INDEX
-	check(sizeof(Name        )>=sizeof(INT          ));
-	*(INT*)&Name                    = SerialPointerIndex((void *) InName);
+	// M13: FName and _LinkerIndex are 4 bytes, the stashed name and the autoregister chain are pointers.
+	// Park them in pointer-sized members that are NULL until Register() (which clears them again).
+	*(const TCHAR  **)&StateFrame   = InName;
+	*(const TCHAR  **)&Outer        = InPackageName;
+	*(UObject      **)&_Linker      = GAutoRegister;
 #else
+	check(sizeof(_LinkerIndex)>=sizeof(GAutoRegister));
 	check(sizeof(Name        )>=sizeof(InName       ));
 	*(const TCHAR  **)&Name         = InName;
-#endif
 
 	*(const TCHAR  **)&Outer        = InPackageName;
 	*(UObject      **)&_LinkerIndex = GAutoRegister;
+#endif
 	GAutoRegister                   = this;
 
 	// Call native registration from terminal constructor.
@@ -148,12 +150,11 @@ UObject::UObject( EStaticConstructor, const TCHAR* InName, const TCHAR* InPackag
 
 	// Setup registration info, for processing now (if inited) or later (if starting up).
 	check(sizeof(Outer       )>=sizeof(InPackageName));
-	check(sizeof(_LinkerIndex)>=sizeof(GAutoRegister));
-
 #if SERIAL_POINTER_INDEX
-	check(sizeof(Name        )>=sizeof(INT          ));
-	*(INT*)&Name                    = SerialPointerIndex((void *) InName);
+	// M13: see the native constructor above.
+	*(const TCHAR  **)&StateFrame   = InName;
 #else
+	check(sizeof(_LinkerIndex)>=sizeof(GAutoRegister));
 	check(sizeof(Name        )>=sizeof(InName       ));
 	*(const TCHAR  **)&Name         = InName;
 #endif
@@ -164,7 +165,11 @@ UObject::UObject( EStaticConstructor, const TCHAR* InName, const TCHAR* InPackag
 	// If we are not initialized yet, auto register.
 	if (!GObjInitialized)
 	{
+#if SERIAL_POINTER_INDEX
+		*(UObject      **)&_Linker      = GAutoRegister;
+#else
 		*(UObject      **)&_LinkerIndex = GAutoRegister;
+#endif
 		GAutoRegister                   = this;
 	}
 	unguard;
@@ -1966,9 +1971,9 @@ void UObject::Register()
 	const TCHAR* InOuter = *(const TCHAR**)&Outer;
 
 #if SERIAL_POINTER_INDEX
-	INT idx = *(INT*)&Name;
-	check(idx < GTotalSerializedPointers);
-	const TCHAR* InName  = (const TCHAR*) GSerializedPointers[idx];
+	const TCHAR* InName  = *(const TCHAR**)&StateFrame;
+	StateFrame   = NULL;
+	_Linker      = NULL;
 #else
 	const TCHAR* InName  = *(const TCHAR**)&Name;
 #endif
@@ -2085,7 +2090,11 @@ void UObject::ProcessRegistrants()
 	if( ++GObjRegisterCount==1 )
 	{
 		// Make list of all objects to be registered.
+#if SERIAL_POINTER_INDEX
+		for( ; GAutoRegister; GAutoRegister=*(UObject **)&GAutoRegister->_Linker )
+#else
 		for( ; GAutoRegister; GAutoRegister=*(UObject **)&GAutoRegister->_LinkerIndex )
+#endif
 			GObjRegistrants.AddItem( GAutoRegister );
 		for( INT i=0; i<GObjRegistrants.Num(); i++ )
 			GObjRegistrants(i)->ConditionalRegister();

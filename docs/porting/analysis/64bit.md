@@ -56,3 +56,39 @@ that one an error again) or `-Wint-to-pointer-cast`, fetched libraries skipped. 
 **29 ptr-to-int + 90 int-to-ptr = 119 lines** (Engine 81, IpDrv 21, Core 10, GUI 7);
 `logs/m13/cast-census-before.txt`. Not seen by the compiler (needs reading/running): type puns like
 `*(FResolveInfo**)&PrivateResolveInfo`, literal `4`s, `sizeof(INT)` used for a pointer, layouts.
+
+### Step 2 — Core: platform macro, bytecode object slots, registration stashes (WIP, 2026-10-05)
+
+First run of the unmodified 64-bit `ucc-bin verifyclasses` (`logs/m13/verify64-0.out`): `Assertion failed:
+sizeof(_LinkerIndex)>=sizeof(GAutoRegister)` (UnObj.cpp) — the native-registration stash.
+
+- `Core.h`: `PLATFORM_64BITS` (x86_64, `_WIN64`, aarch64, any `__LP64__`) / `PLATFORM_32BITS`, as engine-ut2004.
+  (CMake's `-DPLATFORM_32BIT` is unused by any source.)
+- `UnObjBas.h`: `SERIAL_POINTER_INDEX` on `PLATFORM_64BITS` (was `__x86_64__` only: arm64 would have widened
+  bytecode slots). Ryan's side table (`GSerializedPointers[64K]`, linear search per reference at every load and
+  every GC pass) is replaced by the object table: a slot holds `Obj->Index`, `INDEX_NONE` for None
+  (`UObject::SerialPointerIndex` / `SerialIndexPointer`, O(1); same scheme as ufront 2.83's UT99 decision 1).
+  Bytecode keeps 4-byte slots, so every jump/skip offset of the 32-bit `.u` and every ScriptPatch (applied
+  through `SerializeExpr`, UnScriptPatcher.cpp) stays valid. Readers: `FFrame::ReadObject` (UnScript.h),
+  `execBoolVariable` (UnCorSc.cpp), `XFERPTR` (UnClass.cpp `SerializeExpr`). All other bytecode object reads in
+  Core/Engine already go through `ReadObject` (grep: no raw `*(UObject**)Stack.Code` outside those).
+- `UnObj.cpp` native/static constructors: on 64-bit the stashed `const TCHAR*` name goes to `StateFrame` and
+  the autoregister chain to `_Linker` (both pointer-sized, NULL until `Register()`, which clears them again);
+  `ProcessRegistrants` walks `_Linker`. 32-bit code path unchanged (`#else` keeps Epic's lines).
+
+Built: `cmake --build build-native --target Core` (32-bit) and `build-native64 --target Core`: 0 errors.
+
+**Plan for the layout proof (B2)** — decided, not yet written:
+1. `UStruct::Link` gets a placeholder table (ut99 `NativePlaceholderSize`, by string): a script `int` that
+   stands in for C++ data (UObject `ObjectInternal[7]`, `Subsystem.ExecVtbl`, `Player.vfOut/vfExec`, the
+   `*Ptr` one-int structs of Actor.uc, `WebResponse.ReplacementMap[5]`, `WebRequest.VariableMap[5]`, IpDrv's
+   `PrivateResolveInfo`/`LinkPtr`/`MSLinkPtr`, ...) advances the layout by the C++ size; the property itself
+   stays a 4-byte int (script never reads these; to be confirmed per entry). Identical sizes at 32-bit.
+2. Object properties align to 4 at 64-bit (they align to `sizeof(UObject*)` now; the generated headers are
+   pack(4)); hand-written mirror headers not yet under pack(4) get it where verify says so.
+3. Native C++ size recorded at static class construction; at link a mismatch with the script size is fatal
+   on 64-bit (ut99 decision 5).
+4. `verifyclasses` 64-bit mode: the generated lists (as at 32-bit) + every native class's C++ size vs script
+   size + the placeholder report + a layout dump; `tools/dev/m13-layout-check.py` compares the dump with the
+   binary's DWARF (`dwarf-layouts.py`) for every class AND script struct member. 32-bit mode unchanged.
+5. VM: port ut99 `253aaf2` (None-context fill re-zeroes the whole destination; switch compares pointer width).

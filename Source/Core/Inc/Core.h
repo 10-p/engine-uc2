@@ -93,6 +93,16 @@ public:
 #endif
 #endif
 
+// Pointer width (M13). 64-bit for x86_64 (Unix and MinGW's _WIN64), arm64 and any other LP64 target; wasm32,
+// i386 and i686 MinGW are 32-bit. The shipped script packages were compiled for 32-bit pointers, so the
+// 64-bit build keeps their 4-byte pointer slots in bytecode (SERIAL_POINTER_INDEX, UnObjBas.h) and gives
+// script ints that stand in for C++ pointers their C++ size when classes are linked (UnClass.cpp).
+#if defined(__x86_64__) || defined(_WIN64) || defined(__aarch64__) || defined(__LP64__)
+	#define PLATFORM_64BITS 1
+#else
+	#define PLATFORM_32BITS 1
+#endif
+
 // Compiler specific include.
 #if __GCN__
 	#ifdef EMU
