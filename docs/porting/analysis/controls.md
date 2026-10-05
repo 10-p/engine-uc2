@@ -424,7 +424,8 @@ Two shared-code changes, stated for the coordinator:
   only the `Joy*` stick lines and `ControllerConfiguration.ApplyJoysticks` do), so keyboard and mouse numbers are
   unchanged, before = after: `MoveForward` (`Axis aBaseY Speed=+1200`, held) gives aBaseY = 1200 x dt x 20/dt =
   24,000 at any frame rate; the mouse (`Axis aMouseX Speed=1.0`, IST_Axis) gives 0.01 x 1.0 x pixels x 20/dt
-  (1.2 x pixels/frame... = 72 per pixel moved in a frame at 60 fps), identical before and after. A full stick
+  (12 per pixel at 60 fps; the view turns 32 x dt x that, so per pixel it is frame-rate independent), identical
+  before and after. A full stick
   (`SpeedBase=100`): before = 100 x 20/dt = 120,000 at 60 fps, 60,000 at 30 fps (frame-rate dependent, 1,200x the
   Xbox); after = 100 at any frame rate (the Xbox's value, `ReadInput` scales by 1 there). With our `JoyX/JoyY
   SpeedBase=2400000`: 2,400,000 -> 24,000 after UCPlayerInput's /100, the keyboard's value.
