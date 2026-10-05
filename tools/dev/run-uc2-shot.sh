@@ -48,7 +48,7 @@ inner=$(mktemp)
 cat > "$inner" <<INNER
 cd "$sys" || exit 1
 # M8: OpenAL Soft renders to its null backend unless ALSOFT_DRIVERS says otherwise (headless runs stay quiet).
-SDL_AUDIODRIVER=dummy ALSOFT_DRIVERS=${ALSOFT_DRIVERS:-null} ./uc2.bin $map -log "\$@" > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy ALSOFT_DRIVERS=${ALSOFT_DRIVERS:-null} ./uc2.bin $map -log -nostartupmovies "\$@"   # M9: no logos (the fire-at times assume none) > "$out/$name.out" 2>&1 &
 pid=\$!
 if [ "$fire" != 0 ]; then
   sleep \$(( $fire - 4 ))
