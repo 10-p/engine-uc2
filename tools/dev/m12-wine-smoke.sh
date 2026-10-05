@@ -19,7 +19,8 @@
 #   null       uc2.exe -nullrenderer: menu level up, null device, Ctrl+C at 45 s -> exit 0, "Exiting.", 0 Critical
 #   gl         uc2.exe (OpenGL): GL_VENDOR/RENDERER/VERSION logged, menu up, -glerrors -> 0 GL errors, engine
 #              screenshot not blank, Ctrl+C -> exit 0, 0 Critical
-#   pinned     DM-Deadbolt from a pinned view (tools/dev/m12/deadbolt-pinned.scen) under wine AND on Linux:
+#   pinned     (post-processing off: glow and depth of field spread the moving things over the static part)
+#              DM-Deadbolt from a pinned view (tools/dev/m12/deadbolt-pinned.scen) under wine AND on Linux:
 #              same position/rotation, 0 GL errors, and the two engine screenshots identical (within 2 levels)
 #              in >= 99.9% of the pixels outside the player model and the pickups (the only things that move)
 #   audiocheck ucc.exe UC2ALAudio.UC2AudioCheck: "0 failures"
@@ -142,14 +143,14 @@ check_pinned() {
   local line wp lp
   rm -rf "$out/smoke-pinned-wine" "$out/smoke-pinned-linux"
   line=$(M10_URL='DM-Deadbolt?NumBots=0' M10_TREE=m12 M10_OUT=$out/smoke-pinned-wine M10_LAUNCH="$wine $sys uc2.exe" \
-    M10_STOPSIG=USR1 M10_MEM=3G M10_PROC=uc2.exe "$repo/tools/dev/m10-controls.sh" --file "$repo/tools/dev/m12/deadbolt-pinned.scen" pinned -glerrors 2>&1 | tail -1)
+    M10_STOPSIG=USR1 M10_MEM=3G M10_PROC=uc2.exe "$repo/tools/dev/m10-controls.sh" --file "$repo/tools/dev/m12/deadbolt-pinned.scen" pinned -glerrors -nopostprocess 2>&1 | tail -1)
   wp=$out/smoke-pinned-wine/pinned-pinned.png
   if [ ! -x "$ref/uc2.bin" ]; then
     result SKIP pinned "no Linux reference tree at $ref (wine run: $line)"
     return
   fi
   M10_URL='DM-Deadbolt?NumBots=0' M10_TREE=m12-native M10_OUT=$out/smoke-pinned-linux \
-    "$repo/tools/dev/m10-controls.sh" --file "$repo/tools/dev/m12/deadbolt-pinned.scen" pinned -glerrors > /dev/null 2>&1
+    "$repo/tools/dev/m10-controls.sh" --file "$repo/tools/dev/m12/deadbolt-pinned.scen" pinned -glerrors -nopostprocess > /dev/null 2>&1
   lp=$out/smoke-pinned-linux/pinned-pinned.png
   local vw vl cmp errs
   vw=$(grep -a "^probe view" "$out/smoke-pinned-wine/pinned.out" | grep -a -o "loc=([^)]*) rot=([^)]*)")
@@ -171,6 +172,8 @@ for y in range(h):
     for x in range(w):
         v = px[x, y]; sq += v * v; exact += (v == 0)
         if 60 * w // 640 <= x <= 395 * w // 640 and y >= 265 * h // 480: moving += 1; continue
+        # ... and the aiming reticle in the middle of the screen, which animates too (x 280..360, y 210..265).
+        if 280 * w // 640 <= x <= 360 * w // 640 and 210 * h // 480 <= y < 265 * h // 480: moving += 1; continue
         static += 1; same_static += (v <= 2)
 mse = sq / float(w * h)
 print("OK %.3f %.1f %.2f" % (100.0 * same_static / static, 100.0 * exact / (w * h), 99.0 if mse == 0 else 10 * math.log10(255 * 255 / mse)))

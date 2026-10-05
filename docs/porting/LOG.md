@@ -234,3 +234,15 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   `PS_Terrain3Layer`, shadow blur. Owner decisions pending (BLOCKERS.md): depth-of-field alpha 100 vs the
   shipped 65, dynamic gamma on by default, distortion scaled by height/480, the pause overlay's teal negative.
   No GPU run yet: under software GL the effects cost 1.4x-3.8x frame time.
+- 2026-10-05 — **M12 green (Windows, MinGW-w64 i686, under wine).** Merged `m12-windows`. `uc2.exe` and
+  `ucc.exe` link statically (no MinGW runtime DLLs, SDL2 linked in; `OpenAL32.dll` built from the fetched
+  source and loaded at run time); MinGW runs through the GCC Core layer with `_WIN32` branches; MS bitfield
+  layout kept (verifyclasses passes with either). Coordinator's run of `tools/dev/m12-wine-smoke.sh` on merged
+  main (with M7 post-processing, M8 audio, M10 controls): verify, server, netjoin (handshake only), null, gl
+  (0 GL errors, wine gives GL 4.3 on llvmpipe), audiocheck, selftest 39/0, capture (menu music -19.02 dB),
+  nosound, keyboard 16, pad 33, leftovers: PASS. The wine-vs-Linux picture comparison first failed on main:
+  post-processing spreads moving things over the frame and the animated aiming reticle was not masked; the
+  check now runs with `-nopostprocess` and masks the reticle: static part 100.000% within 2 levels, same
+  position and rotation. wine is not Windows: the real-Windows checklist is in `analysis/windows.md`.
+  64-bit Windows waits for M13. Found on the way: a client joining any server stops at
+  `check(GObjBeginLoadCount)` after the handshake (all platforms) - being fixed on branch `net-join`.
