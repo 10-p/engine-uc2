@@ -885,6 +885,32 @@ void UUC2GLRenderDevice::AttachMainDepthStencil()
 		AttachDepthStencilRenderbuffer( MainDepthRenderbuffer );
 }
 
+UBOOL UUC2GLRenderDevice::UploadMainDepth( const DWORD* Rows, INT Width, INT Height )
+{
+	if( !MainDepthStencil )
+		return 0;
+	if( !IsGLES )
+	{
+		glBindTexture( GL_TEXTURE_2D, MainDepthStencil );
+		glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
+		glTexSubImage2D( GL_TEXTURE_2D, 0, 0, 0, Width, Height, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, Rows );
+		return 1;
+	}
+#ifdef __EMSCRIPTEN__
+	// WEBGL_depth_texture forbids texSubImage2D on a depth texture.
+	return 0;
+#else
+	GLint Bound = 0;
+	Raw_glGetIntegerv( GL_TEXTURE_BINDING_2D, &Bound );
+	Raw_glBindTexture( GL_TEXTURE_2D, MainDepthStencil );
+	Raw_glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
+	Raw_glTexSubImage2D( GL_TEXTURE_2D, 0, 0, 0, Width, Height, GL_DEPTH_STENCIL_OES, GL_UNSIGNED_INT_24_8_OES, Rows );
+	Raw_glBindTexture( GL_TEXTURE_2D, Bound );
+	// gl4es sets the unpack alignment itself before each of its own uploads.
+	return Raw_glGetError() == GL_NO_ERROR;
+#endif
+}
+
 void UUC2GLRenderDevice::BindQuadBuffer()
 {
 	glBindBuffer( GL_ARRAY_BUFFER, QuadBuffer );

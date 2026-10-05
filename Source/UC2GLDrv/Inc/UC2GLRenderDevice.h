@@ -231,6 +231,9 @@ public:
 	void AttachDepthStencilTexture( GLuint Texture );
 	void AttachDepthStencilRenderbuffer( GLuint Renderbuffer );
 	void AttachMainDepthStencil();
+	// Verification (UC2GLSelfTest.cpp): writes the main depth buffer from D24S8 words, bottom
+	// row first. Returns 0 where the context cannot do that (no depth texture).
+	UBOOL UploadMainDepth( const DWORD* Rows, INT Width, INT Height );
 	void DetectCapabilities();
 	// A static full-screen strip (-1..1) in a buffer object: WebGL has no client-side arrays.
 	GLuint							QuadBuffer;

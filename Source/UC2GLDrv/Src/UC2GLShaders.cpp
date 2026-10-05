@@ -42,7 +42,6 @@ enum
 	PSV_SpecularEnable	= 0x10,	// D3DRS_SPECULARENABLE for shaders without xfc
 };
 
-#define UC2GL_SHADER_HEADER "#version 120\n"
 
 #define UC2GL_LOG_ONCE(...) { static UBOOL Logged = 0; if( !Logged ) { Logged = 1; debugf( NAME_Init, __VA_ARGS__ ); } }
 
@@ -390,7 +389,7 @@ GLuint UUC2GLRenderDevice::GetVertexShaderObject( QWORD Enum )
 	FString	Source = BuildVertexShaderSource( Enum );
 	if( Source.Len() )
 	{
-		Shader = UC2GL_CompileShader( this, GL_VERTEX_SHADER, UC2GL_SHADER_HEADER, TCHAR_TO_ANSI(*Source), *FString::Printf(TEXT("vertex shader %s"),appI64toa((SQWORD)Enum)) );
+		Shader = UC2GL_CompileShader( this, GL_VERTEX_SHADER, ShaderPrologue(0), TCHAR_TO_ANSI(*Source), *FString::Printf(TEXT("vertex shader %s"),appI64toa((SQWORD)Enum)) );
 		if( Shader )
 			VertexShadersCompiled++;
 		else
@@ -412,7 +411,7 @@ GLuint UUC2GLRenderDevice::GetFragmentShaderObject( INT PixelShader, DWORD Varia
 	if( Source.Source )
 	{
 		ANSICHAR Header[256];
-		appStrcpy( Header, UC2GL_SHADER_HEADER );
+		appStrcpy( Header, ShaderPrologue(1) );
 		for( INT s=0; s<4; s++ )
 			if( Variant & (1<<s) )
 				appSprintf( Header + appStrlen(Header), "#define UC2_TEX%i_CUBE 1\n", s );

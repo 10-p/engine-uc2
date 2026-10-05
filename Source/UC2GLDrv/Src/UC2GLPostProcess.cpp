@@ -107,11 +107,10 @@ static const char* GPostDepthCopyFragmentShader =
 
 static GLuint UC2GL_BuildPostProgram( UUC2GLRenderDevice* RenDev, const char* FragmentBody, const TCHAR* What, GLint& RectLoc )
 {
-	const char* Prologue = "#version 120\n";
 	GLuint Shaders[2] = { 0, 0 };
 	for( INT i=0; i<2; i++ )
 	{
-		const char* Sources[2] = { Prologue, i == 0 ? GPostVertexShader : FragmentBody };
+		const char* Sources[2] = { RenDev->ShaderPrologue( i == 1 ), i == 0 ? GPostVertexShader : FragmentBody };
 		Shaders[i] = RenDev->glCreateShader( i == 0 ? GL_VERTEX_SHADER : GL_FRAGMENT_SHADER );
 		RenDev->glShaderSource( Shaders[i], 2, Sources, NULL );
 		RenDev->glCompileShader( Shaders[i] );
@@ -270,12 +269,12 @@ void UUC2GLRenderDevice::DrawPostQuad( GLuint Program, GLint RectLoc, GLuint Sou
 	glUseProgram( Program );
 	glUniform4f( RectLoc, Rect[0], Rect[1], Rect[2], Rect[3] );
 
-	static const FLOAT Quad[8] = { -1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, 1.f };
-	glBindBuffer( GL_ARRAY_BUFFER, 0 );
-	glVertexAttribPointer( 0, 2, GL_FLOAT, GL_FALSE, 0, Quad );
+	BindQuadBuffer();
+	glVertexAttribPointer( 0, 2, GL_FLOAT, GL_FALSE, 0, NULL );
 	glEnableVertexAttribArray( 0 );
 	glDrawArrays( GL_TRIANGLE_STRIP, 0, 4 );
 	glDisableVertexAttribArray( 0 );
+	glBindBuffer( GL_ARRAY_BUFFER, 0 );
 	glUseProgram( 0 );
 
 	glEnable( GL_SCISSOR_TEST );

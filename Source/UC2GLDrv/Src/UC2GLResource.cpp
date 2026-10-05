@@ -98,11 +98,7 @@ void FOpenGLTexture::DeleteGLObjects()
 		RenDev->glDeleteFramebuffers( 1, &FramebufferID );
 		FramebufferID = 0;
 	}
-	if( DepthStencilID )
-	{
-		RenDev->glDeleteRenderbuffers( 1, &DepthStencilID );
-		DepthStencilID = 0;
-	}
+	RenDev->DeleteDepthStencilRenderbuffer( DepthStencilID );
 	if( TextureID && OwnsTexture )
 		RenDev->glDeleteTextures( 1, &TextureID );
 	TextureID = 0;
@@ -372,18 +368,16 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 
 				if( RenderTarget->CreationFlags & FRenderTarget::RT_CREATE_DEPTH )
 				{
-					RenDev->glGenRenderbuffers( 1, &DepthStencilID );
-					RenDev->glBindRenderbuffer( GL_RENDERBUFFER, DepthStencilID );
-					RenDev->glRenderbufferStorage( GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, USize, VSize );
-					RenDev->glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, DepthStencilID );
-					RenDev->glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, DepthStencilID );
+					// (M11: storage and attachment through the device's helpers, which go
+					// around gl4es on GLES.)
+					DepthStencilID = RenDev->CreateDepthStencilRenderbuffer( USize, VSize );
+					RenDev->AttachDepthStencilRenderbuffer( DepthStencilID );
 				}
 				else
 				{
 					// Without RT_CREATE_DEPTH, D3DDrv borrows the back buffer's depth surface
 					// (a texture since M7: UUC2GLRenderDevice::CreateMainFramebuffer).
-					RenDev->glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, RenDev->MainDepthStencil, 0 );
-					RenDev->glFramebufferTexture2D( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, RenDev->MainDepthStencil, 0 );
+					RenDev->AttachMainDepthStencil();
 				}
 
 				GLenum Status = RenDev->glCheckFramebufferStatus( GL_FRAMEBUFFER );
