@@ -315,3 +315,19 @@ quantiser that reads 32-bit pixels as `unsigned long*` (8 bytes at LP64: it woul
 the image). It has **no caller** in the tree (`HeckbertQuantize` is referenced nowhere; Engine's CMakeLists calls
 the file "a leftover tool source"), so it is left as Epic wrote it and listed here. Pointer hashes use object
 indices (`GetTypeHash(UObject*)`); literal `*4` sizes in memcpy are pixel rows.
+
+### Step 10 — controls at 64-bit; windows64 builds and verifies under wine (2026-10-05)
+
+- `m13-64bit.sh controls` (first run): keyboard 16, mouse 18, text 7, both 14 PASS; pad 31/33 — the B and Start
+  presses did not close the in-game pause menu (`pd-b-closes-pause-menu`, `pd-start-after-replug-resumes`), while
+  I was configuring windows64 on the same machine. Rerun at once: **64-bit pad 33/33 PASS**, 32-bit pad 33/33 PASS
+  (`logs/m13/controls-r2`, `controls32-r1`). Counted as timing under load; the final full run decides.
+- **windows64** (MinGW x86_64, LLP64): `cmake --preset windows64` configures ("pointer width: 8 bytes"), the full
+  build has 0 errors (`logs/m13/build-win64-1.log`); `ucc.exe`/`uc2.exe` PE32+ x86-64. The cast census of that
+  build found one site LP64 could not show: `FMallocAnsi.h` `unguardf` message `(INT)Ptr` (only compiled where
+  guards are try/catch, i.e. MinGW) -> `(INT)(PTRINT)`. LLP64 itself needed nothing else: PTRINT is `unsigned
+  long long` there (UnGnuG.h, from M12), the archive operator for PTRINT is not declared on Windows (PTRINT is
+  QWORD), placeholder sizes come from `sizeof`.
+- Under wine (own prefix `.cache/wine-m13`; `M12_TREE=m13-win64 M12_REF=m13 M12_OUT=logs/m13/win64
+  UC2_WINEPREFIX=<WorkUC2>/.cache/wine-m13 tools/dev/m12-wine-smoke.sh verify server`): **verify PASS** (the 64-bit
+  mode: 400 classes 0 mismatches, 6,578 scripts scanned), **server PASS** (DM-Deadbolt up, clean Ctrl+C).

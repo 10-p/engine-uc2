@@ -52,7 +52,7 @@ public:
 			Result = NULL;
 		}
 		return Result;
-		unguardf(( TEXT("%08X %i %s:%i"), (INT)Ptr, NewSize, File, Line ));
+		unguardf(( TEXT("%08X %i %s:%i"), (INT)(PTRINT)Ptr, NewSize, File, Line ));	// M13: the low half is enough for the message
 	}
 	void Free( void* Ptr )
 	{
