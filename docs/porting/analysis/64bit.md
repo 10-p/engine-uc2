@@ -377,3 +377,14 @@ with SCTLR.A or for exclusive/atomic accesses, which these are not), so this is 
 x86_64; armv7 (not a target) would need the ut99 `ba023f3` copy-read treatment. Object pointers in pack(4)
 mirrors are likewise 4-aligned 8-byte loads. No atomics on such members (`grep __sync|__atomic|std::atomic` in
 the engine: only `TimeToDie` in UnThreadingPosix.cpp, a naturally aligned member of a C++-only class).
+
+### Step 12 — gate (a) builds and the full 64-bit run, part 1 (2026-10-05)
+
+- Builds at the branch tip, every one 0 errors: `native64` (`logs/m13/build64-final1.log`), `native`
+  (`build32-2.log`), `wasm` (`source ../env.sh; cmake --preset wasm; cmake --build build-wasm -j4` ->
+  `SDLLaunch.wasm`, `ucc-bin.wasm`; `build-wasm.log`), `windows` (i686 MinGW, `build-win32.log`), `windows64`
+  (`build-win64-2.log`), `native64-uchar` (`build-uchar.log`).
+- `tools/dev/m13-64bit.sh` full run 1 (`logs/m13/full-run1.txt`): verify PASS, census PASS (58/58, same per map as
+  32-bit, no exit hang this time), controls FAIL: pad 30/33 (`pd-b-closes-pause-menu` again, and the two rumble
+  checks) — run while the wasm and windows builds were compiling on the same machine. Pad in isolation passed
+  33/33 at both widths earlier; repeated after the run without load (step 13).
