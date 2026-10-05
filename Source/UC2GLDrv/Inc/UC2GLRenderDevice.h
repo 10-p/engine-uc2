@@ -255,6 +255,19 @@ public:
 	UBOOL							NoLODBias;
 	// -glerrorsdraw: glGetError after every draw call and texture upload, with what it was (slow; to find the call behind an error -glerrors reports).
 	UBOOL							CheckGLErrorsPerDraw;
+	// -glstats: one log line every 300 frames (M11, G5): frame time and what a frame costs
+	// in calls the driver makes (per frame averages over the interval).
+	UBOOL							LogStats;
+	INT								StatDraws,			// draw calls (passes), all
+									StatPrimitives,
+									StatMaterials,		// passes whose full material state was (re)applied
+									StatBufferUploads, StatBufferBytes,
+									StatTextureUploads,
+									StatPostQuads,		// the device's own full-target quads (snapshots, depth copies)
+									StatSnapshots, StatDepthColors, StatDepthCopies,
+									StatFrame0;
+	DOUBLE							StatTime0;
+	void LogFrameStats();
 	void BindQuadBuffer();
 
 	// Constructors.

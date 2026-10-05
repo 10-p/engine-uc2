@@ -483,6 +483,10 @@ UBOOL UUC2GLRenderDevice::Init()
 	ParseTimeList( TEXT("glpptoggle="), GPPToggleTimes );
 	GShotRamp = ParseParam( appCmdLine(), TEXT("glshotramp") );
 	NoLODBias = ParseParam( appCmdLine(), TEXT("glnolodbias") );
+	LogStats = ParseParam( appCmdLine(), TEXT("glstats") );
+	StatDraws = StatPrimitives = StatMaterials = StatBufferUploads = StatBufferBytes = StatTextureUploads = StatPostQuads = 0;
+	StatSnapshots = StatDepthColors = StatDepthCopies = StatFrame0 = 0;
+	StatTime0 = 0.0;
 	CheckGLErrorsPerDraw = ParseParam( appCmdLine(), TEXT("glerrorsdraw") );
 	CheckGLErrors |= CheckGLErrorsPerDraw;
 	if( ParseParam( appCmdLine(), TEXT("glselftest") ) )
@@ -1039,6 +1043,26 @@ void UUC2GLRenderDevice::FreeBuffer( GLenum Target, GLuint& Buffer )
 	else
 		glDeleteBuffers( 1, &Buffer );
 	Buffer = 0;
+}
+
+void UUC2GLRenderDevice::LogFrameStats()
+{
+	DOUBLE	Now		= appSeconds();
+	INT		Frames	= FrameCounter - StatFrame0;
+	if( StatTime0 > 0.0 && Frames > 0 )
+	{
+		FLOAT N = Frames;
+		debugf( NAME_Init, TEXT("UC2GLDrv: stats: frames %i-%i: %.2f ms/frame (%.1f frames/s); per frame: %.1f draw calls, %.0f primitives, %.1f material state applications, %.1f buffer uploads (%.1f KB), %.2f texture uploads, %.2f device quads (%.2f back-buffer snapshots, %.2f depth-as-colour, %.2f depth copies)"),
+			StatFrame0 + 1, FrameCounter, (FLOAT)((Now - StatTime0) * 1000.0 / Frames), (FLOAT)(Frames / (Now - StatTime0)),
+			StatDraws / N, StatPrimitives / N, StatMaterials / N, StatBufferUploads / N, StatBufferBytes / N / 1024.f, StatTextureUploads / N, StatPostQuads / N,
+			(SnapshotCopies - StatSnapshots) / N, (DepthColorCopies - StatDepthColors) / N, (DepthBufferCopies - StatDepthCopies) / N );
+	}
+	StatTime0	= Now;
+	StatFrame0	= FrameCounter;
+	StatDraws = StatPrimitives = StatMaterials = StatBufferUploads = StatBufferBytes = StatTextureUploads = StatPostQuads = 0;
+	StatSnapshots	= SnapshotCopies;
+	StatDepthColors	= DepthColorCopies;
+	StatDepthCopies	= DepthBufferCopies;
 }
 
 void UUC2GLRenderDevice::BindQuadBuffer()
@@ -1689,6 +1713,9 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 	}
 
 	BindingSwap( Viewport );
+
+	if( LogStats && (FrameCounter - StatFrame0 >= 300 || StatTime0 == 0.0) )
+		LogFrameStats();
 
 	// -glshot: the engine's own SHOT exec (ReadPixels -> appCreateBitmap).
 	if( GFirstFrameTime == 0.0 )

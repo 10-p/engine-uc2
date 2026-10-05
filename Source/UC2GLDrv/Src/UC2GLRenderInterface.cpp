@@ -1287,6 +1287,7 @@ void FOpenGLRenderInterface::SetMaterialBlending( FOpenGLMaterialState* NewMater
 
 	if( CurrentState->CurrentMaterialState == NewMaterialState )
 		return;
+	RenDev->StatMaterials++;
 
 	// Passes of pixel-shader materials get their program in DrawPrimitive (BeginProgramPass);
 	// everything below is state both paths share (the combiner set-up is simply unused then).
@@ -2016,6 +2017,8 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 
 		if( Programmed )
 			EndProgramPass();
+		RenDev->StatDraws++;
+		RenDev->StatPrimitives += NumPrimitives;
 
 		if( RestoreFogColor )
 		{

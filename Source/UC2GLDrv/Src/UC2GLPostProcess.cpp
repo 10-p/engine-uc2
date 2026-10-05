@@ -246,6 +246,7 @@ void UUC2GLRenderDevice::SetPostProcess( UBOOL Enable )
 //
 void UUC2GLRenderDevice::DrawPostQuad( GLuint Program, GLint RectLoc, GLuint SourceTexture, GLuint DestFramebuffer, INT DestWidth, INT DestHeight, const FLOAT* Rect, UBOOL DepthOnly )
 {
+	StatPostQuads++;
 	glBindFramebuffer( GL_FRAMEBUFFER, DestFramebuffer );
 	glViewport( 0, 0, DestWidth, DestHeight );
 	glDisable( GL_SCISSOR_TEST );

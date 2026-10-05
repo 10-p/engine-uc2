@@ -706,6 +706,8 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 	if( RenDev->CheckGLErrorsPerDraw )
 		RenDev->CheckGLError( *FString::Printf( TEXT("texture upload: %ix%i format %i, %i mips from %i, composite %i cubemap %i render target %i"), Width, Height, (INT)ActualFormat, NumMips, FirstMip, CompositeTexture != NULL, Cubemap != NULL, RenderTarget != NULL ) );
 
+	RenDev->StatTextureUploads++;
+
 	// Update the cached info.
 	CachedRevision	= SourceTexture->GetRevision();
 	CachedWidth		= USize;
@@ -844,6 +846,7 @@ void FOpenGLVertexStream::Cache(FVertexStream* SourceStream)
 
 	RenDev->glBindBuffer( GL_ARRAY_BUFFER, BufferID );
 	RenDev->glBufferData( GL_ARRAY_BUFFER, Size, Swizzled, GL_STATIC_DRAW );
+	RenDev->StatBufferUploads++; RenDev->StatBufferBytes += Size;
 	RenDev->RenderInterface.InvalidateHardwareState();
 
 	CachedSize		= Size;
@@ -909,6 +912,7 @@ INT FOpenGLDynamicVertexStream::AddVertices(FVertexStream* Stream)
 
 	RenDev->glBindBuffer( GL_ARRAY_BUFFER, BufferID );
 	RenDev->glBufferSubData( GL_ARRAY_BUFFER, Tail, Size, Swizzled );
+	RenDev->StatBufferUploads++; RenDev->StatBufferBytes += Size;
 	RenDev->RenderInterface.InvalidateHardwareState();
 
 	INT	BaseVertexIndex = Stride ? Tail / Stride : 0;
@@ -988,6 +992,7 @@ void FOpenGLIndexBuffer::Cache(FIndexBuffer* SourceIndexBuffer)
 
 	RenDev->glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, BufferID );
 	RenDev->glBufferData( GL_ELEMENT_ARRAY_BUFFER, Size, &RenDev->ScratchBuffer(0), GL_STATIC_DRAW );
+	RenDev->StatBufferUploads++; RenDev->StatBufferBytes += Size;
 	RenDev->RenderInterface.InvalidateHardwareState();
 
 	CachedSize		= Size;
@@ -1044,6 +1049,7 @@ INT FOpenGLDynamicIndexBuffer::AddIndices(FIndexBuffer* Indices)
 
 	RenDev->glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, BufferID );
 	RenDev->glBufferSubData( GL_ELEMENT_ARRAY_BUFFER, Tail, Size, &RenDev->ScratchBuffer(0) );
+	RenDev->StatBufferUploads++; RenDev->StatBufferBytes += Size;
 	RenDev->RenderInterface.InvalidateHardwareState();
 
 	INT	BaseIndex = Tail / IndexSize;
