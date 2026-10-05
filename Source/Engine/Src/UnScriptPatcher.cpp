@@ -140,11 +140,18 @@ UBOOL FLinkerPatchData::Apply( ULinkerLoad* Loader, FPatchReader& Ar, UBOOL bCre
 	}
 
 	// add any new imports to the linker's import table
+	// uc2 port: AppendImport -> VerifyImport may have to find or create the linker of the new import's
+	// package (GetPackageLinker, which checks GObjBeginLoadCount): that happens when ApplyPatches made this
+	// linker with LOAD_NoVerify for a package that so far existed only as the empty UPackage a network client
+	// creates for each USES line (UNetPendingLevel::NotifyReceivedText). Epic's shipped build compiled check()
+	// out (FINAL_RELEASE). Only linkers are made here, no objects, so this EndLoad has nothing else to load.
+	UObject::BeginLoad();
 	for ( INT i = 0; i < Imports.Num(); i++ )
 	{
 		Loader->AppendImport(Imports(i));
 		Imports.Remove(i--);
 	}
+	UObject::EndLoad();
 
 	if ( Exports.Num() )
 	{
@@ -282,17 +289,10 @@ void FScriptPatcher::ApplyPatches( UBOOL bCreateDependencies )
 			UObject::EndLoad();
 
 			FPatchReader Ar;
-			// uc2 port: hold the load count across Apply() as well. Apply -> ULinkerLoad::AppendImport ->
-			// VerifyImport may have to find or create the linker of the new import's package
-			// (GetPackageLinker, which checks GObjBeginLoadCount). That happens when this linker was made
-			// just above with LOAD_NoVerify, i.e. for a package that exists only as the empty UPackage a network
-			// client creates for each USES line (UNetPendingLevel::NotifyReceivedText); Epic's shipped (FINAL_RELEASE)
-			// build had check() compiled out. The count stays held through the bytecode swap below, so objects
-			// that AppendExports created are still serialized from the patch reader by the one EndLoad, as before.
-			UObject::BeginLoad();
 			if ( Update->Apply(Loader,Ar, bCreateDependencies) )
 			{
 				// for any patches that contain updated bytecode, here is where we replace the existing bytecode
+				UObject::BeginLoad();
 
 				// swap the linker's source-reader to our memory reader, so that all any objects created during
 				// serialization of the new bytecode will be loaded from our memory reader, instead of disk
@@ -327,7 +327,6 @@ void FScriptPatcher::ApplyPatches( UBOOL bCreateDependencies )
 			}
 			else
 			{
-				UObject::EndLoad();
 				// if the patch couldn't be applied, leave it in the PackageUpdate array for now;
 				// we'll retry the patch after the map has been fully loaded
 				continue;

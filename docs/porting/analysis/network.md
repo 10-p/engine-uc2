@@ -56,11 +56,8 @@ Whose bug: Epic's PC/Xbox code path. `check()` is compiled out under `FINAL_RELE
 which the shipped Xbox game used; GetPackageLinker itself works without the count (it only finds/creates a
 linker), so the shipped game never saw it. Epic's non-final PC build (and ours: DO_CHECK=1) asserts.
 
-Fix (Engine/Src/UnScriptPatcher.cpp ApplyPatches): BeginLoad moved up to before `Update->Apply()`, EndLoad
-added on the "could not apply, retry later" branch. The success branch keeps its single EndLoad after the
-bytecode swap, so the exports AppendExports created (queued in GObjLoaded, UnLinker.cpp:846) are still
-serialized from the patch reader exactly as before (previously they waited in GObjLoaded with count 0 until
-that same EndLoad).
+Fix, first attempt (commit 0926219, WRONG, replaced in step 2): BeginLoad moved up in ApplyPatches to cover
+`Update->Apply()`.
 
 Open doubt noted for later: `UPackageMap::Compute` (Core/Src/UnCoreNet.cpp:276) takes ObjectCount/NameCount
 from `ExportMap.Num()`/`NameMap.Num()`, which include exports/names the patcher appended. Client and server
@@ -68,3 +65,23 @@ must therefore have patched the same packages before Compute, or every later pac
 The client patches every USES package (placeholders included) before its Compute; the server patches only what
 is loaded at its first ApplyPatches (packages loaded later, e.g. during InitGame, get patched by the second
 pass after Listen/Compute). To check with a per-package map dump on both sides.
+
+### Step 2: the first fix was wrong; BeginLoad/EndLoad around the AppendImport loop only
+
+With the step-1 change the client got past the assertion and died with `Bad export index 12550143/582`
+(`logs/net/repro2-client-gdb.out`), and with a breakpoint on the error output (repro3, first run) in
+`UClass::Serialize` `check(GetPropertiesSize()>=sizeof(UObject))` from `EndLoad` in the SECOND
+`ApplyPatches(TRUE)` pass (UnGame.cpp:2931). Cause: holding the count across Apply also covered
+`PreloadExports` (bCreateDependencies=TRUE), whose own BeginLoad/EndLoad used to flush the classes it creates
+from the package file; under my outer count they stayed queued until the EndLoad after the reader swap
+(`Loader->Loader = &Ar`) and were serialized from the patch bytes -> garbage. Lesson: in this function the
+position of each EndLoad decides which reader an object is read from.
+
+Fix (Engine/Src/UnScriptPatcher.cpp, `FLinkerPatchData::Apply`): BeginLoad/EndLoad around the
+`AppendImport` loop only. VerifyImport creates linkers there, never objects, so the EndLoad has nothing of its
+own to serialize; GObjLoaded is empty on entry (the previous patch's bytecode EndLoad flushed it).
+ApplyPatches is back to Epic's text.
+
+Result (repro3, `logs/net/repro3-*`): client `UCPlayerController0 got player SDL2Viewport` / `setplayer`,
+server `Join request`, `UCPlayerController0 got player TcpipConnection`, `Join succeeded: Player-1`. One
+`Received invalid actor class` on the client -> next step (package map agreement).
