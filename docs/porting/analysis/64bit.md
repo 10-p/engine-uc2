@@ -293,3 +293,18 @@ time (verify reaches every layout; listed here is what *runs* the C++ that uses 
 
 Counts: P 50 placeholder entries (46 members — 8 of them script-struct members — and 4 array strides; one per
 table entry), C 22 casts (cast census 119 diagnostic lines -> 0), U 6, L 16 headers/structs, V 2, F 1.
+
+### Step 9 — first verification results (2026-10-05)
+
+- Both censuses after the step-5 fixes: 64-bit (`logs/m13-census/summary.tsv`) **58/58 PASS**, this branch's 32-bit
+  build (`logs/m13-census32/summary.tsv`) **58/58 PASS**, per-map result identical (`diff` of status+map empty).
+  Each had about 2 servers crash during exit after the TERM (BLOCKERS.md, pre-existing, both widths).
+- Rebuilt with `-Werror=int-to-pointer-cast`: 64-bit full build 0 errors, cast census **0 + 0**
+  (`logs/m13/build64-final1.log`); 32-bit build 0 errors.
+- 64-bit GL client, DM-Deadbolt with 4 bots, 70 s (`/usr/bin/time -v` inside `capped 3G`): **max RSS 227 MB**,
+  0 GL errors in 1,124 frames — the suites' 2G ceilings stay right for 64-bit (`logs/m13/client64-mem.out`).
+- `m13-64bit.sh verify psh2glsl glselftest pinned`: all PASS — verify (400 classes, 0 link mismatches, 50
+  placeholders, 6,578 scripts scanned, DWARF 2 = 2 pre-existing); psh2glsl 100 shaders 0 failed; glselftest
+  10/10; **pinned: 64-bit and 32-bit at the same loc=(1531.9,3111.5,-34.1) rot=(0,-40880,0), static part
+  100.000% within 2 levels**, whole frame 89.7% bit-identical, 0 GL errors.
+- New check `saves` (profiletest on both trees, files compared byte for byte, cross loads).

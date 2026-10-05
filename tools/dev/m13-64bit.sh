@@ -32,6 +32,8 @@
 #              tree, post-processing off: same position/rotation, static part >= 99.9% within 2 levels
 #              (tools/dev/pinned-compare.py, as m12-wine-smoke.sh's pinned check)
 #   psh2glsl   python3 tools/psh2glsl.py --selftest
+#   saves      `ucc-bin profiletest`: a profile saved by each build is byte-identical to the other's, and each
+#              build loads the other's file back to the values it was saved with (ULoadSaveManager, the game's path)
 #   soak       M13_SOAK s: menu -> DM-Deadbolt with 4 bots -> menu -> DM-Azure with 4 bots; 0 Critical, the
 #              resident size sampled every 30 s does not grow over the second map (flat RSS)
 #   leftovers  no uc2.bin/ucc-bin/Xvfb of the m13 trees running
@@ -260,6 +262,26 @@ PY
   fi
 }
 
+check_saves() {	# a profile saved by the 64-bit build loads in the 32-bit one and the other way round
+  local rc64 rc32 r a b c d f64 f32
+  rm -rf "$sys/Profiles/M13Save" "$rsys/Profiles/M13Save" "$sys/Profiles/M13From32" "$rsys/Profiles/M13From64"
+  ( cd "$sys" && "$capped" 3G 120 -- ./ucc-bin profiletest save M13Save "$out/saves-64-saved.txt" > "$out/saves-64-save.out" 2>&1 ); rc64=$?
+  ( cd "$rsys" && "$capped" 2G 120 -- ./ucc-bin profiletest save M13Save "$out/saves-32-saved.txt" > "$out/saves-32-save.out" 2>&1 ); rc32=$?
+  f64=$sys/Profiles/M13Save/AVARIS_PROFILE.PRO; f32=$rsys/Profiles/M13Save/AVARIS_PROFILE.PRO
+  mkdir -p "$rsys/Profiles/M13From64" "$sys/Profiles/M13From32"
+  cp -f "$f64" "$rsys/Profiles/M13From64/" 2>/dev/null; cp -f "$f32" "$sys/Profiles/M13From32/" 2>/dev/null
+  ( cd "$rsys" && "$capped" 2G 120 -- ./ucc-bin profiletest load M13From64 "$out/saves-32-loaded-64.txt" > "$out/saves-32-load.out" 2>&1 ); a=$?
+  ( cd "$sys" && "$capped" 3G 120 -- ./ucc-bin profiletest load M13From32 "$out/saves-64-loaded-32.txt" > "$out/saves-64-load.out" 2>&1 ); b=$?
+  r="64 save rc $rc64, 32 save rc $rc32, 32 loads 64's rc $a, 64 loads 32's rc $b"
+  if [ $rc64 = 0 ] && [ $rc32 = 0 ] && [ $a = 0 ] && [ $b = 0 ] && cmp -s "$f64" "$f32" \
+     && cmp -s "$out/saves-64-saved.txt" "$out/saves-32-loaded-64.txt" && cmp -s "$out/saves-32-saved.txt" "$out/saves-64-loaded-32.txt" \
+     && cmp -s "$out/saves-64-saved.txt" "$out/saves-32-saved.txt"; then
+    result PASS saves "profile files written by the 64-bit and the 32-bit build are byte-identical ($(stat -c %s "$f64") bytes); each build loads the other's and exports the same $(wc -l < "$out/saves-64-saved.txt") property lines it was saved with"
+  else
+    result FAIL saves "$r; files $(cmp "$f64" "$f32" 2>&1 | head -1); see $out/saves-*"
+  fi
+}
+
 check_leftovers() {
   local left="" p
   for p in $(pgrep -x uc2.bin) $(pgrep -x ucc-bin) $(pgrep -x Xvfb); do
@@ -268,7 +290,7 @@ check_leftovers() {
   if [ -z "$left" ]; then result PASS leftovers "no uc2.bin/ucc-bin/Xvfb of the m13 trees running"; else result FAIL leftovers "still running:$left"; fi
 }
 
-checks=${*:-verify census controls audio movies glselftest effects pinned psh2glsl soak leftovers}
+checks=${*:-verify census controls audio movies glselftest effects pinned psh2glsl saves soak leftovers}
 for c in $checks; do
   type "check_$c" > /dev/null 2>&1 || { echo "unknown check: $c" >&2; continue; }
   "check_$c"
