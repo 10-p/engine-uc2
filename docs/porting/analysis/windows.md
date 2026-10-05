@@ -338,3 +338,16 @@ wine is not Windows. One session on a real Windows 10/11 PC with `tools/dev/pack
    DM-Deadbolt`, Ctrl+C stops it cleanly; Windows Firewall prompt on first listen (UDP 7777).
 9. A client on the Linux build joining the Windows server (or the reverse) on the LAN: never tried here.
 10. Exit from the menu (Quit): process gone, no "has stopped working" dialog; Avaris.log ends with "Log file closed".
+
+### Step 8 — no-sound path, network handshake, a defect that is not Windows' (2026-10-05)
+- `nosound` smoke check: OpenAL32.dll moved aside for one run → `UC2ALAudio: no OpenAL library (OpenAL32.dll)
+  beside the game or on the system: sound is off`, menu up, exit 0 (wine 10 has no openal32 of its own, so
+  nothing else was found).
+- `netjoin` smoke check: the Linux `uc2.bin` (run/m12-native) connects to `ucc.exe server DM-Deadbolt PORT=7797`
+  under wine. Server: `NotifyAcceptingConnection`, `Open MyLevel ... 127.0.0.1:<port>`, HELLO/CHALLENGE/NETSPEED/
+  LOGIN, `Login request: ...`, the `USES` package list; client: `Welcomed by server: LEVEL=DM-Deadbolt
+  GAME=UCGameplay.UCDeathmatch`. That is the server's WinSock UDP and its tick loop answering a real client, the
+  "ticks" part of W2 shown by traffic. The client then stops at `Assertion failed: GObjBeginLoadCount`
+  (UnObj.cpp:3361, `UObject::GetPackageLinker`). **Reproduced Linux client → Linux `ucc-bin server`**
+  (`logs/m12/linux-netjoin-*.out`): a pre-existing network-join defect, not Windows', recorded in BLOCKERS.md and
+  left alone (outside M12). The check passes on the handshake and reports the assertion count.
