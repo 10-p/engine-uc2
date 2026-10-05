@@ -200,6 +200,15 @@ def check_shots(name, text, shots, ogv, tmp):
     ca, cb = crop(a, size, box), crop(b, size, box)
     ra, pa = cooked_frame_rgb(ogv, sl[0][2], (mw, mh), tmp)
     rb, pb = cooked_frame_rgb(ogv, sl[1][2], (mw, mh), tmp)
+    bands = 'the subtitle bands are hidden' in text
+    if bands:
+        # XboxMovieThread's HideSubtitles: rows 0-96 and 384-480 of the 640x480 picture are black
+        def black(rgb):
+            rgb = bytearray(rgb)
+            for y in list(range(0, mh * 96 // 480)) + list(range(mh * 384 // 480, mh)):
+                rgb[y * mw * 3:(y + 1) * mw * 3] = bytes(mw * 3)
+            return bytes(rgb)
+        ra, rb = black(ra), black(rb)
     between = psnr(ca, cb)
     own_a, other_a = psnr(ca, ra), psnr(ca, rb)
     own_b, other_b = psnr(cb, rb), psnr(cb, ra)
@@ -208,8 +217,9 @@ def check_shots(name, text, shots, ogv, tmp):
            % (sl[0][0], sl[0][2], sl[1][0], sl[1][2], between))
     result(name + '-match', own_a >= 30.0 and own_b >= 30.0 and own_a > other_a + 3 and own_b > other_b + 3,
            'each screenshot matches the cooked frame shown at its time (decoded picture %d / %d, %dx%d quad): '
-           'PSNR %.1f / %.1f dB against its own frame, %.1f / %.1f dB against the other one'
-           % (pa, pb, mw, mh, own_a, own_b, other_a, other_b))
+           'PSNR %.1f / %.1f dB against its own frame, %.1f / %.1f dB against the other one%s'
+           % (pa, pb, mw, mh, own_a, own_b, other_a, other_b,
+              ' (subtitles off: the reference has the HideSubtitles bands black too)' if bands else ''))
 
 
 def scen_logos(a, tmp):
@@ -269,10 +279,19 @@ def cine_url():
     return 'DM-Deadbolt?StartCinematic=%s' % CINE
 
 
+def cine_exec(tree):
+    """A map on the command line loads inside UGameEngine::Init, before the window exists (no movie can show
+    there, nor did the game ever start a ladder match that way). The ladder travels from the menu: EXEC= runs
+    this file after Init and its OPEN travels on the first tick, as the menu's travel does."""
+    path = os.path.join(work, 'run', tree, 'System', 'm9-cinematic.txt')
+    open(path, 'w').write('open %s\n' % cine_url())
+    return 'EXEC=m9-cinematic.txt'
+
+
 def scen_cinematic(a, tmp):
     out = os.path.join(work, 'logs', a.tree)
     wav = os.path.join(out, 'm9-cinematic.wav')
-    text, shots, dt, left = run_game(a.tree, 'cinematic', 150, [cine_url(), '-log', '-nostartupmovies', '-glerrors',
+    text, shots, dt, left = run_game(a.tree, 'cinematic', 150, [cine_exec(a.tree), '-log', '-nostartupmovies', '-glerrors',
                                      '-movieshot=5,14', '-audiowave=%s' % wav], alsoft='wave')
     ls = re.search(r'UC2Movie: loading screen for DM-Deadbolt[^\n]*', text)
     result('cinematic-loading-screen', bool(ls), ls.group(0) if ls else 'no loading screen line')
@@ -296,7 +315,7 @@ def scen_cinematic(a, tmp):
                         os.path.join(work, 'run', a.tree, 'Movies', CINE + '.ogv'), '-map', '0:a:0', src], check=True)
         ctrl = os.path.join(tmp, 'ctrl-src.wav')
         subprocess.run([capped, '1G', '120', '--', 'ffmpeg', '-nostdin', '-y', '-v', 'error', '-i',
-                        os.path.join(work, 'run', a.tree, 'Movies', '11_Asc06.ogv'), '-map', '0:a:0', ctrl], check=True)
+                        os.path.join(work, 'run', a.tree, 'Movies', 'UC2_Logos.ogv'), '-map', '0:a:0', ctrl], check=True)
         r = subprocess.run(['python3', os.path.join(here, 'audio-music-check.py'), cut, src, str(a.movie_gain), ctrl],
                            stdout=subprocess.PIPE).stdout.decode().strip()
         result('cinematic-sound', r.endswith('PASS'), 'stream opened at %.2f s of the capture; %s' % (start, r))
@@ -309,7 +328,7 @@ def scen_cinematic(a, tmp):
 
 
 def scen_cinematic_skip(a, tmp):
-    text, shots, dt, left = run_game(a.tree, 'cinematic-skip', 120, [cine_url(), '-log', '-nostartupmovies', '-glerrors'],
+    text, shots, dt, left = run_game(a.tree, 'cinematic-skip', 120, [cine_exec(a.tree), '-log', '-nostartupmovies', '-glerrors'],
                                      inject='UC2Movie: full-screen D:|3.0|Return')
     s = re.search(r'UC2Movie: D:\\Movies\\%s\.xmv skipped by a key or button at movie time ([\d.]+) s[^\n]*' % CINE, text)
     after = text[s.end():] if s else ''
@@ -324,7 +343,7 @@ def no_movie_activity(text):
 
 
 def scen_nullrenderer(a, tmp):
-    text, shots, dt, left = run_game(a.tree, 'nullrenderer', 45, [cine_url(), '-log', '-nullrenderer'])
+    text, shots, dt, left = run_game(a.tree, 'nullrenderer', 60, [cine_exec(a.tree), '-log', '-nullrenderer'])
     act = no_movie_activity(text)
     lv = 'Bringing Level DM-Deadbolt' in text
     result('nullrenderer', not act and lv and 'NullRenderDevice' in text,
