@@ -354,3 +354,17 @@ indices (`GetTypeHash(UObject*)`); literal `*4` sizes in memcpy are pixel rows.
     UnGnuG.h refuses unsigned char outside the audit build), so arm behaves as x86. Recorded, not changed
     (it is Epic's shipped behaviour; whether accented text should survive in saved inis is a separate question).
   - String hashes/CRCs mask with `&255` (`appStrCrc`, no UNICODE): sign-independent.
+
+## Hunks in files other agents own (for the hand merge)
+
+- **net-join (IpDrv)**: `Source/IpDrv/Inc/IpDrvClasses.h` three members `INT` -> `PTRINT` (`PrivateResolveInfo`,
+  `LinkPtr GCC_PACK(4)`, `MSLinkPtr GCC_PACK(4)`); `Source/IpDrv/Src/MasterServerClient.cpp` two casts
+  `LinkPtr = (INT)(NEW FServerQueryLink(...))`, `MSLinkPtr = (INT)(NEW FMasterServerClientLink(this))` ->
+  `(PTRINT)`; `Source/IpDrv/Src/MasterServerUplink.cpp` two `LinkPtr = (INT)(NEW FMasterServerUplinkLink(this))`
+  -> `(PTRINT)`. Nothing in UnPending.cpp, UnLevel.cpp, UnConn.cpp, UnChan.cpp, Core's linker/package map
+  (UnLinker.*, UnCoreNet.cpp) or SDL2Drv's test channel.
+- **web renderer (UC2GLDrv, web launcher files)**: no hunk. The GL driver compiled clean at 64-bit (cast census 0)
+  and runs (glselftest 10/10, effects, pinned).
+- **coordinator's tools**: `tools/dev/m10-controls.sh`/`m12-wine-smoke.sh` carry main's `b367ae0` hunks verbatim;
+  `m12-wine-smoke.sh` also gained `M12_TREE`/`M12_REF`/`M12_OUT` and calls `tools/dev/pinned-compare.py` (its
+  comparison code moved there unchanged); `map-census.sh` gained `CENSUS_NAME`/`CENSUS_PORT` (defaults unchanged).
