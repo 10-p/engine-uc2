@@ -206,3 +206,23 @@ Next: run tree with the .exe/.dll (mkrun-uc2.sh), wine prefix, `ucc.exe verifycl
   `X connection ... broken` at the end of the log). `m12-wine.sh` now also takes USR1 as "press Ctrl+C";
   `M10_STOPSIG=USR1` for wine runs: `Exiting.`, `0 GL errors in 467 frames`, `Object subsystem successfully
   closed.`
+
+### Step 6 (W3 audio, W5) — audio under wine; the smoke script (2026-10-05)
+- `ucc.exe UC2ALAudio.UC2AudioSelfTest` under wine: `39 checks, 0 failed; Pan3D -1.10 dB, Pan2D -1.52 dB` —
+  the same line, to the hundredth, as every Linux run in `<WorkUC2>/logs/*/audio-selftest.out` (OpenAL Soft's
+  loopback mixer, same source, now as OpenAL32.dll).
+- `ucc.exe UC2ALAudio.UC2AudioCheck`: `78 cue tables, 2438 cues, 0 failures`, 7141 waves at exact length, 21 music
+  streams — identical to Linux.
+- Capture: `uc2.exe -audiowave=<WorkUC2>/logs/m12/smoke-capture.wav` on the menu, 60 s: the device is `"OpenAL
+  Soft on Wave File Writer"` (the `_putenv` path works: OpenAL32.dll read ALSOFT_CONF/ALSOFT_DRIVERS set by the
+  game at run time); `audio-music-check.py`: NuBattle at -19.01 dB (expected -19.00), correlation 0.827, control
+  Recoil 0.124. A Unix absolute path works as a file name for a Windows program under wine (the working
+  directory is on Z:, so `/home/...` resolves to `Z:\home\...`).
+- What wine provides for sound: nothing is used. The game's OpenAL32.dll is ours (wine 10 ships no openal32);
+  its backends would be WASAPI/DirectSound/WinMM on top of wine's mmdevapi → winepulse/winealsa, but every run
+  here forces `ALSOFT_DRIVERS=null` (capped) or the wave writer, so no wine audio driver is exercised.
+- `tools/dev/m12-wine-smoke.sh` (W5): checks verify, server, null, gl, pinned, audiocheck, selftest, capture,
+  keyboard, pad, leftovers; PASS/FAIL from log lines and measurements only. First runs: all PASS (pinned:
+  static part 100.000 % within 2 levels, 90.8 % of the frame bit-identical, PSNR 29.5 dB).
+- `m12-wine.sh` also disables winedbg (`winedbg.exe=d`): a crash ends the process after the engine's own report
+  instead of opening a dialog on the Xvfb display.
