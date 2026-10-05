@@ -417,3 +417,69 @@ confirmed by the extension list of the browser run). The fallbacks stay on the l
 | depth textures (`-glnodepthtexture`) | **NOT implemented** | main depth is a renderbuffer; the depth of field gets a constant "near" depth colour and leaves the picture sharp (log line); the distortion accumulation target's depth is cleared, so distortion is not hidden by nearer geometry | `UUC2GLRenderDevice::UpdateSampledTexture` (depth usage): maintain the depth colour by a second draw of every depth-writing primitive from `DrawPrimitive` into a target of its own (position-only program writing `gl_FragCoord.z` as three bytes; alpha-tested passes need stage 0's alpha) |
 | `gl_FragDepth` (`-glnofragdepth`) | **NOT implemented** | `CopyDepthBuffer` clears the destination's depth instead of copying: distortion shows through nearer geometry | a depth test inside the fragment shader of program passes drawn into that target (sample the scene depth at `gl_FragCoord`, `discard`); needs a hook at the top of `main` in the generated shaders (`tools/psh2glsl.py`) |
 | 32-bit indices (`-glnouintindex`) | **NOT implemented, not even guarded** | gl4es converts the indices to 16 bits (wrong above 65535 vertices) | split the draw by vertex range; hook `FOpenGLRenderInterface::DrawPrimitive` |
+
+## G3: the Emscripten build with the GL device (2026-10-05)
+
+- Root `CMakeLists.txt`: `UC2GLDrv` is built on every target, gl4es is fetched for Emscripten too (the web
+  build already compiles everything with `-pthread`, line 149, so gl4es gets it). `Source/UC2GL4ESDrv` under
+  `__EMSCRIPTEN__`: SDL keeps the window and the input (`ResizeViewport` without `BLIT_OpenGL`), the WebGL 1
+  context is created by the device on the engine's worker (`emscripten_webgl_create_context("#canvas")`:
+  `alpha 0, depth 0, stencil 0, antialias 0`, `explicitSwapControl`, `renderViaOffscreenBackBuffer`,
+  high-performance preference, extensions enabled by default); present = `emscripten_webgl_commit_frame()`;
+  entry points for gl4es and for the raw table from `emscripten_webgl_get_proc_address`.
+  The context is created in the device's package, not in the launcher's web part or in SDL2Drv: it belongs
+  with the rest of the binding and SDL2Drv stays untouched.
+- `Source/SDLLaunch/cmake/Web.cmake` (block `# --- M11`): `-sGL_ENABLE_GET_PROC_ADDRESS=1`,
+  `-sMIN_WEBGL_VERSION=1 -sMAX_WEBGL_VERSION=1`, `-sFULL_ES2=1`, `-sOFFSCREEN_FRAMEBUFFER` (verified in the
+  emitted loader: `blitOffscreenFramebuffer` 1 occurrence, `defaultFbo` 3). Memory settings unchanged.
+- `Engine/Config/web/Default.ini`: `RenderDevice=UC2GL4ESDrv.UC2GL4ESRenderDevice` and the device's section;
+  rows in `Engine/Config/README.md`.
+- `source ../env.sh && capped 6G 5400 -- bash -c 'cmake --preset wasm-perf && cmake --build build-wasm-perf -j6'`
+  -> `[100%] Built target SDLLaunch`, exit 0; `SDLLaunch.wasm` 11.6 MB (it was about 9 MB with the null
+  device), `SDLLaunch.js` 331 KB. (`wasm` preset and the Node layout check: in the gate section.)
+
+## G4, first browser runs (frontend harness under the mem guard, inside `capped 6G`)
+
+Command, always this one (`yarn build` first, with `--engine-artifact
+<this worktree>/build-wasm-perf/Source/SDLLaunch` so that `.ufront/publish.local.json` is not touched):
+
+```sh
+cd /home/ion/WorkUC2/ufrontend && source /home/ion/WorkUC2/env.sh
+/home/ion/WorkUC2/bin/capped 4G 300 -- yarn build --target uc2 --engine-artifact /home/ion/WorkUC2/engine-uc2-m11/build-wasm-perf/Source/SDLLaunch
+UC2_E2E_SHOT_DIR=/home/ion/WorkUC2/logs/m11/e2e UFRONT_E2E_TRACE=/home/ion/WorkUC2/logs/m11/e2e-trace-N.txt \
+  /home/ion/WorkUC2/bin/capped 6G 600 -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=12 -- --target uc2 uc2-wasm-boot.spec.js
+```
+
+Run 1 (the old first-light spec, which stops at "menu level up"): passed; the engine's lines:
+
+```
+Initializing UC2GLDrv (class UC2GL4ESDrv.UC2GL4ESRenderDevice; binding: WebGL 1 through GL4ES)
+UC2GL4ESDrv: WebGL 1 context created on the engine's thread (handle ...; alpha 0, depth 0, stencil 0, antialias 0, explicit swap)
+UC2GLDrv: GLES hardware: WebKit WebGL / OpenGL ES 2.0 (WebGL 1.0 (OpenGL ES 2.0 Chromium))
+UC2GLDrv: GLES fragment highp float: 23 bits of precision (range 2^-127..2^127)
+UC2GLDrv: capabilities: S3TC yes, depth texture yes, gl_FragDepth yes, 32-bit indices yes, texture max level no (mip chains are completed to 1x1), fragment highp yes
+UC2GLDrv: 8 texture units (GL reports 16), max texture 32768, S3TC yes, combine3 yes, anisotropy 1 of 16
+UC2GLDrv: pixel shaders on: 84 fragment shaders compiled, 0 failed
+Render device: UC2GL4ESDrv.UC2GL4ESRenderDevice (640x480 windowed)
+```
+
+**The headless browser of the harness uses the real GPU here**: `[GPU] WebGL renderer: ANGLE (NVIDIA, Vulkan
+1.4.312 (NVIDIA Quadro P620 (0x00001CB6)), NVIDIA)` (the harness launches with `--use-angle=vulkan
+--disable-software-rasterizer` and no display; the GPU canary of `lib/gpu.js` passes).
+
+Run 2: my new spec hung on `page.fill('#engine-options')` (the field is inside the collapsed Advanced
+fieldset; no action timeout): stopped by `capped`'s 600 s limit (exit 124). Fixed in the spec (the ut2004
+specs open the fieldset first), with a timeout.
+
+Run 3: frames are drawn for the first time, and WebGL 1 is stricter than Mesa's ES context:
+`UC2GLDrv: render target 16x16 incomplete (0x8cd9)` (FRAMEBUFFER_INCOMPLETE_DIMENSIONS: the 16x16 luminance
+target of the dynamic gamma borrowed the 640x480 depth-stencil, which D3D, desktop GL and ES 3 allow and
+ES 2 / WebGL 1 do not), then `Assertion failed: StateIndex > 0` (the engine pops a render target it could
+not set). Fixed: on GLES a target that is smaller than the main framebuffer gets no depth attachment
+(`UC2GLResource.cpp`; the engine's tiles into such targets do not depth-test). Also seen and not yet
+located: one `GL_INVALID_OPERATION` during `SetRes` (error checkpoints added to `SetRes` for the next run).
+
+Run 4: **stopped by the mem guard, not by the test** (exit 3): `9.5 GB in use at start, budget 12 GB`,
+killed at 12.0 GB machine-wide. Other work on the machine (compiles of other agents, my own twin effect
+series, the owner's desktop) held 9.5-10.5 GB; the browser run itself peaks at 2.8-3.3 GB in its cgroup
+(runs 1 and 3). Not retried until the machine has less in use (the budget is machine-wide and stays 12).
