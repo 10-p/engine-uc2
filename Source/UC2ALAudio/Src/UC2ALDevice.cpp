@@ -22,7 +22,13 @@ UBOOL UC2ALBind( FString& Error )
 	return 0;
 #else
 	// Beside the executable first (what tools/dev/mkrun-uc2.sh puts there), then the system's.
+#ifdef _WIN32
+	// Windows (M12): the build's own OpenAL32.dll (LoadLibrary), else an installed OpenAL (the system's
+	// OpenAL32.dll router, or OpenAL Soft's soft_oal.dll).
+	const TCHAR* Names[] = { TEXT("OpenAL32.dll"), TEXT("soft_oal.dll") };
+#else
 	const TCHAR* Names[] = { TEXT("libopenal.so.1"), TEXT("libopenal.so") };
+#endif
 	for( INT i=0; i<ARRAY_COUNT(Names) && !GALHandle; i++ )
 	{
 		FString Local = FString(appBaseDir()) + Names[i];
@@ -32,7 +38,7 @@ UBOOL UC2ALBind( FString& Error )
 	}
 	if( !GALHandle )
 	{
-		Error = TEXT("no OpenAL library (libopenal.so.1) beside the game or on the system");
+		Error = FString::Printf( TEXT("no OpenAL library (%s) beside the game or on the system"), Names[0] );
 		return 0;
 	}
 	appMemzero( &GAL, sizeof(GAL) );

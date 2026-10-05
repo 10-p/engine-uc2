@@ -1363,7 +1363,7 @@ static HRESULT LightMapCompressionCallback(void* Data,INT MipIndex,DWORD Size)
 void UModel::CompressLightmaps()
 {
 	guard(UModel::CompressLightmaps);
-#if !CONSOLE && !__LINUX__
+#if !CONSOLE && !__LINUX__ && _MSC_VER	// engine-uc2: nvDXT (above) is an MSVC library; MinGW has neither
 
 	GWarn->BeginSlowTask(TEXT("Compressing lightmaps..."),1);
 	for(INT TextureIndex = 0;TextureIndex < LightMapTextures.Num();TextureIndex++)

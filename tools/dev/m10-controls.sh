@@ -14,15 +14,32 @@
 #
 # Output in <WorkUC2>/logs/m10/: <scenario>.out (engine log), <scenario>.result (every check),
 # <scenario>-<shot>.png, <scenario>.inject (runner transcript).
+#
+# M12: the same scenarios drive the Windows build under wine (tools/dev/m12-wine-smoke.sh sets these):
+#   M10_TREE=m12            run tree under <WorkUC2>/run (default m10)
+#   M10_OUT=<dir>           output directory (default <WorkUC2>/logs/m10)
+#   M10_LAUNCH="<command>"  what starts the game from System/ (default ./uc2.bin); it gets the arguments
+#   M10_STOPSIG=INT         signal that ends the game after the scenario (default TERM)
+#   M10_MEM=3G              capped's ceiling (default 2G)
+#   M10_PROC=uc2.exe        process name for the "left running" check (default uc2.bin)
+#   M10_URL=<url>           map URL given to the game as its first argument (default none: the menu)
+#   M10_SETTLE=12           seconds between "level up for play" and the Fire that starts the match (default 6;
+#                           under wine the first frames of the level come later and an early Fire is lost)
+# The game is also given UC2_WINE_DISPLAY=$DISPLAY (Xvfb's), which tools/dev/m12-wine.sh needs.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
-sys=$work/run/m10/System
-out=$work/logs/m10
+tree=${M10_TREE:-m10}
+sys=$work/run/$tree/System
+out=${M10_OUT:-$work/logs/m10}
+launch=${M10_LAUNCH:-./uc2.bin}
+stopsig=${M10_STOPSIG:-TERM}
+mem=${M10_MEM:-2G}
+proc=${M10_PROC:-uc2.bin}
 capped=$work/bin/capped
 inject=$repo/tools/dev/m10-inject.py
 mkdir -p "$out"
-[ -x "$sys/uc2.bin" ] || { echo "no run tree at $sys (tools/dev/mkrun-uc2.sh build-native m10)" >&2; exit 2; }
+[ -n "${M10_LAUNCH:-}" ] || [ -x "$sys/uc2.bin" ] || { echo "no run tree at $sys (tools/dev/mkrun-uc2.sh build-native m10)" >&2; exit 2; }
 
 # Fresh configuration for every run: our tracked inis, the derived ones and saved profiles removed. The test
 # also un-suppresses the DevUI/DevGUI log names (the GUI's own "OpenMenu"/"handled XC_*" lines) in the run
@@ -31,7 +48,7 @@ prep_tree() {
   cp -f "$repo"/Engine/Config/*.ini "$sys/"
   sed -i '/^Suppress=DevUI\r\?$/d; /^Suppress=DevGUI\r\?$/d' "$sys/Default.ini"
   rm -f "$sys/Avaris.ini" "$sys/User.ini" "$sys"/Shot*.bmp
-  rm -rf "$sys/Profiles" "$work/run/m10/Save"/*.pro 2>/dev/null
+  rm -rf "$sys/Profiles" "$work/run/$tree/Save"/*.pro 2>/dev/null
   mkdir -p "$sys/Profiles"
 }
 
@@ -45,16 +62,16 @@ run_one() {
   inner=$(mktemp)
   cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy ./uc2.bin -log -inputtest="$chan" "\$@" > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy UC2_WINE_DISPLAY=\$DISPLAY $launch ${M10_URL:+"$M10_URL"} -log -inputtest="$chan" "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$name.out" "$chan" "$out/$name.result" > "$out/$name.inject" 2>&1
-kill -TERM \$pid 2>/dev/null
-for i in 1 2 3 4 5 6 7 8 9 10; do kill -0 \$pid 2>/dev/null || break; sleep 0.5; done
+kill -$stopsig \$pid 2>/dev/null
+for i in \$(seq 20); do kill -0 \$pid 2>/dev/null || break; sleep 0.5; done
 kill -KILL \$pid 2>/dev/null
 wait \$pid 2>/dev/null
 exit 0
 INNER
-  "$capped" 2G "$secs" -- xvfb-run -a -s "-screen 0 1280x720x24" bash "$inner" "$@"
+  "$capped" "$mem" "$secs" -- xvfb-run -a -s "-screen 0 1280x720x24" bash "$inner" "$@"
   local rc=$?
   rm -f "$inner"
   # Screenshots: SHOT writes System/ShotNNNNN.bmp in order; the runner listed the names.
@@ -77,7 +94,7 @@ INNER
   else
     echo "FAIL $name ($passes passed, $fails failed, $crit Critical, capped exit $rc; see $out/$name.result)"
   fi
-  for p in $(pgrep -x uc2.bin) $(pgrep -x Xvfb); do
+  for p in $(pgrep -x "$proc") $(pgrep -x Xvfb); do
     case "$(readlink /proc/$p/cwd 2>/dev/null)" in "$sys"|"$sys"/*) echo "WARNING: left running: $p";; esac
   done
 }
@@ -130,7 +147,7 @@ sleep 1.5
 $accept
 expect $p-travel-to-deathmatch Game class is 'UCDeathmatch' 120
 expect $p-deadbolt-up Bringing Level DM-Deadbolt.MyLevel up for play 60
-sleep 6
+sleep ${M10_SETTLE:-6}
 $fire
 sleep 4
 probe spawn
@@ -393,8 +410,10 @@ probe z4
 check pd-left-stick-x-strafes-the-right-way side('z2','z3') > 100 or side('z3','z4') < -100
 check pd-left-stick-x-never-strafes-the-wrong-way side('z2','z3') > -20 and side('z3','z4') < 20
 probe t0
+# Half a second: a full stick turns about 26000 units a second (Linux), and a turn past 180 degrees (32768)
+# wraps and reads as a left turn. Under wine the release arrives a few frames later; 1 s once gave 34320.
 pad axis rightx 32767
-sleep 1
+sleep 0.5
 pad axis rightx 0
 sleep 0.3
 probe t1

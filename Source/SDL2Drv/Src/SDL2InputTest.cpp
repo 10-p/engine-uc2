@@ -154,7 +154,11 @@ void FSDL2InputTest::Tick( USDL2Client* Client )
 		int C = fgetc( File );
 		if( C==EOF )
 		{
+			// Lines are appended while we read. clearerr alone is enough for glibc; Microsoft's CRT
+			// (as wine's msvcrt implements it, at least) also remembers end-of-file at the descriptor
+			// and keeps returning EOF until the next seek. A seek to where we are is the portable form.
 			clearerr( File );
+			fseek( File, 0, SEEK_CUR );
 			return;
 		}
 		if( C=='\r' )

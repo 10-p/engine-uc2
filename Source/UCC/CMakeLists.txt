@@ -21,11 +21,22 @@ if(TARGET UC2ALAudio)
   list(PREPEND LINK_PACKAGES UC2ALAudio)
   target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_UC2ALAUDIO=1)
 endif()
+if(MINGW)
+  # M12: ucc.exe, a console program. Static link, as everywhere; nothing is exported (on Windows
+  # appGetDllHandle answers "linked in" for every package, which is what Epic's static builds did), and
+  # winpthread comes in statically through the root -static. ws2_32: IpDrv's WinSock.
+  set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME ucc)
+  target_link_libraries(${PROJECT_NAME} PRIVATE
+    -Wl,--whole-archive ${LINK_PACKAGES} -Wl,--no-whole-archive
+    zlib ws2_32 winmm)
+else()
 target_link_libraries(${PROJECT_NAME} PRIVATE
   -Wl,--whole-archive ${LINK_PACKAGES} -Wl,--no-whole-archive
   zlib dl pthread m
 )
-if(NOT EMSCRIPTEN)
+endif()
+if(MINGW)
+elseif(NOT EMSCRIPTEN)
   target_link_options(${PROJECT_NAME} PRIVATE -Wl,-export-dynamic)
 else()
   # M4w: ucc-bin.js + ucc-bin.wasm, a Node program that runs inside a run tree like the native ucc-bin

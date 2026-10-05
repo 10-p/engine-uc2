@@ -6,7 +6,7 @@ Revision history:
 	* Created by Tim Sweeney.
 =============================================================================*/
 
-#if WIN32
+#if _MSC_VER	// engine-uc2: MinGW takes the portable path (FFileManagerUnix, POSIX threading, argv)
 	#include <windows.h>
 #else
 	#include <errno.h>
@@ -74,7 +74,7 @@ FOutputDeviceAnsiError Error;
 FFeedbackContextAnsi Warn;
 
 // File manager.
-#if WIN32
+#if _MSC_VER
 	#include "FFileManagerWindows.h"
 	FFileManagerWindows FileManager;
 	#include "FMallocAnsi.h"
@@ -84,7 +84,7 @@ FFeedbackContextAnsi Warn;
 	FFileManagerPSX2 FileManager;
 	#include "FMallocAnsi.h"
 	FMallocAnsi Malloc;
-#elif __LINUX_X86__
+#elif __LINUX_X86__ || defined(__MINGW32__)
 	#include "FFileManagerLinux.h"
 	FFileManagerLinux FileManager;
 	#include "FMallocAnsi.h"
@@ -100,7 +100,7 @@ FFeedbackContextAnsi Warn;
 #include "FConfigCacheIni.h"
 
 //jg -- Thread synchronization factory
-#if WIN32
+#if _MSC_VER
 #include "UnThreadingWindows.h"
 FSynchronizeFactoryWin SynchFactory;
 FThreadFactoryWin ThreadFactory;
@@ -176,7 +176,7 @@ static UBOOL VerifyNativeClasses()
 
 int main( int argc, char* argv[] )
 {
-    #if __LINUX__
+    #if __LINUX__ || defined(__MINGW32__)
         setbuf(stdout, NULL);
         setbuf(stderr, NULL);
         #if __DO_LINUX_MCHECKING__
@@ -205,7 +205,7 @@ int main( int argc, char* argv[] )
 		// Parse command line.
 		TCHAR CmdLine[1024], *CmdLinePtr=CmdLine;
 		*CmdLinePtr = 0;
-		#if WIN32
+		#if _MSC_VER
 			ANSICHAR* Ch = GetCommandLineA();
 			while( *Ch && *Ch!=' ' )
 				Ch++;

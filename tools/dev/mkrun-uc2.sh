@@ -54,6 +54,11 @@ copy_bins() {
   if [ -f "$1"/_deps/openalsoft-build/libopenal.so.1 ]; then
     cp -fL "$1"/_deps/openalsoft-build/libopenal.so.1 "$run/System/libopenal.so.1"
   fi
+  # M12: a Windows (MinGW) build: ucc.exe, uc2.exe and the OpenAL32.dll the build compiled (LoadLibrary'd
+  # from beside the exe). Run under wine from System/ (tools/dev/m12-wine-smoke.sh).
+  for bin in "$1"/Source/UCC/ucc.exe "$1"/Source/SDLLaunch/uc2.exe "$1"/_deps/openalsoft-build/OpenAL32.dll; do
+    [ -f "$bin" ] && cp -f "$bin" "$run/System/"
+  done
   # An Emscripten build: ucc-bin.js/.wasm run under Node from System/ (the browser build's SDLLaunch.* is
   # served from the build directory, not from here).
   for bin in "$1"/Source/UCC/ucc-bin.js "$1"/Source/UCC/ucc-bin.wasm; do
@@ -65,4 +70,4 @@ copy_bins "$build"
 shift $(( $# < 2 ? $# : 2 ))
 for more in "$@"; do copy_bins "$(cd "$more" && pwd)"; done
 mkdir -p "$run/Save" "$run/Cache"
-echo "$run: $(cd "$run/System" && ls -1 ucc-bin* uc2* 2>/dev/null | tr '\n' ' ')"
+echo "$run: $(cd "$run/System" && ls -1 ucc-bin* uc2* ucc.exe OpenAL32.dll 2>/dev/null | tr '\n' ' ')"

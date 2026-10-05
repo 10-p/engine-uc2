@@ -483,8 +483,15 @@ UBOOL UUC2ALAudioSubsystem::Init()
 		FString Text = FString::Printf( TEXT("[general]\ndrivers=wave\n[wave]\nfile=%s\n"), *Wave );
 		if( appSaveStringToFile( Text, *Conf ) )
 		{
+#ifdef _WIN32
+			// Windows (M12): the CRT's _putenv copies the string and updates the process environment, which
+			// OpenAL32.dll reads with _wgetenv.
+			_putenv( appToAnsi(*(FString(TEXT("ALSOFT_CONF=")) + Conf)) );
+			_putenv( "ALSOFT_DRIVERS=wave" );
+#else
 			setenv( "ALSOFT_CONF", appToAnsi(*Conf), 1 );
 			setenv( "ALSOFT_DRIVERS", "wave", 1 );
+#endif
 		}
 	}
 #endif

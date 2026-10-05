@@ -13,8 +13,9 @@ Revision history:
 	#pragma warning( disable : 4201 )
 #endif
 
-// Socket API.
-#if _MSC_VER
+// Socket API. engine-uc2 (as engine-ut2004): keyed on the platform, not the compiler -- Windows is WinSock
+// whichever compiler built it (MinGW has no <sys/socket.h>).
+#ifdef _WIN32
 	#define __WINSOCK__ 1
 	#define SOCKET_API TEXT("WinSock")
 #else
@@ -30,6 +31,18 @@ Revision history:
 	#include <windows.h>
 	#include <winsock.h>
 	#include <conio.h>
+#ifndef _MSC_VER
+	#include <ws2tcpip.h>	// engine-uc2, MinGW: socklen_t
+	// <wingdi.h>'s mapping-mode macro would rename the script enum value EMoveMethod::MM_MAX
+	// (UCGameplayClasses.h) in every file that includes both, i.e. the launchers.
+	#undef MM_MAX
+	// Core.h declared FSynchronizeFactory::CreateEvent/CreateSemaphore/CreateMutex before this point
+	// (MSVC builds include <windows.h> first, so there both sides were renamed to ...A); keep the plain
+	// names for the threading classes declared after this header (UnThreadingPosix.h in the launchers).
+	#undef CreateEvent
+	#undef CreateSemaphore
+	#undef CreateMutex
+#endif
 #endif
 #endif
 
@@ -124,7 +137,7 @@ public:
 		*Error = 0;
 		ThreadId = 1;
 
-#if _MSC_VER
+#ifdef _WIN32	// engine-uc2: the declarations above switch on __UNIX__, which MinGW does not define
 		HANDLE hThread = CreateThread( NULL, 0, ResolveThreadEntry, this, 0, &ThreadId );
 		check(hThread);
 		CloseHandle( hThread );
