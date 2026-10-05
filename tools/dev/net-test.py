@@ -666,6 +666,21 @@ def check_soak(minutes=float(os.environ.get("NET_SOAK_MIN", "10"))):
                     break
         for c in (a, b):
             c.input("pad axis lefty 0")
+            c.input("pad axis rightx 0")
+        # Late replication: after minutes of play (past the packet-id wrap, ~16k packets) both clients must show
+        # every player's score and deaths as the server has them (PRI updates lost on the way are resent after
+        # a NAK; poll up to 10 s).
+        agree = None
+        for k in range(10):
+            time.sleep(1.0)
+            sv, av, bv = s.probe("ZV%d" % k), a.probe("ZV%d" % k), b.probe("ZV%d" % k)
+            want = {n: (v.get("score"), v.get("deaths")) for n, v in (sv["pris"].items() if sv else [])}
+            seen = [{n: (v.get("score"), v.get("deaths")) for n, v in (x["pris"].items() if x else [])} for x in (av, bv)]
+            agree = (want, seen)
+            if want and all(x == want for x in seen):
+                break
+        result(bool(agree) and agree[0] and all(x == agree[0] for x in agree[1]), ck + ".views",
+               "server (score, deaths) %s; NetA's view %s; NetB's view %s" % (agree[0], agree[1][0], agree[1][1]) if agree else "no probes")
         alive = all(p.alive() for p in procs)
         sp = s.probe("Zend")
         result(alive and bool(sp), ck + ".alive", "after %.1f min: all %d processes alive=%s; server PRIs %s"

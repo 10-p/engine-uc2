@@ -560,3 +560,15 @@ whether it happens on a real lossy link; noted for the script milestone.
 `logs/net/lag10b/summary.txt`: runs 1-10 each 9/9 PASS (join, spawn, place, seeother, othermoves, hit, kill,
 healthseen, clean); one information run at PktLag=50 PktLoss=20: 9/9 PASS. Together with step L3's series:
 all 21 runs joined; no hang. The race-weapon guard had to act once in the ten (run 4: one NextWeapon).
+
+### Step L5: the wrap defect in real play -- 8-minute soak under PktLag=50 PktLoss=5, fixed vs Epic's ack logic
+
+New soak item `.views`: after the play, both clients must show every player's (score, deaths) as the server
+has them, polled for up to 10 s. An 8-minute soak passes the packet-id wrap (~16k packets at ~60/s).
+- Fixed build (`NET_SOAK_MIN=8 NET_SOAK_SIM="PktLag=50 PktLoss=5"`, `logs/net/soakloss-fixed-summary.txt`): all
+  items PASS; `.views` identical on server, NetA and NetB (bots Darius 8/3, Raiden 5/4, NetA -1/5, NetB 0/2).
+- Same with `-NETOLDACKS` on all three processes (Epic's UC2 ack logic; `soakloss-oldacks-*`): `.views` FAIL --
+  ten seconds after play stopped NetA still showed Corrosion's score 9 (server 10) and NetB's deaths 1
+  (server 3): property updates lost after the wrap are never resent, so a client's view of the game silently
+  goes stale minutes into any lossy match. alive/rss/clean still PASS (nothing crashes or times out), which is
+  why the earlier soak (no loss) could not see it.
