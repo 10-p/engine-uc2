@@ -261,3 +261,18 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   Not exercised: outro cinematics, MovieMaterial with sound, non-English tracks in game (tracks 1-4 are mapped
   from the Xbox code only). Off behind hooks: the animated loading movie (no thread; static screen instead),
   attract mode, legal/rating screens. Runtime XMV decoding is M16; web playback M11.
+- 2026-10-05 — **Network play merged (`net-join`), one defect open.** A client joins a dedicated or listen
+  server and plays. Causes fixed, both Epic's: the script patcher appended imports outside
+  BeginLoad/EndLoad (`check(GObjBeginLoadCount)` in a network client; the Xbox release builds compile checks
+  out), and the package map counted the patcher's appended names/exports, which differ between client and
+  server (both ends need this fix). Also three use-after-frees in connection/channel/commandlet teardown
+  (ASan) and one buffer overrun of ours in `UnUnix.cpp`. Coordinator's run on merged main,
+  `NET_SOAK_MIN=10 tools/dev/net-test.sh`: dedicated1 8/8, dedicated2 9/9, listen 8/8, travel 6/6,
+  disconnect 6/6, glshot 3/3, soak 4/4 (10 min, RSS flat), leftovers: PASS = 46. **`lag` (PktLag=50,
+  PktLoss=5): 0/8 in this run** - one client's join hung for the whole run: the server's CHALLENGE was
+  dropped by the loss simulation and never retransmitted while the connection stayed open (logs kept in
+  `<WorkUC2>/logs/coord/net-lag-hang/`). The agent had passed `lag` twice, so it is intermittent; a lost
+  handshake packet must not hang a join (it will matter on a WebRTC data channel). Being diagnosed on branch
+  `net-loss`. Never exercised: team games online, package download, more than 3 clients, server browser.
+  Owner entry points added the same day: `bin/play-uc2` (native, own display) and the web preview service
+  `uc2-preview` on port 8096 (`bin/publish-preview`).

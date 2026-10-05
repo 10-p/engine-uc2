@@ -86,7 +86,8 @@ class Proc:
             argv = ["./ucc-bin", "server", self.url, "PORT=%d" % PORT] + common
         else:
             argv = ["xvfb-run", "-a", "-s", "-screen 0 1024x768x24", "./uc2.bin", self.url, "-log"] + common
-            argv += ["-inputtest=" + os.path.basename(self.inputcmd)]
+            # -nostartupmovies: with the GL device the logos would play first and own the input (M9).
+            argv += ["-inputtest=" + os.path.basename(self.inputcmd), "-nostartupmovies"]
             if self.kind == "listen":
                 argv += ["PORT=%d" % PORT]
             if self.render == "null":
