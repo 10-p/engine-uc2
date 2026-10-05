@@ -246,3 +246,18 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   position and rotation. wine is not Windows: the real-Windows checklist is in `analysis/windows.md`.
   64-bit Windows waits for M13. Found on the way: a client joining any server stops at
   `check(GObjBeginLoadCount)` after the handshake (all platforms) - being fixed on branch `net-join`.
+- 2026-10-05 — **M9 green (video).** Merged `m9-video`. `tools/cook-movies.py`: 110 XMV (1052 MB) to Ogg
+  Theora + per-language Vorbis (654 MB), frame and sample accounting exact for 110/110; vendored libtheora
+  1.2.0 (decoder); `UC2Movie` player behind Epic's movie interface, sound through the audio device's stream
+  with the video on the audio clock; startup logos (skippable, `-nostartupmovies`), MovieMaterial textures in
+  the GL driver, intro cinematics on travel, a static loading screen. Coordinator's re-run on combined main
+  (M7+M8+M9+M10+M12): all four targets build (native, windows, wasm, wasm-perf); `verifyclasses` passes;
+  `movie-selftest.sh` 96 checks, 0 failed (pictures identical to ffmpeg's decode, sound within one step, loop
+  wrap, A/V sync error 0); `m9-movies.py` 19 PASS (logos match their cooked frames at 82/66 dB PSNR, cinematic
+  sound correlation 0.989 at 0.00 dB); audio suite 39/0, menu music -19.01 dB; renderer self-test 10/10;
+  wine smoke 13/13; browser boot 1/1 (menu up 9.1 s, browser PSS peak 1.47 GB, machine peak 9.9 GB);
+  controls 5/5 after two test fixes (the scenarios now pass `-nostartupmovies`: the logos own the input;
+  the mouse click is held 1 s: a click shorter than a software-GL frame can be lost, `analysis/controls.md`).
+  Not exercised: outro cinematics, MovieMaterial with sound, non-English tracks in game (tracks 1-4 are mapped
+  from the Xbox code only). Off behind hooks: the animated loading movie (no thread; static screen instead),
+  attract mode, legal/rating screens. Runtime XMV decoding is M16; web playback M11.

@@ -53,6 +53,7 @@ prep_tree() {
 }
 
 # run_one <name> <scenario-file> <seconds> [uc2.bin args...]
+# (-nostartupmovies: since M9 the logos play first and a full-screen movie owns the input.)
 run_one() {
   local name=$1 scen=$2 secs=$3; shift 3
   prep_tree
@@ -62,7 +63,7 @@ run_one() {
   inner=$(mktemp)
   cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy UC2_WINE_DISPLAY=\$DISPLAY $launch ${M10_URL:+"$M10_URL"} -log -inputtest="$chan" "\$@" > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy UC2_WINE_DISPLAY=\$DISPLAY $launch ${M10_URL:+"$M10_URL"} -log -nostartupmovies -inputtest="$chan" "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$name.out" "$chan" "$out/$name.result" > "$out/$name.inject" 2>&1
 kill -$stopsig \$pid 2>/dev/null
@@ -278,8 +279,12 @@ click 1
 sleep 4
 probe spawn
 check ms-left-click-starts-match P['spawn'].pawn==1
+# The button is held for 1 s: under software GL with post-processing a frame can take longer than a short
+# click, press and release then arrive in the same tick and the shot is sometimes not taken (seen 2 runs in 5
+# with a 0.3 s click, never with post-processing off). Not reachable at playable frame rates; recorded in
+# docs/porting/analysis/controls.md.
 probe s0
-click 1 0.3
+click 1 1.0
 sleep 1.5
 probe s1
 check ms-left-click-fires P['s1'].shots != P['s0'].shots

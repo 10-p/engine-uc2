@@ -446,3 +446,16 @@ Two shared-code changes, stated for the coordinator:
   -> `Bringing Level Menu.MyLevel up for play (0)...`, `Render device: Engine.NullRenderDevice (640x480 windowed)`,
   `appRequestExit(0)` at the 30 s timeout.
 - Ceilings: 6G for builds, 2G for every game/ucc run; none hit.
+
+## Coordinator's notes after the M7/M9 merges (2026-10-05)
+
+- **Startup logos.** Since M9 the logos play first and a full-screen movie owns the input, so the scenarios
+  launch with `-nostartupmovies` (without it keyboard, mouse, text and both failed at their first menu step;
+  pad passed only because its first button press skipped the logos).
+- **A click shorter than one frame can be lost.** With post-processing on under software GL (a frame can take
+  more than 0.3 s) `ms-left-click-fires` failed in 2 runs of 5 with the 0.3 s click, in 0 of 3 with
+  `-nopostprocess`, and in 0 of 4 once the button is held for 1 s; waiting longer after the spawn did not
+  help (1 of 3 failed). Reading: press and release arrive in the same tick and the shot is not taken.
+  This is inferred from those pass rates, not traced in the input code. Not reachable at playable frame
+  rates, but a hitch in a browser could do it: worth a look when the web build renders (where in
+  `UInput`/`UCPlayerController` a same-tick press+release is dropped; `LeftMouse=Fire` is Epic's binding).

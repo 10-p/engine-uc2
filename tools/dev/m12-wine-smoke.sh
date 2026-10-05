@@ -92,7 +92,7 @@ client() {
   # The capture wants the cue log (DevSound), as tools/dev/run-uc2-audio.sh does; in this tree's copy only.
   [ "${CLIENT_DEVSOUND:-0}" = 1 ] && sed -i '/^Suppress=DevSound\r\?$/d' "$sys/Default.ini"
   UC2_WINE_STOP_AFTER=$stop "$capped" 3G $((stop + 60)) -- xvfb-run -a -s "-screen 0 1280x720x24" \
-    bash -c 'SDL_AUDIODRIVER=dummy UC2_WINE_DISPLAY=$DISPLAY "$0" "$@"' "$wine" "$sys" uc2.exe "$@" > "$out/smoke-$name.out" 2>&1
+    bash -c 'SDL_AUDIODRIVER=dummy UC2_WINE_DISPLAY=$DISPLAY "$0" "$@"' "$wine" "$sys" uc2.exe "$@" -nostartupmovies > "$out/smoke-$name.out" 2>&1
   rc=$?
   cp -f "$sys/Avaris.log" "$out/smoke-$name.log" 2>/dev/null
 }
