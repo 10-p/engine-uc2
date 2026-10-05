@@ -141,3 +141,40 @@ and `S3 pawn name=Player-1 loc=(-1908.7,-1097.8,-130.1) health=140 local=0 role=
 explosive=UCInventory.UCWeap_RocketLauncher` on the server = the client's URL options arrived. The first Fire
 (1 s after attaching the pad, ~4 s after the join) did not spawn; the second did. `-name=` is not an option;
 the player name comes from the URL (`?Name=`).
+
+### Step 5 (checkpoint after the usage-limit cut-off): harness, first scenario results
+
+Cause chain so far (all Epic code, latent in the shipped FINAL_RELEASE Xbox build, which compiled `check()` out
+-- `XboxLaunch.vcproj` release configurations define FINAL_RELEASE; Epic's non-final PC build would have hit
+both):
+1. `FLinkerPatchData::Apply` -> `AppendImport` -> `VerifyImport` -> `GetPackageLinker` outside BeginLoad on a
+   network client (USES placeholder packages get patched) -> `check(GObjBeginLoadCount)`. Fix: BeginLoad/EndLoad
+   around the AppendImport loop only (step 2; the wider scope of step 1 broke the patcher's reader swap).
+2. `UPackageMap::Compute` counted the patcher's appended exports/names; client and server patch at different
+   moments, so the tables disagreed (UCMutators 765 vs 766 names). Fix: clamp to the file's last generation
+   (step 3). Not a crash on its own here (UCMutators is last) but a desync with any other order.
+3. Not a defect of ours: one `Received invalid actor class` per join = the server opening a channel for the
+   run-time-spawned `DefaultPhysicsVolume` (bNoDelete, no linker, DM-Deadbolt has none in its file). Epic's
+   behaviour (UT2004 identical); harmless; the harness tolerates exactly this many.
+
+Harness (tools/dev/net-test.sh -> net-test.py, ONE `capped 6G` scope, port 7850, fresh inis per process,
+each uc2.bin on its own Xvfb, virtual pad per client, all decisions from NetProbe/SDL2 probe lines):
+- dedicated1 (server + NetA, null renderer): join, level, spawn, URL options on the server PRI
+  (pawnclass/energy/explosive), server sees NetA move 624.9 units while the pad holds forward, client and
+  server agree to 0.0 units after stopping, client state menu=None paused=0 pawn=1. All PASS; `.clean` failed
+  only on my own diagnostic line matching the "bunch" regex (fixed: the regex skips `DevNet:   channel`).
+- dedicated2 (server + NetA + NetB): join, place (NETPLACENEAR, a server-side test teleport in our code),
+  seeother (0.4/0.5 units), othermoves (515.8 units, 0.5 from the server), hit (140 -> 124 on the first shot),
+  kill after 9 shots (NetA score 1, NetB deaths 1 on the server and both clients), healthseen (124 on server,
+  attacker and victim), clean: all PASS. `.spawn` FAILED in that run: NetA pressed Fire 10 times alone and
+  stayed a spectator until NetB also pressed -- before the match starts a DM waits for every player
+  ("UCDeathmatch0: START MATCH" only after both). Harness fixed: `spawn_all` presses Fire on all players.
+- listen (uc2.bin DM-Deadbolt?Listen + NetB): join, spawn, place, seeother (0.0/0.4), clientmoves (500.4),
+  hit (140 -> 124), kill (9 shots, score 1 on both), clean: all PASS.
+- travel (servertravel DM-Sever): the server brings DM-Sever up, the client gets `Welcomed by server:
+  LEVEL=DM-Sever` and its probe shows level DM-Sever with a local pawn, BUT the server hits a Critical
+  (`appError called`) and has no "Join succeeded: NetA" afterwards -> next step, logs `logs/net/travel-*`.
+
+Not yet run: disconnect, lag, glshot, soak. Open doubts: the DefaultPhysicsVolume channel (candidate fix in
+ULevel::ServerTickClients, not applied); whether the patch-name clamp could ever hide a replicated FName
+(the patched names all exist in other packages' tables, so NameIndices still finds them).

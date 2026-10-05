@@ -216,17 +216,33 @@ def client(check, name, render="null", extra=(), host="127.0.0.1"):
     return Proc(check, name, "client", "%s:%d?Name=%s" % (host, PORT, name), render=render, extra=extra).start()
 
 
-def spawn(c, tag, tries=10):
-    """Press Fire until the client's own probe shows its pawn; returns the probe or None."""
-    c.input("pad attach")
+def spawn_all(cs, tag, tries=12):
+    """Press Fire on every player until each one's own probe shows its pawn; returns the list of probes (None
+    for a player that did not spawn). All together, because before the match starts a DM waits until every
+    player has pressed Fire (one client pressing alone stays a spectator: seen in the first dedicated2 run)."""
+    for c in cs:
+        if not getattr(c, "pad", False):
+            c.input("pad attach")
+            c.pad = True
     time.sleep(1.0)
+    got = [None] * len(cs)
     for i in range(tries):
-        c.fire()
+        for k, c in enumerate(cs):
+            if got[k] is None:
+                c.fire()
         time.sleep(1.5)
-        p = c.probe("%s-%d" % (tag, i))
-        if p and p["summary"].get("localpawn") == "1":
-            return p
-    return None
+        for k, c in enumerate(cs):
+            if got[k] is None:
+                p = c.probe("%s-%s-%d" % (tag, c.name, i))
+                if p and p["summary"].get("localpawn") == "1":
+                    got[k] = p
+        if all(got):
+            break
+    return got
+
+
+def spawn(c, tag, tries=12):
+    return spawn_all([c], tag, tries)[0]
 
 
 def crit_lines(procs):
@@ -342,7 +358,7 @@ def check_dedicated2(ck="dedicated2", srv_extra=(), cli_extra=()):
         ja = s.wait(r"Join succeeded: ", 60)
         jb = s.wait(r"Join succeeded: ", 60)
         result(bool(ja and jb), ck + ".join", "server: %d joins" % s.count(r"Join succeeded: "))
-        pa, pb = spawn(a, "Aspawn"), spawn(b, "Bspawn")
+        pa, pb = spawn_all([a, b], "spawn")
         result(bool(pa and pb), ck + ".spawn", "NetA localpawn=%s, NetB localpawn=%s"
                % (bool(pa), bool(pb)))
         s.send("exec netplacenear NetB NetA 450")
@@ -421,7 +437,7 @@ def check_listen():
         procs.append(b)
         j = l.wait(r"Join succeeded: ", 60)
         result(bool(j), ck + ".join", "listen server: %s" % (j.group(0) if j else "no join in 60 s"))
-        pl, pb = spawn(l, "Lspawn"), spawn(b, "Bspawn")
+        pl, pb = spawn_all([l, b], "spawn")
         result(bool(pl and pb), ck + ".spawn", "NetL localpawn=%s NetB localpawn=%s" % (bool(pl), bool(pb)))
         l.send("exec netplacenear NetB NetL 450")
         pm = l.wait(r"^NetProbe: placenear NetB (ok|failed.*)", 15)
@@ -489,8 +505,7 @@ def check_disconnect():
     try:
         s.wait(r"Join succeeded: ", 60)
         s.wait(r"Join succeeded: ", 60)
-        spawn(a, "Aspawn")
-        spawn(b, "Bspawn")
+        spawn_all([a, b], "spawn")
         p0 = s.probe("D0")
         result(bool(p0) and p0["summary"].get("conns") == "2", ck + ".twojoined", "server conns=%s" % (p0 and p0["summary"].get("conns")))
         # A leaves cleanly: the console command DISCONNECT, then the process quits.
@@ -533,8 +548,7 @@ def check_soak(minutes=float(os.environ.get("NET_SOAK_MIN", "10"))):
     try:
         s.wait(r"Join succeeded: ", 60)
         s.wait(r"Join succeeded: ", 60)
-        spawn(a, "Aspawn")
-        spawn(b, "Bspawn")
+        spawn_all([a, b], "spawn")
         p0 = s.probe("Z0")
         bots = [n for n, v in (p0["pris"].items() if p0 else []) if v.get("bot") == "1"]
         result(len(bots) == 2, ck + ".bots", "server PRIs: %s (bots %s)" % (p0 and sorted(p0["pris"]), bots))
@@ -599,7 +613,7 @@ def check_glshot():
     try:
         s.wait(r"Join succeeded: ", 90)
         s.wait(r"Join succeeded: ", 90)
-        pa, pb = spawn(a, "Aspawn", tries=15), spawn(b, "Bspawn")
+        pa, pb = spawn_all([a, b], "spawn", tries=20)
         result(bool(pa and pb), ck + ".spawn", "NetA (GL) localpawn=%s, NetB localpawn=%s" % (bool(pa), bool(pb)))
         s.send("exec netplacenear NetB NetA 350")
         s.wait(r"^NetProbe: placenear NetB", 15)

@@ -7,6 +7,9 @@
 	                                     pawn and one per PlayerReplicationInfo in this process's level
 	  NETPLACE <name> <x> <y> <z> <yaw>  server/listen server: move that player's pawn there (the
 	                                     client follows through the engine's own position correction)
+	  NETPLACENEAR <name> <other> <dist> server: put that player's pawn <dist> units from the
+	                                     other's, at the first of 16 headings with a clear path for
+	                                     a pawn-sized box between them, facing the other
 	  NETAIM <name>                      a player's own process: turn the local player controller
 	                                     to face that player's pawn as this process sees it
 
@@ -160,6 +163,62 @@ static void Place( UGameEngine* Engine, const TCHAR* Cmd )
 	debugf( NETPROBE, TEXT("place %s failed: no such player"), *Name );
 }
 
+static AController* FindPlayer( ULevel* Level, const TCHAR* Name )
+{
+	for( AController* C = Level->GetLevelInfo()->ControllerList; C; C = C->nextController )
+		if( SameName(C->PlayerReplicationInfo, Name) )
+			return C;
+	return NULL;
+}
+
+static void PlaceNear( UGameEngine* Engine, const TCHAR* Cmd )
+{
+	FString Name, Other;
+	ParseToken( Cmd, Name, 0 );
+	ParseToken( Cmd, Other, 0 );
+	FLOAT Dist = appAtof( *ParseToken(Cmd,0) );
+	ULevel* Level = Engine->GLevel;
+	if( !Level || !Level->GetLevelInfo() || Level->GetLevelInfo()->NetMode==NM_Client )
+	{
+		debugf( NETPROBE, TEXT("placenear %s failed: no server level here"), *Name );
+		return;
+	}
+	AController* C = FindPlayer( Level, *Name );
+	AController* O = FindPlayer( Level, *Other );
+	if( !C || !C->Pawn || !O || !O->Pawn )
+	{
+		debugf( NETPROBE, TEXT("placenear %s failed: both players need a pawn"), *Name );
+		return;
+	}
+	APawn* P = C->Pawn;
+	FVector From = O->Pawn->Location;
+	FVector Extent( P->CollisionRadius, P->CollisionRadius, P->CollisionHeight );
+	for( INT k=0; k<16; k++ )
+	{
+		FVector Dir = FRotator( 0, k*4096, 0 ).Vector();
+		FVector To = From + Dir * Dist;
+		FCheckResult Hit( 1.f );
+		Level->SingleLineCheck( Hit, NULL, To, From, TRACE_World, Extent );
+		if( Hit.Time < 1.f )
+			continue;
+		// And ground below the spot (no ledge): the floor must be within 1.5 pawn heights.
+		FCheckResult Floor( 1.f );
+		Level->SingleLineCheck( Floor, NULL, To - FVector(0,0,P->CollisionHeight*1.5f), To, TRACE_World, Extent );
+		if( Floor.Time >= 1.f )
+			continue;
+		if( !Level->FarMoveActor( P, To, 0, 0 ) )
+			continue;
+		FRotator R = (From - To).Rotation();
+		R.Pitch = R.Roll = 0;
+		P->Velocity = P->Acceleration = FVector(0,0,0);
+		P->Rotation = R;
+		C->Rotation = R;
+		debugf( NETPROBE, TEXT("placenear %s ok loc=(%.1f,%.1f,%.1f) heading=%i"), *Name, P->Location.X, P->Location.Y, P->Location.Z, k*4096 );
+		return;
+	}
+	debugf( NETPROBE, TEXT("placenear %s failed: no clear spot at %.0f"), *Name, Dist );
+}
+
 static void Aim( UGameEngine* Engine, const TCHAR* Cmd )
 {
 	FString Name;
@@ -200,6 +259,11 @@ ENGINE_API UBOOL UC2NetTestExec( UGameEngine* Engine, const TCHAR* Cmd, FOutputD
 	else if( ParseCommand(&Cmd,TEXT("NETPLACE")) )
 	{
 		Place( Engine, Cmd );
+		return 1;
+	}
+	else if( ParseCommand(&Cmd,TEXT("NETPLACENEAR")) )
+	{
+		PlaceNear( Engine, Cmd );
 		return 1;
 	}
 	else if( ParseCommand(&Cmd,TEXT("NETAIM")) )
