@@ -441,3 +441,38 @@ ladder does.
 Looked at (sanity): `m9-logos-0/1.png` (upright, correct colours, whole picture), `m9-cinematic-1.png`
 (letterboxed scene with the black bands, colours plausible, no tint), `m9-menu-movie-1.png` (CTF portrait
 playing in its frame behind the dialog).
+
+## Step 6 - gate runs and status (2026-10-05)
+
+- (b) `bin/capped 6G 3000 -- bash -c 'cmake --preset native && cmake --build build-native -j8'` -> rc 0,
+  `[100%] Built target SDLLaunch`, `[100%] Built target UCC` (`logs/m9/gate-b-native.out`).
+  `source env.sh && bin/capped 6G 3500 -- bash -c 'cmake --preset wasm && cmake --build build-wasm -j6'` -> rc 0,
+  0 `error:`; targets Core Engine GUI IpDrv ogg SDL2Drv SDLLaunch **theora UC2Movie** UCC UCElements UCGameplay
+  UnrealGame UWeb vorbis zlib (`logs/m9/gate-b-wasm.out`). On the web the player is compiled, linked and
+  registered (`GCreateMoviePlayer` set) but idle: there is no GL device (null renderer: no full-screen movie, no
+  MovieMaterial draw) and no audio device there yet (M11).
+- (c) `tools/dev/movie-selftest.sh m9` on the final build: `UC2MovieSelfTest: 96 checks, 0 failed`.
+- (d) `tools/dev/m9-movies.py`: 19 PASS, 0 FAIL (Step 5).
+- (e) from `run/m9`: `./ucc-bin verifyclasses` -> `All native class layouts match`; `timeout 20 ./ucc-bin server
+  DM-Deadbolt -log` -> `Game class is 'UCDeathmatch'`, `Bringing Level DM-Deadbolt.MyLevel up for play`, no movie
+  line (`logs/m9/gate-server.out`); `tools/dev/audio-regression.sh m9`: check 0 failures, self-test 39/0, menu
+  music PASS (-19.02 dB, correlation 0.840), four captures 0 silent seconds 0 Critical - the same kinds as M8.
+  First attempt failed the menu-music check (correlation 0.220): the start-up logos now play first in every
+  capture; `run-uc2-audio.sh` and `run-uc2-shot.sh` now pass `-nostartupmovies` (their timings assume no logos).
+  `run-uc2-shot.sh m9 gate-deadbolt 70 0 DM-Deadbolt -glerrors` -> `UC2GLDrv: frame 1200, 0 GL errors so far`,
+  0 Critical. Start-up time (`Startup time:` of InitEngine, logos skipped): M9 runs 0.83-1.33 s (median about
+  1.0 s), M8 runs 0.85-1.40 s (median about 0.97 s): unchanged (the logos come after it; at start-up no loading
+  screen is drawn because the window is not open yet).
+
+### Deferred, with the hooks
+- Animated loading movie: off; `PlayLoadingMovie` (UnMovie.cpp) draws a static first picture. Needs a design
+  where the loader yields (or a render thread with its own GL context) - not safe now.
+- Attract mode (`UC2_Attract.xmv`, `A51.xmv`): cooked, not wired (the Xbox's attract trigger is in UCMenu
+  script; `appPlayMovieFullscreen` is the hook to call).
+- Legal/rating start-up screens (`Startup/UC2Startup.xpr`, XPR textures): not shown.
+- MovieMaterial with sound (the "View movies" menu: `T_UI_2` cinematics with `bEnableAudio`): implemented
+  (non-exclusive stream), never exercised in a run.
+- Outro cinematics (`?EndCinematic=`): implemented through the same hook as the intro, never exercised.
+- Runtime XMV decoding: M16. Web playback (GL4ES texture upload, Web Audio): M11.
+- The Xbox's per-call `XMV_ENDOFFILE` repetition (OnDonePlaying once here), the Xbox's chroma upsampling (not
+  documented): deliberate or unknown differences, see above.
