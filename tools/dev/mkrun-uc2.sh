@@ -43,6 +43,19 @@ for d in Sounds Music; do
   fi
 done
 
+# M9: the cooked movies (tools/cook-movies.py: Movies/ and Textures/Movies/), hard-linked the same way. The
+# player reads ../Movies and ../Textures/Movies from System/, as the Xbox read D:\Movies and D:\Textures\Movies.
+if [ -d "$cooked/Movies" ]; then
+  cp -al "$cooked/Movies" "$run/Movies"
+  rm -rf "$run/Movies/.cook"
+else
+  echo "note: no cooked Movies at $cooked (tools/cook-movies.py makes them); no movies will play" >&2
+fi
+if [ -d "$cooked/Textures/Movies" ]; then
+  mkdir -p "$run/Textures"
+  cp -al "$cooked/Textures/Movies" "$run/Textures/Movies"
+fi
+
 # Our tracked configuration wins over the asset tree's (identical until we start changing defaults).
 cp -f "$repo"/Engine/Config/*.ini "$run/System/"
 
