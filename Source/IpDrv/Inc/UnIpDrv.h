@@ -33,6 +33,15 @@ Revision history:
 	#include <conio.h>
 #ifndef _MSC_VER
 	#include <ws2tcpip.h>	// engine-uc2, MinGW: socklen_t
+	// <wingdi.h>'s mapping-mode macro would rename the script enum value EMoveMethod::MM_MAX
+	// (UCGameplayClasses.h) in every file that includes both, i.e. the launchers.
+	#undef MM_MAX
+	// Core.h declared FSynchronizeFactory::CreateEvent/CreateSemaphore/CreateMutex before this point
+	// (MSVC builds include <windows.h> first, so there both sides were renamed to ...A); keep the plain
+	// names for the threading classes declared after this header (UnThreadingPosix.h in the launchers).
+	#undef CreateEvent
+	#undef CreateSemaphore
+	#undef CreateMutex
 #endif
 #endif
 #endif

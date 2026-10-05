@@ -21,6 +21,12 @@
 #elif defined(_MSC_VER)
 #include <limits.h>
 #include <D3D8.h>
+#elif defined(_WIN32)
+// engine-uc2, MinGW: the same scalar types from the Win32 headers (DWORD is unsigned long there, and the
+// engine's Stripify caller uses that DWORD).
+#include <limits.h>
+#define NOMINMAX
+#include <windows.h>
 #else
 // Only the basic Windows scalar types were wanted from <D3D8.h>.
 #include <limits.h>

@@ -27,11 +27,21 @@ if(TARGET UC2ALAudio)
   list(PREPEND LINK_PACKAGES UC2ALAudio)
   target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_UC2ALAUDIO=1)
 endif()
+if(MINGW)
+  # M12: uc2.exe. A Windows-subsystem program like Epic's Avaris.exe (no console window; the log is
+  # System/Avaris.log, -log still echoes to a console if one is attached). MinGW's CRT calls our main()
+  # for either subsystem, so SDL2main is not used. Nothing exported (see Source/UCC/CMakeLists.txt).
+  set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME uc2 WIN32_EXECUTABLE TRUE)
+  target_link_libraries(${PROJECT_NAME} PRIVATE
+    -Wl,--whole-archive ${LINK_PACKAGES} -Wl,--no-whole-archive
+    SDL2::SDL2-static zlib ws2_32 winmm)
+else()
 target_link_libraries(${PROJECT_NAME} PRIVATE
   -Wl,--whole-archive ${LINK_PACKAGES} -Wl,--no-whole-archive
   SDL2::SDL2-static zlib dl pthread m
 )
 target_link_options(${PROJECT_NAME} PRIVATE -Wl,-export-dynamic)
+endif()
 
 # --- M4w: the browser build (SDLLaunch.js/.wasm/.data + meta.json); see cmake/Web.cmake ---------------------
 if(EMSCRIPTEN)
