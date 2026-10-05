@@ -41,9 +41,11 @@ cd "$dir" || exit 1
 # stopped and the prefix's wineserver killed (the EXIT trap) before capped's own KILL.
 wine "./$prog" "$@" &
 pid=$!
-# TERM (capped's time limit): stop now. INT: passed on as a Ctrl+C (clean exit), and we keep waiting.
+# TERM (capped's time limit): stop now. INT or USR1: passed on to the program as a Ctrl+C (clean exit), and we
+# keep waiting. (A caller that started this script with `&` from a non-interactive shell must use USR1: such a
+# background job inherits SIGINT as ignored, and bash cannot trap a signal ignored on entry.)
 trap 'kill -TERM $pid 2>/dev/null; exit 143' TERM
-trap 'kill -INT $pid 2>/dev/null' INT
+trap 'kill -INT $pid 2>/dev/null' INT USR1
 # UC2_WINE_STOP_AFTER=<s>: after that many seconds press Ctrl+C (wine turns SIGINT into a CTRL_C_EVENT; the
 # engine's console handler requests a clean exit), then wait up to 20 s for the program to finish by itself.
 if [ -n "${UC2_WINE_STOP_AFTER:-}" ]; then

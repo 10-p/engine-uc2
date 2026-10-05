@@ -22,6 +22,7 @@
 #   M10_STOPSIG=INT         signal that ends the game after the scenario (default TERM)
 #   M10_MEM=3G              capped's ceiling (default 2G)
 #   M10_PROC=uc2.exe        process name for the "left running" check (default uc2.bin)
+#   M10_URL=<url>           map URL given to the game as its first argument (default none: the menu)
 #   M10_SETTLE=12           seconds between "level up for play" and the Fire that starts the match (default 6;
 #                           under wine the first frames of the level come later and an early Fire is lost)
 # The game is also given UC2_WINE_DISPLAY=$DISPLAY (Xvfb's), which tools/dev/m12-wine.sh needs.
@@ -61,7 +62,7 @@ run_one() {
   inner=$(mktemp)
   cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy UC2_WINE_DISPLAY=\$DISPLAY $launch -log -inputtest="$chan" "\$@" > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy UC2_WINE_DISPLAY=\$DISPLAY $launch ${M10_URL:+"$M10_URL"} -log -inputtest="$chan" "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$name.out" "$chan" "$out/$name.result" > "$out/$name.inject" 2>&1
 kill -$stopsig \$pid 2>/dev/null

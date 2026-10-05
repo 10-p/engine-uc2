@@ -1,0 +1,20 @@
+# M12: DM-Deadbolt from a pinned view, the same input on Linux (uc2.bin) and under wine (uc2.exe), for the
+# screenshot comparison in tools/dev/m12-wine-smoke.sh. Run through tools/dev/m10-controls.sh --file, with the
+# URL "DM-Deadbolt?NumBots=0" (no bots: nothing else moves) and -glerrors. "NumPlayers 0" makes the game pick
+# the first PlayerStart (as tools/dev/run-uc2-shot.sh does), God keeps the player alive.
+wait Bringing Level DM-Deadbolt.MyLevel up for play 120
+sleep 12
+chan exec set UCDeathmatch NumPlayers 0
+wait test: exec set UCDeathmatch NumPlayers 0 10
+sleep 1
+focus
+key Alt_L 0.2
+sleep 4
+probe spawn
+check pinned-spawned P['spawn'].pawn==1 and P['spawn'].level=='DM-Deadbolt'
+chan exec God
+wait test: exec God 10
+sleep 3
+probe view
+shot pinned
+sleep 3
