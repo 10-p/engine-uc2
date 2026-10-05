@@ -220,3 +220,17 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   the spawn. The pad is SDL's virtual controller: no physical pad has been tried (owner). Script-side list
   for M14 in `analysis/controls.md` (mouse/stick separation in `UCPlayerInput`, aim adhesion, lock-on with a
   mouse, button glyphs, rebinding menu).
+- 2026-10-05 — **M7 green (render targets and post-processing), with two leftovers still open.** Merged
+  `m7-postprocess`. The Xbox post-process paths run behind one capability (`FRenderCaps::XboxPostProcess`,
+  `UsePostProcess=True` in the GL device): distortion (DM-Praxis panes now show the sea, DM-Decay icicles,
+  torch shimmer), emissive glow and bloom, always-on depth of field, screen and radial blur, colour remaps
+  (berserk, pause, Liandri), dynamic gamma. Coordinator's re-run on merged main, `tools/dev/m7-effects.sh
+  coord`: numeric self-test of the primitives 10 passed, 0 failed (snapshot orientation, depth copy, blur
+  taps, back-buffer copy, DOF ramp, remap, luminance); 14 effect pairs with critical=0 glerrors=0
+  programs_failed=0; the post-processing-off picture is pixel-identical to M6's in the static part of the
+  frame. The Praxis picture depends on a random PlayerStart (about one in four): it missed in 10 tries once,
+  hit on the first try the next time. No "on" picture has a reference (no Xbox here, Epic's PC build never
+  had these effects). NOT done: the 12 projector shaders (about 560 lines of Xbox batch renderer to port),
+  `PS_Terrain3Layer`, shadow blur. Owner decisions pending (BLOCKERS.md): depth-of-field alpha 100 vs the
+  shipped 65, dynamic gamma on by default, distortion scaled by height/480, the pause overlay's teal negative.
+  No GPU run yet: under software GL the effects cost 1.4x-3.8x frame time.
