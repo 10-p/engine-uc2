@@ -336,3 +336,21 @@ indices (`GetTypeHash(UObject*)`); literal `*4` sizes in memcpy are pixel rows.
   wine vs Linux x86_64 at the same view, static part 100.000% within 2 levels**, audiocheck 0 failures, selftest
   39/0, capture (menu music -19.01 dB), keyboard 16, pad 33, nosound, leftovers (`logs/m13/win64/smoke-summary.txt`).
   `netjoin` not run (the join does not complete on any platform: net-join branch). wine is not Windows.
+
+### Step 11 — the `-funsigned-char` audit build (2026-10-05)
+
+- `bin/capped 4G 900 -- cmake --preset native64-uchar && bin/capped 6G 3600 -- cmake --build
+  build-native64-uchar -j6`: 0 errors (435 compile commands carry `-funsigned-char`).
+- Compiler scan for code whose meaning depends on char signedness: every engine TU (360 commands, fetched
+  libraries excluded) compiled `-fsyntax-only -Wtype-limits -Wchar-subscripts` once with `-fsigned-char`, once
+  with `-funsigned-char` (`logs/m13/uchar-typelimits.txt`, `uchar-{s,u}.txt`). Only 5 lines appear with unsigned
+  char alone:
+  - `UnFile.h:357,397,401` (`appToUpper`/`appIsLower`/`appIsAlpha`): Latin-1 ranges like `c>='à' && c<='ÿ'`
+    become "always true" upper bounds — same result either way.
+  - `Core.h:214` `ToAnsi`/`FromUnicode`: `(_WORD)In<0x100 ? In : MAXSBYTE`. With signed char (Epic's MSVC and
+    every build here) a Latin-1 character >= 0x80 sign-extends to 0xFFxx and is written as 0x7F by every ANSI
+    conversion (log files, `appSaveStringToFile`, `appToAnsi`, FileLog); with unsigned char it is kept. A real
+    difference, but **not on arm64**: the arm64 preset keeps `-fsigned-char` like every target (CMakeLists.txt,
+    UnGnuG.h refuses unsigned char outside the audit build), so arm behaves as x86. Recorded, not changed
+    (it is Epic's shipped behaviour; whether accented text should survive in saved inis is a separate question).
+  - String hashes/CRCs mask with `&255` (`appStrCrc`, no UNICODE): sign-independent.
