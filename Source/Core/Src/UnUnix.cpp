@@ -3637,6 +3637,14 @@ CORE_API const void appGetLastError( void )
 CORE_API SQWORD appSystemTime64()
 {
 	guard(appSystemTime64);
+#ifdef _WIN32
+	// Windows: exactly UnVcWin32.cpp's computation.
+	SYSTEMTIME SysTime;
+	FILETIME FileTime;
+	GetLocalTime( &SysTime );
+	SystemTimeToFileTime( &SysTime, &FileTime );
+	return ((SQWORD)FileTime.dwHighDateTime << 32) | (SQWORD)FileTime.dwLowDateTime;
+#else
 	struct timeval Tv;
 	gettimeofday( &Tv, NULL );
 	time_t Now = Tv.tv_sec;
@@ -3646,6 +3654,7 @@ CORE_API SQWORD appSystemTime64()
 		GmtOffset = (SQWORD)Local.tm_gmtoff;
 	const SQWORD EpochDelta = 116444736000000000LL;	// 1601-01-01 to 1970-01-01 in 100 ns units
 	return EpochDelta + ((SQWORD)Tv.tv_sec + GmtOffset) * 10000000LL + (SQWORD)Tv.tv_usec * 10LL;
+#endif
 	unguard;
 }
 

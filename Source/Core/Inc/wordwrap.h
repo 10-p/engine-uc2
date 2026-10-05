@@ -6,6 +6,16 @@
 #undef HANDLE
 #undef INFINITE
 #include <windows.h>
+#elif !defined(_XBOX) && defined(_WIN32)
+// engine-uc2, MinGW: <winnt.h> (through UnGnuG.h) already has BOOL, UINT, CHAR, LPSTR..., but its WCHAR is
+// wchar_t, a type distinct from UNICHAR. MSVC 7.1 (no /Zc:wchar_t) had WCHAR == unsigned short == UNICHAR;
+// keep that for this interface (only wordwrap.cpp and UnCanvas.cpp include it).
+typedef UNICHAR			WW_WCHAR;
+typedef const UNICHAR*	WW_LPCWSTR;
+typedef UNICHAR*		WW_LPWSTR;
+#define WCHAR			WW_WCHAR
+#define LPCWSTR			WW_LPCWSTR
+#define LPWSTR			WW_LPWSTR
 #elif !defined(_XBOX)
 // engine-uc2: the Win32 types this interface uses, for builds without <windows.h> (GCC, Emscripten).
 // WCHAR is 16 bits as on Windows -- UCanvas::WrapStringToArray passes appToUnicode() UNICHARs.
