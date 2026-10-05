@@ -75,3 +75,22 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     --out=$<TARGET_FILE_DIR:${PROJECT_NAME}> --target=uc2 --abi=${UE_ABI_VERSION} --emcc=${META_EMCC}
   COMMENT "Emitting artifact meta.json"
   VERBATIM)
+
+# --- M11: the GL device on the web (UC2GLDrv behind gl4es on WebGL 1; docs/porting/analysis/web-renderer.md) ---
+if(TARGET UC2GL4ESDrv)
+  target_link_options(${PROJECT_NAME} PRIVATE
+    # gl4es and the driver's raw table look GLES entry points up by name (emscripten_webgl_get_proc_address).
+    -sGL_ENABLE_GET_PROC_ADDRESS=1
+    # gl4es targets OpenGL ES 2 = WebGL 1 (decision 3); FULL_ES2 is the template's setting (client-side
+    # array emulation for whatever gl4es still sends that way; the driver itself sends none).
+    -sMIN_WEBGL_VERSION=1
+    -sMAX_WEBGL_VERSION=1
+    -sFULL_ES2=1
+    # The context is created with explicitSwapControl + renderViaOffscreenBackBuffer and each frame is
+    # presented with emscripten_webgl_commit_frame(): both exist only with this flag (without it the call
+    # is a stub and presentation depends on the browser compositing when the worker's task ends:
+    # frontend step 2.43).
+    -sOFFSCREEN_FRAMEBUFFER
+  )
+endif()
+# --- end M11 ---
