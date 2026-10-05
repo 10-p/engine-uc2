@@ -15,9 +15,10 @@ and `wineserver -k` after every run. Logs: `<WorkUC2>/logs/m12/`. Run trees: `<W
    has a MinGW block (no `__UNIX__`/`__LINUX__`, `<minwindef.h>`/`<basetsd.h>` for DWORD/SIZE_T, real
    `__stdcall`, `\r\n` and `\` separators, `.dll`). Epic's `UnVcWin32.h/.cpp` stay MSVC-only (inline
    `__asm`, `#pragma`s, SEH, the UNICODE-era helpers). Piece by piece:
-   - file manager: `FFileManagerUnix.h` (ucc and uc2), with its `_WIN32` branches (`_mkdir`, `O_BINARY`,
-     `_fullpath`, `USERPROFILE`); `__FILE_NOCASE` case folding is harmless on a case-insensitive file system
-     (it only adds a directory scan when the exact name is missing); `\` and `/` both accepted by Windows.
+   - file manager: `FFileManagerUnix.h` (ucc and uc2), with its `_WIN32` branches (`mkdir` without a mode,
+     `O_BINARY` on every `open` — without it MinGW opens in text mode —, `USERPROFILE` for the home directory);
+     `__FILE_NOCASE` case folding (`appUnixPath`) only runs when `access()` fails, which on a case-insensitive
+     file system means the file really is missing; it turns `\` into `/`, which Windows accepts.
    - time: `appSeconds` = `clock_gettime(CLOCK_MONOTONIC)` (winpthreads provides it: QueryPerformanceCounter);
      `appSystemTime64` = UnVcWin32.cpp's GetLocalTime/SystemTimeToFileTime (W1).
    - threads: `UnThreadingPosix.cpp` on winpthreads (MinGW posix thread model, linked statically), not
