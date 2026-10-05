@@ -520,3 +520,20 @@ packet 0 after its wrap). Compatibility (`handshake-compat`):
 So: each end's fix covers the packets that end sends. A fixed client against an unfixed server can still lose
 the server's packet 0 or post-wrap packets (now ending in the failure menu instead of a silent hang), and an
 unfixed client can still lose its own; both ends of a game should run the fix (they are the same build here).
+
+### Notes for the WebRTC driver: what packet loss means on an unreliable/unordered data channel
+
+- The engine's reliability (UnConn.cpp/UnChan.cpp) assumes datagrams that can be lost, duplicated or reordered,
+  and detects loss ONLY from acks of later packets (virtual NAK); acks ride on every packet both ways, and
+  each side sends keep-alives every KeepAliveTime (0.2 s) once the handshake allows it (client always, server
+  after the challenge). An unordered, `maxRetransmits:0` data channel delivers exactly that model, so the engine
+  needs nothing extra from it -- but it needs the two fixes of step L2 on both ends: without them the first
+  packet a side sends (server: CHALLENGE) and every packet after ~16k packets (~4.5 min) are never resent once
+  lost, which an unreliable channel will do as surely as UDP.
+- Do not "fix" it by making the channel reliable/ordered: the engine would then see head-of-line blocking and
+  its own resends on top; if a reliable channel is ever used, set `bInternalAck`-style semantics instead
+  (UNetConnection already has `bInternalAck` for 100 % reliable transports such as demo recording).
+- Use the same NETDROP=/NETPKTID= switches (they act in UNetConnection::FlushNet, above any driver) and
+  `net-test.py handshake-loss` against the WebRTC driver; they test the engine's side regardless of transport.
+- A data channel that closes must close the UNetConnection (State=USOCK_Closed) at once; otherwise only the 30 s
+  ConnectionTimeout ends it, and a pending client now gives up after 20 s without WELCOME.
