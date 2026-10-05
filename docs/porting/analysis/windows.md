@@ -188,3 +188,21 @@ Next: run tree with the .exe/.dll (mkrun-uc2.sh), wine prefix, `ucc.exe verifycl
   Escape), travel to DM-Deadbolt, spawn with Alt, W forward, Right turn, E/Q weapons, Alt fire, Escape pause.
 - **`pad`: PASS (33 checks, 0 Critical)** — SDL's virtual controller under wine (hot-plug, menus, sticks, dead
   zone, trigger threshold, rumble request reaching the device, unplug/replug).
+
+### Step 5 — the same pinned view on Linux and under wine (2026-10-05)
+- `tools/dev/m12/deadbolt-pinned.scen` (run by `m10-controls.sh --file`, URL `DM-Deadbolt?NumBots=0` through the
+  new `M10_URL`, `-glerrors`): wait for the level, `set UCDeathmatch NumPlayers 0` (first PlayerStart), Alt to
+  spawn, God, probe, `shot pinned`. Linux tree `run/m12-native` (this worktree's `build-native`), wine tree
+  `run/m12`. Both probes: `loc=(1531.9,3111.5,-34.1) rot=(0,-40880,0)`, the same view.
+- Comparison (`logs/m12/linux/pinned-pinned.png` vs `logs/m12/wine/pinned-pinned.png`, diff ×4 in
+  `logs/m12/pinned-diff.png`): 640×480; 90.6 % of pixels bit-identical; PSNR 25.5 dB overall; **outside the
+  rectangle x 60–395, y ≥ 265 (the player model and two pickups) 234,959 of 234,960 pixels identical and the
+  one other differs by 1 level**. Inside it the differences are the player's idle animation and the pickups'
+  rotation at a slightly different time since the spawn (the two runs do not spawn at the same engine time).
+  Same Mesa llvmpipe underneath, so the world, the HUD and every shader pass come out the same through wine's
+  WGL as through native GLX.
+- Wrapper fix: a background job started by a non-interactive shell inherits SIGINT as ignored, and bash cannot
+  trap it, so the M10 runner's stop signal never reached the game (it was killed after the grace period;
+  `X connection ... broken` at the end of the log). `m12-wine.sh` now also takes USR1 as "press Ctrl+C";
+  `M10_STOPSIG=USR1` for wine runs: `Exiting.`, `0 GL errors in 467 frames`, `Object subsystem successfully
+  closed.`
