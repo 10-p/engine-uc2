@@ -167,7 +167,8 @@ static UViewport* MovieViewport()
 	if( !Engine || !Engine->Client || Engine->Client->Viewports.Num()==0 )
 		return NULL;
 	UViewport* Viewport = Engine->Client->Viewports(0);
-	if( !Viewport || !Viewport->RenDev || !Viewport->Canvas || !Viewport->Actor )
+	// (No window yet: the menu's LoadMap inside UGameEngine::Init runs before Viewport->OpenWindow.)
+	if( !Viewport || !Viewport->RenDev || !Viewport->Canvas || !Viewport->Actor || !Viewport->GetWindow() )
 		return NULL;
 	return Viewport;
 }
