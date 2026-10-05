@@ -541,3 +541,29 @@ All 25 shaders of M6's waiting list are compiled and reachable by their material
 - Opaque black for unset stages, fog factor 1 without fog (M6's inferences) also feed these shaders.
 - `POSTPROCESS 0` after it was on does not restore the exact M6 state of distortion materials (P2).
 - Nothing was run on a real GPU, with GL4ES, in split-screen, or in a cinematic.
+
+## Checkpoint, 2026-10-05 02:30 (after a second interruption)
+
+State of things that were only in my head:
+
+- **All gate runs of "Gate numbers" above completed before the interruption** (22:05-22:15) and are valid as
+  written; nothing was in flight except the last complete run of `m7-effects.sh`, which also finished (23:07,
+  `logs/m7/fx-final.txt`: self-test 10 passed, 0 failed; 14 effect lines, all 0 Critical, 0 GL errors, 0 failed
+  programs, nothing left running; `berserk` printed `glerrors=?` because that run did not reach frame 600,
+  where the counter line is logged: the device now logs the counters at every `-glshot`, commit `efd22ef`).
+- **Clean exit with the effects on** (`logs/m7/exit-deadbolt.out`, `-glexec=50:exit` in DM-Deadbolt, match
+  running): `UC2GLDrv: 0 GL errors in 871 frames (0 frames with errors)`, `Object subsystem successfully
+  closed.`, 0 Critical, nothing left running. So the pool hand-over at exit (defect 2) holds.
+- **Why DM-Praxis needs several tries, and that the last complete run got it wrong.** The window panes are
+  not in view from the first PlayerStart (the pinned one). Without the pin the start is random
+  (`RatePlayerStart` adds `RandRange(0,0.3) * players`, seeded from the clock); about one start in four is the
+  one of the wine picture `DM-Praxis-windows-A.png`. Hits so far: 2 of my 3 manual runs, the 3rd try of the
+  22:10 run, **none of the 6 tries of the 23:07 run, which then printed a normal line for a picture of another
+  room** (its `fx-praxis-panes-a.png` differs from the reference by 25 of 255). That was a bug of the script,
+  fixed in `28b…` (it now tries up to 10 times and prints `FAILED` if the view is not reached). Things I tried
+  to make the start deterministic, none of which works: `suicide` + console `Fire` (the exec does not
+  respawn; it needs the button), `set PlayerStart ...` (the `set` command is per class, not per object). A
+  seed option would not help either: how many random numbers are drawn before the spawn depends on the
+  number of frames. So: **the Praxis camera is repeatable, the number of runs it takes is not.**
+  Command: `tools/dev/m7-effects.sh m7 praxis-panes`.
+- The half-texel note, the three bugs the self-test found and the pause-overlay trap are in P5a.
