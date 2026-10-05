@@ -28,6 +28,7 @@
 #              -19.0 dB (tools/dev/audio-music-check.py, Recoil as control), 0 Critical
 #   keyboard   the M10 keyboard scenario (real X key events through wine; tools/dev/m10-controls.sh)
 #   pad        the M10 pad scenario (SDL's virtual controller through the engine's test channel)
+#   nosound    OpenAL32.dll moved aside for one run: "sound is off", the menu still comes up, exit 0
 #   leftovers  no wineserver of the M12 prefix, no uc2.exe/ucc.exe left running
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -181,6 +182,19 @@ PY
   fi
 }
 
+check_nosound() {	# no OpenAL32.dll anywhere: the game must still come up, silently
+  local o=$out/smoke-nosound.out
+  mv "$sys/OpenAL32.dll" "$sys/OpenAL32.dll.off"
+  client nosound 30 -log -nullrenderer
+  mv "$sys/OpenAL32.dll.off" "$sys/OpenAL32.dll"
+  if grep -a -q "UC2ALAudio: no OpenAL library (OpenAL32.dll) beside the game or on the system: sound is off" "$o" \
+     && grep -a -q "Bringing Level Menu.MyLevel up for play" "$o" && clean_exit "$o" && [ "$(crit "$o")" = 0 ]; then
+    result PASS nosound "without OpenAL32.dll: 'sound is off', menu up, exit 0, Critical 0"
+  else
+    result FAIL nosound "exit $rc; $(grep -a 'UC2ALAudio' "$o" | head -1); Critical $(crit "$o")"
+  fi
+}
+
 check_audiocheck() {
   local o=$out/smoke-audiocheck.out rc
   "$capped" 3G 900 -- "$wine" "$sys" ucc.exe UC2ALAudio.UC2AudioCheck > "$o" 2>&1; rc=$?
@@ -236,11 +250,11 @@ check_leftovers() {
   else result FAIL leftovers "still running:$left"; fi
 }
 
-all="verify server null gl pinned audiocheck selftest capture keyboard pad leftovers"
+all="verify server null gl pinned audiocheck selftest capture nosound keyboard pad leftovers"
 : > "$summary"
 for c in ${@:-$all}; do
   case "$c" in
-    verify|server|null|gl|pinned|audiocheck|selftest|capture|leftovers) "check_$c" ;;
+    verify|server|null|gl|pinned|audiocheck|selftest|capture|nosound|leftovers) "check_$c" ;;
     keyboard|pad) check_controls "$c" ;;
     *) echo "unknown check $c (known: $all)" >&2 ;;
   esac
