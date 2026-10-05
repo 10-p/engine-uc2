@@ -163,3 +163,28 @@ Next: run tree with the .exe/.dll (mkrun-uc2.sh), wine prefix, `ucc.exe verifycl
   `Bringing Level Menu.MyLevel up for play`, `Opened viewport (SDL window 1, 640x480)`, then the Ctrl+C →
   `SDL_QUIT received`, `appRequestExit(0)`, clean shutdown, exit 0. stdout of the GUI-subsystem exe reaches the
   terminal under wine.
+
+### Step 4 (W3/W5) — GL through wine, keyboard and pad (2026-10-05)
+- **GL under wine + Xvfb** (`logs/m12/client-gl-1.out`, menu, 60 s, `-glerrors -glshot=20,35`):
+  `GL_VENDOR : Mesa`, `GL_RENDERER : llvmpipe (LLVM 21.1.8, 256 bits)`, `GL_VERSION : 4.3 (Compatibility
+  Profile) Mesa 26.0.8-1ubuntu0.3`, `GL_SHADING_LANGUAGE_VERSION : 4.50` (wine's WGL on the host's Mesa through
+  Xvfb's GLX; the native Linux build on the same Xvfb gets 4.5 compatibility — wine 10 caps the reported
+  version at 4.3; UC2GLDrv needs 2.1-era compatibility GL, so this is irrelevant), 8 texture units, S3TC yes;
+  59 fragment shaders and 405 vertex shaders compiled, 0 failed; `0 GL errors in 1767 frames`. Two engine
+  screenshots of the main menu (`logs/m12/client-gl-1-{0,1}.png`), looked at: the menu as on Linux.
+- **Input test channel bug (Windows CRT)**: the first keyboard scenario under wine got no probe answers. A 6-line
+  test program (`fopen` "r", `fgetc` to EOF, `clearerr`, append from outside) proved it: wine's msvcrt keeps
+  returning EOF on a file that grows until the next seek (glibc does not). `SDL2InputTest.cpp` now does
+  `clearerr` + `fseek(File, 0, SEEK_CUR)` (portable; the same test program then reads all lines). Whether
+  Microsoft's own msvcrt behaves like wine's here is not known; the seek is right for both.
+- `tools/dev/m10-controls.sh` runs unchanged scenarios against uc2.exe under wine with
+  `M10_TREE=m12 M10_OUT=<WorkUC2>/logs/m12/controls M10_LAUNCH="tools/dev/m12-wine.sh <WorkUC2>/run/m12/System
+  uc2.exe" M10_STOPSIG=INT M10_MEM=3G M10_PROC=uc2.exe M10_SETTLE=12` (new variables, defaults unchanged).
+  The keyboard scenario first failed only its match start: the Fire (Alt) 6 s after "level up for play" was
+  lost; a diagnostic run (`WINEDEBUG=+key`) showed wine delivering `vkey=00a4` press/release, and the same Alt
+  6 s later spawned the player and every further Alt fired. So it is timing (the level's first frames come
+  later under wine), not input: `M10_SETTLE` (default 6) = 12 for wine.
+- **`keyboard`: PASS (16 checks, 0 Critical)** — the whole menu path by real X key events (Down, Return,
+  Escape), travel to DM-Deadbolt, spawn with Alt, W forward, Right turn, E/Q weapons, Alt fire, Escape pause.
+- **`pad`: PASS (33 checks, 0 Critical)** — SDL's virtual controller under wine (hot-plug, menus, sticks, dead
+  zone, trigger threshold, rumble request reaching the device, unplug/replug).
