@@ -4995,7 +4995,7 @@ private:
 		// Object could be a misaligned pointer.
 		// Copy the contents of the pointer into a temporary and work on that.
 		UObject* Obj;
-		appMemcpy(&Obj, &Object, sizeof(INT));
+		appMemcpy(&Obj, &Object, sizeof(UObject*));	// M13: a pointer's width, was sizeof(INT)
 		
 #if DO_GUARD_SLOW
 		guard(CheckValid);
@@ -5046,7 +5046,7 @@ private:
 
 		// Contents of pointer might have been modified.
 		// Copy the results back into the misaligned pointer.
-		appMemcpy(&Object, &Obj, sizeof(INT));
+		appMemcpy(&Object, &Obj, sizeof(UObject*));	// M13
 		return *this;
 		unguardSlow;
 	}

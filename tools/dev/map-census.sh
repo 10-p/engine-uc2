@@ -6,6 +6,8 @@
 # Each worker gets its own run tree (<WorkUC2>/run/census-N) and its own port, so logs and inis do not collide.
 # A map PASSES when its level is brought up for play, nothing Critical is logged, and the server is still
 # ticking when the timeout stops it. Result table: <WorkUC2>/logs/census/summary.tsv (+ one log per map).
+# CENSUS_NAME (default census) names the run trees (<name>-N) and the log folder; CENSUS_PORT (default 7780)
+# the first port: a second census (M13's 64-bit one: CENSUS_NAME=m13-census) does not collide with this one.
 set -uo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -13,7 +15,9 @@ work=$(cd "$repo/.." && pwd)
 build=${1:?usage: map-census.sh <build-dir> [seconds-per-map] [workers]}
 secs=${2:-15}
 workers=${3:-4}
-out=$work/logs/census
+name=${CENSUS_NAME:-census}
+port=${CENSUS_PORT:-7780}
+out=$work/logs/$name
 mkdir -p "$out"
 rm -f "$out"/*.log "$out"/part-*.tsv
 
@@ -21,13 +25,13 @@ mapfile -t maps < <(cd "${UC2_ASSETS_DIR:-$work/assets/uc2}/Maps" && ls -1 *.unr
 
 run_worker() {
   local w=$1
-  "$repo/tools/dev/mkrun-uc2.sh" "$build" "census-$w" >/dev/null
-  cd "$work/run/census-$w/System" || exit 1
+  "$repo/tools/dev/mkrun-uc2.sh" "$build" "$name-$w" >/dev/null
+  cd "$work/run/$name-$w/System" || exit 1
   local i=0 map status rc warn crit
   for map in "${maps[@]}"; do
     if [ $(( i % workers )) -eq "$w" ]; then
       rm -f ucc.log
-      timeout -s TERM "$secs" ./ucc-bin Engine.ServerCommandlet "$map" "PORT=$((7780 + w))" -log >"$out/$map.stdout.log" 2>&1
+      timeout -s TERM "$secs" ./ucc-bin Engine.ServerCommandlet "$map" "PORT=$((port + w))" -log >"$out/$map.stdout.log" 2>&1
       rc=$?
       cp -f ucc.log "$out/$map.log" 2>/dev/null
       # grep -c prints the count and still exits 1 when it is 0, so no `|| echo 0` here.

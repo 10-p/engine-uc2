@@ -186,3 +186,15 @@ declared in the opposite order in C++ and script — to compare with the 32-bit 
   the 64-bit checks (exit 0). m13-layout-check at 32-bit gives the same 2 `Texture.__LastUpdateTime`/`MemUsage`
   lines as at 64-bit: **pre-existing** (C++ declares MemUsage before __LastUpdateTime, script after; Epic's
   shipped PC/Xbox builds have the same order; script never reads either). Not changed.
+
+### Step 5 — first runs: GC pointer copy; census parameter (2026-10-05)
+
+- First 64-bit `ucc-bin Engine.ServerCommandlet DM-Deadbolt`: SIGSEGV in `FArchiveTagUsed::operator<<` at the
+  first garbage collection (`LoadMap`): `appMemcpy(&Obj, &Object, sizeof(INT))` copied 4 bytes of every object
+  reference the GC follows (rdx = 0x55e63b40, the low half). Both copies now `sizeof(UObject*)` (UnObj.cpp).
+  The same grep (`appMemcpy.*sizeof(INT|DWORD)`) found no other pointer copy outside PSX2/GCN branches; the
+  script call-graph profiler's `FLargeDWORDArray` is `#if PROFILE` (not built). After it: the server brings
+  DM-Deadbolt up and ticks 60 s (`logs/m13/server64-smoke.out`).
+- `tools/dev/map-census.sh`: `CENSUS_NAME` (run trees `<name>-N`, `logs/<name>/`) and `CENSUS_PORT`; defaults
+  unchanged (`census`, 7780). M13 runs `CENSUS_NAME=m13-census CENSUS_PORT=7880` (64-bit) and
+  `m13-census32`/7890 (this branch's 32-bit build) so it never touches the shared `census-*` trees.
