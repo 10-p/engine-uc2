@@ -422,3 +422,66 @@ more than 3 clients, teleporters with players online (see step 11).
 Not working / observations: one `Received invalid actor class` per connection (run-time DefaultPhysicsVolume
 has no package-map index; Epic's behaviour, harmless); after a travel the client logs in with its character
 name ("Anubis"), not the command line's `?Name=`.
+
+## Packet loss during the handshake (branch `net-loss`, from main 0f44cbf)
+
+### Step L1: the coordinator's lag hang reproduced deterministically; two causes found
+
+Coordinator's evidence (`logs/coord/net-lag-hang/`): in a `lag` run (PktLag=50 PktLoss=5) NetA sent HELLO,
+the server answered CHALLENGE, and then neither side logged anything for that connection for 3.5 minutes; no
+timeout on either side.
+
+Test tools (our code, compiled under Epic's `DO_ENABLE_NET_TEST` like PktLoss/PktLag):
+- `NETDROP=<spec>[,<spec>]` (UC2NetTest.cpp; hooks in `UNetConnection::Serialize` for sent control text,
+  `UControlChannel::ReceivedBunch` for received text, `UNetConnection::FlushNet` for the drop): `TEXT[#n][+k]`
+  loses the packet that carries the n-th control message starting with TEXT on a connection (plus k more);
+  `<TEXT[#n][+k]` loses the next k packets after receiving it. The packet is lost as on the wire: id, lag
+  bookkeeping and LastSendTime advance as for a sent packet. (First version crashed: UE2's `TArray::AddItem`
+  assigns into raw memory, wrong for elements holding an FString; placement-new copy instead.)
+- `NETPKTID=<n>` (UnConn.cpp constructor): this side's packet ids start at n and everything before counts as
+  acked, i.e. a connection that has been running; lets a short test cross the packet-id wrap. (Without also
+  setting OutAckPacketId the first ack produced 16k virtual NAKs and no actor channel opened -- an artefact of
+  the knob, not of the engine.)
+- `tools/dev/net-test.py` check `handshake-loss`: one server + one client per case, the drop on one side;
+  item PASS = joined, the drop really happened, spawned, server sees the pawn.
+
+Results BEFORE any fix (NET_DROP_LIMIT=40 s):
+
+| lost packet | side | joins? |
+|---|---|---|
+| HELLO (client's first packet) | client | yes, 3.2 s (channel 0 not yet open-acked -> UChannel::Tick resends after 1 s) |
+| CHALLENGE (server's first packet, id 0) | server | NO, hangs (client stays at HELLO) |
+| NETSPEED / LOGIN | client | yes, 2.4 s |
+| USES #10 | server | yes, 2.4 s |
+| WELCOME | server | yes, 2.4 s |
+| JOIN | client | yes, 2.2 s |
+| server's 3 packets after JOIN | server | yes, 2.2 s |
+| WELCOME just after the packet-id wrap (NETPKTID=16375) | server | NO, hangs (client stuck in the USES list) |
+| (wrap alone, nothing lost) | - | yes, spawns |
+
+Mechanism (UnConn.cpp, all Epic's UC2 code; the port changed nothing in UnConn.cpp, epic-sources diff empty):
+- Lost reliable bunches are resent only on a NAK, and a NAK is deduced in `ReceivedPacket` from an ack of a
+  LATER packet: `if( AckPacketId>OutAckPacketId ) for( Nak=OutAckPacketId+1; Nak<AckPacketId; ... )`
+  (UnConn.cpp ~513). Acks ride on every packet (UC2 acks every received packet, ack-only ones too, at the end of
+  ReceivedPacket ~691), so the ack stream itself carries later packet ids: a lost packet is normally noticed
+  within a round trip. The only timer-based resend is `UChannel::Tick` for channel 0 while it is not
+  open-acked (UnChan.cpp:309), i.e. on the side that opened it (the client).
+- Cause 1, first packet: UC2 initialises `OutAckPacketId(0)` (UnConn.cpp:40; UT2004 has `-1`,
+  engine-ut2004 UnConn.cpp:34) and the first packet a connection sends has id 0 (OutPacketId is never set, the
+  "Zero reserved for invalid id" comment in UnConn.h is not implemented). Packet 0 is therefore never in a NAK
+  range: if it is lost, only the channel-0 timer could resend it. On the client that timer exists (HELLO
+  recovers); on the server channel 0 was opened by the client and is open-acked at once, so nothing ever resends
+  the server's packet 0 = CHALLENGE. The server sends no keep-alives before the challenge is passed
+  (`HasPendingData`, UnConn.cpp:296, same idea as UT2004's `PassedChallenge`), the client keeps sending
+  keep-alives and the server keeps acking them, so neither side times out: a silent hang, exactly the
+  coordinator's log.
+- Cause 2, packet-id wrap: UC2 ("superville") made packet ids `_WORD`s that wrap `% (MAX_PACKETID-1)` (UnConn.cpp
+  ~388) but kept plain `>` comparisons (UT2004 used INTs with `MakeRelative`). After ~16k packets (~4.5 min at
+  60/s, every real game) an ack of a small post-wrap id is never `> OutAckPacketId`, so no NAK is ever deduced
+  again: any reliable bunch lost after the wrap is never resent (here: WELCOME). The soak did not show it because
+  it has no packet loss.
+- Not a property of the simulation: PktLag/PktLoss drop or delay at FlushNet, NETDROP drops at the same point;
+  a packet lost on the wire is equally invisible to the sender. The `Delayed` queue is flushed in
+  `UNetConnection::Tick` for every connection (UNetDriver::TickFlush), so it is not starved.
+- Whose: Epic's UC2 protocol code (both causes), not the port. On a LAN/system link (the Xbox's main case) loss
+  is rare; over the internet 5 % loss on the first server packet hangs 1 join in 20.

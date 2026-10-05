@@ -730,9 +730,60 @@ def check_wine():
         finish(ck, procs)
 
 
+# Deterministic loss of one handshake/join packet (NETDROP=, Engine/Src/UC2NetTest.cpp). (case, side, spec)
+HANDSHAKE_DROPS = [
+    ("hello", "client", "HELLO"),          # the client's first packet
+    ("challenge", "server", "CHALLENGE"),  # the server's answer (the coordinator's lag hang)
+    ("netspeed", "client", "NETSPEED"),    # NETSPEED and LOGIN usually share a packet
+    ("login", "client", "LOGIN"),
+    ("uses", "server", "USES#10"),         # one of the 67 package lines
+    ("welcome", "server", "WELCOME"),
+    ("join", "client", "JOIN"),
+    ("afterjoin", "server", "<JOIN+3"),    # the server's first three packets after it got JOIN (actor channels)
+    # The server's packet ids start just before the wrap (NETPKTID=16375; ids run 0..16382), so its WELCOME
+    # goes out after the wrap: a loss there needs the ack logic to work across the wrap.
+    ("wrap", "server", "WELCOME", "NETPKTID=16375"),
+    ("wraponly", "server", "NOSUCHTEXT", "NETPKTID=16375"),   # diagnostic: the wrap alone, nothing lost
+]
+
+
+def check_handshake_loss():
+    ck = "handshake-loss"
+    limit = float(os.environ.get("NET_DROP_LIMIT", "60"))
+    only = os.environ.get("NET_DROP_CASES")
+    for entry in HANDSHAKE_DROPS:
+        case, side, spec = entry[:3]
+        more = list(entry[3:])
+        if only and case not in only.split(","):
+            continue
+        sub = "hsloss-" + case
+        s = server(sub, extra=(["NETDROP=" + spec] + more if side == "server" else []))
+        a = client(sub, "NetA", extra=(["NETDROP=" + spec] if side == "client" else []))
+        procs = [s, a]
+        try:
+            j = s.wait(r"Join succeeded: NetA", limit)
+            took = time.time() - a.started
+            dropper = s if side == "server" else a
+            lost = dropper.count(r"^NetProbe: netdrop: lost packet")
+            p = spawn(a, "spawn") if j else None
+            sp = s.probe("H1") if j else None
+            ok = bool(j) and lost >= 1 and bool(p) and bool(pawn_of(sp, "NetA"))
+            if j:
+                det = "joined %.1f s after the client started, spawned=%s, %d packet(s) lost by %s" % (took, bool(p), lost, side)
+            else:
+                cl = a.text()
+                last = [l for l in cl.splitlines() if "PendingLevel received" in l or "sending text" in l]
+                det = "NO JOIN within %.0f s (%d packet(s) lost by %s); client's last handshake line: %s" % (
+                    limit, lost, side, last[-1][:100] if last else "none")
+            result(ok, "%s.%s" % (ck, case), "%s drops %s: %s" % (side, spec, det))
+        finally:
+            finish(sub, procs)
+
+
 ALL = {"dedicated1": check_dedicated1, "dedicated2": check_dedicated2, "listen": check_listen,
        "travel": check_travel, "disconnect": check_disconnect, "soak": check_soak, "lag": check_lag,
-       "glshot": check_glshot, "wine": check_wine}
+       "glshot": check_glshot, "wine": check_wine,
+       "handshake-loss": check_handshake_loss}
 
 if __name__ == "__main__":
     for c in CHECKS:

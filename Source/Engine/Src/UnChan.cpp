@@ -8,6 +8,10 @@
 
 #include "EnginePrivate.h"
 #include "UnNet.h"
+
+#if DO_ENABLE_NET_TEST
+ENGINE_API void UC2NetTestNoteText( UNetConnection* Connection, const TCHAR* Text, UBOOL bSending );	// uc2 port (UC2NetTest.cpp)
+#endif
 #include "ULoadSaveManager.h"
 
 static inline void SerializeCompVector( FArchive& Ar, FVector& V )
@@ -681,6 +685,9 @@ void UControlChannel::ReceivedBunch( FInBunch& Bunch )
 		Bunch << Text;
 		if( Bunch.IsError() )
 			break;
+#if DO_ENABLE_NET_TEST
+		UC2NetTestNoteText( Connection, *Text, 0 );	// uc2 port: NETDROP= triggers (UC2NetTest.cpp)
+#endif
 		Connection->Driver->Notify->NotifyReceivedText( Connection, *Text );
 	}
 	unguard;

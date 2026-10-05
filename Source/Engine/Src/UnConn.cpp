@@ -9,6 +9,12 @@
 #include "EnginePrivate.h"
 #include "UnNet.h"
 
+#if DO_ENABLE_NET_TEST
+// uc2 port: the network tests' deterministic packet drop (Engine/Src/UC2NetTest.cpp).
+ENGINE_API UBOOL UC2NetTestDropPacket( UNetConnection* Connection );
+ENGINE_API void UC2NetTestNoteText( UNetConnection* Connection, const TCHAR* Text, UBOOL bSending );
+#endif
+
 
 /*-----------------------------------------------------------------------------
 	UNetConnection implementation.
@@ -48,6 +54,17 @@ UNetConnection::UNetConnection( UNetDriver* InDriver, const FURL& InURL )
 	Parse(appCmdLine(),TEXT("PktOrder="),PktOrder);
 	Parse(appCmdLine(),TEXT("PktDup="),  PktDup);
 	Parse(appCmdLine(),TEXT("PktLag="),  PktLag);
+	// uc2 port: the network tests' wrap test: NETPKTID=<n> starts this side's packet ids at n, so a short test
+	// crosses the packet-id wrap (16382 -> 0) that a real connection reaches after ~16k packets (~4.5 min at 60/s).
+	{
+		INT StartId = 0;
+		if( Parse(appCmdLine(),TEXT("NETPKTID="), StartId) )
+		{
+			// As on a connection that has been running: everything up to the previous id counts as acked.
+			OutPacketId    = (_WORD)(StartId % (MAX_PACKETID - 1));
+			OutAckPacketId = (_WORD)((StartId + MAX_PACKETID - 2) % (MAX_PACKETID - 1));
+		}
+	}
 #endif
 
 	// Other parameters.
@@ -331,7 +348,12 @@ void UNetConnection::FlushNet()
 
 		// Send now.
 #if DO_ENABLE_NET_TEST
-		if( PktOrder )
+		// uc2 port: the network tests' deterministic packet drop (NETDROP=, UC2NetTest.cpp): the packet is lost
+		// as if on the wire; everything below (packet id, lag bookkeeping, LastSendTime) still happens.
+		if( UC2NetTestDropPacket( this ) )
+		{
+		}
+		else if( PktOrder )
 		{
 			DelayedPacket& B = *(new(Delayed)DelayedPacket);
 			B.Data.Add( Out.GetNumBytes() );
@@ -395,6 +417,9 @@ void UNetConnection::Serialize( const TCHAR* Data, EName MsgType )
 	guard(UNetConnection::Serialize);
 
 	debugf(NAME_DevNet, TEXT("NetConnection sending text: %s"), Data);
+#if DO_ENABLE_NET_TEST
+	UC2NetTestNoteText( this, Data, 1 );	// uc2 port: NETDROP= triggers (UC2NetTest.cpp)
+#endif
 
 	// Send data to the control channel.
 	if( Channels[0] && !Channels[0]->bClosing )
