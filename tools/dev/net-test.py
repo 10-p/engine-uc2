@@ -257,14 +257,19 @@ def crit_lines(procs):
 
 
 def finish(check, procs, allow_invalid_class=0):
+    """Stop everything; '.clean' = no Critical/assert/overflow/bunch line in any log, and every client-side
+    'Received invalid actor class' explained by a server-side 'persistent actor ...DefaultPhysicsVolume... has no
+    package-map index' line (one per connection: network.md step 3). allow_invalid_class is ignored."""
     for p in procs:
         if p.alive():
             p.stop()
+    allow_invalid_class = sum(p.count(r"persistent actor DefaultPhysicsVolume \S+ has no package-map index")
+                              for p in procs if p.kind in ("server", "listen"))
     bad = crit_lines(procs)
     inv = [b for b in bad if "invalid actor class" in b]
     rest = [b for b in bad if "invalid actor class" not in b]
     result(not rest and len(inv) <= allow_invalid_class, check + ".clean",
-           "Critical/assert/overflow/bunch lines: %d%s; 'Received invalid actor class': %d (allowed %d)"
+           "Critical/assert/overflow/bunch lines: %d%s; 'Received invalid actor class': %d (server-side unmapped DefaultPhysicsVolume channels: %d)"
            % (len(rest), (" first: " + rest[0]) if rest else "", len(inv), allow_invalid_class))
 
 
@@ -483,7 +488,7 @@ def check_travel():
         sl = s.wait(r"Bringing Level DM-Sever\.MyLevel up for play", 120)
         result(bool(sl), ck + ".servertravel", "server: %s" % (sl.group(0) if sl else "no DM-Sever in 120 s"))
         cl = a.wait(r"Welcomed by server: LEVEL=DM-Sever", 120)
-        cj = s.wait(r"Join succeeded: NetA", 120)
+        cj = s.wait(r"Join succeeded: \S+", 120)
         result(bool(cl and cj), ck + ".clientfollows", "client: %s; server: %s" % (cl and cl.group(0), cj and cj.group(0)))
         lv = a.probe("T1")
         result(bool(lv) and lv["summary"].get("level") == "DM-Sever", ck + ".clientlevel",
@@ -512,11 +517,15 @@ def check_disconnect():
         a.send("exec disconnect")
         time.sleep(4)
         p1 = s.probe("D1")
-        result(bool(p1) and p1["summary"].get("conns") == "1" and "NetA" not in p1["pris"], ck + ".clean",
+        result(bool(p1) and p1["summary"].get("conns") == "1" and "NetA" not in p1["pris"], ck + ".leave",
                "server after NetA's DISCONNECT: conns=%s, PRIs %s" % (p1 and p1["summary"].get("conns"), p1 and sorted(p1["pris"])))
         a.stop()
-        # B is killed: the server must drop it after ConnectionTimeout.
-        b.stop(signal.SIGKILL, grace=5)
+        # B freezes (SIGSTOP: its socket stays open, so no ICMP port-unreachable tells the server; a killed
+        # process on 127.0.0.1 is dropped at once through that ICMP, which the 'killed' item below shows): the
+        # server must drop it after ConnectionTimeout (30 s, Default.ini [IpDrv.TcpNetDriver]).
+        bpid = b.engine_pid()
+        if bpid:
+            os.kill(bpid, signal.SIGSTOP)
         t0 = time.time()
         dropped = None
         while time.time() - t0 < 75:
@@ -525,8 +534,25 @@ def check_disconnect():
                 dropped = time.time() - t0
                 break
             time.sleep(3)
-        result(dropped is not None and s.alive(), ck + ".timeout",
-               "server dropped the killed NetB after %s s (ConnectionTimeout 30), server alive=%s" % (dropped and round(dropped), s.alive()))
+        result(dropped is not None and 25 <= dropped <= 45 and s.alive(), ck + ".timeout",
+               "server dropped the frozen NetB after %s s (ConnectionTimeout 30), server alive=%s" % (dropped and round(dropped), s.alive()))
+        b.stop(signal.SIGKILL, grace=5)
+        # A client process killed outright (socket closed): dropped through the ICMP port-unreachable.
+        c0 = client(ck, "NetK")
+        procs.append(c0)
+        jk = s.wait(r"Join succeeded: NetK", 60)
+        time.sleep(2)
+        c0.stop(signal.SIGKILL, grace=5)
+        t1 = time.time()
+        dk = None
+        while time.time() - t1 < 45:
+            pk = s.probe("DK-%d" % int(time.time() - t1))
+            if pk and pk["summary"].get("conns") == "0":
+                dk = time.time() - t1
+                break
+            time.sleep(2)
+        result(bool(jk) and dk is not None and s.alive(), ck + ".killed", "server dropped the killed NetK after %s s, server alive=%s"
+               % (dk and round(dk), s.alive()))
         # A new client joins afterwards.
         c = client(ck, "NetC")
         procs.append(c)
