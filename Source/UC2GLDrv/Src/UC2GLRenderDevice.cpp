@@ -1254,6 +1254,12 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 		if( appSeconds() - GFirstFrameTime >= GShotTimes(0) )
 		{
 			debugf( NAME_Init, TEXT("UC2GLDrv: -glshot at %.1f s (frame %i)"), GShotTimes(0), FrameCounter );
+			// The counters at the moment of the picture (the periodic line may not come in a short run).
+			if( CheckGLErrors )
+			{
+				debugf( NAME_Init, TEXT("UC2GLDrv: frame %i, %i GL errors so far"), FrameCounter, GLErrorCount );
+				LogPixelShaderStats();
+			}
 			GShotTimes.Remove(0);
 			Viewport->Exec( TEXT("SHOT"), *GLog );
 		}
