@@ -224,6 +224,16 @@ public:
 		Ar.ByteOrderSerialize( &S, sizeof(S) );
 		return Ar;
 	}
+#if !defined(_WIN32) && !defined(_MSC_VER)
+	// M13: PTRINT (a pointer-sized integer that C++ keeps in a script int's place, e.g. a TArray<PTRINT> of
+	// particles) is `unsigned long`: a type of its own on Linux and the web (on Windows it is DWORD or QWORD,
+	// which have operators). Only counting/GC archives meet it; pointers are never written to a package.
+	friend FArchive& operator<<( FArchive& Ar, PTRINT& P )
+	{
+		Ar.ByteOrderSerialize( &P, sizeof(P) );
+		return Ar;
+	}
+#endif
 	CORE_API friend FArchive& operator<<( FArchive& Ar, FString& A );
 
 protected:

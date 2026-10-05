@@ -357,7 +357,7 @@ void UParticleEmitter::SpawnParticle( INT Index, FLOAT SpawnTime, INT Flags, INT
 	//jg -- Check for a particle being there. If not allocate one.
 	if (Particles(Index) == NULL)
 	{
-		Particles(Index) = (INT)CreateParticle();
+		Particles(Index) = (PTRINT)CreateParticle();
 	}
 	FParticle& Particle = *(FParticle*)Particles(Index);
 

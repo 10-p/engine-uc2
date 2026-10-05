@@ -92,3 +92,80 @@ Built: `cmake --build build-native --target Core` (32-bit) and `build-native64 -
    size + the placeholder report + a layout dump; `tools/dev/m13-layout-check.py` compares the dump with the
    binary's DWARF (`dwarf-layouts.py`) for every class AND script struct member. 32-bit mode unchanged.
 5. VM: port ut99 `253aaf2` (None-context fill re-zeroes the whole destination; switch compares pointer width).
+
+### Step 3 — the layout proof and every pointer-through-int site in the census (2026-10-05)
+
+**What "C++ and script agree" means at 64 bits** (decided): the shipped 32-bit `.u` files, linked by the
+property system with this target's rules — object references 8 bytes aligned to **4** (`UObjectProperty::Link`,
+was `sizeof(UObject*)`; the mirrors are pack(4) like Epic's /Zp4; same value on every 32-bit target),
+`FString`/`TArray` `sizeof(FArray)`=16, `TMap` 32, delegates 16, and the **native placeholders** — must give
+every native class, script struct and event-parameter struct the size and member offsets GCC gives the C++
+declaration. Checked three ways:
+1. **Link-time guard** (UnClass.cpp, 64-bit only): the C++ `sizeof` of every class registered by
+   `DECLARE_CLASS` (recorded in both UStruct native constructors; static link uses `EStaticConstructor`) is
+   compared with the linked script size; mismatch = `appErrorf` (fatal), or a `VERIFY: [layout]` warning on
+   the console while `ucc verifyclasses` runs (`GLayoutWarnOnly`, set by UCC from argv before appInit).
+2. **`ucc-bin verifyclasses` 64-bit mode** (UCC.cpp `VerifyNativeLayouts64`; the 32-bit mode is unchanged):
+   loads UWeb too; runs the generated member-offset lists exactly as at 32-bit; then (a) every class with a
+   C++ size: C++ vs script (400 classes), (b) every placeholder table entry exists and is linked at its C++
+   size, (c) **no bytecode reads or writes a placeholder** — every `UStruct`'s script is walked with
+   `SerializeExpr` on a collecting archive (6,578 scripts) and every `UProperty` it references is tested.
+   `DUMP=<file>` (any width; opt-in) writes the linked layout of every class, script struct and function.
+3. **`tools/dev/m13-layout-check.py <dump> <dwarf>`** (new): compares that dump with
+   `tools/dev/dwarf-layouts.py ucc-bin` member by member: classes (AX/UX), script structs (FX) and event
+   parameter structs (`UX_eventF_Parms`) — covers the hand-written headers and structs the generated lists
+   never see.
+
+**Native placeholders** (`GNativePlaceholders`, UnClass.cpp; ut99 `NativePlaceholderSize`, by string): a
+script `int` standing in for C++ data advances the layout by the C++ size (`PH_Member`), or gives an
+`array<int>` the pointer stride (`PH_ArrayElement`); the property itself stays a 4-byte int. Identical sizes
+at 32-bit (the code is `#if PLATFORM_64BITS` anyway). 47 entries:
+
+| Script (package.struct.property) | C++ | kind |
+|---|---|---|
+| Core.Object.ObjectInternal[7] | vtable, Index, HashNext, HashOuterNext, StateFrame, _Linker, _LinkerIndex (56) | member |
+| Core.Subsystem.ExecVtbl; Engine.Player.vfOut, vfExec | FExec / FOutputDevice base vtables | member |
+| Core.Orientation.MA | `UMatSubAction*` (FOrientation, Engine.h) | member |
+| Engine.ActorRenderDataPtr/LightRenderDataPtr/ProjectorRenderInfoPtr/StaticMeshProjectorRenderInfoPtr.Ptr | typedef'd pointers (Engine.h) | member |
+| Engine.Actor.OctreeNodes | `FOctreeNode*` in `TArray<PTRINT>` | array element |
+| Engine.StateInfo.Node/StateNode/Code | `UStruct*`/`UState*`/`BYTE*` (FStateInfo, Controller.StateStack) | member |
+| Engine.FileLog.LogAr | `FArchive*` | member |
+| Engine.MovieMaterial.MovieDecoder/RenderInterface/InMemoryDecodingBlock/ThreadSynch/Thread | player, texture, buffer, critical section, thread | member |
+| Engine.ParticleEmitter.Particles | `FParticle*` in `TArray<PTRINT>` | array element |
+| Engine.Texture.RenderInterface, Cubemap.CubemapRenderInterface | `FStaticTexture*`, `FStaticCubemap*` | member |
+| Engine.Canvas.pCanvasUtil; MotionBlur.RenderTargets[2]; FluidSurfaceInfo.Indices | `FCanvasUtil*`; 2 `FAuxRenderTarget*`; `void*` | member |
+| UCGameplay.UCScreen{Bloom,Emissive,DOF,MotionBlur,RadialBlur,HeatShimmer}.*Target(s) | `FRenderTarget*` (BlurTargets: array element) | member/array |
+| GUI.GUIController.Designer | `UPropertyManagerBase*` | member |
+| GUI.UIXInteraction.m_pFont/m_pLiveEngine/m_pUIPlugin/LiveInterface/FriendsInterface | Xbox Live UI pointers | member |
+| IpDrv.InternetLink.PrivateResolveInfo, MasterServerLink.LinkPtr, MasterServerClient.MSLinkPtr | resolver / link objects | member |
+| UWeb.WebResponse.ReplacementMap[5], WebRequest.VariableMap[5] | `TMap`/`TMultiMap<FString,FString>` (32) | member |
+
+Where the C++ member was a generated `INT` that native code casts to and from a pointer it is now `PTRINT`
+(4 bytes, `unsigned long`, at 32-bit: same layout; casts `(INT)p` -> `(PTRINT)p`): EngineClasses.h
+(`OctreeNodes`, `FStateInfo`, `LogAr`, the five MovieMaterial fields, `Particles`), GUIClasses.h (`Designer`),
+IpDrvClasses.h (`PrivateResolveInfo`, `LinkPtr`, `MSLinkPtr`). An `FArchive << PTRINT&` (not on Windows,
+where PTRINT is DWORD/QWORD) serves the counting archives that walk `Particles`.
+
+**pack(4) on hand-written mirrors** (Epic built everything /Zp4; GCC packed only the generated headers):
+whole-file `#pragma pack(push,4)` in UnMaterial.h, UnForceFeedbackWaveform.h, UnCanvas.h, UnPlayer.h,
+UnTerrain.h, UnFluidSurface.h, UnCameraEffects.h, UnGame.h, UnEngine.h, UnURL.h (FURL), UnCorObj.h
+(UCommandlet's tail), UCCameraEffects.h, UWeb.h; around `FLiveUser` (UnObjBas.h), `FOrientation`
+(Engine.h), `UUIXInteraction` (UnUIXInteraction.h). None of these headers has an 8-byte scalar member
+(grep `QWORD|DOUBLE|SQWORD|double`), so no 32-bit target's layout can change (i386 never aligns above 4;
+wasm32/MinGW only differ for 8-byte scalars).
+
+**Other census fixes**: `Align()` and `FMemStack::PushBytes` through `PTRINT` (were DWORD/INT: truncated
+heap addresses), `STRUCT_OFFSET` `(INT)(PTRINT)`, object outer-hash input `(DWORD)(PTRINT)` (a hash, kept),
+`UnAudio.cpp` RIFF chunk bound, `UnStats.cpp` memset length, `UnIn.cpp` binding offsets, **UInput alias
+struct** described by `sizeof(FAlias)`/`STRUCT_OFFSET` (the arithmetic `sizeof(FName)+sizeof(FString)` put
+`Command` at 4 instead of 8: the ut99 client crash on the first alias key), UnMovie.cpp log map keyed by
+object index, **native class config name** stashed in a side table (UClass is pack(1): the 8-byte
+`const TCHAR*` written into the 4-byte `ClassConfigName` overwrote half of `ClassConstructor` -> SIGSEGV
+`0x0000555500005555` on the first object of Engine).
+
+**Result** (`logs/m13/verify64-6.out`, `ucc.log`): `VERIFY: 64-bit native size check: 400 classes, 0
+mismatches while linking`, `bytecode scan: 6578 scripts read for placeholder references` (0 references),
+all 47 placeholders found, `All native class layouts match`, exit 0. Cast census of a full rebuild:
+**0 ptr-to-int, 0 int-to-ptr** (`logs/m13/build64-3.log`). m13-layout-check: 5,697 properties, 400 classes,
+122 structs, 202 event parm structs checked; 2 mismatches left: `Texture.__LastUpdateTime`/`MemUsage` are
+declared in the opposite order in C++ and script — to compare with the 32-bit dump (expected pre-existing).

@@ -1126,7 +1126,9 @@ void UObjectProperty::Link( FArchive& Ar, UProperty* Prev )
 	guard(UObjectProperty::Link);
 	Super::Link( Ar, Prev );
 	ElementSize = sizeof(UObject*);
-	Offset      = Align( GetOuterUField()->GetPropertiesSize(), sizeof(UObject*) );
+	// M13: 4, not sizeof(UObject*). The C++ mirrors of script classes are #pragma pack(4) (Epic's /Zp4), so an
+	// 8-byte pointer sits on a 4-byte boundary there too. Same value as before on every 32-bit target.
+	Offset      = Align( GetOuterUField()->GetPropertiesSize(), 4 );
 	if( ((PropertyFlags & CPF_EditInline) && (PropertyFlags & CPF_ExportObject)) || (PropertyFlags & CPF_Automated) )
 		PropertyFlags |= CPF_NeedCtorLink;
 	unguardobj;

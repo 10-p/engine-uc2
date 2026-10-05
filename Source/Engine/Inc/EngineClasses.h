@@ -406,9 +406,9 @@ struct ENGINE_API FFuncTimerInfo
 struct ENGINE_API FStateInfo
 {
     FName StateName;
-    INT Node;
-    INT StateNode;
-    INT Code;
+    PTRINT Node;
+    PTRINT StateNode;
+    PTRINT Code;
 };
 
 struct ENGINE_API FDelegateInfo
@@ -800,7 +800,7 @@ public:
     FName InitialState;
     FName Group;
     TArrayNoInit<class AActor*> Touching;
-    TArrayNoInit<INT> OctreeNodes;
+    TArrayNoInit<PTRINT> OctreeNodes;
     FBox OctreeBox;
     FVector OctreeBoxCenter;
     FVector OctreeBoxRadii;
@@ -2835,7 +2835,7 @@ public:
 class ENGINE_API AFileLog : public AInfo
 {
 public:
-    INT LogAr GCC_PACK(4);
+    PTRINT LogAr GCC_PACK(4);
     FStringNoInit LogFileName;
     DECLARE_FUNCTION(execLogf);
     DECLARE_FUNCTION(execCloseLog);
@@ -7004,11 +7004,11 @@ class ENGINE_API UMovieMaterial : public UBitmapMaterial
 {
 public:
     FStringNoInit MovieFileName GCC_PACK(4);
-    INT MovieDecoder;
-    INT RenderInterface;
-    INT InMemoryDecodingBlock;
-    INT ThreadSynch;
-    INT Thread;
+    PTRINT MovieDecoder;
+    PTRINT RenderInterface;
+    PTRINT InMemoryDecodingBlock;
+    PTRINT ThreadSynch;
+    PTRINT Thread;
     INT InMemoryBlockSize;
     FLOAT LastAdvanceTime;
     INT LastD3DTexture;
@@ -8428,7 +8428,7 @@ public:
     BYTE DetailLevel;
     class AEmitter* Owner GCC_PACK(4);
     FLOAT InactiveTime;
-    TArrayNoInit<INT> Particles;
+    TArrayNoInit<PTRINT> Particles;
     INT ParticleIndex;
     INT ActiveParticles;
     FLOAT PPSFraction;

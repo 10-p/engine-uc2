@@ -2845,7 +2845,7 @@ public:
     FStringNoInit LastSelectedMaplistName;
     FLOAT FastCursorFade;
     INT FastCursorStep;
-    INT Designer;
+    PTRINT Designer;
     class UGUIComponent* FocusedControl[2];
     class UGUIComponent* ActiveControl;
     class UGUIComponent* TopControl;

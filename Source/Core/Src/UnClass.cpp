@@ -335,6 +335,24 @@ IMPLEMENT_CLASS(UField)
 //
 // Constructors.
 //
+#if PLATFORM_64BITS
+// M13: the C++ sizeof of every natively declared class (DECLARE_CLASS passes it here), kept because Link
+// replaces PropertiesSize with the size the loaded script properties give. Plain BSS: these constructors run
+// during static initialisation.
+enum { MAX_NATIVE_STRUCT_SIZES=4096 };
+static UStruct* GNativeStructs[MAX_NATIVE_STRUCT_SIZES];
+static INT      GNativeStructSizes[MAX_NATIVE_STRUCT_SIZES];
+static INT      GNativeStructCount=0;
+CORE_API UBOOL  GLayoutWarnOnly=0;		// ucc verifyclasses: report every mismatch instead of stopping at the first.
+CORE_API INT    GLayoutMismatches=0;
+CORE_API INT GetNativeStructSize( UStruct* Struct )
+{
+	for( INT i=0; i<GNativeStructCount; i++ )
+		if( GNativeStructs[i]==Struct )
+			return GNativeStructSizes[i];
+	return -1;
+}
+#endif
 UStruct::UStruct( ENativeConstructor, INT InSize, const TCHAR* InName, const TCHAR* InPackageName, DWORD InFlags, UStruct* InSuperStruct )
 :	UField			( EC_NativeConstructor, UClass::StaticClass(), InName, InPackageName, InFlags, InSuperStruct )
 ,	Children		( NULL )
@@ -349,7 +367,16 @@ UStruct::UStruct( ENativeConstructor, INT InSize, const TCHAR* InName, const TCH
 ,	TextPos			( 0 )
 ,	Line			( 0 )
 #endif
-{}
+{
+#if PLATFORM_64BITS
+	if( GNativeStructCount<MAX_NATIVE_STRUCT_SIZES )
+	{
+		GNativeStructs[GNativeStructCount]     = this;
+		GNativeStructSizes[GNativeStructCount] = InSize;
+		GNativeStructCount++;
+	}
+#endif
+}
 UStruct::UStruct( EStaticConstructor, INT InSize, const TCHAR* InName, const TCHAR* InPackageName, DWORD InFlags )
 :	UField			( EC_StaticConstructor, InName, InPackageName, InFlags )
 ,	Children		( NULL )
@@ -364,7 +391,17 @@ UStruct::UStruct( EStaticConstructor, INT InSize, const TCHAR* InName, const TCH
 ,	TextPos			( 0 )
 ,	Line			( 0 )
 #endif
-{}
+{
+#if PLATFORM_64BITS
+	// Static link (__STATIC_LINK, every target here) registers classes through this constructor.
+	if( GNativeStructCount<MAX_NATIVE_STRUCT_SIZES )
+	{
+		GNativeStructs[GNativeStructCount]     = this;
+		GNativeStructSizes[GNativeStructCount] = InSize;
+		GNativeStructCount++;
+	}
+#endif
+}
 UStruct::UStruct( UStruct* InSuperStruct )
 :	UField( InSuperStruct )
 ,	PropertiesSize( InSuperStruct ? InSuperStruct->GetPropertiesSize() : 0 )
@@ -381,6 +418,111 @@ void UStruct::AddCppProperty( UProperty* Property )
 	Children       = Property;
 	unguard;
 }
+
+#if PLATFORM_64BITS
+//
+// M13: native placeholders. The shipped packages were compiled for 32-bit pointers and declare as `int` the
+// script variables that stand in for C++ data script never touches: the object header, vtable pointers of
+// secondary C++ bases, private pointers and maps. On a 64-bit target the C++ data is bigger than its stand-in,
+// so Link gives each one the size of its C++ counterpart (the property itself stays a 4-byte int). Kind
+// PH_Member advances the layout by Size; PH_ArrayElement makes Size the element stride of an array<int> that
+// C++ fills with pointers. Lookup by string: a cached FName can be purged and its index reused (ufront 2.83).
+// Proven by `ucc-bin verifyclasses` (sizes, offsets, and that no bytecode reads a placeholder) and
+// tools/dev/m13-layout-check.py; docs/porting/analysis/64bit.md lists every entry and why.
+//
+enum EPlaceholderKind { PH_Member, PH_ArrayElement };
+struct FNativePlaceholder
+{
+	const TCHAR* Package;
+	const TCHAR* Struct;
+	const TCHAR* Property;
+	INT Size;
+	INT Kind;
+};
+static const FNativePlaceholder GNativePlaceholders[] =
+{
+	// vtable, Index, HashNext, HashOuterNext, StateFrame, _Linker, _LinkerIndex: everything before Outer.
+	{ TEXT("Core"),   TEXT("Object"),       TEXT("ObjectInternal"), (INT)(sizeof(UObject) - sizeof(UObject*) - sizeof(DWORD) - sizeof(FName) - sizeof(UClass*)), PH_Member },
+	{ TEXT("Core"),   TEXT("Subsystem"),    TEXT("ExecVtbl"),       (INT)sizeof(FExec),          PH_Member },
+	{ TEXT("Core"),   TEXT("Orientation"),  TEXT("MA"),             (INT)sizeof(void*),          PH_Member },	// UMatSubAction* (FOrientation, Engine.h)
+	{ TEXT("Engine"), TEXT("Player"),       TEXT("vfOut"),          (INT)sizeof(FOutputDevice),  PH_Member },
+	{ TEXT("Engine"), TEXT("Player"),       TEXT("vfExec"),         (INT)sizeof(FExec),          PH_Member },
+	{ TEXT("Engine"), TEXT("ActorRenderDataPtr"),               TEXT("Ptr"), (INT)sizeof(void*), PH_Member },	// FDynamicActor*
+	{ TEXT("Engine"), TEXT("LightRenderDataPtr"),               TEXT("Ptr"), (INT)sizeof(void*), PH_Member },	// FDynamicLight*
+	{ TEXT("Engine"), TEXT("ProjectorRenderInfoPtr"),           TEXT("Ptr"), (INT)sizeof(void*), PH_Member },	// FProjectorRenderInfo*
+	{ TEXT("Engine"), TEXT("StaticMeshProjectorRenderInfoPtr"), TEXT("Ptr"), (INT)sizeof(void*), PH_Member },	// FStaticProjectorInfo*
+	{ TEXT("Engine"), TEXT("Actor"),          TEXT("OctreeNodes"),           (INT)sizeof(void*), PH_ArrayElement },	// FOctreeNode*
+	{ TEXT("Engine"), TEXT("StateInfo"),      TEXT("Node"),                  (INT)sizeof(void*), PH_Member },	// UStruct*
+	{ TEXT("Engine"), TEXT("StateInfo"),      TEXT("StateNode"),             (INT)sizeof(void*), PH_Member },	// UState*
+	{ TEXT("Engine"), TEXT("StateInfo"),      TEXT("Code"),                  (INT)sizeof(void*), PH_Member },	// BYTE*
+	{ TEXT("Engine"), TEXT("FileLog"),        TEXT("LogAr"),                 (INT)sizeof(void*), PH_Member },	// FArchive*
+	{ TEXT("Engine"), TEXT("MovieMaterial"),  TEXT("MovieDecoder"),          (INT)sizeof(void*), PH_Member },	// FMoviePlayer*
+	{ TEXT("Engine"), TEXT("MovieMaterial"),  TEXT("RenderInterface"),       (INT)sizeof(void*), PH_Member },	// FMovieTexture*
+	{ TEXT("Engine"), TEXT("MovieMaterial"),  TEXT("InMemoryDecodingBlock"), (INT)sizeof(void*), PH_Member },	// BYTE*
+	{ TEXT("Engine"), TEXT("MovieMaterial"),  TEXT("ThreadSynch"),           (INT)sizeof(void*), PH_Member },	// FCriticalSection*
+	{ TEXT("Engine"), TEXT("MovieMaterial"),  TEXT("Thread"),                (INT)sizeof(void*), PH_Member },	// FRunnableThread*
+	{ TEXT("Engine"), TEXT("ParticleEmitter"),TEXT("Particles"),             (INT)sizeof(void*), PH_ArrayElement },	// FParticle*
+	{ TEXT("GUI"),    TEXT("GUIController"),  TEXT("Designer"),              (INT)sizeof(void*), PH_Member },	// UPropertyManagerBase*
+	{ TEXT("IpDrv"),  TEXT("InternetLink"),   TEXT("PrivateResolveInfo"),    (INT)sizeof(void*), PH_Member },	// FResolveInfo*
+	{ TEXT("IpDrv"),  TEXT("MasterServerLink"),  TEXT("LinkPtr"),            (INT)sizeof(void*), PH_Member },	// FMasterServer*Link*
+	{ TEXT("IpDrv"),  TEXT("MasterServerClient"),TEXT("MSLinkPtr"),          (INT)sizeof(void*), PH_Member },	// FMasterServerClientLink*
+	{ TEXT("Engine"), TEXT("Texture"),        TEXT("RenderInterface"),       (INT)sizeof(void*), PH_Member },	// FStaticTexture*
+	{ TEXT("Engine"), TEXT("Cubemap"),        TEXT("CubemapRenderInterface"),(INT)sizeof(void*), PH_Member },	// FStaticCubemap*
+	{ TEXT("Engine"), TEXT("Canvas"),         TEXT("pCanvasUtil"),           (INT)sizeof(void*), PH_Member },	// FCanvasUtil*
+	{ TEXT("Engine"), TEXT("MotionBlur"),     TEXT("RenderTargets"),         (INT)(2*sizeof(void*)), PH_Member },	// FAuxRenderTarget*[2]
+	{ TEXT("Engine"), TEXT("FluidSurfaceInfo"),TEXT("Indices"),              (INT)sizeof(void*), PH_Member },	// void*
+	{ TEXT("UCGameplay"), TEXT("UCScreenBloom"),      TEXT("EmissiveResultTarget"), (INT)sizeof(void*), PH_Member },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenEmissive"),   TEXT("BackBufferTarget"),     (INT)sizeof(void*), PH_Member },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenEmissive"),   TEXT("SelectTarget"),         (INT)sizeof(void*), PH_Member },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenEmissive"),   TEXT("BlurTargets"),          (INT)sizeof(void*), PH_ArrayElement },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenDOF"),        TEXT("BackBufferTarget"),     (INT)sizeof(void*), PH_Member },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenDOF"),        TEXT("BlurTargets"),          (INT)sizeof(void*), PH_ArrayElement },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenMotionBlur"), TEXT("BackBufferTarget"),     (INT)sizeof(void*), PH_Member },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenMotionBlur"), TEXT("AccumulationTarget"),   (INT)sizeof(void*), PH_Member },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenRadialBlur"), TEXT("BackBufferTarget"),     (INT)sizeof(void*), PH_Member },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenRadialBlur"), TEXT("AccumulationTarget"),   (INT)sizeof(void*), PH_Member },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenHeatShimmer"),TEXT("BackBufferTarget"),     (INT)sizeof(void*), PH_Member },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenHeatShimmer"),TEXT("OffscreenTarget"),      (INT)sizeof(void*), PH_Member },	// FRenderTarget*
+	{ TEXT("GUI"),    TEXT("UIXInteraction"), TEXT("m_pFont"),               (INT)sizeof(void*), PH_Member },	// CXBFont*
+	{ TEXT("GUI"),    TEXT("UIXInteraction"), TEXT("m_pLiveEngine"),         (INT)sizeof(void*), PH_Member },	// ILiveEngine*
+	{ TEXT("GUI"),    TEXT("UIXInteraction"), TEXT("m_pUIPlugin"),           (INT)sizeof(void*), PH_Member },	// ITitleUIPlugin*
+	{ TEXT("GUI"),    TEXT("UIXInteraction"), TEXT("LiveInterface"),         (INT)sizeof(void*), PH_Member },	// XboxLiveManager*
+	{ TEXT("GUI"),    TEXT("UIXInteraction"), TEXT("FriendsInterface"),      (INT)sizeof(void*), PH_Member },	// LiveFriendsList*
+	{ TEXT("UWeb"),   TEXT("WebResponse"),  TEXT("ReplacementMap"), (INT)sizeof(TMap<FString,FString>),      PH_Member },
+	{ TEXT("UWeb"),   TEXT("WebRequest"),   TEXT("VariableMap"),    (INT)sizeof(TMultiMap<FString,FString>), PH_Member },
+};
+CORE_API INT GetNativePlaceholderCount() { return ARRAY_COUNT(GNativePlaceholders); }
+CORE_API void GetNativePlaceholder( INT i, const TCHAR*& Package, const TCHAR*& Struct, const TCHAR*& Property, INT& Size, INT& Kind )
+{
+	const FNativePlaceholder& P = GNativePlaceholders[i];
+	Package = P.Package; Struct = P.Struct; Property = P.Property; Size = P.Size; Kind = P.Kind;
+}
+static const FNativePlaceholder* FindNativePlaceholder( UStruct* Owner, UProperty* Property )
+{
+	if( !Owner->GetOuter() || (!Cast<UIntProperty>(Property) && !Cast<UArrayProperty>(Property)) )
+		return NULL;
+	// Script structs are outered to their class; the package is the outermost object.
+	UObject* Package = Owner;
+	while( Package->GetOuter() )
+		Package = Package->GetOuter();
+	for( INT i=0; i<ARRAY_COUNT(GNativePlaceholders); i++ )
+	{
+		const FNativePlaceholder& P = GNativePlaceholders[i];
+		if
+		(	appStricmp( Property->GetName(), P.Property )==0
+		&&	appStricmp( Owner->GetName(), P.Struct )==0
+		&&	appStricmp( Package->GetName(), P.Package )==0
+		&&	(P.Kind==PH_Member ? Cast<UIntProperty>(Property)!=NULL : Cast<UIntProperty>(((UArrayProperty*)Property)->Inner)!=NULL) )
+			return &P;
+	}
+	return NULL;
+}
+CORE_API UBOOL IsNativePlaceholder( UProperty* Property )
+{
+	UStruct* Owner = Cast<UStruct>( Property->GetOuter() );
+	return Owner && FindNativePlaceholder( Owner, Property )!=NULL;
+}
+#endif
 
 //
 // Link offsets.
@@ -409,11 +551,32 @@ void UStruct::Link( FArchive& Ar, UBOOL Props )
 			if( Property )
 			{
 				Property->Link( Ar, Prev );
+#if PLATFORM_64BITS
+				const FNativePlaceholder* Placeholder = FindNativePlaceholder( this, Property );
+				if( Placeholder && Placeholder->Kind==PH_ArrayElement )
+					((UArrayProperty*)Property)->Inner->ElementSize = Placeholder->Size;
+				PropertiesSize = Property->Offset + (Placeholder && Placeholder->Kind==PH_Member ? Placeholder->Size : Property->GetSize());
+#else
 				PropertiesSize = Property->Offset + Property->GetSize();
+#endif
 				Prev = Property;
 			}
 		}
 		PropertiesSize = Align(PropertiesSize,4);
+#if PLATFORM_64BITS
+		// M13: a native class whose C++ size differs from the size its script properties give is read through
+		// two layouts; every member past the first difference is silent corruption, and objects are allocated
+		// at the script size. Fatal (ufront 2.83 decision 5), except while `ucc verifyclasses` lists them all.
+		INT NativeSize = GetNativeStructSize( this );
+		if( NativeSize>=0 && NativeSize!=PropertiesSize )
+		{
+			GLayoutMismatches++;
+			if( GLayoutWarnOnly )
+				GWarn->Logf( NAME_Warning, TEXT("VERIFY: [layout] native %s: C++ sizeof=%i but script layout=%i"), GetPathName(), NativeSize, PropertiesSize );
+			else
+				appErrorf( TEXT("Native class %s: C++ sizeof=%i but script layout=%i (run ucc-bin verifyclasses)"), GetPathName(), NativeSize, PropertiesSize );
+		}
+#endif
 	}
 	else
 	{
@@ -1260,6 +1423,31 @@ IMPLEMENT_CLASS(UState);
 	UClass implementation.
 -----------------------------------------------------------------------------*/
 
+#if PLATFORM_64BITS
+// M13: a native class's config name waits here until Register(). Epic parked the `const TCHAR*` in the 4-byte
+// ClassConfigName (an FName), which on 64-bit wrote its high half over ClassConstructor (UClass is pack(1)).
+// Plain BSS: the constructors run during static initialisation.
+enum { MAX_NATIVE_CONFIG_NAMES=4096 };
+static UClass*      GNativeConfigClasses[MAX_NATIVE_CONFIG_NAMES];
+static const TCHAR* GNativeConfigNames[MAX_NATIVE_CONFIG_NAMES];
+static INT          GNativeConfigCount=0;
+static void StashNativeConfigName( UClass* Class, const TCHAR* ConfigName )
+{
+	check(GNativeConfigCount<MAX_NATIVE_CONFIG_NAMES);
+	GNativeConfigClasses[GNativeConfigCount] = Class;
+	GNativeConfigNames  [GNativeConfigCount] = ConfigName;
+	GNativeConfigCount++;
+}
+static const TCHAR* TakeNativeConfigName( UClass* Class )
+{
+	for( INT i=0; i<GNativeConfigCount; i++ )
+		if( GNativeConfigClasses[i]==Class )
+			return GNativeConfigNames[i];
+	appErrorf( TEXT("No stashed config name for native class %s"), Class->GetName() );
+	return NULL;
+}
+#endif
+
 //
 // Register the native class.
 //
@@ -1269,7 +1457,11 @@ void UClass::Register()
 	Super::Register();
 
 	// Get stashed registration info.
+#if PLATFORM_64BITS
+	const TCHAR* InClassConfigName = TakeNativeConfigName( this );
+#else
 	const TCHAR* InClassConfigName = *(TCHAR**)&ClassConfigName;
+#endif
 	ClassConfigName = InClassConfigName;
 
 	// Init default object.
@@ -1770,7 +1962,11 @@ UClass::UClass
 ,	ClassStaticConstructor	( InClassStaticConstructor )
 ,	bPrecached				(0)								//scion rwd - mark this class as not precached
 {
+#if PLATFORM_64BITS
+	StashNativeConfigName( this, InConfigName );
+#else
 	*(const TCHAR**)&ClassConfigName = InConfigName;
+#endif
 }
 
 // Called when statically linked.
@@ -1801,7 +1997,11 @@ UClass::UClass
 ,	ClassStaticConstructor	( InClassStaticConstructor )
 ,	bPrecached				(0)								//scion rwd - mark this class as not precached
 {
+#if PLATFORM_64BITS
+	StashNativeConfigName( this, InConfigName );
+#else
 	*(const TCHAR**)&ClassConfigName = InConfigName;
+#endif
 }
 
 UBOOL CORE_API ShouldPrecacheClass(UClass *testClass)

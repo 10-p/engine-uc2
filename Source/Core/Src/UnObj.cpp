@@ -1616,7 +1616,7 @@ UObject* UObject::StaticFindObjectFast( UClass* InClass, UObject* InOuter, FName
 	if (InOuter != NULL)
 	{
 		// Find in the specified package.
-		INT iHash = GetObjectOuterHash(InName,(DWORD)InOuter);
+		INT iHash = GetObjectOuterHash(InName,(DWORD)(PTRINT)InOuter);
 		for( UObject* Hash = GObjHashOuter[iHash]; Hash != NULL; Hash = Hash->HashOuterNext )
 		{
 			/*
@@ -4567,7 +4567,7 @@ void UObject::HashObject()
 	GObjHash[iHash] = this;
 
 	//jg -- Add to hash with the outer
-	iHash			= GetObjectOuterHash(Name,(DWORD)Outer);
+	iHash			= GetObjectOuterHash(Name,(DWORD)(PTRINT)Outer);
 	HashOuterNext	= GObjHashOuter[iHash];
 	GObjHashOuter[iHash] = this;
 
@@ -4598,7 +4598,7 @@ void UObject::UnhashObject( INT OuterIndex )
 	check(Removed!=0);
 	check(Removed==1);
 	//jg -- Remove from the outer hash
-	iHash   = GetObjectOuterHash(Name,(DWORD)Outer);
+	iHash   = GetObjectOuterHash(Name,(DWORD)(PTRINT)Outer);
 	Hash    = &GObjHashOuter[iHash];
 	Removed = 0;
 	while( *Hash != NULL )

@@ -4776,9 +4776,9 @@ void AAIController::execPushState(FFrame &Stack, RESULT_DECL)
 	{
 		// gather the current state info
 		FStateInfo StateInfo;
-		StateInfo.Node		= (INT)GetStateFrame()->Node;
-		StateInfo.StateNode = (INT)GetStateFrame()->StateNode;
-		StateInfo.Code		= (INT)GetStateFrame()->Code;
+		StateInfo.Node		= (PTRINT)GetStateFrame()->Node;
+		StateInfo.StateNode = (PTRINT)GetStateFrame()->StateNode;
+		StateInfo.Code		= (PTRINT)GetStateFrame()->Code;
 		StateInfo.StateName = GetStateFrame()->StateNode ? GetStateFrame()->StateNode->GetFName() : FName(NAME_None);
 
 		// and do a normal transition to the new state, skipping notification

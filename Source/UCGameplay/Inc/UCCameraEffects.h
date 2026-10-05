@@ -1,3 +1,6 @@
+#if SUPPORTS_PRAGMA_PACK
+#pragma pack (push,4)	// M13: script mirrors are laid out with /Zp4 (as the generated headers); 64-bit pointers sit on 4
+#endif
 
 /* scion ======================================================================
 * Class: UUCScreenDOF
@@ -261,3 +264,6 @@ public:
 };
 
 
+#if SUPPORTS_PRAGMA_PACK
+#pragma pack (pop)
+#endif

@@ -67,7 +67,7 @@ public:
     INT Socket;
     INT Port;
     INT RemoteSocket;
-    INT PrivateResolveInfo;
+    PTRINT PrivateResolveInfo;
     INT DataPending;
     BYTE ReceiveMode;
     DECLARE_FUNCTION(execGetLocalIP);
@@ -263,7 +263,7 @@ struct AMasterServerLink_eventGetMasterServer_Parms
 class IPDRV_API AMasterServerLink : public AInfo
 {
 public:
-    INT LinkPtr GCC_PACK(4);
+    PTRINT LinkPtr GCC_PACK(4);
     INT LANPort;
     INT LANServerPort;
     INT CurrentMasterServer;
@@ -486,7 +486,7 @@ struct AMasterServerClient_eventOnQueryFinished_Parms
 class IPDRV_API AMasterServerClient : public AServerQueryClient
 {
 public:
-    INT MSLinkPtr GCC_PACK(4);
+    PTRINT MSLinkPtr GCC_PACK(4);
     TArrayNoInit<FQueryData> Query;
     INT ResultCount;
     FScriptDelegate __OnQueryFinished__Delegate;

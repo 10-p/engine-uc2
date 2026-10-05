@@ -59,9 +59,10 @@ void UInput::StaticInitInput()
 
 	// Create input alias struct.
 	UStruct* AliasStruct = new(StaticClass(),TEXT("Alias"))UStruct( NULL );
-	AliasStruct->SetPropertiesSize( sizeof(FName) + sizeof(FString));
-	new(AliasStruct,TEXT("Alias"),  RF_Public)UNameProperty( EC_CppProperty, 0,             TEXT(""), CPF_Config );
-	new(AliasStruct,TEXT("Command"),RF_Public)UStrProperty ( EC_CppProperty, sizeof(FName), TEXT(""), CPF_Config );
+	// M13: the layout of FAlias, not arithmetic (Command is at 8 and the struct 24 bytes on LP64; ufront 2.83).
+	AliasStruct->SetPropertiesSize( sizeof(FAlias) );
+	new(AliasStruct,TEXT("Alias"),  RF_Public)UNameProperty( EC_CppProperty, STRUCT_OFFSET(FAlias,Alias),   TEXT(""), CPF_Config );
+	new(AliasStruct,TEXT("Command"),RF_Public)UStrProperty ( EC_CppProperty, STRUCT_OFFSET(FAlias,Command), TEXT(""), CPF_Config );
 	AliasStruct->Link( ArDummy, 0 );
 
 	// Add alias list to class.
@@ -76,7 +77,7 @@ void UInput::StaticInitInput()
 		if( InputKeys->Names(i)!=NAME_None )
 		{
 			const TCHAR* Str = *InputKeys->Names(i);
-			new(StaticClass(),Str+3,RF_Public)UStrProperty( EC_CppProperty, (INT)&((UInput*)NULL)->Bindings[i], TEXT("RawKeys"), CPF_Config );
+			new(StaticClass(),Str+3,RF_Public)UStrProperty( EC_CppProperty, (INT)(PTRINT)&((UInput*)NULL)->Bindings[i], TEXT("RawKeys"), CPF_Config );
 		}
 	}
 	StaticClass()->Link( ArDummy, 0 );
