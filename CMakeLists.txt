@@ -124,7 +124,15 @@ add_definitions(-DSUPPORTS_PRAGMA_PACK=1)
 # Compiler flags
 #-----------------------------------------------------------------------------
 
-add_compile_options(-pipe -fsigned-char -fno-strict-aliasing)
+# char is signed on x86 and unsigned on arm (and the code was written for signed char). The audit build
+# (preset native64-uchar) inverts it to show the code does not depend on it (M13, docs/porting/analysis/64bit.md).
+option(UC2_UNSIGNED_CHAR_AUDIT "Build with -funsigned-char (arm64's char) instead of -fsigned-char" OFF)
+if(UC2_UNSIGNED_CHAR_AUDIT)
+  add_compile_options(-pipe -funsigned-char -fno-strict-aliasing)
+  add_definitions(-DUC2_UNSIGNED_CHAR_AUDIT=1)
+else()
+  add_compile_options(-pipe -fsigned-char -fno-strict-aliasing)
+endif()
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fpermissive> -fno-lifetime-dse)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-register>)

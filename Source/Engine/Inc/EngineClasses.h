@@ -7094,7 +7094,7 @@ public:
 class ENGINE_API UScriptedTexture : public UBitmapMaterial
 {
 public:
-    INT RenderTarget GCC_PACK(4);
+    PTRINT RenderTarget GCC_PACK(4);
     class UViewport* RenderViewport;
     class AActor* Client;
     INT Revision;
@@ -7117,7 +7117,7 @@ public:
 class ENGINE_API UShadowBitmapMaterial : public UBitmapMaterial
 {
 public:
-    INT TextureInterfaces[3] GCC_PACK(4);
+    PTRINT TextureInterfaces[3] GCC_PACK(4);
     class AActor* ShadowActor;
     FVector LightDirection;
     FLOAT LightDistance;

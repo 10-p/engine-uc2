@@ -280,8 +280,8 @@ typedef unsigned long PTRINT;
 typedef unsigned int size_t;
 #endif
 
-// Make sure characters are signed.
-#ifdef __CHAR_UNSIGNED__
+// Make sure characters are signed. (M13: except in the -funsigned-char audit build, UC2_UNSIGNED_CHAR_AUDIT.)
+#if defined(__CHAR_UNSIGNED__) && !defined(UC2_UNSIGNED_CHAR_AUDIT)
 	#error "Bad compiler option: Characters must be signed"
 #endif
 

@@ -467,6 +467,8 @@ static const FNativePlaceholder GNativePlaceholders[] =
 	{ TEXT("IpDrv"),  TEXT("MasterServerLink"),  TEXT("LinkPtr"),            (INT)sizeof(void*), PH_Member },	// FMasterServer*Link*
 	{ TEXT("IpDrv"),  TEXT("MasterServerClient"),TEXT("MSLinkPtr"),          (INT)sizeof(void*), PH_Member },	// FMasterServerClientLink*
 	{ TEXT("Engine"), TEXT("Texture"),        TEXT("RenderInterface"),       (INT)sizeof(void*), PH_Member },	// FStaticTexture*
+	{ TEXT("Engine"), TEXT("ScriptedTexture"),TEXT("RenderTarget"),          (INT)sizeof(void*), PH_Member },	// FScriptedRenderTarget* (punned)
+	{ TEXT("Engine"), TEXT("ShadowBitmapMaterial"),TEXT("TextureInterfaces"),(INT)(3*sizeof(void*)), PH_Member },	// FAuxRenderTarget*[3] (punned)
 	{ TEXT("Engine"), TEXT("Cubemap"),        TEXT("CubemapRenderInterface"),(INT)sizeof(void*), PH_Member },	// FStaticCubemap*
 	{ TEXT("Engine"), TEXT("Canvas"),         TEXT("pCanvasUtil"),           (INT)sizeof(void*), PH_Member },	// FCanvasUtil*
 	{ TEXT("Engine"), TEXT("MotionBlur"),     TEXT("RenderTargets"),         (INT)(2*sizeof(void*)), PH_Member },	// FAuxRenderTarget*[2]

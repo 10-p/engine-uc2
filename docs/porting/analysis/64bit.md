@@ -198,3 +198,24 @@ declared in the opposite order in C++ and script — to compare with the 32-bit 
 - `tools/dev/map-census.sh`: `CENSUS_NAME` (run trees `<name>-N`, `logs/<name>/`) and `CENSUS_PORT`; defaults
   unchanged (`census`, 7780). M13 runs `CENSUS_NAME=m13-census CENSUS_PORT=7880` (64-bit) and
   `m13-census32`/7890 (this branch's 32-bit build) so it never touches the shared `census-*` trees.
+
+### Step 6 — two punned pointer ints; presets arm64 and native64-uchar; script parameters (2026-10-05)
+
+- A grep for `*(T**)&member` (type puns the compiler cannot see) found two script ints written as pointers
+  through a pun, i.e. 8-byte stores into 4-byte fields that verify could not see (the C++ member was `INT`
+  like the script): `ScriptedTexture.RenderTarget` (`*(FRenderTarget**)&RenderTarget`, UnScriptedTexture.cpp:
+  would overwrite `RenderViewport`'s low half) and `ShadowBitmapMaterial.TextureInterfaces[3]`
+  (`*(FAuxRenderTarget**)&TextureInterfaces[0]/[1]`, UnShadowProjector.cpp: [1] overlapped [0]'s high half).
+  Both `PTRINT` in EngineClasses.h + placeholders (8 and 24). The other puns are on real pointer members
+  (`FCheckResult::Next`, `*(BYTE**)&` stream pointers), PS2-only, or Core's (stashes, handled).
+- CMake: `UC2_UNSIGNED_CHAR_AUDIT` (`-funsigned-char`, UnGnuG.h's `#error` lifted only for it), preset
+  `native64-uchar`; preset `arm64` + `cmake/toolchain-aarch64-linux-gnu.cmake` (build-only, compiler missing).
+  arm64 path read: every x86 asm/intrinsic site is gated `__i386__` (FloatToInt in UnRenderBatch/
+  UnRenderStaticMesh -> `lrintf`), `__x86_64__||__i386__` (cpuid, rdtsc in UnUnix.cpp/UnGnuG.h; else
+  `UT_NO_X86_INTRIN`, the wasm path), `_XBOX`, `__PSX2_EE__` or `__HAS_SSE__` (Intel compiler only); so
+  arm64 takes the same C paths as x86_64 and wasm. Platform block: `__LINUX_X86__` is set for every non-Windows
+  build (as for wasm); little-endian.
+- `tools/dev/m12-wine-smoke.sh`: `M12_TREE`, `M12_REF`, `M12_OUT` (defaults m12, m12-native, logs/m12), for
+  windows64. Its picture comparison moved to `tools/dev/pinned-compare.py` (unchanged code) so M13 reuses it.
+- `tools/dev/m10-controls.sh`/`m12-wine-smoke.sh`: main's `b367ae0` hunks (`-nostartupmovies`, the 1 s click)
+  applied verbatim, so the merge sees one version.
