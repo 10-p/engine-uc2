@@ -216,7 +216,7 @@ static UMovieMaterial* WrapPlayer( FPortableMoviePlayer* Player, const TCHAR* Na
 	UMovieMaterial* M = ConstructObject<UMovieMaterial>( UMovieMaterial::StaticClass(), UObject::GetTransientPackage(), NAME_None, RF_Transient );
 	M->AddToRoot();
 	M->MovieFileName = Name;
-	M->MovieDecoder = (INT)Player;
+	M->MovieDecoder = (PTRINT)Player;
 	M->bUpdateWhenPaused = 1;	// the level does not tick while a full-screen movie plays
 	M->USize = Player->GetWidth();
 	M->VSize = Player->GetHeight();
@@ -410,7 +410,7 @@ FPortableMoviePlayer* appUpdateMovieMaterial( UMovieMaterial* M, UBOOL& bOutFall
 		DWORD Flags = (M->bPlayLooping ? MOVIE_Loop : 0) | (M->bEnableAudio ? MOVIE_Audio : 0) | (M->bManualFramerateSynch ? MOVIE_ManualSync : 0);
 		Player = appOpenMovie( *M->MovieFileName, Flags, Engine ? Engine->Audio : NULL );
 		if( Player )
-			M->MovieDecoder = (INT)Player;
+			M->MovieDecoder = (PTRINT)Player;
 		else
 		{
 			// So we don't try this material again (the Xbox logged "Failed to open movie" to the artist).
@@ -441,10 +441,10 @@ FPortableMoviePlayer* appUpdateMovieMaterial( UMovieMaterial* M, UBOOL& bOutFall
 	// Evidence for the logs: each material's frame, at most every 2 s.
 	static TMap<INT,DOUBLE> LastLogged;
 	DOUBLE Now = appSeconds();
-	DOUBLE* Last = LastLogged.Find( (INT)M );
+	DOUBLE* Last = LastLogged.Find( M->GetIndex() );
 	if( !Last || Now - *Last >= 2.0 )
 	{
-		LastLogged.Set( (INT)M, Now );
+		LastLogged.Set( M->GetIndex(), Now );
 		debugf( NAME_Log, TEXT("UC2Movie: MovieMaterial %s frame %i of %i (pass %s, revision %i)"), M->GetPathName(),
 			Player->GetFrame(), Player->GetFrameCount(), Player->HasEnded() ? TEXT("ended") : TEXT("playing"), Player->GetRevision() );
 	}

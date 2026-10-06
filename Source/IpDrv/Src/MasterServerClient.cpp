@@ -287,7 +287,7 @@ void AServerQueryClient::Init()
 	if( !LinkPtr )
     {
         if ((!bLANQuery) || (LANPort >= 0))
-		    LinkPtr = (INT)(NEW FServerQueryLink(this, bLANQuery ? LANPort : 0));
+		    LinkPtr = (PTRINT)(NEW FServerQueryLink(this, bLANQuery ? LANPort : 0));
     }
 }
 
@@ -683,7 +683,7 @@ void AMasterServerClient::Init()
 	// Make a new link to the master server
 	if( MSLinkPtr )
 		delete ((FMasterServerClientLink*)MSLinkPtr);
-    MSLinkPtr = (INT)(NEW FMasterServerClientLink(this));
+    MSLinkPtr = (PTRINT)(NEW FMasterServerClientLink(this));
 }
 
 UBOOL AMasterServerClient::Poll( INT WaitTime )

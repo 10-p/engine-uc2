@@ -2,12 +2,27 @@
 
 Newest first. Remove an entry when it is resolved and say how in `LOG.md`.
 
+## Open (M13, 2026-10-05)
+
+- Exit-time crash on a dedicated server after SIGTERM, both widths (found by M13's censuses, which only notice it
+  as a server that does not end): `UObject::StaticExit` -> `PurgeGarbage` -> `ConditionalDestroy` crashes in
+  `ULinkerLoad::DetachExport` (64-bit OD-Overflow; 32-bit ACT-HallwayAmbush, `UObject::IsValid` on a destroyed
+  export) or in `realloc` from `UClass::Destroy` (32-bit DM-Nexus: heap already corrupt); about 2 maps in 58 per
+  census. The crash handler then calls `appExit`, whose `FFileStream::Destroy` waits for the file-stream thread
+  forever, so the process hangs (two seen, killed by PID). `map-census.sh` reports PASS anyway (its `timeout`
+  has no `-k`). Linker teardown is the net-join branch's area; not changed by M13. Logs:
+  `logs/m13-census/OD-Overflow.log`, `logs/m13-census32/{ACT-HallwayAmbush,DM-Nexus}.log`.
+
 ## Needs the owner
 
 - Reddit thread by VBelov_UZ (`/r/unrealtournament/comments/1t9dn3v`): blocked for the agent's fetch tools.
   Only needed if it says more than `reference/community/uc2-test-suite/README_TESTER.md`.
 - Xbox-look visual oracle (wanted at M6/M7): xemu plus its MCPX ROM, BIOS and HDD image.
-- arm64 (M13): `sudo apt install g++-aarch64-linux-gnu qemu-user`.
+- arm64 (M13): `sudo apt install g++-aarch64-linux-gnu qemu-user qemu-user-binfmt` for `cmake --preset arm64`
+  (toolchain file and preset exist since M13, never configured: no compiler here). `ucc-bin` needs nothing more; the
+  client additionally needs the arm64 X11/GL development packages through multiarch (`sudo dpkg --add-architecture
+  arm64`, then `libx11-dev:arm64 libxext-dev:arm64 libxrandr-dev:arm64 libxcursor-dev:arm64 libxi-dev:arm64
+  libxss-dev:arm64 libgl-dev:arm64 libasound2-dev:arm64 libpulse-dev:arm64`) because SDL2 is built from source.
 - Canonical config (M15): retail and leak disagree on `Characters.ini`, `Gametypes.ini`, `Maplists.ini` and 14
   localisation files; the owner should see the per-file diff before one side is chosen.
 - Depth-of-field alpha (visible from M7): we corrected a header that had fallen behind its script, which

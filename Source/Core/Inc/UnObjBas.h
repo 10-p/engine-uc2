@@ -7,17 +7,12 @@
 =============================================================================*/
 
 // This is a hack, but MUST be defined for 64-bit platforms right now! --ryan.
-#ifdef __x86_64__
+// M13: every 64-bit target (PLATFORM_64BITS, Core.h), not only x86_64. An object reference in bytecode keeps
+// its 4-byte slot (the shipped .u files are 32-bit; every jump and skip offset counts those slots) and holds
+// the object's index in the object table, INDEX_NONE for None: UObject::SerialPointerIndex/SerialIndexPointer.
+// (Ryan's side table GSerializedPointers was searched linearly for every reference at every load and GC.)
+#if PLATFORM_64BITS
 #define SERIAL_POINTER_INDEX 1
-#endif
-
-#if SERIAL_POINTER_INDEX
-#define MAX_SERIALIZED_POINTERS (1024 * 64)
-extern "C" {
-    extern void *GSerializedPointers[MAX_SERIALIZED_POINTERS];
-    extern INT GTotalSerializedPointers;
-    INT SerialPointerIndex(void *ptr);
-}
 #endif
 
 //epic superville: Skip FindFunctionChecked if on XBox FINAL_RELEASE
@@ -328,11 +323,17 @@ public:
 //
 // Script wrapper for the XBox Live XUID struct.
 //
+#if SUPPORTS_PRAGMA_PACK
+#pragma pack (push,4)	// M13: script mirrors are laid out with /Zp4 (as the generated headers); 64-bit pointers sit on 4
+#endif
 struct CORE_API FLiveUser
 {
 	FString	GamerTag;
 	BYTE	XUID[12];
 };
+#if SUPPORTS_PRAGMA_PACK
+#pragma pack (pop)
+#endif
 
 
 // rjp -- temporary fix for bug in VisualAssistX parser
@@ -833,6 +834,11 @@ public:
 	static ULinkerLoad* GetPackageLinker( UObject* InOuter, const TCHAR* Filename, DWORD LoadFlags, UPackageMap* Sandbox, FGuid* CompatibleGuid );
 	static void StaticShutdownAfterError();
 	static UObject* GetIndexedObject( INT Index );
+#if SERIAL_POINTER_INDEX
+	// A bytecode object slot (see SERIAL_POINTER_INDEX above).
+	static INT SerialPointerIndex( UObject* Ptr ) { return Ptr ? Ptr->Index : INDEX_NONE; }
+	static UObject* SerialIndexPointer( INT Idx ) { return (DWORD)Idx<(DWORD)GObjObjects.Num() ? GObjObjects(Idx) : NULL; }
+#endif
 	static void GlobalSetProperty( const TCHAR* Value, UClass* Class, UProperty* Property, INT Offset, UBOOL Immediate );
 	static void ExportProperties( FOutputDevice& Out, UClass* ObjectClass, BYTE* Object, INT Indent, UClass* DiffClass, BYTE* Diff );
 	static void ResetConfig( UClass* Class );

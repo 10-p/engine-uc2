@@ -2119,7 +2119,7 @@ void UGUIController::CreatePropertyWindow()
 	{
 		UClass* ManagerClass = LoadClass<UPropertyManagerBase>(NULL, TEXT("GUIDesigner.PropertyManager"), NULL, LOAD_NoWarn, NULL);
 		if ( ManagerClass )
-			Designer = (INT)ConstructObject<UPropertyManagerBase>(ManagerClass);
+			Designer = (PTRINT)ConstructObject<UPropertyManagerBase>(ManagerClass);
 	}
 
 	if ( Designer )

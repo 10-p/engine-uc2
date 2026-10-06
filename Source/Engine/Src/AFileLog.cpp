@@ -54,7 +54,7 @@ void AFileLog::execOpenLog( FFrame& Stack, RESULT_DECL )
 	{
 		Flags |= FILEWRITE_Append;
 	}
-	LogAr = (INT) GFileManager->CreateFileWriter( *LogFileName, Flags );
+	LogAr = (PTRINT) GFileManager->CreateFileWriter( *LogFileName, Flags );
 
 	if ( LogAr == NULL )
 		debugf(NAME_Warning, TEXT("%s could not create log file '%s'!"), GetName(), *LogFileName);

@@ -1134,7 +1134,7 @@ FBaseTexture* UMovieMaterial::GetRenderInterface(void)
 	if (RenderInterface == NULL)
 	{
 		RenderInterface =
-			(INT)NEW FMovieTexture(this);
+			(PTRINT)NEW FMovieTexture(this);
 	}
 	return (FBaseTexture*)RenderInterface;
 }
@@ -1262,7 +1262,7 @@ void UMovieMaterial::LoadInMemoryMovie(void)
 	if (ThreadSynch == NULL)
 	{
 		// Create a synch object so the two threads can safely look at vars
-		ThreadSynch = (INT)GSynchronizeFactory->CreateCriticalSection();
+		ThreadSynch = (PTRINT)GSynchronizeFactory->CreateCriticalSection();
 		check(ThreadSynch);
 		bDoneBackgroundLoading = FALSE;
 		// Create our runnable
@@ -1273,7 +1273,7 @@ void UMovieMaterial::LoadInMemoryMovie(void)
 			FALSE,FALSE);
 //			TRUE,TRUE);
 		check(pThread);
-		Thread = (INT)pThread;
+		Thread = (PTRINT)pThread;
 	}
 	unguard;
 }
@@ -1316,7 +1316,7 @@ UBOOL UMovieMaterial::FBackgroundMovieLoading::Init(void)
 		{
 			AmountLeft = (DWORD)File->TotalSize();
 			// Allocate the buffer for holding the full movie size
-			Movie->InMemoryDecodingBlock = (INT) NEW BYTE[AmountLeft];
+			Movie->InMemoryDecodingBlock = (PTRINT) NEW BYTE[AmountLeft];
 			check(Movie->InMemoryDecodingBlock);
 			// Store the size for the movie player
 			Movie->InMemoryBlockSize = AmountLeft;

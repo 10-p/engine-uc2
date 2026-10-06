@@ -875,7 +875,7 @@ void FStats::Render(class UViewport* Viewport, class UEngine* Engine)
 FEngineStats::FEngineStats()
 {
 	guard(FEngineStats::FEngineStats);
-	appMemset( &STATS_FirstEntry, 0xFF, (DWORD) &STATS_LastEntry - (DWORD) &STATS_FirstEntry );
+	appMemset( &STATS_FirstEntry, 0xFF, (DWORD)((PTRINT) &STATS_LastEntry - (PTRINT) &STATS_FirstEntry) );
 #ifdef _XBOX
 	//scion jg -- Init push buffer memory stats to zero not -1
 	STATS_Cached_PushBuffer_Runnable = 0;

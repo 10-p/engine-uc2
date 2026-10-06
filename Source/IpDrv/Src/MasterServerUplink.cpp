@@ -754,7 +754,7 @@ void AMasterServerUplink::execReconnect( FFrame& Stack, RESULT_DECL )
 {
 	P_FINISH;
 	if( !LinkPtr )
-		LinkPtr = (INT)(NEW FMasterServerUplinkLink(this));
+		LinkPtr = (PTRINT)(NEW FMasterServerUplinkLink(this));
 	else
 		((FMasterServerUplinkLink*)LinkPtr)->Close();
 
@@ -769,7 +769,7 @@ void AMasterServerUplink::execLogStatLine( FFrame& Stack, RESULT_DECL )
 	P_GET_STR(StatLine);
 	P_FINISH;
 	if( !LinkPtr )
-		LinkPtr = (INT)(NEW FMasterServerUplinkLink(this));
+		LinkPtr = (PTRINT)(NEW FMasterServerUplinkLink(this));
 	*(UBOOL*)Result = ((FMasterServerUplinkLink*)LinkPtr)->SendStatLine( *StatLine );
 }
 

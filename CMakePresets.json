@@ -24,6 +24,31 @@
             "cacheVariables": { "UC2_ALLOW_64BIT": "ON" }
         },
         {
+            "name": "native64-uchar",
+            "displayName": "Native Linux x86_64, char unsigned (M13 audit)",
+            "description": "native64 with -funsigned-char instead of -fsigned-char: the char signedness of arm64, on a machine that runs the tests. Builds in build-native64-uchar/.",
+            "inherits": "native64",
+            "binaryDir": "${sourceDir}/build-native64-uchar",
+            "cacheVariables": { "UC2_UNSIGNED_CHAR_AUDIT": "ON" }
+        },
+        {
+            "name": "native64-asan",
+            "displayName": "Native Linux x86_64 with AddressSanitizer + UBSan (M13)",
+            "description": "native64 with -fsanitize=address,undefined (no vptr/alignment). Run with ASAN_OPTIONS=detect_leaks=0. Builds in build-native64-asan/.",
+            "inherits": "native64",
+            "binaryDir": "${sourceDir}/build-native64-asan",
+            "cacheVariables": { "UC2_SANITIZE": "address,undefined" }
+        },
+        {
+            "name": "arm64",
+            "displayName": "Linux arm64 (aarch64 cross, build-only)",
+            "description": "LP64 like native64. Needs g++-aarch64-linux-gnu (docs/porting/BLOCKERS.md). Builds in build-arm64/.",
+            "inherits": "native-base",
+            "binaryDir": "${sourceDir}/build-arm64",
+            "toolchainFile": "${sourceDir}/cmake/toolchain-aarch64-linux-gnu.cmake",
+            "cacheVariables": { "UC2_ALLOW_64BIT": "ON" }
+        },
+        {
             "name": "wasm",
             "displayName": "Web (Emscripten/WASM) -- dev default",
             "description": "-O2 with DWARF and assertions. Builds in build-wasm/. Source <WorkUC2>/env.sh first (sets EMSDK).",
@@ -72,6 +97,9 @@
     "buildPresets": [
         { "name": "native", "configurePreset": "native" },
         { "name": "native64", "configurePreset": "native64" },
+        { "name": "native64-uchar", "configurePreset": "native64-uchar" },
+        { "name": "native64-asan", "configurePreset": "native64-asan" },
+        { "name": "arm64", "configurePreset": "arm64" },
         { "name": "wasm", "configurePreset": "wasm" },
         { "name": "wasm-debug", "configurePreset": "wasm-debug" },
         { "name": "wasm-perf", "configurePreset": "wasm-perf" },

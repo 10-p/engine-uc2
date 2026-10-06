@@ -14,6 +14,9 @@
 -----------------------------------------------------------------------------*/
 
 #include "Engine.h"
+#if SUPPORTS_PRAGMA_PACK
+#pragma pack (push,4)	// M13: script mirrors are laid out with /Zp4 (as the generated headers); 64-bit pointers sit on 4
+#endif
 
 class UNetConnection;
 
@@ -73,4 +76,7 @@ class ENGINE_API UPlayer : public UObject, public FOutputDevice, public FExec
 	The End.
 -----------------------------------------------------------------------------*/
 
+#if SUPPORTS_PRAGMA_PACK
+#pragma pack (pop)
+#endif
 #endif // __UNPLAYER_H__

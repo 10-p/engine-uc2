@@ -272,6 +272,9 @@ enum ECamOrientation
 
 // Struct for storing Matinee camera orientations (this is mirrored in MatObject.uc and SceneManager.uc - keep all definitions in sync!)
 class UMatSubAction;
+#if SUPPORTS_PRAGMA_PACK
+#pragma pack (push,4)	// M13: script mirrors are laid out with /Zp4 (as the generated headers); 64-bit pointers sit on 4
+#endif
 struct ENGINE_API FOrientation
 {
 	// Exposed in editor
@@ -327,6 +330,9 @@ struct ENGINE_API FOrientation
 		return (MA != Other.MA);
 	}
 };
+#if SUPPORTS_PRAGMA_PACK
+#pragma pack (pop)
+#endif
 
 // Ease In and Ease Out Interpolation is done by calculating the
 // acceleration which will cover exactly half the distance in half

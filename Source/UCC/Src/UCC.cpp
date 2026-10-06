@@ -149,9 +149,144 @@ extern "C"
 // generated class headers carry for the check in UGameEngine::LoadMap. That check only runs once a map has
 // loaded, which is too late to diagnose a layout problem that breaks loading itself. Returns the mismatch count
 // as seen in the log ("VERIFY: ..." lines).
+#if PLATFORM_64BITS
+extern CORE_API UBOOL GLayoutWarnOnly;
+extern CORE_API INT GLayoutMismatches;
+extern CORE_API INT GetNativeStructSize( UStruct* Struct );
+extern CORE_API INT GetNativePlaceholderCount();
+extern CORE_API void GetNativePlaceholder( INT i, const TCHAR*& Package, const TCHAR*& Struct, const TCHAR*& Property, INT& Size, INT& Kind );
+extern CORE_API UBOOL IsNativePlaceholder( UProperty* Property );
+#endif
+// M13: `verifyclasses DUMP=<file>` writes the linked layout of every class, script struct and function (its
+// parameters) for tools/dev/m13-layout-check.py, which compares it with the DWARF of the same binary. Opt-in on
+// every width (the 32-bit dump is the reference for "same as before"); nothing else changes without DUMP=.
+static void DumpScriptLayouts( const TCHAR* DumpFile )
+{
+	FArchive* Out = GFileManager->CreateFileWriter( DumpFile );
+	if( !Out )
+		return;
+	for( TObjectIterator<UStruct> It; It; ++It )
+	{
+		const TCHAR* Kind = It->GetClass()==UClass::StaticClass() ? TEXT("class") : It->GetClass()==UStruct::StaticClass() ? TEXT("struct")
+			: It->GetClass()==UFunction::StaticClass() ? TEXT("function") : NULL;
+		if( !Kind )
+			continue;
+#if PLATFORM_64BITS
+		INT NativeSize = GetNativeStructSize(*It);
+#else
+		INT NativeSize = -1;
+#endif
+		FString Line = FString::Printf( TEXT("S %s %s %i %i\n"), Kind, It->GetPathName(), It->GetPropertiesSize(), NativeSize );
+		Out->Serialize( (void*)*Line, Line.Len() );
+		for( TFieldIterator<UProperty,CLASS_IsAUProperty> P(*It); P; ++P )
+		{
+			if( P.GetStruct()!=*It )
+				continue;
+			UArrayProperty* A = Cast<UArrayProperty>(*P);
+			UBoolProperty* B = Cast<UBoolProperty>(*P);
+#if PLATFORM_64BITS
+			INT Placeholder = IsNativePlaceholder(*P) ? 1 : 0;
+#else
+			INT Placeholder = 0;
+#endif
+			FString PLine = FString::Printf( TEXT("P %s %i %i %i %s %i %i %i\n"), P->GetName(), P->Offset, P->ElementSize, P->ArrayDim,
+				P->GetClass()->GetName(), B ? (INT)B->BitMask : 0, A ? A->Inner->ElementSize : 0, Placeholder );
+			Out->Serialize( (void*)*PLine, PLine.Len() );
+		}
+	}
+	delete Out;
+	debugf( TEXT("VERIFY: layout dump written to %s"), DumpFile );
+}
+
+#if PLATFORM_64BITS
+// M13: the 64-bit layout proof (docs/porting/analysis/64bit.md). The shipped packages were compiled for 32-bit
+// pointers, so at 64 bits "C++ and script agree" means: the property system, linking those packages with this
+// target's rules (object references 8 bytes aligned to 4, arrays/strings sizeof(FArray), the native
+// placeholders of UnClass.cpp), gives every native class the size and member offsets the C++ compiler gives it.
+
+// Collects every object a piece of bytecode refers to (SerializeExpr on a plain archive only reads).
+class FArchiveScriptRefs : public FArchive
+{
+public:
+	TArray<UObject*> Refs;
+	FArchive& operator<<( UObject*& Obj ) { if( Obj ) Refs.AddUniqueItem( Obj ); return *this; }
+};
+
+static UBOOL VerifyNativeLayouts64( const TCHAR* DumpFile )
+{
+	UBOOL Mismatch = false;
+	// 1. Every class with a C++ declaration: C++ sizeof against the linked script size (UStruct::Link counted
+	//    and logged each mismatch while loading; this lists the checked ones too).
+	INT Checked=0;
+	for( TObjectIterator<UClass> It; It; ++It )
+	{
+		INT NativeSize = GetNativeStructSize( *It );
+		if( NativeSize<0 || !It->GetPropertiesSize() )
+			continue;
+		Checked++;
+		if( NativeSize!=It->GetPropertiesSize() )
+		{
+			debugf( TEXT("VERIFY: Class %s size problem; Script=%i C++=%i (64-bit native size check)"), It->GetPathName(), It->GetPropertiesSize(), NativeSize );
+			Mismatch = true;
+		}
+	}
+	debugf( TEXT("VERIFY: 64-bit native size check: %i classes, %i mismatches while linking"), Checked, GLayoutMismatches );
+	if( GLayoutMismatches )
+		Mismatch = true;
+	// 2. Every placeholder entry names a property that exists and is linked at its C++ size.
+	for( INT i=0; i<GetNativePlaceholderCount(); i++ )
+	{
+		const TCHAR *Pkg, *StructName, *PropName; INT Size, Kind;
+		GetNativePlaceholder( i, Pkg, StructName, PropName, Size, Kind );
+		UStruct* Struct = FindObject<UStruct>( ANY_PACKAGE, StructName );
+		UProperty* Found = NULL;
+		if( Struct )
+			for( TFieldIterator<UProperty,CLASS_IsAUProperty> It(Struct); It; ++It )
+				if( It.GetStruct()==Struct && appStricmp(It->GetName(),PropName)==0 )
+					Found = *It;
+		if( !Found || !IsNativePlaceholder(Found) )
+		{
+			debugf( TEXT("VERIFY: placeholder %s.%s.%s NOT FOUND (stale table entry or package not loaded)"), Pkg, StructName, PropName );
+			Mismatch = true;
+		}
+		else
+			debugf( TEXT("VERIFY: placeholder %s.%s.%s offset %i, C++ size %i (%s)"), Pkg, StructName, PropName, Found->Offset, Size, Kind ? TEXT("array element") : TEXT("member") );
+	}
+	// 3. No bytecode reads or writes a placeholder: script would see only the low 4 bytes of the C++ data.
+	INT Scanned=0;
+	for( TObjectIterator<UStruct> It; It; ++It )
+	{
+		if( !It->Script.Num() )
+			continue;
+		FArchiveScriptRefs Ar;
+		INT iCode = 0;
+		while( iCode < It->Script.Num() )
+			It->SerializeExpr( iCode, Ar );
+		Scanned++;
+		for( INT j=0; j<Ar.Refs.Num(); j++ )
+		{
+			UProperty* P = Cast<UProperty>( Ar.Refs(j) );
+			if( P && IsNativePlaceholder(P) )
+			{
+				debugf( TEXT("VERIFY: bytecode of %s refers to native placeholder %s"), It->GetPathName(), P->GetPathName() );
+				Mismatch = true;
+			}
+		}
+	}
+	debugf( TEXT("VERIFY: bytecode scan: %i scripts read for placeholder references"), Scanned );
+	if( DumpFile && *DumpFile )
+		DumpScriptLayouts( DumpFile );
+	return !Mismatch;
+}
+#endif
+
 static UBOOL VerifyNativeClasses()
 {
-	static const TCHAR* Packages[] = { TEXT("Engine"), TEXT("IpDrv"), TEXT("UnrealGame"), TEXT("UCElements"), TEXT("UCGameplay"), TEXT("GUI") };
+	static const TCHAR* Packages[] = { TEXT("Engine"), TEXT("IpDrv"), TEXT("UnrealGame"), TEXT("UCElements"), TEXT("UCGameplay"), TEXT("GUI")
+#if PLATFORM_64BITS
+		, TEXT("UWeb")	// its hand-written mirrors carry placeholders; the 32-bit list is Epic's set, unchanged
+#endif
+	};
 	for( INT i=0; i<ARRAY_COUNT(Packages); i++ )
 	{
 		debugf( TEXT("VERIFY: loading package %s"), Packages[i] );
@@ -172,8 +307,76 @@ static UBOOL VerifyNativeClasses()
 	#undef AUTOGENERATE_NAME
 	#undef NAMES_ONLY
 	#undef VERIFY_CLASS_SIZES
+	FString DumpFile;
+	Parse( appCmdLine(), TEXT("DUMP="), DumpFile );
+#if PLATFORM_64BITS
+	if( !VerifyNativeLayouts64( *DumpFile ) )
+		Mismatch = true;
+#else
+	if( DumpFile.Len() )
+		DumpScriptLayouts( *DumpFile );
+#endif
 	debugf( TEXT("VERIFY: %s"), Mismatch ? TEXT("C++ / script class layout MISMATCH") : TEXT("all native class layouts match") );
 	return !Mismatch;
+}
+#endif
+
+#if __STATIC_LINK && !defined(_MSC_VER)
+// M13: "ucc profiletest save|load <profile> <export.txt>": the save game format across pointer widths.
+// save: a profile of the configured class with a deterministic non-default value in every plain property
+// (ints, floats, bytes, bools, names, strings), written through ULoadSaveManager as the game does
+// (System/Profiles/<profile>/AVARIS_PROFILE.PRO); load: read it back. Either way every property is exported as
+// text to <export.txt>, so a profile saved by one build and loaded by another can be compared with the values
+// it was saved with (tools/dev/m13-64bit.sh `saves`). Returns success.
+static UBOOL ProfileTest( const TCHAR* Parms )
+{
+	FString Mode, Name, OutFile;
+	if( !ParseToken(Parms,Mode,0) || !ParseToken(Parms,Name,0) || !ParseToken(Parms,OutFile,0) )
+		return 0;
+	UObject::LoadPackage( NULL, TEXT("Engine"), LOAD_NoFail );
+	ULoadSaveManager* Manager = ConstructObject<ULoadSaveManager>( ULoadSaveManager::StaticClass() );
+	Manager->Init( NULL );
+	UClass* Cls = Manager->getGameProfileClass() ? Manager->getGameProfileClass() : UPlayerProfile::StaticClass();
+	UPlayerProfile* Profile = ConstructObject<UPlayerProfile>( Cls );
+	UBOOL Ok;
+	if( Mode==TEXT("SAVE") )
+	{
+		INT n = 0;
+		for( TFieldIterator<UProperty,CLASS_IsAUProperty> It(Cls); It; ++It, n++ )
+		{
+			if( It->PropertyFlags & (CPF_Transient|CPF_Native) )
+				continue;
+			for( INT j=0; j<It->ArrayDim; j++ )
+			{
+				BYTE* Data = (BYTE*)Profile + It->Offset + j*It->ElementSize;
+				if( Cast<UIntProperty>(*It) )
+					*(INT*)Data = 1000 + 7*n + j;
+				else if( Cast<UFloatProperty>(*It) )
+					*(FLOAT*)Data = n + 0.25f*j + 0.5f;
+				else if( Cast<UByteProperty>(*It) )
+				{
+					UEnum* Enum = ((UByteProperty*)*It)->Enum;
+					*Data = (BYTE)(Enum && Enum->Names.Num() ? (n+j) % Enum->Names.Num() : (3*n+j) & 0x7f);
+				}
+				else if( Cast<UBoolProperty>(*It) )
+					*(BITFIELD*)Data ^= ((UBoolProperty*)*It)->BitMask;
+				else if( Cast<UNameProperty>(*It) )
+					*(FName*)Data = FName( It->GetName() );
+				else if( Cast<UStrProperty>(*It) )
+					*(FString*)Data = FString::Printf( TEXT("%s%i"), It->GetName(), j );
+			}
+		}
+		Profile->ProfileName = Name;
+		Profile->SetDirty();
+		Profile->SetTransient( false );
+		Ok = Profile->SaveProfile();
+	}
+	else
+		Ok = Profile->LoadProfile( Name );
+	FStringOutputDevice Out;
+	UObject::ExportProperties( Out, Cls, (BYTE*)Profile, 0, NULL, NULL );
+	appSaveStringToFile( Out, *OutFile );
+	return Ok;
 }
 #endif
 
@@ -226,6 +429,11 @@ int main( int argc, char* argv[] )
 			}
 		#endif
 
+#if __STATIC_LINK && !defined(_MSC_VER) && PLATFORM_64BITS
+		// M13: verifyclasses lists every layout mismatch the class linker finds instead of stopping at the first.
+		if( argc>1 && appStricmp(argv[1],"verifyclasses")==0 )
+			GLayoutWarnOnly = 1;
+#endif
 		//jg -- Set the pointer to the synchronization factory
 		GSynchronizeFactory = &SynchFactory;
 		GThreadFactory = &ThreadFactory;
@@ -291,6 +499,15 @@ int main( int argc, char* argv[] )
 		{
 			UBOOL Ok = VerifyNativeClasses();
 			Warn.Logf( TEXT("%s (details: the VERIFY lines in the log)"), Ok ? TEXT("All native class layouts match") : TEXT("Class layout mismatches found") );
+			ErrorLevel = Ok ? 0 : 1;
+		}
+#endif
+#if __STATIC_LINK && !defined(_MSC_VER)
+		else if( Token==TEXT("PROFILETEST") )	// M13
+		{
+			const TCHAR* Parms = appCmdLine();
+			UBOOL Ok = ProfileTest( Parms );
+			Warn.Logf( TEXT("PROFILETEST: %s"), Ok ? TEXT("ok") : TEXT("FAILED") );
 			ErrorLevel = Ok ? 0 : 1;
 		}
 #endif

@@ -598,6 +598,26 @@ public:
 		return 0;	
 		unguard;
 	}
+	// M13: a directory exists too. Core.h's default asks FileSize(), which is -1 for a directory here (the Windows
+	// file manager answers for directories), so ULoadSaveManager::ExistsGameObject never found a saved profile
+	// and no profile ever loaded on Linux or MinGW ("Unable to load profile"). Found by the cross-width save test.
+	UBOOL Exists( const TCHAR* FakePath )
+	{
+		guard(FFileManagerUnix::Exists);
+		if( FileSize(FakePath) >= 0 )
+			return 1;
+        if ( (FakePath == NULL) ||
+             (appStrlen(FakePath) + appStrlen(BaseDir) >= PATH_MAX) )
+            return 0;
+        char ansipath[PATH_MAX];
+        TCHAR tmp[PATH_MAX];
+		appStrcpy( tmp, BaseDir );
+		appStrcat( tmp, FakePath );
+        unixToANSI(ansipath, tmp);
+		struct stat St;
+		return stat( appUnixPath(ansipath), &St )==0;
+		unguard;
+	}
 	UBOOL MakeDirectory( const TCHAR* FakePath, UBOOL Tree=0 )
 	{
 		guard(FFileManagerUnix::MakeDirectory);

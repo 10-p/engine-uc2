@@ -39,10 +39,17 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 capped=$work/bin/capped
 wine=$repo/tools/dev/m12-wine.sh
-tree=${M12_TREE:-$work/run/m12}	# M12_TREE/M12_REF/M12_OUT: other trees (the net-join check ran on run/netwin + run/net)
+# The trees, output folder and wine prefix can be chosen (defaults: M12's). M12_TREE/M12_REF take a run-tree
+# name (M13: M12_TREE=m13-win64 M12_REF=m13 M12_OUT=<WorkUC2>/logs/m13/win64 UC2_WINEPREFIX=<WorkUC2>/.cache/wine-m13)
+# or a path (the net-join check: M12_TREE=<WorkUC2>/run/netwin M12_REF=<WorkUC2>/run/net).
+treepath() { case "$1" in */*) echo "$1";; *) echo "$work/run/$1";; esac; }
+tree=$(treepath "${M12_TREE:-m12}")
+treename=$(basename "$tree")
+refname=$(basename "$(treepath "${M12_REF:-m12-native}")")
 sys=$tree/System
-ref=${M12_REF:-$work/run/m12-native}/System
+ref=$(treepath "${M12_REF:-m12-native}")/System
 out=${M12_OUT:-$work/logs/m12}
+export UC2_WINEPREFIX=${UC2_WINEPREFIX:-$work/.cache/wine-m12}
 summary=$out/smoke-summary.txt
 prefix=${UC2_WINEPREFIX:-$work/.cache/wine-m12}
 mkdir -p "$out"
@@ -135,50 +142,28 @@ PY
 
 # M10 runner, wine settings. $1 = scenario or --file ...
 m10_wine() {
-  M10_TREE=m12 M10_OUT=$out/smoke-controls M10_LAUNCH="$wine $sys uc2.exe" M10_STOPSIG=USR1 M10_MEM=3G \
+  M10_TREE=$treename M10_OUT=$out/smoke-controls M10_LAUNCH="$wine $sys uc2.exe" M10_STOPSIG=USR1 M10_MEM=3G \
     M10_PROC=uc2.exe M10_SETTLE=12 "$repo/tools/dev/m10-controls.sh" "$@"
 }
 
 check_pinned() {
   local line wp lp
   rm -rf "$out/smoke-pinned-wine" "$out/smoke-pinned-linux"
-  line=$(M10_URL='DM-Deadbolt?NumBots=0' M10_TREE=m12 M10_OUT=$out/smoke-pinned-wine M10_LAUNCH="$wine $sys uc2.exe" \
+  line=$(M10_URL='DM-Deadbolt?NumBots=0' M10_TREE=$treename M10_OUT=$out/smoke-pinned-wine M10_LAUNCH="$wine $sys uc2.exe" \
     M10_STOPSIG=USR1 M10_MEM=3G M10_PROC=uc2.exe "$repo/tools/dev/m10-controls.sh" --file "$repo/tools/dev/m12/deadbolt-pinned.scen" pinned -glerrors -nopostprocess 2>&1 | tail -1)
   wp=$out/smoke-pinned-wine/pinned-pinned.png
   if [ ! -x "$ref/uc2.bin" ]; then
     result SKIP pinned "no Linux reference tree at $ref (wine run: $line)"
     return
   fi
-  M10_URL='DM-Deadbolt?NumBots=0' M10_TREE=m12-native M10_OUT=$out/smoke-pinned-linux \
+  M10_URL='DM-Deadbolt?NumBots=0' M10_TREE=$refname M10_OUT=$out/smoke-pinned-linux \
     "$repo/tools/dev/m10-controls.sh" --file "$repo/tools/dev/m12/deadbolt-pinned.scen" pinned -glerrors -nopostprocess > /dev/null 2>&1
   lp=$out/smoke-pinned-linux/pinned-pinned.png
   local vw vl cmp errs
   vw=$(grep -a "^probe view" "$out/smoke-pinned-wine/pinned.out" | grep -a -o "loc=([^)]*) rot=([^)]*)")
   vl=$(grep -a "^probe view" "$out/smoke-pinned-linux/pinned.out" | grep -a -o "loc=([^)]*) rot=([^)]*)")
   errs=$(grep -a -o "UC2GLDrv: [0-9]* GL errors in [0-9]* frames" "$out/smoke-pinned-wine/pinned.out" | tail -1)
-  cmp=$(python3 - "$lp" "$wp" "$out/smoke-pinned-diff.png" <<'PY' 2>&1
-import sys, math
-from PIL import Image, ImageChops
-a = Image.open(sys.argv[1]).convert('RGB'); b = Image.open(sys.argv[2]).convert('RGB')
-if a.size != b.size: print("SIZE %s %s" % (a.size, b.size)); sys.exit(0)
-d = ImageChops.difference(a, b); r, g, bl = d.split()
-mx = ImageChops.lighter(ImageChops.lighter(r, g), bl)
-d.point(lambda v: min(255, 4 * v)).save(sys.argv[3])
-w, h = a.size; px = mx.load()
-# The player model and the two pickups of this pinned view (they animate with the time since the spawn,
-# which differs between two runs): x 60..395, y >= 265 of the 640x480 frame.
-static = moving = same_static = exact = 0; sq = 0
-for y in range(h):
-    for x in range(w):
-        v = px[x, y]; sq += v * v; exact += (v == 0)
-        if 60 * w // 640 <= x <= 395 * w // 640 and y >= 265 * h // 480: moving += 1; continue
-        # ... and the aiming reticle in the middle of the screen, which animates too (x 280..360, y 210..265).
-        if 280 * w // 640 <= x <= 360 * w // 640 and 210 * h // 480 <= y < 265 * h // 480: moving += 1; continue
-        static += 1; same_static += (v <= 2)
-mse = sq / float(w * h)
-print("OK %.3f %.1f %.2f" % (100.0 * same_static / static, 100.0 * exact / (w * h), 99.0 if mse == 0 else 10 * math.log10(255 * 255 / mse)))
-PY
-)
+  cmp=$(python3 "$repo/tools/dev/pinned-compare.py" "$lp" "$wp" "$out/smoke-pinned-diff.png" 2>&1)
   set -- $cmp
   if [ "${1-}" = OK ] && [ -n "$vw" ] && [ "$vw" = "$vl" ] && [[ "$errs" == "UC2GLDrv: 0 GL errors in "* ]] \
      && awk -v s="$2" 'BEGIN{exit !(s>=99.9)}' && [ "$(crit "$out/smoke-pinned-wine/pinned.out")" = 0 ]; then
@@ -280,7 +265,7 @@ check_leftovers() {
   for p in $(pgrep -f 'uc2\.exe|ucc\.exe'); do
     case "$(readlink /proc/$p/cwd 2>/dev/null)" in "$sys"|"$sys"/*) left="$left $p";; esac
   done
-  if [ -z "$left" ]; then result PASS leftovers "no wineserver of $prefix, no uc2.exe/ucc.exe of run/m12 running"
+  if [ -z "$left" ]; then result PASS leftovers "no wineserver of $prefix, no uc2.exe/ucc.exe of run/$treename running"
   else result FAIL leftovers "still running:$left"; fi
 }
 

@@ -704,7 +704,7 @@ void FOctreeNode::StoreActor(AActor *Actor, FCollisionOctree* o, const FPlane* n
 		for(INT i=0; i<PendingActors.Num(); i++)
 		{
 			// Remove this actors reference to this node.
-			PendingActors(i)->OctreeNodes.RemoveItem((INT)(this));
+			PendingActors(i)->OctreeNodes.RemoveItem((PTRINT)(this));
 
 			// Then re-check it against this node, which will then check against children.
 			if(PendingActors(i)->bWasSNFiltered)
@@ -720,7 +720,7 @@ void FOctreeNode::StoreActor(AActor *Actor, FCollisionOctree* o, const FPlane* n
 		Actors.AddItem(Actor);
 
 		// and add this node to the actors list of nodes.
-		Actor->OctreeNodes.AddItem((INT)(this));
+		Actor->OctreeNodes.AddItem((PTRINT)(this));
 	}
 
 	unguard;
@@ -1980,7 +1980,7 @@ void FCollisionOctree::CheckIsEmpty()
 
 // Comapares the two arrays to see if they contain the same nodes,
 // but not necessarily in the same order. Returns true if they are the same.
-static UBOOL CompareArray(TArray<FOctreeNode*> *Array1, TArray<INT> *Array2)
+static UBOOL CompareArray(TArray<FOctreeNode*> *Array1, TArray<PTRINT> *Array2)
 {
 	UBOOL isDifferent = 0;
 	for(INT i=0; i<Array1->Num() && !isDifferent; i++)
