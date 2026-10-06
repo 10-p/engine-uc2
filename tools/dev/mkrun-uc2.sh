@@ -35,8 +35,12 @@ chmod -R u+w "$run/System"
 # audio device reads ../Sounds and ../Music from System/, as the Xbox read ..\Sounds. A missing cooked tree
 # only means a silent game.
 cooked=${UC2_COOKED_DIR:-$work/assets/uc2-cooked}
+# Since asset tree v1 (tools/dev/mkassets-uc2.sh) the cooked folders are in the asset tree and arrive with the
+# content folders above; these links only serve an older asset tree.
 for d in Sounds Music; do
-  if [ -d "$cooked/$d" ]; then
+  if [ -d "$run/$d" ]; then
+    :
+  elif [ -d "$cooked/$d" ]; then
     cp -al "$cooked/$d" "$run/$d"
   else
     echo "note: no cooked $d at $cooked (tools/cook-audio.py makes it); the game runs silent" >&2
@@ -45,13 +49,15 @@ done
 
 # M9: the cooked movies (tools/cook-movies.py: Movies/ and Textures/Movies/), hard-linked the same way. The
 # player reads ../Movies and ../Textures/Movies from System/, as the Xbox read D:\Movies and D:\Textures\Movies.
-if [ -d "$cooked/Movies" ]; then
+if [ -d "$run/Movies" ]; then
+  rm -rf "$run/Movies/.cook"
+elif [ -d "$cooked/Movies" ]; then
   cp -al "$cooked/Movies" "$run/Movies"
   rm -rf "$run/Movies/.cook"
 else
   echo "note: no cooked Movies at $cooked (tools/cook-movies.py makes them); no movies will play" >&2
 fi
-if [ -d "$cooked/Textures/Movies" ]; then
+if [ ! -d "$run/Textures/Movies" ] && [ -d "$cooked/Textures/Movies" ]; then
   mkdir -p "$run/Textures"
   cp -al "$cooked/Textures/Movies" "$run/Textures/Movies"
 fi
