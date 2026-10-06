@@ -129,3 +129,46 @@ Next: native build (running), PipeWire reconfigure, backend logging, missing-dat
   `tools/dev/movie-selftest.sh m11audio` -> `UC2MovieSelfTest: 99 checks, 0 failed` (96 before + these 3).
 
 Next: O-2, openal-soft into the web build.
+
+## Step 2 - O-2 engine side: openal-soft in the web build (2026-10-06, in progress)
+
+Changes:
+- Root `CMakeLists.txt` (M8 block): under Emscripten, openal-soft from the same fork STATIC with
+  `ALSOFT_BACKEND_WEB`, NEON/DLOPEN/WAVE/EAX/utils off, `ALSOFT_REQUIRE_SSE4_1`; its scope gets only the
+  optimisation level as directory options, and `-pthread -sNO_DISABLE_EXCEPTION_CATCHING -msimd128 -msse4.1` in
+  its language flags (its configure checks compile with those; `xmmintrin.h` needs -msimd128). Configure:
+  `Building OpenAL with support for the following backends: WebAudio, Null`, CPU extensions `Default, SSE, SSE2,
+  SSE3, SSE4.1`. `UC2ALAudio` is no longer native-only.
+- `Source/UC2ALAudio/CMakeLists.txt`: links `OpenAL` on the web; `UC2ALBind` fills the table with the linked
+  symbols (`UC2AL_WITH_PROTOTYPES` in UC2ALDevice.cpp).
+- `Source/SDLLaunch/cmake/Web.cmake`: one delimited block, `-sPTHREAD_POOL_SIZE=4` (the backend's mixer and the
+  context's event thread on top of main() and Core's streaming thread).
+- `Source/UCC/CMakeLists.txt` (one hunk): `ucc-bin.js` exports `_malloc`/`_free`: first wasm link failed with
+  `error: undefined symbol: malloc (referenced by $stringToNewUTF8, ...)` - the fork's alconfig.cpp reads
+  `Module.alsoftConfig` through stringToNewUTF8; SDLLaunch exports malloc already.
+- `Engine/Config/web/Default.ini` (CRLF kept): `AudioDevice=UC2ALAudio.UC2ALAudioSubsystem`, sections
+  `[UC2ALAudio.UC2ALAudioSubsystem]` and `[UC2Movie]`; README rows.
+- Logging for the web checks (NAME_Log/NAME_Init, one line per event, also native): `UC2ALAudio: N of 23
+  persistent cue tables read in X ms`, `UC2Audio: [t] read wave pack <file> (<bytes>) in X ms` (once per
+  pack), `UC2Audio: [t] music <song>: playing ... file read in X ms` (was DevSound only), `UC2Audio: [t] first
+  sound: <cue>`; `UC2Movie: decode cost of <movie>: N updates, M new pictures, X ms per update on average, Y ms
+  at most` after every full-screen movie.
+- `-NULLMOVIES` (UnMovie.cpp, tests): full-screen movies play on the null render device too (file access,
+  decoding, sound and clock run; nothing drawn) - how the web build's movie path is tested before its GL device.
+- O-4 tool: `ucc-bin UC2ALAudio.UC2ZoneSurvey [MAP=<name>]` (UC2ZoneSurvey.cpp) lists every map's zones and
+  their ZoneAudioEffect.
+- Xbox reverb reading (O-4): `XACTAudioSubsystem.cpp` Init loads the DSP effects image `..\xbox.bin` with the
+  I3DL2 reverb in it (`dsImageLoc.dwI3DL2ReverbIndex = GraphI3DL2_I3DL2Reverb`, :180-185) and never sets an
+  I3DL2 listener (NotifyZoneChange's `SetI3dl2Listener` is `#if 0`; the only other call is the "FILTER" debug
+  exec, :1069, Underwater). So on the Xbox every sound with an I3DL2 send went through one reverb with the
+  DSP image's initial listener parameters, in every map and zone.
+
+Frontend side (ufrontend, branch uc2, not committed yet): `packages/e2e/uc2-wasm-audio.spec.js` (2 tests),
+`playwright.config.js` testMatch + `<target>-wasm-audio.spec.js` (opt-in), `targets/uc2/target.json`
+(`webAudio` recommended, `audioBuffer` 10 ms x 3, cook by-products in `manifestExclude`).
+Local asset tree for the browser: `run/m11audio-assets` = hard links of assets/uc2/* plus uc2-cooked's
+Sounds, Music, Movies (minus .cook, cook-report, movie-manifest) and Textures/Movies (hard links, because the
+manifest generator does not follow symlinked directories: `readdirSync(recursive, withFileTypes)` +
+`isFile()`). Manifest: `node packages/glue/bin/generate-manifest.cjs run/m11audio-assets <scratch>/uc2-audio-
+file-manifest.json --exclude-from targets/uc2/target.json` -> 1223 files, 1899.1 MB (Sounds 421, Music 23,
+Movies 99, Textures 149 of which 87 movies); a superset of the committed 593-entry manifest.

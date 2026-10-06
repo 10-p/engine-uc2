@@ -279,6 +279,67 @@ if(NOT EMSCRIPTEN)
   endif()
   message(STATUS "openal-soft (shared, wave writer on): ${OPENALSOFT_GIT_REPOSITORY}@${OPENALSOFT_GIT_TAG}")
 endif()
+# M11 (O-2): the web build links the same fork STATIC into the module, with its Web Audio backend (alc/backends/
+# web.cpp: the mixer on its own pthread renders into a ring in the shared wasm memory, an AudioWorklet plays it;
+# every AudioContext call goes to the browser main thread; the context resumes on the page's next pointerdown/
+# keydown/touchend). Settings as engine-ut2004's web block (ufront 2.61), read-only template:
+#  - its scope gets its own compile options: the optimisation level, -pthread and exception catching of the
+#    engine (openal-soft reports every AL error by throwing and catching it internally), plus -msimd128
+#    -msse4.1 so its SSE mixers compile through Emscripten's SIMD translation headers; none of the engine's
+#    clang compatibility flags (-fdelayed-template-parsing miscompiled openal-soft's static tables elsewhere);
+#  - NEON off (its header check passes on Emscripten and the runtime would prefer it), no dlopen, no wave
+#    writer, SSE4.1 required (a silent fallback to the C mixers costs 2.5x), EAX off (UC2 uses EFX), the
+#    default HRTF data embedded (openal-soft's default; HRTF stays off unless asked).
+if(EMSCRIPTEN)
+  include(FetchContent)
+  set(OPENALSOFT_GIT_REPOSITORY "https://github.com/10-p/openal-soft-web.git"
+      CACHE STRING "openal-soft git remote; its ufront/web branch carries the Web Audio backend")
+  set(OPENALSOFT_GIT_TAG "ufront/web" CACHE STRING "openal-soft git ref")
+  FetchContent_Declare(
+    OpenALSoft
+    GIT_REPOSITORY ${OPENALSOFT_GIT_REPOSITORY}
+    GIT_TAG        ${OPENALSOFT_GIT_TAG}
+    GIT_SHALLOW    TRUE
+  )
+  set(_UC2_SAVED_CXX_STANDARD "${CMAKE_CXX_STANDARD}")
+  set(CMAKE_CXX_STANDARD 20)
+  set(LIBTYPE STATIC CACHE STRING "" FORCE)
+  foreach(opt ALSOFT_UTILS ALSOFT_EXAMPLES ALSOFT_TESTS ALSOFT_INSTALL ALSOFT_INSTALL_CONFIG
+              ALSOFT_INSTALL_HRTF_DATA ALSOFT_INSTALL_AMBDEC_PRESETS ALSOFT_UPDATE_BUILD_VERSION
+              ALSOFT_BACKEND_WAVE ALSOFT_CPUEXT_NEON ALSOFT_DLOPEN ALSOFT_EAX)
+    set(${opt} OFF CACHE BOOL "" FORCE)
+  endforeach()
+  set(ALSOFT_BACKEND_WEB ON CACHE BOOL "" FORCE)
+  set(ALSOFT_BACKEND_NULL ON CACHE BOOL "" FORCE)
+  set(ALSOFT_REQUIRE_SSE4_1 ON CACHE BOOL "" FORCE)
+  set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
+  get_directory_property(_UC2_SAVED_DEFS COMPILE_DEFINITIONS)
+  get_directory_property(_UC2_SAVED_OPTS COMPILE_OPTIONS)
+  if(UC2_WEB_PERF)
+    set(_UC2_AL_OPT -O3 -g0)
+  elseif(UC2_WEB_DEBUG)
+    set(_UC2_AL_OPT -O0 -g)
+  else()
+    set(_UC2_AL_OPT -O2 -g)
+  endif()
+  set_directory_properties(PROPERTIES COMPILE_DEFINITIONS "" COMPILE_OPTIONS "${_UC2_AL_OPT}")
+  # (In the language flags rather than the directory options: its configure checks, e.g. for xmmintrin.h,
+  # compile with these and fail without -msimd128.)
+  set(_UC2_SAVED_C_FLAGS "${CMAKE_C_FLAGS}")
+  set(_UC2_SAVED_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+  string(APPEND CMAKE_C_FLAGS " -pthread -msimd128 -msse4.1")
+  string(APPEND CMAKE_CXX_FLAGS " -pthread -sNO_DISABLE_EXCEPTION_CATCHING -msimd128 -msse4.1")
+  FetchContent_MakeAvailable(OpenALSoft)
+  set(CMAKE_C_FLAGS "${_UC2_SAVED_C_FLAGS}")
+  set(CMAKE_CXX_FLAGS "${_UC2_SAVED_CXX_FLAGS}")
+  set_directory_properties(PROPERTIES COMPILE_DEFINITIONS "${_UC2_SAVED_DEFS}" COMPILE_OPTIONS "${_UC2_SAVED_OPTS}")
+  unset(CMAKE_POLICY_VERSION_MINIMUM)
+  set(CMAKE_CXX_STANDARD "${_UC2_SAVED_CXX_STANDARD}")
+  if(NOT TARGET OpenAL)
+    message(FATAL_ERROR "openal-soft: expected target 'OpenAL' was not created")
+  endif()
+  message(STATUS "openal-soft (static, Web Audio backend): ${OPENALSOFT_GIT_REPOSITORY}@${OPENALSOFT_GIT_TAG}")
+endif()
 # --- end M8 --------------------------------------------------------------------------------------------------
 
 # --- M9: video. libtheora 1.2.0, decoder only, vendored (Thirdparty/Theora/README.uc2); every target. ---------
@@ -302,8 +363,8 @@ set(UC2_PACKAGES
 set(UC2_NATIVE_ONLY_PACKAGES UCC Editor SDL2Drv SDLLaunch)
 # M5: the desktop-GL binding of UC2GLDrv is native-only; the web build gets the same source through GL4ES later.
 list(APPEND UC2_NATIVE_ONLY_PACKAGES UC2GLDrv)
-# M8: the OpenAL audio device is native-only until the web build adopts it (M11: openal-soft's Web Audio backend).
-list(APPEND UC2_NATIVE_ONLY_PACKAGES UC2ALAudio)
+# M8: the OpenAL audio device was native-only until the web build adopted it (M11/O-2: openal-soft's Web Audio
+# backend, linked into the module by the block above).
 
 # --- M4w: the web build has the SDL2 client and launcher (browser), and ucc-bin (run under Node to check
 # the wasm32 layout and load maps without a browser) -------------------------------------------------------

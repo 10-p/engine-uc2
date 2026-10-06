@@ -335,8 +335,13 @@ static ALuint EnsureBuffer( FUC2AudioState* S, FUC2WaveBank* Bank, FUC2Wave* W, 
 	if( !Bank->bDataTried )
 	{
 		Bank->bDataTried = 1;
+		DOUBLE ReadStart = appSeconds();
 		if( !appLoadFileToArray( Bank->Data, *(S->SoundsDir + Bank->DataFile) ) )
 			LogOnce( S, FString(TEXT("data:")) + Bank->DataFile, FString::Printf( TEXT("cannot read %s"), *(S->SoundsDir + Bank->DataFile) ) );
+		else
+			// One line per wave pack and run: what loading it cost (on the web: the fetch of the whole file on first use).
+			debugf( NAME_Log, TEXT("UC2Audio: [%7.2f] read wave pack %s (%i bytes) in %.0f ms"), (FLOAT)(NowOf(S) - S->T0), *Bank->DataFile,
+				Bank->Data.Num(), 1000.0 * (appSeconds() - ReadStart) );
 	}
 	if( W->Offset<0 || W->Size<=0 || W->Offset+W->Size > Bank->Data.Num() )
 	{
@@ -664,8 +669,12 @@ UBOOL UUC2ALAudioSubsystem::Init()
 			bWantEFX ? TEXT("the device has no EFX reverb") : TEXT("EFX switched off (UseEFX=False or -NOEFX)") );
 
 	// The persistent banks (XACT :215-237). Only their cue tables load now; wave data loads on first play.
+	DOUBLE BanksStart = appSeconds();
+	INT BanksLoaded = 0;
 	for( INT i=0; i<ARRAY_COUNT(GPersistentBanks); i++ )
-		GetSoundBank( S, GPersistentBanks[i], 1 );
+		BanksLoaded += GetSoundBank( S, GPersistentBanks[i], 1 ) >= 0;
+	debugf( NAME_Init, TEXT("UC2ALAudio: %i of %i persistent cue tables read in %.0f ms"), BanksLoaded, ARRAY_COUNT(GPersistentBanks),
+		1000.0 * (appSeconds() - BanksStart) );
 	return 1;
 	unguard;
 }
@@ -1029,6 +1038,14 @@ static void StartTrack( UUC2ALAudioSubsystem* Audio, FUC2AudioState* S, FUC2CueI
 		CueLogf( CueLog, S, TEXT("%s takes the voice of %s"), *Inst.Name, *Stolen );
 	}
 	FUC2Voice& V = S->Voices(VoiceIndex);
+	if( !S->bTest )
+	{
+		// The first sound of the run (O-2: the time from the device's start to something audible).
+		static UBOOL bFirst = 1;
+		if( bFirst )
+			debugf( NAME_Log, TEXT("UC2Audio: [%7.2f] first sound: %s"), (FLOAT)(Now - S->T0), *Inst.Name );
+		bFirst = 0;
+	}
 	V.Inst		= Inst.Id;
 	V.Track		= TrackIndex;
 	V.Priority	= Snd.Priority;
@@ -1568,7 +1585,10 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 	FString File = S->SoundsDir + WB->DataFile, Error;
 	FUC2MusicSlot& M = S->Music[0];
 	M.Stream.Frames = W->Frames;
-	if( !appLoadFileToArray( Data, *File ) || !M.Stream.Open( Data, Error ) )
+	DOUBLE ReadStart = appSeconds();
+	UBOOL bRead = appLoadFileToArray( Data, *File );
+	DOUBLE ReadSeconds = appSeconds() - ReadStart;
+	if( !bRead || !M.Stream.Open( Data, Error ) )
 	{
 		CueLogf( CueLog, S, TEXT("music %s: cannot play %s (%s)"), *Song, *File, Error.Len() ? *Error : TEXT("unreadable") );
 		return 0;
@@ -1594,8 +1614,10 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 	FLOAT MB = M.Volume + CategoryMB( S->CategoryVolumes[VOLUME_Music] );
 	GAL.alSourcef( M.Source, AL_GAIN, MBToGain( Clamp( MB, -10000.f, 0.f ) ) * M.Fade );
 	GAL.alSourcePlay( M.Source );
-	CueLogf( CueLog, S, TEXT("music %s: playing %s (%d Hz, %d ch, %s, volume %d mB, fade in %.1f s)"),
-		*Song, *File, M.Stream.Rate, M.Stream.Channels, M.bLoop ? TEXT("looping") : TEXT("once"), M.Volume, bFade ? FadeInTime : 0.f );
+	// (Not only in the cue log: one line per song, and what a web run checks that the music started.)
+	debugf( NAME_Log, TEXT("UC2Audio: [%7.2f] music %s: playing %s (%d Hz, %d ch, %s, volume %d mB, fade in %.1f s; file read in %.0f ms)"),
+		(FLOAT)(NowOf(S) - S->T0), *Song, *File, M.Stream.Rate, M.Stream.Channels, M.bLoop ? TEXT("looping") : TEXT("once"), M.Volume,
+		bFade ? FadeInTime : 0.f, 1000.0 * ReadSeconds );
 	return M.Handle;
 	unguard;
 }

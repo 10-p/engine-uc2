@@ -75,3 +75,13 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     --out=$<TARGET_FILE_DIR:${PROJECT_NAME}> --target=uc2 --abi=${UE_ABI_VERSION} --emcc=${META_EMCC}
   COMMENT "Emitting artifact meta.json"
   VERBATIM)
+
+# --- M11 audio (O-2, branch m11-audio): the audio device on openal-soft's Web Audio backend ------------------
+# openal-soft is linked through UC2ALAudio (root CMakeLists.txt). Its web backend starts two threads of its own
+# when the device opens: the mixer and the context's event thread. Pool 2 -> 4 (main(), Core's file-streaming
+# thread, those two): a thread created with the pool empty still starts, but only after the browser main thread
+# has spun up a worker for it, and the audio ring would absorb that delay as an underrun (engine-ut2004 found
+# this, ufront 2.61). emcc takes the last -s setting, so this overrides the 2 above. Exception catching stays on
+# (UC2_WEB_EXCEPTION_FLAGS): openal-soft throws and catches internally.
+target_link_options(${PROJECT_NAME} PRIVATE -sPTHREAD_POOL_SIZE=4)
+# --- end M11 audio --------------------------------------------------------------------------------------------

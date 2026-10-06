@@ -50,4 +50,6 @@ web-only change (GL device, WebRTC net driver, M11) goes here as a row:
 
 | File | Setting | `Engine/Config` value | Web value | Why |
 |---|---|---|---|---|
-| (none yet) | | | | |
+| `Default.ini` | `[Engine.Engine] AudioDevice` | `UC2ALAudio.UC2ALAudioSubsystem` | `UC2ALAudio.UC2ALAudioSubsystem` (was `Engine.NullAudioDevice`) | M11/O-2: the same device as native, on openal-soft's Web Audio backend linked into the module (AudioWorklet; the context starts on the page's first click or key). `Engine.NullAudioDevice` stays as a commented line. Without Web Audio, AudioWorklet or cross-origin isolation the device logs why and the game runs silent. |
+| `Default.ini` | new section `[UC2ALAudio.UC2ALAudioSubsystem]` | compiled defaults (section in `Engine/Config/Default.ini`) | the native values; `Backends=` empty (the web build has one backend, `web`) | M11/O-2: written out so the web set is complete and readable. |
+| `Default.ini` | new section `[UC2Movie]` | absent (= all on) | `StartupMovies=True`, `Cinematics=True`, `LoadingMovie=True` | M11/O-2: movies on, written out. The cooked movies must be in the web build's file manifest (`docs/porting/analysis/web-audio.md`). |

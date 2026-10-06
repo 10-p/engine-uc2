@@ -234,7 +234,10 @@ UBOOL appCanPlayFullscreenMovie( EFullscreenMovieKind Kind )
 	if( !Viewport )
 		return 0;
 	// The null render device draws nothing (and a dedicated server or a commandlet has no viewport).
-	if( appStricmp( Viewport->RenDev->GetClass()->GetName(), TEXT("NullRenderDevice") ) == 0 )
+	// -NULLMOVIES (tests, O-2): play them there all the same - the file access, the decoding, the sound and the
+	// clock run as usual, only the picture is not drawn (the web build's audio and movie path before its GL
+	// device exists; a headless run measuring decode cost).
+	if( appStricmp( Viewport->RenDev->GetClass()->GetName(), TEXT("NullRenderDevice") ) == 0 && !ParseParam( appCmdLine(), TEXT("NULLMOVIES") ) )
 		return 0;
 	// -NOMOVIE: no full-screen movies at all; -NOSTARTUPMOVIES: no start-up logos (Epic's UE3 switches; UE2
 	// had none). The same per kind in Avaris.ini: [UC2Movie] StartupMovies, Cinematics, LoadingMovie.
@@ -399,6 +402,9 @@ UBOOL appPlayMovieFullscreen( const TCHAR* Name, EFullscreenMovieKind Kind, UBOO
 	const TCHAR* Ending = TEXT("ended");
 	INT Presented = 0, LastLogged = -1;
 	DOUBLE LastTime = Start;
+	// Decode cost (O-2): the time Advance takes (reading, decoding, converting, feeding the sound), per call.
+	DOUBLE AdvanceTotal = 0.0, AdvanceMax = 0.0;
+	INT Advances = 0, PictureChanges = 0;
 	while( 1 )
 	{
 		DOUBLE Now = appSeconds();
@@ -415,7 +421,13 @@ UBOOL appPlayMovieFullscreen( const TCHAR* Name, EFullscreenMovieKind Kind, UBOO
 			Ending = TEXT("skipped by a key or button");
 			break;
 		}
-		Player->Advance();
+		DOUBLE A0 = appSeconds();
+		if( Player->Advance() )
+			PictureChanges++;
+		DOUBLE A1 = appSeconds() - A0;
+		AdvanceTotal += A1;
+		AdvanceMax = Max( AdvanceMax, A1 );
+		Advances++;
 		if( !Player->IsPlaying() )
 			break;
 		DrawMovieFrame( Viewport, M, Player, NULL, bHideSubtitles );
@@ -440,6 +452,8 @@ UBOOL appPlayMovieFullscreen( const TCHAR* Name, EFullscreenMovieKind Kind, UBOO
 	}
 	debugf( NAME_Log, TEXT("UC2Movie: %s %s at movie time %.3f s, frame %i of %i, %i pictures presented in %.3f s"),
 		Name, Ending, Player->GetTime(), Player->GetFrame(), Player->GetFrameCount(), Presented, appSeconds() - Start );
+	debugf( NAME_Log, TEXT("UC2Movie: decode cost of %s: %i updates, %i new pictures, %.2f ms per update on average, %.2f ms at most"),
+		Name, Advances, PictureChanges, Advances ? 1000.0 * AdvanceTotal / Advances : 0.0, 1000.0 * AdvanceMax );
 	GFullscreenMovie = 0;
 	UnwrapPlayer( M );
 	delete Player;	// closes the sound; the device resumes the others

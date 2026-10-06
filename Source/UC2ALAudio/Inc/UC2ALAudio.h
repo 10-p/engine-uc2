@@ -102,10 +102,23 @@ class UUC2AudioSelfTestCommandlet : public UCommandlet
 	INT Main( const TCHAR* Parms );
 };
 
+/*-----------------------------------------------------------------------------
+	UUC2ZoneSurveyCommandlet: `ucc-bin UC2ALAudio.UC2ZoneSurvey [MAP=<name>]` lists every
+	map's zones and the EZoneAudioEffect (reverb preset) each carries (O-4).
+-----------------------------------------------------------------------------*/
+
+class UUC2ZoneSurveyCommandlet : public UCommandlet
+{
+	DECLARE_CLASS(UUC2ZoneSurveyCommandlet,UCommandlet,CLASS_Transient,UC2ALAudio)
+	void StaticConstructor();
+	INT Main( const TCHAR* Parms );
+};
+
 #define AUTO_INITIALIZE_REGISTRANTS_UC2ALAUDIO \
 	UUC2ALAudioSubsystem::StaticClass(); \
 	UUC2AudioCheckCommandlet::StaticClass(); \
-	UUC2AudioSelfTestCommandlet::StaticClass();
+	UUC2AudioSelfTestCommandlet::StaticClass(); \
+	UUC2ZoneSurveyCommandlet::StaticClass();
 
 #endif // _INC_UC2ALAUDIO
 
