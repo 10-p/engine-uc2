@@ -863,7 +863,7 @@ void FOpenGLVertexStream::Cache(FVertexStream* SourceStream)
 	RenDev->glBindBuffer( GL_ARRAY_BUFFER, BufferID );
 	RenDev->glBufferData( GL_ARRAY_BUFFER, Size, Swizzled, GL_STATIC_DRAW );
 	RenDev->StatBufferUploads++; RenDev->StatBufferBytes += Size;
-	RenDev->RenderInterface.InvalidateHardwareState();
+	// (G5: no InvalidateHardwareState: a buffer upload changes no material state; the streams and the index buffer are bound by every draw)
 
 	CachedSize		= Size;
 	CachedRevision	= SourceStream->GetRevision();
@@ -889,7 +889,7 @@ void FOpenGLDynamicVertexStream::Reallocate(INT NewSize)
 		BufferID = RenDev->NewBuffer( GL_ARRAY_BUFFER );
 	RenDev->glBindBuffer( GL_ARRAY_BUFFER, BufferID );
 	RenDev->glBufferData( GL_ARRAY_BUFFER, NewSize, NULL, GL_STREAM_DRAW );
-	RenDev->RenderInterface.InvalidateHardwareState();
+	// (G5: no InvalidateHardwareState: a buffer upload changes no material state; the streams and the index buffer are bound by every draw)
 	CachedSize	= NewSize;
 	Tail		= 0;
 	unguard;
@@ -929,7 +929,7 @@ INT FOpenGLDynamicVertexStream::AddVertices(FVertexStream* Stream)
 	RenDev->glBindBuffer( GL_ARRAY_BUFFER, BufferID );
 	RenDev->glBufferSubData( GL_ARRAY_BUFFER, Tail, Size, Swizzled );
 	RenDev->StatBufferUploads++; RenDev->StatBufferBytes += Size;
-	RenDev->RenderInterface.InvalidateHardwareState();
+	// (G5: no InvalidateHardwareState: a buffer upload changes no material state; the streams and the index buffer are bound by every draw)
 
 	INT	BaseVertexIndex = Stride ? Tail / Stride : 0;
 	Tail += Size;
@@ -1053,7 +1053,7 @@ void FOpenGLIndexBuffer::Cache(FIndexBuffer* SourceIndexBuffer)
 	RenDev->glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, BufferID );
 	RenDev->glBufferData( GL_ELEMENT_ARRAY_BUFFER, StoredSize, &RenDev->ScratchBuffer(0), GL_STATIC_DRAW );
 	RenDev->StatBufferUploads++; RenDev->StatBufferBytes += StoredSize;
-	RenDev->RenderInterface.InvalidateHardwareState();
+	// (G5: no InvalidateHardwareState: a buffer upload changes no material state; the streams and the index buffer are bound by every draw)
 
 	CachedSize		= Size;
 	CachedRevision	= SourceIndexBuffer->GetRevision();
@@ -1081,7 +1081,7 @@ void FOpenGLDynamicIndexBuffer::Reallocate(INT NewSize)
 		BufferID = RenDev->NewBuffer( GL_ELEMENT_ARRAY_BUFFER );
 	RenDev->glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, BufferID );
 	RenDev->glBufferData( GL_ELEMENT_ARRAY_BUFFER, NewSize, NULL, GL_STREAM_DRAW );
-	RenDev->RenderInterface.InvalidateHardwareState();
+	// (G5: no InvalidateHardwareState: a buffer upload changes no material state; the streams and the index buffer are bound by every draw)
 	CachedSize	= NewSize;
 	Tail		= 0;
 	unguard;
@@ -1115,7 +1115,7 @@ INT FOpenGLDynamicIndexBuffer::AddIndices(FIndexBuffer* Indices)
 	RenDev->glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, BufferID );
 	RenDev->glBufferSubData( GL_ELEMENT_ARRAY_BUFFER, Tail, Size, &RenDev->ScratchBuffer(0) );
 	RenDev->StatBufferUploads++; RenDev->StatBufferBytes += Size;
-	RenDev->RenderInterface.InvalidateHardwareState();
+	// (G5: no InvalidateHardwareState: a buffer upload changes no material state; the streams and the index buffer are bound by every draw)
 
 	INT	BaseIndex = Tail / IndexSize;
 	Tail += Size;

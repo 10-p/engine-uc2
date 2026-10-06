@@ -50,10 +50,12 @@ They are GENERATED: `tools/dev/sync-web-ini.py` writes them as the two files abo
 nothing else (`--check` fails when they are not that). So a change of the native defaults reaches the browser
 by running the script, not by copying sections by hand: at M11 the web copies were still the M4w ones, without
 M7's `MaxDistortion` and without M10's key table, pad map and bindings (the menus would not have answered the
-keyboard). A new web-only difference is a new entry in the script's `DELTAS` and a row here:
+keyboard). A new web-only difference is a new entry in the script's `DELTAS` (a fixed value) or `WEB_KEYS` / `WEB_SECTIONS`
+(whatever the web file has is kept) and a row here:
 
 | File | Setting | `Engine/Config` value | Web value | Why |
 |---|---|---|---|---|
 | `web/Default.ini` | `[Engine.Engine] RenderDevice` | `UC2GLDrv.UC2GLRenderDevice` | `UC2GL4ESDrv.UC2GL4ESRenderDevice` | M11: the same driver behind GL4ES on WebGL 1; its section `[UC2GL4ESDrv.UC2GL4ESRenderDevice]` is in both files. |
-| `web/Default.ini` | `[Engine.Engine] AudioDevice` | `UC2ALAudio.UC2ALAudioSubsystem` | `Engine.NullAudioDevice` | The web build has no audio device yet. |
+| `web/Default.ini` | `[Engine.Engine] AudioDevice` | `UC2ALAudio.UC2ALAudioSubsystem` | kept as the web file has it | Web-owned (`WEB_KEYS`): the web audio work sets it (openal-soft's Web Audio backend); on a branch without that work it is `Engine.NullAudioDevice`. |
+| `web/Default.ini` | sections `[UC2ALAudio.UC2ALAudioSubsystem]`, `[UC2Movie]` | the native section, or none | kept as the web file has them | Web-owned (`WEB_SECTIONS`): the web audio and movie set-up (e.g. the web-only `Backends=` key). |
 | `web/Default.ini` | `[SDL2Drv.SDL2Client] UseJoystick` | `True` | `False` | Game pads through the browser's Gamepad API are untested. |

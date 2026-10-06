@@ -380,6 +380,10 @@ void UUC2GLRenderDevice::UpdateSampledTexture( FOpenGLTexture* Texture )
 		}
 		if( SnapshotVersion != MainColorVersion )
 		{
+			// -glsnapshotlog (G5): what asks for each back-buffer snapshot, for one frame (the 600th).
+			if( FrameCounter == 600 && ParseParam( appCmdLine(), TEXT("glsnapshotlog") ) )
+				debugf( NAME_Init, TEXT("UC2GLDrv: snapshot %i of frame %i, for material %s (main colour version %i, the snapshot had %i)"), SnapshotCopies + 1, FrameCounter,
+					RenderInterface.GetLastMaterial() ? RenderInterface.GetLastMaterial()->GetPathName() : TEXT("None"), MainColorVersion, SnapshotVersion );
 			DrawPostQuad( PostCopyProgram, PostCopyRectLoc, MainColorTexture, SnapshotFramebuffer, MainWidth, MainHeight, FlipRect, 0 );
 			SnapshotVersion = MainColorVersion;
 			SnapshotCopies++;
