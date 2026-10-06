@@ -103,6 +103,7 @@ FOpenGLRenderInterface::FOpenGLRenderInterface(UUC2GLRenderDevice* InRenDev)
 	appMemzero( ColorRemapConstant, sizeof(ColorRemapConstant) );
 	PointSampleNudge		= 0;
 	InOcclusionQuery		= 0;
+	SceneDepthTestFramebuffer	= 0;
 	WireIndexBuffer			= 0;
 }
 
@@ -126,6 +127,7 @@ void FOpenGLRenderInterface::Locked( UViewport* InViewport, BYTE* InHitData, INT
 	guard(FOpenGLRenderInterface::Locked);
 
 	Viewport = InViewport;
+	SceneDepthTestFramebuffer = 0;
 
 	// The default target: the device's main framebuffer.
 	SavedRenderTargetState.Reset();
@@ -1557,8 +1559,9 @@ INT FOpenGLRenderInterface::SetDynamicIndexBuffer(FIndexBuffer* IndexBuffer,INT 
 	FOpenGLDynamicIndexBuffer* DynamicIndexBuffer;
 	if( IndexBuffer->GetIndexSize() == sizeof(DWORD) )
 	{
+		// M11: without 32-bit indices this buffer stores them narrowed to 16 bits (UC2GLResource.cpp).
 		if( !RenDev->DynamicIndexBuffer32 )
-			RenDev->DynamicIndexBuffer32 = new FOpenGLDynamicIndexBuffer(RenDev,sizeof(DWORD));
+			RenDev->DynamicIndexBuffer32 = new FOpenGLDynamicIndexBuffer(RenDev,RenDev->CapUIntIndex ? sizeof(DWORD) : sizeof(_WORD));
 		DynamicIndexBuffer = RenDev->DynamicIndexBuffer32;
 	}
 	else

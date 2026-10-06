@@ -709,14 +709,14 @@ void FOpenGLRenderInterface::CopyDepthBuffer( FRenderTarget* DestTarget, FRender
 		return;
 	}
 
-	if( !RenDev->MainDepthStencil || !RenDev->CapFragDepth )
+	if( !RenDev->MainDepthStencil )
 	{
-		// M11, NOT IMPLEMENTED YET: without depth textures there is nothing to copy from, and
-		// without gl_FragDepth (EXT_frag_depth) no way to write it. The plan is a depth test
-		// in the accumulation shaders against the scene's depth (web-renderer.md,
-		// "Fallbacks"). Until then the target's depth is cleared: what is drawn into it (the
-		// distortion accumulation) is not hidden by nearer scene geometry.
-		UC2GL_LOG_ONCE( TEXT("UC2GLDrv: no %s on this context: the scene's depth is not copied into the distortion accumulation target, distortion shows through nearer geometry (fallback not implemented)"), RenDev->MainDepthStencil ? TEXT("gl_FragDepth") : TEXT("depth textures") );
+		// M11, NOT IMPLEMENTED: a context without depth textures (WebGL 1 without
+		// WEBGL_depth_texture) has no scene depth a shader can read, so neither the copy nor
+		// the in-shader test below can be done (web-renderer.md, "Fallbacks"). The target's
+		// depth is cleared: what is drawn into it (the distortion accumulation) is not hidden
+		// by nearer scene geometry.
+		UC2GL_LOG_ONCE( TEXT("UC2GLDrv: no depth textures on this context: the scene's depth cannot reach the distortion accumulation target, distortion shows through nearer geometry (fallback not implemented)") );
 		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, DestTexture->FramebufferID );
 		RenDev->glDisable( GL_SCISSOR_TEST );
 		RenDev->glDepthMask( GL_TRUE );
@@ -748,6 +748,29 @@ void FOpenGLRenderInterface::CopyDepthBuffer( FRenderTarget* DestTarget, FRender
 		U0,
 		1.f - V0
 	};
+	if( !RenDev->CapFragDepth )
+	{
+		// M11, a context without gl_FragDepth (WebGL 1 without EXT_frag_depth): the depth
+		// cannot be written by a shader, so it is not copied. The target's depth is cleared
+		// instead (the accumulation passes still test against each other there), and every
+		// program pass drawn into this target until the next frame compares its fragment's
+		// depth with the scene's depth in the shader, through the same mapping the copy quad
+		// would use: target pixel centre (gl_FragCoord.xy) / target size -> this Rect.
+		UC2GL_LOG_ONCE( TEXT("UC2GLDrv: no gl_FragDepth on this context: the distortion accumulation passes test the scene's depth in their fragment shaders instead of a depth copy") );
+		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, DestTexture->FramebufferID );
+		RenDev->glDisable( GL_SCISSOR_TEST );
+		RenDev->glDepthMask( GL_TRUE );
+		RenDev->glClearDepth( 1.0 );
+		RenDev->glClear( GL_DEPTH_BUFFER_BIT );
+		RenDev->glEnable( GL_SCISSOR_TEST );
+		RestoreAfterDeviceDraw();
+		SceneDepthTestFramebuffer	= DestTexture->FramebufferID;
+		SceneDepthTestRect[0]		= Rect[0] / Max<INT>( DestTexture->CachedWidth, 1 );
+		SceneDepthTestRect[1]		= Rect[1] / Max<INT>( DestTexture->CachedHeight, 1 );
+		SceneDepthTestRect[2]		= Rect[2];
+		SceneDepthTestRect[3]		= Rect[3];
+		return;
+	}
 	RenDev->DrawPostQuad( RenDev->PostDepthCopyProgram, RenDev->PostDepthCopyRectLoc, RenDev->MainDepthStencil, DestTexture->FramebufferID, DestTexture->CachedWidth, DestTexture->CachedHeight, Rect, 1 );
 	RenDev->DepthBufferCopies++;
 

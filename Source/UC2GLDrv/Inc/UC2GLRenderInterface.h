@@ -340,6 +340,13 @@ public:
 	FLOAT					DistortionScale[4];			// VSC_DISTORTION_SCALE (HandlePSVertexShader)
 	FLOAT					ColorRemapConstant[4];		// VSC_COLOR_REMAP
 	UBOOL					PointSampleNudge;			// see GetGLMatrices
+	// M11, a context without gl_FragDepth (EXT_frag_depth): CopyDepthBuffer cannot write the
+	// scene's depth into the distortion accumulation target, so the program passes drawn into
+	// that target this frame test the scene's depth in their fragment shader instead
+	// (PSV_SceneDepthTest, UC2GLShaders.cpp). The framebuffer is that target's; the rectangle
+	// maps gl_FragCoord.xy to the main depth texture: uv = xy * Rect.xy + Rect.zw.
+	GLuint					SceneDepthTestFramebuffer;
+	FLOAT					SceneDepthTestRect[4];
 	// M11. Between BeginOcclusionQuery and EndOcclusionQuery nothing is drawn: the engine's
 	// query geometry writes neither colour nor depth nor stencil, and there is no query to count for.
 	UBOOL					InOcclusionQuery;

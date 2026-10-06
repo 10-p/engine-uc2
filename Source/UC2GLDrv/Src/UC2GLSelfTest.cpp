@@ -17,6 +17,9 @@
 	  dof-ramp     PS_DepthOfField: depth -> ramp texture -> blend alpha (absolute mode)
 	  remap        PS_ColorRemap + ColorRemap.vsh: luminance -> lookup coordinate
 	  luminance    PS_LuminanceTexIndex into the 16x16 target the dynamic gamma reads
+	  fog          fixed-function linear fog (M11)
+	  index-narrow only without 32-bit indices (M11 fallback): 32-bit index data stored as
+	               16-bit and drawn
 
 	Console: POSTSELFTEST (runs at the start of the next frame). Command line: -glselftest
 	(runs once, at the tenth frame with a player). Results: one log line per test,
@@ -128,38 +131,66 @@ struct FSelfTest
 
 	GLuint PointProgram;
 	GLint  PointColorLoc;
+	// M11: the same, with the scene depth test of PSV_SceneDepthTest (UC2GLShaders.cpp) around it.
+	GLuint DepthTestProgram;
+	GLint  DepthTestColorLoc, DepthTestRectLoc;
 	INT    LastProbeRed, LastProbeGreen;	// pixels whose upper / lower bound held in the last probe
-	UBOOL BuildPointProgram()
+	UBOOL  ProbeWithSceneDepthTest;			// DrawDepthPoints draws with DepthTestProgram
+	GLuint BuildProbeProgram( UBOOL SceneDepthTest, GLint& ColorLoc )
 	{
-		if( PointProgram )
-			return 1;
 		static const char* VS = "attribute vec3 aPosition;\nvoid main()\n{\n\tgl_Position = vec4( aPosition, 1.0 );\n}\n";
 		static const char* FS = "uniform vec4 uColor;\nvoid main()\n{\n\tgl_FragColor = uColor;\n}\n";
+		extern FString UC2GL_WithSceneDepthTest( const ANSICHAR* Body );
+		extern FString UC2GL_WithSceneDepthTestVertex( const FString& Source );
+		FString FSWithTest = UC2GL_WithSceneDepthTest( FS ), VSWithTest = UC2GL_WithSceneDepthTestVertex( FString( VS ) );
+		ANSICHAR FSText[2048], VSText[2048];
+		appStrncpy( FSText, TCHAR_TO_ANSI(*FSWithTest), ARRAY_COUNT(FSText) );
+		appStrncpy( VSText, TCHAR_TO_ANSI(*VSWithTest), ARRAY_COUNT(VSText) );
 		GLuint Shaders[2];
 		for( INT i=0; i<2; i++ )
 		{
-			const char* Sources[2] = { RenDev->ShaderPrologue( i == 1 ), i == 0 ? VS : FS };
+			const char* Sources[2] = { RenDev->ShaderPrologue( i == 1 ), i == 0 ? (SceneDepthTest ? VSText : VS) : (SceneDepthTest ? FSText : FS) };
 			Shaders[i] = RenDev->glCreateShader( i == 0 ? GL_VERTEX_SHADER : GL_FRAGMENT_SHADER );
 			RenDev->glShaderSource( Shaders[i], 2, Sources, NULL );
 			RenDev->glCompileShader( Shaders[i] );
 		}
-		PointProgram = RenDev->glCreateProgram();
-		RenDev->glAttachShader( PointProgram, Shaders[0] );
-		RenDev->glAttachShader( PointProgram, Shaders[1] );
-		RenDev->glBindAttribLocation( PointProgram, 0, "aPosition" );
-		RenDev->glLinkProgram( PointProgram );
+		GLuint Program = RenDev->glCreateProgram();
+		RenDev->glAttachShader( Program, Shaders[0] );
+		RenDev->glAttachShader( Program, Shaders[1] );
+		RenDev->glBindAttribLocation( Program, 0, "aPosition" );
+		RenDev->glLinkProgram( Program );
 		RenDev->glDeleteShader( Shaders[0] );
 		RenDev->glDeleteShader( Shaders[1] );
 		GLint Status = 0;
-		RenDev->glGetProgramiv( PointProgram, GL_LINK_STATUS, &Status );
+		RenDev->glGetProgramiv( Program, GL_LINK_STATUS, &Status );
 		if( !Status )
 		{
-			RenDev->glDeleteProgram( PointProgram );
-			PointProgram = 0;
+			RenDev->glDeleteProgram( Program );
 			return 0;
 		}
-		PointColorLoc = RenDev->glGetUniformLocation( PointProgram, "uColor" );
-		return 1;
+		ColorLoc = RenDev->glGetUniformLocation( Program, "uColor" );
+		return Program;
+	}
+	UBOOL BuildPointProgram()
+	{
+		if( !PointProgram )
+			PointProgram = BuildProbeProgram( 0, PointColorLoc );
+		return PointProgram != 0;
+	}
+	UBOOL BuildDepthTestProgram()
+	{
+		if( !DepthTestProgram )
+		{
+			DepthTestProgram = BuildProbeProgram( 1, DepthTestColorLoc );
+			if( DepthTestProgram )
+			{
+				DepthTestRectLoc = RenDev->glGetUniformLocation( DepthTestProgram, "u_sceneDepthRect" );
+				RenDev->glUseProgram( DepthTestProgram );
+				RenDev->glUniform1i( RenDev->glGetUniformLocation( DepthTestProgram, "u_sceneDepth" ), 7 );
+				RenDev->glUseProgram( 0 );
+			}
+		}
+		return DepthTestProgram != 0;
 	}
 	// One point per pixel of a W x H framebuffer, at 24-bit depth Z + Offset. Z is the picture
 	// top row first; BottomUp says the framebuffer stores it the GL way (the main framebuffer),
@@ -187,8 +218,8 @@ struct FSelfTest
 		GLuint Buffer = RenDev->NewBuffer( GL_ARRAY_BUFFER );
 		RenDev->glBindBuffer( GL_ARRAY_BUFFER, Buffer );
 		RenDev->glBufferData( GL_ARRAY_BUFFER, Vertices.Num() * sizeof(FLOAT), &Vertices(0), GL_STATIC_DRAW );
-		RenDev->glUseProgram( PointProgram );
-		RenDev->glUniform4fv( PointColorLoc, 1, Color );
+		RenDev->glUseProgram( ProbeWithSceneDepthTest ? DepthTestProgram : PointProgram );
+		RenDev->glUniform4fv( ProbeWithSceneDepthTest ? DepthTestColorLoc : PointColorLoc, 1, Color );
 		RenDev->glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, 0, NULL );
 		RenDev->glEnableVertexAttribArray( 0 );
 		RenDev->glDrawArrays( GL_TRIANGLES, 0, W * H * 3 );
@@ -238,6 +269,59 @@ struct FSelfTest
 		{
 			LastProbeRed	+= Tally.Data(i*4) == 255;
 			LastProbeGreen	+= Tally.Data(i*4+1) == 255;
+		}
+		RI->RestoreAfterDeviceDraw();
+		return Wrong;
+	}
+	// M11, no gl_FragDepth: CopyDepthBuffer copies nothing and the passes drawn into the target
+	// test the scene's depth in the shader (PSV_SceneDepthTest). The same two bounds as
+	// ProbeDepth, through that shader test and with GL's depth test off: a triangle at
+	// Expected+Bound must be dropped (GL_LEQUAL against the scene), one at Expected-Bound kept.
+	// Returns the pixels where either bound fails.
+	INT ProbeSceneDepthTest( GLuint Framebuffer, INT W, INT H, const TArray<DWORD>& Expected, INT Bound )
+	{
+		if( !BuildDepthTestProgram() || RI->SceneDepthTestFramebuffer != Framebuffer )
+			return W * H;
+		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, Framebuffer );
+		RenDev->glViewport( 0, 0, W, H );
+		RenDev->glDisable( GL_SCISSOR_TEST );
+		RenDev->glDisable( GL_STENCIL_TEST );
+		RenDev->glDisable( GL_BLEND );
+		RenDev->glDisable( GL_ALPHA_TEST );
+		RenDev->glDisable( GL_CULL_FACE );
+		RenDev->glDisable( GL_DEPTH_TEST );
+		RenDev->glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+		RenDev->glClearColor( 0.f, 0.f, 0.f, 0.f );
+		RenDev->glClear( GL_COLOR_BUFFER_BIT );
+		RenDev->glActiveTexture( GL_TEXTURE0 + 7 );
+		RenDev->glBindTexture( GL_TEXTURE_2D, RenDev->MainDepthStencil );
+		RenDev->glActiveTexture( GL_TEXTURE0 );
+		RenDev->glUseProgram( DepthTestProgram );
+		RenDev->glUniform4fv( DepthTestRectLoc, 1, RI->SceneDepthTestRect );
+		ProbeWithSceneDepthTest = 1;
+		static const FLOAT Red[4] = { 1.f, 0.f, 0.f, 0.f }, Green[4] = { 0.f, 1.f, 0.f, 0.f };
+		RenDev->glColorMask( GL_TRUE, GL_FALSE, GL_FALSE, GL_FALSE );
+		DrawDepthPoints( W, H, Expected, Bound, Red, 0 );
+		RenDev->glColorMask( GL_FALSE, GL_TRUE, GL_FALSE, GL_FALSE );
+		DrawDepthPoints( W, H, Expected, -Bound, Green, 0 );
+		ProbeWithSceneDepthTest = 0;
+		RenDev->glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+		RenDev->glEnable( GL_DEPTH_TEST );
+		RenDev->glEnable( GL_SCISSOR_TEST );
+		FTestImage Tally( W, H );
+		RenDev->glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+		RenDev->glReadPixels( 0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, &Tally.Data(0) );
+		INT Wrong = 0;
+		LastProbeRed = LastProbeGreen = 0;
+		for( INT i=0; i<W*H; i++ )
+		{
+			// Where Expected + Bound is beyond the largest depth the triangle is clamped to it,
+			// equal to the scene's depth, and GL_LEQUAL keeps it: no upper bound to test there.
+			UBOOL Upper = Tally.Data(i*4) == 0 || Expected(i) + Bound > 0xffffff, Lower = Tally.Data(i*4+1) == 255;
+			LastProbeRed	+= Upper;
+			LastProbeGreen	+= Lower;
+			if( !Upper || !Lower )
+				Wrong++;
 		}
 		RI->RestoreAfterDeviceDraw();
 		return Wrong;
@@ -337,6 +421,78 @@ struct FSelfTest
 	}
 
 	/*-------------------------------------------------------------------------
+		M11: 32-bit indices on a context without them (OES_element_index_uint
+		missing, or -glnouintindex). Only run then.
+	-------------------------------------------------------------------------*/
+
+	// A 32-bit index buffer through the engine's path (SetDynamicIndexBuffer), then drawn by
+	// GL from what the driver stored: two triangles over a 16x16 viewport, every pixel must be
+	// covered. Also checks what was stored: 16-bit indices equal to the 32-bit ones.
+	void TestIndexNarrow()
+	{
+		if( RenDev->CapUIntIndex || !BuildPointProgram() )
+			return;
+		FRaw32BitIndexBuffer Indices;
+		static const DWORD Quad[6] = { 0, 1, 2, 2, 1, 3 };
+		for( INT i=0; i<6; i++ )
+			Indices.Indices.AddItem( Quad[i] + 40000 );		// above 32767: a sign or width mistake shows
+		INT First = RI->SetDynamicIndexBuffer( &Indices, 0 );
+		FOpenGLDynamicIndexBuffer* Stored = RenDev->DynamicIndexBuffer32;
+		INT StoredWrong = 0;
+		if( !Stored || Stored->IndexSize != sizeof(_WORD) )
+			StoredWrong = 6;
+		else if( RenDev->IsGLES && Stored->Shadow.Num() == 6 * sizeof(_WORD) )
+			for( INT i=0; i<6; i++ )
+				StoredWrong += ((_WORD*)&Stored->Shadow(0))[i] != Quad[i] + 40000;
+		// 40004 vertices, the four used at 40000..40003: a full-viewport quad.
+		TArray<FLOAT> Vertices;
+		Vertices.AddZeroed( 40004 * 3 );
+		static const FLOAT Corner[4][2] = { { -1.f, -1.f }, { 1.f, -1.f }, { -1.f, 1.f }, { 1.f, 1.f } };
+		for( INT c=0; c<4; c++ )
+		{
+			Vertices( (40000 + c) * 3 + 0 ) = Corner[c][0];
+			Vertices( (40000 + c) * 3 + 1 ) = Corner[c][1];
+		}
+		GLuint Buffer = RenDev->NewBuffer( GL_ARRAY_BUFFER );
+		RenDev->glBindBuffer( GL_ARRAY_BUFFER, Buffer );
+		RenDev->glBufferData( GL_ARRAY_BUFFER, Vertices.Num() * sizeof(FLOAT), &Vertices(0), GL_STATIC_DRAW );
+		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, RenDev->MainFramebuffer );
+		RenDev->glViewport( 0, 0, 16, 16 );
+		RenDev->glDisable( GL_SCISSOR_TEST );
+		RenDev->glDisable( GL_STENCIL_TEST );
+		RenDev->glDisable( GL_DEPTH_TEST );
+		RenDev->glDisable( GL_BLEND );
+		RenDev->glDisable( GL_CULL_FACE );
+		RenDev->glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+		RenDev->glClearColor( 0.f, 0.f, 0.f, 0.f );
+		RenDev->glClear( GL_COLOR_BUFFER_BIT );
+		static const FLOAT White[4] = { 1.f, 1.f, 1.f, 1.f };
+		RenDev->glUseProgram( PointProgram );
+		RenDev->glUniform4fv( PointColorLoc, 1, White );
+		RenDev->glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, 0, NULL );
+		RenDev->glEnableVertexAttribArray( 0 );
+		if( Stored )
+		{
+			RenDev->glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, Stored->BufferID );
+			RenDev->glDrawElements( GL_TRIANGLES, 6, Stored->IndexSize == 4 ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT, (const BYTE*)(PTRINT)(First * Stored->IndexSize) );
+			RenDev->glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, 0 );
+		}
+		RenDev->glDisableVertexAttribArray( 0 );
+		RenDev->glUseProgram( 0 );
+		RenDev->glBindBuffer( GL_ARRAY_BUFFER, 0 );
+		RenDev->FreeBuffer( GL_ARRAY_BUFFER, Buffer );
+		FTestImage Got( 16, 16 );
+		RenDev->glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+		RenDev->glReadPixels( 0, 0, 16, 16, GL_RGBA, GL_UNSIGNED_BYTE, &Got.Data(0) );
+		RenDev->glEnable( GL_SCISSOR_TEST );
+		RI->RestoreAfterDeviceDraw();
+		INT Uncovered = 0;
+		for( INT i=0; i<16*16; i++ )
+			Uncovered += Got.Data(i*4) != 255;
+		Report( TEXT("index-narrow"), 16*16 + 6, Uncovered + StoredWrong, 0.f, *FString::Printf( TEXT("FALLBACK (no 32-bit indices): six 32-bit indices 40000..40003 through SetDynamicIndexBuffer are stored as %i-bit (%i stored values wrong) and draw a 16x16 quad (%i pixels not covered)"), Stored ? Stored->IndexSize * 8 : 0, StoredWrong, Uncovered ) );
+	}
+
+	/*-------------------------------------------------------------------------
 		snapshot, depth-color, depth-copy: the driver's own copies.
 	-------------------------------------------------------------------------*/
 
@@ -399,6 +555,38 @@ struct FSelfTest
 		INT HW = W/2, HH = H/2;
 		FAuxRenderTarget* Half = new FAuxRenderTarget( HW, HH, TEXF_RGBA8, FRenderTarget::RT_CREATE_COLOR|FRenderTarget::RT_CREATE_DEPTH );
 		RI->CopyDepthBuffer( Half, RenDev->DefaultRenderTarget );
+		if( !RenDev->CapFragDepth )
+		{
+			// M11, no gl_FragDepth: nothing is copied; what stands for the copy is the depth test
+			// in the shaders of the passes drawn into the target. Checked with the same expected
+			// depths and bounds as the copy.
+			TArray<DWORD> Expected;
+			Expected.Add( HW * HH );
+			for( INT y=0; y<HH; y++ )
+				for( INT x=0; x<HW; x++ )
+					Expected(y*HW+x) = Z( (2*y+1)*W + 2*x+1 );
+			INT Bound = 0, WrongAtBound = 0, WrongAt1 = 0;
+			FString PerBound;
+			static const INT Bounds[] = { 1, 2, 3, 4, 8, 16, 256, 65536 };
+			for( INT b=0; b<ARRAY_COUNT(Bounds); b++ )
+			{
+				Bound			= Bounds[b];
+				WrongAtBound	= ProbeSceneDepthTest( RI->CacheTexture( Half )->FramebufferID, HW, HH, Expected, Bound );
+				PerBound		+= FString::Printf( TEXT(" [%i: %i wrong, upper held %i, lower held %i]"), Bound, WrongAtBound, LastProbeRed, LastProbeGreen );
+				if( b == 0 )
+					WrongAt1 = WrongAtBound;
+				if( WrongAtBound == 0 )
+					break;
+			}
+			debugf( NAME_Init, TEXT("UC2GLDrv: selftest depth-copy (fallback) per bound:%s"), *PerBound );
+			// Tolerance 3 units of the 24-bit depth (the copy's is 1): the depth reaches the shader
+			// as a 32-bit float from the texture and is compared with an interpolated 32-bit
+			// float, where GL's own test compares two integers; measured on the twin: 1 unit
+			// fails for 81% of the pixels, 2 for 25%, 3 for none.
+			Report( TEXT("depth-copy"), HW*HH, WrongAtBound ? 16777215.f : (FLOAT)Bound, 3.f, *FString::Printf( TEXT("FALLBACK (no gl_FragDepth): the scene depth test in the shader of a pass drawn into a %ix%i target after CopyDepthBuffer: target pixel (x,y) is tested against the depth of back-buffer pixel (2x+1,2y+1); probed with two triangles at the expected depth +/- N units through that test: every pixel within %i units (%i pixels not within 1); last probe: upper bound held for %i pixels, lower bound for %i"), HW, HH, Bound, WrongAt1, LastProbeRed, LastProbeGreen ) );
+			delete Half;
+			return;
+		}
 		if( RenDev->IsGLES )
 		{
 			// M11: OpenGL ES cannot read a depth buffer back. The copy is probed instead: see ProbeDepth.
@@ -763,6 +951,7 @@ struct FSelfTest
 		TestRemap();
 		TestLuminance();
 		TestFog();
+		TestIndexNarrow();
 		RI->PopState();
 
 		// Leave a defined frame behind.
@@ -786,10 +975,15 @@ void UC2GL_RunPostProcessSelfTest( UUC2GLRenderDevice* RenDev, UViewport* Viewpo
 	Test.Viewport	= Viewport;
 	Test.PointProgram		= 0;
 	Test.PointColorLoc		= -1;
+	Test.DepthTestProgram	= 0;
+	Test.DepthTestColorLoc	= Test.DepthTestRectLoc = -1;
+	Test.ProbeWithSceneDepthTest = 0;
 	Test.DepthUploadFailed	= 0;
 	Test.Run();
 	if( Test.PointProgram )
 		RenDev->glDeleteProgram( Test.PointProgram );
+	if( Test.DepthTestProgram )
+		RenDev->glDeleteProgram( Test.DepthTestProgram );
 }
 
 /*-----------------------------------------------------------------------------

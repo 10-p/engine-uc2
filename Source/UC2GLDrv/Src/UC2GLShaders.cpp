@@ -40,7 +40,59 @@ enum
 {
 	PSV_CubeMask		= 0x0f,	// stage n samples a cube map (PS_GLOBALFLAGS_TEXMODE_ADJUST)
 	PSV_SpecularEnable	= 0x10,	// D3DRS_SPECULARENABLE for shaders without xfc
+	PSV_SceneDepthTest	= 0x20,	// M11: no gl_FragDepth; the scene's depth is tested in the shader (UC2GL_SceneDepthTestMain)
 };
+
+// The texture unit of the scene's depth for PSV_SceneDepthTest (the pixel shaders use units 0..3).
+#define UC2GL_SCENEDEPTH_UNIT 7
+
+//
+// M11, PSV_SceneDepthTest. The generated body's main() is renamed and this main() put after
+// it: the fragment is dropped where the depth test GL_LEQUAL against the scene's depth would
+// drop it, as if the scene's depth had been copied into the target (CopyDepthBuffer). The
+// half unit of the 24-bit depth makes "<=" compare as the quantised depth buffer would.
+// The fragment's own depth comes from the clip-space z and w of the vertex shader, interpolated
+// with perspective and divided here: that is exactly the window depth (z/w is affine in screen
+// space), and it is highp, where gl_FragCoord is only mediump in GLSL ES 1.00 (on Mesa's ES 2.0
+// context mediump is 16-bit: gl_FragCoord.z missed by up to 2^-11 = 8192 depth units, found by
+// the self-test). The vertex side is UC2GL_WithSceneDepthTestVertex. Also used by the self-test.
+//
+#define UC2GL_SCENEDEPTH_VS_FLAG (((QWORD)1) << 63)	// in a vertex shader key: the depth varying is written (no unique shader is that large)
+
+FString UC2GL_WithSceneDepthTest( const ANSICHAR* Body )
+{
+	FString Source = appFromAnsi( Body );
+	INT At = Source.InStr( TEXT("void main()") );
+	if( At < 0 )
+		return Source;
+	return Source.Left( At ) + TEXT("void uc2_main()") + Source.Mid( At + 11 ) + TEXT("\n")
+		+ TEXT("uniform UC2_HIGHP sampler2D u_sceneDepth;\n")
+		+ TEXT("uniform vec4 u_sceneDepthRect;\n")
+		+ TEXT("varying UC2_HIGHP vec2 v_sceneDepthZW;\n")
+		+ TEXT("void main()\n")
+		+ TEXT("{\n")
+		+ TEXT("	UC2_HIGHP float SceneDepth = texture2D( u_sceneDepth, gl_FragCoord.xy * u_sceneDepthRect.xy + u_sceneDepthRect.zw ).r;\n")
+		+ TEXT("	UC2_HIGHP float Depth = v_sceneDepthZW.x / v_sceneDepthZW.y * 0.5 + 0.5;\n")
+		+ TEXT("	if( Depth > SceneDepth + 0.5 / (4096.0 * 4096.0 - 1.0) )\n")
+		+ TEXT("		discard;\n")
+		+ TEXT("	uc2_main();\n")
+		+ TEXT("}\n");
+}
+
+// The vertex shader of such a program: its main() renamed, and the clip-space z and w passed on.
+FString UC2GL_WithSceneDepthTestVertex( const FString& Source )
+{
+	INT At = Source.InStr( TEXT("void main()") );
+	if( At < 0 )
+		return Source;
+	return Source.Left( At ) + TEXT("void uc2_vmain()") + Source.Mid( At + 11 ) + TEXT("\n")
+		+ TEXT("varying vec2 v_sceneDepthZW;\n")
+		+ TEXT("void main()\n")
+		+ TEXT("{\n")
+		+ TEXT("	uc2_vmain();\n")
+		+ TEXT("	v_sceneDepthZW = gl_Position.zw;\n")
+		+ TEXT("}\n");
+}
 
 
 #define UC2GL_LOG_ONCE(...) { static UBOOL Logged = 0; if( !Logged ) { Logged = 1; debugf( NAME_Init, __VA_ARGS__ ); } }
@@ -386,7 +438,9 @@ GLuint UUC2GLRenderDevice::GetVertexShaderObject( QWORD Enum )
 		return *Found;
 
 	GLuint	Shader = 0;
-	FString	Source = BuildVertexShaderSource( Enum );
+	FString	Source = BuildVertexShaderSource( Enum & ~UC2GL_SCENEDEPTH_VS_FLAG );
+	if( Source.Len() && (Enum & UC2GL_SCENEDEPTH_VS_FLAG) )
+		Source = UC2GL_WithSceneDepthTestVertex( Source );
 	if( Source.Len() )
 	{
 		Shader = UC2GL_CompileShader( this, GL_VERTEX_SHADER, ShaderPrologue(0), TCHAR_TO_ANSI(*Source), *FString::Printf(TEXT("vertex shader %s"),appI64toa((SQWORD)Enum)) );
@@ -417,7 +471,8 @@ GLuint UUC2GLRenderDevice::GetFragmentShaderObject( INT PixelShader, DWORD Varia
 				appSprintf( Header + appStrlen(Header), "#define UC2_TEX%i_CUBE 1\n", s );
 		if( Variant & PSV_SpecularEnable )
 			appStrcat( Header, "#define UC2_SPECULARENABLE 1\n" );
-		Shader = UC2GL_CompileShader( this, GL_FRAGMENT_SHADER, Header, Source.Source, *FString::Printf(TEXT("pixel shader %i (%s.psh, variant %i)"),PixelShader,Source.Name,Variant) );
+		FString Body = (Variant & PSV_SceneDepthTest) ? UC2GL_WithSceneDepthTest( Source.Source ) : FString( appFromAnsi( Source.Source ) );
+		Shader = UC2GL_CompileShader( this, GL_FRAGMENT_SHADER, Header, TCHAR_TO_ANSI(*Body), *FString::Printf(TEXT("pixel shader %i (%s.psh, variant %i)"),PixelShader,Source.Name,Variant) );
 		if( Shader )
 			FragmentShadersCompiled++;
 		else
@@ -444,7 +499,7 @@ FOpenGLProgram* UUC2GLRenderDevice::GetProgram( INT PixelShader, DWORD Variant, 
 	P->Next				= First;
 	Programs.Set( Hash, P );
 
-	GLuint	VS = GetVertexShaderObject( VertexShaderEnum ),
+	GLuint	VS = GetVertexShaderObject( VertexShaderEnum | ((Variant & PSV_SceneDepthTest) ? UC2GL_SCENEDEPTH_VS_FLAG : 0) ),
 			FS = GetFragmentShaderObject( PixelShader, Variant );
 	if( VS && FS )
 	{
@@ -487,6 +542,7 @@ FOpenGLProgram* UUC2GLRenderDevice::GetProgram( INT PixelShader, DWORD Variant, 
 			P->DistortionScaleLoc	= glGetUniformLocation( Program, "u_distortionScale" );
 			P->DistortionScreenLoc	= glGetUniformLocation( Program, "u_distortionScreen" );
 			P->ColorRemapLoc		= glGetUniformLocation( Program, "u_colorRemap" );
+			P->SceneDepthRectLoc	= glGetUniformLocation( Program, "u_sceneDepthRect" );
 			// Samplers never change: stage n is texture unit n.
 			glUseProgram( Program );
 			for( INT i=0; i<4; i++ )
@@ -496,6 +552,9 @@ FOpenGLProgram* UUC2GLRenderDevice::GetProgram( INT PixelShader, DWORD Variant, 
 				if( Loc >= 0 )
 					glUniform1i( Loc, i );
 			}
+			GLint SceneDepthLoc = glGetUniformLocation( Program, "u_sceneDepth" );
+			if( SceneDepthLoc >= 0 )
+				glUniform1i( SceneDepthLoc, UC2GL_SCENEDEPTH_UNIT );
 			glUseProgram( 0 );
 			ProgramsLinked++;
 			debugf( NAME_Init, TEXT("UC2GLDrv: program %i: pixel shader %i (%s.psh) variant %i, vertex shader %s"), ProgramsLinked, PixelShader, GUC2GLPixelShaders[PixelShader].Name, Variant, appI64toa((SQWORD)VertexShaderEnum) );
@@ -824,6 +883,12 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 	for( INT s=0; s<4; s++ )
 		if( Source.TexOp[s] == 1 && s < MaterialState->StagesUsed && MaterialState->Stages[s].Texture && MaterialState->Stages[s].Texture->TextureID && MaterialState->Stages[s].Texture->IsCubemap )
 			Variant |= 1 << s;
+	// M11: a pass into the distortion accumulation target on a context without gl_FragDepth
+	// (CopyDepthBuffer, UC2GLPostProcess.cpp) tests the scene's depth itself.
+	UBOOL SceneDepthTest = SceneDepthTestFramebuffer && SavedRenderTargetState.GetCurrentState()->Framebuffer == SceneDepthTestFramebuffer
+		&& MaterialState->ZTest && DepthEnabled && RenDev->MainDepthStencil;
+	if( SceneDepthTest )
+		Variant |= PSV_SceneDepthTest;
 
 	FOpenGLProgram* Program = RenDev->GetProgram( PixelShader, Variant, Enum );
 	if( !Program->Program )
@@ -981,6 +1046,13 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 	}
 	if( Program->ColorRemapLoc >= 0 )
 		RenDev->glUniform4fv( Program->ColorRemapLoc, 1, ColorRemapConstant );
+	if( SceneDepthTest )
+	{
+		RenDev->glActiveTexture( GL_TEXTURE0 + UC2GL_SCENEDEPTH_UNIT );
+		RenDev->glBindTexture( GL_TEXTURE_2D, RenDev->MainDepthStencil );
+		RenDev->glActiveTexture( GL_TEXTURE0 );
+		RenDev->glUniform4fv( Program->SceneDepthRectLoc, 1, SceneDepthTestRect );
+	}
 
 	// Pixel shader constants (D3D's SetPixelShaderConstant; the shader clamps them to [0,1]).
 	for( INT i=0; i<8; i++ )

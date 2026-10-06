@@ -992,6 +992,43 @@ FOpenGLIndexBuffer::~FOpenGLIndexBuffer()
 	unguard;
 }
 
+//
+// M11: a context without 32-bit indices (WebGL 1 without OES_element_index_uint; -glnouintindex
+// masks them anywhere). 32-bit index data is narrowed to 16 bits in place (the WORDs land at or
+// below the DWORDs they come from, so a forward loop is safe). Exact when no index is above
+// 65535, which holds for every index buffer this engine makes (it makes no 32-bit ones: only
+// FRaw32BitIndexBuffer would, and nothing uses it). Returns 0 if an index does not fit; the
+// buffer is then left as zeros (every primitive degenerate: nothing drawn) and that is logged.
+//
+static UBOOL UC2GL_NarrowIndices( BYTE* Data, INT Count )
+{
+	const DWORD*	Source	= (const DWORD*)Data;
+	_WORD*			Dest	= (_WORD*)Data;
+	DWORD			Largest	= 0;
+	for( INT i=0; i<Count; i++ )
+		Largest = Max( Largest, Source[i] );
+	if( Largest > 65535 )
+	{
+		static UBOOL Logged = 0;
+		if( !Logged )
+		{
+			Logged = 1;
+			debugf( NAME_Warning, TEXT("UC2GLDrv: a 32-bit index buffer with index %u, above 65535, on a context without 32-bit indices: not drawn"), Largest );
+		}
+		appMemzero( Data, Count * sizeof(_WORD) );
+		return 0;
+	}
+	for( INT i=0; i<Count; i++ )
+		Dest[i] = (_WORD)Source[i];
+	static UBOOL Logged = 0;
+	if( !Logged )
+	{
+		Logged = 1;
+		debugf( NAME_Init, TEXT("UC2GLDrv: no 32-bit indices on this context: 32-bit index data is stored as 16-bit (first buffer: %i indices, largest %u)"), Count, Largest );
+	}
+	return 1;
+}
+
 void FOpenGLIndexBuffer::Cache(FIndexBuffer* SourceIndexBuffer)
 {
 	guard(FOpenGLIndexBuffer::Cache);
@@ -1005,10 +1042,17 @@ void FOpenGLIndexBuffer::Cache(FIndexBuffer* SourceIndexBuffer)
 	if( RenDev->ScratchBuffer.Num() < Size )
 		RenDev->ScratchBuffer.Add( Size - RenDev->ScratchBuffer.Num() );
 	SourceIndexBuffer->GetContents( &RenDev->ScratchBuffer(0) );
+	INT StoredSize = Size;
+	if( IndexSize == sizeof(DWORD) && !RenDev->CapUIntIndex )
+	{
+		UC2GL_NarrowIndices( &RenDev->ScratchBuffer(0), Size / sizeof(DWORD) );
+		IndexSize	= sizeof(_WORD);
+		StoredSize	= Size / 2;
+	}
 
 	RenDev->glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, BufferID );
-	RenDev->glBufferData( GL_ELEMENT_ARRAY_BUFFER, Size, &RenDev->ScratchBuffer(0), GL_STATIC_DRAW );
-	RenDev->StatBufferUploads++; RenDev->StatBufferBytes += Size;
+	RenDev->glBufferData( GL_ELEMENT_ARRAY_BUFFER, StoredSize, &RenDev->ScratchBuffer(0), GL_STATIC_DRAW );
+	RenDev->StatBufferUploads++; RenDev->StatBufferBytes += StoredSize;
 	RenDev->RenderInterface.InvalidateHardwareState();
 
 	CachedSize		= Size;
@@ -1047,8 +1091,11 @@ INT FOpenGLDynamicIndexBuffer::AddIndices(FIndexBuffer* Indices)
 {
 	guard(FOpenGLDynamicIndexBuffer::AddIndices);
 
-	INT	Size = Indices->GetSize();
-	check( Indices->GetIndexSize() == IndexSize );
+	INT		SourceSize	= Indices->GetSize();
+	// M11: the 32-bit dynamic buffer of a context without 32-bit indices stores 16-bit ones.
+	UBOOL	Narrow		= Indices->GetIndexSize() == sizeof(DWORD) && IndexSize == sizeof(_WORD);
+	INT		Size		= Narrow ? SourceSize / 2 : SourceSize;
+	check( Narrow || Indices->GetIndexSize() == IndexSize );
 
 	if( Size > CachedSize )
 		Reallocate( Size * 2 );
@@ -1059,9 +1106,11 @@ INT FOpenGLDynamicIndexBuffer::AddIndices(FIndexBuffer* Indices)
 		Tail = 0;
 	}
 
-	if( RenDev->ScratchBuffer.Num() < Size )
-		RenDev->ScratchBuffer.Add( Size - RenDev->ScratchBuffer.Num() );
+	if( RenDev->ScratchBuffer.Num() < SourceSize )
+		RenDev->ScratchBuffer.Add( SourceSize - RenDev->ScratchBuffer.Num() );
 	Indices->GetContents( &RenDev->ScratchBuffer(0) );
+	if( Narrow )
+		UC2GL_NarrowIndices( &RenDev->ScratchBuffer(0), SourceSize / sizeof(DWORD) );
 
 	RenDev->glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, BufferID );
 	RenDev->glBufferSubData( GL_ELEMENT_ARRAY_BUFFER, Tail, Size, &RenDev->ScratchBuffer(0) );

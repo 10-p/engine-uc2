@@ -57,7 +57,8 @@ struct FOpenGLProgram
 					ConstantLoc[8],
 					DistortionScaleLoc,		// M7: VSC_DISTORTION_SCALE
 					DistortionScreenLoc,	// M7: clip space to back-buffer texture coordinates
-					ColorRemapLoc;			// M7: VSC_COLOR_REMAP
+					ColorRemapLoc,			// M7: VSC_COLOR_REMAP
+					SceneDepthRectLoc;		// M11: the scene depth test in the shader (PSV_SceneDepthTest)
 };
 
 //

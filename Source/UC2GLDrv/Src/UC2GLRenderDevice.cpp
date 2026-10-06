@@ -1234,9 +1234,9 @@ void UUC2GLRenderDevice::DetectCapabilities()
 	}
 	debugf( NAME_Init, TEXT("UC2GLDrv: capabilities: S3TC %s, depth texture %s, gl_FragDepth %s, 32-bit indices %s, texture max level %s, fragment highp %s"),
 		UseHardwareS3TC() ? TEXT("yes") : IsGLES ? TEXT("NO (fallback: gl4es decodes DXT to RGBA8)") : TEXT("NO (fallback: the engine decodes DXT to RGBA8)"),
-		CapDepthTexture ? TEXT("yes") : TEXT("NO (fallback: depth drawn as colour)"),
-		CapFragDepth ? TEXT("yes") : TEXT("NO (fallback: depth test in the shader)"),
-		CapUIntIndex ? TEXT("yes") : TEXT("NO (fallback: 16-bit index ranges)"),
+		CapDepthTexture ? TEXT("yes") : TEXT("NO (no fallback: the depth of field and the hiding of distortion behind nearer geometry are lost)"),
+		CapFragDepth ? TEXT("yes") : TEXT("NO (fallback: the distortion passes test the scene's depth in the shader)"),
+		CapUIntIndex ? TEXT("yes") : TEXT("NO (fallback: 32-bit index data stored as 16-bit)"),
 		CapTextureMaxLevel ? TEXT("yes") : TEXT("no (mip chains are completed to 1x1)"),
 		CapFragmentHighp ? TEXT("yes") : TEXT("NO (mediump)") );
 }
