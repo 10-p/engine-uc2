@@ -27,6 +27,12 @@
 # Thresholds are in the check functions, each with its reason; docs/porting/analysis/web-renderer.md has the
 # measurements they come from. A line starting with "INFO" is a measurement that decides nothing.
 set -u
+# The twin's OpenGL ES context is version 2.0, not the 3.2 Mesa gives by default: ES-3-only leniency would
+# hide what WebGL 1 rejects (web-renderer.md, "A stricter twin"). MESA_DEBUG=1 makes Mesa print every error it
+# raises, including those gl4es' own glGetError calls swallow; the boot check counts those lines. Neither
+# affects a desktop OpenGL context.
+export MESA_GLES_VERSION_OVERRIDE=${MESA_GLES_VERSION_OVERRIDE:-2.0}
+export MESA_DEBUG=${MESA_DEBUG:-1}
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 capped=$work/bin/capped
@@ -79,10 +85,11 @@ check_boot() {
   vs=$(grep -a -o "[0-9]* vertex shaders compiled ([0-9]* failed)" "$o" | head -1)
   e=$(grep -a -o "UC2GLDrv: [0-9]* GL errors in [0-9]* frames ([0-9]* frames with errors)" "$o")
   if [[ "$cls" == *"UC2GL4ESDrv.UC2GL4ESRenderDevice"* ]] && [[ "$fs" == *"84 fragment shaders compiled, 0 failed" ]] && [[ "$vs" == "405 vertex shaders compiled (0 failed)" ]] \
-     && [[ "$e" == "UC2GLDrv: 0 GL errors in "* ]] && [ "$(crit "$o")" = 0 ] && grep -a -q "Bringing Level Menu.MyLevel up for play" "$o"; then
-    result PASS boot "$cls; $fs; $vs; ${e#UC2GLDrv: }; $(grep -a -o 'GLES hardware: .*' "$o"); $(grep -a -o 'capabilities: .*' "$o")"
+     && [[ "$e" == "UC2GLDrv: 0 GL errors in "* ]] && [ "$(crit "$o")" = 0 ] && grep -a -q "Bringing Level Menu.MyLevel up for play" "$o" \
+     && [ "$(grep -a -c '^Mesa: error' "$o")" = 0 ]; then
+    result PASS boot "$cls; $fs; $vs; ${e#UC2GLDrv: }; Mesa errors 0; $(grep -a -o 'GLES hardware: .*' "$o"); $(grep -a -o 'capabilities: .*' "$o")"
   else
-    result FAIL boot "class '$cls' fragment '$fs' vertex '$vs' errors '$e' critical $(crit "$o") (see $o)"
+    result FAIL boot "class '$cls' fragment '$fs' vertex '$vs' errors '$e' Mesa errors $(grep -a -c '^Mesa: error' "$o") critical $(crit "$o") (see $o)"
   fi
 }
 
