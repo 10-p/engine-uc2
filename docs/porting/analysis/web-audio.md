@@ -172,3 +172,95 @@ manifest generator does not follow symlinked directories: `readdirSync(recursive
 `isFile()`). Manifest: `node packages/glue/bin/generate-manifest.cjs run/m11audio-assets <scratch>/uc2-audio-
 file-manifest.json --exclude-from targets/uc2/target.json` -> 1223 files, 1899.1 MB (Sounds 421, Music 23,
 Movies 99, Textures 149 of which 87 movies); a superset of the committed 593-entry manifest.
+
+## Step 3 - O-2 in the browser: first green spec runs (2026-10-06)
+
+Build: `source ../env.sh; bin/capped 6G 5400 -- cmake --preset wasm-perf && cmake --build build-wasm-perf -j6`
+-> rc 0 after two fixes (ucc-bin.js malloc export, see step 2; `RF_ClassDefaultObject` does not exist in UE2).
+`SDLLaunch.wasm` 12,035,640 bytes, `ucc-bin.wasm` 11,739,858. Assembled with the frontend's own build into
+`run/m11audio-web` (`yarn build --target uc2 --engine-artifact .../build-wasm-perf/Source/SDLLaunch --out
+run/m11audio-web --assets run/m11audio-assets --manifest <scratch>/uc2-audio-file-manifest.json`, capped 4G 300,
+rc 0; serve-web/ untouched: its marker kept the renderer agent's 22:40 build).
+
+How the spec is pointed at that directory: `ufront-e2e.mjs` checks `serve-web/`'s marker (uc2: yes) and the
+Playwright webServer serves `serve-web/` on :8080 with `reuseExistingServer: true`, so the run starts the
+frontend's own server first, in the same capped scope, and Playwright reuses it:
+```
+m=$(pactl load-module module-null-sink sink_name=uc2test)
+PULSE_SINK=uc2test bin/capped 6G 600 -- bash -c 'node packages/build/bin/ufront-serve.mjs --port 8080 --root <WorkUC2>/run/m11audio-web & sleep 2;
+    node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=12 -- --target uc2 uc2-wasm-audio.spec.js'
+pactl unload-module $m
+```
+This is only correct when no other e2e run and nothing on :8080 exist: check `pgrep -af e2e-mem-guard` and
+`ss -ltn | grep :8080` and do NOT start otherwise (see the incident below).
+
+Run 1 (`logs/m11audio/e2e-1.out`): **2 passed (54.1 s)**, plus a teardown error "1 browser profile(s) outlived
+their test: profile-KPs5hJ" (lib/global-teardown.js; not explained yet). Literal record:
+```
+menu up after 8.3 s; music line after 8.3 s; [CTX] before any page input: running
+UC2ALAudio: OpenAL Soft backends: order web (the only backend of the web build): web initialised, null initialised; playing through web
+UC2ALAudio: 1.1 ALSOFT 1.25.2 on "Web Audio" (backend web) at 48000 Hz, 64 voices, reverb EFX (EAX reverb), loop points yes
+UC2ALAudio: 23 of 23 persistent cue tables read in 489 ms
+UC2Audio: [   1.34] music NuBattle: playing ../Sounds/../Music/NuBattle.ogg (44100 Hz, 2 ch, looping, volume -1500 mB, fade in 3.0 s; file read in 48 ms)
+UC2Audio: [   1.39] read wave pack A_Gameplay.ogp (532633 bytes) in 22 ms
+UC2Audio: [   1.35] first sound: A_Gameplay.MenuPageOpened
+[AUDIO-SKIPS] menu music: underruns=0 ... audible=0.979 ctx=running clock=0.999 lib=openal-soft-web | 2ch@48000 period=480 ring=1536/1440 target=1504 recentBurst=1024 mixerWorst=4.02ms mixerWorstGap=22.689ms burst=2048 quanta=4968
+[FETCH] Sounds: 27 files, 1 MiB; Music: 1 file (NuBattle.ogg); Movies: 0
+[MEM] browser PSS peak 1397 MiB, cgroup memory.peak 2952 MiB, wasm memory 256 MiB, JS heap 25 MiB
+-- test 2 (-NULLMOVIES) --
+UC2Movie: opened ../Movies/UC2_Logos.ogv for ..\Movies\UC2_Logos.xmv: Theora 640x480, 600 frames at 30 fps, Vorbis 44100 Hz 2 ch from ../Movies/UC2_Logos.ogv (880500 frames, padded to 882000); language int: international track 0
+UC2Audio: [   1.64] movie sound stream opened (44100 Hz, 2 ch, exclusive: other sounds paused)
+UC2Movie: ..\Movies\UC2_Logos.xmv ended at movie time 20.000 s, frame 599 of 600, 2170 pictures presented in 20.035 s
+UC2Movie: decode cost of ..\Movies\UC2_Logos.xmv: 2171 updates, 592 new pictures, 1.23 ms per update on average, 36.06 ms at most
+UC2Audio: movie sound stream closed after 20.000 s played
+[AUDIO-SKIPS] logos: underruns=0 audible=1 ctx=running clock=1.001 ... mixerWorst=3.189ms quanta=8164
+[FETCH] Movies: UC2_Logos.ogv 200 3 MiB; [MEM] browser PSS peak 1686 MiB, cgroup memory.peak 2990 MiB, wasm 256 MiB
+```
+Reading: the context was already `running` when the device opened, without any page input after the Start click
+(Chromium's autoplay rule for Web Audio uses the page's sticky activation: the Start click counts); the backend's
+own resume-on-gesture listeners are the fallback. Time to first sound: 1.35 s after the device opened (the
+menu's page sound), the music at 1.34 s; the device opens during the engine's Init, about 7 s after Start.
+Music file (2.6 MB) read in 40-48 ms on localhost; the whole wave pack A_Gameplay.ogp in 22 ms. The logos ran
+in real time on the web (20.035 s wall for 20.000 s of movie, the sound stream played exactly 20.000 s); the
+decode costs 1.23 ms per update on average, 36 ms at most (the first update includes the whole-file fetch).
+
+**Speaker safety, run 1**: the spec's `test.use({launchOptions})` with `--mute-audio` had NO effect: the suite's
+`lib/fixtures.js` launches its own persistent context and ignores launchOptions, and the config runs Chromium
+"headed" with `--headless=new` in its args, so Playwright's usual `--mute-audio` is not added either. What kept
+the sound off the owner's speakers in run 1 is only `PULSE_SINK=uc2test` (a null sink, loaded before and
+unloaded after; libpulse honours PULSE_SINK for a stream opened on the default device). The spec now makes its
+own context with lib/persistent-context's `launchPersistent({ extraArgs: ['--mute-audio'] })`.
+
+**Incident, run 2 attempt**: started while the renderer agent's e2e (`uc2-wasm-boot.spec.js`, its own capped
+6G scope) was running and its server held :8080 - my preflight printed both facts but the command did not stop
+on them. My server could not bind, my run would have reused THEIR server; my mem-guard killed my run at
+12.4 GB machine in-use ("over the 12 GB budget", exit 3) before any test result; their run carried on (its log
+shows the menu up and its GL milestones afterwards). Two browsers ran at once for a short time, against the rule.
+From now on the run command itself refuses to start unless `pgrep -f e2e-mem-guard` finds nothing and :8080 is
+free.
+
+Frontend commits (ufrontend, branch uc2, local): `03858a5` test(e2e) the spec + testMatch (opt-in),
+`f49e003` feat(targets) target.json (webAudio recommended, audioBuffer, cook by-products excluded) + README.
+Gates: `yarn test` 28/28, `yarn gates` "all CI-tier gates green", eslint + prettier clean on my files.
+
+## Step 4 - O-4 survey (2026-10-06)
+
+`cd run/m11audio/System && bin/capped 2G 1800 -- ./ucc-bin UC2ALAudio.UC2ZoneSurvey` (`logs/m11audio/
+zones-all.out`): **58 maps, 34 with a zone that is not Default; DM-Azure: 18 zones, all Default** (also OD-Azure).
+Cross-check with M8's in-game line for DM-Praxis: `Default x2 Auditorium x2 Hangar x1 Hallway x9 Underwater x1`,
+the same. Totals over all maps: Default x350 Generic x2 Room x4 Bathroom x5 LivingRoom x7 StoneRoom x14
+Auditorium x22 ConcertHall x3 Cave x11 Arena x6 Hangar x16 Hallway x119 StoneCorridor x15 Forest x1 City x17
+Mountains x4 Quarry x10 Plain x2 Underwater x2 NoReverb x5. Maps with Default only: OD-Azure, DM-Legacy,
+DM-Azure, DM-ColdFusion, DM-AcidRain, CTF-Gauntlet][, OD-Falls, Entry, Menu, DM-Nexus, DM-Undertow,
+CTF-TotalControl, ACT-SelketCheats, DM-Evilhands, CTF-ViperPit, ACT-BarrensAmbush, DM-Deadbolt, DM-Meridian,
+ACT-HallwayAmbush, DM-Eternal, OD-Zenith, CTF-Emperor, DM-Phoenix, DM-DeepCore.
+
+What the Xbox does instead (the owner hears reverb in DM-Azure): **one I3DL2 reverb with the Default preset, in
+every map and zone.** Evidence: the game's `xbox.bin` (ISO and epic-sources, 18,608 bytes, SHA-1 df4bc8c9...) is
+byte-identical to the XDK 5849 standard effects image `source/dsound/dsp/dsstdfx.bin`; its `dsstdfx.ini` puts
+`I3DL2Reverb` in `GraphI3DL2` with initial state `reverb_Default_24k_state.ini`; XACTAudioSubsystem.cpp loads
+that image with `dwI3DL2ReverbIndex = GraphI3DL2_I3DL2Reverb` and never sets a listener (zone switch `#if 0`).
+Every 3D sound reached it through its own I3DL2 send level from the XACT project: 1,694 sounds at 0 mB (full
+send), 733 at -300 mB, 1 at -333 mB; DM-Azure's own bank A_Azure: 13 sounds, all 0 mB. So in DM-Azure our device
+with ZoneReverb=True does what the Xbox did (Default preset everywhere, the same sends); in the 34 maps with other
+zone presets it differs from the Xbox by the owner's decision (zone reverb kept on).

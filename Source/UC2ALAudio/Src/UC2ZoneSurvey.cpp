@@ -61,7 +61,7 @@ INT UUC2ZoneSurveyCommandlet::Main( const TCHAR* Parms )
 			for( TObjectIterator<AZoneInfo> It; It; ++It )
 			{
 				AZoneInfo* Z = *It;
-				if( !Z->IsIn( Package ) || (Z->GetFlags() & RF_ClassDefaultObject) )
+				if( !Z->IsIn( Package ) )
 					continue;
 				Zones++;
 				INT E = Z->ZoneAudioEffect < UC2_NUM_ZONE_PRESETS ? Z->ZoneAudioEffect : 0;
