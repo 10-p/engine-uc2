@@ -148,3 +148,58 @@ fade has only taken 28%. Farther away (the owner's picture may be from farther t
 match it exactly) the difference grows: at 4000 units 36% -> 93%. Label: **seen only**, plus the numbers
 above; the Xbox reference shows the faded state, which `DistortionCullDistance=5000` reproduces by
 construction (same formula and constant as Epic's driver).
+
+### Step 5: O-5 pictures, the splash fade
+
+- `tools/dev/fx-owner.sh fx pool` and `UC2_BIN=uc2-before.bin tools/dev/fx-owner.sh fx pool` (same camera:
+  pawn at (8320,3480,-1218), yaw 16384, pitch -5000, third person, 1280x720, llvmpipe):
+  `logs/fx/fx-pool-before-on.png` (without the fix: the pool is the bare floor under a nearly invisible film),
+  `logs/fx/fx-pool-on.png` (with it: a darker water surface over the floor, the cube map's reflection with a
+  golden ring under the cobra and golden glints), `fx-pool-nowater.png` (FluidSurfaceInfo hidden).
+  Side by side with the owner's Xbox picture: `logs/fx/o5-pool-before-after-xbox.png` (before | after | xemu).
+  Against the Xbox: the golden ring at the far end and the floor seen through the water match; the Xbox shows
+  more golden streaks across the middle and its pool reads lighter (its camera is higher, its dynamic gamma
+  state and the mega health's glow differ); the mega health pickup had not spawned in my run. Label:
+  **matches the owner's Xbox screenshot in kind (water layer, golden reflections), not pixel-close; cameras
+  differ.**
+- Splash: `fx-pool-splash` drops the pawn into the pool (`logs/fx/o5-splash-strip.png`, 0.25 s steps; the
+  camera moves with the fall, so frames are not comparable pixel by pixel). The splash's distortion sprite
+  (`UCEM_Impact_Water_FootSplash.SpriteEmitter1`, `FX_Part_Shock_Combo_Distort_Shd`, FadeIn/FadeOut) fades by
+  particle alpha (`UParticleEmitter`, `Color -= FadeFactor * MaxFade` for the default draw style,
+  `UnParticleEmitter.cpp` 1279-1293); the sprite renderer calls `EnableLighting(0,1)` (RS_COLORVERTEX), so
+  the vertex shader gets ambient alpha 0 and the vertex alpha (D3DRenderState.cpp 483: same rule in our
+  `GetStateVertexShaderEnum`/uniforms), and `DistortionAccum.vsh` scales the distortion by that alpha: the
+  distortion fades with the particle exactly as on the Xbox. **Inferred from the code, not measured**; with
+  the water surface back the owner's "jarring" impression should be judged again. Not changed.
+
+### Step 6: O-6 conclusions so far
+
+- Not reproduced, on Mesa llvmpipe nor on this machine's NVIDIA Quadro P620 (the owner's GPU; driven headless
+  through SDL's offscreen video driver and EGL: `UC2_GPU=1 tools/dev/fx-owner.sh ...`, nothing on the owner's
+  display; GPU memory 617 -> 648 MiB during the run). First person, standing still at the cobra waterfall: the
+  waterfall is in the post-process list every frame, its accumulation covers about 25,000 texels of the
+  640x360 target with mean offsets (12.6,16.9) on NVIDIA and (12.8,15.6) on llvmpipe, the full-screen pass
+  moves the pixels behind it, and the offsets change every frame (the panner). Moving (virtual pad) only
+  changes the waterfall's size on screen (stats in `logs/fx/fx-wfmove*.out`). The NVIDIA post-process self-test
+  passes 10/10 (`logs/fx/gpu-selftest-0.out`, includes the depth copy). It is the only distortion item in the
+  frame in both first and third person, so "it only shows when a splash is also in the list" is not what
+  happens in these runs.
+- What the owner's two pictures differ in, that I can see: in third person the camera is farther, the
+  distortion texture is smaller on screen and its wobble has a higher spatial frequency, crossing the bright
+  block edge behind the water; in the close first-person view the same pixel offsets make a smooth, slow
+  displacement (texture magnified), which reads as "straight" in a still picture. That explains a weaker
+  look, not a complete absence; the owner's first-person picture shows a perfectly straight edge behind the
+  water, which my runs do not. **Status: not fixed (not reproduced). Needed from the owner: the exact spot,
+  window size, and whether it happens right after spawning or after switching views.**
+- "Waterfall drawn on top of the character" (third person): not reproduced as such. Two mechanisms of Epic's
+  method put the effect over the edge of a pawn standing in front of the water: the depth test of the
+  accumulation pass uses a half-size copy of the depth buffer (one depth sample per 2x2 pixels: thin parts
+  such as ears and horns are missed half the time), and the full-screen pass reads displaced pixels whatever
+  they belong to (defect 9 in postprocess.md). Both are the Xbox's design too (its copy target is half the
+  320x240 bloom size). Inferred, not changed.
+- Side finding on the NVIDIA GPU (outside O-5..O-7, reported for a separate task): the fixed-function path
+  has 4 texture units and no `combine3` there (`UC2GLDrv: 4 texture units (GL reports 4) ... combine3 no`), and
+  materials that need `D3DTOP_MODULATEALPHA_ADDCOLOR` fall back to another op: DM-Azure's wooden pillars
+  (`Shader T_NK_MeshSkins.Decorations.T_NKMesh_Deco_Wood02_Snow_SD`, stage 1 colour op 18 on llvmpipe, 5 =
+  MODULATE2X on NVIDIA, `logs/fx/fx-pillar*.out`) look like orange metal on NVIDIA and like wood on llvmpipe.
+  The cobra statue also looks different. NVIDIA has `GL_NV_texture_env_combine4`, which can express that op.

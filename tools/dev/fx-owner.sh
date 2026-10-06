@@ -80,7 +80,7 @@ scenario() {  # scenario <case>
   pool-splash)
     start DM-Azure
     place 8320 3480 -1218 16384 -5000
-    echo 'shot before'
+    echo 'shot dry'
     echo 'chan exec NETPLACE FxCam 8320 3800 -1150 16384 -5000'
     for i in 0 1 2 3 4 5 6 7; do echo 'sleep 0.25'; echo "shot t$i"; done
     ;;
