@@ -8,6 +8,10 @@
 #   tools/dev/fx-owner.sh list
 #   UC2_BIN=uc2-before.bin tools/dev/fx-owner.sh fx pool   another executable from the tree's System folder
 #                                                          (the pictures get the suffix "-before")
+#   UC2_GPU=1 tools/dev/fx-owner.sh fx waterfall-1p        render on this machine's GPU instead of Mesa
+#                                                          llvmpipe: SDL's offscreen video driver (EGL, no
+#                                                          window, nothing on the owner's display); the
+#                                                          pictures get the suffix "-gpu"
 #
 # Each case is one game run of tools/dev/m10-inject.py's scenario language (wait/sleep/chan/pad/shot) inside
 # <WorkUC2>/bin/capped 2G, headless (Xvfb, software GL), 1280x720, map URL <map>?Name=FxCam, -nostartupmovies,
@@ -27,23 +31,22 @@ sys=$work/run/$tree/System
 out=$work/logs/$tree
 bin=${UC2_BIN:-uc2.bin}
 suffix=""; [ "$bin" != uc2.bin ] && suffix="-${bin%.bin}"; suffix=${suffix/-uc2-/-}
+video=""; [ -n "${UC2_GPU:-}" ] && { video="SDL_VIDEODRIVER=offscreen"; suffix="$suffix-gpu"; }
 inject=$repo/tools/dev/m10-inject.py
 mkdir -p "$out"
 
 # The common start: level up, match started with Fire (left button, as run-uc2-shot.sh), invulnerable, view
 # pitch held.
 start() {  # start <map>
+  echo "wait Bringing Level $1.MyLevel up for play 150"
+  echo "sleep 6"
+  if [ -n "${UC2_GPU:-}" ]; then
+    # No game window on the X display: Fire is the virtual pad's right trigger.
+    printf 'pad attach\nsleep 1\npadtrigger righttrigger\nsleep 1\npadtrigger righttrigger\nsleep 1\npadtrigger righttrigger\nsleep 3\n'
+  else
+    printf 'focus\nmove 640 360\nclick 1\nsleep 1\nclick 1\nsleep 1\nclick 1\nsleep 3\n'
+  fi
   cat <<SCEN
-wait Bringing Level $1.MyLevel up for play 150
-sleep 6
-focus
-move 640 360
-click 1
-sleep 1
-click 1
-sleep 1
-click 1
-sleep 3
 chan exec God
 chan exec SetAutoCenterPitch 0
 sleep 1
@@ -59,8 +62,9 @@ pool|DM-Azure|150|O-5: the centre pool from the near rim, third person, looking 
 pool-splash|DM-Azure|150|O-5: the pawn dropped into the pool; shots every 0.25 s from the splash on
 waterfall-1p|DM-Azure|170|O-6: first person in front of the cobra waterfall: still (two shots), strafing with the pad (two shots), still again
 waterfall-3p|DM-Azure|150|O-6: the same spot in third person: still, then the view turned so the waterfall is between camera and pawn
-praxis-near|DM-Praxis|150|O-7: the window panes from close (owner'"'"'s PraxisWindowPanesClose.png)
-praxis-far|DM-Praxis|150|O-7: the panes across the round room (owner'"'"'s PraxisWindowPanesDistance.png)
+praxis-near|DM-Praxis|150|O-7: a large window pane from close (owner'"'"'s PraxisWindowPanesClose.png), time frozen: "xbox" with DistortionCullDistance 5000, "raised" with 15000 (no visible change expected this close)
+praxis-far|DM-Praxis|150|O-7: the panes of the round room from the ledge at the first PlayerStart, about 2650 units away (owner'"'"'s PraxisWindowPanesDistance.png), time frozen: "xbox" (5000), "raised" (15000), "nofade" (1000000), and "off" (no distortion at all: all PSDistortionMaterial amounts 0)
+custom|FXMAP|150|an ad-hoc scenario: FX_SCENARIO=<file> (lines after the common start), FX_MAP=<map>, FX_NAME=<name>
 '
 
 scenario() {  # scenario <case>
@@ -100,13 +104,23 @@ scenario() {  # scenario <case>
     ;;
   praxis-near)
     start DM-Praxis
-    place -60 -520 -40 -16384 0
-    echo 'shot near'
+    place 0 1850 450 16384 0
+    echo 'chan exec set LevelInfo TimeDilation 0.0001'; echo 'sleep 1'
+    echo 'chan exec DISTORTIONCULLDISTANCE 5000'; echo 'sleep 0.5'; echo 'shot xbox'
+    echo 'chan exec DISTORTIONCULLDISTANCE 15000'; echo 'sleep 0.5'; echo 'shot raised'
     ;;
   praxis-far)
     start DM-Praxis
-    place -60 1100 120 -16384 -1000
-    echo 'shot far'
+    place -1220 288 690 5220 -600
+    echo 'chan exec set LevelInfo TimeDilation 0.0001'; echo 'sleep 1'
+    echo 'chan exec DISTORTIONCULLDISTANCE 5000'; echo 'sleep 0.5'; echo 'chan exec GLPIXTRACE 360 380 all'; echo 'sleep 0.5'; echo 'shot xbox'
+    echo 'chan exec DISTORTIONCULLDISTANCE 15000'; echo 'sleep 0.5'; echo 'chan exec GLPIXTRACE 360 380 all'; echo 'sleep 0.5'; echo 'shot raised'
+    echo 'chan exec DISTORTIONCULLDISTANCE 1000000'; echo 'sleep 0.5'; echo 'chan exec GLPIXTRACE 360 380 all'; echo 'sleep 0.5'; echo 'shot nofade'
+    echo 'chan exec set PSDistortionMaterial DistortionAmount 0'; echo 'sleep 0.5'; echo 'shot off'
+    ;;
+  custom)
+    start "${FX_MAP:-DM-Azure}"
+    cat "$FX_SCENARIO"
     ;;
   esac
 }
@@ -120,8 +134,10 @@ want=" $* "
 echo "$CASES" | while IFS='|' read -r name map secs what; do
   [ -n "$name" ] || continue
   if [ "$want" != "  " ] && [ "${want#* $name }" = "$want" ]; then continue; fi
+  [ "$map" = FXMAP ] && map=${FX_MAP:-DM-Azure}
+  [ "$name" = custom ] && [ -n "${FX_NAME:-}" ] && name=$FX_NAME
   tag=fx-$name$suffix
-  scen=$(mktemp); scenario "$name" > "$scen"
+  scen=$(mktemp); { if [ -n "${FX_NAME:-}" ] && [ "$name" = "$FX_NAME" ]; then scenario custom; else scenario "$name"; fi; echo 'sleep 1.5'; } > "$scen"
   cp -f "$repo"/Engine/Config/*.ini "$sys/"
   sed -i -E "s/^(WindowedViewportX|FullscreenViewportX)=.*/\\1=1280/; s/^(WindowedViewportY|FullscreenViewportY)=.*/\\1=720/" "$sys/Default.ini"
   rm -f "$sys/Avaris.ini" "$sys/User.ini" "$sys"/Shot*.bmp "$out/$tag"-*.png "$out/$tag".result*
@@ -129,7 +145,7 @@ echo "$CASES" | while IFS='|' read -r name map secs what; do
   inner=$(mktemp)
   cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy ./$bin "$map?Name=FxCam" -log -nostartupmovies -glerrors -inputtest="$chan" > "$out/$tag.out" 2>&1 &
+SDL_AUDIODRIVER=dummy $video ./$bin "$map?Name=FxCam" -log -nostartupmovies -glerrors -inputtest="$chan" > "$out/$tag.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$tag.out" "$chan" "$out/$tag.result" > "$out/$tag.inject" 2>&1
 kill -TERM \$pid 2>/dev/null

@@ -105,3 +105,46 @@ not read. Left as is.
 - Tools: `tools/dev/fx-owner.sh` (scenario runner on top of `m10-inject.py`: fixed camera, the virtual pad for
   movement, shots); `tools/dev/run-uc2-shot.sh` takes `UC2_BIN=` (a second executable in the same tree for
   before/after pictures; `run/fx/System/uc2-before.bin` = this branch without the cube-map fix).
+
+### Step 4: O-7, the DM-Praxis panes at a distance: the knob, measured, then raised (tuning, as the owner asked)
+
+The coordinator relayed the owner's clarification: "not meant to be a fix per se but figure out what tuneable is
+there AND THEN increase it"; the effect itself is not to be restructured.
+
+Facts (`logs/fx/praxis-probe-0.out`, `fx-praxis-far.out`):
+- The panes are `StaticMeshActor`s with `StaticMesh DM-Praxis.Arch.S_Praxis_DistWindow01` (two groups, at
+  (0,-672,432) and (0,2208,432)) and `S_Praxis_Window_Distortion_01` (-2720,128,192); material
+  `PSDistortionMaterial DM-Praxis.Effects.T_Praxis_Largewindow_Dists01`: DistortionAmount 30, Mask
+  `T_Praxis_DiskMask01`, distortion texture `TexScaler T_Praxis_Largewindow_DistScaler01`. Every pane actor has
+  `CullDistance` 0 (never culled). Nothing in `FPostProcessRender::Render` or the post-process list culls by
+  distance or screen size.
+- **The knob that sets the range**: `DISTORTION_CULL_DISTANCE = 5000.f` in Epic's
+  `FD3DRenderInterface::HandlePSVertexShader` (`Source/D3DDrv/Src/D3DMaterialState.cpp` 1377), passed as
+  `VSC_DISTORTION_SCALE.z = 1/5000` to `DistortionAccum.vsh`, which multiplies each vertex's distortion by
+  `1 - saturate(z * 1/5000)^2` (z = camera-space depth). 75% left at 2500 units, 36% at 4000, 0 at 5000. Our port
+  had the same constant (`Source/UC2GLDrv/Src/UC2GLMaterialState.cpp`, `HandlePSVertexShader`).
+- A second, smaller factor with its own constant (not changed): the accumulation pass samples the distortion
+  texture with `TextureMipLODBias = -1.8f` (`D3DPSMaterialState.cpp` 372; ours `UC2GLPSMaterialState.cpp` 383);
+  far away the texture is minified and its mip levels average the offsets towards zero. Measured at the far
+  view: a stronger bias (-4 or -8, identical: the mip chain bottoms out) adds about 15% to the mean offset.
+  Also inherent and not a knob: the displacement is in screen pixels (at most `MaxDistortion` = 35 of 480),
+  so a pane far away moves the same few pixels while it gets smaller; and the accumulation target is half
+  the screen size.
+- Measured at the view of the first PlayerStart (-1220,288,690, yaw 5220, the round room's panes about 2650
+  units away; frozen time; mean accumulated offset r,g over the 4582 texels the panes cover):
+  DistortionCullDistance 5000 (Xbox): 6.32, 9.97; 15000: 8.51, 13.33; 1000000 (no fade): 8.81, 13.78.
+  Close to a pane (0,1850,450): 10.41, 18.04 over 51,713 texels.
+
+Change: the constant is now a setting, `[UC2GLDrv.UC2GLRenderDevice] DistortionCullDistance` (read at the first
+distortion draw; missing or not positive = 5000, the Xbox value), console `DISTORTIONCULLDISTANCE [<units>]`.
+`Engine/Config/Default.ini` sets 15000: 97% of the distortion is left at 2650 units, 89% at 5000. Row in
+`Engine/Config/README.md`. Nothing else about the effect changes.
+
+Pictures (`tools/dev/fx-owner.sh fx praxis-far praxis-near`): `logs/fx/fx-praxis-far-xbox.png` (5000),
+`-raised.png` (15000), `-nofade.png`; crop `logs/fx/o7-praxis-far-xbox-vs-raised-crop.png` (2x, top 5000,
+bottom 15000). At this camera the difference is visible but modest (mean pixel difference in the pane area
+about 1 of 255: pane edges and the white lamps a little more displaced), because 2650 units is where the Xbox
+fade has only taken 28%. Farther away (the owner's picture may be from farther than my camera; I could not
+match it exactly) the difference grows: at 4000 units 36% -> 93%. Label: **seen only**, plus the numbers
+above; the Xbox reference shows the faded state, which `DistortionCullDistance=5000` reproduces by
+construction (same formula and constant as Epic's driver).
