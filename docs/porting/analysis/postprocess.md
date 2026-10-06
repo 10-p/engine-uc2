@@ -229,6 +229,10 @@ run) and what has not:
   for a space. Log line `UC2GLDrv: -glexec at <s> s (frame N): <command>`.
 - `-glshotramp`: screenshots include the dynamic gamma ramp (they are read before the present pass otherwise).
 - console `DOFSHIPPEDALPHA [0|1]`, ini `DOFShippedBlurAlpha`.
+- (fx-fixes, O-7) console `DISTORTIONCULLDISTANCE [<units>]`, ini `DistortionCullDistance`: the `5000` of the
+  `DistortionAccum.vsh` row above (Epic's `DISTORTION_CULL_DISTANCE`) is a setting now, default 15000, Xbox 5000.
+  Debug: `GLPIXTRACE <x> <y> [all]` (what the next frame draws over a pixel; the distortion accumulation target's
+  statistics). Both in `analysis/fx-fixes.md`.
 
 How each effect is triggered from the console (bindable or through `-glexec`):
 
