@@ -276,3 +276,28 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   `net-loss`. Never exercised: team games online, package download, more than 3 clients, server browser.
   Owner entry points added the same day: `bin/play-uc2` (native, own display) and the web preview service
   `uc2-preview` on port 8096 (`bin/publish-preview`).
+- 2026-10-06 — **Network loss defects fixed (`net-loss`, merged e7e6d23).** Two causes of the hung join (a
+  lost handshake message was never resent; the client now gives up a stalled handshake, measured from the last
+  server message and after dispatch, with the engine's normal error) and a worse one found on the way: after
+  the packet-id wrap, lost property updates were never resent (a client's scores went silently stale minutes
+  into a lossy match; `-NETOLDACKS` keeps Epic's ack logic for comparison). Deterministic drop tests
+  (`NETDROP=`, `NETPKTID=`, checks `handshake-loss`, `handshake-compat`). Coordinator's run on merged main,
+  `NET_SOAK_MIN=10 tools/dev/net-test.sh`: **89 PASS, 0 FAIL** (`logs/coord/a1-net.log`).
+- 2026-10-06 — **M13 green (64-bit).** Merged `m13-64bit` (064dd20): `native64` (LP64) plays; every
+  pointer-width site fixed at its declaration (`analysis/64bit.md` site table), a 64-bit mode of
+  `verifyclasses`, saved profiles byte-identical between 32- and 64-bit builds (the POSIX file manager now
+  reports directories as existing, which saved profiles needed), `windows64` builds and passes the wine smoke
+  (per the agent), an `arm64` preset (toolchain now installed by the owner; not yet built). Coordinator's run
+  of `tools/dev/m13-64bit.sh` on merged main: verify, census 58/58 (same per-map result as 32-bit), controls
+  5/5, audio, movies, glselftest 10/10, effects 14/14, pinned 64 vs 32 (static part 99.997% within 2 levels),
+  psh2glsl, saves, soak 1200 s (RSS +1.5%), leftovers: **all PASS** (`logs/coord/a1-m13.log`).
+- 2026-10-06 — **Web sound and movies, native output hardening (`m11-audio`, merged 14494a0).** UC2ALAudio on
+  openal-soft's Web Audio backend in the browser, the movie player active on the web, explicit backend order
+  natively (pipewire, pulse, alsa, oss; the chosen one logged), movie textures without a picture show their
+  fallback or black instead of the engine's green default texture (the owner's "videos play green"), a zone
+  survey (`UC2ALAudio.UC2ZoneSurvey`: DM-Azure's 18 zones are all Default; the Xbox runs one fixed Default
+  reverb fed by per-sound send levels, which our device does too). Agent's evidence: audio suite 39/0,
+  movie self-test 99/0, m9-movies 19/0, the wasm32 code under Node 39/0 and 99/0, browser spec
+  `uc2-wasm-audio.spec.js` 3/3 twice (Web Audio device, menu music, output not silent by an analyser, logos with
+  sound and skippable). Asset tree v1 (8cbea58) carries the cooked folders; frontend manifest regenerated
+  (ufrontend 05862c4, 1,223 files). Coordinator re-verification on main after the renderer merge.
