@@ -23,6 +23,7 @@
 #   M10_MEM=3G              capped's ceiling (default 2G)
 #   M10_PROC=uc2.exe        process name for the "left running" check (default uc2.bin)
 #   M10_SECS=1500          --file only: the run's time limit in seconds (default 240; M13's soak is longer)
+#   M10_KEEP=1              do not reset the tree first: keep the inis and saved profiles the last run left (default: reset)
 #   M10_URL=<url>           map URL given to the game as its first argument (default none: the menu)
 #   M10_SETTLE=12           seconds between "level up for play" and the Fire that starts the match (default 6;
 #                           under wine the first frames of the level come later and an early Fire is lost)
@@ -46,6 +47,8 @@ mkdir -p "$out"
 # also un-suppresses the DevUI/DevGUI log names (the GUI's own "OpenMenu"/"handled XC_*" lines) in the run
 # tree's copy only.
 prep_tree() {
+  # C-2: M10_KEEP=1 runs on the tree as the previous run left it (saved profiles, derived inis): a restart test.
+  [ -z "${M10_KEEP:-}" ] || return 0
   cp -f "$repo"/Engine/Config/*.ini "$sys/"
   sed -i '/^Suppress=DevUI\r\?$/d; /^Suppress=DevGUI\r\?$/d' "$sys/Default.ini"
   rm -f "$sys/Avaris.ini" "$sys/User.ini" "$sys"/Shot*.bmp

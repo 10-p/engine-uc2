@@ -5241,6 +5241,18 @@ void UObject::RemoveNames( DWORD RemoveFlags, DWORD KeepFlags )
 	GConfig->Flush(0);
 #endif
 
+	// engine-uc2: the config cache is dropped by UnloadAll() below, and with it every value that was set but
+	// not written yet. SetString (appApplyIniOverrides' `-ini:` switches, FURL::SaveURLConfig's [DefaultPlayer]
+	// name/class/weapons, the launcher's resolution switches) only marks the ini dirty; only SaveConfig flushes.
+	// Whenever no SaveConfig ran before the next garbage purge (every level change, and StaticExit, which runs
+	// BEFORE appExit's own flush) those values were lost: `ucc-bin ... -ini:System:[S]:K=V` never reached the
+	// ini, and on the web nothing else writes the inis before the tab is closed. Write the dirty files first,
+	// while the FNames the cache is keyed by are still valid. (The Xbox never writes inis.)
+#ifndef _XBOX
+	if( GConfig )
+		GConfig->Flush( 0 );
+#endif
+
 	for( INT i=0; i<FName::GetMaxNames(); i++ )
 	{
 		FNameEntry* Name = FName::GetEntry(i);

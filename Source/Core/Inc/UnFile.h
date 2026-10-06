@@ -306,6 +306,12 @@ CORE_API const TCHAR* appCmdLine();
 // True when a command-line token is a global option of the form Key=Value rather than a map URL
 // (a URL's own options follow a '?', so "DM-Map?Name=x" is a URL and "Name=x" is an option).
 CORE_API UBOOL appIsGlobalOptionToken( const TCHAR* Token );
+// Apply every `-ini:<File>:[<Section>]:<Key>=<Value>` token on the command line (engine-ut2004's switch,
+// ported for the launcher's player name and any per-launch setting). <File> is the config cache's generic
+// name (`System` = Avaris.ini, `User` = User.ini) or a literal ini name. A value with spaces needs the whole
+// token quoted ("-ini:...=a b"); the value is WRITTEN into the ini (the file is marked dirty), not just
+// overridden for the run. Called once by appInit, right after GConfig->Init.
+CORE_API void appApplyIniOverrides();
 CORE_API const TCHAR* appBaseDir();
 CORE_API const TCHAR* appPackage();
 CORE_API const TCHAR* appComputerName();

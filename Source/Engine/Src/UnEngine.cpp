@@ -305,6 +305,23 @@ UBOOL UEngine::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UEngine::Exec);
 
+	// FLUSHCONFIG: write the config cache to the file system now (engine-ut2004's command of the same name,
+	// ufront 2.28; the web host calls it through ue_exec_command, SDLLaunchWeb.cpp, before it reads the inis
+	// to keep them). A browser tab is closed, never shut down, so nothing may wait for appExit's flush; and a
+	// value that was only set (SetString: the -ini: overrides, SaveURLConfig's [DefaultPlayer] values, the
+	// resolution switches) is not written by anything else until a SaveConfig or the exit. First in the chain
+	// so that no subsystem can claim it; the reply is what the host reads to know the engine acted.
+	{
+		const TCHAR* FlushStr = Cmd;
+		if( ParseCommand(&FlushStr,TEXT("FLUSHCONFIG")) )
+		{
+			if( GConfig )
+				GConfig->Flush( 0 );
+			Ar.Log( TEXT("ufront: flushed config to disk (ok)") );
+			return 1;
+		}
+	}
+
 	// See if any other subsystems claim the command.
 	if( GSys    && GSys->Exec		(Cmd,Ar) ) return 1;
 //#ifdef _XBOX

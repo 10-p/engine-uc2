@@ -1977,6 +1977,58 @@ CORE_API UBOOL appIsGlobalOptionToken( const TCHAR* Token )
 	return 0;
 }
 
+//
+// Apply every `-ini:<File>:[<Section>]:<Key>=<Value>` token on the command line. See UnFile.h.
+//
+// Ported from engine-ut2004 (UnMisc.cpp), where the launcher's "Player Name" box emits
+// `-ini:User:[DefaultPlayer]:Name=<name>`; nothing read it until the switch was implemented. The
+// file part uses the config cache's generic names (FConfigCacheIni::ValidateFileName), so `System` and
+// `User` resolve to this build's inis (Avaris.ini and User.ini) and no path is hardcoded here. Applied
+// straight after GConfig->Init, before any class loads its config properties.
+//
+// What to know:
+//  - The value is stored with SetString, which marks the ini dirty: it is WRITTEN to the ini when the
+//    config cache flushes (at exit, or by `flushconfig`). That is deliberate (one mechanism, and the web
+//    persistence daemon keeps the ini), but it means a launch-only override does not exist.
+//  - Spaces: the launchers join argv with plain spaces (no re-quoting), and ParseToken splits on spaces,
+//    so a value with spaces must reach us as ONE token in double quotes: argv element
+//    `"-ini:System:[Sec]:Key=a b"` (the quotes are part of the element, as the frontend emits them).
+//    `=`, `?` and `:` inside the value are fine (the first `=` after `]:` ends the key); a double quote
+//    inside the value is not (it ends the token).
+//  - A token that starts with `-ini:` but cannot be parsed is logged and ignored: an unrecognised switch
+//    is otherwise silence.
+//
+CORE_API void appApplyIniOverrides()
+{
+	guard(appApplyIniOverrides);
+	if( !GConfig )
+		return;
+	const TCHAR* Stream = appCmdLine();
+	TCHAR Token[1024];
+	while( ParseToken( Stream, Token, ARRAY_COUNT(Token), 0 ) )
+	{
+		if( appStrnicmp( Token, TEXT("-ini:"), 5 )!=0 )
+			continue;
+		// -ini:<File>:[<Section>]:<Key>=<Value>
+		TCHAR* File = Token + 5;
+		TCHAR* Open = appStrstr( File, TEXT(":[") );
+		TCHAR* Section = Open ? Open + 2 : NULL;
+		TCHAR* Close = Section ? appStrstr( Section, TEXT("]:") ) : NULL;
+		TCHAR* Key = Close ? Close + 2 : NULL;
+		TCHAR* Eq = Key ? appStrstr( Key, TEXT("=") ) : NULL;
+		if( !Eq || Eq==Key || Open==File || Close==Section )
+		{
+			debugf( NAME_Warning, TEXT("Ini override ignored (expected -ini:<File>:[<Section>]:<Key>=<Value>): %s"), Token );
+			continue;
+		}
+		TCHAR* Value = Eq + 1;
+		*Open = 0; *Close = 0; *Eq = 0;
+		GConfig->SetString( Section, Key, Value, File );
+		debugf( NAME_Init, TEXT("Ini override: [%s] %s=%s (%s)"), Section, Key, Value, File );
+	}
+	unguard;
+}
+
 CORE_API void appInit( const TCHAR* InPackage, const TCHAR* InCmdLine, FMalloc* InMalloc, FOutputDevice* InLog, FOutputDeviceError* InError, FFeedbackContext* InWarn, FFileManager* InFileManager, FConfigCache*(*ConfigFactory)(), UBOOL RequireConfig )
 {
 	guard(appInit);
@@ -2097,6 +2149,10 @@ CORE_API void appInit( const TCHAR* InPackage, const TCHAR* InCmdLine, FMalloc* 
  	// Init config.
 	GConfig = ConfigFactory();
 	GConfig->Init( GIni, GUserIni, RequireConfig );
+
+	// `-ini:<File>:[<Section>]:<Key>=<Value>` switches (the launcher's player name, per-launch settings): after
+	// the inis are known and before anything reads them, notably the language below.
+	appApplyIniOverrides();
 
 	// Language.
 #ifdef _XBOX
