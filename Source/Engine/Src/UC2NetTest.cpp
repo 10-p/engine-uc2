@@ -360,3 +360,107 @@ ENGINE_API void UC2NetTestTick( UGameEngine* Engine )
 	}
 	unguard;
 }
+
+/*-----------------------------------------------------------------------------
+	NETDROP=<spec>[,<spec>...]: deterministic packet loss for the network tests
+	(tools/dev/net-test.py handshake-loss). Read once from the command line; inert without it.
+	  <TEXT>[#n][+k]    when this process SENDS a control message starting with TEXT for the n-th time
+	                    on a connection (default 1), the packet carrying it is lost, and k more after it
+	  <<TEXT>[#n][+k]   when this process RECEIVES it for the n-th time, its next k outgoing packets on
+	                    that connection are lost (default k 1)
+	Hooks: UNetConnection::Serialize (sent text), UControlChannel::ReceivedBunch (received text),
+	UNetConnection::FlushNet (the drop, DO_ENABLE_NET_TEST like Epic's PktLoss/PktLag).
+-----------------------------------------------------------------------------*/
+
+struct FUC2DropSpec
+{
+	FString Text;
+	UBOOL	bReceived;
+	INT		Nth;
+	INT		Extra;
+};
+#define UC2_MAX_DROP_SPECS 16
+struct FUC2DropState
+{
+	INT		Seen[UC2_MAX_DROP_SPECS];	// per spec: occurrences on this connection (plain data: TMap copies values)
+	INT		Armed;						// packets still to drop
+	INT		Dropped;
+};
+static TArray<FUC2DropSpec>* GDropSpecs = NULL;
+static TMap<UNetConnection*,FUC2DropState>* GDropState = NULL;
+
+static UBOOL DropInit()
+{
+	static UBOOL Done = 0;
+	if( !Done )
+	{
+		Done = 1;
+		FString All;
+		if( Parse(appCmdLine(), TEXT("NETDROP="), All) && All.Len() )
+		{
+			GDropSpecs = new TArray<FUC2DropSpec>;
+			GDropState = new TMap<UNetConnection*,FUC2DropState>;
+			while( All.Len() )
+			{
+				FString One;
+				INT Comma = All.InStr( TEXT(",") );
+				if( Comma>=0 ) { One = All.Left(Comma); All = All.Mid(Comma+1); }
+				else { One = All; All = TEXT(""); }
+				FUC2DropSpec S;
+				S.bReceived = One.Left(1)==TEXT("<");
+				if( S.bReceived )
+					One = One.Mid(1);
+				S.Nth = 1;
+				S.Extra = S.bReceived ? 1 : 0;
+				INT Plus = One.InStr( TEXT("+") );
+				if( Plus>=0 ) { S.Extra = appAtoi( *One.Mid(Plus+1) ); One = One.Left(Plus); }
+				INT Hash = One.InStr( TEXT("#") );
+				if( Hash>=0 ) { S.Nth = appAtoi( *One.Mid(Hash+1) ); One = One.Left(Hash); }
+				S.Text = One;
+				if( GDropSpecs->Num() < UC2_MAX_DROP_SPECS )
+					new(*GDropSpecs) FUC2DropSpec( S );	// placement copy: AddItem assigns into raw memory
+				debugf( NETPROBE, TEXT("netdrop: %s %s #%i +%i"), S.bReceived ? TEXT("on receiving") : TEXT("on sending"), *S.Text, S.Nth, S.Extra );
+			}
+		}
+	}
+	return GDropSpecs!=NULL;
+}
+
+ENGINE_API void UC2NetTestNoteText( UNetConnection* Connection, const TCHAR* Text, UBOOL bSending )
+{
+	if( !DropInit() || !Connection )
+		return;
+	FUC2DropState* St = GDropState->Find( Connection );
+	if( !St )
+	{
+		FUC2DropState New;
+		appMemzero( &New, sizeof(New) );
+		St = &GDropState->Set( Connection, New );
+	}
+	for( INT i=0; i<GDropSpecs->Num(); i++ )
+	{
+		FUC2DropSpec& S = (*GDropSpecs)(i);
+		if( S.bReceived==bSending || appStrnicmp(Text, *S.Text, S.Text.Len())!=0 )
+			continue;
+		if( ++St->Seen[i]==S.Nth )
+		{
+			// Sent text: its own packet (the next flush) plus Extra; received text: the next Extra packets.
+			St->Armed += bSending ? 1 + S.Extra : S.Extra;
+			debugf( NETPROBE, TEXT("netdrop: %s '%s' #%i on %s: dropping the next %i outgoing packet(s)"),
+				bSending ? TEXT("sending") : TEXT("received"), *S.Text, S.Nth, *Connection->LowLevelGetRemoteAddress(), St->Armed );
+		}
+	}
+}
+
+ENGINE_API UBOOL UC2NetTestDropPacket( UNetConnection* Connection )
+{
+	if( !GDropSpecs || !Connection )
+		return 0;
+	FUC2DropState* St = GDropState->Find( Connection );
+	if( !St || St->Armed<=0 )
+		return 0;
+	St->Armed--;
+	St->Dropped++;
+	debugf( NETPROBE, TEXT("netdrop: lost packet %i (%i bytes) to %s"), Connection->OutPacketId, Connection->Out.GetNumBytes(), *Connection->LowLevelGetRemoteAddress() );
+	return 1;
+}

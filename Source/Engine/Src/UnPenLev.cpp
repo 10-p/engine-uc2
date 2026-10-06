@@ -28,6 +28,9 @@ IMPLEMENT_CLASS(UPendingLevel);
 	UNetPendingLevel implementation.
 -----------------------------------------------------------------------------*/
 
+// uc2 port: NetDriver->Time of the last control message the pending connection received (or 0 at creation).
+static FLOAT GUC2HandshakeProgress = 0.f;
+
 //
 // Constructor.
 //
@@ -66,6 +69,9 @@ UNetPendingLevel::UNetPendingLevel( UEngine* InEngine, const FURL& InURL )
 	{
 		bSameHostAsLast = false;
 	}
+
+	// uc2 port: handshake progress clock (Tick); one pending level exists at a time.
+	GUC2HandshakeProgress = 0.f;
 
 	// Try to create network driver.
 	UClass* NetDriverClass = StaticLoadClass( UNetDriver::StaticClass(), NULL, TEXT("ini:Engine.Engine.NetworkDevice"), NULL, LOAD_NoFail, NULL );
@@ -162,6 +168,7 @@ void UNetPendingLevel::NotifyReceivedText( UNetConnection* Connection, const TCH
 	guard(UNetPendingLevel::NotifyReceivedText);
 	check(Connection==NetDriver->ServerConnection);
 	debugf( NAME_DevNet, TEXT("PendingLevel received: %s  %f/%f"), Text, NetDriver->Time, Connection->LastReceiveTime );
+	GUC2HandshakeProgress = NetDriver->Time;	// uc2 port: see Tick
 
 	// This client got a response from the server.
 	//scion bcl -- promoted from Championship
@@ -624,12 +631,26 @@ void UNetPendingLevel::Tick( FLOAT DeltaTime )
 	if( NetDriver->ServerConnection->State==USOCK_Closed && Error==TEXT("") )
 		Error = LocalizeError(TEXT("ConnectionFailed"),TEXT("Engine"));
 
+
 	if ( Error != TEXT("") )
 		return;
 
 	// Update network driver.
 	NetDriver->TickDispatch( DeltaTime );
 	NetDriver->TickFlush();
+
+	// uc2 port: a handshake that stops making progress before WELCOME fails after InitialConnectTimeout without a
+	// control message from the server. The server's acks of our keep-alives keep the connection from timing out,
+	// so a server that lost its CHALLENGE and never resends it (Epic's UC2 ack logic, fixed in UnConn.cpp; an
+	// unfixed server still does it) left the client waiting in the menu forever. Measured from the last message
+	// received (UC2HandshakeProgress), after this tick's packets were processed, so a long frame on our side
+	// (software GL starting up) does not count. Downloads start only after WELCOME and are not limited by this.
+	if( !Success && Error==TEXT("") && NetDriver->ServerConnection
+	&&	NetDriver->Time - GUC2HandshakeProgress > NetDriver->InitialConnectTimeout )
+	{
+		debugf( NAME_DevNet, TEXT("Pending connection: no message from the server for %.0f s before WELCOME, giving up"), NetDriver->InitialConnectTimeout );
+		Error = LocalizeError(TEXT("ConnectionFailed"),TEXT("Engine"));
+	}
 	
 	//epic moelfke: tick any temporary spectator PlayerControllers
 	if (bPreloadedLevel)

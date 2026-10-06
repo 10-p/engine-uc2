@@ -9,6 +9,36 @@
 #include "EnginePrivate.h"
 #include "UnNet.h"
 
+#if DO_ENABLE_NET_TEST
+// uc2 port: the network tests' deterministic packet drop (Engine/Src/UC2NetTest.cpp).
+ENGINE_API UBOOL UC2NetTestDropPacket( UNetConnection* Connection );
+ENGINE_API void UC2NetTestNoteText( UNetConnection* Connection, const TCHAR* Text, UBOOL bSending );
+#endif
+
+// uc2 port: packet ids are _WORDs that wrap modulo MAX_PACKETID-1 (FlushNet), so "later than" must be decided
+// modulo that range, as UT2004 does with MakeRelative on INT ids. Signed distance from B to A.
+#if DO_ENABLE_NET_TEST
+// The network tests' compatibility switch NETOLDACKS: this process keeps Epic's UC2 ack logic (ids from 0 with
+// OutAckPacketId 0, plain comparisons), to run a fixed and an unfixed end against each other.
+static INT GUC2OldAcks = -1;
+static UBOOL UC2OldAcks()
+{
+	if( GUC2OldAcks<0 )
+		GUC2OldAcks = ParseParam( appCmdLine(), TEXT("NETOLDACKS") ) ? 1 : 0;
+	return GUC2OldAcks;
+}
+#else
+static UBOOL UC2OldAcks() { return 0; }
+#endif
+static inline INT PacketIdDelta( INT A, INT B )
+{
+	if( UC2OldAcks() )
+		return A - B;
+	const INT M = MAX_PACKETID - 1;
+	INT D = ((A - B) % M + M) % M;
+	return D > M/2 ? D - M : D;
+}
+
 
 /*-----------------------------------------------------------------------------
 	UNetConnection implementation.
@@ -31,8 +61,8 @@ UNetConnection::UNetConnection( UNetDriver* InDriver, const FURL& InURL )
 ,	QueuedBytes			( 0 )
 ,	URL					( InURL )
 ,	StatPeriod          ( 1.f  )
-,	OutAckPacketId		( 0 )
-,	InPacketId			( 0 )
+,	OutAckPacketId		( MAX_PACKETID - 2 )	// uc2 port: "the id before 0" (UT2004: -1), so packet 0 can be NAKed
+,	InPacketId			( MAX_PACKETID - 2 )
 ,	LagAcc				( 9999 )
 ,	BestLagAcc			( 9999 )
 ,	BestLag				( 9999 )
@@ -48,6 +78,19 @@ UNetConnection::UNetConnection( UNetDriver* InDriver, const FURL& InURL )
 	Parse(appCmdLine(),TEXT("PktOrder="),PktOrder);
 	Parse(appCmdLine(),TEXT("PktDup="),  PktDup);
 	Parse(appCmdLine(),TEXT("PktLag="),  PktLag);
+	// uc2 port: the network tests' wrap test: NETPKTID=<n> starts this side's packet ids at n, so a short test
+	// crosses the packet-id wrap (16382 -> 0) that a real connection reaches after ~16k packets (~4.5 min at 60/s).
+	{
+		INT StartId = 0;
+		if( UC2OldAcks() )
+			OutAckPacketId = InPacketId = 0;
+		if( Parse(appCmdLine(),TEXT("NETPKTID="), StartId) )
+		{
+			// As on a connection that has been running: everything up to the previous id counts as acked.
+			OutPacketId    = (_WORD)(StartId % (MAX_PACKETID - 1));
+			OutAckPacketId = (_WORD)((StartId + MAX_PACKETID - 2) % (MAX_PACKETID - 1));
+		}
+	}
 #endif
 
 	// Other parameters.
@@ -331,7 +374,12 @@ void UNetConnection::FlushNet()
 
 		// Send now.
 #if DO_ENABLE_NET_TEST
-		if( PktOrder )
+		// uc2 port: the network tests' deterministic packet drop (NETDROP=, UC2NetTest.cpp): the packet is lost
+		// as if on the wire; everything below (packet id, lag bookkeeping, LastSendTime) still happens.
+		if( UC2NetTestDropPacket( this ) )
+		{
+		}
+		else if( PktOrder )
 		{
 			DelayedPacket& B = *(new(Delayed)DelayedPacket);
 			B.Data.Add( Out.GetNumBytes() );
@@ -395,6 +443,9 @@ void UNetConnection::Serialize( const TCHAR* Data, EName MsgType )
 	guard(UNetConnection::Serialize);
 
 	debugf(NAME_DevNet, TEXT("NetConnection sending text: %s"), Data);
+#if DO_ENABLE_NET_TEST
+	UC2NetTestNoteText( this, Data, 1 );	// uc2 port: NETDROP= triggers (UC2NetTest.cpp)
+#endif
 
 	// Send data to the control channel.
 	if( Channels[0] && !Channels[0]->bClosing )
@@ -459,9 +510,10 @@ void UNetConnection::ReceivedPacket( FBitReader& Reader )
 
 	// Check packet ordering.
 	INT PacketId = Reader.ReadInt(MAX_PACKETID);;
-	if( PacketId > InPacketId )
+	INT PacketDelta = PacketIdDelta( PacketId, InPacketId );	// uc2 port: wrap-aware
+	if( PacketDelta > 0 )
 	{
-		InLossAcc += PacketId - InPacketId - 1;
+		InLossAcc += PacketDelta - 1;
 		InPacketId = PacketId;
 	}
 	else 
@@ -496,16 +548,19 @@ void UNetConnection::ReceivedPacket( FBitReader& Reader )
 
 			// Resend any old reliable packets that the receiver hasn't acknowledged.
 			guard(ReceivedVirtualNak);
-			if( AckPacketId>OutAckPacketId )
+			// uc2 port: wrap-aware (PacketIdDelta); the plain '>' stopped all NAKs after the first packet-id wrap.
+			INT AckDelta = PacketIdDelta( AckPacketId, OutAckPacketId );
+			if( AckDelta>0 )
 			{
-				for( INT NakPacketId=OutAckPacketId+1; NakPacketId<AckPacketId; NakPacketId++,OutLossAcc++ )
+				for( INT k=1; k<AckDelta; k++,OutLossAcc++ )
 				{
+					INT NakPacketId = (OutAckPacketId + k) % (MAX_PACKETID - 1);
 					debugf( NAME_DevNetTraffic, TEXT("   Received virtual nak %i (%.1f)"), NakPacketId, (Reader.GetPosBits()-StartPos)/8.f );
 					ReceivedNak( NakPacketId );
 				}
 				OutAckPacketId = AckPacketId;
 			}
-			else if( AckPacketId<OutAckPacketId )
+			else if( AckDelta<0 )
 			{
 				//warning: Double-ack logic makes this unmeasurable.
 				//OutOrdAcc++;

@@ -85,7 +85,7 @@ class Proc:
         elif self.kind == "server":
             argv = ["./ucc-bin", "server", self.url, "PORT=%d" % PORT] + common
         else:
-            argv = ["xvfb-run", "-a", "-s", "-screen 0 1024x768x24", "./uc2.bin", self.url, "-log"] + common
+            argv = ["xvfb-run", "-a", "-s", "-screen 0 1024x768x24", "./uc2.bin"] + ([self.url] if self.url else []) + ["-log"] + common
             # -nostartupmovies: with the GL device the logos would play first and own the input (M9).
             argv += ["-inputtest=" + os.path.basename(self.inputcmd), "-nostartupmovies"]
             if self.kind == "listen":
@@ -233,7 +233,18 @@ def server(check, url="DM-Deadbolt", extra=(), wine=False):
 
 
 def client(check, name, render="null", extra=(), host="127.0.0.1"):
-    return Proc(check, name, "client", "%s:%d?Name=%s" % (host, PORT, name), render=render, extra=extra).start()
+    url = "%s:%d?Name=%s" % (host, PORT, name)
+    if render != "gl":
+        return Proc(check, name, "client", url, render=render, extra=extra).start()
+    # A GL client under Xvfb's software GL can stall for 20 s and more while it starts up (shader compiles; seen
+    # in a full-suite run under load): connecting from the command line then puts that stall into the handshake,
+    # where the server's InitialConnectTimeout drops the silent connection. Start it in the menu and connect
+    # once it renders, as a player does (the console OPEN command, here through -nettest).
+    c = Proc(check, name, "client", "", render=render, extra=extra).start()
+    c.wait(r"Bringing Level Menu\.MyLevel up for play", 180)
+    time.sleep(5)
+    c.send("exec open " + url)
+    return c
 
 
 def spawn_all(cs, tag, tries=12):
@@ -368,8 +379,23 @@ def place_near(srv, name, other, d=450, tag="PL"):
     return None
 
 
+def ranged(attacker, aname, tag):
+    """Make sure the attacker holds its race weapon (unlimited ammo). Under simulated loss a player sometimes
+    came out of the spawn holding the melee weapon or the energy weapon (UCWeap_SniperRifle, which starts without
+    ammo) -- the same on server and client, see network.md step L3; neither can hit at 450 units. NextWeapon
+    (the Q binding) cycles to it."""
+    for k in range(5):
+        p = attacker.probe("%s%d" % (tag, k))
+        w = pawn_of(p, aname)
+        if not w or "Race" in w.get("weapon", ""):
+            return
+        attacker.input("exec NextWeapon")
+        time.sleep(1.0)
+
+
 def fight(ck, srvproc, attacker, victim, aname, vname, max_shots=40):
     """attacker aims at victim and fires until the victim dies on the server; returns (first-hit, kill) dicts."""
+    ranged(attacker, aname, "RW")
     sp0 = srvproc.probe("F0")
     v0 = pawn_of(sp0, vname)
     h0 = int(v0["health"]) if v0 else None
@@ -417,7 +443,10 @@ def check_dedicated2(ck="dedicated2", srv_extra=(), cli_extra=()):
         d2 = dist(sA["loc"], bA["loc"]) if sA and bA else 1e9
         result(d1 < 40 and d2 < 40, ck + ".seeother", "NetA sees NetB %.1f units from the server's NetB; NetB sees NetA %.1f from the server's"
                % (d1, d2))
-        # Movement of B changes what A sees.
+        # Movement of B changes what A sees. B first faces A (its view rotation is its own client's, not the
+        # placement's), so it walks along the path place_near checked clear instead of into a wall.
+        b.send("exec netaim NetA")
+        time.sleep(0.3)
         b.input("pad axis lefty -32768")
         time.sleep(1.2)
         b.input("pad axis lefty 0")
@@ -431,22 +460,26 @@ def check_dedicated2(ck="dedicated2", srv_extra=(), cli_extra=()):
         # Put B back in front of A and shoot it.
         place_near(s, "NetB", "NetA", tag="PK")
         first, kill = fight(ck, s, a, b, "NetA", "NetB")
-        time.sleep(1.0)
-        ap3, bp3 = a.probe("K1"), b.probe("K1")
         result(bool(first), ck + ".hit", "NetB health on the server: %s" % first)
-        if first and first["health"] > 0:
-            pass
         sp3 = kill["probe"] if kill else s.probe("K1s")
         def sc(p, who, field):
             return num(p["pris"].get(who, {}).get(field)) if p else None
-        scores = [(sc(x, "NetA", "score"), sc(x, "NetB", "deaths")) for x in (sp3, ap3, bp3)]
-        ok = bool(kill) and all(sa is not None and sa >= 1 and db is not None and db >= 1 for sa, db in scores)
+        # The clients' PlayerReplicationInfos follow within a few updates; under loss a lost update is resent
+        # after the NAK, so poll up to 6 s (a lag run once had NetB's own deaths=0 at 1 s and =1 later).
+        for k in range(6):
+            time.sleep(1.0)
+            ap3, bp3 = a.probe("K%d" % (k + 1)), b.probe("K%d" % (k + 1))
+            scores = [(sc(x, "NetA", "score"), sc(x, "NetB", "deaths")) for x in (sp3, ap3, bp3)]
+            ok = bool(kill) and all(sa is not None and sa >= 1 and db is not None and db >= 1 for sa, db in scores)
+            if ok or not kill:
+                break
         result(ok, ck + ".kill", "after %s shots: (NetA score, NetB deaths) server %s, NetA's view %s, NetB's view %s"
                % (kill and kill["shot"], scores[0], scores[1], scores[2]))
         # Health seen by the victim's own client and by the attacker: compared in a separate shot sequence after respawn.
         pb2 = spawn(b, "Brespawn")
         if pb2:
             place_near(s, "NetB", "NetA", tag="PH")
+            ranged(a, "NetA", "RH")
             h_before = pawn_of(s.probe("H0"), "NetB")
             got = None
             for i in range(20):
@@ -458,6 +491,14 @@ def check_dedicated2(ck="dedicated2", srv_extra=(), cli_extra=()):
                 hs, ha, hb = (pawn_of(x, "NetB") for x in (sv, av, bv))
                 if hs and h_before and 0 < int(hs["health"]) < int(h_before["health"]):
                     got = (int(h_before["health"]), int(hs["health"]), ha and int(ha["health"]), hb and int(hb["health"]))
+                    # the clients follow within a few updates (resent after a NAK under loss): up to 5 s
+                    for k in range(5):
+                        if got[1] == got[2] == got[3]:
+                            break
+                        time.sleep(1.0)
+                        sv, av, bv = (x.probe("HC%d-%d" % (i, k)) for x in (s, a, b))
+                        hs, ha, hb = (pawn_of(x, "NetB") for x in (sv, av, bv))
+                        got = (got[0], hs and int(hs["health"]), ha and int(ha["health"]), hb and int(hb["health"]))
                     break
             result(bool(got) and got[1] == got[2] == got[3], ck + ".healthseen",
                    "NetB health before %s; after a hit: server %s, NetA's view %s, NetB's own %s" % got if got else
@@ -486,6 +527,8 @@ def check_listen():
         d1 = dist(pawn_of(lp, "NetB")["loc"], pawn_of(bp, "NetB")["loc"]) if pawn_of(lp, "NetB") and pawn_of(bp, "NetB") else 1e9
         d2 = dist(pawn_of(lp, "NetL")["loc"], pawn_of(bp, "NetL")["loc"]) if pawn_of(lp, "NetL") and pawn_of(bp, "NetL") else 1e9
         result(d1 < 40 and d2 < 40, ck + ".seeother", "NetB: client vs listen server %.1f units; NetL: %.1f" % (d1, d2))
+        b.send("exec netaim NetL")   # walk along the checked path (see dedicated2)
+        time.sleep(0.3)
         b.input("pad axis lefty -32768")
         time.sleep(1.2)
         b.input("pad axis lefty 0")
@@ -604,9 +647,12 @@ def check_disconnect():
 
 def check_soak(minutes=float(os.environ.get("NET_SOAK_MIN", "10"))):
     ck = "soak"
-    s = server(ck, url="DM-Deadbolt?NumBots=2")
-    a = client(ck, "NetA")
-    b = client(ck, "NetB")
+    # NET_SOAK_SIM="PktLag=50 PktLoss=5": the soak under simulated lag/loss on every process (long enough to
+    # cross the packet-id wrap, ~16k packets).
+    sim = tuple(os.environ.get("NET_SOAK_SIM", "").split())
+    s = server(ck, url="DM-Deadbolt?NumBots=2", extra=sim)
+    a = client(ck, "NetA", extra=sim)
+    b = client(ck, "NetB", extra=sim)
     procs = [s, a, b]
     try:
         s.wait(r"Join succeeded: ", 60)
@@ -637,6 +683,21 @@ def check_soak(minutes=float(os.environ.get("NET_SOAK_MIN", "10"))):
                     break
         for c in (a, b):
             c.input("pad axis lefty 0")
+            c.input("pad axis rightx 0")
+        # Late replication: after minutes of play (past the packet-id wrap, ~16k packets) both clients must show
+        # every player's score and deaths as the server has them (PRI updates lost on the way are resent after
+        # a NAK; poll up to 10 s).
+        agree = None
+        for k in range(10):
+            time.sleep(1.0)
+            sv, av, bv = s.probe("ZV%d" % k), a.probe("ZV%d" % k), b.probe("ZV%d" % k)
+            want = {n: (v.get("score"), v.get("deaths")) for n, v in (sv["pris"].items() if sv else [])}
+            seen = [{n: (v.get("score"), v.get("deaths")) for n, v in (x["pris"].items() if x else [])} for x in (av, bv)]
+            agree = (want, seen)
+            if want and all(x == want for x in seen):
+                break
+        result(bool(agree) and agree[0] and all(x == agree[0] for x in agree[1]), ck + ".views",
+               "server (score, deaths) %s; NetA's view %s; NetB's view %s" % (agree[0], agree[1][0], agree[1][1]) if agree else "no probes")
         alive = all(p.alive() for p in procs)
         sp = s.probe("Zend")
         result(alive and bool(sp), ck + ".alive", "after %.1f min: all %d processes alive=%s; server PRIs %s"
@@ -664,7 +725,10 @@ def check_soak(minutes=float(os.environ.get("NET_SOAK_MIN", "10"))):
 def check_lag():
     # Epic's own net test switches (Engine/Inc/UnConn.h DO_ENABLE_NET_TEST): every process delays its outgoing
     # packets by 50 ms (=> 100 ms round trip) and drops 5 % of them.
-    check_dedicated2("lag", srv_extra=("PktLag=50", "PktLoss=5"), cli_extra=("PktLag=50", "PktLoss=5"))
+    # NET_LAG_LOSS overrides the loss percentage (information runs at 20 %).
+    loss = os.environ.get("NET_LAG_LOSS", "5")
+    sim = ("PktLag=50", "PktLoss=" + loss)
+    check_dedicated2("lag", srv_extra=sim, cli_extra=sim)
 
 
 def check_glshot():
@@ -731,9 +795,88 @@ def check_wine():
         finish(ck, procs)
 
 
+# Deterministic loss of one handshake/join packet (NETDROP=, Engine/Src/UC2NetTest.cpp). (case, side, spec)
+HANDSHAKE_DROPS = [
+    ("hello", "client", "HELLO"),          # the client's first packet
+    ("challenge", "server", "CHALLENGE"),  # the server's answer (the coordinator's lag hang)
+    ("netspeed", "client", "NETSPEED"),    # NETSPEED and LOGIN usually share a packet
+    ("login", "client", "LOGIN"),
+    ("uses", "server", "USES#10"),         # one of the 67 package lines
+    ("welcome", "server", "WELCOME"),
+    ("join", "client", "JOIN"),
+    ("afterjoin", "server", "<JOIN+3"),    # the server's first three packets after it got JOIN (actor channels)
+    # The server's packet ids start just before the wrap (NETPKTID=16375; ids run 0..16382), so its WELCOME
+    # goes out after the wrap: a loss there needs the ack logic to work across the wrap.
+    ("wrap", "server", "WELCOME", "NETPKTID=16375"),
+    ("wraponly", "server", "NOSUCHTEXT", "NETPKTID=16375"),   # the wrap alone, nothing lost
+    # The client's ids start at 16381: its JOIN goes out as packet 0 after the wrap.
+    ("wrapclient", "client", "JOIN", "c:NETPKTID=16381"),
+]
+# Compatibility (check handshake-compat): one end keeps Epic's UC2 ack logic (NETOLDACKS, test switch in UnConn.cpp).
+# Expected: "join", or "fail" = the unfixed end lost the packet, which it never resends; the fixed client then
+# gives up after InitialConnectTimeout (20 s) and shows ConnectionFailureMenu instead of waiting forever.
+HANDSHAKE_COMPAT = [
+    ("oldclient-challenge", "server", "CHALLENGE", [], ["-NETOLDACKS"], "join"),   # fixed server, unfixed client
+    ("oldserver-challenge", "server", "CHALLENGE", ["-NETOLDACKS"], [], "fail"),   # unfixed server, fixed client
+    ("oldclient-login", "client", "LOGIN", [], ["-NETOLDACKS"], "join"),
+    ("oldserver-login", "client", "LOGIN", ["-NETOLDACKS"], [], "join"),
+    # Unfixed client whose JOIN is its packet 0 after the wrap: it never resends it, a fixed server cannot help;
+    # the client sits in the level without a player (it is past WELCOME, so no handshake timeout either).
+    ("oldclient-wrap", "client", "JOIN", [], ["-NETOLDACKS", "NETPKTID=16381"], "nojoin"),
+    ("oldserver-wrap", "server", "WELCOME", ["-NETOLDACKS", "NETPKTID=16375"], [], "fail"),
+]
+
+
+def check_handshake_loss(compat=False):
+    ck = "handshake-compat" if compat else "handshake-loss"
+    limit = float(os.environ.get("NET_DROP_LIMIT", "60"))
+    only = os.environ.get("NET_DROP_CASES")
+    cases = [(e[0], e[1], e[2], [x for x in e[3:] if not x.startswith("c:")], [x[2:] for x in e[3:] if x.startswith("c:")], "join")
+             for e in HANDSHAKE_DROPS]
+    if compat:
+        cases = list(HANDSHAKE_COMPAT)
+    for case, side, spec, sextra, cextra, expect in cases:
+        if only and case not in only.split(","):
+            continue
+        sub = "hsloss-" + case
+        s = server(sub, extra=(["NETDROP=" + spec] if side == "server" else []) + sextra)
+        a = client(sub, "NetA", extra=(["NETDROP=" + spec] if side == "client" else []) + cextra)
+        procs = [s, a]
+        try:
+            j = s.wait(r"Join succeeded: NetA", limit)
+            took = time.time() - a.started
+            dropper = s if side == "server" else a
+            lost = dropper.count(r"^NetProbe: netdrop: lost packet")
+            p = spawn(a, "spawn") if j else None
+            sp = s.probe("H1") if j else None
+            ok = bool(j) and (lost >= 1 or spec == "NOSUCHTEXT") and bool(p) and bool(pawn_of(sp, "NetA"))
+            menu = None
+            if j:
+                det = "joined %.1f s after the client started, spawned=%s, %d packet(s) lost by %s" % (took, bool(p), lost, side)
+            else:
+                cl = a.text()
+                last = [l for l in cl.splitlines() if "PendingLevel received" in l or "sending text" in l]
+                a.input("probe NOJOIN")
+                m = a.wait(r"probe NOJOIN (.*)$", 10)
+                menu = parse_kv(m.group(1)).get("menu") if m else None
+                gave_up = a.count(r"Pending connection: no message from the server for .* before WELCOME, giving up")
+                det = "NO JOIN within %.0f s (%d packet(s) lost by %s); client's last handshake line: %s; client gave up: %s, menu now %s" % (
+                    limit, lost, side, last[-1][:80] if last else "none", bool(gave_up), menu)
+                if expect == "nojoin":
+                    ok = lost >= 1
+                    det = "expected no join (unfixed client lost it): " + det
+                if expect == "fail":
+                    ok = lost >= 1 and bool(gave_up) and menu == "ConnectionFailureMenu"
+                    det = "expected no join (unfixed end lost it): " + det
+            result(ok, "%s.%s" % (ck, case), "%s drops %s: %s" % (side, spec, det))
+        finally:
+            finish(sub, procs)
+
+
 ALL = {"dedicated1": check_dedicated1, "dedicated2": check_dedicated2, "listen": check_listen,
        "travel": check_travel, "disconnect": check_disconnect, "soak": check_soak, "lag": check_lag,
-       "glshot": check_glshot, "wine": check_wine}
+       "glshot": check_glshot, "wine": check_wine,
+       "handshake-loss": check_handshake_loss, "handshake-compat": lambda: check_handshake_loss(True)}
 
 if __name__ == "__main__":
     for c in CHECKS:
