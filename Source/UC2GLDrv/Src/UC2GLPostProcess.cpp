@@ -365,6 +365,7 @@ void UUC2GLRenderDevice::UpdateSampledTexture( FOpenGLTexture* Texture )
 		}
 		else if( DepthColorVersion != MainDepthVersion )
 		{
+			ResolveMain( 0, 1 );
 			DrawPostQuad( PostDepthEncodeProgram, PostDepthEncodeRectLoc, MainDepthStencil, DepthColorFramebuffer, MainWidth, MainHeight, FlipRect, 0 );
 			DepthColorVersion = MainDepthVersion;
 			DepthColorCopies++;
@@ -384,6 +385,7 @@ void UUC2GLRenderDevice::UpdateSampledTexture( FOpenGLTexture* Texture )
 			if( FrameCounter == 600 && ParseParam( appCmdLine(), TEXT("glsnapshotlog") ) )
 				debugf( NAME_Init, TEXT("UC2GLDrv: snapshot %i of frame %i, for material %s (main colour version %i, the snapshot had %i)"), SnapshotCopies + 1, FrameCounter,
 					RenderInterface.GetLastMaterial() ? RenderInterface.GetLastMaterial()->GetPathName() : TEXT("None"), MainColorVersion, SnapshotVersion );
+			ResolveMain( 1, 0 );
 			DrawPostQuad( PostCopyProgram, PostCopyRectLoc, MainColorTexture, SnapshotFramebuffer, MainWidth, MainHeight, FlipRect, 0 );
 			SnapshotVersion = MainColorVersion;
 			SnapshotCopies++;
@@ -752,6 +754,8 @@ void FOpenGLRenderInterface::CopyDepthBuffer( FRenderTarget* DestTarget, FRender
 		U0,
 		1.f - V0
 	};
+	// O-8: the multisampled main depth into the texture both paths below read.
+	RenDev->ResolveMain( 0, 1 );
 	if( !RenDev->CapFragDepth )
 	{
 		// M11, a context without gl_FragDepth (WebGL 1 without EXT_frag_depth): the depth

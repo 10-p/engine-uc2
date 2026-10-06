@@ -119,6 +119,24 @@ public:
 									MainDepthRenderbuffer;	// ... or renderbuffer (M11: no depth textures)
 	INT								MainWidth,
 									MainHeight;
+	// M11 / O-8, anti-aliasing. AntiAliasing (ini; -glaa=N, -glnoaa) is the number of samples.
+	// Desktop GL: MainFramebuffer is then a multisampled framebuffer (renderbuffers), and
+	// MainColorTexture / MainDepthStencil are its resolve, in MainResolveFramebuffer, brought up
+	// to date (ResolveMain) before anything reads them: the copies the post-process samples,
+	// the depth copy, the present pass, ReadPixels. OpenGL ES 2 / WebGL 1 have no multisampled
+	// framebuffers: there the present pass applies FXAA instead (PresentFXAA).
+	INT								AntiAliasing;
+	INT								MainSamples;			// 0: the main framebuffer is single-sampled
+	GLuint							MainResolveFramebuffer,
+									MainMSColorRenderbuffer,
+									MainMSDepthRenderbuffer;
+	INT								ResolvedColorVersion,
+									ResolvedDepthVersion;
+	UBOOL							PresentFXAA;
+	GLint							PresentFXAALoc;
+	void ResolveMain( UBOOL Color, UBOOL Depth );
+	// The framebuffer that holds MainColorTexture / MainDepthStencil (the main one without MSAA).
+	GLuint MainTextureFramebuffer() { return MainSamples ? MainResolveFramebuffer : MainFramebuffer; }
 
 	// Render-target post-processing (M7; UC2GLPostProcess.cpp, docs/porting/analysis/postprocess.md).
 	// UsePostProcess=False is exactly M6: no capability reported to the engine, the M7 pixel

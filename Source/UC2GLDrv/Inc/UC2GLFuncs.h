@@ -7,6 +7,7 @@
 	_GL      : OpenGL 1.1-1.5 as used here (required)
 	_GL2     : OpenGL 2.0 shading language entry points (present shader; required)
 	_FBO     : framebuffer objects, GL 3.0 / ARB_framebuffer_object names (required)
+	_MSAA    : multisampled renderbuffers + glBlitFramebuffer (anti-aliasing; optional)
 =============================================================================*/
 
 GL_EXT(_GL)
@@ -19,6 +20,7 @@ GL_EXT(_GL_NV_texture_env_combine4)
 GL_EXT(_GL_ARB_texture_env_crossbar)
 GL_EXT(_GL_ARB_texture_non_power_of_two)
 GL_EXT(_GL_EXT_packed_depth_stencil)
+GL_EXT(_MSAA)
 
 // OpenGL 1.1
 GL_PROC(_GL,void,glAlphaFunc,(GLenum,GLclampf))
@@ -138,6 +140,10 @@ GL_PROC(_FBO,void,glGenRenderbuffers,(GLsizei,GLuint*))
 GL_PROC(_FBO,void,glDeleteRenderbuffers,(GLsizei,const GLuint*))
 GL_PROC(_FBO,void,glBindRenderbuffer,(GLenum,GLuint))
 GL_PROC(_FBO,void,glRenderbufferStorage,(GLenum,GLenum,GLsizei,GLsizei))
+// Multisampled renderbuffers and their resolve (GL 3.0 / ARB_framebuffer_object; M11/O-8 anti-aliasing,
+// desktop binding only: OpenGL ES 2 and WebGL 1 have neither)
+GL_PROC(_MSAA,void,glRenderbufferStorageMultisample,(GLenum,GLsizei,GLenum,GLsizei,GLsizei))
+GL_PROC(_MSAA,void,glBlitFramebuffer,(GLint,GLint,GLint,GLint,GLint,GLint,GLint,GLint,GLbitfield,GLenum))
 
 /*-----------------------------------------------------------------------------
 	The End.

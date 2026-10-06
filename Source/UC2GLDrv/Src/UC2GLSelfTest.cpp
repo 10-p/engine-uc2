@@ -940,6 +940,15 @@ struct FSelfTest
 			debugf( NAME_Init, TEXT("UC2GLDrv: selftest: post-processing is off, nothing to test") );
 			return;
 		}
+		if( RenDev->MainSamples || RenDev->PresentFXAA )
+		{
+			// The checks write and read the main framebuffer's textures directly and compare
+			// exactly: they need the single-sampled main framebuffer (O-8).
+			debugf( NAME_Init, TEXT("UC2GLDrv: selftest: anti-aliasing is on (%s); the self-test needs it off: -glnoaa"), RenDev->MainSamples ? TEXT("multisampled main framebuffer") : TEXT("FXAA") );
+			Failed = 1;
+			debugf( NAME_Init, TEXT("UC2GLDrv: selftest summary: %i passed, %i failed"), Passed, Failed );
+			return;
+		}
 		RI->PushState();
 		TestSnapshot();
 		TestDepth();

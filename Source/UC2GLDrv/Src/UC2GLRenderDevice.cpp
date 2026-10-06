@@ -47,6 +47,11 @@ static TArray<FString>	GExecCommands;
 // frame (0 = no, 1 = at the next frame with a player, n = n frames from now).
 static INT				GSelfTestPending = 0;
 static UBOOL			GShotRamp = 0;
+// -glshotpresented (O-8): -glshot pictures are what the present pass put on the screen (the gamma and
+// FXAA applied), read from the default framebuffer before the swap, instead of the main framebuffer.
+static UBOOL			GShotPresented = 0;
+static TArray<FColor>	GPresentedPixels;
+static INT				GPresentedWidth = 0, GPresentedHeight = 0;
 static BYTE				GLastGammaRamp[256];
 void UC2GL_RememberGammaRamp( const BYTE* Ramp ) { appMemcpy( GLastGammaRamp, Ramp, 256 ); }
 static DOUBLE			GFirstFrameTime = 0.0;
@@ -102,6 +107,11 @@ UUC2GLRenderDevice::UUC2GLRenderDevice()
 	MainFramebuffer			= 0;
 	MainColorTexture		= 0;
 	MainDepthStencil		= 0;
+	MainSamples				= 0;
+	MainResolveFramebuffer	= MainMSColorRenderbuffer = MainMSDepthRenderbuffer = 0;
+	ResolvedColorVersion	= ResolvedDepthVersion = -1;
+	PresentFXAA				= 0;
+	PresentFXAALoc			= -1;
 	MainWidth				= 0;
 	MainHeight				= 0;
 	PresentProgram			= 0;
@@ -157,6 +167,7 @@ void UUC2GLRenderDevice::StaticConstructor()
 	new(GetClass(),TEXT("UsePostProcess"),		RF_Public)UBoolProperty	( CPP_PROPERTY(UsePostProcess		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("DOFShippedBlurAlpha"),	RF_Public)UBoolProperty	( CPP_PROPERTY(DOFShippedBlurAlpha	), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("LevelOfAnisotropy"),	RF_Public)UIntProperty	( CPP_PROPERTY(LevelOfAnisotropy	), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("AntiAliasing"),		RF_Public)UIntProperty	( CPP_PROPERTY(AntiAliasing			), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("MaxTextureUnits"),		RF_Public)UIntProperty	( CPP_PROPERTY(MaxTextureUnits		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("DetailTexMipBias"),	RF_Public)UFloatProperty( CPP_PROPERTY(DetailTexMipBias		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("DefaultTexMipBias"),	RF_Public)UFloatProperty( CPP_PROPERTY(DefaultTexMipBias	), TEXT("Options"), CPF_Config );
@@ -173,7 +184,10 @@ void UUC2GLRenderDevice::StaticConstructor()
 	PrecompileVertexShaders	= 1;
 	UsePostProcess			= 1;
 	DOFShippedBlurAlpha		= 0;
-	LevelOfAnisotropy		= 1;
+	// O-8 (owner, 2026-10-06): 16x anisotropic filtering and 4x anti-aliasing by default, also
+	// for an ini that predates the keys.
+	LevelOfAnisotropy		= 16;
+	AntiAliasing			= 4;
 	MaxTextureUnits			= 8;
 	DetailTexMipBias		= 0.8f;
 	DefaultTexMipBias		= -0.5f;
@@ -271,6 +285,7 @@ void UUC2GLRenderDevice::FindProcs()
 	SUPPORTS_GL_ARB_texture_env_crossbar		= VersionNumber >= 14 || FindExt("GL_ARB_texture_env_crossbar");
 	SUPPORTS_GL_ARB_texture_non_power_of_two	= VersionNumber >= 20 || FindExt("GL_ARB_texture_non_power_of_two");
 	SUPPORTS_GL_EXT_packed_depth_stencil		= VersionNumber >= 30 || FindExt("GL_EXT_packed_depth_stencil");
+	SUPPORTS_MSAA								= VersionNumber >= 30 || FindExt("GL_ARB_framebuffer_object");
 
 	#define GL_EXT(name)
 	#define GL_PROC(ext,ret,func,parms) FindProc( *(void**)&func, #func, #ext, SUPPORTS##ext );
@@ -485,7 +500,12 @@ UBOOL UUC2GLRenderDevice::Init()
 		UsePostProcess = 1;
 	ParseTimeList( TEXT("glpptoggle="), GPPToggleTimes );
 	GShotRamp = ParseParam( appCmdLine(), TEXT("glshotramp") );
+	GShotPresented = ParseParam( appCmdLine(), TEXT("glshotpresented") );
 	NoLODBias = ParseParam( appCmdLine(), TEXT("glnolodbias") );
+	// O-8: -glaa=N (samples; 0 = off), -glnoaa. Tests that compare pictures run with -glnoaa.
+	Parse( appCmdLine(), TEXT("glaa="), AntiAliasing );
+	if( ParseParam( appCmdLine(), TEXT("glnoaa") ) )
+		AntiAliasing = 0;
 	LogStats = ParseParam( appCmdLine(), TEXT("glstats") );
 	StatDraws = StatPrimitives = StatMaterials = StatBufferUploads = StatBufferBytes = StatTextureUploads = StatPostQuads = 0;
 	StatSnapshots = StatDepthColors = StatDepthCopies = StatFrame0 = 0;
@@ -629,6 +649,13 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 			LevelOfAnisotropy, (INT)MaxAnisotropy );
 		if( !SUPPORTS_GL_EXT_texture_compression_s3tc )
 			debugf( NAME_Init, TEXT("UC2GLDrv: no S3TC; DXT textures are decompressed on upload") );
+		// O-8: multisampling where the main framebuffer can be multisampled (desktop GL),
+		// otherwise FXAA in the present pass (OpenGL ES 2 / WebGL 1 have no multisampled
+		// framebuffer objects; the context's own antialias attribute only reaches the default
+		// framebuffer, which receives nothing but the present quad).
+		PresentFXAA = AntiAliasing > 0 && (IsGLES || !SUPPORTS_MSAA);
+		debugf( NAME_Init, TEXT("UC2GLDrv: anti-aliasing: %s"),
+			AntiAliasing <= 0 ? TEXT("off") : PresentFXAA ? TEXT("FXAA in the present pass (no multisampled framebuffers on this context)") : *FString::Printf( TEXT("%ix multisampled main framebuffer, resolved before it is read"), AntiAliasing ) );
 
 		SupportsCubemaps = UseCubemaps;
 
@@ -700,8 +727,9 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 
 	glGenTextures( 1, &MainColorTexture );
 	glBindTexture( GL_TEXTURE_2D, MainColorTexture );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+	// (FXAA samples between texels; every other reader samples texel centres, the same either way.)
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, PresentFXAA ? GL_LINEAR : GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, PresentFXAA ? GL_LINEAR : GL_NEAREST );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0 );
@@ -736,9 +764,49 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 		return 0;
 	}
 
+	// O-8: the multisampled main framebuffer; the one built above becomes its resolve.
+	MainSamples = 0;
+	if( !IsGLES && !PresentFXAA && AntiAliasing > 1 && SUPPORTS_MSAA && MainDepthStencil )
+	{
+		GLint MaxSamples = 0;
+		glGetIntegerv( GL_MAX_SAMPLES, &MaxSamples );
+		INT Samples = Min<INT>( AntiAliasing, MaxSamples );
+		if( Samples > 1 )
+		{
+			MainResolveFramebuffer = MainFramebuffer;
+			glGenRenderbuffers( 1, &MainMSColorRenderbuffer );
+			glBindRenderbuffer( GL_RENDERBUFFER, MainMSColorRenderbuffer );
+			glRenderbufferStorageMultisample( GL_RENDERBUFFER, Samples, GL_RGBA8, Width, Height );
+			glGenRenderbuffers( 1, &MainMSDepthRenderbuffer );
+			glBindRenderbuffer( GL_RENDERBUFFER, MainMSDepthRenderbuffer );
+			glRenderbufferStorageMultisample( GL_RENDERBUFFER, Samples, GL_DEPTH24_STENCIL8, Width, Height );
+			glBindRenderbuffer( GL_RENDERBUFFER, 0 );
+			glGenFramebuffers( 1, &MainFramebuffer );
+			glBindFramebuffer( GL_FRAMEBUFFER, MainFramebuffer );
+			glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, MainMSColorRenderbuffer );
+			glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, MainMSDepthRenderbuffer );
+			glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, MainMSDepthRenderbuffer );
+			GLenum MSStatus = glCheckFramebufferStatus( GL_FRAMEBUFFER );
+			if( MSStatus == GL_FRAMEBUFFER_COMPLETE )
+				MainSamples = Samples;
+			else
+			{
+				debugf( NAME_Init, TEXT("UC2GLDrv: %ix multisampled main framebuffer incomplete (0x%04x): no anti-aliasing"), Samples, MSStatus );
+				glBindFramebuffer( GL_FRAMEBUFFER, MainResolveFramebuffer );
+				glDeleteFramebuffers( 1, &MainFramebuffer );
+				glDeleteRenderbuffers( 1, &MainMSColorRenderbuffer );
+				glDeleteRenderbuffers( 1, &MainMSDepthRenderbuffer );
+				MainFramebuffer = MainResolveFramebuffer;
+				MainResolveFramebuffer = MainMSColorRenderbuffer = MainMSDepthRenderbuffer = 0;
+			}
+		}
+	}
+	ResolvedColorVersion = ResolvedDepthVersion = -1;
+
 	MainWidth	= Width;
 	MainHeight	= Height;
-	debugf( NAME_Init, TEXT("UC2GLDrv: main framebuffer %ix%i (RGBA8 texture, depth 24 + stencil 8 %s)"), Width, Height, MainDepthStencil ? TEXT("texture") : TEXT("renderbuffer") );
+	debugf( NAME_Init, TEXT("UC2GLDrv: main framebuffer %ix%i (RGBA8 texture, depth 24 + stencil 8 %s%s)"), Width, Height, MainDepthStencil ? TEXT("texture") : TEXT("renderbuffer"),
+		MainSamples ? *FString::Printf( TEXT("; drawn %ix multisampled, resolved into them"), MainSamples ) : TEXT("") );
 	MainColorVersion++;
 	MainDepthVersion++;
 
@@ -762,6 +830,35 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 	unguard;
 }
 
+//
+// O-8: the multisampled main framebuffer's colour and/or depth-stencil into MainColorTexture /
+// MainDepthStencil, if anything was drawn since the last resolve. Leaves GL_FRAMEBUFFER bound
+// to the interface's current target. (Scissor off for the blit: it applies to blits.)
+//
+void UUC2GLRenderDevice::ResolveMain( UBOOL Color, UBOOL Depth )
+{
+	if( !MainSamples )
+		return;
+	GLbitfield Mask = 0;
+	if( Color && ResolvedColorVersion != MainColorVersion )
+		Mask |= GL_COLOR_BUFFER_BIT;
+	if( Depth && ResolvedDepthVersion != MainDepthVersion )
+		Mask |= GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
+	if( !Mask )
+		return;
+	glBindFramebuffer( GL_READ_FRAMEBUFFER, MainFramebuffer );
+	glBindFramebuffer( GL_DRAW_FRAMEBUFFER, MainResolveFramebuffer );
+	glDisable( GL_SCISSOR_TEST );
+	glBlitFramebuffer( 0, 0, MainWidth, MainHeight, 0, 0, MainWidth, MainHeight, Mask, GL_NEAREST );
+	glEnable( GL_SCISSOR_TEST );
+	GLuint Current = RenderInterface.SavedRenderTargetState.GetCurrentState()->Framebuffer;
+	glBindFramebuffer( GL_FRAMEBUFFER, Current ? Current : MainFramebuffer );
+	if( Mask & GL_COLOR_BUFFER_BIT )
+		ResolvedColorVersion = MainColorVersion;
+	if( Mask & GL_DEPTH_BUFFER_BIT )
+		ResolvedDepthVersion = MainDepthVersion;
+}
+
 void UUC2GLRenderDevice::DestroyMainFramebuffer()
 {
 	// The snapshot and the depth colour have the main framebuffer's size.
@@ -769,12 +866,22 @@ void UUC2GLRenderDevice::DestroyMainFramebuffer()
 	if( !ContextAlive() )
 	{
 		MainFramebuffer = MainDepthStencil = MainDepthRenderbuffer = MainColorTexture = 0;
+		MainResolveFramebuffer = MainMSColorRenderbuffer = MainMSDepthRenderbuffer = 0;
+		MainSamples = 0;
 		MainWidth = MainHeight = 0;
 		return;
 	}
 	glBindFramebuffer( GL_FRAMEBUFFER, 0 );
 	if( MainFramebuffer )
 		glDeleteFramebuffers( 1, &MainFramebuffer );
+	if( MainResolveFramebuffer )
+		glDeleteFramebuffers( 1, &MainResolveFramebuffer );
+	if( MainMSColorRenderbuffer )
+		glDeleteRenderbuffers( 1, &MainMSColorRenderbuffer );
+	if( MainMSDepthRenderbuffer )
+		glDeleteRenderbuffers( 1, &MainMSDepthRenderbuffer );
+	MainResolveFramebuffer = MainMSColorRenderbuffer = MainMSDepthRenderbuffer = 0;
+	MainSamples = 0;
 	if( MainDepthStencil )
 		glDeleteTextures( 1, &MainDepthStencil );
 	DeleteDepthStencilRenderbuffer( MainDepthRenderbuffer );
@@ -1259,15 +1366,43 @@ static const char* GPresentVertexShader =
 // uGamma = ( 1/Gamma, Contrast+0.5, (Brightness-0.5)*0.5 - Contrast*0.5 + 0.25, enabled ).
 // M7: with dynamic gamma the ramp is the 256-entry table FD3DDynamicGamma::UpdateDeviceGamma
 // computes (uRamp, one channel; uUseRamp 1), looked up per colour channel at texel centres.
+// O-8: uFXAA = ( 1/width, 1/height of the scene, enabled ). FXAA where the main framebuffer
+// cannot be multisampled (OpenGL ES 2 / WebGL 1): Timothy Lottes' "FXAA PC simple" filter (the
+// public reduced form: four diagonal neighbours give the edge direction, two or four taps along
+// it, the wider blend kept only if its luma stays within the neighbourhood's range). It runs on
+// the scene before the gamma, i.e. on what the game drew; the HUD and menus are in that picture
+// too (the engine draws them into the same buffer), so their edges are smoothed as well.
 static const char* GPresentFragmentShader =
 	"uniform sampler2D uScene;\n"
 	"uniform sampler2D uRamp;\n"
 	"uniform float uUseRamp;\n"
 	"uniform vec4 uGamma;\n"
+	"uniform vec4 uFXAA;\n"
 	"varying vec2 vTexCoord;\n"
+	"vec3 FXAA( vec2 UV )\n"
+	"{\n"
+	"	vec2 Rcp = uFXAA.xy;\n"
+	"	vec3 NW = texture2D( uScene, UV + vec2( -1.0, -1.0 ) * Rcp ).rgb;\n"
+	"	vec3 NE = texture2D( uScene, UV + vec2( 1.0, -1.0 ) * Rcp ).rgb;\n"
+	"	vec3 SW = texture2D( uScene, UV + vec2( -1.0, 1.0 ) * Rcp ).rgb;\n"
+	"	vec3 SE = texture2D( uScene, UV + vec2( 1.0, 1.0 ) * Rcp ).rgb;\n"
+	"	vec3 M = texture2D( uScene, UV ).rgb;\n"
+	"	vec3 Luma = vec3( 0.299, 0.587, 0.114 );\n"
+	"	float LNW = dot( NW, Luma ), LNE = dot( NE, Luma ), LSW = dot( SW, Luma ), LSE = dot( SE, Luma ), LM = dot( M, Luma );\n"
+	"	float LMin = min( LM, min( min( LNW, LNE ), min( LSW, LSE ) ) );\n"
+	"	float LMax = max( LM, max( max( LNW, LNE ), max( LSW, LSE ) ) );\n"
+	"	vec2 Dir = vec2( -((LNW + LNE) - (LSW + LSE)), (LNW + LSW) - (LNE + LSE) );\n"
+	"	float Reduce = max( (LNW + LNE + LSW + LSE) * (0.25 * 0.125), 1.0 / 128.0 );\n"
+	"	float RcpDirMin = 1.0 / (min( abs( Dir.x ), abs( Dir.y ) ) + Reduce);\n"
+	"	Dir = min( vec2( 8.0 ), max( vec2( -8.0 ), Dir * RcpDirMin ) ) * Rcp;\n"
+	"	vec3 A = 0.5 * (texture2D( uScene, UV + Dir * (1.0 / 3.0 - 0.5) ).rgb + texture2D( uScene, UV + Dir * (2.0 / 3.0 - 0.5) ).rgb);\n"
+	"	vec3 B = A * 0.5 + 0.25 * (texture2D( uScene, UV + Dir * -0.5 ).rgb + texture2D( uScene, UV + Dir * 0.5 ).rgb);\n"
+	"	float LB = dot( B, Luma );\n"
+	"	return (LB < LMin || LB > LMax) ? A : B;\n"
+	"}\n"
 	"void main()\n"
 	"{\n"
-	"	vec3 Scene = texture2D( uScene, vTexCoord ).rgb;\n"
+	"	vec3 Scene = uFXAA.z > 0.5 ? FXAA( vTexCoord ) : texture2D( uScene, vTexCoord ).rgb;\n"
 	"	vec3 Ramp = clamp( uGamma.y * pow( Scene, vec3( uGamma.x ) ) + vec3( uGamma.z ), 0.0, 1.0 );\n"
 	"	vec3 Result = mix( Scene, Ramp, uGamma.w );\n"
 	"	if( uUseRamp > 0.5 )\n"
@@ -1327,6 +1462,7 @@ UBOOL UUC2GLRenderDevice::CreatePresentProgram()
 	PresentGammaLoc		= glGetUniformLocation( PresentProgram, "uGamma" );
 	PresentRampLoc		= glGetUniformLocation( PresentProgram, "uRamp" );
 	PresentUseRampLoc	= glGetUniformLocation( PresentProgram, "uUseRamp" );
+	PresentFXAALoc		= glGetUniformLocation( PresentProgram, "uFXAA" );
 	return 1;
 
 	unguard;
@@ -1339,6 +1475,7 @@ void UUC2GLRenderDevice::DrawPresentPass( UViewport* Viewport )
 	INT DrawableX = MainWidth, DrawableY = MainHeight;
 	BindingGetDrawableSize( Viewport, DrawableX, DrawableY );
 
+	ResolveMain( 1, 0 );
 	glBindFramebuffer( GL_FRAMEBUFFER, 0 );
 	glViewport( 0, 0, DrawableX, DrawableY );
 	glDisable( GL_SCISSOR_TEST );
@@ -1360,6 +1497,7 @@ void UUC2GLRenderDevice::DrawPresentPass( UViewport* Viewport )
 	glUniform4f( PresentGammaLoc, 1.f / Gamma, PresentContrast + 0.5f, (PresentBrightness - 0.5f) * 0.5f - PresentContrast * 0.5f + 0.25f, ApplyGamma ? 1.f : 0.f );
 	UBOOL UseRamp = GammaRampActive && GammaRampTexture && ApplyGamma && PostProcessActive();
 	glUniform1f( PresentUseRampLoc, UseRamp ? 1.f : 0.f );
+	glUniform4f( PresentFXAALoc, 1.f / Max( MainWidth, 1 ), 1.f / Max( MainHeight, 1 ), PresentFXAA ? 1.f : 0.f, 0.f );
 	glUniform1i( PresentRampLoc, 1 );
 	if( UseRamp )
 	{
@@ -1843,6 +1981,20 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 
 	DrawPresentPass( Viewport );
 
+	if( GShotPresented && GShotTimes.Num() && GFirstFrameTime != 0.0 && appSeconds() - GFirstFrameTime >= GShotTimes(0) )
+	{
+		INT W = MainWidth, H = MainHeight;
+		BindingGetDrawableSize( Viewport, W, H );
+		GPresentedPixels.Empty( W * H );
+		GPresentedPixels.Add( W * H );
+		glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+		glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+		glReadPixels( 0, 0, W, H, GL_BGRA, GL_UNSIGNED_BYTE, &GPresentedPixels(0) );
+		glBindFramebuffer( GL_FRAMEBUFFER, MainFramebuffer );
+		GPresentedWidth = W;
+		GPresentedHeight = H;
+	}
+
 	if( CheckGLErrors )
 	{
 		if( CheckGLError( TEXT("frame") ) )
@@ -1913,7 +2065,23 @@ void UUC2GLRenderDevice::ReadPixels( UViewport* Viewport, FColor* Pixels )
 	INT Width = Min( Viewport->SizeX, MainWidth ), Height = Min( Viewport->SizeY, MainHeight );
 	appMemzero( Pixels, sizeof(FColor) * Viewport->SizeX * Viewport->SizeY );
 
-	glBindFramebuffer( GL_FRAMEBUFFER, MainFramebuffer );
+	if( GPresentedWidth )
+	{
+		// -glshotpresented: the picture read after the present pass of this frame.
+		INT W = Min( Width, GPresentedWidth ), H = Min( Height, GPresentedHeight );
+		for( INT y=0; y<H; y++ )
+			for( INT x=0; x<W; x++ )
+			{
+				FColor C = GPresentedPixels( (GPresentedHeight - 1 - y) * GPresentedWidth + x );
+				C.A = 255;
+				Pixels[ y * Viewport->SizeX + x ] = C;
+			}
+		GPresentedWidth = GPresentedHeight = 0;
+		return;
+	}
+
+	ResolveMain( 1, 0 );
+	glBindFramebuffer( GL_FRAMEBUFFER, MainTextureFramebuffer() );
 	glPixelStorei( GL_PACK_ALIGNMENT, 1 );
 	TArray<FColor> Rows( Width * Height );
 	glReadPixels( 0, 0, Width, Height, GL_BGRA, GL_UNSIGNED_BYTE, &Rows(0) );

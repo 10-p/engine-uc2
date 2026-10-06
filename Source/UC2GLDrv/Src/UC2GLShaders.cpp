@@ -1048,6 +1048,7 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 		RenDev->glUniform4fv( Program->ColorRemapLoc, 1, ColorRemapConstant );
 	if( SceneDepthTest )
 	{
+		// (The main depth was resolved by CopyDepthBuffer, which set this test up.)
 		RenDev->glActiveTexture( GL_TEXTURE0 + UC2GL_SCENEDEPTH_UNIT );
 		RenDev->glBindTexture( GL_TEXTURE_2D, RenDev->MainDepthStencil );
 		RenDev->glActiveTexture( GL_TEXTURE0 );

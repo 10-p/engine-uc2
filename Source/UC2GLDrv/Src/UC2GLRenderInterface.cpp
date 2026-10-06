@@ -1375,8 +1375,13 @@ void FOpenGLRenderInterface::SetMaterialBlending( FOpenGLMaterialState* NewMater
 				MinFilter = MinLinear ? GL_LINEAR_MIPMAP_LINEAR : GL_NEAREST_MIPMAP_LINEAR;
 			RenDev->glTexParameteri( Target, GL_TEXTURE_MIN_FILTER, MinFilter );
 			RenDev->glTexParameteri( Target, GL_TEXTURE_MAG_FILTER, MagLinear ? GL_LINEAR : GL_NEAREST );
+			// O-8: D3DDrv makes every stage's default minifying filter D3DTEXF_ANISOTROPIC when
+			// LevelOfAnisotropy > 1 (D3DRenderState.cpp); the stages here default to LINEAR, so
+			// a linear filter of a texture with mipmaps is that default. Point-filtered stages
+			// (the post-process reads) and textures without mipmaps (render targets) stay at 1.
 			if( RenDev->SUPPORTS_GL_EXT_texture_filter_anisotropic )
-				RenDev->glTexParameterf( Target, GL_TEXTURE_MAX_ANISOTROPY_EXT, (Stage.MinFilter == D3DTEXF_ANISOTROPIC) ? Max<FLOAT>(1.f,RenDev->LevelOfAnisotropy) : 1.f );
+				RenDev->glTexParameterf( Target, GL_TEXTURE_MAX_ANISOTROPY_EXT,
+					(Stage.MinFilter == D3DTEXF_ANISOTROPIC || (Stage.MinFilter == D3DTEXF_LINEAR && Mipped)) ? Max<FLOAT>(1.f,RenDev->LevelOfAnisotropy) : 1.f );
 		}
 
 		if( Stage.TextureMipLODBias < -100.f )
