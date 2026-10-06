@@ -1995,6 +1995,15 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 			CommitTexCoords( Pass );
 		}
 
+		// GLPIXTRACE (debug, UC2GLPixelTrace.cpp): the traced pixel before this pass.
+		extern UBOOL UC2GL_PixelTraceActive( UUC2GLRenderDevice* );
+		extern void UC2GL_PixelTraceRead( FOpenGLRenderInterface*, FColor& );
+		extern void UC2GL_PixelTraceLog( FOpenGLRenderInterface*, INT, const FColor&, const FColor& );
+		FColor TraceBefore;
+		UBOOL Trace = UC2GL_PixelTraceActive( RenDev );
+		if( Trace )
+			UC2GL_PixelTraceRead( this, TraceBefore );
+
 		if( CurrentState->IndexBuffer )
 		{
 			INT IndexSize = CurrentState->IndexBuffer->IndexSize;
@@ -2006,6 +2015,13 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 		}
 		else
 			RenDev->glDrawArrays( Type, 0, Count );
+
+		if( Trace )
+		{
+			FColor TraceAfter;
+			UC2GL_PixelTraceRead( this, TraceAfter );
+			UC2GL_PixelTraceLog( this, Pass, TraceBefore, TraceAfter );
+		}
 
 		if( Programmed )
 			EndProgramPass();

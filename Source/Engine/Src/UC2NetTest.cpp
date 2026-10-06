@@ -5,8 +5,10 @@
 	Console commands (also from the SDL2 test channel's "exec ..." lines):
 	  NETPROBE <tag>                     "NetProbe: <tag> ..." lines: one summary line, one per
 	                                     pawn and one per PlayerReplicationInfo in this process's level
-	  NETPLACE <name> <x> <y> <z> <yaw>  server/listen server: move that player's pawn there (the
-	                                     client follows through the engine's own position correction)
+	  NETPLACE <name> <x> <y> <z> <yaw> [<pitch>]  server/listen server: move that player's pawn there
+	                                     (the client follows through the engine's own position
+	                                     correction); the optional pitch turns the view up or down
+	                                     (picture tests, tools/dev/fx-water.sh)
 	  NETPLACENEAR <name> <other> <dist> [<first>] server: put that player's pawn <dist> units from the
 	                                     other's, at the first of 16 headings with a clear path for
 	                                     a pawn-sized box between them, facing the other
@@ -136,6 +138,7 @@ static void Place( UGameEngine* Engine, const TCHAR* Cmd )
 	L.Y = appAtof( *ParseToken(Cmd,0) );
 	L.Z = appAtof( *ParseToken(Cmd,0) );
 	INT Yaw = appAtoi( *ParseToken(Cmd,0) );
+	INT Pitch = appAtoi( *ParseToken(Cmd,0) );	// optional: 0 when absent
 	ULevel* Level = Engine->GLevel;
 	if( !Level || !Level->GetLevelInfo() || Level->GetLevelInfo()->NetMode==NM_Client )
 	{
@@ -157,10 +160,10 @@ static void Place( UGameEngine* Engine, const TCHAR* Cmd )
 		P->Velocity = FVector(0,0,0);
 		P->Acceleration = FVector(0,0,0);
 		P->Rotation = R;
-		C->Rotation = R;
+		C->Rotation = FRotator( Pitch, Yaw, 0 );
 		KeepServerMoveSpot( C );
-		debugf( NETPROBE, TEXT("place %s %s loc=(%.1f,%.1f,%.1f) yaw=%i"), *Name, Moved ? TEXT("ok") : TEXT("failed"),
-			P->Location.X, P->Location.Y, P->Location.Z, Yaw );
+		debugf( NETPROBE, TEXT("place %s %s loc=(%.1f,%.1f,%.1f) yaw=%i pitch=%i"), *Name, Moved ? TEXT("ok") : TEXT("failed"),
+			P->Location.X, P->Location.Y, P->Location.Z, Yaw, Pitch );
 		return;
 	}
 	debugf( NETPROBE, TEXT("place %s failed: no such player"), *Name );
