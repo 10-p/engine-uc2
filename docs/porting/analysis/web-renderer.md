@@ -828,3 +828,62 @@ script as it goes); the edit was undone at once and is kept in my scratch direct
   dB against its own frame` (colours right: a red/blue swap would not match), `m9-menu-movie-log` advancing,
   `m9-menu-movie-shots` PASS, 0 GL errors. The two `-clean` FAIL lines are `1 processes left` = my own shell,
   whose command line contained the run tree's path (`pgrep -f`), not a game process.
+
+## O-8: anisotropic filtering 16x and anti-aliasing 4x by default (2026-10-07)
+
+**Anisotropy.** D3DDrv makes every stage's default minifying filter `D3DTEXF_ANISOTROPIC` when
+`LevelOfAnisotropy > 1` (`D3DRenderState.cpp`); our stages default to LINEAR and the anisotropy was only
+applied to an explicit ANISOTROPIC filter, i.e. never. Now a linear minifying filter on a texture with
+mipmaps gets `LevelOfAnisotropy` (point-filtered post-process reads and render targets stay at 1), and the
+default is 16 (ini and compiled default, clamped to the hardware's maximum: desktop llvmpipe `anisotropy 16 of
+16`; the browser's ANGLE/Vulkan context reported `anisotropy 1 of 16` with the old ini). WebGL has
+`EXT_texture_filter_anisotropic` there; gl4es passes `GL_TEXTURE_MAX_ANISOTROPY` through. Before/after:
+`logs/m11/aniso-crops.png` (desktop, DM-Deadbolt floor grating, 1 above, 16 below: the far grating keeps its
+bars); whole frame difference mean 2.33. A player's saved `Avaris.ini` that predates this keeps its
+`LevelOfAnisotropy=1` (the engine derives it once from `Default.ini`), in the browser too (persisted in
+IndexedDB): such a player gets 16x only after clearing the saved settings.
+
+**Anti-aliasing: the decision.** Desktop GL: a 4x multisampled main framebuffer (renderbuffers), resolved
+with `glBlitFramebuffer` into the existing colour and depth-stencil textures, only when something reads them
+and they changed since the last resolve (`UUC2GLRenderDevice::ResolveMain`, keyed on the existing colour/depth
+versions). Every reader was checked and resolves first: the back-buffer snapshot and the depth-as-colour
+copy (`UpdateSampledTexture`), the depth copy and its no-`gl_FragDepth` fallback (`CopyDepthBuffer`), the
+present pass, `ReadPixels` (screenshots, `-glshot`), and the render targets that borrow the main depth
+(they attach the resolved depth texture, single-sampled). The self-test writes and reads those textures
+directly and compares exactly: it refuses to run with anti-aliasing on and says to use `-glnoaa`.
+WebGL 1 (and the ES 2.0 twin): there are no multisampled framebuffer objects. The three candidates:
+- the context's `antialias` attribute: it multisamples only the DEFAULT framebuffer, and the scene is drawn
+  into the driver's own framebuffer (the post-process reads it as textures); the default framebuffer
+  receives one full-screen quad, which has no edges to smooth. Rejected by construction.
+- WebGL 2 (`renderbufferStorageMultisample` + `blitFramebuffer`): gl4es emits GLSL ES 1.00 only, and WebGL 2
+  gives ESSL 1.00 shaders no `EXT_frag_depth`, `OES_standard_derivatives` or `EXT_shader_texture_lod`, and
+  rejects the unsized depth formats gl4es uses (decision 3 above). It would move the whole web renderer to an
+  untested context class in the last step of the milestone. Rejected for now; the natural next step if
+  MSAA quality is wanted in the browser.
+- a post-process AA: FXAA ("FXAA PC simple", Timothy Lottes' public reduced form) folded into the present
+  pass, which already reads the whole frame: no extra pass, no extra target, works on every WebGL 1 context.
+  **Chosen** for OpenGL ES 2 / WebGL 1 (and for a desktop context without multisampled renderbuffers).
+  Cost: 9 texture reads per pixel in the present pass instead of 1; it also smooths the HUD and menus (the
+  engine draws them into the same frame).
+Switches: ini `AntiAliasing=4` (samples; FXAA when > 0 on ES), `-glaa=N`, `-glnoaa`. `tools/dev/run-uc2-shot.sh`
+adds `-glnoaa` to every run (set `UC2_AA=1` to keep it on), so every pinned-picture comparison, the effects and
+the self-test run without anti-aliasing, exactly as before. New `-glshotpresented`: the `-glshot` pictures are
+read from the default framebuffer after the present pass (gamma and FXAA included) instead of the main one.
+Evidence (`logs/m11g/aa-*.out`, 0 GL errors, 0 Mesa errors on each): `anti-aliasing: 4x multisampled main
+framebuffer, resolved before it is read`, `main framebuffer 1280x720 (...; drawn 4x multisampled, resolved into
+them)`; twin: `anti-aliasing: FXAA in the present pass (no multisampled framebuffers on this context)`.
+Before/after crops: `logs/m11/aa-crops.png` (DM-Deadbolt, a diagonal pipe, 3x: desktop off | desktop 4x
+MSAA | twin off | twin FXAA). Whole-frame differences: desktop MSAA vs off mean 1.13 (0.99% of the pixels above
+32 levels: the edges); twin FXAA vs off (presented pictures) mean 1.06 (1.19% above 32).
+
+## The S3TC fallback crashed; fixed (2026-10-07)
+
+G2's first full run: `fb-glnos3tc` (twin, `-glnos3tc`) died in its first frame: `UTexture::ConvertDXT <-
+FOpenGLTexture::UploadMip <- CacheTexture <- EnableLighting <- FBspDrawList::Render` (a NULL `UTexture`: the
+BSP lightmaps are DXT1 `FTexture`s without one). The desktop with `-glnos3tc` crashed the same way. So the
+"S3TC fallback implemented" of the table above had never run on a level. Fixed (`89204c7`): the driver decodes
+DXT1/3/5 itself from the compressed data (`UC2GL_DecodeDXT`), for uploads and for the mip chain completion.
+DM-Deadbolt, static part of the pinned view, `-glnos3tc` against the same binding with S3TC: twin mean 0.019
+(max 3), desktop mean 0.019 (max 3); 0 GL errors (`logs/m11f/s3tc-*.out`, `logs/m11fd/s3tc-*.out`). Affected
+before the fix: any WebGL 1 context without `WEBGL_compressed_texture_s3tc` (most phones), which would have
+crashed at the first level.
