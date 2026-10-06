@@ -82,3 +82,77 @@ Commit: `Core: ...`, `tools: c1-ini-overrides.sh`, this notebook.
 
 Next: C-2 - the web needs an explicit "write the config now" (engine-ut2004's `FLUSHCONFIG`, which the frontend's
 UserData daemon calls through `ue_exec_command`); then the file inventory, the profile restart check, Node, globs.
+
+## Step 3 - C-2 native: what the game writes, and the restart check (2026-10-07)
+
+Correction to step 2: the C-1 script has 26 PASS lines before the FLUSHCONFIG checks (not 27); with them (checks D, E)
+it has 30 PASS, 0 FAIL (`logs/c1/c1-ini-run4.txt`).
+
+### FLUSHCONFIG (`Source/Engine/Src/UnEngine.cpp`, `UEngine::Exec`, first in the chain)
+
+engine-ut2004's command (its UnEngine.cpp:321), which the frontend's UserData daemon calls as
+`ueExecResult('flushconfig', 4000)` (`ufrontend/packages/frontend/src/shell/boot.ts:752`) through the frozen
+`ue_exec_command` ABI (UC2: `SDLLaunchWeb.cpp:50`, already there) before it reads the inis to keep them: a browser tab
+is closed, not shut down, so nothing may wait for the exit flush. `GConfig->Flush(0)` and the reply
+`ufront: flushed config to disk (ok)`. Without it nothing on the web writes a value that was only SET (the `-ini:`
+overrides, the player name that `SaveURLConfig` copies to `[DefaultPlayer]`, the resolution switches) until some
+`SaveConfig` happens to flush. Proof (C-1 script, checks D/E): a client started with `-ini:System:[C1Flush]:Key=flushed`
+and `-ini:User:[C1Flush]:UserKey=flushed-user`, given `exec flushconfig` and then SIGKILLed (no exit code runs) has both
+values in `Avaris.ini` / `User.ini`. (E, the same without the command: the KILLed client also had the value, so
+something in the native menu boot flushes by itself; the web cannot rely on that.)
+
+### The file inventory (native, `tools/dev/c1-saves.sh`, evidence `logs/c1/saves/`)
+
+Method: a fresh configuration (our tracked inis, no Avaris.ini/User.ini, no Profiles, no logs), a listing of the whole
+run tree (1231 files: path, size, mtime, links) -> run 1 -> listing -> diff. Run 1 (client under Xvfb, `capped 2G`):
+main menu -> Profiles -> the on-screen keyboard page, name `Saver` typed on the real keyboard (the M10 `text`
+scenario) -> Enter -> back -> Instant Action -> DeathMatch -> DM-Deadbolt, one character change (Right on the
+character page) -> match, pawn spawned, a second of forward movement, a screenshot -> SIGTERM. What it ADDED
+(`logs/c1/saves/written1.txt`; nothing else in the 1231 files changed, nothing outside `System/`):
+
+```
+new  ./System/Avaris.ini                           10110 bytes   the engine ini, derived from Default.ini at first start
+new  ./System/User.ini                              9189 bytes   the user ini, derived from DefUser.ini at first start
+new  ./System/Avaris.log                           34559 bytes   the log (overwritten at every start, no backups)
+new  ./System/Profiles/Saver/AVARIS_PROFILE.PRO    57681 bytes   THE PROFILE
+```
+(+ `System/ShotNNNNN.bmp` for each `SHOT`: the harness converts and deletes them; see below.)
+
+The profile: `ULoadSaveManager::GetProfileRoot()` = `<GFileManager default directory>/Profiles/` (the default
+directory is `appBaseDir()` = the working directory = `System/` natively and `/System` on the web, boot.ts:471
+`bootFS.chdir('/System')`); one DIRECTORY per profile named as the profile (`GetProfilePath` = root + name + "/"), and
+in it one file, `SAVE_FILE_NAME` = `AVARIS_PROFILE.PRO` (ULoadSaveManager.h:33): the whole player state (settings,
+button layout, ladder progression, unlocks, per-character stats: `UPlayerProfile::Serialize`). 56951 bytes when
+created, 57681 after the match (rewritten by the game's own saves; profile names with spaces keep them in the
+directory name, `PlayerName` is the underscore form). Several profiles = several sibling directories
+(`ListGameObjects` lists the directories of `Profiles/`, `DeleteGameObject` removes one recursively).
+
+Writers found by reading (`CreateFileWriter` / `appSaveStringToFile` over `Source/`, minus the editor, Xbox, Windows
+setup): the inis (`FConfigFile::Write`), the log (`FOutputDeviceFile`), profiles (`ULoadSaveManager`), screenshots
+(`appCreateBitmap("Shot")` -> `System/Shot%05d.bmp`, UnMisc.cpp:1567), `System/Detected.ini` / `Running.ini` (SDLLaunch.cpp
+:381/388: only with `-testrendev` / `-debugging`), `AutoPatch.txt` (MasterServerClient.cpp:352: the master-server
+browser), `uc2.uprof` (the script profiler's `profile stop`), demo recording and `ucc` exports. The shipped
+`System/PlayerProfile.ini` (class `PlayerProfile` is `config(PlayerProfile)`) was NOT written. There are no save
+games other than the profile (the `Save/` and `Cache/` folders in the tree stay empty).
+
+Persist or not (web): YES `System/Avaris.ini`, `System/User.ini` (settings, keys, `[DefaultPlayer] Name`),
+`System/Profiles/<name>/AVARIS_PROFILE.PRO`. NO: `Avaris.log`, `Shot*.bmp` (1.2 MB each, nobody can fetch them out of
+a browser), `Detected.ini`/`Running.ini`, `AutoPatch.txt`, `uc2.uprof`.
+
+### The restart check (native), PASS
+
+Run 2 starts a NEW process on the SAME tree (`M10_KEEP=1`, new in `m10-controls.sh`: skips the tree reset): the
+Profiles page lists `Saver` (no "no profiles" dialog; screenshot `logs/c1/saves/run2-list.png`: title "No Profile",
+list "Saver"), A selects it (title "Saver", Edit enabled; `run2-selected.png`), leaving the page loads it: the
+engine's `getall PlayerProfile ProfileName` answers `Saver` and `CharacterClassName` answers
+`UCCharacters.UCPawn_Human_Sapphire`, the character run 1 chose (the default is `UCPawn_Nakhti_Anubis`), so the
+value came from the file, not from class defaults. No `Unable to load profile` in either log; the profile's bytes
+are identical after run 2 (md5 `b2f33d84...`, not rewritten by a run that changed nothing). Output of run 4 of the
+script: `logs/c1/c1-saves-run4.txt` (14 PASS, 0 FAIL).
+
+So natively saving works since M13's `FFileManagerUnix::Exists` fix (a profile that `SaveGameObject` wrote was
+reported as non-existent by `ExistsGameObject`, so every load failed: the "Unable to load profile" lines in M10's
+logs). What can still look like "saving does not work" to a player: nothing is saved while the profile is the
+transient default ("No Profile" in the title): every setting lives IN the profile (`SensitivityX`, `bInvertY`, ...)
+and `SaveProfile` skips a transient one; and the profile is not auto-selected at the next start (the viewport always
+begins with the transient profile; the page lists the saved ones, the player picks one).

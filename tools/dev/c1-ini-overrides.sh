@@ -70,7 +70,7 @@ count_is() {	# count_is <expected> <fixed text> <log>
 run_client() {	# run_client <name> <scenario> <M10_URL or empty> <uc2.bin args...>
   local name=$1 scen=$2 url=$3; shift 3
   rm -f "$sys"/*.log "$sys"/*.log.*
-  M10_TREE=$tree M10_OUT=$out M10_URL=$url "$m10" --file "$scen" "$name" "$@" | sed 's/^/    /'
+  M10_STOPSIG=${STOPSIG:-TERM} M10_TREE=$tree M10_OUT=$out M10_URL=$url "$m10" --file "$scen" "$name" "$@" | sed 's/^/    /'
   # Lines logged inside appInit (the override lines) go to the FILE log only: -log's console echo starts later.
   cp -f "$sys/Avaris.log" "$out/$name-Avaris.log" 2>/dev/null
   cp -f "$sys/Avaris.ini" "$out/$name-Avaris.ini" 2>/dev/null
@@ -159,6 +159,37 @@ check c-ucc-log-user-override logline 'Ini override: [C1Test] UserKey=ucc-user (
 check c-ucc-reports-malformed logline 'Ini override ignored (expected -ini:<File>:[<Section>]:<Key>=<Value>): -ini:bad' "$out/c-ucc.out" "$sys"/*.log
 check c-ucc-system-value-written-to-Avaris.ini expect_ini "$out/c-Avaris.ini" C1Test Key 'ucc value'
 check c-ucc-user-value-written-to-User.ini expect_ini "$out/c-User.ini" C1Test UserKey ucc-user
+
+# ---------------------------------------------------------------------------------------------------------------
+# D: FLUSHCONFIG (Source/Engine/Src/UnEngine.cpp), the web host's "write the config now". A browser tab is closed,
+# never shut down, so nothing may wait for the exit flush: the client is KILLED (no exit code runs), and the value
+# is in the ini only if the engine wrote it when asked. E is the same without the command (informational: it says
+# whether anything else flushed the cache on its own during the menu boot).
+# ---------------------------------------------------------------------------------------------------------------
+cat > "$out/d.scen" <<'SCEN'
+wait OpenMenu \[UCMenu.UC2MainMenu\] 90
+sleep 3
+chan exec flushconfig
+expect d-flushconfig-answers ufront: flushed config to disk \(ok\) 10
+sleep 1
+SCEN
+cat > "$out/e.scen" <<'SCEN'
+wait OpenMenu \[UCMenu.UC2MainMenu\] 90
+sleep 4
+SCEN
+echo "== D: flushconfig, then SIGKILL (client, Xvfb)"
+STOPSIG=KILL run_client d "$out/d.scen" '' '-ini:System:[C1Flush]:Key=flushed' '-ini:User:[C1Flush]:UserKey=flushed-user'
+if grep -a -q -P "^PASS\td-flushconfig-answers\t" "$out/d.result" 2>/dev/null; then result PASS d-flushconfig-answers "$(grep -a -P '^PASS\td-' "$out/d.result" | cut -f3 | cut -c1-200)"
+else result FAIL d-flushconfig-answers "see $out/d.result"; fi
+check d-killed-process-has-the-system-value-in-Avaris.ini expect_ini "$out/d-Avaris.ini" C1Flush Key flushed
+check d-killed-process-has-the-user-value-in-User.ini expect_ini "$out/d-User.ini" C1Flush UserKey flushed-user
+echo "== E: no flushconfig, then SIGKILL (client, Xvfb; informational)"
+STOPSIG=KILL run_client e "$out/e.scen" '' '-ini:System:[C1Flush]:Key=notflushed'
+if ini_get "$out/e-Avaris.ini" C1Flush Key > /dev/null 2>&1; then
+  result PASS e-info "without flushconfig a KILLed client DID have the value in Avaris.ini (something flushed during the menu boot)"
+else
+  result PASS e-info "without flushconfig a KILLed client had NO value in Avaris.ini: only the exit flush or flushconfig writes an override"
+fi
 
 echo "c1-ini-overrides: $([ "$fails" = 0 ] && echo ALL PASS || echo "$fails FAILED") (logs in $out)"
 [ "$fails" = 0 ]
