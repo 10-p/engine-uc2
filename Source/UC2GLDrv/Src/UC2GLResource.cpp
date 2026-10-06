@@ -392,13 +392,22 @@ void FOpenGLTexture::CompleteCompressedChain( GLenum Target, FTexture* Texture, 
 	GLenum Format	= ActualFormat == TEXF_DXT1 ? GL_COMPRESSED_RGBA_S3TC_DXT1_EXT :
 					  ActualFormat == TEXF_DXT3 ? GL_COMPRESSED_RGBA_S3TC_DXT3_EXT :
 												  GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+	// Every completed level is that block repeated: a level of a non-square chain can be more than
+	// one block in one direction (e.g. 1x16 = 1x4 blocks), and the size of the data must be exactly
+	// its number of blocks (WebGL: GL_INVALID_VALUE otherwise; seen on the first browser match).
+	INT		MaxBlocks	= ((Max( MipWidth >> 1, 1 ) + 3) / 4) * ((Max( MipHeight >> 1, 1 ) + 3) / 4);
+	TArray<BYTE> Repeated;
+	Repeated.Add( MaxBlocks * BlockBytes );
+	for( INT i=0; i<MaxBlocks; i++ )
+		appMemcpy( &Repeated(i * BlockBytes), Block, BlockBytes );
 	INT Level = LastMipIndex - FirstMip;
 	while( MipWidth > 1 || MipHeight > 1 )
 	{
 		MipWidth	= Max( MipWidth >> 1, 1 );
 		MipHeight	= Max( MipHeight >> 1, 1 );
 		Level++;
-		RenDev->CompressedTexImage2D( UploadBindTarget, TextureID, Target, Level, Format, MipWidth, MipHeight, BlockBytes, Block, 0 );
+		INT Blocks = ((MipWidth + 3) / 4) * ((MipHeight + 3) / 4);
+		RenDev->CompressedTexImage2D( UploadBindTarget, TextureID, Target, Level, Format, MipWidth, MipHeight, Blocks * BlockBytes, &Repeated(0), 0 );
 	}
 }
 
