@@ -116,3 +116,17 @@ crash-notifier processes; both are the owner's to clear.
   lower value = more important), the "Recurring" flag of volume/pitch events read as "fade", the cue radius of
   non-3D sounds (we use DirectSound's defaults, 4 units: such cues on other actors are culled). Details and the
   evidence in `analysis/audio.md`.
+
+## O-1/O-2 sound and movies (2026-10-06, branch `m11-audio`, details in `analysis/web-audio.md`)
+
+- **PipeWire for the 32-bit game (optional; tell the owner).** The PipeWire backend of OpenAL Soft is compiled
+  when `libpipewire-0.3-dev` is installed (it was installed on this machine during the session, amd64 and
+  i386, at 22:11 on 2026-10-06; a reconfigure picked it up: `Building OpenAL with support for the following
+  backends: PipeWire, PulseAudio, ALSA, OSS, WaveFile, Null`). At run time the 32-bit backend then fails:
+  `Failed to create PipeWire event context (errno: 2)`, because the i386 client modules
+  (`/usr/lib/i386-linux-gnu/pipewire-0.3/libpipewire-module-protocol-native.so` and the rest) are not
+  installed. The game falls back to PulseAudio, which PipeWire serves through its pulse server, and the log
+  says so (`order pipewire,pulse,alsa,oss: pipewire failed, pulse initialised; playing through pulse`).
+  Sound works either way. To get the native PipeWire backend in the 32-bit game:
+  `sudo apt install libpipewire-0.3-modules:i386` (the 64-bit game, preset `native64`, has the amd64 modules
+  already). A player's machine needs the same package for the same reason; nothing else changes.

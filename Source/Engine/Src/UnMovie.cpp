@@ -125,6 +125,51 @@ UBOOL appFindMovie( const TCHAR* Name, FString& VideoFile, FString& AudioFile, F
 	unguard;
 }
 
+/*-----------------------------------------------------------------------------
+	Saying why movies do not play (O-1): once in the log per movie, once for the player.
+-----------------------------------------------------------------------------*/
+
+static FString	GMovieNotice;			// waiting to be shown on the console (appTakeMovieNotice)
+static UBOOL	GMovieNoticeGiven = 0;	// the "no movies at all" notice is given once per run
+
+static void SetMovieNotice( const FString& Text )
+{
+	if( GMovieNoticeGiven )
+		return;
+	GMovieNoticeGiven = 1;
+	GMovieNotice = Text;
+	debugf( NAME_Init, TEXT("UC2Movie: %s"), *Text );
+}
+
+UBOOL appTakeMovieNotice( FString& Out )
+{
+	if( !GMovieNotice.Len() )
+		return 0;
+	Out = GMovieNotice;
+	GMovieNotice = TEXT("");
+	return 1;
+}
+
+// Is there any cooked movie at all? (A run tree or web manifest without the cooked folders: every movie is off.)
+static UBOOL AnyCookedMovie()
+{
+	static INT Known = -1;
+	if( Known < 0 )
+		Known = GFileManager->FindFiles( MOVIE_DIR TEXT("/*.ogv"), 1, 0 ).Num() + GFileManager->FindFiles( TEXTURE_MOVIE_DIR TEXT("/*.ogv"), 1, 0 ).Num() > 0;
+	return Known;
+}
+
+// Each missing movie once (the same name is asked for again by every material and level that uses it).
+static UBOOL FirstTimeFor( const TCHAR* Kind, const TCHAR* Name )
+{
+	static TMap<FString,INT> Seen;
+	FString Key = FString(Kind) + TEXT(":") + FString(Name).Caps();
+	if( Seen.Find( Key ) )
+		return 0;
+	Seen.Set( *Key, 1 );
+	return 1;
+}
+
 FPortableMoviePlayer* appOpenMovie( const TCHAR* Name, DWORD Flags, UAudioSubsystem* Audio )
 {
 	guard(appOpenMovie);
@@ -134,12 +179,19 @@ FPortableMoviePlayer* appOpenMovie( const TCHAR* Name, DWORD Flags, UAudioSubsys
 		if( !Logged )
 			debugf( NAME_Log, TEXT("UC2Movie: this build has no movie player: %s and every other movie stay off"), Name );
 		Logged = 1;
+		SetMovieNotice( TEXT("Movies are off: this build has no movie player.") );
 		return NULL;
 	}
 	FString Video, AudioFile, Note;
 	if( !appFindMovie( Name, Video, AudioFile, &Note ) )
 	{
-		debugf( NAME_Log, TEXT("UC2Movie: no cooked movie for %s (tools/cook-movies.py)"), Name );
+		if( !AnyCookedMovie() )
+			SetMovieNotice( TEXT("Movies are off: there are no cooked movies in ../Movies or ../Textures/Movies ")
+				TEXT("(tools/cook-movies.py makes them; tools/dev/mkrun-uc2.sh links them into a run tree; a web build needs them in its file manifest).") );
+		if( FirstTimeFor( TEXT("missing"), Name ) )
+			debugf( NAME_Log, TEXT("UC2Movie: no cooked movie for %s (%s)"), Name,
+				AnyCookedMovie() ? TEXT("the cooked tree has no such movie; names the content references but the game never shipped, e.g. CH_*, failed to open on the Xbox too")
+					: TEXT("no cooked movies at all: tools/cook-movies.py") );
 		return NULL;
 	}
 	FPortableMoviePlayer* Player = GCreateMoviePlayer();
@@ -318,7 +370,16 @@ UBOOL appPlayMovieFullscreen( const TCHAR* Name, EFullscreenMovieKind Kind, UBOO
 	UEngine* Engine = UEngine::GEngine;
 	FPortableMoviePlayer* Player = appOpenMovie( Name, MOVIE_Audio | MOVIE_ExclusiveAudio, Engine->Audio );
 	if( !Player )
+	{
+		// Say why on the console once (outside rendering: this is the place); the log has it already.
+		FString Notice;
+		if( Viewport->Actor && appTakeMovieNotice( Notice ) )
+		{
+			debugf( NAME_Log, TEXT("UC2Movie: on the console: %s"), *Notice );
+			Viewport->Actor->eventClientMessage( Notice, NAME_None );
+		}
 		return 0;
+	}
 	ParseMovieShots();
 	UMovieMaterial* M = WrapPlayer( Player, Name );
 	// Only XboxMovieThread (cinematics, credits) hid the bands, and never for the credits (bIsCreditsMovie);
@@ -390,6 +451,60 @@ UBOOL appPlayMovieFullscreen( const TCHAR* Name, EFullscreenMovieKind Kind, UBOO
 	MovieMaterial (D3DMaterialState.cpp:4539-4624 on the Xbox).
 -----------------------------------------------------------------------------*/
 
+// What a MovieMaterial shows while it has no picture: an opaque black 4x4 picture that never changes (O-1).
+// Without it the device fell back to Material.DefaultMaterial, UC2's bright green DefaultTexture: every movie
+// texture of a build without the cooked movies (the web build so far) was a green square.
+class FBlackMoviePicture : public FPortableMoviePlayer
+{
+public:
+	enum { SIZE = 4 };
+	BYTE Pixels[SIZE*SIZE*4];
+	FBlackMoviePicture()
+	{
+		for( INT i=0; i<SIZE*SIZE; i++ )
+		{
+			Pixels[i*4+0] = Pixels[i*4+1] = Pixels[i*4+2] = 0;
+			Pixels[i*4+3] = 255;
+		}
+	}
+	UBOOL Open( const TCHAR*, const TCHAR*, DWORD, UAudioSubsystem* ) { return 1; }
+	UBOOL Advance() { return 0; }
+	UBOOL IsPlaying() { return 0; }
+	UBOOL HasEnded() { return 0; }
+	void  Pause( UBOOL ) {}
+	void  Rewind() {}
+	INT   GetWidth() { return SIZE; }
+	INT   GetHeight() { return SIZE; }
+	INT   GetFrame() { return 0; }
+	INT   GetFrameCount() { return 1; }
+	FLOAT GetFrameRate() { return 30.f; }
+	DOUBLE GetTime() { return 0.0; }
+	// A revision no real picture has (a device keeps "revision + 1" of what it uploaded, 0 meaning none).
+	INT   GetRevision() { return -2; }
+	const BYTE* GetBGRA() { return Pixels; }
+	const TCHAR* GetDescription() { return TEXT("black (no picture)"); }
+};
+static FBlackMoviePicture GBlackMoviePicture;
+
+// No picture for M: its LoadingFallback when it has one (the Xbox's choice while a movie loaded), else black.
+static FPortableMoviePlayer* NoPicture( UMovieMaterial* M, UBOOL& bOutFallback, const TCHAR* Why )
+{
+	if( FirstTimeFor( Why, M->GetPathName() ) )
+		debugf( NAME_Log, TEXT("UC2Movie: MovieMaterial %s shows %s: %s"), M->GetPathName(),
+			M->LoadingFallback ? *FString::Printf( TEXT("its LoadingFallback %s"), M->LoadingFallback->GetPathName() ) : TEXT("black"), Why );
+	if( M->LoadingFallback )
+	{
+		bOutFallback = 1;
+		return NULL;
+	}
+	if( M->USize <= 0 || M->VSize <= 0 )
+	{
+		M->USize = FBlackMoviePicture::SIZE;
+		M->VSize = FBlackMoviePicture::SIZE;
+	}
+	return &GBlackMoviePicture;
+}
+
 FPortableMoviePlayer* appUpdateMovieMaterial( UMovieMaterial* M, UBOOL& bOutFallback )
 {
 	guard(appUpdateMovieMaterial);
@@ -419,7 +534,7 @@ FPortableMoviePlayer* appUpdateMovieMaterial( UMovieMaterial* M, UBOOL& bOutFall
 		}
 	}
 	if( M->bHasError || !Player )
-		return NULL;
+		return NoPicture( M, bOutFallback, TEXT("its movie cannot be opened (see the line above)") );
 	if( M->bNeedsFrameUpdate )
 	{
 		UBOOL bWasPlaying = !Player->HasEnded();
@@ -428,14 +543,11 @@ FPortableMoviePlayer* appUpdateMovieMaterial( UMovieMaterial* M, UBOOL& bOutFall
 		// ENDOFFILE on every later call, which would call the delegate every frame).
 		if( bWasPlaying && Player->HasEnded() && OBJ_DELEGATE_IS_SET(M,OnDonePlaying) )
 			M->delegateOnDonePlaying();
-		if( Player->GetFrame() < 0 )
-		{
-			bOutFallback = 1;	// no picture yet: LoadingFallback or the default material
-			return NULL;
-		}
 	}
-	else if( Player->GetFrame() < 0 )
-		return NULL;
+	// No picture yet: nothing decoded, or nothing converted (revision 0: the first packets were rejected or
+	// duplicates, so the player's buffer holds no picture).
+	if( Player->GetFrame() < 0 || Player->GetRevision() == 0 )
+		return NoPicture( M, bOutFallback, TEXT("no picture decoded yet") );
 	M->USize = Player->GetWidth();
 	M->VSize = Player->GetHeight();
 	// Evidence for the logs: each material's frame, at most every 2 s.

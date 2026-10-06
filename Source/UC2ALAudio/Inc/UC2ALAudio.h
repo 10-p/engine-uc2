@@ -28,6 +28,7 @@ class UUC2ALAudioSubsystem : public UAudioSubsystem
 
 	// Configuration ([UC2ALAudio.UC2ALAudioSubsystem]).
 	FStringNoInit	OutputDevice;		// alcOpenDevice name; empty = the default device
+	FStringNoInit	Backends;			// OpenAL Soft backends to try, in order (its ALSOFT_DRIVERS, unless the environment sets that)
 	FStringNoInit	WaveFile;			// render to this .wav with OpenAL Soft's wave writer (tests); -AUDIOWAVE=
 	INT				MaxVoices;			// sources in the voice pool (the Xbox had 188 2D + 64 3D)
 	UBOOL			ZoneReverb;			// zone -> I3DL2 preset (the shipped Xbox code had this in #if 0)

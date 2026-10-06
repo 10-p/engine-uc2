@@ -54,3 +54,78 @@ opened movie with no picture yet and `bNeedsFrameUpdate` 0 -> NULL without fallb
 buffers that were never written (zero planes = green in BT.601). To see: what DefaultTexture looks like.
 
 Next: native build (running), PipeWire reconfigure, backend logging, missing-data messages.
+
+## Step 1 - O-1 native: backend order and report, missing-data messages, no more green movie textures (2026-10-06)
+
+### (a) Backends
+- `[UC2ALAudio.UC2ALAudioSubsystem] Backends=` (new config property; compiled default on Linux
+  `pipewire,pulse,alsa,oss` = openal-soft's own order, explicit). Init sets `ALSOFT_DRIVERS` to it unless the
+  environment already has one (bin/capped's `null`, the wave writer's `wave`); on the web nothing is set.
+- Init captures openal-soft's log while the device opens (`alsoft_set_log_callback`, found with
+  `alcGetProcAddress(NULL, ...)`: it is NOT a dynamic export of libopenal.so.1, `nm -D` shows only
+  `alsoft_get_version`), then reports (`UC2ALBackendReport`, UC2ALDevice.cpp) and removes the callback.
+  The callback only sees the first open of the process (backends initialise once).
+- PipeWire: libpipewire-0.3-dev appeared mid-session (see step 0); reconfigure -> `Building OpenAL with support
+  for the following backends: PipeWire, PulseAudio, ALSA, OSS, WaveFile, Null`, HAVE_PIPEWIRE 1. At run time the
+  32-bit backend fails: `/usr/lib/i386-linux-gnu/pipewire-0.3/` does not exist (`libpipewire-0.3-modules:i386`
+  not installed; amd64 has them) -> `Failed to create PipeWire event context (errno: 2)` -> pulse. BLOCKERS.md
+  has the optional `sudo apt install libpipewire-0.3-modules:i386`.
+- Runs (run tree `run/m11audio`, `capped 2G 30 -- xvfb-run ... ./uc2.bin -log -nostartupmovies`), literal lines:
+  ```
+  null (capped default)  UC2ALAudio: OpenAL Soft backends: order null (ALSOFT_DRIVERS): null initialised; playing through null
+                         UC2ALAudio: 1.1 ALSOFT 1.25.2 on "No Output" (backend null) at 48000 Hz, 64 voices, reverb EFX (EAX reverb), loop points yes
+  pulse + null sink      UC2ALAudio: OpenAL Soft backends: order pulse (ALSOFT_DRIVERS): pulse initialised; playing through pulse
+  (PULSE_SINK=uc2test)   UC2ALAudio: 1.1 ALSOFT 1.25.2 on "uc2test Audio/Sink sink" (backend pulse) at 48000 Hz, 64 voices, reverb EFX (EAX reverb), loop points yes
+  default order          UC2ALAudio: OpenAL Soft backends: order pipewire,pulse,alsa,oss: pipewire failed, pulse initialised; playing through pulse
+  (ALSOFT_DRIVERS= empty,UC2ALAudio: openal-soft said: Failed to create PipeWire event context (errno: 2)
+   PULSE_SINK=uc2test)   UC2ALAudio: 1.1 ALSOFT 1.25.2 on "uc2test Audio/Sink sink" (backend pulse) at 48000 Hz, ...
+  pipewire only, named   UC2ALAudio: OpenAL Soft backends: order pipewire (ALSOFT_DRIVERS): pipewire failed; playing through none
+  device                 UC2ALAudio: OpenAL could not open device "uc2-no-such-device": sound is off
+                         UC2ALAudio: output devices of that backend: none
+  ```
+  (logs `logs/m11audio/o1-*.out`.) The default-order run was only made after checking that the i386 PipeWire
+  modules are absent (`test ! -e .../libpipewire-module-protocol-native.so`), so it could not reach the owner's
+  default sink; the null sink was loaded and unloaded around each run (`pactl load-module module-null-sink
+  sink_name=uc2test` / `unload-module`), afterwards `pactl list short sinks | grep -c uc2test` = 0.
+- On failure to open, the device now also lists the devices of the chosen backend (what `OutputDevice=` takes).
+
+### (b) Run trees and messages
+- `tools/dev/mkrun-uc2.sh` already links Sounds/, Music/, Movies/, Textures/Movies/ from assets/uc2-cooked and
+  copies `libopenal.so.1` beside uc2.bin (printing a note on stderr when a cooked folder is missing);
+  `bin/play-uc2` (not mine, not changed) calls it on main's build-native and sends only stdout to /dev/null, so
+  those notes reach the owner's terminal. main's build-native has HAVE_PIPEWIRE 0 (configured before the dev
+  package came); nothing else is missing for sound.
+- New: the device says at Init (NAME_Init, so with -log on the terminal) and once on the console
+  (`PlayerController.ClientMessage`, from `Update`, before the scene is drawn) when ../Sounds has no
+  `A_Gameplay.uc2cues` ("Game sound is off ...") or ../Music has no .ogg ("Music is off ..."), when no OpenAL
+  library could be loaded, and when no device could be opened (with the backend report). Movies: `UnMovie.cpp`
+  says once (NAME_Init + console, from the full-screen player or the audio device's Update) when there is no
+  cooked movie at all or no movie player, and once per missing movie name which case it is.
+  Run without cooked data (`run/m11audio-nodata`, `logs/m11audio/o1-nodata.out`): `UC2ALAudio: Sound effects
+  are off: no cooked sound data in ../Sounds (...)` (text since changed to "Game sound is off (effects, speech,
+  music)"), `UC2Movie: Movies are off: there are no cooked movies in ../Movies or ../Textures/Movies (...)`,
+  `UC2ALAudio: on the console: ...`. Whether the menu shows ClientMessage text on screen: not looked at (log only).
+
+### (c) "Videos play green": found and fixed
+- **Cause, seen**: a MovieMaterial whose movie cannot be opened made `SetMovieMaterial` return 0 and the GL
+  device then drew `Material.DefaultMaterial` = `Engine.DefaultTexture`, which in UC2 is **bright green**.
+  Run tree without Movies/ and Textures/Movies (`run/m11audio-nomovies`, `m9-movies.py --only menu-movie`):
+  `logs/m11audio-nomovies/m9-menu-movie-0.png` shows the arena page's game-type portrait as a solid green
+  square. The web build has no movie in its manifest, so every movie texture there was green. (The Xbox drew the
+  same DefaultTexture for a movie it could not open, but every movie it referenced on purpose existed.)
+  The all-zero-YUV theory (zero planes convert to green in BT.601) does not apply to our player: its BGRA buffer
+  starts zeroed (transparent black) and only decoded pictures are converted; libtheora fills its reference
+  frames with grey when a stream starts on an inter frame.
+- **Fix** (`Engine/Src/UnMovie.cpp`, `appUpdateMovieMaterial`): while a material has no picture (its movie
+  cannot be opened, nothing decoded yet, or nothing converted: revision 0) it shows its `LoadingFallback` when it
+  has one, else a 4x4 opaque black picture (`FBlackMoviePicture`, revision -2), never NULL-without-fallback.
+  One log line per material and reason. The GL device's code is unchanged (it uploads whatever picture it gets).
+  After the fix, the same run: the portrait area shows the material's LoadingFallback
+  `T_Portrait.Arena.UI_Arena_Null_Portrait` (the page background shows through), log `UC2Movie: MovieMaterial
+  T_Portrait.GameType.Portrait_Gametype_CTF shows its LoadingFallback T_Portrait.Arena.UI_Arena_Null_Portrait:
+  its movie cannot be opened (see the line above)`.
+- Numeric check added to `UC2Movie.UC2MovieSelfTest` (3 checks: missing movie without fallback -> 16 texels all
+  (0,0,0,255) and bHasError; with a fallback -> fallback; an existing movie -> its own frame 0, revision 1).
+  `tools/dev/movie-selftest.sh m11audio` -> `UC2MovieSelfTest: 99 checks, 0 failed` (96 before + these 3).
+
+Next: O-2, openal-soft into the web build.
