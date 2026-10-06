@@ -301,3 +301,21 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   `uc2-wasm-audio.spec.js` 3/3 twice (Web Audio device, menu music, output not silent by an analyser, logos with
   sound and skippable). Asset tree v1 (8cbea58) carries the cooked folders; frontend manifest regenerated
   (ufrontend 05862c4, 1,223 files). Coordinator re-verification on main after the renderer merge.
+- 2026-10-07 — **C-1 and C-2 (web ini overrides, what persists) merged (`web-ini-saves`, 3a5a532).**
+  `appApplyIniOverrides` ported from engine-ut2004 (`-ini:<File>:[<Section>]:<Key>=<Value>`, called once in
+  `appInit`; a malformed token is logged and ignored; values are written back to the ini as in the template),
+  `FLUSHCONFIG`, and a shared-code bug fixed: `UObject::RemoveNames` dropped the config cache without writing
+  it on every garbage purge, losing `-ini:` values and `SaveURLConfig`'s `[DefaultPlayer]` (possibly part of
+  the owner's "saving doesn't work"). Native saves work: profiles at `System/Profiles/<name>/AVARIS_PROFILE.PRO`
+  survive a restart (since M13's directory fix); a player can still think saving is broken because the game
+  starts on a transient "No Profile" and does not auto-select the saved one (D-3). The web build writes the
+  same profile flat, `System/Profiles/<name>.PRO` (`__EMSCRIPTEN__` only, ULoadSaveManager.cpp), because the
+  frontend's `userFiles` globs allow a wildcard only in the file name (coordinator's decision; alternative:
+  teach the frontend directory wildcards and revert 22e9dbf). Frontend (ufrontend f90b70f): `network.playerName`
+  (User.ini [DefaultPlayer] Name), `userFiles: System/Profiles/*.PRO`, player files excluded from the manifest.
+  Coordinator's re-run on main: `tools/dev/c1-ini-overrides.sh` ALL PASS, `tools/dev/c1-saves.sh` ALL PASS
+  (profile listed and loaded after a restart, bytes unchanged), `m10-controls.sh keyboard text` PASS; frontend
+  `yarn test` 28/28. Not verified: the browser's own file layer (WasmFS mkdir under /System, the persistence
+  daemon's scan, flushconfig round trip): C-3's browser e2e must create a profile, reload, and find it.
+  D-4 facts (where the player name comes from and where the character name overwrites it without a profile)
+  are in `analysis/web-ini-saves.md`.
