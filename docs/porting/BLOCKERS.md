@@ -17,37 +17,26 @@ Newest first. Remove an entry when it is resolved and say how in `LOG.md`.
 
 - Reddit thread by VBelov_UZ (`/r/unrealtournament/comments/1t9dn3v`): blocked for the agent's fetch tools.
   Only needed if it says more than `reference/community/uc2-test-suite/README_TESTER.md`.
-- Xbox-look visual oracle (wanted at M6/M7): xemu plus its MCPX ROM, BIOS and HDD image.
-- arm64 (M13): `sudo apt install g++-aarch64-linux-gnu qemu-user qemu-user-binfmt` for `cmake --preset arm64`
+- Xbox-look visual oracle: **provided 2026-10-06** (`<WorkUC2>/xbox-emulation/run-uc2-iso.sh`, xemu; slow on this
+  machine: last resort). The owner's xemu captures are in `<WorkUC2>/temp/`.
+- arm64 (M13): **compiler and qemu-user installed by the owner 2026-10-06**; still missing for the client: `sudo apt install g++-aarch64-linux-gnu qemu-user qemu-user-binfmt` for `cmake --preset arm64`
   (toolchain file and preset exist since M13, never configured: no compiler here). `ucc-bin` needs nothing more; the
   client additionally needs the arm64 X11/GL development packages through multiarch (`sudo dpkg --add-architecture
   arm64`, then `libx11-dev:arm64 libxext-dev:arm64 libxrandr-dev:arm64 libxcursor-dev:arm64 libxi-dev:arm64
   libxss-dev:arm64 libgl-dev:arm64 libasound2-dev:arm64 libpulse-dev:arm64`) because SDL2 is built from source.
-- Canonical config (M15): retail and leak disagree on `Characters.ini`, `Gametypes.ini`, `Maplists.ini` and 14
-  localisation files; the owner should see the per-file diff before one side is chosen.
-- Depth-of-field alpha (visible from M7): we corrected a header that had fallen behind its script, which
-  changes one blur constant from what the shipped binary used (`analysis/runtime-port.md`, "Deviation").
-  The owner should confirm which behaviour to keep once the effect is on screen.
-- Post-processing (M7), four things only the owner can settle, each with a switch and a picture pair
-  (`tools/dev/m7-effects.sh`, `analysis/postprocess.md`):
-  1. Depth-of-field blur alpha: script's value (100 in third person; default) or the shipped binary's (65):
-     `DOFShippedBlurAlpha` / console `DOFSHIPPEDALPHA`; pair `logs/m7/fx-dof-alpha-a.png` / `-b.png`.
-  2. Dynamic gamma is on with post-processing because the Xbox build turns it on; on a dark map it brightens
-     the frame a lot (`fx-dyngamma-a.png` with, `-b.png` without). Console `DYNAMICGAMMA 0`.
-  3. Distortion amounts are scaled by height/480 so the effect covers the same share of the picture as on a
-     640x480 Xbox frame (one constant, `PixelScale` in `UC2GLShaders.cpp`); in pixels it would be 1.5 times
-     weaker at 720p.
-  4. The pause overlay alone turns the scene into a teal negative (`fx-pause-b.png`): that is what the ramp
-     texture and Epic's shader give; nobody here knows what the Xbox pause screen looks like.
-  None of the "on" pictures has a reference: an Xbox capture of DM-Praxis (the round room), DM-Deadbolt (first
-  start) and DM-Azure (first start) would settle more than anything else.
-- Optional tool: `sudo apt install xdotool` would make input-injection tests one-liners. Not blocking: key
+- **Decided by the owner, 2026-10-06** (`<WorkUC2>/answers.txt`, PLAN.md "Owner review"): canonical config
+  and localisation = the leak (unless a difference changes behaviour); depth-of-field alpha = the shipped value
+  65 (`DOFShippedBlurAlpha=True` in Default.ini, O-3); dynamic gamma on, as the Xbox ("it works as it should");
+  distortion size: the DM-Praxis panes close up are "spot on" (other distortions: O-5..O-7); the pause overlay's
+  teal negative is what the Xbox shows; localised taunt indices: keep the Xbox behaviour (no relink); zone
+  reverb: keep on.
+- Optional tool: xdotool **installed 2026-10-06**; it would make input-injection tests one-liners. Not blocking: key
   and mouse events are injected through the X test extension with a few lines of Python (M10's
   `tools/dev/m10-inject.py`; `python3-xlib` is not installed either, ctypes is used).
 - M10, pads: no physical pad on this machine. The tests use SDL's virtual game controller, so everything after
   SDL is exercised, but SDL's own device mapping of a real pad (and real rumble motors) is not. `/dev/uinput`
   is writable for user ion (seat ACL), so a kernel-level virtual pad would be possible, but it would appear on
-  the owner's whole desktop session while a test runs; not used. Wanted from the owner: one session with a real
+  the owner's whole desktop session while a test runs; not used. Owner (2026-10-06): tested later, from CI builds once the engine is on GitHub. Wanted then: one session with a real
   pad (any XInput/PlayStation pad SDL knows): menu with D-pad/A/B, a match with sticks/triggers, unplug and
   replug, and whether rumble is felt; `uc2.bin -inputlog` logs every pad event as `SDL2Input:` lines.
 - Scope, to decide when reached: split-screen on PC; web multiplayer visible at launch; arm64 hardware.
