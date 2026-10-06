@@ -17,6 +17,9 @@
 #                        Fire, e.g. "set UCDeathmatch NumPlayers 0" (the first PlayerStart is then always
 #                        chosen: the wine reference script does the same)
 #
+#   UC2_AA=1             keep the device's anti-aliasing (O-8: on by default since M11); without it every run gets
+#                        -glnoaa, so pictures compare with the references made before anti-aliasing existed
+#
 # Everything runs inside <WorkUC2>/bin/capped 2G (CLAUDE.md, "Running anything: memory ceiling, always").
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -44,13 +47,14 @@ if [ -n "${UC2_POSTCMD:-}" ]; then
   postcmd=1
 fi
 
+aaarg=-glnoaa; [ -n "${UC2_AA:-}" ] && aaarg=""
 inner=$(mktemp)
 cat > "$inner" <<INNER
 cd "$sys" || exit 1
 echo "\$DISPLAY" > "$out/$name.display"
 # M8: OpenAL Soft renders to its null backend unless ALSOFT_DRIVERS says otherwise (headless runs stay quiet).
 # M9: no logos (the fire-at times assume none)
-SDL_AUDIODRIVER=dummy ALSOFT_DRIVERS=${ALSOFT_DRIVERS:-null} ./uc2.bin $map -log -nostartupmovies "\$@" > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy ALSOFT_DRIVERS=${ALSOFT_DRIVERS:-null} ./uc2.bin $map -log -nostartupmovies $aaarg "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
 if [ "$fire" != 0 ]; then
   sleep \$(( $fire - 4 ))

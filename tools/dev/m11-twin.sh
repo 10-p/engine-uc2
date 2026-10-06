@@ -20,8 +20,9 @@
 #   effects    tools/dev/m7-effects.sh on both; the desktop's B pictures are the twin's fx-<effect>-b.ref.png
 #   m6         the M6 pixel-shader pictures (pixel shaders on / off) on both
 #   fallbacks  the twin with each capability masked: -glnos3tc (engine decodes DXT), -glnomaxlevel on the
-#              desktop (mip chains completed by the driver); -glnodepthtexture and -glnofragdepth are run and
-#              reported, their fallbacks are NOT implemented (the lines say what happens instead)
+#              desktop (mip chains completed by the driver), -glnofragdepth (depth test in the distortion
+#              passes' shaders), -glnouintindex (32-bit indices stored as 16-bit); -glnodepthtexture is run
+#              and reported, its fallback is NOT implemented (the line says what happens instead)
 #   movies     tools/dev/m9-movies.py scenarios logos, logos-skip, menu-movie on the twin
 #
 # Thresholds are in the check functions, each with its reason; docs/porting/analysis/web-renderer.md has the
@@ -194,28 +195,30 @@ check_fallbacks() {
   UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D fb-ref 110 34 DM-Deadbolt -opengl -glerrors -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$LD/fb-ref.report" 2>&1
   wait $pid
   local spec sw tree arg fails=0 st s e L
-  for spec in "glnos3tc|$T|-gl4es" "glnomaxlevel|$D|-opengl"; do
+  for spec in "glnos3tc|$T|-gl4es" "glnomaxlevel|$D|-opengl" "glnofragdepth|$T|-gl4es" "glnouintindex|$T|-gl4es"; do
     IFS='|' read -r sw tree arg <<<"$spec"; L=$work/logs/$tree
     UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $tree fb-$sw 110 34 DM-Deadbolt $arg -glerrors -$sw -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$L/fb-$sw.report" 2>&1
     st=$("$imgdiff" "$L/fb-ref-0.png" "$L/fb-$sw-0.png" --box 760,0,1280,720 --diff "$L/fb-$sw-diff.png" 2>&1)
     s=$(grep -a -o "selftest summary: [0-9]* passed, [0-9]* failed" "$L/fb-$sw.out"); e=$(glerr "$L/fb-$sw.out")
     # Threshold: the static part within a mean of 1 of 255 of the same binding with the capability (another
     # DXT decoder rounds differently; completed mip levels are only seen at extreme minification).
-    if le "$(num mean "$st")" 1 && [ "$s" = "selftest summary: 11 passed, 0 failed" ] && [ "$e" = 0 ] && [ "$(crit "$L/fb-$sw.out")" = 0 ]; then
+    # The self-test: every check passes (-glnofragdepth replaces depth-copy by the check of its fallback,
+    # -glnouintindex adds index-narrow: 11 or 12 checks).
+    if le "$(num mean "$st")" 1 && [[ "$s" =~ ^selftest\ summary:\ 1[12]\ passed,\ 0\ failed$ ]] && [ "$e" = 0 ] && [ "$(crit "$L/fb-$sw.out")" = 0 ]; then
       echo "PASS m11-fallback-$sw: $(grep -a -o 'capabilities: .*' "$L/fb-$sw.out" | cut -c1-220); static part vs the same binding with the capability: $st; $s; GL errors $e" | tee -a "$summary"
     else
       fails=$((fails+1)); echo "FAIL m11-fallback-$sw: picture '$st' selftest '${s:-none}' GL errors '${e:-?}' critical $(crit "$L/fb-$sw.out")" | tee -a "$summary"
     fi
   done
-  # The two masks whose fallback is not implemented: run, so that what happens is on record.
-  for sw in glnodepthtexture glnofragdepth; do
+  # The mask whose fallback is not implemented: run, so that what happens is on record.
+  for sw in glnodepthtexture; do
     UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T fb-$sw 110 34 DM-Deadbolt -gl4es -glerrors -$sw -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$LT/fb-$sw.report" 2>&1
     st=$("$imgdiff" "$LT/fb-ref-0.png" "$LT/fb-$sw-0.png" --box 760,0,1280,720 --diff "$LT/fb-$sw-diff.png" 2>&1)
     s=$(grep -a -o "selftest summary: [0-9]* passed, [0-9]* failed" "$LT/fb-$sw.out"); e=$(glerr "$LT/fb-$sw.out")
     fails=$((fails+1))
     echo "FAIL m11-fallback-$sw: FALLBACK NOT IMPLEMENTED. With the capability masked: critical $(crit "$LT/fb-$sw.out"), GL errors ${e:-?}, ${s:-no selftest summary}, static part vs the twin with the capability: $st; $(grep -a -o 'UC2GLDrv: no [a-zA-Z_ ]* on this context: [^(]*' "$LT/fb-$sw.out" | head -2 | tr '\n' ' ')" | tee -a "$summary"
   done
-  result FAIL fallbacks "2 of 4 masks have a working fallback (S3TC, texture max level); depth texture and gl_FragDepth do not"
+  result FAIL fallbacks "4 of 5 masks have a working fallback (S3TC, texture max level, gl_FragDepth, 32-bit indices); depth textures do not ($fails failing lines)"
 }
 
 check_movies() {
