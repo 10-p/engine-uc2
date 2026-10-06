@@ -303,3 +303,60 @@ device plays the same preset there with the same sends. Whether its LEVEL equals
 (EFX vs the Xbox's reverb24k DSP program; M8's doubt), and nothing here can measure it without an Xbox capture.
 
 Movie self-test (`tools/dev/movie-selftest.sh m11audio`): `UC2MovieSelfTest: 99 checks, 0 failed`.
+
+## Step 6 - final gate runs (2026-10-06)
+
+Builds (this branch's tip): `bin/capped 6G 1800 -- cmake --build build-native -j6` rc 0
+(`logs/m11audio/native-build-6.log`), `bin/capped 6G 5400 -- cmake --build build-wasm-perf -j6` rc 0
+(`wasm-perf-build-4.log`; SDLLaunch.wasm 12,036,128 bytes). `./ucc-bin verifyclasses` -> `All native class
+layouts match`.
+
+wasm32 twin under Node (`tools/dev/mkrun-uc2.sh build-native m11audio build-wasm-perf`, then in
+`run/m11audio/System`, `bin/capped 3G ... node ucc-bin.js ...`): the web build's own openal-soft (static, SIMD
+through Emscripten's SSE headers) and decoders:
+```
+UC2AudioCheck: 78 cue tables, 2438 cues, 0 failures      (waves: 7141 decoded to their exact length; music streams: 21 of 21)
+UC2AudioSelfTest: 39 checks, 0 failed; Pan3D -1.10 dB, Pan2D -1.52 dB   (loopback device; reverb section all PASS: Default decay 1.68 s for 1.49 s, Hangar 10.07 for 10.05)
+UC2MovieSelfTest: 99 checks, 0 failed
+```
+So EFX reverb (zone reverb) works in the web build's openal-soft, measured by the same numbers as natively;
+in the browser the device line says `reverb EFX (EAX reverb)`.
+
+Native: `tools/dev/movie-selftest.sh m11audio` 99/0; `python3 tools/dev/m9-movies.py --tree m11audio-m9` ->
+`m9-movies: 19 checks, 0 failed` (all PASS, `logs/m11audio-m9/m9-summary.txt`); audio suite as in step 5;
+PulseAudio null sink run with the final binary (`logs/m11audio/gate-pulse-nullsink.out`):
+`UC2ALAudio: OpenAL Soft backends: order pipewire,pulse,alsa,oss: pipewire failed, pulse initialised; playing
+through pulse` / `UC2ALAudio: 1.1 ALSOFT 1.25.2 on "uc2test Audio/Sink sink" (backend pulse) at 48000 Hz, ...`.
+
+Browser spec, with the run command refusing to start unless no node process runs e2e-mem-guard and :8080 is
+free (`pgrep -a node | grep e2e-mem-guard`; NOT `pgrep -f`, which matched the command's own shell):
+- run 2 attempt 2 (`e2e-3.out`): stopped by my mem-guard at 12.1 GB machine in-use (10.6 GB at start: other
+  agents' builds and GL runs); no test result. Waited (20 min loop on in-use < 8.5 GB never reached it: the
+  desktop and the other agents keep about 9 GB), retried at 9.1 GB.
+- **pass A** (`e2e-4.out`): 3 passed (1.5 m), profiles certified clean, guard peak 11.1 GB.
+- **pass B** (`e2e-5.out`): 3 passed (1.6 m), profiles certified clean, guard peak 11.4 GB.
+Measurements (pass A / pass B; run 1 of step 3 for the first two tests: menu up 8.3 s on a quieter machine):
+| | A | B |
+|---|---|---|
+| menu up / music line, after Start | 15.3 / 15.5 s | 15.9 / 16.4 s |
+| 23 persistent cue tables read | 1,345 ms | 1,584 ms |
+| first sound / music, after the device opened | 3.13 / 3.12 s | 3.58 / 3.57 s |
+| music file read (2.6 MB) / A_Gameplay.ogp read (0.5 MB) | 98 / 102 ms | - / - (same order) |
+| music refill (32768 frames) on the game thread | 5.76 ms avg, 16.03 max | 6.78 avg, 16.23 max |
+| menu, 12 s: audible share / underruns / clock ratio | 1.0 / 1 (3 ms) / 0.997 | 1.0 / 1 (1 ms) / 0.958 |
+| logos: wall time for 20.000 s / sound played | 20.218 s / 20.000 s | 20.413 s / 20.000 s |
+| logos decode cost per update avg / max | 1.93 / 53.48 ms | 2.20 / 118.47 ms |
+| logos: audible / underruns | 0.984 / 0 | 0.984 / 1 (1 ms) |
+| skip: key at about 3 s -> | skipped at 3.220 s, music after | skipped at 3.000 s, music after |
+| files fetched for sound (menu) | 27 Sounds (1 MiB) + NuBattle.ogg | same |
+| browser PSS peak / cgroup memory.peak / wasm memory | 1,314-1,364 MiB / 2.6-2.7 GiB / 256 MiB | 1,358-1,369 MiB / 2,748 MiB / 256 MiB |
+The context was `running` without any page input after Start in every run. The single 1-3 ms underruns came with
+a 67 ms long task on the page (pass A) or a 45-100 ms mixer gap (`mixerWorstGap`), i.e. a busy machine; the
+backend's adaptive ring grew to 2,528 frames afterwards.
+
+What remains for the GL device's merge (not seen here: this branch has the null renderer on the web): the
+movie PICTURES on the web (logos, cinematics full screen; MovieMaterial textures uploaded by UC2GLMovie.cpp as
+GL_BGRA through GL4ES to WebGL 1, which has no BGRA format: GL4ES must convert, unverified), the black/fallback
+texture for missing movies on the web, frame pacing of the full-screen loop with a real present, and the decode
+cost with rendering competing for the same worker. Cinematics are fetched whole on first touch (01_AscPre1.ogv
+29.7 MB + its .oga): a stall at the ladder's travel of the fetch time; a prefetch belongs to the precache work.

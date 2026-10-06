@@ -130,3 +130,12 @@ crash-notifier processes; both are the owner's to clear.
   Sound works either way. To get the native PipeWire backend in the 32-bit game:
   `sudo apt install libpipewire-0.3-modules:i386` (the 64-bit game, preset `native64`, has the amd64 modules
   already). A player's machine needs the same package for the same reason; nothing else changes.
+- **Cooked sound and movies for the web (coordinator's decision).** The frontend builds the uc2 target from ONE
+  asset root, `assets/uc2`, which has no `Sounds/`, `Music/`, `Movies/`, `Textures/Movies/` (they are in
+  `assets/uc2-cooked`), so the committed `targets/uc2/file-manifest.json` has no sound and no movie and the web
+  game runs silent (it says so once in the log) with black/fallback movie textures. Proposal: hard-link the four
+  cooked folders into `assets/uc2` (`cp -al`, as `tools/dev/mkrun-uc2.sh` does for run trees), regenerate the
+  target's manifest (`generate-manifest.cjs assets/uc2 targets/uc2/file-manifest.json --exclude-from
+  targets/uc2/target.json`: 1,223 files, 1,899 MB; `manifestExclude` already drops the cook's by-products), then
+  add the precache candidates listed in `targets/uc2/README.md` (cue tables, menu music and page sound, logos:
+  about 7 MB). Tested meanwhile on a local tree (`run/m11audio-assets`, `analysis/web-audio.md` step 3).
