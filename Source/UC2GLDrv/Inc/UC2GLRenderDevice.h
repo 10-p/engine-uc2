@@ -247,6 +247,7 @@ public:
 	// row first. Returns 0 where the context cannot do that (no depth texture).
 	UBOOL UploadMainDepth( const DWORD* Rows, INT Width, INT Height );
 	void DetectCapabilities();
+	void PrepareGL4ESTextureZero();
 	// A static full-screen strip (-1..1) in a buffer object: WebGL has no client-side arrays.
 	GLuint							QuadBuffer;
 	// Buffer object names. On GLES a freed name is kept and handed out again instead of

@@ -602,6 +602,8 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 		appSprintf( GMachineVideo, TEXT("%s"), appFromAnsi((ANSICHAR*)glGetString(GL_RENDERER)) );
 
 		DetectCapabilities();
+		if( IsGLES )
+			PrepareGL4ESTextureZero();
 		if( CheckGLErrors ) CheckGLError( TEXT("SetRes: binding and capabilities") );
 
 		// Capabilities.
@@ -897,10 +899,10 @@ GLint UUC2GLRenderDevice::RawBindFramebuffer( GLuint Framebuffer )
 
 //
 // The colour attachment goes through gl4es (it tracks colour attachments). While attaching,
-// gl4es sets sampling parameters of the texture on whatever GLES has bound at that moment;
-// with nothing bound WebGL answers GL_INVALID_OPERATION where OpenGL ES silently takes
-// texture 0 (the one GL error of the first browser runs, at the creation of the main
-// framebuffer). So on GLES the texture is bound for the duration of the call.
+// gl4es sets sampling parameters of the texture on whatever GLES has bound at that moment,
+// so on GLES the texture is bound for the duration of the call. (The one GL error of the
+// browser runs up to G4 run 12, reported here, was gl4es realising its "texture 0" inside
+// this call: PrepareGL4ESTextureZero.)
 //
 void UUC2GLRenderDevice::AttachColorTexture( GLuint Texture )
 {
@@ -1138,6 +1140,60 @@ void UUC2GLRenderDevice::BindQuadBuffer()
 //
 // What the context can do (see the Cap* members). Desktop GL 2.0 + FBO has all of it.
 //
+//
+// GLES: gl4es' "texture 0" (M11, G4).
+//
+// gl4es treats texture 0 as an object with parameters, as desktop GL and OpenGL ES 2 do (they
+// have a default texture); WebGL has none. Two consequences, both seen:
+// - The first time gl4es realises a unit with texture 0 bound, it sets that texture's filter
+//   and wrap parameters with nothing bound under it, and WebGL answers GL_INVALID_OPERATION
+//   (the one GL error of every browser run up to G4 run 12, inside the first
+//   glFramebufferTexture2D: gl4es realize_textures -> realize_1texture).
+// - Its texture 0 has the default minifying filter NEAREST_MIPMAP_LINEAR and no mipmaps, so at
+//   a draw gl4es calls glGenerateMipmap for it (realize_textures, drawing) without making that
+//   unit active: on whatever texture the ACTIVE unit has, which can be an engine texture with
+//   DXT storage (Mesa with an ES 2.0 context: "GL_INVALID_OPERATION in generate mipmaps on
+//   compressed texture"; gl4es' own glGetError calls hide it from -glerrors).
+// So: every unit starts with a texture of our own under gl4es' "texture 0" (1x1 opaque black,
+// which is what WebGL samples for no texture; gl4es binds a real 0 once it has bound anything
+// else on a unit, and by then has nothing left to set), and texture 0 gets a filter that needs
+// no mipmaps.
+//
+void UUC2GLRenderDevice::PrepareGL4ESTextureZero()
+{
+	if( Raw_glGenTextures )
+	{
+		static const BYTE Black[4] = { 0, 0, 0, 255 };
+		GLint RawUnits = 0;
+		Raw_glGetIntegerv( GL_MAX_TEXTURE_IMAGE_UNITS, &RawUnits );
+		GLuint StandIn = 0;
+		Raw_glGenTextures( 1, &StandIn );
+		for( INT Unit = Min<INT>( RawUnits, 32 ) - 1; Unit >= 0; Unit-- )
+		{
+			Raw_glActiveTexture( GL_TEXTURE0 + Unit );
+			Raw_glBindTexture( GL_TEXTURE_2D, StandIn );
+			if( Unit == 0 )
+				Raw_glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, Black );
+		}
+	}
+	// gl4es keeps sampler parameters and applies them when it next realises the unit. That has
+	// to happen NOW, while no texture of gl4es' own was ever bound for real (so its "texture 0"
+	// is our stand-in): 2D binds are deferred, so bind another name and 0 again to mark unit 0
+	// changed, and glFlush realises it (gl4es realize_textures). From then on gl4es' record of
+	// texture 0 matches what it wants and it never sets texture 0's parameters again.
+	GLuint Scratch = 0;
+	glActiveTexture( GL_TEXTURE0 );
+	glGenTextures( 1, &Scratch );
+	glBindTexture( GL_TEXTURE_2D, Scratch );
+	glBindTexture( GL_TEXTURE_2D, 0 );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+	glFlush();
+	glDeleteTextures( 1, &Scratch );
+}
+
 void UUC2GLRenderDevice::DetectCapabilities()
 {
 	CapDepthTexture = CapFragDepth = CapUIntIndex = CapTextureMaxLevel = CapFragmentHighp = 1;
