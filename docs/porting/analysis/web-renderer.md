@@ -666,3 +666,51 @@ tolerating it, the play test), G2 script end to end, the two missing fallbacks, 
 - Run 13: the same error (the first version of the fix only bound the stand-in; gl4es realised texture 0
   later, after a real bind, on null). Run 14: stopped by the mem guard before the browser started
   ("10.7 GB in use at start", other work on the machine); to be retried, not raised.
+
+## G4, runs 15-20 (2026-10-06): the whole spec green, the play test with real input; published
+
+Command (always): `yarn build --target uc2 --engine-artifact <this worktree>/build-wasm-perf/Source/SDLLaunch`
+inside `capped 4G 300`, then `capped 6G 600 -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=12 --
+--target uc2 uc2-wasm-boot.spec.js` with `UC2_E2E_SHOT_DIR=logs/m11/e2eN`, `UFRONT_E2E_TRACE=logs/m11/e2e-trace-N.txt`.
+
+- Runs 14 and 15 were stopped by the mem guard before a page loaded (10.2-10.7 GB in use machine-wide at the
+  start: other agents' builds). Not raised; retried later.
+- Run 16: tests 1 and 2 pass with **0 GL errors** (`frame 600, 0 GL errors so far` on the menu and on
+  DM-Deadbolt with post-processing): the texture-0 fix holds in the browser. The play test failed at every
+  menu step, for one reason: **the menus are drawn 1:1 in the top-left 640x480 pixels of the 1024x768 frame**
+  (owner review D-2, a later script task), and the spec scaled the 640x480 positions to the canvas. Positions
+  are now canvas pixels (the canvas has as many device as CSS pixels, "ratio 1.00" in the device's log).
+- The spec's first version un-suppressed the GUI's log names with `-glexec=1:UNSUPPRESS+EVENT=DevUI@...`: the
+  frontend's sanitiser strips `+` and `@` from the Advanced field, so that never worked; it now issues
+  `UNSUPPRESS EVENT=DevGUI` / `DevUI` through the shell's `ueExec` and waits for `Unsuppressed event ...`.
+- Real input: Playwright's own `page.keyboard` (trusted events; the active element is blurred first so the
+  keys bubble to `window`, where SDL listens) and `page.mouse`; every key and button held (150 ms; Fire
+  1 s; W 1.5 s).
+- Run 17: every menu step passes; the match is DM-Decay: DM-Deadbolt is 7 Downs below the first map, not 8.
+  Run 18: an Enter taken while the arena page loads every map's localisation is answered by the game type list
+  without moving on (one Enter in one run, two in another). The spec now presses Enter until a Down is
+  handled by the map list (`MaplistPanel->... handled XC_PadDown`), undoing a Down taken by the game type
+  list with Up, and confirms every Down by its log line.
+- Run 19: every input step passes and a real driver defect shows: `GL error 0x0501 from a compressed upload:
+  texture 1169 ... level 3 format 0x83f3 1x16, 16 bytes`. The DXT mip levels the driver completes (no
+  `GL_TEXTURE_MAX_LEVEL` on GLES) were one 4x4 block each; a level of a non-square chain can be more (1x16 is
+  1x4 blocks = 64 bytes) and WebGL checks the size exactly. Fixed (`a4975f2`): each completed level is the
+  average block repeated as many times as the level has blocks. (Mesa's ES context would have refused it too;
+  the twin's pinned views never loaded that texture.)
+- **Run 20: `3 passed (2.8m)`**, mem guard peak 10.9 GB machine-wide:
+  - menu: 0 GL errors, 2 programs;
+  - DM-Deadbolt with post-processing: 0 GL errors, 10 programs, 0 failed; frame time 47.96 ms over the last
+    300 frames in this run (25-26 ms in runs 12 and 16: the machine was busy with other agents' builds; the
+    numbers of a quiet machine are in run 12);
+  - play: `UNSUPPRESS` x2, hover selects a main menu item, a click on INSTANT ACTION opens the arena page,
+    its dialog, Escape closes it, a click selects the DeathMatch row, Enter gives the map list the focus, 7
+    Downs, character, armory, launch confirmation, `Game class is 'UCDeathmatch'`, `Bringing Level
+    DM-Deadbolt.MyLevel up for play`, Fire spawns (`pawn=0 -> pawn=1`), W moves 627 units in 1.5 s, the
+    mouse moved 300 px right turns the view by 15,724 yaw units (86 degrees), 0 GL errors in the session.
+  - Pointer lock: the page logs `raw input (unadjustedMovement) refused — WrongDocumentError: The root
+    document of this element is not valid for pointer lock` and `document.pointerLockElement` stays null in
+    the headless page; mouse look works from SDL's absolute motion events there. Whether a real browser
+    locks is the frontend's business (its README); not asserted here.
+- Published to the owner's preview: `bin/publish-preview .../build-wasm-perf/Source/SDLLaunch` ->
+  `2026-10-06 23:11:07 published ... (a4975f2 ...)`.
+- Frontend commits: `c26c4b7` (work in progress), `68e3a5d` (green spec).
