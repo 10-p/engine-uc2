@@ -51,7 +51,7 @@ which prints the class default the config loader produced from the (overridden) 
 Lines logged inside appInit (the "Ini override:" lines) go to the FILE log (`System/Avaris.log`, `ucc.log`) only: the
 `-log` console echo starts after appInit, so the script reads the file logs for them.
 
-Results of run 3 (`logs/c1/c1-ini-run3.txt`, 27 PASS, 0 FAIL): system key (`ShortName`) and user key
+Results of run 3 (`logs/c1/c1-ini-run3.txt`, 26 PASS, 0 FAIL): system key (`ShortName`) and user key
 (`MouseSensitivity_X`) reach the class defaults; a quoted token with spaces, `?` and `=` in the value
 (`"-ini:System:[Engine.GameReplicationInfo]:AdminEmail=My C1 Server?mode=a=b"`) arrives whole; an `-ini:` token as
 the FIRST command-line token still boots to the menu; seven different malformed tokens are logged as
@@ -148,7 +148,7 @@ engine's `getall PlayerProfile ProfileName` answers `Saver` and `CharacterClassN
 `UCCharacters.UCPawn_Human_Sapphire`, the character run 1 chose (the default is `UCPawn_Nakhti_Anubis`), so the
 value came from the file, not from class defaults. No `Unable to load profile` in either log; the profile's bytes
 are identical after run 2 (md5 `b2f33d84...`, not rewritten by a run that changed nothing). Output of run 4 of the
-script: `logs/c1/c1-saves-run4.txt` (14 PASS, 0 FAIL).
+script: `logs/c1/c1-saves-run4.txt` (11 PASS, 0 FAIL).
 
 So natively saving works since M13's `FFileManagerUnix::Exists` fix (a profile that `SaveGameObject` wrote was
 reported as non-existent by `ExistsGameObject`, so every load failed: the "Unable to load profile" lines in M10's
@@ -264,3 +264,46 @@ reload, the profile is listed and selectable; set a setting, reload):
   (the daemon's own note: writes into a SERVED file land in the engine thread's heap; a new file is not served);
 - the daemon's 5-second scan and the `flushconfig` round trip for the inis;
 - `Profiles/` must not exist in the served tree (see manifestExclude below).
+
+## Step 6 - the recommended `targets/uc2/target.json` changes, and the final gate (2026-10-07)
+
+The frontend is NOT edited from here (another agent commits there). The coordinator applies:
+
+```json
+"network": {
+  "_networkComment": "Namespaces and the player name. The engine applies `-ini:<File>:[<Section>]:<Key>=<Value>` switches (engine-uc2 C-1, Core appApplyIniOverrides) and writes the value into the ini; the web engine has no WebRTC net driver yet, so modes/serverName stay omitted (and ServerName could not be seeded anyway: the profile code overwrites GameReplicationInfo's default ServerName at start-up).",
+  "publicRoom": "default-public-room",
+  "peerPrefix": "uc2",
+  "defaultServerName": "UC2 Server",
+  "_playerNameComment": "Where the ENGINE persists the in-game player name: User.ini [DefaultPlayer] Name (DefUser.ini and the web Default seed carry Name=Player). The engine reads it into its default URL at start (UGameEngine::Init) and WRITES it back at every map load from the URL it loaded (the profile's name, or the character's when no profile is picked: see engine-uc2 analysis/web-ini-saves.md step 4, the D-4 question).",
+  "playerName": { "iniPath": "System/User.ini", "iniToken": "User", "section": "DefaultPlayer", "key": "Name", "prefix": "Player" }
+},
+"_userFilesComment": "The files a PLAYER makes by playing, which a reload must give back (ufront 2.75). UC2's only save game is the PROFILE (settings, button layout, ladder progression, unlocks, stats: ~57 KB). The web engine keeps it as ONE FLAT FILE, System/Profiles/<name>.PRO (engine-uc2 ULoadSaveManager.cpp, web build only), because a glob is allowed only in the file name and Epic's layout, Profiles/<name>/AVARIS_PROFILE.PRO, is rejected by compileUserFiles. Avaris.ini and User.ini are the engine files already derived from manifestExclude; the engine writes them when the host sends `flushconfig` (engine-uc2 UEngine::Exec).",
+"userFiles": [ "System/Profiles/*.PRO" ],
+```
+and these entries appended to `manifestExclude` (all GLOBS or non-`.ini` paths on purpose: a literal `*.ini` entry
+becomes an "engine file" the daemon persists, files.ts:118):
+```json
+"System/Profiles/**",       a saved profile is the player's, never served from the asset tree (a play tree used as the asset source has them)
+"*.PRO",                    the same for a profile that is anywhere else
+"System/Shot*.bmp",         SHOT screenshots (1.2 MB BMPs): not served, not persisted
+"System/AutoPatch.txt"      the master-server browser's download list (IpDrv), engine scratch
+```
+(`*.log` and `Logs/**` are already excluded: `Avaris.log` is overwritten at every start and must not persist.
+`System/Detected.ini` / `Running.ini` exist only with `-testrendev` / `-debugging`; do NOT list them: a literal
+`.ini` entry would make them persisted engine files.)
+
+What is persisted, entry by entry: `System/Avaris.ini` (engine settings: video, audio, game defaults) and
+`System/User.ini` (key bindings, mouse sensitivity, `[DefaultPlayer]` name/character/weapons) through the existing
+manifestExclude engine-file derivation + `flushconfig`; `System/Profiles/*.PRO` through the new `userFiles` entry.
+NOT persisted, on purpose: `Avaris.log`, `Shot*.bmp`, `Detected.ini`/`Running.ini`, `AutoPatch.txt`, `uc2.uprof`,
+the `Save/` and `Cache/` folders (empty: nothing writes there).
+
+### Final gate (2026-10-07)
+
+(a) `capped 6G 3600 -- cmake --preset native && cmake --build build-native -j4` links (`uc2.bin`, `ucc-bin`);
+`source env.sh && cmake --preset wasm-perf && cmake --build build-wasm-perf -j4` builds (`SDLLaunch.js/.wasm/.data`
++ `meta.json`, `ucc-bin.js/.wasm`). (b) `tools/dev/c1-ini-overrides.sh`: 30 PASS, 0 FAIL. (c) `tools/dev/c1-saves.sh`:
+11 PASS (inventory + restart), `tools/dev/c1-web-saves.sh`: 16 PASS. (d) from a fresh tree: `./ucc-bin verifyclasses`
+exit 0 "all native class layouts match"; `m10-controls.sh keyboard text`: PASS 16 checks, PASS 7 checks.
+Memory: every run in `capped`: clients 2G, native ucc 2G, wasm under Node 3G, builds 6G; no ceiling was hit.
