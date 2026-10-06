@@ -156,3 +156,60 @@ logs). What can still look like "saving does not work" to a player: nothing is s
 transient default ("No Profile" in the title): every setting lives IN the profile (`SensitivityX`, `bInvertY`, ...)
 and `SaveProfile` skips a transient one; and the profile is not auto-selected at the next start (the viewport always
 begins with the transient profile; the page lists the saved ones, the player picks one).
+
+## Step 4 - C-1.3: the player name and the profile name (facts for D-4; nothing implemented) (2026-10-07)
+
+How a name reaches the game (file:line in this tree):
+
+1. **The default name is the user ini's `[DefaultPlayer]`.** `UGameEngine::Init` (Engine/Src/UnGame.cpp:210) does
+   `DefaultURL.LoadURLConfig("DefaultPlayer","User")`: every option of that section (`Name`, `Class`, `team`,
+   `EnergyWeapon`, `ExplosiveWeapon`, `ThirdPerson`) becomes a URL option of `DefaultURL`, and every URL the engine
+   builds starts from it (`FURL URL(&DefaultURL, Parm, TRAVEL_Partial)`, UnGame.cpp:311, the command-line map). So
+   `-ini:User:[DefaultPlayer]:Name=<n>` (C-1) is what makes `<n>` the name of the FIRST map, the menu level
+   (`LoadMap: menu.unr?Name=FrontendName?Class=...` in `logs/c1/d4/noprofile.out:39`, `InitGame: ?Name=FrontendName`).
+   The Login of a map takes the URL option `Name` (GameInfo.Login -> `ChangeName`, GameInfo.uc:2285); a launcher
+   travel URL `Map?Name=<n>` (what `ufrontend` `getNameTravel()` appends today, controller.ts:340) wins over the default.
+2. **The engine writes the name BACK to `[DefaultPlayer]` at every map load**: `UGameEngine::LoadMap` ends with
+   `URL.SaveURLConfig("DefaultPlayer","Name"|"Class"|"Team"|..., "User")` (UnGame.cpp:2896-2905; `SetString` only, so
+   it reaches User.ini at the next flush: SaveConfig, `flushconfig`, exit; before the RemoveNames fix of step 2 it was
+   lost at the next garbage purge when nothing else flushed). Consequence seen in the runs: after a session the
+   persisted `User.ini [DefaultPlayer] Name` is whatever the LAST loaded URL carried: `Saver` after a profile session
+   (`logs/c1/saves/run2.out:39`: `menu.unr?Name=Saver?Class=...Sapphire`), `Anubis` after a profile-less session
+   (the character's name, below). That is also what the frontend's `playerName.iniPath` read-back would show next time.
+3. **The profile.** Every viewport starts with a TRANSIENT default profile (Engine/Src/UnCamera.cpp:177-188:
+   `ConstructObject<UPlayerProfile>` + `DirtyMask |= kTransientProfile`); a transient profile is never saved
+   (UnPlayerProfile.cpp:203). The player picks or creates a real one on the Profiles page (UC2Profile.uc,
+   `NewProfileClosed` 334 -> `PlayerProfile.NewProfile`; selecting: `APlayerController::execLoadProfile`,
+   UnController.cpp:1070 -> `UPlayerProfile::LoadProfile`, then `eventSetProfileName`). Two names live in the profile
+   (PlayerProfile.uc): `ProfileName` (true name, spaces allowed, = the directory name under `System/Profiles/`) and
+   `PlayerName` = the same with spaces as underscores (`SetProfileName`, PlayerProfile.uc:382). Neither is stored in
+   the `.PRO` file; the loader sets them (M13's finding).
+4. **Profile -> name in the game.** Whenever the profile's name or character changes, its `SetPlayerName` delegate
+   fires (PlayerProfile.uc:449 `NewProfile`, 614 `InitializeProfileValues`, 731 `SetCharacterClassName` when
+   transient) into `GUIController.SetProfilePlayerName` (GUI/Classes/GUIController.uc:2746): 
+   - NON-transient profile: the name is `Profile.GetPlayerName()` (the underscore form);
+   - TRANSIENT profile (no profile picked): the name is the CHARACTER's name (`CharacterInformation.GetCharacterName`,
+     GUIController.uc:2759-2768), "Anubis", "Sapphire", ... This is what replaces the frontend's name;
+   - it then stores the name in the GameStartInfo (`GSI.SetURLKeyValue(i,"Name",...)`, GUIController.uc:2784; GSI keeps
+     `PlayerName[i]` with spaces -> `_`, GameStartInfoBase.uc:236) and calls `PC.SetName(...)` in the menu level or for a
+     real profile (2794-2802), else only `PC.UpdateURL("Name", ...)` (2806).
+   - `GameStartInfo.GetName` (GameStartInfoBase.uc:156-190) decides the `?Name=` of the launch URL a menu builds:
+     Xbox Live gamer tag (never on PC) > the non-transient profile's name > `GSI.PlayerName[i]` (whatever
+     `SetURLKeyValue` last stored; "" at start: then no `?Name=` is added and `DefaultURL`'s applies).
+5. **Evidence** (`logs/c1/d4/noprofile.out`; run: the client with `-ini:User:[DefaultPlayer]:Name=FrontendName`, NO
+   profile, menu -> Instant Action -> DeathMatch -> DM-Deadbolt, default character): menu level `Name=FrontendName`
+   (line 39); on the character page `getall PlayerReplicationInfo PlayerName` = `Anubis` (170, the transient
+   profile's character name replaced it); the match URL `LoadMap: DM-Deadbolt?...?Name=Anubis?Game=...` (210) and the
+   human's PRI in the match is `Anubis` (353); with a profile `Saver` the match URL carries `Name=Saver`
+   (`logs/c1/saves/run1.out:242`). So today: profile wins (correct for D-4), but without a profile the FRONTEND's name
+   is overwritten by the character name as soon as the character page is used, and then persisted that way.
+6. **Where D-4 would change it** (not done): the transient branch of `SetProfilePlayerName` (GUIController.uc:2759-2768)
+   should keep the name the frontend/ini gave (the `[DefaultPlayer] Name` the engine started with) instead of the
+   character's; and `SaveURLConfig("Name")` (UnGame.cpp:2896) should not persist a profile's name into
+   `[DefaultPlayer]` (or the frontend's read-back of `User.ini` should read it only before the first launch). Both are
+   script/engine decisions for D-4; the C-1 port only supplies the switch.
+7. Single player (`UC2SP_EntryPanel.uc:123`) sets the PRI name from the profile directly.
+
+`network.playerName` for `targets/uc2` is therefore the same block as UT2004's: file `System/User.ini`, section
+`DefaultPlayer`, key `Name` (DefUser.ini and the web `Engine/Config/web/DefUser.ini` both carry `Name=Player`).
+The frontend restricts its own name to `[A-Za-z0-9._-]` (no spaces: the engine rewrites spaces to `_` anyway).
