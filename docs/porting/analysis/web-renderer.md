@@ -622,3 +622,47 @@ What I found on disk that is not in the sections above (browser runs 5-11, `logs
 Plan, in the brief's order: G4 green (frame report, locate the start-up INVALID_OPERATION instead of
 tolerating it, the play test), G2 script end to end, the two missing fallbacks, G5 waste, O-8 defaults
 (aniso 16x, AA 4x), gate.
+
+## G4, runs 12-14 (2026-10-06): both render tests pass; the start-up GL error located
+
+- **Why the DM-Deadbolt test hung at "frame 600" (run 11):** not the frame counter. A `?map=` link is the
+  frontend's AUTOSTART path, which launches with the target's default engine options only
+  (`packages/frontend/src/shell/boot.ts`, step 2.82: "this list only reaches the engine on the AUTOSTART
+  path"); the Advanced field's `-glerrors -glstats` never reached the engine, so neither the error count nor
+  the stats line was ever logged. The spec now launches the map through the Play form (`#map-input`,
+  `#travel-options` = `Game=UCGameplay.UCDeathmatch?NumBots=0`) like the unreal1 and ut99 specs.
+- **Run 12** (`logs/m11/e2e-run-12.txt`): `2 passed (1.2m)`. Menu: 28.1 / 25.0 ms per frame, 42 draws.
+  DM-Deadbolt with post-processing: `30.51 ms/frame` then `26.15 ms/frame (38.2 frames/s)`, per frame 98.4
+  draws, 34,399 primitives, 93.4 material state applications, 47.4 buffer uploads, 4.00 device quads (3.00
+  back-buffer snapshots, 1.00 depth-as-colour); 10 programs linked, 0 failed; screenshot
+  `logs/m11/e2e12/uc2-map.png` 75.4% lit, 5000+ colours; wasm memory 256 MiB, JS heap 24 MiB; the mem
+  guard's machine-wide peak 10.7 GB. Still one GL error, frame 0, in the colour attachment.
+- **The start-up error, located.** A diagnostic in `AttachColorTexture` (raw state and the same attachment
+  made raw just before gl4es' call) showed the raw attachment answers 0 every time
+  (`UC2GLDrv: (GLES) colour attachment of texture 508: raw framebuffer 510, raw texture 508 on unit 0; the raw
+  attachment answers 0x0000`): the error is raised by another call inside gl4es' `glFramebufferTexture2D`.
+  Reading gl4es: it calls `realize_1texture` for the attached texture, which calls `realize_textures(0)`,
+  which realises every changed unit; the driver had just bound texture 0 (`CreateDepthStencilTexture` ends
+  with `glBindTexture(GL_TEXTURE_2D, 0)`), and gl4es then sets the filter/wrap parameters of its "texture 0"
+  object with null bound for real. OpenGL ES 2 has a default texture object (no error); **WebGL has none
+  (INVALID_OPERATION)**. Same root, second defect, found with a stricter twin (below): gl4es' texture 0 has
+  the default min filter `NEAREST_MIPMAP_LINEAR`, so at a draw `realize_textures(1)` calls
+  `glGenerateMipmap` for it **without making that unit active**, i.e. on the active unit's texture, which
+  can be an engine texture with DXT storage. gdb on the twin (break on `write`, Mesa's message): the call is
+  `realize_textures (texture_params.c:942) <- glDrawElementsCommon <- FOpenGLRenderInterface::DrawPrimitive
+  <- FBspDrawList::Render`. gl4es' own `glGetError` calls (after every `glBindFramebuffer`) swallow it, so
+  `-glerrors` never counted it.
+  Fix, `UUC2GLRenderDevice::PrepareGL4ESTextureZero` (SetRes, GLES only, before gl4es touches a texture): a
+  raw 1x1 opaque black texture is bound on every unit under gl4es' "texture 0" (what WebGL samples for no
+  texture), texture 0 gets NEAREST filters and CLAMP wraps, and a deferred bind + `glFlush` makes gl4es
+  realise it at once onto the stand-in; from then on gl4es' record of texture 0 matches and it never sets
+  its parameters or generates its mipmaps again. Desktop binding untouched. (Commit `209d8ad`.)
+- **A stricter twin:** `MESA_GLES_VERSION_OVERRIDE=2.0` makes Mesa give an OpenGL ES **2.0** context (log:
+  `GLES hardware: llvmpipe ... / OpenGL ES 2.0 Mesa 26.0.8`) instead of 3.2, so ES-3-only leniency no longer
+  hides what WebGL 1 rejects; with `MESA_DEBUG=1` Mesa prints each error it raises, including the ones gl4es
+  swallows. That is how the mipmap defect showed (`Mesa: error: GL_INVALID_OPERATION in generate mipmaps on
+  compressed texture`, gone after the fix: `es2-menu4.out`, `es2-dead.out`: `frame 600, 0 GL errors so
+  far`, no Mesa line). `tools/dev/m11-twin.sh` will run the twin this way.
+- Run 13: the same error (the first version of the fix only bound the stand-in; gl4es realised texture 0
+  later, after a real bind, on null). Run 14: stopped by the mem guard before the browser started
+  ("10.7 GB in use at start", other work on the machine); to be retried, not raised.
