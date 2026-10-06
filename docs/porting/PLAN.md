@@ -161,8 +161,10 @@ Tasks, in the order they will be done (each one ends at an observable check, log
 - O-6 **DM-Azure waterfall, first person**: the distortion behind the waterfall disappears while the player
   stands still and returns when moving (`temp/AzureWaterfallStraight.png`); in third person it works
   (`AzureWaterfallDistorted.png`), but the waterfall is sometimes drawn on top of the character.
-- O-7 **Distortion range**: the DM-Praxis panes lose their distortion at a distance
-  (`temp/PraxisWindowPanesDistance.png`): find what limits it (LOD/distance/fade) and raise it.
+- O-7 **Distortion range (tuning, not a defect)**: the DM-Praxis panes lose their distortion at a distance
+  (`temp/PraxisWindowPanesDistance.png`). Owner, 2026-10-07: "not meant to be a fix per se but figure out
+  what tuneable is there AND THEN increase it": find the existing knob (and its Xbox value), then raise it
+  through that knob, the Xbox value one setting away.
 - O-8 **Defaults**: anisotropic filtering 16x; anti-aliasing 4x (multisampled main framebuffer; WebGL 1 has
   no multisampled framebuffer objects: WebGL 2 or a post-process AA on the web, decided with evidence).
 
