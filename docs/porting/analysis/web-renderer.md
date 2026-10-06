@@ -595,3 +595,30 @@ copy of every buffer.
 the regression part of the gate I will make the same one-line change in my copy of `m10-controls.sh` or run
 the `pad` scenario only, and say which. Note for the web: a press and release inside one engine tick can be
 lost (the main fix holds the click 1 s).
+
+## Handover, 2026-10-06: an Opus agent takes over from here
+
+The previous agent was stopped by the usage limit. I (Opus 5.5) continue from this notebook and its 19
+commits; nothing is redone. First actions: committed its uncommitted launcher change (`a860ac8`: the web
+`ue_exec_command` hands what the engine does not take to the first viewport, so `GLPROBE` and the device's
+commands reach it through the shell's `ueExec`), and the frontend's uncommitted spec (`ufrontend c26c4b7`,
+work in progress: tolerate one known start-up GL error, the play test with real keyboard and mouse events;
+one unused parameter removed and prettier applied so the hooks pass).
+
+What I found on disk that is not in the sections above (browser runs 5-11, `logs/m11/e2e-run-*.txt`,
+`e2e-trace-*.txt`, all after the checkpoint):
+
+- Run 11: **the menu test PASSES in the browser** on the real GPU (ANGLE/Vulkan/Quadro P620): canvas
+  1024x768, 56.9% lit, 4453 colours (`logs/m11/e2e/uc2-menu.png`), 22.7 / 20.6 ms per frame, 42 draws per
+  frame, browser PSS peak 1362 MiB, cgroup peak 2955 MiB, wasm memory 256 MiB, and exactly one GL error:
+  `GL_INVALID_OPERATION in frame 0 [colour attachment: glFramebufferTexture2D through gl4es]`.
+- Run 11, DM-Deadbolt with post-processing: the level comes up, 10 programs link, the dynamic gamma runs
+  (ramp 3201 by 241 s), but **the line `frame 600, N GL errors so far` never comes**, so the test waits
+  240 s and fails. `FrameCounter` counts `Lock`, the report is in `Present` and needs `FrameCounter % 600
+  == 0` exactly; in a match there is evidently more than one `Lock` per `Present` (hypothesis, to verify
+  with -glstats on the twin) and 600 is stepped over. The start-up error there is tagged `[SetRes]`.
+- Nothing published since `2026-10-05 12:42` (`serve/PUBLISHED.txt`: "uncommitted work after ee1274d").
+
+Plan, in the brief's order: G4 green (frame report, locate the start-up INVALID_OPERATION instead of
+tolerating it, the play test), G2 script end to end, the two missing fallbacks, G5 waste, O-8 defaults
+(aniso 16x, AA 4x), gate.
