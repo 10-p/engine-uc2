@@ -741,3 +741,56 @@ box and one animated pickup. **The browser draws what the twin draws**: the menu
 the map within 1.05 of 255. References kept as `logs/m11/twin-ref/menu-1024x768.png` (the nearest of the 9)
 and `deadbolt-1024x768.png`; the spec compares with them when `UC2_E2E_TWIN_MENU` / `UC2_E2E_TWIN_MAP` name
 them, tolerances 10 and 3 (frontend `uc2-wasm-boot.spec.js`, comment above the constants).
+
+## Fallbacks, 2026-10-06: gl_FragDepth and 32-bit indices implemented; depth textures not (why)
+
+**No gl_FragDepth (WebGL 1 without `EXT_frag_depth`; mask `-glnofragdepth`).** `CopyDepthBuffer` cannot write
+the scene's depth into the distortion accumulation target. Now (commit `f5fbcae`): the target's depth is
+cleared (the accumulation passes still test against each other there) and the interface remembers the target
+and the copy's mapping (`SceneDepthTestFramebuffer`, `SceneDepthTestRect`, reset every frame). Every program
+pass drawn into that target with Z test on gets the variant `PSV_SceneDepthTest`: the generated fragment body's
+`main()` is renamed `uc2_main()` and a new `main()` samples the main depth texture (unit 7) at
+`gl_FragCoord.xy * Rect.xy + Rect.zw` (the copy quad's own mapping, quarter-texel nudge included) and
+`discard`s where GL_LEQUAL would fail; the vertex shader of that program passes clip `z,w` on
+(`UC2GL_WithSceneDepthTestVertex`, a vertex-shader key with bit 63 set). The fragment's depth is `z/w*0.5+0.5`
+of that varying, NOT `gl_FragCoord.z`: the first version used `gl_FragCoord.z`, which is mediump in GLSL ES 1.00;
+the self-test check of the fallback then failed (on the ES 2.0 twin). Fixed-function passes into that target
+are not tested (none is expected: the accumulation materials are pixel-shader materials).
+Self-test, with the mask, `depth-copy` is replaced by the check of the fallback: the same expected depths
+(back-buffer pixel (2x+1,2y+1) for target pixel (x,y)), two triangles at +/-N units drawn through the very
+wrapper (`UC2GL_WithSceneDepthTest`) with GL's depth test off: the one at +N must be dropped, the one at -N kept.
+Twin and desktop, both with `-glnofragdepth` (`logs/m11f/fb-twin-masks4.out`, `logs/m11fd/fb-desk-masks.out`):
+`per bound: [1: 187269 wrong ...] [2: 58227 wrong ...] [3: 0 wrong]`, `selftest depth-copy: PASS ... largest
+error 3.00 (tolerance 3.00)`, `selftest summary: 12 passed, 0 failed`, 0 GL errors. Tolerance 3 units of 16.7
+million (the copy's is 1): the depth reaches the shader as a float from a texture and is compared with an
+interpolated float, where GL's own test compares integers. One pixel whose expected depth + N is beyond the
+largest depth is not tested for the upper bound (the triangle clamps to the scene's depth). Picture check in a
+scene with distortion: pending (G2 effects with the mask).
+
+**No 32-bit indices (WebGL 1 without `OES_element_index_uint`; mask `-glnouintindex`).** This engine makes no
+32-bit index buffer at all (every `GetIndexSize` returns `sizeof(_WORD)`; `FRaw32BitIndexBuffer` is defined
+and never used), so the case is only reachable by a mod or by the driver's own wireframe lines. Implemented
+anyway: 32-bit index data is narrowed to 16 bits on upload, static and dynamic (exact when no index exceeds
+65535; above that the buffer is zeroed, nothing drawn, and a warning logged). Self-test `index-narrow` (only
+without 32-bit indices): six indices 40000..40003 through `SetDynamicIndexBuffer`, stored as 16-bit, 0 values
+wrong, the 16x16 quad they draw fully covered; PASS on twin and desktop. Label: numerically checked, never
+exercised by content.
+
+**No depth textures (WebGL 1 without `WEBGL_depth_texture`; mask `-glnodepthtexture`): NOT implemented, and
+why.** The only readers of the scene's depth are the depth of field (`DepthColor` via the depth-encode pass)
+and the distortion occlusion (copy or the in-shader test above, both need the depth as a texture). Without a
+depth texture the depth must be produced as colour by drawing every depth-writing primitive a second time into
+a colour target with a depth-encoding program. For fixed-function geometry (most of the scene: BSP, static
+meshes, terrain through gl4es' emulation) that needs the driver's own position-only program reproducing the
+fixed-function transform, the per-stage texture transforms and alpha test of masked materials (stage 0's alpha
+decides coverage), mirrored culling for top-row-first targets, and a second set of render states per draw:
+about doubling the draw calls of a frame on exactly the low-end devices that lack the extension. Not done in
+this milestone. What is lost on such a context: the depth of field (the picture stays sharp; log line `no depth
+textures ... depth of field ... stays off`) and the hiding of distortion behind nearer geometry (distortion
+draws over it). Which WebGL configurations: WebGL 1 contexts without `WEBGL_depth_texture`, i.e. old mobile
+GPUs and blocklisted drivers; every desktop ANGLE back end (D3D11, Vulkan, Metal, GL) exposes it, and the one
+browser this ran in (ANGLE/Vulkan/NVIDIA) has it.
+
+Note for the record: `tools/dev/m11-twin.sh` was edited while its first full run was going (bash reads a running
+script as it goes); the edit was undone at once and is kept in my scratch directory, to be applied after the run
+(fallbacks check: the two new masks pass, the depth-texture one is reported).
