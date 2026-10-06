@@ -106,10 +106,95 @@ inconsistencies, and produce a staged plan. Exploration is complete (`analysis/e
 4. Web: `yarn build --target uc2 && yarn serve`, then the uc2 E2E specs under the memory guard.
 5. Windows: wine smoke. Every gate's evidence line goes into `docs/porting/LOG.md`.
 
-## Needed from the owner (none blocks M0–M5)
-- Reddit thread text (blocked for my tools) if it says more than `README_TESTER.md`.
-- xbox-sdks: helpful as *reference* (shader assembler semantics, XACT/XMV/UIX headers + docs), not needed to
-  build. Archives are nested installers/RARs; M0 unpacks 5849 (matches UC2's era) and 5344 ("files only").
-- For the Xbox-look oracle (M6/M7): xemu plus its MCPX ROM, BIOS and HDD image.
-- M13: `sudo apt install g++-aarch64-linux-gnu` (and qemu-user) when arm64 builds are wanted.
-- Only if we end up decompiling `default.xbe`: Ghidra + a JDK.
+## Needed from the owner
+All items of the first list were answered on 2026-10-06 (`<WorkUC2>/answers.txt`; summary below). Open:
+- How the native build was launched when it had no sound and no movies (see O-1).
+- Which keyboard bindings feel "backwards" (an example or two) (see O-14).
+- Go-ahead, repository name and visibility for pushing engine-uc2 to GitHub and setting up CI (needed for
+  the real-pad and real-Windows tests the owner wants to run from CI builds).
+
+## Owner review of 2026-10-06 and the tasks it creates
+
+Source: `<WorkUC2>/answers.txt` (the owner's answers to every open question, plus an addendum), with the
+screenshots in `<WorkUC2>/temp/` (xemu captures of the Xbox game and ours). Decisions taken there:
+- **Models:** no Fable for subagents from now on; Opus 5.5 for reasoning, Sonnet 5.5 for mechanical work.
+- **Pause overlay** (teal negative): correct, matches the Xbox. **Dynamic gamma**: correct, keep as is.
+- **Distortion size**: the DM-Praxis panes close up are "spot on"; other distortions need work (O-5..O-8).
+- **Localised taunt indices**: keep the Xbox behaviour (no relink). **Zone reverb**: keep it on (the owner
+  hears reverb/echo on the Xbox in DM-Azure).
+- **Config and localisation set**: the leak, for simplicity (unless it changes behaviour).
+- **Real gamepad and real Windows**: tested later, from CI-built binaries once the engine is on GitHub.
+- **arm64 toolchain, qemu-user, xdotool**: installed.
+- **Reddit thread**: saved in `<WorkUC2>/temp/` (only the key bindings matter; already known).
+- **Corrections to my report**: the web build does render at the canvas size (4K fullscreen works, HUD
+  aside); maps load and play in the browser, with the typed player name.
+- **xemu** (`<WorkUC2>/xbox-emulation/run-uc2-iso.sh`) exists but is slow here: last resort only.
+- **Jank last**: HUD/menu scaling, mouse aim, bindings and the other script-side issues come after the plan's
+  remaining technical work, in the order of the addendum.
+
+Tasks, in the order they will be done (each one ends at an observable check, logged in LOG.md):
+
+**Phase A: finish and merge the work in flight**
+- A-1 Merge M13 (64-bit; it also fixed "the POSIX file manager reports directories as existing (saved
+  profiles load)", which may be the owner's save bug on native) and the `net-loss` branch (lost handshake
+  packets no longer hang a join). Coordinator verifies each gate on main before logging it.
+- A-2 Finish M11's renderer part (GL4ES twin + browser) with an Opus agent that continues from the Fable
+  agent's notebook and commits (`analysis/web-renderer.md`); merge.
+
+**Phase B: what the owner found wrong in what exists (engine and data side; no script changes)**
+- O-1 **No sound, no movies ("they skip or play green, there are errors in the console")**. First find out
+  where: the web build has neither yet (expected, O-2); natively, the only native logs on this machine are
+  ours, and our run of `bin/play-uc2` through PulseAudio plays (2026-10-06: `ALSOFT 1.25.2 on "uc2test"`).
+  Our OpenAL Soft build has no PipeWire backend (`libpipewire-0.3-dev` is not installed; PulseAudio and ALSA
+  are built). Make device selection robust (try PipeWire, PulseAudio, ALSA in order and log which), make
+  the run tree carry everything it needs, and ask the owner how they launched it.
+- O-2 **Web audio and web movies** (M11 scope): openal-soft's Web Audio backend from the fork the sibling
+  port uses, the cooked Ogg audio and Ogg Theora movies through the frontend's file system, precache rules.
+- O-3 **Depth of field**: the owner cannot see it (what they see in DM-Praxis is bloom, correctly). Explain
+  it with a picture pair, and default `DOFShippedBlurAlpha` to the shipped value (65) so the look matches the
+  Xbox binary, consistent with the "keep the Xbox behaviour" decisions (see O-3 in LOG.md when done).
+- O-4 **DM-Azure reverb**: verify that DM-Azure's zones carry a reverb preset and that it reaches OpenAL
+  (EFX), with a capture pair; the owner hears it on the Xbox.
+- O-5 **DM-Azure water pool**: renders as flat transparent black; on the Xbox it has a textured, reflective
+  surface with golden caustics (`temp/AzureWaterDistortion.png` vs `temp/AzureWaterFlat.png`). Splash
+  distortions show but do not fade properly.
+- O-6 **DM-Azure waterfall, first person**: the distortion behind the waterfall disappears while the player
+  stands still and returns when moving (`temp/AzureWaterfallStraight.png`); in third person it works
+  (`AzureWaterfallDistorted.png`), but the waterfall is sometimes drawn on top of the character.
+- O-7 **Distortion range**: the DM-Praxis panes lose their distortion at a distance
+  (`temp/PraxisWindowPanesDistance.png`): find what limits it (LOD/distance/fade) and raise it.
+- O-8 **Defaults**: anisotropic filtering 16x; anti-aliasing 4x (multisampled main framebuffer; WebGL 1 has
+  no multisampled framebuffer objects: WebGL 2 or a post-process AA on the web, decided with evidence).
+
+**Phase C: finish the web product (M11)**
+- C-1 Port engine-ut2004's `-ini:` command-line overrides (`appApplyIniOverrides`) to UC2: the frontend's
+  player name, and the localisation option below, depend on it.
+- C-2 Save games and profiles on the web: find every file the engine writes (profiles, `Save/`, inis) and
+  declare them as user data in `targets/uc2` so they persist (the native part is A-1 / M13's fix).
+- C-3 Precache list, target descriptor completed, e2e boot/play specs green.
+
+**Phase D: M14 scripts, then the owner's addendum in this order (script changes allowed from here)**
+- D-1 M14: build ucc/Editor, recompile the scripts, prove the bytecode against the shipped `.u`, retire
+  ScriptPatches.
+- D-2 **UI scaling** (most urgent of the addendum): menus and the in-game HUD, reticle included, drawn in a
+  centred 4:3 area at any resolution (today they distort or stay in the top-left corner beyond 480p).
+- D-3 **Saving**: profiles and saves persist (native and web), verified by a restart.
+- D-4 **Player name and profile name**: the frontend's name wins when there is no profile; a profile's name
+  wins when one exists; if changing a profile's name from outside is impractical, the frontend disables
+  its name field for that case.
+- D-5 **Text entry**: the on-screen keyboard pages accept a real keyboard, Enter accepts, Escape cancels.
+- D-6 **Mouse and gamepad separated rigorously**: relative, uncapped, unsmoothed mouse look with no camera
+  drift toward the movement and no "hexagonal" feel; the pad keeps its Xbox response curve, acceleration and
+  aim assist; fix the "backwards" keyboard bindings.
+- D-7 **Console**: find out whether it is locked or hidden and make it available.
+- D-8 **AutoFOV**: port the widescreen field-of-view work of the other engines (frontend steps 2.16, 2.29).
+- D-9 **Rebinding controls in game**: a menu to rebind keys (absolutely last of the addendum).
+
+**Phase E: last of all**
+- E-1 Split-screen on PC.
+- E-2 Web multiplayer at launch (WebRTCDrv, as UT2004/UT99/the others have it).
+- E-3 Gamepad support in the frontend, for every engine.
+- E-4 A language option in the frontend's advanced section, for every engine: target data naming what to
+  change (the `-ini:` setting) and a map of languages to values (e.g. `"English": "int"`); uses C-1.
+- E-5 GitHub + CI (after the owner's go-ahead), then the real-pad and real-Windows sessions from CI builds.
+- Then M15 (content polish), M16 (original Xbox assets), M17 (close-out), as planned.
