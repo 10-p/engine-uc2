@@ -1340,7 +1340,7 @@ void UUC2GLRenderDevice::DetectCapabilities()
 			SUPPORTS_GL_EXT_texture_compression_s3tc = 0;
 	}
 	debugf( NAME_Init, TEXT("UC2GLDrv: capabilities: S3TC %s, depth texture %s, gl_FragDepth %s, 32-bit indices %s, texture max level %s, fragment highp %s"),
-		UseHardwareS3TC() ? TEXT("yes") : IsGLES ? TEXT("NO (fallback: gl4es decodes DXT to RGBA8)") : TEXT("NO (fallback: the engine decodes DXT to RGBA8)"),
+		UseHardwareS3TC() ? TEXT("yes") : TEXT("NO (fallback: the driver decodes DXT to RGBA8)"),
 		CapDepthTexture ? TEXT("yes") : TEXT("NO (no fallback: the depth of field and the hiding of distortion behind nearer geometry are lost)"),
 		CapFragDepth ? TEXT("yes") : TEXT("NO (fallback: the distortion passes test the scene's depth in the shader)"),
 		CapUIntIndex ? TEXT("yes") : TEXT("NO (fallback: 32-bit index data stored as 16-bit)"),

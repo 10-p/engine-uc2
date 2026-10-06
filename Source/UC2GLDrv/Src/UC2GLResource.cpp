@@ -120,6 +120,109 @@ INT FOpenGLTexture::CalculateFootprint()
 // FD3DTexture::Cache does: always through FTexture::GetTextureData, which converts
 // P8/G16/RGBA7 to RGBA8 and copies DXT blocks unchanged.
 //
+//
+// M11: DXT1/3/5 decoded by the driver, from the texture's compressed data (GetTextureData), into
+// B,G,R,A bytes (what GL_BGRA uploads). Used where the hardware takes no S3TC (-glnos3tc, WebGL 1
+// without WEBGL_compressed_texture_s3tc). It replaces UTexture::ConvertDXT, which only exists for
+// textures that are UTextures: the BSP lightmaps (DXT1 FTextures of the engine) have none, and the
+// first -glnos3tc run of the twin crashed there (G2, 2026-10-07). Standard S3TC: DXT1 with its
+// three-colour + transparent mode when c0 <= c1, DXT3 explicit 4-bit alpha, DXT5 interpolated alpha.
+//
+static void UC2GL_Expand565( _WORD C, INT* RGB )
+{
+	INT R = (C >> 11) & 31, G = (C >> 5) & 63, B = C & 31;
+	RGB[0] = (R << 3) | (R >> 2);
+	RGB[1] = (G << 2) | (G >> 4);
+	RGB[2] = (B << 3) | (B >> 2);
+}
+
+static void UC2GL_DecodeDXT( const BYTE* Source, ETextureFormat Format, INT Width, INT Height, BYTE* Dest )
+{
+	INT BlockBytes	= Format == TEXF_DXT1 ? 8 : 16,
+		BlocksX		= (Width + 3) / 4,
+		BlocksY		= (Height + 3) / 4;
+	for( INT by=0; by<BlocksY; by++ )
+		for( INT bx=0; bx<BlocksX; bx++ )
+		{
+			const BYTE* Block		= Source + (by * BlocksX + bx) * BlockBytes;
+			const BYTE* ColorBlock	= Format == TEXF_DXT1 ? Block : Block + 8;
+			_WORD C0 = ColorBlock[0] | (ColorBlock[1] << 8), C1 = ColorBlock[2] | (ColorBlock[3] << 8);
+			INT Colors[4][4];
+			UC2GL_Expand565( C0, Colors[0] );
+			UC2GL_Expand565( C1, Colors[1] );
+			Colors[0][3] = Colors[1][3] = Colors[2][3] = Colors[3][3] = 255;
+			if( Format != TEXF_DXT1 || C0 > C1 )
+				for( INT k=0; k<3; k++ )
+				{
+					Colors[2][k] = (2 * Colors[0][k] + Colors[1][k]) / 3;
+					Colors[3][k] = (Colors[0][k] + 2 * Colors[1][k]) / 3;
+				}
+			else
+			{
+				for( INT k=0; k<3; k++ )
+				{
+					Colors[2][k] = (Colors[0][k] + Colors[1][k]) / 2;
+					Colors[3][k] = 0;
+				}
+				Colors[3][3] = 0;
+			}
+			DWORD Indices = ColorBlock[4] | (ColorBlock[5] << 8) | (ColorBlock[6] << 16) | ((DWORD)ColorBlock[7] << 24);
+			// Alpha of DXT5: two end points and eight (or six + 0 + 255) values, 3-bit indices.
+			INT Alphas[8];
+			QWORD AlphaBits = 0;
+			if( Format == TEXF_DXT5 )
+			{
+				Alphas[0] = Block[0];
+				Alphas[1] = Block[1];
+				if( Alphas[0] > Alphas[1] )
+					for( INT k=1; k<7; k++ )
+						Alphas[k+1] = ((7 - k) * Alphas[0] + k * Alphas[1]) / 7;
+				else
+				{
+					for( INT k=1; k<5; k++ )
+						Alphas[k+1] = ((5 - k) * Alphas[0] + k * Alphas[1]) / 5;
+					Alphas[6] = 0;
+					Alphas[7] = 255;
+				}
+				for( INT k=0; k<6; k++ )
+					AlphaBits |= (QWORD)Block[2 + k] << (8 * k);
+			}
+			for( INT y=0; y<4; y++ )
+				for( INT x=0; x<4; x++ )
+				{
+					INT PX = bx * 4 + x, PY = by * 4 + y;
+					if( PX >= Width || PY >= Height )
+						continue;
+					INT		Texel	= y * 4 + x;
+					INT*	C		= Colors[ (Indices >> (2 * Texel)) & 3 ];
+					INT		A		= C[3];
+					if( Format == TEXF_DXT3 )
+						A = ((Block[Texel / 2] >> (4 * (Texel & 1))) & 15) * 17;
+					else if( Format == TEXF_DXT5 )
+						A = Alphas[ (INT)((AlphaBits >> (3 * Texel)) & 7) ];
+					BYTE* Out = Dest + (PY * Width + PX) * 4;
+					Out[0] = (BYTE)C[2];
+					Out[1] = (BYTE)C[1];
+					Out[2] = (BYTE)C[0];
+					Out[3] = (BYTE)A;
+				}
+		}
+}
+
+// One mip level of a DXT texture as B,G,R,A bytes, Width x Height (the caller frees it).
+static BYTE* UC2GL_DecodeDXTMip( FTexture* Texture, INT MipIndex, ETextureFormat Format, INT Width, INT Height )
+{
+	INT		BlocksX	= (Width + 3) / 4,
+			BlocksY	= (Height + 3) / 4,
+			RowBytes= BlocksX * (Format == TEXF_DXT1 ? 8 : 16);
+	TArray<BYTE> Compressed;
+	Compressed.AddZeroed( RowBytes * BlocksY );
+	Texture->GetTextureData( MipIndex, &Compressed(0), RowBytes, Format, 0 );
+	BYTE* Pixels = new BYTE[ Width * Height * 4 ];
+	UC2GL_DecodeDXT( &Compressed(0), Format, Width, Height, Pixels );
+	return Pixels;
+}
+
 void FOpenGLTexture::UploadMip( GLenum Target, FTexture* Texture, ETextureFormat ActualFormat, INT MipIndex, INT FirstMip, INT Width, INT Height )
 {
 	INT		Level		= MipIndex - FirstMip,
@@ -148,9 +251,8 @@ void FOpenGLTexture::UploadMip( GLenum Target, FTexture* Texture, ETextureFormat
 		}
 		else
 		{
-			// No S3TC: decompress (the engine's own decoder, as OpenGLDrv does).
-			BYTE* Data = NULL;
-			Texture->GetUTexture()->ConvertDXT( MipIndex, 1, 0, &Data );
+			// No S3TC: decompress (the driver's own decoder; see UC2GL_DecodeDXT).
+			BYTE* Data = UC2GL_DecodeDXTMip( Texture, MipIndex, ActualFormat, MipWidth, MipHeight );
 			RenDev->TexImage2D( UploadBindTarget, TextureID, Target, Level, GL_RGBA, MipWidth, MipHeight, GL_BGRA, GL_UNSIGNED_BYTE, Data );
 			if( Level == 0 )
 				CachedGLFormat = GL_RGBA;
@@ -219,10 +321,7 @@ void FOpenGLTexture::CompleteChain( GLenum Target, FTexture* Texture, ETextureFo
 	TArray<BYTE> Pixels;
 	if( IsDXTC(ActualFormat) )
 	{
-		BYTE* Data = NULL;
-		Texture->GetUTexture()->ConvertDXT( LastMipIndex, 1, 0, &Data );
-		if( !Data )
-			return;
+		BYTE* Data = UC2GL_DecodeDXTMip( Texture, LastMipIndex, ActualFormat, MipWidth, MipHeight );
 		Pixels.Add( MipWidth * MipHeight * 4 );
 		appMemcpy( &Pixels(0), Data, MipWidth * MipHeight * 4 );
 		delete [] Data;
