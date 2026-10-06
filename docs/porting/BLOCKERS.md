@@ -105,3 +105,26 @@ crash-notifier processes; both are the owner's to clear.
   lower value = more important), the "Recurring" flag of volume/pitch events read as "fade", the cue radius of
   non-3D sounds (we use DirectSound's defaults, 4 units: such cues on other actors are culled). Details and the
   evidence in `analysis/audio.md`.
+
+## O-1/O-2 sound and movies (2026-10-06, branch `m11-audio`, details in `analysis/web-audio.md`)
+
+- **PipeWire for the 32-bit game (optional; tell the owner).** The PipeWire backend of OpenAL Soft is compiled
+  when `libpipewire-0.3-dev` is installed (it was installed on this machine during the session, amd64 and
+  i386, at 22:11 on 2026-10-06; a reconfigure picked it up: `Building OpenAL with support for the following
+  backends: PipeWire, PulseAudio, ALSA, OSS, WaveFile, Null`). At run time the 32-bit backend then fails:
+  `Failed to create PipeWire event context (errno: 2)`, because the i386 client modules
+  (`/usr/lib/i386-linux-gnu/pipewire-0.3/libpipewire-module-protocol-native.so` and the rest) are not
+  installed. The game falls back to PulseAudio, which PipeWire serves through its pulse server, and the log
+  says so (`order pipewire,pulse,alsa,oss: pipewire failed, pulse initialised; playing through pulse`).
+  Sound works either way. To get the native PipeWire backend in the 32-bit game:
+  `sudo apt install libpipewire-0.3-modules:i386` (the 64-bit game, preset `native64`, has the amd64 modules
+  already). A player's machine needs the same package for the same reason; nothing else changes.
+- **Cooked sound and movies for the web (coordinator's decision).** The frontend builds the uc2 target from ONE
+  asset root, `assets/uc2`, which has no `Sounds/`, `Music/`, `Movies/`, `Textures/Movies/` (they are in
+  `assets/uc2-cooked`), so the committed `targets/uc2/file-manifest.json` has no sound and no movie and the web
+  game runs silent (it says so once in the log) with black/fallback movie textures. Proposal: hard-link the four
+  cooked folders into `assets/uc2` (`cp -al`, as `tools/dev/mkrun-uc2.sh` does for run trees), regenerate the
+  target's manifest (`generate-manifest.cjs assets/uc2 targets/uc2/file-manifest.json --exclude-from
+  targets/uc2/target.json`: 1,223 files, 1,899 MB; `manifestExclude` already drops the cook's by-products), then
+  add the precache candidates listed in `targets/uc2/README.md` (cue tables, menu music and page sound, logos:
+  about 7 MB). Tested meanwhile on a local tree (`run/m11audio-assets`, `analysis/web-audio.md` step 3).

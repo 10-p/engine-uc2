@@ -28,6 +28,7 @@ class UUC2ALAudioSubsystem : public UAudioSubsystem
 
 	// Configuration ([UC2ALAudio.UC2ALAudioSubsystem]).
 	FStringNoInit	OutputDevice;		// alcOpenDevice name; empty = the default device
+	FStringNoInit	Backends;			// OpenAL Soft backends to try, in order (its ALSOFT_DRIVERS, unless the environment sets that)
 	FStringNoInit	WaveFile;			// render to this .wav with OpenAL Soft's wave writer (tests); -AUDIOWAVE=
 	INT				MaxVoices;			// sources in the voice pool (the Xbox had 188 2D + 64 3D)
 	UBOOL			ZoneReverb;			// zone -> I3DL2 preset (the shipped Xbox code had this in #if 0)
@@ -101,10 +102,23 @@ class UUC2AudioSelfTestCommandlet : public UCommandlet
 	INT Main( const TCHAR* Parms );
 };
 
+/*-----------------------------------------------------------------------------
+	UUC2ZoneSurveyCommandlet: `ucc-bin UC2ALAudio.UC2ZoneSurvey [MAP=<name>]` lists every
+	map's zones and the EZoneAudioEffect (reverb preset) each carries (O-4).
+-----------------------------------------------------------------------------*/
+
+class UUC2ZoneSurveyCommandlet : public UCommandlet
+{
+	DECLARE_CLASS(UUC2ZoneSurveyCommandlet,UCommandlet,CLASS_Transient,UC2ALAudio)
+	void StaticConstructor();
+	INT Main( const TCHAR* Parms );
+};
+
 #define AUTO_INITIALIZE_REGISTRANTS_UC2ALAUDIO \
 	UUC2ALAudioSubsystem::StaticClass(); \
 	UUC2AudioCheckCommandlet::StaticClass(); \
-	UUC2AudioSelfTestCommandlet::StaticClass();
+	UUC2AudioSelfTestCommandlet::StaticClass(); \
+	UUC2ZoneSurveyCommandlet::StaticClass();
 
 #endif // _INC_UC2ALAUDIO
 

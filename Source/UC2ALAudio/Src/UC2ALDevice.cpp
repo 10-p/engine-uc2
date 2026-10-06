@@ -7,6 +7,9 @@
 	library is linked in and the table takes its symbols directly.
 =============================================================================*/
 
+#ifdef __EMSCRIPTEN__
+#define UC2AL_WITH_PROTOTYPES 1		// the table is filled with the linked symbols (UC2ALAudioPrivate.h)
+#endif
 #include "UC2ALAudioPrivate.h"
 
 FUC2AL GAL;
@@ -18,8 +21,13 @@ UBOOL UC2ALBind( FString& Error )
 	if( GALHandle )
 		return 1;
 #ifdef __EMSCRIPTEN__
-	Error = TEXT("UC2ALAudio is not built for the web yet (M11)");
-	return 0;
+	// M11: openal-soft (the fork's Web Audio backend) is linked into the module (root CMakeLists.txt).
+	appMemzero( &GAL, sizeof(GAL) );
+#define UC2AL_BIND_LINKED(Name,Type) GAL.Name = (Type)&Name;
+	UC2AL_CORE_FUNCS(UC2AL_BIND_LINKED)
+#undef UC2AL_BIND_LINKED
+	GALHandle = (void*)&GAL;	// "bound"
+	return 1;
 #else
 	// Beside the executable first (what tools/dev/mkrun-uc2.sh puts there), then the system's.
 #ifdef _WIN32
@@ -74,6 +82,98 @@ UBOOL UC2ALBindEFX()
 ALenum UC2ALFormat( INT Channels )
 {
 	return Channels==2 ? AL_FORMAT_STEREO16 : AL_FORMAT_MONO16;
+}
+
+/*-----------------------------------------------------------------------------
+	OpenAL Soft's log while the device opens (O-1): which backend, and why not the others.
+
+	openal-soft initialises its backends once, on the first device open, in its compiled order
+	(pipewire, pulse, alsa, oss, ... on Linux; web on the web), or in the order ALSOFT_DRIVERS gives; the
+	first whose init succeeds and that can play is used. It reports each step in its log ("Initialized
+	backend", "Failed to initialize backend", "Added ... for playback"), which goes to a callback when one is
+	set (alsoft_set_log_callback, found through alcGetProcAddress: it is not a dynamic export) whatever
+	ALSOFT_LOGLEVEL says. The callback is only set around Init: openal-soft serialises calls to it, and
+	nothing of the engine may run on its threads later.
+-----------------------------------------------------------------------------*/
+
+typedef void (*UC2LPALSOFTLOGCALLBACK)( void* UserPtr, char Level, const char* Message, int Length );
+typedef void (*UC2LPALSOFTSETLOGCALLBACK)( UC2LPALSOFTLOGCALLBACK Callback, void* UserPtr );
+
+static ANSICHAR	GALLog[16384];
+static INT		GALLogLen = 0;
+
+static void UC2ALLogCallback( void* UserPtr, char Level, const char* Message, int Length )
+{
+	// "<level> <message>\n", dropped when full (only the first lines matter).
+	if( !Message || Length < 0 || GALLogLen + Length + 3 >= (INT)sizeof(GALLog) )
+		return;
+	GALLog[GALLogLen++] = Level;
+	GALLog[GALLogLen++] = ' ';
+	appMemcpy( GALLog + GALLogLen, Message, Length );
+	GALLogLen += Length;
+	GALLog[GALLogLen++] = '\n';
+	GALLog[GALLogLen] = 0;
+}
+
+void UC2ALCaptureLog( UBOOL bOn )
+{
+	if( !GAL.alcGetProcAddress )
+		return;
+	UC2LPALSOFTSETLOGCALLBACK SetCallback = (UC2LPALSOFTSETLOGCALLBACK)GAL.alcGetProcAddress( NULL, "alsoft_set_log_callback" );
+	if( !SetCallback )
+		return;
+	SetCallback( bOn ? UC2ALLogCallback : NULL, NULL );
+}
+
+// The quoted name in a line like: Initialized backend "pulse"
+static FString QuotedName( const FString& Line )
+{
+	INT A = Line.InStr( TEXT("\"") );
+	if( A < 0 )
+		return FString();
+	FString Rest = Line.Mid( A+1 );
+	INT B = Rest.InStr( TEXT("\"") );
+	return B < 0 ? FString() : Rest.Left( B );
+}
+
+FString UC2ALBackendReport( const TCHAR* Order, FString& Chosen, TArray<FString>& Problems )
+{
+	guard(UC2ALBackendReport);
+	Chosen = TEXT("");
+	TArray<FString> Lines;
+	FString( appFromAnsi( GALLog ) ).ParseIntoArray( TEXT("\n"), &Lines );
+	FString Tried;
+	UBOOL bLogged = 0;
+	for( INT i=0; i<Lines.Num(); i++ )
+	{
+		const FString& L = Lines(i);
+		if( L.Len() < 3 )
+			continue;
+		FString Text = L.Mid( 2 );
+		if( Text.InStr( TEXT("Initialized backend") ) == 0 )
+		{
+			Tried += FString::Printf( TEXT("%s%s initialised"), Tried.Len() ? TEXT(", ") : TEXT(""), *QuotedName(Text) );
+			bLogged = 1;
+		}
+		else if( Text.InStr( TEXT("Failed to initialize backend") ) == 0 )
+		{
+			Tried += FString::Printf( TEXT("%s%s failed"), Tried.Len() ? TEXT(", ") : TEXT(""), *QuotedName(Text) );
+			bLogged = 1;
+		}
+		else if( Text.InStr( TEXT("Added") ) == 0 && Text.InStr( TEXT("for playback") ) > 0 )
+			Chosen = QuotedName( Text );
+		else if( (*L)[0] == 'W' || (*L)[0] == 'E' )
+		{
+			if( Problems.Num() < 8 && Text.InStr( TEXT("capture") ) < 0 )	// (we never capture)
+				new(Problems) FString( Text );	// (TArray<FString>::AddItem assigns into unconstructed memory)
+		}
+	}
+	if( !bLogged )
+		return FString::Printf( TEXT("order %s; openal-soft logged no backend lines (initialised earlier in this process, or a library without alsoft_set_log_callback)"),
+			Order && *Order ? Order : TEXT("(the library's own)") );
+	return FString::Printf( TEXT("order %s: %s; playing through %s"), Order && *Order ? Order : TEXT("(the library's own)"), *Tried,
+		Chosen.Len() ? *Chosen : TEXT("none") );
+	unguard;
 }
 
 /*-----------------------------------------------------------------------------

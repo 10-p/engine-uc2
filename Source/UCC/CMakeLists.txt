@@ -20,6 +20,11 @@ set(LINK_PACKAGES GUI UCGameplay UCElements UnrealGame UWeb IpDrv Engine Core)
 if(TARGET UC2ALAudio)
   list(PREPEND LINK_PACKAGES UC2ALAudio)
   target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_UC2ALAUDIO=1)
+  if(EMSCRIPTEN)
+    # M11/O-2: openal-soft is linked into the web builds, and its JS half (Module.alsoftConfig, read with
+    # stringToNewUTF8) needs malloc exported; the browser build exports it already (cmake/Web.cmake).
+    target_link_options(${PROJECT_NAME} PRIVATE "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free']")
+  endif()
 endif()
 # M9: the movie player (factory + `ucc-bin UC2Movie.UC2MovieSelfTest`).
 if(TARGET UC2Movie)

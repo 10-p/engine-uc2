@@ -151,6 +151,8 @@ struct FUC2AudioState
 	TArray<INT>				ActiveAmbients;
 	TMap<FString,FUC2CueStats> Stats;
 	TArray<class FUC2ALMovieStream*> MovieStreams;	// M9: movie sound streams alive (detached on Destroy)
+	FString					Notice;			// O-1: why sound is off or incomplete, shown once on the console
+	FString					Backend;		// the OpenAL Soft backend playing ("" = unknown or none)
 
 	FUC2AudioState() : bDevice(0), Device(NULL), Context(NULL), bEFX(0), bEAXReverb(0), bLoopPoints(0), Slot(0),
 		Effect(0), ZonePreset(-1), NextMusicHandle(1), Viewport(NULL), NextInstId(1), bPaused(0), PauseStart(0),
@@ -333,8 +335,13 @@ static ALuint EnsureBuffer( FUC2AudioState* S, FUC2WaveBank* Bank, FUC2Wave* W, 
 	if( !Bank->bDataTried )
 	{
 		Bank->bDataTried = 1;
+		DOUBLE ReadStart = appSeconds();
 		if( !appLoadFileToArray( Bank->Data, *(S->SoundsDir + Bank->DataFile) ) )
 			LogOnce( S, FString(TEXT("data:")) + Bank->DataFile, FString::Printf( TEXT("cannot read %s"), *(S->SoundsDir + Bank->DataFile) ) );
+		else
+			// One line per wave pack and run: what loading it cost (on the web: the fetch of the whole file on first use).
+			debugf( NAME_Log, TEXT("UC2Audio: [%7.2f] read wave pack %s (%i bytes) in %.0f ms"), (FLOAT)(NowOf(S) - S->T0), *Bank->DataFile,
+				Bank->Data.Num(), 1000.0 * (appSeconds() - ReadStart) );
 	}
 	if( W->Offset<0 || W->Size<=0 || W->Offset+W->Size > Bank->Data.Num() )
 	{
@@ -438,6 +445,7 @@ void UUC2ALAudioSubsystem::StaticConstructor()
 {
 	guard(UUC2ALAudioSubsystem::StaticConstructor);
 	new(GetClass(),TEXT("OutputDevice"), RF_Public)UStrProperty  (CPP_PROPERTY(OutputDevice), TEXT("Audio"), CPF_Config );
+	new(GetClass(),TEXT("Backends"),     RF_Public)UStrProperty  (CPP_PROPERTY(Backends),     TEXT("Audio"), CPF_Config );
 	new(GetClass(),TEXT("WaveFile"),     RF_Public)UStrProperty  (CPP_PROPERTY(WaveFile),     TEXT("Audio"), CPF_Config );
 	new(GetClass(),TEXT("MaxVoices"),    RF_Public)UIntProperty  (CPP_PROPERTY(MaxVoices),    TEXT("Audio"), CPF_Config );
 	new(GetClass(),TEXT("ZoneReverb"),   RF_Public)UBoolProperty (CPP_PROPERTY(ZoneReverb),   TEXT("Audio"), CPF_Config );
@@ -446,6 +454,11 @@ void UUC2ALAudioSubsystem::StaticConstructor()
 	new(GetClass(),TEXT("CueLog"),       RF_Public)UBoolProperty (CPP_PROPERTY(CueLog),       TEXT("Audio"), CPF_Config );
 	// Compiled defaults = Default.ini's [UC2ALAudio.UC2ALAudioSubsystem].
 	MaxVoices	= 64;
+#if !defined(__EMSCRIPTEN__) && !defined(_WIN32)
+	// openal-soft's own Linux order, made explicit (O-1): PipeWire, then PulseAudio (also PipeWire's pulse
+	// server), then ALSA, then OSS. The null and wave backends are never chosen unless asked for.
+	Backends	= TEXT("pipewire,pulse,alsa,oss");
+#endif
 	ZoneReverb	= 1;
 	UseEFX		= 1;
 	MusicFades	= 1;
@@ -498,12 +511,46 @@ UBOOL UUC2ALAudioSubsystem::Init()
 	}
 #endif
 
+	// The cooked data (O-1): say so when it is not there, here and once on the console, instead of failing
+	// every cue in the (normally suppressed) cue log.
+	UBOOL bSoundData = GFileManager->FileSize( *(S->SoundsDir + TEXT("A_Gameplay.uc2cues")) ) > 0;
+	UBOOL bMusicData = GFileManager->FindFiles( TEXT("../Music/*.ogg"), 1, 0 ).Num() > 0;
+	if( !bSoundData )
+		S->Notice = TEXT("Game sound is off (effects, speech, music): no cooked sound data in ../Sounds (tools/cook-audio.py makes it; tools/dev/mkrun-uc2.sh links it into a run tree; a web build needs it in its file manifest).");
+	else if( !bMusicData )
+		S->Notice = TEXT("Music is off: no cooked music in ../Music (tools/cook-audio.py makes it; tools/dev/mkrun-uc2.sh links it into a run tree; a web build needs it in its file manifest).");
+	if( S->Notice.Len() )
+		debugf( NAME_Init, TEXT("UC2ALAudio: %s"), *S->Notice );
+
 	FString Why;
 	if( !UC2ALBind( Why ) )
 	{
 		debugf( NAME_Init, TEXT("UC2ALAudio: %s: sound is off"), *Why );
+		S->Notice = FString::Printf( TEXT("Sound is off: %s."), *Why );
 		return 1;
 	}
+
+	// The backend order (O-1): explicit, and what the log reports against. OpenAL Soft reads ALSOFT_DRIVERS
+	// when it first opens a device; a value already in the environment (the test harness's "null", the
+	// wave writer's "wave") or an empty Backends= leaves the choice to it and its alsoft.conf.
+	FString Order;
+#ifndef __EMSCRIPTEN__
+	const ANSICHAR* EnvDrivers = getenv( "ALSOFT_DRIVERS" );
+	if( EnvDrivers && *EnvDrivers )
+		Order = FString(appFromAnsi(EnvDrivers)) + TEXT(" (ALSOFT_DRIVERS)");
+	else if( Backends.Len() )
+	{
+#ifdef _WIN32
+		_putenv( appToAnsi(*(FString(TEXT("ALSOFT_DRIVERS=")) + Backends)) );
+#else
+		setenv( "ALSOFT_DRIVERS", appToAnsi(*Backends), 1 );
+#endif
+		Order = Backends;
+	}
+#else
+	Order = TEXT("web (the only backend of the web build)");
+#endif
+	UC2ALCaptureLog( 1 );
 	ALCint Attribs[] = { ALC_MAX_AUXILIARY_SENDS, 1, 0, 0, 0, 0, 0, 0, 0 };
 	if( LoopbackTest )
 	{
@@ -518,10 +565,27 @@ UBOOL UUC2ALAudioSubsystem::Init()
 	}
 	else
 		S->Device = GAL.alcOpenDevice( OutputDevice.Len() ? appToAnsi(*OutputDevice) : NULL );
+	// What openal-soft did while opening it (the backends are initialised by the first open).
+	TArray<FString> Problems;
+	FString BackendLine = UC2ALBackendReport( *Order, S->Backend, Problems );
+	UC2ALCaptureLog( 0 );
+	if( LoopbackTest )
+		S->Backend = TEXT("loopback");
+	debugf( NAME_Init, TEXT("UC2ALAudio: OpenAL Soft backends: %s"), *BackendLine );
+	for( INT i=0; i<Problems.Num(); i++ )
+		debugf( NAME_Init, TEXT("UC2ALAudio: openal-soft said: %s"), *Problems(i) );
 	if( !S->Device )
 	{
 		debugf( NAME_Init, TEXT("UC2ALAudio: OpenAL could not open %s: sound is off"),
 			OutputDevice.Len() ? *FString::Printf(TEXT("device \"%s\""), *OutputDevice) : TEXT("an output device") );
+		S->Notice = FString::Printf( TEXT("Sound is off: no audio output device could be opened (OpenAL Soft backends: %s)."), *BackendLine );
+		// The names OutputDevice= can take (ALC_ENUMERATE_ALL_EXT: a list of strings ending with an empty one).
+		const ALCchar* List = GAL.alcIsExtensionPresent( NULL, "ALC_ENUMERATE_ALL_EXT" ) ? GAL.alcGetString( NULL, ALC_ALL_DEVICES_SPECIFIER )
+			: GAL.alcGetString( NULL, ALC_DEVICE_SPECIFIER );
+		FString Names;
+		for( const ALCchar* P = List; P && *P; P += strlen(P) + 1 )
+			Names += FString::Printf( TEXT("%s\"%s\""), Names.Len() ? TEXT(", ") : TEXT(""), appFromAnsi(P) );
+		debugf( NAME_Init, TEXT("UC2ALAudio: output devices of that backend: %s"), Names.Len() ? *Names : TEXT("none") );
 		return 1;
 	}
 	S->Context = GAL.alcCreateContext( S->Device, Attribs );
@@ -592,8 +656,9 @@ UBOOL UUC2ALAudioSubsystem::Init()
 		DeviceName = GAL.alcGetString( S->Device, ALC_DEVICE_SPECIFIER );
 	ALCint OutRate = 0;
 	GAL.alcGetIntegerv( S->Device, ALC_FREQUENCY, 1, &OutRate );
-	debugf( NAME_Init, TEXT("UC2ALAudio: %s on \"%s\" at %d Hz, %d voices, reverb %s, loop points %s%s"),
-		appFromAnsi((const ANSICHAR*)GAL.alGetString( AL_VERSION )), appFromAnsi(DeviceName ? DeviceName : ""), OutRate,
+	debugf( NAME_Init, TEXT("UC2ALAudio: %s on \"%s\" (backend %s) at %d Hz, %d voices, reverb %s, loop points %s%s"),
+		appFromAnsi((const ANSICHAR*)GAL.alGetString( AL_VERSION )), appFromAnsi(DeviceName ? DeviceName : ""),
+		S->Backend.Len() ? *S->Backend : TEXT("unknown"), OutRate,
 		S->Voices.Num(), !S->bEFX ? TEXT("off (no EFX: dry sound)") : S->bEAXReverb ? TEXT("EFX (EAX reverb)") : TEXT("EFX (standard reverb)"),
 		S->bLoopPoints ? TEXT("yes") : TEXT("no"),
 		Wave.Len() ? *FString::Printf( TEXT(", writing %s"), *Wave ) : TEXT("") );
@@ -604,8 +669,12 @@ UBOOL UUC2ALAudioSubsystem::Init()
 			bWantEFX ? TEXT("the device has no EFX reverb") : TEXT("EFX switched off (UseEFX=False or -NOEFX)") );
 
 	// The persistent banks (XACT :215-237). Only their cue tables load now; wave data loads on first play.
+	DOUBLE BanksStart = appSeconds();
+	INT BanksLoaded = 0;
 	for( INT i=0; i<ARRAY_COUNT(GPersistentBanks); i++ )
-		GetSoundBank( S, GPersistentBanks[i], 1 );
+		BanksLoaded += GetSoundBank( S, GPersistentBanks[i], 1 ) >= 0;
+	debugf( NAME_Init, TEXT("UC2ALAudio: %i of %i persistent cue tables read in %.0f ms"), BanksLoaded, ARRAY_COUNT(GPersistentBanks),
+		1000.0 * (appSeconds() - BanksStart) );
 	return 1;
 	unguard;
 }
@@ -969,6 +1038,14 @@ static void StartTrack( UUC2ALAudioSubsystem* Audio, FUC2AudioState* S, FUC2CueI
 		CueLogf( CueLog, S, TEXT("%s takes the voice of %s"), *Inst.Name, *Stolen );
 	}
 	FUC2Voice& V = S->Voices(VoiceIndex);
+	if( !S->bTest )
+	{
+		// The first sound of the run (O-2: the time from the device's start to something audible).
+		static UBOOL bFirst = 1;
+		if( bFirst )
+			debugf( NAME_Log, TEXT("UC2Audio: [%7.2f] first sound: %s"), (FLOAT)(Now - S->T0), *Inst.Name );
+		bFirst = 0;
+	}
 	V.Inst		= Inst.Id;
 	V.Track		= TrackIndex;
 	V.Priority	= Snd.Priority;
@@ -1508,7 +1585,10 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 	FString File = S->SoundsDir + WB->DataFile, Error;
 	FUC2MusicSlot& M = S->Music[0];
 	M.Stream.Frames = W->Frames;
-	if( !appLoadFileToArray( Data, *File ) || !M.Stream.Open( Data, Error ) )
+	DOUBLE ReadStart = appSeconds();
+	UBOOL bRead = appLoadFileToArray( Data, *File );
+	DOUBLE ReadSeconds = appSeconds() - ReadStart;
+	if( !bRead || !M.Stream.Open( Data, Error ) )
 	{
 		CueLogf( CueLog, S, TEXT("music %s: cannot play %s (%s)"), *Song, *File, Error.Len() ? *Error : TEXT("unreadable") );
 		return 0;
@@ -1534,8 +1614,10 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 	FLOAT MB = M.Volume + CategoryMB( S->CategoryVolumes[VOLUME_Music] );
 	GAL.alSourcef( M.Source, AL_GAIN, MBToGain( Clamp( MB, -10000.f, 0.f ) ) * M.Fade );
 	GAL.alSourcePlay( M.Source );
-	CueLogf( CueLog, S, TEXT("music %s: playing %s (%d Hz, %d ch, %s, volume %d mB, fade in %.1f s)"),
-		*Song, *File, M.Stream.Rate, M.Stream.Channels, M.bLoop ? TEXT("looping") : TEXT("once"), M.Volume, bFade ? FadeInTime : 0.f );
+	// (Not only in the cue log: one line per song, and what a web run checks that the music started.)
+	debugf( NAME_Log, TEXT("UC2Audio: [%7.2f] music %s: playing %s (%d Hz, %d ch, %s, volume %d mB, fade in %.1f s; file read in %.0f ms)"),
+		(FLOAT)(NowOf(S) - S->T0), *Song, *File, M.Stream.Rate, M.Stream.Channels, M.bLoop ? TEXT("looping") : TEXT("once"), M.Volume,
+		bFade ? FadeInTime : 0.f, 1000.0 * ReadSeconds );
 	return M.Handle;
 	unguard;
 }
@@ -1573,6 +1655,10 @@ INT UUC2ALAudioSubsystem::StopAllMusic( FLOAT FadeOutTime )
 
 static void UpdateMusic( UUC2ALAudioSubsystem* Audio, FUC2AudioState* S, FLOAT DeltaTime )
 {
+	// What a refill costs the frame it happens in (O-2: decoding 32768 frames of Vorbis on the game thread),
+	// reported once after the first 8 refills of the run.
+	static INT RefillCount = 0;
+	static DOUBLE RefillTotal = 0.0, RefillMax = 0.0;
 	for( INT i=0; i<UC2_MUSIC_SLOTS; i++ )
 	{
 		FUC2MusicSlot& M = S->Music[i];
@@ -1584,7 +1670,18 @@ static void UpdateMusic( UUC2ALAudioSubsystem* Audio, FUC2AudioState* S, FLOAT D
 		{
 			ALuint B = 0;
 			GAL.alSourceUnqueueBuffers( M.Source, 1, &B );
-			if( !M.bEnded && FillMusicBuffer( M, B ) )
+			DOUBLE T0 = appSeconds();
+			UBOOL bFilled = !M.bEnded && FillMusicBuffer( M, B );
+			if( bFilled && !S->bTest && RefillCount < 8 )
+			{
+				DOUBLE T = appSeconds() - T0;
+				RefillTotal += T;
+				RefillMax = ::Max( RefillMax, T );
+				if( ++RefillCount == 8 )
+					debugf( NAME_Log, TEXT("UC2Audio: music refill cost (first 8 buffers of %i frames, decoded on the game thread): %.2f ms on average, %.2f ms at most"),
+						(INT)UC2_MUSIC_BUFFER_FRAMES, 1000.0 * RefillTotal / 8, 1000.0 * RefillMax );
+			}
+			if( bFilled )
 				GAL.alSourceQueueBuffers( M.Source, 1, &B );
 			else
 				M.bEnded = 1;
@@ -1696,7 +1793,26 @@ void UUC2ALAudioSubsystem::Update()
 {
 	guard(UUC2ALAudioSubsystem::Update);
 	FUC2AudioState* S = State;
-	if( !S || !S->bDevice )
+	if( !S )
+		return;
+	// O-1: why sound or movies are off, once on the console (here: outside rendering's draw calls, with a
+	// player controller to tell). The log said it at Init already.
+	if( S->Viewport && S->Viewport->Actor )
+	{
+		FString MovieNotice;
+		if( S->Notice.Len() )
+		{
+			debugf( NAME_Log, TEXT("UC2ALAudio: on the console: %s"), *S->Notice );
+			S->Viewport->Actor->eventClientMessage( S->Notice, NAME_None );
+			S->Notice = TEXT("");
+		}
+		if( appTakeMovieNotice( MovieNotice ) )
+		{
+			debugf( NAME_Log, TEXT("UC2ALAudio: on the console: %s"), *MovieNotice );
+			S->Viewport->Actor->eventClientMessage( MovieNotice, NAME_None );
+		}
+	}
+	if( !S->bDevice )
 		return;
 	static DOUBLE LastTime = 0.0;
 	DOUBLE Now = NowOf( S );

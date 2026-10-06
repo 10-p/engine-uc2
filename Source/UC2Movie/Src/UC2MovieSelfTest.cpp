@@ -430,6 +430,50 @@ static void LanguageChecks()
 	UObject::SetLanguage( *Saved );
 }
 
+// O-1 (2026-10-06): what a MovieMaterial shows without a picture. The device draws the player
+// appUpdateMovieMaterial returns, or the LoadingFallback when it says so; NULL with no fallback made it draw
+// Material.DefaultMaterial, UC2's bright green DefaultTexture ("videos play green").
+static void MaterialChecks()
+{
+	UMovieMaterial* M = ConstructObject<UMovieMaterial>( UMovieMaterial::StaticClass(), UObject::GetTransientPackage(), NAME_None, RF_Transient );
+	UConstantColor* Fallback = ConstructObject<UConstantColor>( UConstantColor::StaticClass(), UObject::GetTransientPackage(), NAME_None, RF_Transient );
+	// 1. A movie that does not exist (referenced by the content, never shipped), no LoadingFallback: black.
+	M->MovieFileName = TEXT("D:\\Textures\\Movies\\CH_Flak_Fire.xmv");
+	M->bNeedsFrameUpdate = 1;
+	UBOOL bFallback = 1;
+	FPortableMoviePlayer* P = appUpdateMovieMaterial( M, bFallback );
+	INT NotBlack = 0, Texels = 0;
+	if( P && P->GetBGRA() )
+	{
+		Texels = P->GetWidth() * P->GetHeight();
+		for( INT i=0; i<Texels; i++ )
+		{
+			const BYTE* T = P->GetBGRA() + i*4;
+			if( T[0] || T[1] || T[2] || T[3] != 255 )
+				NotBlack++;
+		}
+	}
+	Check( P && !bFallback && Texels > 0 && NotBlack == 0 && M->bHasError, FString::Printf(
+		TEXT("material without its movie, no LoadingFallback: %s, fallback %i, %i texels of which %i not opaque black, bHasError %i"),
+		P ? P->GetDescription() : TEXT("no picture (the device would draw the green DefaultTexture)"), bFallback, Texels, NotBlack, M->bHasError ) );
+	// 2. The same with a LoadingFallback: the fallback (what the Xbox showed while a movie loaded).
+	M->LoadingFallback = Fallback;
+	P = appUpdateMovieMaterial( M, bFallback );
+	Check( !P && bFallback, FString::Printf( TEXT("material without its movie, with a LoadingFallback: player %s, fallback %i (expected none, 1)"),
+		P ? P->GetDescription() : TEXT("none"), bFallback ) );
+	// 3. A movie that exists: its own first picture (not the black one).
+	M->LoadingFallback = NULL;
+	M->bHasError = 0;
+	M->MovieFileName = TEXT("D:\\Textures\\Movies\\Reactor_01.xmv");
+	M->bNeedsFrameUpdate = 1;
+	P = appUpdateMovieMaterial( M, bFallback );
+	Check( P && !bFallback && P->GetWidth() == 128 && P->GetFrame() == 0 && P->GetRevision() > 0, FString::Printf(
+		TEXT("material with its movie: %s, frame %i, revision %i, fallback %i"), P ? P->GetDescription() : TEXT("no picture"),
+		P ? P->GetFrame() : -1, P ? P->GetRevision() : -1, bFallback ) );
+	M->ConditionalDestroy();	// deletes the player (UMovieMaterial::Destroy)
+	Fallback->ConditionalDestroy();
+}
+
 INT UUC2MovieSelfTestCommandlet::Main( const TCHAR* Parms )
 {
 	guard(UUC2MovieSelfTestCommandlet::Main);
@@ -456,6 +500,7 @@ INT UUC2MovieSelfTestCommandlet::Main( const TCHAR* Parms )
 			SoundCase( Ref, Words(0), Words(1), Words(2) );
 	}
 	LanguageChecks();
+	MaterialChecks();
 	GWarn->Logf( TEXT("UC2MovieSelfTest: %i checks, %i failed"), GChecks, GFailed );
 	return GFailed ? 1 : 0;
 	unguard;

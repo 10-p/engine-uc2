@@ -14,8 +14,12 @@
 
 #include "UC2ALAudio.h"
 
+// Natively nothing calls OpenAL by name (the library is loaded at run time). On the web it is linked in, and
+// UC2ALDevice.cpp takes the prototypes to fill the table with the symbols themselves.
+#ifndef UC2AL_WITH_PROTOTYPES
 #define AL_NO_PROTOTYPES 1
 #define ALC_NO_PROTOTYPES 1
+#endif
 #include "AL/al.h"
 #include "AL/alc.h"
 #include "AL/alext.h"
@@ -241,6 +245,14 @@ UBOOL UC2ALBind( FString& Error );				// load libopenal and resolve the core ent
 void UC2ALUnbind();
 UBOOL UC2ALBindEFX();							// after a context is current
 ALenum UC2ALFormat( INT Channels );
+
+// OpenAL Soft's own log (alsoft_set_log_callback, when the library has it), captured while the device opens:
+// it is the only place that says which backend was chosen and why the others were not.
+void UC2ALCaptureLog( UBOOL bOn );
+// After the device opened (or failed to): the backend chosen ("" if none was), and one line saying which
+// backends were tried in which order and what happened to each. Warnings and errors the library logged
+// meanwhile go to Problems (one per line), for the log.
+FString UC2ALBackendReport( const TCHAR* Order, FString& Chosen, TArray<FString>& Problems );
 
 // The 26 I3DL2 listener presets of the Xbox's DSound.h, in EZoneAudioEffect order (ZoneInfo.uc).
 struct FUC2I3DL2

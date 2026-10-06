@@ -117,9 +117,17 @@ ENGINE_API UBOOL appPlayMovieFullscreen( const TCHAR* Name, EFullscreenMovieKind
 
 // The MovieMaterial part of SetMovieMaterial (D3DMaterialState.cpp:4539 on the Xbox), for any render device:
 // bReset, opening on first use, advancing when bNeedsFrameUpdate, OnDonePlaying, USize/VSize. Returns the
-// player whose picture to show, or NULL: show LoadingFallback/DefaultMaterial (no picture yet) when
-// bOutFallback, else nothing (the movie failed to open: bHasError).
+// player whose picture to show, or NULL with bOutFallback: show the material's LoadingFallback.
+// While a movie has no picture (not decoded yet, or it cannot be opened at all) and the material has no
+// LoadingFallback, the "player" returned is a small opaque black picture (O-1, 2026-10-06): returning NULL
+// made the device fall back to Material.DefaultMaterial, which is UC2's bright green DefaultTexture (the
+// Xbox did the same for a movie it could not open, but there every movie existed). Logged once per material.
 ENGINE_API FPortableMoviePlayer* appUpdateMovieMaterial( class UMovieMaterial* Material, UBOOL& bOutFallback );
+
+// A message for the player about movies being unavailable (no cooked movies at all, or no movie player in
+// this build), to be shown once on the console by whoever can do so safely outside rendering (the
+// full-screen player, the audio device's update). Returns 1 and the text once.
+ENGINE_API UBOOL appTakeMovieNotice( FString& Out );
 
 // Input while a full-screen movie plays: UEngine::InputEvent hands every event here first. Returns 1 when
 // the event belongs to the movie (it is then not passed on).
