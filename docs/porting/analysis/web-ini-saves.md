@@ -167,7 +167,7 @@ How a name reaches the game (file:line in this tree):
    builds starts from it (`FURL URL(&DefaultURL, Parm, TRAVEL_Partial)`, UnGame.cpp:311, the command-line map). So
    `-ini:User:[DefaultPlayer]:Name=<n>` (C-1) is what makes `<n>` the name of the FIRST map, the menu level
    (`LoadMap: menu.unr?Name=FrontendName?Class=...` in `logs/c1/d4/noprofile.out:39`, `InitGame: ?Name=FrontendName`).
-   The Login of a map takes the URL option `Name` (GameInfo.Login -> `ChangeName`, GameInfo.uc:2285); a launcher
+   The Login of a map takes the URL option `Name` (`GameInfo.Login`, GameInfo.uc:1317: `Left(ParseOption(Options,"Name"),20)`, `_` shown as a space; then `ChangeName`, 2285); a launcher
    travel URL `Map?Name=<n>` (what `ufrontend` `getNameTravel()` appends today, controller.ts:340) wins over the default.
 2. **The engine writes the name BACK to `[DefaultPlayer]` at every map load**: `UGameEngine::LoadMap` ends with
    `URL.SaveURLConfig("DefaultPlayer","Name"|"Class"|"Team"|..., "User")` (UnGame.cpp:2896-2905; `SetString` only, so
@@ -213,3 +213,54 @@ How a name reaches the game (file:line in this tree):
 `network.playerName` for `targets/uc2` is therefore the same block as UT2004's: file `System/User.ini`, section
 `DefaultPlayer`, key `Name` (DefUser.ini and the web `Engine/Config/web/DefUser.ini` both carry `Name=Player`).
 The frontend restricts its own name to `[A-Za-z0-9._-]` (no spaces: the engine rewrites spaces to `_` anyway).
+
+## Step 5 - C-2 web: can the persistence daemon see a profile? No, as laid out; the web build now lays it out flat (2026-10-07)
+
+### The finding (read from the frontend, executed with its own code)
+
+The daemon (`ufrontend/packages/glue/src/idb/user-data.js` `scanUserFiles`) lists ONE directory per `userFiles` entry and
+the entry grammar (`glue/src/target/user-files.js` `compileUserFiles`, which THROWS on an invalid entry) allows `*`/`?`
+in the LAST path segment only. UC2's profile is `System/Profiles/<name>/AVARIS_PROFILE.PRO`: a directory per profile.
+I ran the frontend's own compiler (read-only import, `tools/dev/c1-web-saves.sh`): `System/Profiles/*/AVARIS_PROFILE.PRO`
+is REJECTED ("a glob is allowed only in the file name"), and `System/Profiles/*` accepts but never matches the nested
+file. So no `userFiles` entry can persist a native-layout profile, and pasting the nested entry into target.json would
+break the frontend (the compiler throws). UT2004 never met this: its profiles are flat files (`Saves/*.uvx`).
+
+### What was done (web build only; native unchanged; one commit, revertable)
+
+`Source/Engine/Src/ULoadSaveManager.cpp`: under `__EMSCRIPTEN__` (or `-DUC2_FLAT_PROFILE_FILES=1`) a profile is ONE flat
+file `Profiles/<name>.PRO` in the engine's default directory (`/System/` in the browser), same bytes inside; load,
+save, exists, delete and list (`FindFiles("Profiles/*.PRO")`, extension stripped) follow. The five functions branch on
+the macro; the header (and the Xbox subclass's virtual `GetProfilePath`) are untouched. Native keeps Epic's layout
+(`Profiles/<name>/AVARIS_PROFILE.PRO`; the M13 `saves` check and `c1-saves.sh` still hold).
+Alternative the coordinator may prefer: keep the layout, and teach the frontend's `compileUserFiles`/`scanUserFiles`
+one directory-wildcard segment (`System/Profiles/*/AVARIS_PROFILE.PRO`); then revert this commit.
+
+`ucc-bin profiletest` got `list|exists|delete` (UCC.cpp) so the file layer can be exercised without a game.
+
+### Evidence under Node (`tools/dev/c1-web-saves.sh`, `capped 3G`; `logs/c1/c1-web-saves-run2.txt`: 16 PASS)
+
+`node ucc-bin.js profiletest save WebProf out.txt` from `System/` writes `Profiles/WebProf.PRO` (845 bytes, no
+`Profiles/WebProf/`), the engine's base directory is that `System/` (the browser's `/System/`, boot.ts:471), so the
+daemon's path is `/System/Profiles/WebProf.PRO`; list answers `WebProf`; exists true/false; load gives back every stored
+property; the file is byte-identical to the native build's `Profiles/WebProf/AVARIS_PROFILE.PRO`, and each build loads
+the other's file to the same export; delete removes it and the list is empty. The frontend's compiler accepts
+`System/Profiles/*.PRO`, matches `/System/Profiles/WebProf.PRO`, does not match the nested native path. The C-1 ucc
+check on the web build: the three `-ini:` tokens (one quoted with a space, one malformed) are applied/logged and the
+two values are in `Avaris.ini` / `User.ini` after the exit (the RemoveNames flush works under wasm too).
+
+### What Node cannot show (nothing here may start a browser)
+
+`-sNODERAWFS` is the HOST file system, not WasmFS. Not verified, to be shown by the C-3 browser e2e (create a profile,
+reload, the profile is listed and selectable; set a setting, reload):
+- `mkdir /System/Profiles` by the engine (`EnsureDirectory`, `FFileManagerGeneric::MakeDirectory`): the web build
+  `--preload-file`s `Default.ini`/`DefUser.ini` into `/System`, which Emscripten's WasmFS creates read-only (0555), and
+  WasmFS refuses `mkdir` below it (EACCES) while allowing file creation (the frontend's own note,
+  `glue/src/fetchfs/wasmfs-backend.js:307`). The backend's `ensureDir` chmods `/System` writable when it registers a
+  manifest file in a SUBdirectory (UC2's manifest has `System/Localization/<lang>/` and `System/Ladders/`), so it should
+  be writable by then; if not, creating a profile fails with the page's own "create profile failed" state. A
+  fallback that needs no directory at all would be to keep the profile files directly in `System/`.
+- that a file the engine thread creates in a NEW directory is visible to the main-thread daemon's `FS.readdir`/`stat`
+  (the daemon's own note: writes into a SERVED file land in the engine thread's heap; a new file is not served);
+- the daemon's 5-second scan and the `flushconfig` round trip for the inis;
+- `Profiles/` must not exist in the served tree (see manifestExclude below).

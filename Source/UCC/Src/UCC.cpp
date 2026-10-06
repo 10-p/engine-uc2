@@ -323,6 +323,7 @@ static UBOOL VerifyNativeClasses()
 
 #if __STATIC_LINK && !defined(_MSC_VER)
 // M13: "ucc profiletest save|load <profile> <export.txt>": the save game format across pointer widths.
+// (C-2 adds list|exists|delete, see below.)
 // save: a profile of the configured class with a deterministic non-default value in every plain property
 // (ints, floats, bytes, bools, names, strings), written through ULoadSaveManager as the game does
 // (System/Profiles/<profile>/AVARIS_PROFILE.PRO); load: read it back. Either way every property is exported as
@@ -336,6 +337,22 @@ static UBOOL ProfileTest( const TCHAR* Parms )
 	UObject::LoadPackage( NULL, TEXT("Engine"), LOAD_NoFail );
 	ULoadSaveManager* Manager = ConstructObject<ULoadSaveManager>( ULoadSaveManager::StaticClass() );
 	Manager->Init( NULL );
+	// C-2: "list" writes the names ListGameObjects finds (one per line) to <export.txt>; "exists" and "delete" return
+	// whether the profile <profile> exists / was deleted (the web build keeps profiles as Profiles/<name>.PRO).
+	if( Mode==TEXT("LIST") )
+	{
+		TArray<FString> Names;
+		UBOOL Listed = Manager->ListGameObjects( &Names );
+		FString Text;
+		for( INT i=0; i<Names.Num(); i++ )
+			Text += Names(i) + TEXT("\n");
+		appSaveStringToFile( Text, *OutFile );
+		return Listed;
+	}
+	if( Mode==TEXT("EXISTS") )
+		return Manager->ExistsGameObject( Name );
+	if( Mode==TEXT("DELETE") )
+		return Manager->DeleteGameObject( Name );
 	UClass* Cls = Manager->getGameProfileClass() ? Manager->getGameProfileClass() : UPlayerProfile::StaticClass();
 	UPlayerProfile* Profile = ConstructObject<UPlayerProfile>( Cls );
 	UBOOL Ok;
