@@ -714,3 +714,30 @@ inside `capped 4G 300`, then `capped 6G 600 -- node packages/e2e/tools/e2e-mem-g
 - Published to the owner's preview: `bin/publish-preview .../build-wasm-perf/Source/SDLLaunch` ->
   `2026-10-06 23:11:07 published ... (a4975f2 ...)`.
 - Frontend commits: `c26c4b7` (work in progress), `68e3a5d` (green spec).
+
+## G4: the canvas against the twin (2026-10-06)
+
+Twin pictures at the canvas's size, with the dynamic gamma ramp applied as the present pass does
+(`-glshotramp`), on the ES 2.0 twin (`MESA_GLES_VERSION_OVERRIDE=2.0`); desktop pictures the same way:
+
+```sh
+UC2_RES=1024x768 tools/dev/run-uc2-shot.sh m11t ref-menu 50 0 '' -gl4es -glerrors -glshotramp -glshot=6,8,...,24
+UC2_RES=1024x768 tools/dev/run-uc2-shot.sh m11t ref-map 80 0 DM-Deadbolt -gl4es -glerrors -glshotramp -glshot=12,16,20,24,30
+```
+
+| Compared (whole 1024x768 frame) | mean of 255 | above 2 / 8 / 32 levels |
+|---|---|---|
+| menu: browser (run 20) vs twin, the 9 twin shots 6-24 s | 5.40-8.79 (nearest 5.40) | 63.6 / 36.3 / 3.1 % (nearest) |
+| menu: twin vs twin 2 s apart (noise: the background camera flies on wall-clock time) | 5.89-6.40 | ~70 / 41 / 4.3 % |
+| menu: browser run 16 vs run 20, run 13 vs run 20 | 5.71, 5.72 | |
+| menu: desktop vs twin, same moment | 1.72-3.81 | |
+| DM-Deadbolt, pre-match camera, post-processing on: browser vs twin (5 shots 12-30 s) | 1.046-1.058 | 5.6 / 1.0 / 0.73 % |
+| the same: browser run 16 vs run 20 | 0.182 | 0.37 / 0.22 / 0.14 % |
+| the same: desktop vs twin | 1.81-1.84 | 27.9 / 4.5 / 0.38 % (LOD bias) |
+
+`logs/m11/cmp-browser-twin-menu.png`, `cmp-browser-twin-map.png` (browser left, twin right) and
+`cmp-browser-twin-map-diff.png`: the pixels above 32 levels on the map are the HUD's match clock, the map name
+box and one animated pickup. **The browser draws what the twin draws**: the menu within its animation noise,
+the map within 1.05 of 255. References kept as `logs/m11/twin-ref/menu-1024x768.png` (the nearest of the 9)
+and `deadbolt-1024x768.png`; the spec compares with them when `UC2_E2E_TWIN_MENU` / `UC2_E2E_TWIN_MAP` name
+them, tolerances 10 and 3 (frontend `uc2-wasm-boot.spec.js`, comment above the constants).
