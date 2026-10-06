@@ -16,6 +16,8 @@
 #   UC2_PRECMD="..."     a console command bound to F1 in the run tree's DefUser.ini and pressed 4 s before
 #                        Fire, e.g. "set UCDeathmatch NumPlayers 0" (the first PlayerStart is then always
 #                        chosen: the wine reference script does the same)
+#   UC2_BIN=uc2-before.bin  another executable in the tree's System folder (before/after pictures from one
+#                        tree; default uc2.bin)
 #
 # Everything runs inside <WorkUC2>/bin/capped 2G (CLAUDE.md, "Running anything: memory ceiling, always").
 set -u
@@ -50,7 +52,7 @@ cd "$sys" || exit 1
 echo "\$DISPLAY" > "$out/$name.display"
 # M8: OpenAL Soft renders to its null backend unless ALSOFT_DRIVERS says otherwise (headless runs stay quiet).
 # M9: no logos (the fire-at times assume none)
-SDL_AUDIODRIVER=dummy ALSOFT_DRIVERS=${ALSOFT_DRIVERS:-null} ./uc2.bin $map -log -nostartupmovies "\$@" > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy ALSOFT_DRIVERS=${ALSOFT_DRIVERS:-null} ./${UC2_BIN:-uc2.bin} $map -log -nostartupmovies "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
 if [ "$fire" != 0 ]; then
   sleep \$(( $fire - 4 ))
@@ -97,7 +99,7 @@ grep -a "GL errors\|UC2GLDrv: programs\|does not\|not usable\|no program" "$out/
 # Nothing of this run may be left behind. Other run trees (other agents) have their own uc2.bin and Xvfb:
 # only a uc2.bin whose working directory is this tree's System and the Xvfb of this run's display count.
 left=0
-for pid in $(pgrep -x uc2.bin); do
+for pid in $(pgrep -x "${UC2_BIN:-uc2.bin}"); do
   [ "$(readlink /proc/$pid/cwd 2>/dev/null)" = "$sys" ] && { echo "WARNING: uc2.bin $pid of this run tree is still running"; left=1; }
 done
 disp=$(cat "$out/$name.display" 2>/dev/null); rm -f "$out/$name.display"

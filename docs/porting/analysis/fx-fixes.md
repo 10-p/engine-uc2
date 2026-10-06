@@ -77,3 +77,31 @@ Not the cause (checked): the PC/Xbox difference in the fluid's vertex colour (`F
 `FluidColor`, the Xbox push-buffer path writes (255,255,255,VertAlpha); `UnFluidSurface.cpp` 584 vs 1306-1308).
 With the cube complete, the shader takes colour from the cube and alpha from cube x opacity: the vertex colour is
 not read. Left as is.
+
+### Step 3: O-6, the waterfall: what it is and what the first measurements say
+
+- The waterfall is two `StaticMeshActor`s with the same mesh `S_NK_Decorations.Misc.NK_Deco_Misc_Waterspout01`
+  at (8318,4451,-1130) (the cobra's mouth), both `CullDistance` 3500, `bUseHWOcclusionTests`:
+  `StaticMeshActor84` draws the mesh's own material `Shader T_Liquid_Falls_Water01_SD01` (diffuse combiner,
+  env-map specular, OB_Brighten, two-sided: the visible water); `StaticMeshActor42` has
+  `Skins=(PSDistortionMaterial'T_Liquid.Downfall.T_Liquid_Downfall_Water01_DIST04')`: DistortionAmount 15,
+  Mask None, bTwoSided, distortion texture `TexScaler(4,5)` over `TexPanner` (rate 0.6) over
+  `UCPixelShaderEffects.Distortions.UCP_T_Praxis_Distortion` (the texture of the Praxis panes).
+- New in the pixel trace: during the accumulation stage it logs the whole accumulation target (texels with
+  distortion, mean/max of the accumulated red/green offsets) and writes it as a PPM in `System/`.
+- Measurements (llvmpipe, 1280x720, pawn at (8200,4200), yaw 14000, pitch 1500; `logs/fx/wf-*.out`):
+  - first person, standing still: the waterfall is drawn in the accumulation pass every frame and the offsets
+    change from frame to frame (the panner): pixel (250,420) (6,3) -> (1,23) -> (12,2) over three frames; the
+    full-screen quad moves the main pixel accordingly.
+  - time frozen (`set LevelInfo TimeDilation 0.0001`), same spot: first person 24,995 texels with distortion,
+    mean offset (10.1,19.1), max (89,104); third person 9,138 texels, mean (10.3,14.9), max (46,64). The
+    distortion is at least as strong in first person (the waterfall is larger on screen).
+  - Frozen on/off pictures (`set PSDistortionMaterial DistortionAmount 0`): the stone behind the waterfall is
+    displaced in both views.
+  So on this machine (Mesa llvmpipe) the first-person, standing-still waterfall distortion is drawn. **Not
+  reproduced yet.** The owner plays on this machine's NVIDIA Quadro P620 (`lspci`), which none of our tests
+  use. Next: run the same scenario on the NVIDIA GPU headless (EGL), if that can be done without touching the
+  owner's session.
+- Tools: `tools/dev/fx-owner.sh` (scenario runner on top of `m10-inject.py`: fixed camera, the virtual pad for
+  movement, shots); `tools/dev/run-uc2-shot.sh` takes `UC2_BIN=` (a second executable in the same tree for
+  before/after pictures; `run/fx/System/uc2-before.bin` = this branch without the cube-map fix).

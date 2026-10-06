@@ -12,6 +12,11 @@
 	  UC2GLDrv: pixtrace #<n>   stage <s>: tex=<GL id> <w>x<h> cube=<0/1> rt=<0/1> tci=<index>
 	             colorop=<op> <arg1>,<arg2> alphaop=<op> <arg1>,<arg2> xform=<0/1>
 
+	Every pass that draws into a render target during the accumulation stage of the
+	distortion (PP_STAGE_ACCUMULATE) also logs the whole target after it: how many texels hold
+	distortion (alpha > 0) and their mean and largest red/green (the accumulated offsets,
+	DistortionAccum.psh), and writes it as PixTraceAccum-<frame>-<n>.ppm in the working folder.
+
 	Quiet unless armed: two calls from DrawPrimitive, which return at once.
 =============================================================================*/
 
@@ -102,6 +107,38 @@ void UC2GL_PixelTraceLog( FOpenGLRenderInterface* RI, INT Pass, const FColor& Be
 		MS->AlphaBlending, BlendName(MS->SrcBlend), BlendName(MS->DestBlend), (INT)MS->BlendOp, MS->AlphaTest, MS->AlphaRef, MS->ZTest, MS->ZWrite,
 		MS->ColorWriteMask, (INT)MS->PixelShader, MS->UsePixelShaderProgram ? TEXT("program") : TEXT("ff"), (QWORD)MS->MaterialVertexShaderEnum, MS->StagesUsed,
 		Before.R, Before.G, Before.B, Before.A, After.R, After.G, After.B, After.A );
+	if( !Main && RI->PostProcessStage == FRenderInterface::PP_STAGE_ACCUMULATE && RT->Width > 0 && RT->Height > 0 )
+	{
+		TArray<BYTE> Pixels( RT->Width * RT->Height * 4 );
+		RI->RenDev->glReadPixels( 0, 0, RT->Width, RT->Height, GL_RGBA, GL_UNSIGNED_BYTE, &Pixels(0) );
+		INT Count = 0, Over16 = 0, MaxR = 0, MaxG = 0;
+		DOUBLE SumR = 0, SumG = 0;
+		for( INT i=0; i<RT->Width*RT->Height; i++ )
+		{
+			BYTE* P = &Pixels(i*4);
+			if( !P[3] )
+				continue;
+			Count++;
+			SumR += P[0]; SumG += P[1];
+			MaxR = Max<INT>( MaxR, P[0] ); MaxG = Max<INT>( MaxG, P[1] );
+			if( P[0] > 16 || P[1] > 16 )
+				Over16++;
+		}
+		debugf( NAME_Init, TEXT("UC2GLDrv: pixtrace #%i   accumulation %ix%i: %i texels with distortion, mean r,g %.2f,%.2f, max %i,%i, %i over 16"),
+			GPixTraceDraw, RT->Width, RT->Height, Count, Count ? SumR/Count : 0.0, Count ? SumG/Count : 0.0, MaxR, MaxG, Over16 );
+		FString Name = FString::Printf( TEXT("PixTraceAccum-%i-%i.ppm"), GPixTraceFrame, GPixTraceDraw );
+		FArchive* Ar = GFileManager->CreateFileWriter( *Name );
+		if( Ar )
+		{
+			FString Header = FString::Printf( TEXT("P6\n%i %i\n255\n"), RT->Width, RT->Height );
+			Ar->Serialize( (void*)TCHAR_TO_ANSI(*Header), Header.Len() );
+			// Top row first (render targets are stored that way, UC2GLPostProcess.cpp).
+			for( INT y=0; y<RT->Height; y++ )
+				for( INT x=0; x<RT->Width; x++ )
+					Ar->Serialize( &Pixels((y*RT->Width + x)*4), 3 );
+			delete Ar;
+		}
+	}
 	for( INT s=0; s<MS->StagesUsed && s<MAX_STAGES; s++ )
 	{
 		FOpenGLMaterialStateStage& St = MS->Stages[s];
