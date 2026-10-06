@@ -794,3 +794,37 @@ browser this ran in (ANGLE/Vulkan/NVIDIA) has it.
 Note for the record: `tools/dev/m11-twin.sh` was edited while its first full run was going (bash reads a running
 script as it goes); the edit was undone at once and is kept in my scratch directory, to be applied after the run
 (fallbacks check: the two new masks pass, the depth-texture one is reported).
+
+## G5 step 1, the web inis and the movie upload (2026-10-06)
+
+- **Upload invalidation removed, measured: no effect on the counts.** The six `InvalidateHardwareState` calls
+  in the vertex/index buffer uploads (`UC2GLResource.cpp`) are gone (a buffer upload changes no material
+  state; streams and index buffer are bound by every draw). Twin, DM-Deadbolt pre-match camera, 640x480,
+  `-glstats` (`logs/m11f/g5-before.out`, `logs/m11g/g5-after.out`): before `105.0 draw calls ... 100.0
+  material state applications`, after `105.0 draw calls ... 100.0 material state applications`. So the
+  premise in the checkpoint was wrong: the material state is re-applied because the engine's `SetMaterial`
+  hands a NEW pool object for every draw (`FOpenGLMaterialStatePool::AllocateState`, contents copied from
+  a default), and `SetMaterialBlending` only skips on pointer equality. Skipping by CONTENT needs every
+  setter that touches the same GL state outside the material (cull mode, depth enable and mask, colour
+  mask, texture factor, the program passes' texture units) to invalidate the record: not done blind; it is
+  the next G5 step if time allows, verified by bit-identical desktop pictures.
+- **The 3 back-buffer snapshots per frame are not waste.** `-glsnapshotlog` (new) names what asks for each
+  snapshot in frame 600: all three are `Package.PSBlurMaterial`, each after exactly one draw into the main
+  framebuffer (versions 54037, 54038, 54039): Epic's blur reads the back buffer, writes it, reads it again.
+  The Xbox reads its back buffer in place; GL cannot sample the framebuffer it draws into, so each read of
+  changed content needs one copy quad. Kept.
+- **Web inis and the web audio work (coordinator, 2026-10-06).** Main's `web/Default.ini` now has
+  `AudioDevice=UC2ALAudio.UC2ALAudioSubsystem`, a `[UC2ALAudio.UC2ALAudioSubsystem]` section with a web-only
+  `Backends=` key and a `[UC2Movie]` section. `tools/dev/sync-web-ini.py` would have overwritten the audio
+  line with `Engine.NullAudioDevice` and dropped the rest. It now treats those as web-owned (`WEB_KEYS`,
+  `WEB_SECTIONS`): kept as the current web file has them. Checked by simulating the merged file in a scratch
+  copy of `Engine/Config`: `--check` says up to date, and a regeneration is byte-identical to the merged file.
+  On this branch the web file keeps `Engine.NullAudioDevice` (the audio device is not in this branch's web
+  build). Commit `ef34e6c`.
+- **Movie frames are uploaded as `GL_BGRA` (`UC2GLMovie.cpp`), which WebGL 1 lacks.** gl4es converts BGRA to
+  RGBA on the CPU when the hardware has no `EXT_texture_format_BGRA8888`; Mesa has it, so the twin passed
+  BGRA through. Run with gl4es told to ignore it (`LIBGL_NOBGRA=1`, the WebGL case) on the ES 2.0 twin:
+  `m9-movies.py --only logos,menu-movie` (`logs/m11f/m9-nobgra.txt`): `m9-logos-match: ... PSNR 82.4 / 65.8
+  dB against its own frame` (colours right: a red/blue swap would not match), `m9-menu-movie-log` advancing,
+  `m9-menu-movie-shots` PASS, 0 GL errors. The two `-clean` FAIL lines are `1 processes left` = my own shell,
+  whose command line contained the run tree's path (`pgrep -f`), not a game process.
