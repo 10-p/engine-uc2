@@ -203,3 +203,38 @@ construction (same formula and constant as Epic's driver).
   (`Shader T_NK_MeshSkins.Decorations.T_NKMesh_Deco_Wood02_Snow_SD`, stage 1 colour op 18 on llvmpipe, 5 =
   MODULATE2X on NVIDIA, `logs/fx/fx-pillar*.out`) look like orange metal on NVIDIA and like wood on llvmpipe.
   The cobra statue also looks different. NVIDIA has `GL_NV_texture_env_combine4`, which can express that op.
+
+## Hunks in `Source/UC2GLDrv` (for the hand merge with `m11-webgl`), base `2208566`
+
+The web branch (`m11-webgl`, merge base with this branch `776ed23`) rewrote large parts of `UC2GLResource.cpp`
+(`UploadMip`: driver-side DXT decode, `PrepareStorage`) and `DrawPrimitive`; textual conflicts are expected in
+hunks 1-2 and 4. What each hunk does, so it can be re-applied by meaning:
+
+1. `UC2GLResource.cpp`, `FOpenGLTexture::UploadMip` (4 hunks, the fix of O-5): `Texture` may be NULL (a cube
+   face the cubemap leaves empty). Every read of the source (`GetTextureData`, `ConvertDXT`, and on the web
+   branch also the driver's own DXT decode and the last-mip readers) is skipped for NULL and the upload gets
+   zeroed data of the same size and format (DXT: zero blocks = opaque black for DXT1, transparent black for
+   DXT3/5; uncompressed: zero texels). Comment above the function explains why.
+2. `UC2GLResource.cpp`, `FOpenGLTexture::Cache`, cube branch (1 hunk, the fix of O-5): the face loop calls
+   `UploadMip` for every face, NULL included, and `UnloadRawTextureData` only for faces that exist. (If the web
+   branch's `PrepareStorage` allocates immutable storage for all faces, a cube is complete there anyway on that
+   path, but the desktop path still needs this.)
+3. `UC2GLMaterialState.cpp`, `HandlePSVertexShader` + a global above it (2 hunks, O-7): new global
+   `FLOAT GUC2GLDistortionCullDistance` (0 = not read yet); Epic's `static FLOAT DISTORTION_CULL_DISTANCE =
+   5000.f;` becomes: on first use read `[UC2GLDrv.UC2GLRenderDevice] DistortionCullDistance` with
+   `GConfig->GetFloat` (missing or <= 0: 5000), log one `Init` line, use it. The web branch did not touch
+   this file.
+4. `UC2GLRenderInterface.cpp`, `DrawPrimitive` (2 hunks, debug only): before the draw, if
+   `UC2GL_PixelTraceActive(RenDev)`, read the traced pixel; after it, read it again and call
+   `UC2GL_PixelTraceLog`. Three `extern` declarations inside the function. Quiet unless armed.
+5. `UC2GLRenderDevice.cpp`, `Exec` (1 hunk): console commands `DISTORTIONCULLDISTANCE [<units>]` (O-7) and
+   `GLPIXTRACE <x> <y> [all]` (debug), inserted before `POSTSELFTEST`.
+6. New file `UC2GLPixelTrace.cpp` (debug only; picked up by the `Src/*.cpp` glob): arming, per-pass logging,
+   accumulation-target statistics and PPM dump. Uses `glReadPixels`, `glPixelStorei`, `GFileManager`; on a
+   multisampled main framebuffer (the web branch's anti-aliasing) the main-framebuffer read would need the
+   resolved copy instead.
+
+No header changed. Engine side: `Source/Engine/Src/UC2NetTest.cpp` (test command `NETPLACE` takes an optional
+pitch; default 0 = old behaviour; not reachable without the console). No engine rendering code changed, so a
+device without the post-process capability behaves exactly as before (the cube-map fix is a driver change
+that applies with and without post-processing: see the pinned check in the gate).
