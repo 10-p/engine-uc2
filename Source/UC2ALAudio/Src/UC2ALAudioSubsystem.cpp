@@ -1655,6 +1655,10 @@ INT UUC2ALAudioSubsystem::StopAllMusic( FLOAT FadeOutTime )
 
 static void UpdateMusic( UUC2ALAudioSubsystem* Audio, FUC2AudioState* S, FLOAT DeltaTime )
 {
+	// What a refill costs the frame it happens in (O-2: decoding 32768 frames of Vorbis on the game thread),
+	// reported once after the first 8 refills of the run.
+	static INT RefillCount = 0;
+	static DOUBLE RefillTotal = 0.0, RefillMax = 0.0;
 	for( INT i=0; i<UC2_MUSIC_SLOTS; i++ )
 	{
 		FUC2MusicSlot& M = S->Music[i];
@@ -1666,7 +1670,18 @@ static void UpdateMusic( UUC2ALAudioSubsystem* Audio, FUC2AudioState* S, FLOAT D
 		{
 			ALuint B = 0;
 			GAL.alSourceUnqueueBuffers( M.Source, 1, &B );
-			if( !M.bEnded && FillMusicBuffer( M, B ) )
+			DOUBLE T0 = appSeconds();
+			UBOOL bFilled = !M.bEnded && FillMusicBuffer( M, B );
+			if( bFilled && !S->bTest && RefillCount < 8 )
+			{
+				DOUBLE T = appSeconds() - T0;
+				RefillTotal += T;
+				RefillMax = ::Max( RefillMax, T );
+				if( ++RefillCount == 8 )
+					debugf( NAME_Log, TEXT("UC2Audio: music refill cost (first 8 buffers of %i frames, decoded on the game thread): %.2f ms on average, %.2f ms at most"),
+						(INT)UC2_MUSIC_BUFFER_FRAMES, 1000.0 * RefillTotal / 8, 1000.0 * RefillMax );
+			}
+			if( bFilled )
 				GAL.alSourceQueueBuffers( M.Source, 1, &B );
 			else
 				M.bEnded = 1;

@@ -264,3 +264,42 @@ Every 3D sound reached it through its own I3DL2 send level from the XACT project
 send), 733 at -300 mB, 1 at -333 mB; DM-Azure's own bank A_Azure: 13 sounds, all 0 mB. So in DM-Azure our device
 with ZoneReverb=True does what the Xbox did (Default preset everywhere, the same sends); in the 34 maps with other
 zone presets it differs from the Xbox by the owner's decision (zone reverb kept on).
+
+## Step 5 - native gate runs and the DM-Azure capture pair (2026-10-06)
+
+`tools/dev/audio-regression.sh m11audio` (run tree from this branch's build-native, `logs/m11audio/audio-summary.txt`):
+```
+SUMMARY audio-check: 182 index files; waves: 7141 decoded to their exact length of 7141 cooked (19 entries have no cooked wave); music streams: 21 of 21; cues [int]: 2438 in 78 cue tables: 2417 resolve fully, 6 partly, 15 to no decodable wave (0 use a localised bank); UC2AudioCheck: 78 cue tables, 2438 cues, 0 failures
+SUMMARY audio-selftest: UC2AudioSelfTest: 39 checks, 0 failed; Pan3D -1.10 dB, Pan2D -1.52 dB
+SUMMARY audio-menu-music: music NuBattle.wav in audio-menu.wav: envelope correlation 0.857 at 0.30 s, mix gain -19.02 dB (expected -19.00 dB, error -0.02 dB), control track Recoil.wav correlates 0.115: PASS
+SUMMARY audio-menu: 58.645333 s, peak -19.0 dBFS, RMS -34.5 dBFS, silent seconds 0; cue requests 1: played 1 (1 distinct), culled 0 (0 distinct), failed 0 (0 distinct); Critical 0
+SUMMARY audio-deadbolt: 83.605333 s, peak 3.1 dBFS, RMS -23.6 dBFS, silent seconds 0; cue requests 1103: played 490 (55 distinct), culled 613 (75 distinct), failed 0 (0 distinct); Critical 0
+SUMMARY audio-praxis-efx: 83.541333 s, peak -2.9 dBFS, RMS -24.4 dBFS, silent seconds 0; cue requests 1063: played 260 (39 distinct), culled 803 (81 distinct), failed 0 (0 distinct); Critical 0
+SUMMARY audio-praxis-dry: 83.626667 s, peak -2.1 dBFS, RMS -25.1 dBFS, silent seconds 0; cue requests 1235: played 292 (44 distinct), culled 943 (88 distinct), failed 0 (0 distinct); Critical 0
+```
+(Deadbolt peaks at +3.1 dBFS: the float wave writer does not clip; same remark as M8.)
+
+DM-Azure pair (O-4), same input script as the suite's Praxis pair (`UC2_PRECMD="set UCDeathmatch NumPlayers 0"`,
+`UC2_POSTCMD="Ghost"` so the walk crosses zones; `tools/dev/run-uc2-audio.sh m11audio azure-zone-efx|azure-zone-dry
+85 28 'DM-Azure?NumBots=3' [-NOEFX]`; without Ghost: `azure-efx`/`azure-dry`, no zone change logged):
+```
+SUMMARY azure-zone-efx: 83.413333 s, peak 3.1 dBFS, RMS -28.0 dBFS, silent seconds 0; cue requests 901: played 263 (48 distinct), culled 638 (61 distinct), failed 0 (0 distinct); Critical 0
+SUMMARY azure-zone-dry: 83.562667 s, peak -3.2 dBFS, RMS -29.9 dBFS, silent seconds 0; cue requests 1009: played 236 (36 distinct), culled 773 (70 distinct), failed 0 (0 distinct); Critical 0
+efx run:  UC2ALAudio: ... (backend wave) ..., reverb EFX (EAX reverb), ...   UC2Audio: 33 static ambient sounds; zone reverb presets in this level: Default x18
+          UC2Audio: [  35.89] zone ZoneInfo15 (ZoneAudioEffect 0): reverb preset Default unchanged   (7 such lines, ZoneInfo15/9/LevelInfo0)
+dry run:  UC2ALAudio: EFX switched off (UseEFX=False or -NOEFX): zone reverb is off, sound is dry
+          UC2Audio: [  41.29] zone LevelInfo0 (ZoneAudioEffect 0): no EFX, sound stays dry
+```
+RMS with EFX minus without, by window (from the captures' per-second RMS): azure-zone 5-24 s (before the spawn:
+music + 3D ambients) +0.4 dB, 30-55 s +3.0 dB, 55-80 s -0.0 dB; azure (no Ghost) +0.3 / -0.7 / +0.9 dB; the
+suite's Praxis pair +0.7 / +0.7 / +0.4 dB. Log-correlated only: gameplay is not identical between two runs. The
+pre-spawn window is the comparable one: a fraction of a dB, as expected of the Default preset (Room -1000 mB,
+late reverb +200 mB, 1.49 s), whose decay the self-test measures numerically (`PASS reverb Default 3D, send
+-300 mB: ... decay time measured 1.68 s, preset 1.49 s (+13%)`). Files: `logs/m11audio/azure-zone-{efx,dry}.
+{wav,png,report.txt,cues.txt,out}`.
+What it means for the owner: DM-Azure has no reverb zone; its reverb on the Xbox is the one fixed Default
+reverb every map had, fed by each sound's I3DL2 send (A_Azure's 13 ambient sounds send at 0 mB, i.e. fully). Our
+device plays the same preset there with the same sends. Whether its LEVEL equals the Xbox DSP's is not known
+(EFX vs the Xbox's reverb24k DSP program; M8's doubt), and nothing here can measure it without an Xbox capture.
+
+Movie self-test (`tools/dev/movie-selftest.sh m11audio`): `UC2MovieSelfTest: 99 checks, 0 failed`.
