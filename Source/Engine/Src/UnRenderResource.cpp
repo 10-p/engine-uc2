@@ -54,6 +54,22 @@ ENGINE_API UBOOL RenDevHasXboxPostProcess()
 	return Caps && Caps->XboxPostProcess;
 }
 
+//
+// UC2 port (M7b): the capability behind which the Xbox shadow-texture filter runs
+// (FRenderCaps::XboxShadows, UnRenDev.h; UnShadowProjector.cpp).
+//
+ENGINE_API UBOOL RenDevHasXboxShadows()
+{
+#ifdef _XBOX
+	return 1;	// Epic's Xbox build always took this branch
+#endif
+	UClient* Client = UTexture::__Client;
+	if( !Client || !Client->Engine || !Client->Engine->GRenDev )
+		return 0;
+	FRenderCaps* Caps = Client->Engine->GRenDev->GetRenderCaps();
+	return Caps && Caps->XboxShadows;
+}
+
 /* scion ======================================================================
 * FRenderTarget::RemovePoolRef
 * Author: sz

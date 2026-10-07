@@ -3126,12 +3126,14 @@ UBOOL FOpenGLRenderInterface::SetTerrainMaterial( UTerrainMaterial* TerrainMater
 			case 3:
 				{
 				CurrentState->MaterialPasses[0]->PixelShader = PS_Terrain3Layer;
-#ifdef _XBOX
+				// UC2GLDrv (M7b): the Xbox's constants (D3DDrv's "#ifdef _XBOX"): c0..c2 select the
+				// red, green and blue weight of the combined weight map. Reached only when the caps
+				// report three layers (UseTerrain3Layer), i.e. when the program exists.
 				static FLOAT MaskCoefficients[3*4] = {	1.f, 0.f, 0.f, 0.f,	
 															0.f, 1.f, 0.f, 0.f,	
 															0.f, 0.f, 1.f, 0.f };
-				RenDev->DeferredState.SetPixelShaderConstant( 0, MaskCoefficients, 3 );
-#endif
+				SetPixelShaderConstant( 0, MaskCoefficients, 3 );
+				CurrentState->MaterialPasses[0]->UsePixelShaderProgram = 1;
 				}
 				break;
 			case 4:
@@ -3442,7 +3444,14 @@ public:
 UBOOL FOpenGLRenderInterface::SetProjectorMultiMaterial( UProjectorMultiMaterial* ProjectorMultiMaterial, FOpenGLModifierInfo InModifierInfo, FString* ErrorString, UMaterial** ErrorMaterial )
 {
 	guard(FOpenGLRenderInterface::SetProjectorMultiMaterial);
-#ifdef _XBOX
+	// UC2GLDrv (M7b): Epic's body below was "#ifdef _XBOX". On PC this function set nothing
+	// and returned 1, so whatever asked for a UProjectorMultiMaterial drew with the default
+	// pass: UnSkeletalMesh.cpp's projector path (not gated) does, for every projector with a
+	// simple bitmap on a skeletal mesh. It runs when the device draws the projector pixel
+	// shaders (UseXboxProjectors; docs/porting/analysis/projectors.md); PC's behaviour is kept
+	// otherwise, for comparison.
+	if( !RenDev->XboxProjectorsActive() )
+		return 1;
 
 	if( !ProjectorMultiMaterial->RenderEntries.Num() )
 		return 0;
@@ -3572,9 +3581,11 @@ UBOOL FOpenGLRenderInterface::SetProjectorMultiMaterial( UProjectorMultiMaterial
 			StagesUsed++;		
 		}
 
-		D3DMATRIX* pWorldInvMat = RenDev->DeferredState.GetTransform(TS_WORLDINV);
+		// UC2GLDrv: D3D's deferred TS_WORLD / TS_WORLDINV are the interface's LocalToWorld.
+		FMatrix WorldInv = CurrentState->LocalToWorld.Inverse();
+		D3DMATRIX* pWorldInvMat = (D3DMATRIX*)&WorldInv;
 		D3DMATRIX WorldInvTransposeMat;
-		D3DXMatrixTranspose( (D3DXMATRIX*)&WorldInvTransposeMat, (D3DXMATRIX*)RenDev->DeferredState.GetTransform(TS_WORLD) );
+		D3DXMatrixTranspose( (D3DXMATRIX*)&WorldInvTransposeMat, (D3DXMATRIX*)&CurrentState->LocalToWorld );
  
 		// iterate through projectors and set their texture stages
 		for( INT ProjIndex=LastProjectorUsed+1; ProjIndex < ProjectorMultiMaterial->RenderEntries.Num() && StagesUsed < MaxStages; ProjIndex++ )
@@ -3664,7 +3675,8 @@ UBOOL FOpenGLRenderInterface::SetProjectorMultiMaterial( UProjectorMultiMaterial
 			}
 			else
 			{
-				debugf( NAME_Error, TEXT("Invalid Material [%s] on projector [%s]") );
+				// UC2GLDrv: Epic's line passed no arguments for its two %s.
+				debugf( NAME_Error, TEXT("Invalid Material [%s] on projector [%s]"), ProjectorInfo->Material ? ProjectorInfo->Material->GetName() : TEXT("None"), Projector->GetName() );
 			}
 			LastProjectorUsed++;
 		}
@@ -3713,7 +3725,8 @@ UBOOL FOpenGLRenderInterface::SetProjectorMultiMaterial( UProjectorMultiMaterial
 		}
 
 		// Set vertex shader constants (directions, origins, trace dists, backfaces in one copy)
-		RenDev->SetVertexShaderConstant( VSC_PROJ_DIRECTIONS, ProjectorConstants, NumConstants );
+		// UC2GLDrv: the interface keeps them for the program's u_proj[] (UC2GLShaders.cpp).
+		appMemcpy( ProjectorShaderConstants, ProjectorConstants, sizeof(FLOAT) * 4 * NumConstants );
 
 		// make sure specular channel is enabled since we pass attenuation factors
 		// using both the diffuse and the specular output colors
@@ -3784,7 +3797,7 @@ UBOOL FOpenGLRenderInterface::SetProjectorMultiMaterial( UProjectorMultiMaterial
 
 				// set pixel shader constant[0]
 				static FLOAT flColor[] = { 127.f * ONE_OVER_255, 127.f * ONE_OVER_255, 127.f * ONE_OVER_255, 0.f };
-				RenDev->DeferredState.SetPixelShaderConstant( 0, flColor, 1 );
+				SetPixelShaderConstant( 0, flColor, 1 );
 
 			}
 			break;
@@ -3796,6 +3809,9 @@ UBOOL FOpenGLRenderInterface::SetProjectorMultiMaterial( UProjectorMultiMaterial
 			}
 		};
 
+		// UC2GLDrv: drawn by the program of MaterialState->PixelShader.
+		MaterialState->UsePixelShaderProgram = 1;
+
 		// setup for a new pass
 		if( Pass < (NumProjPasses-1) )
 			CurrentState->MaterialPasses[Pass+1] = MaterialStatePool.AllocateState( &DefaultPass );
@@ -3803,7 +3819,6 @@ UBOOL FOpenGLRenderInterface::SetProjectorMultiMaterial( UProjectorMultiMaterial
 	
 	CurrentState->NumMaterialPasses = NumProjPasses;
 
-#endif
 	return 1;
 	unguard;
 }

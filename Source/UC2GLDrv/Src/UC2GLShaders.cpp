@@ -146,14 +146,14 @@ static UBOOL UC2GL_IsM7PixelShader( INT Type )
 }
 
 //
-// Translated, but nothing in the PC code path asks for them: the engine batches projectors
-// into UProjectorMultiMaterial only under _XBOX (UnRenderBSP.cpp, UnRenderStaticMesh.cpp,
-// UnRenderBatch.cpp) and SetProjectorMultiMaterial is an _XBOX body; terrain asks for its
-// pixel shader only when the caps report three simultaneous layers.
+// Until M7b the 12 projector shaders and PS_Terrain3Layer were listed here: translated, but
+// nothing in the PC code path asked for them. Since M7b both are drawn (SetProjectorMultiMaterial
+// and the terrain caps, docs/porting/analysis/projectors.md); the list is empty and kept for
+// the start-up log's count.
 //
 static UBOOL UC2GL_IsEngineGatedPixelShader( INT Type )
 {
-	return (Type >= PS_Projector_Add_1 && Type <= PS_Projector_Modulate_Clip) || Type == PS_Terrain3Layer;
+	return 0;
 }
 
 /*-----------------------------------------------------------------------------
@@ -186,13 +186,14 @@ static GLuint UC2GL_CompileShader( UUC2GLRenderDevice* RenDev, GLenum Type, cons
 //
 FString UUC2GLRenderDevice::BuildVertexShaderSource( QWORD Enum )
 {
-	// GPU skinning and the packed terrain vertices exist only with XBOX_ASSET_FORMAT; of the
-	// unique shaders the projector attenuation ones are engine-gated (projector batching).
+	// GPU skinning and the packed terrain vertices exist only with XBOX_ASSET_FORMAT.
 	// M7: VS_Distortion, VS_DistortionAccum and VS_ColorRemap (Distortion.vsh,
 	// DistortionAccum.vsh, ColorRemap.vsh) are composed below, with what
-	// FD3DCombinedVertexShader skips for each of them.
+	// FD3DCombinedVertexShader skips for each of them. M7b: VS_Projector_Atten and
+	// VS_Projector_Atten_Clip (ProjectorAtten.vsh, TexSourceTexKill3.vsh) too.
 	DWORD Unique = VS_GETUNIQUESHADER(Enum);
-	if( (Enum & (VS_SkeletalSkin | VS_TerrainSpecial)) || (Unique && Unique != VS_Distortion && Unique != VS_DistortionAccum && Unique != VS_ColorRemap) )
+	UBOOL Projector = Unique == VS_Projector_Atten || Unique == VS_Projector_Atten_Clip;
+	if( (Enum & (VS_SkeletalSkin | VS_TerrainSpecial)) || (Unique && Unique != VS_Distortion && Unique != VS_DistortionAccum && Unique != VS_ColorRemap && !Projector) )
 		return FString();
 	UBOOL	SkipTexStage[4]	= { 0, 0, 0, 0 },
 			SkipLighting	= 0,
@@ -214,6 +215,14 @@ FString UUC2GLRenderDevice::BuildVertexShaderSource( QWORD Enum )
 		SkipTexStage[1] = SkipTexStage[2] = 1;
 		SkipLighting = 1;
 		SkipOutputColor = 1;
+	}
+	else if( Projector )
+	{
+		// the attenuation goes out through oD0/oD1; stage 3 carries the clip distances
+		SkipLighting = 1;
+		SkipOutputColor = 1;
+		if( Unique == VS_Projector_Atten_Clip )
+			SkipTexStage[3] = 1;
 	}
 
 	FString S;
@@ -242,6 +251,7 @@ FString UUC2GLRenderDevice::BuildVertexShaderSource( QWORD Enum )
 		TEXT("uniform vec4 u_distortionScale;\n")	// VSC_DISTORTION_SCALE
 		TEXT("uniform vec4 u_distortionScreen;\n")	// clip space xy to back-buffer texture coordinates (scale, offset)
 		TEXT("uniform vec4 u_colorRemap;\n")		// VSC_COLOR_REMAP
+		TEXT("uniform vec4 u_proj[13];\n")			// VSC_PROJ_DIRECTIONS .. VSC_PROJ_LIFESPAN_ATTEN (M7b)
 		TEXT("varying vec4 v_color0;\n")			// oD0
 		TEXT("varying vec4 v_color1;\n")			// oD1
 		TEXT("varying float v_fog;\n")				// oFog
@@ -311,6 +321,33 @@ FString UUC2GLRenderDevice::BuildVertexShaderSource( QWORD Enum )
 	}
 	S +=	TEXT("\t// OutLightRGB.vsh (output colours are clamped to [0,1])\n")
 			TEXT("\tv_color0 = clamp(finalColor, 0.0, 1.0);\n");
+
+	if( Projector )
+	{
+		// ProjectorAtten.vsh (M7b), register for register: u_proj[0..2] = directions, [3..5]
+		// origins, [6] back-face flags, [7] 1/max trace distance, [12] lifespan, one component
+		// per projector (x, y, z). Distance: 1 - ((P - O) . D) / max, 0 behind the origin, at
+		// least 0. Direction: N . -D, or 1 where back faces are wanted. Their product goes out
+		// as oD0 = .xxzx and oD1 = .xxwy (v0.a = projector 1, v1.a = projector 2, v0.b = 3).
+		S +=	TEXT("\t// ProjectorAtten.vsh\n")
+				TEXT("\tvec4 distAtten = vec4(dot(localPosition.xyz - u_proj[3].xyz, -u_proj[0].xyz), dot(localPosition.xyz - u_proj[4].xyz, -u_proj[1].xyz), dot(localPosition.xyz - u_proj[5].xyz, -u_proj[2].xyz), 0.0);\n")
+				TEXT("\tdistAtten = vec4(1.0) + distAtten * u_proj[7];\n")
+				TEXT("\tdistAtten *= vec4(lessThan(distAtten, vec4(1.0)));\n")
+				TEXT("\tdistAtten = max(distAtten, vec4(0.0));\n")
+				TEXT("\tvec3 projNormal = localNormal * inversesqrt(max(dot(localNormal, localNormal), 1e-12));\n")
+				TEXT("\tvec4 atten = vec4(dot(projNormal, -u_proj[0].xyz), dot(projNormal, -u_proj[1].xyz), dot(projNormal, -u_proj[2].xyz), 0.0);\n")
+				TEXT("\tatten = max(atten, u_proj[6]);\n")
+				TEXT("\tatten *= u_proj[12];\n")
+				TEXT("\tatten *= distAtten;\n")
+				TEXT("\tatten = max(atten, vec4(0.0));\n")
+				TEXT("\tv_color0 = clamp(atten.xxzx, 0.0, 1.0);\n")
+				TEXT("\tv_color1 = clamp(atten.xxwy, 0.0, 1.0);\n");
+		if( Unique == VS_Projector_Atten_Clip )
+			// TexSourceTexKill3.vsh: m4x4 oT3, R_LOCAL_POSITION, c[VSC_PROJ_CLIP_MATRIX]: the
+			// distances to four frustum planes, which texkill t3 tests.
+			S +=	TEXT("\t// TexSourceTexKill3.vsh\n")
+					TEXT("\tv_tex3 = vec4(dot(localPosition, u_proj[8]), dot(localPosition, u_proj[9]), dot(localPosition, u_proj[10]), dot(localPosition, u_proj[11]));\n");
+	}
 
 	UBOOL CameraSpacePositionInit = 0, CameraSpaceNormalInit = 0, CameraSpaceReflectInit = 0;
 
@@ -542,6 +579,7 @@ FOpenGLProgram* UUC2GLRenderDevice::GetProgram( INT PixelShader, DWORD Variant, 
 			P->DistortionScaleLoc	= glGetUniformLocation( Program, "u_distortionScale" );
 			P->DistortionScreenLoc	= glGetUniformLocation( Program, "u_distortionScreen" );
 			P->ColorRemapLoc		= glGetUniformLocation( Program, "u_colorRemap" );
+			P->ProjectorLoc			= glGetUniformLocation( Program, "u_proj" );
 			P->SceneDepthRectLoc	= glGetUniformLocation( Program, "u_sceneDepthRect" );
 			// Samplers never change: stage n is texture unit n.
 			glUseProgram( Program );
@@ -1046,6 +1084,8 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 	}
 	if( Program->ColorRemapLoc >= 0 )
 		RenDev->glUniform4fv( Program->ColorRemapLoc, 1, ColorRemapConstant );
+	if( Program->ProjectorLoc >= 0 )
+		RenDev->glUniform4fv( Program->ProjectorLoc, 13, &ProjectorShaderConstants[0][0] );
 	if( SceneDepthTest )
 	{
 		// (The main depth was resolved by CopyDepthBuffer, which set this test up.)

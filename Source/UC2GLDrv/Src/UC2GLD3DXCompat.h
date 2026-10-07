@@ -42,6 +42,56 @@ FORCEINLINE D3DXMATRIX* D3DXMatrixIdentity( D3DXMATRIX* Out )
 	return Out;
 }
 
+// M7b: the vector helpers of SetProjectorMultiMaterial (Epic's Xbox body). D3DX's
+// TransformNormal is v * M (upper 3x3), Transform is (v,1) * M; the same as FMatrix's.
+struct D3DXVECTOR3
+{
+	FLOAT x, y, z;
+};
+struct D3DXVECTOR4
+{
+	FLOAT x, y, z, w;
+	D3DXVECTOR4() {}
+	D3DXVECTOR4( FLOAT X, FLOAT Y, FLOAT Z, FLOAT W ) : x(X), y(Y), z(Z), w(W) {}
+};
+
+FORCEINLINE D3DXVECTOR3* D3DXVec3TransformNormal( D3DXVECTOR3* Out, const D3DXVECTOR3* V, const D3DXMATRIX* M )
+{
+	FVector R = ((const FMatrix*)M)->TransformNormal( FVector( V->x, V->y, V->z ) );
+	Out->x = R.X; Out->y = R.Y; Out->z = R.Z;
+	return Out;
+}
+
+FORCEINLINE D3DXVECTOR4* D3DXVec3Transform( D3DXVECTOR4* Out, const D3DXVECTOR3* V, const D3DXMATRIX* M )
+{
+	FPlane R = ((const FMatrix*)M)->TransformFPlane( FPlane( V->x, V->y, V->z, 1.f ) );
+	Out->x = R.X; Out->y = R.Y; Out->z = R.Z; Out->w = R.W;
+	return Out;
+}
+
+FORCEINLINE D3DXVECTOR3* D3DXVec3Normalize( D3DXVECTOR3* Out, const D3DXVECTOR3* V )
+{
+	FVector R = FVector( V->x, V->y, V->z ).SafeNormal();
+	Out->x = R.X; Out->y = R.Y; Out->z = R.Z;
+	return Out;
+}
+
+FORCEINLINE D3DXVECTOR3* D3DXVec3Subtract( D3DXVECTOR3* Out, const D3DXVECTOR3* A, const D3DXVECTOR3* B )
+{
+	Out->x = A->x - B->x; Out->y = A->y - B->y; Out->z = A->z - B->z;
+	return Out;
+}
+
+FORCEINLINE FLOAT D3DXVec3Length( const D3DXVECTOR3* V )
+{
+	return appSqrt( V->x * V->x + V->y * V->y + V->z * V->z );
+}
+
+FORCEINLINE FLOAT D3DXVec3Dot( const D3DXVECTOR3* A, const D3DXVECTOR3* B )
+{
+	return A->x * B->x + A->y * B->y + A->z * B->z;
+}
+
 #endif
 /*-----------------------------------------------------------------------------
 	The End.
