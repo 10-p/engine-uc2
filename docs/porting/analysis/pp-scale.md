@@ -189,7 +189,7 @@ targets logged at 1280x720: DOF 426x120, 213x120; emissive select 213x120, blur 
 | emissive glow | streak falloff 0.4 per frame (`FalloffRate`) | per frame | unchanged | a time constant (frame-rate dependent), not a distance; not this task |
 | bloom | select W/4 x H/4 (one read per texel: the Xbox read 2x2 of the 4x4 pixels under it), blur W/8 x H/4, W/8 x H/8 | fractions of the back buffer; at 4K the select would read 2x2 of 18x18 pixels | fractions of the reference picture; the select reads the reference copy | same share; the reference copy is what makes the select read the picture as the Xbox did |
 | bloom / emissive / DOF composite | bilinear upsample of the last target to the screen | - | unchanged (bilinear, as on the Xbox) | the brief: the look of the Xbox's upsampling at the same share of the picture |
-| back-buffer copy (`UpdateBackBufferCopyTarget`) | half the back buffer, taps +-1 back-buffer pixel | blur of 4x4 back-buffer pixels: k times smaller | taps +-1 reference pixel, from the reference copy; **target stays half the back buffer** | the target is also the distortion accumulation target with its depth copy: the distortion field and its occlusion stay sharp with more texels; its readers (player-cam screens, sniper skin remap with `bUseBlurredCopy`, refraction) get the Xbox's blur |
+| back-buffer copy (`UpdateBackBufferCopyTarget`) | half the back buffer, taps +-1 back-buffer pixel | blur of 4x4 back-buffer pixels: k times smaller | taps +-1 reference pixel, from the reference copy; **target stays half the back buffer** | the target is also the distortion accumulation target with its depth copy: the distortion field and its occlusion stay sharp with more texels; its readers (`PSPlayerCamMaterial` screens, `PSBackBufferEffect`, a `PSColorRemapMaterial` with `bUseBlurredCopy`, `PSRefractionMaterial`) get the Xbox's blur |
 | distortion | amounts in pixels (`MaxDistortion` 35, materials' `DistortionAmount`) | M7: x height/480 | x height/R (R = reference height; 480 when R = 0) | already scaled since M7; now one setting for both |
 | distortion | accumulation target and depth copy size (half the back buffer) | - | unchanged | a field resolution, not a distance (see the back-buffer copy row) |
 | radial blur (speed, teleport-in, sniper) | quads inset by `RadialBlurDistance`/i pixels (13 default, script drives it; 6 quads) | screen pixels: at 1440x1080 a 2.25 times weaker zoom | insets x W/(R*4/3) across, x H/R down | keeps the Xbox's zoom factor on each axis at any resolution and aspect (AutoFOV on or off: a point of the 4:3 middle moves as on the Xbox) |
@@ -285,3 +285,19 @@ the downsampling passes, and smaller targets) and the same at 1920x1080. Self-te
 
 All pp-scale measurements before `7f58c55` used the first shader (same arithmetic); they are repeated on the final
 binary below.
+
+## M7b's shadow blur and these changes (read in `../engine-uc2-m7b`, branch `m7b-projectors`, 2026-10-07 23:55)
+
+M7b lifts the Xbox shadow blur (`UnShadowProjector.cpp`, `NEW_SHADOW_BLEND`, behind its own capability
+`RenDevHasXboxShadows`). It does **not** use the primitives changed here: it draws one `UPSBlurMaterial` tile
+(`PS_ShadowBlur`, `BLUR_SHADOW`) with its own `UTexMatrix` offsets of +-1 and +-1/3 shadow-texture texels
+(`1.0f/USize`) from `TempRenderTarget` into `ShadowTexture`, through `FScreenPrimUtil`; no
+`FilterCopyRenderTarget` (whose back-buffer taps are now scaled), no read of the default render target (whose
+downsampling reads go to the reference copy), no camera-effect target. Its distances are shadow-texture texels,
+not screen pixels: nothing to scale. Files both branches change (hand merge): `Engine/Inc/UnRenDev.h`
+(`FRenderCaps` members and constructor list, a function declaration after `RenDevHasXboxPostProcess`),
+`Engine/Src/UnRenderResource.cpp` (a function after `RenDevHasXboxPostProcess`), `UC2GLDrv/Inc/UC2GLRenderDevice.h`,
+`UC2GLDrv/Src/UC2GLRenderDevice.cpp` (`GetRenderCaps`, constructor, `StaticConstructor`, `Exec`),
+`UC2GLDrv/Src/UC2GLShaders.cpp`, `Engine/Config/README.md`, `Engine/Config/Default.ini` and `web/Default.ini`,
+`tools/dev/m11-twin.sh` (M7b: shader/program counts; here: the self-test count), `tools/dev/o9-nvidia.sh` (the
+same `O9_TREE` line on both, made identical here).
