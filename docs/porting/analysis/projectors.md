@@ -287,3 +287,10 @@ Claims still from reading only: that the Xbox ignores the base opacity of masked
   the pre-O-9 binary (with main as "before" the two are equal by construction): not a regression.
   combiner-gpu, caps and pictures-other did not start: another agent's headless GPU run was going on (the script
   allows one at a time); rerun below.
+- `tools/dev/m11-twin.sh` (`M11_DESKTOP_TREE=m7b-m11 M11_TWIN_TREE=m7b-m11t`; `logs/m7b/m11-twin.txt`): shaders,
+  gputest, boot (`97 fragment shaders compiled, 0 failed; 405 vertex shaders`), selftest 11/0 on both bindings,
+  **progtest 485 programs on each side, largest difference 1 of 255** (the 12 projector shaders and
+  `PS_Terrain3Layer` now among them, on GLES too), pinned PASS, m6 4/4 PASS, effects 13 of 14: liandri FAIL
+  (mean 11.4: the overlay's random noise, the known failure of main noted in LOG.md for O-9b). Stopped during
+  `fallbacks` at the coordinator's new rule (at most one game run at a time; the script ran desktop and twin side
+  by side): `M11_SERIAL=1` added; fallbacks and movies rerun serially below.
