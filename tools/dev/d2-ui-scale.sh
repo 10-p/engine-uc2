@@ -58,6 +58,8 @@ extras() {
   one "$ref" 1920x1080 ref-hud deadbolt.scen "DM-Deadbolt?NumBots=0"
   # The switch: UIScaleMode=Native640 in Default.ini gives today's behaviour back.
   M10_INI="UIScaleMode=Native640" one "$tree" 1920x1080 native-menu menu.scen ""
+  # A marker on an actor (the lock-on reticle, placed by WorldToScreen): boxed and unboxed, same window pixels.
+  one "$tree" 1920x1080 lockon lockon.scen "DM-Deadbolt?NumBots=0"
   # The mouse scenario of M10 at 640x480 and 1920x1080 (its 640x480 positions mapped into the box).
   for res in 640x480 1920x1080; do
     M10_TREE=$tree M10_RES=$res M10_OUT=$out/$res M10_MEM=2G "$ctl" mouse 2>&1 | tail -1 | sed "s|^|[$res] |"

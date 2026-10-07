@@ -545,6 +545,7 @@ class ENGINE_API UClient : public UObject
 	FLOAT		MaxDistortion;						// scion sz - maximum screen space distortion offset in pixels
 	BYTE		UIScaleMode;						// D-2: EUIScaleMode
 	BYTE		UIMenuBackground;					// D-2: EUIMenuBackground (Fit43 only)
+	BITFIELD	UISharpText;						// D-2: a scaled-up UI takes its glyphs from bigger sizes of the font
 
 	// scion sz -
 	class UViewportMgr*		ViewportMgr;

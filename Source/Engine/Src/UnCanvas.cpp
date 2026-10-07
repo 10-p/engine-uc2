@@ -9,6 +9,7 @@ Revision history:
 
 
 #include "EnginePrivate.h"
+#include "UnLinker.h"	// D-2: a font's package export table (sharper text)
 #include "wordwrap.h"
 
 #ifdef _XBOX
@@ -185,6 +186,117 @@ void UCanvas::SetClip( FLOAT X, FLOAT Y, FLOAT XL, FLOAT YL )
 -----------------------------------------------------------------------------*/
 TCHAR Ellipsis[4] = TEXT("...");
 
+/*-----------------------------------------------------------------------------
+	D-2: sharper text in a scaled-up UI (docs/porting/analysis/ui-scale.md).
+
+	UC2's text is laid out with bitmap fonts made for 640x480 ("T_Fonts2.SuiGeneris_12pt"), so a UI drawn x2.25
+	or x4.5 magnifies the glyph textures. The same package has the family in bigger point sizes (12 18 20 24 28
+	40 pt). With UISharpText on, a glyph keeps the small font's layout (position, advance, box: the metrics
+	every script and the GUI measured text with) and takes its pixels from the smallest bigger size that gives
+	at least one texel per screen pixel (or the biggest there is). Nothing changes at 640x480 (no box) or for
+	fonts without a "<Family>_<N>pt" family in their package (the Xbox button glyphs).
+-----------------------------------------------------------------------------*/
+
+struct FSharpFontFamily
+{
+	UFont*			Font;		// the font text is laid out with
+	INT				Pt;			// its point size
+	TArray<INT>		Pts;		// bigger sizes of its family, ascending
+	TArray<UFont*>	Fonts;
+};
+static TArray<FSharpFontFamily> GSharpFonts;
+
+// "<Family>_<N>pt" -> N (and the family prefix up to the underscore), or 0.
+static INT ParseFontPt( const FString& Name, FString* Family )
+{
+	INT Len = Name.Len();
+	if( Len < 4 || appToUpper(Name[Len-1]) != 'T' || appToUpper(Name[Len-2]) != 'P' )
+		return 0;
+	INT i = Len - 3;
+	while( i >= 0 && appIsDigit(Name[i]) )
+		i--;
+	if( i == Len - 3 || i < 1 || Name[i] != '_' )
+		return 0;
+	if( Family )
+		*Family = Name.Left( i + 1 );
+	return appAtoi( *Name.Mid( i + 1 ) );
+}
+
+// The family of Font with bigger sizes, and in Start the index of the size to try first (the smallest that gives
+// at least one texel per screen pixel at this magnification, or the biggest); NULL when there is none.
+static FSharpFontFamily* SharpFontFor( UFont* Font, FLOAT Magnification, INT& Start )
+{
+	guardSlow(SharpFontFor);
+	if( !Font || Magnification < 1.2f )
+		return NULL;
+	INT Index = INDEX_NONE;
+	for( INT i=0; i<GSharpFonts.Num(); i++ )
+		if( GSharpFonts(i).Font == Font )
+		{
+			Index = i;
+			break;
+		}
+	if( Index == INDEX_NONE )
+	{
+		// Once per font: find its family's bigger sizes in its package. They are kept loaded (root set), and so
+		// is the font itself (this table refers to it by address).
+		Index = GSharpFonts.AddZeroed();
+		FSharpFontFamily& F = GSharpFonts(Index);
+		F.Font = Font;
+		Font->AddToRoot();
+		FString Family;
+		F.Pt = ParseFontPt( Font->GetName(), &Family );
+		ULinkerLoad* Linker = Font->GetLinker();
+		FString Found;
+		if( F.Pt > 0 && Linker && Font->GetOuter() )
+		{
+			for( INT e=0; e<Linker->ExportMap.Num(); e++ )
+			{
+				FString Name = *Linker->ExportMap(e).ObjectName;
+				FString OtherFamily;
+				INT Pt = ParseFontPt( Name, &OtherFamily );
+				if( Pt <= F.Pt || appStricmp( *OtherFamily, *Family ) != 0 )
+					continue;
+				UFont* Big = Cast<UFont>( UObject::StaticLoadObject( UFont::StaticClass(), NULL,
+					*FString::Printf( TEXT("%s.%s"), Font->GetOuter()->GetPathName(), *Name ), NULL, LOAD_NoWarn | LOAD_Quiet, NULL ) );
+				if( !Big || !Big->Characters.Num() )
+					continue;
+				Big->AddToRoot();
+				INT At = 0;
+				while( At < F.Pts.Num() && F.Pts(At) < Pt )
+					At++;
+				F.Pts.Insert( At );
+				F.Pts(At) = Pt;
+				F.Fonts.Insert( At );
+				F.Fonts(At) = Big;
+			}
+			for( INT j=0; j<F.Pts.Num(); j++ )
+			{
+				// how many of the printable ASCII characters each size has (the letters are what text needs)
+				INT Have = 0;
+				for( INT c=32; c<127; c++ )
+					if( F.Fonts(j)->RemapChar( (TCHAR)c ) != NULLCHARACTER )
+						Have++;
+				Found += FString::Printf( TEXT(" %ipt(%i/95)"), F.Pts(j), Have );
+			}
+		}
+		debugf( NAME_Log, TEXT("UIScale: sharper text for %s:%s"), Font->GetPathName(), Found.Len() ? *Found : TEXT(" (no bigger size in its package)") );
+	}
+	FSharpFontFamily& F = GSharpFonts(Index);
+	if( !F.Fonts.Num() )
+		return NULL;
+	FLOAT Want = F.Pt * Magnification * 0.95f;
+	Start = F.Pts.Num() - 1;
+	for( INT j=0; j<F.Pts.Num(); j++ )
+		if( F.Pts(j) >= Want )
+		{
+			Start = j;
+			break;
+		}
+	return &F;
+	unguardSlow;
+}
+
 //
 // Draw a string of characters.
 // - returns pixels drawn
@@ -223,10 +335,21 @@ static FLOAT DrawString
 	// Whether we already checked if we need to draw the ellipsis character
 	bool bCheckedEllipsis = Font == Canvas->XBoxButtonFont;
 
+	// D-2: the bigger sizes of this font to take the glyphs' pixels from, when the UI is scaled up
+	FSharpFontFamily* Sharp = NULL;
+	INT SharpStart = 0;
+	if( Canvas->IsUIBoxed() )
+	{
+		UClient* Client = Canvas->Viewport ? Canvas->Viewport->GetOuterUClient() : NULL;
+		if( Client && Client->UISharpText )
+			Sharp = SharpFontFor( Font, Canvas->GetUIScale() * ScaleY, SharpStart );
+	}
+
 	for( i=0; Text[i]; i++ )
 	{
 		UBOOL bUnderlineNext = 0;
 		INT Ch = (TCHARU)Font->RemapChar(Text[i]);
+		TCHAR SourceChar = Text[i];		// D-2: the character Ch is (for the sharp glyph)
 
 		// Handle ampersand underlining.
 		if( bHandleApersand )
@@ -241,6 +364,7 @@ static FLOAT DrawString
 				{
 					bUnderlineNext = 1;
 					Ch = (TCHARU)Font->RemapChar(Text[i+1]);
+					SourceChar = Text[i+1];
 				}
 			}
 		}
@@ -318,6 +442,33 @@ static FLOAT DrawString
 
 					FLOAT		TileX = Canvas->OrgX + X,
 								TileY = Canvas->OrgY + Y;
+
+					// D-2: a whole glyph (not clipped, not an underline) from a bigger size, in the same box. The
+					// bigger sizes do not all have every character (SuiGeneris_40pt has no letters): the first
+					// size, going down from the preferred one, that has this character with the same shape of
+					// box (within a third) gives it; none: the font's own glyph.
+					if( Sharp && !bDrawUnderline && CU == Char.StartU && CV == Char.StartV && CUSize == Char.USize && CVSize == Char.VSize
+					&&	Char.USize > 0 && Char.VSize > 0 && Ch != NULLCHARACTER )
+					{
+						for( INT k=SharpStart; k>=0; k-- )
+						{
+							UFont* Big = Sharp->Fonts(k);
+							INT BigCh = (TCHARU)Big->RemapChar( SourceChar );
+							if( BigCh == NULLCHARACTER || BigCh >= Big->Characters.Num() )
+								continue;
+							FFontCharacter& BigChar = Big->Characters(BigCh);
+							UTexture* BigTex;
+							if( BigChar.USize <= 0 || BigChar.VSize <= 0 || BigChar.TextureIndex >= Big->Textures.Num()
+							||	(BigTex = Big->Textures(BigChar.TextureIndex)) == NULL )
+								continue;
+							FLOAT Shape = (BigChar.USize * (FLOAT)Char.VSize) / (BigChar.VSize * (FLOAT)Char.USize);
+							if( Shape < 0.75f || Shape > 1.33f )
+								continue;
+							Tex = BigTex;
+							CU = BigChar.StartU; CV = BigChar.StartV; CUSize = BigChar.USize; CVSize = BigChar.VSize;
+							break;
+						}
+					}
 
                     Canvas->DrawTile( Tex, TileX, TileY, AdjustedCharUSize, AdjustedCharVSize,
                                       CU, CV, CUSize, CVSize, 0.f, Color);

@@ -90,6 +90,7 @@ void USDL2Client::StaticConstructor()
 	LogInput			= 0;
 	UIScaleMode			= UISCALE_Fit43;	// D-2: the UI in a centred 4:3 box (Native640 = as before)
 	UIMenuBackground	= UIMENUBG_Fill;	// D-2: menu backgrounds fill the window (ui-scale.md)
+	UISharpText			= 1;				// D-2: glyphs from bigger sizes of the font when the UI is scaled up
 
 	unguard;
 }

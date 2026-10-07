@@ -190,6 +190,31 @@ if A is not None and B is not None:
 else:
     result('switch-native640-1920x1080', False, 'missing pictures')
 
+# ------------------------------------------------------------------------------------- a marker on an actor
+def green_box(im):
+    """Bounding box of the lock-on reticle's green (DrawColor 20,255,20) below the HUD's top bars."""
+    r, g, b = im.split()
+    m = ImageChops.multiply(ImageChops.multiply(g.point(lambda v: 255 if v > 150 else 0), r.point(lambda v: 255 if v < 110 else 0)),
+                            b.point(lambda v: 255 if v < 110 else 0))
+    W, H = im.size
+    m.paste(0, (0, 0, W, H // 6))
+    h = m.histogram()
+    return m.getbbox(), h[255]
+
+A, B = pic('1920x1080', 'lockon-lock-fit'), pic('1920x1080', 'lockon-lock-native')
+if A is not None and B is not None:
+    (ba, na), (bb_, nb) = green_box(A), green_box(B)
+    if ba and bb_ and na > 50 and nb > 50:
+        ca = ((ba[0] + ba[2]) / 2, (ba[1] + ba[3]) / 2); cb = ((bb_[0] + bb_[2]) / 2, (bb_[1] + bb_[3]) / 2)
+        ok = abs(ca[0] - cb[0]) <= 2 and abs(ca[1] - cb[1]) <= 2 and abs((ba[2] - ba[0]) - (bb_[2] - bb_[0])) <= 3
+        result('marker-on-actor-1920x1080', ok,
+               f'lock-on reticle (WorldToScreen) with the UI boxed: centre ({ca[0]:.1f},{ca[1]:.1f}) size {ba[2]-ba[0]}x{ba[3]-ba[1]}; '
+               f'unboxed (Native640, window pixels as before D-2): centre ({cb[0]:.1f},{cb[1]:.1f}) size {bb_[2]-bb_[0]}x{bb_[3]-bb_[1]}')
+    else:
+        result('marker-on-actor-1920x1080', False, f'no lock-on reticle found (green pixels: {na}, {nb})')
+else:
+    result('marker-on-actor-1920x1080', False, 'missing pictures (lockon-lock-fit, lockon-lock-native)')
+
 # ------------------------------------------------------------------------------------- mouse, logs
 for res in ('640x480', '1920x1080'):
     p = os.path.join(run, res, 'mouse.result')

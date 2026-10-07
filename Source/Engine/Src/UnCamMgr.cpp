@@ -104,6 +104,7 @@ void UClient::StaticConstructor()
 	new(PUIMenuBackground->Names)FName( TEXT("Fill") );		// UIMENUBG_Fill
 	new(GetClass(),TEXT("UIScaleMode"),			RF_Public)UByteProperty (CPP_PROPERTY(UIScaleMode			), TEXT("Display"), CPF_Config, PUIScaleMode );
 	new(GetClass(),TEXT("UIMenuBackground"),	RF_Public)UByteProperty (CPP_PROPERTY(UIMenuBackground		), TEXT("Display"), CPF_Config, PUIMenuBackground );
+	new(GetClass(),TEXT("UISharpText"),			RF_Public)UBoolProperty (CPP_PROPERTY(UISharpText			), TEXT("Display"), CPF_Config );
 
 	unguard;
 }
@@ -139,8 +140,8 @@ void UClient::Destroy()
 UBOOL UClient::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UClient::Exec);
-	// D-2: UISCALE [Native640|Fit43] [Box|Fill] switches the UI mapping for this session (the ini keeps its
-	// UIScaleMode/UIMenuBackground); without arguments it says what is in use.
+	// D-2: UISCALE [Native640|Fit43] [Box|Fill] [Sharp|Soft] switches the UI mapping for this session (the ini
+	// keeps its UIScaleMode/UIMenuBackground/UISharpText); without arguments it says what is in use.
 	if( ParseCommand(&Cmd,TEXT("UISCALE")) )
 	{
 		TCHAR Word[64];
@@ -150,11 +151,14 @@ UBOOL UClient::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 			else if( appStricmp(Word,TEXT("Fit43"))==0 )	UIScaleMode = UISCALE_Fit43;
 			else if( appStricmp(Word,TEXT("Box"))==0 )		UIMenuBackground = UIMENUBG_Box;
 			else if( appStricmp(Word,TEXT("Fill"))==0 )		UIMenuBackground = UIMENUBG_Fill;
-			else Ar.Logf( TEXT("UISCALE: unknown word '%s' (Native640, Fit43, Box, Fill)"), Word );
+			else if( appStricmp(Word,TEXT("Sharp"))==0 )	UISharpText = 1;
+			else if( appStricmp(Word,TEXT("Soft"))==0 )		UISharpText = 0;
+			else Ar.Logf( TEXT("UISCALE: unknown word '%s' (Native640, Fit43, Box, Fill, Sharp, Soft)"), Word );
 		}
-		Ar.Logf( TEXT("UISCALE: UIScaleMode=%s UIMenuBackground=%s"),
+		Ar.Logf( TEXT("UISCALE: UIScaleMode=%s UIMenuBackground=%s UISharpText=%s"),
 			UIScaleMode==UISCALE_Fit43 ? TEXT("Fit43") : TEXT("Native640"),
-			UIMenuBackground==UIMENUBG_Fill ? TEXT("Fill") : TEXT("Box") );
+			UIMenuBackground==UIMENUBG_Fill ? TEXT("Fill") : TEXT("Box"),
+			UISharpText ? TEXT("True") : TEXT("False") );
 		return 1;
 	}
 	else

@@ -1,0 +1,38 @@
+# D-2: a marker on an actor (the lock-on reticle, Element_TargetReticle, placed with PlayerController.WorldToScreen)
+# lands on the same window pixels with the UI boxed (Fit43) and unboxed (Native640). DM-Deadbolt from the
+# pinned view, a pawn summoned in front of the player, Lock, then one picture per mode, the scene unchanged
+# (God, no bots, nothing moves). Run through tools/dev/m10-controls.sh --file (tools/dev/d2-ui-scale.sh).
+wait Bringing Level DM-Deadbolt.MyLevel up for play 120
+sleep 12
+chan exec set UCDeathmatch NumPlayers 0
+wait test: exec set UCDeathmatch NumPlayers 0 10
+sleep 1
+focus
+# Fire held 2 s: a short press and its release can fall between two frames at the low frame rates of big
+# windows in software GL (2560x1440: under 1 frame per second), and the press would be lost
+keydown Alt_L
+sleep 2
+keyup Alt_L
+sleep 4
+probe spawn
+check d2-spawned P['spawn'].pawn==1 and P['spawn'].level=='DM-Deadbolt'
+chan exec God
+wait test: exec God 10
+sleep 1
+chan exec summon UCCharacters.UCPawn_Liandri_Devastation
+wait test: exec summon 10
+sleep 4
+chan exec Lock 1
+wait test: exec Lock 1 10
+sleep 0.5
+chan exec Lock 0
+sleep 2
+shot lock-fit
+chan exec UISCALE Native640
+wait test: exec UISCALE Native640 10
+sleep 1.5
+shot lock-native
+chan exec UISCALE Fit43
+wait test: exec UISCALE Fit43 10
+sleep 1.5
+shot lock-fit2
