@@ -3291,6 +3291,11 @@ void APlayerController::execWorldToScreen( FFrame& Stack, RESULT_DECL )
 
 	*(FVector*)Result = CanvasUtil.ScreenToCanvas.TransformFVector(SceneNode.Project(InLocation));
 
+	// D-2: the HUD draws in the viewport canvas's coordinates, which are the UI's design pixels when the UI is
+	// in a centred box (ui-scale.md); X/Y follow, so a marker drawn there lands on the actor anywhere in the
+	// viewport (outside the box too: negative or beyond 640). Z (depth) is untouched.
+	if( View->Canvas )
+		View->Canvas->TargetToDesign( ((FVector*)Result)->X, ((FVector*)Result)->Y );
 
 	unguard;
 }
@@ -3318,6 +3323,10 @@ void APlayerController::execScreenToWorld( FFrame& Stack, RESULT_DECL )
 
 	FCameraSceneNode	SceneNode(View,&View->RenderTarget,ViewActor, CameraActor->Location, CameraActor->Rotation, CameraActor->FovAngle);
 	FCanvasUtil			CanvasUtil(&View->RenderTarget,View->RI);
+
+	// D-2: X/Y are the viewport canvas's coordinates (design pixels when the UI is boxed), as WorldToScreen gives
+	if( View->Canvas )
+		View->Canvas->DesignToTarget( InLocation.X, InLocation.Y );
 
 	FPlane	P(CanvasUtil.CanvasToScreen.TransformFVector(InLocation),NEAR_CLIPPING_PLANE);
 	FVector Direction = SceneNode.Deproject(P);

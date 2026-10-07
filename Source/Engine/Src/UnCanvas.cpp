@@ -9,6 +9,7 @@ Revision history:
 
 
 #include "EnginePrivate.h"
+#include "UnLinker.h"	// D-2: a font's package export table (sharper text)
 #include "wordwrap.h"
 
 #ifdef _XBOX
@@ -51,6 +52,62 @@ void UCanvas::DrawTile
 		// If we are modulating the alpha channel, force the style to alpha
 		if ( DrawColor.W != 1.0 )
 			Style = STY_Alpha;
+
+		// D-2: a tile that covers the whole design space is a full-screen layer, not a UI element: the game's
+		// fades, flashes and overlays (UCPlayerController's blood and ColorOverlay) cover the whole viewport,
+		// stretched; a menu page's background follows UIMenuBackground (Box: stays in the box; Fill: the
+		// whole viewport, its picture scaled to cover it with the aspect kept, the overflow cropped).
+		UBOOL bLayer = 0;
+		if( pCanvasUtil->bUIBoxed && !pTransformMat && XL > 0.f && YL > 0.f
+		&&	X <= 0.5f && Y <= 0.5f && X + XL >= SizeX - 0.5f && Y + YL >= SizeY - 0.5f )
+		{
+			UClient* Client = Viewport->GetOuterUClient();
+			UBOOL bMenu = pCanvasUtil->UIContext == UICONTEXT_Menu;
+			UBOOL bFill = !bMenu || (Client && Client->UIMenuBackground == UIMENUBG_Fill);
+			// Say once per material what happened to it (the notebook's evidence of which layers these are).
+			static TArray<UMaterial*> Reported;
+			if( Reported.FindItemIndex(Material) == INDEX_NONE && Reported.Num() < 256 )
+			{
+				Reported.AddItem( Material );
+				debugf( NAME_Log, TEXT("UIScale: full-screen tile %s (%s) %s"), Material->GetFullName(),
+					bMenu ? TEXT("menu") : TEXT("game"),
+					!bFill ? TEXT("stays in the box") : bMenu ? TEXT("covers the viewport, aspect kept") : TEXT("stretched to the viewport") );
+			}
+			if( bFill )
+			{
+				FLOAT X1, Y1, X2, Y2;
+				GetTargetInDesign( X1, Y1, X2, Y2 );
+				if( bMenu )
+				{
+					// cover: scale the tile about its centre until it covers the viewport, keep what shows
+					FLOAT K = Max( (X2 - X1) / XL, (Y2 - Y1) / YL );
+					FLOAT CX = X + XL * 0.5f, CY = Y + YL * 0.5f;
+					FLOAT SX1 = CX - XL * K * 0.5f, SY1 = CY - YL * K * 0.5f;
+					FLOAT FU1 = (X1 - SX1) / (XL * K), FU2 = (X2 - SX1) / (XL * K);
+					FLOAT FV1 = (Y1 - SY1) / (YL * K), FV2 = (Y2 - SY1) / (YL * K);
+					FLOAT NewU = U + UL * FU1, NewUL = UL * (FU2 - FU1);
+					FLOAT NewV = V + VL * FV1, NewVL = VL * (FV2 - FV1);
+					U = NewU; UL = NewUL; V = NewV; VL = NewVL;
+				}
+				X = X1; Y = Y1; XL = X2 - X1; YL = Y2 - Y1;
+				bLayer = 1;
+			}
+		}
+		// D-2: the menus are clipped to the box, as the Xbox's 640x480 screen clipped them (UC2's pages have
+		// decorations that run past x=640: a black header bar over the menu level otherwise). The HUD is not:
+		// its markers on actors (WorldToScreen) may be anywhere in the viewport.
+		if( !bLayer && pCanvasUtil->bUIBoxed && !pTransformMat && pCanvasUtil->UIContext == UICONTEXT_Menu && XL != 0.f && YL != 0.f )
+		{
+			if( XL < 0.f ) { X += XL; XL = -XL; U += UL; UL = -UL; }
+			if( YL < 0.f ) { Y += YL; YL = -YL; V += VL; VL = -VL; }
+			FLOAT CX2 = SizeX, CY2 = SizeY;
+			if( X >= CX2 || Y >= CY2 || X + XL <= 0.f || Y + YL <= 0.f )
+				return;
+			if( X < 0.f )			{ FLOAT F = -X / XL;				U += UL * F; UL -= UL * F; XL += X; X = 0.f; }
+			if( Y < 0.f )			{ FLOAT F = -Y / YL;				V += VL * F; VL -= VL * F; YL += Y; Y = 0.f; }
+			if( X + XL > CX2 )		{ FLOAT F = (X + XL - CX2) / XL;	UL -= UL * F; XL = CX2 - X; }
+			if( Y + YL > CY2 )		{ FLOAT F = (Y + YL - CY2) / YL;	VL -= VL * F; YL = CY2 - Y; }
+		}
 
 		// scion sz - note that Z doesn't actually get used (it was always 0 anyway)
 		// set the canvas CurZ value instead
@@ -129,6 +186,205 @@ void UCanvas::SetClip( FLOAT X, FLOAT Y, FLOAT XL, FLOAT YL )
 -----------------------------------------------------------------------------*/
 TCHAR Ellipsis[4] = TEXT("...");
 
+/*-----------------------------------------------------------------------------
+	D-2: sharper text in a scaled-up UI (docs/porting/analysis/ui-scale.md).
+
+	UC2's text is laid out with bitmap fonts made for 640x480 ("T_Fonts2.SuiGeneris_12pt"), so a UI drawn x2.25
+	or x4.5 magnifies the glyph textures. The same package has the family in other sizes; by glyph height in
+	texels: 12pt 16, 18pt 16 (the same bitmap), 20pt 20, 24pt 21, 28pt 26, 40pt 60 (digits only). With
+	UISharpText on, text keeps the small font's layout (advances: the metrics every script and the GUI measured
+	text with) and each glyph takes its pixels from the smallest taller size that gives at least one texel per
+	screen pixel (or the tallest that has the character), drawn at the small glyph's height with its own aspect,
+	its ink centred where the small glyph's ink is. Nothing changes at 640x480 (no box) or for fonts without a
+	"<Family>_<N>pt" family in their package (the Xbox button glyphs).
+-----------------------------------------------------------------------------*/
+
+struct FSharpFontFamily
+{
+	UFont*			Font;		// the font text is laid out with
+	INT				Pt;			// its point size (by name)
+	INT				Height;		// its glyphs' height in texels (the names lie: SuiGeneris_18pt is the 12pt bitmap)
+	TArray<INT>		Pts;		// taller sizes of its family, by glyph height, ascending
+	TArray<INT>		Heights;
+	TArray<UFont*>	Fonts;
+};
+
+// A font's glyph height in texels: the tallest printable ASCII glyph it has.
+static INT FontHeight( UFont* Font )
+{
+	INT H = 0;
+	for( INT c=32; c<127; c++ )
+	{
+		INT Ch = (TCHARU)Font->RemapChar( (TCHAR)c );
+		if( Ch != NULLCHARACTER && Ch < Font->Characters.Num() )
+			H = Max( H, Font->Characters(Ch).VSize );
+	}
+	return H;
+}
+static TArray<FSharpFontFamily> GSharpFonts;
+
+// "<Family>_<N>pt" -> N (and the family prefix up to the underscore), or 0.
+static INT ParseFontPt( const FString& Name, FString* Family )
+{
+	INT Len = Name.Len();
+	if( Len < 4 || appToUpper(Name[Len-1]) != 'T' || appToUpper(Name[Len-2]) != 'P' )
+		return 0;
+	INT i = Len - 3;
+	while( i >= 0 && appIsDigit(Name[i]) )
+		i--;
+	if( i == Len - 3 || i < 1 || Name[i] != '_' )
+		return 0;
+	if( Family )
+		*Family = Name.Left( i + 1 );
+	return appAtoi( *Name.Mid( i + 1 ) );
+}
+
+// The ink of each glyph of a font: the columns whose alpha is above 4/15, read from the font's DXT3 page (UC2's
+// fonts are DXT3), as the centre in texels from the glyph box's left edge; -1 when unknown (another format,
+// the page's data not in memory) or empty (a space). Built once per font.
+struct FGlyphInk
+{
+	UFont*			Font;
+	TArray<FLOAT>	Centre;
+};
+static TArray<FGlyphInk> GGlyphInk;
+
+static FLOAT GlyphInkCentre( UFont* Font, INT Ch )
+{
+	INT Index = INDEX_NONE;
+	for( INT i=0; i<GGlyphInk.Num(); i++ )
+		if( GGlyphInk(i).Font == Font )
+		{
+			Index = i;
+			break;
+		}
+	if( Index == INDEX_NONE )
+	{
+		Index = GGlyphInk.AddZeroed();
+		FGlyphInk& G = GGlyphInk(Index);
+		G.Font = Font;
+		G.Centre.Add( Font->Characters.Num() );
+		for( INT c=0; c<Font->Characters.Num(); c++ )
+		{
+			G.Centre(c) = -1.f;
+			FFontCharacter& Char = Font->Characters(c);
+			UTexture* Tex = Char.TextureIndex < Font->Textures.Num() ? Font->Textures(Char.TextureIndex) : NULL;
+			if( !Tex || Tex->Format != TEXF_DXT3 || !Tex->Mips.Num() || Char.USize <= 0 || Char.VSize <= 0 )
+				continue;
+			FMipmap& Mip = Tex->Mips(0);
+			Mip.DataArray.Load();
+			INT BlocksX = Mip.USize / 4;
+			if( BlocksX <= 0 || Mip.DataArray.Num() < (Mip.USize / 4) * (Mip.VSize / 4) * 16 )
+				continue;
+			const BYTE* Data = &Mip.DataArray(0);
+			INT Left = Char.USize, Right = -1;
+			for( INT y=Char.StartV; y<Char.StartV+Char.VSize && y<Mip.VSize; y++ )
+				for( INT x=Char.StartU; x<Char.StartU+Char.USize && x<Mip.USize; x++ )
+				{
+					const BYTE* Block = Data + ((y >> 2) * BlocksX + (x >> 2)) * 16;
+					INT Row = Block[(y & 3) * 2] | (Block[(y & 3) * 2 + 1] << 8);
+					if( ((Row >> ((x & 3) * 4)) & 15) > 4 )
+					{
+						Left = Min( Left, x - Char.StartU );
+						Right = Max( Right, x - Char.StartU );
+					}
+				}
+			if( Right >= Left )
+				G.Centre(c) = (Left + Right + 1) * 0.5f;
+		}
+	}
+	FGlyphInk& G = GGlyphInk(Index);
+	return Ch >= 0 && Ch < G.Centre.Num() ? G.Centre(Ch) : -1.f;
+}
+
+// The family of Font with bigger sizes, and in Start the index of the size to try first (the smallest that gives
+// at least one texel per screen pixel at this magnification, or the biggest); NULL when there is none.
+static FSharpFontFamily* SharpFontFor( UFont* Font, FLOAT Magnification, INT& Start )
+{
+	guardSlow(SharpFontFor);
+	if( !Font || Magnification < 1.2f )
+		return NULL;
+	INT Index = INDEX_NONE;
+	for( INT i=0; i<GSharpFonts.Num(); i++ )
+		if( GSharpFonts(i).Font == Font )
+		{
+			Index = i;
+			break;
+		}
+	if( Index == INDEX_NONE )
+	{
+		// Once per font: find its family's bigger sizes in its package. They are kept loaded (root set), and so
+		// is the font itself (this table refers to it by address).
+		Index = GSharpFonts.AddZeroed();
+		FSharpFontFamily& F = GSharpFonts(Index);
+		F.Font = Font;
+		Font->AddToRoot();
+		FString Family;
+		F.Pt = ParseFontPt( Font->GetName(), &Family );
+		F.Height = FontHeight( Font );
+		ULinkerLoad* Linker = Font->GetLinker();
+		FString Found;
+		if( F.Pt > 0 && Linker && Font->GetOuter() )
+		{
+			for( INT e=0; e<Linker->ExportMap.Num(); e++ )
+			{
+				FString Name = *Linker->ExportMap(e).ObjectName;
+				FString OtherFamily;
+				INT Pt = ParseFontPt( Name, &OtherFamily );
+				if( Pt <= F.Pt || appStricmp( *OtherFamily, *Family ) != 0 )
+					continue;
+				UFont* Big = Cast<UFont>( UObject::StaticLoadObject( UFont::StaticClass(), NULL,
+					*FString::Printf( TEXT("%s.%s"), Font->GetOuter()->GetPathName(), *Name ), NULL, LOAD_NoWarn | LOAD_Quiet, NULL ) );
+				if( !Big || !Big->Characters.Num() )
+					continue;
+				INT Height = FontHeight( Big );
+				if( Height <= F.Height )
+					continue;		// not taller (SuiGeneris_18pt is the 12pt bitmap again)
+				Big->AddToRoot();
+				INT At = 0;
+				while( At < F.Heights.Num() && F.Heights(At) < Height )
+					At++;
+				F.Pts.Insert( At );
+				F.Pts(At) = Pt;
+				F.Heights.Insert( At );
+				F.Heights(At) = Height;
+				F.Fonts.Insert( At );
+				F.Fonts(At) = Big;
+			}
+			for( INT j=0; j<F.Pts.Num(); j++ )
+			{
+				// how many of the printable ASCII characters each size has (the letters are what text needs)
+				INT Have = 0;
+				for( INT c=32; c<127; c++ )
+					if( F.Fonts(j)->RemapChar( (TCHAR)c ) != NULLCHARACTER )
+						Have++;
+				INT Ink = 0;
+				for( INT c=32; c<127; c++ )
+				{
+					INT Ch = (TCHARU)F.Fonts(j)->RemapChar( (TCHAR)c );
+					if( Ch != NULLCHARACTER && GlyphInkCentre( F.Fonts(j), Ch ) >= 0.f )
+						Ink++;
+				}
+				Found += FString::Printf( TEXT(" %ipt(%i texels high, %i/95 characters, ink of %i read)"), F.Pts(j), F.Heights(j), Have, Ink );
+			}
+		}
+		debugf( NAME_Log, TEXT("UIScale: sharper text for %s (%i texels high):%s"), Font->GetPathName(), F.Height, Found.Len() ? *Found : TEXT(" (no taller size in its package)") );
+	}
+	FSharpFontFamily& F = GSharpFonts(Index);
+	if( !F.Fonts.Num() )
+		return NULL;
+	FLOAT Want = F.Height * Magnification * 0.95f;
+	Start = F.Heights.Num() - 1;
+	for( INT j=0; j<F.Heights.Num(); j++ )
+		if( F.Heights(j) >= Want )
+		{
+			Start = j;
+			break;
+		}
+	return &F;
+	unguardSlow;
+}
+
 //
 // Draw a string of characters.
 // - returns pixels drawn
@@ -167,10 +423,21 @@ static FLOAT DrawString
 	// Whether we already checked if we need to draw the ellipsis character
 	bool bCheckedEllipsis = Font == Canvas->XBoxButtonFont;
 
+	// D-2: the bigger sizes of this font to take the glyphs' pixels from, when the UI is scaled up
+	FSharpFontFamily* Sharp = NULL;
+	INT SharpStart = 0;
+	if( Canvas->IsUIBoxed() )
+	{
+		UClient* Client = Canvas->Viewport ? Canvas->Viewport->GetOuterUClient() : NULL;
+		if( Client && Client->UISharpText )
+			Sharp = SharpFontFor( Font, Canvas->GetUIScale() * ScaleY, SharpStart );
+	}
+
 	for( i=0; Text[i]; i++ )
 	{
 		UBOOL bUnderlineNext = 0;
 		INT Ch = (TCHARU)Font->RemapChar(Text[i]);
+		TCHAR SourceChar = Text[i];		// D-2: the character Ch is (for the sharp glyph)
 
 		// Handle ampersand underlining.
 		if( bHandleApersand )
@@ -185,6 +452,7 @@ static FLOAT DrawString
 				{
 					bUnderlineNext = 1;
 					Ch = (TCHARU)Font->RemapChar(Text[i+1]);
+					SourceChar = Text[i+1];
 				}
 			}
 		}
@@ -262,6 +530,41 @@ static FLOAT DrawString
 
 					FLOAT		TileX = Canvas->OrgX + X,
 								TileY = Canvas->OrgY + Y;
+
+					// D-2: a whole glyph (not clipped, not an underline) from a taller size of the font. The taller
+					// sizes do not all have every character (SuiGeneris_40pt has digits only): the first one,
+					// going down from the preferred one, that has this character gives it; none: the font's own.
+					if( Sharp && !bDrawUnderline && CU == Char.StartU && CV == Char.StartV && CUSize == Char.USize && CVSize == Char.VSize
+					&&	Char.USize > 0 && Char.VSize > 0 && Ch != NULLCHARACTER )
+					{
+						for( INT k=SharpStart; k>=0; k-- )
+						{
+							UFont* Big = Sharp->Fonts(k);
+							INT BigCh = (TCHARU)Big->RemapChar( SourceChar );
+							if( BigCh == NULLCHARACTER || BigCh >= Big->Characters.Num() )
+								continue;
+							FFontCharacter& BigChar = Big->Characters(BigCh);
+							UTexture* BigTex;
+							if( BigChar.USize <= 0 || BigChar.VSize <= 0 || BigChar.TextureIndex >= Big->Textures.Num()
+							||	(BigTex = Big->Textures(BigChar.TextureIndex)) == NULL )
+								continue;
+							// The bigger bitmap's glyphs are not the small ones' proportions (rounding at 16 texels:
+							// 'f' is 5x16 at 12pt and 7x26 at 28pt, 'o' 10x16 and 15x26) and their ink sits elsewhere
+							// in the box, so the glyph keeps its own aspect at the small glyph's height and its ink
+							// is centred where the small glyph's ink is (the box's centre when the ink is unknown);
+							// stretched into the small box instead, narrow letters showed gaps ("pro file").
+							FLOAT BigWidth = AdjustedCharVSize * BigChar.USize / (FLOAT)BigChar.VSize;
+							FLOAT SmallInk = GlyphInkCentre( Font, Ch ), BigInk = GlyphInkCentre( Big, BigCh );
+							if( SmallInk >= 0.f && BigInk >= 0.f )
+								TileX += SmallInk * AdjustedCharUSize / Char.USize - BigInk * BigWidth / BigChar.USize;
+							else
+								TileX += (AdjustedCharUSize - BigWidth) * 0.5f;
+							AdjustedCharUSize = BigWidth;
+							Tex = BigTex;
+							CU = BigChar.StartU; CV = BigChar.StartV; CUSize = BigChar.USize; CVSize = BigChar.VSize;
+							break;
+						}
+					}
 
                     Canvas->DrawTile( Tex, TileX, TileY, AdjustedCharUSize, AdjustedCharVSize,
                                       CU, CV, CUSize, CVSize, 0.f, Color);
@@ -679,25 +982,143 @@ void UCanvas::Update()
 	if ( !pCanvasUtil )
 		pCanvasUtil = NEW FCanvasUtil(&Viewport->RenderTarget,Viewport->RI);
 
-	// Copy size parameters from viewport.
-	ClipX = Viewport->SizeX;
-	SizeX = appTrunc( ClipX );
-	ClipY = Viewport->SizeY;
-	SizeY = appTrunc( ClipY );
+	// D-2: the client's UIScaleMode (never in the editor).
+	UClient* Client = Viewport->GetOuterUClient();
+	ApplyUIBox( !GIsEditor && Client && Client->UIScaleMode == UISCALE_Fit43 );
 
-	// offset top left corner to center of viewport (0,0)
-	FVector OffsetVec( -ClipX * 0.5f - 0.5f, -ClipY * 0.5f - 0.5f, 0.0f );
-	// scale back to canonical [-1,1]
-	FVector ScaleVec( 2.0f / ClipX, -2.0f / ClipY, 1.0f );
-	// translate to center then scale
-    FTranslationMatrix	OffsetMat( OffsetVec );
-	FScaleMatrix		ScaleMat( ScaleVec );
-	pCanvasUtil->CanvasToScreen = OffsetMat * ScaleMat;
-
-	pCanvasUtil->ScreenToCanvas = pCanvasUtil->CanvasToScreen.Inverse();
+	pCanvasUtil->UIContext = UICONTEXT_Game;
     pCanvasUtil->RI = Viewport->RI;
 
 	unguard;
+}
+
+/*-----------------------------------------------------------------------------
+	D-2: the UI's 640x480 design space in a centred box (docs/porting/analysis/ui-scale.md).
+
+	UC2 lays out every menu and HUD element in 640x480 pixels (the Xbox's screen). With UIScaleMode=Fit43 the
+	viewport canvas presents that space to script and to the GUI (ClipX/ClipY/SizeX/SizeY = 640x480) and its
+	CanvasToScreen puts it into the largest 4:3 rectangle of the viewport, centred: scale
+	s = min(W/640, H/480), origin ((W-640s)/2, (H-480s)/2) floored to whole pixels. The 3D world is not drawn
+	through the canvas and keeps the whole viewport. At 640x480 this is the identity and the code below takes
+	the exact path it took before D-2. A split-screen viewport (E-1) gets its share of the design space
+	(640*ScaleX x 480*ScaleY, the fractions UnSplitScreenMgr gives it) fitted the same way into its own rectangle.
+-----------------------------------------------------------------------------*/
+
+void UCanvas::ApplyUIBox( UBOOL bWanted )
+{
+	guard(UCanvas::ApplyUIBox);
+
+	if( !pCanvasUtil )
+		return;
+
+	FLOAT W = Viewport->SizeX, H = Viewport->SizeY;
+	FLOAT DW = 640.f, DH = 480.f;
+	if( Viewport->ScaleX > 0.f && Viewport->ScaleX < 1.f )
+		DW *= Viewport->ScaleX;
+	if( Viewport->ScaleY > 0.f && Viewport->ScaleY < 1.f )
+		DH *= Viewport->ScaleY;
+
+	FLOAT S = 1.f, BX = 0.f, BY = 0.f;
+	if( bWanted && W > 0.f && H > 0.f )
+	{
+		S  = Min( W / DW, H / DH );
+		BX = appFloor( (W - DW * S) * 0.5f );
+		BY = appFloor( (H - DH * S) * 0.5f );
+	}
+	// The identity (a 640x480 window, or UIScaleMode=Native640): exactly what Update() did before D-2.
+	UBOOL bBoxed = bWanted && W > 0.f && H > 0.f && !( S == 1.f && BX == 0.f && BY == 0.f && DW == W && DH == H );
+
+	pCanvasUtil->bUIBoxed	= bBoxed;
+	pCanvasUtil->UIScale	= bBoxed ? S : 1.f;
+	pCanvasUtil->UIOriginX	= bBoxed ? BX : 0.f;
+	pCanvasUtil->UIOriginY	= bBoxed ? BY : 0.f;
+	pCanvasUtil->UITargetX	= W;
+	pCanvasUtil->UITargetY	= H;
+
+	if( !bBoxed )
+	{
+		// Copy size parameters from viewport.
+		ClipX = Viewport->SizeX;
+		SizeX = appTrunc( ClipX );
+		ClipY = Viewport->SizeY;
+		SizeY = appTrunc( ClipY );
+	}
+	else
+	{
+		ClipX = DW;
+		SizeX = appTrunc( ClipX );
+		ClipY = DH;
+		SizeY = appTrunc( ClipY );
+	}
+	pCanvasUtil->CanvasToScreen = UICanvasToScreen();
+	pCanvasUtil->ScreenToCanvas = pCanvasUtil->CanvasToScreen.Inverse();
+
+	unguard;
+}
+
+FMatrix UCanvas::UICanvasToScreen() const
+{
+	if( !pCanvasUtil || !pCanvasUtil->bUIBoxed )
+	{
+		// offset top left corner to center of viewport (0,0)
+		FVector OffsetVec( -ClipX * 0.5f - 0.5f, -ClipY * 0.5f - 0.5f, 0.0f );
+		// scale back to canonical [-1,1]
+		FVector ScaleVec( 2.0f / ClipX, -2.0f / ClipY, 1.0f );
+		// translate to center then scale
+		FTranslationMatrix	OffsetMat( OffsetVec );
+		FScaleMatrix		ScaleMat( ScaleVec );
+		return OffsetMat * ScaleMat;
+	}
+	// design pixels -> target pixels (scale, then the box's corner), then the same mapping as above on the
+	// target's pixels (including Epic's half-pixel offset, which stays one target pixel wide)
+	FLOAT W = pCanvasUtil->UITargetX, H = pCanvasUtil->UITargetY;
+	return FScaleMatrix( FVector( pCanvasUtil->UIScale, pCanvasUtil->UIScale, 1.0f ) )
+		 * FTranslationMatrix( FVector( pCanvasUtil->UIOriginX - W * 0.5f - 0.5f, pCanvasUtil->UIOriginY - H * 0.5f - 0.5f, 0.0f ) )
+		 * FScaleMatrix( FVector( 2.0f / W, -2.0f / H, 1.0f ) );
+}
+
+UBOOL UCanvas::IsUIBoxed() const
+{
+	return pCanvasUtil && pCanvasUtil->bUIBoxed;
+}
+
+FLOAT UCanvas::GetUIScale() const
+{
+	return IsUIBoxed() ? pCanvasUtil->UIScale : 1.f;
+}
+
+void UCanvas::DesignToTarget( FLOAT& X, FLOAT& Y ) const
+{
+	if( IsUIBoxed() )
+	{
+		X = pCanvasUtil->UIOriginX + X * pCanvasUtil->UIScale;
+		Y = pCanvasUtil->UIOriginY + Y * pCanvasUtil->UIScale;
+	}
+}
+
+void UCanvas::TargetToDesign( FLOAT& X, FLOAT& Y ) const
+{
+	if( IsUIBoxed() )
+	{
+		X = (X - pCanvasUtil->UIOriginX) / pCanvasUtil->UIScale;
+		Y = (Y - pCanvasUtil->UIOriginY) / pCanvasUtil->UIScale;
+	}
+}
+
+void UCanvas::GetTargetInDesign( FLOAT& X1, FLOAT& Y1, FLOAT& X2, FLOAT& Y2 ) const
+{
+	X1 = 0.f;
+	Y1 = 0.f;
+	X2 = pCanvasUtil ? pCanvasUtil->UITargetX : (FLOAT)Viewport->SizeX;
+	Y2 = pCanvasUtil ? pCanvasUtil->UITargetY : (FLOAT)Viewport->SizeY;
+	TargetToDesign( X1, Y1 );
+	TargetToDesign( X2, Y2 );
+}
+
+void UCanvas::SetUIContext( BYTE Context )
+{
+	if( pCanvasUtil )
+		pCanvasUtil->UIContext = Context;
 }
 
 void UCanvas::NotifyLevelChange()
@@ -904,13 +1325,27 @@ void UCanvas::DrawActorTile( AActor* Actor, FLOAT X, FLOAT Y, FLOAT XL, FLOAT YL
 	// set viewport scale
 	Viewport->ScaleX = 1.f;
 	Viewport->ScaleY = 1.f;
+	if( IsUIBoxed() )
+	{
+		// D-2: the tile is in design pixels; the 3D viewport needs the viewport's own
+		FLOAT X2 = X + XL, Y2 = Y + YL;
+		DesignToTarget( X, Y );
+		DesignToTarget( X2, Y2 );
+		Viewport->SizeX = appTrunc(X2 - X);
+		Viewport->SizeY = appTrunc(Y2 - Y);
+		Viewport->OffsetX = appTrunc(X)+SavedOffsetX;
+		Viewport->OffsetY = appTrunc(Y)+SavedOffsetY;
+	}
+	else
+	{
 	// set viewport size
 	Viewport->SizeX = appTrunc(XL*SavedScaleX);
 	Viewport->SizeY = appTrunc(YL*SavedScaleY);
 	// make sure to offset from the start of the current viewport
 	Viewport->OffsetX = appTrunc(X*SavedScaleX)+SavedOffsetX;
 	Viewport->OffsetY = appTrunc(Y*SavedScaleY)+SavedOffsetY;
-	
+	}
+
 	// set viewport offset/scale
 	Viewport->RI->SetViewport( Viewport->OffsetX, Viewport->OffsetY, Viewport->SizeX, Viewport->SizeY );	
 
@@ -1125,6 +1560,15 @@ void UCanvas::execDrawPortal( FFrame& Stack, RESULT_DECL )
 	P_GET_INT_OPTX(FOV, 90);
 	P_GET_UBOOL_OPTX(ClearZ, 1);
 	P_FINISH;
+
+	if( IsUIBoxed() )
+	{
+		// D-2: design pixels -> the viewport's own (the portal is a 3D viewport and a clear in target pixels)
+		FLOAT X1 = X, Y1 = Y, X2 = X + Width, Y2 = Y + Height;
+		DesignToTarget( X1, Y1 );
+		DesignToTarget( X2, Y2 );
+		X = appFloor(X1); Y = appFloor(Y1); Width = appFloor(X2) - X; Height = appFloor(Y2) - Y;
+	}
 
 	// Save state.
 
@@ -1767,6 +2211,13 @@ void UCanvas::execSetCanvasMatrix(FFrame& Stack,RESULT_DECL)
 	if (pCanvasUtil != NULL)
 	{
 		pCanvasUtil->Flush();
+		if( IsUIBoxed() )
+		{
+			// D-2: the same rotation and clip-space scale, composed with the box's mapping
+			pCanvasUtil->CanvasToScreen = FRotationMatrix(newRotation) * UICanvasToScreen() *
+										   FScaleMatrix(newScale);
+		}
+		else
 		pCanvasUtil->CanvasToScreen = (FRotationMatrix(newRotation) *
 									   FTranslationMatrix(FVector(-SizeX / 2.0f - 0.5f,-SizeY / 2.0f - 0.5f,0.0f)) *
 									   FScaleMatrix(FVector(2.0f / SizeX,-2.0f / SizeY,1.0f) * newScale));

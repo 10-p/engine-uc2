@@ -1,0 +1,50 @@
+# D-2: the main menu and an arena page (UC2Arena_Main: game type list, rules, map), for tools/dev/d2-ui-scale.sh.
+# Each page: <page> (as the player sees it, UIMenuBackground=Fill), <page>-box (Box), and both again with the
+# level off (TOGGLERENDERLEVEL: the UI on black) for the measurements. Run through m10-controls.sh --file.
+wait OpenMenu \[UCMenu.UC2MainMenu\] 90
+sleep 4
+focus
+probe main
+shot main
+chan exec UISCALE Box
+wait test: exec UISCALE Box 10
+sleep 1
+shot main-box
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 1
+shot main-box-levelOff
+chan exec UISCALE Fill
+wait test: exec UISCALE Fill 10
+sleep 1
+shot main-levelOff
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 1
+key Down
+sleep 0.5
+key Return
+expect d2-arena-opens OpenMenu \[UCMenu.UC2Arena_Main\] 15
+wait OpenMenu \[GUI.GUIMessageBox\] 20
+wait GUIMessageBox Unblocking animation 20
+sleep 0.5
+key Escape
+expect d2-no-profile-box-closes CloseMenu \[GUIMessageBox\] 10
+sleep 3
+probe arena
+shot arena
+chan exec UISCALE Box
+wait test: exec UISCALE Box 10
+sleep 1
+shot arena-box
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 1
+shot arena-box-levelOff
+chan exec UISCALE Fill
+wait test: exec UISCALE Fill 10
+sleep 1
+shot arena-levelOff
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 1

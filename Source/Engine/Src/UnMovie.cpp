@@ -322,6 +322,7 @@ static void DrawMovieFrame( UViewport* Viewport, UMovieMaterial* M, FPortableMov
 		return;
 	UCanvas* Canvas = Viewport->Canvas;
 	Canvas->Update();
+	Canvas->ApplyUIBox( 0 );	// D-2: this frame is laid out in the viewport's own pixels (below)
 	Viewport->RI->Clear( 1, FColor(0,0,0), 1, 1.f );
 	FLOAT SX = Viewport->SizeX, SY = Viewport->SizeY;
 	FLOAT W = SX, H = SX * Player->GetHeight() / Max(Player->GetWidth(),1);

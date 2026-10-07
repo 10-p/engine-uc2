@@ -253,6 +253,13 @@ public:
 //	Canvas space is in pixel coordinates, 0 through to viewport width/height.
 //
 //epic rwd - changed to support batching
+// D-2: FCanvasUtil::UIContext.
+enum EUIContext
+{
+	UICONTEXT_Game	= 0,	// the HUD, script, the engine's own 2D
+	UICONTEXT_Menu	= 1,	// the GUI controller's pages (their full-screen backgrounds follow UIMenuBackground)
+};
+
 class ENGINE_API FCanvasUtil : public FVertexStream
 {
 public:
@@ -276,6 +283,18 @@ public:
 								CanvasToScreen;
 
 	UBOOL						bZTest;				// scion sz - to enable z-buffer test
+
+	// D-2 (UI scaling, docs/porting/analysis/ui-scale.md): set by UCanvas::Update() for the viewport canvas.
+	// With [<Client>] UIScaleMode=Fit43 the canvas's coordinates are the 640x480 design pixels of the game's UI
+	// and CanvasToScreen puts them into a centred box of the target; a canvas built anywhere else (camera
+	// effects, scripted textures, the editor) keeps the target's pixels (bUIBoxed 0, scale 1, origin 0).
+	UBOOL						bUIBoxed;			// coordinates are design pixels mapped into the box
+	FLOAT						UIScale;			// target pixels per design pixel
+	FLOAT						UIOriginX,			// the box's top-left corner on the target, in target pixels
+								UIOriginY;
+	FLOAT						UITargetX,			// the target's size in pixels
+								UITargetY;
+	BYTE						UIContext;			// who draws: UICONTEXT_Game (HUD, script) or UICONTEXT_Menu (the GUI)
 
     // Constructor/destructor.
 	FCanvasUtil(FRenderTarget* RenderTarget,FRenderInterface* InRI);

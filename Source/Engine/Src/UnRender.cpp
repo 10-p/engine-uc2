@@ -2169,6 +2169,12 @@ void FPlayerSceneNode::Render(FRenderInterface* RI)
 		{
 			FLevelSceneNode::Render(RI);
 		}
+		else
+		{
+			// uc2 port: nothing else clears the colour buffer of a frame without the level (on the Xbox a movie
+			// covered it); TOGGLERENDERLEVEL then shows the HUD on black (D-2's measurements, ui-scale.md).
+			RI->Clear( 1, FColor(0,0,0), 0, 1.f, 0, 0 );
+		}
 
 		if ( Viewport->Canvas->pCanvasUtil )
 			Viewport->Canvas->pCanvasUtil->Flush();

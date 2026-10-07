@@ -790,6 +790,14 @@ FCanvasUtil::FCanvasUtil(FRenderTarget* RenderTarget,FRenderInterface* InRI) :
 	FLOAT	SizeX = RenderTarget->GetWidth(),
 			SizeY = RenderTarget->GetHeight();
 
+	// D-2: target pixels until UCanvas::Update() says otherwise.
+	bUIBoxed	= 0;
+	UIScale		= 1.f;
+	UIOriginX	= UIOriginY = 0.f;
+	UITargetX	= SizeX;
+	UITargetY	= SizeY;
+	UIContext	= 0;
+
 	if( GIsOpenGL )
 		CanvasToScreen = FTranslationMatrix(FVector(-SizeX / 2.0f,-SizeY / 2.0f,0.0f)) * FScaleMatrix(FVector(2.0f / SizeX,-2.0f / SizeY,1.0f));
 	else

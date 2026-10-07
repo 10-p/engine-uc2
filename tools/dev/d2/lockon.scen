@@ -1,0 +1,50 @@
+# D-2: a marker on an actor (the lock-on reticle, Element_TargetReticle, placed with PlayerController.WorldToScreen)
+# lands on the same window pixels with the UI boxed (Fit43) and unboxed (Native640). DM-Deadbolt from the
+# pinned view, a pawn summoned in front of the player, Lock, then one picture per mode, the scene unchanged
+# (God, no bots, nothing moves). Run through tools/dev/m10-controls.sh --file (tools/dev/d2-ui-scale.sh).
+wait Bringing Level DM-Deadbolt.MyLevel up for play 120
+sleep 12
+chan exec set UCDeathmatch NumPlayers 0
+wait test: exec set UCDeathmatch NumPlayers 0 10
+sleep 1
+focus
+# Fire until the player is in: a press and its release can fall between two frames at the low frame rates of
+# big windows in software GL (3840x2160: about 2.5 s per frame), so Fire is held 3 s and repeated until a probe
+# shows the pawn
+seek 8 P['_'].pawn==1 ;; key Alt_L 3
+sleep 3
+probe spawn
+check d2-spawned P['spawn'].pawn==1 and P['spawn'].level=='DM-Deadbolt'
+chan exec God
+wait test: exec God 10
+sleep 1
+chan exec summon UCCharacters.UCPawn_Liandri_Devastation
+wait test: exec summon 10
+sleep 3
+# step back from the target (summoned 72 units ahead) so its reticle is small enough to stay on screen
+keydown s
+sleep 1.2
+keyup s
+sleep 2
+chan exec Lock 1
+wait test: exec Lock 1 10
+sleep 0.5
+chan exec Lock 0
+# the lock turns the view onto the target (slowly at the frame rates of software GL); then the game is slowed
+# down tenfold so the view hardly moves between the three pictures. The check measures the reticle against
+# the target's own figure in each picture, so a moving view does not matter.
+sleep 8
+chan exec slomo 0.1
+wait test: exec slomo 0.1 10
+sleep 2
+shot lock-fit
+chan exec UISCALE Native640
+wait test: exec UISCALE Native640 10
+sleep 3
+shot lock-native
+chan exec UISCALE Fit43
+wait test: exec UISCALE Fit43 10
+sleep 3
+shot lock-fit2
+chan exec slomo 1
+sleep 1

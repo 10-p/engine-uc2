@@ -27,6 +27,11 @@
 #   M10_URL=<url>           map URL given to the game as its first argument (default none: the menu)
 #   M10_SETTLE=12           seconds between "level up for play" and the Fire that starts the match (default 6;
 #                           under wine the first frames of the level come later and an early Fire is lost)
+#   M10_RES=1920x1080       window size (D-2): written to the tree's Default.ini after the reset, Xvfb's screen
+#                           made at least that big, and M10_UIMAP=<the same> given to m10-inject.py so the
+#                           scenarios' 640x480 positions land in the centred 4:3 UI box (M10_UIMAP=none: raw)
+#   M10_INI="K=V K2=V2"     set existing keys of the tree's Default.ini after the reset (every line "K=..." gets V;
+#                           D-2 uses it for UIScaleMode=Native640)
 # The game is also given UC2_WINE_DISPLAY=$DISPLAY (Xvfb's), which tools/dev/m12-wine.sh needs.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -54,6 +59,24 @@ prep_tree() {
   rm -f "$sys/Avaris.ini" "$sys/User.ini" "$sys"/Shot*.bmp
   rm -rf "$sys/Profiles" "$work/run/$tree/Save"/*.pro 2>/dev/null
   mkdir -p "$sys/Profiles"
+  set_res
+}
+
+# D-2: M10_RES=<W>x<H> -> the windowed size in the tree's Default.ini (also with M10_KEEP), the Xvfb screen.
+xvfb_screen=1280x720
+set_res() {
+  local kv
+  for kv in ${M10_INI:-}; do
+    grep -q "^${kv%%=*}=" "$sys/Default.ini" || echo "m10-controls: M10_INI: no ${kv%%=*}= in Default.ini" >&2
+    sed -i -E "s/^${kv%%=*}=.*/${kv}/" "$sys/Default.ini"
+  done
+  [ -n "${M10_RES:-}" ] || return 0
+  sed -i -E "s/^(WindowedViewportX|FullscreenViewportX)=.*/\\1=${M10_RES%x*}/; s/^(WindowedViewportY|FullscreenViewportY)=.*/\\1=${M10_RES#*x}/" "$sys/Default.ini"
+  rm -f "$sys/Avaris.ini"
+  local w=${M10_RES%x*} h=${M10_RES#*x}
+  [ "$w" -lt 1280 ] && w=1280; [ "$h" -lt 720 ] && h=720
+  xvfb_screen=${w}x${h}
+  export M10_UIMAP=${M10_UIMAP:-$M10_RES}
 }
 
 # run_one <name> <scenario-file> <seconds> [uc2.bin args...]
@@ -63,6 +86,7 @@ prep_tree() {
 run_one() {
   local name=$1 scen=$2 secs=$3; shift 3
   prep_tree
+  [ -z "${M10_KEEP:-}" ] || set_res
   local chan=$out/$name.channel inner
   : > "$chan"
   rm -f "$out/$name".out "$out/$name".result "$out/$name".result.shots "$out/$name"-*.png
@@ -78,7 +102,7 @@ kill -KILL \$pid 2>/dev/null
 wait \$pid 2>/dev/null
 exit 0
 INNER
-  "$capped" "$mem" "$secs" -- xvfb-run -a -s "-screen 0 1280x720x24" bash "$inner" "$@"
+  "$capped" "$mem" "$secs" -- xvfb-run -a -s "-screen 0 ${xvfb_screen}x24" bash "$inner" "$@"
   local rc=$?
   rm -f "$inner"
   # Screenshots: SHOT writes System/ShotNNNNN.bmp in order; the runner listed the names.
