@@ -132,18 +132,27 @@ for res in resl:
     m, dx, dy = align(hud, res, href, 0, 0, 640, 480, r=2)
     result(f'hud-scale-{res}', m <= 3 and abs(dx) <= 1 and abs(dy) <= 1,
            f'the box scaled back to 640x480 vs the 640x480 HUD: mean difference {m:.2f}, best offset ({dx},{dy}) px')
-    # the reticle: the drawn shape in a window around the centre
-    r = 40 * s
-    win = hud.crop((round(W / 2 - r), round(H / 2 - r), round(W / 2 + r), round(H / 2 + r)))
-    rb = bbox(win, 24)
-    if rb is None:
+    # the reticle: the drawn shape in a window around the centre. The crosshair's parts are laid out around
+    # x=62.5 of a 128-wide element anchored at its centre (Crosshair_NakhtiRW: 28/96, 23.5/101.5), so the art
+    # is off-centre by itself and the 640x480 picture has it too; the check is that the reticle is where the
+    # 640x480 one maps (+-max(2, s/2+1) px) and the literal distance to the screen centre is reported.
+    def reticle(img, Wi, Hi, sc):
+        rr = 40 * sc
+        x0, y0 = round(Wi / 2 - rr), round(Hi / 2 - rr)
+        rb = bbox(img.crop((x0, y0, round(Wi / 2 + rr), round(Hi / 2 + rr))), 24)
+        return None if rb is None else (x0 + (rb[0] + rb[2]) / 2.0, y0 + (rb[1] + rb[3]) / 2.0, rb[2] - rb[0], rb[3] - rb[1])
+    rt, r0 = reticle(hud, W, H, s), reticle(href, 640, 480, 1.0)
+    if rt is None or r0 is None:
         result(f'reticle-{res}', False, 'no reticle near the centre')
     else:
-        cx = round(W / 2 - r) + (rb[0] + rb[2]) / 2.0
-        cy = round(H / 2 - r) + (rb[1] + rb[3]) / 2.0
-        result(f'reticle-{res}', abs(cx - W / 2) <= 2 and abs(cy - H / 2) <= 2,
-               f'reticle centre ({cx:.1f},{cy:.1f}), screen centre ({W/2:.1f},{H/2:.1f}), offset ({cx-W/2:+.1f},{cy-H/2:+.1f}) px, '
-               f'size {rb[2]-rb[0]}x{rb[3]-rb[1]}')
+        cx, cy, rw, rh = rt
+        ex, ey = bx + s * r0[0], by + s * r0[1]
+        tol = max(2.0, s / 2 + 1)
+        lit = abs(cx - W / 2) <= 2 and abs(cy - H / 2) <= 2
+        result(f'reticle-{res}', abs(cx - ex) <= tol and abs(cy - ey) <= tol,
+               f'reticle centre ({cx:.1f},{cy:.1f}) size {rw}x{rh}; the 640x480 one ({r0[0]:.1f},{r0[1]:.1f}) maps to ({ex:.1f},{ey:.1f}) '
+               f'(tolerance {tol:.1f}); from the screen centre ({W/2:.0f},{H/2:.0f}): ({cx-W/2:+.1f},{cy-H/2:+.1f}) px, '
+               f'{"within" if lit else "NOT within"} 2 px')
 
 # ------------------------------------------------------------------------------------- 640x480 = before
 def identity(name, a, b, base_a=None, base_b=None):

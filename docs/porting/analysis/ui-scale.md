@@ -178,3 +178,31 @@ Next: the d2 verification script (all resolutions, menu + arena + DM-Deadbolt, l
   script-visible class changed: the new state lives in `FCanvasUtil` and `UClient`, which are C++ only).
 - Started: the full verification (`tools/dev/d2-ui-scale.sh`, output `logs/d2/d2-ui-scale-full-1.txt`) and the
   wasm-perf build (`logs/d2/build-wasm-perf.log`).
+
+## Step 4 (2026-10-07): builds, the browser harness, the reticle's own asymmetry
+
+- **wasm-perf**: `source env.sh && bin/capped 4G 1200 -- cmake --preset wasm-perf` rc 0, `bin/capped 6G 5400 --
+  cmake --build build-wasm-perf -j6` rc 0 (`[100%] Built target SDLLaunch`, `logs/d2/build-wasm-perf.log`).
+  **windows**: `bin/capped 4G 600 -- cmake --preset windows` rc 0, `bin/capped 6G 3600 -- cmake --build
+  build-windows -j6` rc 0 (`uc2.exe`, `ucc.exe`; `logs/d2/build-windows.log`).
+- **Browser spec without touching the frontend.** The frontend's Playwright config picks specs by a fixed
+  list per target (`<id>-wasm-boot/net/benchmark/proxynet/audio.spec.js`), so a new spec there would mean
+  editing it. The D-2 spec lives here instead: `tools/dev/d2/web/uc2-d2-uiscale.spec.js` (requires the
+  frontend's `lib/` by path) with `tools/dev/d2/web/playwright.d2.config.js` (the frontend's config, this
+  folder's spec, output in `logs/d2/web`), run as `node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=N --
+  --target uc2 --config <engine-uc2>/tools/dev/d2/web/playwright.d2.config.js` from the frontend, after
+  `yarn build --target uc2 --engine-artifact <engine-uc2-d2>/build-wasm-perf/Source/SDLLaunch` (rc 0; it
+  assembles the frontend's `serve-web/` with this build: rebuild it before another engine's run).
+  First try: "No tests found" (the fixed list); second: the memory guard stopped it at 12.1 GB machine-wide
+  (9.6 GB in use before the browser started: the desktop, other agents' census, my Windows build). The
+  WebGL renderer was the NVIDIA GPU (`ANGLE (NVIDIA, Vulkan 1.4.312 (NVIDIA Quadro P620))`). Next try with
+  the machine quieter and `--max-gb=14` (machine-wide; under the owner's 16 GB for one piece of work).
+- **Reticle**: measured centre at 640x480 (319.5, 239.5); the crosshair's parts (`Crosshair_NakhtiRW`) are
+  laid out around x=62.5 of a 128-wide element anchored at its centre, so the art itself sits about 1.5
+  design pixels left of its anchor (rounding at 640x480 shows half a pixel). Scaled up, the offset grows:
+  -2.0 px at 1920x1080, -2.5 px at 2560x1440. The check now compares with where the 640x480 reticle maps
+  (+-max(2, s/2+1) px) and states the literal distance to the screen centre; the literal "within 2 px" holds
+  up to 1920x1080 and not above, by the art's design, not by the mapping (the box's centre is the window's
+  centre exactly: origin floor((W-640s)/2) is a whole number at every listed size).
+- 4K HUD: about 2.5 s per frame in software GL with the builds running; the 2 s Fire hold was still lost.
+  The scenarios now repeat a 3 s Fire until a probe shows the pawn (`seek 8 P['_'].pawn==1 ;; key Alt_L 3`).

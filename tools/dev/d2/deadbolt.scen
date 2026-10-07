@@ -7,12 +7,11 @@ chan exec set UCDeathmatch NumPlayers 0
 wait test: exec set UCDeathmatch NumPlayers 0 10
 sleep 1
 focus
-# Fire held 2 s: a short press and its release can fall between two frames at the low frame rates of big
-# windows in software GL (2560x1440: under 1 frame per second), and the press would be lost
-keydown Alt_L
-sleep 2
-keyup Alt_L
-sleep 4
+# Fire until the player is in: a press and its release can fall between two frames at the low frame rates of
+# big windows in software GL (3840x2160: about 2.5 s per frame), so Fire is held 3 s and repeated until a probe
+# shows the pawn
+seek 8 P['_'].pawn==1 ;; key Alt_L 3
+sleep 3
 probe spawn
 check d2-spawned P['spawn'].pawn==1 and P['spawn'].level=='DM-Deadbolt'
 chan exec God

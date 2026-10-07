@@ -1,0 +1,27 @@
+# D-2: the in-game pause menu (InGame_MainMenu, a GUI page over the world) and the scoreboard, for the owner's
+# pictures (tools/dev/d2-ui-scale.sh). DM-Deadbolt, pinned view as deadbolt.scen.
+wait Bringing Level DM-Deadbolt.MyLevel up for play 120
+sleep 12
+chan exec set UCDeathmatch NumPlayers 0
+wait test: exec set UCDeathmatch NumPlayers 0 10
+sleep 1
+focus
+# Fire until the player is in: a press and its release can fall between two frames at the low frame rates of
+# big windows in software GL (3840x2160: about 2.5 s per frame), so Fire is held 3 s and repeated until a probe
+# shows the pawn
+seek 8 P['_'].pawn==1 ;; key Alt_L 3
+sleep 3
+chan exec God
+wait test: exec God 10
+sleep 2
+keydown Tab
+sleep 2.5
+shot scoreboard
+keyup Tab
+sleep 2
+key Escape 0.8
+expect d2-pause-menu-opens OpenMenu 20
+sleep 3
+shot pause
+key Escape 0.8
+sleep 2
