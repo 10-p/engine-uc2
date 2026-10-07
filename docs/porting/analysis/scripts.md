@@ -326,3 +326,26 @@ Things a D-phase change must know (from the proof): `GUIController.bUnlockCharac
 `config` in the source (the shipped files have them config); `CTFFlag.home` runs its `Begin:` code again with
 rebuilt packages (Epic's patch for it was broken); `ConnectionFailureMenu` can probe `Timer` again;
 `GameEngine.MainMenuClass` defaults to `UCMenu.UC2MainMenu` (an ini can still choose `StartMenu`).
+
+## Checkpoint after the usage-limit cut-off (2026-10-07 07:55)
+
+Cut off at about 01:50; nothing of this milestone kept running. State of each gate item at that moment:
+
+Observed (logs kept):
+- (a) native: `bin/capped 6G 3000 -- cmake --build build-native -j4` -> rc 0, `ucc-bin` linked with Editor
+  (`logs/m14/build-native-14.log`). wasm-perf: `source env.sh && bin/capped 4G 1200 -- cmake --preset wasm-perf`
+  rc 0, `bin/capped 6G 5400 -- cmake --build build-wasm-perf -j4` rc 0, 0 error lines, `[100%] Built target
+  SDLLaunch` (`logs/m14/build-wasm-perf.log`, finished 01:55, the background job completed normally).
+- (b) script-build summary and (c) the 30-patch table: as in step 2b (`logs/m14/m14-make-compare.txt`,
+  `m14-make-patches.txt`, `m14-make-functions.txt`).
+- (e) header-export diff: step 2c (`logs/m14/m14-hdr-headers.diff`).
+- (d) partly: `verifyclasses` on m14-run and m14-ship (both pass), menu and DM-Deadbolt on both trees (0
+  Critical, 0 GL errors, ScriptPatcher lines as designed), `m10-controls.sh` with `M10_TREE=m14-run`:
+  keyboard 16, mouse 18, text 7, pad 33, both 14 checks, all PASS (`logs/m14/m10-run.txt`, run outside the
+  check script).
+- per-function file: `script-diff.py --functions` (committed now): 10456 functions/states, 9621 byte-identical,
+  813 only Line/TextPos in the 17 changed classes, 19 patched (bytecode = ScriptPatches.h), 3 with findings
+  (CTFFlag.home, UCWeap_Melee.BusyShieldOn and its HitWall).
+
+Not run yet (so nothing is claimed for them): audio, effects, census, movies, net, leftovers on the rebuilt
+packages, and the complete `tools/dev/m14-scripts-check.sh` run. Next: run the check script end to end.
