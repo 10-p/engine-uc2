@@ -154,3 +154,27 @@ Next: the d2 verification script (all resolutions, menu + arena + DM-Deadbolt, l
 - First measurements, 640x480 HUD on black: bounding box (38,32)-(597,418); the reticle (Nakhti race
   weapon's scripted crosshair, `DrawX=320 DrawY=240`) centre (319.5, 240.0): half a design pixel left of the
   centre, which is 2.25 px at 4K (s=4.5) if the art scales as drawn.
+
+## Step 3 (2026-10-07): sharper text built and looked at; the first full pass and what it taught
+
+- Sharp text, first try: every glyph an empty square at 4K. `SuiGeneris_40pt` has only 12 of the 95
+  printable characters (digits for the HUD's big numbers), so `RemapChar` gave the null character. Now each
+  glyph tries the sizes going down from the preferred one and takes the first that has the character with a
+  box of the same shape (within a third); the log lists what each size has: `UIScale: sharper text for
+  T_Fonts2.SuiGeneris_12pt: 18pt(95/95) 20pt(95/95) 24pt(95/95) 28pt(95/95) 40pt(12/95)`. At 4K the menu text
+  then comes from the 28pt glyphs: visibly crisper, same layout (`logs/d2/t5/menu2160-arena.png` against
+  `logs/d2/t1/menu2160-arena.png`; crops compared side by side). Small kerning differences (the 'f' of
+  "Profile" sits a little further right) are the only visible change. Xbox button glyphs
+  (`Controller_Buttons_LG`) have no bigger size and stay magnified.
+- First pass of all resolutions (before sharp text): every menu run passed; the HUD runs at 2560x1440 and
+  3840x2160 failed to spawn: at under one frame per second (49 frames in the whole 2560x1440 run, software
+  GL) the 0.2 s Fire press and its release fell between two frames. `exec Fire` through the test channel did
+  not restart the player either (not investigated further); the scenarios now hold Fire for 2 s.
+- My mistake: I ran a short 640x480 test in the `d2` tree while the 4K run of the full pass used that tree.
+  `m10-controls.sh` resets the tree before a run (inis, `Shot*.bmp`), so the 4K menu pictures of that pass
+  were lost. Nothing else is shared between trees; the gate regressions use their own tree `d2-reg`. Never
+  two runs in one tree.
+- `./ucc-bin verifyclasses` on `run/d2-reg` (this build): `All native class layouts match`, rc 0 (no
+  script-visible class changed: the new state lives in `FCanvasUtil` and `UClient`, which are C++ only).
+- Started: the full verification (`tools/dev/d2-ui-scale.sh`, output `logs/d2/d2-ui-scale-full-1.txt`) and the
+  wasm-perf build (`logs/d2/build-wasm-perf.log`).
