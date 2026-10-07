@@ -52,7 +52,7 @@ run() {  # run <name> <seconds>  (scenario in $out/<name>.scen)
 # The start of every restart: the main menu is up, nothing has been pressed; ask the engine.
 at_start() {  # at_start <prefix>
   cat <<SCEN
-wait OpenMenu \[UCMenu.UC2MainMenu\] 90
+expect $1-main-menu-up OpenMenu \[UCMenu.UC2MainMenu\] 90
 sleep 3
 focus
 chan exec getall PlayerProfile ProfileName
@@ -249,8 +249,10 @@ at_start r3
 to_profiles r3
 cat <<'SCEN'
 sleep 3
-probe l0
-seek 4 'Saver' in P['_'].item ;; key Up
+# The list (alphabetical: Saver, Second) opens on the active profile, Second; its rows have no text the probe
+# can read (the names are check boxes beside it), so one Up and the result decides (r3-saver-is-active below).
+key Up
+sleep 0.5
 key Return
 sleep 2
 shot selected
@@ -272,7 +274,7 @@ at_start r4
 to_profiles r4
 cat <<'SCEN'
 sleep 3
-seek 4 'Saver' in P['_'].item ;; key Up
+# The list opens on the active profile, Saver: X deletes it.
 key x
 wait OpenMenu \[GUI.GUIMessageBox\] 15
 sleep 1.5
