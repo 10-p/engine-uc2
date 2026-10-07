@@ -93,7 +93,8 @@ public:
 									UseCubemaps,
 									CheckGLErrors;
 	INT								LevelOfAnisotropy,
-									MaxTextureUnits;
+									MaxTextureUnits,
+									MaterialStages;		// O-9: the stage count the material compiler is given (Epic's D3DDrv: exactly 4)
 	FLOAT							DetailTexMipBias,
 									DefaultTexMipBias;
 
@@ -194,6 +195,23 @@ public:
 									FragmentShadersCompiled, FragmentShadersFailed,
 									PrecompileSeen, PrecompileNotApplicable,
 									ProgramDraws, ProgramFallbackDraws;
+
+	// O-9 (UC2GLFFProgram.cpp): the texture stages of fixed-function passes as GLSL instead
+	// of GL's texture environment. UseFixedFunctionPrograms is the ini switch
+	// (FixedFunctionPrograms; -glffprograms / -glnoffprograms; console FFPROGRAMS [0|1]);
+	// FFProgramsActive says whether they are in use (desktop GL only). The stage count and
+	// the texture-op caps the material compiler sees follow from it (UpdateTextureCaps).
+	UBOOL							UseFixedFunctionPrograms,
+									FFProgramsActive,
+									LogFFPrograms,			// -glffsource: log every generated program
+									MaskCombine3,			// -glnocombine3: as if GL_ATI_texture_env_combine3 were missing
+									MaskCombine4;			// -glnocombine4: as if GL_NV_texture_env_combine4 were missing
+	INT								GLFixedFunctionUnits,	// GL_MAX_TEXTURE_UNITS: units of the texture environment
+									GLProgramUnits;			// min(GL_MAX_TEXTURE_COORDS, GL_MAX_TEXTURE_IMAGE_UNITS): units a fragment shader can sample with fixed-function texture coordinates
+	INT								FFProgramsLinked, FFProgramsFailed, FFProgramDraws, FFFallbackDraws;
+	void UpdateTextureCaps();
+	UBOOL HasCombine3() { return SUPPORTS_GL_ATI_texture_env_combine3 && !MaskCombine3; }
+	UBOOL HasCombine4() { return SUPPORTS_GL_NV_texture_env_combine4 && !MaskCombine4; }
 
 	// GL error checking (CheckGLErrors=True or -glerrors).
 	INT								GLErrorFrames,

@@ -1,0 +1,10 @@
+chan exec NETPLACE FxCam 8150 4230 -1200 16384 1000
+sleep 3
+chan exec NETPLACE FxCam 8150 4230 -1200 16384 1000
+sleep 8
+chan exec FFPROGRAMS 0
+sleep 8
+chan exec FFPROGRAMS 1
+sleep 8
+chan exec FFPROGRAMS 0
+sleep 8

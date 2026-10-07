@@ -8,6 +8,7 @@
 #   tools/dev/fx-owner.sh list
 #   UC2_BIN=uc2-before.bin tools/dev/fx-owner.sh fx pool   another executable from the tree's System folder
 #                                                          (the pictures get the suffix "-before")
+#   FX_ARGS="-glmatcensus" tools/dev/fx-owner.sh ...       more uc2.bin arguments (O-9)
 #   UC2_GPU=1 tools/dev/fx-owner.sh fx waterfall-1p        render on this machine's GPU instead of Mesa
 #                                                          llvmpipe: SDL's offscreen video driver (EGL, no
 #                                                          window, nothing on the owner's display); the
@@ -145,7 +146,7 @@ echo "$CASES" | while IFS='|' read -r name map secs what; do
   inner=$(mktemp)
   cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy $video ./$bin "$map?Name=FxCam" -log -nostartupmovies -glerrors -inputtest="$chan" > "$out/$tag.out" 2>&1 &
+SDL_AUDIODRIVER=dummy $video ./$bin "$map?Name=FxCam" -log -nostartupmovies -glerrors -inputtest="$chan" ${FX_ARGS:-} > "$out/$tag.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$tag.out" "$chan" "$out/$tag.result" > "$out/$tag.inject" 2>&1
 kill -TERM \$pid 2>/dev/null

@@ -161,5 +161,127 @@ void UC2GL_PixelTraceLog( FOpenGLRenderInterface* RI, INT Pass, const FColor& Be
 }
 
 /*-----------------------------------------------------------------------------
+	O-9: material census (-glmatcensus). Every distinct compilation of a material is
+	logged once, as the material compiler left it: passes, blending, and per stage the
+	colour and alpha operation with their arguments and the texture target. Comparing the
+	census of two runs (e.g. 8 stages and exact operations against 4 stages without
+	three-operand operations) lists the materials whose compilation depends on the device.
+
+	  UC2GLDrv: census <material> [-> fallback <material>] passes=<n> | p<i> blend=<0/1> <src>,<dst>
+	             ps=<pixel shader>(<program/ff>) stages=<n>: c<op>(<arg1>,<arg2>,<arg0>) a<op>(...) <2d/cube/->; ...
+-----------------------------------------------------------------------------*/
+
+static INT GMatCensus = -1;
+
+// The compiled passes of the current material state, as one line.
+static FString UC2GL_PassSignature( FOpenGLRenderInterface* RI )
+{
+	FString Line = FString::Printf( TEXT("passes=%i"), RI->CurrentState->NumMaterialPasses );
+	for( INT p=0; p<RI->CurrentState->NumMaterialPasses; p++ )
+	{
+		FOpenGLMaterialState* MS = RI->CurrentState->MaterialPasses[p];
+		if( !MS )
+			continue;
+		Line += FString::Printf( TEXT(" | p%i blend=%i %s,%s ps=%i(%s) stages=%i:"), p, MS->AlphaBlending, BlendName(MS->SrcBlend), BlendName(MS->DestBlend),
+			(INT)MS->PixelShader, MS->UsePixelShaderProgram ? TEXT("program") : TEXT("ff"), MS->StagesUsed );
+		for( INT s=0; s<MS->StagesUsed && s<MAX_STAGES; s++ )
+		{
+			FOpenGLMaterialStateStage& St = MS->Stages[s];
+			Line += FString::Printf( TEXT(" c%i(%x,%x,%x) a%i(%x,%x,%x) %s;"), (INT)St.ColorOp, St.ColorArg1, St.ColorArg2, St.ColorArg0,
+				(INT)St.AlphaOp, St.AlphaArg1, St.AlphaArg2, St.AlphaArg0,
+				!St.Texture ? TEXT("-") : St.Texture->IsCubemap ? TEXT("cube") : TEXT("2d") );
+		}
+	}
+	return Line;
+}
+
+void UC2GL_MaterialCensus( FOpenGLRenderInterface* RI, UMaterial* Requested, UMaterial* Used )
+{
+	if( GMatCensus < 0 )
+		GMatCensus = ParseParam( appCmdLine(), TEXT("glmatcensus") ) ? 1 : 0;
+	if( GMatCensus != 1 || !Requested )
+		return;
+	static TMap<FString,INT> Seen;
+	if( Seen.Num() >= 20000 )
+		return;
+	FString Line = FString::Printf( TEXT("%s"), Requested->GetPathName() );
+	if( Used != Requested )
+		Line += FString::Printf( TEXT(" -> fallback %s"), Used ? Used->GetPathName() : TEXT("None") );
+	Line += TEXT(" ");
+	Line += UC2GL_PassSignature( RI );
+	if( Seen.Find( Line ) )
+		return;
+	Seen.Set( *Line, 1 );
+	debugf( NAME_Init, TEXT("UC2GLDrv: census %s"), *Line );
+}
+
+/*
+	GLMATCENSUS (console; runs at the start of the next frame): every material object in
+	memory is compiled, lit and unlit, with three sets of device caps, and nothing is drawn:
+	  A  8 stages, MODULATEALPHA_ADDCOLOR and MULTIPLYADD (fragment programs; Mesa before O-9)
+	  B  4 stages, the same ops (Epic's D3DDrv on every card it accepted, and the Xbox)
+	  C  4 stages, neither op (the NVIDIA driver before O-9)
+	Logged: every material whose passes differ between A and B or between B and C, with the
+	three compilations, and a summary. Pixel-shader, projector, terrain, particle and movie
+	materials are skipped (they are not plain fixed-function materials or need a draw context).
+*/
+void UC2GL_RunMaterialCensus( UUC2GLRenderDevice* RenDev, UViewport* Viewport )
+{
+	FOpenGLRenderInterface* RI = &RenDev->RenderInterface;
+	struct { const TCHAR* Name; INT Stages; DWORD Caps; } Cfg[3] =
+	{
+		{ TEXT("A"), 8, D3DTEXOPCAPS_MODULATEALPHA_ADDCOLOR | D3DTEXOPCAPS_MULTIPLYADD },
+		{ TEXT("B"), 4, D3DTEXOPCAPS_MODULATEALPHA_ADDCOLOR | D3DTEXOPCAPS_MULTIPLYADD },
+		{ TEXT("C"), 4, 0 },
+	};
+	DWORD	SavedTex = RenDev->DeviceCaps.MaxSimultaneousTextures, SavedBlend = RenDev->DeviceCaps.MaxTextureBlendStages, SavedOps = RenDev->DeviceCaps.TextureOpCaps;
+	INT		SavedUnits = RenDev->NumTextureUnits;
+	INT		Materials = 0, DiffAB = 0, DiffBC = 0, FallbackA = 0, FallbackB = 0, FallbackC = 0;
+	GMatCensus = 2;		// SetMaterial's own census stays quiet meanwhile
+	RI->PushState();
+	for( TObjectIterator<UMaterial> It; It; ++It )
+	{
+		UMaterial* M = *It;
+		if( M->IsA(UPixelShaderMaterial::StaticClass()) || M->IsA(UProjectorMaterial::StaticClass()) || M->IsA(UProjectorMultiMaterial::StaticClass())
+		||	M->IsA(UTerrainMaterial::StaticClass()) || M->IsA(UParticleMaterial::StaticClass()) || M->IsA(UMovieMaterial::StaticClass()) )
+			continue;
+		Materials++;
+		for( INT Lit=0; Lit<2; Lit++ )
+		{
+			FString Sig[3];
+			UBOOL	Fallback[3];
+			for( INT c=0; c<3; c++ )
+			{
+				RenDev->DeviceCaps.MaxSimultaneousTextures	= Cfg[c].Stages;
+				RenDev->DeviceCaps.MaxTextureBlendStages	= Cfg[c].Stages;
+				RenDev->DeviceCaps.TextureOpCaps			= Cfg[c].Caps;
+				RenDev->NumTextureUnits						= Cfg[c].Stages;
+				RI->EnableLighting( Lit, Lit, 0, NULL, 0, FSphere(FVector(0,0,0),0.f) );
+				FString Error;
+				UMaterial* ErrorMaterial = NULL;
+				RI->SetMaterial( M, &Error, &ErrorMaterial, NULL );
+				Fallback[c] = Error.Len() > 0;
+				Sig[c] = UC2GL_PassSignature( RI ) + (Fallback[c] ? FString::Printf( TEXT(" ERROR(%s)"), *Error ) : FString());
+			}
+			FallbackA += Fallback[0]; FallbackB += Fallback[1]; FallbackC += Fallback[2];
+			UBOOL AB = Sig[0] != Sig[1], BC = Sig[1] != Sig[2];
+			DiffAB += AB; DiffBC += BC;
+			if( AB || BC )
+				debugf( NAME_Init, TEXT("UC2GLDrv: matcensus %s %s %s%s%s\n    A: %s\n    B: %s\n    C: %s"), Lit ? TEXT("lit") : TEXT("unlit"), M->GetClass()->GetName(), M->GetPathName(),
+					AB ? TEXT(" [A!=B: 8 vs 4 stages]") : TEXT(""), BC ? TEXT(" [B!=C: the three-operand caps]") : TEXT(""), *Sig[0], *Sig[1], *Sig[2] );
+		}
+	}
+	RI->PopState();
+	RenDev->DeviceCaps.MaxSimultaneousTextures	= SavedTex;
+	RenDev->DeviceCaps.MaxTextureBlendStages	= SavedBlend;
+	RenDev->DeviceCaps.TextureOpCaps			= SavedOps;
+	RenDev->NumTextureUnits						= SavedUnits;
+	RI->InvalidateHardwareState();
+	GMatCensus = -1;
+	debugf( NAME_Init, TEXT("UC2GLDrv: matcensus summary: %i materials x lit/unlit; differ A/B (8 vs 4 stages) %i, B/C (three-operand caps) %i; compile errors A %i, B %i, C %i"),
+		Materials, DiffAB, DiffBC, FallbackA, FallbackB, FallbackC );
+}
+
+/*-----------------------------------------------------------------------------
 	The End.
 -----------------------------------------------------------------------------*/

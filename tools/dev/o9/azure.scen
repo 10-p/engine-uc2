@@ -1,0 +1,30 @@
+chan exec NETPLACE FxCam 8150 4230 -1200 16384 1000
+sleep 3
+chan exec NETPLACE FxCam 8150 4230 -1200 16384 1000
+sleep 2
+chan exec set LevelInfo TimeDilation 0.0001
+sleep 1
+shot pp
+chan exec POSTPROCESS 0
+sleep 1
+shot nopp
+chan exec FFPROGRAMS 0
+sleep 1
+shot texenv
+chan exec FFPROGRAMS 1
+chan exec POSTPROCESS 1
+chan exec set LevelInfo TimeDilation 1
+chan exec ToggleThirdCam
+chan exec NETPLACE FxCam 8180 4290 -1200 9000 900
+sleep 3
+chan exec NETPLACE FxCam 8180 4290 -1200 9000 900
+sleep 2
+chan exec set LevelInfo TimeDilation 0.0001
+sleep 1
+shot cobra
+chan exec POSTPROCESS 0
+sleep 1
+shot cobra-nopp
+chan exec FFPROGRAMS 0
+sleep 1
+shot cobra-texenv
