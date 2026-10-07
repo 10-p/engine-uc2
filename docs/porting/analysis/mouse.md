@@ -306,3 +306,41 @@ symptoms are (before: speed-dependence 52.0 vs 52.4 per count, camera there-and-
 440, 200 in one tick 440, circle 12,293 x 11,212 units, 16.6% out of round). Pad vs shipped worst 0.47% (0.35
 deflection, where whole units per tick dominate), 0.07-0.09% elsewhere; adhesion under the pad 881 units, under the
 mouse 0; Right arrow 87.9 deg/s; auto-centre under the pad 3,016 -> 1,661 in 1.5 s, under the mouse unchanged.
+
+## Step 7 (2026-10-07): builds, D-4/D-5 regressions, the browser
+
+Builds at the final engine code (82f25cc; nothing in `Source/` changed after it):
+- native: `bin/capped 6G 3600 -- cmake --build build-native -j2` rc 0 (`logs/d6/build-native-8.log`; the full build
+  from scratch `build-native-0.log`, -j6).
+- wasm-perf: `source env.sh && bin/capped 4G 1200 -- cmake --preset wasm-perf`, `bin/capped 6G 5400 -- cmake --build
+  build-wasm-perf -j6` rc 0, 0 `error:` (`build-wasm-perf-1.log` from scratch, `-2.log` incremental after the last
+  engine edits: relinked); SDLLaunch.wasm sha256 3bcfb2ab8a05ca1c...; carries `NOINIMIGRATE`.
+- windows: `bin/capped 4G 1200 -- cmake --preset windows`, `bin/capped 6G 5400 -- cmake --build build-windows -j6`
+  rc 0, 0 `error:` (`build-windows-1.log`; `-2.log` incremental: up to date); `uc2.exe` carries `NOINIMIGRATE`.
+
+On the rebuilt tree d6-run (all 17 packages from this branch):
+- `D4_TREE=d6-run tools/dev/d4-names.sh`: **d4-names: ALL PASS** (n1 11, n2 7, n3 3, n4 4 scenario checks + 8 file
+  checks; `logs/d6/d4-names.txt`).
+- `D5_TREE=d6-run tools/dev/d5-text.sh`: **d5-text: ALL PASS** (k1 13, k2 14, k3 4, k4 14, k5 10; `logs/d6/d5-text.txt`).
+
+Browser (frontend clone, `uc2` branch): serve-web assembled immediately before with this worktree's wasm-perf and the
+asset tree `run/d6-webassets` (the asset tree hard-linked, `System/UCGameplay.u` = `run/d6-make/System/UCGameplay.u`;
+manifests regenerated into `logs/d6/web/`: 208 packages, all resolved) by `corepack yarn build --target uc2 --assets
+... --manifest ... --deps ... --engine-artifact <worktree>/build-wasm-perf/Source/SDLLaunch` (`logs/d6/fe-build-1.txt`);
+`sha256sum serve-web/SDLLaunch.wasm` = this build's before and after every run (`logs/d6/e2e-engine-proof.txt`);
+sound to the null sink `uc2d6` (created and removed per run); `PULSE_SINK=uc2d6 bin/capped 6G 1500 -- node
+packages/e2e/tools/e2e-mem-guard.mjs --max-gb=14 -- --target uc2 uc2-wasm-boot.spec.js` with `env.sh` sourced (the
+guard spawns `yarn`, the workspace's shim in `bin/`; my first try without it failed to start, nothing ran).
+- run 2, the whole boot spec (`logs/d6/e2e-boot-2.txt`): the three existing tests passed (menu, DM-Deadbolt drawn,
+  keyboard and mouse: "moving the mouse right turns the player right: yaw -40880 -> -37876 (3004) after 300 px" =
+  10.01 per px); the new test failed only its "page has pointer lock" step.
+- headless Chromium does not grant pointer lock here: the shell's raw request is refused with `WrongDocumentError:
+  The root document of this element is not valid for pointer lock`, and the plain lock it asks for at the next click
+  was not engaged either; the mouse's relative motion reaches SDL as movementX/Y anyway. The test now clicks twice,
+  reports the lock and does not require it.
+- run 3, `-g "mouse look"` (`logs/d6/e2e-boot-3.txt`): **1 passed (1.2m)**: rotation units per pixel 100 px slow 10,
+  400 px slow 10.0125, 400 px in two steps 10.01, 100 px up 10.01; the view unchanged 1.5 s after the mouse stopped;
+  the engine's `ScriptPatcher: UCGameplay is not the package the patch was made for ... rebuilt from source` line
+  proves the rebuilt package was loaded. Mem-guard peak 12.0 GB machine-wide (other agents included).
+- Frontend gates: `yarn lint` rc 0, `yarn test` 28/28; committed in ufrontend 51cab98 (local), with the uc2 target
+  README's "Mouse look" section. serve-web is left assembled with this branch's engine and `run/d6-webassets`.
