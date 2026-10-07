@@ -63,11 +63,11 @@ link_cooked Textures/Movies
 # v2 (2026-10-07): script packages rebuilt from source (M14, tools/dev/script-build.sh) replace the shipped ones
 # where a change needs them; today only GUI.u (D-4: without a profile the player keeps the launcher's name;
 # bUnlockCharacters/bShowAllMuts config again). The rebuilt files are kept in assets/uc2-scripts/System (copied
-# there from a script-build tree by the coordinator), the shipped ones are put aside in assets/uc2-shipped/System
+# there from a script-build tree by the coordinator; D-6 adds UCGameplay.u, a SERVER package: every peer must run it), the shipped ones are put aside in assets/uc2-shipped/System
 # (never deleted), and SCRIPTS.txt in the tree says which packages are rebuilt. GUI is not a server package, so
 # shipped and rebuilt peers still play together; Core.u (the frontend's fingerprint) stays the shipped file.
 rebuilt_dir=${UC2_REBUILT_SCRIPTS:-$here/../assets/uc2-scripts/System}
-rebuilt_pkgs=${UC2_REBUILT_PACKAGES-GUI}
+rebuilt_pkgs=${UC2_REBUILT_PACKAGES-GUI UCGameplay}
 shipped_dir=$here/../assets/uc2-shipped/System
 : > "$dst/System/SCRIPTS.txt"
 for pkg in $rebuilt_pkgs; do

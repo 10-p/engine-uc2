@@ -26,6 +26,10 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 assets=${UC2_ASSETS_DIR:-$work/assets/uc2}
 epic=${UC2_EPIC_SOURCES:-$work/epic-sources}
+# The SHIPPED script packages, the baseline for conforming and comparing. Not the asset tree's System/: since
+# asset tree v2 (D-4, D-6) some of its packages are rebuilt ones (System/SCRIPTS.txt), and conforming against
+# those would chain generations and compare a build with itself.
+shipped=${UC2_SHIPPED_SYSTEM:-$epic/System}
 capped=$work/bin/capped
 build=build-native
 tree=m14-make
@@ -73,7 +77,7 @@ assemble() {
   chmod -R u+w "$run/System"
   mkdir -p "$run/GUIRes"
   for p in "${packages[@]}"; do
-    cp -a "$assets/System/$p.u" "$run/GUIRes/$p.u"
+    cp -a "$shipped/$p.u" "$run/GUIRes/$p.u"
     rm -f "$run/System/$p.u"
   done
   chmod u+w "$run/GUIRes"/*.u
@@ -178,7 +182,7 @@ for s in "${stages[@]}"; do
     strip) strip_scripts || true;;
     compare)
       set +e
-      python3 "$repo/tools/dev/script-diff.py" "$assets/System" "$run/System" \
+      python3 "$repo/tools/dev/script-diff.py" "$shipped" "$run/System" \
         --patches "$repo/Source/Engine/Inc/ScriptPatches.h" \
         --details "$logs/$tree-compare.txt" --patch-table "$logs/$tree-patches.txt" --functions "$logs/$tree-functions.txt"
       echo "compare: exit $? (details $logs/$tree-compare.txt, per function $logs/$tree-functions.txt, patch table $logs/$tree-patches.txt)"
