@@ -4,7 +4,7 @@
 # with the shipped packages. M14; docs/porting/analysis/scripts.md.
 #
 #   tools/dev/script-build.sh [options] [stage...]
-#     stages: assemble make compare (default: all three, in that order)
+#     stages: assemble make strip compare (default: all four, in that order)
 #     --build <dir>     build directory with Source/UCC/ucc-bin (default build-native)
 #     --tree <name>     output tree <WorkUC2>/run/<name>; must start with m14 (default m14-make)
 #     --mem <size>      memory ceiling of the `ucc-bin make` run (default 3G)
@@ -38,11 +38,11 @@ while [ $# -gt 0 ]; do
     --mem) mem=$2; shift 2;;
     --headers) headers=1; shift;;
     --extra) extra=$2; shift 2;;
-    assemble|make|compare) stages+=("$1"); shift;;
+    assemble|make|strip|compare) stages+=("$1"); shift;;
     *) echo "unknown argument: $1" >&2; exit 2;;
   esac
 done
-[ ${#stages[@]} -eq 0 ] && stages=(assemble make compare)
+[ ${#stages[@]} -eq 0 ] && stages=(assemble make strip compare)
 case "$tree" in m14*) ;; *) echo "tree name must start with m14: $tree" >&2; exit 2;; esac
 case "$tree" in */*|*..*) echo "bad tree name: $tree" >&2; exit 2;; esac
 case "$build" in /*) ;; *) build=$repo/$build;; esac
@@ -72,9 +72,10 @@ assemble() {
     rm -f "$run/System/$p.u"
   done
   chmod u+w "$run/GUIRes"/*.u
-  cp -f "$repo"/Engine/Config/*.ini "$run/System/"
-  cp -f "$repo/Engine/Config/DefaultXbox.ini" "$run/System/Avaris.ini"
-  cp -f "$repo/Engine/Config/DefUserXbox.ini" "$run/System/User.ini"
+  # Epic's own inis (the asset tree's System/ has them unchanged), not Engine/Config's: defaults of config
+  # properties are read from them during the build.
+  cp -f "$assets/System/DefaultXbox.ini" "$run/System/Avaris.ini"
+  cp -f "$assets/System/DefUserXbox.ini" "$run/System/User.ini"
   cp -f "$build/Source/UCC/ucc-bin" "$run/System/"
   for p in "${packages[@]}"; do
     s=$(srcdir "$p")
@@ -111,10 +112,38 @@ make_scripts() {
   return $rc
 }
 
+# Epic ran `ucc editor.stripsource` on the made packages before they shipped (docs/porting/analysis/scripts.md,
+# step 2): it loads every .u but Editor.u, replaces script and C++ text with " " and saves. Same here, saving
+# conformed to ../GUIRes (-CONFORM, our addition) so the result lines up with the shipped files. The made packages
+# (with their text) stay in <tree>/Unstripped/.
+strip_scripts() {
+  local log=$logs/$tree-strip.log
+  rm -rf "$run/Unstripped"
+  mkdir -p "$run/Unstripped"
+  for p in "${packages[@]}"; do cp -a "$run/System/$p.u" "$run/Unstripped/$p.u"; done
+  rm -f "$run/System/ucc.log"
+  # With the PC inis: the shipped defaults of config properties carry Default.ini's values where it and
+  # DefaultXbox.ini differ (e.g. UWeb.WebServer DefaultApplication=0, against the class's -1), so the strip,
+  # which loads every class's config again, ran after sync_avaris.pl had deleted the Xbox Avaris.ini/User.ini.
+  cp -f "$assets/System/Default.ini" "$run/System/Avaris.ini"
+  cp -f "$assets/System/DefUser.ini" "$run/System/User.ini"
+  set +e
+  (cd "$run/System" && "$capped" "$mem" 3600 -- ./ucc-bin editor.stripsource -CONFORM -log=ucc.log) > "$log.out" 2>&1
+  local rc=$?
+  set -e
+  cp -f "$run/System/ucc.log" "$log" 2>/dev/null || true
+  # The shipped UCMenu.u was not stripped (all 171 text buffers hold the full text, 111 classes lack the flag a
+  # load sets), unlike the other 15: it ships as `make` wrote it. Editor.u is skipped by the commandlet itself.
+  cp -f "$run/Unstripped/UCMenu.u" "$run/System/UCMenu.u"
+  echo "ucc-bin editor.stripsource -CONFORM: exit $rc (output $log.out, log $log); UCMenu.u kept unstripped"
+  return $rc
+}
+
 for s in "${stages[@]}"; do
   case "$s" in
     assemble) assemble;;
-    make) make_scripts;;
+    make) make_scripts || true;;
+    strip) strip_scripts || true;;
     compare) echo "compare: not written yet";;
   esac
 done

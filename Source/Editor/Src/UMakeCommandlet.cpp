@@ -31,7 +31,7 @@ static INT UC2CompareNTFS( const FString& A, const FString& B )
 			return 0;
 	}
 }
-static void UC2SortLikeNTFS( TArray<FString>& Files )
+void UC2SortLikeNTFS( TArray<FString>& Files ) // also used by UStripSourceCommandlet.cpp
 {
 	for( INT i=1; i<Files.Num(); i++ )
 		for( INT j=i; j>0 && UC2CompareNTFS(Files(j-1),Files(j))>0; j-- )

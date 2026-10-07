@@ -105,3 +105,49 @@ Open after step 1:
   is compiled later); to be checked against the shipped defaults in step 2.
 
 Next: the comparison tool (step 2).
+
+## Step 2a (2026-10-07): the comparison tool, first results, and what the shipped files went through
+
+`tools/dev/script-diff.py <shipped System> <recompiled System> --patches Source/Engine/Inc/ScriptPatches.h
+--details <file>`: parses every export with the v151 serialisers (UObject stack + tagged properties, UField,
+UStruct with its script, UFunction, UState, UClass with dependencies and tagged defaults, every UProperty kind,
+UConst, UEnum, UTextBuffer; bytecode token by token like `UStruct::SerializeExpr`), requires each parse to consume
+the export exactly, and compares field by field (references resolved to object paths). One line per package.
+
+More fixes found by comparing:
+- `Core/Src/UnObj.cpp` `GetPackageLinker`: the package name deduced from a file name also splits at `\`. A
+  script's `#exec obj load file=..\Textures\T_HUD.utx` (no `PACKAGE=`) named the package `""` (cut at the first
+  `.` of `..`), i.e. a transient `PackageN`, and every T_HUD texture referenced from defaults was saved as an
+  import from `Package15`; `stripsource` could then not load UCMutators.u. Real Linux bug (Windows splits at `\`
+  because it is PATH_SEPARATOR there); it also affects the game wherever a package file name with backslashes
+  is loaded.
+- `Editor/Src/UStripSourceCommandlet.cpp`: files in NTFS order; `-CONFORM` (ours, opt-in) saves conforming to
+  `../GUIRes/<Pkg>.u`.
+
+What the shipped files went through (evidence in the comparison):
+1. `make` with the Xbox inis (as sync_avaris.pl);
+2. `editor.stripsource` with the **PC** inis (`Default.ini`/`DefUser.ini`): the shipped default of
+   `UWeb.WebServer.DefaultApplication` is 0 (Default.ini) where the class says -1 and DefaultXbox.ini has no
+   key; with the PC inis our strip reproduces it. (sync_avaris.pl deletes Avaris.ini/User.ini right after
+   make, so a later strip run derives them from Default.ini.) Marks of the strip: text buffers `" "`,
+   `CLASS_FullDefaults` set on load, `CPF_NeedCtorLink` on edit-inline object properties (set by
+   `UObjectProperty::Link` on load, after `make`'s save had added `CPF_EditInline|CPF_ExportObject`).
+3. **except UCMenu.u**, which carries none of these marks: all 171 text buffers hold the full text (so the
+   shipped UCMenu.u contains Epic's retail UCMenu source!), and it matches our unstripped make output. So
+   `script-build.sh strip` keeps UCMenu.u (and Editor.u, skipped by the commandlet) unstripped.
+
+Result after make + strip (PC inis): Core, UCAnnouncements, UnrealEd: every export byte-identical. The rest:
+explainable categories (positions and dependency CRCs in classes whose source changed after retail, import
+time stamps and lazy-array file offsets in textures, FName case `l`/`L`, the patch's own appended objects in
+another order) plus real findings, being worked through in step 2b:
+- `Dir_PlayerEnableControls.DirectionStart`: shipped `IntConst -1`, ours `IntConst 2147483647` (twice): a literal
+  the C runtime parses differently (to look at).
+- `GUIController.bUnlockCharacters` and `bShowAllMuts` are `config` in the shipped GUI.u, not in the source
+  (a post-retail source change no patch can carry: the runesofwar "bUnlockCharacters" ini tweak works with the
+  shipped scripts and would not with recompiled ones).
+- **Epic's patch for `UCGameplay.CTFFlag.home` is defective**: its label table names `WeaponAbility` (name index
+  100 of the shipped package) where the source and the recompiled state say `Begin` (index 122), and the
+  patcher cannot update the state's `LabelTableOffset` (16 in the shipped state, 48 in the patched script). The
+  recompiled state is consistent.
+- `ConnectionFailureMenu` gains a `Timer` event by patch; the patch cannot set the class's `ProbeMask`
+  (0 shipped, 0x100 recompiled).
