@@ -165,6 +165,25 @@ public:
 	INT								SnapshotCopies,
 									DepthColorCopies,
 									DepthBufferCopies;
+	// pp-scale (docs/porting/analysis/pp-scale.md): the post-processing works on a picture of
+	// PostProcessReferenceHeight lines (ini, default 480 = the Xbox's; 0 = in back-buffer pixels,
+	// as before; console PPREFERENCE). A pass that draws the back buffer into a smaller render
+	// target (the first, downsampling pass of every blur chain) reads ReferenceTexture: the back
+	// buffer brought down to that many lines by an area-averaging pass, so that the chains run
+	// texel for texel as on the Xbox. Made only when the back buffer is taller than the reference.
+	INT								PostProcessReferenceHeight;
+	GLuint							PostReferenceProgram;
+	GLint							PostReferenceRectLoc,
+									PostReferenceTapsLoc,
+									PostReferenceStepLoc;
+	GLuint							ReferenceTexture,
+									ReferenceFramebuffer;
+	INT								ReferenceWidth,
+									ReferenceHeight,
+									ReferenceVersion,		// MainColorVersion the reference copy holds
+									ReferenceCopies;
+	UBOOL							SampleReference;		// the pass being prepared reads the reference copy
+	UBOOL ReferenceCopyActive();
 	// Dynamic gamma (FD3DDynamicGamma's ramp): a 256x1 lookup the present pass applies.
 	GLuint							GammaRampTexture;
 	UBOOL							GammaRampActive,

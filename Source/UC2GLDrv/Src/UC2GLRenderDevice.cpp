@@ -140,6 +140,11 @@ UUC2GLRenderDevice::UUC2GLRenderDevice()
 	SnapshotVersion = DepthColorVersion = -1;
 	MainColorVersion = MainDepthVersion = 0;
 	SnapshotCopies = DepthColorCopies = DepthBufferCopies = 0;
+	PostReferenceProgram = ReferenceTexture = ReferenceFramebuffer = 0;
+	PostReferenceRectLoc = PostReferenceTapsLoc = PostReferenceStepLoc = -1;
+	ReferenceWidth = ReferenceHeight = ReferenceCopies = 0;
+	ReferenceVersion = -1;
+	SampleReference			= 0;
 	GammaRampTexture		= 0;
 	GammaRampActive			= 0;
 	XboxClientDefaultsApplied = 0;
@@ -179,6 +184,7 @@ void UUC2GLRenderDevice::StaticConstructor()
 	new(GetClass(),TEXT("PrecompileVertexShaders"),RF_Public)UBoolProperty( CPP_PROPERTY(PrecompileVertexShaders), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("UsePostProcess"),		RF_Public)UBoolProperty	( CPP_PROPERTY(UsePostProcess		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("DOFShippedBlurAlpha"),	RF_Public)UBoolProperty	( CPP_PROPERTY(DOFShippedBlurAlpha	), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("PostProcessReferenceHeight"),RF_Public)UIntProperty( CPP_PROPERTY(PostProcessReferenceHeight), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("LevelOfAnisotropy"),	RF_Public)UIntProperty	( CPP_PROPERTY(LevelOfAnisotropy	), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("AntiAliasing"),		RF_Public)UIntProperty	( CPP_PROPERTY(AntiAliasing			), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("MaxTextureUnits"),		RF_Public)UIntProperty	( CPP_PROPERTY(MaxTextureUnits		), TEXT("Options"), CPF_Config );
@@ -200,6 +206,9 @@ void UUC2GLRenderDevice::StaticConstructor()
 	PrecompileVertexShaders	= 1;
 	UsePostProcess			= 1;
 	DOFShippedBlurAlpha		= 0;
+	// pp-scale: the blurs cover the share of the picture they cover on the Xbox's 640x480, also
+	// for an ini that predates the key.
+	PostProcessReferenceHeight = 480;
 	// O-8 (owner, 2026-10-06): 16x anisotropic filtering and 4x anti-aliasing by default, also
 	// for an ini that predates the keys.
 	LevelOfAnisotropy		= 16;
@@ -2026,6 +2035,19 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		Ar.Logf( TEXT("UC2GLDrv: depth-of-field blur alpha %s (frame %i)"), DOFShippedBlurAlpha ? TEXT("as the shipped binary read it") : TEXT("as script sets it"), FrameCounter );
 		return 1;
 	}
+	else if( ParseCommand(&Cmd,TEXT("PPREFERENCE")) )
+	{
+		// PPREFERENCE [<lines>]: the picture height the post-process blurs are made for
+		// (PostProcessReferenceHeight; 480 = the Xbox's, 0 = back-buffer pixels as before;
+		// docs/porting/analysis/pp-scale.md). The camera effects resize their targets on the
+		// next frame. No argument: say what it is.
+		if( appStrlen(Cmd) )
+			PostProcessReferenceHeight = Max( appAtoi(Cmd), 0 );
+		Ar.Logf( TEXT("UC2GLDrv: post-process reference height %i (%s; back buffer %ix%i, frame %i)"), PostProcessReferenceHeight,
+			PostProcessReferenceHeight ? TEXT("blurs sized for a picture of that many lines") : TEXT("blurs in back-buffer pixels, as before"),
+			MainWidth, MainHeight, FrameCounter );
+		return 1;
+	}
 	else if( ParseCommand(&Cmd,TEXT("SUPPORTEDRESOLUTION")) )
 	{
 		Ar.Logf( TEXT("1") );
@@ -2261,6 +2283,9 @@ FRenderCaps* UUC2GLRenderDevice::GetRenderCaps()
 	// paths (docs/porting/analysis/postprocess.md, "Engine gates").
 	RenderCaps.XboxPostProcess				= PostProcessActive() ? 1 : 0;
 	RenderCaps.ShippedDOFBlurAlpha			= DOFShippedBlurAlpha ? 1 : 0;
+	// pp-scale: the picture height the camera effects size their blurs for (UnRenderUtil.h,
+	// GetPostProcessReference).
+	RenderCaps.PostProcessReferenceHeight	= Max( PostProcessReferenceHeight, 0 );
 	return &RenderCaps;
 }
 

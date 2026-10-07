@@ -54,6 +54,15 @@ ENGINE_API UBOOL RenDevHasXboxPostProcess()
 	return Caps && Caps->XboxPostProcess;
 }
 
+ENGINE_API INT RenDevPostProcessReferenceHeight()
+{
+	UClient* Client = UTexture::__Client;
+	if( !Client || !Client->Engine || !Client->Engine->GRenDev )
+		return 0;
+	FRenderCaps* Caps = Client->Engine->GRenDev->GetRenderCaps();
+	return Caps ? Max( Caps->PostProcessReferenceHeight, 0 ) : 0;
+}
+
 /* scion ======================================================================
 * FRenderTarget::RemovePoolRef
 * Author: sz

@@ -83,3 +83,39 @@ Epic compares the pooled targets' INT sizes with the FLOAT products (`GetWidth()
 is not a whole number (1366x768: 1366 x 0.25 = 341.5) the test is true every frame: the pooled targets are
 released and re-obtained each frame and the emissive accumulation target (an `FAuxRenderTarget`, deleted and
 re-created) loses its streak history every frame. At 640x480, 1280x720, 1920x1080 every product is whole.
+
+## Step 2. The implementation (2026-10-07 20:40), self-test 15/15 at 1280x720
+
+Baseline binary for comparisons: main `e4ce0a5` built here before any change (`run/pp-bin/uc2-base.bin`, sha256
+`0806446a...`; in the run tree `run/pp/System/uc2-base.bin`, used with `UC2_BIN=uc2-base.bin`).
+
+What was changed (file: function, why):
+
+- `Engine/Inc/UnRenDev.h`: `FRenderCaps::PostProcessReferenceHeight` (default 0) and `RenDevPostProcessReferenceHeight()`
+  (defined in `UnRenderResource.cpp` next to `RenDevHasXboxPostProcess`).
+- `Engine/Inc/UnRenderUtil.h`, `Src/UnRenderUtil.cpp`: `FPostProcessReference GetPostProcessReference(W, H)`: the
+  reference picture (R lines, W*R/H columns, PixelScale = H/R) or the back buffer itself (R = 0 or R = H).
+  `FilterCopyRenderTarget`: with a source viewport (= the back buffer) the taps are multiplied by PixelScale.
+- `UCGameplay/Src/UCCameraEffects.cpp`: `UUCScreenDOF::PreRender`, `UUCScreenBloom::PreRender`,
+  `UUCScreenEmissive::PreRender` size from the reference picture; sizes compared as the truncated whole numbers they
+  are created with (`UCPP_TargetSize`; the per-frame re-creation defect of step 1); one log line per (re)created
+  target (`UCCameraEffects: <effect> target <i>: WxH (reference picture ..., back buffer ...)`).
+  `UUCScreenRadialBlur::PostRender`: insets times W/(R*4/3) across and H/R down.
+- `UC2GLDrv`: ini `PostProcessReferenceHeight` (compiled default 480), console `PPREFERENCE [h]`, `GetRenderCaps` passes
+  it on. `UC2GLPostProcess.cpp`: the reference copy (`GPostReferenceFragmentShader`, `UC2GL_UpdateReferenceCopy`;
+  N x N bilinear samples per reference pixel, N = ceil(k) <= 8, from the main colour texture, flipped to top row
+  first; made at most once per change of the main framebuffer, like the snapshot); `PrepareSampledTargets` decides
+  per pass (`SampleReference`): back buffer sampled while drawing into a render target of at most 3/4 of the back
+  buffer's height; `GetSampledTexture` binds it; `UpdateBackBufferCopyTarget` taps x PixelScale (target stays half
+  the back buffer). `UC2GLShaders.cpp`: distortion `PixelScale` = H / R (480 when R = 0, as before).
+- Self-test (`UC2GLSelfTest.cpp`): the eleven tests of M7/M11 now run with the reference height 0 (they check
+  Epic's primitives as specified; unchanged); new: `pp-sizes` (first, with the configured reference: every live
+  pooled target is one of the sizes Epic's formulas give for the reference picture and none is missing),
+  `ref-copy`, `ref-taps`, `bb-copy-ref` (with R = 480, back buffer taller than 480 lines).
+
+First run (`tools/dev/m7-effects.sh pp selftest`, 1280x720, `logs/pp/fx-selftest.out`): `15 passed, 0 failed`. The
+targets logged at 1280x720: DOF 426x120, 213x120; emissive select 213x120, blur 213x120, 213x60, 106x60; bloom select
+213x120, blur 106x120, 106x60 (at the reference picture 853.3x480: the Xbox's 640x480 numbers widened to 16:9);
+`reference copy 853x480 of the 1280x720 back buffer (2x2 samples per pixel)`. `ref-copy` largest error 1.00,
+`ref-taps` 1.38 (taps 1.5 back-buffer pixels apart, no extra copy made during the pass: the copy was current),
+`bb-copy-ref` 1.41, `pp-sizes` 7 live targets, none unexpected, none missing.

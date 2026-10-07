@@ -45,6 +45,34 @@ FORCEINLINE void ViewportTransformTexMatrix( UTexMatrix* TexMatrix, UMaterial* M
 	TexMatrix->Matrix.M[3][1] = (FLOAT)Viewport->OffsetY / Material->MaterialVSize();
 }
 
+/* UC2 port (pp-scale) =======================================================
+* The blur targets of the depth of field, the emissive glow and the bloom are
+* sized for the reference picture (GetPostProcessReference, UnRenderUtil.h;
+* docs/porting/analysis/pp-scale.md). The sizes are FLOAT products, which Epic
+* passed to ObtainRenderTarget's INT parameters (truncated) but compared with
+* the targets' INT sizes as FLOATs: wherever a product is not a whole number
+* (1366x768 x 0.25 = 341.5, and most sizes of a 16:9 reference picture) the
+* targets were released and obtained again every frame, and the emissive
+* accumulation target (deleted and created again) lost its streaks. Both now
+* use the truncated whole number. At 640x480 every product is whole: as before.
+* ============================================================================
+*/
+static FORCEINLINE INT UCPP_TargetSize( FLOAT Size )
+{
+	return Max( (INT)Size, 1 );
+}
+
+// One log line whenever a blur target is (re)created: the evidence that the sizes follow the
+// reference picture (tools/dev/pp-scale.sh reads it).
+static void UCPP_LogTarget( const TCHAR* Effect, INT Index, FRenderTarget* Target, const FPostProcessReference& Reference, FRenderInterface* RI )
+{
+	if( !Target )
+		return;
+	debugf( NAME_Init, TEXT("UCCameraEffects: %s target %i: %ix%i (reference picture %.1fx%.1f, back buffer %ix%i)"),
+		Effect, Index, Target->GetWidth(), Target->GetHeight(), Reference.Width, Reference.Height,
+		RI->GetRenderTarget()->GetWidth(), RI->GetRenderTarget()->GetHeight() );
+}
+
 
 /* scion ======================================================================
  * UUCScreenBlur::PostRender
@@ -228,8 +256,13 @@ void UUCScreenDOF::PreRender(UViewport* Viewport,FRenderInterface* RI)
 	
 	checkSlow( BlurTargets.Num() >= 2 );
 
-	FLOAT BlurSizeX = RI->GetRenderTarget()->GetWidth() * BlurTargetScaleX * Viewport->ScaleX;
-	FLOAT BlurSizeY = RI->GetRenderTarget()->GetHeight() * BlurTargetScaleY * Viewport->ScaleY;
+	// UC2 port (pp-scale): the sizes are fractions of the reference picture (480 lines, the back
+	// buffer's aspect) instead of the back buffer, so the blur covers the same share of the picture
+	// as on the Xbox at any resolution; Epic's: RI->GetRenderTarget()->GetWidth() * BlurTargetScaleX
+	// (GetPostProcessReference gives exactly that without a reference height).
+	FPostProcessReference Reference = GetPostProcessReference( RI->GetRenderTarget()->GetWidth(), RI->GetRenderTarget()->GetHeight() );
+	FLOAT BlurSizeX = Reference.Width * BlurTargetScaleX * Viewport->ScaleX;
+	FLOAT BlurSizeY = Reference.Height * BlurTargetScaleY * Viewport->ScaleY;
 
 	if( BlurTargets.Num() < 2 )
 	{
@@ -251,9 +284,11 @@ void UUCScreenDOF::PreRender(UViewport* Viewport,FRenderInterface* RI)
 			BlurSizeX *= 0.5f;
 		}
 
-		if( !BlurTargets(i) || 
-			BlurTargets(i)->GetWidth() != BlurSizeX ||
-			BlurTargets(i)->GetHeight() != BlurSizeY )
+		// UC2 port (pp-scale): compared as the whole numbers the target is created with (see
+		// UCPP_TargetSize); Epic compared the INT size with the FLOAT product.
+		if( !BlurTargets(i) ||
+			BlurTargets(i)->GetWidth() != UCPP_TargetSize(BlurSizeX) ||
+			BlurTargets(i)->GetHeight() != UCPP_TargetSize(BlurSizeY) )
 		{
 			if( BlurTargets(i) )
 			{
@@ -262,11 +297,12 @@ void UUCScreenDOF::PreRender(UViewport* Viewport,FRenderInterface* RI)
 			}
 
 			// obtain/create the render target
-			BlurTargets(i) = RI->GetRenderTargetPool()->ObtainRenderTarget(BlurSizeX, BlurSizeY, TEXF_RGBA8, 
+			BlurTargets(i) = RI->GetRenderTargetPool()->ObtainRenderTarget(UCPP_TargetSize(BlurSizeX), UCPP_TargetSize(BlurSizeY), TEXF_RGBA8,
 				FRenderTarget::RT_CREATE_COLOR );
+			UCPP_LogTarget( TEXT("UCScreenDOF"), i, BlurTargets(i), Reference, RI );
 		}
 	}
-	
+
 	unguard;
 }
 
@@ -800,6 +836,20 @@ void UUCScreenRadialBlur::PostRender(UViewport* Viewport,FRenderInterface* RI)
 	FLOAT RadialBlurDistanceX=RadialBlurDistance;
 	FLOAT RadialBlurDistanceY=RadialBlurDistance;
 
+	// UC2 port (pp-scale): RadialBlurDistance is the inset, in pixels of the Xbox's 640x480 screen,
+	// of the zoomed copies drawn below: a zoom of 1 - 2d/640 across and 1 - 2d/480 down. The insets
+	// are scaled so that both zoom factors stay the Xbox's at any resolution and aspect (across: the
+	// screen's width over 4/3 of the reference height; down: its height over the reference height),
+	// which puts every point of the picture's 4:3 middle exactly where the Xbox put it. 1 and 1 at
+	// 640x480 and without a reference height (Epic's pixels). docs/porting/analysis/pp-scale.md.
+	FLOAT InsetScaleX = 1.f, InsetScaleY = 1.f;
+	INT ReferenceHeight = RenDevPostProcessReferenceHeight();
+	if( ReferenceHeight > 0 )
+	{
+		InsetScaleX = RI->GetRenderTarget()->GetWidth() / (ReferenceHeight * 4.f / 3.f);
+		InsetScaleY = RI->GetRenderTarget()->GetHeight() / (FLOAT)ReferenceHeight;
+	}
+
 	GScreenPrimUtil.Update( Viewport->SizeX, Viewport->SizeY, RI );
 
 	// draw quad multiple times 
@@ -808,8 +858,8 @@ void UUCScreenRadialBlur::PostRender(UViewport* Viewport,FRenderInterface* RI)
 		RadialBlurDistanceX = RadialBlurDistance/(FLOAT)i;
 		RadialBlurDistanceY = RadialBlurDistance/(FLOAT)i;
 		// scale by viewport size
-		RadialBlurDistanceX *= Viewport->ScaleX;
-		RadialBlurDistanceY *= Viewport->ScaleY;		
+		RadialBlurDistanceX *= Viewport->ScaleX * InsetScaleX;
+		RadialBlurDistanceY *= Viewport->ScaleY * InsetScaleY;
 		
 		GScreenPrimUtil.DrawTile(
 			RadialBlurDistanceX, RadialBlurDistanceY, Viewport->SizeX-RadialBlurDistanceX, Viewport->SizeY-RadialBlurDistanceY,
@@ -896,14 +946,17 @@ void UUCScreenBloom::PreRender(UViewport* Viewport,FRenderInterface* RI)
 
 	checkSlow( BlurTargets.Num() == 2 );
 
-	FLOAT BlurSizeX = RI->GetRenderTarget()->GetWidth() * BlurTargetScaleX * Viewport->ScaleX;
-	FLOAT BlurSizeY = RI->GetRenderTarget()->GetHeight() * BlurTargetScaleY * Viewport->ScaleY;
+	// UC2 port (pp-scale): fractions of the reference picture, compared as whole numbers (see
+	// UCPP_TargetSize and UUCScreenDOF::PreRender).
+	FPostProcessReference Reference = GetPostProcessReference( RI->GetRenderTarget()->GetWidth(), RI->GetRenderTarget()->GetHeight() );
+	FLOAT BlurSizeX = Reference.Width * BlurTargetScaleX * Viewport->ScaleX;
+	FLOAT BlurSizeY = Reference.Height * BlurTargetScaleY * Viewport->ScaleY;
 
 	// create a render target for selecting hot pixels
 	// this render target is always 1/2 the size of the back buffer
 	if( !SelectTarget ||
-		SelectTarget->GetWidth() != BlurSizeX ||
-		SelectTarget->GetHeight() != BlurSizeY )
+		SelectTarget->GetWidth() != UCPP_TargetSize(BlurSizeX) ||
+		SelectTarget->GetHeight() != UCPP_TargetSize(BlurSizeY) )
 	{
 		if( SelectTarget )
 		{
@@ -912,16 +965,17 @@ void UUCScreenBloom::PreRender(UViewport* Viewport,FRenderInterface* RI)
 		}
 		// NOTE: this render target is also used by the BackBufferCopyTarget since they are both 320x240
 		// purposefully creating a depth buffer here as well
-		SelectTarget = RI->GetRenderTargetPool()->ObtainRenderTarget( BlurSizeX, BlurSizeY, TEXF_RGBA8 /*,FRenderTarget::RT_CREATE_COLOR*/ );
+		SelectTarget = RI->GetRenderTargetPool()->ObtainRenderTarget( UCPP_TargetSize(BlurSizeX), UCPP_TargetSize(BlurSizeY), TEXF_RGBA8 /*,FRenderTarget::RT_CREATE_COLOR*/ );
+		UCPP_LogTarget( TEXT("UCScreenBloom select"), 0, SelectTarget, Reference, RI );
 	}
-	
+
 	// 1/2 horizontal width for first render target (horizontal blur)
 	BlurSizeX *= 0.5f;
 
 	// 1st render target is used for vertical blur
 	if( !BlurTargets(0) ||
-		BlurTargets(0)->GetWidth() != BlurSizeX ||
-		BlurTargets(0)->GetHeight() != BlurSizeY )
+		BlurTargets(0)->GetWidth() != UCPP_TargetSize(BlurSizeX) ||
+		BlurTargets(0)->GetHeight() != UCPP_TargetSize(BlurSizeY) )
 	{
 		if( BlurTargets(0) )
 		{
@@ -929,16 +983,17 @@ void UUCScreenBloom::PreRender(UViewport* Viewport,FRenderInterface* RI)
 			BlurTargets(0) = NULL;
 		}
 
-		BlurTargets(0) = RI->GetRenderTargetPool()->ObtainRenderTarget( BlurSizeX, BlurSizeY, TEXF_RGBA8, FRenderTarget::RT_CREATE_COLOR );
+		BlurTargets(0) = RI->GetRenderTargetPool()->ObtainRenderTarget( UCPP_TargetSize(BlurSizeX), UCPP_TargetSize(BlurSizeY), TEXF_RGBA8, FRenderTarget::RT_CREATE_COLOR );
+		UCPP_LogTarget( TEXT("UCScreenBloom"), 0, BlurTargets(0), Reference, RI );
 	}
 
-	// 1/2 vertical height for second render target (vertical blur)	
-	BlurSizeY *= 0.5f;	
+	// 1/2 vertical height for second render target (vertical blur)
+	BlurSizeY *= 0.5f;
 
 	// 2nd render target is used for horizontal blur
 	if( !BlurTargets(1) ||
-		BlurTargets(1)->GetWidth() != BlurSizeX ||
-		BlurTargets(1)->GetHeight() != BlurSizeY )
+		BlurTargets(1)->GetWidth() != UCPP_TargetSize(BlurSizeX) ||
+		BlurTargets(1)->GetHeight() != UCPP_TargetSize(BlurSizeY) )
 	{
 		if( BlurTargets(1) )
 		{
@@ -946,7 +1001,8 @@ void UUCScreenBloom::PreRender(UViewport* Viewport,FRenderInterface* RI)
 			BlurTargets(1) = NULL;
 		}
 
-		BlurTargets(1) = RI->GetRenderTargetPool()->ObtainRenderTarget( BlurSizeX, BlurSizeY, TEXF_RGBA8, FRenderTarget::RT_CREATE_COLOR );
+		BlurTargets(1) = RI->GetRenderTargetPool()->ObtainRenderTarget( UCPP_TargetSize(BlurSizeX), UCPP_TargetSize(BlurSizeY), TEXF_RGBA8, FRenderTarget::RT_CREATE_COLOR );
+		UCPP_LogTarget( TEXT("UCScreenBloom"), 1, BlurTargets(1), Reference, RI );
 	}
 
 	unguard;
@@ -1167,19 +1223,23 @@ void UUCScreenEmissive::PreRender(UViewport* Viewport,FRenderInterface* RI)
 	// get pointer to render target pool
 	FRenderTargetPool* RenderTargetPool = RI->GetRenderTargetPool();
 
-	FLOAT BlurSizeX = BackBufferTarget->GetWidth() * BlurTargetScaleX * Viewport->ScaleX;
-	FLOAT BlurSizeY = BackBufferTarget->GetHeight() * BlurTargetScaleY * Viewport->ScaleY;
+	// UC2 port (pp-scale): fractions of the reference picture, compared as whole numbers (see
+	// UCPP_TargetSize and UUCScreenDOF::PreRender).
+	FPostProcessReference Reference = GetPostProcessReference( BackBufferTarget->GetWidth(), BackBufferTarget->GetHeight() );
+	FLOAT BlurSizeX = Reference.Width * BlurTargetScaleX * Viewport->ScaleX;
+	FLOAT BlurSizeY = Reference.Height * BlurTargetScaleY * Viewport->ScaleY;
 
 	// Accumulation target (check for sizeX/sizeY changes)
 	if( !SelectTarget ||
-		SelectTarget->GetWidth() != BlurSizeX ||
-		SelectTarget->GetHeight() != BlurSizeY )
+		SelectTarget->GetWidth() != UCPP_TargetSize(BlurSizeX) ||
+		SelectTarget->GetHeight() != UCPP_TargetSize(BlurSizeY) )
 	{
 		if( SelectTarget )
 			delete SelectTarget;
 
 		// create a unique target since we want to accumulate streaks across frames
-		SelectTarget = NEW FAuxRenderTarget( BlurSizeX, BlurSizeY, TEXF_RGBA8, FRenderTarget::RT_CREATE_COLOR );
+		SelectTarget = NEW FAuxRenderTarget( UCPP_TargetSize(BlurSizeX), UCPP_TargetSize(BlurSizeY), TEXF_RGBA8, FRenderTarget::RT_CREATE_COLOR );
+		UCPP_LogTarget( TEXT("UCScreenEmissive select"), 0, SelectTarget, Reference, RI );
 	}
 
 	// initialize blur render targets (each one is half the size of the previous)
@@ -1209,9 +1269,9 @@ void UUCScreenEmissive::PreRender(UViewport* Viewport,FRenderInterface* RI)
 			BlurSizeX *= 0.5f;
 		}
 		
-		if( !BlurTargets(i) || 
-			BlurTargets(i)->GetWidth() != BlurSizeX ||
-			BlurTargets(i)->GetHeight() != BlurSizeY )
+		if( !BlurTargets(i) ||
+			BlurTargets(i)->GetWidth() != UCPP_TargetSize(BlurSizeX) ||
+			BlurTargets(i)->GetHeight() != UCPP_TargetSize(BlurSizeY) )
 		{
 			if( BlurTargets(i) )
 			{
@@ -1220,7 +1280,8 @@ void UUCScreenEmissive::PreRender(UViewport* Viewport,FRenderInterface* RI)
 			}
 
 			// obtain/create the render target
-			BlurTargets(i) = RenderTargetPool->ObtainRenderTarget(BlurSizeX, BlurSizeY, TEXF_RGBA8, FRenderTarget::RT_CREATE_COLOR );			
+			BlurTargets(i) = RenderTargetPool->ObtainRenderTarget(UCPP_TargetSize(BlurSizeX), UCPP_TargetSize(BlurSizeY), TEXF_RGBA8, FRenderTarget::RT_CREATE_COLOR );
+			UCPP_LogTarget( TEXT("UCScreenEmissive"), i, BlurTargets(i), Reference, RI );
 		}
 	}
 

@@ -779,6 +779,14 @@ struct FRenderCaps
 	// UC2 port (M7): not a capability but a review switch a device can expose: 1 = the always-on
 	// depth of field takes its blur alpha as the shipped binary did (UUCScreenDOF::PostRender).
 	UBOOL	ShippedDOFBlurAlpha;
+	// UC2 port (pp-scale): the height of the picture the Xbox post-processing was made for (480:
+	// the Xbox's 640x480). The camera effects size their blur targets for a picture of this many
+	// lines (and the back buffer's aspect) and measure their back-buffer taps and screen
+	// distances in its pixels, so that every blur covers the same share of the picture at any
+	// resolution (GetPostProcessReference, UnRenderUtil.h). 0 = Epic's code as it was: sizes and
+	// distances in pixels of the real back buffer. Set by the device (UC2GLDrv:
+	// PostProcessReferenceHeight); docs/porting/analysis/pp-scale.md.
+	INT		PostProcessReferenceHeight;
 
 	// set default render caps in constructor
 	FRenderCaps()
@@ -786,7 +794,8 @@ struct FRenderCaps
 		PixelShaderVersion(0),
 		HardwareTL(0),
 		XboxPostProcess(0),
-		ShippedDOFBlurAlpha(0)
+		ShippedDOFBlurAlpha(0),
+		PostProcessReferenceHeight(0)
 	{}
 };
 
@@ -869,6 +878,12 @@ class ENGINE_API URenderDevice : public USubsystem
 // those keep the PC branch, exactly as before.
 //
 ENGINE_API UBOOL RenDevHasXboxPostProcess();
+
+//
+// UC2 port (pp-scale): FRenderCaps::PostProcessReferenceHeight of the engine's render device;
+// 0 without a client, a device or a reference (sizes and distances in back-buffer pixels).
+//
+ENGINE_API INT RenDevPostProcessReferenceHeight();
 
 #endif
 /*------------------------------------------------------------------------------------
