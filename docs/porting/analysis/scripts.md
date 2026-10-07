@@ -384,3 +384,18 @@ UCMutators is in no patcher line: nothing in S3 loads it (the census servers, 58
 packages: Engine/Editor/UnrealGame/UCGameplay/UCInventory/GUI on 57 maps each, UCMenu on 1; never UCMutators).
 So the UCMutators patches (WeaponMaster `ScoreKill`, the two `Reset` functions) and their rebuilt equivalents
 are proved equal only by the bytecode comparison, never exercised in a game here.
+
+Effects rerun alone with the fixed check (`M14_NO_MKRUN=1 tools/dev/m14-scripts-check.sh effects leftovers`):
+
+```
+PASS effects: m14-run: 4 pairs critical=0 glerrors=0 programs_failed=0+0, selftest 10 passed, 0 failed;
+     m14-ship: the same; B pictures rebuilt-vs-shipped mean difference: bloom 0.62, blur 4.43, berserk 1.33, decay 0.47
+PASS leftovers: no uc2.bin/ucc-bin/Xvfb running in an m14 tree
+```
+
+The blur pair (the one that depends on UCScreenBlur's defaults, which the DLL-load emulation fixed) looked at
+side by side: the same concussion blur with ghost copies in both trees; its displacement is time-driven and the
+wall screen plays a movie, hence the larger mean (seen only, not numerically compared beyond the mean).
+
+All S3 items observed: 11 PASS lines (verify, menu, deadbolt, patcher, controls, audio, census, movies, net,
+leftovers from the full run; effects from the rerun).
