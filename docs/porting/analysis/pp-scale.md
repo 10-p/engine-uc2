@@ -151,3 +151,26 @@ targets logged at 1280x720: DOF 426x120, 213x120; emissive select 213x120, blur 
   u 0.004, v 0.007 at 3/6 Hz), `OscBlur2` (0.003, 0.008 at 2/3 Hz): fractions of the picture, weights 0.3 each.
   The radial blur's `SpeedComboRadialBlur` has no back-buffer modifier (the code supplies it), masks
   `T_HUD.Overlay.HUD_Overlay_Speed_Mask`, falloff 0.45.
+
+## Step 4. Calibration at 640x480 and 1440x1080 (2026-10-07 21:40)
+
+`tools/dev/pp-scale.sh` first runs (`logs/pp/cal-640.txt`, `logs/pp2/cal-glow.txt`):
+
+- glow 640x480: width 8.54%, peak 12.63 (reference 480 and 0 identical, as they must be at 480 lines);
+  **1440x1080: reference 480 width 8.33% (ratio 0.98), peak 12.85 (1.02); reference 0 width 4.17% (0.49), peak
+  21.75.** Frame rates were low (machine loaded: 5 frames/s at 640x480, 1.7 at 1440x1080), hence a check that at
+  least 60 frames passed between post-processing on and the shot (the dynamic gamma's 0.95^n), and longer waits.
+- depth of field: DM-Azure, DOF on against DOF off (`set UCScreenDOF Enabled 0`) in one frozen frame. The DOF
+  only acts where the depth is beyond StartZ 0.98: through the gap in the middle (mountains, far temple) and the
+  temple's top edge against the sky (difference picture looked at). Box (310,186)-(428,230) of the 480-line
+  picture: sigma 3.10, alpha 0.228 (the shipped alpha 65/255 = 0.255 times the ramp), fit 0.964. (The first box,
+  296..376 x 196..252, took in the near bridge and the crosshair: fit 0.54.)
+- concussion blur: poster box (360,175)-(500,255): sigma 3.15, fit 0.87.
+- radial blur held at distance 30: not a Gaussian (fit 0.65-0.76 whatever the box, sigma at the 12 limit near the
+  edge). Its own model fits: `pp-measure.py zoom` (test = a * Z_d(base) + c * base + b, Z_d = the picture zoomed
+  as Epic's quad inset by d pixels of 640x480 on every side): box (150,95)-(620,300): **inset 9.10, a 0.51, fit
+  0.914** (the six copies at d = 30, 15, 10, 7.5, 6, 5, each blended at 0.45 over the last, act like one copy at
+  about 9).
+- `ucc-bin verifyclasses` with this branch's binary: `All native class layouts match` (exit 0).
+- Windows build (`cmake --preset windows`, `cmake --build build-windows -j6`, capped 6G): `[100%] Built target
+  UCC`, exit 0.

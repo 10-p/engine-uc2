@@ -15,7 +15,8 @@
 #   dof       DM-Azure, pinned: the always-on depth of field's blur in the distance (DOF on against DOF off, same
 #             frozen frame), as a Gaussian sigma in 480-line pixels (pp-measure.py sigma), same resolutions
 #   blur      DM-Deadbolt: the concussion blur (BlurMe) on the poster, sigma, same resolutions
-#   radial    DM-Deadbolt: the radial blur held at distance 30, sigma across, near the right edge, same resolutions
+#   radial    DM-Deadbolt: the radial blur held at distance 30, as one zoomed copy (pp-measure.py zoom): its inset
+#             in 640x480 pixels, same resolutions
 #   identity  640x480, post-processing on, frozen frame: this binary against main's (the tree's System/uc2-base.bin)
 #             twice each; pixels that differ outside the animated part (the pawn) must be 0, as between two runs of
 #             main's binary
@@ -65,9 +66,9 @@ frames() {  # frames <log>: "shot@T=frame ..." from the engine's own lines
 # frames for the dynamic gamma to settle (it moves 5% of the way per frame) at the software-GL frame rates here.
 waits() {
   case $1 in
-    640x480)   W1=20; W2=12; CAP=2G; LIM=0 ;;
-    1440x1080) W1=40; W2=25; CAP=2G; LIM=0 ;;
-    *)         W1=90; W2=55; CAP=3G; LIM=0 ;;
+    640x480)   W1=20; W2=12; CAP=2G ;;
+    1440x1080) W1=45; W2=30; CAP=2G ;;
+    *)         W1=${PP_WAIT_4K:-180}; W2=$(( ${PP_WAIT_4K:-180} / 2 )); CAP=3G ;;
   esac
 }
 runshot() {  # runshot <name> <res> <secs> <fire> <map> <args...>: one run, pinned, pictures <name>-N.png
@@ -102,7 +103,14 @@ check_glow() {
     local o=$out/pp-glow-$res
     if [ ! -f "$o-2.png" ]; then result FAIL glow-$res "no pictures ($(runok "$o.out"); see $o.out)"; fails=$((fails+1)); continue; fi
     g1=$($M glow "$o-0.png" "$o-1.png"); g2=$($M glow "$o-0.png" "$o-2.png")
-    info glow-$res "reference 480: $g1; reference 0 (as before): $g2; $(runok "$o.out"); shots $(frames "$o.out")"
+    # Frames from post-processing on to the reference-480 shot: the dynamic gamma (the bloom's threshold) has
+    # 0.95^n of its start offset left; below 60 frames (5%) the peak is not comparable.
+    local pon f1 settled
+    pon=$(grep -a -o 'post-processing on (frame [0-9]*)' "$o.out" | head -1 | grep -o '[0-9]*')
+    f1=$(frames "$o.out" | awk '{print $2}' | sed 's/.*:f//')
+    settled=$(( ${f1:-0} - ${pon:-0} ))
+    info glow-$res "reference 480: $g1; reference 0 (as before): $g2; $(runok "$o.out"); shots $(frames "$o.out"); $settled frames from post-processing on to the reference-480 shot"
+    [ "$settled" -ge 60 ] || { result FAIL glow-$res "only $settled frames between post-processing on and the shot: the dynamic gamma has not settled (more time: waits())"; fails=$((fails+1)); continue; }
     if [ "$res" = 640x480 ]; then base_w=$(num width "$g1"); base_p=$(num peak "$g1"); fi
     [ -n "$base_w" ] || continue
     local w1 p1 w2; w1=$(num width "$g1"); p1=$(num peak "$g1"); w2=$(num width "$g2")
@@ -121,13 +129,18 @@ check_glow() {
 }
 
 # sigma check, shared by dof, blur, radial: pairs (base shot, effect shot) for reference 480 and reference 0.
-#   sigmacheck <check> <res> <box> <axis> <ref480-base> <ref480-effect> <ref0-base> <ref0-effect>
+#   sigmacheck <check> <res> <box> <axis|zoom> <ref480-base> <ref480-effect> <ref0-base> <ref0-effect>
 declare -A SIG480 SIG0
 sigmacheck() {
   local check=$1 res=$2 box=$3 axis=$4 o=$out/pp-$1-$2
-  local s1 s2
-  s1=$($M sigma "$o-$5.png" "$o-$6.png" $box $axis); s2=$($M sigma "$o-$7.png" "$o-$8.png" $box $axis)
-  SIG480[$check-$res]=$(num sigma "$s1"); SIG0[$check-$res]=$(num sigma "$s2")
+  local s1 s2 key=sigma
+  if [ "$axis" = zoom ]; then
+    key=inset
+    s1=$($M zoom "$o-$5.png" "$o-$6.png" $box); s2=$($M zoom "$o-$7.png" "$o-$8.png" $box)
+  else
+    s1=$($M sigma "$o-$5.png" "$o-$6.png" $box $axis); s2=$($M sigma "$o-$7.png" "$o-$8.png" $box $axis)
+  fi
+  SIG480[$check-$res]=$(num $key "$s1"); SIG0[$check-$res]=$(num $key "$s2")
   info $check-$res "box $box ($axis) on the 480-line picture: reference 480: $s1; reference 0 (as before): $s2; $(runok "$o.out"); shots $(frames "$o.out")"
 }
 # judge <check> <tolerance> <expect-old>: the reference-480 sigma at every resolution within tolerance of 640x480's;
@@ -141,9 +154,9 @@ judge() {
     local s1=${SIG480[$check-$res]:-} s0=${SIG0[$check-$res]:-}
     if [ -z "$s1" ]; then fails=$((fails+1)); txt="$txt $res: no measurement;"; continue; fi
     within "$s1" "$b" "$tol" || fails=$((fails+1))
-    txt="$txt $res: sigma $s1 (ratio $(ratio $s1 $b)), reference 0: ${s0:-?} (ratio $(ratio ${s0:-0} $b));"
+    txt="$txt $res: $s1 (ratio $(ratio $s1 $b)), reference 0: ${s0:-?} (ratio $(ratio ${s0:-0} $b));"
   done
-  [ $fails = 0 ] && result PASS $check "640x480: sigma $b 480-line pixels;$txt within ${tol} with the reference 480" || result FAIL $check "640x480: sigma $b;$txt (tolerance $tol)"
+  [ $fails = 0 ] && result PASS $check "640x480: $b 480-line pixels;$txt within ${tol} with the reference 480" || result FAIL $check "640x480: $b;$txt (tolerance $tol)"
 }
 
 # dof: post-processing on from the start; frozen; 0 = DOF on (ref 480), 1 = DOF off (ref 480), 2 = DOF off
@@ -156,7 +169,7 @@ check_dof() {
     runshot pp-dof-$res $res $((t3+25)) 42 DM-Azure -glshot=$t0,$t1,$t2,$t3 \
       -glexec=50:set+LevelInfo+TimeDilation+0.0001@$((t0+1)):set+UCScreenDOF+Enabled+0@$((t1+1)):PPREFERENCE+0@$((t2+1)):set+UCScreenDOF+Enabled+1
     [ -f "$out/pp-dof-$res-3.png" ] || { info dof-$res "no pictures ($(runok "$out/pp-dof-$res.out"))"; continue; }
-    sigmacheck dof $res "${PP_DOF_BOX:-296 196 376 252}" xy 1 0 2 3
+    sigmacheck dof $res "${PP_DOF_BOX:-310 186 428 230}" xy 1 0 2 3
   done
   judge dof 0.15 shrinks
   [ -f "$out/pp-dof-1440x1080-3.png" ] && $M sheet "$out/pp-sheet-dof.png" "640x480" "$out/pp-dof-640x480-0.png" "1440x1080 old (reference 0)" "$out/pp-dof-1440x1080-3.png" "1440x1080 new (reference 480)" "$out/pp-dof-1440x1080-0.png" > /dev/null
@@ -168,7 +181,8 @@ check_blur() {
   local res
   for res in $RESOLUTIONS; do
     waits $res
-    local t0=$((42+W1)) t1=$((44+W1+W2)) t2=$((48+W1+W2+W2)) t3=$((50+W1+3*W2))
+    # (half waits between the switches: the pairs compared are 0/2 and 1/3, each at one reference height)
+    local h=$((W2/2)); local t0=$((42+W1)); local t1=$((t0+2+h)) t2=$((t0+6+2*h)) t3=$((t0+8+3*h))
     runshot pp-blur-$res $res $((t3+25)) 34 DM-Deadbolt -glshot=$t0,$t1,$t2,$t3 \
       -glexec=40:set+LevelInfo+TimeDilation+0.0001@$((t0+1)):PPREFERENCE+0@$((t1+1)):PPREFERENCE+480@$((t1+2)):BlurMe@$((t2+1)):PPREFERENCE+0
     [ -f "$out/pp-blur-$res-3.png" ] || { info blur-$res "no pictures ($(runok "$out/pp-blur-$res.out"))"; continue; }
@@ -187,7 +201,7 @@ check_radial() {
     runshot pp-radial-$res $res $((t3+25)) 34 DM-Deadbolt -glshot=$t0,$t1,$t2,$t3 \
       -glexec=38:set+UCPlayerController+RadialBlurSpeed+0@38.2:set+UCPlayerController+RadialBlurMinChange+-1@40:set+LevelInfo+TimeDilation+0.0001@$((t0+1)):set+UCScreenRadialBlur+RadialBlurDistance+30@$((t0+1)).2:set+UCScreenRadialBlur+Enabled+1@$((t1+1)):PPREFERENCE+0@$((t2+1)):set+UCScreenRadialBlur+Enabled+0
     [ -f "$out/pp-radial-$res-3.png" ] || { info radial-$res "no pictures ($(runok "$out/pp-radial-$res.out"))"; continue; }
-    sigmacheck radial $res "${PP_RADIAL_BOX:-560 110 630 290}" x 0 1 3 2
+    sigmacheck radial $res "${PP_RADIAL_BOX:-150 95 620 300}" zoom 0 1 3 2
   done
   judge radial 0.15 shrinks
   [ -f "$out/pp-radial-1440x1080-3.png" ] && $M sheet "$out/pp-sheet-radial.png" "640x480" "$out/pp-radial-640x480-1.png" "1440x1080 old (reference 0)" "$out/pp-radial-1440x1080-2.png" "1440x1080 new (reference 480)" "$out/pp-radial-1440x1080-1.png" > /dev/null
