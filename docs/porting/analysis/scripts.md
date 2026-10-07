@@ -349,3 +349,36 @@ Observed (logs kept):
 
 Not run yet (so nothing is claimed for them): audio, effects, census, movies, net, leftovers on the rebuilt
 packages, and the complete `tools/dev/m14-scripts-check.sh` run. Next: run the check script end to end.
+
+## Step 3 results: `tools/dev/m14-scripts-check.sh` on the rebuilt packages (2026-10-07 07:52-08:51)
+
+Full run (commit a5b874b's script, trees m14-run with the rebuilt packages from `run/m14-make/System`,
+m14-ship with the shipped ones, same binary; summary kept as `logs/m14/check/m14-summary-full-run.txt`):
+
+```
+PASS verify: exit 0, 'VERIFY: all native class layouts match', 'VERIFY: Editor class layouts match' (rebuilt packages)
+PASS menu: m14-run: menu up, 0 Critical, 0 GL errors; m14-ship: menu up, 0 Critical, 0 GL errors
+PASS deadbolt: m14-run: DM-Deadbolt up, Fire pressed at 28 s, 0 Critical, 0 GL errors; m14-ship: the same
+PASS patcher: rebuilt tree: not applied to Editor Engine GUI UCGameplay UCInventory UCMenu UnrealGame (none patched);
+     shipped tree: patched Editor Engine GUI UCGameplay UCInventory UCMenu UnrealGame
+PASS controls: keyboard 16, mouse 18, text 7, pad 33, both 14 checks, 0 Critical each
+PASS audio: UC2AudioSelfTest 39 checks, 0 failed; menu music NuBattle at -19.02 dB (expected -19.00); captures
+     menu/deadbolt/praxis-efx/praxis-dry: 0 silent s, 0 failed cues, 0 Critical (UC2AudioCheck 0 failures)
+FAIL effects: (the check's own filter counted the 11 "fx selftest" lines as pairs; the data: on both trees
+     selftest 10 passed 0 failed, bloom/blur/berserk/decay critical=0 glerrors=0 programs_failed=0+0)
+PASS census: 58 maps, 58 PASS with the rebuilt packages, the same per-map result as the shipped ones (58 PASS);
+     hung servers killed after exit: 0
+PASS movies: 19 PASS, 0 FAIL (m9-movies.py on tree m14-movies with the rebuilt packages)
+PASS net: 16 PASS, 0 FAIL (NET_TREE=m14-net, dedicated2 + travel, rebuilt packages), port 7860 free after
+PASS leftovers: no uc2.bin/ucc-bin/Xvfb running in an m14 tree
+```
+
+My mistake during that run: I edited the running script to fix the effects filter, then restored it with
+`git checkout`, which replaced the file while bash still read the old (edited) inode; after its last check bash
+resumed at a shifted offset ("line 212: s: command not found") and started the checks again. I stopped that
+accidental second pass by PID (it had redone verify, menu, deadbolt, patcher, controls, all PASS again) and
+checked that no m14 process was left. The effects check, fixed (commit after ea59500), is being rerun on its own.
+Lesson for whoever runs these suites: never edit a running bash script.
+
+UCMutators is not in the patcher line: no client run loaded it (the census loads it on the servers; the
+per-map results there are the same as with the shipped files).
