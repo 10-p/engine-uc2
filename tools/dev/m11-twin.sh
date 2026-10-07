@@ -12,9 +12,10 @@
 #
 #   shaders    tools/psh2glsl.py --selftest: the 100 pixel shaders, interpreter against Epic's compiled words
 #   gputest    tools/psh2glsl.py --gputest: the GLSL of every pixel shader against the interpreter (desktop GL)
-#   boot       twin: menu for 40 s; device class, 84 fragment + 405 vertex shaders through gl4es, 0 GL errors
+#   boot       twin: menu for 40 s; device class, 97 fragment + 405 vertex shaders through gl4es, 0 GL errors
+#              (84 until M7b, which compiles the 12 projector shaders and PS_Terrain3Layer too)
 #   selftest   -glselftest numeric checks on both bindings: 11 of 11 on each (M7's ten + fixed-function fog), same tolerances
-#   progtest   420 complete programs (84 pixel shaders x 5 vertex shader enums) drawn on both, compared
+#   progtest   485 complete programs (97 pixel shaders x 5 vertex shader enums; 420 = 84 x 5 before M7b) drawn on both, compared
 #   pinned     DM-Deadbolt (first PlayerStart) and the menu, desktop against twin: post-processing off (static
 #              part of the frame) and on
 #   effects    tools/dev/m7-effects.sh on both; the desktop's B pictures are the twin's fx-<effect>-b.ref.png
@@ -87,7 +88,7 @@ check_boot() {
   fs=$(grep -a -o "pixel shaders on: [0-9]* fragment shaders compiled, [0-9]* failed" "$o")
   vs=$(grep -a -o "[0-9]* vertex shaders compiled ([0-9]* failed)" "$o" | head -1)
   e=$(grep -a -o "UC2GLDrv: [0-9]* GL errors in [0-9]* frames ([0-9]* frames with errors)" "$o")
-  if [[ "$cls" == *"UC2GL4ESDrv.UC2GL4ESRenderDevice"* ]] && [[ "$fs" == *"84 fragment shaders compiled, 0 failed" ]] && [[ "$vs" == "405 vertex shaders compiled (0 failed)" ]] \
+  if [[ "$cls" == *"UC2GL4ESDrv.UC2GL4ESRenderDevice"* ]] && [[ "$fs" == *"97 fragment shaders compiled, 0 failed" ]] && [[ "$vs" == "405 vertex shaders compiled (0 failed)" ]] \
      && [[ "$e" == "UC2GLDrv: 0 GL errors in "* ]] && [ "$(crit "$o")" = 0 ] && grep -a -q "Bringing Level Menu.MyLevel up for play" "$o" \
      && [ "$(grep -a -c '^Mesa: error' "$o")" = 0 ]; then
     result PASS boot "$cls; $fs; $vs; ${e#UC2GLDrv: }; Mesa errors 0; $(grep -a -o 'GLES hardware: .*' "$o"); $(grep -a -o 'capabilities: .*' "$o")"
@@ -115,7 +116,7 @@ check_progtest() {
   local line; line=$(python3 "$repo/tools/dev/m11-progcmp.py" "$LD/fx-selftest.out" "$LT/fx-selftest.out" 2 2>&1 | tail -1)
   # Tolerance 2 of 255: both sides compute in 32-bit floats on the same rasteriser; the last step is a
   # rounding to 8 bits (measured: largest difference 1).
-  if [[ "$line" == "progtest: 420 programs on side A, 420 on side B"*", 0 programs outside the tolerance or missing" ]]; then result PASS progtest "$line"; else result FAIL progtest "$line (run 'selftest' first: it makes the two logs)"; fi
+  if [[ "$line" == "progtest: 485 programs on side A, 485 on side B"*", 0 programs outside the tolerance or missing" ]]; then result PASS progtest "$line"; else result FAIL progtest "$line (run 'selftest' first: it makes the two logs)"; fi
 }
 
 check_pinned() {
