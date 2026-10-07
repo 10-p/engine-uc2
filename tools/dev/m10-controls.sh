@@ -290,8 +290,10 @@ check ms-left-click-starts-match P['spawn'].pawn==1
 # with a 0.3 s click, never with post-processing off). Not reachable at playable frame rates; recorded in
 # docs/porting/analysis/controls.md.
 probe s0
-click 1 1.0
-sleep 1.5
+# A freshly spawned pawn cannot fire at once (spawn-in), and on a loaded machine the 1 s hold above was not
+# always enough: click again, at most four times, until the shot counter moves.
+seek 4 P['_'].shots != P['s0'].shots ;; click 1 1.0
+sleep 0.5
 probe s1
 check ms-left-click-fires P['s1'].shots != P['s0'].shots
 probe l0
@@ -387,13 +389,15 @@ pad axis lefty 0
 sleep 0.5
 probe f1
 check pd-left-stick-moves-forward fwd('f0','f1') > 150 and abs(side('f0','f1')) < 0.5*fwd('f0','f1')
+# Half stick BACKWARDS: the full-stick walk above can end at a ledge (seen since M11 made frames faster: the
+# pawn then fell instead of walking); going back over the ground just walked is always possible.
 probe h0
-pad axis lefty -19661
+pad axis lefty 19661
 sleep 1.5
 pad axis lefty 0
 sleep 0.5
 probe h1
-check pd-stick-at-0.6-moves-forward fwd('h0','h1') > 100
+check pd-stick-at-0.6-moves-backward fwd('h0','h1') < -100
 probe z0
 pad axis leftx 6554
 sleep 1.2

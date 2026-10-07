@@ -333,3 +333,31 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   exact spot is needed. Agent's regressions: m7-effects 10/10 + 14 lines clean, psh2glsl self/gpu tests,
   verifyclasses, pinned DM-Deadbolt unchanged. Found on the way: O-9 (NVIDIA: 4 fixed-function texture units, no
   combine3). New tools: `GLPIXTRACE`, `tools/dev/fx-owner.sh` (UC2_GPU=1 runs headless on the NVIDIA GPU).
+- 2026-10-07 — **M11 renderer merged (`m11-webgl`, f17d095): the game draws in the browser.** One driver
+  source with a GL4ES binding chosen at run time (WebGL 1), verified first on a native GLES 2 twin
+  (`tools/dev/m11-twin.sh`): 420 complete programs desktop vs twin within 1/255, self-test 11/11 on both
+  bindings, effect pairs against the desktop references. Defaults (owner, O-8): anisotropy 16x; AA 4x =
+  multisampled main framebuffer on desktop, FXAA in the present pass on WebGL 1 (no multisampled FBOs there).
+  Fallbacks implemented: no S3TC (driver DXT decoder; would have crashed on most phones before), texture max
+  level, gl_FragDepth, 32-bit indices; NOT implemented: no depth textures (old mobile GPUs lose depth of field
+  and distortion occlusion). Windows build fixed (the host's PipeWire headers leaked into MinGW: openal-soft's
+  Linux backends are off for WIN32). Coordinator's verification of the combined main (all branches but M14,
+  1538155, `logs/coord/a2/summary.txt`): verifyclasses; audio suite; movie self-test 99/0; m9-movies 19/0;
+  controls 4/5 (pad: test walked off a ledge); m11-twin 31 PASS, 3 FAIL (the depth-texture fallback twice, one
+  timing-sensitive movie picture); c1-saves ALL PASS; browser `uc2-wasm-boot.spec.js` and
+  `uc2-wasm-audio.spec.js` PASS (browser PSS peak 1.8 GB, sound routed to a null sink). **Published to the
+  owner's preview (port 8096) 2026-10-07 09:35: renderer, sound, movies, effects, defaults together.**
+- 2026-10-07 — **M14 green (scripts).** Merged `m14-scripts` (24c80dc): `ucc-bin make` builds all 17 script
+  packages from `Source/*/Classes` on Linux; `tools/dev/script-build.sh` + `script-diff.py` prove them against
+  the shipped `.u`: 0 unexplained differences (9,621 of 10,456 functions byte-identical, 813 differ only in line
+  positions in the 17 classes changed after retail); 29 of Epic's 30 load-time patches are already in the
+  source; the patcher now skips rebuilt packages and logs it. Findings for the switch to rebuilt scripts
+  (asset tree and web still use the shipped .u): Epic's `CTFFlag.home` patch is defective (a returning flag
+  never re-checks touching actors; the source does it); `GUIController.bUnlockCharacters`/`bShowAllMuts` are
+  `config` in the shipped GUI.u but not in the source (the community unlock tweak would stop working);
+  `HTTPDownload`/`Prefab` are registered under the wrong package (predates M14). Coordinator's re-run on main
+  after the merge (`logs/coord/a3/verify.txt`): verifyclasses, renderer self-test 11/11, and
+  `tools/dev/m14-scripts-check.sh`: verify, menu, deadbolt, patcher, audio, effects, census 58/58 on rebuilt
+  packages, net 16/0 PASS; controls and movies had one timing-sensitive failure each, fixed in the tests
+  (half-stick check walks back over known ground; the fire click retries during spawn-in; the cinematic-skip
+  check proves rendering after the skip with a timed picture): mouse+pad 3/3 runs PASS, cinematic-skip 3/3.

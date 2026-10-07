@@ -332,7 +332,9 @@ def scen_cinematic(a, tmp):
 
 
 def scen_cinematic_skip(a, tmp):
-    text, shots, dt, left = run_game(a.tree, 'cinematic-skip', 120, [cine_exec(a.tree), '-log', '-nostartupmovies', '-glerrors'],
+    # -glshot=60: with -glerrors the driver logs its frame counter at the picture, so "the level renders
+    # afterwards" does not depend on reaching the periodic 600-frame line (missed on a loaded machine).
+    text, shots, dt, left = run_game(a.tree, 'cinematic-skip', 120, [cine_exec(a.tree), '-log', '-nostartupmovies', '-glerrors', '-glshot=60'],
                                      inject='UC2Movie: full-screen D:|3.0|Return')
     s = re.search(r'UC2Movie: D:\\Movies\\%s\.xmv skipped by a key or button at movie time ([\d.]+) s[^\n]*' % CINE, text)
     after = text[s.end():] if s else ''
