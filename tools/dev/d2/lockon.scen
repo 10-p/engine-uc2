@@ -25,13 +25,15 @@ chan exec Lock 1
 wait test: exec Lock 1 10
 sleep 0.5
 chan exec Lock 0
-sleep 2
+# the lock turns the view onto the target over a few seconds (slowly at the frame rates of software GL):
+# the pictures are taken once it rests; fit and fit2 (before and after the unboxed one) show that it did
+sleep 10
 shot lock-fit
 chan exec UISCALE Native640
 wait test: exec UISCALE Native640 10
-sleep 1.5
+sleep 4
 shot lock-native
 chan exec UISCALE Fit43
 wait test: exec UISCALE Fit43 10
-sleep 1.5
+sleep 4
 shot lock-fit2

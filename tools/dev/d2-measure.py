@@ -155,27 +155,35 @@ for res in resl:
                f'{"within" if lit else "NOT within"} 2 px')
 
 # ------------------------------------------------------------------------------------- 640x480 = before
-def identity(name, a, b, base_a=None, base_b=None):
+def identity(name, a, b, masks, why, base_a, base_b, levels=0):
+    """a vs b (640x480): every pixel outside the masks identical (within `levels`); the masks are the parts
+    that animate on their own (measured: two runs of one binary differ there and only there)."""
     A, B = pic('640x480', a), pic('640x480', b)
     if A is None or B is None:
         result(name, False, f'missing {a if A is None else b}')
         return
-    pct, mx = same_pct(A, B)
-    detail = f'{a} vs {b}: {pct:.3f}% of pixels identical, largest difference {mx}'
-    if base_a:
-        BA, BB = pic('640x480', base_a), pic('640x480', base_b)
-        bpct, bmx = same_pct(BA, BB)
-        detail += f'; two runs of the reference binary: {bpct:.3f}% identical, largest {bmx}'
-        result(name, pct >= bpct - 0.5 or pct == 100.0, detail)
-    else:
-        result(name, pct == 100.0, detail)
+    def outside(X, Y):
+        m = maxch(ImageChops.difference(X, Y)).point(lambda v: 255 if v > levels else 0)
+        for r in masks:
+            m.paste(0, r)
+        h = m.histogram()
+        n = 640 * 480 - sum((r[2] - r[0]) * (r[3] - r[1]) for r in masks)
+        return h[255], n, m.getbbox()
+    bad, n, bb = outside(A, B)
+    detail = (f'{a} vs {b}: {n - bad} of {n} pixels outside {why} {"identical" if levels == 0 else f"within {levels} levels"}'
+              f' ({100.0 * (n - bad) / n:.3f}%){"" if bb is None else f", differences in {bb}"}')
+    BA, BB = pic('640x480', base_a), pic('640x480', base_b)
+    if BA is not None and BB is not None:
+        full = maxch(ImageChops.difference(BA, BB)).point(lambda v: 255 if v > levels else 0).getbbox()
+        detail += f'; two runs of the reference binary ({base_a} vs {base_b}) differ in {full}'
+    result(name, bad == 0, detail)
 
-identity('identity-main-640x480', 'menu-main-box-levelOff', 'ref-menu-main-box-levelOff',
-         'ref-menu-main-box-levelOff', 'ref2-menu-main-box-levelOff')
-identity('identity-arena-640x480', 'menu-arena-box-levelOff', 'ref-menu-arena-box-levelOff',
-         'ref-menu-arena-box-levelOff', 'ref2-menu-arena-box-levelOff')
-identity('identity-hud-640x480', 'hud-hud-levelOff', 'ref-hud-hud-levelOff',
-         'ref-hud-hud-levelOff', 'ref2-hud-hud-levelOff')
+identity('identity-main-640x480', 'menu-main-box-levelOff', 'ref-menu-main-box-levelOff', [(55, 125, 300, 165)],
+         'the focused item (its highlight pulses)', 'ref-menu-main-box-levelOff', 'ref3-menu-main-box-levelOff')
+identity('identity-arena-640x480', 'menu-arena-box-levelOff', 'ref-menu-arena-box-levelOff', [(400, 80, 592, 298)],
+         'the game type preview (a movie)', 'ref-menu-arena-box-levelOff', 'ref3-menu-arena-box-levelOff')
+identity('identity-hud-640x480', 'hud-hud-levelOff', 'ref-hud-hud-levelOff', [(280, 210, 360, 265), (55, 45, 75, 58)],
+         'the reticle and the adrenaline meter\'s end (both animate)', 'ref-hud-hud-levelOff', 'ref2-hud-hud-levelOff', levels=2)
 for a, b, tag in (('hud-hud', 'main-hud-hud', 'pinned-hud-640x480'),
                   ('pinned-hud', 'main-pinned-hud', 'pinned-nopostprocess-640x480')):
     pa, pb = os.path.join(run, '640x480', a + '.png'), os.path.join(run, '640x480', b + '.png')
@@ -200,29 +208,32 @@ else:
     result('switch-native640-1920x1080', False, 'missing pictures')
 
 # ------------------------------------------------------------------------------------- a marker on an actor
-def green_box(im):
-    """Bounding box of the lock-on reticle's green (DrawColor 20,255,20) below the HUD's top bars."""
+def reticle_box(im):
+    """Bounding box of the lock-on reticle (Element_TargetReticle; orange on an enemy here), below the HUD's
+    top bars and the poster of this view (y >= 260)."""
     r, g, b = im.split()
-    m = ImageChops.multiply(ImageChops.multiply(g.point(lambda v: 255 if v > 150 else 0), r.point(lambda v: 255 if v < 110 else 0)),
-                            b.point(lambda v: 255 if v < 110 else 0))
+    m = ImageChops.multiply(ImageChops.multiply(r.point(lambda v: 255 if v > 180 else 0), g.point(lambda v: 255 if 90 < v < 190 else 0)),
+                            b.point(lambda v: 255 if v < 70 else 0))
     W, H = im.size
-    m.paste(0, (0, 0, W, H // 6))
-    h = m.histogram()
-    return m.getbbox(), h[255]
+    m.paste(0, (0, 0, W, 260))
+    return m.getbbox(), m.histogram()[255]
 
-A, B = pic('1920x1080', 'lockon-lock-fit'), pic('1920x1080', 'lockon-lock-native')
-if A is not None and B is not None:
-    (ba, na), (bb_, nb) = green_box(A), green_box(B)
-    if ba and bb_ and na > 50 and nb > 50:
-        ca = ((ba[0] + ba[2]) / 2, (ba[1] + ba[3]) / 2); cb = ((bb_[0] + bb_[2]) / 2, (bb_[1] + bb_[3]) / 2)
-        ok = abs(ca[0] - cb[0]) <= 2 and abs(ca[1] - cb[1]) <= 2 and abs((ba[2] - ba[0]) - (bb_[2] - bb_[0])) <= 3
-        result('marker-on-actor-1920x1080', ok,
-               f'lock-on reticle (WorldToScreen) with the UI boxed: centre ({ca[0]:.1f},{ca[1]:.1f}) size {ba[2]-ba[0]}x{ba[3]-ba[1]}; '
-               f'unboxed (Native640, window pixels as before D-2): centre ({cb[0]:.1f},{cb[1]:.1f}) size {bb_[2]-bb_[0]}x{bb_[3]-bb_[1]}')
+A, B, C = pic('1920x1080', 'lockon-lock-fit'), pic('1920x1080', 'lockon-lock-native'), pic('1920x1080', 'lockon-lock-fit2')
+if A is not None and B is not None and C is not None:
+    (ba, na), (bb_, nb), (bc, nc) = reticle_box(A), reticle_box(B), reticle_box(C)
+    if ba and bb_ and bc and min(na, nb, nc) > 200:
+        cen = lambda b: ((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)
+        ca, cb, cc = cen(ba), cen(bb_), cen(bc)
+        still = abs(ca[0] - cc[0]) <= 2 and abs(ca[1] - cc[1]) <= 2
+        same = abs(ca[0] - cb[0]) <= 2 and abs(ca[1] - cb[1]) <= 2 and abs((ba[2] - ba[0]) - (bb_[2] - bb_[0])) <= 4
+        result('marker-on-actor-1920x1080', still and same,
+               f'lock-on reticle (placed with WorldToScreen) boxed: centre ({ca[0]:.1f},{ca[1]:.1f}) size {ba[2]-ba[0]}x{ba[3]-ba[1]}; '
+               f'unboxed (Native640: window pixels, as before D-2): ({cb[0]:.1f},{cb[1]:.1f}) size {bb_[2]-bb_[0]}x{bb_[3]-bb_[1]}; '
+               f'boxed again: ({cc[0]:.1f},{cc[1]:.1f}) (the view {"rested" if still else "MOVED"} between the pictures)')
     else:
-        result('marker-on-actor-1920x1080', False, f'no lock-on reticle found (green pixels: {na}, {nb})')
+        result('marker-on-actor-1920x1080', False, f'no lock-on reticle found (reticle pixels: {na}, {nb}, {nc})')
 else:
-    result('marker-on-actor-1920x1080', False, 'missing pictures (lockon-lock-fit, lockon-lock-native)')
+    result('marker-on-actor-1920x1080', False, 'missing pictures (lockon-lock-fit, -native, -fit2)')
 
 # ------------------------------------------------------------------------------------- mouse, logs
 for res in ('640x480', '1920x1080'):
@@ -290,5 +301,14 @@ if ba:
         sheet.paste(t, ((i % 2) * (ba[0].width + 6), (i // 2) * (ba[0].height + 6)))
     sheet.save(os.path.join(run, 'before-after-1920x1080.png'))
     print(f'      before/after (left: main\'s binary / Box; right: this build / Fill): {os.path.join(run, "before-after-1920x1080.png")}')
+
+ig = [t for t in (thumb('1920x1080', 'pause-scoreboard', 405), thumb('1920x1080', 'pause-pause', 405),
+                  thumb('1920x1080', 'lockon-lock-native', 405), thumb('1920x1080', 'lockon-lock-fit', 405)) if t]
+if ig:
+    sheet = Image.new('RGB', (2 * ig[0].width + 6, ((len(ig) + 1) // 2) * (ig[0].height + 6)), (40, 40, 40))
+    for i, t in enumerate(ig):
+        sheet.paste(t, ((i % 2) * (ig[0].width + 6), (i // 2) * (ig[0].height + 6)))
+    sheet.save(os.path.join(run, 'ingame-1920x1080.png'))
+    print(f'      in game (scoreboard, pause menu; lock-on unboxed / boxed): {os.path.join(run, "ingame-1920x1080.png")}')
 
 print(f'{"ALL PASS" if fails == 0 else f"{fails} FAILED"}')

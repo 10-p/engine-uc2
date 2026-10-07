@@ -47,6 +47,7 @@ extras() {
   # runs of one binary differ.
   one "$ref" 640x480 ref-menu menu.scen ""
   one "$ref" 640x480 ref2-menu menu.scen ""
+  one "$ref" 640x480 ref3-menu menu.scen ""
   one "$ref" 640x480 ref-hud deadbolt.scen "DM-Deadbolt?NumBots=0"
   one "$ref" 640x480 ref2-hud deadbolt.scen "DM-Deadbolt?NumBots=0"
   M10_LAUNCH=./uc2-main.bin M10_PROC=uc2-main.bin one "$ref" 640x480 main-hud deadbolt.scen "DM-Deadbolt?NumBots=0"
@@ -60,9 +61,14 @@ extras() {
   M10_INI="UIScaleMode=Native640" one "$tree" 1920x1080 native-menu menu.scen ""
   # A marker on an actor (the lock-on reticle, placed by WorldToScreen): boxed and unboxed, same window pixels.
   one "$tree" 1920x1080 lockon lockon.scen "DM-Deadbolt?NumBots=0"
+  # The scoreboard and the in-game pause menu (a GUI page over the world), for the owner's pictures.
+  one "$tree" 1920x1080 pause pause.scen "DM-Deadbolt?NumBots=0"
   # The mouse scenario of M10 at 640x480 and 1920x1080 (its 640x480 positions mapped into the box).
   for res in 640x480 1920x1080; do
-    M10_TREE=$tree M10_RES=$res M10_OUT=$out/$res M10_MEM=2G "$ctl" mouse 2>&1 | tail -1 | sed "s|^|[$res] |"
+    # on the big window: keys held longer and every pause 3x as long (m10-inject.py M10_KEYHOLD, M10_SLOW): its
+    # frames in software GL are slow enough to swallow a short press or merge two wheel clicks
+    hold=0.12 slow=1; [ "$res" = 640x480 ] || { hold=0.5; slow=3; }
+    M10_KEYHOLD=$hold M10_SLOW=$slow M10_TREE=$tree M10_RES=$res M10_OUT=$out/$res M10_MEM=2G "$ctl" mouse 2>&1 | tail -1 | sed "s|^|[$res] |"
   done
 }
 

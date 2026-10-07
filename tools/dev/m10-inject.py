@@ -109,8 +109,17 @@ def key_event(name, down):
     x.XFlush(d)
 
 
-def key(name, hold=0.12):
-    key_event(name, True); time.sleep(hold); key_event(name, False); time.sleep(0.08)
+# M10_KEYHOLD=<seconds>: how long `key` holds a key when the scenario gives no time (default 0.12). A press
+# and its release inside one engine frame are lost; big windows in software GL (D-2's 1920x1080 runs) have
+# frames of half a second on the character page. Below the X server's auto-repeat delay (0.66 s) no repeat.
+KEYHOLD = float(os.environ.get('M10_KEYHOLD', '0.12'))
+# M10_SLOW=<factor>: every scenario `sleep` is that much longer (default 1). For big windows in software GL,
+# where two wheel clicks 0.5 s apart can land in one engine frame and count once (D-2's 1920x1080 mouse run).
+SLOW = float(os.environ.get('M10_SLOW', '1'))
+
+
+def key(name, hold=None):
+    key_event(name, True); time.sleep(KEYHOLD if hold is None else hold); key_event(name, False); time.sleep(0.08)
 
 
 CHARNAMES = {' ': 'space', '.': 'period', '-': 'minus', '_': 'underscore', ',': 'comma'}
@@ -339,7 +348,7 @@ def execute(line):
             focus()
         elif cmd == 'key':
             parts = rest.split()
-            key(parts[0], float(parts[1]) if len(parts) > 1 else 0.12)
+            key(parts[0], float(parts[1]) if len(parts) > 1 else None)
         elif cmd == 'keydown':
             key_event(rest, True)
         elif cmd == 'keyup':
@@ -375,7 +384,7 @@ def execute(line):
                 f.write(rest + '\n')
             time.sleep(0.5)
         elif cmd == 'sleep':
-            time.sleep(float(rest))
+            time.sleep(float(rest) * SLOW)
         elif cmd == 'check':
             name, _, expr = rest.partition(' ')
             try:

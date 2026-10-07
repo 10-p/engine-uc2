@@ -190,20 +190,37 @@ TCHAR Ellipsis[4] = TEXT("...");
 	D-2: sharper text in a scaled-up UI (docs/porting/analysis/ui-scale.md).
 
 	UC2's text is laid out with bitmap fonts made for 640x480 ("T_Fonts2.SuiGeneris_12pt"), so a UI drawn x2.25
-	or x4.5 magnifies the glyph textures. The same package has the family in bigger point sizes (12 18 20 24 28
-	40 pt). With UISharpText on, a glyph keeps the small font's layout (position, advance, box: the metrics
-	every script and the GUI measured text with) and takes its pixels from the smallest bigger size that gives
-	at least one texel per screen pixel (or the biggest there is). Nothing changes at 640x480 (no box) or for
-	fonts without a "<Family>_<N>pt" family in their package (the Xbox button glyphs).
+	or x4.5 magnifies the glyph textures. The same package has the family in other sizes; by glyph height in
+	texels: 12pt 16, 18pt 16 (the same bitmap), 20pt 20, 24pt 21, 28pt 26, 40pt 60 (digits only). With
+	UISharpText on, text keeps the small font's layout (advances: the metrics every script and the GUI measured
+	text with) and each glyph takes its pixels from the smallest taller size that gives at least one texel per
+	screen pixel (or the tallest that has the character), drawn at the small glyph's height with its own aspect,
+	its ink centred where the small glyph's ink is. Nothing changes at 640x480 (no box) or for fonts without a
+	"<Family>_<N>pt" family in their package (the Xbox button glyphs).
 -----------------------------------------------------------------------------*/
 
 struct FSharpFontFamily
 {
 	UFont*			Font;		// the font text is laid out with
-	INT				Pt;			// its point size
-	TArray<INT>		Pts;		// bigger sizes of its family, ascending
+	INT				Pt;			// its point size (by name)
+	INT				Height;		// its glyphs' height in texels (the names lie: SuiGeneris_18pt is the 12pt bitmap)
+	TArray<INT>		Pts;		// taller sizes of its family, by glyph height, ascending
+	TArray<INT>		Heights;
 	TArray<UFont*>	Fonts;
 };
+
+// A font's glyph height in texels: the tallest printable ASCII glyph it has.
+static INT FontHeight( UFont* Font )
+{
+	INT H = 0;
+	for( INT c=32; c<127; c++ )
+	{
+		INT Ch = (TCHARU)Font->RemapChar( (TCHAR)c );
+		if( Ch != NULLCHARACTER && Ch < Font->Characters.Num() )
+			H = Max( H, Font->Characters(Ch).VSize );
+	}
+	return H;
+}
 static TArray<FSharpFontFamily> GSharpFonts;
 
 // "<Family>_<N>pt" -> N (and the family prefix up to the underscore), or 0.
@@ -220,6 +237,64 @@ static INT ParseFontPt( const FString& Name, FString* Family )
 	if( Family )
 		*Family = Name.Left( i + 1 );
 	return appAtoi( *Name.Mid( i + 1 ) );
+}
+
+// The ink of each glyph of a font: the columns whose alpha is above 4/15, read from the font's DXT3 page (UC2's
+// fonts are DXT3), as the centre in texels from the glyph box's left edge; -1 when unknown (another format,
+// the page's data not in memory) or empty (a space). Built once per font.
+struct FGlyphInk
+{
+	UFont*			Font;
+	TArray<FLOAT>	Centre;
+};
+static TArray<FGlyphInk> GGlyphInk;
+
+static FLOAT GlyphInkCentre( UFont* Font, INT Ch )
+{
+	INT Index = INDEX_NONE;
+	for( INT i=0; i<GGlyphInk.Num(); i++ )
+		if( GGlyphInk(i).Font == Font )
+		{
+			Index = i;
+			break;
+		}
+	if( Index == INDEX_NONE )
+	{
+		Index = GGlyphInk.AddZeroed();
+		FGlyphInk& G = GGlyphInk(Index);
+		G.Font = Font;
+		G.Centre.Add( Font->Characters.Num() );
+		for( INT c=0; c<Font->Characters.Num(); c++ )
+		{
+			G.Centre(c) = -1.f;
+			FFontCharacter& Char = Font->Characters(c);
+			UTexture* Tex = Char.TextureIndex < Font->Textures.Num() ? Font->Textures(Char.TextureIndex) : NULL;
+			if( !Tex || Tex->Format != TEXF_DXT3 || !Tex->Mips.Num() || Char.USize <= 0 || Char.VSize <= 0 )
+				continue;
+			FMipmap& Mip = Tex->Mips(0);
+			Mip.DataArray.Load();
+			INT BlocksX = Mip.USize / 4;
+			if( BlocksX <= 0 || Mip.DataArray.Num() < (Mip.USize / 4) * (Mip.VSize / 4) * 16 )
+				continue;
+			const BYTE* Data = &Mip.DataArray(0);
+			INT Left = Char.USize, Right = -1;
+			for( INT y=Char.StartV; y<Char.StartV+Char.VSize && y<Mip.VSize; y++ )
+				for( INT x=Char.StartU; x<Char.StartU+Char.USize && x<Mip.USize; x++ )
+				{
+					const BYTE* Block = Data + ((y >> 2) * BlocksX + (x >> 2)) * 16;
+					INT Row = Block[(y & 3) * 2] | (Block[(y & 3) * 2 + 1] << 8);
+					if( ((Row >> ((x & 3) * 4)) & 15) > 4 )
+					{
+						Left = Min( Left, x - Char.StartU );
+						Right = Max( Right, x - Char.StartU );
+					}
+				}
+			if( Right >= Left )
+				G.Centre(c) = (Left + Right + 1) * 0.5f;
+		}
+	}
+	FGlyphInk& G = GGlyphInk(Index);
+	return Ch >= 0 && Ch < G.Centre.Num() ? G.Centre(Ch) : -1.f;
 }
 
 // The family of Font with bigger sizes, and in Start the index of the size to try first (the smallest that gives
@@ -246,6 +321,7 @@ static FSharpFontFamily* SharpFontFor( UFont* Font, FLOAT Magnification, INT& St
 		Font->AddToRoot();
 		FString Family;
 		F.Pt = ParseFontPt( Font->GetName(), &Family );
+		F.Height = FontHeight( Font );
 		ULinkerLoad* Linker = Font->GetLinker();
 		FString Found;
 		if( F.Pt > 0 && Linker && Font->GetOuter() )
@@ -261,12 +337,17 @@ static FSharpFontFamily* SharpFontFor( UFont* Font, FLOAT Magnification, INT& St
 					*FString::Printf( TEXT("%s.%s"), Font->GetOuter()->GetPathName(), *Name ), NULL, LOAD_NoWarn | LOAD_Quiet, NULL ) );
 				if( !Big || !Big->Characters.Num() )
 					continue;
+				INT Height = FontHeight( Big );
+				if( Height <= F.Height )
+					continue;		// not taller (SuiGeneris_18pt is the 12pt bitmap again)
 				Big->AddToRoot();
 				INT At = 0;
-				while( At < F.Pts.Num() && F.Pts(At) < Pt )
+				while( At < F.Heights.Num() && F.Heights(At) < Height )
 					At++;
 				F.Pts.Insert( At );
 				F.Pts(At) = Pt;
+				F.Heights.Insert( At );
+				F.Heights(At) = Height;
 				F.Fonts.Insert( At );
 				F.Fonts(At) = Big;
 			}
@@ -277,18 +358,25 @@ static FSharpFontFamily* SharpFontFor( UFont* Font, FLOAT Magnification, INT& St
 				for( INT c=32; c<127; c++ )
 					if( F.Fonts(j)->RemapChar( (TCHAR)c ) != NULLCHARACTER )
 						Have++;
-				Found += FString::Printf( TEXT(" %ipt(%i/95)"), F.Pts(j), Have );
+				INT Ink = 0;
+				for( INT c=32; c<127; c++ )
+				{
+					INT Ch = (TCHARU)F.Fonts(j)->RemapChar( (TCHAR)c );
+					if( Ch != NULLCHARACTER && GlyphInkCentre( F.Fonts(j), Ch ) >= 0.f )
+						Ink++;
+				}
+				Found += FString::Printf( TEXT(" %ipt(%i texels high, %i/95 characters, ink of %i read)"), F.Pts(j), F.Heights(j), Have, Ink );
 			}
 		}
-		debugf( NAME_Log, TEXT("UIScale: sharper text for %s:%s"), Font->GetPathName(), Found.Len() ? *Found : TEXT(" (no bigger size in its package)") );
+		debugf( NAME_Log, TEXT("UIScale: sharper text for %s (%i texels high):%s"), Font->GetPathName(), F.Height, Found.Len() ? *Found : TEXT(" (no taller size in its package)") );
 	}
 	FSharpFontFamily& F = GSharpFonts(Index);
 	if( !F.Fonts.Num() )
 		return NULL;
-	FLOAT Want = F.Pt * Magnification * 0.95f;
-	Start = F.Pts.Num() - 1;
-	for( INT j=0; j<F.Pts.Num(); j++ )
-		if( F.Pts(j) >= Want )
+	FLOAT Want = F.Height * Magnification * 0.95f;
+	Start = F.Heights.Num() - 1;
+	for( INT j=0; j<F.Heights.Num(); j++ )
+		if( F.Heights(j) >= Want )
 		{
 			Start = j;
 			break;
@@ -443,10 +531,9 @@ static FLOAT DrawString
 					FLOAT		TileX = Canvas->OrgX + X,
 								TileY = Canvas->OrgY + Y;
 
-					// D-2: a whole glyph (not clipped, not an underline) from a bigger size, in the same box. The
-					// bigger sizes do not all have every character (SuiGeneris_40pt has no letters): the first
-					// size, going down from the preferred one, that has this character with the same shape of
-					// box (within a third) gives it; none: the font's own glyph.
+					// D-2: a whole glyph (not clipped, not an underline) from a taller size of the font. The taller
+					// sizes do not all have every character (SuiGeneris_40pt has digits only): the first one,
+					// going down from the preferred one, that has this character gives it; none: the font's own.
 					if( Sharp && !bDrawUnderline && CU == Char.StartU && CV == Char.StartV && CUSize == Char.USize && CVSize == Char.VSize
 					&&	Char.USize > 0 && Char.VSize > 0 && Ch != NULLCHARACTER )
 					{
@@ -461,9 +548,18 @@ static FLOAT DrawString
 							if( BigChar.USize <= 0 || BigChar.VSize <= 0 || BigChar.TextureIndex >= Big->Textures.Num()
 							||	(BigTex = Big->Textures(BigChar.TextureIndex)) == NULL )
 								continue;
-							FLOAT Shape = (BigChar.USize * (FLOAT)Char.VSize) / (BigChar.VSize * (FLOAT)Char.USize);
-							if( Shape < 0.75f || Shape > 1.33f )
-								continue;
+							// The bigger bitmap's glyphs are not the small ones' proportions (rounding at 16 texels:
+							// 'f' is 5x16 at 12pt and 7x26 at 28pt, 'o' 10x16 and 15x26) and their ink sits elsewhere
+							// in the box, so the glyph keeps its own aspect at the small glyph's height and its ink
+							// is centred where the small glyph's ink is (the box's centre when the ink is unknown);
+							// stretched into the small box instead, narrow letters showed gaps ("pro file").
+							FLOAT BigWidth = AdjustedCharVSize * BigChar.USize / (FLOAT)BigChar.VSize;
+							FLOAT SmallInk = GlyphInkCentre( Font, Ch ), BigInk = GlyphInkCentre( Big, BigCh );
+							if( SmallInk >= 0.f && BigInk >= 0.f )
+								TileX += SmallInk * AdjustedCharUSize / Char.USize - BigInk * BigWidth / BigChar.USize;
+							else
+								TileX += (AdjustedCharUSize - BigWidth) * 0.5f;
+							AdjustedCharUSize = BigWidth;
 							Tex = BigTex;
 							CU = BigChar.StartU; CV = BigChar.StartV; CUSize = BigChar.USize; CVSize = BigChar.VSize;
 							break;
