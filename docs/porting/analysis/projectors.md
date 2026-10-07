@@ -202,3 +202,26 @@ with `texkill`) agree to 4 levels; a wrong texture coordinate, attenuation or cl
 the grid (it did: the deferred-query defect above removed it, and the clipped shader alone with
 `-glprojnoclip` versus without was how that was found). **No Xbox reference:** none of the owner's xemu pictures
 shows one of these projectors.
+
+## Step 4. Terrain (item 2): implemented as a switch, off by default: no visible difference
+
+Implementation, driver only (the engine's PC branch already reads the caps; the `_XBOX` parts of `UnTerrain.cpp`
+are the packed Xbox vertex format, not needed): `MaxSimultaneousTerrainLayers` = 3 when `UseTerrain3Layer` and
+`PS_Terrain3Layer` is compiled; `SetTerrainMaterial`'s `_XBOX` mask constants (c0..c2 select red, green, blue of
+the combined weight map) set and the pass drawn by its program; `TERRAIN3LAYER [0|1]` re-runs
+`ATerrainInfo::Update` on every loaded terrain (what loading does), so one frame can be drawn both ways.
+
+With the switch on, the census counts 4 + 16 sectors of DM-Azure drawn by one combined pass each (instead of
+three weight-map passes), DM-DeepCore's single sector by one combined + one single pass (4 layers).
+
+| Map, view (spawn, time frozen) | one vs three layers per pass, pawn masked | control (two frames) | What I see |
+|---|---|---|---|
+| DM-Ascension, mossy courtyard ground (`fx-m7b-terrain-DM-Ascension-*`) | terrain area: mean 0.039, largest 2 levels, 0 pixels above 2 | 0.002 | identical |
+| CTF-Judgment, grass and rock hills (`fx-m7b-terrain-CTF-Judgment-*`) | mean 0.147, largest 21, 0.034% above 2 | 0.003 | identical to the eye; the difference picture x8 is black but for a few specks |
+| DM-Apex, snow seen through a doorway | mean 0.050, 0.081% above 2 | 0.003 | identical |
+
+As step 0 predicted: the two are the same sum, rounded once instead of three times; the Xbox's single clamp
+would only brighten blend zones where a layer saturates under strong vertex light, and none of these views has
+that. **Decision: `UseTerrain3Layer=False` by default** (the owner's rule: implement where the Xbox looks
+different; here it does not), kept as a switch because it saves draw calls (`m7b.sh terrain` prints them) and
+because it is the exact Xbox structure.
