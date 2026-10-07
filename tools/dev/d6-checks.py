@@ -112,3 +112,31 @@ def enemy_off(tag):
         if o['name'] == P[tag].enemy:
             return abs(wrap(P[tag].rot[1] - o['face'][1]))
     return 99999
+
+
+def camera_lag(tag, first=None, last=None):
+    """How much the third-person camera lags the view during a watch trace (the pawn standing still): the camera's
+    offset from the pawn, turned into the view's yaw frame (forward, right, up), depends only on the pitch for a
+    camera that follows the rotation at once (Epic's offset blends with the pitch); a lazy camera's offset also
+    depends on where the view came from. Samples are binned by pitch (300 units) and split by whether the pitch was
+    rising or falling; the result is the largest distance between the two halves' mean offsets in one bin."""
+    rows = W[tag][first:last]
+    bins = {}
+    for a, b in zip(rows, rows[1:]):
+        dp = wrap(b['pitch'] - a['pitch'])
+        if dp == 0:
+            continue
+        yaw = b['yaw'] * math.pi / 32768.0
+        rx, ry, rz = (b['cam'][0] - b['loc'][0], b['cam'][1] - b['loc'][1], b['cam'][2] - b['loc'][2])
+        off = (rx * math.cos(yaw) + ry * math.sin(yaw), -rx * math.sin(yaw) + ry * math.cos(yaw), rz)
+        key = (wrap(b['pitch']) // 300, dp > 0)
+        bins.setdefault(key, []).append(off)
+    worst = 0.0
+    for (k, rising), offs in bins.items():
+        other = bins.get((k, not rising))
+        if not rising or not other:
+            continue
+        m1 = [sum(c) / len(offs) for c in zip(*offs)]
+        m2 = [sum(c) / len(other) for c in zip(*other)]
+        worst = max(worst, math.dist(m1, m2))
+    return round(worst, 2)

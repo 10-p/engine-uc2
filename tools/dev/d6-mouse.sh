@@ -16,8 +16,9 @@
 #           motion, switch target with Lock + D, break away by mouse motion past the clamp (degrees), not by a
 #           smaller one; the stick's break-away still works; aim adhesion follows a target under the pad, not under
 #           the mouse
-#   before  the look scenario as the owner played it (shipped scripts, main's DefUser.ini at 47b1b18): evidence,
-#           its drift/symmetry checks are expected to FAIL there (labelled "before-")
+#   before  the look scenario as the owner played it natively (shipped scripts, main's DefUser.ini at 47b1b18):
+#           evidence, its drift checks are expected to FAIL there (labelled "before-")
+#   epic    (on request) the mouse as Epic's PC leak had it, which the web build used until 2026-10-07: evidence
 #
 # Trees (<WorkUC2>/run/<name>, made by tools/dev/mkrun-uc2.sh): D6_TREE (rebuilt packages, default d6-run),
 # D6_SHIP_TREE (shipped packages, default d6-ship). Every game run is tools/dev/m10-controls.sh --file (Xvfb inside
@@ -154,6 +155,8 @@ PY
 watch circ test: log CIRCLE-END 60
 pyexec C=save('$p-circle', circle_stats('circ', *moving_rows('circ')))
 check $p-circle-is-a-circle C['dev'] < 0.03 and C['n'] >= 140
+pyexec CL=save('$p-camera-lag-during-circle', camera_lag('circ', *moving_rows('circ')))
+check $p-camera-does-not-lag-the-circle CL < 1.0
 check $p-circle-closes abs(yawdiff('Ca','Cb')) <= 2 and abs(pitchdiff('Ca','Cb')) <= 2
 sleep 2
 probe Cc
@@ -449,6 +452,45 @@ check lock-aim-adhesion-under-the-pad abs(yawdiff('mc','md')) > 300 and P['md'].
 SCEN
 }
 
+# epic: the mouse as the PC leak shipped it (shipped scripts, Epic's DefUser.ini: the web build's inis until
+# 2026-10-07, so the browser the owner played on 2026-10-06): evidence only
+scen_epic() {
+  start epic
+  echo "probe Sa"; mlines 20 0 1; echo "probe Sb"
+  echo "probe Fa"; echo "chan mouse 20 0"; echo "probe Fb"
+  echo "probe Ga"; echo "chan mouse 200 0"; echo "probe Gb"
+  echo "probe Ha"; mlines 0 -20 1; echo "probe Hb"; mlines 0 20 1; echo "probe Hc"
+  cat <<SCEN
+pyexec save('epic-yaw-20-counts-1-per-tick', yawdiff('Sa','Sb')); save('epic-yaw-20-counts-in-1-tick', yawdiff('Fa','Fb')); save('epic-yaw-200-counts-in-1-tick', yawdiff('Ga','Gb'))
+pyexec save('epic-pitch-20-counts-1-per-tick', pitchdiff('Ha','Hb'))
+check epic-mouse-is-capped-and-nonlinear abs(yawdiff('Ga','Gb')) < 3 * abs(yawdiff('Fa','Fb')) and yawdiff('Sa','Sb') != yawdiff('Fa','Fb')
+SCEN
+  python3 - 25 <<'PY'
+import math, sys
+R, N = int(sys.argv[1]), 72
+print('probe Ca')
+print(f'chan watch {2 * N + 60} circ')
+px = py = 0
+for i in range(1, 2 * N + 1):
+    a = 2 * math.pi * i / N
+    x, y = round(R * math.cos(a) - R), round(R * math.sin(a))
+    print(f'chan mouse {x - px} {y - py}'); px, py = x, y
+print('probe Cb')
+print('chan log CIRCLE-END')
+PY
+  cat <<SCEN
+watch circ test: log CIRCLE-END 60
+pyexec C=save('epic-circle', circle_stats('circ', *moving_rows('circ'))); save('epic-camera-lag-during-circle', camera_lag('circ', *moving_rows('circ')))
+check epic-circle-is-not-a-circle C['dev'] > 0.05
+probe Da
+chan mouse 3 0
+probe Db
+sleep 2
+probe Dc
+pyexec save('epic-camera-after-flick', round(cam_moved('Db','Dc'),2))
+SCEN
+}
+
 # ini: the mouse's settings from User.ini, given the way the launcher gives settings (-ini:, C-1, which also writes
 # them into User.ini): sensitivity 1.0 and the mouse inverted; the pad's invert stays off
 scen_ini() {
@@ -520,7 +562,11 @@ PY
       echo "== before ($ship, shipped scripts, main's DefUser.ini: what the owner played; expected to FAIL drift/symmetry)"
       git -C "$repo" show 47b1b18:Engine/Config/DefUser.ini > "$out/DefUser-main.ini"
       scen_look before > "$out/before.scen"; prep "$ship" "$out/DefUser-main.ini"; D6_KVAL=52.4 run before "$ship" 0 600 -maxfps=60 | sed 's/^/(before) /';;
-    *) echo "unknown scenario $s (look ini pad lock before)" >&2;;
+    epic)
+      echo "== epic ($ship, shipped scripts, Epic's DefUser.ini as the web build had it until 2026-10-07; evidence)"
+      git -C "$repo" show 45f7301:Engine/Config/web/DefUser.ini > "$out/DefUser-epic.ini"
+      scen_epic > "$out/epic.scen"; prep "$ship" "$out/DefUser-epic.ini"; run epic "$ship" 0 300 -maxfps=60 | sed 's/^/(epic) /';;
+    *) echo "unknown scenario $s (look ini pad lock before epic)" >&2;;
   esac
 done
 echo "d6-mouse: $passes PASS, $fails FAIL (scenarios: ${*:-look ini pad lock before}; 'before' is evidence and not counted)"
