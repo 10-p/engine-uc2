@@ -12,6 +12,6 @@ chan exec NETPLACE FxCam 0 1850 450 16384 0
 sleep 2
 chan exec set LevelInfo TimeDilation 0.0001
 sleep 1
-chan exec GLPIXTRACE 640 300
+chan exec GLPIXTRACE 300 400
 sleep 0.5
 shot near

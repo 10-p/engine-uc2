@@ -93,7 +93,7 @@ echo "$EFFECTS" | while IFS='|' read -r name map pinned secs fire la lb args; do
   # command NETPLACE (UC2NetTest.cpp; LocalPlayer = this viewport's player), twice: the second once the
   # pawn stands. One run. Picture A must then match the reference (mean difference below 8 of 255; any
   # other start gives more than 20); if it does not, the line says FAILED: the panes or the camera changed.
-  try=0; ok=0
+  try=0; ok=0; m=""
   while [ $try -lt $tries ] && [ $ok = 0 ]; do
     try=$((try+1))
     rm -f "$out/fx-$name-0.png" "$out/fx-$name-1.png" "$out/fx-$name-a.png" "$out/fx-$name-b.png" "$out/fx-$name-ab.png"
@@ -115,7 +115,7 @@ echo "$EFFECTS" | while IFS='|' read -r name map pinned secs fire la lb args; do
   left=$(echo "$report" | grep -c "WARNING")
   if [ $ok = 0 ]; then
     rm -f "$out/fx-$name-0.png" "$out/fx-$name-1.png"
-    echo "fx $name: FAILED, the reference view was not reached in $try runs (random PlayerStart); run it again. critical=${crit:-?} left_behind=$left"
+    echo "fx $name: FAILED, picture A differs from the wine reference logs/oracle/DM-Praxis-windows-A.png by mean ${m:-?} (8 or more): the panes or the camera changed. critical=${crit:-?} left_behind=$left"
   elif [ -f "$out/fx-$name-0.png" ] && [ -f "$out/fx-$name-1.png" ]; then
     mv -f "$out/fx-$name-0.png" "$out/fx-$name-a.png"; mv -f "$out/fx-$name-1.png" "$out/fx-$name-b.png"
     python3 -c "
@@ -125,7 +125,8 @@ a=Image.open(sys.argv[1]).convert('RGB'); b=Image.open(sys.argv[2]).convert('RGB
 o=Image.new('RGB',(a.size[0]+b.size[0]+8,max(a.size[1],b.size[1])),(255,0,255)); o.paste(a,(0,0)); o.paste(b,(a.size[0]+8,0)); o.save(sys.argv[3])" "$out/fx-$name-a.png" "$out/fx-$name-b.png" "$out/fx-$name-ab.png"
     st=$(stats "$out/fx-$name-a.png" "$out/fx-$name-b.png")
     ref=""
-    [ -f "$out/fx-$name-b.ref.png" ] && ref=" ref: B vs accepted $(stats "$out/fx-$name-b.png" "$out/fx-$name-b.ref.png")"
+    [ "$name" = praxis-panes ] && ref=" A vs wine reference mean=$m"
+    [ -f "$out/fx-$name-b.ref.png" ] && ref="$ref ref: B vs accepted $(stats "$out/fx-$name-b.png" "$out/fx-$name-b.ref.png")"
     echo "fx $name: A=[$la] B=[$lb] critical=${crit:-?} glerrors=${glerr:-?} programs_failed=${pfail:-?} diff(A,B) $st left_behind=$left tries=$try$ref"
   else
     echo "fx $name: FAILED, no pair of pictures (see $log) critical=${crit:-?} left_behind=$left tries=$try"
