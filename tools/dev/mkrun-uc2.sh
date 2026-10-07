@@ -65,6 +65,18 @@ fi
 # Our tracked configuration wins over the asset tree's (identical until we start changing defaults).
 cp -f "$repo"/Engine/Config/*.ini "$run/System/"
 
+# M14: UC2_SCRIPTS=<dir> installs script packages built from source (tools/dev/script-build.sh writes them to
+# <WorkUC2>/run/m14-make/System) over the shipped ones. Unset: the shipped .u, as before.
+if [ -n "${UC2_SCRIPTS:-}" ]; then
+  n=0
+  for u in "$UC2_SCRIPTS"/*.u; do
+    [ -f "$run/System/$(basename "$u")" ] || continue   # only packages the asset tree ships
+    cp -f "$u" "$run/System/"
+    n=$((n+1))
+  done
+  echo "UC2_SCRIPTS: $n script packages from $UC2_SCRIPTS" >&2
+fi
+
 copy_bins() {
   for bin in "$1"/Source/UCC/ucc-bin "$1"/Source/SDLLaunch/uc2*; do
     [ -f "$bin" ] && [ -x "$bin" ] && cp -f "$bin" "$run/System/"

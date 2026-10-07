@@ -288,6 +288,25 @@ void FScriptPatcher::ApplyPatches( UBOOL bCreateDependencies )
 			check(Loader);
 			UObject::EndLoad();
 
+			// uc2 port (M14): a patch is made for the package it was compared against: the shipped first-generation
+			// file with exactly NameCount names and ExportCount exports. A package rebuilt from the source by
+			// `ucc-bin make` (tools/dev/script-build.sh) is a later generation of it (conformed save) and already
+			// contains what the patch carries (docs/porting/analysis/scripts.md), so it is left alone. The patch
+			// table itself is not touched.
+			if( Loader->Summary.Generations.Num()!=1
+			||	Loader->Summary.Generations(0).NameCount!=Update->NameCount
+			||	Loader->Summary.Generations(0).ExportCount!=Update->ExportCount )
+			{
+				debugf( NAME_Log, TEXT("ScriptPatcher: %s is not the package the patch was made for (generations %i, first %i names/%i exports; patch %i/%i): rebuilt from source, patch not applied"),
+					*Update->PackageName, Loader->Summary.Generations.Num(),
+					Loader->Summary.Generations.Num() ? Loader->Summary.Generations(0).NameCount : 0,
+					Loader->Summary.Generations.Num() ? Loader->Summary.Generations(0).ExportCount : 0,
+					Update->NameCount, Update->ExportCount );
+				delete Update;
+				PackageUpdates.Remove(i--);
+				continue;
+			}
+
 			FPatchReader Ar;
 			if ( Update->Apply(Loader,Ar, bCreateDependencies) )
 			{
@@ -324,6 +343,7 @@ void FScriptPatcher::ApplyPatches( UBOOL bCreateDependencies )
 
 				// restore the linker's previous reader
 				Loader->Loader = OldArchive;
+				debugf( NAME_Log, TEXT("ScriptPatcher: %s patched (%i bytecode patches, %i new objects)"), *Update->PackageName, Update->ScriptPatches.Num(), Update->Objects.Num() );
 			}
 			else
 			{
