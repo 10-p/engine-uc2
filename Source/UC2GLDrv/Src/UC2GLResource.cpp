@@ -215,14 +215,28 @@ static BYTE* UC2GL_DecodeDXTMip( FTexture* Texture, INT MipIndex, ETextureFormat
 	INT		BlocksX	= (Width + 3) / 4,
 			BlocksY	= (Height + 3) / 4,
 			RowBytes= BlocksX * (Format == TEXF_DXT1 ? 8 : 16);
+	BYTE* Pixels = new BYTE[ Width * Height * 4 ];
+	if( !Texture )
+	{
+		// A cube map face the cube map leaves empty (fx-fixes O-5, see UploadMip): zeros.
+		appMemzero( Pixels, Width * Height * 4 );
+		return Pixels;
+	}
 	TArray<BYTE> Compressed;
 	Compressed.AddZeroed( RowBytes * BlocksY );
 	Texture->GetTextureData( MipIndex, &Compressed(0), RowBytes, Format, 0 );
-	BYTE* Pixels = new BYTE[ Width * Height * 4 ];
 	UC2GL_DecodeDXT( &Compressed(0), Format, Width, Height, Pixels );
 	return Pixels;
 }
 
+//
+// UploadMip with Texture NULL (fx-fixes, O-5; ported to M11's driver): a cube map face the
+// cubemap leaves empty. D3D allocates all six faces of a cube texture and fills those that
+// exist, so the cube stays usable; GL needs every face for a complete cube map (an incomplete
+// one disables texturing: DM-Azure's pool drew its vertex colour instead of
+// T_Liquid_Decay_Water_C_CM, which has no -Z face). The missing face gets zeroed blocks/texels,
+// as in D3D's freshly allocated memory; on GLES its mip chain is completed from those zeros.
+//
 void FOpenGLTexture::UploadMip( GLenum Target, FTexture* Texture, ETextureFormat ActualFormat, INT MipIndex, INT FirstMip, INT Width, INT Height )
 {
 	INT		Level		= MipIndex - FirstMip,
@@ -240,7 +254,8 @@ void FOpenGLTexture::UploadMip( GLenum Target, FTexture* Texture, ETextureFormat
 		{
 			BYTE* Data = new BYTE[Size];
 			appMemzero( Data, Size );
-			Texture->GetTextureData( MipIndex, Data, RowBytes, ActualFormat, 0 );
+			if( Texture )
+				Texture->GetTextureData( MipIndex, Data, RowBytes, ActualFormat, 0 );
 			GLenum Format	= ActualFormat == TEXF_DXT1 ? GL_COMPRESSED_RGBA_S3TC_DXT1_EXT :
 							  ActualFormat == TEXF_DXT3 ? GL_COMPRESSED_RGBA_S3TC_DXT3_EXT :
 														  GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
@@ -284,8 +299,10 @@ void FOpenGLTexture::UploadMip( GLenum Target, FTexture* Texture, ETextureFormat
 		for( INT i=0; i<MipWidth*MipHeight; i++ )
 			((DWORD*)Data)[i] = 0xFF000000;
 	}
-	else
+	else if( Texture )
 		Texture->GetTextureData( MipIndex, Data, Pitch, ActualFormat, 0 );
+	else
+		appMemzero( Data, Pitch * MipHeight );
 
 	RenDev->TexImage2D( UploadBindTarget, TextureID, Target, Level, Internal, MipWidth, MipHeight, Format, Type, Data );
 	if( Level == 0 )
@@ -330,20 +347,20 @@ void FOpenGLTexture::CompleteChain( GLenum Target, FTexture* Texture, ETextureFo
 	{
 		Internal = Format = ActualFormat == TEXF_L8 ? GL_LUMINANCE : GL_ALPHA;
 		Channels = 1;
-		Pixels.Add( MipWidth * MipHeight );
-		Texture->GetTextureData( LastMipIndex, &Pixels(0), MipWidth, ActualFormat, 0 );
+		Pixels.AddZeroed( MipWidth * MipHeight );
+		if( Texture ) Texture->GetTextureData( LastMipIndex, &Pixels(0), MipWidth, ActualFormat, 0 );
 	}
 	else if( ActualFormat == TEXF_RGBA8 )
 	{
-		Pixels.Add( MipWidth * MipHeight * 4 );
-		Texture->GetTextureData( LastMipIndex, &Pixels(0), MipWidth * 4, ActualFormat, 0 );
+		Pixels.AddZeroed( MipWidth * MipHeight * 4 );
+		if( Texture ) Texture->GetTextureData( LastMipIndex, &Pixels(0), MipWidth * 4, ActualFormat, 0 );
 	}
 	else if( ActualFormat == TEXF_R5G6B5 )
 	{
 		// Averaged as three 8-bit channels, stored again as 5-6-5.
 		TArray<_WORD> Packed;
-		Packed.Add( MipWidth * MipHeight );
-		Texture->GetTextureData( LastMipIndex, &Packed(0), MipWidth * 2, ActualFormat, 0 );
+		Packed.AddZeroed( MipWidth * MipHeight );
+		if( Texture ) Texture->GetTextureData( LastMipIndex, &Packed(0), MipWidth * 2, ActualFormat, 0 );
 		Channels = 3;
 		Pixels.Add( MipWidth * MipHeight * 3 );
 		for( INT i=0; i<MipWidth*MipHeight; i++ )
@@ -468,7 +485,8 @@ void FOpenGLTexture::CompleteCompressedChain( GLenum Target, FTexture* Texture, 
 		RowBytes	= BlocksX * BlockBytes;
 	TArray<BYTE> Data;
 	Data.AddZeroed( RowBytes * BlocksY );
-	Texture->GetTextureData( LastMipIndex, &Data(0), RowBytes, ActualFormat, 0 );
+	if( Texture )
+		Texture->GetTextureData( LastMipIndex, &Data(0), RowBytes, ActualFormat, 0 );
 	INT R = 0, G = 0, B = 0, A = 0, Count = 0;
 	for( INT i=0; i<BlocksX*BlocksY; i++ )
 		UC2GL_DecodeDXTBlockAverage( &Data(i*BlockBytes), ActualFormat, R, G, B, A, Count );
@@ -799,14 +817,14 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 		{
 			for( INT FaceIndex=0; FaceIndex<6; FaceIndex++ )
 			{
+				// fx-fixes (O-5): an empty face is uploaded too (zeroed, UploadMip), or GL's cube
+				// map is incomplete and the stage samples nothing.
 				FTexture* Face = Cubemap->GetFace( FaceIndex );
+				UploadMip( GL_TEXTURE_CUBE_MAP_POSITIVE_X + FaceIndex, Face, ActualFormat, MipIndex, FirstMip, Width, Height );
+				if( MipIndex == NumMips-1 && Levels > 0 )
+					CompleteChain( GL_TEXTURE_CUBE_MAP_POSITIVE_X + FaceIndex, Face, ActualFormat, MipIndex, FirstMip, Width, Height );
 				if( Face )
-				{
-					UploadMip( GL_TEXTURE_CUBE_MAP_POSITIVE_X + FaceIndex, Face, ActualFormat, MipIndex, FirstMip, Width, Height );
-					if( MipIndex == NumMips-1 && Levels > 0 )
-						CompleteChain( GL_TEXTURE_CUBE_MAP_POSITIVE_X + FaceIndex, Face, ActualFormat, MipIndex, FirstMip, Width, Height );
 					Face->UnloadRawTextureData( MipIndex );
-				}
 			}
 			Levels++;
 		}

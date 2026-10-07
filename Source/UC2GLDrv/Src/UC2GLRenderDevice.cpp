@@ -1888,6 +1888,25 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		Ar.Log( *Line );
 		return 1;
 	}
+	else if( ParseCommand(&Cmd,TEXT("DISTORTIONCULLDISTANCE")) )
+	{
+		// DISTORTIONCULLDISTANCE [<units>]: the distance over which distortion fades out (O-7,
+		// UC2GLMaterialState.cpp); 5000 is the Xbox's. No argument: show it. (fx-fixes)
+		extern FLOAT GUC2GLDistortionCullDistance;
+		if( appStrlen(Cmd) && appAtof(Cmd) > 0.f )
+			GUC2GLDistortionCullDistance = appAtof(Cmd);
+		Ar.Logf( TEXT("UC2GLDrv: distortion fades out over %.0f units (frame %i)"), GUC2GLDistortionCullDistance, FrameCounter );
+		return 1;
+	}
+	else if( ParseCommand(&Cmd,TEXT("GLPIXTRACE")) )
+	{
+		// GLPIXTRACE <x> <y> [all]: log what the next frame draws over that pixel (UC2GLPixelTrace.cpp; fx-fixes).
+		extern void UC2GL_PixelTraceArm( UUC2GLRenderDevice*, INT, INT, UBOOL );
+		INT X = appAtoi( *ParseToken(Cmd,0) );
+		INT Y = appAtoi( *ParseToken(Cmd,0) );
+		UC2GL_PixelTraceArm( this, X, Y, ParseCommand(&Cmd,TEXT("ALL")) );
+		return 1;
+	}
 	else if( ParseCommand(&Cmd,TEXT("POSTSELFTEST")) )
 	{
 		GSelfTestPending = 1;
