@@ -314,3 +314,22 @@ same `O9_TREE` line on both, made identical here).
   33+2 skipped, "before" 22/11; twin 33+2 skipped; nothing left running).
 - Started: the final pp-scale run (`logs/pp/final.txt`, `logs/pp2/final.txt`), `m11-twin.sh` with trees
   ppm11/ppm11t (`logs/pp/m11-twin.txt`).
+
+## Step 8. Final run under a load of 60; the twin stopped (2026-10-08 00:10)
+
+The final pp-scale run (`logs/pp/final.txt`, `logs/pp2/final.txt`, binary `47d2cd24`) ran while the machine's load
+average was 60-65 on 12 cores (two agents' twin suites and a compile). PASS: selftest (15/15 at 1440x1080 and
+2880x2160), glow 640x480 and 2880x2160 (8.33% / 13.08 against 8.54% / 12.63; reference 0: 3.12%), aspect (16:9
+AutoFOV on: new 8.33% / 12.70, main's binary 4.17% / 20.47), blur-setting and blur (3.20 / 3.10 / 3.15), identity
+(0 differing pixels outside the pickups, main/new twice). Not valid, timing: glow 1440x1080 (only 59 frames to
+settle: the guard refused it; its numbers are those of run 1: 8.33%, 12.85), dof 2880x2160 (fit 0: both shots
+without the DOF: at 0.4 frames/s the switch one second after the shot time landed in the frame the shot was taken
+from) and radial 2880x2160 (inset 13.1, fit 0.55, same cause; the shots were 4 frames apart). The script now
+leaves G seconds (2, 4, 12 by resolution) between a shot and the next switch and refuses shots fewer than 3 frames
+apart; 1440x1080 waits 70 s to settle.
+
+`m11-twin.sh` (trees ppm11/ppm11t, `logs/pp/m11-twin.txt`) had passed shaders, gputest, boot, **selftest (15 of
+15 on desktop and twin)**, progtest (420 programs, largest difference 1 of 255) and pinned when the coordinator's
+rule came (at most one game run of an agent at a time; do not judge timing failures above a load of ~16). It runs
+the two bindings at once, so it was stopped by PID during the effects check (my processes and their Xvfb only).
+`M11_SERIAL=1` now makes it run them one after the other; the rest (effects, m6, fallbacks, movies) is rerun so.
