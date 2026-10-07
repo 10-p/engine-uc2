@@ -4971,7 +4971,7 @@ void UObject::execSaveConfig( FFrame& Stack, RESULT_DECL )
 			}
 		}
 		else
-			UC2SaveConfigFromScript( this );
+			UC2SaveConfigFromScript( this, 0 );
 	}
 	unguard;
 }
@@ -4985,7 +4985,7 @@ void UObject::execStaticSaveConfig( FFrame& Stack, RESULT_DECL )
 // rjp - calling SaveConfig() has mucho side-effects, so behavior should be identical on both PC and XBOX
 // uc2: PC saves (ScriptSaveConfig); the Xbox's no-op is ScriptSaveConfig=False
 	if( UC2ScriptSaveConfigEnabled() )
-		UC2SaveConfigFromScript( Class->GetDefaultObject() );
+		UC2SaveConfigFromScript( Class->GetDefaultObject(), 1 );
 	unguard;
 }
 IMPLEMENT_FUNCTION( UObject, INDEX_NONE, execStaticSaveConfig);

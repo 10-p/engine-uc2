@@ -21,7 +21,8 @@ UBOOL UC2ScriptSaveConfigEnabled();
 // What script's SaveConfig() / StaticSaveConfig() do when enabled: Object->SaveConfig() (every config property of
 // its class), except for a globalconfig property that ANOTHER class deliberately sets (its defaultproperties): that
 // one is left out, because the ini section it would go to is shared and would override that class's default.
-void UC2SaveConfigFromScript( UObject* Object );
+// Logs one "Script SaveConfig: ..." line per call (the checks read it: a normal session has none).
+void UC2SaveConfigFromScript( UObject* Object, UBOOL bStatic );
 
 // Called by UClass::Link / UClass::Serialize right after a class default has loaded its config: records the
 // inherited globalconfig properties this class DELIBERATELY gives another default than its superclass (see UnObj.cpp).
