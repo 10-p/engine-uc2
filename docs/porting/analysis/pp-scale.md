@@ -302,7 +302,7 @@ not screen pixels: nothing to scale. Files both branches change (hand merge): `E
 `tools/dev/m11-twin.sh` (M7b: shader/program counts; here: the self-test count), `tools/dev/o9-nvidia.sh` (the
 same `O9_TREE` line on both, made identical here).
 
-## Step 7. Builds and regressions on the final code (2026-10-08 00:10; code as of `7f58c55`)
+## Step 7. Builds and regressions on the final code (2026-10-07 23:40; code as of `7f58c55`)
 
 - Native (`cmake --build build-native -j6`, capped 6G): exit 0, `uc2.bin` sha256 `47d2cd24...`.
 - Windows (`cmake --build build-windows -j4`, capped 6G): `[100%] Built target SDLLaunch`, exit 0; `uc2.exe`
