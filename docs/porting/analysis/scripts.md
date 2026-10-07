@@ -277,3 +277,52 @@ Result: UCElements, UCGameplay, UnrealGame, GameSpy (IpDrv): identical. The diff
   contain them are byte-identical to the shipped ones.
 - **Preprocessor symbols**: neither `debug` nor `FINAL_RELEASE` (step 0); confirmed by the bytecode: `` `log ``
   calls compile to `log(...)` calls identical to the shipped ones, `` `logd `` to nothing.
+
+## Step 3: the game on the rebuilt packages (S3)
+
+`tools/dev/m14-scripts-check.sh` (one PASS/FAIL line per check, summary `<WorkUC2>/logs/m14/check/m14-summary.txt`).
+Trees: `m14-run` (rebuilt packages via `UC2_SCRIPTS`), `m14-ship` (same binary, shipped packages) for the
+side-by-side checks. The patcher switch (`Engine/Src/UnScriptPatcher.cpp`): a patch is applied only to the
+package it was made for, the first-generation file with the patch's `NameCount`/`ExportCount`; a rebuilt
+package (a later, conformed generation) is skipped with
+`ScriptPatcher: <Pkg> is not the package the patch was made for (...): rebuilt from source, patch not applied`;
+applied patches log `ScriptPatcher: <Pkg> patched (N bytecode patches, M new objects)`. The patch table is
+untouched.
+
+Results are recorded below as they come in (step 3 log).
+
+Repeatability: two consecutive `script-build.sh` runs give byte-identical packages except the `InternalTime`
+property of the 78 `#exec`-imported textures (Engine 68, Editor 6, GamePlay 4): the import time stamp
+(`appSeconds()`), by design. Everything else is deterministic (file order, class order, conform).
+
+## How to change a script (for the D-phase tasks)
+
+1. Edit `Source/<Pkg>/Classes/<Class>.uc`. The files are Latin-1 with LF endings, 37 of them contain 0x02
+   bytes (button glyph escapes inside strings): edit bytes, never re-encode (`python3` on bytes, or an editor
+   set to Latin-1). Never edit `epic-sources/`.
+2. Build: `tools/dev/script-build.sh` (assemble + make + strip + compare, ~1 min) or only
+   `tools/dev/script-build.sh assemble make strip`. The make log is `<WorkUC2>/logs/m14/m14-make-make.log`
+   (compiler errors as `<file>(<line>) : Error, ...`; the last line must be `Success - 0 error(s), ...`).
+3. Compare: the summary lines show which packages changed. Before any change every package is
+   identical/equivalent/different-explained with **problems 0**; after a change the edited package (and only
+   what really changed) shows up as problems, with a bytecode listing diff per function in
+   `m14-make-compare.txt`. A change to a class adds it to the "changed classes" list at the top, and other
+   classes' dependency records follow (neutral). Packages compiled after it change only if they use what you
+   changed (a constant, a default, a function signature).
+4. Native classes: adding or moving a `var` in a class declared `native` changes its C++ layout. Run
+   `tools/dev/script-build.sh --tree m14-hdr --headers assemble make` and port the relevant hunk of
+   `<WorkUC2>/logs/m14/m14-hdr-headers.diff` into `Source/<Pkg>/Inc/<Pkg>Classes.h` by hand (keep our
+   `PTRINT`, `GCC_PACK` and comment deviations; never copy the exported file over ours), rebuild the C++, and
+   `ucc-bin verifyclasses` must pass (32- and 64-bit: `tools/dev/m13-64bit.sh verify`).
+5. Run: `UC2_SCRIPTS=<WorkUC2>/run/m14-make/System tools/dev/mkrun-uc2.sh build-native <tree>`, then the
+   suites with that tree (`tools/dev/m14-scripts-check.sh` runs them all). The rebuilt packages no longer get the
+   load-time patches (they do not need them: step 2b). A tree mixing rebuilt and shipped packages is fine: each
+   shipped package is still patched.
+6. Network: a rebuilt package keeps the shipped GUID and adds a generation (conformed save), so peers with the
+   same rebuilt files connect; mixing rebuilt and shipped peers is not a goal.
+7. Web: the web build and the asset tree keep the shipped `.u` until the coordinator and the owner decide.
+
+Things a D-phase change must know (from the proof): `GUIController.bUnlockCharacters`/`bShowAllMuts` are not
+`config` in the source (the shipped files have them config); `CTFFlag.home` runs its `Begin:` code again with
+rebuilt packages (Epic's patch for it was broken); `ConnectionFailureMenu` can probe `Timer` again;
+`GameEngine.MainMenuClass` defaults to `UCMenu.UC2MainMenu` (an ini can still choose `StartMenu`).
