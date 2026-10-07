@@ -248,3 +248,52 @@ scale, title/item position, Fill/Box, HUD box and scale check PASS at all eight 
 - M10 at 640x480 on run tree `d2-reg` (this build, while the second pass and two builds ran): mouse 18, text
   7, pad 33, both 14 PASS; keyboard 15/16: the second Escape was handled (`InGame_MainMenu handled XC_B`) but
   the pause menu had not closed 2 s later. To be rerun on a quiet machine.
+
+## Step 6 (2026-10-07): the final pass, the gate
+
+Final code: dd78796 (Engine) + tools/docs after it. Builds of that code: native `bin/capped 6G 3600 -- cmake
+--build build-native -j6` rc 0 (`logs/d2/build-native-10.log`); wasm-perf and windows `bin/capped 6G ...
+-- cmake --build build-wasm-perf -j6` / `build-windows -j6` rc 0 (`logs/d2/build-wasm-perf-3.log`,
+`build-windows-3.log`, both `[100%] Built target SDLLaunch`); presets configured earlier in this task (rc 0).
+
+**Pass 3** (`tools/dev/d2-ui-scale.sh run`, `D2_NO_REF=1 tools/dev/d2-ui-scale.sh extras`, `... measure`;
+`logs/d2/d2-ui-scale-full-3.txt`, `logs/d2/run/summary.txt`; reference pictures from pass 2, same reference
+binary): every run PASS, **81 PASS, 0 FAIL, "ALL PASS"**. In short: UI bounding box on black = the computed
+box to the pixel at all eight sizes (main menu and arena page); the box scaled back to 640x480 against the
+640x480 picture: mean difference 1.1-1.5 levels, best alignment (0,0) (4K (-1,-1)); the title and a menu item
+found within 0-2 px of where the design maps; Fill draws the page layer outside the box (mean level 6.8-8.1),
+Box leaves it black; the HUD's bounding box = the 640x480 one scaled (within 0.5 px), inside the box; the HUD
+scaled back: 0.45-0.75 levels; reticle where the 640x480 one maps (within 0.6 px), from the screen centre
+-1.0..-2.0 px up to 1920x1200, -2.5 px at 2560x1440 and -4.0 px at 3840x2160 (the crosshair art's own
+off-centre, see step 4); 640x480 identical to the reference outside the self-animating parts (main menu,
+arena page, HUD), pinned DM-Deadbolt against main's binary 100.000% (with and without post-processing);
+`UIScaleMode=Native640` against main's binary at 1920x1080: same UI bounding box (0,0)-(1564,1080), 99.68%
+identical (the rest: animation); the lock-on reticle at the same window pixels boxed and unboxed (0 px); the
+M10 mouse scenario 18/18 at 640x480 and at 1920x1080 (positions mapped into the box); 22 logs, 0 Critical, 0
+GL errors.
+
+**Regressions** (run tree `d2-reg`, this build): `./ucc-bin verifyclasses` rc 0 "All native class layouts
+match"; `tools/dev/m10-controls.sh` keyboard 16, mouse 18, text 7, pad 33, both 14, all PASS (keyboard
+on the quiet machine; under the load of two builds and the second pass it had failed once, step 5);
+`tools/dev/m7-effects.sh d2 selftest`: 11 passed, 0 failed; pinned picture: the pass's `pinned-*` lines.
+
+**Browser** (final wasm): `yarn build --target uc2 --engine-artifact <this>/build-wasm-perf/Source/SDLLaunch`
+rc 0, then the D-2 spec under the memory guard (`--max-gb=14`, capped 6G, PulseAudio null sink `uc2d2`
+loaded and unloaded): `1 passed (32.8s)`, exit 0, peak 10.9 GB machine-wide, `frame 600, 0 GL errors so far`,
+canvas 1920x1080, box 240,0 1440x1080 x2.25, hover and click hit; pictures `logs/d2/web2/`. The frontend's
+`serve-web/` now holds this build (rebuild it before running another engine's specs); nothing in the frontend
+repository changed.
+
+For the coordinator, when D-2 reaches the web build:
+- `ufrontend/packages/e2e/uc2-wasm-boot.spec.js` play test clicks at raw 640x480 canvas pixels
+  (`at = (x, y) => [box.x + x, box.y + y]`); with Fit43 it needs the box mapping (at its 1024x768: scale 1.6,
+  origin 0,0): `s = min(w/640, h/480)`, `at = (x, y) => [box.x + floor((w-640s)/2) + x*s, box.y +
+  floor((h-480s)/2) + y*s]` (as `tools/dev/d2/web/uc2-d2-uiscale.spec.js` does).
+- Its twin references (`logs/m11/twin-ref/{menu,deadbolt}-1024x768*.png`) show the old top-left UI: they
+  must be remade with this build.
+- No script was changed: the shipped `.u` work as they are (no switch decision needed for D-2).
+
+Pictures for the owner: `logs/d2/run/contact-sheet.png` (main menu, arena page, HUD at every size),
+`logs/d2/run/before-after-1920x1080.png` (main's binary vs this build; Box vs Fill), `logs/d2/run/
+ingame-1920x1080.png` (console line, pause menu over the world, lock-on unboxed/boxed), the full-size
+pictures in `logs/d2/run/<WxH>/`, the browser's in `logs/d2/web2/`.
