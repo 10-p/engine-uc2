@@ -252,3 +252,36 @@ The coordinator reported a usage-limit cut-off at about 21:10; from this side th
   them); perf on the GPU (the scenario must outlast the markers: `sleep 50` is too short); m7-effects on this tree;
   m11-twin (trees ppm11/ppm11t); o9-nvidia combiner lines (O9_TREE=ppo9); the owner's sheets; whether M7b's shadow
   blur reuses the primitives changed here; the final report.
+
+## Step 6. Identity at 640x480, performance on the GPU, and a slow shader fixed (2026-10-07 23:45)
+
+**Identity (gate item 3).** Two runs of main's binary differ even in a frozen frame (step 5). Found where: with
+game time frozen from the first frame, the dynamic gamma stopped after its first update (`DYNAMICGAMMA 0` at the
+end of frame 1) and no Fire (the view behind the "press fire" board; every camera effect runs: the log has the
+effects' targets), two runs of main's binary differ only around the two spinning pickups (rows 236-306, glow up
+to rows 228-303). `pp-scale.sh identity` now compares rows 0-219 and 320-479 (79% of the picture): main/main,
+new/new and main/new (twice) **0 differing pixels** there; whole frame main/new 1039 and 1789 pixels against
+main/main 1332 (the pickups). PASS (`logs/pp2/pp-identity`).
+
+**Performance (gate item 5), GPU** (`UC2_GPU=1` of fx-owner.sh: the Quadro P620, offscreen, `-glnoaa`; pinned
+DM-Deadbolt view, bots off, time frozen so every frame is the same picture; frames per second in three 15 s
+windows: reference 480, 0, 480 in one run; main's binary the same way to show the drift). First attempts without
+pin and freeze varied by 30% with the bots; with them:
+
+| | 1920x1080 | 3840x2160 |
+|---|---|---|
+| first shader (loop with a uniform bound and `break`) 480 / 0 / 480 | 109.6 / 111.1 / 107.1 | **61.3 / 78.9 / 59.9** |
+| main's binary, same windows | 112.7 / 101.5 / 107.9 | 67.5 / 75.9 / 78.7 |
+| shader with N a compile-time constant (`7f58c55`) 480 / 0 / 480 | 111.1 / 111.1 / 110.9 | **90.3 / 80.3 / 87.3** |
+| main's binary, same windows | 113.3 / 107.7 / 119.3 | 79.4 / 79.1 / 78.6 |
+
+So the first version cost about 4 ms a frame at 4K: the reference copy's 5x5 reads in a loop whose bound was a
+uniform (GLSL ES 1.00 needs constant limits; the break made it a real loop, reads one after another). The
+program is now built for its N (`#define UC2_TAPS N` in front of the text; rebuilt when N changes, i.e. when the
+resolution does; a 2x2 build at start-up tests that it compiles). Now the reference path is about 10% faster than
+the old one at 3840x2160 (11.3 ms against 12.5 ms: three 853x480 copies instead of three 8-megapixel snapshots for
+the downsampling passes, and smaller targets) and the same at 1920x1080. Self-test after the change: 15 of 15 at
+1280x720.
+
+All pp-scale measurements before `7f58c55` used the first shader (same arithmetic); they are repeated on the final
+binary below.
