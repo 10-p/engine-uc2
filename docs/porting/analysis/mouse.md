@@ -207,3 +207,37 @@ main on 2026-10-07 07:52 with the M11 merge, so the browser the owner played on 
   after a flick 6.6 units.
 So every symptom the owner listed is measured: "capped" and "hexagonal" in the browser's Epic mouse, "extremely
 sensitive" in both (1.23 and 0.29 deg/count), "the camera slides toward the movement" in both (the lazy camera).
+
+Correction to step 3's note: the pitch curve equals the yaw curve because the profile applies its controller
+sliders even when there is none: the transient "no profile" profile sets `MouseSensitivity_X/Y` to 0.8/0.8
+(`getall UCPlayerInput MouseSensitivity_Y` = 0.8 in a fresh tree, `logs/d6/explore/sens.out`); the ini's 1.0/0.9
+never act in a game. The full-stick 26,214 units/s base rate (M10 measured 26,006) is 1024 x 0.8 x 32.
+
+## Step 4 (2026-10-07): the keyboard binding audit ("keyboard bindings being backwards", no example given)
+
+Every binding of `[Engine.Input]` in `Engine/Config/DefUser.ini`, each command looked up as an alias, an `exec`
+function in any script package, or an engine command (script in the notebook's history: a Python pass over the
+section and `Source/*/Classes/*.uc`). Directions, checked against measurements:
+- W/S forward/back, A/D strafe left/right (M10 keyboard scenario; `PlayerMove`: `aStrafe > 0` = right), Up/Down
+  as W/S; mouse right = turn right, mouse up = look up (d6 look: `look-mouse-up-looks-up`); Right arrow = turn right
+  (89.9 deg/s), PageUp = look up; right stick right = turn right, up = look up (M10 pad scenario, d6 pad).
+- Invert defaults: mouse not inverted (`bInvertMouseLook=False`), pad not inverted (profile `bInvertY=false`).
+Nothing is inverted or swapped in direction. What was not right, and what changed:
+- Mouse wheel `NextSkill`/`PrevSkill`: no such command anywhere (dead in a match; the reddit guide says so too).
+  Now `NextWeapon` both ways (UC2 has no previous-weapon: `PrevWeapon` is an empty function).
+- The movement keys did not count as a stick for the game's stick-direction logic, so on a keyboard SmartJump
+  never dodged or wall-dodged, Lock + direction never switched target, and the on-screen "push the stick"
+  prompts could not be answered: `bKeysAsStick` (step 1). This is what the community's User.ini fix in the reddit
+  thread works around ("WASD remapped ... to true analog axes ... unlocking infinite wall-dodges"). Side effect, as
+  on the pad: Space while moving dodges instead of jumping (UC2's SmartJump design); Backspace stays a plain Jump.
+- Left/Right/PageUp/PageDown: on the mouse's linear look now (they were on the stick's curve).
+Left as they are, for the owner to judge:
+- C = Black (1P/3P view, next scoreboard page) sits LEFT of V = White (voice, previous scoreboard page), while on
+  the pad Black is the right shoulder ("next") and White the left: in the scoreboard, C goes forward and V back.
+  C is the camera key by mnemonic, so not swapped.
+- Arrows: Left/Right turn (M10; UT2004's default too), where Epic's PC file strafed (`,` `.` and A/D strafe).
+- Dead commands still bound (harmless, none of them exists in UC2's scripts): Shift `Walking`, G `Grab`, J
+  `Taunt Taunt1`, R `ForceReload`, F2 `ShowServerInfo`, F3 `ShowObjectives`, `=` `GrowHUD`, `-` `ShrinkHUD`,
+  `\` `ChangeHud`, `[` `]` `InventoryPrevious/Next`, and the `Shield 1/0` part of RightMouse/Joy7 (Epic's Xbox
+  binding has it too; the shield works through AltFire).
+The owner's example is still needed (PLAN.md O-14) to know whether "backwards" meant one of these.
