@@ -314,3 +314,20 @@ other agents' software-GL games):
   logs every change it sees ("Profiles: viewport 0 holds ..."). Run 8 with them: `ProfileState: remembered
   "WebSaWdX" (read 1), ticks 759, viewports 1 ... viewport 0 SDL2Viewport profile PlayerProfile name "WebSaWdX"
   transient 0 dirtymask 0`. Runs 9 and 10 with the change log are running.
+
+## Step 9 (2026-10-07): the browser gate runs
+
+All with serve-web assembled from this worktree's final wasm-perf (`logs/d3/build-wasm-perf-5.log`, every engine change
+of this branch), Chromium through the frontend's harness under `bin/capped 6G 1800`, sound to the null sink `uc2d3`:
+- `uc2-wasm-saves.spec.js` runs 9 and 10 (`logs/d3/e2e-saves-9.txt`, `-10.txt`): **1 passed (2.5m)**, **1 passed
+  (2.4m)**: every step above plus "the engine remembers" with its log lines from the engine's own file (`Profiles:
+  viewport 0 holds "WebSaWdX" (was ""; remembered ""; 1 viewport(s))`, `Profiles: remembered profile "WebSaWdX"`),
+  rename (Backspace clears the selected name, Escape keeps it), Network -> Host -> CUSTOMIZE -> SESSION NAME: X opens
+  UC2Keyboard on "Liandri Corporation" and the X is not typed, Escape cancels. The intermittent failure of runs 4-7
+  did not recur in runs 8-10 (cause not found; the diagnostics stay in).
+- With the REBUILT GUI.u (`yarn build --target uc2 --assets <WorkUC2>/run/d3-webassets --manifest
+  logs/d3/web/file-manifest.json --deps logs/d3/web/dependency-manifest.json ...`, `UC2_E2E_REBUILT_GUI=1`,
+  `logs/d3/e2e-saves-rebuiltgui-1.txt`): **1 passed (2.4m)**, including "without a profile the player has the
+  launcher's name: PlayerName = Player-dd0b49" (with the shipped GUI.u: `Anubis`).
+- Regressions: `uc2-wasm-boot.spec.js` **3 passed (2.9m)** (`logs/d3/e2e-boot-1.txt`), `uc2-wasm-audio.spec.js`
+  **3 passed (1.6m)** (`logs/d3/e2e-audio-1.txt`); serve-web assembled back to the standard asset tree before them.
