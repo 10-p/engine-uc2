@@ -272,3 +272,10 @@ Claims still from reading only: that the Xbox ignores the base opacity of masked
   within 2 levels); `0 GL errors in 350 frames`. With post-processing off the shadow capability is off (it needs
   the `PS_Blur` family), DM-Deadbolt has no projector and terrain stays one layer per pass by default: nothing of
   M7b is on there, and nothing changed.
+- Builds (capped 6G, -j6): native (`[100%] Built target SDLLaunch`, exit 0; `logs/m7b/build-native-final.log`),
+  windows (exit 0, `build-windows/Source/SDLLaunch/uc2.exe`, `Source/UCC/ucc.exe`), wasm-perf (exit 0,
+  `SDLLaunch.wasm` + `meta.json`).
+- `tools/dev/m7-effects.sh m7b-fx` (all 14 effects; `logs/m7b/m7-effects.txt`): every line `critical=0 glerrors=0
+  programs_failed=0+0 left_behind=0 tries=1`; praxis-panes A vs the wine reference 2.095 (below 8). The self-test
+  did not run in that call (its log folder did not exist yet: a first-run quirk of the script); rerun alone
+  (`m7-effects.sh m7b-fx selftest`, `logs/m7b/m7-selftest.txt`): `selftest summary: 11 passed, 0 failed`.
