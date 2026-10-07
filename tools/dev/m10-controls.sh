@@ -142,6 +142,8 @@ if [ "${1-}" = "--file" ]; then
 fi
 
 # ---------------------------------------------------------------------------------------------------------------
+# A GUIMessageBox ignores input while it animates in, and the animation counts FRAMES: the scenarios wait for its
+# 'Unblocking animation' line (as tools/dev/d5-text.sh does) instead of a fixed 1.5 s (late answers under load).
 # Scenarios. Names of checks are <scenario>-<what>; each check is a log line ('expect'), the absence of one
 # ('absent'), or a comparison of probe states ('check'); m10-inject.py documents the language.
 # ---------------------------------------------------------------------------------------------------------------
@@ -158,7 +160,8 @@ sleep 0.5
 $accept
 expect $p-main-menu-opens-arena OpenMenu \[UCMenu.UC2Arena_Main\] 15
 wait OpenMenu \[GUI.GUIMessageBox\] 20
-sleep 1.5
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
 $back
 expect $p-back-closes-dialog CloseMenu \[GUIMessageBox\] 10
 sleep 1.5
@@ -232,8 +235,11 @@ sleep 1.5
 probe p1
 check kb-pause-menu-up P['p1'].menu != 'None'
 shot pause
+# The pause menu closes with an animation counted in FRAMES (UC2PageBase: "Active blocking animation (N frames)"):
+# under software GL on a loaded machine that takes longer than 2 s, so wait for the menu to be gone (up to ~16 s).
 key Escape
 sleep 2
+tryseek 20 P['_'].menu == 'None' ;; sleep 0.5
 probe p2
 check kb-escape-closes-pause-menu P['p2'].menu == 'None'
 SCEN
@@ -253,7 +259,8 @@ sleep 0.5
 key Return
 expect ms-hovered-item-is-the-one-enter-opens OpenMenu \[UCMenu.UC2Settings_Main\] 15
 wait OpenMenu \[GUI.GUIMessageBox\] 20
-sleep 1.5
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
 click 3
 expect ms-right-click-answers-no CloseMenu \[GUIMessageBox\] 10
 sleep 1.5
@@ -330,7 +337,8 @@ rmove 200 0 20
 sleep 0.5
 probe l1
 check ms-mouse-right-turns-right yawdiff('l0','l1') > 0
-check ms-mouse-turn-amount 0.6*200*65.5*0.94 < yawdiff('l0','l1') < 1.4*200*65.5
+# D-6: 0.022 deg x MouseLookSensitivity 2.5 per count = 10.012 rotation units (XTEST counts reach SDL 1:1)
+check ms-mouse-turn-amount 0.98*200*10.012 < yawdiff('l0','l1') < 1.02*200*10.012
 rmove -200 0 20
 sleep 0.5
 probe l2
@@ -339,14 +347,14 @@ rmove 0 -100 10
 sleep 0.5
 probe l3
 check ms-mouse-up-looks-up pitchdiff('l2','l3') > 0
-chan exec set UCPlayerInput bInvertMouse True
-wait test: exec set UCPlayerInput bInvertMouse True 10
+chan exec MouseLookInvert True
+wait test: exec MouseLookInvert True 10
 sleep 0.5
 rmove 0 -100 10
 sleep 0.5
 probe l4
 check ms-invert-option-flips-pitch pitchdiff('l3','l4') < 0
-chan exec set UCPlayerInput bInvertMouse False
+chan exec MouseLookInvert False
 shot look
 SCEN
 }
@@ -365,7 +373,8 @@ sleep 0.5
 key Return
 expect tx-profiles-opens OpenMenu \[UCMenu.UC2Profile\] 15
 wait OpenMenu \[GUI.GUIMessageBox\] 20
-sleep 1.5
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
 key Return
 expect tx-on-screen-keyboard-opens OpenMenu \[UCMenu.UC2ProfileKeyboard\] 15
 sleep 3
@@ -434,7 +443,7 @@ pad axis leftx 0
 sleep 0.3
 probe z1
 check pd-stick-inside-dead-zone-does-nothing dist('z0','z1') < 5
-pad axis leftx 9830
+pad axis leftx 11469
 sleep 1.2
 pad axis leftx 0
 sleep 0.3
@@ -491,8 +500,11 @@ check pd-y-switches-back-to-ranged P['w2'].weapon == P['w0'].weapon
 padpress start
 expect pd-start-opens-pause-menu OpenMenu \[UCMenu.InGame_MainMenu\] 10
 sleep 1.5
+# The pause menu closes with an animation counted in FRAMES (UC2PageBase: "Active blocking animation (N frames)"):
+# under software GL on a loaded machine that takes longer than 2 s, so wait for the menu to be gone (up to ~16 s).
 padpress b
 sleep 2
+tryseek 20 P['_'].menu == 'None' ;; sleep 0.5
 probe p2
 check pd-b-closes-pause-menu P['p2'].menu == 'None'
 pad detach
@@ -530,7 +542,8 @@ sleep 0.5
 padpress a
 expect both-key-down-then-pad-a-opens-arena OpenMenu \[UCMenu.UC2Arena_Main\] 15
 wait OpenMenu \[GUI.GUIMessageBox\] 20
-sleep 1.5
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
 key Escape
 expect both-escape-closes-dialog CloseMenu \[GUIMessageBox\] 10
 sleep 1.5
@@ -568,9 +581,10 @@ check both-keyboard-moves-while-pad-idle fwd('b0','b1') > 150
 probe b2
 pad axis rightx 32767
 keydown w
-sleep 1
-keyup w
+sleep 0.4
 pad axis rightx 0
+sleep 0.6
+keyup w
 sleep 0.4
 probe b3
 check both-keyboard-move-and-pad-turn-together dist('b2','b3') > 100 and yawdiff('b2','b3') > 4000
@@ -583,13 +597,16 @@ pad axis lefty 0
 sleep 0.4
 probe b5
 check both-pad-stick-moves-during-mouse-and-keys dist('b4','b5') > 30
-check both-mouse-turns-during-pad-move yawdiff('b4','b5') > 3000
+check both-mouse-turns-during-pad-move yawdiff('b4','b5') > 1000
 check both-keyboard-fires-during-pad-move P['b5'].shots != P['b4'].shots
 key Escape
 expect both-escape-opens-pause-menu OpenMenu \[UCMenu.InGame_MainMenu\] 10
 sleep 1.5
+# The pause menu closes with an animation counted in FRAMES (UC2PageBase: "Active blocking animation (N frames)"):
+# under software GL on a loaded machine that takes longer than 2 s, so wait for the menu to be gone (up to ~16 s).
 padpress b
 sleep 2
+tryseek 20 P['_'].menu == 'None' ;; sleep 0.5
 probe p1
 check both-pad-b-closes-it P['p1'].menu == 'None'
 SCEN

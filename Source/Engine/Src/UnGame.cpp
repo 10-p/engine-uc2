@@ -26,6 +26,7 @@
 // uc2 port (D-3): start in the last used profile, remember it (UC2Profiles.cpp).
 ENGINE_API void UC2StartWithLastProfile( UViewport* Viewport );
 ENGINE_API void UC2RememberProfile( UClient* Client );
+ENGINE_API void UC2MigrateUserIni();	// uc2 port (D-6): UC2InputMigrate.cpp
 ENGINE_API UBOOL UC2ProfileNamesThePlayer( UClient* Client );	// D-4
 ENGINE_API void UC2ProfileNameInURL( UViewport* Viewport, FURL& URL );	// D-4
 ENGINE_API UBOOL UC2ProfilesExec( UClient* Client, const TCHAR* Cmd, FOutputDevice& Ar );	// D-3: PROFILESTATE
@@ -182,6 +183,10 @@ void UGameEngine::Init()
 	// If not a dedicated server.
 	if( GIsClient )
 	{	
+		// uc2 port (D-6): bindings and pad settings an earlier build wrote to User.ini move to D-6's, before
+		// any viewport reads them (UC2InputMigrate.cpp)
+		UC2MigrateUserIni();
+
 		// Init client.
 		UClass* ClientClass = StaticLoadClass( UClient::StaticClass(), NULL, TEXT("ini:Engine.Engine.ViewportManager"), NULL, LOAD_NoFail, NULL );
 		Client = ConstructObject<UClient>( ClientClass );
