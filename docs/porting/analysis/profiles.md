@@ -331,3 +331,18 @@ of this branch), Chromium through the frontend's harness under `bin/capped 6G 18
   launcher's name: PlayerName = Player-dd0b49" (with the shipped GUI.u: `Anubis`).
 - Regressions: `uc2-wasm-boot.spec.js` **3 passed (2.9m)** (`logs/d3/e2e-boot-1.txt`), `uc2-wasm-audio.spec.js`
   **3 passed (1.6m)** (`logs/d3/e2e-audio-1.txt`); serve-web assembled back to the standard asset tree before them.
+
+## Step 10 (2026-10-07): correction — runs 4-7 ran ANOTHER branch's engine
+
+The coordinator found that the D-7/D-8 agent assembled the shared `ufrontend/serve-web/` with its own engine at
+13:23:46; my runs 4-7 (13:23-13:38) loaded that engine, which has no UC2Profiles.cpp: hence "nothing remembered".
+It was not intermittent and not a defect of this branch. Which of my browser results ran my engine (proof = log
+lines only this branch emits: `ProfileState:`, `Profiles: viewport 0 holds`, `Profiles: remembered`):
+- runs 1, 2, 3 (`Profiles: remembered` present), run 8 (3 lines), runs 9 and 10 (7 lines each), the rebuilt-GUI.u
+  run (7 lines): MINE. Runs 4-7: VOID.
+- `uc2-wasm-boot.spec.js` / `uc2-wasm-audio.spec.js` of step 9: serve-web was assembled from my artifact immediately
+  before, but those specs print nothing branch-specific and serve-web was reassembled by someone else at 14:17
+  (`serve-web/meta.json` gitSha 143e193, SDLLaunch.wasm sha256 e38346... vs mine e6e82e..., meta gitSha 4d2e399):
+  treated as unproven; rerun with a sha256 check of `serve-web/SDLLaunch.wasm` against this worktree's build right
+  before AND after the run.
+The diagnostics of step 8 stay (PROFILESTATE is what proves the engine's identity in the saves spec).
