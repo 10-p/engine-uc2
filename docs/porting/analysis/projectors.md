@@ -279,3 +279,11 @@ Claims still from reading only: that the Xbox ignores the base opacity of masked
   programs_failed=0+0 left_behind=0 tries=1`; praxis-panes A vs the wine reference 2.095 (below 8). The self-test
   did not run in that call (its log folder did not exist yet: a first-run quirk of the script); rerun alone
   (`m7-effects.sh m7b-fx selftest`, `logs/m7b/m7-selftest.txt`): `selftest summary: 11 passed, 0 failed`.
+- `tools/dev/o9-nvidia.sh` (`O9_TREE=m7b-o9 O9_NO_MKRUN=1`, "before" = main's e4ce0a5 binary; `logs/m7b/o9-nvidia.txt`):
+  combiner-mesa programs / texenv combine3 / combine4 35 passed 0 failed each, combiner-mesa-before reproduces the
+  defect (22/11/2) as designed, combiner-twin 33/0/2 skipped, leftovers PASS. DM-Azure pillar and cobra on the
+  NVIDIA GPU against Mesa: 0.739 and 0.287 (mean, of 255) with this branch and the same with main's binary;
+  Mesa this branch vs main 0.000. The `pictures` line prints FAIL because its criterion expects "before" to be
+  the pre-O-9 binary (with main as "before" the two are equal by construction): not a regression.
+  combiner-gpu, caps and pictures-other did not start: another agent's headless GPU run was going on (the script
+  allows one at a time); rerun below.
