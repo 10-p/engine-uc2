@@ -171,6 +171,11 @@ Tasks, in the order they will be done (each one ends at an observable check, log
   NVIDIA, wood on Mesa). Express those materials another way (`GL_NV_texture_env_combine4`, or the GLSL path
   the pixel-shader materials already use), and test on the NVIDIA GPU headless (`tools/dev/fx-owner.sh`
   `UC2_GPU=1`).
+- O-10 **Post-process blurs are resolution-dependent** (owner, 2026-10-07: "I want to see if the bloom and blur
+  radious is resolution dependant"): measured yes, the glow covers 8.3% of the screen height at 640x480 and
+  4.2% at 1440x1080 (Epic sizes the targets as a fraction of the screen but blurs a fixed number of texels).
+  Fix: targets sized for a 480-line reference (`PostProcessReferenceHeight=480`), the same share of the screen
+  as on the Xbox at any resolution; audit every other pixel distance (radial blur, concussion).
 - O-8 **Defaults**: anisotropic filtering 16x; anti-aliasing 4x (multisampled main framebuffer; WebGL 1 has
   no multisampled framebuffer objects: WebGL 2 or a post-process AA on the web, decided with evidence).
 
