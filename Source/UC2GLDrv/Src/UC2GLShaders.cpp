@@ -40,9 +40,60 @@ enum
 {
 	PSV_CubeMask		= 0x0f,	// stage n samples a cube map (PS_GLOBALFLAGS_TEXMODE_ADJUST)
 	PSV_SpecularEnable	= 0x10,	// D3DRS_SPECULARENABLE for shaders without xfc
+	PSV_SceneDepthTest	= 0x20,	// M11: no gl_FragDepth; the scene's depth is tested in the shader (UC2GL_SceneDepthTestMain)
 };
 
-#define UC2GL_SHADER_HEADER "#version 120\n"
+// The texture unit of the scene's depth for PSV_SceneDepthTest (the pixel shaders use units 0..3).
+#define UC2GL_SCENEDEPTH_UNIT 7
+
+//
+// M11, PSV_SceneDepthTest. The generated body's main() is renamed and this main() put after
+// it: the fragment is dropped where the depth test GL_LEQUAL against the scene's depth would
+// drop it, as if the scene's depth had been copied into the target (CopyDepthBuffer). The
+// half unit of the 24-bit depth makes "<=" compare as the quantised depth buffer would.
+// The fragment's own depth comes from the clip-space z and w of the vertex shader, interpolated
+// with perspective and divided here: that is exactly the window depth (z/w is affine in screen
+// space), and it is highp, where gl_FragCoord is only mediump in GLSL ES 1.00 (on Mesa's ES 2.0
+// context mediump is 16-bit: gl_FragCoord.z missed by up to 2^-11 = 8192 depth units, found by
+// the self-test). The vertex side is UC2GL_WithSceneDepthTestVertex. Also used by the self-test.
+//
+#define UC2GL_SCENEDEPTH_VS_FLAG (((QWORD)1) << 63)	// in a vertex shader key: the depth varying is written (no unique shader is that large)
+
+FString UC2GL_WithSceneDepthTest( const ANSICHAR* Body )
+{
+	FString Source = appFromAnsi( Body );
+	INT At = Source.InStr( TEXT("void main()") );
+	if( At < 0 )
+		return Source;
+	return Source.Left( At ) + TEXT("void uc2_main()") + Source.Mid( At + 11 ) + TEXT("\n")
+		+ TEXT("uniform UC2_HIGHP sampler2D u_sceneDepth;\n")
+		+ TEXT("uniform vec4 u_sceneDepthRect;\n")
+		+ TEXT("varying UC2_HIGHP vec2 v_sceneDepthZW;\n")
+		+ TEXT("void main()\n")
+		+ TEXT("{\n")
+		+ TEXT("	UC2_HIGHP float SceneDepth = texture2D( u_sceneDepth, gl_FragCoord.xy * u_sceneDepthRect.xy + u_sceneDepthRect.zw ).r;\n")
+		+ TEXT("	UC2_HIGHP float Depth = v_sceneDepthZW.x / v_sceneDepthZW.y * 0.5 + 0.5;\n")
+		+ TEXT("	if( Depth > SceneDepth + 0.5 / (4096.0 * 4096.0 - 1.0) )\n")
+		+ TEXT("		discard;\n")
+		+ TEXT("	uc2_main();\n")
+		+ TEXT("}\n");
+}
+
+// The vertex shader of such a program: its main() renamed, and the clip-space z and w passed on.
+FString UC2GL_WithSceneDepthTestVertex( const FString& Source )
+{
+	INT At = Source.InStr( TEXT("void main()") );
+	if( At < 0 )
+		return Source;
+	return Source.Left( At ) + TEXT("void uc2_vmain()") + Source.Mid( At + 11 ) + TEXT("\n")
+		+ TEXT("varying vec2 v_sceneDepthZW;\n")
+		+ TEXT("void main()\n")
+		+ TEXT("{\n")
+		+ TEXT("	uc2_vmain();\n")
+		+ TEXT("	v_sceneDepthZW = gl_Position.zw;\n")
+		+ TEXT("}\n");
+}
+
 
 #define UC2GL_LOG_ONCE(...) { static UBOOL Logged = 0; if( !Logged ) { Logged = 1; debugf( NAME_Init, __VA_ARGS__ ); } }
 
@@ -387,10 +438,12 @@ GLuint UUC2GLRenderDevice::GetVertexShaderObject( QWORD Enum )
 		return *Found;
 
 	GLuint	Shader = 0;
-	FString	Source = BuildVertexShaderSource( Enum );
+	FString	Source = BuildVertexShaderSource( Enum & ~UC2GL_SCENEDEPTH_VS_FLAG );
+	if( Source.Len() && (Enum & UC2GL_SCENEDEPTH_VS_FLAG) )
+		Source = UC2GL_WithSceneDepthTestVertex( Source );
 	if( Source.Len() )
 	{
-		Shader = UC2GL_CompileShader( this, GL_VERTEX_SHADER, UC2GL_SHADER_HEADER, TCHAR_TO_ANSI(*Source), *FString::Printf(TEXT("vertex shader %s"),appI64toa((SQWORD)Enum)) );
+		Shader = UC2GL_CompileShader( this, GL_VERTEX_SHADER, ShaderPrologue(0), TCHAR_TO_ANSI(*Source), *FString::Printf(TEXT("vertex shader %s"),appI64toa((SQWORD)Enum)) );
 		if( Shader )
 			VertexShadersCompiled++;
 		else
@@ -412,13 +465,14 @@ GLuint UUC2GLRenderDevice::GetFragmentShaderObject( INT PixelShader, DWORD Varia
 	if( Source.Source )
 	{
 		ANSICHAR Header[256];
-		appStrcpy( Header, UC2GL_SHADER_HEADER );
+		appStrcpy( Header, ShaderPrologue(1) );
 		for( INT s=0; s<4; s++ )
 			if( Variant & (1<<s) )
 				appSprintf( Header + appStrlen(Header), "#define UC2_TEX%i_CUBE 1\n", s );
 		if( Variant & PSV_SpecularEnable )
 			appStrcat( Header, "#define UC2_SPECULARENABLE 1\n" );
-		Shader = UC2GL_CompileShader( this, GL_FRAGMENT_SHADER, Header, Source.Source, *FString::Printf(TEXT("pixel shader %i (%s.psh, variant %i)"),PixelShader,Source.Name,Variant) );
+		FString Body = (Variant & PSV_SceneDepthTest) ? UC2GL_WithSceneDepthTest( Source.Source ) : FString( appFromAnsi( Source.Source ) );
+		Shader = UC2GL_CompileShader( this, GL_FRAGMENT_SHADER, Header, TCHAR_TO_ANSI(*Body), *FString::Printf(TEXT("pixel shader %i (%s.psh, variant %i)"),PixelShader,Source.Name,Variant) );
 		if( Shader )
 			FragmentShadersCompiled++;
 		else
@@ -445,7 +499,7 @@ FOpenGLProgram* UUC2GLRenderDevice::GetProgram( INT PixelShader, DWORD Variant, 
 	P->Next				= First;
 	Programs.Set( Hash, P );
 
-	GLuint	VS = GetVertexShaderObject( VertexShaderEnum ),
+	GLuint	VS = GetVertexShaderObject( VertexShaderEnum | ((Variant & PSV_SceneDepthTest) ? UC2GL_SCENEDEPTH_VS_FLAG : 0) ),
 			FS = GetFragmentShaderObject( PixelShader, Variant );
 	if( VS && FS )
 	{
@@ -488,6 +542,7 @@ FOpenGLProgram* UUC2GLRenderDevice::GetProgram( INT PixelShader, DWORD Variant, 
 			P->DistortionScaleLoc	= glGetUniformLocation( Program, "u_distortionScale" );
 			P->DistortionScreenLoc	= glGetUniformLocation( Program, "u_distortionScreen" );
 			P->ColorRemapLoc		= glGetUniformLocation( Program, "u_colorRemap" );
+			P->SceneDepthRectLoc	= glGetUniformLocation( Program, "u_sceneDepthRect" );
 			// Samplers never change: stage n is texture unit n.
 			glUseProgram( Program );
 			for( INT i=0; i<4; i++ )
@@ -497,6 +552,9 @@ FOpenGLProgram* UUC2GLRenderDevice::GetProgram( INT PixelShader, DWORD Variant, 
 				if( Loc >= 0 )
 					glUniform1i( Loc, i );
 			}
+			GLint SceneDepthLoc = glGetUniformLocation( Program, "u_sceneDepth" );
+			if( SceneDepthLoc >= 0 )
+				glUniform1i( SceneDepthLoc, UC2GL_SCENEDEPTH_UNIT );
 			glUseProgram( 0 );
 			ProgramsLinked++;
 			debugf( NAME_Init, TEXT("UC2GLDrv: program %i: pixel shader %i (%s.psh) variant %i, vertex shader %s"), ProgramsLinked, PixelShader, GUC2GLPixelShaders[PixelShader].Name, Variant, appI64toa((SQWORD)VertexShaderEnum) );
@@ -825,6 +883,12 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 	for( INT s=0; s<4; s++ )
 		if( Source.TexOp[s] == 1 && s < MaterialState->StagesUsed && MaterialState->Stages[s].Texture && MaterialState->Stages[s].Texture->TextureID && MaterialState->Stages[s].Texture->IsCubemap )
 			Variant |= 1 << s;
+	// M11: a pass into the distortion accumulation target on a context without gl_FragDepth
+	// (CopyDepthBuffer, UC2GLPostProcess.cpp) tests the scene's depth itself.
+	UBOOL SceneDepthTest = SceneDepthTestFramebuffer && SavedRenderTargetState.GetCurrentState()->Framebuffer == SceneDepthTestFramebuffer
+		&& MaterialState->ZTest && DepthEnabled && RenDev->MainDepthStencil;
+	if( SceneDepthTest )
+		Variant |= PSV_SceneDepthTest;
 
 	FOpenGLProgram* Program = RenDev->GetProgram( PixelShader, Variant, Enum );
 	if( !Program->Program )
@@ -982,6 +1046,14 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 	}
 	if( Program->ColorRemapLoc >= 0 )
 		RenDev->glUniform4fv( Program->ColorRemapLoc, 1, ColorRemapConstant );
+	if( SceneDepthTest )
+	{
+		// (The main depth was resolved by CopyDepthBuffer, which set this test up.)
+		RenDev->glActiveTexture( GL_TEXTURE0 + UC2GL_SCENEDEPTH_UNIT );
+		RenDev->glBindTexture( GL_TEXTURE_2D, RenDev->MainDepthStencil );
+		RenDev->glActiveTexture( GL_TEXTURE0 );
+		RenDev->glUniform4fv( Program->SceneDepthRectLoc, 1, SceneDepthTestRect );
+	}
 
 	// Pixel shader constants (D3D's SetPixelShaderConstant; the shader clamps them to [0,1]).
 	for( INT i=0; i<8; i++ )
@@ -999,6 +1071,210 @@ void FOpenGLRenderInterface::EndProgramPass()
 	RenDev->glUseProgram( 0 );
 	for( INT Attrib=0; Attrib<VA_MAX; Attrib++ )
 		RenDev->glDisableVertexAttribArray( Attrib );
+}
+
+/*-----------------------------------------------------------------------------
+	Program test (M11): complete programs, vertex side included, drawn and read back.
+
+	For every usable pixel shader and five vertex shader enums (texture coordinates passed
+	through; + vertex colours; + five directional lights; + fog; + 4x2 texture transforms on
+	stages 0 and 1) the real program of the driver is linked and a quad is drawn with four
+	sets of pseudo-random constants, lights, matrices, colours and coordinates, over four
+	small bilinear textures; the centre pixel is logged. The numbers mean nothing by
+	themselves: tools/dev/m11-twin.sh compares the lines of the desktop binding (whose
+	fragment shaders tools/psh2glsl.py --gputest ties to the reference interpreter) with the
+	lines of the GL4ES binding, i.e. the same programs after gl4es' conversion to GLSL ES
+	1.00 on OpenGL ES. Part of POSTSELFTEST / -glselftest.
+-----------------------------------------------------------------------------*/
+
+static DWORD UC2GL_ProgTestHash( DWORD A, DWORD B, DWORD C )
+{
+	DWORD H = A * 0x9E3779B1u ^ (B + 0x7F4A7C15u) * 0x85EBCA6Bu ^ (C + 0x165667B1u) * 0xC2B2AE35u;
+	H ^= H >> 15; H *= 0x2C1B3C6Du; H ^= H >> 12; H *= 0x297A2D39u; H ^= H >> 15;
+	return H;
+}
+// A value on the 8-bit grid in [0,1].
+static FLOAT UC2GL_ProgTestUnit( DWORD A, DWORD B, DWORD C )
+{
+	return (UC2GL_ProgTestHash( A, B, C ) & 255) / 255.f;
+}
+
+void UC2GL_RunProgramTest( UUC2GLRenderDevice* RenDev )
+{
+	guard(UC2GL_RunProgramTest);
+
+	enum { Size = 8, Cases = 4, Enums = 5 };
+	QWORD EnumList[Enums];
+	for( INT e=0; e<Enums; e++ )
+	{
+		QWORD Enum = VS_Normal;
+		for( INT s=0; s<4; s++ )
+			VS_SETTEXSOURCE( s, s, Enum )
+		if( e == 1 )	Enum |= VS_VertexColored;
+		if( e == 2 )	Enum |= VS_Lit;
+		if( e == 3 )	Enum |= VS_Fog;
+		if( e == 4 )	{ VS_SETTEXTRANSFORM( 0, VS_Tex_Transform_m4x2, Enum ) VS_SETTEXTRANSFORM( 1, VS_Tex_Transform_m4x2, Enum ) }
+		EnumList[e] = Enum;
+	}
+
+	// Target and textures (through the binding's ordinary texture path; bilinear, repeating).
+	GLuint Target = 0, Framebuffer = 0, Textures[4];
+	RenDev->glGenTextures( 1, &Target );
+	RenDev->glBindTexture( GL_TEXTURE_2D, Target );
+	RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+	RenDev->glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, Size, Size, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL );
+	RenDev->glGenFramebuffers( 1, &Framebuffer );
+	RenDev->glBindFramebuffer( GL_FRAMEBUFFER, Framebuffer );
+	RenDev->glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, Target, 0 );
+	RenDev->glGenTextures( 4, Textures );
+	for( INT t=0; t<4; t++ )
+	{
+		BYTE Texels[4*4*4];
+		for( INT i=0; i<4*4*4; i++ )
+			Texels[i] = UC2GL_ProgTestHash( t, i, 99 ) & 255;
+		RenDev->glActiveTexture( GL_TEXTURE0 + t );
+		RenDev->glBindTexture( GL_TEXTURE_2D, Textures[t] );
+		RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+		RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+		RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
+		RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
+		RenDev->glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
+		RenDev->glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, 4, 4, 0, GL_RGBA, GL_UNSIGNED_BYTE, Texels );
+	}
+	RenDev->glActiveTexture( GL_TEXTURE0 );
+
+	RenDev->glViewport( 0, 0, Size, Size );
+	RenDev->glDisable( GL_SCISSOR_TEST );
+	RenDev->glDisable( GL_STENCIL_TEST );
+	RenDev->glDisable( GL_DEPTH_TEST );
+	RenDev->glDisable( GL_BLEND );
+	RenDev->glDisable( GL_ALPHA_TEST );
+	RenDev->glDisable( GL_CULL_FACE );
+	RenDev->glDepthMask( GL_FALSE );
+	RenDev->glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+
+	INT Shaders = 0, Lines = 0, NoProgram = 0;
+	for( INT Type=0; Type<PS_MAX; Type++ )
+	{
+		if( RenDev->PixelShaderState[Type] != PSS_Ready )
+			continue;
+		Shaders++;
+		for( INT e=0; e<Enums; e++ )
+		{
+			FOpenGLProgram* Program = RenDev->GetProgram( Type, 0, EnumList[e] );
+			if( !Program->Program )
+			{
+				NoProgram++;
+				debugf( NAME_Init, TEXT("UC2GLDrv: progtest %i %s v%i: NO PROGRAM"), Type, appFromAnsi(GUC2GLPixelShaders[Type].Name), e );
+				continue;
+			}
+			FString Line;
+			for( INT c=0; c<Cases; c++ )
+			{
+				DWORD Seed = Type * 1000 + e * 10 + c;
+				#define U(n) UC2GL_ProgTestUnit( Seed, n, 7 )
+				RenDev->glClearColor( 128/255.f, 64/255.f, 192/255.f, 32/255.f );	// what a discarding shader leaves
+				RenDev->glClear( GL_COLOR_BUFFER_BIT );
+				RenDev->glUseProgram( Program->Program );
+
+				FMatrix Identity = FMatrix::Identity;
+				RenDev->glUniformMatrix4fv( Program->ClipLoc, 1, GL_FALSE, (GLfloat*)&Identity );
+				if( Program->ModelViewLoc >= 0 )
+				{
+					// Camera-space z between -100 and -1100 for the fog.
+					FMatrix ModelView = FMatrix::Identity;
+					ModelView.M[3][2] = -100.f - 1000.f * U(1);
+					RenDev->glUniformMatrix4fv( Program->ModelViewLoc, 1, GL_FALSE, (GLfloat*)&ModelView );
+				}
+				if( Program->NormalMatrixLoc >= 0 )
+				{
+					static const FLOAT M3[9] = { 1,0,0, 0,1,0, 0,0,1 };
+					RenDev->glUniformMatrix3fv( Program->NormalMatrixLoc, 1, GL_FALSE, M3 );
+				}
+				if( Program->AmbientLoc >= 0 )
+					RenDev->glUniform4f( Program->AmbientLoc, U(2) * 0.5f, U(3) * 0.5f, U(4) * 0.5f, U(5) );
+				if( Program->LightDirLoc >= 0 || Program->LightColorLoc >= 0 )
+				{
+					FLOAT Dirs[15], Colors[15];
+					for( INT i=0; i<5; i++ )
+					{
+						FVector D = FVector( U(10+i*3) - 0.5f, U(11+i*3) - 0.5f, -0.25f - U(12+i*3) ).SafeNormal();
+						Dirs[i*3] = D.X; Dirs[i*3+1] = D.Y; Dirs[i*3+2] = D.Z;
+						for( INT k=0; k<3; k++ )
+							Colors[i*3+k] = U(30+i*3+k) * 0.25f;
+					}
+					if( Program->LightDirLoc >= 0 )
+						RenDev->glUniform3fv( Program->LightDirLoc, 5, Dirs );
+					if( Program->LightColorLoc >= 0 )
+						RenDev->glUniform3fv( Program->LightColorLoc, 5, Colors );
+				}
+				if( Program->FogParamsLoc >= 0 )
+					RenDev->glUniform4f( Program->FogParamsLoc, 1.f / 1000.f, 1200.f / 1000.f, 0.f, 0.f );
+				if( Program->FogColorLoc >= 0 )
+					RenDev->glUniform4f( Program->FogColorLoc, U(50), U(51), U(52), 1.f );
+				for( INT s=0; s<4; s++ )
+					if( Program->TexMatrixLoc[s] >= 0 )
+					{
+						FMatrix M = FMatrix::Identity;
+						M.M[0][0] = 0.5f + U(60+s);
+						M.M[1][1] = 0.5f + U(64+s);
+						M.M[3][0] = U(68+s) * 0.25f;
+						M.M[3][1] = U(72+s) * 0.25f;
+						RenDev->glUniformMatrix4fv( Program->TexMatrixLoc[s], 1, GL_FALSE, (GLfloat*)&M );
+					}
+				for( INT i=0; i<8; i++ )
+					if( Program->ConstantLoc[i] >= 0 )
+						RenDev->glUniform4f( Program->ConstantLoc[i], U(80+i*4), U(81+i*4), U(82+i*4), U(83+i*4) );
+				if( Program->DistortionScaleLoc >= 0 )
+					RenDev->glUniform4f( Program->DistortionScaleLoc, 0.01f, 0.01f, 0.f, 0.f );
+				if( Program->DistortionScreenLoc >= 0 )
+					RenDev->glUniform4f( Program->DistortionScreenLoc, 0.5f, 0.5f, 0.5f, 0.5f );
+				if( Program->ColorRemapLoc >= 0 )
+					RenDev->glUniform4f( Program->ColorRemapLoc, 0.30f, 0.59f, 0.11f, 1.f );
+
+				for( INT t=0; t<4; t++ )
+				{
+					RenDev->glActiveTexture( GL_TEXTURE0 + t );
+					RenDev->glBindTexture( GL_TEXTURE_2D, Textures[t] );
+				}
+				RenDev->glActiveTexture( GL_TEXTURE0 );
+
+				RenDev->BindQuadBuffer();
+				RenDev->glVertexAttribPointer( VA_Position, 2, GL_FLOAT, GL_FALSE, 0, NULL );
+				RenDev->glEnableVertexAttribArray( VA_Position );
+				for( INT a=1; a<VA_MAX; a++ )
+					RenDev->glDisableVertexAttribArray( a );
+				RenDev->glVertexAttrib4f( VA_Normal, 0.f, 0.f, 1.f, 0.f );
+				RenDev->glVertexAttrib4f( VA_Diffuse, U(110) * 0.5f, U(111) * 0.5f, U(112) * 0.5f, U(113) );
+				RenDev->glVertexAttrib4f( VA_Specular, U(114), U(115), U(116), U(117) );
+				for( INT s=0; s<4; s++ )
+					RenDev->glVertexAttrib4f( VA_TexCoord0+s, U(120+s*4), U(121+s*4), U(122+s*4), 1.f );
+				RenDev->glDrawArrays( GL_TRIANGLE_STRIP, 0, 4 );
+				RenDev->glDisableVertexAttribArray( VA_Position );
+				RenDev->glBindBuffer( GL_ARRAY_BUFFER, 0 );
+				RenDev->glUseProgram( 0 );
+				#undef U
+
+				BYTE Pixel[4] = { 0, 0, 0, 0 };
+				RenDev->glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+				RenDev->glReadPixels( Size/2, Size/2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, Pixel );
+				Line += FString::Printf( TEXT(" %02x%02x%02x%02x"), Pixel[0], Pixel[1], Pixel[2], Pixel[3] );
+			}
+			debugf( NAME_Init, TEXT("UC2GLDrv: progtest %i %s v%i:%s"), Type, appFromAnsi(GUC2GLPixelShaders[Type].Name), e, *Line );
+			Lines++;
+		}
+	}
+	debugf( NAME_Init, TEXT("UC2GLDrv: progtest summary: %i pixel shaders x %i vertex shader enums, %i programs drawn (%i cases each), %i could not be built"), Shaders, Enums, Lines, Cases, NoProgram );
+
+	RenDev->glBindFramebuffer( GL_FRAMEBUFFER, RenDev->MainFramebuffer );
+	RenDev->glDeleteFramebuffers( 1, &Framebuffer );
+	RenDev->glDeleteTextures( 1, &Target );
+	RenDev->glDeleteTextures( 4, Textures );
+	RenDev->glEnable( GL_SCISSOR_TEST );
+	RenDev->RenderInterface.RestoreAfterDeviceDraw();
+
+	unguard;
 }
 
 /*-----------------------------------------------------------------------------

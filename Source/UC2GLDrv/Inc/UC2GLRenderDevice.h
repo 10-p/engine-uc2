@@ -57,7 +57,8 @@ struct FOpenGLProgram
 					ConstantLoc[8],
 					DistortionScaleLoc,		// M7: VSC_DISTORTION_SCALE
 					DistortionScreenLoc,	// M7: clip space to back-buffer texture coordinates
-					ColorRemapLoc;			// M7: VSC_COLOR_REMAP
+					ColorRemapLoc,			// M7: VSC_COLOR_REMAP
+					SceneDepthRectLoc;		// M11: the scene depth test in the shader (PSV_SceneDepthTest)
 };
 
 //
@@ -100,6 +101,7 @@ public:
 	FRenderCaps						RenderCaps;
 	FOpenGLDeviceCaps				DeviceCaps;
 	UViewport*						LockedViewport;
+	UViewport*						LastViewport;		// the viewport of the last frame (GLPROBE)
 	INT								FrameCounter;
 	INT								NumTextureUnits;
 	FLOAT							MaxAnisotropy;
@@ -113,9 +115,28 @@ public:
 	// texture (M7), so a shader can read the scene's depth (depth of field).
 	GLuint							MainFramebuffer,
 									MainColorTexture,
-									MainDepthStencil;
+									MainDepthStencil,		// texture (CapDepthTexture) ...
+									MainDepthRenderbuffer;	// ... or renderbuffer (M11: no depth textures)
 	INT								MainWidth,
 									MainHeight;
+	// M11 / O-8, anti-aliasing. AntiAliasing (ini; -glaa=N, -glnoaa) is the number of samples.
+	// Desktop GL: MainFramebuffer is then a multisampled framebuffer (renderbuffers), and
+	// MainColorTexture / MainDepthStencil are its resolve, in MainResolveFramebuffer, brought up
+	// to date (ResolveMain) before anything reads them: the copies the post-process samples,
+	// the depth copy, the present pass, ReadPixels. OpenGL ES 2 / WebGL 1 have no multisampled
+	// framebuffers: there the present pass applies FXAA instead (PresentFXAA).
+	INT								AntiAliasing;
+	INT								MainSamples;			// 0: the main framebuffer is single-sampled
+	GLuint							MainResolveFramebuffer,
+									MainMSColorRenderbuffer,
+									MainMSDepthRenderbuffer;
+	INT								ResolvedColorVersion,
+									ResolvedDepthVersion;
+	UBOOL							PresentFXAA;
+	GLint							PresentFXAALoc;
+	void ResolveMain( UBOOL Color, UBOOL Depth );
+	// The framebuffer that holds MainColorTexture / MainDepthStencil (the main one without MSAA).
+	GLuint MainTextureFramebuffer() { return MainSamples ? MainResolveFramebuffer : MainFramebuffer; }
 
 	// Render-target post-processing (M7; UC2GLPostProcess.cpp, docs/porting/analysis/postprocess.md).
 	// UsePostProcess=False is exactly M6: no capability reported to the engine, the M7 pixel
@@ -186,6 +207,92 @@ public:
 	#include "UC2GLFuncs.h"
 	#undef GL_EXT
 	#undef GL_PROC
+	// The library under the binding (UC2GLRawFuncs.h): the same functions on desktop GL,
+	// OpenGL ES 2 / WebGL itself under GL4ES.
+	#define GL_RAW(ret,func,parms) static ret (APIENTRY *Raw_##func)parms;
+	#include "UC2GLRawFuncs.h"
+	#undef GL_RAW
+
+	// The GL binding (UC2GLBinding.h; M11). This class binds desktop OpenGL through SDL;
+	// UC2GL4ESDrv.UC2GL4ESRenderDevice overrides the Binding* virtuals to bind OpenGL ES 2 /
+	// WebGL 1 through GL4ES. Everything else is the same object code for both.
+	UBOOL							IsGLES;				// the context is OpenGL ES 2 / WebGL 1 (behind GL4ES)
+	// What the context can do; all true on desktop GL. Each has its fallback, and a switch
+	// that masks it so the fallback can be tested where the capability exists
+	// (-glnodepthtexture, -glnofragdepth, -glnos3tc, -glnouintindex).
+	UBOOL							CapDepthTexture,	// a depth-stencil texture can be a framebuffer attachment and be sampled
+									CapFragDepth,		// a fragment shader can write gl_FragDepth
+									CapUIntIndex,		// 32-bit index buffers
+									CapTextureMaxLevel,	// GL_TEXTURE_MAX_LEVEL: a mip chain may stop before 1x1
+									CapFragmentHighp,	// highp float in fragment shaders
+									CapRawS3TC;			// GLES: the hardware takes DXT data (gl4es itself always decodes it in software)
+	// A compressed image for a texture, handed to the library under the binding (GLES: gl4es
+	// would decode it to RGBA8 on the CPU). BindTarget is GL_TEXTURE_2D or GL_TEXTURE_CUBE_MAP.
+	void CompressedTexImage2D( GLenum BindTarget, GLuint Texture, GLenum Target, INT Level, GLenum Format, INT Width, INT Height, INT Size, const BYTE* Data, UBOOL FirstStorage );
+	UBOOL UseHardwareS3TC() { return IsGLES ? CapRawS3TC : SUPPORTS_GL_EXT_texture_compression_s3tc; }
+	// The same for uncompressed data of an engine texture (Format GL_BGRA, GL_LUMINANCE,
+	// GL_ALPHA or GL_RGB with 5-6-5; tightly packed rows).
+	void TexImage2D( GLenum BindTarget, GLuint Texture, GLenum Target, INT Level, GLint Internal, INT Width, INT Height, GLenum Format, GLenum Type, const BYTE* Data );
+	virtual const TCHAR* BindingName();
+	// SDL_GL_SetAttribute for the context this binding wants; before the window is (re)created.
+	virtual void BindingSetContextAttributes();
+	// The viewport's window with a current context of this binding.
+	virtual UBOOL BindingCreateContext( UViewport* Viewport, UBOOL Fullscreen, INT NewX, INT NewY, UBOOL bSaveSize );
+	// Once, with the context current, before the pointer table is filled.
+	virtual UBOOL BindingInit();
+	virtual void* BindingGetProcAddress( const char* Name );
+	virtual void* BindingGetRawProcAddress( const char* Name );
+	virtual UBOOL BindingContextAlive();
+	virtual void BindingGetDrawableSize( UViewport* Viewport, INT& Width, INT& Height );
+	virtual void BindingSetSwapInterval( INT Interval );
+	virtual void BindingSwap( UViewport* Viewport );
+	// The hardware's extension string (GLES: not gl4es' emulated one), space separated.
+	UBOOL FindRawExt( const char* Name );
+	// The first lines of every GLSL source this driver compiles.
+	const ANSICHAR* ShaderPrologue( UBOOL Fragment );
+
+	// Depth-stencil storage for framebuffers, and its attachment to the framebuffer bound to
+	// GL_FRAMEBUFFER (UC2GLRenderDevice.cpp; around gl4es on GLES).
+	GLuint CreateDepthStencilTexture( INT Width, INT Height );
+	GLuint CreateDepthStencilRenderbuffer( INT Width, INT Height );
+	void DeleteDepthStencilRenderbuffer( GLuint& Renderbuffer );
+	void AttachDepthStencilTexture( GLuint Framebuffer, GLuint Texture );
+	void AttachDepthStencilRenderbuffer( GLuint Framebuffer, GLuint Renderbuffer );
+	void AttachMainDepthStencil( GLuint Framebuffer );
+	GLint RawBindFramebuffer( GLuint Framebuffer );
+	// A 2D texture as colour attachment 0 of the framebuffer bound to GL_FRAMEBUFFER.
+	void AttachColorTexture( GLuint Texture );
+	// Verification (UC2GLSelfTest.cpp): writes the main depth buffer from D24S8 words, bottom
+	// row first. Returns 0 where the context cannot do that (no depth texture).
+	UBOOL UploadMainDepth( const DWORD* Rows, INT Width, INT Height );
+	void DetectCapabilities();
+	void PrepareGL4ESTextureZero();
+	// A static full-screen strip (-1..1) in a buffer object: WebGL has no client-side arrays.
+	GLuint							QuadBuffer;
+	// Buffer object names. On GLES a freed name is kept and handed out again instead of
+	// being deleted (NewBuffer / FreeBuffer in UC2GLRenderDevice.cpp say why).
+	TArray<GLuint>					FreeArrayBuffers, FreeElementBuffers;
+	GLuint NewBuffer( GLenum Target );
+	void FreeBuffer( GLenum Target, GLuint& Buffer );
+	// -glnolodbias: every texture LOD bias is 0 (verification: GLES has no LOD bias for the
+	// fixed-function path, so this is what the desktop driver is compared with).
+	UBOOL							NoLODBias;
+	// -glerrorsdraw: glGetError after every draw call and texture upload, with what it was (slow; to find the call behind an error -glerrors reports).
+	UBOOL							CheckGLErrorsPerDraw;
+	// -glstats: one log line every 300 frames (M11, G5): frame time and what a frame costs
+	// in calls the driver makes (per frame averages over the interval).
+	UBOOL							LogStats;
+	INT								StatDraws,			// draw calls (passes), all
+									StatPrimitives,
+									StatMaterials,		// passes whose full material state was (re)applied
+									StatBufferUploads, StatBufferBytes,
+									StatTextureUploads,
+									StatPostQuads,		// the device's own full-target quads (snapshots, depth copies)
+									StatSnapshots, StatDepthColors, StatDepthCopies,
+									StatFrame0;
+	DOUBLE							StatTime0;
+	void LogFrameStats();
+	void BindQuadBuffer();
 
 	// Constructors.
 	UUC2GLRenderDevice();

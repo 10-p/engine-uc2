@@ -38,6 +38,9 @@ Revision history:
 #if UC2_WITH_UC2GLDRV
 #include "UC2GLDrv.h"
 #endif
+#if UC2_WITH_UC2GL4ESDRV	// M11: the GL4ES binding of UC2GLDrv (GLES2 natively, WebGL on the web)
+#include "UC2GL4ESDrv.h"
+#endif
 #if UC2_WITH_UC2ALAUDIO	// M8
 #include "UC2ALAudio.h"
 #endif
@@ -285,6 +288,7 @@ static const FRenderSwitch GRenderSwitches[] =
 {
 	{ TEXT("NULLRENDERER"), TEXT("Engine.NullRenderDevice") },
 	{ TEXT("OPENGL"),       TEXT("UC2GLDrv.UC2GLRenderDevice") },	// M5
+	{ TEXT("GL4ES"),        TEXT("UC2GL4ESDrv.UC2GL4ESRenderDevice") },	// M11: the same driver on GLES2 through GL4ES
 };
 
 static void SelectRenderDevice()
@@ -484,6 +488,9 @@ int main( int argc, char** argv )
 		AUTO_INITIALIZE_REGISTRANTS_SDL2DRV;
 #if UC2_WITH_UC2GLDRV
 		AUTO_INITIALIZE_REGISTRANTS_UC2GLDRV;
+#endif
+#if UC2_WITH_UC2GL4ESDRV	// M11
+		AUTO_INITIALIZE_REGISTRANTS_UC2GL4ESDRV;
 #endif
 #if UC2_WITH_UC2ALAUDIO	// M8
 		AUTO_INITIALIZE_REGISTRANTS_UC2ALAUDIO;

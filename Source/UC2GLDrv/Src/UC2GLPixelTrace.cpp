@@ -68,8 +68,19 @@ void UC2GL_PixelTraceRead( FOpenGLRenderInterface* RI, FColor& Out )
 	INT X, Y;
 	TracedPixel( RI, X, Y );
 	BYTE RGBA[4] = { 0, 0, 0, 0 };
+	// M11 (O-8): a multisampled main framebuffer cannot be read: read its resolve, made now.
+	UUC2GLRenderDevice* RenDev = RI->RenDev;
+	UBOOL Resolved = RenDev->MainSamples && RI->SavedRenderTargetState.GetCurrentState()->Framebuffer == RenDev->MainFramebuffer;
+	if( Resolved )
+	{
+		RenDev->ResolvedColorVersion = -1;
+		RenDev->ResolveMain( 1, 0 );
+		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, RenDev->MainResolveFramebuffer );
+	}
 	RI->RenDev->glPixelStorei( GL_PACK_ALIGNMENT, 1 );
 	RI->RenDev->glReadPixels( X, Y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, RGBA );
+	if( Resolved )
+		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, RenDev->MainFramebuffer );
 	Out = FColor( RGBA[0], RGBA[1], RGBA[2], RGBA[3] );
 }
 

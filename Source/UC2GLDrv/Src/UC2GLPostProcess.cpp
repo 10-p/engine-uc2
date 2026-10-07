@@ -84,12 +84,16 @@ static const char* GPostCopyFragmentShader =
 // The depth arrives as a 32-bit float: the 24-bit value is reproduced to within two units
 // (self-test "depth-color"), and without the min() a depth of exactly 1 (the cleared buffer,
 // the sky) rounds up to 2^24, whose high byte does not exist: found by self-test "dof-ramp".
+// M11: 2^24-1 is written as a product because gl4es reprints every float literal of a shader
+// with six significant digits (16777215.0 became 1.67772e+07 = 16777200; found by self-test
+// "depth-color" on the twin). No literal in any shader of the driver may need more than six.
 static const char* GPostDepthEncodeFragmentShader =
-	"uniform sampler2D uSource;\n"
+	"uniform UC2_HIGHP sampler2D uSource;\n"
 	"varying vec2 vTexCoord;\n"
 	"void main()\n"
 	"{\n"
-	"	float Z = min( floor( texture2D( uSource, vTexCoord ).r * 16777215.0 + 0.5 ), 16777215.0 );\n"
+	"	float ZMax = 4096.0 * 4096.0 - 1.0;\n"
+	"	float Z = min( floor( texture2D( uSource, vTexCoord ).r * ZMax + 0.5 ), ZMax );\n"
 	"	float High = floor( Z / 65536.0 );\n"
 	"	float Middle = floor( (Z - High * 65536.0) / 256.0 );\n"
 	"	float Low = Z - High * 65536.0 - Middle * 256.0;\n"
@@ -97,7 +101,7 @@ static const char* GPostDepthEncodeFragmentShader =
 	"}\n";
 
 static const char* GPostDepthCopyFragmentShader =
-	"uniform sampler2D uSource;\n"
+	"uniform UC2_HIGHP sampler2D uSource;\n"
 	"varying vec2 vTexCoord;\n"
 	"void main()\n"
 	"{\n"
@@ -107,11 +111,10 @@ static const char* GPostDepthCopyFragmentShader =
 
 static GLuint UC2GL_BuildPostProgram( UUC2GLRenderDevice* RenDev, const char* FragmentBody, const TCHAR* What, GLint& RectLoc )
 {
-	const char* Prologue = "#version 120\n";
 	GLuint Shaders[2] = { 0, 0 };
 	for( INT i=0; i<2; i++ )
 	{
-		const char* Sources[2] = { Prologue, i == 0 ? GPostVertexShader : FragmentBody };
+		const char* Sources[2] = { RenDev->ShaderPrologue( i == 1 ), i == 0 ? GPostVertexShader : FragmentBody };
 		Shaders[i] = RenDev->glCreateShader( i == 0 ? GL_VERTEX_SHADER : GL_FRAGMENT_SHADER );
 		RenDev->glShaderSource( Shaders[i], 2, Sources, NULL );
 		RenDev->glCompileShader( Shaders[i] );
@@ -243,6 +246,7 @@ void UUC2GLRenderDevice::SetPostProcess( UBOOL Enable )
 //
 void UUC2GLRenderDevice::DrawPostQuad( GLuint Program, GLint RectLoc, GLuint SourceTexture, GLuint DestFramebuffer, INT DestWidth, INT DestHeight, const FLOAT* Rect, UBOOL DepthOnly )
 {
+	StatPostQuads++;
 	glBindFramebuffer( GL_FRAMEBUFFER, DestFramebuffer );
 	glViewport( 0, 0, DestWidth, DestHeight );
 	glDisable( GL_SCISSOR_TEST );
@@ -270,12 +274,12 @@ void UUC2GLRenderDevice::DrawPostQuad( GLuint Program, GLint RectLoc, GLuint Sou
 	glUseProgram( Program );
 	glUniform4f( RectLoc, Rect[0], Rect[1], Rect[2], Rect[3] );
 
-	static const FLOAT Quad[8] = { -1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, 1.f };
-	glBindBuffer( GL_ARRAY_BUFFER, 0 );
-	glVertexAttribPointer( 0, 2, GL_FLOAT, GL_FALSE, 0, Quad );
+	BindQuadBuffer();
+	glVertexAttribPointer( 0, 2, GL_FLOAT, GL_FALSE, 0, NULL );
 	glEnableVertexAttribArray( 0 );
 	glDrawArrays( GL_TRIANGLE_STRIP, 0, 4 );
 	glDisableVertexAttribArray( 0 );
+	glBindBuffer( GL_ARRAY_BUFFER, 0 );
 	glUseProgram( 0 );
 
 	glEnable( GL_SCISSOR_TEST );
@@ -294,7 +298,7 @@ static void UC2GL_CreateColorTarget( UUC2GLRenderDevice* RenDev, GLuint& Texture
 	RenDev->glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8, Width, Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL );
 	RenDev->glGenFramebuffers( 1, &Framebuffer );
 	RenDev->glBindFramebuffer( GL_FRAMEBUFFER, Framebuffer );
-	RenDev->glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, Texture, 0 );
+	RenDev->AttachColorTexture( Texture );
 	GLenum Status = RenDev->glCheckFramebufferStatus( GL_FRAMEBUFFER );
 	if( Status != GL_FRAMEBUFFER_COMPLETE )
 		debugf( NAME_Warning, TEXT("UC2GLDrv: post-process copy target %ix%i incomplete (0x%04x)"), Width, Height, Status );
@@ -339,8 +343,29 @@ void UUC2GLRenderDevice::UpdateSampledTexture( FOpenGLTexture* Texture )
 			UC2GL_CreateColorTarget( this, DepthColorTexture, DepthColorFramebuffer, MainWidth, MainHeight );
 			DepthColorVersion = -1;
 		}
-		if( DepthColorVersion != MainDepthVersion )
+		if( !MainDepthStencil )
 		{
+			// M11, NOT IMPLEMENTED YET: a context without depth textures (CapDepthTexture; WebGL 1
+			// without WEBGL_depth_texture). The plan is a second draw of every depth-writing
+			// primitive into this target (docs/porting/analysis/web-renderer.md, "Fallbacks").
+			// Until then the depth colour says "near" everywhere: the depth of field, its only
+			// reader, then leaves the picture sharp instead of blurring all of it.
+			UC2GL_LOG_ONCE( TEXT("UC2GLDrv: no depth textures on this context: the depth of field has no depth to read and stays off (fallback not implemented)") );
+			if( DepthColorVersion == -1 )
+			{
+				glBindFramebuffer( GL_FRAMEBUFFER, DepthColorFramebuffer );
+				glDisable( GL_SCISSOR_TEST );
+				glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+				glClearColor( 0.f, 0.f, 0.f, 0.f );
+				glClear( GL_COLOR_BUFFER_BIT );
+				glEnable( GL_SCISSOR_TEST );
+				RenderInterface.RestoreAfterDeviceDraw();
+				DepthColorVersion = 0;
+			}
+		}
+		else if( DepthColorVersion != MainDepthVersion )
+		{
+			ResolveMain( 0, 1 );
 			DrawPostQuad( PostDepthEncodeProgram, PostDepthEncodeRectLoc, MainDepthStencil, DepthColorFramebuffer, MainWidth, MainHeight, FlipRect, 0 );
 			DepthColorVersion = MainDepthVersion;
 			DepthColorCopies++;
@@ -356,6 +381,11 @@ void UUC2GLRenderDevice::UpdateSampledTexture( FOpenGLTexture* Texture )
 		}
 		if( SnapshotVersion != MainColorVersion )
 		{
+			// -glsnapshotlog (G5): what asks for each back-buffer snapshot, for one frame (the 600th).
+			if( FrameCounter == 600 && ParseParam( appCmdLine(), TEXT("glsnapshotlog") ) )
+				debugf( NAME_Init, TEXT("UC2GLDrv: snapshot %i of frame %i, for material %s (main colour version %i, the snapshot had %i)"), SnapshotCopies + 1, FrameCounter,
+					RenderInterface.GetLastMaterial() ? RenderInterface.GetLastMaterial()->GetPathName() : TEXT("None"), MainColorVersion, SnapshotVersion );
+			ResolveMain( 1, 0 );
 			DrawPostQuad( PostCopyProgram, PostCopyRectLoc, MainColorTexture, SnapshotFramebuffer, MainWidth, MainHeight, FlipRect, 0 );
 			SnapshotVersion = MainColorVersion;
 			SnapshotCopies++;
@@ -685,6 +715,24 @@ void FOpenGLRenderInterface::CopyDepthBuffer( FRenderTarget* DestTarget, FRender
 		return;
 	}
 
+	if( !RenDev->MainDepthStencil )
+	{
+		// M11, NOT IMPLEMENTED: a context without depth textures (WebGL 1 without
+		// WEBGL_depth_texture) has no scene depth a shader can read, so neither the copy nor
+		// the in-shader test below can be done (web-renderer.md, "Fallbacks"). The target's
+		// depth is cleared: what is drawn into it (the distortion accumulation) is not hidden
+		// by nearer scene geometry.
+		UC2GL_LOG_ONCE( TEXT("UC2GLDrv: no depth textures on this context: the scene's depth cannot reach the distortion accumulation target, distortion shows through nearer geometry (fallback not implemented)") );
+		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, DestTexture->FramebufferID );
+		RenDev->glDisable( GL_SCISSOR_TEST );
+		RenDev->glDepthMask( GL_TRUE );
+		RenDev->glClearDepth( 1.0 );
+		RenDev->glClear( GL_DEPTH_BUFFER_BIT );
+		RenDev->glEnable( GL_SCISSOR_TEST );
+		RestoreAfterDeviceDraw();
+		return;
+	}
+
 	// adjust UVs based on viewport size
 	// so that we only blit the desired portion of the back buffer
 	FLOAT OffsetX = (FLOAT)Viewport->OffsetX / (FLOAT)RenDev->MainWidth;
@@ -706,6 +754,31 @@ void FOpenGLRenderInterface::CopyDepthBuffer( FRenderTarget* DestTarget, FRender
 		U0,
 		1.f - V0
 	};
+	// O-8: the multisampled main depth into the texture both paths below read.
+	RenDev->ResolveMain( 0, 1 );
+	if( !RenDev->CapFragDepth )
+	{
+		// M11, a context without gl_FragDepth (WebGL 1 without EXT_frag_depth): the depth
+		// cannot be written by a shader, so it is not copied. The target's depth is cleared
+		// instead (the accumulation passes still test against each other there), and every
+		// program pass drawn into this target until the next frame compares its fragment's
+		// depth with the scene's depth in the shader, through the same mapping the copy quad
+		// would use: target pixel centre (gl_FragCoord.xy) / target size -> this Rect.
+		UC2GL_LOG_ONCE( TEXT("UC2GLDrv: no gl_FragDepth on this context: the distortion accumulation passes test the scene's depth in their fragment shaders instead of a depth copy") );
+		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, DestTexture->FramebufferID );
+		RenDev->glDisable( GL_SCISSOR_TEST );
+		RenDev->glDepthMask( GL_TRUE );
+		RenDev->glClearDepth( 1.0 );
+		RenDev->glClear( GL_DEPTH_BUFFER_BIT );
+		RenDev->glEnable( GL_SCISSOR_TEST );
+		RestoreAfterDeviceDraw();
+		SceneDepthTestFramebuffer	= DestTexture->FramebufferID;
+		SceneDepthTestRect[0]		= Rect[0] / Max<INT>( DestTexture->CachedWidth, 1 );
+		SceneDepthTestRect[1]		= Rect[1] / Max<INT>( DestTexture->CachedHeight, 1 );
+		SceneDepthTestRect[2]		= Rect[2];
+		SceneDepthTestRect[3]		= Rect[3];
+		return;
+	}
 	RenDev->DrawPostQuad( RenDev->PostDepthCopyProgram, RenDev->PostDepthCopyRectLoc, RenDev->MainDepthStencil, DestTexture->FramebufferID, DestTexture->CachedWidth, DestTexture->CachedHeight, Rect, 1 );
 	RenDev->DepthBufferCopies++;
 

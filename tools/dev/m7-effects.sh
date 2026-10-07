@@ -26,6 +26,9 @@
 # change of the renderer (the GL4ES/WebGL twin at M11) shows up as a number, not only as a picture.
 # Animated things (the pawn's idle pose, pickups, the HUD) differ between any two runs; expect a few percent.
 #
+# UC2_GLARGS="-gl4es" (M11) adds arguments to every run: the same pictures from the GL4ES/GLES2 twin of the
+# driver (tools/dev/m11-twin.sh uses a second run tree for it and installs the desktop's B pictures as refs).
+#
 # What the on side should look like is in docs/porting/analysis/postprocess.md (per-effect table). There is no
 # Xbox reference picture for any of them.
 set -u
@@ -75,7 +78,7 @@ PY
 
 # The numeric self-test of the primitives (UC2GLSelfTest.cpp), unless effects were named and it is not among them.
 if [ "$want" = "  " ] || [ "${want#* selftest }" != "$want" ]; then
-  UC2_RES=1280x720 UC2_PRECMD="set UCDeathmatch NumPlayers 0" "$shot" "$tree" fx-selftest 60 34 DM-Deadbolt -glerrors -glexec=44:POSTSELFTEST > "$out/fx-selftest.report" 2>&1
+  UC2_RES=1280x720 UC2_PRECMD="set UCDeathmatch NumPlayers 0" "$shot" "$tree" fx-selftest 60 34 DM-Deadbolt -glerrors -glexec=44:POSTSELFTEST ${UC2_GLARGS:-} > "$out/fx-selftest.report" 2>&1
   grep -a "UC2GLDrv: selftest" "$out/fx-selftest.out" | sed -E 's/^UC2GLDrv: //; s/;.*//' | sed 's/^/fx /'
   grep -a -q "selftest summary" "$out/fx-selftest.out" || echo "fx selftest: FAILED to run (see $out/fx-selftest.out)"
 fi
@@ -96,9 +99,9 @@ echo "$EFFECTS" | while IFS='|' read -r name map pinned secs fire la lb args; do
     try=$((try+1))
     rm -f "$out/fx-$name-0.png" "$out/fx-$name-1.png" "$out/fx-$name-a.png" "$out/fx-$name-b.png" "$out/fx-$name-ab.png"
     if [ "$pinned" = 1 ]; then
-      report=$(UC2_RES=1280x720 UC2_PRECMD="set UCDeathmatch NumPlayers 0" "$shot" "$tree" "fx-$name" "$secs" "$fire" "$map" -glerrors $args 2>&1)
+      report=$(UC2_RES=1280x720 UC2_PRECMD="set UCDeathmatch NumPlayers 0" "$shot" "$tree" "fx-$name" "$secs" "$fire" "$map" -glerrors $args ${UC2_GLARGS:-} 2>&1)
     else
-      report=$(UC2_RES=1280x720 "$shot" "$tree" "fx-$name" "$secs" "$fire" "$map" -glerrors $args 2>&1)
+      report=$(UC2_RES=1280x720 "$shot" "$tree" "fx-$name" "$secs" "$fire" "$map" -glerrors $args ${UC2_GLARGS:-} 2>&1)
     fi
     ok=1
     if [ "$name" = praxis-panes ] && [ -f "$out/fx-$name-0.png" ] && [ -f "$work/logs/oracle/DM-Praxis-windows-A.png" ]; then

@@ -346,6 +346,53 @@ endif()
 add_subdirectory(Thirdparty/Theora)
 # --- end M9 --------------------------------------------------------------------------------------------------
 
+# --- M11: GL4ES (desktop OpenGL 1.x/2.x calls translated to OpenGL ES 2 / WebGL 1), fetched as engine-ut2004
+# fetches it (same fork, same branch). The web build renders through it; the native Linux build carries it
+# too, as the second binding of the one GL driver (Source/UC2GL4ESDrv: "the native twin"), so every renderer
+# test runs against the web code path without a browser. Not on Windows: the twin is a Linux test vehicle.
+# Notebook: docs/porting/analysis/web-renderer.md.
+if(EMSCRIPTEN OR (UNIX AND NOT APPLE AND NOT MINGW))
+  include(FetchContent)
+  set(GL4ES_GIT_REPOSITORY "https://github.com/10-p/gl4es.git"
+      CACHE STRING "GL4ES git remote (the 10-p fork carries the cubemap/combiner fixes; upstream: ptitSeb/gl4es)")
+  set(GL4ES_GIT_TAG "fix/cubemap-bind-active-unit" CACHE STRING "GL4ES git ref")
+  FetchContent_Declare(
+    GL4ES
+    GIT_REPOSITORY ${GL4ES_GIT_REPOSITORY}
+    GIT_TAG        ${GL4ES_GIT_TAG}
+    GIT_SHALLOW    TRUE
+  )
+  # Static library, GLES2 back end, no X11/EGL of its own (SDL or Emscripten owns the context and gl4es is
+  # handed their GetProcAddress), no constructor (the device initialises it once the context exists).
+  set(NOX11 ON CACHE BOOL "" FORCE)
+  set(NOEGL ON CACHE BOOL "" FORCE)
+  set(STATICLIB ON CACHE BOOL "" FORCE)
+  set(DEFAULT_ES 2 CACHE STRING "" FORCE)
+  set(NO_INIT_CONSTRUCTOR ON CACHE BOOL "" FORCE)
+  # (-m32 needs nothing here: the 32-bit block above already put it into CMAKE_C_FLAGS for every C library.)
+  set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
+  FetchContent_MakeAvailable(GL4ES)
+  unset(CMAKE_POLICY_VERSION_MINIMUM)
+  if(TARGET GL)
+    # gl4es writes its archive into its own source tree (shared by every build directory): keep each
+    # build's copy in its own binary directory.
+    set_target_properties(GL PROPERTIES
+      ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+      LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
+    # The engine's directory-wide definitions and C++ switches are not gl4es's business; its own -O2 must
+    # survive (at -O0 one of its functions exceeds V8's limit of locals once Asyncify has instrumented it:
+    # engine-ut2004's finding).
+    target_compile_options(GL PRIVATE -O2 -w)
+    if(NOT TARGET gl4es::GL)
+      add_library(gl4es::GL ALIAS GL)
+    endif()
+    message(STATUS "gl4es (static, GLES2): ${GL4ES_GIT_REPOSITORY}@${GL4ES_GIT_TAG}")
+  else()
+    message(FATAL_ERROR "gl4es: expected target 'GL' was not created")
+  endif()
+endif()
+# --- end M11 -------------------------------------------------------------------------------------------------
+
 #-----------------------------------------------------------------------------
 # Engine packages. A package joins the build when its CMakeLists.txt lands (docs/porting/PLAN.md lists
 # the order); everything else under Source/ is reference and is not compiled.
@@ -361,8 +408,8 @@ set(UC2_PACKAGES
 # Native-only tools: the commandlet host is not part of the web build. SDL2Drv and SDLLaunch are native-only
 # until the web client is wired (M4w: -sUSE_SDL=2, Asyncify yield, preload).
 set(UC2_NATIVE_ONLY_PACKAGES UCC Editor SDL2Drv SDLLaunch)
-# M5: the desktop-GL binding of UC2GLDrv is native-only; the web build gets the same source through GL4ES later.
-list(APPEND UC2_NATIVE_ONLY_PACKAGES UC2GLDrv)
+# M11: UC2GLDrv is built everywhere (one driver source); its GL4ES binding, UC2GL4ESDrv, where gl4es is
+# (Linux and the web: see the M11 block above and Source/UC2GL4ESDrv/CMakeLists.txt).
 # M8: the OpenAL audio device was native-only until the web build adopted it (M11/O-2: openal-soft's Web Audio
 # backend, linked into the module by the block above).
 

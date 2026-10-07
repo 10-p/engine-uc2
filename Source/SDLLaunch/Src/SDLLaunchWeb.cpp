@@ -54,7 +54,10 @@ extern "C" EMSCRIPTEN_KEEPALIVE char* ue_exec_command( const char* Cmd )
 	if( GUC2WebEngine && Cmd )
 	{
 		FStringOutputDevice Out;
-		GUC2WebEngine->Exec( Cmd, Out );
+		// M11: what the engine itself does not take goes to the first viewport, as a line typed
+		// on the console would (the render device's commands, the player's exec functions).
+		if( !GUC2WebEngine->Exec( Cmd, Out ) && GUC2WebEngine->Client && GUC2WebEngine->Client->Viewports.Num() )
+			GUC2WebEngine->Client->Viewports(0)->Exec( Cmd, Out );
 		Captured = Out;
 	}
 	return (char*)*Captured;
