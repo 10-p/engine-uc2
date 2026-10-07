@@ -1898,6 +1898,8 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 			LogPixelShaderStats();
 			UsePixelShaders = Wanted;
 			InitPixelShaders();
+			// M7b: the terrain pixel shader comes and goes with them.
+			RefreshTerrainPasses();
 		}
 		Ar.Logf( TEXT("UC2GLDrv: pixel shaders %s (frame %i)"), UsePixelShaders ? TEXT("on") : TEXT("off"), FrameCounter );
 		return 1;
@@ -2043,10 +2045,13 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	}
 	else if( ParseCommand(&Cmd,TEXT("XBOXPROJECTORS")) )
 	{
-		// M7b: XBOXPROJECTORS [0|1] (no argument: toggle); the next material set uses it.
+		// M7b: XBOXPROJECTORS [0|1] (no argument: toggle). The engine batches static projectors
+		// when a map loads (UGameEngine::LoadMap), so the change shows from the next map on.
+		// (Switching a loaded level over was tried: the static actor leaf lists of
+		// ULevel::BuildRenderData do not follow a projector re-attached at run time.)
 		UseXboxProjectors = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !UseXboxProjectors;
-		Ar.Logf( TEXT("UC2GLDrv: Xbox projector material %s%s (frame %i)"), UseXboxProjectors ? TEXT("on") : TEXT("off"),
-			(UseXboxProjectors && !XboxProjectorsActive()) ? TEXT(" but not active (pixel shaders off or a projector shader missing)") : TEXT(""), FrameCounter );
+		Ar.Logf( TEXT("UC2GLDrv: Xbox projector batching %s from the next map load%s (frame %i)"), UseXboxProjectors ? TEXT("on") : TEXT("off"),
+			(UseXboxProjectors && !XboxProjectorsActive()) ? TEXT(", but not available (pixel shaders off or a projector shader missing)") : TEXT(""), FrameCounter );
 		return 1;
 	}
 	else if( ParseCommand(&Cmd,TEXT("TERRAIN3LAYER")) )
@@ -2055,14 +2060,7 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		// from the caps when it loads (ATerrainInfo::CheckComputeDataOnLoad -> Update), so every
 		// terrain of the current level is updated the same way again.
 		UseTerrain3Layer = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !UseTerrain3Layer;
-		INT Updated = 0;
-		for( TObjectIterator<ATerrainInfo> It; It; ++It )
-			if( !It->bDeleteMe && It->XLevel )
-			{
-				It->Update( 0.f );
-				Updated++;
-			}
-		Ar.Logf( TEXT("UC2GLDrv: terrain layers per pass %i (%i terrains updated, frame %i)"), GetRenderCaps()->MaxSimultaneousTerrainLayers, Updated, FrameCounter );
+		RefreshTerrainPasses();
 		return 1;
 	}
 	else if( ParseCommand(&Cmd,TEXT("GLSHADOWCHECK")) )
@@ -2347,22 +2345,47 @@ FRenderCaps* UUC2GLRenderDevice::GetRenderCaps()
 	RenderCaps.ShippedDOFBlurAlpha			= DOFShippedBlurAlpha ? 1 : 0;
 	// M7b: the Xbox shadow-texture filter (UnShadowProjector.cpp; analysis/projectors.md).
 	RenderCaps.XboxShadows					= XboxShadowsActive() ? 1 : 0;
+	// M7b: level-static projectors batched and drawn with the Xbox projector material.
+	RenderCaps.XboxProjectors				= XboxProjectorsActive() ? 1 : 0;
 	return &RenderCaps;
 }
 
-UBOOL UUC2GLRenderDevice::XboxProjectorsActive()
+UBOOL UUC2GLRenderDevice::ProjectorShadersReady()
 {
-	if( !UseXboxProjectors || !UsePixelShaders )
+	if( !UsePixelShaders )
 		return 0;
+	if( !ShaderStateKnown )
+		return 1;
 	for( INT Type=PS_Projector_Add_1; Type<=PS_Projector_Modulate_Clip; Type++ )
 		if( PixelShaderState[Type] != PSS_Ready )
 			return 0;
 	return 1;
 }
 
+UBOOL UUC2GLRenderDevice::XboxProjectorsActive()
+{
+	return UseXboxProjectors && ProjectorShadersReady();
+}
+
 UBOOL UUC2GLRenderDevice::Terrain3LayerActive()
 {
-	return UseTerrain3Layer && UsePixelShaders && PixelShaderState[PS_Terrain3Layer] == PSS_Ready;
+	return UseTerrain3Layer && UsePixelShaders && (!ShaderStateKnown || PixelShaderState[PS_Terrain3Layer] == PSS_Ready);
+}
+
+//
+// M7b: the engine builds a terrain's passes from the caps when it loads (ATerrainInfo::
+// CheckComputeDataOnLoad -> Update); after the caps change every terrain is updated the same way.
+//
+void UUC2GLRenderDevice::RefreshTerrainPasses()
+{
+	INT Updated = 0;
+	for( TObjectIterator<ATerrainInfo> It; It; ++It )
+		if( !It->bDeleteMe && It->XLevel && !It->JustLoaded )
+		{
+			It->Update( 0.f );
+			Updated++;
+		}
+	debugf( NAME_Init, TEXT("UC2GLDrv: terrain layers per pass %i (%i terrains updated, frame %i)"), GetRenderCaps()->MaxSimultaneousTerrainLayers, Updated, FrameCounter );
 }
 
 UBOOL UUC2GLRenderDevice::XboxShadowsActive()

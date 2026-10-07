@@ -136,6 +136,22 @@ void UC2GL_RunSceneCensus( UUC2GLRenderDevice* RenDev, UViewport* Viewport )
 		if( P->StaticPrims.Num() || P->DrawType == DT_StaticProjectorBatch )
 			NumBatched++;
 
+		// How the renderer sees it (static actors are drawn from the leaf lists of ULevel::BuildRenderData).
+		{
+			INT InLeaves = 0;
+			for( INT l=0; l<Level->LeafRenderInfo.Num(); l++ )
+				if( Level->LeafRenderInfo(l).RenderActors.FindItemIndex( P ) != INDEX_NONE )
+					InLeaves++;
+			FBox Box = P->ActorRenderData ? P->ActorRenderData->BoundingBox : FBox(0);
+			Extra += FString::Printf( TEXT(" filter=%i leaves=%i/%i renderdata=%i box=(%.0f,%.0f,%.0f)-(%.0f,%.0f,%.0f)"), (INT)P->StaticFilterState,
+				InLeaves, P->Leaves.Num(), P->ActorRenderData ? 1 : 0, Box.Min.X, Box.Min.Y, Box.Min.Z, Box.Max.X, Box.Max.Y, Box.Max.Z );
+		}
+		// Which side of its frustum planes the middle of the frustum is on (the clip planes of
+		// SetProjectorMultiMaterial, ProjectorInfo->FrustumPlanes[1..4]; texkill drops negatives).
+		FVector Mid = P->Location + P->Rotation.Vector() * (0.5f * P->MaxTraceDistance);
+		Extra += FString::Printf( TEXT(" mid-plane-dots=%.0f,%.0f,%.0f,%.0f,%.0f,%.0f"),
+			P->FrustumPlanes[0].PlaneDot(Mid), P->FrustumPlanes[1].PlaneDot(Mid), P->FrustumPlanes[2].PlaneDot(Mid),
+			P->FrustumPlanes[3].PlaneDot(Mid), P->FrustumPlanes[4].PlaneDot(Mid), P->FrustumPlanes[5].PlaneDot(Mid) );
 		debugf( NAME_Init, TEXT("UC2GLDrv: scene projector %s %s at (%.0f,%.0f,%.0f) rot (%i,%i,%i) scale %.2f tex=%s [%s] fb=%s mat=%s fov=%i trace=%i datt=%.1f flags=%s draw=%i prims=%i life=%s on: bsp=%i sm=%i terrain=%i actors=%i dyn=%i%s"),
 			P->GetClass()->GetName(), P->GetName(), P->Location.X, P->Location.Y, P->Location.Z,
 			P->Rotation.Pitch, P->Rotation.Yaw, P->Rotation.Roll, P->DrawScale,

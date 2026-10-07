@@ -2067,7 +2067,15 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 {
 	guard(FOpenGLRenderInterface::DrawPrimitive);
 
-	if( NumPrimitives <= 0 || !CurrentState->VertexShader || InOcclusionQuery )
+	if( NumPrimitives <= 0 || !CurrentState->VertexShader )
+		return;
+	// M11: the engine's own query geometry (the boxes of FOcclusionQueryManager::RenderQuery, drawn
+	// with OcclusionFB: colour, alpha and depth writes off) is not drawn while a query is open: there
+	// is nothing to count (GetOcclusionQueryResults answers "visible"). M7b: a deferred query
+	// (BeginDeferredQuery) wraps an actor's real draw instead, which must be drawn: only the projector
+	// batches use it (Projector.uc bUseDeferredHWOcclusionTests), and they exist only with the Xbox
+	// static projector batching (FRenderCaps::XboxProjectors).
+	if( InOcclusionQuery && CurrentState->MaterialPasses[0] && !CurrentState->MaterialPasses[0]->ColorWriteMask && !CurrentState->MaterialPasses[0]->ZWrite )
 		return;
 
 	GLenum	Type;
@@ -2282,7 +2290,8 @@ void FOpenGLRenderInterface::SetTerrainTransform( FMatrix& WorldMat, INT HeightM
 UBOOL FOpenGLRenderInterface::BeginOcclusionQuery(void)
 {
 	// M11: the engine's query geometry (wireframe boxes with every write off) is not drawn
-	// while there is nothing to count for it: see DrawPrimitive.
+	// while there is nothing to count for it; real draws inside a deferred query are (M7b): see
+	// DrawPrimitive.
 	InOcclusionQuery = 1;
 	return 1;
 }

@@ -672,6 +672,9 @@ void UUC2GLRenderDevice::InitPixelShaders()
 		VertexShadersPrecompiled = VertexShaderObjects.Num();
 	}
 
+	// M7b: from now on the caps report what the shaders can do (see ShaderStateKnown).
+	ShaderStateKnown = 1;
+
 	unguard;
 }
 

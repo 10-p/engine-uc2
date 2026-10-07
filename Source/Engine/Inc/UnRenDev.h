@@ -785,6 +785,12 @@ struct FRenderCaps
 	// UShadowBitmapMaterial (UnShadowProjector.cpp) takes the _XBOX && NEW_SHADOW_BLEND branch
 	// where this is set (RenDevHasXboxShadows below). 0 for every device that does not set it.
 	UBOOL	XboxShadows;
+	// UC2 port (M7b): the device draws UProjectorMultiMaterial (the Xbox projector material:
+	// ProjectorAtten.vsh + the PS_Projector_* shaders). UGameEngine::LoadMap then re-packs every
+	// level-static projector into one DT_StaticProjectorBatch actor, as the Xbox build does
+	// (AProjector::RebuildStaticPrimsBatch; RenDevHasXboxProjectors below). 0 for every device
+	// that does not set it.
+	UBOOL	XboxProjectors;
 
 	// set default render caps in constructor
 	FRenderCaps()
@@ -793,7 +799,8 @@ struct FRenderCaps
 		HardwareTL(0),
 		XboxPostProcess(0),
 		ShippedDOFBlurAlpha(0),
-		XboxShadows(0)
+		XboxShadows(0),
+		XboxProjectors(0)
 	{}
 };
 
@@ -883,6 +890,12 @@ ENGINE_API UBOOL RenDevHasXboxPostProcess();
 // without a client or a device and for any device that leaves the capability unset.
 //
 ENGINE_API UBOOL RenDevHasXboxShadows();
+
+//
+// UC2 port (M7b): does the engine's render device report FRenderCaps::XboxProjectors? The test of
+// the lifted "_XBOX" static-projector batching in UGameEngine::LoadMap (UnGame.cpp).
+//
+ENGINE_API UBOOL RenDevHasXboxProjectors();
 
 #endif
 /*------------------------------------------------------------------------------------

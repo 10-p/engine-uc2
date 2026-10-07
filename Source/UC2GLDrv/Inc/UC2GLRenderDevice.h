@@ -154,10 +154,18 @@ public:
 	// MaxSimultaneousTerrainLayers = 3, the value the Xbox build hard-codes in UnTerrain.cpp).
 	UBOOL							UseTerrain3Layer;
 	UBOOL Terrain3LayerActive();
-	// M7b: the Xbox projector material (SetProjectorMultiMaterial, the 12 PS_Projector_*,
-	// ProjectorAtten.vsh). Without it a UProjectorMultiMaterial draws as on PC.
+	// M7b: the Xbox's static projector batching (FRenderCaps::XboxProjectors: UGameEngine::LoadMap
+	// re-packs level-static projectors, drawn with UProjectorMultiMaterial: SetProjectorMultiMaterial,
+	// the 12 PS_Projector_*, ProjectorAtten.vsh). Read when a map loads.
 	UBOOL							UseXboxProjectors;
 	UBOOL XboxProjectorsActive();
+	UBOOL ProjectorShadersReady();
+	// M7b: InitPixelShaders has run since the context was made. The engine loads the command-line
+	// map before the viewport (and so the GL context) exists and builds terrain passes and the
+	// static projector batches from the caps then: until the shaders are known the caps say
+	// what the switches ask for (both shaders compile everywhere: psh2glsl --gputest, GLSL ES too).
+	UBOOL							ShaderStateKnown;
+	void RefreshTerrainPasses();
 	// What a shader gets when a material samples the default render target: GL cannot sample
 	// the framebuffer it is drawing into, and the main framebuffer is stored bottom row first.
 	// Snapshot = its colour, DepthColor = its depth as the Xbox saw it through D3DFMT_LIN_B8G8R8A8

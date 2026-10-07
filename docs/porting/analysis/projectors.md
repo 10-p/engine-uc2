@@ -85,7 +85,7 @@ the surfaces its geometry lies on) and every terrain (layers, render combination
   projectors in 7 maps blend with the surface's own material** (`MaterialBlendingOp` modulate/add/alpha):
   CTF-Recoil 8 (wire mesh, modulate), DM-Meridian 4 (pagoda pattern on static meshes and terrain), OD-Cancer 2,
   OD-Prism 1 (`FX_Shadow_PrismTop`, additive, on 439 BSP nodes), DM-Legacy 2, ACT-SelketCheats 2.
-- **43 terrains in 32 maps**; with one layer per pass (PC) every pass is a single-layer weight map pass; 39 of the
+- **43 terrains in 32 maps**; with one layer per pass (PC) every pass is a single-layer weight map pass; 38 of the
   43 terrains have three or more opaque layers.
 
 ## Step 2. Shadows (item 3): implemented, numerically checked + seen
