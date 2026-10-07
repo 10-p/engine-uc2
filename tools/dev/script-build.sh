@@ -83,7 +83,8 @@ assemble() {
     ln -s "$repo/Source/$s/Classes" "$run/$s/Classes"
     if [ -d "$repo/Source/$s/Inc" ]; then
       mkdir -p "$run/$s/Inc"
-      cp -a "$repo/Source/$s/Inc/"*Classes.h "$run/$s/Inc/" 2>/dev/null || true
+      # every header: the exporter writes `#include "<Class>.h"` into a class body when that file exists here
+      cp -a "$repo/Source/$s/Inc/"*.h "$run/$s/Inc/" 2>/dev/null || true
     fi
     for r in "$epic/$s"/*/; do
       r=$(basename "$r")
@@ -98,7 +99,7 @@ assemble() {
 make_scripts() {
   local log=$logs/$tree-make.log
   local args="-nobind -CONFORMNOCONFIG"
-  [ $headers -eq 1 ] || args="$args -noh"
+  [ $headers -eq 1 ] && args="$args -ForceHeads" || args="$args -noh"
   rm -f "$run/System/ucc.log"
   set +e
   (cd "$run/System" && "$capped" "$mem" 3600 -- ./ucc-bin make $args $extra -log=ucc.log) > "$log.out" 2>&1
@@ -110,6 +111,22 @@ make_scripts() {
   for p in "${packages[@]}"; do
     if [ -f "$run/System/$p.u" ]; then echo "  built $p.u $(stat -c %s "$run/System/$p.u") bytes"; else echo "  MISSING $p.u"; fi
   done
+  if [ $headers -eq 1 ]; then
+    # The exported C++ headers (in the tree's scratch <Pkg>/Inc, never Source/) against ours, line endings aside.
+    local hd=$logs/$tree-headers.diff f s
+    : > "$hd"
+    for f in "$run"/*/Inc/*Classes.h; do
+      s=$repo/Source/${f#$run/}
+      [ -f "$s" ] || { echo "  header ${f#$run/}: no counterpart in Source/"; continue; }
+      if diff <(tr -d '\r' < "$s") <(tr -d '\r' < "$f") > /dev/null; then
+        echo "  header ${f#$run/}: identical"
+      else
+        echo "  header ${f#$run/}: $(diff <(tr -d '\r' < "$s") <(tr -d '\r' < "$f") | grep -c '^[<>]') lines differ"
+        { echo "=== ${f#$run/} (< ours in Source/, > exported from the recompiled scripts)"; diff <(tr -d '\r' < "$s") <(tr -d '\r' < "$f"); } >> "$hd"
+      fi
+    done
+    echo "  header diff: $hd"
+  fi
   return $rc
 }
 

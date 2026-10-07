@@ -236,3 +236,44 @@ tooling bug; the scripts are fine). `GUIController.uc` warns "'Empty' : local va
 value" (GUIController.uc 3365, 3387), `ClientBeaconReceiver.uc(19)` 'zeroBeacon' and `UCWeap_SniperRifle.uc(604)`
 'OldDist' used before assigned, plus unused locals (StartMenu.uc 521-524, UCWeapAttch_Melee.uc 9-10): compiler
 warnings, recorded for later.
+
+## Step 2c (2026-10-07): the C++ header export, compared (never written over Source/)
+
+```
+tools/dev/script-build.sh --tree m14-hdr --headers assemble make
+    # make with -ForceHeads instead of -noh; the exporter writes <WorkUC2>/run/m14-hdr/<Pkg>/Inc/<Pkg>Classes.h,
+    # copies of Source/<Pkg>/Inc; the diff against Source/ goes to <WorkUC2>/logs/m14/m14-hdr-headers.diff
+```
+
+Also fixed on the way (a crash at the end of every `make`, after all packages were saved): `Editor.h`'s
+`UEditorEngine` put `BYTE AutosaveTimeMinutes` right after a bitfield run; GCC places it inside the bitfield's
+word, MSVC and the script linker start a new DWORD, so `GameCommandLine` and `EditPackages` were 4 bytes off
+and `ExitProperties` destroyed a garbage array. `GCC_PACK(4)` added (the M3 rule), the 3 untagged first members
+of the generated `EditorClasses.h` tagged with `tools/dev/fix-bitfield-pack.py`, and `ucc-bin verifyclasses`
+now also checks the Editor classes (generated sizes plus every UEditorEngine member by script and C++ name;
+`Editor/Src/UC2EditorRegistrants.cpp`). Editor is built for 32-bit Linux only (root CMakeLists, M14 block):
+its UEditorEngine mirrors script's `int Pad[8]` with four pointers.
+
+Result: UCElements, UCGameplay, UnrealGame, GameSpy (IpDrv): identical. The differences, all explained:
+
+| Header | Lines | What | Why |
+|---|---|---|---|
+| Engine, GUI, IpDrv | 16 + 2 + 8 | `PTRINT` ours, `INT` exported | our M13 64-bit placeholders (deliberate deviation, `analysis/64bit.md`): a regenerated header would lose them, so headers are compared, never regenerated |
+| EngineClasses.h | 3 | comment lines in `UPSDistortionBaseMaterial` | the exporter writes cpptext with comments stripped (the preprocessor runs on cpptext too); M7 put the comment in the header and the .uc |
+| EngineClasses.h, EditorClasses.h, IpDrvClasses.h | 4 | `UHTTPDownload` and `UPrefab` registrants listed under Engine instead of IpDrv/Editor | both say `DECLARE_CLASS(...,Engine)` but are implemented in the IpDrv/Editor DLLs: Epic's DLL build registered them in the DLL's package, our static build in `Engine`. **Runtime finding (pre-existing, not M14's)**: Default.ini names `DownloadManagers=IpDrv.HTTPDownload`, which our static build registers as `Engine.HTTPDownload` (package download has never been exercised) |
+| EditorClasses.h | 2 | `UmakeCommandlet` vs `UMakeCommandlet` | FName case (step 0) |
+| UnrealEdClasses.h | 8 | `GCC_PACK(4)` on first members | the exporter rule restored at M3; the checked-in UnrealEdClasses.h predates it (UnrealEd's C++ is not built) |
+
+## Step 2 wrap-up for S1's other questions
+
+- **UnrealEd**: the shipped UnrealEd.u is in the asset tree; `make` compiles UnrealEd's 10 classes from script
+  only (their C++ is the editor application, not built: `UClass::Bind` tolerates a native class without C++
+  under `GIsEditor`), and the result is byte-identical to the shipped UnrealEd.u (after the strip).
+- **Case** of `#exec` paths and `` `include `` paths (`..\Core\Classes\avaris.huc`, `GamePlay` vs `Gameplay`):
+  resolved by the file manager's case-insensitive lookup (`__FILE_NOCASE`, `appUnixPath`); backslashes needed the
+  two fixes in step 1/2a (object names from `#exec` file names, package names from file names).
+- **0x02 bytes** (button glyph escapes in 37 .uc strings, `GUI.uc`'s `const XboxButtonCode="\x02"`): pass
+  through the comment stripper and the macro processor unchanged; the UCMenu/GUI defaults and constants that
+  contain them are byte-identical to the shipped ones.
+- **Preprocessor symbols**: neither `debug` nor `FINAL_RELEASE` (step 0); confirmed by the bytecode: `` `log ``
+  calls compile to `log(...)` calls identical to the shipped ones, `` `logd `` to nothing.
