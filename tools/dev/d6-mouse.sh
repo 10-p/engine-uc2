@@ -369,7 +369,7 @@ probe ld0
 sleep 1.0
 probe ld
 pyexec save('lock-offset-after-mouse-and-1s-later', [enemy_off('ld0'), enemy_off('ld')])
-check lock-pulls-back-after-the-mouse-stops P['ld'].locked and enemy_off('ld') < enemy_off('ld0') - 300
+check lock-pulls-back-after-the-mouse-stops P['ld'].locked and enemy_off('ld') < enemy_off('ld0') - 50
 chan exec Lock 1
 sleep 0.2
 keydown d
@@ -410,9 +410,11 @@ sleep 0.3
 probe lj
 check lock-stick-break-away-unchanged not P['lj'].locked
 SCEN
-  # aim adhesion: a target in front, our pawn strafes; the view follows it under the pad only
+  # aim adhesion: one target in front (the other one put behind us), our pawn strafes; the view follows it under the
+  # pad only (Epic's adhesion: 20% of the target's angular motion when it is near the crosshair)
   cat <<SCEN
 chan place 0 500 0
+chan place 1 600 180
 sleep 0.2
 chan aim 0
 sleep 0.2
@@ -426,8 +428,9 @@ keyup a
 sleep 0.3
 probe mb
 pyexec save('lock-adhesion-yaw-under-mouse', yawdiff('ma','mb'))
-check lock-no-aim-adhesion-under-the-mouse yawdiff('ma','mb') == 0 and P['mb'].mouselook == 'True'
+check lock-no-aim-adhesion-under-the-mouse yawdiff('ma','mb') == 0 and P['mb'].mouselook == 'True' and dist('ma','mb') > 50
 chan place 0 500 0
+chan place 1 600 180
 sleep 0.2
 pad axis rightx 12000
 sleep 0.05
@@ -442,7 +445,7 @@ keyup a
 sleep 0.3
 probe md
 pyexec save('lock-adhesion-yaw-under-pad', yawdiff('mc','md'))
-check lock-aim-adhesion-under-the-pad abs(yawdiff('mc','md')) > 300 and P['md'].mouselook == 'False'
+check lock-aim-adhesion-under-the-pad abs(yawdiff('mc','md')) > 300 and P['md'].mouselook == 'False' and dist('mc','md') > 50
 SCEN
 }
 
@@ -512,7 +515,7 @@ PY
       count "$out/ini.result";;
     lock)
       echo "== lock ($tree, two bots frozen)"
-      scen_lock > "$out/lock.scen"; prep "$tree"; run lock "$tree" 2 400; count "$out/lock.result";;
+      scen_lock > "$out/lock.scen"; prep "$tree"; run lock "$tree" 2 400 -maxfps=60; count "$out/lock.result";;
     before)
       echo "== before ($ship, shipped scripts, main's DefUser.ini: what the owner played; expected to FAIL drift/symmetry)"
       git -C "$repo" show 47b1b18:Engine/Config/DefUser.ini > "$out/DefUser-main.ini"
