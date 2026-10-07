@@ -206,3 +206,45 @@ Next: the d2 verification script (all resolutions, menu + arena + DM-Deadbolt, l
   centre exactly: origin floor((W-640s)/2) is a whole number at every listed size).
 - 4K HUD: about 2.5 s per frame in software GL with the builds running; the 2 s Fire hold was still lost.
   The scenarios now repeat a 3 s Fire until a probe shows the pawn (`seek 8 P['_'].pawn==1 ;; key Alt_L 3`).
+
+## Step 5 (2026-10-07): the first full pass measured; what it found and what changed
+
+First full pass (`logs/d2/d2-ui-scale-full-1.txt`, pictures kept in `logs/d2/run-pass1/`): every bounding-box,
+scale, title/item position, Fill/Box, HUD box and scale check PASS at all eight sizes; the failures were:
+
+- **640x480 identity** "failed" against two reference runs that were 100% identical to each other. Two more
+  runs settled it: our binary against itself (`d2b-menu`) differs exactly where the reference against itself
+  (`ref3-menu`) does: the focused item's highlight (it pulses; (59,130)-(295,160)) and the arena page's game
+  type preview (a movie; (403,83)-(588,294)). The first two reference runs had happened to run at the same low
+  frame rate (the Windows build was compiling). The identity checks now require every pixel outside those
+  self-animating parts to be identical (HUD: within 2 levels, outside the reticle and the adrenaline meter's
+  first segment, which blinks): main menu 297,400 of 297,400 pixels, arena page 265,344 of 265,344, HUD
+  302,540 of 302,540, and say where two reference runs differ.
+- **Marker on an actor**: the lock-on reticle on an enemy is orange, not green, and the lock turns the view
+  onto the target over a few seconds (at under 2 frames per second), so the boxed and unboxed pictures had
+  different views. `lockon.scen` now waits 10 s for the view to rest and takes boxed / unboxed / boxed again;
+  the check finds the orange reticle below y=260 in each and requires boxed = unboxed (and boxed = boxed
+  again: the view rested).
+- **M10 mouse scenario at 1920x1080**: every position check passed (hover, click on INSTANT ACTION, click on
+  a list row, right click), then the keyboard trip to the match failed (a Return on the character page lost
+  in a half-second frame) and, in a second try, two wheel clicks 0.5 s apart counted once. Frame-rate
+  effects of software GL at 1920x1080, not of the mapping. `m10-inject.py` gained `M10_KEYHOLD` (default key
+  hold) and `M10_SLOW` (every `sleep` x factor); d2-ui-scale.sh uses 0.5 s and x3 at 1920x1080.
+- **Sharper text, revised after looking at it in the browser picture**: "pro file", "se ttings": the taller
+  fonts' glyphs are not the 16-texel font's proportions (probe: 'f' 5x16 at 12pt, 7x26 at 28pt; 'o' 10x16 and
+  15x26), and SuiGeneris_18pt is the 12pt bitmap again (identical cells). Now: sizes are ranked by real glyph
+  height (12pt 16, 20pt 20, 24pt 21, 28pt 26, 40pt 60 texels), the taller glyph keeps its aspect at the small
+  glyph's height, and its ink (columns with DXT3 alpha > 4/15, read once per font from the page; 94 of 95
+  characters have ink, the space none) is centred on the small glyph's ink. The spacing is now even to the
+  eye at 1920x1080 (`logs/d2/probe/probe3-box.png`; soft / first / final compared in crops).
+- **Console line**: Tab in the pinned match opened the console's typing line, which starts at x=32 and is
+  ClipX wide; on the Xbox its last 32 pixels were off screen, in the box they ran 72 px into the right pillar.
+  The global interactions (console, GUI) now draw in the clipped context too (`UnInteractionMaster.cpp`).
+- **Browser** (the D-2 spec, `--max-gb=14`): `1 passed (44.4s)`, canvas 1920x1080, UI box 240,0 1440x1080
+  scale 2.25, hover over OPTIONS selects it, a click on INSTANT ACTION opens the arena page (not the hovered
+  OPTIONS), `frame 600, 0 GL errors so far`, WebGL on the NVIDIA GPU, mem guard peak 11.1 GB machine-wide.
+  The harness's teardown then reported "1 browser profile(s) outlived their test" (it removed it) and the run's
+  exit code is 1 for that; the test itself passed. Pictures `logs/d2/web/uc2-d2-{menu,arena}-1920x1080.png`.
+- M10 at 640x480 on run tree `d2-reg` (this build, while the second pass and two builds ran): mouse 18, text
+  7, pad 33, both 14 PASS; keyboard 15/16: the second Escape was handled (`InGame_MainMenu handled XC_B`) but
+  the pause menu had not closed 2 s later. To be rerun on a quiet machine.
