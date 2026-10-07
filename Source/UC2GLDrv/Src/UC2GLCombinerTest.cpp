@@ -443,7 +443,7 @@ struct FUC2GLCombinerTest
 	{
 		if( Case.NumStages > RenDev->NumTextureUnits )
 		{
-			Skip( Case.Name, *FString::Printf( TEXT("needs %i stages, the device reports %i on this path"), Case.NumStages, RenDev->NumTextureUnits ) );
+			Skip( Case.Name, *FString::Printf( TEXT("needs %i stages, this path has %i"), Case.NumStages, RenDev->NumTextureUnits ) );
 			return;
 		}
 		FLOAT	Coords[4][MAX_STAGES][4];
@@ -559,7 +559,7 @@ struct FUC2GLCombinerTest
 		FString Name = FString::Printf( TEXT("lod-bias-stage%i"), Stage );
 		if( Stage + 1 > RenDev->NumTextureUnits )
 		{
-			Skip( *Name, *FString::Printf( TEXT("needs %i stages, the device reports %i on this path"), Stage + 1, RenDev->NumTextureUnits ) );
+			Skip( *Name, *FString::Printf( TEXT("needs %i stages, this path has %i"), Stage + 1, RenDev->NumTextureUnits ) );
 			return;
 		}
 		if( RenDev->IsGLES )
@@ -606,8 +606,12 @@ struct FUC2GLCombinerTest
 							RenDev->IsGLES ? TEXT("texture environment through GL4ES") :
 							RenDev->HasCombine3() ? TEXT("texture environment with combine3") :
 							RenDev->HasCombine4() ? TEXT("texture environment with combine4") : TEXT("texture environment without combine3 or combine4");
-		debugf( NAME_Init, TEXT("UC2GLDrv: combinertest of the texture stages (frame %i): %s, %i stages, GL %s"),
-			RenDev->FrameCounter, Path, RenDev->NumTextureUnits, appFromAnsi((ANSICHAR*)RenDev->glGetString(GL_RENDERER)) );
+		debugf( NAME_Init, TEXT("UC2GLDrv: combinertest of the texture stages (frame %i): %s, GL %s"),
+			RenDev->FrameCounter, Path, appFromAnsi((ANSICHAR*)RenDev->glGetString(GL_RENDERER)) );
+		// What the path can do, not what the material compiler is told (MaterialStages, 4):
+		// the test draws its own passes.
+		INT CompilerStages = RenDev->NumTextureUnits;
+		RenDev->NumTextureUnits = Min<INT>( MAX_STAGES, Min<INT>( RenDev->MaxTextureUnits, RenDev->FFProgramsActive ? RenDev->GLProgramUnits : RenDev->GLFixedFunctionUnits ) );
 		RI->PushState();
 		Setup();
 		for( INT i=0; i<ARRAY_COUNT(GCTCases); i++ )
@@ -617,6 +621,8 @@ struct FUC2GLCombinerTest
 		RunLODBias( 5 );
 		Teardown();
 		RI->PopState();
+		INT PathStages = RenDev->NumTextureUnits;
+		RenDev->NumTextureUnits = CompilerStages;
 		// The engine's state comes back with the next pass; fog as the scene had it.
 		if( RI->CurrentState->DistanceFogEnabled )
 		{
@@ -629,7 +635,7 @@ struct FUC2GLCombinerTest
 		RenDev->glEnable( GL_SCISSOR_TEST );
 		RI->LightsDirty = RI->MatricesDirty = 1;
 		RI->RestoreAfterDeviceDraw();
-		debugf( NAME_Init, TEXT("UC2GLDrv: combinertest summary: %i passed, %i failed, %i skipped (%s, %i stages)"), Passed, Failed, Skipped, Path, RenDev->NumTextureUnits );
+		debugf( NAME_Init, TEXT("UC2GLDrv: combinertest summary: %i passed, %i failed, %i skipped (%s, %i stages on this path, %i given to the material compiler)"), Passed, Failed, Skipped, Path, PathStages, CompilerStages );
 	}
 };
 

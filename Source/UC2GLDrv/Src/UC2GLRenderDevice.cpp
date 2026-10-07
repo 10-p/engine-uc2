@@ -182,6 +182,7 @@ void UUC2GLRenderDevice::StaticConstructor()
 	new(GetClass(),TEXT("LevelOfAnisotropy"),	RF_Public)UIntProperty	( CPP_PROPERTY(LevelOfAnisotropy	), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("AntiAliasing"),		RF_Public)UIntProperty	( CPP_PROPERTY(AntiAliasing			), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("MaxTextureUnits"),		RF_Public)UIntProperty	( CPP_PROPERTY(MaxTextureUnits		), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("MaterialStages"),		RF_Public)UIntProperty	( CPP_PROPERTY(MaterialStages		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("DetailTexMipBias"),	RF_Public)UFloatProperty( CPP_PROPERTY(DetailTexMipBias		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("DefaultTexMipBias"),	RF_Public)UFloatProperty( CPP_PROPERTY(DefaultTexMipBias	), TEXT("Options"), CPF_Config );
 
@@ -204,6 +205,10 @@ void UUC2GLRenderDevice::StaticConstructor()
 	LevelOfAnisotropy		= 16;
 	AntiAliasing			= 4;
 	MaxTextureUnits			= 8;
+	// O-9: UC2's D3DDrv clamps MaxSimultaneousTextures and MaxTextureBlendStages to 4 and
+	// refuses any card that has fewer (D3DRenderDevice.cpp, CheckDeviceCaps; Xbox and PC), so
+	// its material compiler only ever split materials into passes for 4 stages.
+	MaterialStages			= 4;
 	DetailTexMipBias		= 0.8f;
 	DefaultTexMipBias		= -0.5f;
 	DetailTextures			= 1;
@@ -289,16 +294,18 @@ void UUC2GLRenderDevice::UpdateTextureCaps()
 {
 	if( MaxTextureUnits < 1 )
 		MaxTextureUnits = MAX_STAGES;
+	if( MaterialStages < 1 )
+		MaterialStages = 4;
 	FFProgramsActive = UseFixedFunctionPrograms && !IsGLES && SUPPORTS_GL2;
 	INT Units = FFProgramsActive ? GLProgramUnits : GLFixedFunctionUnits;
-	NumTextureUnits = Clamp<INT>( Min<INT>( Units, MaxTextureUnits ), 2, MAX_STAGES );
+	NumTextureUnits = Clamp<INT>( Min<INT>( Min<INT>( Units, MaxTextureUnits ), MaterialStages ), 2, MAX_STAGES );
 	DeviceCaps.MaxSimultaneousTextures	= NumTextureUnits;
 	DeviceCaps.MaxTextureBlendStages	= NumTextureUnits;
 	DeviceCaps.TextureOpCaps			= (FFProgramsActive || HasCombine3() || HasCombine4()) ? (D3DTEXOPCAPS_MODULATEALPHA_ADDCOLOR | D3DTEXOPCAPS_MULTIPLYADD) : 0;
 	DeviceCaps.PrimitiveMiscCaps		= 0;	// no D3DPMISCCAPS_TSSARGTEMP: GL combiners have no temp register (the terrain path that wants it is not reached)
-	debugf( NAME_Init, TEXT("UC2GLDrv: fixed-function materials: %s; %i texture stages, three-operand operations %s"),
+	debugf( NAME_Init, TEXT("UC2GLDrv: fixed-function materials: %s; %i texture stages (MaterialStages %i, %i on this path), three-operand operations %s"),
 		FFProgramsActive ? TEXT("fragment programs (FixedFunctionPrograms=True)") : IsGLES ? TEXT("texture environment (GL4ES generates its shaders)") : TEXT("texture environment (FixedFunctionPrograms=False)"),
-		NumTextureUnits,
+		NumTextureUnits, MaterialStages, Min<INT>( Units, MaxTextureUnits ),
 		FFProgramsActive ? TEXT("exact") : HasCombine3() ? TEXT("through combine3") : HasCombine4() ? TEXT("through combine4") : TEXT("NOT available (approximated)") );
 }
 
@@ -542,6 +549,7 @@ UBOOL UUC2GLRenderDevice::Init()
 	if( ParseParam( appCmdLine(), TEXT("glffprograms") ) )
 		UseFixedFunctionPrograms = 1;
 	Parse( appCmdLine(), TEXT("glunits="), MaxTextureUnits );
+	Parse( appCmdLine(), TEXT("glstages="), MaterialStages );
 	MaskCombine3	= ParseParam( appCmdLine(), TEXT("glnocombine3") );
 	MaskCombine4	= ParseParam( appCmdLine(), TEXT("glnocombine4") );
 	LogFFPrograms	= ParseParam( appCmdLine(), TEXT("glffsource") );

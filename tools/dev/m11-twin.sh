@@ -39,7 +39,9 @@ work=$(cd "$repo/.." && pwd)
 capped=$work/bin/capped
 shot=$repo/tools/dev/run-uc2-shot.sh
 imgdiff=$repo/tools/dev/imgdiff.py
-D=m11; T=m11t                       # run trees: desktop binding, twin
+# run trees: desktop binding, twin (M11_DESKTOP_TREE / M11_TWIN_TREE: other names, so that a branch can run
+# the whole script without touching the trees of main)
+D=${M11_DESKTOP_TREE:-m11}; T=${M11_TWIN_TREE:-m11t}
 LD=$work/logs/$D; LT=$work/logs/$T
 ALL="shaders gputest boot selftest progtest pinned effects m6 fallbacks movies"
 if [ "${1:-}" = list ]; then sed -n '/^#   shaders/,/^#   movies/p' "$0"; exit 0; fi
@@ -231,7 +233,7 @@ check_movies() {
 for c in $want; do
   case " $ALL " in *" $c "*) check_$c;; *) echo "unknown check: $c (try: $0 list)";; esac
 done
-left=$(pgrep -f "$work/run/m11" | wc -l)
-[ "$left" = 0 ] && result PASS leftovers "nothing of run/m11* is running" || result FAIL leftovers "$left processes of run/m11* still running"
+left=$(( $(pgrep -f "$work/run/$D/" | wc -l) + $(pgrep -f "$work/run/$T/" | wc -l) ))
+[ "$left" = 0 ] && result PASS leftovers "nothing of run/$D, run/$T is running" || result FAIL leftovers "$left processes of run/$D, run/$T still running"
 echo "m11-twin: $(grep -c '^PASS' "$summary") PASS, $(grep -c '^FAIL' "$summary") FAIL lines ($summary)"
 grep -q '^FAIL' "$summary" && exit 1 || exit 0

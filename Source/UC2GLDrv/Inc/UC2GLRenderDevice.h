@@ -93,7 +93,8 @@ public:
 									UseCubemaps,
 									CheckGLErrors;
 	INT								LevelOfAnisotropy,
-									MaxTextureUnits;
+									MaxTextureUnits,
+									MaterialStages;		// O-9: the stage count the material compiler is given (Epic's D3DDrv: exactly 4)
 	FLOAT							DetailTexMipBias,
 									DefaultTexMipBias;
 

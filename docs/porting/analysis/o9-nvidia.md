@@ -127,3 +127,54 @@ space, z forward) was added so both signs are covered.
 
 Next: commit; census (which shipped materials compile differently with 4/8 stages and with/without the caps);
 pictures (DM-Azure pillar and cobra, NVIDIA before/after, Mesa); the twin; the script `tools/dev/o9-nvidia.sh`.
+
+## Step 2 (2026-10-07): census of every map's materials; the stage count; pictures; the script
+
+### Census (`tools/dev/o9-census.sh`, console `GLMATCENSUS`)
+
+Every `UMaterial` in memory after a map has loaded (pixel-shader, projector, terrain, particle and movie materials
+skipped) is compiled lit and unlit with three sets of caps, nothing drawn: **A** 8 stages + the three-operand
+ops (Mesa and the web before O-9), **B** 4 stages + the ops (Epic's D3DDrv and the Xbox), **C** 4 stages without
+(NVIDIA before O-9). Mesa (Xvfb), three maps at a time, run trees `run/o9c0..2`; per-map summary in
+`logs/o9/census-summary.txt`, the differing materials with their three compilations in `logs/o9c*/census-<map>.out`.
+
+DM-Azure (`logs/o9/census-DM-Azure.out`): 583 materials; **B/C differ for 31** (lit+unlit counted separately:
+the cobra statue `NKMesh_Statues_Cobra01_COMB` (CO_Add_With_Mask_Modulation: MODULATEALPHA_ADDCOLOR
+`tex + tex.a*current` -> ADD) and `_Sd`, the Horus statue, the wooden pillars `T_NKMesh_Deco_Wood0*_SD` (specular
+stage MODULATEALPHA_ADDCOLOR -> MODULATE2X), iced walls/floors/trim, the invisibility pickup, ...); **A/B differ
+for 2**: `T_Liquid_Falls_Water01_SD01` (the cobra's waterfall) and `T_FX.Beams.FX_Beams_Raiden_Body_Shader`:
+with 8 stages the compiler puts the specular/second layer into the same pass (5 stages), with Epic's 4 it uses a
+second pass with framebuffer blending (`sa,1` resp. `dc,0`). The formulas differ (the second pass blends with
+what the first left in the framebuffer), so **8 stages is not Epic's/Xbox's picture for those materials**.
+
+### Decision on the stage count: 4, as Epic's D3DDrv
+
+`MaterialStages` (new key, default 4, `-glstages=N`): the compiler is given min(path's units, MaxTextureUnits,
+MaterialStages). Reason: UC2's D3DDrv clamps both stage counts to 4 and refuses to run otherwise
+(`D3DRenderDevice.cpp` 418-422, PC and Xbox); `MaxTextureUnits=8` came from Epic's UT2003-era *OpenGLDrv*
+section in `Default.ini`, not from UC2's D3D path. With 4 everywhere the compile is identical on NVIDIA (programs
+or texture environment with combine4), Mesa and the web, and equal to Epic's. The fragment programs can still do 8
+(the test's 8-stage case passes with them on NVIDIA); the compiler just is not asked to. Old inis without the key
+get the compiled default. This changes Mesa's and the web's picture for the A/B materials only (to Epic's split).
+
+### First pictures on NVIDIA (`tools/dev/o9/azure.scen` through `fx-owner.sh`, `UC2_GPU=1`)
+
+`logs/o9/fx-azure-before-gpu-pp.png` (main's binary) vs `fx-azure-gpu-pp.png` (this branch), post-processing on
+as the owner plays: the pillar is wood instead of orange metal; the cobra is golden like Mesa's instead of the
+redder ADD look. `fx-azure-gpu-texenv.png` (FFPROGRAMS 0: texture environment with combine4) shows the same
+wooden pillar. Seen on the way (not O-9, both binaries): after `POSTPROCESS 0` at run time the cobra waterfall is
+drawn as an opaque violet stream (`fx-azure-*-nopp.png`), i.e. the distortion material's fallback when
+post-processing is switched off while running. To be reported, not touched here.
+
+The Mesa pictures taken while the census ran three llvmpipe games in parallel failed (0.2 fps: the match never
+started before the shots); to be retaken when the machine is idle.
+
+### Script `tools/dev/o9-nvidia.sh`
+
+Checks combiner-mesa (programs; texture environment combine3; combine4 only; "before" = main's NVIDIA path
+emulated: texture environment without combine3/4, 4 units, expected to fail exactly the 11 three-operand cases),
+combiner-gpu (programs; texture environment = combine4; "before" = `-glnocombine4`), combiner-twin, caps, pictures.
+First run of `combiner-gpu` (`logs/o9/o9-nvidia-summary.txt`): programs 35/35 (largest error 0.56/255); texture
+environment combine4 33 passed, 2 skipped (8 stages, stage-5 bias: 4 units); before: exactly the 11 three-operand
+cases fail. `tools/dev/m11-twin.sh` takes `M11_DESKTOP_TREE`/`M11_TWIN_TREE` (default m11/m11t) so this branch can
+run it in `o9m11`/`o9m11t`.
