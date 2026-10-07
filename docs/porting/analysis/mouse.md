@@ -397,3 +397,21 @@ last notebook entry, with its evidence on disk:
   animations count FRAMES (`Active blocking animation (N frames)`), and the software-GL frame rate under that load
   stretches them past the scenarios' fixed waits. The same suite passed 5/5 on this tree at 19:2x (step 5).
 Remaining when stopped: a clean controls run at a normal load, then the gate summary and the final report.
+
+## Step 9 (2026-10-07 23:1x): browser gate run, and the pause-menu waits
+
+Browser, run 4 (`logs/d6/e2e-boot-4.txt`): serve-web reassembled right before from this worktree's wasm-perf and
+`run/d6-webassets` (`logs/d6/fe-build-2.txt`); no other harness running, :8080 free; `sha256sum
+serve-web/SDLLaunch.wasm` = 3bcfb2ab8a05ca1c... = this build's before and after (`logs/d6/e2e-engine-proof.txt`);
+null sink `uc2d6` made and removed. The WHOLE `uc2-wasm-boot.spec.js`: **4 passed (4.7m)**: menu drawn, DM-Deadbolt
+drawn, keyboard+mouse path (including the old "mouse right turns right" step), and "mouse look (D-6)": 10 / 10.0125 /
+10.01 / 10.01 rotation units per pixel (100 px slow, 400 px slow, 400 px in two steps, 100 px up), the view unchanged
+after the mouse stopped, `ScriptPatcher: UCGameplay ... rebuilt from source` (the rebuilt package was served).
+Pointer lock: refused by headless Chromium (`WrongDocumentError`), reported, not required. Mem-guard peak 12.4 GB.
+
+`tools/dev/m10-controls.sh`: the pause-menu close checks (keyboard Escape, pad B, both pad B) now probe until the
+menu is gone (up to ~16 s) instead of after a fixed 2 s (7eaaa7d): the close animation counts frames, so under
+software GL on a loaded machine it was seen finishing after the probe in 6 runs (step 8). A clean run at 22:53
+(load 1.7 at the start, 28 at the end: another agent's GL runs started meanwhile; `logs/d6/m10-clean/`): keyboard 16,
+mouse 18, text 7 PASS; pad 32/33 (the late close), both 3/14 (stuck behind a menu animation at the character page,
+the rest cascades).
