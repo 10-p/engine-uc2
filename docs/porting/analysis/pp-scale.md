@@ -200,3 +200,34 @@ targets logged at 1280x720: DOF 426x120, 213x120; emissive select 213x120, blur 
 | dynamic gamma | 16x16 luminance target (256 samples at fixed fractions of the screen) | each sample read 2x2 back-buffer pixels | reads the reference copy (a sample = 2x2 reference pixels, as the Xbox's 2x2 pixels) | sample positions were already fractions; the copy makes each sample average the same share |
 | point-sample nudge (1/32 texel), half-texel conventions | sub-texel | - | unchanged | conventions of the GL port, not effect distances |
 | shadow blur (`PS_ShadowBlur`) | shadow texture texels | not lifted (M7b's work) | not touched | not screen space; another agent's area |
+
+## Step 5. First complete measurement (2026-10-07 22:30; `logs/pp/run1.txt`, `logs/pp2/run1.txt`)
+
+Measured by `tools/dev/pp-scale.sh`, all 4:3 with the same pinned view, on the 480-line picture:
+
+| Effect (measure) | 640x480 | 1440x1080 new | 1440x1080 old (reference 0) | 2880x2160 new | 2880x2160 old |
+|---|---|---|---|---|---|
+| glow around the tube: width above 10% of the peak, % of the height | 8.54 | 8.54 (1.00) | 4.17 (0.49) | 8.33 (0.98) | 3.12 (0.37) |
+| glow: peak brightening, levels | 12.63 | 12.95 (1.03) | 21.75 | 13.08 (1.04) | 19.72 |
+| depth of field, DM-Azure distance: Gaussian sigma, 480-line pixels (alpha) | 3.10 (0.228) | 3.15 (1.02) | 1.45 (0.47) | 3.10 (1.00) | 0.70 (0.23) |
+| radial blur at 30: inset of the equivalent zoomed copy, 640x480 pixels | 9.10 | 9.20 (1.01) | 4.60 (0.51) | 9.20 (1.01) | 2.30 (0.25) |
+| concussion blur (BlurMe): sigma | 2.60 | 3.30 | 3.50 | 2.65 | 2.60 |
+| 1920x1080, AutoFOV on (the tube at x 518 of the 853x480 picture): glow width, peak | | new: 8.12%, 13.45 | main's binary: 4.17%, 21.75 | | |
+
+(ratios to 640x480 in brackets). The old behaviour's numbers are exactly 480/height of the new ones for the
+depth of field and the radial blur (0.47 and 0.23; 0.51 and 0.25), as the analysis says. The glow at the old
+2880x2160 is narrower still but not a quarter: its width is limited by the tube's own width at that scale.
+
+- The concussion blur's sigma moves between runs (2.60, 3.30, 2.65) but not between reference 480 and 0 in one
+  run (2.60/2.60, 3.30/3.50, 2.65/2.60): its four reads are offset by the material's oscillators and the frozen
+  frame catches them at a phase that differs per run. It is in texture-coordinate units and the setting does not
+  touch it. The check now judges the two shots of one frame against each other and the resolutions within 30%.
+- Self-test at 1440x1080: 15 of 15 (`ref-copy` 3x3 samples, largest error 1.00; `ref-taps` 1.25; `bb-copy-ref`
+  1.37; `pp-sizes`: 320x120 160x120 160x60 80x60 160x120+depth 80x120 720x540+depth, none unexpected or missing).
+  The 2880x2160 run was stopped by its time limit before the test (the script's limit was fixed at 150 s): rerun.
+- Identity at 640x480 failed as a test: two runs of main's binary differ by up to 3 levels over a third of the
+  static part (the dynamic gamma settles to a slightly different bloom threshold per run), main against this
+  branch likewise (max 3, mean 0.34/0.40 against main/main 0.49). Rerun with `DYNAMICGAMMA 0` at the end of the
+  first frame (the threshold then stays where one update put it).
+- Wasm-perf build (`cmake --preset wasm-perf`, `cmake --build build-wasm-perf -j6`, capped 6G): `[100%] Built
+  target SDLLaunch`, exit 0; `SDLLaunch.wasm` sha256 `43f2d9c4...`.
