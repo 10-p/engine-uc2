@@ -137,17 +137,17 @@ pyexec M['y']=save('$p-pitch-per-count', pitchdiff('Ya','Yb')/$(( 500 / sc )).0)
 check $p-same-turn-in-both-axes abs(M['y']/M['500medium']-1) < 0.005
 check $p-pitch-returns abs(pitchdiff('Ya','Yc')) <= 2
 SCEN
-  # 3. a circle (radius 300 counts, 72 steps a turn, two turns), then nothing: the circle and no drift
+  # 3. a circle (radius 300 counts, 72 steps a turn): one turn one way, then back the other way, then nothing:
+  #    the circle, the camera at the same place for the same rotation both ways round (no lag), no drift
   python3 - $(( 300 / sc )) <<'PY'
 import math, sys
 R, N = int(sys.argv[1]), 72
 print('probe Ca')
 print(f'chan watch {2 * N + 60} circ')
-px = py = 0
-for i in range(1, 2 * N + 1):
-    a = 2 * math.pi * i / N
-    x, y = round(R * math.cos(a) - R), round(R * math.sin(a))
-    print(f'chan mouse {x - px} {y - py}'); px, py = x, y
+pts = [(round(R * math.cos(2 * math.pi * i / N) - R), round(R * math.sin(2 * math.pi * i / N))) for i in range(N + 1)]
+path = pts + pts[-2::-1]
+for (x0, y0), (x1, y1) in zip(path, path[1:]):
+    print(f'chan mouse {x1 - x0} {y1 - y0}')
 print('probe Cb')
 print('chan log CIRCLE-END')
 PY
@@ -155,8 +155,8 @@ PY
 watch circ test: log CIRCLE-END 60
 pyexec C=save('$p-circle', circle_stats('circ', *moving_rows('circ')))
 check $p-circle-is-a-circle C['dev'] < 0.03 and C['n'] >= 140
-pyexec CL=save('$p-camera-lag-during-circle', camera_lag('circ', *moving_rows('circ')))
-check $p-camera-does-not-lag-the-circle CL < 1.0
+pyexec CL=save('$p-camera-there-and-back', camera_lag('circ', *moving_rows('circ')))
+check $p-camera-does-not-lag-the-circle CL['n'] > 40 and CL['max'] < 1.0
 check $p-circle-closes abs(yawdiff('Ca','Cb')) <= 2 and abs(pitchdiff('Ca','Cb')) <= 2
 sleep 2
 probe Cc
@@ -480,7 +480,7 @@ print('chan log CIRCLE-END')
 PY
   cat <<SCEN
 watch circ test: log CIRCLE-END 60
-pyexec C=save('epic-circle', circle_stats('circ', *moving_rows('circ'))); save('epic-camera-lag-during-circle', camera_lag('circ', *moving_rows('circ')))
+pyexec C=save('epic-circle', circle_stats('circ', *moving_rows('circ')))
 check epic-circle-is-not-a-circle C['dev'] > 0.05
 probe Da
 chan mouse 3 0

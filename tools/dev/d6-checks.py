@@ -115,28 +115,21 @@ def enemy_off(tag):
 
 
 def camera_lag(tag, first=None, last=None):
-    """How much the third-person camera lags the view during a watch trace (the pawn standing still): the camera's
-    offset from the pawn, turned into the view's yaw frame (forward, right, up), depends only on the pitch for a
-    camera that follows the rotation at once (Epic's offset blends with the pitch); a lazy camera's offset also
-    depends on where the view came from. Samples are binned by pitch (300 units) and split by whether the pitch was
-    rising or falling; the result is the largest distance between the two halves' mean offsets in one bin."""
+    """How much the third-person camera lags the view, from a watch trace of a path driven forward and then back
+    over itself (the pawn standing still): at the same view rotation the camera of the forward half and the camera
+    of the backward half are compared (nearest rotation, within 40 units). A camera that follows the rotation at
+    once is at the same place both times (walls included: they depend on the rotation, not on the history); a lazy
+    camera trails behind, in opposite directions on the way there and on the way back. Returns the median and the
+    largest distance (Unreal units) over the matched samples."""
     rows = W[tag][first:last]
-    bins = {}
-    for a, b in zip(rows, rows[1:]):
-        dp = wrap(b['pitch'] - a['pitch'])
-        if dp == 0:
-            continue
-        yaw = b['yaw'] * math.pi / 32768.0
-        rx, ry, rz = (b['cam'][0] - b['loc'][0], b['cam'][1] - b['loc'][1], b['cam'][2] - b['loc'][2])
-        off = (rx * math.cos(yaw) + ry * math.sin(yaw), -rx * math.sin(yaw) + ry * math.cos(yaw), rz)
-        key = (wrap(b['pitch']) // 300, dp > 0)
-        bins.setdefault(key, []).append(off)
-    worst = 0.0
-    for (k, rising), offs in bins.items():
-        other = bins.get((k, not rising))
-        if not rising or not other:
-            continue
-        m1 = [sum(c) / len(offs) for c in zip(*offs)]
-        m2 = [sum(c) / len(other) for c in zip(*other)]
-        worst = max(worst, math.dist(m1, m2))
-    return round(worst, 2)
+    half = len(rows) // 2
+    fwd, back = rows[:half], rows[half:]
+    out = []
+    for b in back:
+        best = min(fwd, key=lambda a: abs(wrap(a['yaw'] - b['yaw'])) + abs(wrap(a['pitch'] - b['pitch'])))
+        if abs(wrap(best['yaw'] - b['yaw'])) + abs(wrap(best['pitch'] - b['pitch'])) <= 40:
+            out.append(math.dist(best['cam'], b['cam']))
+    if not out:
+        return {'n': 0, 'median': None, 'max': None}
+    out.sort()
+    return {'n': len(out), 'median': round(out[len(out) // 2], 2), 'max': round(out[-1], 2)}
