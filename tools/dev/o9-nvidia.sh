@@ -14,6 +14,9 @@
 #   combiner-twin   the same test on the GL4ES / OpenGL ES 2 twin (the browser's code path; gl4es emulates the
 #                   texture environment, combine3 included, in its own shaders)
 #   caps            the material compiler gets the same stage count and the same texture-op caps on NVIDIA and Mesa
+#   pictures-other  DM-AcidRain and DM-Tempest from a PlayerStart (tools/dev/o9/acidrain.scen, tempest.scen):
+#                   views where a fifth of the drawn materials depend on the three-operand caps (-glmatcensus);
+#                   whole frame without the pawn, NVIDIA before/after against Mesa after
 #   pictures        DM-Azure, wooden pillar and cobra statue (tools/dev/o9/azure.scen through fx-owner.sh, time
 #                   frozen, -glnoaa): NVIDIA before (main's binary) and after, Mesa before and after; crops of the
 #                   shots without post-processing compared (the dynamic gamma depends on the frame rate)
@@ -28,7 +31,7 @@ work=$(cd "$repo/.." && pwd)
 capped=$work/bin/capped
 imgdiff=$repo/tools/dev/imgdiff.py
 T=o9; sys=$work/run/$T/System; out=$work/logs/$T
-ALL="combiner-mesa combiner-gpu combiner-twin caps pictures"
+ALL="combiner-mesa combiner-gpu combiner-twin caps pictures pictures-other"
 if [ "${1:-}" = list ]; then sed -n '/^#   combiner-mesa/,/^#                   frozen/p' "$0"; exit 0; fi
 want=${*:-$ALL}
 mkdir -p "$out"
@@ -162,6 +165,42 @@ check_pictures() {
   [ $ok = 1 ] && result PASS pictures "$txt" || result FAIL pictures "$txt"
 }
 
+check_pictures_other() {
+  local spec n map b ok=1 txt=""
+  [ -f "$sys/uc2-before.bin" ] || { result FAIL pictures-other "no $sys/uc2-before.bin (main's executable)"; return; }
+  for spec in acidrain:DM-AcidRain tempest:DM-Tempest; do
+    n=${spec%%:*}; map=${spec#*:}
+    for b in uc2.bin uc2-before.bin; do
+      FX_ARGS="-glnoaa -glmatcensus" UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/$n.scen" FX_MAP=$map FX_NAME=$n "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
+      if [ -n "$(gpu_busy)" ]; then result FAIL pictures-other "another headless GPU run is going on"; return; fi
+      FX_ARGS="-glnoaa -glmatcensus" UC2_GPU=1 UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/$n.scen" FX_MAP=$map FX_NAME=$n "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
+    done
+    local p=$out/fx-$n f
+    for f in "$p-nopp.png" "$p-gpu-nopp.png" "$p-before-gpu-nopp.png" "$p-before-nopp.png" "$p-gpu-texenv.png"; do
+      [ -f "$f" ] || { result FAIL pictures-other "missing $f"; return; }
+    done
+    # The pawn (third person, animating) is masked; the rest of the frame is static (time frozen).
+    local m="--mask 480,440,720,720" after before mesa env drawn dep
+    after=$("$imgdiff" "$p-gpu-nopp.png" "$p-nopp.png" $m)
+    before=$("$imgdiff" "$p-before-gpu-nopp.png" "$p-nopp.png" $m)
+    mesa=$("$imgdiff" "$p-before-nopp.png" "$p-nopp.png" $m)
+    env=$("$imgdiff" "$p-gpu-texenv.png" "$p-gpu-nopp.png" $m)
+    drawn=$(grep -a "UC2GLDrv: census " "$p-gpu.out" | awk '{print $3}' | LC_ALL=C sort -u)
+    dep=$(grep -a -h "UC2GLDrv: matcensus .*B!=C" "$work"/logs/o9c*/census-$map.out 2>/dev/null | awk '{print $5}' | LC_ALL=C sort -u | LC_ALL=C comm -12 - <(echo "$drawn") | wc -l)
+    info pictures-$n "$map: $(echo "$drawn" | wc -l) materials drawn, $dep of them compile differently without the three-operand caps (census of tools/dev/o9-census.sh)"
+    info pictures-$n "$map NVIDIA after vs Mesa after: $after"
+    info pictures-$n "$map NVIDIA before vs Mesa after: $before"
+    info pictures-$n "$map Mesa before vs Mesa after: $mesa"
+    info pictures-$n "$map NVIDIA texture environment (combine4) vs fragment programs: $env"
+    "$imgdiff" "$p-before-gpu-pp.png" "$p-gpu-pp.png" --side "$out/o9-$n-nvidia-before-after.png" > /dev/null
+    "$imgdiff" "$p-gpu-pp.png" "$p-pp.png" --side "$out/o9-$n-nvidia-vs-mesa.png" > /dev/null
+    local ma mb; ma=$(sed -E 's/.*mean=([0-9.]+).*/\1/' <<<"$after"); mb=$(sed -E 's/.*mean=([0-9.]+).*/\1/' <<<"$before")
+    awk -v a="$ma" -v b="$mb" 'BEGIN{exit !(a < 3 && b > a)}' || ok=0
+    txt="$txt $map: NVIDIA vs Mesa before $mb, after $ma;"
+  done
+  [ $ok = 1 ] && result PASS pictures-other "${txt# } pictures o9-acidrain-*.png, o9-tempest-*.png" || result FAIL pictures-other "${txt# }"
+}
+
 for c in $want; do
   case $c in
     combiner-mesa) check_combiner_mesa ;;
@@ -169,6 +208,7 @@ for c in $want; do
     combiner-twin) check_combiner_twin ;;
     caps)          check_caps ;;
     pictures)      check_pictures ;;
+    pictures-other) check_pictures_other ;;
     *) echo "unknown check $c"; exit 2 ;;
   esac
 done

@@ -247,3 +247,18 @@ of 255 against Mesa after O-9:
 | cobra statue (right half, third person) | 5.34 | 0.29 | 0.002 |
 
 NVIDIA texture environment (combine4) against fragment programs, same run: pillar 0.10, cobra close-up 0.000.
+
+### Two more maps (`pictures-other`, `logs/o9/o9-nvidia-other1.txt`)
+
+DM-AcidRain (PlayerStart7) and DM-Tempest (PlayerStart1), third person, time frozen, `-glnoaa -glmatcensus`.
+Of the materials drawn in these views, 23 of 72 (AcidRain) and 26 of 74 (Tempest) are in the census's B/C list
+(their compilation depends on the three-operand caps). Whole frame without the pawn, mean difference of 255:
+
+| View | NVIDIA before vs Mesa after | NVIDIA after vs Mesa after | Mesa before vs after | NVIDIA combine4 vs programs |
+|---|---|---|---|---|
+| DM-AcidRain | 16.1 | 0.70 | 0.25 | 0.09 |
+| DM-Tempest | 13.9 | 0.57 | 0.14 | 0.04 |
+
+`logs/o9/o9-acidrain-nvidia-before-after.png`: before, on the owner's GPU, most walls and the floor gratings of
+that view were nearly black (MULTIPLYADD / AddToCurrent stages with the base colour dropped); after, textured as
+on Mesa.

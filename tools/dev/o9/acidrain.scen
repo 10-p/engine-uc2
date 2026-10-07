@@ -1,0 +1,13 @@
+chan exec NETPLACE FxCam 1605 -1745 232 -9264 0
+sleep 3
+chan exec NETPLACE FxCam 1605 -1745 232 -9264 0
+sleep 2
+chan exec set LevelInfo TimeDilation 0.0001
+sleep 1
+shot pp
+chan exec POSTPROCESS 0
+sleep 1
+shot nopp
+chan exec FFPROGRAMS 0
+sleep 1
+shot texenv
