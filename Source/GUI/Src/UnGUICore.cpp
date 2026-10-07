@@ -1015,6 +1015,13 @@ static UBOOL IsTypingKey( BYTE iKey )
 static void MouseClickPress( UGUIController* C );
 static void MouseClickRelease( UGUIController* C );
 
+// D-5: a character key whose PRESS acted as a pad button while no text field was up (X on the host page's
+// session name, which opens UC2Keyboard at once): SDL delivers that key's character AFTER the press, by
+// then to the keyboard page the press opened, and the page took it as the first typed letter (an "x"
+// replaced the name). The character of that one press is not typed; cleared at the key's release, at
+// any other press, and once its character has been dropped.
+static BYTE GPadKeyHeld = 0;
+
 static BYTE EmulatedPadCode( BYTE iKey, UBOOL TextEntry )
 {
 	if( !GEmulatedPadLoaded )
@@ -1184,8 +1191,14 @@ UBOOL UGUIController::NativeKeyEvent(BYTE& iKey, BYTE& State, FLOAT Delta )
 		BYTE Code = EmulatedPadCode( iKey, TextBox!=NULL );
 		if ( TextBox && Code == EJP_Raw && IsTypingKey(iKey) )
 			Code = EJP_Type;	// a key that makes a character types it while there is a text field
+		if ( State == IST_Press || (State == IST_Release && iKey == GPadKeyHeld) )
+			GPadKeyHeld = 0;
 		if ( Code >= XBC_A && Code <= XBC_RightThumb )
+		{
+			if ( State == IST_Press && !TextBox && IsTypingKey(iKey) )
+				GPadKeyHeld = iKey;	// D-5: its character must not reach a page this press opens
 			iKey = Code;
+		}
 		else if ( Code >= EJP_AltUp && Code <= EJP_AltRight )
 		{
 			// Right thumbstick, as Epic's NumPad 8/2/4/6.
@@ -1200,7 +1213,11 @@ UBOOL UGUIController::NativeKeyEvent(BYTE& iKey, BYTE& State, FLOAT Delta )
 			// Nothing else on the page sees a typing key.
 			if ( iKey==IK_Backspace || iKey==IK_Delete || iKey==IK_Home || iKey==IK_End )
 			{
-				BYTE K = iKey, S = State;
+				// D-5: a keyboard page opens with its whole text selected (typing replaces it); Backspace
+				// on that selection clears it, as on any PC text field. GUIEditBox's own Backspace (the
+				// on-screen keyboard's key, kept for the pad) deletes one character and drops the selection;
+				// its Delete clears a selected text, so a real Backspace on a selection is given as Delete.
+				BYTE K = (iKey==IK_Backspace && TextBox->bAllSelected && TextBox->TextStr.Len()) ? (BYTE)IK_Delete : iKey, S = State;
 				TextBox->NativeKeyEvent( K, S, Delta );
 			}
 			if ( DeleteStack.Num() )
@@ -2337,7 +2354,13 @@ UBOOL UGUIController::NativeKeyType(BYTE& iKey, TCHAR Unicode )
 		// so UGUIComponent::NativeKeyType would refuse; UC2KeyboardPanel calls the same handler for
 		// its own key buttons.)
 		UGUIEditBox* TextBox = bEmulatedJoypad ? TextEntryTarget( this ) : NULL;
-		if ( TextBox && TextBox != eventGetFocusedControl() && (BYTE)Unicode >= 32 && OBJ_DELEGATE_IS_SET(TextBox,OnKeyType) )
+		if ( TextBox && GPadKeyHeld && (BYTE)appToUpper(Unicode) == GPadKeyHeld )
+		{
+			// D-5: the character of the key press that opened this page (see GPadKeyHeld).
+			debugf( NAME_DevUI, TEXT("Dropped '%c': its key opened %s"), Unicode, TextBox->GetMenuPath() );
+			GPadKeyHeld = 0;
+		}
+		else if ( TextBox && TextBox != eventGetFocusedControl() && (BYTE)Unicode >= 32 && OBJ_DELEGATE_IS_SET(TextBox,OnKeyType) )
 		{
 			debugf( NAME_DevUI, TEXT("Typed '%c' into %s"), Unicode, TextBox->GetMenuPath() );
 			TextBox->delegateOnKeyType( iKey, FString::Printf(TEXT("%c"), Unicode) );

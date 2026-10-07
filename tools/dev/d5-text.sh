@@ -149,7 +149,7 @@ expect k2-the-engine-follows-the-rename Profiles: remembered profile "Renamed" 1
 sleep 3
 chan exec getall PlayerProfile ProfileName
 expect k2-renamed PlayerProfile Package.PlayerProfile.ProfileName = Renamed\s*$ 10
-seek 4 P['_'].menu == 'UC2MainMenu' ;; key Escape
+seek 6 P['_'].menu == 'UC2MainMenu' ;; key Escape
 SCEN
 run k2 240
 check k2-renamed-on-disk bash -c "[ -s '$sys/Profiles/Renamed/AVARIS_PROFILE.PRO' ] && [ ! -e '$sys/Profiles/Typer' ] && [ ! -e '$sys/Profiles/Nope' ] && ls '$sys/Profiles' | tr '\n' ' '"
@@ -210,9 +210,11 @@ key Right
 sleep 1
 $downs
 shot session-name
+mark
 key x
 expect k4-x-opens-the-keyboard OpenMenu \[UCMenu.UC2Keyboard\] 20
 sleep 3
+absent k4-the-x-that-opened-it-is-not-typed Typed 'x'
 probe s1
 check k4-keyboard-shows-the-session-name P['s1'].text.startswith('Liandri')
 key BackSpace
@@ -227,7 +229,7 @@ key Escape
 expect k4-escape-closes-the-keyboard CloseMenu \[UC2Keyboard\] 10
 sleep 3
 key x
-expect k4-x-opens-the-keyboard-again OpenMenu \[UCMenu.UC2Keyboard\] 20
+expect k4-x-opens-the-keyboard-again-on-the-old-name OpenMenu \[UCMenu.UC2Keyboard\] \(Liandri Corporation\) 20
 sleep 3
 probe s4
 check k4-escape-kept-the-old-name P['s4'].text == P['s1'].text
@@ -240,7 +242,7 @@ key Return
 expect k4-enter-closes-the-keyboard CloseMenu \[UC2Keyboard\] 10
 sleep 3
 key x
-expect k4-x-opens-the-keyboard-a-third-time OpenMenu \[UCMenu.UC2Keyboard\] 20
+expect k4-x-opens-the-keyboard-on-the-new-name OpenMenu \[UCMenu.UC2Keyboard\] \(Mine\) 20
 sleep 3
 probe s6
 check k4-enter-set-the-name P['s6'].text == 'Mine'
@@ -277,7 +279,8 @@ key Return
 sleep 1
 chan exec getall Console TypedStr
 expect k5-enter-sent-and-closed Console.*TypedStr = \s*$ 10
-expect k5-the-message-was-said wasd Hi 10
+chan exec getall Console History
+expect k5-the-line-ran-as-a-command Console.*History.*Say wasd Hi 10
 chan exec getall Console bTyping
 expect k5-not-typing-after-enter Console.*bTyping = False 10
 key t

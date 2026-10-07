@@ -214,3 +214,41 @@ Prepared for a browser run with the rebuilt GUI.u (the D-4 GUI part): `<WorkUC2>
 the asset tree with only `System/GUI.u` replaced by the rebuilt one (never written in place: the link was removed,
 the asset tree's file is untouched); its manifests `logs/d3/web/file-manifest.json` / `dependency-manifest.json`
 (generated with the glue's own tools; against the committed manifest only `system/gui.u` differs).
+
+## Step 6 (2026-10-07): D-5 natively: two keyboard defects found and fixed in the engine (GUI C++)
+
+`tools/dev/d5-text.sh` run 1 (`logs/d3/d5-text-run1.txt`, tree d5 = shipped packages). The exploration of the host
+pages first failed twice for a silly reason worth knowing: the scenario was called `explore-server`, the test
+channel's file name `-inputtest=.../explore-server.channel` contains `-server`, and `ParseParam(cmdline, "SERVER")`
+matched it: the game started as a dedicated server (no client, no menu). Never put `-server` in a test file name.
+
+Results of run 1:
+- k1 new profile: PASS 13 (exact text `WaSdXq`, Backspace deletes one, no GUI navigation while typing, Escape closes
+  the page and makes no profile, the Profiles page closes too when none exists (Epic: UC2Profile.InternalOnReopened),
+  Enter makes "Typer").
+- k2 rename / k3 copy: the flows work (rename to the typed name, the engine's remembered profile FOLLOWS the rename:
+  `Profiles: remembered profile "TypeRenamed" (was "Typer")`; Escape keeps the old name; copy makes the copy), but
+  **Backspace on the preselected name deleted ONE letter** ("Typer" -> "Type", then typing appended: "TypeRenamed").
+  The page opens with the whole text selected (typing replaces it: "Nope" replaced "Typer"), and GUIEditBox's Backspace
+  ignores a selection (Epic: the on-screen keyboard's own Backspace key, one letter for the pad). Copy names are cut
+  at 15 characters (the profile keyboard's limit).
+- k4 server name (Network -> Host -> DeathMatch -> CUSTOMIZE on -> SESSION NAME -> X): Escape keeps the old name, Enter
+  sets the new one (the page reopens on `(Mine)`), but **the X that opened the keyboard was typed into it**: the field
+  showed "x" instead of "Liandri Corporation". SDL delivers a key's character after its press; the press opened
+  UC2Keyboard synchronously (`Arena_PanelServerMain.XClicked` -> OpenMenu), so the character reached the new page.
+  (Pages opened through an animation, New/Copy on the Profiles page, were not affected: the character came first.)
+- k5 chat (T in a match): PASS 9 of 10: exactly `Say wasd Hi`, W/A/S/D do not move the player while typing, Enter runs
+  the line and closes, ONE Escape closes the chat and discards the text (Epic's Console clears on the press and closes
+  on the release, as D-7's notebook explains; the leak of that release into the page below is D-7's fix 868f41d, not
+  in this branch), keys move the player again. The one FAIL was my check ("the message was said": UC2 logs no chat);
+  now the console history is read instead.
+
+Fixes (both in `GUI/Src/UnGUICore.cpp`, the M10 text-entry routing, engine C++; no script, so the web gets them with
+the next wasm build):
+1. A real Backspace on a field whose whole text is selected is given to the field as Delete (GUIEditBox's Delete clears
+   a selected text): Backspace on the preselected name clears it, as in any PC text field. The on-screen keyboard's own
+   Backspace key (pad) is unchanged.
+2. `GPadKeyHeld`: a character key whose press acted as a pad button while no text field was up is remembered until its
+   release (or any other press); its character is dropped (logged `Dropped 'x': its key opened ...`) if it arrives at a
+   keyboard page. File-static: no class layout changes.
+Native build `logs/d3/build-native-5.log` (0 errors). Run 2 of d5-text.sh started (`logs/d3/d5-text-run2.txt`).
