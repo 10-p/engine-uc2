@@ -316,14 +316,15 @@ if all(m is not None for _, m in ms):
     shift = max(math.dist((base[0] + (w - 1440) / 2, base[1]), m[0][0]) for (n, m), w in zip(on, (1440, 1920, 2560)))
     offm = ms[3][1]
     on_fig = all(m[1][0] <= m[0][0][0] <= m[1][2] and m[1][1] <= m[0][0][1] <= m[1][3] for _, m in ms)
-    result('marker-on-actor', spread <= 6 and rs <= 2.0 and on_fig,
+    result('marker-on-actor', shift <= 2.0 and rs <= 1.0 and on_fig and spread <= 10,
            'lock-on reticle (WorldToScreen; its centre and mean radius on black) against the target\'s figure (the same '
            'frozen frame with the level): ' +
            '; '.join(f'{n} reticle centre ({m[0][0][0]:.1f},{m[0][0][1]:.1f}) radius {m[0][1]:.1f} figure {m[1]} '
                      f'offset ({m[2][0]:+.1f},{m[2][1]:+.1f})' for n, m in ms) +
-           f'; with AutoFOV the offset from the figure spreads {spread:.1f} px (<= 6) and the radius {rs:.1f}% (<= 2) '
-           f'across 4:3, 16:9, 21:9; the 4:3 reticle shifted by the side columns lands within {shift:.1f} px of the wider '
-           f'ones; the reticle\'s centre is on the figure in every picture (AUTOFOV 0: radius {offm[0][1]:.1f}, '
+           f'; the 4:3 reticle shifted by the side columns lands within {shift:.1f} px (<= 2) of the 16:9 and 21:9 ones and '
+           f'their radius differs by {rs:.2f}% (<= 1): the marker is where it is at 4:3 in a picture whose centre is the 4:3 '
+           f'picture (world-third-person); its centre is on the figure in every picture, and its offset from the figure\'s '
+           f'box spreads {spread:.1f} px (<= 10; the purple box is a coarse measure) (AUTOFOV 0: radius {offm[0][1]:.1f}, '
            f'the view zoomed)')
 else:
     result('marker-on-actor', False, 'no lock-on reticle / target found in: ' + ', '.join(n for n, m in ms if m is None))
@@ -348,6 +349,40 @@ for root, dirs, files in os.walk(run):
             if c or g:
                 bad.append(f'{os.path.relpath(os.path.join(root, f), run)}: {c} Critical, {g} GL errors')
 result('logs', not bad and nlogs > 0, f'{nlogs} logs, ' + ('0 Critical, 0 GL errors' if not bad else '; '.join(bad)))
+
+# ------------------------------------------------------------------------- pictures for the owner
+def sheet(kind, fn, sub):
+    """One picture per row: 4:3 (1440x1080), 16:9 (1920x1080), 21:9 (2560x1080), 16:9 with AUTOFOV 0 (before),
+    each 360 px high, centred, labelled."""
+    from PIL import ImageDraw
+    rows = []
+    for suffix, label in (('1440x1080', '4:3 (1440x1080)'), ('1920x1080', '16:9 (1920x1080), AutoFOV'),
+                          ('2560x1080', '21:9 (2560x1080), AutoFOV'), ('1920x1080-off', '16:9, AUTOFOV 0 (before)')):
+        im = pic(sub, f'fov-{kind}-{suffix}')
+        if im is not None:
+            rows.append((im.resize((im.size[0] * 360 // im.size[1], 360)), label))
+    if not rows:
+        return None
+    W = max(r[0].size[0] for r in rows)
+    S = Image.new('RGB', (W, sum(r[0].size[1] + 24 for r in rows)), (40, 40, 40))
+    d = ImageDraw.Draw(S); y = 0
+    for im, label in rows:
+        d.text((8, y + 6), label, fill=(255, 255, 255))
+        S.paste(im, ((W - im.size[0]) // 2, y + 24)); y += im.size[1] + 24
+    out = os.path.join(run, fn)
+    S.save(out)
+    return out
+
+
+made = []
+for kind, what in (('tp', 'third person'), ('fp', 'first person'), ('zoom', 'zoom 40'), ('sniper', 'sniper rifle'),
+                   ('cin', 'letterbox'), ('lock', 'lock-on')):
+    for sub in ('fov-pp', 'fov'):
+        o = sheet(kind, f'owner-{kind}-{sub}.png', sub)
+        if o:
+            made.append(o)
+print('pictures for the owner (rows 4:3, 16:9, 21:9, 16:9 before; fov-pp = with post-processing): '
+      + ', '.join(os.path.relpath(m, run) for m in made))
 
 print('ALL PASS' if fails == 0 else f'{fails} FAILED')
 sys.exit(1 if fails else 0)
