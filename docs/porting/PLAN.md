@@ -165,6 +165,12 @@ Tasks, in the order they will be done (each one ends at an observable check, log
   (`temp/PraxisWindowPanesDistance.png`). Owner, 2026-10-07: "not meant to be a fix per se but figure out
   what tuneable is there AND THEN increase it": find the existing knob (and its Xbox value), then raise it
   through that knob, the Xbox value one setting away.
+- O-9 **NVIDIA fixed-function gap** (found 2026-10-07 by the O-5 work, on this machine's Quadro P620): the
+  desktop driver's fixed-function path gets only 4 texture units there and no `combine3` blend mode, so
+  materials that need it fall back to another blend (DM-Azure's wooden pillars look like orange metal on
+  NVIDIA, wood on Mesa). Express those materials another way (`GL_NV_texture_env_combine4`, or the GLSL path
+  the pixel-shader materials already use), and test on the NVIDIA GPU headless (`tools/dev/fx-owner.sh`
+  `UC2_GPU=1`).
 - O-8 **Defaults**: anisotropic filtering 16x; anti-aliasing 4x (multisampled main framebuffer; WebGL 1 has
   no multisampled framebuffer objects: WebGL 2 or a post-process AA on the web, decided with evidence).
 

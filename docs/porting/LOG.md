@@ -319,3 +319,17 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   daemon's scan, flushconfig round trip): C-3's browser e2e must create a profile, reload, and find it.
   D-4 facts (where the player name comes from and where the character name overwrites it without a profile)
   are in `analysis/web-ini-saves.md`.
+- 2026-10-07 — **O-5 and O-7 merged (`fx-fixes`, d3e88e7); O-6 not reproduced.** O-5, the DM-Azure pool
+  drawn as flat grey: its reflection cube map (`T_Liquid_Decay_Water_C_CM`) has only five faces; GL treats such
+  a cube as incomplete and fixed-function GL switches the stage off, so the pool was its vertex colour at
+  almost zero alpha. D3D allocates all six faces and fills the ones that exist: the driver now does the same
+  (the missing -Z face is zero; assumption for the Xbox, never seen from above). Water now shows golden
+  reflections, on Mesa and on the NVIDIA GPU (`logs/fx/o5-pool-gpu-before-after.png`); matches the owner's
+  xemu shot in kind, not pixel-close. O-7 (tuning): the knob is Epic's `DISTORTION_CULL_DISTANCE = 5000`
+  (`D3DMaterialState.cpp:1377`): `DistortionAccum.vsh` scales the distortion by `1 - saturate(z/5000)^2`;
+  now `[UC2GLDrv.UC2GLRenderDevice] DistortionCullDistance` (5000 when absent = Xbox; Default.ini 15000) and the
+  console `DISTORTIONCULLDISTANCE`. O-6, the DM-Azure waterfall in first person: the waterfall's distortion is
+  drawn every frame on Mesa and NVIDIA, standing still or moving, as the only distortion item; the owner's
+  exact spot is needed. Agent's regressions: m7-effects 10/10 + 14 lines clean, psh2glsl self/gpu tests,
+  verifyclasses, pinned DM-Deadbolt unchanged. Found on the way: O-9 (NVIDIA: 4 fixed-function texture units, no
+  combine3). New tools: `GLPIXTRACE`, `tools/dev/fx-owner.sh` (UC2_GPU=1 runs headless on the NVIDIA GPU).
