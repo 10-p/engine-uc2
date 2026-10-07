@@ -178,3 +178,48 @@ First run of `combiner-gpu` (`logs/o9/o9-nvidia-summary.txt`): programs 35/35 (l
 environment combine4 33 passed, 2 skipped (8 stages, stage-5 bias: 4 units); before: exactly the 11 three-operand
 cases fail. `tools/dev/m11-twin.sh` takes `M11_DESKTOP_TREE`/`M11_TWIN_TREE` (default m11/m11t) so this branch can
 run it in `o9m11`/`o9m11t`.
+
+## Step 3 (2026-10-07): the census of all 50 maps; the ViperPit water; the decision
+
+`tools/dev/o9-census.sh` over every DM-, CTF- and OD- map (`logs/o9/census-summary.txt`; 526-650 materials
+per map, lit and unlit each):
+
+- **B/C (the three-operand caps; what NVIDIA lost)**: every map, 8-62 compilations per map; **327 distinct
+  materials** over all maps (Combiner, Shader, FinalBlend, TexScaler). Every one of them rendered differently on
+  NVIDIA before O-9 (the caps' fallback: MODULATE2X instead of the specular add, ADD instead of the masked add).
+  On top of those, the unconditional MULTIPLYADD / AddToCurrent stages compile the same in B and C but were
+  approximated by the texture environment at draw time (the base colour dropped).
+- **A/B (8 against 4 stages)**: 15 distinct materials, 1-6 per map: `T_FX.Beams.FX_Beams_Raiden_Body_Shader`
+  (all 50 maps), `NKTemple_Banners_01_Sd`, `NKTech_Floor_Panel_*`, `NKTeam_Banners_02_Sd`, iced floor tiles,
+  `T_Liquid_Falls_Water01_SD01`, `NKTech_Wall_LS06_Sd`, `NKTech_Effects_WalkWay_Sd`, `T_LI_Dammed_Wall004_SD`,
+  `T_CF_SnowBlend_SD01`, the CTF-ViperPit ocean, the two DM-Horizon waters. With 8 stages the specular/env layer
+  is folded into the first pass; with Epic's 4 it is a second pass blended onto the framebuffer (`sa,1`) or the
+  lighting is a separate modulating pass (`dc,0`). Not the same formula.
+- **Compile errors**: none with 8 stages; with 4, one: `T_Liquid_Viper_OceanWater_SD` *lit* ("No stages left for
+  opacity bitmap", Epic's own message). In the game it is the skin of `FluidSurfaceInfo4` (`obj refs`,
+  `logs/o9/fx-viperpit.out`), drawn unlit, and with 4 stages it compiles in one pass without fallback
+  (`-glmatcensus` per draw, `logs/o9/fx-viperpit-water.out`: 91 compilations drawn, 0 fallbacks). The lit error is
+  a context of the compile-only census that the game does not use.
+
+### Decision, with the evidence
+
+1. **Fragment programs by default on desktop GL** (option b). Evidence: the numeric test passes 35/35 with them
+   on both GPUs with errors at rounding level (0.50 Mesa, 0.56 NVIDIA); the code is one path for every vendor
+   (no dependence on combine3, which NVIDIA lacks, or combine4, which AMD lacks, or GL_MAX_TEXTURE_UNITS); the
+   cost is ~300 lines and one generated program per stage combination (DM-Azure: 28 programs, 0 failed, 124,492
+   program draws in a run, `fx-azure-gpu.out`). It is also where the one NVIDIA-only behaviour was found and handled
+   (the sign of `gl_FogFragCoord`).
+2. **combine4 in the texture-environment path** (option a) as the comparison switch's own fix: with
+   `FixedFunctionPrograms=False` NVIDIA now expresses the three-operand ops (33 passed, 2 skipped for 4 units). So
+   the switch compares "GL's combiners" with "GLSL", both right, not "broken" with "fixed".
+3. **4 stages, Epic's number** (`MaterialStages=4`), instead of the 8 of Mesa/web before: 15 materials over all
+   maps are split into passes as on the Xbox; this is the only intended change to Mesa's and the web's pictures.
+4. **Epic's multipass answer (option c)** is not an answer for the missing ops: for a missing op Epic's compiler
+   has only the GeForce1-era substitutions (MODULATE2X, ADD) that made the pillar metal; for stages it has the
+   split into passes, which is what `MaterialStages=4` reproduces.
+5. The web keeps gl4es' own fixed-function shaders (combine3 emulated; the same test on the twin, below).
+
+Coverage note (not measured here, from the extension specs and what this machine shows): combine3 is ATI/AMD's
+and Mesa's, combine4 NVIDIA's and Mesa's; a GL 2.0 fragment shader is on every driver this port can run on (the
+driver already needs GL 2.0). `opengl.gpuinfo.org` could not be read (the listing is filled by script), so no
+coverage percentages are quoted.
