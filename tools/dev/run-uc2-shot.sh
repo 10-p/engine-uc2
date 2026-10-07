@@ -50,13 +50,21 @@ if [ -n "${UC2_POSTCMD:-}" ]; then
 fi
 
 aaarg=-glnoaa; [ -n "${UC2_AA:-}" ] && aaarg=""
+# AutoFOV off unless UC2_AUTOFOV is set: the reference pictures these runs are compared with (the M7 effect
+# pairs, the wine oracle's DM-Praxis view, the O-9 before/after pairs) were made with the 4:3 field of view, and
+# at 16:9 D-8's Hor+ widens the framing. tools/dev/d78.sh measures AutoFOV itself and does not use this runner.
+fovarg="-ini:System:[ufront.AutoFOV]:AutoFOV=0"; [ -n "${UC2_AUTOFOV:-}" ] && fovarg=""
+# Likewise the UI as before D-2 (640x480 drawn 1:1, top-left) unless UC2_UIBOX is set: the references (e.g. the
+# wine oracle's DM-Praxis view, made by the original PC binary) have the old HUD. tools/dev/d2-ui-scale.sh
+# measures the UI box itself and does not use this runner.
+[ -z "${UC2_UIBOX:-}" ] && fovarg="$fovarg -ini:System:[SDL2Drv.SDL2Client]:UIScaleMode=Native640"
 inner=$(mktemp)
 cat > "$inner" <<INNER
 cd "$sys" || exit 1
 echo "\$DISPLAY" > "$out/$name.display"
 # M8: OpenAL Soft renders to its null backend unless ALSOFT_DRIVERS says otherwise (headless runs stay quiet).
 # M9: no logos (the fire-at times assume none)
-SDL_AUDIODRIVER=dummy ALSOFT_DRIVERS=${ALSOFT_DRIVERS:-null} ./${UC2_BIN:-uc2.bin} $map -log -nostartupmovies $aaarg "\$@" > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy ALSOFT_DRIVERS=${ALSOFT_DRIVERS:-null} ./${UC2_BIN:-uc2.bin} $map -log -nostartupmovies $aaarg $fovarg "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
 if [ "$fire" != 0 ]; then
   sleep \$(( $fire - 4 ))

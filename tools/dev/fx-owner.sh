@@ -31,6 +31,12 @@ if [ $# -gt 0 ] && [ -d "$work/run/$1" ]; then tree=$1; shift; fi
 sys=$work/run/$tree/System
 out=$work/logs/$tree
 bin=${UC2_BIN:-uc2.bin}
+# AutoFOV off unless UC2_AUTOFOV is set: the before/after pairs compare with executables older than D-8.
+fovarg="-ini:System:[ufront.AutoFOV]:AutoFOV=0"; [ -n "${UC2_AUTOFOV:-}" ] && fovarg=""
+# Likewise the UI as before D-2 (640x480 drawn 1:1, top-left) unless UC2_UIBOX is set: the references (e.g. the
+# wine oracle's DM-Praxis view, made by the original PC binary) have the old HUD. tools/dev/d2-ui-scale.sh
+# measures the UI box itself and does not use this runner.
+[ -z "${UC2_UIBOX:-}" ] && fovarg="$fovarg -ini:System:[SDL2Drv.SDL2Client]:UIScaleMode=Native640"
 suffix=""; [ "$bin" != uc2.bin ] && suffix="-${bin%.bin}"; suffix=${suffix/-uc2-/-}
 video=""; [ -n "${UC2_GPU:-}" ] && { video="SDL_VIDEODRIVER=offscreen"; suffix="$suffix-gpu"; }
 inject=$repo/tools/dev/m10-inject.py
@@ -146,7 +152,7 @@ echo "$CASES" | while IFS='|' read -r name map secs what; do
   inner=$(mktemp)
   cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy $video ./$bin "$map?Name=FxCam" -log -nostartupmovies -glerrors -inputtest="$chan" ${FX_ARGS:-} > "$out/$tag.out" 2>&1 &
+SDL_AUDIODRIVER=dummy $video ./$bin "$map?Name=FxCam" -log -nostartupmovies -glerrors -inputtest="$chan" $fovarg ${FX_ARGS:-} > "$out/$tag.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$tag.out" "$chan" "$out/$tag.result" > "$out/$tag.inject" 2>&1
 kill -TERM \$pid 2>/dev/null

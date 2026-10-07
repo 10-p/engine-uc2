@@ -60,6 +60,26 @@ link_cooked Sounds
 link_cooked Music
 link_cooked Movies
 link_cooked Textures/Movies
+# v2 (2026-10-07): script packages rebuilt from source (M14, tools/dev/script-build.sh) replace the shipped ones
+# where a change needs them; today only GUI.u (D-4: without a profile the player keeps the launcher's name;
+# bUnlockCharacters/bShowAllMuts config again). The rebuilt files are kept in assets/uc2-scripts/System (copied
+# there from a script-build tree by the coordinator), the shipped ones are put aside in assets/uc2-shipped/System
+# (never deleted), and SCRIPTS.txt in the tree says which packages are rebuilt. GUI is not a server package, so
+# shipped and rebuilt peers still play together; Core.u (the frontend's fingerprint) stays the shipped file.
+rebuilt_dir=${UC2_REBUILT_SCRIPTS:-$here/../assets/uc2-scripts/System}
+rebuilt_pkgs=${UC2_REBUILT_PACKAGES-GUI}
+shipped_dir=$here/../assets/uc2-shipped/System
+: > "$dst/System/SCRIPTS.txt"
+for pkg in $rebuilt_pkgs; do
+  if [ -f "$rebuilt_dir/$pkg.u" ]; then
+    mkdir -p "$shipped_dir"
+    cp --update=none --preserve=timestamps "$src/System/$pkg.u" "$shipped_dir/$pkg.u"
+    cp -f --preserve=timestamps "$rebuilt_dir/$pkg.u" "$dst/System/$pkg.u"
+    echo "$pkg.u rebuilt from source ($(sha256sum "$rebuilt_dir/$pkg.u" | cut -c1-16)); shipped copy in assets/uc2-shipped/System" >> "$dst/System/SCRIPTS.txt"
+  else
+    echo "note: no rebuilt $pkg.u in $rebuilt_dir: the shipped one stays"
+  fi
+done
 chmod -R u+w "$dst"
 ( cd "$dst" && find . -type f ! -name MANIFEST.sha256 -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > MANIFEST.sha256 )
 echo "assets tree: $dst"
