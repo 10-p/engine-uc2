@@ -346,3 +346,22 @@ lines only this branch emits: `ProfileState:`, `Profiles: viewport 0 holds`, `Pr
   treated as unproven; rerun with a sha256 check of `serve-web/SDLLaunch.wasm` against this worktree's build right
   before AND after the run.
 The diagnostics of step 8 stay (PROFILESTATE is what proves the engine's identity in the saves spec).
+
+## Step 11 (2026-10-07): M14 regressions on ALL rebuilt packages; browser runs proven
+
+`M14_PREFIX=d3-m14 M14_SCRIPTS=<WorkUC2>/run/d3-make/System M14_OUT=<WorkUC2>/logs/d3/m14-check
+tools/dev/m14-scripts-check.sh` (all 17 packages rebuilt from this branch's sources, GUI.u with D-4; final native
+binary; `logs/d3/m14-check/m14-summary.txt`): 11 PASS, 0 FAIL — verify, menu, deadbolt, patcher (rebuilt: none
+patched; shipped: 7 patched), controls (keyboard 16, mouse 18, text 7, pad 33, both 14), audio (self-test 39/0, menu
+music -19.02 dB), effects (4 pairs each tree, self-test 11/0), census (58 maps, 58 PASS both trees, 0 hung), movies
+19/0, net 16/0 (dedicated2 + travel), leftovers. The suites' own logs went to `<WorkUC2>/logs/d3-m14-*` (they write to
+`logs/<tree>` by design).
+
+Builds at the final engine code (no engine change after c2e7b83): native `logs/d3/build-native-7.log`, wasm-perf
+`logs/d3/build-wasm-perf-5.log`, windows `logs/d3/build-windows-2.log` (incremental after `build-windows.log`), all
+rc 0, 0 errors.
+
+Browser, engine identity PROVEN (sha256 of `serve-web/SDLLaunch.wasm` = this worktree's `e6e82ef55aab...` before and
+after each run, `logs/d3/e2e-engine-proof.txt`): `uc2-wasm-boot.spec.js` 3 passed (2.9m), `uc2-wasm-audio.spec.js`
+3 passed (1.2m), `uc2-wasm-saves.spec.js` run 11 1 passed (2.3m). Saves runs 9 and 10 and the rebuilt-GUI.u run are
+proven by this branch's own log lines (step 10). Null sink removed.
