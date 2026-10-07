@@ -238,3 +238,24 @@ No header changed. Engine side: `Source/Engine/Src/UC2NetTest.cpp` (test command
 pitch; default 0 = old behaviour; not reachable without the console). No engine rendering code changed, so a
 device without the post-process capability behaves exactly as before (the cube-map fix is a driver change
 that applies with and without post-processing: see the pinned check in the gate).
+
+## Gate (2026-10-07, final tree; every run through `<WorkUC2>/bin/capped`, no ceiling hit, no exit 137)
+
+- (a) `capped 6G 3600 -- cmake --preset native && cmake --build build-native -j6`: `[100%] Built target
+  SDLLaunch`, `native build exit 0` (`logs/fx/gate-native-build.log`). `capped 6G 5400 -- source env.sh && cmake
+  --preset wasm-perf && cmake --build build-wasm-perf -j6`: `[100%] Built target SDLLaunch`, `wasm build exit 0`
+  (`logs/fx/wasm-build.log`; UC2GLDrv is not in the web build on this base, the Engine change is).
+- (c) Fresh run tree `tools/dev/mkrun-uc2.sh build-native fx`, then `tools/dev/m7-effects.sh fx`
+  (`logs/fx/gate-m7-effects.txt`): self-test `10 passed, 0 failed`; bloom, blur, berserk, liandri, pause,
+  radial, dyngamma, dof-alpha, azure, octane, decay, undertow, recoil, praxis-panes: every line
+  `critical=0 glerrors=0 programs_failed=0+0 left_behind=0` (praxis on the first try).
+  `capped 1G -- python3 tools/psh2glsl.py --selftest`: `100 shaders, 99 compared ... 0 failed, 0 lint warnings;
+  7 synthetic semantics checks, 0 failed`; `--gputest` (xvfb, capped 2G): `107 shaders rendered, 6848 cases, 0
+  outside the tolerance ... 0 shaders failed`; `--check-emitted`: `102 files, 0 differ, 0 stale` (translator
+  untouched). `./ucc-bin verifyclasses` (capped 2G): `All native class layouts match`, exit 0.
+  DM-Deadbolt pinned picture with `-nopostprocess` (`tools/dev/m12/deadbolt-pinned.scen` through
+  `m10-controls.sh --file`, this branch in run tree `fx-pin` against main's build `engine-uc2/build-native` in
+  `fx-ref`): same view `loc=(1531.9,3111.5,-34.1) rot=(0,-40880,0)`, `pinned-compare.py`: `OK 99.997 90.9 24.77`
+  (static part 99.997% within 2 levels; the M13 threshold is 99.9), 0 GL errors in 207 frames, 0 Critical.
+- Ceilings used: builds 6G, game runs 2G (`run-uc2-shot.sh`, `fx-owner.sh`, `m10-controls.sh`), psh2glsl 1G/2G,
+  mkrun 2G. The NVIDIA runs (offscreen EGL) took the GPU's memory from 617 to at most ~650 MiB of 2048.
