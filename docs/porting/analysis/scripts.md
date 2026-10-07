@@ -380,5 +380,7 @@ accidental second pass by PID (it had redone verify, menu, deadbolt, patcher, co
 checked that no m14 process was left. The effects check, fixed (commit after ea59500), is being rerun on its own.
 Lesson for whoever runs these suites: never edit a running bash script.
 
-UCMutators is not in the patcher line: no client run loaded it (the census loads it on the servers; the
-per-map results there are the same as with the shipped files).
+UCMutators is in no patcher line: nothing in S3 loads it (the census servers, 58 maps, report the other seven
+packages: Engine/Editor/UnrealGame/UCGameplay/UCInventory/GUI on 57 maps each, UCMenu on 1; never UCMutators).
+So the UCMutators patches (WeaponMaster `ScoreKill`, the two `Reset` functions) and their rebuilt equivalents
+are proved equal only by the bytecode comparison, never exercised in a game here.
