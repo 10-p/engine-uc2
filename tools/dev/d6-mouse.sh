@@ -2,13 +2,15 @@
 # D-6 check (native): mouse look like a PC shooter, the game pad as on the Xbox, measured. One PASS/FAIL line per
 # check on stdout, then a summary line.
 #
-#   tools/dev/d6-mouse.sh [scenario...]        (default: look ini pad lock before)
+#   tools/dev/d6-mouse.sh [scenario...]        (default: look ini migrate pad lock before)
 #
 #   look    linear mouse look: N counts turn N x k at three speeds and three distances, the same k in both axes, a
 #           circle of mouse motion gives a circle of view directions, no camera motion after the mouse stops (a
 #           flick, the circle), the sensitivity, FOV and invert settings (mouse invert apart from the pad's, both
 #           applied), auto-centring only under the pad, the look keys, mouse after stick
 #   ini     the mouse's settings read from User.ini as the launcher passes them (-ini:, which also writes them there)
+#   migrate a User.ini an earlier build left (M10's; Epic's, which the web had): its old mouse/pad values are moved
+#           to D-6's at start-up (Source/Engine/Src/UC2InputMigrate.cpp) and the mouse is D-6's mouse
 #   pad     the right stick's turn and look-up curves (rotation reached 0.1-1.0 s after the stick is pushed to
 #           0.35/0.5/0.75/1.0) on our scripts and on the SHIPPED scripts with the same ini: must match; the stick
 #           dead zone 0.3; the left stick walks
@@ -42,13 +44,15 @@ done
 # Turn per count at FOV 90 with the default MouseLookSensitivity 2.5: 0.022 deg x 2.5 x 65536/360
 K=10.012444
 
-# prep <tree> [defuser-file]: fresh inis (ours, or another DefUser.ini), DevUI unsuppressed, no profiles
+# prep <tree> [defuser-file] [user-ini-file]: fresh inis (ours, or another DefUser.ini; a User.ini an earlier build
+# left, for the migration), DevUI unsuppressed, no profiles
 prep() {
   local sys=$work/run/$1/System
   cp -f "$repo"/Engine/Config/*.ini "$sys/"
   [ -n "${2:-}" ] && cp -f "$2" "$sys/DefUser.ini"
   sed -i '/^Suppress=DevUI\r\?$/d; /^Suppress=DevGUI\r\?$/d' "$sys/Default.ini"
   rm -f "$sys/Avaris.ini" "$sys/User.ini" "$sys"/Shot*.bmp
+  [ -n "${3:-}" ] && cp -f "$3" "$sys/User.ini"
   rm -rf "$sys/Profiles" "$work/run/$1/Save"/*.pro 2>/dev/null
   mkdir -p "$sys/Profiles"
 }
@@ -508,6 +512,22 @@ check ini-settings-kept-in-user-ini all(s in open(os.environ['D6_SYS']+'/User.in
 SCEN
 }
 
+# migrate <kind>: a User.ini an earlier build wrote (m10: main before D-6; epic: Epic's PC file, the web's until
+# 2026-10-07): the engine moves its mouse/pad values to D-6's (UC2InputMigrate.cpp) and the mouse is D-6's
+scen_migrate() {
+  start migrate-$1
+  cat <<SCEN
+probe Na
+chan mouse 500 0
+probe Nb
+check migrate-$1-mouse-is-the-linear-mouse abs(yawdiff('Na','Nb') - 500*K) <= 2 and P['Nb'].mouselook == 'True'
+chan exec getall UCPlayerInput aMouseX_Limit
+expect migrate-$1-pad-limits-are-the-xbox-ones UCPlayerInput.aMouseX_Limit = 100\.000000 10
+chan exec getall UCPlayerInput bNonlinearAccel
+expect migrate-$1-pad-curve-is-the-xbox-one UCPlayerInput.bNonlinearAccel = True 10
+SCEN
+}
+
 fails=0
 passes=0
 count() {
@@ -516,7 +536,7 @@ count() {
   passes=$((passes + $(grep -c '^PASS' "$f"))); fails=$((fails + $(grep -c '^FAIL' "$f")))
 }
 
-for s in ${@:-look ini pad lock before}; do
+for s in ${@:-look ini migrate pad lock before}; do
   case $s in
     look)
       echo "== look ($tree, our DefUser.ini)"
@@ -555,6 +575,16 @@ PY
       scen_ini > "$out/ini.scen"; prep "$tree"
       run ini "$tree" 0 200 "-ini:User:[UCGameplay.UCPlayerInput]:MouseLookSensitivity=1.0" "-ini:User:[UCGameplay.UCPlayerInput]:bInvertMouseLook=True"
       count "$out/ini.result";;
+    migrate)
+      git -C "$repo" show 47b1b18:Engine/Config/DefUser.ini > "$out/User-m10.ini"
+      git -C "$repo" show 45f7301:Engine/Config/web/DefUser.ini > "$out/User-epic.ini"
+      for k in m10 epic; do
+        echo "== migrate-$k ($tree, a User.ini from before D-6: $k)"
+        scen_migrate $k > "$out/migrate-$k.scen"; prep "$tree" "" "$out/User-$k.ini"
+        run migrate-$k "$tree" 0 200 -maxfps=60
+        grep -a "Input: User.ini" "$out/migrate-$k.out" | sed 's/^/    engine: /' | cut -c1-200
+        count "$out/migrate-$k.result"
+      done;;
     lock)
       echo "== lock ($tree, two bots frozen)"
       scen_lock > "$out/lock.scen"; prep "$tree"; run lock "$tree" 2 400 -maxfps=60; count "$out/lock.result";;
@@ -566,7 +596,7 @@ PY
       echo "== epic ($ship, shipped scripts, Epic's DefUser.ini as the web build had it until 2026-10-07; evidence)"
       git -C "$repo" show 45f7301:Engine/Config/web/DefUser.ini > "$out/DefUser-epic.ini"
       scen_epic > "$out/epic.scen"; prep "$ship" "$out/DefUser-epic.ini"; run epic "$ship" 0 300 -maxfps=60 | sed 's/^/(epic) /';;
-    *) echo "unknown scenario $s (look ini pad lock before epic)" >&2;;
+    *) echo "unknown scenario $s (look ini migrate pad lock before epic)" >&2;;
   esac
 done
-echo "d6-mouse: $passes PASS, $fails FAIL (scenarios: ${*:-look ini pad lock before}; 'before' is evidence and not counted)"
+echo "d6-mouse: $passes PASS, $fails FAIL (scenarios: ${*:-look ini migrate pad lock before}; 'before' is evidence and not counted)"
