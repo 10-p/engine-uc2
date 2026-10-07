@@ -292,3 +292,19 @@ native drawing path - not done. Example: `get Engine.GameEngine CacheSizeMegs` -
   (`logs/d78/reg/m10c`): the character page's Enter lost on a slow frame (3/11). `both` with
   `M10_KEYHOLD=0.3` only (`logs/d78/reg/m10d`): PASS 14. So all five pass, with held keys / slower steps on
   this loaded machine; a run without pacing on a quiet machine is for the coordinator's gate.
+- D-2 suite as a regression (`D2_TREE=d78-d2 D2_REF_TREE=d78-d2ref D2_OUT=<WorkUC2>/logs/d78/d2run
+  tools/dev/d2-ui-scale.sh`, `logs/d78/d2-suite.txt`, exit 0; measured again after one rerun:
+  `logs/d78/d2-measure-2.txt`): every game run PASS (all 8 sizes, menu+hud, refs, pinned, native-menu, lockon,
+  pause, mouse 18/18 at 640x480 and 1920x1080); **79 PASS, 2 FAIL**:
+  - `identity-arena-640x480`: our arena page on black differs from reference run 1 in the band (63,330)-(531,346):
+    the game type's description is typed out with a cursor, and reference run 1 caught it still typing; against
+    reference runs 2 and 3 ours differs only inside the excluded movie preview (405,85)-(583,294), and reference
+    run 1 against reference run 3 differs in that band too (the check's own line says so). An animation caught
+    in a reference picture, not a change: AutoFOV does not touch a 640x480 menu (and nothing at 4:3).
+  - `marker-on-actor-1920x1080` (D-2's boxed / unboxed / boxed-again lock-on pictures): first pass the view was
+    still turning into the lock (reticle box moved 26 px); rerun alone at a lower load (`lockon` again, PASS):
+    fit -> native 7 px (the view still settling: the figure moved 8 px too), native -> fit2 0 px (reticle
+    (575,358)-(1086,958) in both), offset from the figure spread 4.0 px (<= 8). The same scenario on MAIN's
+    binary at the same time (`logs/d78/d2lock-main`, no AutoFOV): the box moved 24 px and the offset spread 23 px
+    - the check is sensitive to the frame rate on a loaded machine (the lock turns the view in real time), more
+    so on main than here. Boxed and unboxed land on the same pixels (native vs fit2: 0 px) with AutoFOV at 16:9.
