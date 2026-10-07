@@ -26,6 +26,7 @@ Scenario language, one command per line (# comments):
     chan <channel command>        any channel line (exec ..., log ...)
     probe <tag>                   ask the engine for a probe line and keep its fields as <tag>
     seek <max> <expr> ;; <cmd>    probe (as '_') until <expr> holds, running <cmd> in between, at most <max> times
+    tryseek <max> <expr> ;; <cmd> the same, but the scenario goes on when <expr> is not reached (a later check says)
     shot <name>                   engine screenshot (SHOT); the shell renames it to <name>.png afterwards
     sleep <seconds>
     check <name> <python expr>    record PASS/FAIL; the expression sees P (probes by tag), yawdiff(a,b),
@@ -328,8 +329,9 @@ def execute(line):
     global fail_fast, mark_at
     cmd, _, rest = line.partition(' ')
     if True:
-        if cmd == 'seek':
+        if cmd in ('seek', 'tryseek'):
             # seek <max> <expr> ;; <command>: probe as '_', stop when <expr> holds, else run <command>
+            # tryseek: the same, but not reaching <expr> only prints a note and the scenario goes on (D-8)
             head, _, action = rest.partition(';;')
             limit, _, expr = head.strip().partition(' ')
             for _ in range(int(limit) + 1):
@@ -338,6 +340,9 @@ def execute(line):
                     return
                 execute(action.strip())
                 time.sleep(0.3)
+            if cmd == 'tryseek':
+                print(f'  tryseek: {expr} not reached in {limit} steps; going on', flush=True)
+                return
             raise RuntimeError(f'seek: {expr} not reached in {limit} steps')
         elif cmd == 'wait':
             parts = rest.rsplit(' ', 1)

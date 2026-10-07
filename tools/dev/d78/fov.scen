@@ -148,9 +148,48 @@ check d78-zoom-fov P['zoom43'].fov==40 and P['zoom169'].fov==40 and P['zoom219']
 chan exec set UCPlayerController DesiredFOV 90
 chan exec set UCPlayerController FovAngle 90
 wait test: exec set UCPlayerController FovAngle 10
-# ---- third person again, the lock-on reticle on a summoned target
+# ---- the sniper rifle (the default loadout's energy weapon): its own zoom (AltFire) and scope overlay
 chan exec PlayersOnly
 wait test: exec PlayersOnly 10
+chan exec TEMPSETRES 1920x1080w
+chan exec set LevelInfo TimeDilation 1
+wait test: exec set LevelInfo TimeDilation 10
+sleep 2
+tryseek 8 P['_'].weapon=='UCWeap_SniperRifle' ;; chan exec NextWeapon
+sleep 3
+click 3
+sleep 4
+probe sniper
+chan exec set LevelInfo TimeDilation 0.001
+wait test: exec set LevelInfo TimeDilation 10
+chan exec PlayersOnly
+wait test: exec PlayersOnly 10
+sleep 2
+shot sniper-1920x1080
+chan exec TEMPSETRES 1440x1080w
+sleep 5
+probe sniper43
+shot sniper-1440x1080
+chan exec TEMPSETRES 2560x1080w
+sleep 6
+shot sniper-2560x1080
+chan exec TEMPSETRES 1920x1080w
+sleep 5
+chan exec AUTOFOV 0
+wait test: exec AUTOFOV 0 10
+sleep 4
+shot sniper-1920x1080-off
+chan exec AUTOFOV 2
+wait test: exec AUTOFOV 2 10
+check d78-sniper-zoomed P['sniper'].weapon=='UCWeap_SniperRifle' and P['sniper'].desiredfov<60 and P['sniper43'].fov==P['sniper'].fov
+chan exec PlayersOnly
+wait test: exec PlayersOnly 10
+chan exec set LevelInfo TimeDilation 1
+wait test: exec set LevelInfo TimeDilation 10
+sleep 2
+tryseek 4 P['_'].desiredfov>=80 ;; click 3
+sleep 2
+# ---- third person again, the lock-on reticle on a summoned target
 chan exec TEMPSETRES 1920x1080w
 chan exec set LevelInfo TimeDilation 1
 wait test: exec set LevelInfo TimeDilation 10
