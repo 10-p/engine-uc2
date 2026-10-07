@@ -232,8 +232,11 @@ sleep 1.5
 probe p1
 check kb-pause-menu-up P['p1'].menu != 'None'
 shot pause
+# The pause menu closes with an animation counted in FRAMES (UC2PageBase: "Active blocking animation (N frames)"):
+# under software GL on a loaded machine that takes longer than 2 s, so wait for the menu to be gone (up to ~16 s).
 key Escape
 sleep 2
+tryseek 20 P['_'].menu == 'None' ;; sleep 0.5
 probe p2
 check kb-escape-closes-pause-menu P['p2'].menu == 'None'
 SCEN
@@ -492,8 +495,11 @@ check pd-y-switches-back-to-ranged P['w2'].weapon == P['w0'].weapon
 padpress start
 expect pd-start-opens-pause-menu OpenMenu \[UCMenu.InGame_MainMenu\] 10
 sleep 1.5
+# The pause menu closes with an animation counted in FRAMES (UC2PageBase: "Active blocking animation (N frames)"):
+# under software GL on a loaded machine that takes longer than 2 s, so wait for the menu to be gone (up to ~16 s).
 padpress b
 sleep 2
+tryseek 20 P['_'].menu == 'None' ;; sleep 0.5
 probe p2
 check pd-b-closes-pause-menu P['p2'].menu == 'None'
 pad detach
@@ -590,8 +596,11 @@ check both-keyboard-fires-during-pad-move P['b5'].shots != P['b4'].shots
 key Escape
 expect both-escape-opens-pause-menu OpenMenu \[UCMenu.InGame_MainMenu\] 10
 sleep 1.5
+# The pause menu closes with an animation counted in FRAMES (UC2PageBase: "Active blocking animation (N frames)"):
+# under software GL on a loaded machine that takes longer than 2 s, so wait for the menu to be gone (up to ~16 s).
 padpress b
 sleep 2
+tryseek 20 P['_'].menu == 'None' ;; sleep 0.5
 probe p1
 check both-pad-b-closes-it P['p1'].menu == 'None'
 SCEN
