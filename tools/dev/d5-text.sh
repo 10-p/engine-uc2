@@ -59,7 +59,8 @@ $menu_up
 $to_profiles
 expect k1-profiles-opens OpenMenu \[UCMenu.UC2Profile\] 15
 wait OpenMenu \[GUI.GUIMessageBox\] 20
-sleep 1.5
+wait GUIMessageBox Unblocking animation 15
+sleep 0.5
 key Return
 expect k1-keyboard-opens OpenMenu \[UCMenu.UC2ProfileKeyboard\] 15
 sleep 3
@@ -84,7 +85,9 @@ seek 4 P['_'].menu == 'UC2MainMenu' ;; key Escape
 key Return
 expect k1-profiles-opens-again OpenMenu \[UCMenu.UC2Profile\] 15
 wait OpenMenu \[GUI.GUIMessageBox\] 20
-sleep 1.5
+# A box takes no key while it animates in (seen under load: A ignored, the letters typed next went to it).
+wait GUIMessageBox Unblocking animation 15
+sleep 0.5
 key Return
 expect k1-the-keyboard-opens-again OpenMenu \[UCMenu.UC2ProfileKeyboard\] 20
 sleep 3
