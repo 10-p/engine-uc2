@@ -396,3 +396,16 @@ the panes as a strong pink/blue swirl where the oracle (Epic's D3D8 path under w
   AcidRain 16.1 / 0.73, Tempest 13.9 / 0.67; all combiner lines as before.
 - Pictures: `logs/o9b/o9b-praxis-oracle-view-wine-main-before.png` (wine | main | main before O-9, Mesa, same camera)
   and `logs/o9b/o9b-praxis-near-main-before.png` (close view: main | before O-9, the same swirl).
+
+## Step 4: m7-effects and the twin's effects (O-9b gate)
+
+- `tools/dev/m7-effects.sh o9bgate` on a fresh tree (`logs/o9/o9b-m7-effects.txt`): self-test `11 passed, 0
+  failed`; 14 effect lines, every one `critical=0 glerrors=0 programs_failed=0+0 left_behind=0 tries=1`;
+  `fx praxis-panes: ... tries=1 A vs wine reference mean=2.578`.
+- `M11_DESKTOP_TREE=o9m11 M11_TWIN_TREE=o9m11t tools/dev/m11-twin.sh effects` (`logs/o9/o9b-m11-twin-effects.txt`):
+  13 of 14 effects PASS, **praxis-panes PASS** on both bindings in one run each (B desktop vs twin 2.547);
+  **liandri FAIL** (B desktop vs twin 6.440 > 6), as in my O-9 gate (9.26). Not the panes and not O-9: the
+  Liandri overlay's noise differs from run to run on any binary: two pre-O-9 desktop runs (`logs/fx` 00:56 and
+  `logs/m7`, Oct 5) differ by 8.12; the coordinator's own run of 16:07 today (`logs/m11` vs `logs/m11t`) by 6.58;
+  two runs of the O-9 binary by 9.37. The M11 notebook says the same ("the effect's scan-line noise is random").
+  A deterministic liandri check would need the noise's random numbers fixed or the noise masked; not done here.
