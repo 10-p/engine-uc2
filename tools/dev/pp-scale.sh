@@ -66,9 +66,9 @@ frames() {  # frames <log>: "shot@T=frame ..." from the engine's own lines
 # frames for the dynamic gamma to settle (it moves 5% of the way per frame) at the software-GL frame rates here.
 waits() {
   case $1 in
-    640x480)   W1=20; W2=12; CAP=2G ;;
-    1440x1080) W1=45; W2=30; CAP=2G ;;
-    *)         W1=${PP_WAIT_4K:-180}; W2=$(( ${PP_WAIT_4K:-180} / 2 )); CAP=3G ;;
+    640x480)   W1=20; W2=12; G=2; CAP=2G ;;
+    1440x1080) W1=70; W2=35; G=4; CAP=2G ;;
+    *)         W1=${PP_WAIT_4K:-180}; W2=$(( ${PP_WAIT_4K:-180} / 2 )); G=12; CAP=3G ;;
   esac
 }
 runshot() {  # runshot <name> <res> <secs> <fire> <map> <args...>: one run, pinned, pictures <name>-N.png
@@ -97,9 +97,11 @@ check_glow() {
   local res g1 g2 base_w="" base_p="" fails=0
   for res in $RESOLUTIONS; do
     waits $res
-    local t1=$((46+W1)) t2=$((48+W1+W2))
-    runshot pp-glow-$res $res $((t2+25)) 34 DM-Deadbolt -nopostprocess -glpptoggle=46 -glshot=44,$t1,$t2 \
-      -glexec=49:set+LevelInfo+TimeDilation+0.0001@$((t1+2)):PPREFERENCE+0
+    # G: seconds between a shot and the next switch, a few frames at that resolution's frame rate (a shot is
+    # taken at the end of the first frame after its time; a switch made in between would be in it).
+    local on=$((44+G)); local t1=$((on+W1)); local t2=$((t1+G+W2))
+    runshot pp-glow-$res $res $((t2+25)) 34 DM-Deadbolt -nopostprocess -glpptoggle=$on -glshot=44,$t1,$t2 \
+      -glexec=$((on+3)):set+LevelInfo+TimeDilation+0.0001@$((t1+G)):PPREFERENCE+0
     local o=$out/pp-glow-$res
     if [ ! -f "$o-2.png" ]; then result FAIL glow-$res "no pictures ($(runok "$o.out"); see $o.out)"; fails=$((fails+1)); continue; fi
     g1=$($M glow "$o-0.png" "$o-1.png"); g2=$($M glow "$o-0.png" "$o-2.png")
@@ -141,6 +143,13 @@ sigmacheck() {
     s1=$($M sigma "$o-$5.png" "$o-$6.png" $box $axis); s2=$($M sigma "$o-$7.png" "$o-$8.png" $box $axis)
   fi
   SIG480[$check-$res]=$(num $key "$s1"); SIG0[$check-$res]=$(num $key "$s2")
+  # Every shot at least 3 frames after the one before (else a switch may have landed in the wrong picture).
+  local fr gaps prev="" ok=1
+  for fr in $(frames "$o.out" | grep -o 'f[0-9]*' | tr -d f); do
+    [ -n "$prev" ] && [ $((fr - prev)) -lt 3 ] && ok=0
+    prev=$fr
+  done
+  [ $ok = 1 ] || { SIG480[$check-$res]=""; info $check-$res "shots fewer than 3 frames apart ($(frames "$o.out")): not judged; rerun on a quieter machine"; }
   info $check-$res "box $box ($axis) on the 480-line picture: reference 480: $s1; reference 0 (as before): $s2; $(runok "$o.out"); shots $(frames "$o.out")"
 }
 # judge <check> <tolerance> <expect-old>: the reference-480 sigma at every resolution within tolerance of 640x480's;
@@ -165,9 +174,9 @@ check_dof() {
   local res
   for res in $RESOLUTIONS; do
     waits $res
-    local t0=$((52+W1)) t1=$((52+W1+12)) t2=$((54+W1+12+W2)) t3=$((56+W1+12+W2+12))
+    local t0=$((52+W1)); local t1=$((t0+2*G+8)); local t2=$((t1+G+W2)); local t3=$((t2+2*G+8))
     runshot pp-dof-$res $res $((t3+25)) 42 DM-Azure -glshot=$t0,$t1,$t2,$t3 \
-      -glexec=50:set+LevelInfo+TimeDilation+0.0001@$((t0+1)):set+UCScreenDOF+Enabled+0@$((t1+1)):PPREFERENCE+0@$((t2+1)):set+UCScreenDOF+Enabled+1
+      -glexec=50:set+LevelInfo+TimeDilation+0.0001@$((t0+G)):set+UCScreenDOF+Enabled+0@$((t1+G)):PPREFERENCE+0@$((t2+G)):set+UCScreenDOF+Enabled+1
     [ -f "$out/pp-dof-$res-3.png" ] || { info dof-$res "no pictures ($(runok "$out/pp-dof-$res.out"))"; continue; }
     sigmacheck dof $res "${PP_DOF_BOX:-310 186 428 230}" xy 1 0 2 3
   done
@@ -182,9 +191,9 @@ check_blur() {
   for res in $RESOLUTIONS; do
     waits $res
     # (half waits between the switches: the pairs compared are 0/2 and 1/3, each at one reference height)
-    local h=$((W2/2)); local t0=$((42+W1)); local t1=$((t0+2+h)) t2=$((t0+6+2*h)) t3=$((t0+8+3*h))
+    local h=$((W2/2)); local t0=$((42+W1)); local t1=$((t0+G+h)); local t2=$((t1+2*G+h)); local t3=$((t2+G+h))
     runshot pp-blur-$res $res $((t3+25)) 34 DM-Deadbolt -glshot=$t0,$t1,$t2,$t3 \
-      -glexec=40:set+LevelInfo+TimeDilation+0.0001@$((t0+1)):PPREFERENCE+0@$((t1+1)):PPREFERENCE+480@$((t1+2)):BlurMe@$((t2+1)):PPREFERENCE+0
+      -glexec=40:set+LevelInfo+TimeDilation+0.0001@$((t0+G)):PPREFERENCE+0@$((t1+G)):PPREFERENCE+480@$((t1+G+1)):BlurMe@$((t2+G)):PPREFERENCE+0
     [ -f "$out/pp-blur-$res-3.png" ] || { info blur-$res "no pictures ($(runok "$out/pp-blur-$res.out"))"; continue; }
     sigmacheck blur $res "${PP_BLUR_BOX:-360 175 500 255}" xy 0 2 1 3
   done
@@ -208,9 +217,9 @@ check_radial() {
   local res
   for res in $RESOLUTIONS; do
     waits $res
-    local t0=$((42+W1)) t1=$((50+W1)) t2=$((52+W1+W2)) t3=$((60+W1+W2))
+    local t0=$((42+W1)); local t1=$((t0+2*G+6)); local t2=$((t1+G+W2)); local t3=$((t2+2*G+6))
     runshot pp-radial-$res $res $((t3+25)) 34 DM-Deadbolt -glshot=$t0,$t1,$t2,$t3 \
-      -glexec=38:set+UCPlayerController+RadialBlurSpeed+0@38.2:set+UCPlayerController+RadialBlurMinChange+-1@40:set+LevelInfo+TimeDilation+0.0001@$((t0+1)):set+UCScreenRadialBlur+RadialBlurDistance+30@$((t0+1)).2:set+UCScreenRadialBlur+Enabled+1@$((t1+1)):PPREFERENCE+0@$((t2+1)):set+UCScreenRadialBlur+Enabled+0
+      -glexec=38:set+UCPlayerController+RadialBlurSpeed+0@38.2:set+UCPlayerController+RadialBlurMinChange+-1@40:set+LevelInfo+TimeDilation+0.0001@$((t0+G)):set+UCScreenRadialBlur+RadialBlurDistance+30@$((t0+G)).2:set+UCScreenRadialBlur+Enabled+1@$((t1+G)):PPREFERENCE+0@$((t2+G)):set+UCScreenRadialBlur+Enabled+0
     [ -f "$out/pp-radial-$res-3.png" ] || { info radial-$res "no pictures ($(runok "$out/pp-radial-$res.out"))"; continue; }
     sigmacheck radial $res "${PP_RADIAL_BOX:-150 95 620 300}" zoom 0 1 3 2
   done

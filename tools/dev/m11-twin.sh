@@ -62,10 +62,15 @@ if [ -z "${M11_NO_MKRUN:-}" ]; then
 fi
 PIN='set UCDeathmatch NumPlayers 0'
 
-# Both bindings at once (two trees): desktop in the background, twin in the foreground.
+# Both bindings at once (two trees): desktop in the background, twin in the foreground. M11_SERIAL=1: one after the
+# other (a loaded machine: one game run at a time; the coordinator's rule of 2026-10-08).
 both() {  # both <name> <secs> <fire> <map> <args...>
   local name=$1 secs=$2 fire=$3 map=$4; shift 4
-  UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D "$name" "$secs" "$fire" "$map" -opengl -glerrors "$@" > "$LD/$name.report" 2>&1 &
+  if [ -n "${M11_SERIAL:-}" ]; then
+    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D "$name" "$secs" "$fire" "$map" -opengl -glerrors "$@" > "$LD/$name.report" 2>&1
+  else
+    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D "$name" "$secs" "$fire" "$map" -opengl -glerrors "$@" > "$LD/$name.report" 2>&1 &
+  fi
   local pid=$!
   UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T "$name" "$secs" "$fire" "$map" -gl4es -glerrors "$@" > "$LT/$name.report" 2>&1
   wait $pid
@@ -145,7 +150,11 @@ check_pinned() {
 
 check_effects() {
   local names="bloom blur berserk liandri pause radial dyngamma dof-alpha azure octane decay undertow recoil praxis-panes"
-  ( "$repo/tools/dev/m7-effects.sh" $D $names > "$LD/fx-lines.txt" 2>&1 ) &
+  if [ -n "${M11_SERIAL:-}" ]; then
+    "$repo/tools/dev/m7-effects.sh" $D $names > "$LD/fx-lines.txt" 2>&1
+  else
+    ( "$repo/tools/dev/m7-effects.sh" $D $names > "$LD/fx-lines.txt" 2>&1 ) &
+  fi
   local pid=$!
   rm -f "$LT"/fx-*-b.ref.png
   UC2_GLARGS=-gl4es "$repo/tools/dev/m7-effects.sh" $T $names > "$LT/fx-lines.txt" 2>&1
@@ -193,7 +202,11 @@ check_m6() {
 check_fallbacks() {
   # Reference for each mask: the same binding with the capability, same pinned view, so the comparison
   # isolates the fallback.
-  UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T fb-ref 110 34 DM-Deadbolt -gl4es -glerrors -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$LT/fb-ref.report" 2>&1 &
+  if [ -n "${M11_SERIAL:-}" ]; then
+    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T fb-ref 110 34 DM-Deadbolt -gl4es -glerrors -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$LT/fb-ref.report" 2>&1
+  else
+    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T fb-ref 110 34 DM-Deadbolt -gl4es -glerrors -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$LT/fb-ref.report" 2>&1 &
+  fi
   local pid=$!
   UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D fb-ref 110 34 DM-Deadbolt -opengl -glerrors -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$LD/fb-ref.report" 2>&1
   wait $pid
