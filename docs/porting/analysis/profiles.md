@@ -168,3 +168,24 @@ leaves a player without one. Same on the Xbox: with exactly one profile, `ForceP
 
 Next: the same D-4 script on the shipped packages (evidence of Epic's behaviour), D-5 native scenarios, then the
 browser runs (wasm-perf rebuilt with every engine change).
+
+## Step 4 (2026-10-07): Epic's behaviour on the shipped packages, recorded; D-5 script; first browser run
+
+`D4_TREE=d3 D4_OUT=<WorkUC2>/logs/d3/names-shipped tools/dev/d4-names.sh` (shipped packages, every engine change;
+`logs/d3/d4-names-shipped.txt`): 4 FAILED, all in GUI.u's part: without a profile the player is `Anubis` already in
+the menu level, `Sapphire` after the character page, the match URL carries `Name=Sapphire` and User.ini
+[DefaultPlayer] Name becomes `Sapphire`; n2's start and n4's "the launcher's name is back" show `Anubis` too. The
+engine-only parts PASS on the shipped packages: a profile names the player (n2, n3 with `?Name=FrontName` in the URL),
+[DefaultPlayer] Name is not overwritten by the profile's name. So until the web gets the rebuilt GUI.u, a browser
+player WITHOUT a profile is named after the character, and WITH one after the profile (the owner's rule holds there).
+
+`tools/dev/d5-text.sh` (k1 new profile: exact text, Backspace, Escape cancels, Enter makes it; k2 rename: Escape keeps,
+Enter renames and the remembered profile follows; k3 copy; k4 the host's server name on UC2Keyboard; k5 chat in a
+match: text, no movement while typing, Enter sends, one Escape cancels). k4's path through the host pages is a first
+guess (an exploration run starved at load 30: another agent's software-GL game used 4 cores; game runs are done one
+at a time from here).
+
+Browser: wasm-perf rebuilt with every engine change (`logs/d3/build-wasm-perf-2.log`, 0 errors); `yarn build --target
+uc2 --engine-artifact <this worktree>/build-wasm-perf/Source/SDLLaunch` (`logs/d3/fe-build-1.txt`); null sink `uc2d3`;
+`PULSE_SINK=uc2d3 bin/capped 6G 1800 -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=14 -- --target uc2
+uc2-wasm-saves.spec.js` (`logs/d3/e2e-saves-1.txt`).
