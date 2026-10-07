@@ -255,6 +255,13 @@ if(NOT EMSCRIPTEN)
   set(ALSOFT_EAX OFF CACHE BOOL "" FORCE)            # UC2 uses EFX (zone reverb), not EAX
   set(ALSOFT_BACKEND_WAVE ON CACHE BOOL "" FORCE)    # ALSOFT_DRIVERS=wave: render to a .wav (tests)
   set(ALSOFT_BACKEND_NULL ON CACHE BOOL "" FORCE)
+  # A MinGW build must not pick up the HOST's Linux audio headers (libpipewire-0.3-dev on the build machine:
+  # pipewire/utils.h needs <sys/un.h>, which MinGW lacks). Windows uses openal-soft's WASAPI backend.
+  if(WIN32)
+    foreach(be PIPEWIRE PULSEAUDIO ALSA OSS JACK SNDIO)
+      set(ALSOFT_BACKEND_${be} OFF CACHE BOOL "" FORCE)
+    endforeach()
+  endif()
   set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
   # The engine's directory-wide definitions and -fpermissive are not openal-soft's business.
   get_directory_property(_UC2_SAVED_DEFS COMPILE_DEFINITIONS)
