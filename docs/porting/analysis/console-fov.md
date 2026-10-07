@@ -209,3 +209,19 @@ Prepared: windows and wasm-perf configured offline (deps copied from main's buil
   scope overlay at 16:9 - it is drawn in the 4:3 box (four quarter tiles of `ClipX/2 x ClipY/2`, D-2), so on a
   wide window the side columns would show the zoomed world unmasked, presumably; a D-2 follow-up if the owner
   sees it (a native rule in `UCanvas` or a script change to extend the mask).
+
+## Step 5 (2026-10-07): the reworked FOV run measured (`-nopostprocess`, `logs/d78/run/fov`)
+
+world-third-person 99.55% / 98.56% (16:9 / 21:9 centre vs 4:3; control 8.54%); letterbox 99.87% / 99.87%
+(control 45.94%); world-first-person 100.00% / 100.00% (control 10.66%); zoom 40 100.00% / 100.00%; vertical
+scale 1.000 at 16:9, 21:9 and zoomed (controls 1.310 and 1.762); weapon on black against 4:3: area +0.0%,
+centroid 0.0 px at 16:9 and 21:9, and 0.0% / 0.0 px for the same 4:3 picture taken again (PlayersOnly froze the
+idle animation; AUTOFOV 0: -6.0%, 70.1 px); lock-on reticle on black: centre (611.8,668.1) at 4:3, the 16:9 and
+21:9 ones within 1.0 px of it shifted by the side columns, radius 271.3 / 271.2 / 271.0; the target's figure
+inside the reticle at every size (offset from the figure's box (-8.2,-26.4) / (-8.2,-26.4) / (-8.3,-24.8)). The
+figure search is now limited to the inside of the reticle (at 21:9 the +-450 px window caught other purple).
+This run still had the sniper section (its check FAILs: no rifle); the scenario no longer has it.
+
+Engine tweak (0f77515): a key press the console did not take clears that key's mark, so a lost release cannot
+swallow a later one. Owner's sheets: `logs/d78/run/owner-{tp,fp,zoom,cin,lock}-{fov,fov-pp}.png` (rows: 4:3,
+16:9, 21:9, 16:9 with AUTOFOV 0), seen: right.
