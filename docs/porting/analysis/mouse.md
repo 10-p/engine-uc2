@@ -92,3 +92,76 @@ invert therefore has to live outside the profile.
 - Keyboard WASD counts as a full stick for the stick-direction logic (dodges, lock-target switch).
 - Test: SDL2Drv test channel `mouse <dx> <dy>` (an SDL motion event, the real path from SDL on), a per-tick trace,
   camera fields in the probe; `tools/dev/d6-mouse.sh`.
+
+## Step 1 (2026-10-07): the separation, in script and ini (commits 49d4705, b22c067, 0475725, d75990b)
+
+`UCGameplay` (rebuilt package; `tools/dev/script-build.sh --tree d6-make`: make 0 errors, 85 warnings = M14's):
+- `UCPlayerInput.PlayerInput`: before Epic's stick code overwrites `aTurn/aLookUp`, keep them (the mouse and the
+  look keys: `LinearTurn/LinearLookUp`); after the pad invert, `AddMouseLook`: counts = Linear x dt x 5 (UInput adds
+  0.01 per count, ReadInput x20/dt), rotation units = counts x 0.022 x 65536/360 x `MouseLookSensitivity` x
+  `DesiredFOV/90` (exact; Epic's `0.01111` is 0.01% short), own invert `bInvertMouseLook`, fractional unit carried
+  to the next tick; added to `aTurn/aLookUp` as `(units +- 0.5)/(32 dt)` so UpdateRotation's `int(32 dt aTurn)` is
+  exactly that many units (the stick alone keeps Epic's arithmetic: nothing is added when the mouse is still).
+- Who owns the look: `bMouseOwnsLook` (stick moved -> pad, mouse or look key moved -> mouse; the mouse wins a tick
+  both moved in; starts as the mouse on PC, the pad on the Xbox). Aim adhesion (`GetTurn/LookUpAdhesionAdjust`)
+  returns 0 while the mouse owns it (its state keeps updating); auto-centre pitch (`UpdateRotation`) not while the
+  mouse owns it. Friction already acts on `aMouseX/aMouseY` only, which is now the stick only.
+- Third-person camera (`UCPlayerController.CalcBehindView` -> `MouseLookCamera`): while the mouse owns the look the
+  camera is put at `DesiredCameraLocation` (where Epic's lazy camera is heading: behind the pawn for the view, walls
+  taken into account) after `CalcThirdPersonView`, and `OldCameraLoc` with it. First attempt (shift `OldCameraLoc`
+  by the change of the ideal offset before the native) left a slide wherever a wall shortens the camera arm (seen:
+  189 -> 125 units over ~0.2 s after a flick, `logs/d6/explore/e1n.out`); replaced. Consequence: under the mouse
+  the camera lags neither rotation nor movement; under the pad Epic's lazy camera is unchanged.
+- Lock-on: the lock's pull is held off while the mouse moves against it (as Epic does for the stick); the mouse
+  breaks a lock by moving `MouseLockBreakAngle` (25) degrees against the clamp (decays in 0.5 s);
+  `LockMousePush` reset while not locked.
+- Stick movement scale: `aForward/aStrafe` (0..1) x 24000 in `PlayerInput` on PC (PlayerMove does it on the Xbox
+  only), so `JoyX/JoyY SpeedBase=100` works again, also when a profile's swap-sticks rewrites the bindings, and
+  `Ctrl_Move_*_Pct` is the stick's real deflection again.
+- Keys as stick (`bKeysAsStick`, default on): the movement keys add a full (diagonal: 0.707) stick to
+  `Ctrl_Move_*_Pct`: SmartJump dodges and wall-dodges, Lock + A/D target switching, the on-screen stick prompts.
+- Tutorial (`UCTrainingController`): the "look up" question answered with the mouse sets the mouse's invert, and
+  its "toggle" toggles the invert of the device that owns the look.
+- Console `MouseLookSens <x>`, `MouseLookInvert <bool>` (session only: UC2's script `SaveConfig`/`StaticSaveConfig`
+  are `#if 0` in `UnCorSc.cpp` ("rjp - calling SaveConfig() has mucho side-effects"), found when the first test
+  checked User.ini; the lasting setting is the ini key, or `-ini:` from a launcher).
+- `script-diff.py` against the SHIPPED packages (`logs/d6/d6-make-compare-shipped.txt`; GUI.u taken from
+  `assets/uc2-shipped`): every package problems 0 except UCGameplay: 18 problems, all in what was changed
+  (UCPlayerInput: PlayerInput, Get*AdhesionAdjust, the new functions/properties; UCPlayerController: UpdateRotation,
+  CalcBehindView, the new functions; UCTrainingController: PlayerViewSetup.PlayerMove, PlayerViewTest.Fire/AltFire,
+  InvertLookToggle), findings 6 = M14's 5 + the new UCPlayerInput defaults. (Against `assets/uc2/System`, which
+  carries the D-4 GUI.u, GUI/UCMenu report the D-4 change as "problems"; the shipped baseline is the right one.)
+
+`Engine/Config/DefUser.ini`: `MouseX/MouseY ... Axis aTurn/aLookUp Speed=1.0`; Left/Right `Axis aTurn Speed=-/+16`,
+PageUp/PageDown `Axis aLookUp Speed=+/-16` (89.9 deg/s measured at the default sensitivity); sticks
+`SpeedBase=100.0 DeadZone=0.3` (the retail disc's); `[UCGameplay.UCPlayerInput]` the Xbox's values
+(`bNonlinearAccel=true`, limits 100/1024, `bAccelMultipliers=true`, friction ranges 0.95/0.9 of the retail disc
+instead of the PC leak's 0.75/0.65, because friction is the stick's alone now) plus `MouseLookSensitivity=2.5`,
+`bInvertMouseLook=False`, `MouseLockBreakAngle=25.0`, `bKeysAsStick=True`; `[UCGameplay.UCPlayerController]`
+`bAutoCenterPitch=true`, `LockSearchTimer=0.3` (the Xbox's; the leak had 0.1); wheel `NextWeapon` (step 4).
+Ini comments: the engine keeps only lines with `=` when it rewrites a file, so comments have none.
+
+## Step 2 (2026-10-07): the test channel and `tools/dev/d6-mouse.sh`
+
+SDL2Drv test channel (`SDL2InputTest.h`): `mouse <dx> <dy>` pushes an `SDL_MOUSEMOTION` (xrel/yrel) for the first
+viewport's window, so `USDL2Viewport::HandleEvent` onwards is the real path; one per tick. `watch <ticks> [tag]`
+logs time, view rotation, camera, pawn, lock and look owner every client tick. The probe has a second line
+(`probe2`: camera, lock, enemy, look owner, mouse sensitivity/invert, pad invert, auto-centre) and one line per other
+pawn (`probe3`: name, location, distance, line of sight, the rotation that faces it). `place <i> <dist> <yaw>` and
+`aim <i>` set up lock-on tests (move a frozen bot in front, face it). `m10-inject.py` parses the new lines,
+collects watch traces (`watch <tag> <end-regex>`), loads helpers (`pyfile tools/dev/d6-checks.py`).
+
+The runs use `-nullrenderer`: under software GL the game runs at about 5 frames a second here (load from other
+agents), where Epic's lazy camera reaches its target in one frame and no slide can be seen; the null renderer runs
+at ~1,300 frames a second. Spawn points are random per run; nothing measured depends on them.
+
+First `look` + `ini` runs (`logs/d6/mouse/look.*`, `ini.*`): 37 PASS, 0 FAIL after two test fixes (the spawn probe
+came before the pawn: now a seek; the circle's centre is a least-squares fit, the plain mean was biased by
+repeated samples) and the SaveConfig finding above. Measured: 10.01 units per count at 100/500 counts (exact
+10.0124 x counts within one unit: the carried fraction of the previous motion), 10.0115 at 2000, the same at
+500 counts in one tick, 50 per tick or 5 per tick; pitch 10.012 per count; circle radius 3004.7 (expected 3003.7),
+deviation 0.29%, closes within 2 units; camera 0.0 units of motion in the 2 s after the circle and after a flick
+(it moved 18 units with the flick, in the flick's frame); sensitivity 1.25 halves the turn, FOV 45 halves it;
+the mouse's invert and the pad's are independent both ways; under the mouse W walking leaves the pitch alone, under
+the pad it moves toward -1400 (2948 -> 2665 in 1.5 s at ~1,300 fps: Epic's per-tick integer step makes this slower
+at high frame rates); Right arrow 89.9 deg/s; the mouse right after the stick is exactly linear.
