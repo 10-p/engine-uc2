@@ -165,3 +165,45 @@ deviation 0.29%, closes within 2 units; camera 0.0 units of motion in the 2 s af
 the mouse's invert and the pad's are independent both ways; under the mouse W walking leaves the pitch alone, under
 the pad it moves toward -1400 (2948 -> 2665 in 1.5 s at ~1,300 fps: Epic's per-tick integer step makes this slower
 at high frame rates); Right arrow 89.9 deg/s; the mouse right after the stick is exactly linear.
+
+## Step 3 (2026-10-07): pad against the shipped scripts, lock-on, and what the owner had (evidence)
+
+Added `-maxfps=<n>` to SDLLaunch (a standalone game has no frame cap; the null renderer runs at ~1,300 fps, where
+Epic's whole-unit view rotation per tick swallows slow stick turns: at 0.35 deflection 167 units/s = 0.13 units a
+tick = 0 at that rate; the shipped and our scripts agree, but the numbers say nothing). Pad curves are measured at
+30 fps (the Xbox's rate), everything else at 60.
+
+`tools/dev/d6-mouse.sh pad` (`logs/d6/mouse/pad*.{result,json,inject}`): the right stick held at 0.35/0.5/0.75/1.0
+for 1.25 s and up at 0.5 for 0.5 s, rotation reached 0.1-1.0 s after the push, ours vs the SHIPPED scripts with the
+same DefUser.ini, both at 30 fps: worst differences 0.13%, 0.15%, 0.08%, 0.06% (yaw) and 0.12% (pitch) of the
+shipped value (limit 3%). Full stick: 3,146 units at 0.1 s, 9,343 at 0.25, 23,570 at 0.5, 56,325 at 1.0 s (Epic's
+hold-acceleration to 2.5x after 0.5 s); 0.5 deflection 2,123/s. Dead zone 0.3 on both sticks (0.28 turns/walks
+nothing), the left stick walks (on our scripts; the shipped ones do not walk with SpeedBase 100 on PC: measured
+-0.0, which is why M10 used SpeedBase 2400000).
+Note for the owner: the pitch curve equals the yaw curve at the same deflection in both trees although
+`MouseSensitivity_Y=0.9`; not investigated (identical in the shipped scripts, so Epic's behaviour).
+
+`lock` (two bots frozen with PlayersOnly, put 400 units in front by the test channel): 12 PASS: acquired with Lock
+while the mouse owns the look; held through +-40-count jitter; after 300 counts against it the lock pulls the view
+back (2,569 -> 1,761 units off in 1 s; Epic's pull stops within MinLockAdjust, it is a camera lock, not an aim
+lock); Lock + D switches to the target on the right (keys as stick); 450 counts (25 deg) inside the clamp keep the
+lock, 2,000 counts (110 deg, past the 38.5-deg clamp by more than 25) break it; re-acquired; the stick's full push
+for 1.5 s still breaks it (Epic's path); aim adhesion: strafing past a target turns the view 317 units under the
+pad, 0 under the mouse (first try had two bots near the crosshair: the adhesion target alternated and Epic resets
+its ramp on every change, so the pad also showed 0; the second bot now goes behind the player).
+
+`look` final: 34 PASS (adds the camera there-and-back check: the circle driven one way and back, the camera at the
+same rotation is at the same place: median 0.01, max 0.08 units).
+
+Evidence of what the owner had (`before`: shipped scripts + main's M10 DefUser.ini at 47b1b18, as `bin/play-uc2`
+ran on 2026-10-06; `epic`: shipped scripts + Epic's DefUser.ini, which the WEB build carried until c66d275 reached
+main on 2026-10-07 07:52 with the M11 merge, so the browser the owner played on 2026-10-06 had it):
+- native/M10: 52.4 units per count = 0.288 deg/count (5.2x our default; 1,250 counts per 360 deg = 4 cm at
+  800 dpi), 52.0 at one count a tick (Epic's per-tick truncation), camera there-and-back median 26.5 / max 37.7
+  units, 19 units of camera slide after the circle stopped and 62 after a flick (`before-*`).
+- web/Epic: 20 counts at one a tick turn 4,478 units (24.6 deg: 1.23 deg/count), 20 counts in one tick 441,
+  200 counts in one tick 440 (capped: ten times the motion, the same turn), the circle comes out 12,286 x 10,954
+  units with 16% radius deviation (the per-axis clamp + squared fall-off: the owner's "hexagonal"), camera slide
+  after a flick 6.6 units.
+So every symptom the owner listed is measured: "capped" and "hexagonal" in the browser's Epic mouse, "extremely
+sensitive" in both (1.23 and 0.29 deg/count), "the camera slides toward the movement" in both (the lazy camera).
