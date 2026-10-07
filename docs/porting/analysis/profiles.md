@@ -109,3 +109,46 @@ starts straight into DM-Deadbolt (as the launcher's Play form does) and reads `U
 
 Next: rerun the fixed script; then D-4 (GUI.u transient name, `SaveURLConfig("Name")` skipped while a profile is
 active: already written in the working tree, not committed in this step).
+
+## Step 2 (2026-10-07): D-3 test green except one name check; a Core bug; D-4 written
+
+`tools/dev/d3-profiles.sh` runs 3 and 4 (`logs/d3/d3-profiles-run3.txt`, `-run4.txt`): r1, r2 (start in "Saver"
+without any menu action, invert and character back, the menu's PlayerReplicationInfo named Saver), r2m (a direct
+map start: `UCPlayerInput bInvertMouse = True`, i.e. the profile's setting is APPLIED to the player), r3 (Second, the
+last used, is active; selecting Saver is remembered) PASS.
+
+**Core bug found by r4 (Delete on the Profiles page did nothing):** `FFileManagerGeneric::DeleteFiles` cut the
+directory off its pattern at the last `\` only; with `/` the pattern stayed, every file was deleted as
+`<dir>/*/<file>`, the directory stayed non-empty, `DeleteDirectory(Tree)` failed, `DeleteGameObject` returned false
+and the page's "unable to delete" box was itself refused ("Cannot open new menu until previous menu initialization has
+completed!"). Fixed (`Core/Inc/FFileManagerGeneric.h`, last separator of either kind; commit 10b802f). Run 4 after the
+fix: r4 deletes Saver, the engine remembers "" (no profile), r5 starts without a profile. (The web keeps profiles as
+flat files deleted with `GFileManager->Delete`: not affected.)
+
+**There is no "no profile" choice in UC2's UI once a profile exists**: the Profiles page always checks the
+highlighted profile (`ManageProfilePanel.SelectCurrentProfile`), `UC2Profile.ClearProfile` is never called; only
+deleting the active profile (or `ForceProfileLoad`'s "continue without" with several profiles and none loaded)
+leaves a player without one. Same on the Xbox: with exactly one profile, `ForceProfileLoad` always loads it.
+
+### D-4 (written in this step; tests running)
+
+- GUI.u, `GUIController.SetProfilePlayerName` (GUI/Classes/GUIController.uc:2757-2781): a transient profile's name is
+  `PC.Level.GetDefaultURL("Name")` (User.ini [DefaultPlayer] Name = the launcher's `-ini:`/`?Name=`, kept by the engine
+  from the last map loaded without a profile); only if that is empty, the character's name (Epic). The only GUI.u
+  function that changes: `script-diff.py` per-function list vs M14's = exactly `GUIController.SetProfilePlayerName`
+  (684 -> 752 bytes; it is one of Epic's load-time patches, so the compare reports it as a finding against the patch's
+  bytecode). Also restored `config` on `bUnlockCharacters`/`bShowAllMuts` (M14's two GUI findings are gone: the
+  rebuilt properties now carry the shipped flags). Build: `tools/dev/script-build.sh --tree d3-make`
+  (`logs/d3/script-build-1.txt`: every package problems 0; GUI findings 1 = SetProfilePlayerName).
+- Engine, `UGameEngine::LoadMap` (UnGame.cpp, `#ifndef _XBOX` block): `SaveURLConfig("Name")` only while no saved
+  profile names the player (`UC2ProfileNamesThePlayer`), so [DefaultPlayer] Name stays the player's own name.
+- Engine, `MatchViewportsToActors` (UnGame.cpp): the primary viewport's PlayerController is spawned with a copy of the
+  URL whose `Name` is the active profile's (`UC2ProfileNameInURL`). Needed because the profile's name had reached a
+  directly started map only by leaking into [DefaultPlayer] (r2m failed once the leak was closed: `?Name=Player`,
+  PlayerReplicationInfo "Player-1"): the GUI binds `SetPlayerName` only when a menu is first shown.
+- Frontend (ufrontend 52e993d, 9a1c80a, d23794f): `network.playerName.ownedBy` (generic, data-driven), the uc2 target
+  names `User.ini [Profiles] LastProfile`; the field is disabled while it is set. Unit tests: glue 726 pass (4 new),
+  frontend 371 (5 new), root 28, build 185; gates no-engine-specifics, lint, abi-parity clean.
+- Test: `tools/dev/d4-names.sh` (n1 no profile through the character page into a match, n2 profile created, n3 direct
+  map start with `?Name=`, n4 profile deleted), on tree d3s = `UC2_SCRIPTS=<WorkUC2>/run/d3-make/System
+  tools/dev/mkrun-uc2.sh build-native d3s`.

@@ -26,6 +26,8 @@
 // uc2 port (D-3): start in the last used profile, remember it (UC2Profiles.cpp).
 ENGINE_API void UC2StartWithLastProfile( UViewport* Viewport );
 ENGINE_API void UC2RememberProfile( UClient* Client );
+ENGINE_API UBOOL UC2ProfileNamesThePlayer( UClient* Client );	// D-4
+ENGINE_API void UC2ProfileNameInURL( UViewport* Viewport, FURL& URL );	// D-4
 
 /*-----------------------------------------------------------------------------
 	Object class implementation.
@@ -1133,7 +1135,12 @@ static void MatchViewportsToActors( UClient* Client, ULevel* Level, const FURL& 
 				// else spawn player using level URL
 				FString Error;
 				debugf( NAME_Log, TEXT("Spawning new actor for Viewport %s"), Viewport->GetName() );
-				if( !Level->SpawnPlayActor( Viewport, ROLE_SimulatedProxy, URL, Error ) )
+				// uc2 port (D-4): with a saved profile active the player logs in under the profile's name, whatever
+				// the URL says (a map from the command line or the web launcher): UC2Profiles.cpp.
+				FURL PlayerURL( URL );
+				if( Viewport == Client->Viewports(0) )
+					UC2ProfileNameInURL( Viewport, PlayerURL );
+				if( !Level->SpawnPlayActor( Viewport, ROLE_SimulatedProxy, PlayerURL, Error ) )
 					appErrorf( TEXT("%s"), *Error );
 			}
 		}		
@@ -2900,7 +2907,10 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 #ifndef _XBOX
 	if( GIsClient )
 	{
-		URL.SaveURLConfig( TEXT("DefaultPlayer"), TEXT("Name" ), TEXT("User") );
+		// uc2 port (D-4): not while a saved profile names the player (the URL then carries the profile's name;
+		// [DefaultPlayer] Name is the player's own name, used without a profile): UC2Profiles.cpp.
+		if( !UC2ProfileNamesThePlayer( Client ) )
+			URL.SaveURLConfig( TEXT("DefaultPlayer"), TEXT("Name" ), TEXT("User") );
 		URL.SaveURLConfig( TEXT("DefaultPlayer"), TEXT("Team" ), TEXT("User") );
 		URL.SaveURLConfig( TEXT("DefaultPlayer"), TEXT("Class"), TEXT("User") );
 		URL.SaveURLConfig( TEXT("DefaultPlayer"), TEXT("Skin" ), TEXT("User") );

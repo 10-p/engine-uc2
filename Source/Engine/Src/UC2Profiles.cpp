@@ -105,3 +105,43 @@ ENGINE_API void UC2RememberProfile( UClient* Client )
 	unguard;
 }
 
+/*-----------------------------------------------------------------------------
+	D-4: whose name is it?
+
+	With a saved profile active the player is named after the profile (GUIController.
+	SetProfilePlayerName), so the Name of every URL the menus build is the PROFILE's name.
+	UGameEngine::LoadMap writes each loaded URL's Name back to User.ini [DefaultPlayer]
+	(Epic's PC code), which made the profile's name the player's "own" name from then on: the
+	name a transient profile uses (D-4, GUI.u) and the name the web launcher reads back into
+	its name field. LoadMap asks this first and leaves [DefaultPlayer] Name alone while a
+	profile names the player.
+-----------------------------------------------------------------------------*/
+
+ENGINE_API UBOOL UC2ProfileNamesThePlayer( UClient* Client )
+{
+	return Client && Client->Viewports.Num() && ActiveProfileName( Client->Viewports(0) ).Len() > 0;
+}
+
+/*-----------------------------------------------------------------------------
+	D-4: a local player with an active profile logs in under the profile's name.
+
+	The menus put the profile's name in every URL they build (GameStartInfo.GetName), and
+	GUIController.SetProfilePlayerName renames the player whenever the profile changes, but
+	only once the GUI has bound that delegate (when a menu is first shown). A level loaded
+	from the command line, by the web launcher's Play form (`DM-Deadbolt?Name=<launcher's
+	name>`) or by a console `open` logged the player in under the URL's Name, so a profile
+	made at the menus did not name the player in a map started directly (seen in
+	tools/dev/d3-profiles.sh r2m once the profile's name stopped leaking into [DefaultPlayer]).
+	MatchViewportsToActors spawns the primary viewport's PlayerController with a copy of the
+	URL whose Name is the profile's (PlayerName: the underscore form the URLs use).
+-----------------------------------------------------------------------------*/
+
+ENGINE_API void UC2ProfileNameInURL( UViewport* Viewport, FURL& URL )
+{
+	guard(UC2ProfileNameInURL);
+	UPlayerProfile* Profile = Viewport ? Viewport->Profile : NULL;
+	if( !Profile || Profile->IsTransient() || !Profile->PlayerName.Len() )
+		return;
+	URL.AddOption( *(FString(TEXT("Name=")) + Profile->PlayerName) );
+	unguard;
+}
