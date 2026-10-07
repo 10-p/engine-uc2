@@ -53,7 +53,9 @@ prep_tree() {
 }
 
 # run_one <name> <scenario-file> <seconds> [uc2.bin args...]
-# (-nostartupmovies: since M9 the logos play first and a full-screen movie owns the input.)
+# (-nostartupmovies: since M9 the logos play first and a full-screen movie owns the input. -glnoaa: the key and
+# button timings here were calibrated without the anti-aliasing that is on by default since M11 (O-8); with its
+# 4x multisampling the software rasteriser's frames are slower and the menu steps came late on a loaded machine.)
 run_one() {
   local name=$1 scen=$2 secs=$3; shift 3
   prep_tree
@@ -63,7 +65,7 @@ run_one() {
   inner=$(mktemp)
   cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy UC2_WINE_DISPLAY=\$DISPLAY $launch ${M10_URL:+"$M10_URL"} -log -nostartupmovies -inputtest="$chan" "\$@" > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy UC2_WINE_DISPLAY=\$DISPLAY $launch ${M10_URL:+"$M10_URL"} -log -nostartupmovies -glnoaa -inputtest="$chan" "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$name.out" "$chan" "$out/$name.result" > "$out/$name.inject" 2>&1
 kill -$stopsig \$pid 2>/dev/null
