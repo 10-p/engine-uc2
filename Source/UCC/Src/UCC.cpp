@@ -407,6 +407,58 @@ static UBOOL ProfileTest( const TCHAR* Parms )
 }
 #endif
 
+#if __STATIC_LINK && !defined(_MSC_VER)
+// saveconfig task: "ucc saveconfigtest static|instance|keys|get <Class> <Property> [<Value>] [load=<Package>]".
+// Script's SaveConfig() / StaticSaveConfig() and the SAVECONFIGKEYS command without a game: the default of
+// <Property> of <Class> is set to <Value> (if given), then
+//   static   calls the native behind StaticSaveConfig() (UObject::execStaticSaveConfig) on the class,
+//   instance calls the native behind SaveConfig() (UObject::execSaveConfig) on the class default object,
+//   keys     runs "SAVECONFIGKEYS <Class> <Property>" through UObject::StaticExec.
+//   get      prints the class default of <Property> ("GET <Class> <Property>"), which shows what the ini gave it.
+// The natives are called as the script VM calls them (a frame whose code is the end-of-parameters token), so
+// [Engine.Engine] ScriptSaveConfig (and -ini: for it) decide whether anything is written. The ini the class
+// belongs to is what the checks read (tools/dev/sc-saveconfig.sh, natively and on the wasm build under Node,
+// where it goes through the web build's file layer). Returns success.
+static UBOOL SaveConfigTest( const TCHAR* Parms )
+{
+	FString Mode, ClassName, PropName, Value;
+	if( !ParseToken(Parms,Mode,0) || !ParseToken(Parms,ClassName,0) || !ParseToken(Parms,PropName,0) )
+		return 0;
+	ParseToken( Parms, Value, 0 );
+	// LOAD=<Package>: load that package first (a game has them all loaded; a save looks at the classes that are)
+	FString LoadPackageName;
+	if( Parse( Parms, TEXT("LOAD="), LoadPackageName ) )
+		UObject::LoadPackage( NULL, *LoadPackageName, LOAD_NoWarn );
+	UClass* Cls = UObject::StaticLoadClass( UObject::StaticClass(), NULL, *ClassName, NULL, LOAD_NoWarn, NULL );
+	UProperty* Prop = Cls ? FindField<UProperty>( Cls, *PropName ) : NULL;
+	if( !Cls || !Prop )
+	{
+		GWarn->Logf( TEXT("SAVECONFIGTEST: no %s %s"), Cls ? TEXT("property") : TEXT("class"), Cls ? *PropName : *ClassName );
+		return 0;
+	}
+	UObject* Defaults = Cls->GetDefaultObject();
+	if( Value.Len() )
+		Prop->ImportText( *Value, (BYTE*)Defaults + Prop->Offset, 0 );
+	BYTE Code[4] = { EX_EndFunctionParms, 0, 0, 0 };
+	if( Mode==TEXT("STATIC") || Mode==TEXT("INSTANCE") )
+	{
+		FFrame Stack( Defaults );
+		Stack.Code = Code;
+		BYTE Result[64];
+		if( Mode==TEXT("STATIC") )
+			Defaults->execStaticSaveConfig( Stack, Result );
+		else
+			Defaults->execSaveConfig( Stack, Result );
+		return 1;
+	}
+	if( Mode==TEXT("KEYS") )
+		return UObject::StaticExec( *FString::Printf(TEXT("SAVECONFIGKEYS %s %s"), *ClassName, *PropName), *GWarn );
+	if( Mode==TEXT("GET") )		// the class default as the engine holds it: GWarn gets "GET <Class> <Property>"'s answer
+		return UObject::StaticExec( *FString::Printf(TEXT("GET %s %s"), *ClassName, *PropName), *GWarn );
+	return 0;
+}
+#endif
+
 int main( int argc, char* argv[] )
 {
     #if __LINUX__ || defined(__MINGW32__)
@@ -538,6 +590,14 @@ int main( int argc, char* argv[] )
 			const TCHAR* Parms = appCmdLine();
 			UBOOL Ok = ProfileTest( Parms );
 			Warn.Logf( TEXT("PROFILETEST: %s"), Ok ? TEXT("ok") : TEXT("FAILED") );
+			ErrorLevel = Ok ? 0 : 1;
+		}
+#endif
+#if __STATIC_LINK && !defined(_MSC_VER)
+		else if( Token==TEXT("SAVECONFIGTEST") )	// saveconfig task
+		{
+			UBOOL Ok = SaveConfigTest( appCmdLine() );
+			Warn.Logf( TEXT("SAVECONFIGTEST: %s"), Ok ? TEXT("ok") : TEXT("FAILED") );
 			ErrorLevel = Ok ? 0 : 1;
 		}
 #endif

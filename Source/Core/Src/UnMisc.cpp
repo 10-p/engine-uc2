@@ -8,6 +8,7 @@
 
 // Core includes.
 #include "CorePrivate.h"
+#include "UC2ScriptSaveConfig.h"
 #include <stdlib.h>
 
 CORE_API FCriticalSection *gethostbyname_mutex = NULL;
@@ -2153,6 +2154,10 @@ CORE_API void appInit( const TCHAR* InPackage, const TCHAR* InCmdLine, FMalloc* 
 	// `-ini:<File>:[<Section>]:<Key>=<Value>` switches (the launcher's player name, per-launch settings): after
 	// the inis are known and before anything reads them, notably the language below.
 	appApplyIniOverrides();
+
+	// [Engine.Engine] ScriptSaveConfig (UC2ScriptSaveConfig.h): read once here, so a -ini: override applies and the
+	// setting cannot change under a running game.
+	UC2ScriptSaveConfigEnabled();
 
 	// Language.
 #ifdef _XBOX

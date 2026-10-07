@@ -21,6 +21,7 @@ static INT   GNullContextSize   = 0;
 
 #ifndef _XBOX
 #include "OpCode.h"
+#include "UC2ScriptSaveConfig.h"
 #endif
 
 /*-----------------------------------------------------------------------------
@@ -4905,14 +4906,73 @@ void UObject::execSetPropertyText( FFrame& Stack, RESULT_DECL )
 }
 IMPLEMENT_FUNCTION( UObject, INDEX_NONE, execSetPropertyText );
 
+/*-----------------------------------------------------------------------------
+	uc2 port: script SaveConfig() / StaticSaveConfig() on PC (UC2ScriptSaveConfig.h).
+
+	Epic: "rjp - calling SaveConfig() has mucho side-effects, so behavior should be identical on both PC
+	and XBOX" and, from the line above it, "jg -- removed as it violates TCRs" (Xbox certification: no
+	unprompted disk writes; the Xbox keeps settings in the profile). On PC both natives are live again when
+	[Engine.Engine] ScriptSaveConfig is True (the default); False is Epic's no-op. An Xbox build (_XBOX)
+	keeps the no-op whatever the ini says.
+
+	One more rule, for the one script call on a LIVE game object (DeathMatch.AdjustSkill: SaveConfig() on the
+	match's gametype instance, meant to keep GameDifficulty): an instance of a GameInfo holds the match's
+	rules, which the URL options overrode (GoalScore, TimeLimit, MaxPlayers, NumBots...), so saving it writes a
+	match into Gametypes.ini, where the gametype's DEFAULTS live. It is not saved (logged once). The class
+	default object of a GameInfo (StaticSaveConfig) is the gametype's own defaults and is saved like any other.
+-----------------------------------------------------------------------------*/
+
+UBOOL UC2ScriptSaveConfigEnabled()
+{
+	static INT State = -1;
+	if( State < 0 )
+	{
+		UBOOL Value = 1;
+#ifdef _XBOX
+		Value = 0;
+#else
+		if( GConfig )
+			GConfig->GetBool( TEXT("Engine.Engine"), TEXT("ScriptSaveConfig"), Value );
+#endif
+		State = Value ? 1 : 0;
+		debugf( NAME_Init, TEXT("Script SaveConfig: %s ([Engine.Engine] ScriptSaveConfig)"),
+			State ? TEXT("on: SaveConfig() and StaticSaveConfig() write the ini") : TEXT("off: they do nothing, as on the Xbox") );
+	}
+	return State==1;
+}
+
+// An object that is not a class default object, of a class derived from Engine.GameInfo.
+static UBOOL UC2IsGameRulesInstance( UObject* Object )
+{
+	if( Object->GetIndex()==INDEX_NONE )
+		return 0;
+	for( UClass* C=Object->GetClass(); C; C=C->GetSuperClass() )
+		if( appStricmp( C->GetPathName(), TEXT("Engine.GameInfo") )==0 )
+			return 1;
+	return 0;
+}
+
 void UObject::execSaveConfig( FFrame& Stack, RESULT_DECL )
 {
 	guard(UObject::execSaveConfig);
 	P_FINISH;
 //#ifndef _XBOX//jg -- removed as it violates TCRs
-#if 0	// rjp - calling SaveConfig() has mucho side-effects, so behavior should be identical on both PC and XBOX
-	SaveConfig();
-#endif
+// rjp - calling SaveConfig() has mucho side-effects, so behavior should be identical on both PC and XBOX
+// uc2: PC saves (ScriptSaveConfig); the Xbox's no-op is ScriptSaveConfig=False
+	if( UC2ScriptSaveConfigEnabled() )
+	{
+		static UBOOL Told = 0;
+		if( UC2IsGameRulesInstance(this) )
+		{
+			if( !Told )
+			{
+				Told = 1;
+				debugf( NAME_Log, TEXT("Script SaveConfig: %s not saved (an instance of a GameInfo holds the match's rules, set by the URL; Gametypes.ini keeps the gametype's defaults)"), GetFullName() );
+			}
+		}
+		else
+			UC2SaveConfigFromScript( this );
+	}
 	unguard;
 }
 IMPLEMENT_FUNCTION( UObject, 536, execSaveConfig);
@@ -4922,9 +4982,10 @@ void UObject::execStaticSaveConfig( FFrame& Stack, RESULT_DECL )
 	guard(UObject::execStaticSaveConfig);
 	P_FINISH;
 //#ifndef _XBOX//jg -- removed as it violates TCRs
-#if 0	// rjp - calling SaveConfig() has mucho side-effects, so behavior should be identical on both PC and XBOX
-	Class->GetDefaultObject()->SaveConfig();
-#endif
+// rjp - calling SaveConfig() has mucho side-effects, so behavior should be identical on both PC and XBOX
+// uc2: PC saves (ScriptSaveConfig); the Xbox's no-op is ScriptSaveConfig=False
+	if( UC2ScriptSaveConfigEnabled() )
+		UC2SaveConfigFromScript( Class->GetDefaultObject() );
 	unguard;
 }
 IMPLEMENT_FUNCTION( UObject, INDEX_NONE, execStaticSaveConfig);

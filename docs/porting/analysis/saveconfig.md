@@ -72,13 +72,86 @@ SDLDrv likewise), and the editor (Core/UnObj.cpp:1951 under `GIsEditor`, Window/
 the script natives changes none of them. `Source/Engine/Inc/ULoadSaveManager.h:12` is a comment saying `LoadConfig()/
 SaveConfig()` could one day go through the load/save manager "so that SaveConfig() doesn't have to be disabled".
 
-### Decisions that follow (implemented in the next steps)
+### Decisions that follow (revised in step 2 after the first experiment)
 
 1. Both natives call the real thing when `[Engine.Engine] ScriptSaveConfig` is True (default; read once at start;
    `False` = Epic's no-op, as on the Xbox).
 2. Site 4 (a live gametype instance): the native does not save an instance of a `GameInfo` (logged once). Match
    rules come from the URL; Gametypes.ini holds the gametype's defaults and must not take a match's values.
-3. Sites 1, 2, 3, 5 write what their class holds, which is only the intended change (survey above): kept.
+3. A whole-class save of a BASE class is NOT harmless (step 2: it pinned the FOV): the natives leave out a
+   globalconfig property that another class deliberately sets differently.
 4. The D-6 mouse settings need a save of exactly two keys, and a whole-class save of `UCPlayerInput` would carry the
    profile's pad values along: a new native, `SAVECONFIGKEYS <Class> <Prop>...` (console command, written like
    `SaveConfig` writes a property, honouring `ScriptSaveConfig`), called by `MouseLookSens` / `MouseLookInvert`.
+
+## Step 2 (2026-10-08): the natives, and the thing "mucho side-effects" hides: a base-class save pins every subclass
+
+Native build of the unchanged tree first (`logs/sc/build-native-0.log`, 0 errors; load average 30-70 from other
+agents, `-j4`, about 25 minutes from scratch), then the edits below, each rebuilt incrementally.
+
+### First experiment: Epic's whole-class `StaticSaveConfig` through `SetWeaponHand`, as it would have been enabled
+
+`ucc-bin saveconfigtest static Engine.PlayerController Handedness -1` (new, see below) on a fresh User.ini, then
+`ucc-bin saveconfigtest get UCGameplay.UCPlayerController DesiredFOV` in a new process:
+
+- the save wrote `[Engine.Controller] Handedness=-1.000000` (the intended key) and the WHOLE `[Engine.PlayerController]`
+  section, 37 keys at `Engine.PlayerController`'s compiled defaults (its globalconfig properties, and the `config` ones the
+  class inherits from Actor/Controller: `DrawScale`, `Mass`, `TargetDistWeight`...), among them `DesiredFOV=85`,
+  `DefaultFOV=85` (evidence: `logs/sc/polluted-User.ini`);
+- the next start: `UCGameplay.UCPlayerController` `DesiredFOV` = **85, not 90**, `DefaultFOV` 85. Cause
+  (`UObject::LoadConfig`, Core/Src/UnObj.cpp:903): a `globalconfig` property is read from the section of the class that
+  DECLARES it (`Engine.PlayerController`) into the default of EVERY subclass, after that subclass's own
+  `defaultproperties`. UCPlayerController sets `DesiredFOV=90.000000` (UCPlayerController.uc:8061); the ini key replaces it.
+  Clean User.ini: 90. So enabling the natives naively would have changed the player's field of view (and with it the
+  mouse sensitivity, `DesiredFOV/90`, and the AutoFOV baseline) the first time anybody typed `ShowGun`. This is the real
+  content of Epic's "mucho side-effects": a save of a class writes that class's DEFAULTS over its subclasses'.
+
+### What was done
+
+`Source/Core/Src/UnCorSc.cpp`: `execSaveConfig` / `execStaticSaveConfig` call `UC2SaveConfigFromScript` when
+`UC2ScriptSaveConfigEnabled()` (`[Engine.Engine] ScriptSaveConfig`, default True, read once by `appInit` after the `-ini:`
+overrides, `UnMisc.cpp`; `_XBOX` keeps the no-op); an instance of a `GameInfo` is not saved (site 4), logged once.
+`Source/Core/Src/UnObj.cpp`:
+- `UC2NoteDefaultOverrides(UClass*)`, called by `UClass::Link` / `UClass::Serialize` (`UnClass.cpp`) right after a class
+  default has loaded its config: records every inherited globalconfig property whose default differs from the
+  superclass's (the class DELIBERATELY sets it: its defaultproperties, not an ini key, which both would carry). Recorded at
+  load because afterwards they cannot be told from a subclass that merely did not see a change script made to its
+  parent's default (Handedness after `SetHand`: UnrealPlayer and UCPlayerController still hold the old 1);
+- `UC2SaveConfigFromScript`: `UObject::SaveConfig()`, except that a globalconfig property some OTHER class (a descendant
+  of the declaring class) deliberately sets is left out (`UC2SetByAnotherClass`), and the names are logged:
+  `Script SaveConfig: PlayerController: not written, another class sets its own default and globalconfig is shared with it:
+  bNeverSwitchOnPickup, DesiredFOV, DefaultFOV`. Native C++ callers of `SaveConfig()` are untouched (they never share
+  a section with a subclass's default this way);
+- `SAVECONFIGKEYS <Class> <Property>...` in `UObject::StaticExec`: `SaveConfig()` with a filter (`GSaveConfigOnly`) on the
+  named properties, the same file/section/`ExportText`/flush code as a whole-class save; replies one line per key
+  (`SaveConfigKeys: UCPlayerInput.MouseLookSensitivity=1.750000 written to User.ini`); `ScriptSaveConfig=False`: replies
+  `off`, writes nothing.
+`Source/UCC/Src/UCC.cpp`: `ucc-bin saveconfigtest static|instance|keys|get <Class> <Property> [<Value>] [load=<Pkg>]`: sets the
+class default, then runs the native behind `StaticSaveConfig()` / `SaveConfig()` the way the VM does (a frame whose code is
+the end-of-parameters token) or the `SAVECONFIGKEYS` / `GET` command; works unchanged in the wasm `ucc-bin.js`.
+`Source/Core/Src/UC2ScriptSaveConfig.h`: the private declarations (no public header changed). `Engine/Config/Default.ini`
+`[Engine.Engine] ScriptSaveConfig=True`, `web/Default.ini` regenerated by `tools/dev/sync-web-ini.py`, a row in
+`Engine/Config/README.md`.
+
+Bugs found by the compiler's warning on the first build and fixed before anything ran: `GetPathName()` / `GetFullName()`
+return `const TCHAR*` here, I had dereferenced them (`*C->GetPathName()`).
+
+### Results of the same experiment with the filter (`logs/sc/t4-User.ini`)
+
+`ucc-bin saveconfigtest static Engine.PlayerController Handedness -1 load=UCGameplay` (a game has UCGameplay loaded; the
+filter looks at the classes that are loaded): `[Engine.Controller] Handedness=-1.000000` written; `bNeverSwitchOnPickup`,
+`DesiredFOV`, `DefaultFOV` not written (UCPlayerController sets them); in a new process `UCPlayerController` `DesiredFOV` 90
+and `Handedness` -1. Without `load=` the same save writes DesiredFOV=85 (nothing else is loaded to protect): that is why
+the filter must be a load-time record of the loaded classes, and why the hook has `load=`.
+`keys UCGameplay.UCPlayerInput MouseLookSensitivity 1.75`: of the 36 keys of `[UCGameplay.UCPlayerInput]` only
+`MouseLookSensitivity` changed (2.5 -> 1.750000). With `-ini:System:[Engine.Engine]:ScriptSaveConfig=False`: reply `off`,
+`MouseLookSensitivity=2.5` stays, the log has `Script SaveConfig: off: they do nothing, as on the Xbox`.
+
+Script (UCGameplay, `UCPlayerInput.uc`): `MouseLookSens` / `MouseLookInvert` also set the class default and send
+`SAVECONFIGKEYS UCGameplay.UCPlayerInput <key>`. `tools/dev/script-build.sh --tree d10-sc --logs <WorkUC2>/logs/sc`: make
+`Success - 0 error(s), 85 warning(s)` (M14's count); against the shipped packages UCGameplay "different", problems 18,
+findings 6 (D-6's own numbers; every other package as before). Against a build of main's sources (`--tree d10-base`) the
+exports differ in exactly two sizes by path: `UCPlayerInput.MouseLookSens` 68 -> 161 bytes, `UCPlayerInput.MouseLookInvert`
+63 -> 154; 78 more exports differ in at most 29 bytes each (Line/TextPos and dependency CRCs of the classes after the
+edit); no export added or removed. Package to switch: **UCGameplay.u only** (1,584,207 -> 1,584,391 bytes; GUI.u as the
+asset tree has it).
