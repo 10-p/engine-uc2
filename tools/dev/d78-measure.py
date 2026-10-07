@@ -205,7 +205,7 @@ else:
 ref = pic('fov', 'fov-tp-1440x1080')
 parts = []; ok = ref is not None
 for name, want, tol in (('tp-1920x1080', 1.0, 0.006), ('tp-2560x1080', 1.0, 0.006), ('zoom-1920x1080', 1.0, 0.006),
-                        ('tp-1920x1080-off', 4 / 3.0, 0.02), ('tp-2560x1080-off', (2560 / 1080.0) / (4 / 3.0), 0.03)):
+                        ('tp-1920x1080-off', 4 / 3.0, 0.05), ('tp-2560x1080-off', (2560 / 1080.0) / (4 / 3.0), 0.06)):
     r = pic('fov', 'fov-zoom-1440x1080') if name.startswith('zoom') else ref
     im = pic('fov', 'fov-' + name)
     if r is None or im is None:
@@ -214,7 +214,8 @@ for name, want, tol in (('tp-1920x1080', 1.0, 0.006), ('tp-2560x1080', 1.0, 0.00
     ok &= abs(z - want) <= tol
     parts.append(f'{name} {z:.3f} (want {want:.3f})')
 result('vertical-extent', ok, 'vertical scale of the scene against the 4:3 picture, best fit of the rows near the centre '
-       'column: ' + ', '.join(parts))
+       'column (the HUD, which does not scale, pulls the AUTOFOV 0 controls a little toward 1): ' + ', '.join(parts)
+       + '; with AutoFOV within 0.006 of 1, the controls within 0.05/0.06 of the stock zoom')
 
 # more scene left and right: the columns outside the 4:3 frame are scene, not empty
 im = pic('fov', 'fov-tp-1920x1080')
@@ -255,46 +256,69 @@ else:
     result('weapon-size-place', False, 'missing pictures')
 
 # ------------------------------------------------------------------------- 5. the lock-on reticle on its target
-def lock_marker(im):
-    """The lock-on reticle (Element_TargetReticle, orange on an enemy; placed with WorldToScreen) and the target's
-    figure (the summoned Liandri's purple) inside it (tools/dev/d2-measure.py). y >= 300 only (HUD bars)."""
-    W, H = im.size
+def reticle(lo):
+    """The lock-on reticle (Element_TargetReticle, orange; placed with PlayerController.WorldToScreen) on black:
+    the centroid of its pixels and their mean distance from it (its ring of arcs turns, which moves its bounding
+    box but not these). y >= 300 (the HUD's top bars); colour orange/brown (the HUD's other parts are teal,
+    green, white)."""
+    W, H = lo.size
+    r, g, b = lo.split()
+    rp, gp, bp = r.load(), g.load(), b.load()
+    pts = [(x, y) for y in range(300, H) for x in range(0, W, 1)
+           if rp[x, y] > 70 and rp[x, y] >= gp[x, y] + 25 and gp[x, y] >= bp[x, y] + 10]
+    if len(pts) < 200:
+        return None
+    cx = sum(p[0] for p in pts) / len(pts); cy = sum(p[1] for p in pts) / len(pts)
+    rad = sum(math.hypot(x - cx, y - cy) for x, y in pts) / len(pts)
+    return (cx, cy), rad, len(pts)
 
-    def m3(fr, fg, fb):
-        r, g, b = im.split()
-        return ImageChops.multiply(ImageChops.multiply(r.point(fr), g.point(fg)), b.point(fb))
-    o = m3(lambda v: 255 if v > 180 else 0, lambda v: 255 if 90 < v < 190 else 0, lambda v: 255 if v < 70 else 0)
-    o.paste(0, (0, 0, W, 300))
-    ob = o.getbbox()
-    if ob is None or o.histogram()[255] < 100:
+
+def figure(im, c):
+    """The target's figure (the summoned Liandri's purple) within 450 px of the reticle's centre."""
+    W, H = im.size
+    x0, x1 = max(0, int(c[0]) - 450), min(W, int(c[0]) + 450)
+    sub = im.crop((x0, 300, x1, H))
+    r, g, b = sub.split()
+    m = ImageChops.multiply(ImageChops.multiply(r.point(lambda v: 255 if v > 120 else 0), g.point(lambda v: 255 if v < 100 else 0)),
+                            b.point(lambda v: 255 if v > 140 else 0))
+    bb = m.getbbox()
+    if bb is None or m.histogram()[255] < 300:
         return None
-    p = m3(lambda v: 255 if v > 120 else 0, lambda v: 255 if v < 100 else 0, lambda v: 255 if v > 140 else 0).crop(ob)
-    pb = p.getbbox()
-    if pb is None:
-        return None
-    pb = (ob[0] + pb[0], ob[1] + pb[1], ob[0] + pb[2], ob[1] + pb[3])
-    oc = ((ob[0] + ob[2]) / 2, (ob[1] + ob[3]) / 2); pc = ((pb[0] + pb[2]) / 2, (pb[1] + pb[3]) / 2)
-    return ob, pb, (oc[0] - pc[0], oc[1] - pc[1])
+    return (x0 + bb[0], 300 + bb[1], x0 + bb[2], 300 + bb[3])
 
 
 ms = []
 for name in ('lock-1440x1080', 'lock-1920x1080', 'lock-2560x1080', 'lock-1920x1080-off'):
     im = pic('fov', 'fov-' + name)
-    m = lock_marker(im) if im is not None else None
-    ms.append((name, m))
+    lo = pic('fov', 'fov-' + name.replace('-off', '') + ('-lo-off' if name.endswith('-off') else '-lo'))
+    if im is None or lo is None:
+        ms.append((name, None)); continue
+    rt = reticle(lo)
+    fg = figure(im, rt[0]) if rt else None
+    if rt is None or fg is None:
+        ms.append((name, None)); continue
+    fc = ((fg[0] + fg[2]) / 2, (fg[1] + fg[3]) / 2)
+    ms.append((name, (rt, fg, (rt[0][0] - fc[0], rt[0][1] - fc[1]))))
 if all(m is not None for _, m in ms):
-    on = [m for n, m in ms if not n.endswith('-off')]
-    offs = [m[2] for m in on]
+    on = [(n, m) for n, m in ms if not n.endswith('-off')]
+    offs = [m[2] for _, m in on]
     spread = max(max(o[0] for o in offs) - min(o[0] for o in offs), max(o[1] for o in offs) - min(o[1] for o in offs))
-    sizes = [(m[0][2] - m[0][0], m[0][3] - m[0][1]) for m in on]
-    sz = max(max(s[0] for s in sizes) - min(s[0] for s in sizes), max(s[1] for s in sizes) - min(s[1] for s in sizes))
+    rads = [m[0][1] for _, m in on]
+    rs = (max(rads) / min(rads) - 1) * 100
+    # where the 4:3 reticle lands in the wider frames (+ (W-1440)/2) against where it is
+    base = on[0][1][0][0]
+    shift = max(math.dist((base[0] + (w - 1440) / 2, base[1]), m[0][0]) for (n, m), w in zip(on, (1440, 1920, 2560)))
     offm = ms[3][1]
-    inside = all(m[0][0] <= m[1][0] and m[1][2] <= m[0][2] for _, m in ms)
-    result('marker-on-actor', spread <= 8 and sz <= 6 and inside,
-           'lock-on reticle (WorldToScreen) against the target\'s figure: ' +
-           '; '.join(f'{n} reticle {m[0]} figure {m[1]} offset ({m[2][0]:+.1f},{m[2][1]:+.1f})' for n, m in ms) +
-           f'; with AutoFOV the offset spreads {spread:.1f} px (<= 8: the figure idles, the lock turns the view) and the '
-           f'reticle\'s size {sz} px (<= 6) across 4:3, 16:9, 21:9; the figure inside the reticle in every picture')
+    on_fig = all(m[1][0] <= m[0][0][0] <= m[1][2] and m[1][1] <= m[0][0][1] <= m[1][3] for _, m in ms)
+    result('marker-on-actor', spread <= 6 and rs <= 2.0 and on_fig,
+           'lock-on reticle (WorldToScreen; its centre and mean radius on black) against the target\'s figure (the same '
+           'frozen frame with the level): ' +
+           '; '.join(f'{n} reticle centre ({m[0][0][0]:.1f},{m[0][0][1]:.1f}) radius {m[0][1]:.1f} figure {m[1]} '
+                     f'offset ({m[2][0]:+.1f},{m[2][1]:+.1f})' for n, m in ms) +
+           f'; with AutoFOV the offset from the figure spreads {spread:.1f} px (<= 6) and the radius {rs:.1f}% (<= 2) '
+           f'across 4:3, 16:9, 21:9; the 4:3 reticle shifted by the side columns lands within {shift:.1f} px of the wider '
+           f'ones; the reticle\'s centre is on the figure in every picture (AUTOFOV 0: radius {offm[0][1]:.1f}, '
+           f'the view zoomed)')
 else:
     result('marker-on-actor', False, 'no lock-on reticle / target found in: ' + ', '.join(n for n, m in ms if m is None))
 

@@ -81,6 +81,9 @@ wait test: exec ToggleThirdCam 10
 sleep 6
 chan exec set LevelInfo TimeDilation 0.001
 wait test: exec set LevelInfo TimeDilation 10
+# only the player's controller ticks (CheatManager.PlayersOnly): the weapon's idle animation stops too
+chan exec PlayersOnly
+wait test: exec PlayersOnly 10
 sleep 2
 chan exec TEMPSETRES 1440x1080w
 sleep 5
@@ -146,6 +149,8 @@ chan exec set UCPlayerController DesiredFOV 90
 chan exec set UCPlayerController FovAngle 90
 wait test: exec set UCPlayerController FovAngle 10
 # ---- third person again, the lock-on reticle on a summoned target
+chan exec PlayersOnly
+wait test: exec PlayersOnly 10
 chan exec TEMPSETRES 1920x1080w
 chan exec set LevelInfo TimeDilation 1
 wait test: exec set LevelInfo TimeDilation 10
@@ -167,21 +172,56 @@ chan exec Lock 0
 sleep 10
 chan exec set LevelInfo TimeDilation 0.001
 wait test: exec set LevelInfo TimeDilation 10
+chan exec PlayersOnly
+wait test: exec PlayersOnly 10
 sleep 3
-shot lock-1920x1080
+# each size: the scene (the target's figure), then the same frozen frame with the level not drawn (the reticle
+# alone on black: its centre and size measure cleanly; its ring of arcs turns, so not its bounding box)
 chan exec TEMPSETRES 1440x1080w
 sleep 5
 shot lock-1440x1080
-chan exec TEMPSETRES 2560x1080w
-sleep 6
-shot lock-2560x1080
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 3
+shot lock-1440x1080-lo
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
 chan exec TEMPSETRES 1920x1080w
 sleep 5
+shot lock-1920x1080
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 3
+shot lock-1920x1080-lo
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
 chan exec AUTOFOV 0
 wait test: exec AUTOFOV 0 10
 sleep 4
 shot lock-1920x1080-off
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 3
+shot lock-1920x1080-lo-off
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
 chan exec AUTOFOV 2
+wait test: exec AUTOFOV 2 10
+chan exec TEMPSETRES 2560x1080w
+sleep 6
+shot lock-2560x1080
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 3
+shot lock-2560x1080-lo
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+chan exec TEMPSETRES 1440x1080w
+sleep 5
+shot lock-1440x1080-2
+chan exec PlayersOnly
+wait test: exec PlayersOnly 10
+chan exec set LevelInfo TimeDilation 1
 sleep 2
 probe end
 check d78-alive P['end'].pawn==1

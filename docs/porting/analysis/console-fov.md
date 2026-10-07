@@ -159,3 +159,30 @@ so whole-picture comparison does not apply there: measure reticle vs figure inst
   sub-page, grave + Escape leaves the sub-page open.
 
 Next: README rows, the measurement script (d78-measure.py, d78.sh), the 640x480/1024x768 identity against main.
+
+## Step 3 (2026-10-07): the verification script, first full pass
+
+`tools/dev/d78.sh` (runs) + `tools/dev/d78-measure.py` (checks), output `logs/d78/run/`. First pass
+(`logs/d78/d78-run-1.txt`): ident 640x480/1024x768 (ours and main's binary, pinned, -nopostprocess), fov, console
+game/menu, fov-pp (post-processing on, the owner's pictures). Measured so far:
+- identical-to-main 640x480 and 1024x768: static part 100.000% within 2 levels (93.7%/92.7% of the whole frame
+  bit-identical: the animated player model, pickups and reticle), `[AutoFOV] ... base=90 effective=90`.
+- fov-numbers: every logged effective FOV = 2*atan(tan(base/2)*aspect/(4/3)) within 0.001 (world 90 and zoom 40,
+  weapon 60, at 16:9 and 21:9; unchanged at 4:3).
+- world-third-person 99.23% / 97.82% (16:9 / 21:9 centre vs 4:3), control AUTOFOV 0 8.58%; letterbox 99.76% /
+  99.72% (control 45.97%); world-first-person (above the weapon) 100.00% / 100.00% (control 10.70%); zoom 40
+  100.00% / 100.00%; vertical scale of the scene against 4:3: 1.000 at 16:9 and 21:9 and zoomed, controls 1.310
+  (stock 16:9 is 1.333) and 1.762 (1.778) - the HUD, which does not scale, pulls the controls slightly toward 1.
+- weapon on black: area -2.3% / -1.3%, centroid 2.2 / 1.3 px against 4:3 - but the SAME 1440x1080 picture taken
+  again 40 s later moved by 4.8% / 4.7 px: the weapon's idle animation, not AutoFOV (TimeDilation 0.001 does
+  not stop it). The scenario now also switches `PlayersOnly` on (only the player's controller ticks) for the
+  first-person and lock-on shots.
+- Lock-on: the reticle's ring of arcs turns, and over a lit scene the orange thresholds catch only ~500 pixels,
+  so D-2's bounding-box method spread 14 px between sizes. Now each size is shot twice in the same frozen frame:
+  with the level (the target's purple figure) and without (the reticle alone on black: centroid and mean
+  radius of its pixels, which do not depend on the arcs' angle). Needs the rerun.
+- The teleport camera effect (the FOV write-back path) did not run at spawn in DM (no `base=170` lines):
+  implemented, never exercised so far.
+
+Prepared: windows and wasm-perf configured offline (deps copied from main's build dirs into
+`build-windows/_src`, `build-wasm-perf/_src`), not built yet (the game runs are timing-sensitive under load).
