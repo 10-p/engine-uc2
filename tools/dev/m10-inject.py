@@ -231,6 +231,11 @@ PROBE_RX = re.compile(r'probe (\S+) level=(\S+) menu=(\S+) focus=(\S+) text="(.*
                       r'ammo=([-\d.]+) shots=(\d+) mouse=\(([-\d.]+),([-\d.]+)\) pads=(\d+)')
 
 
+# D-7/D-8: fields after pads= (console typing line, scoreboard, the player's FOV, viewport size); absent from
+# an older engine, then they read -1 / '' / 0.
+PROBE_EXTRA_RX = re.compile(r'console=(-?\d+) typed="(.*)" scores=(-?\d+) fov=([-\d.]+) desiredfov=([-\d.]+) view=(\d+)x(\d+)')
+
+
 class Probe:
     def __init__(self, m):
         (self.tag, self.level, self.menu, self.focus, self.text, self.item, paused, pawn, lx, ly, lz, rp, ry, rr,
@@ -238,9 +243,17 @@ class Probe:
         self.paused = int(paused); self.pawn = int(pawn)
         self.loc = (float(lx), float(ly), float(lz)); self.rot = (int(rp), int(ry), int(rr))
         self.ammo = float(ammo); self.shots = int(shots); self.mouse = (float(mx), float(my)); self.pads = int(pads)
+        x = PROBE_EXTRA_RX.search(m.string)
+        self.console = int(x.group(1)) if x else -1
+        self.typed = x.group(2) if x else ''
+        self.scores = int(x.group(3)) if x else -1
+        self.fov = float(x.group(4)) if x else 0.0
+        self.desiredfov = float(x.group(5)) if x else 0.0
+        self.view = (int(x.group(6)), int(x.group(7))) if x else (0, 0)
 
     def __repr__(self):
-        return f"level={self.level} menu={self.menu} focus={self.focus} text={self.text!r} item={self.item!r} paused={self.paused} pawn={self.pawn} loc={self.loc} rot={self.rot} weapon={self.weapon} ammo={self.ammo} shots={self.shots}"
+        return (f"level={self.level} menu={self.menu} focus={self.focus} text={self.text!r} item={self.item!r} paused={self.paused} pawn={self.pawn} loc={self.loc} rot={self.rot} weapon={self.weapon} ammo={self.ammo} shots={self.shots}"
+                f" console={self.console} typed={self.typed!r} scores={self.scores} fov={self.fov} desiredfov={self.desiredfov} view={self.view}")
 
 
 P = {}
