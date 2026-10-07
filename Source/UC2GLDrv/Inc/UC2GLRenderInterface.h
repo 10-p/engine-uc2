@@ -458,6 +458,7 @@ public:
 	void SetPixelShaderConstant( INT Register, const void* Data, INT Count );
 
 private:
+	friend struct FUC2GLCombinerTest;	// O-9: the numeric test of the texture stages (UC2GLCombinerTest.cpp)
 	void SetMaterialBlending( FOpenGLMaterialState* NewMaterialState, ECullMode CullMode );
 	void ApplyCullMode( ECullMode CullMode );
 	void ApplyViewport();
@@ -472,6 +473,10 @@ private:
 	QWORD GetStateVertexShaderEnum( FOpenGLMaterialState* MaterialState, UBOOL HasDiffuse, UBOOL HasSpecular );
 	UBOOL BeginProgramPass( INT Pass, INT FirstIndex );
 	void EndProgramPass();
+	// O-9: a fixed-function pass's texture stages as a fragment program (UC2GLFFProgram.cpp).
+	UBOOL BeginFixedFunctionProgram( FOpenGLMaterialState* MaterialState, UBOOL ColorSum, UBOOL Fog );
+	void EndFixedFunctionProgram();
+	UBOOL					ColorSumEnabled;			// CommitStreams turned GL_COLOR_SUM on for this pass
 
 	// Various material handlers (UC2GLMaterialState.cpp; UC2's D3DMaterialState.cpp).
 	UBOOL SetMultiPassMaterial( UMultiPassMaterial* MultiPassMaterial, FOpenGLModifierInfo BaseModifierInfo, FString* ErrorString, UMaterial** ErrorMaterial );

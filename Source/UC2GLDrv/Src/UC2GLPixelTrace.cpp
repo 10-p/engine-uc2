@@ -161,5 +161,52 @@ void UC2GL_PixelTraceLog( FOpenGLRenderInterface* RI, INT Pass, const FColor& Be
 }
 
 /*-----------------------------------------------------------------------------
+	O-9: material census (-glmatcensus). Every distinct compilation of a material is
+	logged once, as the material compiler left it: passes, blending, and per stage the
+	colour and alpha operation with their arguments and the texture target. Comparing the
+	census of two runs (e.g. 8 stages and exact operations against 4 stages without
+	three-operand operations) lists the materials whose compilation depends on the device.
+
+	  UC2GLDrv: census <material> [-> fallback <material>] passes=<n> | p<i> blend=<0/1> <src>,<dst>
+	             ps=<pixel shader>(<program/ff>) stages=<n>: c<op>(<arg1>,<arg2>,<arg0>) a<op>(...) <2d/cube/->; ...
+-----------------------------------------------------------------------------*/
+
+static INT GMatCensus = -1;
+
+void UC2GL_MaterialCensus( FOpenGLRenderInterface* RI, UMaterial* Requested, UMaterial* Used )
+{
+	if( GMatCensus < 0 )
+		GMatCensus = ParseParam( appCmdLine(), TEXT("glmatcensus") ) ? 1 : 0;
+	if( !GMatCensus || !Requested )
+		return;
+	static TMap<FString,INT> Seen;
+	if( Seen.Num() >= 20000 )
+		return;
+	FString Line = FString::Printf( TEXT("%s"), Requested->GetPathName() );
+	if( Used != Requested )
+		Line += FString::Printf( TEXT(" -> fallback %s"), Used ? Used->GetPathName() : TEXT("None") );
+	Line += FString::Printf( TEXT(" passes=%i"), RI->CurrentState->NumMaterialPasses );
+	for( INT p=0; p<RI->CurrentState->NumMaterialPasses; p++ )
+	{
+		FOpenGLMaterialState* MS = RI->CurrentState->MaterialPasses[p];
+		if( !MS )
+			continue;
+		Line += FString::Printf( TEXT(" | p%i blend=%i %s,%s ps=%i(%s) stages=%i:"), p, MS->AlphaBlending, BlendName(MS->SrcBlend), BlendName(MS->DestBlend),
+			(INT)MS->PixelShader, MS->UsePixelShaderProgram ? TEXT("program") : TEXT("ff"), MS->StagesUsed );
+		for( INT s=0; s<MS->StagesUsed && s<MAX_STAGES; s++ )
+		{
+			FOpenGLMaterialStateStage& St = MS->Stages[s];
+			Line += FString::Printf( TEXT(" c%i(%x,%x,%x) a%i(%x,%x,%x) %s;"), (INT)St.ColorOp, St.ColorArg1, St.ColorArg2, St.ColorArg0,
+				(INT)St.AlphaOp, St.AlphaArg1, St.AlphaArg2, St.AlphaArg0,
+				!St.Texture ? TEXT("-") : St.Texture->IsCubemap ? TEXT("cube") : TEXT("2d") );
+		}
+	}
+	if( Seen.Find( Line ) )
+		return;
+	Seen.Set( *Line, 1 );
+	debugf( NAME_Init, TEXT("UC2GLDrv: census %s"), *Line );
+}
+
+/*-----------------------------------------------------------------------------
 	The End.
 -----------------------------------------------------------------------------*/

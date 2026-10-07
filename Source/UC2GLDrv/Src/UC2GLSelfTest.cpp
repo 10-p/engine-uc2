@@ -366,8 +366,11 @@ struct FSelfTest
 		{
 			RenDev->glActiveTexture( GL_TEXTURE0 + s );
 			RenDev->glClientActiveTexture( GL_TEXTURE0 + s );
-			RenDev->glDisable( GL_TEXTURE_2D );
-			RenDev->glDisable( GL_TEXTURE_CUBE_MAP );
+			if( s < RenDev->GLFixedFunctionUnits )
+			{
+				RenDev->glDisable( GL_TEXTURE_2D );
+				RenDev->glDisable( GL_TEXTURE_CUBE_MAP );
+			}
 			RenDev->glDisableClientState( GL_TEXTURE_COORD_ARRAY );
 		}
 		RenDev->glActiveTexture( GL_TEXTURE0 );

@@ -36,6 +36,10 @@ D3DTEXTUREOP DUMMY_MODULATE2X = D3DTOP_MODULATE2X;
 static TArray<FLOAT>	GShotTimes;
 static TArray<FLOAT>	GPSToggleTimes;
 static TArray<FLOAT>	GPPToggleTimes;
+static TArray<FLOAT>	GFFToggleTimes;		// O-9: -glfftoggle=<s>,... flips FixedFunctionPrograms
+// O-9: COMBINERTEST / -glcombinertest: the numeric test of the texture stages
+// (UC2GLCombinerTest.cpp), like GSelfTestPending.
+static INT				GCombinerTestPending = 0;
 // -glexec=<seconds>:<command>[@<seconds>:<command>...]: console commands run through the
 // viewport at those times after the first frame; '+' stands for a space in a command
 // (verification: "-glexec=40:BlurMe@50:set+UCScreenBerserk+Enabled+1"). Times ascending.
@@ -98,6 +102,13 @@ UUC2GLRenderDevice::UUC2GLRenderDevice()
 	LastViewport			= NULL;
 	FrameCounter			= 0;
 	NumTextureUnits			= 0;
+	GLFixedFunctionUnits	= 2;
+	GLProgramUnits			= 2;
+	FFProgramsActive		= 0;
+	LogFFPrograms			= 0;
+	MaskCombine3			= 0;
+	MaskCombine4			= 0;
+	FFProgramsLinked = FFProgramsFailed = FFProgramDraws = FFFallbackDraws = 0;
 	MaxAnisotropy			= 1.f;
 	ValidContext			= 0;
 	GLMajorVersion			= 0;
@@ -163,6 +174,7 @@ void UUC2GLRenderDevice::StaticConstructor()
 	new(GetClass(),TEXT("UseCubemaps"),			RF_Public)UBoolProperty	( CPP_PROPERTY(UseCubemaps			), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("CheckGLErrors"),		RF_Public)UBoolProperty	( CPP_PROPERTY(CheckGLErrors		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("UsePixelShaders"),		RF_Public)UBoolProperty	( CPP_PROPERTY(UsePixelShaders		), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("FixedFunctionPrograms"),RF_Public)UBoolProperty( CPP_PROPERTY(UseFixedFunctionPrograms), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("PrecompileVertexShaders"),RF_Public)UBoolProperty( CPP_PROPERTY(PrecompileVertexShaders), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("UsePostProcess"),		RF_Public)UBoolProperty	( CPP_PROPERTY(UsePostProcess		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("DOFShippedBlurAlpha"),	RF_Public)UBoolProperty	( CPP_PROPERTY(DOFShippedBlurAlpha	), TEXT("Options"), CPF_Config );
@@ -181,6 +193,8 @@ void UUC2GLRenderDevice::StaticConstructor()
 	UseCubemaps				= 1;
 	CheckGLErrors			= 0;
 	UsePixelShaders			= 1;
+	// O-9: fixed-function texture stages as GLSL (UC2GLFFProgram.cpp).
+	UseFixedFunctionPrograms= 1;
 	PrecompileVertexShaders	= 1;
 	UsePostProcess			= 1;
 	DOFShippedBlurAlpha		= 0;
@@ -258,6 +272,33 @@ void UUC2GLRenderDevice::FindProc( void*& ProcAddress, const char* Name, const c
 		debugf( NAME_Init, TEXT("UC2GLDrv: missing function '%s' for '%s'"), appFromAnsi(Name), appFromAnsi(SupportName) );
 		Supports = 0;
 	}
+}
+
+//
+// O-9: the stage count and texture-op caps the material compiler (UC2GLMaterialState.cpp)
+// is given. Epic's D3DDrv gave it the hardware's MaxSimultaneousTextures /
+// MaxTextureBlendStages (clamped to 4, D3DRenderDevice.cpp) and its TextureOpCaps; here:
+// - fragment programs (desktop GL, FixedFunctionPrograms): every D3D operation is exact and
+//   a pass may sample as many textures as a fragment shader can with fixed-function texture
+//   coordinates, up to MaxTextureUnits (8);
+// - the texture environment: as many stages as GL_MAX_TEXTURE_UNITS, and the three-operand
+//   operations only with combine3 or combine4.
+//
+void UUC2GLRenderDevice::UpdateTextureCaps()
+{
+	if( MaxTextureUnits < 1 )
+		MaxTextureUnits = MAX_STAGES;
+	FFProgramsActive = UseFixedFunctionPrograms && !IsGLES && SUPPORTS_GL2;
+	INT Units = FFProgramsActive ? GLProgramUnits : GLFixedFunctionUnits;
+	NumTextureUnits = Clamp<INT>( Min<INT>( Units, MaxTextureUnits ), 2, MAX_STAGES );
+	DeviceCaps.MaxSimultaneousTextures	= NumTextureUnits;
+	DeviceCaps.MaxTextureBlendStages	= NumTextureUnits;
+	DeviceCaps.TextureOpCaps			= (FFProgramsActive || HasCombine3() || HasCombine4()) ? (D3DTEXOPCAPS_MODULATEALPHA_ADDCOLOR | D3DTEXOPCAPS_MULTIPLYADD) : 0;
+	DeviceCaps.PrimitiveMiscCaps		= 0;	// no D3DPMISCCAPS_TSSARGTEMP: GL combiners have no temp register (the terrain path that wants it is not reached)
+	debugf( NAME_Init, TEXT("UC2GLDrv: fixed-function materials: %s; %i texture stages, three-operand operations %s"),
+		FFProgramsActive ? TEXT("fragment programs (FixedFunctionPrograms=True)") : IsGLES ? TEXT("texture environment (GL4ES generates its shaders)") : TEXT("texture environment (FixedFunctionPrograms=False)"),
+		NumTextureUnits,
+		FFProgramsActive ? TEXT("exact") : HasCombine3() ? TEXT("through combine3") : HasCombine4() ? TEXT("through combine4") : TEXT("NOT available (approximated)") );
 }
 
 void UUC2GLRenderDevice::FindProcs()
@@ -491,6 +532,21 @@ UBOOL UUC2GLRenderDevice::Init()
 	if( ParseParam( appCmdLine(), TEXT("pixelshaders") ) )
 		UsePixelShaders = 1;
 	ParseTimeList( TEXT("glpstoggle="), GPSToggleTimes );
+	// O-9: -glffprograms / -glnoffprograms (FixedFunctionPrograms), -glunits=N (MaxTextureUnits),
+	// -glnocombine3 / -glnocombine4 (masks: the texture environment as on a GL without them,
+	// e.g. Mesa behaving like the NVIDIA driver), -glffsource (log every generated program),
+	// -glcombinertest (the numeric test of the texture stages, UC2GLCombinerTest.cpp).
+	if( ParseParam( appCmdLine(), TEXT("glnoffprograms") ) )
+		UseFixedFunctionPrograms = 0;
+	if( ParseParam( appCmdLine(), TEXT("glffprograms") ) )
+		UseFixedFunctionPrograms = 1;
+	Parse( appCmdLine(), TEXT("glunits="), MaxTextureUnits );
+	MaskCombine3	= ParseParam( appCmdLine(), TEXT("glnocombine3") );
+	MaskCombine4	= ParseParam( appCmdLine(), TEXT("glnocombine4") );
+	LogFFPrograms	= ParseParam( appCmdLine(), TEXT("glffsource") );
+	if( ParseParam( appCmdLine(), TEXT("glcombinertest") ) )
+		GCombinerTestPending = 10;
+	ParseTimeList( TEXT("glfftoggle="), GFFToggleTimes );
 
 	// The same for render-target post-processing (M7): -nopostprocess / -postprocess, and
 	// -glpptoggle=<s>,... flips UsePostProcess at those times (console: POSTPROCESS [0|1]).
@@ -572,6 +628,10 @@ void UUC2GLRenderDevice::Exit( UViewport* Viewport )
 		RenderInterface.BackBufferCopyTarget = NULL;
 		ExitPostProcess();
 		ExitPixelShaders();
+		extern void UC2GL_LogFFStats( UUC2GLRenderDevice* );
+		UC2GL_LogFFStats( this );
+		extern void UC2GL_FlushFixedFunctionPrograms( UUC2GLRenderDevice* );
+		UC2GL_FlushFixedFunctionPrograms( this );
 		if( NullTextureID )
 			glDeleteTextures( 1, &NullTextureID );
 		NullTextureID = 0;
@@ -627,16 +687,21 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 		if( CheckGLErrors ) CheckGLError( TEXT("SetRes: binding and capabilities") );
 
 		// Capabilities.
-		GLint Units = 0, MaxSize = 0;
+		GLint Units = 0, MaxSize = 0, Coords = 0, ImageUnits = 0;
 		glGetIntegerv( GL_MAX_TEXTURE_UNITS, &Units );
 		glGetIntegerv( GL_MAX_TEXTURE_SIZE, &MaxSize );
-		if( MaxTextureUnits < 1 )
-			MaxTextureUnits = MAX_STAGES;
-		NumTextureUnits = Clamp<INT>( Min<INT>( Units, MaxTextureUnits ), 2, MAX_STAGES );
-		DeviceCaps.MaxSimultaneousTextures	= NumTextureUnits;
-		DeviceCaps.MaxTextureBlendStages	= NumTextureUnits;
-		DeviceCaps.TextureOpCaps			= SUPPORTS_GL_ATI_texture_env_combine3 ? (D3DTEXOPCAPS_MODULATEALPHA_ADDCOLOR | D3DTEXOPCAPS_MULTIPLYADD) : 0;
-		DeviceCaps.PrimitiveMiscCaps		= 0;	// no D3DPMISCCAPS_TSSARGTEMP: GL combiners have no temp register
+		if( !IsGLES )
+		{
+			glGetIntegerv( GL_MAX_TEXTURE_COORDS, &Coords );
+			glGetIntegerv( GL_MAX_TEXTURE_IMAGE_UNITS, &ImageUnits );
+		}
+		GLFixedFunctionUnits	= Clamp<INT>( Units, 2, MAX_STAGES );
+		GLProgramUnits			= IsGLES ? GLFixedFunctionUnits : Clamp<INT>( Min<INT>( Coords, ImageUnits ), GLFixedFunctionUnits, MAX_STAGES );
+		UpdateTextureCaps();
+		debugf( NAME_Init, TEXT("UC2GLDrv: texture units: %i in the texture environment (GL_MAX_TEXTURE_UNITS), %i for fragment programs (GL_MAX_TEXTURE_COORDS %i, GL_MAX_TEXTURE_IMAGE_UNITS %i); combine3 %s, combine4 %s"),
+			Units, GLProgramUnits, Coords, ImageUnits,
+			SUPPORTS_GL_ATI_texture_env_combine3 ? (MaskCombine3 ? TEXT("masked") : TEXT("yes")) : TEXT("no"),
+			SUPPORTS_GL_NV_texture_env_combine4 ? (MaskCombine4 ? TEXT("masked") : TEXT("yes")) : TEXT("no") );
 		DeviceCaps.MaxTextureSize			= MaxSize > 0 ? MaxSize : 2048;
 		if( SUPPORTS_GL_EXT_texture_filter_anisotropic )
 			glGetFloatv( GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &MaxAnisotropy );
@@ -645,7 +710,7 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 		debugf( NAME_Init, TEXT("UC2GLDrv: %i texture units (GL reports %i), max texture %i, S3TC %s, combine3 %s, anisotropy %i of %i"),
 			NumTextureUnits, Units, DeviceCaps.MaxTextureSize,
 			SUPPORTS_GL_EXT_texture_compression_s3tc ? TEXT("yes") : TEXT("no"),
-			SUPPORTS_GL_ATI_texture_env_combine3 ? TEXT("yes") : TEXT("no"),
+			HasCombine3() ? TEXT("yes") : TEXT("no"),
 			LevelOfAnisotropy, (INT)MaxAnisotropy );
 		if( !SUPPORTS_GL_EXT_texture_compression_s3tc )
 			debugf( NAME_Init, TEXT("UC2GLDrv: no S3TC; DXT textures are decompressed on upload") );
@@ -1582,11 +1647,13 @@ void UUC2GLRenderDevice::InitGLState()
 					   PlaneT[4] = { 0.f, 1.f, 0.f, 0.f },
 					   PlaneR[4] = { 0.f, 0.f, 1.f, 0.f },
 					   PlaneQ[4] = { 0.f, 0.f, 0.f, 1.f };
-	for( INT s=0; s<NumTextureUnits; s++ )
+	for( INT s=0; s<Min<INT>(Max<INT>(GLFixedFunctionUnits,GLProgramUnits),MAX_STAGES); s++ )
 	{
+		// (O-9: every unit fragment programs may use; texture environment state only on its own units.)
 		glActiveTexture( GL_TEXTURE0 + s );
 		glClientActiveTexture( GL_TEXTURE0 + s );
-		glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE );
+		if( s < GLFixedFunctionUnits )
+			glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE );
 		glTexGenfv( GL_S, GL_EYE_PLANE, PlaneS );
 		glTexGenfv( GL_T, GL_EYE_PLANE, PlaneT );
 		glTexGenfv( GL_R, GL_EYE_PLANE, PlaneR );
@@ -1595,8 +1662,11 @@ void UUC2GLRenderDevice::InitGLState()
 		glDisable( GL_TEXTURE_GEN_T );
 		glDisable( GL_TEXTURE_GEN_R );
 		glDisable( GL_TEXTURE_GEN_Q );
-		glDisable( GL_TEXTURE_2D );
-		glDisable( GL_TEXTURE_CUBE_MAP );
+		if( s < GLFixedFunctionUnits )
+		{
+			glDisable( GL_TEXTURE_2D );
+			glDisable( GL_TEXTURE_CUBE_MAP );
+		}
 		glDisableClientState( GL_TEXTURE_COORD_ARRAY );
 		glMatrixMode( GL_TEXTURE );
 		glLoadIdentity();
@@ -1907,6 +1977,26 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		UC2GL_PixelTraceArm( this, X, Y, ParseCommand(&Cmd,TEXT("ALL")) );
 		return 1;
 	}
+	else if( ParseCommand(&Cmd,TEXT("FFPROGRAMS")) )
+	{
+		// FFPROGRAMS [0|1]: fixed-function texture stages as fragment programs or as GL's texture
+		// environment (O-9; no argument: toggle). The next material set is compiled for it.
+		UBOOL Wanted = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !UseFixedFunctionPrograms;
+		if( Wanted != UseFixedFunctionPrograms && ValidContext && !LockedViewport )
+		{
+			UseFixedFunctionPrograms = Wanted;
+			UpdateTextureCaps();
+			RenderInterface.InvalidateHardwareState();
+		}
+		Ar.Logf( TEXT("UC2GLDrv: fixed-function programs %s (frame %i)"), FFProgramsActive ? TEXT("on") : TEXT("off"), FrameCounter );
+		return 1;
+	}
+	else if( ParseCommand(&Cmd,TEXT("COMBINERTEST")) )
+	{
+		GCombinerTestPending = 1;
+		Ar.Logf( TEXT("UC2GLDrv: the texture-stage test runs at the start of the next frame; results in the log") );
+		return 1;
+	}
 	else if( ParseCommand(&Cmd,TEXT("POSTSELFTEST")) )
 	{
 		GSelfTestPending = 1;
@@ -1977,6 +2067,11 @@ FRenderInterface* UUC2GLRenderDevice::Lock( UViewport* Viewport, BYTE* HitData, 
 		extern void UC2GL_RunPostProcessSelfTest( UUC2GLRenderDevice* RenDev, UViewport* Viewport );
 		UC2GL_RunPostProcessSelfTest( this, Viewport );
 	}
+	if( GCombinerTestPending && Viewport->Actor && Viewport->Actor->Level && --GCombinerTestPending == 0 )
+	{
+		extern void UC2GL_RunCombinerTest( UUC2GLRenderDevice* RenDev, UViewport* Viewport );
+		UC2GL_RunCombinerTest( this, Viewport );
+	}
 
 	return &RenderInterface;
 
@@ -2022,6 +2117,8 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 		{
 			debugf( NAME_Init, TEXT("UC2GLDrv: frame %i, %i GL errors so far"), FrameCounter, GLErrorCount );
 			LogPixelShaderStats();
+			extern void UC2GL_LogFFStats( UUC2GLRenderDevice* );
+			UC2GL_LogFFStats( this );
 		}
 	}
 
@@ -2042,6 +2139,11 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 	{
 		GPPToggleTimes.Remove(0);
 		Exec( TEXT("POSTPROCESS"), *GLog );
+	}
+	if( GFFToggleTimes.Num() && appSeconds() - GFirstFrameTime >= GFFToggleTimes(0) )
+	{
+		GFFToggleTimes.Remove(0);
+		Exec( TEXT("FFPROGRAMS"), *GLog );
 	}
 	while( GExecTimes.Num() && appSeconds() - GFirstFrameTime >= GExecTimes(0) )
 	{

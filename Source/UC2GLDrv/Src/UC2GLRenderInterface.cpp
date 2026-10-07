@@ -102,6 +102,7 @@ FOpenGLRenderInterface::FOpenGLRenderInterface(UUC2GLRenderDevice* InRenDev)
 	appMemzero( DistortionScale, sizeof(DistortionScale) );
 	appMemzero( ColorRemapConstant, sizeof(ColorRemapConstant) );
 	PointSampleNudge		= 0;
+	ColorSumEnabled			= 0;
 	InOcclusionQuery		= 0;
 	SceneDepthTestFramebuffer	= 0;
 	WireIndexBuffer			= 0;
@@ -947,6 +948,7 @@ INT FOpenGLRenderInterface::SetMaterial(UMaterial* InMaterial, FString* ErrorStr
 
 	// keep track of last material set
 	CurrentState->LastMaterial = InMaterial;
+	UMaterial* RequestedMaterial = InMaterial;	// O-9: the census (UC2GLPixelTrace.cpp)
 
 	// Release old material state.
 	for(INT PassIndex = 0;PassIndex < CurrentState->NumMaterialPasses;PassIndex++)
@@ -1049,6 +1051,9 @@ INT FOpenGLRenderInterface::SetMaterial(UMaterial* InMaterial, FString* ErrorStr
 
 	if( NumPasses )
 		*NumPasses = CurrentState->NumMaterialPasses;
+
+	extern void UC2GL_MaterialCensus( FOpenGLRenderInterface*, UMaterial*, UMaterial* );
+	UC2GL_MaterialCensus( this, RequestedMaterial, InMaterial );
 
 	CurrentState->CurrentMaterialState = NULL;
 
@@ -1174,14 +1179,29 @@ static FGLCombineArg GLFixedArg( GLint Source, GLint Operand )
 // Translate one D3D texture stage operation (colour or alpha half) into
 // GL_COMBINE_RGB/ALPHA, three sources with operands, and the scale.
 //
+#ifndef GL_COMBINE4_NV
+#define GL_COMBINE4_NV		0x8503
+#define GL_SOURCE3_RGB_NV	0x8583
+#define GL_SOURCE3_ALPHA_NV	0x858B
+#define GL_OPERAND3_RGB_NV	0x8593
+#define GL_OPERAND3_ALPHA_NV	0x859B
+#endif
+
+// O-9: a three-operand operation (a*b + c) without combine3, as NV_texture_env_combine4's
+// "Arg0*Arg1 + Arg2*Arg3" (GL_ADD in GL_COMBINE4_NV mode): Src[3] holds the fourth source.
+// Mode is then GL_COMBINE4_NV; SetMaterialBlending switches the unit to that mode and brings
+// the other half of the stage into the same four-operand form (ToCombine4).
+#define UC2GL_MODE_COMBINE4_ADD	0x7fff0001
+
 static void TranslateStageOp( UUC2GLRenderDevice* RenDev, D3DTEXTUREOP Op, DWORD Arg0, DWORD Arg1, DWORD Arg2, UBOOL Alpha, GLint& Mode, FGLCombineArg* Src, FLOAT& Scale )
 {
 	Scale = 1.0f;
 	Src[0] = GLArg( Arg1, Alpha );
 	Src[1] = GLArg( Arg2, Alpha );
 	Src[2] = GLArg( Arg0, Alpha );
+	Src[3] = GLFixedArg( GL_ZERO, Alpha ? GL_SRC_ALPHA : GL_SRC_COLOR );
 	GLint OpA = Alpha ? GL_SRC_ALPHA : GL_SRC_COLOR;
-	UBOOL Combine3 = RenDev->SUPPORTS_GL_ATI_texture_env_combine3;
+	UBOOL Combine3 = RenDev->HasCombine3(), Combine4 = RenDev->HasCombine4();
 
 	switch( Op )
 	{
@@ -1264,11 +1284,21 @@ static void TranslateStageOp( UUC2GLRenderDevice* RenDev, D3DTEXTUREOP Op, DWORD
 			Src[1]	= C;
 			Src[2]	= B;
 		}
+		else if( Combine4 )
+		{
+			// A*B + C*1 (GL_ZERO with ONE_MINUS operand is 1).
+			Mode	= UC2GL_MODE_COMBINE4_ADD;
+			Src[0]	= A;
+			Src[1]	= B;
+			Src[2]	= C;
+			Src[3]	= GLFixedArg( GL_ZERO, Alpha ? GL_ONE_MINUS_SRC_ALPHA : GL_ONE_MINUS_SRC_COLOR );
+		}
 		else
 		{
-			// Without combine3 there is no three-operand op: keep the modulation (the larger
-			// term in every UC2 use) and log once.
-			UC2GL_LOG_ONCE( TEXT("UC2GLDrv: GL_ATI_texture_env_combine3 missing; D3DTOP %i approximated"), (INT)Op );
+			// Without combine3 or combine4 there is no three-operand op: keep the modulation
+			// and log once (the material compiler is told so through TextureOpCaps, but
+			// MULTIPLYADD and the AddToCurrent stage are emitted unconditionally).
+			UC2GL_LOG_ONCE( TEXT("UC2GLDrv: no combine3 or combine4; D3DTOP %i approximated"), (INT)Op );
 			Mode	= GL_MODULATE;
 			Src[0]	= A;
 			Src[1]	= B;
@@ -1283,6 +1313,37 @@ static void TranslateStageOp( UUC2GLRenderDevice* RenDev, D3DTEXTUREOP Op, DWORD
 		Mode = GL_REPLACE;
 		Src[0] = GLFixedArg( GL_PREVIOUS, OpA );
 		break;
+	}
+}
+
+//
+// O-9: one half of a stage in NV_texture_env_combine4's form Src0*Src1 + Src2*Src3 (GL_ADD or
+// GL_ADD_SIGNED), when the other half needs GL_COMBINE4_NV mode. Returns 0 for an operation
+// that has no such form (SUBTRACT, DOT3, MODULATE_ADD_ATI); the caller then keeps GL_COMBINE.
+//
+static UBOOL ToCombine4( GLint& Mode, FGLCombineArg* Src, UBOOL Alpha )
+{
+	GLint			OneOp	= Alpha ? GL_ONE_MINUS_SRC_ALPHA : GL_ONE_MINUS_SRC_COLOR,
+					ZeroOp	= Alpha ? GL_SRC_ALPHA : GL_SRC_COLOR;
+	FGLCombineArg	One		= GLFixedArg( GL_ZERO, OneOp ),
+					Zero	= GLFixedArg( GL_ZERO, ZeroOp );
+	FGLCombineArg	S0 = Src[0], S1 = Src[1], S2 = Src[2];
+	switch( Mode )
+	{
+	case UC2GL_MODE_COMBINE4_ADD:	Mode = GL_ADD; return 1;
+	case GL_REPLACE:	Src[0] = S0; Src[1] = One; Src[2] = Zero; Src[3] = Zero; Mode = GL_ADD; return 1;
+	case GL_MODULATE:	Src[0] = S0; Src[1] = S1;  Src[2] = Zero; Src[3] = Zero; Mode = GL_ADD; return 1;
+	case GL_ADD:		Src[0] = S0; Src[1] = One; Src[2] = S1;   Src[3] = One;  Mode = GL_ADD; return 1;
+	case GL_ADD_SIGNED:	Src[0] = S0; Src[1] = One; Src[2] = S1;   Src[3] = One;  Mode = GL_ADD_SIGNED; return 1;
+	case GL_INTERPOLATE:
+	{
+		// S0*S2 + S1*(1-S2)
+		FGLCombineArg Inv = S2;
+		Inv.Operand =	S2.Operand == GL_SRC_ALPHA ? GL_ONE_MINUS_SRC_ALPHA : S2.Operand == GL_ONE_MINUS_SRC_ALPHA ? GL_SRC_ALPHA :
+						S2.Operand == GL_SRC_COLOR ? GL_ONE_MINUS_SRC_COLOR : GL_SRC_COLOR;
+		Src[0] = S0; Src[1] = S2; Src[2] = S1; Src[3] = Inv; Mode = GL_ADD; return 1;
+	}
+	default:			return 0;
 	}
 }
 
@@ -1341,8 +1402,13 @@ void FOpenGLRenderInterface::SetMaterialBlending( FOpenGLMaterialState* NewMater
 		FOpenGLTexture*				Texture	= (Stage.Texture && Stage.Texture->TextureID) ? Stage.Texture : NULL;
 		GLenum						Target	= (Texture && Texture->IsCubemap) ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
 
+		// O-9: units beyond the texture environment's (GL_MAX_TEXTURE_UNITS; NVIDIA: 4) exist
+		// for fragment programs only: no enables, no texture environment there.
+		UBOOL FixedUnit = s < RenDev->GLFixedFunctionUnits;
 		RenDev->glActiveTexture( GL_TEXTURE0 + s );
-		if( Target == GL_TEXTURE_CUBE_MAP )
+		if( !FixedUnit )
+			;
+		else if( Target == GL_TEXTURE_CUBE_MAP )
 		{
 			RenDev->glDisable( GL_TEXTURE_2D );
 			RenDev->glEnable( GL_TEXTURE_CUBE_MAP );
@@ -1386,18 +1452,43 @@ void FOpenGLRenderInterface::SetMaterialBlending( FOpenGLMaterialState* NewMater
 
 		if( Stage.TextureMipLODBias < -100.f )
 			Stage.TextureMipLODBias = RenDev->DefaultTexMipBias;
+		if( !FixedUnit )
+			continue;	// the fragment program applies this stage's LOD bias in its lookup (UC2GLFFProgram.cpp)
 		RenDev->glTexEnvf( GL_TEXTURE_FILTER_CONTROL, GL_TEXTURE_LOD_BIAS, RenDev->NoLODBias ? 0.f : Stage.TextureMipLODBias );
 
 		// Combiner.
 		GLint			ColorMode, AlphaMode;
-		FGLCombineArg	ColorSrc[3], AlphaSrc[3];
+		FGLCombineArg	ColorSrc[4], AlphaSrc[4];
 		FLOAT			ColorScale, AlphaScale;
 		TranslateStageOp( RenDev, Stage.ColorOp, Stage.ColorArg0, Stage.ColorArg1, Stage.ColorArg2, 0, ColorMode, ColorSrc, ColorScale );
 		TranslateStageOp( RenDev, Stage.AlphaOp, Stage.AlphaArg0, Stage.AlphaArg1, Stage.AlphaArg2, 1, AlphaMode, AlphaSrc, AlphaScale );
 		if( ColorMode == GL_DOT3_RGBA )
 			AlphaMode = GL_REPLACE;	// DOT3_RGBA writes alpha itself; the alpha combiner is ignored
 
-		RenDev->glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE );
+		// O-9: NV_texture_env_combine4 for a three-operand half; the other half into the same form.
+		GLint EnvMode = GL_COMBINE;
+		if( ColorMode == UC2GL_MODE_COMBINE4_ADD || AlphaMode == UC2GL_MODE_COMBINE4_ADD )
+		{
+			GLint C = ColorMode, A = AlphaMode;
+			FGLCombineArg CS[4], AS[4];
+			appMemcpy( CS, ColorSrc, sizeof(CS) );
+			appMemcpy( AS, AlphaSrc, sizeof(AS) );
+			if( ToCombine4( C, CS, 0 ) && ToCombine4( A, AS, 1 ) )
+			{
+				EnvMode = GL_COMBINE4_NV;
+				ColorMode = C; AlphaMode = A;
+				appMemcpy( ColorSrc, CS, sizeof(CS) );
+				appMemcpy( AlphaSrc, AS, sizeof(AS) );
+			}
+			else
+			{
+				UC2GL_LOG_ONCE( TEXT("UC2GLDrv: combine4: colour op %i with alpha op %i has no four-operand form; the three-operand half is approximated"), (INT)Stage.ColorOp, (INT)Stage.AlphaOp );
+				if( ColorMode == UC2GL_MODE_COMBINE4_ADD ) { ColorMode = GL_MODULATE; }
+				if( AlphaMode == UC2GL_MODE_COMBINE4_ADD ) { AlphaMode = GL_MODULATE; }
+			}
+		}
+
+		RenDev->glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, EnvMode );
 		RenDev->glTexEnvfv( GL_TEXTURE_ENV, GL_TEXTURE_ENV_COLOR, (GLfloat*)&TFactor );
 		RenDev->glTexEnvi( GL_TEXTURE_ENV, GL_COMBINE_RGB, ColorMode );
 		RenDev->glTexEnvi( GL_TEXTURE_ENV, GL_COMBINE_ALPHA, AlphaMode );
@@ -1408,12 +1499,19 @@ void FOpenGLRenderInterface::SetMaterialBlending( FOpenGLMaterialState* NewMater
 			RenDev->glTexEnvi( GL_TEXTURE_ENV, GL_SRC0_ALPHA + i, AlphaSrc[i].Source );
 			RenDev->glTexEnvi( GL_TEXTURE_ENV, GL_OPERAND0_ALPHA + i, AlphaSrc[i].Operand );
 		}
+		if( EnvMode == GL_COMBINE4_NV )
+		{
+			RenDev->glTexEnvi( GL_TEXTURE_ENV, GL_SOURCE3_RGB_NV, ColorSrc[3].Source );
+			RenDev->glTexEnvi( GL_TEXTURE_ENV, GL_OPERAND3_RGB_NV, ColorSrc[3].Operand );
+			RenDev->glTexEnvi( GL_TEXTURE_ENV, GL_SOURCE3_ALPHA_NV, AlphaSrc[3].Source );
+			RenDev->glTexEnvi( GL_TEXTURE_ENV, GL_OPERAND3_ALPHA_NV, AlphaSrc[3].Operand );
+		}
 		RenDev->glTexEnvf( GL_TEXTURE_ENV, GL_RGB_SCALE, ColorScale );
 		RenDev->glTexEnvf( GL_TEXTURE_ENV, GL_ALPHA_SCALE, AlphaScale );
 	}
 
 	// Disable all unused texture stages.
-	for( INT s=StagesUsed; s<RenDev->NumTextureUnits; s++ )
+	for( INT s=StagesUsed; s<Min<INT>(RenDev->GLFixedFunctionUnits,MAX_STAGES); s++ )
 	{
 		RenDev->glActiveTexture( GL_TEXTURE0 + s );
 		RenDev->glDisable( GL_TEXTURE_2D );
@@ -1837,7 +1935,8 @@ void FOpenGLRenderInterface::CommitStreams( INT FirstIndex )
 	// lighting (lighting replaces it with the computed specular, which is zero here).
 	GStreamHasSpecular = HasSpecular;
 	FOpenGLMaterialState* Pass = CurrentState->CurrentMaterialState;
-	if( HasSpecular && Pass && Pass->SpecularEnable && !CurrentState->UseDynamicLighting )
+	ColorSumEnabled = HasSpecular && Pass && Pass->SpecularEnable && !CurrentState->UseDynamicLighting;
+	if( ColorSumEnabled )
 	{
 		RenDev->glEnableClientState( GL_SECONDARY_COLOR_ARRAY );
 		RenDev->glEnable( GL_COLOR_SUM );
@@ -1863,7 +1962,8 @@ void FOpenGLRenderInterface::CommitTexCoords( INT Pass )
 	FOpenGLMaterialState*	MaterialState = CurrentState->MaterialPasses[Pass];
 	INT						StagesUsed = Min<INT>( MaterialState->StagesUsed, RenDev->NumTextureUnits );
 
-	for( INT s=0; s<RenDev->NumTextureUnits; s++ )
+	// (Every coordinate set the device may use: NumTextureUnits changes with FFPROGRAMS.)
+	for( INT s=0; s<Min<INT>(RenDev->GLProgramUnits,MAX_STAGES); s++ )
 	{
 		RenDev->glActiveTexture( GL_TEXTURE0 + s );
 		RenDev->glClientActiveTexture( GL_TEXTURE0 + s );
@@ -2009,11 +2109,13 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 		}
 
 		// Pixel-shader materials: program, uniforms and generic attributes (UC2GLShaders.cpp).
-		UBOOL Programmed = BeginProgramPass( Pass, FirstIndex );
+		UBOOL Programmed = BeginProgramPass( Pass, FirstIndex ), FFProgrammed = 0;
 		if( !Programmed )
 		{
 			CommitStreams( FirstIndex );
 			CommitTexCoords( Pass );
+			// O-9: the texture stages as a fragment program (UC2GLFFProgram.cpp).
+			FFProgrammed = BeginFixedFunctionProgram( CurrentState->MaterialPasses[Pass], ColorSumEnabled, CurrentState->DistanceFogEnabled );
 		}
 
 		// GLPIXTRACE (debug, UC2GLPixelTrace.cpp; fx-fixes): the traced pixel before this pass.
@@ -2048,6 +2150,8 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 
 		if( Programmed )
 			EndProgramPass();
+		if( FFProgrammed )
+			EndFixedFunctionProgram();
 		RenDev->StatDraws++;
 		RenDev->StatPrimitives += NumPrimitives;
 
