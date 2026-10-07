@@ -127,3 +127,78 @@ part of the shadow is under the pawn's body, out of view. The same pairs in DM-P
 DM-Azure (`fx-shadow-azure2-*`) show the shadow on dark floors, where the difference is hard to see.
 **No Xbox reference**: the owner's xemu pictures (`temp/`) show the player but no shadow I can make out on those
 dark floors.
+
+## Step 3. Projectors (item 1): the static projector batching, implemented; seen + checked against the PC path
+
+### What the PC path does that the Xbox does not, found on content
+
+Reading on (step 0 listed the candidates), the census and pixel traces (`GLPIXTRACE`) settle it:
+
+- **Nothing on PC draws a `UProjectorMultiMaterial`.** `UnSkeletalMesh.cpp` uses it without a gate
+  (`USE_NEW_PROJECTOR_RENDERING_METHOD`), but only in its GPU-skinning branch, which needs `XBOX_ASSET_FORMAT`
+  data; PC's software-skinned branch draws `FProjectorRenderInfo::GetMaterial` (checked with a pixel trace on a
+  pawn under a DM-DeepCore projector: `ProjectorMaterial`, 3 stages). So the empty PC body of
+  `SetProjectorMultiMaterial` never showed.
+- **Static (map) projectors are where the two builds differ.** The Xbox build re-packs every level-static
+  projector at load into one `DT_StaticProjectorBatch` actor (`UGameEngine::LoadMap`, `_XBOX`;
+  `AProjector::RebuildStaticPrimsBatch`), with `BaseMaterial = NULL` (Epic commented the base-material and UV
+  copy out of `AddStaticPrimToBatch`), drawn with `UProjectorMultiMaterial`. Consequences, all on screen:
+  1. `MaterialBlendingOp` is ignored: the projected texture is drawn alone. PC multiplies it with the surface's
+     own texture (`HandleCombinedMaterial(BaseDiffuse)`, then `MODULATE2X`). 19 projectors in 7 maps.
+  2. A projector that does not clip (`bClipBSP` off) covers whole BSP nodes on both builds; outside its frustum
+     the clamped border texel and the attenuation give the neutral 0.5 on Xbox, but on PC the
+     `base x projected x 2` term darkens the whole node (CTF-Recoil: a far floor pixel 51,63,67 -> 46,56,60 by a
+     wire-mesh projector's pass, pixel trace).
+  3. Base opacity of masked surfaces is ignored by the Xbox (PC keeps the projector off their holes).
+- Where none of that applies (no material blending, `bClipBSP`, gradient: the DM-DeepCore wire-mesh lights) the
+  formulas are the same and so are the pictures (below).
+- Dynamic projectors (player shadows, decals, projectors that follow actors) are not touched: on Xbox they go
+  through push-buffer renderers (`FProjectorRenderBatchBSPNodes`, `FProjectorRenderBatchStaticMesh` with kDOP
+  node indices, `UnTerrain.cpp`'s `_XBOX` projector branch) whose per-pixel result is PC's
+  (`lerp(0.5, t, attenuation)` then 2x modulate, the same attenuation: step 0); their base material is NULL on
+  Xbox too, which changes masked surfaces only. Not ported: no visible difference to show for ~400 lines of
+  push-buffer code.
+
+### Implementation
+
+- Engine: `FRenderCaps::XboxProjectors`, `RenDevHasXboxProjectors()`; `UnGame.cpp`'s `_XBOX` block in
+  `UGameEngine::LoadMap` (the `RebuildStaticPrimsBatch` loop) runs for a device with the capability; the
+  emptying of static mesh index buffers that follows it stays `_XBOX` (PC draws static meshes from them).
+  `RebuildStaticPrimsBatch`, `RenderStaticPrimsBatch`, the `DT_StaticProjectorBatch` draw list and
+  `UStaticProjectorClippedPrim` were never gated: they work as Epic wrote them.
+- Driver: `SetProjectorMultiMaterial` is Epic's Xbox body (D3DX vector helpers added to
+  `UC2GLD3DXCompat.h`; `TS_WORLD`/`TS_WORLDINV` are the interface's `LocalToWorld`; the 13 `VSC_PROJ_*` registers
+  go to a `u_proj[13]` uniform; one `debugf` with no arguments for its two `%s` fixed). `ProjectorAtten.vsh` and
+  `TexSourceTexKill3.vsh` in the vertex-shader composer, register for register; the 12 `PS_Projector_*` compiled
+  (no longer engine-gated). `UseXboxProjectors` (ini, default True; `-noxboxprojectors`; console
+  `XBOXPROJECTORS`, from the next map load: switching a loaded level over was tried and dropped, the static
+  actor leaf lists of `ULevel::BuildRenderData` do not follow a projector re-attached at run time).
+- Two driver defects found on the way, fixed:
+  1. **Deferred occlusion queries dropped the real draw.** M11 made `DrawPrimitive` skip everything between
+     `BeginOcclusionQuery` and `EndOcclusionQuery` (meant for the engine's query boxes, drawn with every write
+     off); `FOcclusionQueryManager::BeginDeferredQuery` wraps an actor's real draw instead, and projector
+     actors use deferred queries (`Projector.uc`), so most batches vanished. Now only passes that write nothing
+     are skipped. No other class uses deferred queries (`Pawn.uc` sets it off), so nothing else changes.
+  2. **The command-line map loads before the GL context exists**, so caps that depend on compiled shaders read
+     "no" at load: the terrain passes and the projector batches were built the PC way for the first map. Until
+     `InitPixelShaders` has run the caps now report what the switches ask for (`ShaderStateKnown`); both
+     shaders compile on every target (`psh2glsl --gputest`, GLSL ES included).
+- Debug: `GLSCENECENSUS` also prints each projector's frustum-plane signs at its middle (positive = inside, what
+  `texkill` keeps) and how the renderer sees the actor (filter state, leaf lists, bounds); the projector material
+  logs once per projector (`UC2GLDrv: projector material <name>: ... clipped per pixel / not clipped, pixel
+  shader N`); `-glprojnoclip` draws clipped projectors with the unclipped shaders; `GLSTATS [RESET]` prints the
+  `-glstats` line on demand.
+
+### Pictures and numbers (`<WorkUC2>/logs/m7b/`, separate runs for the two paths: the batching happens at load)
+
+| Place | Projector | PC path vs Xbox batch | Control (two frames of one run) | What I see |
+|---|---|---|---|---|
+| DM-DeepCore, wire-mesh lights over the metal floor (`fx-m7b-proj-deepcore-*`) | Projector4 (`FX_Proj_WireMesh01_Scale`, modulate, no material blending, `bClipBSP`, gradient) and neighbours | floor, pawn/HUD masked: mean 0.136, largest 4 levels, 0.165% of pixels above 2 | 0.002 | the same warm grid of light on both; nothing to tell apart |
+| CTF-Recoil, corridor floor under Projector5 (`fx-m7b-proj-recoil-*`, crop 2x `m7b-proj-recoil-grid-pc-xbox-2x.png`) | `FX_Proj_WireMesh01_Scale`, modulate, **`MaterialBlendingOp` modulate**, not clipped | grid area: mean 9.0 levels, 64.6% of pixels above 8; whole frame mean 5.3 | 0.043 (whole frame) | PC: a dim, dirty grid, the tiles under it darker (base texture x projection x 2); Xbox: a clear grid of light on the tiles, the floor around a few levels brighter (no darkening of whole nodes) |
+
+The DM-DeepCore row is the numeric check of the port against Epic's PC math: the same projections computed two
+ways (CPU attenuation per vertex + fixed-function stages, against `ProjectorAtten.vsh` + `Proj_Modulate_Clip`
+with `texkill`) agree to 4 levels; a wrong texture coordinate, attenuation or clip plane would move or remove
+the grid (it did: the deferred-query defect above removed it, and the clipped shader alone with
+`-glprojnoclip` versus without was how that was found). **No Xbox reference:** none of the owner's xemu pictures
+shows one of these projectors.
