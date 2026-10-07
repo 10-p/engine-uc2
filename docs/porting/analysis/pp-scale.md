@@ -231,3 +231,24 @@ depth of field and the radial blur (0.47 and 0.23; 0.51 and 0.25), as the analys
   first frame (the threshold then stays where one update put it).
 - Wasm-perf build (`cmake --preset wasm-perf`, `cmake --build build-wasm-perf -j6`, capped 6G): `[100%] Built
   target SDLLaunch`, exit 0; `SDLLaunch.wasm` sha256 `43f2d9c4...`.
+
+## Checkpoint, 2026-10-07 22:55 (coordinator's resume message)
+
+The coordinator reported a usage-limit cut-off at about 21:10; from this side the work went on (the commits up to
+`f544713` and the runs below are from 21:10-22:50). State at this checkpoint, nothing running:
+
+- Done and committed: the code (`f8dfb79`), the ini setting + README row + web inis (`2aad748`), the tools
+  (`pp-measure.py`, `pp-scale.sh`, `run-uc2-shot.sh` UC2_CAP, `o9-nvidia.sh` O9_TREE, self-test counts in
+  `m11-twin.sh`/`m13-64bit.sh`), the audit table, notebook steps 1-5.
+- Gate items observed: (a) native, windows, wasm-perf builds pass (step 4, 5); (b) pp-scale lines: glow 640/1440/
+  2880 PASS, dof PASS, radial PASS (`logs/pp/run1.txt`, `logs/pp2/run1.txt`); after the script update `d034f97`
+  (selftest time limit, GL error count from the exit line, concussion judged per frame, aspect with the UI box):
+  selftest PASS (15/15 at 1440x1080 and 2880x2160), aspect PASS, blur-setting PASS, blur PASS
+  (`logs/pp/run2.txt`, `logs/pp2/run2.txt`); identity FAIL as a test (see step 5: run-to-run noise of main's own
+  binary, also with `DYNAMICGAMMA 0` from the first frame: main/main 8558 pixels of the static box differ, max 2);
+  `ucc-bin verifyclasses` PASS.
+- In flight at the cut-off as the coordinator saw it: nothing. Remaining: a deterministic identity check (a frame
+  frozen from the first frame without spawning: main/main still differ in 1943 pixels, max 150: locate and mask
+  them); perf on the GPU (the scenario must outlast the markers: `sleep 50` is too short); m7-effects on this tree;
+  m11-twin (trees ppm11/ppm11t); o9-nvidia combiner lines (O9_TREE=ppo9); the owner's sheets; whether M7b's shadow
+  blur reuses the primitives changed here; the final report.
