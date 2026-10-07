@@ -8,6 +8,7 @@
 #   M7B_ARGS="-gl4es" tools/dev/m7b.sh m7b-twin shadow projector-agree projector-differ terrain twin-match
 #                       the same checks on the GL4ES / OpenGL ES 2 twin (the browser's code path), then its pictures
 #                       against the desktop's of the tree M7B_REF (default m7b; run that first)
+#   M7B_SECS=240        time limit of each game run (default 150; the twin under load needs more)
 #
 # Every game run is tools/dev/fx-owner.sh's "custom" case (bin/capped 2G, Xvfb, Mesa llvmpipe, 1280x720, -glnoaa
 # via the engine defaults of that runner, AutoFOV off, pre-D-2 UI), the pawn placed with NETPLACE, time frozen
@@ -57,7 +58,7 @@ place() {  # place "<x y z yaw pitch>": twice (the pitch holds once the pawn sta
 }
 run() {  # run <name> <map> <scenario file> [uc2.bin arguments]
   local name=$1 map=$2 scen=$3; shift 3
-  FX_ARGS="$* ${M7B_ARGS:-}" FX_SCENARIO=$scen FX_MAP=$map FX_NAME=m7b-$name "$repo/tools/dev/fx-owner.sh" "$tree" custom > "$tmp/$name.fx" 2>&1
+  FX_SECS=${M7B_SECS:-150} FX_ARGS="$* ${M7B_ARGS:-}" FX_SCENARIO=$scen FX_MAP=$map FX_NAME=m7b-$name "$repo/tools/dev/fx-owner.sh" "$tree" custom > "$tmp/$name.fx" 2>&1
   cat "$tmp/$name.fx" | tail -1
 }
 diffline() {  # diffline <a.png> <b.png> [imgdiff options]: "mean=.. max=.. above2=.." of the pair
@@ -94,9 +95,14 @@ for c in $want; do
     pcm=$(sed -E 's/.*shadow min=([0-9]+).*/\1/' <<< "$pcl"); xbm=$(sed -E 's/.*shadow min=([0-9]+).*/\1/' <<< "$xbl")
     if [ -n "$pcl" ] && [ -n "$xbl" ] && python3 -c "import sys; sys.exit(0 if $pce<=2 and $xbe<=2 and abs($pcm-27)<=2 and abs($xbm-55)<=2 else 1)"; then r=PASS; else r=FAIL; fi
     line $r shadow-filter "recomputed from the caster target: PC branch largest error $pce/255 (core $pcm, expected 27), Xbox branch $xbe/255 (core $xbm, expected 255-200=55)"
-    d=$(diffline "$out/fx-m7b-shadow-pc.png" "$out/fx-m7b-shadow-xbox.png" $DCMASK); n1=$(diffline "$out/fx-m7b-shadow-pc.png" "$out/fx-m7b-shadow-pc2.png" $DCMASK)
-    if python3 -c "import sys; sys.exit(0 if $(mean_of "$d") > 3*max($(mean_of "$n1"),0.01) else 1)"; then r=PASS; else r=FAIL; fi
-    line $r shadow-picture "PC vs Xbox shadow (pawn masked): $d; two PC frames: $n1"
+    # Pixel by pixel (tools/dev/m7b-darker.py): where the PC frame is darker than the Xbox frame, leaving out what
+    # moves between two PC frames; the control is two PC frames against each other.
+    d=$(python3 "$repo/tools/dev/m7b-darker.py" "$out/fx-m7b-shadow-pc.png" "$out/fx-m7b-shadow-xbox.png" "$out/fx-m7b-shadow-pc2.png" 2>&1 | tail -1)
+    x=$(python3 "$repo/tools/dev/m7b-darker.py" "$out/fx-m7b-shadow-xbox.png" "$out/fx-m7b-shadow-pc.png" "$out/fx-m7b-shadow-xbox2.png" 2>&1 | tail -1)
+    n1=$(python3 "$repo/tools/dev/m7b-darker.py" "$out/fx-m7b-shadow-pc2.png" "$out/fx-m7b-shadow-pc.png" "$out/fx-m7b-shadow-pc.png" 2>&1 | tail -1)
+    dk=$(sed -E 's/darker10=([0-9]+).*/\1/' <<< "$d"); nk=$(sed -E 's/darker10=([0-9]+).*/\1/' <<< "$n1")
+    if [ "${dk:-0}" -ge 1000 ] 2>/dev/null && [ "${nk:-1}" -le 50 ] 2>/dev/null; then r=PASS; else r=FAIL; fi
+    line $r shadow-picture "PC frame darker than the Xbox frame: $d; Xbox darker than PC (the sharper edge): $x; control, two PC frames: $n1"
     ;;
   projector-agree|projector-differ|projector-draws)
     # Both projector checks and the draw counts come from the same two pairs of runs (made once).
@@ -138,7 +144,8 @@ for c in $want; do
     done
     ;;
   twin-match)
-    for pic in shadow-xbox:dc proj-deepcore-xbox-a:dc proj-recoil-xbox-a:full terrain-DM-Ascension-three:pawn; do
+    # (Not the terrain pictures: their camera is the spawn's, which is not pinned between runs.)
+    for pic in shadow-xbox:dc proj-deepcore-xbox-a:dc proj-recoil-xbox-a:full; do
       name=${pic%%:*}; how=${pic##*:}
       case $how in dc) m=$DCMASK;; pawn) m="--mask 500,440,760,720";; *) m="";; esac
       a=$ref/fx-m7b-$name.png; b=$out/fx-m7b-$name.png

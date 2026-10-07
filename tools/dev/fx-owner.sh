@@ -9,6 +9,7 @@
 #   UC2_BIN=uc2-before.bin tools/dev/fx-owner.sh fx pool   another executable from the tree's System folder
 #                                                          (the pictures get the suffix "-before")
 #   FX_ARGS="-glmatcensus" tools/dev/fx-owner.sh ...       more uc2.bin arguments (O-9)
+#   FX_SECS=240 (custom case only): another time limit for the run (M7b: the GL4ES twin under load)
 #   UC2_GPU=1 tools/dev/fx-owner.sh fx waterfall-1p        render on this machine's GPU instead of Mesa
 #                                                          llvmpipe: SDL's offscreen video driver (EGL, no
 #                                                          window, nothing on the owner's display); the
@@ -143,6 +144,7 @@ echo "$CASES" | while IFS='|' read -r name map secs what; do
   if [ "$want" != "  " ] && [ "${want#* $name }" = "$want" ]; then continue; fi
   [ "$map" = FXMAP ] && map=${FX_MAP:-DM-Azure}
   [ "$name" = custom ] && [ -n "${FX_NAME:-}" ] && name=$FX_NAME
+  [ -n "${FX_SECS:-}" ] && [ "$map" = "${FX_MAP:-}" ] && secs=$FX_SECS
   tag=fx-$name$suffix
   scen=$(mktemp); { if [ -n "${FX_NAME:-}" ] && [ "$name" = "$FX_NAME" ]; then scenario custom; else scenario "$name"; fi; echo 'sleep 1.5'; } > "$scen"
   cp -f "$repo"/Engine/Config/*.ini "$sys/"
