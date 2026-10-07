@@ -165,6 +165,8 @@ int UInteractionMaster::MasterProcessKeyEvent(EInputKey iKey, EInputAction State
 	}
 	if ( OwnedRelease )
 		return 1;
+	if ( State == IST_Press )
+		GConsoleOwnsKey[(BYTE)iKey] = 0;	// a press the console did not take (a lost release must not stick)
 
 	// Do all Native Globals
 

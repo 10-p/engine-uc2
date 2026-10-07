@@ -273,18 +273,20 @@ def reticle(lo):
     return (cx, cy), rad, len(pts)
 
 
-def figure(im, c):
-    """The target's figure (the summoned Liandri's purple) within 450 px of the reticle's centre."""
+def figure(im, c, rad):
+    """The target's figure (the summoned Liandri's purple) inside the reticle's ring (0.6 of its mean radius
+    either side of its centre; the whole ring's height)."""
     W, H = im.size
-    x0, x1 = max(0, int(c[0]) - 450), min(W, int(c[0]) + 450)
-    sub = im.crop((x0, 300, x1, H))
+    x0, x1 = max(0, int(c[0] - 0.6 * rad)), min(W, int(c[0] + 0.6 * rad))
+    y0, y1 = max(300, int(c[1] - 1.3 * rad)), min(H, int(c[1] + 1.3 * rad))
+    sub = im.crop((x0, y0, x1, y1))
     r, g, b = sub.split()
     m = ImageChops.multiply(ImageChops.multiply(r.point(lambda v: 255 if v > 120 else 0), g.point(lambda v: 255 if v < 100 else 0)),
                             b.point(lambda v: 255 if v > 140 else 0))
     bb = m.getbbox()
     if bb is None or m.histogram()[255] < 300:
         return None
-    return (x0 + bb[0], 300 + bb[1], x0 + bb[2], 300 + bb[3])
+    return (x0 + bb[0], y0 + bb[1], x0 + bb[2], y0 + bb[3])
 
 
 ms = []
@@ -294,7 +296,7 @@ for name in ('lock-1440x1080', 'lock-1920x1080', 'lock-2560x1080', 'lock-1920x10
     if im is None or lo is None:
         ms.append((name, None)); continue
     rt = reticle(lo)
-    fg = figure(im, rt[0]) if rt else None
+    fg = figure(im, rt[0], rt[1]) if rt else None
     if rt is None or fg is None:
         ms.append((name, None)); continue
     fc = ((fg[0] + fg[2]) / 2, (fg[1] + fg[3]) / 2)
