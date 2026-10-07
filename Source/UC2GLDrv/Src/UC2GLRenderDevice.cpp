@@ -141,7 +141,8 @@ UUC2GLRenderDevice::UUC2GLRenderDevice()
 	MainColorVersion = MainDepthVersion = 0;
 	SnapshotCopies = DepthColorCopies = DepthBufferCopies = 0;
 	PostReferenceProgram = ReferenceTexture = ReferenceFramebuffer = 0;
-	PostReferenceRectLoc = PostReferenceTapsLoc = PostReferenceStepLoc = -1;
+	PostReferenceRectLoc = PostReferenceStepLoc = -1;
+	PostReferenceTaps = 0;
 	ReferenceWidth = ReferenceHeight = ReferenceCopies = 0;
 	ReferenceVersion = -1;
 	SampleReference			= 0;

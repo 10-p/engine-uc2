@@ -111,31 +111,42 @@ static const char* GPostDepthCopyFragmentShader =
 
 // pp-scale: the reference copy (docs/porting/analysis/pp-scale.md). One pixel of it is the average
 // of the k x k back-buffer pixels under it (k = back-buffer lines per reference line), read as
-// N x N bilinear samples spread evenly over them: uTaps = (N, 1/(N*N), 0, 0), uStep = the distance
-// between two samples in source texture coordinates (a reference pixel divided by N). N = ceil(k),
-// at most 8; the loops stop at N (the bound is uniform: GLSL ES 1.00 loops need constant limits).
+// N x N bilinear samples spread evenly over them: uStep = the distance between two samples in source
+// texture coordinates (a reference pixel divided by N). N = ceil(k), at most 8, is a constant of the
+// program (UC2_TAPS, put in front of this text; the program is built again when N changes): a loop
+// with a uniform bound and a break ran about 4 ms slower per frame at 3840x2160 on the owner's
+// NVIDIA card than the snapshot it replaces (the 25 reads of 5x5 could not be issued together).
 static const char* GPostReferenceFragmentShader =
 	"uniform sampler2D uSource;\n"
-	"uniform vec4 uTaps;\n"
 	"uniform vec4 uStep;\n"
 	"varying vec2 vTexCoord;\n"
 	"void main()\n"
 	"{\n"
-	"	vec2 Origin = vTexCoord - uStep.xy * ((uTaps.x - 1.0) * 0.5);\n"
+	"	vec2 Origin = vTexCoord - uStep.xy * (float(UC2_TAPS - 1) * 0.5);\n"
 	"	vec4 Sum = vec4( 0.0 );\n"
-	"	for( int j = 0; j < 8; j++ )\n"
-	"	{\n"
-	"		if( float(j) >= uTaps.x )\n"
-	"			break;\n"
-	"		for( int i = 0; i < 8; i++ )\n"
-	"		{\n"
-	"			if( float(i) >= uTaps.x )\n"
-	"				break;\n"
+	"	for( int j = 0; j < UC2_TAPS; j++ )\n"
+	"		for( int i = 0; i < UC2_TAPS; i++ )\n"
 	"			Sum += texture2D( uSource, Origin + uStep.xy * vec2( float(i), float(j) ) );\n"
-	"		}\n"
-	"	}\n"
-	"	gl_FragColor = Sum * uTaps.y;\n"
+	"	gl_FragColor = Sum * (1.0 / float(UC2_TAPS * UC2_TAPS));\n"
 	"}\n";
+
+static GLuint UC2GL_BuildPostProgram( UUC2GLRenderDevice* RenDev, const char* FragmentBody, const TCHAR* What, GLint& RectLoc );
+
+// The reference copy's program for N x N samples (0 if it does not build).
+static GLuint UC2GL_BuildReferenceProgram( UUC2GLRenderDevice* RenDev, INT N )
+{
+	if( RenDev->PostReferenceProgram && RenDev->PostReferenceTaps == N )
+		return RenDev->PostReferenceProgram;
+	if( RenDev->PostReferenceProgram )
+		RenDev->glDeleteProgram( RenDev->PostReferenceProgram );
+	ANSICHAR Body[2048];
+	appSprintf( Body, "#define UC2_TAPS %i\n%s", N, GPostReferenceFragmentShader );
+	RenDev->PostReferenceProgram = UC2GL_BuildPostProgram( RenDev, Body, TEXT("reference copy"), RenDev->PostReferenceRectLoc );
+	RenDev->PostReferenceTaps = RenDev->PostReferenceProgram ? N : 0;
+	if( RenDev->PostReferenceProgram )
+		RenDev->PostReferenceStepLoc = RenDev->glGetUniformLocation( RenDev->PostReferenceProgram, "uStep" );
+	return RenDev->PostReferenceProgram;
+}
 
 static GLuint UC2GL_BuildPostProgram( UUC2GLRenderDevice* RenDev, const char* FragmentBody, const TCHAR* What, GLint& RectLoc )
 {
@@ -198,12 +209,9 @@ UBOOL UUC2GLRenderDevice::InitPostProcess()
 	}
 	// pp-scale: without it the downsampling passes read the full-size snapshot (sparser, but the
 	// same positions): not a reason to switch post-processing off.
-	PostReferenceProgram = UC2GL_BuildPostProgram( this, GPostReferenceFragmentShader, TEXT("reference copy"), PostReferenceRectLoc );
-	if( PostReferenceProgram )
-	{
-		PostReferenceTapsLoc = glGetUniformLocation( PostReferenceProgram, "uTaps" );
-		PostReferenceStepLoc = glGetUniformLocation( PostReferenceProgram, "uStep" );
-	}
+	// (Built here for 2 x 2 samples to know it builds; UC2GL_UpdateReferenceCopy builds it again for the
+	// back buffer's N.)
+	UC2GL_BuildReferenceProgram( this, 2 );
 	debugf( NAME_Init, TEXT("UC2GLDrv: post-processing %s (UsePostProcess=%s%s)"),
 		(UsePostProcess && UsePixelShaders) ? TEXT("on: render targets, back-buffer and depth copies, the Xbox post-process paths of the engine run") : TEXT("off: as at M6"),
 		UsePostProcess ? TEXT("True") : TEXT("False"), UsePixelShaders ? TEXT("") : TEXT(", but pixel shaders are off") );
@@ -251,6 +259,7 @@ void UUC2GLRenderDevice::ExitPostProcess()
 		if( GammaRampTexture )			glDeleteTextures( 1, &GammaRampTexture );
 	}
 	PostCopyProgram = PostDepthEncodeProgram = PostDepthCopyProgram = PostReferenceProgram = 0;
+	PostReferenceTaps = 0;
 	SampleReference = 0;
 	GammaRampTexture	= 0;
 	GammaRampActive		= 0;
@@ -401,8 +410,12 @@ static void UC2GL_UpdateReferenceCopy( UUC2GLRenderDevice* RenDev )
 	static const FLOAT FlipRect[4] = { 1.f, -1.f, 0.f, 1.f };
 	INT N = Clamp( appCeil( (FLOAT)RenDev->MainHeight / H - 0.01f ), 1, 8 );
 	RenDev->ResolveMain( 1, 0 );
+	if( !UC2GL_BuildReferenceProgram( RenDev, N ) )
+	{
+		UC2GL_LOG_ONCE( TEXT("UC2GLDrv: the reference copy program for %ix%i samples does not build; the reference copy stays as it is"), N, N );
+		return;
+	}
 	RenDev->glUseProgram( RenDev->PostReferenceProgram );
-	RenDev->glUniform4f( RenDev->PostReferenceTapsLoc, (FLOAT)N, 1.f / (N * N), 0.f, 0.f );
 	RenDev->glUniform4f( RenDev->PostReferenceStepLoc, 1.f / (W * N), 1.f / (H * N), 0.f, 0.f );
 	// The samples fall between texels: bilinear for this pass (every other reader of the main
 	// colour samples texel centres; FXAA wants it bilinear anyway).

@@ -172,9 +172,9 @@ public:
 	// buffer brought down to that many lines by an area-averaging pass, so that the chains run
 	// texel for texel as on the Xbox. Made only when the back buffer is taller than the reference.
 	INT								PostProcessReferenceHeight;
-	GLuint							PostReferenceProgram;
+	GLuint							PostReferenceProgram;	// built for PostReferenceTaps x PostReferenceTaps samples
+	INT								PostReferenceTaps;
 	GLint							PostReferenceRectLoc,
-									PostReferenceTapsLoc,
 									PostReferenceStepLoc;
 	GLuint							ReferenceTexture,
 									ReferenceFramebuffer;

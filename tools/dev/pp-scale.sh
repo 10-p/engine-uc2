@@ -285,7 +285,8 @@ check_perf() {
       local suffix=""; [ $b = uc2-base.bin ] && suffix="-base"
       local log=$out/fx-pp-perf-$res$suffix-gpu.out
       local f; f=$(grep -a -o -- "-glexec at [0-9.]* s (frame [0-9]*)" "$log" | sed -E 's/.*frame ([0-9]+)\)/\1/' | tr '\n' ' ')
-      read -r a1 a2 a3 a4 a5 a6 a7 a8 <<<"$f"
+      # markers: 1 s pin, 32 s freeze, then 40/55 (480), 56 switch, 60/75 (0), 76 switch, 80/95 (480)
+      read -r p1 p2 a1 a2 a3 a4 a5 a6 a7 a8 <<<"$f"
       if [ -n "${a8:-}" ]; then
         # Three 15 s windows: reference 480, 0, 480 again (main's binary ignores PPREFERENCE: its three windows
         # show how much the frame rate drifts on its own).
