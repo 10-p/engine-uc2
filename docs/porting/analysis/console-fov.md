@@ -308,3 +308,22 @@ native drawing path - not done. Example: `get Engine.GameEngine CacheSizeMegs` -
     binary at the same time (`logs/d78/d2lock-main`, no AutoFOV): the box moved 24 px and the offset spread 23 px
     - the check is sensitive to the frame rate on a loaded machine (the lock turns the view in real time), more
     so on main than here. Boxed and unboxed land on the same pixels (native vs fit2: 0 px) with AutoFOV at 16:9.
+- Browser (`tools/dev/d78/web/uc2-d78.spec.js` through the frontend's harness; nothing in the frontend changed):
+  `corepack yarn build --target uc2 --engine-artifact <engine-uc2-d78>/build-wasm-perf/Source/SDLLaunch` rc 0 (serve-web
+  SDLLaunch.wasm md5 3ce8fda8...), PulseAudio null sink `uc2d78` loaded and unloaded around it,
+  `PULSE_SINK=uc2d78 bin/capped 6G 900 -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=14 -- --target uc2
+  --config <engine-uc2-d78>/tools/dev/d78/web/playwright.d78.config.js` (`logs/d78/web/run.txt`): **1 passed
+  (50.6s)**, exit 0, mem guard peak 11.2 GB, WebGL on ANGLE/Vulkan NVIDIA Quadro P620, `frame 600, 0 GL errors`;
+  steps: `Console: Engine.Console, ConsoleKey 192`; `[AutoFOV] mode=2`; the menu level at 1920x1080 `base=65
+  effective=80.690956` (= Hor+ of 65 at 16:9); the Backquote key opened the console over the main menu,
+  `AUTOFOV` typed + Enter -> `[AutoFOV] mode=2 (Adaptive)`; `get Engine.GameEngine CacheSizeMegs` -> `32.000000`;
+  Backquote + Escape left the main menu where it was (no OpenMenu/CloseMenu). Pictures in
+  `logs/d78/web/test-results/*/uc2-d78-{console,menu}-1920x1080.png`. serve-web now holds this branch's engine:
+  another engine's specs must reassemble it first.
+- Leftovers: none (no uc2.bin/Xvfb/ucc-bin with a cwd in run/d78*, no server on 8080, sink unloaded). No run hit
+  its memory ceiling (no "STOPPED AT THE ... MEMORY CEILING" in logs/d78; ceilings: games 2G, 3G for the runs
+  that go to 2560x1080, builds 6G, configure 4G, yarn build 4G, browser 6G with the guard at 14 GB machine-wide).
+- For the coordinator: the frontend's shared AutoFOV E2E (`packages/e2e/lib/autofov-tests.js`,
+  `registerAutoFovTests`) reads exactly these log lines and the `[ufront.AutoFOV]` section, so `uc2-wasm-boot.spec.js`
+  could register it (with `hudScale: false`: UC2 has the D-2 box instead of AutoFOVUI); not done here (the
+  frontend is not mine to change).
