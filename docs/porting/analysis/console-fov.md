@@ -225,3 +225,17 @@ This run still had the sniper section (its check FAILs: no rifle); the scenario 
 Engine tweak (0f77515): a key press the console did not take clears that key's mark, so a lost release cannot
 swallow a later one. Owner's sheets: `logs/d78/run/owner-{tp,fp,zoom,cin,lock}-{fov,fov-pp}.png` (rows: 4:3,
 16:9, 21:9, 16:9 with AUTOFOV 0), seen: right.
+
+## Step 6 (2026-10-07): the gate runs (in progress)
+
+- Builds of the final engine code (0f77515): native `bin/capped 6G 3600 -- cmake --build build-native -j6` rc 0
+  (`logs/d78/build-native-3.log`); windows `bin/capped 6G 5400/3600 -- cmake --build build-windows -j6` rc 0
+  twice (`build-windows.log`, `build-windows-2.log`: the second picked up 0f77515; `uc2.exe`, `ucc.exe`);
+  wasm-perf started (`build-wasm-perf.log`). `./ucc-bin verifyclasses` (run/d78-reg, the 868f41d build):
+  rc 0, "All native class layouts match" (`logs/d78/verifyclasses.txt`; no script-visible class changed).
+- Final pass: `tools/dev/d78.sh` into `logs/d78/run` (the earlier passes are in `logs/d78/run-pass2`).
+- D-2 suite as a regression: D-2's reference binaries are main 24c80dc (`uc2-main.bin`) and that plus the
+  measurement switch (`uc2.bin`), from before D-2's own change; main's binary now includes D-2, so it cannot be
+  the "before" of the suite. They are copied (read only) from `run/d2-ref` into `run/d78-d2ref`; the suite runs
+  with `D2_TREE=d78-d2 D2_REF_TREE=d78-d2ref D2_OUT=<WorkUC2>/logs/d78/d2run` (D2_OUT is new in
+  d2-ui-scale.sh, b826a22).
