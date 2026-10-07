@@ -90,3 +90,72 @@ ones (world, third and first person, zoomed); 640x480 and 1024x768 against main'
 the lock-on reticle on the target at 16:9; the console scenario.
 
 Next: build main's binary as the reference (in progress), then the native code.
+
+## Step 1 (2026-10-07): the native code, first runs
+
+Reference: this worktree built unchanged (= main 421cb95; deps copied from main's `build-native/_deps` into
+`build-native/_src`, configured with `FETCHCONTENT_FULLY_DISCONNECTED=ON` and `FETCHCONTENT_SOURCE_DIR_*`),
+`bin/capped 6G 3600 -- cmake --build build-native -j6` rc 0; copied to `run/d78-bin/uc2-main-421cb95.bin`,
+run tree `run/d78-ref` (md5 b7ef9067...). Changed builds: run tree `run/d78`.
+
+Code (commits 6f9a9fa, 868f41d; every hunk says D-7 or D-8):
+- `UnRender.h/.cpp`: `[ufront.AutoFOV]` AutoFOV (0/1/2, default 2 Adaptive), ReferenceAspect (4/3),
+  WeaponScale (1); `ufrontEffectiveFov`, `ufrontBaseFov` (inverse), `ufrontWeaponFov`, `ufrontAutoFovSize`
+  (split viewports: SizeX/ScaleX x SizeY/ScaleY), `GAutoFovScopeActor/FrameBase/FrameEffective`, console
+  `AUTOFOV [Off|HorPlus|Adaptive|0|1|2]` (session). Log lines in the template's format:
+  `[AutoFOV] mode=...`, `[AutoFOV] viewport=WxH aspect=A base=B effective=E` (per change of size, base by
+  more than 0.5 deg, or mode), plus `[AutoFOV] weapon viewport=WxH base=B drawFov=D` (not the UT99-only
+  `placeFov` format, so the frontend's shared viewmodel test is not triggered). Within 1e-4 of the reference
+  aspect the FOV is returned untouched (the ini's 1.333333 is not 4/3 exactly; atan(tan(x)) is not x).
+  Letterbox (`FPlayerSceneNode::Render`): when widened, `ScaleFOVY` is set so the band shows the 4:3 band's
+  vertical extent (Epic multiplies the half-angle; Hor+ is tan space); the band height keeps 1/CinematicsRatio.
+- `UnGame.cpp`: `FScopedAutoFov` in `UGameEngine::Draw` after PlayerCalcView; a FOV written during the frame
+  (teleport effect) is kept as `ufrontBaseFov(value)` (snapped to the saved/desired FOV within 0.001);
+  `AUTOFOV` in `UGameEngine::Exec`; the console's `ConsoleKey` 9 (Tab) moved to 192 at start-up, logged
+  `Console: Engine.Console, ConsoleKey 192`.
+- `UnCanvas.cpp`: `execDrawActor`'s omitted FOV is -1 (was the actor's FovAngle); `DrawActor` resolves it to
+  the frame's base FOV (inside the frame) and corrects every canvas-drawn actor's FOV with
+  `ufrontWeaponFov(F, ufrontEffectiveFov(F))` (template's viewmodel pass; no equality heuristic: it could
+  misfire when a zoom passes the weapon's DisplayFOV).
+- `UnController.cpp`: `WorldToScreen`/`ScreenToWorld` take `AutoFovViewFov` (the frame's value inside the
+  frame, the corrected base outside).
+- `UnInteractionMaster.cpp`: the release (and the control character) of a key whose press the console took
+  while typing stops at the console (see step 2).
+- `SDL2InputTest.cpp` probe: `console= typed="" scores= fov= desiredfov= view=WxH` appended (m10-inject.py
+  parses them, optional). `Engine/Config/Default.ini`: `ConsoleKey=192`, `[ufront.AutoFOV]`; web regenerated
+  (`tools/dev/sync-web-ini.py`, `--check` 0).
+- `m10-controls.sh`: `M10_XVFB=<WxH>` (Xvfb screen big enough for a scenario that resizes with TEMPSETRES).
+
+First AutoFOV run (`tools/dev/d78/fov.scen`, `M10_RES=1440x1080 M10_XVFB=2560x1080 M10_MEM=3G`, `-nopostprocess`,
+`logs/d78/t1`): 5/5 checks PASS (sizes, base FovAngle untouched outside the frame = 90 at every size, zoom 40).
+Log: `effective=106.260216` at 1920x1080 (template: 106.26), `121.284508` at 2560x1080, weapon 60 -> 75.178 /
+91.493; zoom 40 -> 51.774 / 65.810; 4:3 -> unchanged. World frozen with `set LevelInfo TimeDilation 0.001`
+(slomo stops at 0.1). Pictures compared with the centre 1440 columns of the wider ones: third person 99.28% of
+pixels within 2 levels at 16:9, 97.94% at 21:9 (AUTOFOV 0 at 16:9: 8.55%); first person 89%: the differences
+are the weapon's outline (and two animated pickups); weapon on black: right hand bbox (948,702) / (948,701) /
+(946,698), area +0.5% / +1.8%, AUTOFOV 0 (1023,753) area -7%: same size and place within a few pixels, the
+drift to be separated from the idle animation (the shots were in aspect order = time order). Lock-on: the
+reticle on the target at all three sizes (seen); the camera still turned under the lock (real-time interpolation),
+so whole-picture comparison does not apply there: measure reticle vs figure instead (D-2's `lock_marker`).
+
+## Step 2 (2026-10-07): the console, measured; Escape's release
+
+- Main's binary (`run/d78-ref`, console-game.scen as "ref-console-game"): Tab opened the console's typing line,
+  typing and Enter worked (`32.000000` replied in the log); its probe has no console fields, so the other checks
+  cannot be read there. So the console was never locked: it was on Tab, where PC players do not look, and it
+  hid the scoreboard and the menus' Start.
+- Ours, first run: Escape on a non-empty line closed the console at once: Epic's Console.uc clears the line on
+  the press and closes on the release (the Escape branch does not look at the action). So "Escape closes" is
+  Epic's behaviour; the scenario now expects that. Escape on an EMPTY line closed the console on the press,
+  and the release went on to the menu page under it (`UGUIPage::NativeKeyEvent` closes a page on the release
+  of Escape): fixed natively in the interaction master (868f41d), no script change.
+- `tools/dev/d78/console-game.scen` (DM-Deadbolt, 640x480): 12/12 PASS (`logs/d78/t3`): ConsoleKey 192 logged;
+  Tab toggles the scoreboard (scores 1, console 0; again: 0); `grave` opens the console; typing
+  `get Engine.GameEngine CacheSizeMegs` fills the line and the pawn does not move; Enter -> `32.000000` in the
+  log, the line closed; Escape with text closes (no pause menu); Escape on an empty line closes; `AUTOFOV` ->
+  `[AutoFOV] mode=2 (Adaptive)`; Up brings back the last line. `console-menu.scen`: 8/8 PASS: Tab in the main
+  menu does not open the console; grave does; typing `was AUTOFOV` (W/A/S are D-pad in the menus' key table)
+  leaves the menu's focus where it was; Escape closes and the page and focus stay; Enter runs `AUTOFOV`; on a
+  sub-page, grave + Escape leaves the sub-page open.
+
+Next: README rows, the measurement script (d78-measure.py, d78.sh), the 640x480/1024x768 identity against main.
