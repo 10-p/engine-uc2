@@ -155,3 +155,13 @@ crash-notifier processes; both are the owner's to clear.
   their own package; our static build registers them as `Engine.HTTPDownload`/`Engine.Prefab`. Default.ini's
   `DownloadManagers=IpDrv.HTTPDownload` therefore names a class that does not exist here (package download has
   never been exercised). Found by the header-export comparison.
+
+## O-9 NVIDIA fixed-function gap (2026-10-07, branch `o9-nvidia`, details in `analysis/o9-nvidia.md`)
+
+- **Not accessible**: the extension coverage pages of `opengl.gpuinfo.org` (how many drivers have
+  `GL_ATI_texture_env_combine3` / `GL_NV_texture_env_combine4`) are filled by script; WebFetch gets only the page
+  frame. The O-9 decision (GLSL for the texture stages) does not depend on the numbers, but they would have been
+  the evidence for "combine3 or combine4 everywhere". If the owner wants them, a browser can read the pages.
+- **Seen, not O-9's (both binaries, NVIDIA and Mesa)**: `POSTPROCESS 0` at run time leaves the DM-Azure cobra
+  waterfall drawn as an opaque violet stream (`logs/o9/fx-azure-*-nopp.png`): the distortion material's
+  fallback when post-processing is switched off while running. Starting with `-nopostprocess` was not checked.
