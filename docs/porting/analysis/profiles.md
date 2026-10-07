@@ -152,3 +152,19 @@ leaves a player without one. Same on the Xbox: with exactly one profile, `ForceP
 - Test: `tools/dev/d4-names.sh` (n1 no profile through the character page into a match, n2 profile created, n3 direct
   map start with `?Name=`, n4 profile deleted), on tree d3s = `UC2_SCRIPTS=<WorkUC2>/run/d3-make/System
   tools/dev/mkrun-uc2.sh build-native d3s`.
+
+## Step 3 (2026-10-07): D-3 and D-4 native green
+
+- `tools/dev/d3-profiles.sh` run 5 (`logs/d3/d3-profiles-run5.txt`, tree d3 = shipped packages, binary with every
+  engine change): **d3-profiles: ALL PASS** (r1 19 checks, r2m 1+3, r2 9+8, r3 5+2, r4 2+3, r5 1+2 file checks).
+  r2m now `PlayerName = Saver` through the login URL (MatchViewportsToActors), with `?Name=Player` in the URL.
+- `tools/dev/d4-names.sh` run 1 (`logs/d3/d4-names-run1.txt`, tree d3s = rebuilt packages): **d4-names: ALL PASS**
+  (n1 11+2: the menu, the character page after two character changes, the match URL `...?Name=FrontName` and the
+  match's PlayerReplicationInfo are all FrontName, User.ini keeps FrontName; n2 7+2: the new profile names the
+  player at once, User.ini [DefaultPlayer] Name stays FrontName, LastProfile=Saver; n3 3+2: a direct start of
+  `DM-Deadbolt?Name=FrontName` with the profile: PlayerReplicationInfo `Saver`; n4 4+2: deleting the profile gives
+  the player FrontName back, LastProfile empty).
+- Frontend e2e spec written (ufrontend b9fb10e, `packages/e2e/uc2-wasm-saves.spec.js`, opt-in), not yet run.
+
+Next: the same D-4 script on the shipped packages (evidence of Epic's behaviour), D-5 native scenarios, then the
+browser runs (wasm-perf rebuilt with every engine change).
