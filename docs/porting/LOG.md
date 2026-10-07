@@ -361,3 +361,15 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   packages, net 16/0 PASS; controls and movies had one timing-sensitive failure each, fixed in the tests
   (half-stick check walks back over known ground; the fire click retries during spawn-in; the cinematic-skip
   check proves rendering after the skip with a timed picture): mouse+pad 3/3 runs PASS, cinematic-skip 3/3.
+- 2026-10-07 — **D-2 green (UI scaling), natively, no script changed.** Merged `d2-ui-scale` (556a69f):
+  `UCanvas::Update()` → `ApplyUIBox()` hands menus and HUD the 640x480 design space and draws it into the
+  largest centred 4:3 box (`[SDL2Drv.SDL2Client] UIScaleMode=Fit43` default, `Native640` = before, console
+  `UISCALE`); full-screen layers stretch to the window; WorldToScreen/ScreenToWorld and the GUI mouse work in
+  design pixels; sharper text from taller sizes of the same fonts (`UISharpText`). Agent's
+  `tools/dev/d2-ui-scale.sh`: 81 PASS (8 sizes incl. 5:4, 16:10 and portrait: UI box exact, 640x480
+  pixel-identical to main, mouse 18/18 at 640x480 and 1920x1080, a browser run at 1920x1080). Known: the
+  crosshair art sits off its anchor (-4 px at 4K, -1 px at 640x480 too); the world looks zoomed vertically at
+  16:9 until D-8 (AutoFOV). Coordinator's run on main (`logs/coord/a4/summary.txt`): native, windows, wasm-perf
+  build; verifyclasses; controls 5/5; renderer self-test 11/11 and effect pairs; m9 logos+cinematic 12/0;
+  browser `uc2-wasm-boot.spec.js` 3/3 (play test now maps 640x480 positions into the box; ufrontend commit)
+  and `uc2-wasm-audio.spec.js` 3/3. Republished to the owner's preview.
