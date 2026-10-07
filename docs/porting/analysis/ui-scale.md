@@ -114,3 +114,43 @@ with `M10_RES=1920x1080` for the big one, the same on `d2-ref` for "before"):
   box's `Unblocking animation` line before pressing.
 
 Next: the d2 verification script (all resolutions, menu + arena + DM-Deadbolt, level-off shots, measurements).
+
+## Step 2 (2026-10-07): menus clipped to the box, sharper text, the verification script
+
+- **The menu level is 3D.** The teal background of every menu page is the menu map rendered behind the GUI
+  (with the level off it is black); the page's own 2D layer is `T_UI_2.XX_Background`, dark and translucent.
+  So the world behind the menus fills the window whatever the setting; `UIMenuBackground` decides only whether
+  that dark layer covers the window (Fill: aspect kept, cropped top/bottom on wide windows) or the box (Box).
+  Both are taken in every run (`menu-<page>.png` Fill, `menu-<page>-box.png` Box). Fill is the default: with
+  Box the box's edge shows as a brightness step over the moving background.
+- **Clipping.** At 4K the arena page's "ARENA" header bar ran past x=640 into the pillar area (on the Xbox
+  the 640x480 screen cut it). What the GUI's pages draw is now clipped to the design area in
+  `UCanvas::DrawTile` (UVs adjusted, flips handled by normalising negative sizes); the controller switches the
+  context back to game before the cursor and the designer frames, so the cursor still goes over the window.
+  The HUD is not clipped (its markers on actors may be outside the box).
+- **Sharper text** (`UISharpText`, default True): text keeps the 640x480 font's layout and takes each whole
+  glyph from the smallest bigger size of the same family in the font's package that gives >= 1 texel per
+  screen pixel (`T_Fonts2.SuiGeneris_<N>pt`: 12 18 20 24 28 40), or the biggest. Families are found from the
+  package's export table once per font (logged: `UIScale: sharper text for ...`), the fonts kept in the root
+  set. Clipped glyphs and the underline keep the small font. Not built/tested yet at this entry.
+- **Reference binary for the 640x480 identity.** The menu level is a camera flight on wall-clock time, so two
+  runs of main's binary agree on only 41-55% of the pixels of a menu picture (measured: `ref-menu` vs
+  `ref2-menu`, 640x480). The UI has to be compared on black, which main's binary cannot do. So the reference
+  is main's source plus only the measurement switch: `git archive 24c80dc` into `run/d2-refsrc`,
+  `logs/d2/refplus.diff` applied (the TOGGLERENDERLEVEL command and its black clear, nothing else), built with
+  `cmake --preset native` (FetchContent sources pointed at this worktree's `build-native/_deps`, disconnected)
+  and `bin/capped 6G 3600 -- cmake --build build-native -j6 --target SDLLaunch` (rc 0). It is `uc2.bin` of
+  run tree `d2-ref`; main's own binary is `uc2-main.bin` there (pinned pictures).
+- **Verification**: `tools/dev/d2-ui-scale.sh` (runs) + `tools/dev/d2-measure.py` (checks). Per resolution
+  (640x480 1280x720 1920x1080 2560x1440 3840x2160 1280x1024 1920x1200 1024x1280): `tools/dev/d2/menu.scen`
+  (main menu and arena page: Fill/Box, level on/off) and `tools/dev/d2/deadbolt.scen` (pinned DM-Deadbolt,
+  HUD level on/off). Extras: the reference at 640x480 twice (menus, HUD), main's binary pinned with and
+  without post-processing, before pictures at 1920x1080, `M10_INI="UIScaleMode=Native640"` at 1920x1080, the
+  M10 mouse scenario at 640x480 and 1920x1080. Checks (PIL only, no numpy here): UI bounding box on black vs
+  the computed box (Box mode); the box scaled back to 640x480 vs the 640x480 picture (mean difference and
+  the best alignment within +-2 px); the title and a menu item located within +-6 px; Fill/Box outside the
+  box; HUD bounding box = the 640x480 one scaled; reticle centre vs the screen centre; identities at 640x480;
+  the switch; mouse; logs. m10-controls.sh gained `M10_INI`.
+- First measurements, 640x480 HUD on black: bounding box (38,32)-(597,418); the reticle (Nakhti race
+  weapon's scripted crosshair, `DrawX=320 DrawY=240`) centre (319.5, 240.0): half a design pixel left of the
+  centre, which is 2.25 px at 4K (s=4.5) if the art scales as drawn.
