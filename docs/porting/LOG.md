@@ -373,3 +373,16 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   build; verifyclasses; controls 5/5; renderer self-test 11/11 and effect pairs; m9 logos+cinematic 12/0;
   browser `uc2-wasm-boot.spec.js` 3/3 (play test now maps 640x480 positions into the box; ufrontend commit)
   and `uc2-wasm-audio.spec.js` 3/3. Republished to the owner's preview.
+- 2026-10-07 — **D-7 and D-8 green (console, AutoFOV), natively, no script changed.** Merged
+  `d78-console-fov` (00634fc). D-7: the console was never locked; the shipped `ConsoleKey=9` (Tab) shadowed
+  the scoreboard and the menus' Tab=Start. Now the key left of 1 (`ConsoleKey=192`, a saved Tab is migrated
+  at start-up); Enter runs, Escape closes, Up/Down history; replies go to the log (Epic's console has no output
+  area); fixed on the way: Escape on an empty console line also closed the menu page underneath. D-8: Hor+
+  AutoFOV ported from engine-ut2004 (`[ufront.AutoFOV] AutoFOV=2`, console `AUTOFOV`): the designed vertical
+  FOV kept at any aspect (106.26 deg at 16:9, 121.28 at 21:9), weapon, third person, zoom/sniper, letterbox and
+  WorldToScreen markers included; 4:3 unchanged. Agent: `tools/dev/d78.sh` 16/16, browser spec PASS.
+  Coordinator's run on main (`logs/coord/a5/summary.txt`): native/windows/wasm-perf build; verifyclasses;
+  controls 5/5 (keyboard failed once under load, then 2/2 PASS); renderer self-test 11/11; `d78.sh` 14/16: the
+  two failures are measurement noise, not AutoFOV (the AutoFOV-off CONTROL's vertical scale at 21:9 1.706 for
+  1.778 +-0.06; the third-person 4:3-vs-centre-crop match 96.6% for >=98.5%, 99.0% in the agent's run; every
+  AutoFOV value measured exactly 1.000).
