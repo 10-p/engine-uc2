@@ -50,6 +50,7 @@ Revision history:
 #endif
 #if UC2_WITH_EDITOR	// M14: the script compiler (ucc-bin make), the header exporter and the editor commandlets
 void UC2InitializeEditorRegistrants( INT& Lookup );	// Editor/Src/UC2EditorRegistrants.cpp
+UBOOL UC2VerifyEditorClasses();						// Editor/Src/UC2EditorRegistrants.cpp
 #endif
 #endif
 
@@ -310,6 +311,12 @@ static UBOOL VerifyNativeClasses()
 	#undef AUTOGENERATE_NAME
 	#undef NAMES_ONLY
 	#undef VERIFY_CLASS_SIZES
+#if UC2_WITH_EDITOR	// M14: the Editor package's script/C++ layouts too
+	debugf( TEXT("VERIFY: loading package Editor") );
+	UObject::LoadPackage( NULL, TEXT("Editor"), LOAD_NoFail );
+	if( !UC2VerifyEditorClasses() )
+		Mismatch = true;
+#endif
 	FString DumpFile;
 	Parse( appCmdLine(), TEXT("DUMP="), DumpFile );
 #if PLATFORM_64BITS

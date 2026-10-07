@@ -105,7 +105,8 @@ make_scripts() {
   local rc=$?
   set -e
   cp -f "$run/System/ucc.log" "$log" 2>/dev/null || true
-  echo "ucc-bin make $args $extra: exit $rc (output $log.out, log $log)"
+  # Epic's ucc exits 1 when there was any warning (UCC.cpp "scion jg"); the verdict is the last log line.
+  echo "ucc-bin make $args $extra: exit $rc, $(grep -a -o '\(Success\|Failure\) - [0-9]* error(s), [0-9]* warning(s)' "$log" | tail -1) (output $log.out, log $log)"
   for p in "${packages[@]}"; do
     if [ -f "$run/System/$p.u" ]; then echo "  built $p.u $(stat -c %s "$run/System/$p.u") bytes"; else echo "  MISSING $p.u"; fi
   done

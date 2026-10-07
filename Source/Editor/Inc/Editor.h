@@ -279,7 +279,7 @@ class EDITOR_API UEditorEngine : public UEngine
 	FLOAT FovAngle;
 	BITFIELD GodMode:1;
 	BITFIELD AutoSave:1;
-	BYTE AutosaveTimeMinutes;
+	BYTE AutosaveTimeMinutes GCC_PACK(4);	// uc2 port (M14): after a bitfield run MSVC and the script start a new DWORD; GCC would use the bitfield's
 	FStringNoInit GameCommandLine;
 	TArray<FString> EditPackages;
 	BITFIELD	AlwaysShowTerrain:1;			// Always show the terrain in the overhead 2D view?

@@ -190,4 +190,66 @@ EDITOR_API void UC2InitializeEditorRegistrants( INT& Lookup )
 	UC2StaticClassUMakeCommandlet();
 }
 
+/*-----------------------------------------------------------------------------
+	`ucc-bin verifyclasses` for Editor (M14): the script and C++ layouts of the Editor classes that have script.
+	The generated EditorClasses.h lists sizes only; UEditorEngine is hand-written (Editor.h) and its C++ names
+	differ from the script's in places, so its members are listed here by both names. The caller loads Editor.
+-----------------------------------------------------------------------------*/
+
+#define UC2_VERIFY_MEMBER(CppClass,ScriptName,CppMember) \
+	{ \
+		UProperty* P = FindField<UProperty>( CppClass::StaticClass(), TEXT(#ScriptName) ); \
+		if( !P ) \
+			{ debugf( TEXT("VERIFY: Class %s has no script member %s"), CppClass::StaticClass()->GetName(), TEXT(#ScriptName) ); Mismatch = true; } \
+		else if( P->Offset != (INT)STRUCT_OFFSET(CppClass,CppMember) ) \
+			{ debugf( TEXT("VERIFY: Class %s Member %s problem: Script=%i C++=%i"), CppClass::StaticClass()->GetName(), TEXT(#ScriptName), P->Offset, (INT)STRUCT_OFFSET(CppClass,CppMember) ); Mismatch = true; } \
+	}
+
+EDITOR_API UBOOL UC2VerifyEditorClasses()
+{
+	guard(UC2VerifyEditorClasses);
+	UBOOL Mismatch = false;
+	#define VERIFY_CLASS_SIZES
+	#define NAMES_ONLY
+	#define AUTOGENERATE_NAME(name)
+	#define AUTOGENERATE_FUNCTION(cls,idx,name)
+	#include "EditorClasses.h"
+	#undef AUTOGENERATE_FUNCTION
+	#undef AUTOGENERATE_NAME
+	#undef NAMES_ONLY
+	#undef VERIFY_CLASS_SIZES
+	UC2_VERIFY_MEMBER(UEditorEngine,Level,Level);
+	UC2_VERIFY_MEMBER(UEditorEngine,TempModel,TempModel);
+	UC2_VERIFY_MEMBER(UEditorEngine,CurrentTexture,CurrentMaterial);
+	UC2_VERIFY_MEMBER(UEditorEngine,CurrentStaticMesh,CurrentStaticMesh);
+	UC2_VERIFY_MEMBER(UEditorEngine,CurrentMesh,CurrentMesh);
+	UC2_VERIFY_MEMBER(UEditorEngine,CurrentClass,CurrentClass);
+	UC2_VERIFY_MEMBER(UEditorEngine,Trans,Trans);
+	UC2_VERIFY_MEMBER(UEditorEngine,Results,Results);
+	UC2_VERIFY_MEMBER(UEditorEngine,Pad,ActorProperties);
+	UC2_VERIFY_MEMBER(UEditorEngine,Bad,Bad);
+	UC2_VERIFY_MEMBER(UEditorEngine,MaterialBackdrop,MaterialBackdrop);
+	UC2_VERIFY_MEMBER(UEditorEngine,TexPropCube,TexPropCube);
+	UC2_VERIFY_MEMBER(UEditorEngine,TexPropSphere,TexPropSphere);
+	UC2_VERIFY_MEMBER(UEditorEngine,AutoSaveIndex,AutoSaveIndex);
+	UC2_VERIFY_MEMBER(UEditorEngine,AutoSaveCount,AutoSaveCount);
+	UC2_VERIFY_MEMBER(UEditorEngine,Mode,Mode);
+	UC2_VERIFY_MEMBER(UEditorEngine,TerrainEditBrush,TerrainEditBrush);
+	UC2_VERIFY_MEMBER(UEditorEngine,ClickFlags,ClickFlags);
+	UC2_VERIFY_MEMBER(UEditorEngine,MovementSpeed,MovementSpeed);
+	UC2_VERIFY_MEMBER(UEditorEngine,PackageContext,ParentContext);
+	UC2_VERIFY_MEMBER(UEditorEngine,AddLocation,ClickLocation);
+	UC2_VERIFY_MEMBER(UEditorEngine,AddPlane,ClickPlane);
+	UC2_VERIFY_MEMBER(UEditorEngine,Tools,Tools);
+	UC2_VERIFY_MEMBER(UEditorEngine,BrowseClass,BrowseClass);
+	UC2_VERIFY_MEMBER(UEditorEngine,ConstraintsVtbl,Constraints);
+	UC2_VERIFY_MEMBER(UEditorEngine,FovAngleDegrees,FovAngle);
+	UC2_VERIFY_MEMBER(UEditorEngine,AutosaveTimeMinutes,AutosaveTimeMinutes);
+	UC2_VERIFY_MEMBER(UEditorEngine,GameCommandLine,GameCommandLine);
+	UC2_VERIFY_MEMBER(UEditorEngine,EditPackages,EditPackages);
+	debugf( TEXT("VERIFY: Editor %s"), Mismatch ? TEXT("C++ / script class layout MISMATCH") : TEXT("class layouts match") );
+	return !Mismatch;
+	unguard;
+}
+
 #endif // __STATIC_LINK
