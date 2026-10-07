@@ -344,3 +344,32 @@ guard spawns `yarn`, the workspace's shim in `bin/`; my first try without it fai
   proves the rebuilt package was loaded. Mem-guard peak 12.0 GB machine-wide (other agents included).
 - Frontend gates: `yarn lint` rc 0, `yarn test` 28/28; committed in ufrontend 51cab98 (local), with the uc2 target
   README's "Mouse look" section. serve-web is left assembled with this branch's engine and `run/d6-webassets`.
+
+## What the owner will feel, and what is labelled how
+
+With the mouse (rebuilt UCGameplay.u + this branch's DefUser.ini/engine):
+- one count of mouse motion turns 0.055 deg (0.022 x 2.5; was 0.29 natively, 1.23 in the browser), the same at any
+  speed (no cap: 200 counts in one frame turn 10x what 20 do), the same up/down as sideways, a circle stays a
+  circle; turning stops the moment the mouse stops, and the third-person camera no longer slides behind the view
+  after a turn (it sits where the lazy camera was heading at once). No aim assist pulls the mouse; walking no
+  longer re-centres the pitch under the mouse (the profile's CENTERVIEW now only acts for the pad).
+- lock-on: Lock (middle mouse or L) holds the target; mouse motion away from it is not fought while the mouse moves;
+  moving the mouse about 25 deg past the lock's 38.5-deg clamp breaks it; Lock + A/D switches target.
+- keyboard: Space while moving dodges (and wall-dodges in the air) as A does on the pad (Backspace = plain jump);
+  the wheel cycles weapons; arrows/PageUp/PageDown turn/look at about 88 deg/s.
+- settings: `User.ini [UCGameplay.UCPlayerInput] MouseLookSensitivity` / `bInvertMouseLook`, or the console
+  `MouseLookSens 1.5` / `MouseLookInvert True` for the session. The menu's Controller page is the pad's.
+With the pad: the Xbox's response (squared curve, hold-acceleration to 2.5x after 0.5 s, dead zone 0.3, friction,
+adhesion, auto-centre, lock break by a full push), as the shipped scripts do (within 0.5%); M10's linear pad is gone.
+The left stick walks with Epic's own binding (also after a profile swaps the sticks).
+
+Labels: measured by the script (d6-mouse, natively, null renderer at 60/30 fps): everything in steps 3 and 6.
+Measured in the browser: linear per pixel at two speeds and two distances, both axes, no drift (pointer lock NOT
+engaged in headless Chromium: the motion arrived without it). Felt-only (cannot be judged here): whether 0.055
+deg/count suits the owner's mouse and desktop (on Linux the browser applies the desktop's pointer acceleration under
+pointer lock: rawPointerLock.ts), how the rigid camera feels on stairs and dodges (no movement smoothing under the
+mouse now), and the pad on a real controller. Not done: an in-game slider for the mouse (D-9's menu), keeping the
+camera's movement smoothing for the mouse (possible as a lag on the pivot only), saving the console's mouse
+settings (UC2's script cannot write config; an engine command could), the pad's frame-rate-dependent slow turns
+(Epic's whole rotation units per tick lose up to one unit a frame: at 144 fps a 0.35 deflection turns ~40% slower
+than at 30; carrying the fraction would fix it but changes Epic's pad, so it is an owner decision).
