@@ -272,21 +272,23 @@ check_aspect() {
 # switch). Reported, not judged (the machine is shared).
 check_perf() {
   local res scen=$(mktemp)
-  # fx-owner.sh stops the game when the scenario ends: keep it running past the last marker (75 s after the
+  # fx-owner.sh stops the game when the scenario ends: keep it running past the last marker (95 s after the
   # first frame; the common start takes about 35 s).
-  echo 'sleep 75' > "$scen"
+  echo 'sleep 95' > "$scen"
   for res in 1920x1080 3840x2160; do
     local X=${res%x*} Y=${res#*x} b
     for b in uc2.bin uc2-base.bin; do
       UC2_GPU=1 UC2_BIN=$b FX_SCENARIO=$scen FX_MAP=DM-Deadbolt FX_NAME=pp-perf-$res \
-        FX_ARGS="-glnoaa -ini:System:[SDL2Drv.SDL2Client]:WindowedViewportX=$X -ini:System:[SDL2Drv.SDL2Client]:WindowedViewportY=$Y -glexec=40:GLINFO@55:GLINFO@56:PPREFERENCE+0@60:GLINFO@75:GLINFO" \
+        FX_ARGS="-glnoaa -ini:System:[SDL2Drv.SDL2Client]:WindowedViewportX=$X -ini:System:[SDL2Drv.SDL2Client]:WindowedViewportY=$Y -glexec=40:GLINFO@55:GLINFO@56:PPREFERENCE+0@60:GLINFO@75:GLINFO@76:PPREFERENCE+480@80:GLINFO@95:GLINFO" \
         "$repo/tools/dev/fx-owner.sh" "$tree" custom > /dev/null 2>&1
       local suffix=""; [ $b = uc2-base.bin ] && suffix="-base"
       local log=$out/fx-pp-perf-$res$suffix-gpu.out
       local f; f=$(grep -a -o -- "-glexec at [0-9.]* s (frame [0-9]*)" "$log" | sed -E 's/.*frame ([0-9]+)\)/\1/' | tr '\n' ' ')
-      read -r a1 a2 a3 a4 a5 <<<"$f"
-      if [ -n "${a5:-}" ]; then
-        info perf-$res$suffix "frames per second, reference 480: $(awk -v a=$a1 -v b=$a2 'BEGIN{printf "%.1f",(b-a)/15}'), reference 0: $(awk -v a=$a4 -v b=$a5 'BEGIN{printf "%.1f",(b-a)/15}') ($(grep -a -o 'UC2GLDrv: main framebuffer [0-9x]*' "$log" | head -1); $(grep -a -o 'NVIDIA[^/;]*' "$log" | head -1))"
+      read -r a1 a2 a3 a4 a5 a6 a7 a8 <<<"$f"
+      if [ -n "${a8:-}" ]; then
+        # Three 15 s windows: reference 480, 0, 480 again (main's binary ignores PPREFERENCE: its three windows
+        # show how much the frame rate drifts on its own).
+        info perf-$res$suffix "frames per second in three 15 s windows, reference 480 / 0 / 480: $(awk -v a=$a1 -v b=$a2 'BEGIN{printf "%.1f",(b-a)/15}') / $(awk -v a=$a4 -v b=$a5 'BEGIN{printf "%.1f",(b-a)/15}') / $(awk -v a=$a7 -v b=$a8 'BEGIN{printf "%.1f",(b-a)/15}') ($(grep -a -o 'UC2GLDrv: main framebuffer [0-9x]*' "$log" | head -1); $(grep -a -o 'NVIDIA[^/;]*' "$log" | head -1))"
       else
         info perf-$res$suffix "no frame markers (see $log)"
       fi
