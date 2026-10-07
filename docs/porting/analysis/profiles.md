@@ -252,3 +252,35 @@ the next wasm build):
    release (or any other press); its character is dropped (logged `Dropped 'x': its key opened ...`) if it arrives at a
    keyboard page. File-static: no class layout changes.
 Native build `logs/d3/build-native-5.log` (0 errors). Run 2 of d5-text.sh started (`logs/d3/d5-text-run2.txt`).
+
+## The switch to rebuilt packages: what this work needs, and a proposal (2026-10-07)
+
+What needs a rebuilt package: ONLY the D-4 part "without a profile the player keeps the launcher's name" (GUI.u,
+`GUIController.SetProfilePlayerName`). Everything else in D-3/D-4/D-5 is engine C++ and reaches the web with the next
+wasm build: starting in the last profile, remembering it, the profile naming the player in a directly started map,
+[DefaultPlayer] Name not overwritten by a profile, deleting a profile on Linux, the two keyboard fixes.
+
+What the rebuilt GUI.u changes (`tools/dev/script-build.sh --tree d3-make`, `script-diff.py` per function against
+the shipped packages and against M14's list): one function, `GUIController.SetProfilePlayerName` (684 -> 778 bytes);
+the properties `bUnlockCharacters`/`bShowAllMuts` carry the shipped `config` flag again (M14's two GUI findings
+are gone); every package problems 0; make 0 errors, 85 warnings (as M14).
+
+Proposal, smallest first:
+1. **Overlay GUI.u only** (recommended now). `tools/dev/mkassets-uc2.sh` (or a small sibling) takes
+   `UC2_SCRIPTS=<script-build tree>/System` and a package list (`UC2_SCRIPT_PACKAGES="GUI"`), moves the shipped
+   `System/GUI.u` to `assets/uc2-shipped/System/GUI.u` (kept, for the M14 comparison and as the fallback) and copies
+   the rebuilt one in. Why it is enough and safe:
+   - GUI is not a server package (`Server Package:` lines: GamePlay, UnrealGame, UCAnnouncements, UCGameplay,
+     UCEffects, UCCharacters, UCInventory, UCMutators), so a peer with the shipped GUI.u and one with the rebuilt
+     one still connect (the menus are client-side);
+   - `System/Core.u` is untouched, so the frontend's `assetMarkers.fingerprint` (sha256 of Core.u) still holds;
+   - the load-time patcher skips the rebuilt GUI.u (its two GUI patches are in the source: M14) and still patches
+     every other shipped package;
+   - the frontend manifest changes in one entry: generated with the glue's own tool for a tree that differs only in
+     GUI.u (`<WorkUC2>/run/d3-webassets`, hard links + the rebuilt GUI.u), only `system/gui.u` differs from the
+     committed `targets/uc2/file-manifest.json`; regenerate it and `dependency-manifest.json`
+     (`targets/uc2/README.md` has the two commands) and commit them in ufrontend with the asset-tree version.
+   The browser run with exactly that tree is in this notebook (`UC2_E2E_REBUILT_GUI=1`).
+2. **All 17 rebuilt packages** (M14's goal, later): Core.u's bytes change (a generation is added), so the target's
+   fingerprint must be updated, every peer must run the same packages, and the full `tools/dev/m14-scripts-check.sh`
+   must be green on that tree (run here on all 17 rebuilt packages with the D-4 change: results below).
