@@ -152,3 +152,14 @@ Under software GL the heavier maps need about 25 s before input is accepted.
 
 Carried to M6: pixel-shader materials are off (`UC2GL_PIXELSHADERS 0`), so the materials PC drew with its own
 DX8 pixel shaders (player skins among them) take the stage-0 fallback and will differ from PC until then.
+
+## O-9 (2026-10-07): fixed-function stages as GLSL; 4 stages
+
+The D3D stage description of a fixed-function pass is no longer drawn with GL's texture environment by default:
+`Src/UC2GLFFProgram.cpp` generates a fragment shader per stage combination (D3D8's operation definitions, linked
+without a vertex shader, so the fixed-function vertex stage stays), `FixedFunctionPrograms=False` /
+`-glnoffprograms` / console `FFPROGRAMS 0` keeps `SetMaterialBlending`'s texture environment, which now also uses
+`GL_NV_texture_env_combine4` for the three-operand ops when combine3 is missing (NVIDIA). The material compiler
+is given `MaterialStages=4` stages (UC2's D3DDrv clamps to exactly 4), not 8. Numeric test: `-glcombinertest`
+(`Src/UC2GLCombinerTest.cpp`); census of how materials compile: console `GLMATCENSUS`, `-glmatcensus`. All of it:
+`analysis/o9-nvidia.md`, `tools/dev/o9-nvidia.sh`.
