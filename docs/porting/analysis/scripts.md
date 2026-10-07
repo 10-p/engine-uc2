@@ -399,3 +399,18 @@ wall screen plays a movie, hence the larger mean (seen only, not numerically com
 
 All S3 items observed: 11 PASS lines (verify, menu, deadbolt, patcher, controls, audio, census, movies, net,
 leftovers from the full run; effects from the rerun).
+
+## Gate summary (2026-10-07, branch head after this entry)
+
+- (a) `bin/capped 6G 3000 -- cmake --build build-native -j4` rc 0 (`[100%] Built target UCC`, logs/m14/
+  build-native-final.log); `source env.sh && bin/capped 4G 1200 -- cmake --preset wasm-perf` rc 0,
+  `bin/capped 6G 5400 -- cmake --build build-wasm-perf -j4` rc 0 (`[100%] Built target SDLLaunch`,
+  build-wasm-perf-final.log; the full build from scratch earlier: build-wasm-perf.log, 0 errors). Not built in
+  this milestone: windows, windows64, native64 (Editor is excluded there by the M14 block; the Core/Engine edits
+  are small and platform-neutral but were not compiled for those presets).
+- (b) step 2b's table; (c) the 30-patch table (29 identical, CTFFlag.home differs: Epic's defective patch);
+  (d) step 3, 11 PASS; (e) step 2c; (f) no `.uc` was changed (the only script-source differences from Epic's
+  tree are M2's and M7's cpptext edits, which change no bytecode); the C++ changes are listed in steps 1, 2a,
+  2b, 2c and 3.
+- Memory: builds 6G (-j4), `make`/strip 3G, game runs 2G, census 8G per tree, net-test 6G; no ceiling hit
+  (no exit 137 anywhere).
