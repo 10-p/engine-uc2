@@ -122,7 +122,9 @@ for res in resl:
     if hud is None or href is None:
         result(f'hud-box-{res}', False, 'no picture')
         continue
-    bb, b0 = bbox(hud), bbox(href)
+    # threshold 24: the level-off frame keeps a faint ghost of lit things (post-processing's lagged back-buffer
+    # copy; a glowing pickup reached 9-20 levels at 2560x1440); the HUD's own pixels are far above it
+    bb, b0 = bbox(hud, 24), bbox(href, 24)
     exp = (bx + b0[0] * s, by + b0[1] * s, bx + b0[2] * s, by + b0[3] * s)
     tol = max(2, math.ceil(s))
     inside = bb[0] >= want[0] - 1 and bb[1] >= want[1] - 1 and bb[2] <= want[2] + 1 and bb[3] <= want[3] + 1
@@ -180,7 +182,7 @@ def identity(name, a, b, masks, why, base_a, base_b, levels=0):
 
 identity('identity-main-640x480', 'menu-main-box-levelOff', 'ref-menu-main-box-levelOff', [(55, 125, 300, 165)],
          'the focused item (its highlight pulses)', 'ref-menu-main-box-levelOff', 'ref3-menu-main-box-levelOff')
-identity('identity-arena-640x480', 'menu-arena-box-levelOff', 'ref-menu-arena-box-levelOff', [(400, 80, 592, 298)],
+identity('identity-arena-640x480', 'menu-arena-box-levelOff', 'ref-menu-arena-box-levelOff', [(400, 80, 600, 298)],
          'the game type preview (a movie)', 'ref-menu-arena-box-levelOff', 'ref3-menu-arena-box-levelOff')
 identity('identity-hud-640x480', 'hud-hud-levelOff', 'ref-hud-hud-levelOff', [(280, 210, 360, 265), (55, 45, 75, 58)],
          'the reticle and the adrenaline meter\'s end (both animate)', 'ref-hud-hud-levelOff', 'ref2-hud-hud-levelOff', levels=2)
@@ -208,30 +210,43 @@ else:
     result('switch-native640-1920x1080', False, 'missing pictures')
 
 # ------------------------------------------------------------------------------------- a marker on an actor
-def reticle_box(im):
-    """Bounding box of the lock-on reticle (Element_TargetReticle; orange on an enemy here), below the HUD's
-    top bars and the poster of this view (y >= 260)."""
-    r, g, b = im.split()
-    m = ImageChops.multiply(ImageChops.multiply(r.point(lambda v: 255 if v > 180 else 0), g.point(lambda v: 255 if 90 < v < 190 else 0)),
-                            b.point(lambda v: 255 if v < 70 else 0))
+def lock_marker(im):
+    """The lock-on reticle (Element_TargetReticle, orange on an enemy; placed at WorldToScreen of the target) and
+    the target's figure (the summoned Liandri's purple) inside it: their bounding boxes and the offset of the
+    reticle's centre from the figure's centre. The search keeps to y >= 300 (the HUD's top bars, the poster)."""
     W, H = im.size
-    m.paste(0, (0, 0, W, 260))
-    return m.getbbox(), m.histogram()[255]
+    def m3(fr, fg, fb):
+        r, g, b = im.split()
+        return ImageChops.multiply(ImageChops.multiply(r.point(fr), g.point(fg)), b.point(fb))
+    o = m3(lambda v: 255 if v > 180 else 0, lambda v: 255 if 90 < v < 190 else 0, lambda v: 255 if v < 70 else 0)
+    o.paste(0, (0, 0, W, 300))
+    ob = o.getbbox()
+    if ob is None or o.histogram()[255] < 100:
+        return None
+    p = m3(lambda v: 255 if v > 120 else 0, lambda v: 255 if v < 100 else 0, lambda v: 255 if v > 140 else 0).crop(ob)
+    pb = p.getbbox()
+    if pb is None:
+        return None
+    pb = (ob[0] + pb[0], ob[1] + pb[1], ob[0] + pb[2], ob[1] + pb[3])
+    oc = ((ob[0] + ob[2]) / 2, (ob[1] + ob[3]) / 2); pc = ((pb[0] + pb[2]) / 2, (pb[1] + pb[3]) / 2)
+    return ob, pb, (oc[0] - pc[0], oc[1] - pc[1])
 
-A, B, C = pic('1920x1080', 'lockon-lock-fit'), pic('1920x1080', 'lockon-lock-native'), pic('1920x1080', 'lockon-lock-fit2')
-if A is not None and B is not None and C is not None:
-    (ba, na), (bb_, nb), (bc, nc) = reticle_box(A), reticle_box(B), reticle_box(C)
-    if ba and bb_ and bc and min(na, nb, nc) > 200:
-        cen = lambda b: ((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)
-        ca, cb, cc = cen(ba), cen(bb_), cen(bc)
-        still = abs(ca[0] - cc[0]) <= 2 and abs(ca[1] - cc[1]) <= 2
-        same = abs(ca[0] - cb[0]) <= 2 and abs(ca[1] - cb[1]) <= 2 and abs((ba[2] - ba[0]) - (bb_[2] - bb_[0])) <= 4
-        result('marker-on-actor-1920x1080', still and same,
-               f'lock-on reticle (placed with WorldToScreen) boxed: centre ({ca[0]:.1f},{ca[1]:.1f}) size {ba[2]-ba[0]}x{ba[3]-ba[1]}; '
-               f'unboxed (Native640: window pixels, as before D-2): ({cb[0]:.1f},{cb[1]:.1f}) size {bb_[2]-bb_[0]}x{bb_[3]-bb_[1]}; '
-               f'boxed again: ({cc[0]:.1f},{cc[1]:.1f}) (the view {"rested" if still else "MOVED"} between the pictures)')
+shots = [(n, pic('1920x1080', 'lockon-lock-' + n)) for n in ('fit', 'native', 'fit2')]
+if all(im is not None for _, im in shots):
+    ms = [(n, lock_marker(im)) for n, im in shots]
+    if all(m is not None for _, m in ms):
+        offs = [m[2] for _, m in ms]
+        whole = all(m[0][1] > 300 and m[0][3] < 1080 and m[0][0] > 0 and m[0][2] < 1920 for _, m in ms)
+        spread = max(max(o[0] for o in offs) - min(o[0] for o in offs), max(o[1] for o in offs) - min(o[1] for o in offs))
+        same = max(abs(a - b) for (_, m1), (_, m2) in zip(ms, ms[1:]) for a, b in zip(m1[0], m2[0]))
+        result('marker-on-actor-1920x1080', spread <= 8 and whole and same <= 2,
+               'lock-on reticle (WorldToScreen) relative to the target\'s figure: ' +
+               '; '.join(f'{n} reticle {m[0]} figure {m[1]} offset ({m[2][0]:+.1f},{m[2][1]:+.1f})' for n, m in ms) +
+               f'; the reticle\'s box moves {same} px between the pictures (<= 2) and its offset from the figure spreads '
+               f'{spread:.1f} px (<= 8: the figure idles); boxed, unboxed (window pixels, as before D-2), boxed again'
+               + ('' if whole else '; the reticle is cut by the window or the y>=300 search'))
     else:
-        result('marker-on-actor-1920x1080', False, f'no lock-on reticle found (reticle pixels: {na}, {nb}, {nc})')
+        result('marker-on-actor-1920x1080', False, 'no lock-on reticle / target found: ' + ', '.join(n for n, m in ms if m is None))
 else:
     result('marker-on-actor-1920x1080', False, 'missing pictures (lockon-lock-fit, -native, -fit2)')
 

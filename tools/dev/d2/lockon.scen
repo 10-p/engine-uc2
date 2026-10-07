@@ -20,20 +20,31 @@ wait test: exec God 10
 sleep 1
 chan exec summon UCCharacters.UCPawn_Liandri_Devastation
 wait test: exec summon 10
-sleep 4
+sleep 3
+# step back from the target (summoned 72 units ahead) so its reticle is small enough to stay on screen
+keydown s
+sleep 1.2
+keyup s
+sleep 2
 chan exec Lock 1
 wait test: exec Lock 1 10
 sleep 0.5
 chan exec Lock 0
-# the lock turns the view onto the target over a few seconds (slowly at the frame rates of software GL):
-# the pictures are taken once it rests; fit and fit2 (before and after the unboxed one) show that it did
-sleep 10
+# the lock turns the view onto the target (slowly at the frame rates of software GL); then the game is slowed
+# down tenfold so the view hardly moves between the three pictures. The check measures the reticle against
+# the target's own figure in each picture, so a moving view does not matter.
+sleep 8
+chan exec slomo 0.1
+wait test: exec slomo 0.1 10
+sleep 2
 shot lock-fit
 chan exec UISCALE Native640
 wait test: exec UISCALE Native640 10
-sleep 4
+sleep 3
 shot lock-native
 chan exec UISCALE Fit43
 wait test: exec UISCALE Fit43 10
-sleep 4
+sleep 3
 shot lock-fit2
+chan exec slomo 1
+sleep 1

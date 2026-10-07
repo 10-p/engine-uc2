@@ -5,6 +5,7 @@
 #   tools/dev/d2-ui-scale.sh run [res...]    only the game runs (default: every resolution below)
 #   tools/dev/d2-ui-scale.sh extras          only the reference/switch/mouse runs
 #   tools/dev/d2-ui-scale.sh measure         only the measurements (on what the runs left)
+#   D2_NO_REF=1                              extras without the reference runs (their pictures stay in <run>)
 #
 # Trees (tools/dev/mkrun-uc2.sh): D2_TREE (default d2) has the build under test; D2_REF_TREE (default d2-ref)
 # has main's binary (the regression anchor at 640x480 and the "before" pictures). Every game run is one
@@ -41,6 +42,8 @@ run_res() {
 }
 
 extras() {
+  # D2_NO_REF=1: keep the reference pictures already in <run> (main's binary does not change between passes).
+  if [ -z "${D2_NO_REF:-}" ]; then
   # The regression anchor at 640x480. D2_REF_TREE's uc2.bin is main's source plus only the measurement switch
   # (TOGGLERENDERLEVEL and its black clear: logs/d2/refplus.diff), so the UI can be compared on black; its
   # uc2-main.bin is main's binary unchanged (the pinned pictures). Two runs of the reference say how much two
@@ -53,10 +56,11 @@ extras() {
   M10_LAUNCH=./uc2-main.bin M10_PROC=uc2-main.bin one "$ref" 640x480 main-hud deadbolt.scen "DM-Deadbolt?NumBots=0"
   # The pinned picture without post-processing (the static-part comparison of M12/M13), main's binary and ours.
   M10_LAUNCH=./uc2-main.bin M10_PROC=uc2-main.bin one "$ref" 640x480 main-pinned deadbolt.scen "DM-Deadbolt?NumBots=0" -nopostprocess
-  one "$tree" 640x480 pinned deadbolt.scen "DM-Deadbolt?NumBots=0" -nopostprocess
   # Before (main) at 1920x1080, for the owner and the switch below.
   one "$ref" 1920x1080 ref-menu menu.scen ""
   one "$ref" 1920x1080 ref-hud deadbolt.scen "DM-Deadbolt?NumBots=0"
+  fi
+  one "$tree" 640x480 pinned deadbolt.scen "DM-Deadbolt?NumBots=0" -nopostprocess
   # The switch: UIScaleMode=Native640 in Default.ini gives today's behaviour back.
   M10_INI="UIScaleMode=Native640" one "$tree" 1920x1080 native-menu menu.scen ""
   # A marker on an actor (the lock-on reticle, placed by WorldToScreen): boxed and unboxed, same window pixels.
