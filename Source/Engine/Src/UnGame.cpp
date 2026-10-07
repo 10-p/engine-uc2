@@ -23,6 +23,10 @@
 #include "UnScriptPatcher.h"
 #include "UnMovie.h"	// engine-uc2 (M9): WITH_PORTABLE_MOVIES lifts the Xbox-only movie hooks below
 
+// uc2 port (D-3): start in the last used profile, remember it (UC2Profiles.cpp).
+ENGINE_API void UC2StartWithLastProfile( UViewport* Viewport );
+ENGINE_API void UC2RememberProfile( UClient* Client );
+
 /*-----------------------------------------------------------------------------
 	Object class implementation.
 -----------------------------------------------------------------------------*/
@@ -232,6 +236,9 @@ void UGameEngine::Init()
 		// Create viewport.
 
 		Viewport = Client->NewViewport( NAME_None );
+
+		// uc2 port (D-3): the first player starts in the profile they last played with (UC2Profiles.cpp).
+		UC2StartWithLastProfile( Viewport );
 
 		// Add code to Create the Menu System here				
 
@@ -3404,6 +3411,7 @@ void UGameEngine::Tick( FLOAT DeltaSeconds )
 	guard(UGameEngine::Tick);
 	FUNC_CLOCK(TiCyc,TickCycles);
 	UC2NetTestTick( this );	// uc2 port: the -nettest=<file> command file (UC2NetTest.cpp); nothing without it
+	UC2RememberProfile( Client );	// uc2 port (D-3): User.ini [Profiles] LastProfile follows the first player's profile
 
     if( DeltaSeconds < 0.0f )
         appErrorf(TEXT("Negative delta time!"));

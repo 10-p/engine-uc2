@@ -79,3 +79,33 @@ Baseline (before any change): native build of main's tip in this worktree, `bin/
 --preset native && cmake --build build-native -j6` rc 0 (`logs/d3/build-native-1.log`); run tree
 `tools/dev/mkrun-uc2.sh build-native d3`; `C1_TREE=d3 C1_OUT=<WorkUC2>/logs/d3/saves-baseline
 tools/dev/c1-saves.sh` (result below in step 1).
+
+## Step 1 (2026-10-07): D-3 native, engine code: start in the last used profile
+
+Baseline before any change (`logs/d3/saves-baseline.txt`): `tools/dev/c1-saves.sh` on tree d3 ALL PASS (run 2 starts
+on `$$Default$$` and needs the Profiles page to get "Saver" back), i.e. the behaviour the owner saw.
+
+Change (`Engine/Src/UC2Profiles.cpp`, new; `Engine/Src/UnGame.cpp` +8 lines, two calls):
+- `UC2StartWithLastProfile(Viewport)`, called in `UGameEngine::Init` right after `Client->NewViewport` (UnGame.cpp:241):
+  reads User.ini `[Profiles] LastProfile`; if that profile exists (`ULoadSaveManager::ExistsGameObject`) it is loaded
+  into the new viewport's (transient) profile object with `UPlayerProfile::LoadProfile` + `eventSetProfileName`, the
+  same two calls as `APlayerController::execLoadProfile`; the PlayerController binds it at its first `SetGamepadID`
+  (UnLevAct.cpp:920, every `SpawnPlayActor` on PC) -> `SetPlayerOwner` -> `Initialize` -> `InitializeProfileValues`,
+  which applies every setting to the player. Logs `Profiles: started with the last profile "<n>"`, or why not.
+- `UC2RememberProfile(Client)`, called first thing in `UGameEngine::Tick`: the primary viewport's profile name ("" while
+  transient) vs. the remembered one, case-sensitive; on a difference `GConfig->SetString` + `GConfig->Flush(0,"User")`
+  and `Profiles: remembered profile "<new>" (was "<old>")`. So the key follows every script path (select, create,
+  copy, rename, delete, "no profile") with no script change, and works with the SHIPPED packages (the web too).
+- Why User.ini, why `[Profiles]`: per-player state, persisted by the web host with the other engine inis (flushed on
+  `flushconfig`); a section that is no class's name, so no class config reads or rewrites it. Only viewport 0: a
+  split-screen second player keeps Epic's behaviour.
+
+First run of the new test (`tools/dev/d3-profiles.sh`, `logs/d3/d3-profiles-run1.txt`): the mechanism works
+(`r2-engine-started-with-saver`, `r2-saver-active-before-any-menu-action: first answer: Saver`, `r4-user-ini-follows-the-
+active-profile`, `r5-starts-with-what-r4-ended-with`), the scenarios themselves needed fixes: the Controller page's
+focus is the inner `GUICheckBoxButton` (seek 'CheckBox', the first one is Invert); the menu level's PlayerInput is
+Engine.PlayerInput, whose `UpdateInvert` is empty, so "the setting is applied" is checked in a map: new run r2m
+starts straight into DM-Deadbolt (as the launcher's Play form does) and reads `UCPlayerInput bInvertMouse`.
+
+Next: rerun the fixed script; then D-4 (GUI.u transient name, `SaveURLConfig("Name")` skipped while a profile is
+active: already written in the working tree, not committed in this step).
