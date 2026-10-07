@@ -155,3 +155,66 @@ exports differ in exactly two sizes by path: `UCPlayerInput.MouseLookSens` 68 ->
 63 -> 154; 78 more exports differ in at most 29 bytes each (Line/TextPos and dependency CRCs of the classes after the
 edit); no export added or removed. Package to switch: **UCGameplay.u only** (1,584,207 -> 1,584,391 bytes; GUI.u as the
 asset tree has it).
+
+## Step 3 (2026-10-08): a class save writes only what changed; the profile/ini rule; the test script
+
+### Second finding: even without the shadowing, a whole-class dump bakes in defaults
+
+After the filter, `StaticSaveConfig` of `Engine.PlayerController` still wrote 35 keys (`[Engine.PlayerController]`: every
+globalconfig property no subclass touches, and the `config` ones the class inherits from Actor/Controller: `DrawScale`,
+`Mass`, `bNetDebug`, `TargetDistWeight`...) at their compiled defaults. Value for value harmless today, but the ini then
+holds a stale copy of a SCRIPT default: a rebuilt package that changes a default would not reach a player whose User.ini
+has the copy (User.ini is kept for years natively and for ever on the web, C-2). So a script save of a CLASS DEFAULT now
+writes a property only when it differs from a baseline (`UC2ConfigValueChanged`, UnObj.cpp):
+- the ini's value, when the key is in the ini (text imported into a scratch value of the property's type and compared with
+  `Identical`, so `2.5` equals `2.500000`);
+- else the value the class default held when it loaded its config (`UC2NoteDefaultOverrides` records, per class, each
+  property it declares and each inherited one its `defaultproperties` set differently from the superclass; ExportText);
+- else (inherited and not overridden) the superclass default's value.
+Arrays and maps are not written by this form. An INSTANCE save (`SaveConfig()` on an object: UdpGameSpyQuery) writes the
+whole instance, as before: a server object's state has no baseline and is meant to be persisted. SAVECONFIGKEYS writes
+exactly the keys named, without any comparison.
+Results (`ucc-bin saveconfigtest`, keys new or changed against DefUser.ini): `static Engine.PlayerController Handedness -1`
+-> exactly `[Engine.Controller] Handedness=-1.000000` (was 37 keys, then 35 keys, now 1); `instance Engine.PlayerInput
+MouseSmoothingMode 2` -> exactly that key; `static UCGameplay.UCPlayerInput MouseLookSensitivity 1.5` -> exactly that
+key (UCPlayerInput's own defaultproperties `MouseSensitivity=0`, `MouseSmoothingMode=0`, `MouseAccelThreshold=0`, which the
+first version of the rule wrote into `[Engine.PlayerInput]`, are recorded as its overrides and not written).
+Found on the way: `GIsEditor` is 1 inside ucc's commandlets, so the first version of the record (skipped under
+`GIsEditor`) had no entry for classes loaded later; the record is not guarded.
+
+### The rule between the profile and the ini (task 3)
+
+What the profile applies, and where (script, `PlayerProfile.uc`): at every `PlayerController.SetPlayerOwner`/`Initialize`
+-> `InitializeProfileValues` (also for the transient "no profile" profile) the pad's invert (`bInvertY` ->
+`PlayerInput.UpdateInvert` -> `default.bInvertMouse` and the instance, ini key `[Engine.PlayerInput] bInvertMouse`),
+sensitivities (`SensitivityX/Y` -> `UpdateSensitivityX/Y` -> `MouseSensitivity_X/Y`, ini `[UCGameplay.UCPlayerInput]`),
+auto-centre, handicap, the weapon classes and the character (`PC.UpdateURL("Class"|"EnergyWeapon"|..., ...)` into the
+viewport's player URL), the name (D-4). The decision:
+
+1. **The profile owns everything it applies; its values are applied AFTER the ini was read, at every player start, so
+   the ini can never override a loaded profile.** Measured (`sc-saveconfig.sh` g1/g2): with the ini saying
+   `MouseSensitivity_Y=0.9` and the transient profile applying 0.8, `getall UCPlayerInput MouseSensitivity_Y` in the match is
+   0.8, and the pad invert is the profile's after a restart. The ini copies of these keys are therefore never read in a
+   game, and nothing writes the profile's values into them: a class save writes only what changed against the ini and the
+   class default (so the profile's `default.MouseSensitivity_Y = 0.8` WOULD be written by `UCPlayerInput.StaticSaveConfig()`;
+   nothing calls that, and the mouse commands use SAVECONFIGKEYS for exactly this reason).
+2. **The ini owns what the profile has no field for: the mouse** (`MouseLookSensitivity`, `bInvertMouseLook`,
+   `MouseLockBreakAngle`, `bKeysAsStick`): the profile file is binary with room for one invert flag, the pad's (D-6), and
+   no profile code touches these properties, so a profile cannot change the mouse (measured: g2, a restart gives the
+   mouse the ini's values while the pad invert comes from the profile). The mouse is per machine and per player, like
+   its DPI; it persists in User.ini, and on the web with the other inis.
+3. **The name**: D-4 (the profile names the player; the ini name is the launcher's and is kept).
+4. **The character**: a menu-driven launch builds the URL from the active profile (GameStartInfo), so the profile wins;
+   `[DefaultPlayer] Class` is only the URL a launch that names no class falls back to (the web launcher's Play form).
+   Known gap, not closed here: after switching profile and before launching from the menus, such a direct launch uses the
+   previous launch's character from `[DefaultPlayer] Class`. A fix (the profile's class into the player's login URL, like
+   `UC2ProfileNameInURL`) needs the profile's class string natively (a script function) and a two-profile test; recorded
+   in BLOCKERS.md.
+5. Weapon hand (`Handedness`), FOV: not in the profile; User.ini owns them (SetWeaponHand, ShowGun, the FOV command).
+
+### The test: `tools/dev/sc-saveconfig.sh`
+
+Parts u (native ucc), w (wasm ucc under Node), g (game: set/kill/restart/off), m (menu round trip + full match with the
+natives on and off, allow-list). Results are in the gate at the end of this notebook.
+`tools/dev/d6-mouse.sh` look scenario: two checks added (`look-sensitivity-saved-to-user-ini`,
+`look-mouse-invert-saved-to-user-ini`): its console commands were session-only before and are not now.
