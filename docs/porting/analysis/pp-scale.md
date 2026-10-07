@@ -301,3 +301,16 @@ not screen pixels: nothing to scale. Files both branches change (hand merge): `E
 `UC2GLDrv/Src/UC2GLShaders.cpp`, `Engine/Config/README.md`, `Engine/Config/Default.ini` and `web/Default.ini`,
 `tools/dev/m11-twin.sh` (M7b: shader/program counts; here: the self-test count), `tools/dev/o9-nvidia.sh` (the
 same `O9_TREE` line on both, made identical here).
+
+## Step 7. Builds and regressions on the final code (2026-10-08 00:10; code as of `7f58c55`)
+
+- Native (`cmake --build build-native -j6`, capped 6G): exit 0, `uc2.bin` sha256 `47d2cd24...`.
+- Windows (`cmake --build build-windows -j4`, capped 6G): `[100%] Built target SDLLaunch`, exit 0; `uc2.exe`
+  `3bb53fa8...`. Wasm-perf (`cmake --build build-wasm-perf -j4`, capped 6G): `[100%] Built target SDLLaunch`, exit
+  0; `SDLLaunch.wasm` `6fe60cb8...` (the GL driver is in the web build: `UC2GLPostProcess.cpp` recompiled). No
+  warning in any changed file in any of the three logs.
+- `O9_TREE=ppo9 tools/dev/o9-nvidia.sh combiner-mesa combiner-gpu combiner-twin` (`logs/ppo9`): 9 PASS, 0 FAIL
+  (Mesa programs / combine3 / combine4 35 of 35; "before" defect reproduced 22/11; NVIDIA programs 35/35, combine4
+  33+2 skipped, "before" 22/11; twin 33+2 skipped; nothing left running).
+- Started: the final pp-scale run (`logs/pp/final.txt`, `logs/pp2/final.txt`), `m11-twin.sh` with trees
+  ppm11/ppm11t (`logs/pp/m11-twin.txt`).
