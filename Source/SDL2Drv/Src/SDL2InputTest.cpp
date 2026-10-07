@@ -52,6 +52,31 @@ static FString GetPropText( UObject* Obj, const TCHAR* Name )
 }
 
 //
+// D-6: a struct property's bytes (a vector or rotator of a script class), NULL if there is none.
+//
+static BYTE* GetStructPropData( UObject* Obj, const TCHAR* Name, const TCHAR* StructName )
+{
+	if( !Obj )
+		return NULL;
+	UStructProperty* P = FindField<UStructProperty>( Obj->GetClass(), Name );
+	if( !P || !P->Struct || appStricmp(P->Struct->GetName(), StructName)!=0 )
+		return NULL;
+	return (BYTE*)Obj + P->Offset;
+}
+
+static FVector GetVectorProp( UObject* Obj, const TCHAR* Name )
+{
+	BYTE* Data = GetStructPropData( Obj, Name, TEXT("Vector") );
+	return Data ? *(FVector*)Data : FVector(0,0,0);
+}
+
+static FRotator GetRotatorProp( UObject* Obj, const TCHAR* Name )
+{
+	BYTE* Data = GetStructPropData( Obj, Name, TEXT("Rotator") );
+	return Data ? *(FRotator*)Data : FRotator(0,0,0);
+}
+
+//
 // The selected row of a GUI list (GUIList: Elements[Index].Item), "" for anything else.
 //
 static FString GetListItem( UObject* Obj )
@@ -113,6 +138,8 @@ FSDL2InputTest::FSDL2InputTest( const TCHAR* InPath )
 ,	PartialLen( 0 )
 ,	Virtual( NULL )
 ,	VirtualID( -1 )
+,	WatchLeft( 0 )
+,	WatchIndex( 0 )
 {
 	File = fopen( TCHAR_TO_ANSI(InPath), "r" );
 	debugf( SDL2INPUT, TEXT("input test channel %s: %s"), InPath, File ? TEXT("open") : TEXT("cannot open") );
@@ -149,6 +176,8 @@ void FSDL2InputTest::Tick( USDL2Client* Client )
 {
 	if( !File )
 		return;
+	if( WatchLeft > 0 )
+		Watch( Client );
 	for( ;; )
 	{
 		int C = fgetc( File );
@@ -274,6 +303,44 @@ UBOOL FSDL2InputTest::Execute( USDL2Client* Client, const TCHAR* Line )
 	{
 		return 0;
 	}
+	else if( ParseCommand(&Cmd,TEXT("MOUSE")) )
+	{
+		// D-6: exact relative motion, as SDL delivers a mouse's motion in relative mode (xrel/yrel in counts,
+		// y down = +). Pushed into SDL's queue, so it reaches USDL2Viewport::HandleEvent through PumpEvents like
+		// a real event. One per tick: the harness paces a path by writing one line per step.
+		FString SX, SY;
+		ParseToken( Cmd, SX, 0 );
+		ParseToken( Cmd, SY, 0 );
+		USDL2Viewport* Viewport = Client->Viewports.Num() ? (USDL2Viewport*)Client->Viewports(0) : NULL;
+		if( !Viewport || !Viewport->Window )
+		{
+			debugf( SDL2INPUT, TEXT("test: mouse: no viewport window") );
+			return 0;
+		}
+		SDL_Event Ev;
+		SDL_zero( Ev );
+		Ev.type				= SDL_MOUSEMOTION;
+		Ev.motion.timestamp	= SDL_GetTicks();
+		Ev.motion.windowID	= SDL_GetWindowID( Viewport->Window );
+		Ev.motion.which		= 0;
+		Ev.motion.xrel		= appAtoi( *SX );
+		Ev.motion.yrel		= appAtoi( *SY );
+		if( SDL_PushEvent( &Ev ) < 0 )
+			debugf( SDL2INPUT, TEXT("test: mouse: SDL_PushEvent failed: %s"), appFromAnsi(SDL_GetError()) );
+		return 1;
+	}
+	else if( ParseCommand(&Cmd,TEXT("WATCH")) )
+	{
+		// D-6: a state line every client tick for the next <ticks> ticks.
+		FString Ticks, Tag;
+		ParseToken( Cmd, Ticks, 0 );
+		if( !ParseToken( Cmd, Tag, 0 ) )
+			Tag = TEXT("w");
+		WatchLeft  = Max( 0, appAtoi(*Ticks) );
+		WatchIndex = 0;
+		WatchTag   = Tag;
+		return 0;
+	}
 	debugf( SDL2INPUT, TEXT("test: unknown command") );
 	return 0;
 	unguard;
@@ -341,6 +408,46 @@ void FSDL2InputTest::Probe( USDL2Client* Client, const TCHAR* Tag )
 		PC->myHUD ? (INT)PC->myHUD->bShowScores : -1,
 		PC->FovAngle, PC->DesiredFOV,
 		Viewport->SizeX, Viewport->SizeY );
+	// D-6: the camera the player sees (UCPlayerController's per-frame view), lock-on state and which device owns
+	// the look (UCPlayerInput), on a line of their own so older parsers of the line above are unaffected.
+	FVector  Cam    = GetVectorProp( PC, TEXT("CurrentCameraLocation") );
+	FRotator CamRot = GetRotatorProp( PC, TEXT("CurrentCameraRotation") );
+	UObject* Enemy  = GetObjectProp( PC, TEXT("Enemy") );
+	debugf( SDL2INPUT,
+		TEXT("probe2 %s cam=(%.2f,%.2f,%.2f) camrot=(%i,%i,%i) locked=%s enemy=%s mouselook=%s sens=%s invert=%s padinvert=%s autocenter=%s"),
+		Tag, Cam.X, Cam.Y, Cam.Z, CamRot.Pitch, CamRot.Yaw, CamRot.Roll,
+		*GetPropText( PC, TEXT("bIsLocked") ),
+		Enemy ? Enemy->GetName() : TEXT("None"),
+		*GetPropText( PC->PlayerInput, TEXT("bMouseOwnsLook") ),
+		*GetPropText( PC->PlayerInput, TEXT("MouseLookSensitivity") ),
+		*GetPropText( PC->PlayerInput, TEXT("bInvertMouseLook") ),
+		*GetPropText( PC->PlayerInput, TEXT("bInvertMouse") ),
+		*GetPropText( PC, TEXT("bAutoCenterPitch") ) );
+	unguard;
+}
+
+//
+// D-6: one compact line per client tick while a watch runs (time, view rotation, camera, pawn).
+//
+void FSDL2InputTest::Watch( USDL2Client* Client )
+{
+	guard(FSDL2InputTest::Watch);
+	WatchLeft--;
+	if( !Client->Viewports.Num() || !Client->Viewports(0)->Actor )
+		return;
+	APlayerController* PC = Client->Viewports(0)->Actor;
+	APawn* Pawn = PC->Pawn;
+	FVector  Cam = GetVectorProp( PC, TEXT("CurrentCameraLocation") );
+	FRotator CamRot = GetRotatorProp( PC, TEXT("CurrentCameraRotation") );
+	debugf( SDL2INPUT,
+		TEXT("watch %s %i t=%.4f rot=(%i,%i) cam=(%.2f,%.2f,%.2f) camrot=(%i,%i) loc=(%.2f,%.2f,%.2f) locked=%s mouselook=%s"),
+		*WatchTag, WatchIndex++,
+		PC->Level ? PC->Level->TimeSeconds : 0.f,
+		PC->Rotation.Pitch, PC->Rotation.Yaw,
+		Cam.X, Cam.Y, Cam.Z, CamRot.Pitch, CamRot.Yaw,
+		Pawn ? Pawn->Location.X : 0.f, Pawn ? Pawn->Location.Y : 0.f, Pawn ? Pawn->Location.Z : 0.f,
+		*GetPropText( PC, TEXT("bIsLocked") ),
+		*GetPropText( PC->PlayerInput, TEXT("bMouseOwnsLook") ) );
 	unguard;
 }
 

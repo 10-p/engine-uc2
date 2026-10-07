@@ -12,6 +12,11 @@
 	  probe <tag>                                 one "SDL2Input: probe <tag> ..." state line
 	  exec <console command>                      run on the first viewport (e.g. "shot")
 	  log <text>                                  a marker line
+	  mouse <dx> <dy>                             D-6: one relative mouse motion (SDL_MOUSEMOTION pushed into
+	                                              SDL's queue for the first viewport's window, so the viewport's
+	                                              own event handling onwards is the real path); one per tick
+	  watch <ticks> [tag]                         D-6: one "SDL2Input: watch <tag> <i> ..." line per client tick
+	                                              for <ticks> ticks (time, view rotation, camera, pawn)
 	The test tools/dev/m10-controls.sh writes these and reads the log.
 =============================================================================*/
 
@@ -28,7 +33,11 @@ private:
 	INT				PartialLen;
 	SDL_Joystick*	Virtual;
 	SDL_JoystickID	VirtualID;
+	INT				WatchLeft;
+	INT				WatchIndex;
+	FString			WatchTag;
 	UBOOL Execute( USDL2Client* Client, const TCHAR* Line );
 	void Probe( USDL2Client* Client, const TCHAR* Tag );
+	void Watch( USDL2Client* Client );
 	void Detach();
 };
