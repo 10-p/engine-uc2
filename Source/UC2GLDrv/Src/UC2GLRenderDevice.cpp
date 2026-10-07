@@ -40,6 +40,7 @@ static TArray<FLOAT>	GFFToggleTimes;		// O-9: -glfftoggle=<s>,... flips FixedFun
 // O-9: COMBINERTEST / -glcombinertest: the numeric test of the texture stages
 // (UC2GLCombinerTest.cpp), like GSelfTestPending.
 static INT				GCombinerTestPending = 0;
+static INT				GMatCensusPending = 0;	// O-9: GLMATCENSUS (UC2GLPixelTrace.cpp)
 // -glexec=<seconds>:<command>[@<seconds>:<command>...]: console commands run through the
 // viewport at those times after the first frame; '+' stands for a space in a command
 // (verification: "-glexec=40:BlurMe@50:set+UCScreenBerserk+Enabled+1"). Times ascending.
@@ -1991,6 +1992,12 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		Ar.Logf( TEXT("UC2GLDrv: fixed-function programs %s (frame %i)"), FFProgramsActive ? TEXT("on") : TEXT("off"), FrameCounter );
 		return 1;
 	}
+	else if( ParseCommand(&Cmd,TEXT("GLMATCENSUS")) )
+	{
+		GMatCensusPending = 1;
+		Ar.Logf( TEXT("UC2GLDrv: the material census runs at the start of the next frame; results in the log") );
+		return 1;
+	}
 	else if( ParseCommand(&Cmd,TEXT("COMBINERTEST")) )
 	{
 		GCombinerTestPending = 1;
@@ -2071,6 +2078,11 @@ FRenderInterface* UUC2GLRenderDevice::Lock( UViewport* Viewport, BYTE* HitData, 
 	{
 		extern void UC2GL_RunCombinerTest( UUC2GLRenderDevice* RenDev, UViewport* Viewport );
 		UC2GL_RunCombinerTest( this, Viewport );
+	}
+	if( GMatCensusPending && Viewport->Actor && Viewport->Actor->Level && --GMatCensusPending == 0 )
+	{
+		extern void UC2GL_RunMaterialCensus( UUC2GLRenderDevice* RenDev, UViewport* Viewport );
+		UC2GL_RunMaterialCensus( this, Viewport );
 	}
 
 	return &RenderInterface;
