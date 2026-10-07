@@ -48,6 +48,9 @@ Revision history:
 #if UC2_WITH_UC2MOVIE	// M9: the movie player and its self-test commandlet (UC2Movie.UC2MovieSelfTest)
 #include "UC2Movie.h"
 #endif
+#if UC2_WITH_EDITOR	// M14: the script compiler (ucc-bin make), the header exporter and the editor commandlets
+void UC2InitializeEditorRegistrants( INT& Lookup );	// Editor/Src/UC2EditorRegistrants.cpp
+#endif
 #endif
 
 #endif
@@ -482,6 +485,9 @@ int main( int argc, char* argv[] )
 #endif
 #if UC2_WITH_UC2MOVIE	// M9
 			AUTO_INITIALIZE_REGISTRANTS_UC2MOVIE;
+#endif
+#if UC2_WITH_EDITOR	// M14: what AUTO_INITIALIZE_REGISTRANTS_EDITOR does (Editor/Src/UC2EditorRegistrants.cpp says why)
+			UC2InitializeEditorRegistrants( Lookup );
 #endif
 			check( Lookup < ARRAY_COUNT(GNativeLookupFuncs) );
 			RegisterNamesGUI();

@@ -444,6 +444,8 @@ UBOOL UEditorEngine::SafeExec( const TCHAR* InStr, FOutputDevice& Ar )
 			{
 				INT i=ObjectName.InStr(PATH_SEPARATOR);
 				if( i==-1 )
+					i=ObjectName.InStr(TEXT("\\")); // uc2 port (M14): #exec lines name files with Windows separators; PATH_SEPARATOR is "/" here
+				if( i==-1 )
 					i=ObjectName.InStr(TEXT("/"));
 				if( i==-1 )
 					break;
@@ -522,7 +524,7 @@ UBOOL UEditorEngine::SafeExec( const TCHAR* InStr, FOutputDevice& Ar )
 				{
 					// Deduce package name from filename.
 					TCHAR* End = TempFname + appStrlen(TempFname);
-					while( End>TempFname && End[-1]!=PATH_SEPARATOR[0] && End[-1]!='/' )
+					while( End>TempFname && End[-1]!=PATH_SEPARATOR[0] && End[-1]!='/' && End[-1]!='\\' ) // uc2 port (M14): '\\' too (#exec paths)
 						End--;
 					appStrncpy( TempName, End, NAME_SIZE );
 					if( appStrchr(TempName,'.') )
@@ -1700,7 +1702,7 @@ UBOOL UEditorEngine::Exec_StaticMesh( const TCHAR* Str, FOutputDevice& Ar )
 			{
 				// Deduce package name from filename.
 				TCHAR* End = TempFname + appStrlen(TempFname);
-				while( End>TempFname && End[-1]!=PATH_SEPARATOR[0] && End[-1]!='/' )
+				while( End>TempFname && End[-1]!=PATH_SEPARATOR[0] && End[-1]!='/' && End[-1]!='\\' ) // uc2 port (M14): '\\' too (#exec paths)
 					End--;
 				appStrncpy( TempName, End, NAME_SIZE );
 				if( appStrchr(TempName,'.') )

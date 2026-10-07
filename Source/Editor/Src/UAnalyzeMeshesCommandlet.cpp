@@ -12,6 +12,11 @@
 
 #include "EditorPrivate.h"
 
+// uc2 port: glibc's <math.h> defines MAXFLOAT as a macro, which breaks the local constant of that name below.
+#ifdef MAXFLOAT
+#undef MAXFLOAT
+#endif
+
 // get directory portion of the path
 static FString GetDirName( const FString &Path )
 {

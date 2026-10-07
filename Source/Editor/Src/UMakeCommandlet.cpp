@@ -9,6 +9,36 @@ Revision history:
 #include "EditorPrivate.h"
 
 /*-----------------------------------------------------------------------------
+	uc2 port (M14): file order.
+
+	FindFiles returned Epic's .uc files in NTFS directory order: names compared code unit by code unit after
+	upper-casing (NTFS's upcase table; for these ASCII names, so '_' sorts after the letters). Classes are
+	created in import order and keep that object-table order, which the compiler's class walk follows (see
+	UC2SortClassesLikeEpic in UnScrCom.cpp), so the order has to be the same here. readdir() order on Linux is
+	arbitrary.
+-----------------------------------------------------------------------------*/
+
+static INT UC2CompareNTFS( const FString& A, const FString& B )
+{
+	const TCHAR* a = *A;
+	const TCHAR* b = *B;
+	for( ; ; a++, b++ )
+	{
+		BYTE ca = (BYTE)appToUpper(*a), cb = (BYTE)appToUpper(*b);
+		if( ca!=cb )
+			return ca<cb ? -1 : 1;
+		if( !ca )
+			return 0;
+	}
+}
+static void UC2SortLikeNTFS( TArray<FString>& Files )
+{
+	for( INT i=1; i<Files.Num(); i++ )
+		for( INT j=i; j>0 && UC2CompareNTFS(Files(j-1),Files(j))>0; j-- )
+			Exchange( Files(j-1), Files(j) );
+}
+
+/*-----------------------------------------------------------------------------
 	UMakeCommandlet.
 -----------------------------------------------------------------------------*/
 
@@ -80,6 +110,7 @@ class UMakeCommandlet : public UCommandlet
 				TArray<FString> Files = GFileManager->FindFiles( *Spec, 1, 0 );
 				if( Files.Num() == 0 )
 					appErrorf( TEXT("Can't find files matching %s"), *Spec );
+				UC2SortLikeNTFS( Files ); // uc2 port (M14)
 				for( INT i=0; i<Files.Num(); i++ )
 				{
 					// Import class.

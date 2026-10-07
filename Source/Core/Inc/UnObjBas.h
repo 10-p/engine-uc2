@@ -472,7 +472,17 @@ public: \
 // Register a class at startup time.
 
 #if __STATIC_LINK
+	// uc2 port (M14): a package compiled with UC2_STATIC_CLASS_ACCESSORS (only Editor) also gets one C function
+	// per class, UC2StaticClass<TClass>(), so its classes declared inside .cpp files (most commandlets) can be
+	// registered from outside those files. Nothing else changes; every other package compiles exactly as before.
+	#if UC2_STATIC_CLASS_ACCESSORS
+		#define UC2_STATIC_CLASS_ACCESSOR(TClass) \
+			extern "C" UClass* UC2StaticClass##TClass() { return TClass::StaticClass(); }
+	#else
+		#define UC2_STATIC_CLASS_ACCESSOR(TClass)
+	#endif
 	#define IMPLEMENT_CLASS(TClass) \
+		UC2_STATIC_CLASS_ACCESSOR(TClass) \
 		UClass* TClass::PrivateStaticClass = NULL; \
 		UClass* TClass::GetPrivateStaticClass##TClass( TCHAR* Package ) \
 		{ \

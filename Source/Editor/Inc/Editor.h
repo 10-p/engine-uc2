@@ -610,6 +610,7 @@ public:
 #define OUT_ARRAY_EXPORT_PF TEXT("..\\XboxTextures\\Source\\%s.uma")
 
 //#include "UnLinker.h"
+struct FObjectExport; // uc2 port: MSVC let UObject's friend declaration name it here; ISO C++ needs a declaration.
 
 /**
  * This exporter knows how to export the various arrays contained within a
