@@ -252,7 +252,11 @@ void UInteractionMaster::MasterProcessPostRender(UViewport* Viewport)
 			GlobalInteractions(i)->NativePostRender(Canvas);
 		}
 	}
+	// D-2: the global interactions (the console's typing line, the GUI) are UI: clipped to the UI's box as the
+	// Xbox's 640x480 screen clipped them (the console's line starts at x=32 and is 640 wide); UnCanvas.cpp
+	Canvas->SetUIContext( UICONTEXT_Menu );
 	eventProcess_PostRender( GlobalInteractions, Canvas );
+	Canvas->SetUIContext( UICONTEXT_Game );
 
 	// only need to process the currently active viewport 
 	eventProcess_PostRender( Viewport->LocalInteractions, Canvas  );
