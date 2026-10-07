@@ -135,10 +135,10 @@ expect k2-rename-again OpenMenu \[UCMenu.UC2ProfileKeyboard\] 20
 sleep 3
 probe r3
 check k2-the-cancelled-text-is-gone P['r3'].text == 'Typer'
-key BackSpace 1.6
+key BackSpace
 sleep 0.5
 probe r4
-check k2-held-backspace-clears P['r4'].text == ''
+check k2-backspace-clears-the-selected-text P['r4'].text == ''
 type Renamed
 sleep 0.5
 probe r5
@@ -167,7 +167,7 @@ key q
 expect k3-copy-opens-the-keyboard OpenMenu \[UCMenu.UC2ProfileKeyboard\] 20
 sleep 3
 probe c0
-key BackSpace 1.6
+key BackSpace
 type Copied
 sleep 0.5
 probe c1
@@ -182,7 +182,13 @@ check k3-copy-on-disk bash -c "[ -s '$sys/Profiles/Copied/AVARIS_PROFILE.PRO' ] 
 fi
 
 # --- k4: host -> server name ----------------------------------------------------------------------------------------
+# Network -> Host -> the game type (DeathMatch) -> the rules list opens on CUSTOMIZE (NO); Right makes it YES (the
+# session name is disabled otherwise: "You must enable the CUSTOMIZE option to modify this setting"); the last rule is
+# SESSION NAME ("Liandri Corporation", the profile's server name); X opens UC2Keyboard on it. The probe cannot read
+# the rule rows (their list items are empty), so the keyboard page's own field is the witness: it shows the rule's
+# current value each time it opens.
 if [[ $wanted == *" k4 "* ]]; then
+downs=$(for i in $(seq 20); do printf 'key Down\nsleep 0.3\n'; done)
 cat > "$out/k4.scen" <<SCEN
 $menu_up
 key Down
@@ -200,33 +206,46 @@ seek 4 P['_'].menu == 'UC2Arena_ServerMain' ;; key Escape
 seek 10 P['_'].item.startswith('DeathMatch|') ;; key Down
 key Return
 sleep 3
-seek 30 P['_'].item.startswith('UC2 ') or 'Server' in P['_'].item or P['_'].text != '' ;; key Down
-probe s0
+key Right
+sleep 1
+$downs
+shot session-name
 key x
 expect k4-x-opens-the-keyboard OpenMenu \[UCMenu.UC2Keyboard\] 20
 sleep 3
 probe s1
-key BackSpace 1.6
-type Mine
+check k4-keyboard-shows-the-session-name P['s1'].text.startswith('Liandri')
+key BackSpace
 sleep 0.5
 probe s2
-check k4-typed P['s2'].text == 'Mine'
+check k4-backspace-clears-the-selected-text P['s2'].text == ''
+type Nope
+sleep 0.5
+probe s3
+check k4-typed P['s3'].text == 'Nope'
 key Escape
 expect k4-escape-closes-the-keyboard CloseMenu \[UC2Keyboard\] 10
 sleep 3
-probe s3
-check k4-escape-kept-the-name P['s3'].item == P['s0'].item
 key x
 expect k4-x-opens-the-keyboard-again OpenMenu \[UCMenu.UC2Keyboard\] 20
 sleep 3
-key BackSpace 1.6
+probe s4
+check k4-escape-kept-the-old-name P['s4'].text == P['s1'].text
+key BackSpace
 type Mine
 sleep 0.5
+probe s5
+check k4-typed-again P['s5'].text == 'Mine'
 key Return
 expect k4-enter-closes-the-keyboard CloseMenu \[UC2Keyboard\] 10
 sleep 3
-probe s4
-check k4-enter-set-the-name P['s4'].item.startswith('Mine')
+key x
+expect k4-x-opens-the-keyboard-a-third-time OpenMenu \[UCMenu.UC2Keyboard\] 20
+sleep 3
+probe s6
+check k4-enter-set-the-name P['s6'].text == 'Mine'
+key Escape
+sleep 2
 shot server-name
 SCEN
 run k4 300
