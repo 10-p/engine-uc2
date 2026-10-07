@@ -175,7 +175,7 @@ check_movies() {
 
 check_glselftest() {
   local l; l=$("$repo/tools/dev/m7-effects.sh" "$tree" selftest 2>&1 | grep -a "selftest summary")
-  if [[ "$l" == *"10 passed, 0 failed"* ]]; then result PASS glselftest "$l"; else result FAIL glselftest "${l:-no summary line}"; fi
+  if [[ "$l" == *"15 passed, 0 failed"* ]]; then result PASS glselftest "$l"; else result FAIL glselftest "${l:-no summary line}"; fi
 }
 
 check_effects() {
@@ -327,7 +327,7 @@ check_base32() {	# gate (c): the 32-bit build after M13 behaves as before (tree 
   cmp=$(python3 "$repo/tools/dev/pinned-compare.py" "$o/pinned-$base/pinned-pinned.png" "$o/pinned-$ref/pinned-pinned.png" "$o/pinned-diff.png" 2>&1)
   set -- $cmp
   if [ $rc = 0 ] && [[ "$v" == *"All native class layouts match"* ]] && [ "$(echo "$ctl" | grep -o 'PASS' | wc -l)" = 2 ] \
-     && [[ "$st" == *"39 checks, 0 failed"* ]] && [[ "$mv" == *"96 checks, 0 failed"* ]] && [[ "$gl" == *"10 passed, 0 failed"* ]] \
+     && [[ "$st" == *"39 checks, 0 failed"* ]] && [[ "$mv" == *"96 checks, 0 failed"* ]] && [[ "$gl" == *"15 passed, 0 failed"* ]] \
      && [ "${1-}" = OK ] && [ -n "$vr" ] && [ "$vr" = "$vb" ] && awk -v s="$2" 'BEGIN{exit !(s>=99.9)}'; then
     result PASS base32 "32-bit after M13: verifyclasses '$v'; controls $ctl $st; $mv; $gl; pinned vs main's build ($base) at the same $vr: static part ${2}% within 2 levels, whole frame ${3}% bit-identical"
   else

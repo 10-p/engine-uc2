@@ -13,7 +13,8 @@
 #   shaders    tools/psh2glsl.py --selftest: the 100 pixel shaders, interpreter against Epic's compiled words
 #   gputest    tools/psh2glsl.py --gputest: the GLSL of every pixel shader against the interpreter (desktop GL)
 #   boot       twin: menu for 40 s; device class, 84 fragment + 405 vertex shaders through gl4es, 0 GL errors
-#   selftest   -glselftest numeric checks on both bindings: 11 of 11 on each (M7's ten + fixed-function fog), same tolerances
+#   selftest   -glselftest numeric checks on both bindings: 15 of 15 on each (M7's ten + fixed-function fog + pp-scale's
+#              pp-sizes, ref-copy, ref-taps, bb-copy-ref, which run at 1280x720), same tolerances
 #   progtest   420 complete programs (84 pixel shaders x 5 vertex shader enums) drawn on both, compared
 #   pinned     DM-Deadbolt (first PlayerStart) and the menu, desktop against twin: post-processing off (static
 #              part of the frame) and on
@@ -103,7 +104,7 @@ check_selftest() {   # also produces the logs check_progtest compares
     local o=$work/logs/$t/fx-selftest.out s e
     s=$(grep -a -o "selftest summary: [0-9]* passed, [0-9]* failed" "$o")
     e=$(grep -a -o "[0-9]* GL errors in [0-9]* frames" "$o" | tail -1)
-    [ "$s" = "selftest summary: 11 passed, 0 failed" ] && [[ "$e" == "0 GL errors in "* ]] && [ "$(crit "$o")" = 0 ] || ok=0
+    [ "$s" = "selftest summary: 15 passed, 0 failed" ] && [[ "$e" == "0 GL errors in "* ]] && [ "$(crit "$o")" = 0 ] || ok=0
     txt="$txt $([ $t = $D ] && echo desktop || echo twin): ${s:-no summary}, ${e:-no error count};"
     grep -a "UC2GLDrv: selftest [a-z-]*: " "$o" | sed -E "s/^UC2GLDrv: //; s/;.*//; s/^/INFO m11-selftest $([ $t = $D ] && echo desktop || echo twin): /" | tee -a "$summary"
   done
@@ -205,8 +206,8 @@ check_fallbacks() {
     # Threshold: the static part within a mean of 1 of 255 of the same binding with the capability (another
     # DXT decoder rounds differently; completed mip levels are only seen at extreme minification).
     # The self-test: every check passes (-glnofragdepth replaces depth-copy by the check of its fallback,
-    # -glnouintindex adds index-narrow: 11 or 12 checks).
-    if le "$(num mean "$st")" 1 && [[ "$s" =~ ^selftest\ summary:\ 1[12]\ passed,\ 0\ failed$ ]] && [ "$e" = 0 ] && [ "$(crit "$L/fb-$sw.out")" = 0 ]; then
+    # -glnouintindex adds index-narrow: 15 or 16 checks with pp-scale's four).
+    if le "$(num mean "$st")" 1 && [[ "$s" =~ ^selftest\ summary:\ 1[56]\ passed,\ 0\ failed$ ]] && [ "$e" = 0 ] && [ "$(crit "$L/fb-$sw.out")" = 0 ]; then
       echo "PASS m11-fallback-$sw: $(grep -a -o 'capabilities: .*' "$L/fb-$sw.out" | cut -c1-220); static part vs the same binding with the capability: $st; $s; GL errors $e" | tee -a "$summary"
     else
       fails=$((fails+1)); echo "FAIL m11-fallback-$sw: picture '$st' selftest '${s:-none}' GL errors '${e:-?}' critical $(crit "$L/fb-$sw.out")" | tee -a "$summary"
