@@ -26,6 +26,7 @@
 #              and reported, its fallback is NOT implemented (the line says what happens instead)
 #   movies     tools/dev/m9-movies.py scenarios logos, logos-skip, menu-movie on the twin
 #
+# M11_SERIAL=1 runs the two bindings one after the other instead of side by side (one game run at a time).
 # Thresholds are in the check functions, each with its reason; docs/porting/analysis/web-renderer.md has the
 # measurements they come from. A line starting with "INFO" is a measurement that decides nothing.
 set -u
@@ -65,6 +66,12 @@ PIN='set UCDeathmatch NumPlayers 0'
 # Both bindings at once (two trees): desktop in the background, twin in the foreground.
 both() {  # both <name> <secs> <fire> <map> <args...>
   local name=$1 secs=$2 fire=$3 map=$4; shift 4
+  if [ -n "${M11_SERIAL:-}" ]; then
+    # M11_SERIAL=1: one game run at a time (a loaded machine; coordinator's rule of 2026-10-08)
+    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D "$name" "$secs" "$fire" "$map" -opengl -glerrors "$@" > "$LD/$name.report" 2>&1
+    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T "$name" "$secs" "$fire" "$map" -gl4es -glerrors "$@" > "$LT/$name.report" 2>&1
+    return
+  fi
   UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D "$name" "$secs" "$fire" "$map" -opengl -glerrors "$@" > "$LD/$name.report" 2>&1 &
   local pid=$!
   UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T "$name" "$secs" "$fire" "$map" -gl4es -glerrors "$@" > "$LT/$name.report" 2>&1
@@ -195,6 +202,7 @@ check_fallbacks() {
   # isolates the fallback.
   UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T fb-ref 110 34 DM-Deadbolt -gl4es -glerrors -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$LT/fb-ref.report" 2>&1 &
   local pid=$!
+  [ -n "${M11_SERIAL:-}" ] && wait $pid
   UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D fb-ref 110 34 DM-Deadbolt -opengl -glerrors -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$LD/fb-ref.report" 2>&1
   wait $pid
   local spec sw tree arg fails=0 st s e L
