@@ -128,3 +128,18 @@ crash-notifier processes; both are the owner's to clear.
   targets/uc2/target.json`: 1,223 files, 1,899 MB; `manifestExclude` already drops the cook's by-products), then
   add the precache candidates listed in `targets/uc2/README.md` (cue tables, menu music and page sound, logos:
   about 7 MB). Tested meanwhile on a local tree (`run/m11audio-assets`, `analysis/web-audio.md` step 3).
+
+## M14 scripts (2026-10-07, branch `m14-scripts`, details in `analysis/scripts.md`)
+
+- **Decisions for the owner/coordinator, found while proving the rebuilt scripts equal to shipped + patches**
+  (none is changed by M14; each is a behaviour difference between the shipped scripts and the source):
+  - `UCGameplay.CTFFlag.home`: Epic's script patch for it is defective (wrong label name, stale label-table
+    offset), so with the shipped scripts a flag returning home never runs `Sleep(0.1); CheckTouching()`. The
+    rebuilt packages run it as the source says. Presumably the Xbox title update had the same defect.
+  - `GUIController.bUnlockCharacters`/`bShowAllMuts` are `config` in the shipped GUI.u, not in the source: the
+    community's `bUnlockCharacters=True` ini tweak stops working with rebuilt scripts (D-phase can restore it).
+- **Static link registers two classes in the wrong package (pre-existing, not M14's)**: `UHTTPDownload` and
+  `UPrefab` say `DECLARE_CLASS(...,Engine)` but live in the IpDrv/Editor DLLs, which registered them under
+  their own package; our static build registers them as `Engine.HTTPDownload`/`Engine.Prefab`. Default.ini's
+  `DownloadManagers=IpDrv.HTTPDownload` therefore names a class that does not exist here (package download has
+  never been exercised). Found by the header-export comparison.
