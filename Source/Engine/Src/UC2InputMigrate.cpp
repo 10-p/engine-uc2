@@ -101,6 +101,14 @@ ENGINE_API void UC2MigrateUserIni()
 	if( bFoundX && bFoundT && LimitX==TEXT("1000000") && LimitT==TEXT("10240000") )
 		for( INT i=0; i<ARRAY_COUNT(GUC2LinearPadSection); i++ )
 			UC2ApplyMigration( GUC2LinearPadSection[i] );
+
+	// The D-6 bindings need the D-6 UCPlayerInput (rebuilt UCGameplay.u): the shipped one overwrites aTurn/aLookUp
+	// from the stick, and the mouse would not turn the view. Say so once if that is the combination.
+	UClass* PlayerInputClass = FindObject<UClass>( NULL, TEXT("UCGameplay.UCPlayerInput") );
+	UBOOL bFound = 0;
+	FString MouseX = UC2IniValue( TEXT("Engine.Input"), TEXT("MouseX"), bFound );
+	if( PlayerInputClass && !FindField<UProperty>( PlayerInputClass, TEXT("MouseLookSensitivity") ) && appStrfind( *MouseX, TEXT("aTurn") ) )
+		debugf( NAME_Warning, TEXT("Input: the mouse is bound to aTurn/aLookUp (D-6) but this UCGameplay.u has no D-6 mouse look (the shipped package?): the mouse will not turn the view; install the rebuilt UCGameplay.u (docs/porting/analysis/mouse.md)") );
 	unguard;
 }
 
