@@ -271,3 +271,17 @@ native drawing path - not done. Example: `get Engine.GameEngine CacheSizeMegs` -
   (`e2e-mem-guard ... uc2-wasm-saves.spec.js`, pid 1753204, from the d3 work) without reassembling, so that run
   was served THIS engine (main + D-7/D-8), not theirs. Its result says nothing about their branch. My own
   browser run waits for theirs to end and reassembles first.
+
+## Step 7 (2026-10-07): final pass, regressions
+
+- Final pass of `tools/dev/d78.sh` on the final engine (0f77515; native md5 7b9d59f7...), `logs/d78/run`,
+  measurement `logs/d78/d78-measure-final.txt` (`tools/dev/d78.sh measure`, exit 0): **16 PASS, "ALL PASS"**.
+  (The pass's own run ended with `line 69: unexpected EOF` and exit 2 after "ALL PASS": I edited d78.sh while
+  it ran, and bash read on from its old offset; the measure-only rerun is clean.) The sniper run is
+  `logs/d78/run/sniper` (`sniper.scen`, tree d78-reg, same binary). Numbers in the gate below.
+- m7 renderer self-test (`tools/dev/m7-effects.sh d78 selftest`, `logs/d78/m7-selftest.txt`): 11 passed, 0 failed.
+- M10 controls, first try at load average 37-51 (`logs/d78/reg/m10`): text PASS 7; keyboard, mouse, pad, both
+  FAIL, every failure a press that came during a GUI animation or a step timed out on a slow frame (keyboard:
+  Escape handled before the box's `Unblocking animation`; mouse and pad: `UC2Arena_Armory` opened after the
+  15 s wait, then the launch confirm missed its A; both: B on the pause menu during its opening). Rerun with
+  m10-inject's own pacing knobs for slow frames (`M10_SLOW=2 M10_KEYHOLD=0.3`, D-2's), same checks.
