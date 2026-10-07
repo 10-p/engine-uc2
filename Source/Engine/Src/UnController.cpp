@@ -3247,6 +3247,19 @@ AActor* APlayerController::GetViewTarget()
 	unguard;
 }
 
+// D-8: the FOV the view of this player is drawn with. Inside the frame (the HUD's markers: the lock-on
+// reticle, the reflect icon, the Sonar blips) FovAngle already holds AutoFOV's effective value; called
+// from anywhere else it is the base value, which is widened the same way, so a projected point lands where
+// the world is drawn either way.
+static FLOAT AutoFovViewFov( APlayerController* PC, UViewport* View )
+{
+	if( GAutoFovScopeActor == PC )
+		return PC->FovAngle;
+	INT SizeX, SizeY;
+	ufrontAutoFovSize( View, SizeX, SizeY );
+	return ufrontEffectiveFov( PC->FovAngle, SizeX, SizeY );
+}
+
 // Converts a world location in to Screen X/Y coordinates
 
 void APlayerController::execWorldToScreen( FFrame& Stack, RESULT_DECL )
@@ -3270,7 +3283,7 @@ void APlayerController::execWorldToScreen( FFrame& Stack, RESULT_DECL )
 	AActor*		ViewActor = NULL;
 	CameraActor->eventPlayerCalcView( 0.f, ViewActor, CameraActor->Location, CameraActor->Rotation, 0 );
 
-	FCameraSceneNode	SceneNode(View,&View->RenderTarget,ViewActor, CameraActor->Location, CameraActor->Rotation,CameraActor->FovAngle);
+	FCameraSceneNode	SceneNode(View,&View->RenderTarget,ViewActor, CameraActor->Location, CameraActor->Rotation,AutoFovViewFov(CameraActor,View));
 	FCanvasUtil			CanvasUtil(&View->RenderTarget,View->RI);
 	
 #if 0
@@ -3321,7 +3334,7 @@ void APlayerController::execScreenToWorld( FFrame& Stack, RESULT_DECL )
 
 	CameraActor->eventPlayerCalcView( 0.f, ViewActor, CameraActor->Location, CameraActor->Rotation, 0 );
 
-	FCameraSceneNode	SceneNode(View,&View->RenderTarget,ViewActor, CameraActor->Location, CameraActor->Rotation, CameraActor->FovAngle);
+	FCameraSceneNode	SceneNode(View,&View->RenderTarget,ViewActor, CameraActor->Location, CameraActor->Rotation, AutoFovViewFov(CameraActor,View));
 	FCanvasUtil			CanvasUtil(&View->RenderTarget,View->RI);
 
 	// D-2: X/Y are the viewport canvas's coordinates (design pixels when the UI is boxed), as WorldToScreen gives

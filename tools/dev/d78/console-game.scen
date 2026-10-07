@@ -1,0 +1,79 @@
+# D-7 (console) in a match: Tab is the scoreboard (not the console), the key left of 1 (X keysym "grave",
+# SDL scancode GRAVE, IK_Tilde) opens the console, typing goes into its line and not to the player, Enter runs
+# the line (the reply is in the log) and closes it, Escape clears a typed line and then closes the console
+# without opening the pause menu. DM-Deadbolt from the pinned view (deadbolt.scen). Run through
+# tools/dev/m10-controls.sh --file (tools/dev/d78.sh).
+expect d78-console-key-logged Console: Engine.Console, ConsoleKey 192 120
+wait Bringing Level DM-Deadbolt.MyLevel up for play 120
+sleep 12
+chan exec set UCDeathmatch NumPlayers 0
+wait test: exec set UCDeathmatch NumPlayers 0 10
+sleep 1
+focus
+seek 8 P['_'].pawn==1 ;; key Alt_L 3
+sleep 3
+chan exec God
+wait test: exec God 10
+sleep 2
+probe c0
+check d78-console-closed P['c0'].console==0 and P['c0'].pawn==1
+# Tab = ShowScores (a toggle), as M10 bound it; before D-7 Tab opened the console here
+key Tab 0.3
+sleep 1.5
+probe tab1
+key Tab 0.3
+sleep 1.5
+probe tab2
+check d78-tab-scoreboard P['tab1'].scores==1 and P['tab1'].console==0 and P['tab2'].scores==0 and P['tab2'].console==0
+# the key left of 1 opens the console
+key grave 0.3
+sleep 1.5
+probe open
+check d78-console-opens P['open'].console==1 and P['open'].typed==''
+# typing (WASD among the letters) goes into the line, not to the pawn
+type get Engine.GameEngine CacheSizeMegs
+sleep 1.5
+probe typed
+check d78-console-typing P['typed'].typed=='get Engine.GameEngine CacheSizeMegs' and dist('open','typed')<1 and P['typed'].console==1
+shot console-typed
+key Return 0.3
+expect d78-console-enter-runs ^\s*32\.0+\s*$ 10
+sleep 1.5
+probe ran
+check d78-console-enter-closes P['ran'].console==0 and P['ran'].typed==''
+# Escape closes the console and drops the typed line (Epic's Console.uc: the press clears the line, the
+# release closes it); it does not open the pause menu. A second Escape then opens the pause menu as usual.
+key grave 0.3
+sleep 1.5
+type UISCALE
+sleep 1
+probe esc0
+key Escape 0.3
+sleep 1.5
+probe esc1
+check d78-console-escape P['esc0'].typed=='UISCALE' and P['esc0'].console==1 and P['esc1'].console==0 and P['esc1'].typed=='' and P['esc1'].menu=='None'
+# Escape on an empty line closes it too, and its release does not reach anything else
+key grave 0.3
+sleep 1.5
+key Escape 0.3
+sleep 1.5
+probe esc2
+check d78-console-escape-empty P['esc2'].console==0 and P['esc2'].menu=='None'
+# a harmless exec with a recognisable reply, and the history (Up brings the last line back)
+key grave 0.3
+sleep 1.5
+type AUTOFOV
+sleep 0.5
+key Return 0.3
+expect d78-console-exec-reply \[AutoFOV\]\ mode=2\ \(Adaptive\) 10
+sleep 1.5
+key grave 0.3
+sleep 1.5
+key Up 0.3
+sleep 1
+probe hist
+check d78-console-history P['hist'].typed=='AUTOFOV'
+key Escape 0.3
+sleep 1.5
+probe end
+check d78-console-end P['end'].console==0 and P['end'].menu=='None' and P['end'].pawn==1

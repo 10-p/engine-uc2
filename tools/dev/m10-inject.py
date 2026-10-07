@@ -26,6 +26,7 @@ Scenario language, one command per line (# comments):
     chan <channel command>        any channel line (exec ..., log ...)
     probe <tag>                   ask the engine for a probe line and keep its fields as <tag>
     seek <max> <expr> ;; <cmd>    probe (as '_') until <expr> holds, running <cmd> in between, at most <max> times
+    tryseek <max> <expr> ;; <cmd> the same, but the scenario goes on when <expr> is not reached (a later check says)
     shot <name>                   engine screenshot (SHOT); the shell renames it to <name>.png afterwards
     sleep <seconds>
     check <name> <python expr>    record PASS/FAIL; the expression sees P (probes by tag), yawdiff(a,b),
@@ -231,6 +232,11 @@ PROBE_RX = re.compile(r'probe (\S+) level=(\S+) menu=(\S+) focus=(\S+) text="(.*
                       r'ammo=([-\d.]+) shots=(\d+) mouse=\(([-\d.]+),([-\d.]+)\) pads=(\d+)')
 
 
+# D-7/D-8: fields after pads= (console typing line, scoreboard, the player's FOV, viewport size); absent from
+# an older engine, then they read -1 / '' / 0.
+PROBE_EXTRA_RX = re.compile(r'console=(-?\d+) typed="(.*)" scores=(-?\d+) fov=([-\d.]+) desiredfov=([-\d.]+) view=(\d+)x(\d+)')
+
+
 class Probe:
     def __init__(self, m):
         (self.tag, self.level, self.menu, self.focus, self.text, self.item, paused, pawn, lx, ly, lz, rp, ry, rr,
@@ -238,9 +244,17 @@ class Probe:
         self.paused = int(paused); self.pawn = int(pawn)
         self.loc = (float(lx), float(ly), float(lz)); self.rot = (int(rp), int(ry), int(rr))
         self.ammo = float(ammo); self.shots = int(shots); self.mouse = (float(mx), float(my)); self.pads = int(pads)
+        x = PROBE_EXTRA_RX.search(m.string)
+        self.console = int(x.group(1)) if x else -1
+        self.typed = x.group(2) if x else ''
+        self.scores = int(x.group(3)) if x else -1
+        self.fov = float(x.group(4)) if x else 0.0
+        self.desiredfov = float(x.group(5)) if x else 0.0
+        self.view = (int(x.group(6)), int(x.group(7))) if x else (0, 0)
 
     def __repr__(self):
-        return f"level={self.level} menu={self.menu} focus={self.focus} text={self.text!r} item={self.item!r} paused={self.paused} pawn={self.pawn} loc={self.loc} rot={self.rot} weapon={self.weapon} ammo={self.ammo} shots={self.shots}"
+        return (f"level={self.level} menu={self.menu} focus={self.focus} text={self.text!r} item={self.item!r} paused={self.paused} pawn={self.pawn} loc={self.loc} rot={self.rot} weapon={self.weapon} ammo={self.ammo} shots={self.shots}"
+                f" console={self.console} typed={self.typed!r} scores={self.scores} fov={self.fov} desiredfov={self.desiredfov} view={self.view}")
 
 
 P = {}
@@ -315,8 +329,9 @@ def execute(line):
     global fail_fast, mark_at
     cmd, _, rest = line.partition(' ')
     if True:
-        if cmd == 'seek':
+        if cmd in ('seek', 'tryseek'):
             # seek <max> <expr> ;; <command>: probe as '_', stop when <expr> holds, else run <command>
+            # tryseek: the same, but not reaching <expr> only prints a note and the scenario goes on (D-8)
             head, _, action = rest.partition(';;')
             limit, _, expr = head.strip().partition(' ')
             for _ in range(int(limit) + 1):
@@ -325,6 +340,9 @@ def execute(line):
                     return
                 execute(action.strip())
                 time.sleep(0.3)
+            if cmd == 'tryseek':
+                print(f'  tryseek: {expr} not reached in {limit} steps; going on', flush=True)
+                return
             raise RuntimeError(f'seek: {expr} not reached in {limit} steps')
         elif cmd == 'wait':
             parts = rest.rsplit(' ', 1)

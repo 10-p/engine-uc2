@@ -32,6 +32,8 @@
 #                           scenarios' 640x480 positions land in the centred 4:3 UI box (M10_UIMAP=none: raw)
 #   M10_INI="K=V K2=V2"     set existing keys of the tree's Default.ini after the reset (every line "K=..." gets V;
 #                           D-2 uses it for UIScaleMode=Native640)
+#   M10_XVFB=2560x1080      Xvfb's screen at least this big (D-8: a scenario that changes the window size with
+#                           TEMPSETRES needs room for the biggest)
 # The game is also given UC2_WINE_DISPLAY=$DISPLAY (Xvfb's), which tools/dev/m12-wine.sh needs.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -75,6 +77,9 @@ set_res() {
   rm -f "$sys/Avaris.ini"
   local w=${M10_RES%x*} h=${M10_RES#*x}
   [ "$w" -lt 1280 ] && w=1280; [ "$h" -lt 720 ] && h=720
+  if [ -n "${M10_XVFB:-}" ]; then
+    [ "$w" -lt "${M10_XVFB%x*}" ] && w=${M10_XVFB%x*}; [ "$h" -lt "${M10_XVFB#*x}" ] && h=${M10_XVFB#*x}
+  fi
   xvfb_screen=${w}x${h}
   export M10_UIMAP=${M10_UIMAP:-$M10_RES}
 }

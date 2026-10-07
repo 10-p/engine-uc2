@@ -1750,6 +1750,171 @@ void FLevelSceneNode::Render(FRenderInterface* RI)
 	unguard;
 }
 
+/*-----------------------------------------------------------------------------
+	D-8: AutoFOV (UnRender.h; docs/porting/analysis/console-fov.md).
+-----------------------------------------------------------------------------*/
+
+ENGINE_API APlayerController*	GAutoFovScopeActor		= NULL;
+ENGINE_API FLOAT				GAutoFovFrameBase		= 90.0f;
+ENGINE_API FLOAT				GAutoFovFrameEffective	= 90.0f;
+
+// Read once from [ufront.AutoFOV] of the system ini (the template's section: a free section, so the
+// frontend's -ini:System:[ufront.AutoFOV]:AutoFOV=0 reaches it); AUTOFOV on the console changes the mode
+// for the session.
+static UBOOL	GAutoFovParsed		= 0;
+static INT		GAutoFovMode		= AUTOFOV_Adaptive;
+static FLOAT	GAutoFovRef			= 4.0f / 3.0f;
+static FLOAT	GAutoFovWeapon		= 1.0f;
+static INT		GAutoFovLastX		= -1;
+static INT		GAutoFovLastY		= -1;
+static FLOAT	GAutoFovLastBase	= -1.0f;
+static INT		GAutoFovLastMode	= -1;
+static INT		GAutoFovWeapLastX	= -1;
+static INT		GAutoFovWeapLastY	= -1;
+static FLOAT	GAutoFovWeapLastBase = -1.0f;
+
+static const TCHAR* AutoFovModeName( INT Mode )
+{
+	return Mode==AUTOFOV_Off ? TEXT("Off") : Mode==AUTOFOV_HorPlus ? TEXT("HorPlus") : TEXT("Adaptive");
+}
+
+static void ufrontParseAutoFov()
+{
+	guard(ufrontParseAutoFov);
+	GAutoFovParsed = 1;
+	INT   Mode = GAutoFovMode;
+	FLOAT Ref  = GAutoFovRef;
+	FLOAT Weap = GAutoFovWeapon;
+	if( GConfig )
+	{
+		GConfig->GetInt  ( TEXT("ufront.AutoFOV"), TEXT("AutoFOV"),         Mode );
+		GConfig->GetFloat( TEXT("ufront.AutoFOV"), TEXT("ReferenceAspect"), Ref  );
+		GConfig->GetFloat( TEXT("ufront.AutoFOV"), TEXT("WeaponScale"),     Weap );
+	}
+	GAutoFovMode   = Clamp( Mode, (INT)AUTOFOV_Off, (INT)AUTOFOV_Adaptive );
+	GAutoFovRef    = (Ref > 0.01f) ? Ref : (4.0f / 3.0f);
+	GAutoFovWeapon = Clamp( Weap, 0.0f, 4.0f );
+	debugf( NAME_Log, TEXT("[AutoFOV] mode=%i referenceAspect=%f weaponScale=%f"), GAutoFovMode, GAutoFovRef, GAutoFovWeapon );
+	unguard;
+}
+
+ENGINE_API void ufrontAutoFovSize( UViewport* Viewport, INT& SizeX, INT& SizeY )
+{
+	SizeX = Viewport ? Viewport->SizeX : 0;
+	SizeY = Viewport ? Viewport->SizeY : 0;
+	if( Viewport && Viewport->ScaleX > 0.01f && Viewport->ScaleY > 0.01f && (Viewport->ScaleX != 1.f || Viewport->ScaleY != 1.f) )
+	{
+		SizeX = appRound( Viewport->SizeX / Viewport->ScaleX );
+		SizeY = appRound( Viewport->SizeY / Viewport->ScaleY );
+	}
+}
+
+// Aspect / reference, or 1 when AutoFOV must leave the FOV alone (off, degenerate, at the reference, or
+// narrower in Adaptive mode).
+static DOUBLE AutoFovWiden( INT SizeX, INT SizeY )
+{
+	if( !GAutoFovParsed )
+		ufrontParseAutoFov();
+	if( GAutoFovMode == AUTOFOV_Off || SizeX <= 0 || SizeY <= 0 )
+		return 1.0;
+	DOUBLE K = ((DOUBLE)SizeX / (DOUBLE)SizeY) / (DOUBLE)GAutoFovRef;
+	// At the reference aspect nothing may change, bit for bit (640x480, 1024x768): the ini's 1.333333 is
+	// not exactly 4/3, and 2*atan(tan(x)) is not exactly x in floating point.
+	if( Abs(K - 1.0) < 1e-4 )
+		return 1.0;
+	if( GAutoFovMode == AUTOFOV_Adaptive && K < 1.0 )
+		return 1.0;
+	return K;
+}
+
+ENGINE_API FLOAT ufrontEffectiveFov( FLOAT BaseFov, INT SizeX, INT SizeY, UBOOL bLog )
+{
+	guard(ufrontEffectiveFov);
+	DOUBLE K = AutoFovWiden( SizeX, SizeY );
+	FLOAT Eff = BaseFov;
+	if( K != 1.0 )
+	{
+		DOUBLE Base = Clamp( BaseFov, 1.0f, 170.0f );
+		Eff = (FLOAT)( appAtan( appTan( Base * PI / 360.0 ) * K ) * 360.0 / PI );
+		Eff = Clamp( Eff, 1.0f, 170.0f );
+	}
+	// One line whenever the inputs change (viewport size, base FOV by more than half a degree, mode): the
+	// template's format, which the frontend's AutoFOV test reads. A zoom costs one line per frame of its
+	// interpolation, once.
+	if( bLog && ( SizeX != GAutoFovLastX || SizeY != GAutoFovLastY || Abs(BaseFov - GAutoFovLastBase) > 0.5f || GAutoFovMode != GAutoFovLastMode ) )
+	{
+		GAutoFovLastX    = SizeX;
+		GAutoFovLastY    = SizeY;
+		GAutoFovLastBase = BaseFov;
+		GAutoFovLastMode = GAutoFovMode;
+		if( GAutoFovMode != AUTOFOV_Off )
+			debugf( NAME_Log, TEXT("[AutoFOV] viewport=%ix%i aspect=%f base=%f effective=%f"),
+				SizeX, SizeY, SizeY > 0 ? (FLOAT)SizeX / (FLOAT)SizeY : 0.f, BaseFov, Eff );
+	}
+	return Eff;
+	unguard;
+}
+
+ENGINE_API FLOAT ufrontBaseFov( FLOAT EffectiveFov, INT SizeX, INT SizeY )
+{
+	guard(ufrontBaseFov);
+	DOUBLE K = AutoFovWiden( SizeX, SizeY );
+	if( K == 1.0 )
+		return EffectiveFov;
+	DOUBLE Eff = Clamp( EffectiveFov, 1.0f, 170.0f );
+	return Clamp( (FLOAT)( appAtan( appTan( Eff * PI / 360.0 ) / K ) * 360.0 / PI ), 1.0f, 170.0f );
+	unguard;
+}
+
+ENGINE_API FLOAT ufrontWeaponFov( FLOAT BaseFov, FLOAT EffectiveFov )
+{
+	guard(ufrontWeaponFov);
+	if( !GAutoFovParsed )
+		ufrontParseAutoFov();
+	if( GAutoFovMode == AUTOFOV_Off || EffectiveFov == BaseFov || Abs(GAutoFovWeapon - 1.0f) < 0.001f )
+		return EffectiveFov;
+	// Blend in tan space (linear on screen): 0.5 lands visually half-way.
+	DOUBLE TanBase = appTan( Clamp( BaseFov, 1.0f, 170.0f ) * PI / 360.0 );
+	DOUBLE TanEff  = appTan( Clamp( EffectiveFov, 1.0f, 170.0f ) * PI / 360.0 );
+	DOUBLE TanOut  = Max( TanBase + ( TanEff - TanBase ) * GAutoFovWeapon, 0.001 );
+	return Clamp( (FLOAT)( appAtan( TanOut ) * 360.0 / PI ), 1.0f, 170.0f );
+	unguard;
+}
+
+// The first-person weapon's line (latched like the world's): what it was asked for and what is drawn.
+ENGINE_API void ufrontLogWeaponFov( INT SizeX, INT SizeY, FLOAT BaseFov, FLOAT DrawFov )
+{
+	if( GAutoFovMode == AUTOFOV_Off )
+		return;
+	if( SizeX != GAutoFovWeapLastX || SizeY != GAutoFovWeapLastY || Abs(BaseFov - GAutoFovWeapLastBase) > 0.5f )
+	{
+		GAutoFovWeapLastX = SizeX;
+		GAutoFovWeapLastY = SizeY;
+		GAutoFovWeapLastBase = BaseFov;
+		debugf( NAME_Log, TEXT("[AutoFOV] weapon viewport=%ix%i base=%f drawFov=%f"), SizeX, SizeY, BaseFov, DrawFov );
+	}
+}
+
+ENGINE_API UBOOL ufrontAutoFovExec( const TCHAR* Cmd, FOutputDevice& Ar )
+{
+	guard(ufrontAutoFovExec);
+	if( !ParseCommand(&Cmd,TEXT("AUTOFOV")) )
+		return 0;
+	if( !GAutoFovParsed )
+		ufrontParseAutoFov();
+	TCHAR Word[64];
+	if( ParseToken( Cmd, Word, ARRAY_COUNT(Word), 0 ) )
+	{
+		if( appStricmp(Word,TEXT("Off"))==0 || appStricmp(Word,TEXT("0"))==0 )				GAutoFovMode = AUTOFOV_Off;
+		else if( appStricmp(Word,TEXT("HorPlus"))==0 || appStricmp(Word,TEXT("1"))==0 )		GAutoFovMode = AUTOFOV_HorPlus;
+		else if( appStricmp(Word,TEXT("Adaptive"))==0 || appStricmp(Word,TEXT("2"))==0 )	GAutoFovMode = AUTOFOV_Adaptive;
+		else Ar.Logf( TEXT("AUTOFOV: unknown mode '%s' (Off, HorPlus, Adaptive or 0, 1, 2)"), Word );
+	}
+	Ar.Logf( TEXT("[AutoFOV] mode=%i (%s) referenceAspect=%f weaponScale=%f"), GAutoFovMode, AutoFovModeName(GAutoFovMode), GAutoFovRef, GAutoFovWeapon );
+	return 1;
+	unguard;
+}
+
 //
 //	FCameraSceneNode::FCameraSceneNode
 //
@@ -2130,8 +2295,20 @@ void FPlayerSceneNode::Render(FRenderInterface* RI)
 		{
 			RI->Clear( 1, FColor(0,0,0), 0, 0, 0, 0 );
 			Viewport->ScaleFOVY = 1.f / Viewport->CinematicsRatio;
+			FLOAT BandScale = Viewport->ScaleFOVY;
+			// D-8: ScaleFOVY multiplies the vertical half-ANGLE of the view. When AutoFOV has widened the
+			// view (ViewFOV is the effective FOV of this frame), the band must show the vertical extent the
+			// 4:3 band shows, so the scale is applied to the base FOV and widened in tan space as the
+			// horizontal is; at the reference aspect (no widening) Epic's line above stands alone.
+			if( GAutoFovScopeActor == Viewport->Actor && ViewFOV != GAutoFovFrameBase && ViewFOV == GAutoFovFrameEffective )
+			{
+				DOUBLE HalfBase = Clamp( GAutoFovFrameBase, 1.0f, 170.0f ) * PI / 360.0;
+				DOUBLE HalfEff  = ViewFOV * PI / 360.0;
+				DOUBLE K        = appTan( HalfEff ) / appTan( HalfBase );
+				Viewport->ScaleFOVY = (FLOAT)( appAtan( appTan( HalfBase * BandScale ) * K ) / HalfEff );
+			}
 			UpdateMatrices();
-			FLOAT SizeY		= Viewport->SizeY * Viewport->ScaleFOVY;
+			FLOAT SizeY		= Viewport->SizeY * BandScale;
 			RI->SetViewport( 0, (Viewport->SizeY - SizeY ) / 2, Viewport->SizeX, SizeY );
 		}
 

@@ -258,6 +258,20 @@ void UGameEngine::Init()
 		if (Console) {
 			Client->InteractionMaster->Console = Console;
 			Viewport->Console = Console;
+
+			// D-7: the shipped [Engine.Console] ConsoleKey=9 is Tab. The console sees every key before the
+			// menus and the bindings (it is the first script interaction), so Tab opened it instead of the
+			// scoreboard in a match (Tab=ShowScores) and instead of Start in the menus ([GUI.EmulatedJoypad]
+			// Tab=Start), and the key PC players try, the one left of 1, did nothing. Default.ini now says 192
+			// (IK_Tilde); a system ini derived before that (a kept Avaris.ini, the web's saved one) still says
+			// 9 and is moved to the tilde key here, for this run (docs/porting/analysis/console-fov.md).
+			UConsole* TheConsole = Cast<UConsole>(Console);
+			if( TheConsole && TheConsole->ConsoleKey == IK_Tab )
+			{
+				TheConsole->ConsoleKey = IK_Tilde;
+				debugf( NAME_Init, TEXT("Console: ConsoleKey Tab (the shipped value) collides with the scoreboard and the menus' Start; using the key left of 1 (IK_Tilde) instead") );
+			}
+			debugf( NAME_Init, TEXT("Console: %s, ConsoleKey %i"), Console->GetClass()->GetPathName(), TheConsole ? (INT)TheConsole->ConsoleKey : -1 );
 		}
 
 		// initialize the input
@@ -422,6 +436,8 @@ UBOOL UGameEngine::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UGameEngine::Exec);
 	if( UC2NetTestExec( this, Cmd, Ar ) )	// uc2 port: NETPROBE/NETPLACE/NETAIM
+		return 1;
+	if( ufrontAutoFovExec( Cmd, Ar ) )		// D-8: AUTOFOV [Off|HorPlus|Adaptive]
 		return 1;
 	const TCHAR* Str=Cmd;
 #if WITH_PORTABLE_MOVIES
@@ -3026,6 +3042,56 @@ void UGameEngine::PrecacheMaterials(UViewport *Viewport, BYTE* HitData, INT* Hit
 }
 
 //
+// D-8: scoped AutoFOV override (engine-ut2004's FScopedAutoFov, UnRender.h). Everything that uses the
+// player's FOV while a frame is drawn reads Viewport->Actor->FovAngle: the world's scene node below, the
+// first-person weapon (UCanvas::DrawActor), the HUD's markers (WorldToScreen), the mesh LOD and shadow
+// biases. Overriding it for the frame keeps them on one value without touching the render device; it is
+// put back afterwards, so script outside the frame (and the mouse, UCPlayerInput's DesiredFOV scale)
+// sees the player's real FOV.
+//
+// UC2: something may set the FOV during the frame (the teleport camera effect, UUCScreenTeleportOverlay::
+// PreRender, which takes its starting FOV inside the frame and widens it to 170 and back). That value is
+// meant as seen on this screen, so it is kept, mapped back to base units (the inverse of Hor+), instead
+// of being thrown away by the restore.
+//
+struct FScopedAutoFov
+{
+	APlayerController*	Actor;
+	FLOAT				Saved;
+	FLOAT				Applied;
+	INT					SizeX, SizeY;
+	FScopedAutoFov( UViewport* Viewport )
+	:	Actor( Viewport->Actor )
+	,	Saved( Viewport->Actor->FovAngle )
+	{
+		ufrontAutoFovSize( Viewport, SizeX, SizeY );
+		Applied = ufrontEffectiveFov( Saved, SizeX, SizeY, 1 );
+		GAutoFovScopeActor		= Actor;
+		GAutoFovFrameBase		= Saved;
+		GAutoFovFrameEffective	= Applied;
+		Actor->FovAngle			= Applied;
+	}
+	~FScopedAutoFov()
+	{
+		if( Actor->FovAngle != Applied )
+		{
+			// Back to base units; a value that round-trips to the saved or the desired FOV (the effect
+			// ending where it started) is snapped to it exactly, so `FovAngle != DesiredFOV` tests in script
+			// (aim help, AdjustView) do not see a rounding error.
+			FLOAT Base = ufrontBaseFov( Actor->FovAngle, SizeX, SizeY );
+			if( Abs(Base - Saved) < 0.001f )
+				Base = Saved;
+			else if( Abs(Base - Actor->DesiredFOV) < 0.001f )
+				Base = Actor->DesiredFOV;
+			Actor->FovAngle = Base;
+		}
+		else
+			Actor->FovAngle = Saved;
+		GAutoFovScopeActor = NULL;
+	}
+};
+
+//
 // Draw a global view.
 //
 void UGameEngine::Draw( UViewport* Viewport, FLOAT DeltaSeconds, UBOOL Blit, BYTE* HitData, INT* HitSize )
@@ -3052,7 +3118,11 @@ void UGameEngine::Draw( UViewport* Viewport, FLOAT DeltaSeconds, UBOOL Blit, BYT
 		debugf(TEXT("Warning: NULL CameraActor returned from PlayerCalcView for %s"),Viewport->Actor->GetPathName());
 		CameraActor = Viewport->Actor;
 	}
-	
+
+	// D-8: AutoFOV, armed after script has calculated the view (PlayerCalcView sees the real FOV) and
+	// restored by the destructor on every way out of this function.
+	FScopedAutoFov AutoFovScope( Viewport );
+
 #ifdef _XBOX
 	extern UBOOL IsPlayingMovie(void);
 	UBOOL bNeedFlush = IsPlayingMovie();

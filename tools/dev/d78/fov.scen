@@ -1,0 +1,229 @@
+# D-8 (AutoFOV): one game with the world frozen, the same scene at 4:3, 16:9 and 21:9 at the same height
+# (TEMPSETRES 1440x1080, 1920x1080, 2560x1080), so the wider pictures can be compared column for column with
+# the 4:3 one (tools/dev/d78-measure.py): third person, first person (the weapon, also with the level off),
+# zoomed (FOV 40), the lock-on reticle on a target, and AUTOFOV 0 for the before pictures. DM-Deadbolt from
+# the pinned view of deadbolt.scen (NumPlayers 0 = the first PlayerStart, no bots, God). Run through
+# tools/dev/m10-controls.sh --file with M10_XVFB=2560x1080 (tools/dev/d78.sh).
+wait Bringing Level DM-Deadbolt.MyLevel up for play 120
+sleep 12
+chan exec set UCDeathmatch NumPlayers 0
+wait test: exec set UCDeathmatch NumPlayers 0 10
+sleep 1
+focus
+# Fire until the player is in (held 3 s and repeated: slow frames in software GL)
+seek 8 P['_'].pawn==1 ;; key Alt_L 3
+sleep 3
+probe spawn
+check d78-spawned P['spawn'].pawn==1 and P['spawn'].level=='DM-Deadbolt'
+chan exec God
+wait test: exec God 10
+sleep 3
+# ---- third person (UC2's default view), frozen
+chan exec set LevelInfo TimeDilation 0.001
+wait test: exec set LevelInfo TimeDilation 10
+sleep 2
+chan exec TEMPSETRES 1440x1080w
+sleep 5
+probe tp43
+shot tp-1440x1080
+chan exec TEMPSETRES 1920x1080w
+sleep 5
+probe tp169
+shot tp-1920x1080
+chan exec AUTOFOV 0
+wait test: exec AUTOFOV 0 10
+sleep 4
+probe tp169off
+shot tp-1920x1080-off
+chan exec AUTOFOV 2
+wait test: exec AUTOFOV 2 10
+sleep 2
+chan exec TEMPSETRES 2560x1080w
+sleep 6
+probe tp219
+shot tp-2560x1080
+chan exec AUTOFOV 0
+wait test: exec AUTOFOV 0 10
+sleep 5
+shot tp-2560x1080-off
+chan exec AUTOFOV 2
+wait test: exec AUTOFOV 2 10
+sleep 2
+# the cinematic letterbox (matinee's bCinematicView; the CINEMATICS console command switches it): the 4:3 band
+# must be the centre of the wider bands too
+chan exec CINEMATICS 1
+wait test: exec CINEMATICS 1 10
+sleep 5
+shot cin-2560x1080
+chan exec TEMPSETRES 1440x1080w
+sleep 5
+shot cin-1440x1080
+chan exec TEMPSETRES 1920x1080w
+sleep 5
+shot cin-1920x1080
+chan exec AUTOFOV 0
+wait test: exec AUTOFOV 0 10
+sleep 4
+shot cin-1920x1080-off
+chan exec AUTOFOV 2
+wait test: exec AUTOFOV 2 10
+chan exec CINEMATICS 0
+wait test: exec CINEMATICS 0 10
+sleep 2
+check d78-sizes P['tp43'].view==(1440,1080) and P['tp169'].view==(1920,1080) and P['tp219'].view==(2560,1080)
+check d78-base-fov-untouched P['tp43'].fov==P['tp169'].fov==P['tp219'].fov==P['spawn'].fov
+# ---- first person: the weapon
+chan exec set LevelInfo TimeDilation 1
+wait test: exec set LevelInfo TimeDilation 10
+sleep 1
+chan exec ToggleThirdCam
+wait test: exec ToggleThirdCam 10
+sleep 6
+chan exec set LevelInfo TimeDilation 0.001
+wait test: exec set LevelInfo TimeDilation 10
+# only the player's controller ticks (CheatManager.PlayersOnly): the weapon's idle animation stops too
+chan exec PlayersOnly
+wait test: exec PlayersOnly 10
+sleep 2
+chan exec TEMPSETRES 1440x1080w
+sleep 5
+probe fp43
+# the weapon and the HUD on black (the level not drawn), in an order that is not the order of the aspects, and
+# 1440x1080 twice: the second tells how much the weapon's idle animation moved in the frozen world
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 3
+shot fp-1440x1080-lo
+chan exec TEMPSETRES 2560x1080w
+sleep 6
+shot fp-2560x1080-lo
+chan exec TEMPSETRES 1920x1080w
+sleep 5
+shot fp-1920x1080-lo
+chan exec AUTOFOV 0
+wait test: exec AUTOFOV 0 10
+sleep 4
+shot fp-1920x1080-lo-off
+chan exec AUTOFOV 2
+wait test: exec AUTOFOV 2 10
+sleep 2
+chan exec TEMPSETRES 1440x1080w
+sleep 5
+shot fp-1440x1080-lo2
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 4
+shot fp-1440x1080
+chan exec TEMPSETRES 2560x1080w
+sleep 6
+shot fp-2560x1080
+chan exec TEMPSETRES 1920x1080w
+sleep 5
+probe fp169
+shot fp-1920x1080
+chan exec AUTOFOV 0
+wait test: exec AUTOFOV 0 10
+sleep 4
+shot fp-1920x1080-off
+chan exec AUTOFOV 2
+wait test: exec AUTOFOV 2 10
+sleep 2
+# ---- zoomed (what the sniper rifle does: DesiredFOV and FovAngle set together), first person
+chan exec set UCPlayerController DesiredFOV 40
+wait test: exec set UCPlayerController DesiredFOV 10
+chan exec set UCPlayerController FovAngle 40
+wait test: exec set UCPlayerController FovAngle 10
+sleep 4
+probe zoom169
+shot zoom-1920x1080
+chan exec TEMPSETRES 1440x1080w
+sleep 5
+probe zoom43
+shot zoom-1440x1080
+chan exec TEMPSETRES 2560x1080w
+sleep 6
+probe zoom219
+shot zoom-2560x1080
+check d78-zoom-fov P['zoom43'].fov==40 and P['zoom169'].fov==40 and P['zoom219'].fov==40
+chan exec set UCPlayerController DesiredFOV 90
+chan exec set UCPlayerController FovAngle 90
+wait test: exec set UCPlayerController FovAngle 10
+# (The sniper rifle's own zoom is DesiredFOV/FovAngle = its ZoomFOV, measured above as "zoom 40"; a match started
+# from a URL gives the player only the race weapon, so the rifle and its scope overlay are not reached here.)
+chan exec PlayersOnly
+wait test: exec PlayersOnly 10
+# ---- third person again, the lock-on reticle on a summoned target
+chan exec TEMPSETRES 1920x1080w
+chan exec set LevelInfo TimeDilation 1
+wait test: exec set LevelInfo TimeDilation 10
+sleep 2
+chan exec ToggleThirdCam
+wait test: exec ToggleThirdCam 10
+sleep 5
+chan exec summon UCCharacters.UCPawn_Liandri_Devastation
+wait test: exec summon 10
+sleep 3
+keydown s
+sleep 1.2
+keyup s
+sleep 2
+chan exec Lock 1
+wait test: exec Lock 1 10
+sleep 0.5
+chan exec Lock 0
+sleep 10
+chan exec set LevelInfo TimeDilation 0.001
+wait test: exec set LevelInfo TimeDilation 10
+chan exec PlayersOnly
+wait test: exec PlayersOnly 10
+sleep 3
+# each size: the scene (the target's figure), then the same frozen frame with the level not drawn (the reticle
+# alone on black: its centre and size measure cleanly; its ring of arcs turns, so not its bounding box)
+chan exec TEMPSETRES 1440x1080w
+sleep 5
+shot lock-1440x1080
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 3
+shot lock-1440x1080-lo
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+chan exec TEMPSETRES 1920x1080w
+sleep 5
+shot lock-1920x1080
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 3
+shot lock-1920x1080-lo
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+chan exec AUTOFOV 0
+wait test: exec AUTOFOV 0 10
+sleep 4
+shot lock-1920x1080-off
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 3
+shot lock-1920x1080-lo-off
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+chan exec AUTOFOV 2
+wait test: exec AUTOFOV 2 10
+chan exec TEMPSETRES 2560x1080w
+sleep 6
+shot lock-2560x1080
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 3
+shot lock-2560x1080-lo
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+chan exec TEMPSETRES 1440x1080w
+sleep 5
+shot lock-1440x1080-2
+chan exec PlayersOnly
+wait test: exec PlayersOnly 10
+chan exec set LevelInfo TimeDilation 1
+sleep 2
+probe end
+check d78-alive P['end'].pawn==1

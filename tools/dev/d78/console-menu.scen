@@ -1,0 +1,51 @@
+# D-7 (console) in the menus: Tab is the menus' Start (not the console), the key left of 1 opens the console
+# over the main menu, typing goes into its line (not to the menus' key table: W/S/A/D are D-pad there), Enter
+# runs it, Escape twice closes it and the menu stays where it was. Run through tools/dev/m10-controls.sh --file.
+wait OpenMenu \[UCMenu.UC2MainMenu\] 90
+sleep 3
+focus
+probe m0
+check d78-menu-up P['m0'].menu=='UC2MainMenu' and P['m0'].console==0
+key Tab 0.3
+sleep 1.5
+probe mtab
+check d78-menu-tab-not-console P['mtab'].console==0
+# back to the main menu if Start went somewhere
+key Escape 0.3
+sleep 2
+probe m1
+key grave 0.3
+sleep 1.5
+probe mopen
+check d78-menu-console-opens P['mopen'].console==1
+type was AUTOFOV
+sleep 1
+probe mtyped
+check d78-menu-console-typing P['mtyped'].typed=='was AUTOFOV' and P['mtyped'].menu==P['m1'].menu and P['mtyped'].focus==P['m1'].focus
+# Escape closes the console; the menu page under it stays (its release does not reach the page)
+key Escape 0.3
+sleep 1.5
+probe mesc
+check d78-menu-console-escape P['mesc'].console==0 and P['mesc'].menu==P['m1'].menu and P['mesc'].focus==P['m1'].focus
+key grave 0.3
+sleep 1.5
+type AUTOFOV
+sleep 0.5
+key Return 0.3
+expect d78-menu-console-runs \[AutoFOV\]\ mode=2\ \(Adaptive\) 10
+sleep 1.5
+probe mran
+check d78-menu-console-closes P['mran'].console==0 and P['mran'].menu==P['m1'].menu
+# Escape on an empty line in a sub-page: the console closes, the page stays (before this fix the release went
+# on to the page and took it back one step)
+key Down 0.3
+sleep 1
+key Return 0.3
+sleep 3
+probe sub
+key grave 0.3
+sleep 1.5
+key Escape 0.3
+sleep 2
+probe subesc
+check d78-submenu-console-escape P['sub'].menu!=P['m1'].menu and P['subesc'].console==0 and P['subesc'].menu==P['sub'].menu

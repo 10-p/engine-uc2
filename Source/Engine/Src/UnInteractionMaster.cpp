@@ -82,6 +82,21 @@ UBaseGUIController* UInteractionMaster::GetGUIController( UViewport* InViewport 
 	unguard;
 }
 
+// D-7: keys whose press the console took while it was typing (or that opened or closed it), until their
+// release. The console is the first script interaction and sees every key before the menus, but Epic's
+// Console.uc only consumes key PRESSES: the release went on to the menus, whose pages act on releases
+// (UGUIPage::NativeKeyEvent closes the page on the release of Escape), so Escape on an empty console line
+// closed the console and then the menu page under it. Here the release of such a key, and the control
+// character the window sends with the press of Escape/Tab/Backspace (SDL2Viewport, WM_CHAR's), stop at the
+// console. UEngine::InputEvent still hands every release to the input system, so nothing stays held.
+static UBOOL GConsoleOwnsKey[256];
+
+static UBOOL ConsoleIsTyping( UInteraction* Console )
+{
+	UConsole* C = Cast<UConsole>( Console );
+	return C && C->bTyping;
+}
+
 // Process all InputEvents. 
 
 int UInteractionMaster::MasterProcessKeyType(EInputKey iKey, TCHAR Unicode)
@@ -94,6 +109,10 @@ int UInteractionMaster::MasterProcessKeyType(EInputKey iKey, TCHAR Unicode)
 	BYTE tiKey=iKey;
 
 	if ( eventProcess_KeyType( GlobalInteractions, tiKey, FString::Printf(TEXT("%c"), Unicode) ) )
+		return 1;
+
+	// D-7: the control character of a key whose press the console took (see GConsoleOwnsKey)
+	if ( (INT)iKey < 0x20 && GConsoleOwnsKey[(BYTE)iKey] )
 		return 1;
 	
 
@@ -132,8 +151,22 @@ int UInteractionMaster::MasterProcessKeyEvent(EInputKey iKey, EInputAction State
 	BYTE tiKey = iKey;
 	BYTE tState = State;
 
+	// D-7: see GConsoleOwnsKey
+	UBOOL WasTyping = ConsoleIsTyping( Console );
+	UBOOL OwnedRelease = State == IST_Release && GConsoleOwnsKey[(BYTE)iKey];
+	if ( OwnedRelease )
+		GConsoleOwnsKey[(BYTE)iKey] = 0;
+
 	if ( eventProcess_KeyEvent( GlobalInteractions, tiKey, tState, Delta) )
-			return 1;
+	{
+		if ( State == IST_Press && (WasTyping || ConsoleIsTyping( Console )) )
+			GConsoleOwnsKey[(BYTE)iKey] = 1;
+		return 1;
+	}
+	if ( OwnedRelease )
+		return 1;
+	if ( State == IST_Press )
+		GConsoleOwnsKey[(BYTE)iKey] = 0;	// a press the console did not take (a lost release must not stick)
 
 	// Do all Native Globals
 

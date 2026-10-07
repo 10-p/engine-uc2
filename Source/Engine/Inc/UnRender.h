@@ -1137,6 +1137,67 @@ void ENGINE_API CalculateVertexCacheHits(UBOOL bIsTriStrip, DWORD dwVertexSize,
 	_WORD* pIndices, DWORD dwNumIndices, DWORD* pdwNumDegenTris,
 	DWORD* pdwNumCacheMisses, DWORD* pdwNumPagesCrossed);
 
+/*-----------------------------------------------------------------------------
+	D-8: AutoFOV (aspect-correct field of view), ported from engine-ut2004 (ufront step 2.16)
+	and adapted to UC2. docs/porting/analysis/console-fov.md.
+-----------------------------------------------------------------------------*/
+
+//
+// UE2's FovAngle is the HORIZONTAL field of view: FCameraSceneNode::UpdateMatrices gives
+// FPerspectiveMatrix(FOV/2, FOV/2, 1, Aspect), whose row 1 divides by the aspect, so a wider window
+// buys width out of height (90 deg at 4:3 is 73.74 deg vertically, at 16:9 only 58.72: the world
+// looks zoomed vertically). UC2 was designed for a 4:3 picture (640x480). AutoFOV re-derives the
+// horizontal FOV from the window's aspect so the VERTICAL one stays what it is at 4:3 (Hor+):
+//
+//   Off      (0) - stock: FovAngle used as it is.
+//   HorPlus  (1) - 2*atan( tan(Fov/2) * Aspect/Ref ). The vertical FOV of Ref (4:3) at any aspect.
+//   Adaptive (2) - max(Fov, HorPlus). The default: Hor+ on windows wider than Ref, stock on narrower
+//                  ones (where Hor+ would cut both axes).
+//
+// Applied as a SCOPED override of the player's FovAngle around the frame (UGameEngine::Draw, after
+// PlayerCalcView), so the world, the first-person weapon, the HUD's 3D markers, the LOD and shadow
+// biases agree on one value, while everything outside the frame (script's ticks, the mouse:
+// UCPlayerInput scales by DesiredFOV) keeps the player's real FOV. Config: [ufront.AutoFOV]
+// AutoFOV / ReferenceAspect / WeaponScale (the template's section and keys); console AUTOFOV [0|1|2]
+// for the session. At the reference aspect (640x480, 1024x768...) nothing changes, bit for bit.
+//
+enum EAutoFovMode
+{
+	AUTOFOV_Off      = 0,
+	AUTOFOV_HorPlus  = 1,
+	AUTOFOV_Adaptive = 2,
+};
+
+// The window size a viewport's FOV is corrected for: SizeX x SizeY for the one full-window viewport;
+// for a split-screen viewport the whole window's (SizeX/ScaleX x SizeY/ScaleY), because the Xbox split
+// layouts were designed on the 4:3 screen they divide (a top/bottom half is 8:3 there).
+ENGINE_API void ufrontAutoFovSize( UViewport* Viewport, INT& SizeX, INT& SizeY );
+
+// Effective horizontal FOV for a window of SizeX x SizeY. BaseFov unchanged when off, at the reference
+// aspect (within 1e-4) or for a degenerate size. bLog: the one-line report (only the primary view).
+ENGINE_API FLOAT ufrontEffectiveFov( FLOAT BaseFov, INT SizeX, INT SizeY, UBOOL bLog = 0 );
+
+// The inverse: the base FOV whose effective FOV is EffectiveFov at this size.
+ENGINE_API FLOAT ufrontBaseFov( FLOAT EffectiveFov, INT SizeX, INT SizeY );
+
+// FOV for a canvas-drawn actor (the first-person weapon: UCWeapon.RenderOverlays draws it through
+// Canvas.DrawActor with its own DisplayFOV, a separate scene node). WeaponScale blends in tan space
+// between the stock FOV (0) and the corrected one (1, the default: the weapon keeps its 4:3 size and
+// place at any aspect).
+ENGINE_API FLOAT ufrontWeaponFov( FLOAT BaseFov, FLOAT EffectiveFov );
+
+// One "[AutoFOV] weapon viewport=WxH base=B drawFov=D" line when the inputs change.
+ENGINE_API void ufrontLogWeaponFov( INT SizeX, INT SizeY, FLOAT BaseFov, FLOAT DrawFov );
+
+// The frame being drawn: the player whose FovAngle is overridden (NULL outside UGameEngine::Draw), its
+// uncorrected FovAngle, and the effective value in use.
+ENGINE_API extern APlayerController* GAutoFovScopeActor;
+ENGINE_API extern FLOAT GAutoFovFrameBase;
+ENGINE_API extern FLOAT GAutoFovFrameEffective;
+
+// Console: AUTOFOV [Off|HorPlus|Adaptive|0|1|2] (session only; the ini keeps its value).
+ENGINE_API UBOOL ufrontAutoFovExec( const TCHAR* Cmd, FOutputDevice& Ar );
+
 #endif
 
 /*------------------------------------------------------------------------------------

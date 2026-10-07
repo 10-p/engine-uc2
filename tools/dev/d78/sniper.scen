@@ -1,0 +1,54 @@
+# D-8: the sniper rifle's own zoom (AltFire; UCWeap_SniperRifle sets DesiredFOV/FOVAngle to its ZoomFOV) and its
+# scope overlay at 4:3, 16:9 and 21:9 at the same height (TEMPSETRES), the world frozen. The rifle is in the
+# default loadout but has no ammunition in a URL-started match, so NextWeapon skips it: GiveAmmo first.
+# DM-Deadbolt from the pinned view. Run through tools/dev/m10-controls.sh --file with M10_XVFB=2560x1080.
+wait Bringing Level DM-Deadbolt.MyLevel up for play 120
+sleep 12
+chan exec set UCDeathmatch NumPlayers 0
+wait test: exec set UCDeathmatch NumPlayers 0 10
+sleep 1
+focus
+seek 8 P['_'].pawn==1 ;; key Alt_L 3
+sleep 3
+chan exec God
+wait test: exec God 10
+chan exec GiveAmmo
+wait test: exec GiveAmmo 10
+sleep 2
+# SwitchWeapon 2 = the energy weapons' group (UCWeap_SniperRifle InventoryGroup=2); a weapon change takes about a
+# second (put down, bring up), so it is asked once and given time
+chan exec SwitchWeapon 2
+wait test: exec SwitchWeapon 2 10
+sleep 4
+tryseek 3 P['_'].weapon=='UCWeap_SniperRifle' ;; chan exec SwitchWeapon 2
+sleep 4
+probe rifle
+click 3
+sleep 4
+probe zoomed
+check d78-sniper-zoomed P['rifle'].weapon=='UCWeap_SniperRifle' and P['zoomed'].desiredfov<60 and P['zoomed'].fov==P['zoomed'].desiredfov
+chan exec set LevelInfo TimeDilation 0.001
+wait test: exec set LevelInfo TimeDilation 10
+chan exec PlayersOnly
+wait test: exec PlayersOnly 10
+sleep 2
+chan exec TEMPSETRES 1440x1080w
+sleep 5
+probe s43
+shot sniper-1440x1080
+chan exec TEMPSETRES 1920x1080w
+sleep 5
+probe s169
+shot sniper-1920x1080
+chan exec TEMPSETRES 2560x1080w
+sleep 6
+shot sniper-2560x1080
+chan exec TEMPSETRES 1920x1080w
+sleep 5
+chan exec AUTOFOV 0
+wait test: exec AUTOFOV 0 10
+sleep 4
+shot sniper-1920x1080-off
+chan exec AUTOFOV 2
+wait test: exec AUTOFOV 2 10
+check d78-sniper-fov-held P['s43'].fov==P['zoomed'].fov and P['s169'].fov==P['zoomed'].fov
