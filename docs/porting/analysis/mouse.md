@@ -415,3 +415,35 @@ software GL on a loaded machine it was seen finishing after the probe in 6 runs 
 (load 1.7 at the start, 28 at the end: another agent's GL runs started meanwhile; `logs/d6/m10-clean/`): keyboard 16,
 mouse 18, text 7 PASS; pad 32/33 (the late close), both 3/14 (stuck behind a menu animation at the character page,
 the rest cascades).
+
+## Step 10 (2026-10-07 23:18): the control suite, final
+
+`tools/dev/m10-controls.sh` on d6-run (final binary 82f25cc, packages `run/d6-make`), after two test-only fixes
+(7eaaa7d: the pause-menu close checks wait for the menu to go; 628038a: the message-box answers wait for its
+`GUIMessageBox Unblocking animation` line, as d5-text does): **keyboard 16, mouse 18, text 7, pad 33, both 14: all
+PASS, 0 Critical** at load average 17-22 (`logs/d6/m10-final3/all-scenarios.txt`). Before the fixes, under load
+24-37, single checks failed where a frame-counted menu animation outlasted a fixed wait (steps 8-9); the menus
+were not changed by D-6.
+
+## Gate (2026-10-07, branch d6-mouse, engine code at 82f25cc; nothing in Source/ or Engine/ changed after it)
+
+(a) Builds: native `bin/capped 6G 3600 -- cmake --build build-native` rc 0 (`logs/d6/build-native-0.log` full -j6,
+`-8.log` final); wasm-perf `source env.sh && bin/capped 4G 1200 -- cmake --preset wasm-perf` +
+`bin/capped 6G 5400 -- cmake --build build-wasm-perf -j6` rc 0, 0 errors (`build-wasm-perf-1.log`, `-2.log`),
+SDLLaunch.wasm 3bcfb2ab...; windows `bin/capped 4G 1200 -- cmake --preset windows` + `bin/capped 6G 5400 -- cmake
+--build build-windows -j6` rc 0, 0 errors (`build-windows-1.log`, `-2.log`). Script packages:
+`tools/dev/script-build.sh --tree d6-make` (3G): `Success - 0 error(s), 85 warning(s)` (M14's count).
+(b) `tools/dev/d6-mouse.sh look ini migrate pad lock before epic`: 67 PASS, 0 FAIL (`logs/d6/d6-mouse-final.txt`);
+evidence runs fail where the owner's symptoms are (steps 3 and 6).
+(c) Regressions: m10 controls 5/5 (step 10); `d4-names` ALL PASS, `d5-text` ALL PASS (step 7);
+`m14-scripts-check.sh` M14_PREFIX=d6-m14: verify, menu, deadbolt, patcher, effects, census 58/58 (same per map as
+shipped), movies 19/0, net 16/0, leftovers PASS; audio PASS on the rerun (step 8); controls: step 10; browser
+`uc2-wasm-boot.spec.js` 4 passed with the engine proven by sha256 (step 9).
+(d) Script changes (script-diff against the shipped packages, `logs/d6/d6-make-compare-final.txt`: only UCGameplay
+"different", 18 problems all in the changed code, findings = M14's 5 + the new UCPlayerInput defaults), engine
+changes and ini changes: steps 1, 5, 6 and `Engine/Config/README.md`.
+(e) The switch: "The switch" section above. (f) The binding audit: step 4; the default sensitivity: step 0/1
+(0.022 x 2.5 = 0.055 deg/count).
+Memory: builds 6G (-j6 / -j2), configures 4G, script make/strip 3G, script-diff 3G, game and ucc runs 2G, census 8G
+and net 6G inside the M14 suite, frontend build 4G, browser 6G (mem-guard peaks 11.5-12.4 GB machine-wide); no
+ceiling was hit (no exit 137).
