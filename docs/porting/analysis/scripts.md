@@ -151,3 +151,85 @@ another order) plus real findings, being worked through in step 2b:
   recompiled state is consistent.
 - `ConnectionFailureMenu` gains a `Timer` event by patch; the patch cannot set the class's `ProbeMask`
   (0 shipped, 0x100 recompiled).
+
+## Step 2b (2026-10-07): the reproduction, and the proof
+
+Commands:
+
+```
+tools/dev/script-build.sh            # assemble, make, strip, compare (tree <WorkUC2>/run/m14-make)
+python3 tools/dev/script-diff.py <WorkUC2>/assets/uc2/System <WorkUC2>/run/m14-make/System \
+    --patches Source/Engine/Inc/ScriptPatches.h --details <file> --patch-table <file>
+```
+
+What the reproduction needed beyond step 2a (each found by a difference, each now matching):
+
+| Difference seen | Cause | Change |
+|---|---|---|
+| `Dir_PlayerEnableControls.DirectionStart`: `IntConst -1` shipped, `2147483647` ours | `const INPUT_All = 4294967295;` goes through `appAtoi` = `atoi`; MSVC's wraps modulo 2^32, glibc's saturates (out of range is undefined in C) | `Core/Src/UnAnsi.cpp` `appAtoi`: MSVC's algorithm off MSVC. Engine-wide (ini values out of range now wrap as on Windows/Xbox) |
+| `GameEngine.MainMenuClass` = `UCMenu.StartMenu` ours, `UCMenu.UC2MainMenu` (the class's own) shipped | `UMakeCommandlet` loads the ini into the defaults of a package it conforms; Epic's retail make had nothing to conform to (no DefaultXbox.ini value in any shipped default) | `-CONFORMNOCONFIG` (ours): conform for order/GUID only. **Runtime-relevant**: our Default.ini has no MainMenuClass, so without this the recompiled game would open StartMenu instead of UC2MainMenu |
+| `UCScreenBlur` Alpha/Enabled/Reset 0, `CharacterMemoryUsageCommandlet` 6 flags False, `ProfilePreview` 46 values | a native class without its own defaultproperties gets its defaults exported from its in-memory defaults (`MakeScripts`); ours were start-up zeros, Epic's came from the superclass when the package's DLL loaded | `UC2RefreshNativeDefaultsLikeDllLoad` (UnScrCom.cpp), called by UMakeCommandlet when it creates IpDrv/UWeb/UnrealGame/UCElements/UCGameplay/GUI: `InitClassDefaultObject` again, superclasses first. **Runtime-relevant** (UCScreenBlur.Alpha would have been 0) |
+| `UCDeathmatch.LevelData`, character speeds | the strip loads config again; Epic's retail-era Gametypes.ini/Characters.ini (no Overdrive maps) | strip stage copies those (and Maplists.ini) from `<WorkUC2>/reference/iso-extract/System` (the retail disc) |
+
+Result (`tools/dev/script-build.sh`, 2026-10-07):
+
+```
+Core             identical           exports  1011, byte-identical  1011, neutral    0, findings  0, problems  0
+Engine           different-explained exports 12640, byte-identical 12125, neutral  933, findings  1, problems  0
+UCAnnouncements  identical           exports   215, byte-identical   215, neutral    0, findings  0, problems  0
+Editor           different-explained exports   446, byte-identical   438, neutral   15, findings  2, problems  0
+UnrealEd         identical           exports   127, byte-identical   127, neutral    0, findings  0, problems  0
+IpDrv            equivalent          exports   526, byte-identical   525, neutral    1, findings  0, problems  0
+UWeb             identical           exports   153, byte-identical   153, neutral    0, findings  0, problems  0
+GamePlay         equivalent          exports   974, byte-identical   962, neutral   16, findings  0, problems  0
+UnrealGame       equivalent          exports   882, byte-identical   841, neutral   73, findings  0, problems  0
+UCElements       equivalent          exports  2956, byte-identical  2955, neutral    1, findings  0, problems  0
+UCGameplay       different-explained exports 10842, byte-identical 10559, neutral  458, findings  5, problems  0
+UCEffects        equivalent          exports  3535, byte-identical  3498, neutral   37, findings  0, problems  0
+UCCharacters     equivalent          exports  2704, byte-identical  2646, neutral   58, findings  0, problems  0
+UCInventory      equivalent          exports  1924, byte-identical  1863, neutral   88, findings  0, problems  0
+UCMutators       equivalent          exports   579, byte-identical   557, neutral   29, findings  0, problems  0
+GUI              different-explained exports  3526, byte-identical  3361, neutral  235, findings  2, problems  0
+UCMenu           different-explained exports 10100, byte-identical  9940, neutral  210, findings  1, problems  0
+```
+
+0 unexplained differences. "neutral" = explained, no effect on what runs, each recognised by a rule (the rule list
+is at the end of the details file): stripsource marks, Line/TextPos and dependency CRCs/lists of the 55 classes
+whose script text changed after retail (own-text CRC differs; the shipped CRC of every other class equals ours,
+i.e. Epic compiled exactly our text), import time stamps and lazy-array file offsets of #exec textures (pixel
+data compared mip by mip: identical), MipZero (unused colour average) off by one in 6 Editor textures, FName case,
+patch-appended objects in another order, names the patch appends that only Epic's later ini-loaded defaults
+used (`CacheSizeMegs`, `bPauseable`; no patch bytecode refers to them).
+
+"findings" = explained, but what runs differs from shipped + patches (11):
+1. `UCGameplay.CTFFlag.home`: **Epic's patch is defective** (both the label name, index 100 = `WeaponAbility`
+   instead of `Begin`, and the `LabelTableOffset` 16 the patcher cannot update): with the patch, a flag returning
+   home never runs its `Begin:` code (`Sleep(0.1); CheckTouching()`), the label search walks the new script from
+   offset 16 and ends at a `None` entry without finding `Begin`. Recompiled: runs as the source says. Gameplay
+   difference: an enemy standing on the base when the flag returns gets it after 0.1 s (recompiled) or only on
+   the next touch (shipped + patch, also the Xbox title update by inference).
+2. `GUIController.bUnlockCharacters`, `bShowAllMuts`: `config` in the shipped GUI.u, not in the source (no patch
+   can change flags). The community tweak `bUnlockCharacters=True` in an ini works only with the shipped scripts.
+3. `ConnectionFailureMenu.ProbeMask` 0 -> 0x100 (the patch adds a `Timer` event but cannot set the probe bit).
+   Recompiled: the menu's Timer can be probed as the source intends.
+4. `UCWeap_Melee.BusyShieldOn.HitWall`: shipped `FUNC_Defined` with the patch's empty body; recompiled not defined
+   (the newer source comments the body out; an empty body is not "defined"), and the state's ProbeMask loses
+   the HitWall bit. Same behaviour: the VM skips undefined functions (`UnCorSc.cpp` 5272, 5444).
+5. `OverflowBall` defaults: `bUpdateSimulatedPosition=True` (the source sets it in defaultproperties; the patch
+   sets it in `PostBeginPlay` code instead, so both end up True after spawn).
+6. `Engine.NetworkDevice` default `IpDrv.TcpNetDriver` (ours) vs none (shipped): a config property; the strip's
+   config load resolves the bare class name with `StaticFindObject` only, which finds the class in our static
+   build (registered at start-up) and did not in Epic's (IpDrv.dll not loaded yet). At run time the ini key
+   (`[Engine.Engine] NetworkDevice=`) replaces it.
+7. `Editor.TexPropSphere`/`TexPropCube`: 1133 and 1 bytes of float low bits differ (`#exec NEW StaticMesh` .ase
+   import math); editor-only meshes, never loaded by the game.
+
+The 30 patches (`<WorkUC2>/logs/m14/m14-make-patches.txt`): 21 bytecode patches + 9 appended objects. For
+29 of 30 the recompiled package contains exactly what the patch carries (bytecode token for token with references
+resolved through the patched index space; appended locals/functions field for field) - i.e. the source in our
+tree already contains each change, and the patch existed because the shipped .u was older than the source. The
+30th (`CTFFlag.home`) differs because the patch itself is wrong (finding 1). Table in step 2c below / the report.
+
+Script bugs seen while proving (recorded, not touched): see the findings above (the CTFFlag patch is Epic's
+tooling bug; the scripts are fine). `GUIController.uc` warns "'Empty' : local variable used before assigned a
+value" (2x, compiler warning from `ucc make`, source line in the make log).
