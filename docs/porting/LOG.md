@@ -386,3 +386,30 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   two failures are measurement noise, not AutoFOV (the AutoFOV-off CONTROL's vertical scale at 21:9 1.706 for
   1.778 +-0.06; the third-person 4:3-vs-centre-crop match 96.6% for >=98.5%, 99.0% in the agent's run; every
   AutoFOV value measured exactly 1.000).
+- 2026-10-07 — **O-9 merged (NVIDIA fixed-function gap), f2d7f25.** The compatibility profile on the owner's
+  Quadro P620 has 4 texture units and no combine3: Epic's compiler then substituted GeForce1-era ops (the
+  orange-metal pillar of DM-Azure) and our GL translation dropped the added term of three-operand ops (327
+  materials across the maps). Fix: each pass's texture stages become a generated GLSL fragment program (D3D8
+  semantics on every vendor; `FixedFunctionPrograms=True`), `GL_NV_texture_env_combine4` for the comparison
+  path, and Epic's 4 stages (`MaterialStages=4`; UC2's D3DDrv accepts only 4). Coordinator's run on main
+  (`logs/coord/a6/summary.txt`): builds; verifyclasses; `tools/dev/o9-nvidia.sh` combiner tests 35/0 on Mesa and
+  NVIDIA, 33+2 skipped on the twin, the "before" defect reproduced, other-maps pictures NVIDIA vs Mesa 0.6-0.8;
+  effect pairs clean; controls 5/5. Open: with post-processing OFF the DM-Praxis panes no longer match the
+  original PC binary's flat look (also with `-glnoffprograms`), so the M7 praxis reference check fails; the
+  O-9 agent investigates on `o9b` and makes that check deterministic. Reference-picture runs now use the pre-D-2
+  UI and AutoFOV off (run-uc2-shot.sh, fx-owner.sh).
+- 2026-10-07 — **D-3, D-4, D-5 green (profiles, names, text entry); first rebuilt script package in the asset
+  tree.** Merged `d3-profiles` (2b2c972). The game starts in the last profile (`User.ini [Profiles]
+  LastProfile`, `UC2Profiles.cpp`, a per-tick watch, no script change); deleting a profile works on Linux
+  (`FFileManagerGeneric::DeleteFiles` only knew `\`); the profile owns the player name and without one the
+  launcher's name survives the character page (`GUIController.SetProfilePlayerName`, script: the only changed
+  function; `bUnlockCharacters`/`bShowAllMuts` config again); every keyboard page takes a real keyboard (Enter,
+  Escape, Backspace clears a preselection, the opening letter no longer typed). Frontend (data-driven, every
+  target): `network.playerName.ownedBy` disables the name field while a profile owns it. **Asset tree v2:**
+  `tools/dev/mkassets-uc2.sh` overlays `assets/uc2-scripts/System/GUI.u` (rebuilt from main: 17 packages compare
+  clean) and keeps the shipped file in `assets/uc2-shipped/System`; `System/SCRIPTS.txt` says so; frontend
+  manifest regenerated (ufrontend 477eca5; dependencies unchanged; GUI is not a server package, Core.u
+  unchanged). Coordinator's run on main (`logs/coord/a7/summary.txt`): windows/wasm-perf build; verifyclasses;
+  d3-profiles, d4-names, d5-text, c1-ini-overrides ALL PASS; c1-saves ALL PASS (after rebuilding its tree);
+  controls 5/5; browser boot 3/3, audio 3/3, saves 1/1 (profile restored after closing the tab), engine proven
+  by the wasm hash. Published to the owner's preview.
