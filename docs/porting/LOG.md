@@ -413,3 +413,11 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   d3-profiles, d4-names, d5-text, c1-ini-overrides ALL PASS; c1-saves ALL PASS (after rebuilding its tree);
   controls 5/5; browser boot 3/3, audio 3/3, saves 1/1 (profile restored after closing the tab), engine proven
   by the wasm hash. Published to the owner's preview.
+- 2026-10-07 — **O-9b: the DM-Praxis signal was a test artefact, the coordinator's misreading.** The panes are
+  drawn exactly as before O-9: the "swirled" probe was a close view, the oracle a distant one (the same
+  fallback texture minified to periwinkle), and the 10 misses were the random spawn. The oracle's view is
+  PlayerStart0 (-1220,288,680 yaw 5220); `tools/dev/m7-effects.sh` now places the camera there with NETPLACE
+  (`LocalPlayer`) and runs once: A vs wine reference 2.58 (Mesa), 2.65-2.72 on NVIDIA (pre-O-9 NVIDIA 18.2).
+  Agent's gate: m7-effects 11/0 + 14 lines clean, praxis first try; o9-nvidia.sh 12/0 with the AutoFOV-off/Native640
+  defaults; m11-twin effects 13/14 (liandri overlay noise differs between any two runs: needs fixed random
+  numbers or a mask, not done). Merged `o9b`.
