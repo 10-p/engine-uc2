@@ -18,7 +18,8 @@ sleep 0.5
 key Return
 expect d2-arena-opens OpenMenu \[UCMenu.UC2Arena_Main\] 15
 wait OpenMenu \[GUI.GUIMessageBox\] 20
-sleep 1.5
+wait GUIMessageBox Unblocking animation 20
+sleep 0.5
 key Escape
 expect d2-no-profile-box-closes CloseMenu \[GUIMessageBox\] 10
 sleep 3
