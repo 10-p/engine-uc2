@@ -259,3 +259,9 @@ native drawing path - not done. Example: `get Engine.GameEngine CacheSizeMegs` -
   levels (AUTOFOV 0: 10.20%). Seen: UC2's scope overlay is a translucent ring, not an opaque mask - the world
   shows around it at 4:3 too - so on wide windows the ring stays round and centred and the extra width is just
   more of the zoomed world. Nothing to fix there.
+- M10 regression, first try (`logs/d78/reg/m10`, tree d78-reg, load average 30-49 machine-wide: other agents'
+  builds and runs, my wasm-opt and two game runs): keyboard FAIL at `kb-back-closes-dialog`: the log has
+  `GUIMessageBox handled XC_B` (line 108) BEFORE `GUIMessageBox Unblocking animation` (line 109): Escape reached
+  the "no profile" box during its opening animation and was ignored - the load effect D-2 recorded (step 1 of
+  ui-scale.md), not the console change (Escape was not a console key: the console was closed). To be rerun on
+  a quieter machine.
