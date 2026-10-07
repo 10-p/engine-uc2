@@ -284,3 +284,15 @@ Proposal, smallest first:
 2. **All 17 rebuilt packages** (M14's goal, later): Core.u's bytes change (a generation is added), so the target's
    fingerprint must be updated, every peer must run the same packages, and the full `tools/dev/m14-scripts-check.sh`
    must be green on that tree (run here on all 17 rebuilt packages with the D-4 change: results below).
+
+## Step 7 (2026-10-07): D-5 native green
+
+`tools/dev/d5-text.sh` run 3 (`logs/d3/d5-text-run3.txt`, tree d5, binary with both keyboard fixes): **d5-text: ALL
+PASS** — k1 13 (+2 file checks), k2 14 (+2: renamed on disk, User.ini LastProfile=Renamed), k3 4 (+1), k4 14 (`Dropped
+'x': its key opened UC2Keyboard->UC2KeyboardPanel->GUIEditBox`, the field shows "Liandri Corporation", Backspace
+clears it, Escape keeps it, Enter sets "Mine": the page reopens on `(Mine)`), k5 10 (chat: exact text, no movement
+while typing, Enter runs `Say wasd Hi` = the console history's first entry, one Escape leaves and discards).
+Run 2 is void: I edited the running bash script (a k1 timing fix) and bash read the changed file mid-run ("syntax
+error near unexpected token" at k2's end), the M14 lesson repeated. Never edit a running script.
+The k1 fix: a GUIMessageBox ignores keys while it animates in; under load (another agent's software-GL game on 6
+cores) the Return came before the box was ready. The scenario now waits for `GUIMessageBox Unblocking animation`.
