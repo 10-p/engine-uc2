@@ -5,6 +5,9 @@
 #
 #   tools/dev/m7b.sh [<tree>] [check ...]      default tree m7b (made from build-native when missing); default: all
 #   tools/dev/m7b.sh list
+#   M7B_ARGS="-gl4es" tools/dev/m7b.sh m7b-twin shadow projector-agree projector-differ terrain twin-match
+#                       the same checks on the GL4ES / OpenGL ES 2 twin (the browser's code path), then its pictures
+#                       against the desktop's of the tree M7B_REF (default m7b; run that first)
 #
 # Every game run is tools/dev/fx-owner.sh's "custom" case (bin/capped 2G, Xvfb, Mesa llvmpipe, 1280x720, -glnoaa
 # via the engine defaults of that runner, AutoFOV off, pre-D-2 UI), the pawn placed with NETPLACE, time frozen
@@ -17,6 +20,7 @@ if [ $# -gt 0 ] && { [ -d "$work/run/$1" ] || [ "$1" = m7b ]; }; then tree=$1; s
 out=$work/logs/$tree
 imgdiff=$repo/tools/dev/imgdiff.py
 CHECKS="census shadow projector-agree projector-differ projector-draws terrain leftovers"
+ref=$work/logs/${M7B_REF:-m7b}
 if [ "${1:-}" = list ]; then
   cat <<LIST
 census            GLSCENECENSUS in DM-DeepCore and CTF-Recoil: every level-static projector batched at load (Xbox)
@@ -27,6 +31,7 @@ projector-agree   DM-DeepCore wire-mesh light (modulate, no material blending, c
 projector-differ  CTF-Recoil wire-mesh light (MaterialBlendingOp=modulate, ignored by the Xbox batch): the pictures differ
 projector-draws   draw calls per frame (GLSTATS) for both paths at the DM-DeepCore and CTF-Recoil cameras
 terrain           CTF-Judgment and DM-Ascension: one layer per pass against three (TERRAIN3LAYER) on the same frame
+twin-match        (not in the default list) this tree's Xbox-path pictures against the same pictures of M7B_REF's tree
 leftovers         nothing of these runs still running
 LIST
   exit 0
@@ -52,7 +57,7 @@ place() {  # place "<x y z yaw pitch>": twice (the pitch holds once the pawn sta
 }
 run() {  # run <name> <map> <scenario file> [uc2.bin arguments]
   local name=$1 map=$2 scen=$3; shift 3
-  FX_ARGS="$*" FX_SCENARIO=$scen FX_MAP=$map FX_NAME=m7b-$name "$repo/tools/dev/fx-owner.sh" "$tree" custom > "$tmp/$name.fx" 2>&1
+  FX_ARGS="$* ${M7B_ARGS:-}" FX_SCENARIO=$scen FX_MAP=$map FX_NAME=m7b-$name "$repo/tools/dev/fx-owner.sh" "$tree" custom > "$tmp/$name.fx" 2>&1
   cat "$tmp/$name.fx" | tail -1
 }
 diffline() {  # diffline <a.png> <b.png> [imgdiff options]: "mean=.. max=.. above2=.." of the pair
@@ -130,6 +135,20 @@ for c in $want; do
       dc=$(grep -a 'UC2GLDrv: stats:' "$f.out" | sed -E 's/.*per frame: ([0-9.]+) draw calls.*/\1/' | tr '\n' ' ')
       if [ "${comb:-0}" -gt 0 ] && python3 -c "import sys; sys.exit(0 if $(mean_of "$d") <= 0.5 else 1)"; then r=PASS; else r=FAIL; fi
       line $r terrain "$m: $comb sectors drawn with PS_Terrain3Layer; one vs three layers per pass (pawn masked): $d; two frames: $n; draw calls per frame one/three: $dc"
+    done
+    ;;
+  twin-match)
+    for pic in shadow-xbox:dc proj-deepcore-xbox-a:dc proj-recoil-xbox-a:full terrain-DM-Ascension-three:pawn; do
+      name=${pic%%:*}; how=${pic##*:}
+      case $how in dc) m=$DCMASK;; pawn) m="--mask 500,440,760,720";; *) m="";; esac
+      a=$ref/fx-m7b-$name.png; b=$out/fx-m7b-$name.png
+      if [ -f "$a" ] && [ -f "$b" ]; then
+        d=$(diffline "$a" "$b" $m)
+        python3 -c "import sys; sys.exit(0 if $(mean_of "$d") <= 3 else 1)" && r=PASS || r=FAIL
+        line $r twin-match "$name: $(basename "$ref") vs $tree: $d"
+      else
+        line FAIL twin-match "$name: picture missing ($a or $b)"
+      fi
     done
     ;;
   leftovers)
