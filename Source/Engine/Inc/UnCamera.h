@@ -495,6 +495,19 @@ struct ENGINE_API HHitProxy
 
 //scion bcl -- added loadsavemanager
 class ULoadSaveManager;
+
+// D-2 (UI scaling, docs/porting/analysis/ui-scale.md): [<Client>] UIScaleMode and UIMenuBackground.
+enum EUIScaleMode
+{
+	UISCALE_Native640	= 0,	// the canvas is the window's pixels: the 640x480 UI drawn 1:1 from the top-left (before D-2)
+	UISCALE_Fit43		= 1,	// the canvas is the 640x480 design space, drawn in a centred 4:3 box of the window
+};
+enum EUIMenuBackground
+{
+	UIMENUBG_Box		= 0,	// a menu's full-screen background stays in the 4:3 box
+	UIMENUBG_Fill		= 1,	// it fills the window, aspect kept (cropped top and bottom on a wide window)
+};
+
 //
 // Client, responsible for tracking viewports.
 //
@@ -530,6 +543,8 @@ class ENGINE_API UClient : public UObject
 	FLOAT		MinDesiredFrameRate;
 	UViewport*	LastCurrent;						// The viewport that was last current
 	FLOAT		MaxDistortion;						// scion sz - maximum screen space distortion offset in pixels
+	BYTE		UIScaleMode;						// D-2: EUIScaleMode
+	BYTE		UIMenuBackground;					// D-2: EUIMenuBackground (Fit43 only)
 
 	// scion sz -
 	class UViewportMgr*		ViewportMgr;

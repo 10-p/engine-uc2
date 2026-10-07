@@ -52,6 +52,45 @@ void UCanvas::DrawTile
 		if ( DrawColor.W != 1.0 )
 			Style = STY_Alpha;
 
+		// D-2: a tile that covers the whole design space is a full-screen layer, not a UI element: the game's
+		// fades, flashes and overlays (UCPlayerController's blood and ColorOverlay) cover the whole viewport,
+		// stretched; a menu page's background follows UIMenuBackground (Box: stays in the box; Fill: the
+		// whole viewport, its picture scaled to cover it with the aspect kept, the overflow cropped).
+		if( pCanvasUtil->bUIBoxed && !pTransformMat && XL > 0.f && YL > 0.f
+		&&	X <= 0.5f && Y <= 0.5f && X + XL >= SizeX - 0.5f && Y + YL >= SizeY - 0.5f )
+		{
+			UClient* Client = Viewport->GetOuterUClient();
+			UBOOL bMenu = pCanvasUtil->UIContext == UICONTEXT_Menu;
+			UBOOL bFill = !bMenu || (Client && Client->UIMenuBackground == UIMENUBG_Fill);
+			// Say once per material what happened to it (the notebook's evidence of which layers these are).
+			static TArray<UMaterial*> Reported;
+			if( Reported.FindItemIndex(Material) == INDEX_NONE && Reported.Num() < 256 )
+			{
+				Reported.AddItem( Material );
+				debugf( NAME_Log, TEXT("UIScale: full-screen tile %s (%s) %s"), Material->GetFullName(),
+					bMenu ? TEXT("menu") : TEXT("game"),
+					!bFill ? TEXT("stays in the box") : bMenu ? TEXT("covers the viewport, aspect kept") : TEXT("stretched to the viewport") );
+			}
+			if( bFill )
+			{
+				FLOAT X1, Y1, X2, Y2;
+				GetTargetInDesign( X1, Y1, X2, Y2 );
+				if( bMenu )
+				{
+					// cover: scale the tile about its centre until it covers the viewport, keep what shows
+					FLOAT K = Max( (X2 - X1) / XL, (Y2 - Y1) / YL );
+					FLOAT CX = X + XL * 0.5f, CY = Y + YL * 0.5f;
+					FLOAT SX1 = CX - XL * K * 0.5f, SY1 = CY - YL * K * 0.5f;
+					FLOAT FU1 = (X1 - SX1) / (XL * K), FU2 = (X2 - SX1) / (XL * K);
+					FLOAT FV1 = (Y1 - SY1) / (YL * K), FV2 = (Y2 - SY1) / (YL * K);
+					FLOAT NewU = U + UL * FU1, NewUL = UL * (FU2 - FU1);
+					FLOAT NewV = V + VL * FV1, NewVL = VL * (FV2 - FV1);
+					U = NewU; UL = NewUL; V = NewV; VL = NewVL;
+				}
+				X = X1; Y = Y1; XL = X2 - X1; YL = Y2 - Y1;
+			}
+		}
+
 		// scion sz - note that Z doesn't actually get used (it was always 0 anyway)
 		// set the canvas CurZ value instead
 		pCanvasUtil->DrawTile(X,Y,
@@ -679,25 +718,143 @@ void UCanvas::Update()
 	if ( !pCanvasUtil )
 		pCanvasUtil = NEW FCanvasUtil(&Viewport->RenderTarget,Viewport->RI);
 
-	// Copy size parameters from viewport.
-	ClipX = Viewport->SizeX;
-	SizeX = appTrunc( ClipX );
-	ClipY = Viewport->SizeY;
-	SizeY = appTrunc( ClipY );
+	// D-2: the client's UIScaleMode (never in the editor).
+	UClient* Client = Viewport->GetOuterUClient();
+	ApplyUIBox( !GIsEditor && Client && Client->UIScaleMode == UISCALE_Fit43 );
 
-	// offset top left corner to center of viewport (0,0)
-	FVector OffsetVec( -ClipX * 0.5f - 0.5f, -ClipY * 0.5f - 0.5f, 0.0f );
-	// scale back to canonical [-1,1]
-	FVector ScaleVec( 2.0f / ClipX, -2.0f / ClipY, 1.0f );
-	// translate to center then scale
-    FTranslationMatrix	OffsetMat( OffsetVec );
-	FScaleMatrix		ScaleMat( ScaleVec );
-	pCanvasUtil->CanvasToScreen = OffsetMat * ScaleMat;
-
-	pCanvasUtil->ScreenToCanvas = pCanvasUtil->CanvasToScreen.Inverse();
+	pCanvasUtil->UIContext = UICONTEXT_Game;
     pCanvasUtil->RI = Viewport->RI;
 
 	unguard;
+}
+
+/*-----------------------------------------------------------------------------
+	D-2: the UI's 640x480 design space in a centred box (docs/porting/analysis/ui-scale.md).
+
+	UC2 lays out every menu and HUD element in 640x480 pixels (the Xbox's screen). With UIScaleMode=Fit43 the
+	viewport canvas presents that space to script and to the GUI (ClipX/ClipY/SizeX/SizeY = 640x480) and its
+	CanvasToScreen puts it into the largest 4:3 rectangle of the viewport, centred: scale
+	s = min(W/640, H/480), origin ((W-640s)/2, (H-480s)/2) floored to whole pixels. The 3D world is not drawn
+	through the canvas and keeps the whole viewport. At 640x480 this is the identity and the code below takes
+	the exact path it took before D-2. A split-screen viewport (E-1) gets its share of the design space
+	(640*ScaleX x 480*ScaleY, the fractions UnSplitScreenMgr gives it) fitted the same way into its own rectangle.
+-----------------------------------------------------------------------------*/
+
+void UCanvas::ApplyUIBox( UBOOL bWanted )
+{
+	guard(UCanvas::ApplyUIBox);
+
+	if( !pCanvasUtil )
+		return;
+
+	FLOAT W = Viewport->SizeX, H = Viewport->SizeY;
+	FLOAT DW = 640.f, DH = 480.f;
+	if( Viewport->ScaleX > 0.f && Viewport->ScaleX < 1.f )
+		DW *= Viewport->ScaleX;
+	if( Viewport->ScaleY > 0.f && Viewport->ScaleY < 1.f )
+		DH *= Viewport->ScaleY;
+
+	FLOAT S = 1.f, BX = 0.f, BY = 0.f;
+	if( bWanted && W > 0.f && H > 0.f )
+	{
+		S  = Min( W / DW, H / DH );
+		BX = appFloor( (W - DW * S) * 0.5f );
+		BY = appFloor( (H - DH * S) * 0.5f );
+	}
+	// The identity (a 640x480 window, or UIScaleMode=Native640): exactly what Update() did before D-2.
+	UBOOL bBoxed = bWanted && W > 0.f && H > 0.f && !( S == 1.f && BX == 0.f && BY == 0.f && DW == W && DH == H );
+
+	pCanvasUtil->bUIBoxed	= bBoxed;
+	pCanvasUtil->UIScale	= bBoxed ? S : 1.f;
+	pCanvasUtil->UIOriginX	= bBoxed ? BX : 0.f;
+	pCanvasUtil->UIOriginY	= bBoxed ? BY : 0.f;
+	pCanvasUtil->UITargetX	= W;
+	pCanvasUtil->UITargetY	= H;
+
+	if( !bBoxed )
+	{
+		// Copy size parameters from viewport.
+		ClipX = Viewport->SizeX;
+		SizeX = appTrunc( ClipX );
+		ClipY = Viewport->SizeY;
+		SizeY = appTrunc( ClipY );
+	}
+	else
+	{
+		ClipX = DW;
+		SizeX = appTrunc( ClipX );
+		ClipY = DH;
+		SizeY = appTrunc( ClipY );
+	}
+	pCanvasUtil->CanvasToScreen = UICanvasToScreen();
+	pCanvasUtil->ScreenToCanvas = pCanvasUtil->CanvasToScreen.Inverse();
+
+	unguard;
+}
+
+FMatrix UCanvas::UICanvasToScreen() const
+{
+	if( !pCanvasUtil || !pCanvasUtil->bUIBoxed )
+	{
+		// offset top left corner to center of viewport (0,0)
+		FVector OffsetVec( -ClipX * 0.5f - 0.5f, -ClipY * 0.5f - 0.5f, 0.0f );
+		// scale back to canonical [-1,1]
+		FVector ScaleVec( 2.0f / ClipX, -2.0f / ClipY, 1.0f );
+		// translate to center then scale
+		FTranslationMatrix	OffsetMat( OffsetVec );
+		FScaleMatrix		ScaleMat( ScaleVec );
+		return OffsetMat * ScaleMat;
+	}
+	// design pixels -> target pixels (scale, then the box's corner), then the same mapping as above on the
+	// target's pixels (including Epic's half-pixel offset, which stays one target pixel wide)
+	FLOAT W = pCanvasUtil->UITargetX, H = pCanvasUtil->UITargetY;
+	return FScaleMatrix( FVector( pCanvasUtil->UIScale, pCanvasUtil->UIScale, 1.0f ) )
+		 * FTranslationMatrix( FVector( pCanvasUtil->UIOriginX - W * 0.5f - 0.5f, pCanvasUtil->UIOriginY - H * 0.5f - 0.5f, 0.0f ) )
+		 * FScaleMatrix( FVector( 2.0f / W, -2.0f / H, 1.0f ) );
+}
+
+UBOOL UCanvas::IsUIBoxed() const
+{
+	return pCanvasUtil && pCanvasUtil->bUIBoxed;
+}
+
+FLOAT UCanvas::GetUIScale() const
+{
+	return IsUIBoxed() ? pCanvasUtil->UIScale : 1.f;
+}
+
+void UCanvas::DesignToTarget( FLOAT& X, FLOAT& Y ) const
+{
+	if( IsUIBoxed() )
+	{
+		X = pCanvasUtil->UIOriginX + X * pCanvasUtil->UIScale;
+		Y = pCanvasUtil->UIOriginY + Y * pCanvasUtil->UIScale;
+	}
+}
+
+void UCanvas::TargetToDesign( FLOAT& X, FLOAT& Y ) const
+{
+	if( IsUIBoxed() )
+	{
+		X = (X - pCanvasUtil->UIOriginX) / pCanvasUtil->UIScale;
+		Y = (Y - pCanvasUtil->UIOriginY) / pCanvasUtil->UIScale;
+	}
+}
+
+void UCanvas::GetTargetInDesign( FLOAT& X1, FLOAT& Y1, FLOAT& X2, FLOAT& Y2 ) const
+{
+	X1 = 0.f;
+	Y1 = 0.f;
+	X2 = pCanvasUtil ? pCanvasUtil->UITargetX : (FLOAT)Viewport->SizeX;
+	Y2 = pCanvasUtil ? pCanvasUtil->UITargetY : (FLOAT)Viewport->SizeY;
+	TargetToDesign( X1, Y1 );
+	TargetToDesign( X2, Y2 );
+}
+
+void UCanvas::SetUIContext( BYTE Context )
+{
+	if( pCanvasUtil )
+		pCanvasUtil->UIContext = Context;
 }
 
 void UCanvas::NotifyLevelChange()
@@ -904,13 +1061,27 @@ void UCanvas::DrawActorTile( AActor* Actor, FLOAT X, FLOAT Y, FLOAT XL, FLOAT YL
 	// set viewport scale
 	Viewport->ScaleX = 1.f;
 	Viewport->ScaleY = 1.f;
+	if( IsUIBoxed() )
+	{
+		// D-2: the tile is in design pixels; the 3D viewport needs the viewport's own
+		FLOAT X2 = X + XL, Y2 = Y + YL;
+		DesignToTarget( X, Y );
+		DesignToTarget( X2, Y2 );
+		Viewport->SizeX = appTrunc(X2 - X);
+		Viewport->SizeY = appTrunc(Y2 - Y);
+		Viewport->OffsetX = appTrunc(X)+SavedOffsetX;
+		Viewport->OffsetY = appTrunc(Y)+SavedOffsetY;
+	}
+	else
+	{
 	// set viewport size
 	Viewport->SizeX = appTrunc(XL*SavedScaleX);
 	Viewport->SizeY = appTrunc(YL*SavedScaleY);
 	// make sure to offset from the start of the current viewport
 	Viewport->OffsetX = appTrunc(X*SavedScaleX)+SavedOffsetX;
 	Viewport->OffsetY = appTrunc(Y*SavedScaleY)+SavedOffsetY;
-	
+	}
+
 	// set viewport offset/scale
 	Viewport->RI->SetViewport( Viewport->OffsetX, Viewport->OffsetY, Viewport->SizeX, Viewport->SizeY );	
 
@@ -1125,6 +1296,15 @@ void UCanvas::execDrawPortal( FFrame& Stack, RESULT_DECL )
 	P_GET_INT_OPTX(FOV, 90);
 	P_GET_UBOOL_OPTX(ClearZ, 1);
 	P_FINISH;
+
+	if( IsUIBoxed() )
+	{
+		// D-2: design pixels -> the viewport's own (the portal is a 3D viewport and a clear in target pixels)
+		FLOAT X1 = X, Y1 = Y, X2 = X + Width, Y2 = Y + Height;
+		DesignToTarget( X1, Y1 );
+		DesignToTarget( X2, Y2 );
+		X = appFloor(X1); Y = appFloor(Y1); Width = appFloor(X2) - X; Height = appFloor(Y2) - Y;
+	}
 
 	// Save state.
 
@@ -1767,6 +1947,13 @@ void UCanvas::execSetCanvasMatrix(FFrame& Stack,RESULT_DECL)
 	if (pCanvasUtil != NULL)
 	{
 		pCanvasUtil->Flush();
+		if( IsUIBoxed() )
+		{
+			// D-2: the same rotation and clip-space scale, composed with the box's mapping
+			pCanvasUtil->CanvasToScreen = FRotationMatrix(newRotation) * UICanvasToScreen() *
+										   FScaleMatrix(newScale);
+		}
+		else
 		pCanvasUtil->CanvasToScreen = (FRotationMatrix(newRotation) *
 									   FTranslationMatrix(FVector(-SizeX / 2.0f - 0.5f,-SizeY / 2.0f - 0.5f,0.0f)) *
 									   FScaleMatrix(FVector(2.0f / SizeX,-2.0f / SizeY,1.0f) * newScale));

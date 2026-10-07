@@ -82,6 +82,19 @@ public:
 
 	virtual void SetClip( FLOAT X, FLOAT Y, FLOAT XL, FLOAT YL );
 
+	// D-2 (UI scaling, docs/porting/analysis/ui-scale.md). Non-virtual, no data: the script layout of Canvas is
+	// untouched; the state lives in pCanvasUtil. With [<Client>] UIScaleMode=Fit43 the canvas (ClipX/ClipY,
+	// SizeX/SizeY, every Draw*) speaks the 640x480 design pixels of the UI and CanvasToScreen maps them into a
+	// centred box of the viewport; "target" pixels are the viewport's own.
+	void ApplyUIBox( UBOOL bWanted );		// recompute size and matrix (Update() calls it with the client's setting)
+	UBOOL IsUIBoxed() const;
+	void DesignToTarget( FLOAT& X, FLOAT& Y ) const;
+	void TargetToDesign( FLOAT& X, FLOAT& Y ) const;
+	FLOAT GetUIScale() const;
+	void GetTargetInDesign( FLOAT& X1, FLOAT& Y1, FLOAT& X2, FLOAT& Y2 ) const;	// the whole viewport in design pixels
+	void SetUIContext( BYTE Context );		// UICONTEXT_Game or UICONTEXT_Menu (the GUI controller while it draws)
+	FMatrix UICanvasToScreen() const;		// the base CanvasToScreen of this frame (SetCanvasMatrix composes on it)
+
 	// Natives.
 	DECLARE_FUNCTION(execStrLen)
 	DECLARE_FUNCTION(execDrawText)

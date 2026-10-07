@@ -16,7 +16,8 @@ Scenario language, one command per line (# comments):
     key <keysym> [hold-seconds]   press and release a key (X keysym names: Return, Down, w, F1 ...)
     keydown <keysym> / keyup <keysym>
     type <text>                   type characters (Shift for capitals)
-    move <x> <y>                  absolute pointer position in window coordinates
+    move <x> <y>                  absolute pointer position in window coordinates (640x480 design pixels mapped
+                                  into the UI box when M10_UIMAP=<W>x<H> is set: D-2)
     rmove <dx> <dy> [steps]       relative pointer motion, split in <steps> events 20 ms apart
     click <button> [x y]          button 1 left, 2 middle, 3 right; 4/5 wheel up/down
     pad <channel command>         e.g. "pad button a 1" (written to the channel as is)
@@ -127,8 +128,31 @@ def type_text(text):
         time.sleep(0.05)
 
 
+# D-2: with the UI in a centred 4:3 box ([SDL2Drv.SDL2Client] UIScaleMode=Fit43), the scenarios' absolute
+# positions are 640x480 design pixels; M10_UIMAP=<W>x<H> (the window size; m10-controls.sh sets it from M10_RES)
+# maps them into the box the engine draws the menus in: scale s = min(W/640, H/480), origin ((W-640s)/2,
+# (H-480s)/2), floored as UCanvas::Update does. Unset, or 640x480: positions are window pixels, as before.
+def _uimap():
+    v = os.environ.get('M10_UIMAP', '')
+    m = re.fullmatch(r'(\d+)x(\d+)', v)
+    if not m:
+        return (1.0, 0, 0)
+    w, h = int(m.group(1)), int(m.group(2))
+    s = min(w / 640.0, h / 480.0)
+    return (s, int((w - 640 * s) // 2), int((h - 480 * s) // 2))
+
+
+UIMAP = _uimap()
+
+
+def ui_to_window(px, py):
+    s, bx, by = UIMAP
+    return (int(round(bx + px * s)), int(round(by + py * s)))
+
+
 def move(px, py):
-    xt.XTestFakeMotionEvent(d, -1, win_origin[0] + px, win_origin[1] + py, 0)
+    wx, wy = ui_to_window(px, py)
+    xt.XTestFakeMotionEvent(d, -1, win_origin[0] + wx, win_origin[1] + wy, 0)
     x.XFlush(d)
 
 

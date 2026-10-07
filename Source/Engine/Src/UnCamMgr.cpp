@@ -95,6 +95,16 @@ void UClient::StaticConstructor()
 	// scion sz - max distortion
 	new(GetClass(),TEXT("MaxDistortion"),			RF_Public)UFloatProperty(CPP_PROPERTY(MaxDistortion		), TEXT("Display"), CPF_Config );
 
+	// D-2 (UI scaling, docs/porting/analysis/ui-scale.md): where the 640x480 UI goes on a bigger window.
+	UEnum* PUIScaleMode = new(GetClass(),TEXT("EUIScaleMode"))UEnum( NULL );
+	new(PUIScaleMode->Names)FName( TEXT("Native640") );		// UISCALE_Native640
+	new(PUIScaleMode->Names)FName( TEXT("Fit43") );			// UISCALE_Fit43
+	UEnum* PUIMenuBackground = new(GetClass(),TEXT("EUIMenuBackground"))UEnum( NULL );
+	new(PUIMenuBackground->Names)FName( TEXT("Box") );		// UIMENUBG_Box
+	new(PUIMenuBackground->Names)FName( TEXT("Fill") );		// UIMENUBG_Fill
+	new(GetClass(),TEXT("UIScaleMode"),			RF_Public)UByteProperty (CPP_PROPERTY(UIScaleMode			), TEXT("Display"), CPF_Config, PUIScaleMode );
+	new(GetClass(),TEXT("UIMenuBackground"),	RF_Public)UByteProperty (CPP_PROPERTY(UIMenuBackground		), TEXT("Display"), CPF_Config, PUIMenuBackground );
+
 	unguard;
 }
 void UClient::Destroy()
@@ -129,6 +139,25 @@ void UClient::Destroy()
 UBOOL UClient::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UClient::Exec);
+	// D-2: UISCALE [Native640|Fit43] [Box|Fill] switches the UI mapping for this session (the ini keeps its
+	// UIScaleMode/UIMenuBackground); without arguments it says what is in use.
+	if( ParseCommand(&Cmd,TEXT("UISCALE")) )
+	{
+		TCHAR Word[64];
+		while( ParseToken( Cmd, Word, ARRAY_COUNT(Word), 0 ) )
+		{
+			if( appStricmp(Word,TEXT("Native640"))==0 )	UIScaleMode = UISCALE_Native640;
+			else if( appStricmp(Word,TEXT("Fit43"))==0 )	UIScaleMode = UISCALE_Fit43;
+			else if( appStricmp(Word,TEXT("Box"))==0 )		UIMenuBackground = UIMENUBG_Box;
+			else if( appStricmp(Word,TEXT("Fill"))==0 )		UIMenuBackground = UIMENUBG_Fill;
+			else Ar.Logf( TEXT("UISCALE: unknown word '%s' (Native640, Fit43, Box, Fill)"), Word );
+		}
+		Ar.Logf( TEXT("UISCALE: UIScaleMode=%s UIMenuBackground=%s"),
+			UIScaleMode==UISCALE_Fit43 ? TEXT("Fit43") : TEXT("Native640"),
+			UIMenuBackground==UIMENUBG_Fill ? TEXT("Fill") : TEXT("Box") );
+		return 1;
+	}
+	else
 	if( ParseCommand(&Cmd,TEXT("BRIGHTNESS")) )
 	{
 		if( *Cmd == '+' )

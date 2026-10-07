@@ -88,6 +88,8 @@ void USDL2Client::StaticConstructor()
 	PadRumbleScale		= 1.0f;
 	JoyDeadZone			= 0.35f;	// [XboxDrv.XboxClient] JoyDeadZone in Epic's inis
 	LogInput			= 0;
+	UIScaleMode			= UISCALE_Fit43;	// D-2: the UI in a centred 4:3 box (Native640 = as before)
+	UIMenuBackground	= UIMENUBG_Fill;	// D-2: menu backgrounds fill the window (ui-scale.md)
 
 	unguard;
 }
@@ -201,6 +203,15 @@ UBOOL USDL2Client::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		return 1;
 	if( PadExec( Cmd, Ar ) )
 		return 1;
+	// UXboxClient's "TOGGLERENDERLEVEL" (XboxClient.cpp: "Used to hack level rendering"): the level is not
+	// drawn, the HUD and the menus are. D-2's checks measure the UI on a black frame with it (ui-scale.md).
+	if( ParseCommand(&Cmd,TEXT("TOGGLERENDERLEVEL")) )
+	{
+		extern UBOOL GRenderLevel;
+		GRenderLevel ^= TRUE;
+		Ar.Logf( TEXT("TOGGLERENDERLEVEL: the level is %s"), GRenderLevel ? TEXT("drawn") : TEXT("not drawn") );
+		return 1;
+	}
 	return 0;
 	unguard;
 }

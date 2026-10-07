@@ -672,7 +672,13 @@ UBOOL UGUIController::ValidMousePos()
 
 	INT ptX, ptY;
 	GetCursorPos( ptX, ptY );
-	if ( ptX > ResX || ptY > ResY || ptX < 0 || ptY < 0 )
+	// D-2: the cursor may be anywhere in the viewport, also outside the UI's box (design pixels below 0 or
+	// beyond ResX/ResY there)
+	FLOAT X1 = 0.f, Y1 = 0.f, X2 = ResX, Y2 = ResY;
+	UViewport* Viewport = Cast<UViewport>(ViewportOwner);
+	if ( Viewport && Viewport->Canvas && Viewport->Canvas->IsUIBoxed() )
+		Viewport->Canvas->GetTargetInDesign( X1, Y1, X2, Y2 );
+	if ( ptX > X2 || ptY > Y2 || ptX < appFloor(X1) || ptY < appFloor(Y1) )
 	{
 		// Out of bounds
 		return 0;
@@ -697,8 +703,12 @@ void UGUIController::GetCursorPos( INT& ptX, INT& ptY )
 		}
 
 		Viewport->UpdateMousePosition();
-		ptX = (INT) Viewport->WindowsMouseX;
-		ptY = (INT) Viewport->WindowsMouseY;
+		// D-2: window pixels -> the canvas's (design pixels when the UI is boxed)
+		FLOAT X = Viewport->WindowsMouseX, Y = Viewport->WindowsMouseY;
+		if ( Viewport->Canvas )
+			Viewport->Canvas->TargetToDesign( X, Y );
+		ptX = appFloor( X );
+		ptY = appFloor( Y );
 	}
 	unguard;
 }
@@ -1226,15 +1236,20 @@ UBOOL UGUIController::NativeKeyEvent(BYTE& iKey, BYTE& State, FLOAT Delta )
 		FLOAT dX=0.0f;
 		FLOAT dY=0.0f;
 
+		// D-2: the deltas are window pixels; MouseX/MouseY are the canvas's (design pixels when the UI is in a
+		// box, ui-scale.md), so the software cursor keeps the speed it has on the window
+		UViewport* MouseViewport = Cast<UViewport>(ViewportOwner);
+		FLOAT MouseScale = (MouseViewport && MouseViewport->Canvas) ? MouseViewport->Canvas->GetUIScale() : 1.f;
+
 		if (iKey==IK_MouseX)
 		{
 			dX = Delta;
-			MouseX+= (dX*MenuMouseSens);
+			MouseX+= (dX*MenuMouseSens) / MouseScale;
 		}
 		else if (iKey==IK_MouseY)
 		{
 			dY = Delta;
-			MouseY-= (dY * MenuMouseSens);
+			MouseY-= (dY * MenuMouseSens) / MouseScale;
 		}
 
 		// As long as we are not capturing the mouse, make sure the Active Control is up to date
@@ -1527,8 +1542,10 @@ void  UGUIController::NativePreRender(UCanvas* Canvas)
 		return;
 
 	UViewport* Viewport = CastChecked<UViewport>(ViewportOwner);
-	ResX = Viewport->SizeX;
-	ResY = Viewport->SizeY;
+	// D-2: the canvas's size, which is the UI's 640x480 design space when the UI is in a centred box
+	// (UIScaleMode=Fit43, docs/porting/analysis/ui-scale.md) and the viewport's pixels otherwise (as before)
+	ResX = Canvas->SizeX;
+	ResY = Canvas->SizeY;
 
 	// If we are using the Windows Mouse.. pass it along before any rendering
 	Viewport->bShowWindowsMouse = Viewport->bWindowsMouseAvailable;
@@ -1593,6 +1610,8 @@ void  UGUIController::NativePostRender(UCanvas* Canvas)
 
 	Canvas->CurX = 0;
 	Canvas->Style=1;
+	// D-2: what the pages draw now is menu (a full-screen page background follows UIMenuBackground)
+	Canvas->SetUIContext( UICONTEXT_Menu );
 
 	UGUIPage* page = NULL;
 	TArray<UGUIPage*> Menus;
@@ -1692,8 +1711,12 @@ void  UGUIController::NativePostRender(UCanvas* Canvas)
 			Canvas->Style = STY_Alpha;
 
 			FLOAT MouseScale = Max<FLOAT>(Canvas->SizeX / 640, 1.f);
-			FLOAT MX = Clamp<FLOAT>(MouseX, 0.f, Canvas->SizeX);
-			FLOAT MY = Clamp<FLOAT>(MouseY, 0.f, Canvas->SizeY);
+			// D-2: the software cursor goes over the whole viewport, also outside the UI's box
+			FLOAT CX1 = 0.f, CY1 = 0.f, CX2 = Canvas->SizeX, CY2 = Canvas->SizeY;
+			if ( Canvas->IsUIBoxed() )
+				Canvas->GetTargetInDesign( CX1, CY1, CX2, CY2 );
+			FLOAT MX = Clamp<FLOAT>(MouseX, CX1, CX2);
+			FLOAT MY = Clamp<FLOAT>(MouseY, CY1, CY2);
 
 			FLOAT MouseSizeX = MouseMat->MaterialUSize()*MouseScale;
 			FLOAT MouseSizeY = MouseMat->MaterialVSize()*MouseScale;
@@ -1735,10 +1758,13 @@ void  UGUIController::NativePostRender(UCanvas* Canvas)
 		LastMouseX = MouseX;
 		MouseX = ViewportOwner->WindowsMouseX;
 		MouseY = ViewportOwner->WindowsMouseY;
+		Canvas->TargetToDesign( MouseX, MouseY );	// D-2: window pixels -> the canvas's
 
 		if ( ActiveControl )
 			ViewportOwner->SelectedCursor = ActiveControl->MouseCursorIndex;
 	}
+
+	Canvas->SetUIContext( UICONTEXT_Game );	// D-2
 
 	if ( DeleteStack.Num() )
 		eventClearDeleteStack();
@@ -1763,6 +1789,8 @@ void UGUIController::execMouseEmulation( FFrame& Stack, RESULT_DECL )
 	{
 		MouseX = (Master->Client->Viewports(0)->SizeX) / 2;
 		MouseY = (Master->Client->Viewports(0)->SizeY) / 2;
+		if ( Master->Client->Viewports(0)->Canvas )
+			Master->Client->Viewports(0)->Canvas->TargetToDesign( MouseX, MouseY );	// D-2
 	}
 
 	unguardexec;

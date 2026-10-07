@@ -1,0 +1,33 @@
+# D-2: the main menu and an arena page (UC2Arena_Main: game type list, rules, map), one engine screenshot each,
+# then the same two frames without the level ("level-off": TOGGLERENDERLEVEL, the UI on black) for the
+# bounding-box measurement. Run through tools/dev/m10-controls.sh --file (tools/dev/d2-ui-scale.sh does).
+wait OpenMenu \[UCMenu.UC2MainMenu\] 90
+sleep 4
+focus
+probe main
+shot main
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 1
+shot main-levelOff
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 1
+key Down
+sleep 0.5
+key Return
+expect d2-arena-opens OpenMenu \[UCMenu.UC2Arena_Main\] 15
+wait OpenMenu \[GUI.GUIMessageBox\] 20
+sleep 1.5
+key Escape
+expect d2-no-profile-box-closes CloseMenu \[GUIMessageBox\] 10
+sleep 3
+probe arena
+shot arena
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 1
+shot arena-levelOff
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 1
