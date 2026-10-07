@@ -136,9 +136,9 @@ check_effects() {
   for t in "$tree" "$ship"; do
     ( cd "$repo" && tools/dev/m7-effects.sh "$t" selftest ${M14_FX:-bloom blur berserk decay} ) > "$out/effects-$t.txt" 2>&1; rc=$?
     [ $rc = 0 ] || bad="$bad $t:exit$rc"
-    grep -a "^fx " "$out/effects-$t.txt" | grep -a -v "critical=0 glerrors=0 programs_failed=0" | grep -a -q . && bad="$bad $t:fx"
+    grep -a "^fx " "$out/effects-$t.txt" | grep -a -v "^fx selftest" | grep -a -v "critical=0 glerrors=0 programs_failed=0+0" | grep -a -q . && bad="$bad $t:fx"
     grep -a -i "selftest" "$out/effects-$t.txt" | grep -a -q " 0 failed" || bad="$bad $t:selftest"
-    msg="$msg $t: $(grep -a -c '^fx ' "$out/effects-$t.txt") pairs critical=0 glerrors=0 programs_failed=0, $(grep -a -i -o '[0-9]* passed, [0-9]* failed' "$out/effects-$t.txt" | head -1);"
+    msg="$msg $t: $(grep -a '^fx ' "$out/effects-$t.txt" | grep -a -v -c '^fx selftest') pairs critical=0 glerrors=0 programs_failed=0+0, selftest $(grep -a -i -o '[0-9]* passed, [0-9]* failed' "$out/effects-$t.txt" | head -1);"
   done
   # The B pictures (effect on) of the two trees, mean difference per effect (animated things differ anyway).
   for f in ${M14_FX:-bloom blur berserk decay}; do
