@@ -153,10 +153,12 @@ void UC2GL_PixelTraceLog( FOpenGLRenderInterface* RI, INT Pass, const FColor& Be
 	for( INT s=0; s<MS->StagesUsed && s<MAX_STAGES; s++ )
 	{
 		FOpenGLMaterialStateStage& St = MS->Stages[s];
-		debugf( NAME_Init, TEXT("UC2GLDrv: pixtrace #%i   stage %i: tex=%i %ix%i cube=%i rt=%i tci=%x tcc=%x colorop=%i %x,%x alphaop=%i %x,%x xform=%i"),
+		debugf( NAME_Init, TEXT("UC2GLDrv: pixtrace #%i   stage %i: tex=%i %ix%i mips=%i cube=%i rt=%i tci=%x tcc=%x colorop=%i %x,%x alphaop=%i %x,%x xform=%i lodbias=%.2f filter=%i/%i/%i"),
 			GPixTraceDraw, s, St.Texture ? (INT)St.Texture->TextureID : -1, St.Texture ? St.Texture->CachedWidth : 0, St.Texture ? St.Texture->CachedHeight : 0,
+			St.Texture ? St.Texture->CachedNumMips - St.Texture->CachedFirstMip : 0,
 			St.Texture ? St.Texture->IsCubemap : 0, St.Texture ? St.Texture->IsRenderTarget : 0, St.TexCoordIndex, St.TexCoordCount,
-			(INT)St.ColorOp, St.ColorArg1, St.ColorArg2, (INT)St.AlphaOp, St.AlphaArg1, St.AlphaArg2, St.TextureTransformsEnabled );
+			(INT)St.ColorOp, St.ColorArg1, St.ColorArg2, (INT)St.AlphaOp, St.AlphaArg1, St.AlphaArg2, St.TextureTransformsEnabled,
+			RI->RenDev->NoLODBias ? 0.f : St.TextureMipLODBias, (INT)St.MinFilter, (INT)St.MagFilter, (INT)St.MipFilter );
 	}
 }
 

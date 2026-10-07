@@ -335,3 +335,77 @@ Logs outside `logs/o9`: the shared scripts name their log folder after the run t
   materials, LightingOnly) were not enumerated.
 - The web build was compiled, not run in a browser here: the web path is unchanged except the 4-stage split
   (gl4es' fixed-function emulation, checked numerically on the twin).
+
+# O-9b (2026-10-07): the DM-Praxis panes signal after the merge
+
+Branch `o9b` from main `e087510` (after the O-9 merge `f2d7f25`), same worktree, run tree `run/o9b`, logs
+`logs/o9b`. The coordinator's signal: `tools/dev/m7-effects.sh <tree> praxis-panes` no longer reached its reference
+view in 10 runs, and a probe (`logs/coord/praxis-probe-vs-oracle.png`, another spawn, close to the panes) showed
+the panes as a strong pink/blue swirl where the oracle (Epic's D3D8 path under wine) shows flat periwinkle.
+
+## Step 1: same camera, before and after: no change in how the panes are drawn
+
+- Every PlayerStart of DM-Praxis (`getall PlayerStart Location/Rotation`, 8 starts) shot from its location and
+  yaw with NETPLACE, third person, `-nopostprocess -glnoaa`, NVIDIA (`logs/o9b/fx-allps-gpu-ps*.png`), against
+  the oracle `logs/oracle/DM-Praxis-windows-A.png`: **PlayerStart0 (-1220,288,680, yaw 5220) gives mean 2.6**;
+  every other start 22-62. So the oracle's view is PlayerStart0's (the M7 note "not in view from the first
+  PlayerStart" meant the start the `NumPlayers 0` pin picks, which is another one).
+- `tools/dev/o9/praxis-panes.scen` (that view, then a close view of a pane, 0,1850,450 yaw 16384, time frozen):
+
+  | Executable / switch | oracle view vs oracle (mean of 255) | close view vs main d6d7e33 (`uc2-before.bin`) |
+  |---|---|---|
+  | Mesa, main e087510 (programs) | 2.869 | 0.807 |
+  | Mesa, `uc2-before.bin` (main d6d7e33, before O-9) | 2.880 | 0 |
+  | NVIDIA, main (programs) | 2.655 | (NVIDIA's before differs: O-9's fix) |
+  | NVIDIA, main `-glnoffprograms` | 2.694 | |
+  | NVIDIA, main `-glstages=8` | 2.717 | |
+  | NVIDIA, `uc2-before.bin` | 18.195 (dark walls and floor: the defect O-9 fixed) | |
+
+  The close view shows the same pink/blue swirled panes with the binary from before O-9 (Mesa: 0.807 between
+  them, which is the animated pawn/pickups). From the oracle's distance the panes are periwinkle with both, and
+  both match the oracle (2.87 / 2.88). **So there is no rendering regression**: the swirl is how the PC
+  fallback (distortion texture through `SetSimpleMaterial`, stage 0) looks from close, before and after O-9; the
+  coordinator's probe compared a close spawn with the oracle's far one. On NVIDIA main matches the oracle where the
+  pre-O-9 binary did not (18.2).
+- The -1.8 LOD bias: `SetMatState_PS_Distortion` sets it only in `PP_STAGE_ACCUMULATE`, i.e. with
+  post-processing on (`UC2GLPSMaterialState.cpp` 383, Epic's `D3DPSMaterialState.cpp` 372, inside the Xbox
+  branch); the post-processing-off picture (PC's path, Epic's `#else`) has no bias on that stage, in Epic's
+  code and ours alike. GLPIXTRACE now prints each stage's LOD bias, mip count and filters to show it per pixel.
+- Why the 10 random tries missed: the start is random (about one start in four or fewer is PlayerStart0); 10
+  misses in a row are possible by chance, and the number of random draws before the spawn can change with any
+  script or engine change. Not investigated further: the check is made deterministic instead.
+
+## Step 2: the check made deterministic
+
+- `UC2NetTest.cpp` `NETPLACE`: the name `LocalPlayer` stands for the player of this machine's viewport, whatever
+  its name (m7-effects runs have no `?Name=`).
+- `m7-effects.sh` praxis-panes: `-glexec=46:NETPLACE+LocalPlayer+-1220+288+680+5220+0@48:...` (placed twice: the
+  pitch holds once the pawn stands), one run (`tries=1`); picture A must still match the oracle below 8.
+
+## Step 3: the checks again on main + O-9b
+
+- One deterministic run of `m7-effects.sh o9b praxis-panes` (Mesa): `place LocalPlayer ok loc=(-1220.0,288.0,680.0)
+  yaw=5220` twice, `tries=1`, picture A against the wine reference mean 2.641 (`logs/o9b/fx-praxis-panes-a.png`).
+- A pane pixel traced (GLPIXTRACE 300 400, close view, NVIDIA, `logs/o9b/fx-pt-*-gpu.out`): the pass is
+  `PSDistortionMaterial DM-Praxis.Effects.T_Praxis_Largewindow_Dists01`, 1 stage, MODULATE(TEXTURE, DIFFUSE),
+  256x256 with 9 mips, trilinear, texture transform on, **LOD bias -0.50** (the device's `DefaultTexMipBias`, as
+  every stage; the distortion handler's -1.8 belongs to the accumulation pass with post-processing on), result
+  (135,138,255) with programs and (134,139,255) with the texture environment.
+- `tools/dev/o9-nvidia.sh` (fresh tree, fx-owner.sh now with AutoFOV off and the pre-D-2 UI for reference pictures):
+  **12 PASS, 0 FAIL** (`logs/o9/o9b-o9-nvidia.txt`): pillar NVIDIA before 59.8 / after 0.74, cobra 5.34 / 0.29,
+  AcidRain 16.1 / 0.73, Tempest 13.9 / 0.67; all combiner lines as before.
+- Pictures: `logs/o9b/o9b-praxis-oracle-view-wine-main-before.png` (wine | main | main before O-9, Mesa, same camera)
+  and `logs/o9b/o9b-praxis-near-main-before.png` (close view: main | before O-9, the same swirl).
+
+## Step 4: m7-effects and the twin's effects (O-9b gate)
+
+- `tools/dev/m7-effects.sh o9bgate` on a fresh tree (`logs/o9/o9b-m7-effects.txt`): self-test `11 passed, 0
+  failed`; 14 effect lines, every one `critical=0 glerrors=0 programs_failed=0+0 left_behind=0 tries=1`;
+  `fx praxis-panes: ... tries=1 A vs wine reference mean=2.578`.
+- `M11_DESKTOP_TREE=o9m11 M11_TWIN_TREE=o9m11t tools/dev/m11-twin.sh effects` (`logs/o9/o9b-m11-twin-effects.txt`):
+  13 of 14 effects PASS, **praxis-panes PASS** on both bindings in one run each (B desktop vs twin 2.547);
+  **liandri FAIL** (B desktop vs twin 6.440 > 6), as in my O-9 gate (9.26). Not the panes and not O-9: the
+  Liandri overlay's noise differs from run to run on any binary: two pre-O-9 desktop runs (`logs/fx` 00:56 and
+  `logs/m7`, Oct 5) differ by 8.12; the coordinator's own run of 16:07 today (`logs/m11` vs `logs/m11t`) by 6.58;
+  two runs of the O-9 binary by 9.37. The M11 notebook says the same ("the effect's scan-line noise is random").
+  A deterministic liandri check would need the noise's random numbers fixed or the noise masked; not done here.
