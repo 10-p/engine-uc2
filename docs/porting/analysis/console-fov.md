@@ -186,3 +186,26 @@ game/menu, fov-pp (post-processing on, the owner's pictures). Measured so far:
 
 Prepared: windows and wasm-perf configured offline (deps copied from main's build dirs into
 `build-windows/_src`, `build-wasm-perf/_src`), not built yet (the game runs are timing-sensitive under load).
+
+## Step 4 (2026-10-07): the post-processing run, the lock-on on black, the sniper rifle
+
+- `fov-pp` (post-processing on; owner's pictures): with `PlayersOnly` the first-person weapon no longer moves
+  between shots: the same 1440x1080 picture taken again later: area 0.4%, centroid 0.1 px; against it the 16:9
+  and 21:9 weapon: area +0.5% / +0.5%, centroid 0.1 / 0.1 px; AUTOFOV 0: area -6.0%, centroid 52.6 px.
+  Lock-on reticle on black: centre (612.3,669.1) at 1440x1080, (852.4-240, 668.2) at 1920x1080, (1171.6-560,
+  668.8) at 2560x1080: within 1.0 px of the 4:3 one shifted by the side columns, radius 272.8 / 272.8 / 272.6.
+  The figure's purple box is a coarse measure (DOF/bloom edges): offsets spread 7 px; the check now rests on
+  the reticle's position (<= 2 px) and radius (<= 1%), with the figure inside it, the box spread <= 10 px as
+  information. With post-processing the world centre checks give 98.1% / 95.6% (third person) and 97.2% /
+  99.2% (first person, above the weapon): screen-space effects (bloom, depth of field) at the frame's edges;
+  the measured run is `-nopostprocess`, as the pinned comparisons of M12/M13/D-2.
+- Seen in the pictures (fov-pp): third person, letterbox (the CINEMATICS command), first person and zoom 40 at
+  4:3/16:9/21:9 show the same vertical extent with more scene left and right; AUTOFOV 0 at 16:9 is the zoomed
+  view the owner saw. The weapon and the HUD stay in the centred 4:3 area.
+- The sniper rifle: a match started from a URL gives the player only the race weapon (NextWeapon x8 stayed on
+  `UCWeap_Race_Nakhti`; the `[DefaultPlayer] EnergyWeapon` loadout applies through the arena/profile flow), and
+  no cheat gives weapons (`AllWeapons` is commented out in CheatManager.uc). Its zoom is `DesiredFOV`/`FOVAngle`
+  = `ZoomFOV[...]` (UCWeap_SniperRifle.uc:388-392), the same path as the measured "zoom 40". NOT exercised: its
+  scope overlay at 16:9 - it is drawn in the 4:3 box (four quarter tiles of `ClipX/2 x ClipY/2`, D-2), so on a
+  wide window the side columns would show the zoomed world unmasked, presumably; a D-2 follow-up if the owner
+  sees it (a native rule in `UCanvas` or a script change to extend the mask).
