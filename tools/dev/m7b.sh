@@ -16,7 +16,7 @@ set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 tree=m7b
-if [ $# -gt 0 ] && { [ -d "$work/run/$1" ] || [ "$1" = m7b ]; }; then tree=$1; shift; fi
+case "${1:-}" in m7b*) tree=$1; shift;; *) [ $# -gt 0 ] && [ -d "$work/run/$1" ] && { tree=$1; shift; };; esac
 out=$work/logs/$tree
 imgdiff=$repo/tools/dev/imgdiff.py
 CHECKS="census shadow projector-agree projector-differ projector-draws terrain leftovers"
