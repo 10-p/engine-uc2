@@ -201,6 +201,32 @@ if ref is not None:
 else:
     result('zoom-40', False, 'missing pictures')
 
+# the sniper rifle's own zoom (AltFire) with its scope overlay (tools/dev/d78/sniper.scen; the overlay is drawn in
+# the 4:3 box, D-2): the 4:3 picture must be the centre of the wider ones here too
+def sniper_check():
+    ref = pic('sniper', 'fov-sniper-1440x1080')
+    res = os.path.join(run, 'sniper', 'fov.result')
+    rtext = open(res).read() if os.path.exists(res) else ''
+    if ref is None:
+        result('sniper-zoom', False, 'missing pictures (sniper/)'); return
+    parts = []; ok = 'FAIL' not in rtext and 'd78-sniper-zoomed' in rtext
+    for w, t in ((1920, 98.0), (2560, 96.0)):
+        im = pic('sniper', f'fov-sniper-{w}x1080')
+        p = within(ref, centre(im), 2) if im else 0.0
+        ok &= p >= t
+        parts.append(f'{w}x1080 centre {p:.2f}% within 2 levels (>= {t})')
+    off = pic('sniper', 'fov-sniper-1920x1080-off')
+    if off is not None:
+        p = within(ref, centre(off), 2); ok &= p < 50
+        parts.append(f'control AUTOFOV 0: {p:.2f}% (< 50)')
+    m = re.findall(r'probe zoomed .* fov=([\d.]+) desiredfov=([\d.]+)', log_text('sniper', 'fov'))
+    result('sniper-zoom', ok, f'sniper rifle zoomed (FOV {m[-1][0] if m else "?"}; scenario checks: '
+           + ', '.join(l.split('\t')[1] + '=' + l.split('\t')[0] for l in rtext.splitlines() if '\t' in l)
+           + '): 1440x1080 vs ' + '; '.join(parts))
+
+
+sniper_check()
+
 # vertical scale of the scene against the 4:3 picture (1.000 = the same vertical field of view)
 ref = pic('fov', 'fov-tp-1440x1080')
 parts = []; ok = ref is not None
@@ -371,9 +397,9 @@ def sheet(kind, fn, sub):
 
 
 made = []
-for kind, what in (('tp', 'third person'), ('fp', 'first person'), ('zoom', 'zoom 40'),
+for kind, what in (('tp', 'third person'), ('fp', 'first person'), ('zoom', 'zoom 40'), ('sniper', 'sniper rifle'),
                    ('cin', 'letterbox'), ('lock', 'lock-on')):
-    for sub in ('fov-pp', 'fov'):
+    for sub in (('sniper',) if kind == 'sniper' else ('fov-pp', 'fov')):
         o = sheet(kind, f'owner-{kind}-{sub}.png', sub)
         if o:
             made.append(o)

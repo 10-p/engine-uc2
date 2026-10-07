@@ -15,6 +15,7 @@
 #                  (third person, cinematic letterbox, first person with the level and on black, zoom 40,
 #                  lock-on), AUTOFOV 0 for the before pictures
 #   fov-pp/        the same with post-processing (the owner's pictures; not measured)
+#   sniper/        tools/dev/d78/sniper.scen, -nopostprocess: the sniper rifle's zoom and scope at the three sizes
 #   console/       tools/dev/d78/console-game.scen and console-menu.scen
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -40,6 +41,7 @@ runs() {
     one "$ref" "ident/$res" "$res" main-pinned "$repo/tools/dev/d2/deadbolt.scen" "DM-Deadbolt?NumBots=0" -nopostprocess
   done
   D78_XVFB=2560x1080 one "$tree" fov 1440x1080 fov "$repo/tools/dev/d78/fov.scen" "DM-Deadbolt?NumBots=0" -nopostprocess
+  D78_XVFB=2560x1080 one "$tree" sniper 1440x1080 fov "$repo/tools/dev/d78/sniper.scen" "DM-Deadbolt?NumBots=0" -nopostprocess
   one "$tree" console 640x480 console-game "$repo/tools/dev/d78/console-game.scen" "DM-Deadbolt?NumBots=0"
   one "$tree" console 640x480 console-menu "$repo/tools/dev/d78/console-menu.scen" ""
   [ -n "${D78_NO_PP:-}" ] || D78_XVFB=2560x1080 one "$tree" fov-pp 1440x1080 fov "$repo/tools/dev/d78/fov.scen" "DM-Deadbolt?NumBots=0"
