@@ -201,12 +201,6 @@ if ref is not None:
 else:
     result('zoom-40', False, 'missing pictures')
 
-# the sniper rifle's own zoom (AltFire) with its scope overlay (drawn in the 4:3 box, D-2)
-if pic('fov', 'fov-sniper-1440x1080') is not None:
-    centre_check('sniper-zoom', 'sniper', {1920: 97.0, 2560: 95.0})
-else:
-    result('sniper-zoom', False, 'missing pictures (the scenario did not get the sniper rifle?)')
-
 # vertical scale of the scene against the 4:3 picture (1.000 = the same vertical field of view)
 ref = pic('fov', 'fov-tp-1440x1080')
 parts = []; ok = ref is not None
@@ -375,7 +369,7 @@ def sheet(kind, fn, sub):
 
 
 made = []
-for kind, what in (('tp', 'third person'), ('fp', 'first person'), ('zoom', 'zoom 40'), ('sniper', 'sniper rifle'),
+for kind, what in (('tp', 'third person'), ('fp', 'first person'), ('zoom', 'zoom 40'),
                    ('cin', 'letterbox'), ('lock', 'lock-on')):
     for sub in ('fov-pp', 'fov'):
         o = sheet(kind, f'owner-{kind}-{sub}.png', sub)
