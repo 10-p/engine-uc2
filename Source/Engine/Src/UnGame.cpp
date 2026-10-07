@@ -28,6 +28,7 @@ ENGINE_API void UC2StartWithLastProfile( UViewport* Viewport );
 ENGINE_API void UC2RememberProfile( UClient* Client );
 ENGINE_API UBOOL UC2ProfileNamesThePlayer( UClient* Client );	// D-4
 ENGINE_API void UC2ProfileNameInURL( UViewport* Viewport, FURL& URL );	// D-4
+ENGINE_API UBOOL UC2ProfilesExec( UClient* Client, const TCHAR* Cmd, FOutputDevice& Ar );	// D-3: PROFILESTATE
 
 /*-----------------------------------------------------------------------------
 	Object class implementation.
@@ -431,6 +432,8 @@ UBOOL UGameEngine::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UGameEngine::Exec);
 	if( UC2NetTestExec( this, Cmd, Ar ) )	// uc2 port: NETPROBE/NETPLACE/NETAIM
+		return 1;
+	if( UC2ProfilesExec( Client, Cmd, Ar ) )	// uc2 port (D-3): PROFILESTATE (UC2Profiles.cpp)
 		return 1;
 	const TCHAR* Str=Cmd;
 #if WITH_PORTABLE_MOVIES

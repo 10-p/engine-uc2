@@ -38,6 +38,7 @@ static const TCHAR* LastProfileIni		= TEXT("User");
 // The value User.ini holds (as last read or written by this file); compared case-sensitively.
 static FString GRememberedProfile;
 static UBOOL GRememberedProfileRead = 0;
+static INT GRememberTicks = 0;		// how often UC2RememberProfile looked (PROFILESTATE)
 
 static void ReadRememberedProfile()
 {
@@ -91,9 +92,18 @@ ENGINE_API void UC2RememberProfile( UClient* Client )
 
 	if( !Client || !Client->Viewports.Num() || GIsEditor || !GConfig )
 		return;
+	GRememberTicks++;
 	ReadRememberedProfile();
 
 	FString Active = ActiveProfileName( Client->Viewports(0) );
+	// Every change the poll sees, once (DevProfiles is not suppressed by default: the evidence a test reads).
+	static FString LastSeen;
+	if( appStrcmp(*Active, *LastSeen)!=0 )
+	{
+		debugf( NAME_Log, TEXT("Profiles: viewport 0 holds \"%s\" (was \"%s\"; remembered \"%s\"; %i viewport(s))"),
+			*Active, *LastSeen, *GRememberedProfile, Client->Viewports.Num() );
+		LastSeen = Active;
+	}
 	if( appStrcmp(*Active, *GRememberedProfile)==0 )
 		return;
 
@@ -143,5 +153,30 @@ ENGINE_API void UC2ProfileNameInURL( UViewport* Viewport, FURL& URL )
 	if( !Profile || Profile->IsTransient() || !Profile->PlayerName.Len() )
 		return;
 	URL.AddOption( *(FString(TEXT("Name=")) + Profile->PlayerName) );
+	unguard;
+}
+
+/*-----------------------------------------------------------------------------
+	PROFILESTATE: what the remembering looks at, for tests and for the curious.
+	Prints the remembered name, how often the tick looked, and every viewport's profile.
+-----------------------------------------------------------------------------*/
+
+ENGINE_API UBOOL UC2ProfilesExec( UClient* Client, const TCHAR* Cmd, FOutputDevice& Ar )
+{
+	guard(UC2ProfilesExec);
+	if( !ParseCommand(&Cmd,TEXT("PROFILESTATE")) )
+		return 0;
+	ReadRememberedProfile();
+	Ar.Logf( TEXT("ProfileState: remembered \"%s\" (read %i), ticks %i, viewports %i"),
+		*GRememberedProfile, GRememberedProfileRead, GRememberTicks, Client ? Client->Viewports.Num() : -1 );
+	for( INT i=0; Client && i<Client->Viewports.Num(); i++ )
+	{
+		UViewport* V = Client->Viewports(i);
+		UPlayerProfile* P = V ? V->Profile : NULL;
+		Ar.Logf( TEXT("ProfileState: viewport %i %s profile %s name \"%s\" transient %i dirtymask %i"),
+			i, V ? V->GetName() : TEXT("None"), P ? P->GetName() : TEXT("None"),
+			P ? *P->ProfileName : TEXT(""), P ? (INT)P->IsTransient() : -1, P ? (INT)P->DirtyMask : -1 );
+	}
+	return 1;
 	unguard;
 }

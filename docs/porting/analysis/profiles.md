@@ -296,3 +296,21 @@ Run 2 is void: I edited the running bash script (a k1 timing fix) and bash read 
 error near unexpected token" at k2's end), the M14 lesson repeated. Never edit a running script.
 The k1 fix: a GUIMessageBox ignores keys while it animates in; under load (another agent's software-GL game on 6
 cores) the Return came before the box was ready. The scenario now waits for `GUIMessageBox Unblocking animation`.
+
+## Step 8 (2026-10-07): browser runs: an intermittent "not remembered", and the diagnostics for it
+
+Browser saves runs 3-8 (`logs/d3/e2e-saves-3..8.txt`; serve-web from this worktree; the load average was 25-42 from
+other agents' software-GL games):
+- runs 3 and 8: every save/restore/name/rename step passed; run 8 also shows in the browser "Backspace clears the
+  selected name" (`TextStr =`), "the new name is typed: Other", Escape keeps the name. Their remaining failures were
+  in the test (the trimmed empty-field entry; NETWORK is one Up from PROFILES; Enter on the host's game type taken
+  by the list while the page loads its maps' localisation, fixed with a retry and CUSTOMIZE's Right as the witness).
+- runs 4-7: the profile was made (`getall`: name WebSaWdX, DirtyMask 0 = not transient) but the engine did NOT
+  write `[Profiles] LastProfile`: no "Profiles: remembered" line in the engine's own log file (read from the
+  page's file system, so not a dropped console line), and the key absent from the engine's User.ini. Runs 3-7 ran
+  the SAME wasm, so it is intermittent; never seen natively (d3-profiles 5 runs, d4-names, d5-text).
+- Diagnostics added (engine): console command `PROFILESTATE` (remembered name, how often the poll ran, every
+  viewport's profile, its transient bit and DirtyMask; UC2Profiles.cpp, chained in UGameEngine::Exec), and the poll
+  logs every change it sees ("Profiles: viewport 0 holds ..."). Run 8 with them: `ProfileState: remembered
+  "WebSaWdX" (read 1), ticks 759, viewports 1 ... viewport 0 SDL2Viewport profile PlayerProfile name "WebSaWdX"
+  transient 0 dirtymask 0`. Runs 9 and 10 with the change log are running.
