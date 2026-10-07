@@ -239,3 +239,16 @@ swallow a later one. Owner's sheets: `logs/d78/run/owner-{tp,fp,zoom,cin,lock}-{
   the "before" of the suite. They are copied (read only) from `run/d2-ref` into `run/d78-d2ref`; the suite runs
   with `D2_TREE=d78-d2 D2_REF_TREE=d78-d2ref D2_OUT=<WorkUC2>/logs/d78/d2run` (D2_OUT is new in
   d2-ui-scale.sh, b826a22).
+
+### D-7 in short (for the owner)
+
+The console was never locked. It is Epic's one-line UE2 console, and the shipped ini put it on **Tab**, which in
+this port is also the scoreboard (in a match) and Start (in the menus); the console takes keys before both, so
+Tab opened a small typing line in the top-left of the 4:3 area and the key PC players reach for did nothing.
+Now: **the key left of 1** (`` ` `` / `~` on a US keyboard; whatever that key prints on another layout) opens
+it, in a match and over the menus; Enter runs the line and closes it; Escape closes it (dropping the line);
+Up/Down recall earlier lines; Tab is the scoreboard / Start again. Replies are written to the log only
+(`System/Avaris.log`, the terminal with `-log`, the browser console on the web), not on screen: Epic's console
+has no output area (`Console.Message` is empty), and adding one would be a script change (Console.uc) or a new
+native drawing path - not done. Example: `get Engine.GameEngine CacheSizeMegs` -> `32.000000` in the log;
+`AUTOFOV` -> `[AutoFOV] mode=2 (Adaptive) ...`.
