@@ -17,9 +17,8 @@
 #   blur      DM-Deadbolt: the concussion blur (BlurMe) on the poster, sigma, same resolutions
 #   radial    DM-Deadbolt: the radial blur held at distance 30, as one zoomed copy (pp-measure.py zoom): its inset
 #             in 640x480 pixels, same resolutions
-#   identity  640x480, post-processing on, frozen frame: this binary against main's (the tree's System/uc2-base.bin)
-#             twice each; pixels that differ outside the animated part (the pawn) must be 0, as between two runs of
-#             main's binary
+#   identity  640x480, post-processing on, a frame frozen from the start: this binary against main's (the tree's
+#             System/uc2-base.bin), twice each; every pixel outside the two spinning pickups must be equal
 #   aspect    1920x1080 with AutoFOV on (the owner's normal view): the tube's glow (the 4:3 middle of the 16:9
 #             picture is the 4:3 picture), this binary and main's; sheets
 #   perf      (not in the default list) frames per second at 1920x1080 and 3840x2160 on the GPU (UC2_GPU=1 of
@@ -219,32 +218,31 @@ check_radial() {
   [ -f "$out/pp-radial-1440x1080-3.png" ] && $M sheet "$out/pp-sheet-radial.png" "640x480" "$out/pp-radial-640x480-1.png" "1440x1080 old (reference 0)" "$out/pp-radial-1440x1080-2.png" "1440x1080 new (reference 480)" "$out/pp-radial-1440x1080-1.png" > /dev/null
 }
 
-# identity: 640x480, on, frozen, one shot; main's binary twice and this one twice.
+# identity: 640x480, post-processing on, the frame before the match (no Fire: the view behind the "press fire"
+# board, every camera effect running), game time frozen from the first frame and the dynamic gamma stopped after
+# its first update (DYNAMICGAMMA 0), so that two runs of one binary give the same picture except at the two
+# spinning pickups and their glow (rows 220-320). Main's binary (System/uc2-base.bin) twice and this one twice;
+# outside that band every pixel must be equal.
 check_identity() {
-  local b i box=${PP_STATIC_BOX:-380 96 640 300}
+  local b i
   [ -f "$work/run/$tree/System/uc2-base.bin" ] || { result FAIL identity "no System/uc2-base.bin in run/$tree (main's binary)"; return; }
   CAP=2G
   for b in base new; do
     for i in 1 2; do
-      # DYNAMICGAMMA 0 at the end of the first frame: the bloom's threshold then stays where one update of the
-      # dynamic gamma put it, the same in every run (with it on, two runs of one binary differ by up to 3 levels
-      # over a third of the static part: the threshold settles differently).
-      if [ $b = base ]; then UC2_BIN=uc2-base.bin runshot pp-id-$b$i 640x480 90 34 DM-Deadbolt -glexec=0:DYNAMICGAMMA+0@40:set+LevelInfo+TimeDilation+0.0001 -glshot=64
-      else runshot pp-id-$b$i 640x480 90 34 DM-Deadbolt -glexec=0:DYNAMICGAMMA+0@40:set+LevelInfo+TimeDilation+0.0001 -glshot=64; fi
+      if [ $b = base ]; then UC2_BIN=uc2-base.bin runshot pp-id-$b$i 640x480 45 0 DM-Deadbolt -glexec=0:DYNAMICGAMMA+0@0.1:set+LevelInfo+TimeDilation+0.0001 -glshot=25
+      else runshot pp-id-$b$i 640x480 45 0 DM-Deadbolt -glexec=0:DYNAMICGAMMA+0@0.1:set+LevelInfo+TimeDilation+0.0001 -glshot=25; fi
     done
   done
-  local o=$out/pp-id d_bb d_nn d_bn d_bn2 all_bn all_bb
-  d_bb=$($M diff "$o-base1-0.png" "$o-base2-0.png" $box); d_nn=$($M diff "$o-new1-0.png" "$o-new2-0.png" $box)
-  d_bn=$($M diff "$o-base1-0.png" "$o-new1-0.png" $box); d_bn2=$($M diff "$o-base2-0.png" "$o-new2-0.png" $box)
-  all_bb=$($M diff "$o-base1-0.png" "$o-base2-0.png"); all_bn=$($M diff "$o-base1-0.png" "$o-new1-0.png")
-  info identity "box $box: main/main $d_bb; new/new $d_nn; main/new $d_bn, $d_bn2. Whole frame: main/main $all_bb; main/new $all_bn"
-  if [ "$(num differing "$d_bn")" = 0 ] && [ "$(num differing "$d_bn2")" = 0 ]; then
-    result PASS identity "640x480, post-processing on: this binary and main's identical in the static part ($box: $d_bn); whole frame main/new $all_bn against main/main $all_bb (the animated pawn)"
-  elif [ "$(num differing "$d_bb")" != 0 ] && [ "$(num max "$d_bn")" -le "$(num max "$d_bb")" ] && [ "$(num max "$d_bn2")" -le "$(num max "$d_bb")" ]; then
-    result PASS identity "640x480: main/new in $box ($d_bn; $d_bn2) within the difference of two runs of main's binary ($d_bb): not exact, the runs themselves differ"
-  else
-    result FAIL identity "640x480: main/new in $box: $d_bn, $d_bn2 (main/main: $d_bb)"
-  fi
+  local o=$out/pp-id p q t bo all txt="" bad=0
+  for pq in "base1 base2" "new1 new2" "base1 new1" "base2 new2"; do
+    set -- $pq
+    t=$($M diff "$o-$1-0.png" "$o-$2-0.png" 0 0 640 220); bo=$($M diff "$o-$1-0.png" "$o-$2-0.png" 0 320 640 480)
+    all=$($M diff "$o-$1-0.png" "$o-$2-0.png")
+    [ "$(num differing "$t")" = 0 ] && [ "$(num differing "$bo")" = 0 ] || bad=1
+    txt="$txt $1/$2: rows 0-219 $(num differing "$t"), rows 320-479 $(num differing "$bo") differing (whole frame: $all);"
+  done
+  grep -a -q "UCCameraEffects: UCScreenDOF target" "$o-new1.out" || bad=1
+  [ $bad = 0 ] && result PASS identity "640x480, post-processing on (the camera effects' targets are in the log):$txt" || result FAIL identity "$txt"
 }
 
 # aspect: 1920x1080, AutoFOV on (Hor+), on, frozen; this binary (ref 480 then 0) and main's. The tube in the
@@ -276,7 +274,7 @@ check_perf() {
   local res scen=$(mktemp)
   # fx-owner.sh stops the game when the scenario ends: keep it running past the last marker (75 s after the
   # first frame; the common start takes about 35 s).
-  echo 'sleep 50' > "$scen"
+  echo 'sleep 75' > "$scen"
   for res in 1920x1080 3840x2160; do
     local X=${res%x*} Y=${res#*x} b
     for b in uc2.bin uc2-base.bin; do
