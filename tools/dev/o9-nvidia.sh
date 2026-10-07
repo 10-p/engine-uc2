@@ -15,7 +15,8 @@
 #                   texture environment, combine3 included, in its own shaders)
 #   caps            the material compiler gets the same stage count and the same texture-op caps on NVIDIA and Mesa
 #   pictures        DM-Azure, wooden pillar and cobra statue (tools/dev/o9/azure.scen through fx-owner.sh, time
-#                   frozen): NVIDIA before (main's binary) and after, Mesa before and after; crops compared
+#                   frozen, -glnoaa): NVIDIA before (main's binary) and after, Mesa before and after; crops of the
+#                   shots without post-processing compared (the dynamic gamma depends on the frame rate)
 #
 # Run tree <WorkUC2>/run/o9 (made from build-native unless O9_NO_MKRUN=1; main's executable must be there as
 # System/uc2-before.bin for the "before" pictures: build main and copy its uc2.bin). Logs and pictures in
@@ -38,7 +39,7 @@ info() { echo "INFO o9-$1: $2" | tee -a "$summary"; }
 if [ -z "${O9_NO_MKRUN:-}" ]; then
   before=""; [ -f "$sys/uc2-before.bin" ] && before=$(mktemp) && cp "$sys/uc2-before.bin" "$before"
   "$capped" 2G 600 -- "$repo/tools/dev/mkrun-uc2.sh" "$repo/build-native" $T > /dev/null || exit 1
-  [ -n "$before" ] && cp "$before" "$sys/uc2-before.bin" && rm -f "$before"
+  [ -n "$before" ] && cp "$before" "$sys/uc2-before.bin" && chmod 755 "$sys/uc2-before.bin" && rm -f "$before"
 fi
 cp -f "$repo"/Engine/Config/*.ini "$sys/"
 
@@ -112,42 +113,52 @@ check_caps() {
   fi
 }
 
-# Crops of the DM-Azure pictures (1280x720): the wooden pillar right of the cobra niche, the cobra statue.
-PILLAR=730,0,920,480; COBRA=330,280,460,560
+# Crops of the DM-Azure pictures (1280x720), third-person view (shots "pp", "nopp", "texenv"): the wooden pillar
+# right of the cobra niche, and the right half of the cobra statue (its left half is behind the waterfall). The
+# close first-person view of the cobra (shots "cobra*") is for people and for the same-run comparison only: its
+# eye height settles differently at the GPU's and at llvmpipe's frame rate (a few pixels), the third-person
+# camera does not.
+PILLAR=730,0,920,480; COBRA=370,290,460,540; COBRACLOSE=600,170,790,540
 check_pictures() {
   if [ ! -f "$sys/uc2-before.bin" ]; then result FAIL pictures "no $sys/uc2-before.bin (main's executable)"; return; fi
   local b
-  for b in uc2-before.bin uc2.bin; do
-    UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/azure.scen" FX_MAP=DM-Azure FX_NAME=azure "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
+  # (After first: fx-owner.sh clears fx-azure-*.png, which includes the "-before" pictures.)
+  for b in uc2.bin uc2-before.bin; do
+    FX_ARGS=-glnoaa UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/azure.scen" FX_MAP=DM-Azure FX_NAME=azure "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
     if [ -n "$(gpu_busy)" ]; then result FAIL pictures "another headless GPU run is going on"; return; fi
-    UC2_GPU=1 UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/azure.scen" FX_MAP=DM-Azure FX_NAME=azure "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
+    FX_ARGS=-glnoaa UC2_GPU=1 UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/azure.scen" FX_MAP=DM-Azure FX_NAME=azure "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
   done
   local p=$out/fx-azure ok=1 shot
-  for f in "$p-pp.png" "$p-before-pp.png" "$p-gpu-pp.png" "$p-before-gpu-pp.png" "$p-gpu-texenv.png" "$p-cobra.png" "$p-gpu-cobra.png" "$p-before-gpu-cobra.png"; do
+  for f in "$p-pp.png" "$p-before-gpu-pp.png" "$p-gpu-pp.png" "$p-nopp.png" "$p-before-nopp.png" "$p-gpu-nopp.png" "$p-before-gpu-nopp.png" "$p-gpu-texenv.png" \
+           "$p-cobra.png" "$p-gpu-cobra.png" "$p-before-gpu-cobra.png" "$p-cobra-nopp.png" "$p-gpu-cobra-nopp.png" "$p-before-gpu-cobra-nopp.png" "$p-gpu-cobra-texenv.png"; do
     [ -f "$f" ] || { result FAIL pictures "missing $f (see $out/pictures-runs.txt)"; return; }
   done
-  # Mesa (after) is the reference: what Mesa drew before O-9 for these materials (combine3, 2-3 stages).
-  local after before mesa gpuenv cafter cbefore
-  after=$("$imgdiff" "$p-gpu-pp.png" "$p-pp.png" --box $PILLAR)
-  before=$("$imgdiff" "$p-before-gpu-pp.png" "$p-pp.png" --box $PILLAR)
-  mesa=$("$imgdiff" "$p-before-pp.png" "$p-pp.png" --box $PILLAR)
+  # Numbers from the shots without post-processing (the dynamic gamma ramp adapts with the frame rate, which is
+  # very different on the GPU and on llvmpipe); Mesa (after) is the reference: what Mesa drew before O-9 for
+  # these materials (combine3, 2-3 stages).
+  local after before mesa gpuenv cafter cbefore cgpuenv
+  after=$("$imgdiff" "$p-gpu-nopp.png" "$p-nopp.png" --box $PILLAR)
+  before=$("$imgdiff" "$p-before-gpu-nopp.png" "$p-nopp.png" --box $PILLAR)
+  mesa=$("$imgdiff" "$p-before-nopp.png" "$p-nopp.png" --box $PILLAR)
   gpuenv=$("$imgdiff" "$p-gpu-texenv.png" "$p-gpu-nopp.png" --box $PILLAR)
-  cafter=$("$imgdiff" "$p-gpu-cobra.png" "$p-cobra.png" --box $COBRA)
-  cbefore=$("$imgdiff" "$p-before-gpu-cobra.png" "$p-cobra.png" --box $COBRA)
+  cafter=$("$imgdiff" "$p-gpu-nopp.png" "$p-nopp.png" --box $COBRA)
+  cbefore=$("$imgdiff" "$p-before-gpu-nopp.png" "$p-nopp.png" --box $COBRA)
+  cgpuenv=$("$imgdiff" "$p-gpu-cobra-texenv.png" "$p-gpu-cobra-nopp.png" --box $COBRACLOSE)
   info pictures-pillar "NVIDIA after vs Mesa after: $after"
   info pictures-pillar "NVIDIA before vs Mesa after: $before"
   info pictures-pillar "Mesa before vs Mesa after: $mesa"
-  info pictures-pillar "NVIDIA, texture environment (combine4) vs fragment programs, post-processing off: $gpuenv"
+  info pictures-pillar "NVIDIA, texture environment (combine4) vs fragment programs: $gpuenv"
   info pictures-cobra "NVIDIA after vs Mesa after: $cafter"
   info pictures-cobra "NVIDIA before vs Mesa after: $cbefore"
+  info pictures-cobra "NVIDIA, texture environment (combine4) vs fragment programs (close view, same run): $cgpuenv"
   mean() { sed -E 's/.*mean=([0-9.]+).*/\1/' <<<"$1"; }
-  awk -v a="$(mean "$after")" -v b="$(mean "$before")" 'BEGIN{exit !(a < 6 && b > 3*a)}' || ok=0
-  awk -v a="$(mean "$cafter")" -v b="$(mean "$cbefore")" 'BEGIN{exit !(a < 6 && b > 2*a)}' || ok=0
-  awk -v a="$(mean "$mesa")" 'BEGIN{exit !(a < 3)}' || ok=0
+  awk -v a="$(mean "$after")" -v b="$(mean "$before")" 'BEGIN{exit !(a < 3 && b > 5*a)}' || ok=0
+  awk -v a="$(mean "$cafter")" -v b="$(mean "$cbefore")" 'BEGIN{exit !(a < 3 && b > 2*a)}' || ok=0
+  awk -v a="$(mean "$mesa")" -v c="$(mean "$gpuenv")" -v d="$(mean "$cgpuenv")" 'BEGIN{exit !(a < 1 && c < 1 && d < 1)}' || ok=0
   "$imgdiff" "$p-before-gpu-pp.png" "$p-gpu-pp.png" --side "$out/o9-azure-nvidia-before-after.png" > /dev/null
   "$imgdiff" "$p-gpu-pp.png" "$p-pp.png" --side "$out/o9-azure-nvidia-vs-mesa.png" > /dev/null
   "$imgdiff" "$p-before-gpu-cobra.png" "$p-gpu-cobra.png" --side "$out/o9-azure-cobra-nvidia-before-after.png" > /dev/null
-  local txt="pillar mean difference to Mesa: NVIDIA before $(mean "$before"), after $(mean "$after"); cobra: before $(mean "$cbefore"), after $(mean "$cafter"); Mesa before/after $(mean "$mesa"); side by side: o9-azure-nvidia-before-after.png, o9-azure-nvidia-vs-mesa.png, o9-azure-cobra-nvidia-before-after.png"
+  local txt="mean difference to Mesa (of 255), pillar: NVIDIA before $(mean "$before"), after $(mean "$after"); cobra: before $(mean "$cbefore"), after $(mean "$cafter"); Mesa before/after (pillar) $(mean "$mesa"); NVIDIA combine4 vs programs: pillar $(mean "$gpuenv"), cobra $(mean "$cgpuenv"); side by side: o9-azure-nvidia-before-after.png, o9-azure-nvidia-vs-mesa.png, o9-azure-cobra-nvidia-before-after.png"
   [ $ok = 1 ] && result PASS pictures "$txt" || result FAIL pictures "$txt"
 }
 

@@ -223,3 +223,27 @@ Coverage note (not measured here, from the extension specs and what this machine
 and Mesa's, combine4 NVIDIA's and Mesa's; a GL 2.0 fragment shader is on every driver this port can run on (the
 driver already needs GL 2.0). `opengl.gpuinfo.org` could not be read (the listing is filled by script), so no
 coverage percentages are quoted.
+
+## Step 4 (2026-10-07): the script's first full runs; the pictures and what the numbers mean
+
+`tools/dev/o9-nvidia.sh` (run 1, `logs/o9/o9-nvidia-run1.txt`): every combiner line PASS on Mesa, NVIDIA and the
+twin; `caps` PASS (4 stages, exact operations on both GPUs). The twin: 33 passed, 2 skipped (LOD bias: none on
+OpenGL ES), largest error 0.80/255: gl4es' emulation of combine3 is right, so the web had the ops already.
+
+Pictures, fixes to the script on the way: the "before" executable lost its exec bit when the tree was rebuilt
+(restored with `chmod 755`); fx-owner.sh deletes `fx-<name>-*.png` before a run, which included the "-before"
+pictures (after-binary runs go first now); post-processed shots differ by the dynamic gamma ramp, which adapts
+with the frame rate (NVIDIA hundreds of fps, llvmpipe a few): the numbers come from the shots without
+post-processing; `-glnoaa`; the first-person close view of the cobra settles its eye height differently at the
+two frame rates (a few pixels: NVIDIA vs Mesa 13.6 in that crop although the third-person crop of the same statue
+differs by 0.29), so the cobra number comes from the third-person view and the close view stays a picture.
+
+Measured (`logs/o9/o9-nvidia-pictures5.txt` and the crops recomputed on the same files), mean absolute difference
+of 255 against Mesa after O-9:
+
+| Crop | NVIDIA before (main) | NVIDIA after | Mesa before |
+|---|---|---|---|
+| wooden pillar | 59.8 | 0.76 | 0.000 |
+| cobra statue (right half, third person) | 5.34 | 0.29 | 0.002 |
+
+NVIDIA texture environment (combine4) against fragment programs, same run: pillar 0.10, cobra close-up 0.000.
