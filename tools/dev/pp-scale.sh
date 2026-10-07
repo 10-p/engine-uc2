@@ -21,6 +21,7 @@
 #             System/uc2-base.bin), twice each; every pixel outside the two spinning pickups must be equal
 #   aspect    1920x1080 with AutoFOV on (the owner's normal view): the tube's glow (the 4:3 middle of the 16:9
 #             picture is the 4:3 picture), this binary and main's; sheets
+#   sheets    the owner's picture sheets from the pictures above (also logs/pp2): logs/<tree>/sheets
 #   perf      (not in the default list) frames per second at 1920x1080 and 3840x2160 on the GPU (UC2_GPU=1 of
 #             tools/dev/fx-owner.sh, offscreen, no window), reference height 480 then 0 in one run, and main's
 #             binary
@@ -308,9 +309,38 @@ check_perf() {
   rm -f "$scen"
 }
 
+# sheets: the owner's picture sheets from the pictures the checks left (in this tree's logs and in PP_ALSO, default
+# logs/pp2): per effect, 640x480 | 1440x1080 old | 1440x1080 new (and the same at 2880x2160), whole pictures at the
+# 480-line scale, and a part of them enlarged twice from each picture's own resolution (pp-measure.py crop);
+# the 16:9 AutoFOV view, main's binary against this one. Into <WorkUC2>/logs/<tree>/sheets.
+check_sheets() {
+  local d=$out/sheets also=${PP_ALSO:-$work/logs/pp2} spec e on old new box res n=0
+  mkdir -p "$d"
+  pic() { if [ -f "$out/$1" ]; then echo "$out/$1"; elif [ -f "$also/$1" ]; then echo "$also/$1"; fi; }
+  # effect | shot with the effect, reference 480 | the same, reference 0 | crop box on the 480-line picture
+  for spec in "glow|1|2|330 90 500 200" "dof|0|3|280 150 460 260" "blur|2|3|340 150 520 280" "radial|1|2|440 60 640 330"; do
+    IFS='|' read -r e on old box <<<"$spec"
+    for res in 1440x1080 2880x2160; do
+      local a b c; a=$(pic pp-$e-640x480-$on.png); b=$(pic pp-$e-$res-$old.png); c=$(pic pp-$e-$res-$on.png)
+      [ -n "$a" ] && [ -n "$b" ] && [ -n "$c" ] || continue
+      $M sheet "$d/$e-$res.png" "640x480 (the Xbox's picture)" "$a" "$res before (main)" "$b" "$res now (reference 480)" "$c" > /dev/null
+      $M crop "$d/$e-$res-detail.png" $box 2 "640x480" "$a" "$res before" "$b" "$res now" "$c" > /dev/null
+      n=$((n+2))
+    done
+  done
+  local mb nw; mb=$(pic pp-aspect-base-1.png); nw=$(pic pp-aspect-new-1.png)
+  if [ -n "$mb" ] && [ -n "$nw" ]; then
+    $M sheet "$d/aspect-1920x1080-autofov.png" "1920x1080 AutoFOV on, before (main)" "$mb" "1920x1080 AutoFOV on, now" "$nw" > /dev/null
+    $M crop "$d/aspect-1920x1080-autofov-detail.png" 436 90 606 200 3 "before (main)" "$mb" "now" "$nw" > /dev/null
+    cp -f "$nw" "$d/aspect-1920x1080-autofov-now-full.png"
+    n=$((n+3))
+  fi
+  info sheets "$n sheets in $d: $(cd "$d" && ls | tr '\n' ' ')"
+}
+
 for c in $want; do
   case $c in
-    selftest|glow|dof|blur|radial|identity|aspect|perf) check_$c ;;
+    selftest|glow|dof|blur|radial|identity|aspect|perf|sheets) check_$c ;;
     *) echo "unknown check $c (tools/dev/pp-scale.sh list)" ;;
   esac
 done
