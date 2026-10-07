@@ -49,6 +49,27 @@ shot tp-2560x1080-off
 chan exec AUTOFOV 2
 wait test: exec AUTOFOV 2 10
 sleep 2
+# the cinematic letterbox (matinee's bCinematicView; the CINEMATICS console command switches it): the 4:3 band
+# must be the centre of the wider bands too
+chan exec CINEMATICS 1
+wait test: exec CINEMATICS 1 10
+sleep 5
+shot cin-2560x1080
+chan exec TEMPSETRES 1440x1080w
+sleep 5
+shot cin-1440x1080
+chan exec TEMPSETRES 1920x1080w
+sleep 5
+shot cin-1920x1080
+chan exec AUTOFOV 0
+wait test: exec AUTOFOV 0 10
+sleep 4
+shot cin-1920x1080-off
+chan exec AUTOFOV 2
+wait test: exec AUTOFOV 2 10
+chan exec CINEMATICS 0
+wait test: exec CINEMATICS 0 10
+sleep 2
 check d78-sizes P['tp43'].view==(1440,1080) and P['tp169'].view==(1920,1080) and P['tp219'].view==(2560,1080)
 check d78-base-fov-untouched P['tp43'].fov==P['tp169'].fov==P['tp219'].fov==P['spawn'].fov
 # ---- first person: the weapon
@@ -64,11 +85,15 @@ sleep 2
 chan exec TEMPSETRES 1440x1080w
 sleep 5
 probe fp43
-shot fp-1440x1080
+# the weapon and the HUD on black (the level not drawn), in an order that is not the order of the aspects, and
+# 1440x1080 twice: the second tells how much the weapon's idle animation moved in the frozen world
 chan exec TOGGLERENDERLEVEL
 wait test: exec TOGGLERENDERLEVEL 10
 sleep 3
 shot fp-1440x1080-lo
+chan exec TEMPSETRES 2560x1080w
+sleep 6
+shot fp-2560x1080-lo
 chan exec TEMPSETRES 1920x1080w
 sleep 5
 shot fp-1920x1080-lo
@@ -79,12 +104,15 @@ shot fp-1920x1080-lo-off
 chan exec AUTOFOV 2
 wait test: exec AUTOFOV 2 10
 sleep 2
-chan exec TEMPSETRES 2560x1080w
-sleep 6
-shot fp-2560x1080-lo
+chan exec TEMPSETRES 1440x1080w
+sleep 5
+shot fp-1440x1080-lo2
 chan exec TOGGLERENDERLEVEL
 wait test: exec TOGGLERENDERLEVEL 10
 sleep 4
+shot fp-1440x1080
+chan exec TEMPSETRES 2560x1080w
+sleep 6
 shot fp-2560x1080
 chan exec TEMPSETRES 1920x1080w
 sleep 5
