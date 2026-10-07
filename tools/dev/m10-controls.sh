@@ -142,6 +142,8 @@ if [ "${1-}" = "--file" ]; then
 fi
 
 # ---------------------------------------------------------------------------------------------------------------
+# A GUIMessageBox ignores input while it animates in, and the animation counts FRAMES: the scenarios wait for its
+# 'Unblocking animation' line (as tools/dev/d5-text.sh does) instead of a fixed 1.5 s (late answers under load).
 # Scenarios. Names of checks are <scenario>-<what>; each check is a log line ('expect'), the absence of one
 # ('absent'), or a comparison of probe states ('check'); m10-inject.py documents the language.
 # ---------------------------------------------------------------------------------------------------------------
@@ -158,7 +160,8 @@ sleep 0.5
 $accept
 expect $p-main-menu-opens-arena OpenMenu \[UCMenu.UC2Arena_Main\] 15
 wait OpenMenu \[GUI.GUIMessageBox\] 20
-sleep 1.5
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
 $back
 expect $p-back-closes-dialog CloseMenu \[GUIMessageBox\] 10
 sleep 1.5
@@ -256,7 +259,8 @@ sleep 0.5
 key Return
 expect ms-hovered-item-is-the-one-enter-opens OpenMenu \[UCMenu.UC2Settings_Main\] 15
 wait OpenMenu \[GUI.GUIMessageBox\] 20
-sleep 1.5
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
 click 3
 expect ms-right-click-answers-no CloseMenu \[GUIMessageBox\] 10
 sleep 1.5
@@ -369,7 +373,8 @@ sleep 0.5
 key Return
 expect tx-profiles-opens OpenMenu \[UCMenu.UC2Profile\] 15
 wait OpenMenu \[GUI.GUIMessageBox\] 20
-sleep 1.5
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
 key Return
 expect tx-on-screen-keyboard-opens OpenMenu \[UCMenu.UC2ProfileKeyboard\] 15
 sleep 3
@@ -537,7 +542,8 @@ sleep 0.5
 padpress a
 expect both-key-down-then-pad-a-opens-arena OpenMenu \[UCMenu.UC2Arena_Main\] 15
 wait OpenMenu \[GUI.GUIMessageBox\] 20
-sleep 1.5
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
 key Escape
 expect both-escape-closes-dialog CloseMenu \[GUIMessageBox\] 10
 sleep 1.5
