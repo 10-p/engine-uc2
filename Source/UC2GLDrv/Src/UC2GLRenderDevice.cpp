@@ -207,8 +207,9 @@ void UUC2GLRenderDevice::StaticConstructor()
 	DOFShippedBlurAlpha		= 0;
 	// M7b: the Xbox's shadow textures (lighter, sharper than PC's; analysis/projectors.md).
 	UseXboxShadows			= 1;
-	// M7b: terrain drawn three layers at a time, as the Xbox build always does.
-	UseTerrain3Layer		= 1;
+	// M7b: terrain drawn three layers at a time as the Xbox build does: no visible difference
+	// (analysis/projectors.md), so off unless asked for.
+	UseTerrain3Layer		= 0;
 	// M7b: the Xbox projector material (projectors on skeletal meshes were drawn with nothing).
 	UseXboxProjectors		= 1;
 	// O-8 (owner, 2026-10-06): 16x anisotropic filtering and 4x anti-aliasing by default, also
@@ -2041,6 +2042,18 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		UseXboxShadows = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !UseXboxShadows;
 		Ar.Logf( TEXT("UC2GLDrv: Xbox shadow textures %s%s (frame %i)"), UseXboxShadows ? TEXT("on") : TEXT("off"),
 			(UseXboxShadows && !XboxShadowsActive()) ? TEXT(" but not active (needs post-processing: PS_ShadowBlur is drawn with the blur family)") : TEXT(""), FrameCounter );
+		return 1;
+	}
+	else if( ParseCommand(&Cmd,TEXT("GLSTATS")) )
+	{
+		// M7b: the -glstats line now, for the frames since the last one (or since GLSTATS RESET).
+		if( ParseCommand(&Cmd,TEXT("RESET")) )
+		{
+			StatTime0 = 0.0;
+			LogFrameStats();
+		}
+		else
+			LogFrameStats();
 		return 1;
 	}
 	else if( ParseCommand(&Cmd,TEXT("XBOXPROJECTORS")) )
