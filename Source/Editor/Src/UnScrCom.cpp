@@ -7357,6 +7357,56 @@ static void UC2SortClassesLikeEpic( TArray<UClass*>& AllClasses, const TArray<FS
 	unguard;
 }
 
+/*-----------------------------------------------------------------------------
+	uc2 port (M14): native class defaults as a late-loaded DLL had them.
+
+	A native class gets its default object when it registers: a copy of its superclass's defaults at that
+	moment (UClass::Register). Epic's IpDrv, UWeb, UnrealGame, UCElements, UCGameplay and GUI DLLs were loaded
+	when `ucc make` created their package, after the earlier packages' scripts had set their defaults; our
+	__STATIC_LINK build registers every class at start-up, when script defaults do not exist yet. MakeScripts
+	then exports a native class's current defaults as its default-properties text when the class has no
+	defaultproperties block of its own, so ours carried start-up zeros into the package (UCScreenBlur.Alpha 0
+	instead of CameraEffect's value, CharacterMemoryUsageCommandlet.LogToStdout False instead of Commandlet's
+	True, ProfilePreview's 46 values). UMakeCommandlet calls this when it creates such a package: each of the
+	package's native classes takes its superclass's current defaults again, superclasses first, as UClass::
+	Register did at DLL load (the static constructors of these packages only declare C++ properties, so they
+	are not run again). Packages loaded at start-up (epoch -1: Core, Engine, Editor) are left alone, as Epic's
+	were.
+-----------------------------------------------------------------------------*/
+
+EDITOR_API void UC2RefreshNativeDefaultsLikeDllLoad( UPackage* Package )
+{
+	guard(UC2RefreshNativeDefaultsLikeDllLoad);
+	INT Epoch = INDEX_NONE;
+	for( INT r=0; r<ARRAY_COUNT(GUC2EpicClassOrder); r++ )
+		if( appStricmp(GUC2EpicClassOrder[r].Package,Package->GetName())==0 )
+			{ Epoch = GUC2EpicClassOrder[r].Epoch; break; }
+	if( Epoch<0 || ParseParam(appCmdLine(),TEXT("NOEPICORDER")) )
+		return;
+	TArray<UClass*> Natives;
+	for( TObjectIterator<UClass> It; It; ++It )
+		if( It->GetOuter()==Package && (It->GetFlags() & RF_Native) && It->GetSuperClass() && It->Defaults.Num() )
+			Natives.AddItem( *It );
+	// Superclasses first: a class's depth in the hierarchy orders them.
+	for( INT Done=0; Done<Natives.Num(); )
+	{
+		INT Best=Done, BestDepth=MAXINT;
+		for( INT i=Done; i<Natives.Num(); i++ )
+		{
+			INT Depth=0;
+			for( UClass* C=Natives(i); C; C=C->GetSuperClass() )
+				Depth++;
+			if( Depth<BestDepth )
+				{ Best=i; BestDepth=Depth; }
+		}
+		Exchange( Natives(Done), Natives(Best) );
+		UClass* Class = Natives(Done++);
+		Class->GetDefaultObject()->InitClassDefaultObject( Class );
+		debugf( NAME_DevCompile, TEXT("Native defaults of %s taken from %s again (DLL load emulation)"), Class->GetName(), Class->GetSuperClass()->GetName() );
+	}
+	unguard;
+}
+
 //
 // Make all scripts.
 // Returns 1 if success, 0 if errors.

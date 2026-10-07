@@ -97,7 +97,7 @@ assemble() {
 
 make_scripts() {
   local log=$logs/$tree-make.log
-  local args="-nobind"
+  local args="-nobind -CONFORMNOCONFIG"
   [ $headers -eq 1 ] || args="$args -noh"
   rm -f "$run/System/ucc.log"
   set +e
@@ -127,6 +127,15 @@ strip_scripts() {
   # which loads every class's config again, ran after sync_avaris.pl had deleted the Xbox Avaris.ini/User.ini.
   cp -f "$assets/System/Default.ini" "$run/System/Avaris.ini"
   cp -f "$assets/System/DefUser.ini" "$run/System/User.ini"
+  # And with the retail disc's per-class inis where they differ from the leak's (later) ones: the shipped
+  # defaults carry them (UCDeathmatch.LevelData without the Overdrive maps of the leak's Gametypes.ini; the
+  # character speeds of the retail Characters.ini). Read-only copies from <WorkUC2>/reference/iso-extract.
+  local retail=$work/reference/iso-extract/System f
+  if [ -d "$retail" ]; then
+    for f in Characters.ini Gametypes.ini Maplists.ini; do cp -f "$retail/$f" "$run/System/$f"; done
+  else
+    echo "note: no $retail: the strip uses the leak's per-class inis (a few config defaults will differ)" >&2
+  fi
   set +e
   (cd "$run/System" && "$capped" "$mem" 3600 -- ./ucc-bin editor.stripsource -CONFORM -log=ucc.log) > "$log.out" 2>&1
   local rc=$?
@@ -144,6 +153,12 @@ for s in "${stages[@]}"; do
     assemble) assemble;;
     make) make_scripts || true;;
     strip) strip_scripts || true;;
-    compare) echo "compare: not written yet";;
+    compare)
+      set +e
+      python3 "$repo/tools/dev/script-diff.py" "$assets/System" "$run/System" \
+        --patches "$repo/Source/Engine/Inc/ScriptPatches.h" \
+        --details "$logs/$tree-compare.txt" --patch-table "$logs/$tree-patches.txt"
+      echo "compare: exit $? (details $logs/$tree-compare.txt, patch table $logs/$tree-patches.txt)"
+      set -e;;
   esac
 done

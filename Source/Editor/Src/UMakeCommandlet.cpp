@@ -93,6 +93,9 @@ class UMakeCommandlet : public UCommandlet
 				// Create package.
 				GWarn->Log( TEXT("Analyzing...") );
 				UPackage* PkgObject = CreatePackage( NULL, Pkg );
+				// uc2 port (M14): defaults of this package's native classes as Epic's DLL load gave them (UnScrCom.cpp).
+				extern EDITOR_API void UC2RefreshNativeDefaultsLikeDllLoad( UPackage* Package );
+				UC2RefreshNativeDefaultsLikeDllLoad( PkgObject );
 
 				// Try reading from package's .ini file.
 				PkgObject->PackageFlags &= ~(PKG_AllowDownload|PKG_ClientOptional|PKG_ServerSideOnly);
@@ -201,7 +204,12 @@ class UMakeCommandlet : public UCommandlet
 					BeginLoad();
 					Conform = UObject::GetPackageLinker( CreatePackage(NULL,*(US+Pkg+TEXT("_OLD"))), *(FString(TEXT("..")) * TEXT("GUIRes") * Pkg + TEXT(".u")), LOAD_NoWarn|LOAD_NoVerify, NULL, NULL );
 					EndLoad();
-					if( Conform )
+					// uc2 port (M14): -CONFORMNOCONFIG conforms the save (name/import/export order, GUID) without
+					// loading the ini into the new defaults first. Epic's retail build did not get that load: the
+					// shipped defaults of config properties carry no DefaultXbox.ini values (GameEngine.MainMenuClass
+					// is the class's UCMenu.UC2MainMenu, DefaultXbox.ini says UCMenu.StartMenu), so there was no
+					// ../GUIRes package to conform to. tools/dev/script-build.sh conforms only to line the files up.
+					if( Conform && !ParseParam(appCmdLine(),TEXT("CONFORMNOCONFIG")) )
 					{
 						debugf( TEXT("Conforming: %s"), Pkg );
 						for ( TObjectIterator<UClass> It; It; ++It )
