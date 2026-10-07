@@ -252,3 +252,10 @@ Up/Down recall earlier lines; Tab is the scoreboard / Start again. Replies are w
 has no output area (`Console.Message` is empty), and adding one would be a script change (Console.uc) or a new
 native drawing path - not done. Example: `get Engine.GameEngine CacheSizeMegs` -> `32.000000` in the log;
 `AUTOFOV` -> `[AutoFOV] mode=2 (Adaptive) ...`.
+
+- Sniper rifle (`tools/dev/d78/sniper.scen`, `logs/d78/run/sniper`): the rifle has no ammunition in a URL-started
+  match, so NextWeapon skipped it; with `GiveAmmo` and `SwitchWeapon 2` (its InventoryGroup) it is selected and
+  AltFire zooms it (FOV 47.735). The 4:3 picture against the centre of 16:9 / 21:9: 99.60% / 99.57% within 2
+  levels (AUTOFOV 0: 10.20%). Seen: UC2's scope overlay is a translucent ring, not an opaque mask - the world
+  shows around it at 4:3 too - so on wide windows the ring stays round and centred and the extra width is just
+  more of the zoomed world. Nothing to fix there.
