@@ -285,3 +285,10 @@ native drawing path - not done. Example: `get Engine.GameEngine CacheSizeMegs` -
   Escape handled before the box's `Unblocking animation`; mouse and pad: `UC2Arena_Armory` opened after the
   15 s wait, then the launch confirm missed its A; both: B on the pause menu during its opening). Rerun with
   m10-inject's own pacing knobs for slow frames (`M10_SLOW=2 M10_KEYHOLD=0.3`, D-2's), same checks.
+- M10 rerun with m10-inject's pacing (`M10_SLOW=2 M10_KEYHOLD=0.3`, `logs/d78/reg/m10b`, load 34-50): keyboard
+  PASS 16, mouse PASS 18, text PASS 7, pad PASS 33, both 13/1: `both-keyboard-move-and-pad-turn-together`
+  measured -15372 yaw: M10_SLOW doubled the 1 s full-right stick hold, the pad turned ~275 degrees and the
+  check's +-32768 wrap read it as a left turn (an artefact of the pacing). `both` without pacing
+  (`logs/d78/reg/m10c`): the character page's Enter lost on a slow frame (3/11). `both` with
+  `M10_KEYHOLD=0.3` only (`logs/d78/reg/m10d`): PASS 14. So all five pass, with held keys / slower steps on
+  this loaded machine; a run without pacing on a quiet machine is for the coordinator's gate.
