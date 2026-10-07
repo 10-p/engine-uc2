@@ -128,3 +128,15 @@ crash-notifier processes; both are the owner's to clear.
   targets/uc2/target.json`: 1,223 files, 1,899 MB; `manifestExclude` already drops the cook's by-products), then
   add the precache candidates listed in `targets/uc2/README.md` (cue tables, menu music and page sound, logos:
   about 7 MB). Tested meanwhile on a local tree (`run/m11audio-assets`, `analysis/web-audio.md` step 3).
+## Owner review O-6 (DM-Azure waterfall, first person): not reproduced (2026-10-07, `analysis/fx-fixes.md`)
+
+- In first person, standing still, the waterfall's distortion is drawn every frame on Mesa llvmpipe and on this
+  machine's NVIDIA Quadro P620 (headless, EGL): measured in the distortion accumulation target, moving changes
+  nothing but the waterfall's size on screen. Needed from the owner to reproduce: where exactly (a screenshot
+  with the HUD, or the console's `NETPROBE x` line), the window size, first or third person at spawn, and
+  whether the view had been switched with the camera key before. The "drawn over the character" part is, as
+  far as I can see, Epic's half-resolution depth mask and screen-space read (the Xbox's design too); a
+  picture of it would settle it.
+- Side finding for a separate task: on the NVIDIA GPU the fixed-function path has 4 texture units and no
+  `combine3`; materials with `D3DTOP_MODULATEALPHA_ADDCOLOR` (DM-Azure's wooden pillars) fall back to
+  MODULATE2X and look like orange metal there, wood on llvmpipe. `GL_NV_texture_env_combine4` can express it.

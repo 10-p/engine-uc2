@@ -120,6 +120,11 @@ INT FOpenGLTexture::CalculateFootprint()
 // Upload one mip level of an engine texture (FStaticTexture and friends) the way
 // FD3DTexture::Cache does: always through FTexture::GetTextureData, which converts
 // P8/G16/RGBA7 to RGBA8 and copies DXT blocks unchanged.
+// Texture NULL (fx-fixes, O-5): a cube map face the cubemap leaves empty. D3D allocates all
+// six faces of a cube texture and fills those that exist, so the cube stays usable; GL
+// needs every face for a complete cube map (an incomplete one disables texturing: DM-Azure's
+// pool drew its vertex colour instead of T_Liquid_Decay_Water_C_CM, which has no -Z face).
+// The missing face gets zeroed blocks/texels, as in D3D's freshly allocated memory.
 //
 void FOpenGLTexture::UploadMip( GLenum Target, FTexture* Texture, ETextureFormat ActualFormat, INT MipIndex, INT FirstMip, INT Width, INT Height )
 {
@@ -138,7 +143,8 @@ void FOpenGLTexture::UploadMip( GLenum Target, FTexture* Texture, ETextureFormat
 		{
 			BYTE* Data = new BYTE[Size];
 			appMemzero( Data, Size );
-			Texture->GetTextureData( MipIndex, Data, RowBytes, ActualFormat, 0 );
+			if( Texture )
+				Texture->GetTextureData( MipIndex, Data, RowBytes, ActualFormat, 0 );
 			GLenum Format	= ActualFormat == TEXF_DXT1 ? GL_COMPRESSED_RGBA_S3TC_DXT1_EXT :
 							  ActualFormat == TEXF_DXT3 ? GL_COMPRESSED_RGBA_S3TC_DXT3_EXT :
 														  GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
@@ -151,7 +157,13 @@ void FOpenGLTexture::UploadMip( GLenum Target, FTexture* Texture, ETextureFormat
 		{
 			// No S3TC: decompress (the engine's own decoder, as OpenGLDrv does).
 			BYTE* Data = NULL;
-			Texture->GetUTexture()->ConvertDXT( MipIndex, 1, 0, &Data );
+			if( Texture )
+				Texture->GetUTexture()->ConvertDXT( MipIndex, 1, 0, &Data );
+			else
+			{
+				Data = new BYTE[MipWidth * MipHeight * 4];
+				appMemzero( Data, MipWidth * MipHeight * 4 );
+			}
 			RenDev->glTexImage2D( Target, Level, GL_RGBA, MipWidth, MipHeight, 0, GL_BGRA, GL_UNSIGNED_BYTE, Data );
 			if( Level == 0 )
 				CachedGLFormat = GL_RGBA;
@@ -183,8 +195,10 @@ void FOpenGLTexture::UploadMip( GLenum Target, FTexture* Texture, ETextureFormat
 		for( INT i=0; i<MipWidth*MipHeight; i++ )
 			((DWORD*)Data)[i] = 0xFF000000;
 	}
-	else
+	else if( Texture )
 		Texture->GetTextureData( MipIndex, Data, Pitch, ActualFormat, 0 );
+	else
+		appMemzero( Data, Pitch * MipHeight );
 
 	RenDev->glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
 	RenDev->glTexImage2D( Target, Level, Internal, MipWidth, MipHeight, 0, Format, Type, Data );
@@ -441,12 +455,12 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 		{
 			for( INT FaceIndex=0; FaceIndex<6; FaceIndex++ )
 			{
+				// fx-fixes (O-5): an empty face is uploaded too (zeroed, UploadMip), or GL's cube
+				// map is incomplete and the stage samples nothing.
 				FTexture* Face = Cubemap->GetFace( FaceIndex );
+				UploadMip( GL_TEXTURE_CUBE_MAP_POSITIVE_X + FaceIndex, Face, ActualFormat, MipIndex, FirstMip, Width, Height );
 				if( Face )
-				{
-					UploadMip( GL_TEXTURE_CUBE_MAP_POSITIVE_X + FaceIndex, Face, ActualFormat, MipIndex, FirstMip, Width, Height );
 					Face->UnloadRawTextureData( MipIndex );
-				}
 			}
 			Levels++;
 		}
