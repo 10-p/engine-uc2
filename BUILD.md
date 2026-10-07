@@ -76,6 +76,36 @@ binary's DWARF. Integer-to-pointer casts are errors at 64-bit; `tools/dev/m13-ca
 counts pointer-to-int narrowing (0). Details, every site, and what no test reaches:
 `docs/porting/analysis/64bit.md`. 32-bit is still the default and the reference (wasm32 has its layout).
 
+## Scripts (M14): `ucc-bin make`
+
+The game runs on the shipped compiled scripts (the 17 `.u` of the asset tree's `System/`, plus the 30 load-time
+patches of `Source/Engine/Inc/ScriptPatches.h`). The native 32-bit Linux build also contains Epic's script
+compiler (the `Editor` package linked into `ucc-bin`), which rebuilds all 17 from `Source/<Pkg>/Classes`:
+
+```
+bin/capped 6G 3600 -- cmake --build build-native -j4      # ucc-bin with Editor (32-bit Linux only)
+tools/dev/script-build.sh                                 # assemble, make, strip, compare
+tools/dev/script-build.sh --tree m14-hdr --headers assemble make   # also export the C++ headers, diff them
+```
+
+- Output: `<WorkUC2>/run/m14-make/System/*.u` (what ships: 15 stripped like Epic's, UCMenu and Editor with their
+  text), `<WorkUC2>/run/m14-make/Unstripped/*.u` (all with script text, for debugging). Logs and the comparison in
+  `<WorkUC2>/logs/m14/` (`m14-make-compare.txt`, `m14-make-patches.txt`). Nothing outside the tree is written;
+  the asset tree, `Source/` and the run trees are never written by it. Exported headers go to the tree's own
+  `<Pkg>/Inc`, never over `Source/*/Inc` (our headers carry deliberate changes: compare, do not regenerate).
+- It reproduces Epic's pipeline (`Source/BuildProcess/sync_avaris.pl`): `ucc make -nobind -noh` with the Xbox
+  inis, then `ucc editor.stripsource` with the PC inis, conforming each package to the shipped one so they line
+  up; `tools/dev/script-diff.py` then compares object by object. Every difference is explained
+  (`docs/porting/analysis/scripts.md`); the rebuilt packages contain what the 30 patches carry.
+- A run tree with the rebuilt packages: `UC2_SCRIPTS=<WorkUC2>/run/m14-make/System tools/dev/mkrun-uc2.sh
+  build-native <tree>`. The script patcher leaves rebuilt packages alone (it patches only the first-generation
+  shipped files it was made for) and logs `ScriptPatcher: <Pkg> ... patch not applied`.
+- `tools/dev/m14-scripts-check.sh`: the game checks (verifyclasses, menu, a match, controls, audio, effects,
+  the 58-map census, movies, network) on the rebuilt packages, PASS/FAIL lines.
+- The web build and the asset tree keep the shipped `.u` until the owner decides otherwise.
+- `make` exits 1 when there was any warning (Epic's `ucc`); the verdict is the log's last line,
+  `Success - 0 error(s), N warning(s)`. Memory: well under 3G; 10 s per full build.
+
 ## Options
 
 | Option | Default | Meaning |

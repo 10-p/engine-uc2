@@ -48,6 +48,10 @@ Revision history:
 #if UC2_WITH_UC2MOVIE	// M9: the movie player and its self-test commandlet (UC2Movie.UC2MovieSelfTest)
 #include "UC2Movie.h"
 #endif
+#if UC2_WITH_EDITOR	// M14: the script compiler (ucc-bin make), the header exporter and the editor commandlets
+void UC2InitializeEditorRegistrants( INT& Lookup );	// Editor/Src/UC2EditorRegistrants.cpp
+UBOOL UC2VerifyEditorClasses();						// Editor/Src/UC2EditorRegistrants.cpp
+#endif
 #endif
 
 #endif
@@ -307,6 +311,12 @@ static UBOOL VerifyNativeClasses()
 	#undef AUTOGENERATE_NAME
 	#undef NAMES_ONLY
 	#undef VERIFY_CLASS_SIZES
+#if UC2_WITH_EDITOR	// M14: the Editor package's script/C++ layouts too
+	debugf( TEXT("VERIFY: loading package Editor") );
+	UObject::LoadPackage( NULL, TEXT("Editor"), LOAD_NoFail );
+	if( !UC2VerifyEditorClasses() )
+		Mismatch = true;
+#endif
 	FString DumpFile;
 	Parse( appCmdLine(), TEXT("DUMP="), DumpFile );
 #if PLATFORM_64BITS
@@ -482,6 +492,9 @@ int main( int argc, char* argv[] )
 #endif
 #if UC2_WITH_UC2MOVIE	// M9
 			AUTO_INITIALIZE_REGISTRANTS_UC2MOVIE;
+#endif
+#if UC2_WITH_EDITOR	// M14: what AUTO_INITIALIZE_REGISTRANTS_EDITOR does (Editor/Src/UC2EditorRegistrants.cpp says why)
+			UC2InitializeEditorRegistrants( Lookup );
 #endif
 			check( Lookup < ARRAY_COUNT(GNativeLookupFuncs) );
 			RegisterNamesGUI();

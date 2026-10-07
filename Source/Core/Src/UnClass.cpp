@@ -366,6 +366,11 @@ UStruct::UStruct( ENativeConstructor, INT InSize, const TCHAR* InName, const TCH
 ,	CppText			( NULL )
 ,	TextPos			( 0 )
 ,	Line			( 0 )
+	// uc2 port (M14): Epic's DLL builds construct native classes in zero-initialised static storage; ours
+	// (__STATIC_LINK) on the heap, where these two were left uninitialised. A non-zero ScriptTextCRC is taken as
+	// the cached CRC (GetScriptTextCRC), so `ucc make` wrote garbage into the dependency records of native classes.
+,	StructFlags		( 0 )
+,	ScriptTextCRC	( 0 )
 #endif
 {
 #if PLATFORM_64BITS
@@ -390,6 +395,11 @@ UStruct::UStruct( EStaticConstructor, INT InSize, const TCHAR* InName, const TCH
 ,	CppText			( NULL )
 ,	TextPos			( 0 )
 ,	Line			( 0 )
+	// uc2 port (M14): Epic's DLL builds construct native classes in zero-initialised static storage; ours
+	// (__STATIC_LINK) on the heap, where these two were left uninitialised. A non-zero ScriptTextCRC is taken as
+	// the cached CRC (GetScriptTextCRC), so `ucc make` wrote garbage into the dependency records of native classes.
+,	StructFlags		( 0 )
+,	ScriptTextCRC	( 0 )
 #endif
 {
 #if PLATFORM_64BITS

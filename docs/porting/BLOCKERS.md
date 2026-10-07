@@ -140,3 +140,18 @@ crash-notifier processes; both are the owner's to clear.
 - Side finding for a separate task: on the NVIDIA GPU the fixed-function path has 4 texture units and no
   `combine3`; materials with `D3DTOP_MODULATEALPHA_ADDCOLOR` (DM-Azure's wooden pillars) fall back to
   MODULATE2X and look like orange metal there, wood on llvmpipe. `GL_NV_texture_env_combine4` can express it.
+
+## M14 scripts (2026-10-07, branch `m14-scripts`, details in `analysis/scripts.md`)
+
+- **Decisions for the owner/coordinator, found while proving the rebuilt scripts equal to shipped + patches**
+  (none is changed by M14; each is a behaviour difference between the shipped scripts and the source):
+  - `UCGameplay.CTFFlag.home`: Epic's script patch for it is defective (wrong label name, stale label-table
+    offset), so with the shipped scripts a flag returning home never runs `Sleep(0.1); CheckTouching()`. The
+    rebuilt packages run it as the source says. Presumably the Xbox title update had the same defect.
+  - `GUIController.bUnlockCharacters`/`bShowAllMuts` are `config` in the shipped GUI.u, not in the source: the
+    community's `bUnlockCharacters=True` ini tweak stops working with rebuilt scripts (D-phase can restore it).
+- **Static link registers two classes in the wrong package (pre-existing, not M14's)**: `UHTTPDownload` and
+  `UPrefab` say `DECLARE_CLASS(...,Engine)` but live in the IpDrv/Editor DLLs, which registered them under
+  their own package; our static build registers them as `Engine.HTTPDownload`/`Engine.Prefab`. Default.ini's
+  `DownloadManagers=IpDrv.HTTPDownload` therefore names a class that does not exist here (package download has
+  never been exercised). Found by the header-export comparison.

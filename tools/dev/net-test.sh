@@ -12,11 +12,14 @@
 # <WorkUC2>/logs/net/net-summary.txt; per-process logs <check>-<proc>.log/.out in the same folder.
 # Memory: one 6G ceiling for the whole run (server + up to 3 clients, each well under 1G; CLAUDE.md "Running
 # anything"). Nothing is left running or listening: capped kills the scope, and the script checks the port.
-# Environment: NET_SOAK_MIN (soak minutes, default 10), NET_PORT (default 7850; keep it in 7850-7899).
+# Environment: NET_SOAK_MIN (soak minutes, default 10), NET_PORT (default 7850; keep it in 7850-7899),
+# NET_TREE (run tree name under <WorkUC2>/run, default net; results then go to <WorkUC2>/logs/<NET_TREE>).
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
-out=$work/logs/net
+tree=${NET_TREE:-net}
+case "$tree" in */*|.|..|"") echo "bad NET_TREE: $tree" >&2; exit 2;; esac
+out=$work/logs/$tree
 keep=0
 [ "${1:-}" = "--keep-tree" ] && { keep=1; shift; }
 checks=("$@")
@@ -25,9 +28,9 @@ port=${NET_PORT:-7850}
 case "$port" in 78[5-9][0-9]) ;; *) echo "NET_PORT must be in 7850-7899" >&2; exit 2;; esac
 mkdir -p "$out"
 if [ $keep = 0 ]; then
-  "$repo/tools/dev/mkrun-uc2.sh" "$repo/build-native" net > /dev/null || exit 2
+  "$repo/tools/dev/mkrun-uc2.sh" "$repo/build-native" "$tree" > /dev/null || exit 2
 fi
-sys=$work/run/net/System
+sys=$work/run/$tree/System
 [ -x "$sys/uc2.bin" ] && [ -x "$sys/ucc-bin" ] || { echo "no run tree at $sys" >&2; exit 2; }
 if ss -lun 2>/dev/null | grep -a -q ":$port "; then echo "port $port is busy" >&2; exit 2; fi
 : > "$out/net-summary.txt"

@@ -3412,6 +3412,11 @@ ULinkerLoad* UObject::GetPackageLinker
 			{
 				if( appStrstr(T,PATH_SEPARATOR) )
 					T = appStrstr(T,PATH_SEPARATOR)+appStrlen(PATH_SEPARATOR);
+				// uc2 port (M14): '\\' as on Windows, where it is PATH_SEPARATOR. Without it a script's
+				// `#exec OBJ LOAD FILE=..\Textures\T_HUD.utx` named the package "" (cut at the first '.'), which
+				// became a transient "PackageN" and every texture of T_HUD.utx was saved as an import from it.
+				else if( appStrstr(T,TEXT("\\")) )
+					T = appStrstr(T,TEXT("\\"))+1;
 				else if( appStrstr(T,TEXT("/")) )
 					T = appStrstr(T,TEXT("/"))+1;
 				else if( appStrstr(T,TEXT(":")) )

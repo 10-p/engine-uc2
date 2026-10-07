@@ -511,8 +511,22 @@ CORE_API INT appAtoi( const TCHAR* Str )
 {
 #if UNICODE
 	return _wtoi( Str );
-#else
+#elif _MSC_VER
 	return atoi( Str );
+#else
+	// uc2 port (M14): what MSVC's atoi does (VC7.1 CRT atox.c): optional white space and sign, then digits
+	// accumulated in 32 bits without an overflow check, so out-of-range values wrap. glibc's atoi saturates
+	// instead (out of range is undefined in ISO C). Epic's script compiler parsed integer literals with this:
+	// UCPlayerController's `const INPUT_All = 4294967295;` compiled to -1 in the shipped scripts, 2147483647 here.
+	while( *Str==' ' || (*Str>='\t' && *Str<='\r') )
+		Str++;
+	TCHAR Sign = *Str;
+	if( Sign=='-' || Sign=='+' )
+		Str++;
+	DWORD Total = 0;
+	while( *Str>='0' && *Str<='9' )
+		Total = 10*Total + (DWORD)(*Str++ - '0');
+	return Sign=='-' ? (INT)(0u-Total) : (INT)Total;
 #endif
 }
 

@@ -9,6 +9,36 @@ Revision history:
 #include "EditorPrivate.h"
 
 /*-----------------------------------------------------------------------------
+	uc2 port (M14): file order.
+
+	FindFiles returned Epic's .uc files in NTFS directory order: names compared code unit by code unit after
+	upper-casing (NTFS's upcase table; for these ASCII names, so '_' sorts after the letters). Classes are
+	created in import order and keep that object-table order, which the compiler's class walk follows (see
+	UC2SortClassesLikeEpic in UnScrCom.cpp), so the order has to be the same here. readdir() order on Linux is
+	arbitrary.
+-----------------------------------------------------------------------------*/
+
+static INT UC2CompareNTFS( const FString& A, const FString& B )
+{
+	const TCHAR* a = *A;
+	const TCHAR* b = *B;
+	for( ; ; a++, b++ )
+	{
+		BYTE ca = (BYTE)appToUpper(*a), cb = (BYTE)appToUpper(*b);
+		if( ca!=cb )
+			return ca<cb ? -1 : 1;
+		if( !ca )
+			return 0;
+	}
+}
+void UC2SortLikeNTFS( TArray<FString>& Files ) // also used by UStripSourceCommandlet.cpp
+{
+	for( INT i=1; i<Files.Num(); i++ )
+		for( INT j=i; j>0 && UC2CompareNTFS(Files(j-1),Files(j))>0; j-- )
+			Exchange( Files(j-1), Files(j) );
+}
+
+/*-----------------------------------------------------------------------------
 	UMakeCommandlet.
 -----------------------------------------------------------------------------*/
 
@@ -63,6 +93,9 @@ class UMakeCommandlet : public UCommandlet
 				// Create package.
 				GWarn->Log( TEXT("Analyzing...") );
 				UPackage* PkgObject = CreatePackage( NULL, Pkg );
+				// uc2 port (M14): defaults of this package's native classes as Epic's DLL load gave them (UnScrCom.cpp).
+				extern EDITOR_API void UC2RefreshNativeDefaultsLikeDllLoad( UPackage* Package );
+				UC2RefreshNativeDefaultsLikeDllLoad( PkgObject );
 
 				// Try reading from package's .ini file.
 				PkgObject->PackageFlags &= ~(PKG_AllowDownload|PKG_ClientOptional|PKG_ServerSideOnly);
@@ -80,6 +113,7 @@ class UMakeCommandlet : public UCommandlet
 				TArray<FString> Files = GFileManager->FindFiles( *Spec, 1, 0 );
 				if( Files.Num() == 0 )
 					appErrorf( TEXT("Can't find files matching %s"), *Spec );
+				UC2SortLikeNTFS( Files ); // uc2 port (M14)
 				for( INT i=0; i<Files.Num(); i++ )
 				{
 					// Import class.
@@ -170,7 +204,12 @@ class UMakeCommandlet : public UCommandlet
 					BeginLoad();
 					Conform = UObject::GetPackageLinker( CreatePackage(NULL,*(US+Pkg+TEXT("_OLD"))), *(FString(TEXT("..")) * TEXT("GUIRes") * Pkg + TEXT(".u")), LOAD_NoWarn|LOAD_NoVerify, NULL, NULL );
 					EndLoad();
-					if( Conform )
+					// uc2 port (M14): -CONFORMNOCONFIG conforms the save (name/import/export order, GUID) without
+					// loading the ini into the new defaults first. Epic's retail build did not get that load: the
+					// shipped defaults of config properties carry no DefaultXbox.ini values (GameEngine.MainMenuClass
+					// is the class's UCMenu.UC2MainMenu, DefaultXbox.ini says UCMenu.StartMenu), so there was no
+					// ../GUIRes package to conform to. tools/dev/script-build.sh conforms only to line the files up.
+					if( Conform && !ParseParam(appCmdLine(),TEXT("CONFORMNOCONFIG")) )
 					{
 						debugf( TEXT("Conforming: %s"), Pkg );
 						for ( TObjectIterator<UClass> It; It; ++It )

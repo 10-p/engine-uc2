@@ -19,6 +19,10 @@
 	fetched, or 0 if not.
 -----------------------------------------------------------------------------*/
 
+// uc2 port (M14): Engine/Src/UnParams.cpp defines the same five parsers (GetFVECTOR x2, GetSUBSTRING,
+// GetFROTATOR x2; same code, explicit (INT) casts there). Each DLL had its own copy; linked statically
+// into one program they collide, so the Engine's serve both. The Editor-only parsers below stay.
+#if !__STATIC_LINK
 //
 // Get a floating-point vector (X=, Y=, Z=).
 //
@@ -158,6 +162,7 @@ UBOOL EDITOR_API GetFROTATOR
 
 	unguard;
 }
+#endif // !__STATIC_LINK
 
 //
 // Gets a "BEGIN" string.  Returns 1 if gotten, 0 if not.

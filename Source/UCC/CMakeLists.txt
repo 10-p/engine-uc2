@@ -31,6 +31,11 @@ if(TARGET UC2Movie)
   list(PREPEND LINK_PACKAGES UC2Movie)
   target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_UC2MOVIE=1)
 endif()
+# M14: the Editor package (script compiler `ucc-bin make`, header exporter, editor commandlets); native only.
+if(TARGET Editor)
+  list(PREPEND LINK_PACKAGES Editor)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_EDITOR=1)
+endif()
 if(MINGW)
   # M12: ucc.exe, a console program. Static link, as everywhere; nothing is exported (on Windows
   # appGetDllHandle answers "linked in" for every package, which is what Epic's static builds did), and

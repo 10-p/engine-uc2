@@ -5,6 +5,15 @@
 
 #include "EditorPrivate.h"
 
+// uc2 port: TrueType import rasterises glyphs through Windows GDI. Only Epic's MSVC build has it; elsewhere the
+// factory exists (the class is registered and serialisable) but importing a font reports an error.
+#if _MSC_VER
+#define UC2_TTF_GDI 1
+#else
+#define UC2_TTF_GDI 0
+#endif
+
+#if UC2_TTF_GDI
 // Windows includes.
 #define STRICT
 #undef TEXT
@@ -12,6 +21,9 @@
 #undef HINSTANCE
 #undef INFINITE
 #include <windows.h>
+#else
+#define FW_NORMAL 400 // <wingdi.h>: the default weight stays the same value everywhere
+#endif
 
 /*------------------------------------------------------------------------------
 	UTrueTypeFontFactory.
@@ -103,6 +115,10 @@ UObject* UTrueTypeFontFactory::FactoryCreateNew
 {
 	guard(UTrueTypeFontFactory::FactoryCreateNew);
 	check(Class==UFont::StaticClass());
+#if !UC2_TTF_GDI
+	Warn->Logf( NAME_Error, TEXT("TrueType font import needs Windows GDI; not available in this build") );
+	return NULL;
+#else
 
 	// Create font and its texture.
 	UFont* Font = new( InParent, Name, Flags )UFont;
@@ -403,6 +419,7 @@ UObject* UTrueTypeFontFactory::FactoryCreateNew
 
 	// Success.
 	return Font;
+#endif // UC2_TTF_GDI
 
 	unguard;
 }
@@ -410,6 +427,9 @@ UObject* UTrueTypeFontFactory::FactoryCreateNew
 UTexture* UTrueTypeFontFactory::CreateTextureFromDC( UFont* Font, DWORD Indc, INT Height, INT TextureNum )
 {
 	guard(UTrueTypeFontFactory::CreateTextureFromDC);
+#if !UC2_TTF_GDI
+	return NULL;
+#else
 
 	HDC dc = (HDC)Indc;
 
@@ -514,6 +534,7 @@ UTexture* UTrueTypeFontFactory::CreateTextureFromDC( UFont* Font, DWORD Indc, IN
 		Texture->Compress(ETextureFormat(Compression));
 
 	return Texture;
+#endif // UC2_TTF_GDI
 	unguard;
 }
 

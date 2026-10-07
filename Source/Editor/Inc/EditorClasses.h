@@ -25,7 +25,7 @@ AUTOGENERATE_NAME(CreateMaterial)
 class EDITOR_API UAnimNotifyProps : public UObject
 {
 public:
-    class UAnimNotify* Notify;
+    class UAnimNotify* Notify GCC_PACK(4);
     DECLARE_CLASS(UAnimNotifyProps,UObject,0,Editor)
     NO_DEFAULT_CONSTRUCTOR(UAnimNotifyProps)
 };
@@ -38,7 +38,7 @@ struct UBrushBuilder_eventBuild_Parms
 class EDITOR_API UBrushBuilder : public UObject
 {
 public:
-    FStringNoInit BitmapFilename;
+    FStringNoInit BitmapFilename GCC_PACK(4);
     FStringNoInit ToolTip;
     TArrayNoInit<FVector> Vertices;
     TArrayNoInit<FBuilderPoly> Polys;
@@ -81,7 +81,7 @@ struct UMaterialFactory_eventCreateMaterial_Parms
 class EDITOR_API UMaterialFactory : public UObject
 {
 public:
-    FStringNoInit Description;
+    FStringNoInit Description GCC_PACK(4);
     DECLARE_FUNCTION(execConsoleCommand);
     class UMaterial* eventCreateMaterial(class UObject* InOuter, const FString& InPackage, const FString& InGroup, const FString& InName)
     {
