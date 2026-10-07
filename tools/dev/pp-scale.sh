@@ -267,9 +267,10 @@ check_aspect() {
   fi
 }
 
-# perf: GPU, offscreen (fx-owner.sh's UC2_GPU=1), DM-Deadbolt from the start of the match: frames counted between
-# -glexec markers 15 s apart, reference 480 then 0 in the same run; main's binary the same way (without the
-# switch). Reported, not judged (the machine is shared).
+# perf: GPU, offscreen (fx-owner.sh's UC2_GPU=1), DM-Deadbolt, the pinned first PlayerStart (no bots: NumPlayers 0
+# before Fire) and game time frozen, so every frame is the same picture: frames counted between -glexec markers
+# 15 s apart, reference 480, 0, 480 in one run; main's binary the same way. Reported, not judged (the machine is
+# shared: the CPU side of the frame competes with other work).
 check_perf() {
   local res scen=$(mktemp)
   # fx-owner.sh stops the game when the scenario ends: keep it running past the last marker (95 s after the
@@ -279,7 +280,7 @@ check_perf() {
     local X=${res%x*} Y=${res#*x} b
     for b in uc2.bin uc2-base.bin; do
       UC2_GPU=1 UC2_BIN=$b FX_SCENARIO=$scen FX_MAP=DM-Deadbolt FX_NAME=pp-perf-$res \
-        FX_ARGS="-glnoaa -ini:System:[SDL2Drv.SDL2Client]:WindowedViewportX=$X -ini:System:[SDL2Drv.SDL2Client]:WindowedViewportY=$Y -glexec=40:GLINFO@55:GLINFO@56:PPREFERENCE+0@60:GLINFO@75:GLINFO@76:PPREFERENCE+480@80:GLINFO@95:GLINFO" \
+        FX_ARGS="-glnoaa -ini:System:[SDL2Drv.SDL2Client]:WindowedViewportX=$X -ini:System:[SDL2Drv.SDL2Client]:WindowedViewportY=$Y -glexec=1:set+UCDeathmatch+NumPlayers+0@32:set+LevelInfo+TimeDilation+0.0001@40:GLINFO@55:GLINFO@56:PPREFERENCE+0@60:GLINFO@75:GLINFO@76:PPREFERENCE+480@80:GLINFO@95:GLINFO" \
         "$repo/tools/dev/fx-owner.sh" "$tree" custom > /dev/null 2>&1
       local suffix=""; [ $b = uc2-base.bin ] && suffix="-base"
       local log=$out/fx-pp-perf-$res$suffix-gpu.out
