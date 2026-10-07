@@ -54,7 +54,7 @@ octane|CTF-Octane|1|125|38|off|on: glow on the corridor lamps and on the emissiv
 decay|DM-Decay|1|100|38|off: the icicles in the doorway are flat dark blue shapes|on: translucent ice (blended distortion, colour pass), heat shimmer over the torch on the right|-nopostprocess -glshot=50,62 -glpptoggle=55
 undertow|DM-Undertow|1|100|38|off|on: the green energy column (distortion material) glows|-nopostprocess -glshot=50,62 -glpptoggle=55
 recoil|CTF-Recoil|1|100|38|off|on: glow; a PSPlayerCamMaterial is drawn in this view (program PlayerCam links) but I could not point at it|-nopostprocess -glshot=50,62 -glpptoggle=55
-praxis-panes|DM-Praxis|0|115|40|off: flat periwinkle panes (the PC bug)|on: the sea seen through the panes, distorted|-nopostprocess -glshot=52,66 -glpptoggle=58
+praxis-panes|DM-Praxis|0|115|40|off: flat periwinkle panes (the PC bug)|on: the sea seen through the panes, distorted|-nopostprocess -glshot=52,66 -glpptoggle=58 -glexec=46:NETPLACE+LocalPlayer+-1220+288+680+5220+0@48:NETPLACE+LocalPlayer+-1220+288+680+5220+0
 '
 
 if [ "${1:-}" = list ]; then
@@ -87,13 +87,12 @@ echo "$EFFECTS" | while IFS='|' read -r name map pinned secs fire la lb args; do
   [ -n "$name" ] || continue
   if [ "$want" != "  " ] && [ "${want#* $name }" = "$want" ]; then continue; fi
   tries=1
-  # DM-Praxis: the panes are not in view from the first PlayerStart, and no console command moves the player
-  # to a chosen start. The start is left random (srand(time)) and the run is repeated, at most 10 times,
-  # until picture A shows the view of the wine reference logs/oracle/DM-Praxis-windows-A.png (mean
-  # difference below 8 of 255; any other start gives more than 20). About one start in four is that one,
-  # so this is the one effect that is repeatable in its camera but not in how many runs it needs; if no run
-  # hits the view the line says FAILED instead of showing a picture of another room.
-  [ "$name" = praxis-panes ] && tries=10
+  # DM-Praxis: the panes are not in view from the start the pin picks. The view of the wine reference
+  # logs/oracle/DM-Praxis-windows-A.png is that of PlayerStart0 (-1220,288,680, yaw 5220; every start was
+  # shot and compared, docs/porting/analysis/o9-nvidia.md, O-9b), so the pawn is moved there with the test
+  # command NETPLACE (UC2NetTest.cpp; LocalPlayer = this viewport's player), twice: the second once the
+  # pawn stands. One run. Picture A must then match the reference (mean difference below 8 of 255; any
+  # other start gives more than 20); if it does not, the line says FAILED: the panes or the camera changed.
   try=0; ok=0
   while [ $try -lt $tries ] && [ $ok = 0 ]; do
     try=$((try+1))

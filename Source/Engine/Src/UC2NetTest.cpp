@@ -8,7 +8,9 @@
 	  NETPLACE <name> <x> <y> <z> <yaw> [<pitch>]  server/listen server: move that player's pawn there
 	                                     (the client follows through the engine's own position
 	                                     correction); the optional pitch turns the view up or down
-	                                     (picture tests, tools/dev/fx-water.sh)
+	                                     (picture tests, tools/dev/fx-water.sh); <name> LocalPlayer:
+	                                     the player of this machine's viewport, whatever its name
+	                                     (tools/dev/m7-effects.sh, O-9b)
 	  NETPLACENEAR <name> <other> <dist> [<first>] server: put that player's pawn <dist> units from the
 	                                     other's, at the first of 16 headings with a clear path for
 	                                     a pawn-sized box between them, facing the other
@@ -145,9 +147,11 @@ static void Place( UGameEngine* Engine, const TCHAR* Cmd )
 		debugf( NETPROBE, TEXT("place %s failed: no server level here"), *Name );
 		return;
 	}
+	UBOOL Local = appStricmp( *Name, TEXT("LocalPlayer") )==0;
 	for( AController* C = Level->GetLevelInfo()->ControllerList; C; C = C->nextController )
 	{
-		if( !SameName(C->PlayerReplicationInfo, *Name) )
+		if( Local ? !(C->IsA(APlayerController::StaticClass()) && ((APlayerController*)C)->Player && ((APlayerController*)C)->Player->IsA(UViewport::StaticClass()))
+				  : !SameName(C->PlayerReplicationInfo, *Name) )
 			continue;
 		if( !C->Pawn )
 		{
