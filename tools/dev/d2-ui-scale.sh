@@ -6,6 +6,8 @@
 #   tools/dev/d2-ui-scale.sh extras          only the reference/switch/mouse runs
 #   tools/dev/d2-ui-scale.sh measure         only the measurements (on what the runs left)
 #   D2_NO_REF=1                              extras without the reference runs (their pictures stay in <run>)
+#   D2_OUT=<dir>                             pictures and summary there instead of <WorkUC2>/logs/d2/run (D-8 reran the
+#                                            suite from another worktree)
 #
 # Trees (tools/dev/mkrun-uc2.sh): D2_TREE (default d2) has the build under test; D2_REF_TREE (default d2-ref)
 # has main's binary (the regression anchor at 640x480 and the "before" pictures). Every game run is one
@@ -19,7 +21,7 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 tree=${D2_TREE:-d2}
 ref=${D2_REF_TREE:-d2-ref}
-out=$work/logs/d2/run
+out=${D2_OUT:-$work/logs/d2/run}
 ctl=$repo/tools/dev/m10-controls.sh
 all_res="640x480 1280x720 1920x1080 2560x1440 3840x2160 1280x1024 1920x1200 1024x1280"
 mkdir -p "$out"
