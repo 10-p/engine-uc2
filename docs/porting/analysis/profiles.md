@@ -189,3 +189,28 @@ Browser: wasm-perf rebuilt with every engine change (`logs/d3/build-wasm-perf-2.
 uc2 --engine-artifact <this worktree>/build-wasm-perf/Source/SDLLaunch` (`logs/d3/fe-build-1.txt`); null sink `uc2d3`;
 `PULSE_SINK=uc2d3 bin/capped 6G 1800 -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=14 -- --target uc2
 uc2-wasm-saves.spec.js` (`logs/d3/e2e-saves-1.txt`).
+
+## Step 5 (2026-10-07): the browser's own file layer works; the spec's engine questions needed ueExecResult
+
+First browser run (`logs/d3/e2e-saves-1.txt`; serve-web from this worktree's wasm-perf, shipped packages): what C-2
+could not show under Node is now seen in the browser:
+- the engine CREATES `/System/Profiles/` and writes `/System/Profiles/WebSaWdX.PRO` (56,951 bytes) under WasmFS (the
+  feared EACCES of `mkdir` below the preloaded `/System` did not happen);
+- the persistence daemon puts the profile into IndexedDB on its own clock, and `User.ini` with `[Profiles]
+  LastProfile=WebSaWdX` (the `flushconfig` round trip);
+- after the tab is closed and another opened: the profile is back in the engine file system byte for byte; the
+  launcher's name field is DISABLED with "Your game profile “WebSaWdX” names you in the game ..." (ownedBy); the
+  engine logs `Profiles: started with the last profile "WebSaWdX"`; User.ini keeps `[DefaultPlayer]
+  Name=Player-c82644` = the launcher's name (D-4 engine part);
+- D-5 in the browser: Playwright's real keyboard typed `WebSaWdXq`, Backspace, Enter: the engine made the profile
+  `WebSaWdX` (exactly the typed text minus the deleted letter: the remembered name proves it), 0 GUI navigation lines
+  while typing; Escape on a second keyboard page closed it and made nothing.
+- The spec's `getall` questions all came back empty: `ueExec` is fire-and-forget and `getall` writes to the
+  command's output device, not the log, so its lines never reach the console. Fixed in the spec: `ueExecResult`
+  (the engine's own answer). Also: without a profile the SHIPPED GUI.u names the player after the character, so that
+  check runs only with `UC2_E2E_REBUILT_GUI=1` (a served tree with the rebuilt GUI.u), else it is recorded.
+
+Prepared for a browser run with the rebuilt GUI.u (the D-4 GUI part): `<WorkUC2>/run/d3-webassets` = hard links into
+the asset tree with only `System/GUI.u` replaced by the rebuilt one (never written in place: the link was removed,
+the asset tree's file is untouched); its manifests `logs/d3/web/file-manifest.json` / `dependency-manifest.json`
+(generated with the glue's own tools; against the committed manifest only `system/gui.u` differs).
