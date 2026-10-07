@@ -119,3 +119,35 @@ targets logged at 1280x720: DOF 426x120, 213x120; emissive select 213x120, blur 
 `reference copy 853x480 of the 1280x720 back buffer (2x2 samples per pixel)`. `ref-copy` largest error 1.00,
 `ref-taps` 1.38 (taps 1.5 back-buffer pixels apart, no extra copy made during the pass: the copy was current),
 `bb-copy-ref` 1.41, `pp-sizes` 7 live targets, none unexpected, none missing.
+
+## Step 3. Measuring (2026-10-07 21:15): tools/dev/pp-measure.py, tools/dev/pp-scale.sh
+
+- `pp-measure.py glow` reproduces the coordinator's numbers on his pictures (`logs/coord/bloomres-*`): 640x480 peak
+  11.30, width 8.54% of the height; 1440x1080 peak 15.53, width 4.17% (his: 11.3 / 8.3%, 15.2 / 4.2%).
+  `pp-measure.py sigma` (Gaussian fit of test - base = a (G_s(base) - base) + b on the 480-line picture) finds a
+  synthetic blend of the 640x480 picture with its own Gaussian blur: s = 3.05 for 3 (alpha 0.402 for 0.4),
+  1.50 for 1.5.
+- First triple with this branch (`logs/pp/try-bloom-*`: off, on with reference 480, on with reference 0 in the
+  same run): 640x480 width 8.54%, peak 12.33; **1440x1080 reference 480: width 8.54%, peak 12.58; reference 0:
+  width 4.17%** (as before). The log lists the targets: at 1440x1080 exactly the Xbox's 320x120, 160x120 (DOF),
+  160x120, 160x60, 80x60 (emissive), 160x120, 80x120, 80x60 (bloom); `reference copy 640x480 of the 1440x1080
+  back buffer (3x3 samples per pixel)`; after `PPREFERENCE 0` the old 720x270, 360x270, ... .
+- Main's binary at 1440x1080 gave peak 18.75 at 56 s and 21.75 at 68 s in one run (`logs/pp2/try-bloom-base-*`),
+  and this branch with reference 0 at 68 s also 21.75: **the peak depends on when the picture is taken**. Cause:
+  the bloom selects pixels above `GetAverageSceneLuminosity()` = (CurMaxL - CurMinL) / 2 of the dynamic gamma,
+  which moves 5% of the way to the frame's histogram per update and updates at most once per frame; at software-GL
+  frame rates (6 frames/s at 1440x1080) it takes tens of seconds to settle from its start values (0, 1). So the
+  coordinator's peaks (11.3 vs 15.2) compared different states of it. The widths do not depend on it.
+- Protocol therefore (pp-scale.sh): freeze game time (`set LevelInfo TimeDilation 0.0001`) once the match runs,
+  wait long enough per resolution (20 s at 640x480, 40 s at 1440x1080, 90 s at 2880x2160 after post-processing
+  goes on; 12-55 s after a later switch), shots in one run differ only by what was switched. Pitfall found: frozen
+  before post-processing goes on, the teleport-in overlay (colour remap + radial blur, timed in game time) stays
+  on screen forever (`try-azure-640x480-1.png`); the freeze comes 3 s after post-processing goes on, or the run
+  has post-processing on from the start.
+- The launcher drops any argument that would take the command line past 1024 characters
+  (`SDLLaunch.cpp`): a long `-glexec=` list silently does nothing.
+- Runtime data (`OBJ DUMP` in `logs/pp/probe-objs.out`): the concussion blur `UCPixelShaderEffects.MotionBlurs.
+  ConcussionBlur` offsets its four reads with `TexRotator RotBlur1/2` and `TexOscillator OscBlur1` (pan amplitude
+  u 0.004, v 0.007 at 3/6 Hz), `OscBlur2` (0.003, 0.008 at 2/3 Hz): fractions of the picture, weights 0.3 each.
+  The radial blur's `SpeedComboRadialBlur` has no back-buffer modifier (the code supplies it), masks
+  `T_HUD.Overlay.HUD_Overlay_Speed_Mask`, falloff 0.45.
