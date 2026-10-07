@@ -207,7 +207,8 @@ void UC2GL_MaterialCensus( FOpenGLRenderInterface* RI, UMaterial* Requested, UMa
 	FString Line = FString::Printf( TEXT("%s"), Requested->GetPathName() );
 	if( Used != Requested )
 		Line += FString::Printf( TEXT(" -> fallback %s"), Used ? Used->GetPathName() : TEXT("None") );
-	Line += TEXT(" ") + UC2GL_PassSignature( RI );
+	Line += TEXT(" ");
+	Line += UC2GL_PassSignature( RI );
 	if( Seen.Find( Line ) )
 		return;
 	Seen.Set( *Line, 1 );

@@ -1,0 +1,6 @@
+chan exec obj refs class=Shader name=T_Liquid.ViperPit.T_Liquid_Viper_OceanWater_SD
+sleep 2
+chan exec getall FluidSurfaceInfo Location
+chan exec getall FluidSurfaceInfo Skins
+sleep 1
+shot spawn
