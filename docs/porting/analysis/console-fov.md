@@ -265,3 +265,9 @@ native drawing path - not done. Example: `get Engine.GameEngine CacheSizeMegs` -
   the "no profile" box during its opening animation and was ignored - the load effect D-2 recorded (step 1 of
   ui-scale.md), not the console change (Escape was not a console key: the console was closed). To be rerun on
   a quieter machine.
+- COORDINATION NOTE: I assembled the frontend's shared `serve-web/` with this branch's wasm-perf build at
+  13:23:46 (`yarn build --target uc2 --engine-artifact .../engine-uc2-d78/build-wasm-perf/Source/SDLLaunch`, rc 0,
+  SDLLaunch.wasm md5 3ce8fda8...); seconds later another agent's browser run started
+  (`e2e-mem-guard ... uc2-wasm-saves.spec.js`, pid 1753204, from the d3 work) without reassembling, so that run
+  was served THIS engine (main + D-7/D-8), not theirs. Its result says nothing about their branch. My own
+  browser run waits for theirs to end and reassembles first.
