@@ -375,3 +375,25 @@ settings (UC2's script cannot write config; an engine command could), the pad's 
 just past the dead zone turns 1024 x 0.8 x 32 x ((d-0.3)/0.7)^2 units/s, so below about 0.335 nothing turns at 60 fps
 and below about 0.352 nothing at 144 fps, where the Xbox at 30 fps turned from about 0.32; carrying the fraction would
 fix it but changes Epic's pad arithmetic, so it is an owner decision).
+
+## Step 8 (2026-10-07 22:55): resumed after the cut-off — where things stood
+
+State at the cut-off (the coordinator's resume message; the branch was at 3f66eb6): what had been done after the
+last notebook entry, with its evidence on disk:
+- The browser test DID land: ufrontend commit 51cab98 (local, `packages/e2e/uc2-wasm-boot.spec.js` test
+  "mouse look (D-6)" + `targets/uc2/README.md` "Mouse look"), run 3 **1 passed** (step 7, `logs/d6/e2e-boot-3.txt`,
+  engine proven by `logs/d6/e2e-engine-proof.txt`). The frontend clone is clean because it is committed.
+- `tools/dev/m14-scripts-check.sh` (M14_PREFIX=d6-m14, rebuilt packages from `run/d6-make`, final binary;
+  `logs/d6/m14-check/m14-summary-run1.txt`, load average 24-37 from other agents): verify, menu, deadbolt, patcher,
+  effects, census (58/58, same per map as shipped), movies 19/0, net 16/0, leftovers PASS; controls 3/5 and audio
+  FAIL. Audio rerun alone (`logs/d6/m14-check-rerun/`): PASS (menu music -19.02 dB; the failed capture had a
+  correlation of 0.44 under that load). Controls reruns failed again on single checks, then a two-round rerun
+  (`logs/d6/m10-final/`) failed worse.
+- Diagnosis of the control failures (not a D-6 defect): every single failure is the in-game pause menu not closed
+  2 s after Escape / pad B (keyboard, pad, both; once E->melee and once a pad move under load), and the two-round
+  rerun's keyboard and pad never left the character page (cascade). In the logs the close does happen, only later:
+  r1 keyboard `InGame_MainMenu handled XC_B` -> `test: probe p2` (menu still up) -> `AutoCloseMenu Menu:InGame_MainMenu`
+  -> `CloseMenu [InGame_MainMenu]`, whereas the passing run at load ~15 logs the close right after the B. UC2's menu
+  animations count FRAMES (`Active blocking animation (N frames)`), and the software-GL frame rate under that load
+  stretches them past the scenarios' fixed waits. The same suite passed 5/5 on this tree at 19:2x (step 5).
+Remaining when stopped: a clean controls run at a normal load, then the gate summary and the final report.
