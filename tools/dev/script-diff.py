@@ -2,7 +2,7 @@
 """Compare recompiled UnrealScript packages with the shipped ones, object by object (M14).
 
     tools/dev/script-diff.py <shipped System dir> <recompiled System dir> [--patches ScriptPatches.h]
-                             [--details <file>] [--packages A,B,...]
+                             [--details <file>] [--functions <file>] [--patch-table <file>] [--packages A,B,...]
 
 Both directories hold the 17 EditPackages .u. The recompiled packages were saved conforming to the shipped ones
 (`ucc-bin make` conforms against ../GUIRes/<Pkg>.u), so names, imports and exports of the shipped file come first
@@ -657,6 +657,7 @@ class Comparison:
             for k in range(1, len(parts) + 1):
                 self.patched_owners.add('.'.join(parts[:k]))
         self.status = {}        # ScriptPatches.h entry -> what the comparison found
+        self.fstatus = []       # (class, path, shipped bytes, recompiled bytes, status) of every function/state
         self.added = set()      # recompiled export paths appended by the patch
         self.removed = set()    # shipped export paths whose slot is empty in the recompiled file
 
@@ -821,6 +822,8 @@ class Comparison:
             a, b = old.export_data(i), new.export_data(i)
             if a == b:
                 self.identical += 1
+                if cls in ('Function', 'State'):
+                    self.fstatus.append((cls, path, len(a), len(b), 'identical'))
                 continue
             try:
                 fa, fb = parse_export(old, i), parse_export(new, i)
@@ -829,6 +832,8 @@ class Comparison:
                 continue
             owner = '%s.%s' % (self.name, path.split('.')[0])
             left = []
+            kinds = []
+            nf, np_ = len(self.findings), len(self.problems)
             for k in sorted(set(fa) | set(fb), key=str):
                 va, vb = fa.get(k), fb.get(k)
                 if va == vb:
@@ -841,6 +846,7 @@ class Comparison:
                 else:
                     for w in why.split(','):
                         self.neutral_(w)
+                        kinds.append(w)
             if left:
                 desc = []
                 for k in left:
@@ -855,6 +861,13 @@ class Comparison:
                         sa, sb = repr(va), repr(vb)
                         desc.append('%s %s -> %s' % (k, sa[:150], sb[:150]))
                 self.problem('%s %s: %s' % (cls, path, '; '.join(desc)))
+            if cls in ('Function', 'State'):
+                st = 'neutral: %s' % ','.join(sorted(set(kinds))) if kinds else ''
+                if len(self.findings) > nf:
+                    st = (st + '; ' if st else '') + 'FINDING'
+                if len(self.problems) > np_:
+                    st = (st + '; ' if st else '') + 'PROBLEM'
+                self.fstatus.append((cls, path, len(a), len(b), st or 'bytes differ, fields equal'))
 
     def config_only(self, clspath, ta, tb):
         da = {(t[0], t[3]): t for t in ta or []}
@@ -1033,6 +1046,7 @@ def main():
     patches_path = None
     details = None
     patch_table = None
+    functions = None
     packages = PACKAGES
     i = 2
     while i < len(args):
@@ -1041,6 +1055,9 @@ def main():
             i += 2
         elif args[i] == '--details':
             details = args[i + 1]
+            i += 2
+        elif args[i] == '--functions':
+            functions = args[i + 1]
             i += 2
         elif args[i] == '--patch-table':
             patch_table = args[i + 1]
@@ -1093,6 +1110,7 @@ def main():
     worst = 0
     summary = []
     statuses = {}
+    flines = []
     for p in packages:
         if p not in news:
             print('%-16s MISSING' % p)
@@ -1101,6 +1119,7 @@ def main():
         c = Comparison(p, olds[p], news[p], patches.get(p), ctx, det)
         verdict = c.run()
         statuses.update(c.status)
+        flines.extend('%-16s %-8s %-70s %6d %6d  %s' % ((p,) + t) for t in c.fstatus)
         line = '%-16s %-19s exports %5d, byte-identical %5d, neutral %4d, findings %2d, problems %2d' % (
             p, verdict, len(olds[p].exports), c.identical, sum(c.neutral.values()), len(c.findings), len(c.problems))
         print(line)
@@ -1110,6 +1129,10 @@ def main():
     det.append('')
     det.append('Neutral kinds:')
     det += ['  %-20s %s' % kv for kv in NEUTRAL.items()]
+    if functions:
+        with open(functions, 'w') as f:
+            f.write('%-16s %-8s %-70s %6s %6s  %s\n' % ('package', 'kind', 'function or state', 'ship', 'ours', 'result'))
+            f.write('\n'.join(flines) + '\n')
     if patch_table and patches:
         rows = []
         n = 0

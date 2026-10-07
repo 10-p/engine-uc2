@@ -175,8 +175,8 @@ for s in "${stages[@]}"; do
       set +e
       python3 "$repo/tools/dev/script-diff.py" "$assets/System" "$run/System" \
         --patches "$repo/Source/Engine/Inc/ScriptPatches.h" \
-        --details "$logs/$tree-compare.txt" --patch-table "$logs/$tree-patches.txt"
-      echo "compare: exit $? (details $logs/$tree-compare.txt, patch table $logs/$tree-patches.txt)"
+        --details "$logs/$tree-compare.txt" --patch-table "$logs/$tree-patches.txt" --functions "$logs/$tree-functions.txt"
+      echo "compare: exit $? (details $logs/$tree-compare.txt, per function $logs/$tree-functions.txt, patch table $logs/$tree-patches.txt)"
       set -e;;
   esac
 done
