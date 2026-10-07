@@ -55,7 +55,8 @@ within() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN{ if (b == 0) exit 1; r = a /
 ratio() { awk -v a="$1" -v b="$2" 'BEGIN{ printf "%.2f", (b == 0 ? 0 : a / b) }'; }
 runok() {  # runok <log>: "critical=N glerrors=N" and 0 if both 0
   local c e
-  c=$(grep -a -c "Critical" "$1" 2>/dev/null); e=$(grep -a "GL errors so far" "$1" 2>/dev/null | tail -1 | sed -E 's/.*, ([0-9]+) GL errors.*/\1/')
+  c=$(grep -a -c "Critical" "$1" 2>/dev/null)
+  e=$(grep -a -o "[0-9]* GL errors so far\|UC2GLDrv: [0-9]* GL errors in [0-9]* frames" "$1" 2>/dev/null | tail -1 | grep -o "[0-9]* GL errors" | grep -o "^[0-9]*")
   echo "critical=${c:-?} glerrors=${e:-?}"
   [ "${c:-1}" = 0 ] && [ "${e:-1}" = 0 ]
 }
@@ -82,7 +83,7 @@ check_selftest() {
   local res ok=1 txt=""
   for res in 1440x1080 2880x2160; do
     waits $res
-    runshot pp-selftest-$res $res 150 34 DM-Deadbolt -glexec=$((44+W1)):POSTSELFTEST@$((50+W1+W1/2)):exit
+    runshot pp-selftest-$res $res $((80+W1+W1/2)) 34 DM-Deadbolt -glexec=$((44+W1)):POSTSELFTEST@$((50+W1+W1/2)):exit
     local o=$out/pp-selftest-$res.out s
     s=$(grep -a -o "selftest summary: [0-9]* passed, [0-9]* failed" "$o")
     grep -a "UC2GLDrv: selftest \(pp-sizes\|ref-\|bb-copy-ref\)" "$o" | sed -E "s/^UC2GLDrv: //; s/ values compared//; s/^/INFO pp-selftest $res: /" | cut -c1-400 | tee -a "$summary"
@@ -188,7 +189,18 @@ check_blur() {
     [ -f "$out/pp-blur-$res-3.png" ] || { info blur-$res "no pictures ($(runok "$out/pp-blur-$res.out"))"; continue; }
     sigmacheck blur $res "${PP_BLUR_BOX:-360 175 500 255}" xy 0 2 1 3
   done
-  judge blur 0.15 same
+  # The concussion blur's four reads are offset by oscillators of the material (fractions of the picture, 2-6 Hz):
+  # the frozen frame catches them at a phase that differs from run to run, so its sigma moves between runs by
+  # more than between resolutions. Judged: one run's reference-480 and reference-0 shots (same phase) agree,
+  # and the resolutions agree within 30%.
+  local r same=0 txt=""
+  for r in $RESOLUTIONS; do
+    [ -n "${SIG480[blur-$r]:-}" ] && [ -n "${SIG0[blur-$r]:-}" ] || continue
+    within "${SIG480[blur-$r]}" "${SIG0[blur-$r]}" 0.10 || same=1
+    txt="$txt $r: ${SIG480[blur-$r]} / ${SIG0[blur-$r]};"
+  done
+  [ $same = 0 ] && result PASS blur-setting "sigma with reference 480 / 0 in the same frozen frame:$txt the setting does not touch it (texture-coordinate offsets)" || result FAIL blur-setting "reference 480 / 0:$txt"
+  judge blur 0.30 same
   [ -f "$out/pp-blur-1440x1080-3.png" ] && $M sheet "$out/pp-sheet-blur.png" "640x480" "$out/pp-blur-640x480-2.png" "1440x1080 old (reference 0)" "$out/pp-blur-1440x1080-3.png" "1440x1080 new (reference 480)" "$out/pp-blur-1440x1080-2.png" > /dev/null
 }
 
@@ -214,8 +226,11 @@ check_identity() {
   CAP=2G
   for b in base new; do
     for i in 1 2; do
-      if [ $b = base ]; then UC2_BIN=uc2-base.bin runshot pp-id-$b$i 640x480 90 34 DM-Deadbolt -glexec=40:set+LevelInfo+TimeDilation+0.0001 -glshot=64
-      else runshot pp-id-$b$i 640x480 90 34 DM-Deadbolt -glexec=40:set+LevelInfo+TimeDilation+0.0001 -glshot=64; fi
+      # DYNAMICGAMMA 0 at the end of the first frame: the bloom's threshold then stays where one update of the
+      # dynamic gamma put it, the same in every run (with it on, two runs of one binary differ by up to 3 levels
+      # over a third of the static part: the threshold settles differently).
+      if [ $b = base ]; then UC2_BIN=uc2-base.bin runshot pp-id-$b$i 640x480 90 34 DM-Deadbolt -glexec=0:DYNAMICGAMMA+0@40:set+LevelInfo+TimeDilation+0.0001 -glshot=64
+      else runshot pp-id-$b$i 640x480 90 34 DM-Deadbolt -glexec=0:DYNAMICGAMMA+0@40:set+LevelInfo+TimeDilation+0.0001 -glshot=64; fi
     done
   done
   local o=$out/pp-id d_bb d_nn d_bn d_bn2 all_bn all_bb
@@ -225,6 +240,8 @@ check_identity() {
   info identity "box $box: main/main $d_bb; new/new $d_nn; main/new $d_bn, $d_bn2. Whole frame: main/main $all_bb; main/new $all_bn"
   if [ "$(num differing "$d_bn")" = 0 ] && [ "$(num differing "$d_bn2")" = 0 ]; then
     result PASS identity "640x480, post-processing on: this binary and main's identical in the static part ($box: $d_bn); whole frame main/new $all_bn against main/main $all_bb (the animated pawn)"
+  elif [ "$(num differing "$d_bb")" != 0 ] && [ "$(num max "$d_bn")" -le "$(num max "$d_bb")" ] && [ "$(num max "$d_bn2")" -le "$(num max "$d_bb")" ]; then
+    result PASS identity "640x480: main/new in $box ($d_bn; $d_bn2) within the difference of two runs of main's binary ($d_bb): not exact, the runs themselves differ"
   else
     result FAIL identity "640x480: main/new in $box: $d_bn, $d_bn2 (main/main: $d_bb)"
   fi
@@ -236,9 +253,9 @@ check_aspect() {
   local g1 g2 gb res=1920x1080
   waits 1440x1080
   local t1=$((46+W1)) t2=$((48+W1+W2))
-  UC2_AUTOFOV=1 runshot pp-aspect-new $res $((t2+25)) 34 DM-Deadbolt -nopostprocess -glpptoggle=46 -glshot=44,$t1,$t2 \
+  UC2_UIBOX=1 UC2_AUTOFOV=1 runshot pp-aspect-new $res $((t2+25)) 34 DM-Deadbolt -nopostprocess -glpptoggle=46 -glshot=44,$t1,$t2 \
     -glexec=49:set+LevelInfo+TimeDilation+0.0001@$((t1+2)):PPREFERENCE+0
-  UC2_AUTOFOV=1 UC2_BIN=uc2-base.bin runshot pp-aspect-base $res $((t1+25)) 34 DM-Deadbolt -nopostprocess -glpptoggle=46 -glshot=44,$t1 \
+  UC2_UIBOX=1 UC2_AUTOFOV=1 UC2_BIN=uc2-base.bin runshot pp-aspect-base $res $((t1+25)) 34 DM-Deadbolt -nopostprocess -glpptoggle=46 -glshot=44,$t1 \
     -glexec=49:set+LevelInfo+TimeDilation+0.0001
   local o=$out/pp-aspect
   g1=$($M glow "$o-new-0.png" "$o-new-1.png" 518 138 10); g2=$($M glow "$o-new-0.png" "$o-new-2.png" 518 138 10)
