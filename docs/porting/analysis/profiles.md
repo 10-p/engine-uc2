@@ -365,3 +365,27 @@ Browser, engine identity PROVEN (sha256 of `serve-web/SDLLaunch.wasm` = this wor
 after each run, `logs/d3/e2e-engine-proof.txt`): `uc2-wasm-boot.spec.js` 3 passed (2.9m), `uc2-wasm-audio.spec.js`
 3 passed (1.2m), `uc2-wasm-saves.spec.js` run 11 1 passed (2.3m). Saves runs 9 and 10 and the rebuilt-GUI.u run are
 proven by this branch's own log lines (step 10). Null sink removed.
+
+## Gate (2026-10-07, branch head after this entry; engine code at c2e7b83, nothing in Source/ changed after it)
+
+(a) Builds: `bin/capped 6G 3600 -- cmake --build build-native -j6` rc 0 (`logs/d3/build-native-7.log`);
+`source env.sh && bin/capped 6G 3600 -- cmake --build build-wasm-perf -j6` rc 0 (`build-wasm-perf-5.log`);
+`bin/capped 6G 3600 -- cmake --build build-windows -j2` rc 0 (`build-windows-2.log`, after the full
+`cmake --preset windows` build `build-windows.log`); 0 `error:` lines in each.
+(b) Native, final binary: `tools/dev/d3-profiles.sh` **ALL PASS** (27 PASS lines; `logs/d3/final-d3-profiles.txt`),
+`tools/dev/c1-saves.sh` (C1_TREE=d3c1) **ALL PASS** (11). Browser saves spec: runs 9, 10, 11 **1 passed** each
+(11 with the sha256 proof), and with the rebuilt GUI.u **1 passed**.
+(c) D-4: `tools/dev/d4-names.sh` (tree d3s, rebuilt packages) **ALL PASS** (12 PASS lines; n1 11, n2 7, n3 3, n4 4
+scenario checks); on the shipped packages 4 FAILED exactly where GUI.u decides (`logs/d3/d4-names-shipped.txt`).
+Browser: the field disabled + hint, the profile names the player, [DefaultPlayer] Name kept (shipped packages); the
+launcher's name without a profile (rebuilt GUI.u run).
+(d) D-5: `tools/dev/d5-text.sh` **ALL PASS** (k1 13, k2 14, k3 4, k4 14, k5 10; `final-d5-text.txt`); browser: typing,
+Backspace, Enter, Escape on the new-profile page, rename, the host's session name (saves spec).
+(e) Regressions: `ucc-bin verifyclasses` on shipped and rebuilt trees "All native class layouts match";
+`tools/dev/m10-controls.sh` (M10_TREE=d3m10) keyboard 16, mouse 18, text 7, pad 33, both 14, all PASS;
+`tools/dev/c1-ini-overrides.sh` (C1_TREE=d3c1) **ALL PASS** (30 PASS, 0 FAIL); browser `uc2-wasm-boot.spec.js` 3
+passed, `uc2-wasm-audio.spec.js` 3 passed (engine proven); `tools/dev/m14-scripts-check.sh` on all rebuilt packages
+11 PASS (step 11).
+Memory: every run in `bin/capped`: builds 6G, script make/strip 3G, game and ucc runs 2G, unit tests 3-4G, browser
+6G (the mem-guard's machine-wide peak 10.7-13.2 GB, other agents included); census 8G and net 6G inside the M14
+suite. No ceiling was hit (no exit 137).
