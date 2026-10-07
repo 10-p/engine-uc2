@@ -165,3 +165,22 @@ crash-notifier processes; both are the owner's to clear.
 - **Seen, not O-9's (both binaries, NVIDIA and Mesa)**: `POSTPROCESS 0` at run time leaves the DM-Azure cobra
   waterfall drawn as an opaque violet stream (`logs/o9/fx-azure-*-nopp.png`): the distortion material's
   fallback when post-processing is switched off while running. Starting with `-nopostprocess` was not checked.
+
+## saveconfig (2026-10-08, branch `saveconfig`, details in `analysis/saveconfig.md`)
+
+- **Decision for the owner/coordinator, found while enabling script `SaveConfig()`**: a script save of a BASE class
+  writes that class's defaults over what its subclasses set on purpose, because `globalconfig` properties are read from the
+  declaring class's section into every subclass (naively enabled, `SetWeaponHand` pinned `UCPlayerController.DesiredFOV`
+  to 85 instead of 90). The natives now write only what changed and leave out a property another class sets on purpose
+  (`UC2NoteDefaultOverrides`, UnObj.cpp); a script that wants exactly one key calls `SAVECONFIGKEYS` through
+  `ConsoleCommand`. The sites in `Engine.u` (`SetHand`, `UpdateSensitivity`...) were NOT changed (a rebuilt Engine.u is a
+  bigger switch than this task): they work through the native rule.
+- **Not closed (needs a profile-aware change and a two-profile test)**: the character. A menu-driven launch takes it from
+  the active profile; a launch that names no class (the web launcher's Play form, a console `open`) takes
+  `[DefaultPlayer] Class`, the previous launch's character, which after switching profile without launching is the OTHER
+  profile's. Fix, if wanted: put the profile's `CharacterClassName` (URL form, `CharacterInformation.GetCharacterClass`) into
+  the player's login URL in `MatchViewportsToActors`, like `UC2ProfileNameInURL` does for the name.
+- **Epic's `UCPlayerInput.UpdateSensitivityX` assigns the instance twice** (`MouseSensitivity_X = F; MouseSensitivity_X = F;`),
+  where `UpdateSensitivityY` sets `default.MouseSensitivity_Y`: the X default is never updated. Left as it is (identical in
+  the shipped package, no effect on the mouse since D-6).
+
