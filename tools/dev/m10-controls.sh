@@ -30,6 +30,8 @@
 #   M10_RES=1920x1080       window size (D-2): written to the tree's Default.ini after the reset, Xvfb's screen
 #                           made at least that big, and M10_UIMAP=<the same> given to m10-inject.py so the
 #                           scenarios' 640x480 positions land in the centred 4:3 UI box (M10_UIMAP=none: raw)
+#   M10_INI="K=V K2=V2"     set existing keys of the tree's Default.ini after the reset (every line "K=..." gets V;
+#                           D-2 uses it for UIScaleMode=Native640)
 # The game is also given UC2_WINE_DISPLAY=$DISPLAY (Xvfb's), which tools/dev/m12-wine.sh needs.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -63,6 +65,11 @@ prep_tree() {
 # D-2: M10_RES=<W>x<H> -> the windowed size in the tree's Default.ini (also with M10_KEEP), the Xvfb screen.
 xvfb_screen=1280x720
 set_res() {
+  local kv
+  for kv in ${M10_INI:-}; do
+    grep -q "^${kv%%=*}=" "$sys/Default.ini" || echo "m10-controls: M10_INI: no ${kv%%=*}= in Default.ini" >&2
+    sed -i -E "s/^${kv%%=*}=.*/${kv}/" "$sys/Default.ini"
+  done
   [ -n "${M10_RES:-}" ] || return 0
   sed -i -E "s/^(WindowedViewportX|FullscreenViewportX)=.*/\\1=${M10_RES%x*}/; s/^(WindowedViewportY|FullscreenViewportY)=.*/\\1=${M10_RES#*x}/" "$sys/Default.ini"
   rm -f "$sys/Avaris.ini"

@@ -1610,7 +1610,8 @@ void  UGUIController::NativePostRender(UCanvas* Canvas)
 
 	Canvas->CurX = 0;
 	Canvas->Style=1;
-	// D-2: what the pages draw now is menu (a full-screen page background follows UIMenuBackground)
+	// D-2: what the pages draw now is menu: clipped to the UI's box as the Xbox's screen clipped it, a full-screen
+	// page background follows UIMenuBackground (UnCanvas.cpp, ui-scale.md)
 	Canvas->SetUIContext( UICONTEXT_Menu );
 
 	UGUIPage* page = NULL;
@@ -1668,6 +1669,9 @@ void  UGUIController::NativePostRender(UCanvas* Canvas)
 		// Restore previous alpha
 		Canvas->ForcedAlpha = LastAlpha;
 	}
+
+	// D-2: the pages are drawn; the designer's frames and the cursor are not clipped to the UI's box
+	Canvas->SetUIContext( UICONTEXT_Game );
 
 	if ( bDesignMode )
 		RenderDesignMode(Canvas);
@@ -1763,8 +1767,6 @@ void  UGUIController::NativePostRender(UCanvas* Canvas)
 		if ( ActiveControl )
 			ViewportOwner->SelectedCursor = ActiveControl->MouseCursorIndex;
 	}
-
-	Canvas->SetUIContext( UICONTEXT_Game );	// D-2
 
 	if ( DeleteStack.Num() )
 		eventClearDeleteStack();

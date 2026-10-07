@@ -1,0 +1,25 @@
+# D-2: DM-Deadbolt in play from the pinned view of tools/dev/m12/deadbolt-pinned.scen (URL
+# "DM-Deadbolt?NumBots=0", "NumPlayers 0" = the first PlayerStart, God), the HUD with the level drawn and on
+# black (TOGGLERENDERLEVEL), for tools/dev/d2-ui-scale.sh. Run through tools/dev/m10-controls.sh --file.
+wait Bringing Level DM-Deadbolt.MyLevel up for play 120
+sleep 12
+chan exec set UCDeathmatch NumPlayers 0
+wait test: exec set UCDeathmatch NumPlayers 0 10
+sleep 1
+focus
+key Alt_L 0.2
+sleep 4
+probe spawn
+check d2-spawned P['spawn'].pawn==1 and P['spawn'].level=='DM-Deadbolt'
+chan exec God
+wait test: exec God 10
+sleep 3
+probe view
+shot hud
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 1.5
+shot hud-levelOff
+chan exec TOGGLERENDERLEVEL
+wait test: exec TOGGLERENDERLEVEL 10
+sleep 1

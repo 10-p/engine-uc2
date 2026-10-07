@@ -56,6 +56,7 @@ void UCanvas::DrawTile
 		// fades, flashes and overlays (UCPlayerController's blood and ColorOverlay) cover the whole viewport,
 		// stretched; a menu page's background follows UIMenuBackground (Box: stays in the box; Fill: the
 		// whole viewport, its picture scaled to cover it with the aspect kept, the overflow cropped).
+		UBOOL bLayer = 0;
 		if( pCanvasUtil->bUIBoxed && !pTransformMat && XL > 0.f && YL > 0.f
 		&&	X <= 0.5f && Y <= 0.5f && X + XL >= SizeX - 0.5f && Y + YL >= SizeY - 0.5f )
 		{
@@ -88,7 +89,23 @@ void UCanvas::DrawTile
 					U = NewU; UL = NewUL; V = NewV; VL = NewVL;
 				}
 				X = X1; Y = Y1; XL = X2 - X1; YL = Y2 - Y1;
+				bLayer = 1;
 			}
+		}
+		// D-2: the menus are clipped to the box, as the Xbox's 640x480 screen clipped them (UC2's pages have
+		// decorations that run past x=640: a black header bar over the menu level otherwise). The HUD is not:
+		// its markers on actors (WorldToScreen) may be anywhere in the viewport.
+		if( !bLayer && pCanvasUtil->bUIBoxed && !pTransformMat && pCanvasUtil->UIContext == UICONTEXT_Menu && XL != 0.f && YL != 0.f )
+		{
+			if( XL < 0.f ) { X += XL; XL = -XL; U += UL; UL = -UL; }
+			if( YL < 0.f ) { Y += YL; YL = -YL; V += VL; VL = -VL; }
+			FLOAT CX2 = SizeX, CY2 = SizeY;
+			if( X >= CX2 || Y >= CY2 || X + XL <= 0.f || Y + YL <= 0.f )
+				return;
+			if( X < 0.f )			{ FLOAT F = -X / XL;				U += UL * F; UL -= UL * F; XL += X; X = 0.f; }
+			if( Y < 0.f )			{ FLOAT F = -Y / YL;				V += VL * F; VL -= VL * F; YL += Y; Y = 0.f; }
+			if( X + XL > CX2 )		{ FLOAT F = (X + XL - CX2) / XL;	UL -= UL * F; XL = CX2 - X; }
+			if( Y + YL > CY2 )		{ FLOAT F = (Y + YL - CY2) / YL;	VL -= VL * F; YL = CY2 - Y; }
 		}
 
 		// scion sz - note that Z doesn't actually get used (it was always 0 anyway)
