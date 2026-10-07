@@ -314,9 +314,12 @@ void FSDL2InputTest::Probe( USDL2Client* Client, const TCHAR* Tag )
 	if( !Text.Len() && Page )
 		Text = GetPropText( FindEditBoxByName( Page, 0 ), TEXT("TextStr") );
 	FString Item = GetListItem( Focus );
+	// D-7/D-8: the console's typing line, the scoreboard and the player's FOV (base and desired).
+	UConsole* Console = Cast<UConsole>( Viewport->Console );
+	FString Typed = Console ? Console->TypedStr.Replace( TEXT("\""), TEXT("'") ) : FString();
 
 	debugf( SDL2INPUT,
-		TEXT("probe %s level=%s menu=%s focus=%s text=\"%s\" item=\"%s\" paused=%i pawn=%i loc=(%.1f,%.1f,%.1f) rot=(%i,%i,%i) weapon=%s ammo=%.1f shots=%i mouse=(%.0f,%.0f) pads=%i"),
+		TEXT("probe %s level=%s menu=%s focus=%s text=\"%s\" item=\"%s\" paused=%i pawn=%i loc=(%.1f,%.1f,%.1f) rot=(%i,%i,%i) weapon=%s ammo=%.1f shots=%i mouse=(%.0f,%.0f) pads=%i console=%i typed=\"%s\" scores=%i fov=%.3f desiredfov=%.3f view=%ix%i"),
 		Tag,
 		Level && Level->GetOuter() ? Level->GetOuter()->GetName() : TEXT("None"),
 		Page ? Page->GetClass()->GetName() : TEXT("None"),
@@ -332,7 +335,12 @@ void FSDL2InputTest::Probe( USDL2Client* Client, const TCHAR* Tag )
 		Weapon ? (INT)Weapon->FlashCount : 0,
 		GUI ? appAtof(*GetPropText(GUI,TEXT("MouseX"))) : 0.f,
 		GUI ? appAtof(*GetPropText(GUI,TEXT("MouseY"))) : 0.f,
-		(INT)Client->PadsInitialized ? SDL_NumJoysticks() : 0 );
+		(INT)Client->PadsInitialized ? SDL_NumJoysticks() : 0,
+		Console ? (INT)Console->bTyping : -1,
+		*Typed,
+		PC->myHUD ? (INT)PC->myHUD->bShowScores : -1,
+		PC->FovAngle, PC->DesiredFOV,
+		Viewport->SizeX, Viewport->SizeY );
 	unguard;
 }
 

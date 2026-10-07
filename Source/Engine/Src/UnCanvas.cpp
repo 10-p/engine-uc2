@@ -1391,6 +1391,27 @@ void UCanvas::DrawActor( AActor* Actor, UBOOL WireFrame, UBOOL ClearZ, FLOAT Dis
 	{
 		return;
 	}
+	// D-8: AutoFOV, the canvas-drawn actor pass (engine-ut2004 UnCanvas.cpp; ufront steps 2.16 and 2.29).
+	// The first-person weapon is drawn here (UCWeapon.RenderOverlays: Canvas.DrawActor(self,false,true,
+	// DisplayFOV), its own FOV, 60 by default) as a separate scene node, so the world's override does not
+	// reach it: without this it would keep its 4:3 horizontal FOV while the world widened, and look bigger
+	// and cut off at the bottom. Its placement (Pawn.CalcDrawOffset) divides by the weapon's DisplayFOV, not
+	// by the player's FOV, so it needs no pinning (UT99's trap, 2.29, does not exist here).
+	// A caller that gave no FOV (execDrawActor's default: combo effects, Inventory.RenderOverlays) means
+	// the player's FOV: inside the frame that is the base value the override replaced, not the overridden
+	// one (the template's double-correction trap), outside the frame the actor's own.
+	{
+		UBOOL InFrame = GAutoFovScopeActor && GAutoFovScopeActor == Viewport->Actor;
+		if( DisplayFOV < 0.f )
+			DisplayFOV = InFrame ? GAutoFovFrameBase : Viewport->Actor->FovAngle;
+		INT FovX, FovY;
+		ufrontAutoFovSize( Viewport, FovX, FovY );
+		FLOAT DrawFOV = ufrontWeaponFov( DisplayFOV, ufrontEffectiveFov( DisplayFOV, FovX, FovY ) );
+		if( InFrame && Actor->IsA(AWeapon::StaticClass()) )
+			ufrontLogWeaponFov( FovX, FovY, DisplayFOV, DrawFOV );
+		DisplayFOV = DrawFOV;
+	}
+
 	AActor*		CameraActor = Viewport->Actor;
 	FVector		CameraLocation = Viewport->Actor->Location;
 	FRotator	CameraRotation = Viewport->Actor->Rotation;
@@ -1421,7 +1442,8 @@ void UCanvas::execDrawActor( FFrame& Stack, RESULT_DECL )
 	P_GET_OBJECT(AActor, Actor);
 	P_GET_UBOOL(WireFrame);
 	P_GET_UBOOL_OPTX(ClearZ, 0);
-	P_GET_FLOAT_OPTX(DisplayFOV,Viewport->Actor->FovAngle);
+	// D-8: -1 = "not given" (the player's FOV); DrawActor resolves it (AutoFOV needs to know which).
+	P_GET_FLOAT_OPTX(DisplayFOV,-1.f);
 	P_FINISH;
 
     DrawActor( Actor, WireFrame, ClearZ, DisplayFOV );
