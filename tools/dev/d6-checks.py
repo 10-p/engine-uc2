@@ -41,16 +41,38 @@ def cam_moved(a, b):
 
 
 def circle_stats(tag, first=None, last=None):
-    """The view-direction path of a watch trace as a circle: centre = mean of the samples (whole turns),
-    radius per sample, relative deviation (max-min)/mean. Yaw is unwrapped, pitch taken as signed."""
+    """The view-direction path of a watch trace as a circle: consecutive repeats dropped (ticks without mouse
+    motion), a least-squares circle fitted (Kasa), radius per sample, relative deviation (max-min)/mean. Yaw is
+    unwrapped, pitch taken as signed."""
     rows = W[tag][first:last]
     yaw = unwrap([r['yaw'] for r in rows])
     pitch = [wrap(r['pitch']) for r in rows]
-    cy = sum(yaw) / len(yaw)
-    cp = sum(pitch) / len(pitch)
-    radii = [math.hypot(y - cy, p - cp) for y, p in zip(yaw, pitch)]
+    pts = []
+    for p in zip(yaw, pitch):
+        if not pts or pts[-1] != p:
+            pts.append(p)
+    # Kasa fit: x^2 + y^2 + D x + E y + F = 0, least squares on (D, E, F)
+    n = len(pts)
+    sx = sum(x for x, _ in pts); sy = sum(y for _, y in pts)
+    sxx = sum(x * x for x, _ in pts); syy = sum(y * y for _, y in pts); sxy = sum(x * y for x, y in pts)
+    sz = [x * x + y * y for x, y in pts]
+    szx = sum(z * x for z, (x, _) in zip(sz, pts)); szy = sum(z * y for z, (_, y) in zip(sz, pts)); szs = sum(sz)
+    A = [[sxx, sxy, sx], [sxy, syy, sy], [sx, sy, n]]
+    b = [-szx, -szy, -szs]
+    def det(m):
+        return (m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+                + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]))
+    d0 = det(A)
+    sol = []
+    for c in range(3):
+        m = [row[:] for row in A]
+        for r in range(3):
+            m[r][c] = b[r]
+        sol.append(det(m) / d0)
+    cx, cy = -sol[0] / 2, -sol[1] / 2
+    radii = [math.hypot(x - cx, y - cy) for x, y in pts]
     mean = sum(radii) / len(radii)
-    return {'n': len(rows), 'radius': round(mean, 1), 'dev': round((max(radii) - min(radii)) / mean, 4),
+    return {'n': n, 'radius': round(mean, 1), 'dev': round((max(radii) - min(radii)) / mean, 4),
             'yaw_extent': max(yaw) - min(yaw), 'pitch_extent': max(pitch) - min(pitch)}
 
 

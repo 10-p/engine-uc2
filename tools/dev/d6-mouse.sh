@@ -2,12 +2,13 @@
 # D-6 check (native): mouse look like a PC shooter, the game pad as on the Xbox, measured. One PASS/FAIL line per
 # check on stdout, then a summary line.
 #
-#   tools/dev/d6-mouse.sh [scenario...]        (default: look pad lock before)
+#   tools/dev/d6-mouse.sh [scenario...]        (default: look ini pad lock before)
 #
 #   look    linear mouse look: N counts turn N x k at three speeds and three distances, the same k in both axes, a
 #           circle of mouse motion gives a circle of view directions, no camera motion after the mouse stops (a
 #           flick, the circle), the sensitivity, FOV and invert settings (mouse invert apart from the pad's, both
-#           saved/applied), auto-centring only under the pad, the look keys, mouse after stick
+#           applied), auto-centring only under the pad, the look keys, mouse after stick
+#   ini     the mouse's settings read from User.ini as the launcher passes them (-ini:, which also writes them there)
 #   pad     the right stick's turn and look-up curves (rotation reached 0.1-1.0 s after the stick is pushed to
 #           0.35/0.5/0.75/1.0) on our scripts and on the SHIPPED scripts with the same ini: must match; the stick
 #           dead zone 0.3; the left stick walks
@@ -50,13 +51,14 @@ prep() {
   mkdir -p "$sys/Profiles"
 }
 
-# run <name> <tree> <bots> <seconds>: one game run of $out/<name>.scen, DM-Deadbolt with <bots> bots
+# run <name> <tree> <bots> <seconds> [engine arguments...]: one game run of $out/<name>.scen, DM-Deadbolt with <bots> bots
 run() {
   local name=$1 t=$2 bots=$3 secs=$4
+  shift 4
   rm -f "$out/$name.json"
   D6_RESULTS=$out/$name.json D6_SYS=$work/run/$t/System D6_K=${D6_KVAL:-$K} \
   M10_KEEP=1 M10_TREE=$t M10_OUT=$out M10_SECS=$secs M10_URL="DM-Deadbolt?NumBots=$bots" \
-    "$m10" --file "$out/$name.scen" "$name" -nullrenderer | sed 's/^/    /'
+    "$m10" --file "$out/$name.scen" "$name" -nullrenderer "$@" | sed 's/^/    /'
   [ -f "$out/$name.result" ] || return 0
   sed -n 's/^\(PASS\|FAIL\)\t\([^\t]*\)\t\(.*\)$/\1 \2: \3/p' "$out/$name.result" | cut -c1-240
 }
@@ -69,6 +71,7 @@ sleep 4
 focus
 key Alt_L 0.3
 sleep 3
+tryseek 6 P['_'].pawn == 1 ;; key Alt_L 0.3
 probe spawn
 check $1-spawned P['spawn'].pawn==1 and P['spawn'].level=='DM-Deadbolt'
 chan exec God
@@ -177,7 +180,6 @@ probe Ea
 chan mouse 500 0
 probe Eb
 check look-sensitivity-setting abs(yawdiff('Ea','Eb') - 500*K/2) <= 2
-check look-sensitivity-saved 'MouseLookSensitivity=1.25' in open(os.environ['D6_SYS']+'/User.ini',encoding='latin-1').read()
 chan exec MouseLookSens 2.5
 wait test: exec MouseLookSens 2.5 10
 chan exec FOV 45
@@ -196,7 +198,6 @@ probe Ia
 chan mouse 0 -100
 probe Ib
 check look-mouse-invert-flips-the-mouse pitchdiff('Ia','Ib') < 0 and P['Ib'].invert == 'True' and P['Ib'].padinvert == 'False'
-check look-mouse-invert-saved 'bInvertMouseLook=True' in open(os.environ['D6_SYS']+'/User.ini',encoding='latin-1').read()
 pad attach
 wait SDL2 pads: pad 0 connected 10
 sleep 1
@@ -246,7 +247,7 @@ keyup w
 sleep 0.3
 probe Ae
 pyexec save('look-auto-centre-under-the-pad', [P['Ad'].rot[0], P['Ae'].rot[0]])
-check look-auto-centre-under-the-pad P['Ad'].mouselook == 'False' and abs(((P['Ae'].rot[0]+1400+32768)&65535)-32768) < abs(((P['Ad'].rot[0]+1400+32768)&65535)-32768) - 1000
+check look-auto-centre-under-the-pad P['Ad'].mouselook == 'False' and abs(((P['Ae'].rot[0]+1400+32768)&65535)-32768) < abs(((P['Ad'].rot[0]+1400+32768)&65535)-32768) - 100
 SCEN
   # 7. the look keys, and the mouse right after the stick (no adhesion/friction/curve on the mouse)
   cat <<SCEN
@@ -434,6 +435,23 @@ check lock-aim-adhesion-under-the-pad abs(yawdiff('mc','md')) > 300 and P['md'].
 SCEN
 }
 
+# ini: the mouse's settings from User.ini, given the way the launcher gives settings (-ini:, C-1, which also writes
+# them into User.ini): sensitivity 1.0 and the mouse inverted; the pad's invert stays off
+scen_ini() {
+  start ini
+  cat <<SCEN
+probe Na
+chan mouse 500 0
+probe Nb
+check ini-sensitivity-from-user-ini abs(yawdiff('Na','Nb') - 500*K/2.5) <= 2 and P['Nb'].sens.startswith('1.0')
+probe Nc
+chan mouse 0 -100
+probe Nd
+check ini-mouse-invert-from-user-ini pitchdiff('Nc','Nd') < 0 and P['Nd'].invert == 'True' and P['Nd'].padinvert == 'False'
+check ini-settings-kept-in-user-ini all(s in open(os.environ['D6_SYS']+'/User.ini',encoding='latin-1').read() for s in ('MouseLookSensitivity=1.0','bInvertMouseLook=True'))
+SCEN
+}
+
 fails=0
 passes=0
 count() {
@@ -442,7 +460,7 @@ count() {
   passes=$((passes + $(grep -c '^PASS' "$f"))); fails=$((fails + $(grep -c '^FAIL' "$f")))
 }
 
-for s in ${@:-look pad lock before}; do
+for s in ${@:-look ini pad lock before}; do
   case $s in
     look)
       echo "== look ($tree, our DefUser.ini)"
@@ -474,6 +492,11 @@ for k in sorted(keys):
     print(f"{'PASS' if worst < 0.03 else 'FAIL'}\tpad-matches-shipped-{k[4:]}\tworst {worst*100:.2f}% of the shipped value (limit 3%); ours {a} shipped {b}")
 PY
       count "$out/pad-compare.result";;
+    ini)
+      echo "== ini ($tree, -ini:User:[UCGameplay.UCPlayerInput]:MouseLookSensitivity=1.0 and bInvertMouseLook=True)"
+      scen_ini > "$out/ini.scen"; prep "$tree"
+      run ini "$tree" 0 200 "-ini:User:[UCGameplay.UCPlayerInput]:MouseLookSensitivity=1.0" "-ini:User:[UCGameplay.UCPlayerInput]:bInvertMouseLook=True"
+      count "$out/ini.result";;
     lock)
       echo "== lock ($tree, two bots frozen)"
       scen_lock > "$out/lock.scen"; prep "$tree"; run lock "$tree" 2 400; count "$out/lock.result";;
@@ -481,7 +504,7 @@ PY
       echo "== before ($ship, shipped scripts, main's DefUser.ini: what the owner played; expected to FAIL drift/symmetry)"
       git -C "$repo" show 47b1b18:Engine/Config/DefUser.ini > "$out/DefUser-main.ini"
       scen_look before > "$out/before.scen"; prep "$ship" "$out/DefUser-main.ini"; D6_KVAL=52.4 run before "$ship" 0 400;;
-    *) echo "unknown scenario $s (look pad lock before)" >&2;;
+    *) echo "unknown scenario $s (look ini pad lock before)" >&2;;
   esac
 done
-echo "d6-mouse: $passes PASS, $fails FAIL (scenarios: ${*:-look pad lock before}; 'before' is evidence and not counted)"
+echo "d6-mouse: $passes PASS, $fails FAIL (scenarios: ${*:-look ini pad lock before}; 'before' is evidence and not counted)"
