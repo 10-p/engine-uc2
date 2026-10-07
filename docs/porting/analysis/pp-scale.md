@@ -174,3 +174,29 @@ targets logged at 1280x720: DOF 426x120, 213x120; emissive select 213x120, blur 
 - `ucc-bin verifyclasses` with this branch's binary: `All native class layouts match` (exit 0).
 - Windows build (`cmake --preset windows`, `cmake --build build-windows -j6`, capped 6G): `[100%] Built target
   UCC`, exit 0.
+
+## The audit: every screen-space distance of the post-processing
+
+"Pixels" below are pixels of the Xbox's 640x480 picture unless said; k = back-buffer lines / 480.
+
+| Effect | Distance, where | Old behaviour (main) | Now | Why |
+|---|---|---|---|---|
+| depth of field | targets W/2 x H/4, W/4 x H/4 (`BlurTargetScale` 0.5, halved), `UUCScreenDOF::PreRender` | fractions of the back buffer: blur k times narrower | fractions of the 480-line reference picture | the blur's reach in target texels is then the Xbox's share of the picture |
+| depth of field | pass 0 taps +-1, +-3 back-buffer pixels (`FilterCopyRenderTarget` with the viewport) | back-buffer pixels | reference pixels (x PixelScale), read from the reference copy | first pass of the chain; without the copy 4 bilinear taps would cover a fraction of each target texel's k-times-larger footprint (aliasing) |
+| depth of field | later pass taps (target texels), composite (bilinear upsample), depth ramp (`StartZ`, 256-entry ramp) | follow the targets; depth only | unchanged | correct once the targets are | 
+| emissive glow | select target W/4 x H/4 (accumulates over frames), blur targets W/4 x H/8, W/8 x H/8, feedback x2 | fractions of the back buffer | fractions of the reference picture | as above |
+| emissive glow | select taps (box x2: +-2 back-buffer pixels) | back-buffer pixels | reference pixels, from the reference copy | as pass 0 above |
+| emissive glow | streak falloff 0.4 per frame (`FalloffRate`) | per frame | unchanged | a time constant (frame-rate dependent), not a distance; not this task |
+| bloom | select W/4 x H/4 (one read per texel: the Xbox read 2x2 of the 4x4 pixels under it), blur W/8 x H/4, W/8 x H/8 | fractions of the back buffer; at 4K the select would read 2x2 of 18x18 pixels | fractions of the reference picture; the select reads the reference copy | same share; the reference copy is what makes the select read the picture as the Xbox did |
+| bloom / emissive / DOF composite | bilinear upsample of the last target to the screen | - | unchanged (bilinear, as on the Xbox) | the brief: the look of the Xbox's upsampling at the same share of the picture |
+| back-buffer copy (`UpdateBackBufferCopyTarget`) | half the back buffer, taps +-1 back-buffer pixel | blur of 4x4 back-buffer pixels: k times smaller | taps +-1 reference pixel, from the reference copy; **target stays half the back buffer** | the target is also the distortion accumulation target with its depth copy: the distortion field and its occlusion stay sharp with more texels; its readers (player-cam screens, sniper skin remap with `bUseBlurredCopy`, refraction) get the Xbox's blur |
+| distortion | amounts in pixels (`MaxDistortion` 35, materials' `DistortionAmount`) | M7: x height/480 | x height/R (R = reference height; 480 when R = 0) | already scaled since M7; now one setting for both |
+| distortion | accumulation target and depth copy size (half the back buffer) | - | unchanged | a field resolution, not a distance (see the back-buffer copy row) |
+| radial blur (speed, teleport-in, sniper) | quads inset by `RadialBlurDistance`/i pixels (13 default, script drives it; 6 quads) | screen pixels: at 1440x1080 a 2.25 times weaker zoom | insets x W/(R*4/3) across, x H/R down | keeps the Xbox's zoom factor on each axis at any resolution and aspect (AutoFOV on or off: a point of the 4:3 middle moves as on the Xbox) |
+| concussion / screen blur (`UUCScreenBlur`, `BlurMe`) | the material's `TexOscillator`/`TexRotator` offsets (pan amplitude 0.003-0.008) | fractions of the picture: already the same share at every resolution | unchanged | material data in texture-coordinate units; at 16:9 the horizontal wobble is the same share of the width (1.33 times as many 480-line pixels): left as Epic's data |
+| motion blur with accumulation (`UUCScreenMotionBlur`) | full-size accumulation target, falloff per frame | no distance | unchanged | no script creates one |
+| heat shimmer camera effect | distortion material, texture-coordinate units | - | unchanged | creation commented out in script |
+| colour remaps (berserk, pause, combo flash, sun flare, teleport, Liandri incl. its noise stages) | per pixel; noise textures tiled in texture-coordinate units | - | unchanged | no distance in pixels |
+| dynamic gamma | 16x16 luminance target (256 samples at fixed fractions of the screen) | each sample read 2x2 back-buffer pixels | reads the reference copy (a sample = 2x2 reference pixels, as the Xbox's 2x2 pixels) | sample positions were already fractions; the copy makes each sample average the same share |
+| point-sample nudge (1/32 texel), half-texel conventions | sub-texel | - | unchanged | conventions of the GL port, not effect distances |
+| shadow blur (`PS_ShadowBlur`) | shadow texture texels | not lifted (M7b's work) | not touched | not screen space; another agent's area |
