@@ -77,6 +77,24 @@ static FRotator GetRotatorProp( UObject* Obj, const TCHAR* Name )
 }
 
 //
+// D-6: the i-th pawn of another controller (bots and other players), in the level's controller list order.
+//
+static APawn* OtherPawn( APlayerController* PC, INT Index )
+{
+	if( !PC || !PC->Level )
+		return NULL;
+	INT i = 0;
+	for( AController* C = PC->Level->ControllerList; C; C = C->nextController )
+	{
+		if( C==PC || !C->Pawn || C->Pawn==PC->Pawn )
+			continue;
+		if( i++ == Index )
+			return C->Pawn;
+	}
+	return NULL;
+}
+
+//
 // The selected row of a GUI list (GUIList: Elements[Index].Item), "" for anything else.
 //
 static FString GetListItem( UObject* Obj )
@@ -329,6 +347,45 @@ UBOOL FSDL2InputTest::Execute( USDL2Client* Client, const TCHAR* Line )
 			debugf( SDL2INPUT, TEXT("test: mouse: SDL_PushEvent failed: %s"), appFromAnsi(SDL_GetError()) );
 		return 1;
 	}
+	else if( ParseCommand(&Cmd,TEXT("PLACE")) || ParseCommand(&Cmd,TEXT("AIM")) )
+	{
+		// D-6 lock-on set-up (test only): put another pawn where the test wants it, or face it.
+		UBOOL bPlace = appStrnicmp( Line, TEXT("PLACE"), 5 )==0;
+		FString SI, SD, SA;
+		ParseToken( Cmd, SI, 0 );
+		APlayerController* PC = Client->Viewports.Num() ? Client->Viewports(0)->Actor : NULL;
+		APawn* Other = OtherPawn( PC, appAtoi(*SI) );
+		if( !PC || !PC->Pawn || !Other )
+		{
+			debugf( SDL2INPUT, TEXT("test: %s: no such pawn"), bPlace ? TEXT("place") : TEXT("aim") );
+			return 0;
+		}
+		if( bPlace )
+		{
+			ParseToken( Cmd, SD, 0 );
+			ParseToken( Cmd, SA, 0 );
+			FLOAT Yaw = PC->Rotation.Yaw * (2.f*PI/65536.f) + appAtof(*SA) * (PI/180.f);
+			FVector Dest = PC->Pawn->Location + appAtof(*SD) * FVector( appCos(Yaw), appSin(Yaw), 0.f );
+			UBOOL Moved = PC->GetLevel()->FarMoveActor( Other, Dest );
+			Other->Velocity = FVector(0,0,0);
+			Other->Rotation = (PC->Pawn->Location - Other->Location).Rotation();
+			Other->Rotation.Pitch = Other->Rotation.Roll = 0;
+			debugf( SDL2INPUT, TEXT("test: place %s at (%.1f,%.1f,%.1f): %s, los %i"), Other->GetName(),
+				Other->Location.X, Other->Location.Y, Other->Location.Z, Moved ? TEXT("moved") : TEXT("blocked"),
+				(INT)PC->LineOfSightTo( Other ) );
+		}
+		else
+		{
+			FVector Eye = GetVectorProp( PC, TEXT("CurrentCameraLocation") );
+			if( Eye.IsZero() )
+				Eye = PC->Pawn->Location;
+			FRotator R = (Other->Location - Eye).Rotation();
+			R.Roll = 0;
+			PC->Rotation = R;
+			debugf( SDL2INPUT, TEXT("test: aim at %s: rot (%i,%i)"), Other->GetName(), R.Pitch & 65535, R.Yaw & 65535 );
+		}
+		return 1;
+	}
 	else if( ParseCommand(&Cmd,TEXT("WATCH")) )
 	{
 		// D-6: a state line every client tick for the next <ticks> ticks.
@@ -423,6 +480,18 @@ void FSDL2InputTest::Probe( USDL2Client* Client, const TCHAR* Tag )
 		*GetPropText( PC->PlayerInput, TEXT("bInvertMouseLook") ),
 		*GetPropText( PC->PlayerInput, TEXT("bInvertMouse") ),
 		*GetPropText( PC, TEXT("bAutoCenterPitch") ) );
+	// D-6: the other pawns (lock-on targets), with line of sight and the view rotation that faces them
+	for( INT i=0; ; i++ )
+	{
+		APawn* Other = OtherPawn( PC, i );
+		if( !Other || !Pawn )
+			break;
+		FVector Eye = Cam.IsZero() ? Pawn->Location : Cam;
+		FRotator To = (Other->Location - Eye).Rotation();
+		debugf( SDL2INPUT, TEXT("probe3 %s other %i %s loc=(%.1f,%.1f,%.1f) dist=%.1f los=%i face=(%i,%i)"),
+			Tag, i, Other->GetName(), Other->Location.X, Other->Location.Y, Other->Location.Z,
+			(Other->Location - Pawn->Location).Size(), (INT)PC->LineOfSightTo( Other ), To.Pitch & 65535, To.Yaw & 65535 );
+	}
 	unguard;
 }
 

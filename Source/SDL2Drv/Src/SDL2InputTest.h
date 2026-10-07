@@ -17,6 +17,10 @@
 	                                              own event handling onwards is the real path); one per tick
 	  watch <ticks> [tag]                         D-6: one "SDL2Input: watch <tag> <i> ..." line per client tick
 	                                              for <ticks> ticks (time, view rotation, camera, pawn)
+	  place <i> <distance> <yaw degrees>          D-6 lock-on set-up: move the i-th other player's pawn (the
+	                                              probe's "other" lines) to <distance> units from ours, at <yaw>
+	                                              degrees from our view's yaw, at our height
+	  aim <i>                                     D-6 lock-on set-up: turn our view to the i-th other pawn
 	The test tools/dev/m10-controls.sh writes these and reads the log.
 =============================================================================*/
 

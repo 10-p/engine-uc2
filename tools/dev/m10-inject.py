@@ -32,6 +32,14 @@ Scenario language, one command per line (# comments):
     check <name> <python expr>    record PASS/FAIL; the expression sees P (probes by tag), yawdiff(a,b),
                                   pitchdiff(a,b), dist(a,b), fwd(a,b), side(a,b) (displacement along/right of a's facing)
     fail_fast                     stop at the first failed check (default: keep going)
+D-6 additions (an engine without them prints none of their lines; older scenarios are unaffected):
+    probe <tag>                   also keeps the "probe2" line (P[tag].cam, .camrot, .locked, .enemy, .mouselook,
+                                  .sens, .invert, .padinvert, .autocenter) and the "probe3" lines (P[tag].others: list
+                                  of dicts name, loc, dist, los, face) when the engine logs them
+    watch <tag> <regex-end> [timeout]  wait for /regex-end/, then collect every "watch <tag> i ..." line so far into
+                                  W[tag] (list of dicts: i, t, pitch, yaw, cam, camrot, loc, locked, mouselook)
+    pyfile <path>                 run a Python file in the namespace 'check' and 'pyexec' see (helper functions)
+    pyexec <python statement>     run one statement in that namespace (e.g. save a measurement)
 """
 import ctypes, re, sys, time, os, math
 
@@ -259,6 +267,15 @@ class Probe:
 
 P = {}
 
+# D-6: the probe's second line (camera, lock-on, the look's owner and the mouse settings) and the other pawns.
+PROBE2_RX = re.compile(r'probe2 (\S+) cam=\(([-\d.]+),([-\d.]+),([-\d.]+)\) camrot=\((-?\d+),(-?\d+),(-?\d+)\) locked=(\S*) '
+                       r'enemy=(\S+) mouselook=(\S*) sens=(\S*) invert=(\S*) padinvert=(\S*) autocenter=(\S*)')
+PROBE3_RX = re.compile(r'probe3 (\S+) other (\d+) (\S+) loc=\(([-\d.]+),([-\d.]+),([-\d.]+)\) dist=([-\d.]+) los=(\d) '
+                       r'face=\((-?\d+),(-?\d+)\)')
+WATCH_RX = re.compile(r'watch (\S+) (\d+) t=([-\d.]+) rot=\((-?\d+),(-?\d+)\) cam=\(([-\d.]+),([-\d.]+),([-\d.]+)\) '
+                      r'camrot=\((-?\d+),(-?\d+)\) loc=\(([-\d.]+),([-\d.]+),([-\d.]+)\) locked=(\S*) mouselook=(\S*)')
+W = {}
+
 
 def probe(tag):
     chan('probe ' + tag)
@@ -269,7 +286,47 @@ def probe(tag):
     if not m:
         raise RuntimeError('unparsable probe line: ' + log_lines[i])
     P[tag] = Probe(m)
-    print(f"  probe {tag}: {P[tag]}", flush=True)
+    pr = P[tag]
+    pr.cam = None; pr.others = []
+    # The D-6 lines follow the first one in the same call (an engine without them has none: 3 s, then go on).
+    if wait_for(r'probe2 ' + re.escape(tag) + ' cam=', 3) is not None:
+        time.sleep(0.2)
+        pump_log()
+    for line in log_lines[i + 1:i + 60]:
+        m2 = PROBE2_RX.search(line)
+        if m2 and m2.group(1) == tag:
+            g = m2.groups()
+            pr.cam = (float(g[1]), float(g[2]), float(g[3])); pr.camrot = (int(g[4]), int(g[5]), int(g[6]))
+            pr.locked = g[7] == 'True'; pr.enemy = g[8]; pr.mouselook = g[9]; pr.sens = g[10]
+            pr.invert = g[11]; pr.padinvert = g[12]; pr.autocenter = g[13]
+            continue
+        m3 = PROBE3_RX.search(line)
+        if m3 and m3.group(1) == tag:
+            g = m3.groups()
+            pr.others.append({'i': int(g[1]), 'name': g[2], 'loc': (float(g[3]), float(g[4]), float(g[5])),
+                              'dist': float(g[6]), 'los': int(g[7]), 'face': (int(g[8]), int(g[9]))})
+            continue
+        if 'probe ' in line and ' level=' in line:
+            break
+    print(f"  probe {tag}: {P[tag]}" + (f" cam={pr.cam} locked={pr.locked} enemy={pr.enemy} mouselook={pr.mouselook}"
+                                        f" sens={pr.sens} invert={pr.invert} padinvert={pr.padinvert}"
+                                        f" others={[(o['name'], o['los'], round(o['dist'])) for o in pr.others]}"
+                                        if pr.cam is not None else ''), flush=True)
+
+
+def collect_watch(tag):
+    pump_log()
+    rows = []
+    for line in log_lines:
+        m = WATCH_RX.search(line)
+        if m and m.group(1) == tag:
+            g = m.groups()
+            rows.append({'i': int(g[1]), 't': float(g[2]), 'pitch': int(g[3]), 'yaw': int(g[4]),
+                         'cam': (float(g[5]), float(g[6]), float(g[7])), 'camrot': (int(g[8]), int(g[9])),
+                         'loc': (float(g[10]), float(g[11]), float(g[12])), 'locked': g[13] == 'True',
+                         'mouselook': g[14]})
+    W[tag] = rows
+    print(f"  watch {tag}: {len(rows)} samples", flush=True)
 
 
 def yawdiff(a, b):
@@ -320,9 +377,12 @@ def run():
         execute(line)
 
 
+NS = {'P': P, 'W': W, 'yawdiff': yawdiff, 'pitchdiff': pitchdiff, 'dist': dist, 'fwd': fwd, 'side': side,
+      'abs': abs, 'min': min, 'max': max, 'math': math, 'os': os, 'chan': chan, 'record': record}
+
+
 def evaluate(expr):
-    return eval(expr, {'P': P, 'yawdiff': yawdiff, 'pitchdiff': pitchdiff, 'dist': dist, 'fwd': fwd, 'side': side,
-                       'abs': abs, 'min': min, 'max': max})
+    return eval(expr, NS)
 
 
 def execute(line):
@@ -413,6 +473,19 @@ def execute(line):
             record(name, ok, detail)
         elif cmd == 'fail_fast':
             fail_fast = True
+        elif cmd == 'watch':
+            # watch <tag> <regex-end> [timeout]: wait for the end marker, then collect the tag's watch lines
+            tag, _, rest2 = rest.partition(' ')
+            parts = rest2.rsplit(' ', 1)
+            regex, timeout = (parts[0], float(parts[1])) if len(parts) == 2 and re.fullmatch(r'[\d.]+', parts[1]) else (rest2, 60.0)
+            if wait_for(regex, timeout) is None:
+                raise RuntimeError(f'timed out waiting for /{regex}/')
+            time.sleep(0.3)
+            collect_watch(tag)
+        elif cmd == 'pyfile':
+            exec(compile(open(rest).read(), rest, 'exec'), NS)
+        elif cmd == 'pyexec':
+            exec(rest, NS)
         else:
             raise RuntimeError('unknown scenario command: ' + line)
 
