@@ -291,3 +291,18 @@ Proposal (the D-4 way, one more package):
    patches the shipped packages.
 Without the switch (shipped `UCGameplay.u`, D-6 engine and inis) the game would have NO mouse look: do not merge the
 ini without the package.
+
+## Step 6 (2026-10-07): the full d6 run on the final native binary
+
+Engine additions since step 5: a start-up warning when the mouse is bound to `aTurn/aLookUp` but the loaded
+`UCGameplay.u` has no D-6 mouse look (seen with the shipped package: "Input: the mouse is bound to aTurn/aLookUp (D-6)
+but this UCGameplay.u has no D-6 mouse look ..."), and `-noinimigrate` (the evidence runs need the old User.ini as it
+was: the first final run's `before` failed because the engine had migrated M10's bindings).
+
+`tools/dev/d6-mouse.sh look ini migrate pad lock before epic` (`logs/d6/d6-mouse-final.txt`): **67 PASS, 0 FAIL**
+(look 34, ini 4, migrate 8, pad 4 + 5 curve comparisons, lock 12); the evidence runs fail exactly where the owner's
+symptoms are (before: speed-dependence 52.0 vs 52.4 per count, camera there-and-back median 23.6 / max 50.7 units,
+23.8 units of slide after the circle, 63.9 after a flick; epic: 20 counts at one a tick 4,442 units, in one tick
+440, 200 in one tick 440, circle 12,293 x 11,212 units, 16.6% out of round). Pad vs shipped worst 0.47% (0.35
+deflection, where whole units per tick dominate), 0.07-0.09% elsewhere; adhesion under the pad 881 units, under the
+mouse 0; Right arrow 87.9 deg/s; auto-centre under the pad 3,016 -> 1,661 in 1.5 s, under the mouse unchanged.
