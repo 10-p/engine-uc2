@@ -241,3 +241,23 @@ Left as they are, for the owner to judge:
   `\` `ChangeHud`, `[` `]` `InventoryPrevious/Next`, and the `Shield 1/0` part of RightMouse/Joy7 (Epic's Xbox
   binding has it too; the shield works through AltFire).
 The owner's example is still needed (PLAN.md O-14) to know whether "backwards" meant one of these.
+
+## Step 5 (2026-10-07): a kept User.ini, and the M10 suite on the rebuilt packages
+
+A User.ini is derived from DefUser.ini once and then kept: in the browser the frontend stores it with the player's
+files (C-2), so the owner's browser may still hold Epic's or M10's bindings, which would go on sending the mouse into
+the stick's variables. `Source/Engine/Src/UC2InputMigrate.cpp` (called first thing in UGameEngine::Init's client
+part): a key whose value is EXACTLY one an earlier build wrote is set to D-6's (MouseX/MouseY of Epic's PC file and
+M10's, M10's look keys and sticks, the dead wheel commands, Epic's PC friction ranges; the M10 linear pad section,
+recognised by its 1,000,000/10,240,000 limits, as a whole), one `Input: User.ini [...] ... is a value from before
+D-6; now ...` Init line each; anything else is left alone. Found by its test: the UCPlayerInput class is already
+loaded when the game engine starts (the static-link build), so its config had been read; the migration now re-reads
+the config of a class that is loaded (`LoadConfig` on the class default). `tools/dev/d6-mouse.sh migrate`: with M10's
+User.ini 18 lines, with Epic's 6; both: the mouse is D-6's (500 counts = 5,006 units), the pad's limits 100 and
+curve on (8 PASS).
+
+`tools/dev/m10-controls.sh` on the rebuilt tree d6-run (GL, `logs/d6/m10/all-scenarios.txt`), with the scenarios
+updated for D-6 (mouse 10.012 units/count within 2% and `MouseLookInvert`; pad dead zone 0.3 tested at 0.35; the
+"both" pad turn held 0.4 s, since with the Xbox's acceleration a 1 s full-stick turn passes 180 degrees and wraps):
+keyboard 16, mouse 18, text 7, pad 33, both 14 checks, all PASS, 0 Critical (binary before the migration; the
+migration acts only on a kept User.ini, and these runs start from DefUser.ini).
