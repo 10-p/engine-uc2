@@ -23,6 +23,13 @@
 #include "UnScriptPatcher.h"
 #include "UnMovie.h"	// engine-uc2 (M9): WITH_PORTABLE_MOVIES lifts the Xbox-only movie hooks below
 
+// uc2 port (D-3): start in the last used profile, remember it (UC2Profiles.cpp).
+ENGINE_API void UC2StartWithLastProfile( UViewport* Viewport );
+ENGINE_API void UC2RememberProfile( UClient* Client );
+ENGINE_API UBOOL UC2ProfileNamesThePlayer( UClient* Client );	// D-4
+ENGINE_API void UC2ProfileNameInURL( UViewport* Viewport, FURL& URL );	// D-4
+ENGINE_API UBOOL UC2ProfilesExec( UClient* Client, const TCHAR* Cmd, FOutputDevice& Ar );	// D-3: PROFILESTATE
+
 /*-----------------------------------------------------------------------------
 	Object class implementation.
 -----------------------------------------------------------------------------*/
@@ -233,6 +240,9 @@ void UGameEngine::Init()
 
 		Viewport = Client->NewViewport( NAME_None );
 
+		// uc2 port (D-3): the first player starts in the profile they last played with (UC2Profiles.cpp).
+		UC2StartWithLastProfile( Viewport );
+
 		// Add code to Create the Menu System here				
 
 		//scion bcl -- some simple changes to make the GUIController code less cast happy
@@ -438,6 +448,8 @@ UBOOL UGameEngine::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	if( UC2NetTestExec( this, Cmd, Ar ) )	// uc2 port: NETPROBE/NETPLACE/NETAIM
 		return 1;
 	if( ufrontAutoFovExec( Cmd, Ar ) )		// D-8: AUTOFOV [Off|HorPlus|Adaptive]
+		return 1;
+	if( UC2ProfilesExec( Client, Cmd, Ar ) )	// uc2 port (D-3): PROFILESTATE (UC2Profiles.cpp)
 		return 1;
 	const TCHAR* Str=Cmd;
 #if WITH_PORTABLE_MOVIES
@@ -1142,7 +1154,12 @@ static void MatchViewportsToActors( UClient* Client, ULevel* Level, const FURL& 
 				// else spawn player using level URL
 				FString Error;
 				debugf( NAME_Log, TEXT("Spawning new actor for Viewport %s"), Viewport->GetName() );
-				if( !Level->SpawnPlayActor( Viewport, ROLE_SimulatedProxy, URL, Error ) )
+				// uc2 port (D-4): with a saved profile active the player logs in under the profile's name, whatever
+				// the URL says (a map from the command line or the web launcher): UC2Profiles.cpp.
+				FURL PlayerURL( URL );
+				if( Viewport == Client->Viewports(0) )
+					UC2ProfileNameInURL( Viewport, PlayerURL );
+				if( !Level->SpawnPlayActor( Viewport, ROLE_SimulatedProxy, PlayerURL, Error ) )
 					appErrorf( TEXT("%s"), *Error );
 			}
 		}		
@@ -2909,7 +2926,10 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 #ifndef _XBOX
 	if( GIsClient )
 	{
-		URL.SaveURLConfig( TEXT("DefaultPlayer"), TEXT("Name" ), TEXT("User") );
+		// uc2 port (D-4): not while a saved profile names the player (the URL then carries the profile's name;
+		// [DefaultPlayer] Name is the player's own name, used without a profile): UC2Profiles.cpp.
+		if( !UC2ProfileNamesThePlayer( Client ) )
+			URL.SaveURLConfig( TEXT("DefaultPlayer"), TEXT("Name" ), TEXT("User") );
 		URL.SaveURLConfig( TEXT("DefaultPlayer"), TEXT("Team" ), TEXT("User") );
 		URL.SaveURLConfig( TEXT("DefaultPlayer"), TEXT("Class"), TEXT("User") );
 		URL.SaveURLConfig( TEXT("DefaultPlayer"), TEXT("Skin" ), TEXT("User") );
@@ -3474,6 +3494,7 @@ void UGameEngine::Tick( FLOAT DeltaSeconds )
 	guard(UGameEngine::Tick);
 	FUNC_CLOCK(TiCyc,TickCycles);
 	UC2NetTestTick( this );	// uc2 port: the -nettest=<file> command file (UC2NetTest.cpp); nothing without it
+	UC2RememberProfile( Client );	// uc2 port (D-3): User.ini [Profiles] LastProfile follows the first player's profile
 
     if( DeltaSeconds < 0.0f )
         appErrorf(TEXT("Negative delta time!"));

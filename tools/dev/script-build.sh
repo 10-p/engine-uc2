@@ -6,7 +6,9 @@
 #   tools/dev/script-build.sh [options] [stage...]
 #     stages: assemble make strip compare (default: all four, in that order)
 #     --build <dir>     build directory with Source/UCC/ucc-bin (default build-native)
-#     --tree <name>     output tree <WorkUC2>/run/<name>; must start with m14 (default m14-make)
+#     --tree <name>     output tree <WorkUC2>/run/<name>; must start with m14 or d<N> (a D-phase task's prefix,
+#                       e.g. d3-make) (default m14-make)
+#     --logs <dir>      where the logs go (default <WorkUC2>/logs/m14; a d<N> tree: <WorkUC2>/logs/d<N>)
 #     --mem <size>      memory ceiling of the `ucc-bin make` run (default 3G)
 #     --headers         also export the C++ headers (into <tree>/<Pkg>/Inc, a scratch copy, never Source/)
 #     --extra "<args>"  more `ucc-bin make` arguments
@@ -17,7 +19,7 @@
 # <Pkg>/Classes -> Source/<Pkg>/Classes and <Pkg>/<resource dir> -> epic-sources/<Pkg>/<resource dir> (the
 # #exec imports read textures and models from there; the repo holds text files only). The compile inis are
 # Epic's: Avaris.ini = DefaultXbox.ini, User.ini = DefUserXbox.ini (sync_avaris.pl copies them so).
-# Nothing is written outside the tree and <WorkUC2>/logs/m14.
+# Nothing is written outside the tree and the logs directory.
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -30,6 +32,7 @@ tree=m14-make
 mem=3G
 headers=0
 extra=""
+logs=""
 stages=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -38,16 +41,18 @@ while [ $# -gt 0 ]; do
     --mem) mem=$2; shift 2;;
     --headers) headers=1; shift;;
     --extra) extra=$2; shift 2;;
+    --logs) logs=$2; shift 2;;
     assemble|make|strip|compare) stages+=("$1"); shift;;
     *) echo "unknown argument: $1" >&2; exit 2;;
   esac
 done
 [ ${#stages[@]} -eq 0 ] && stages=(assemble make strip compare)
-case "$tree" in m14*) ;; *) echo "tree name must start with m14: $tree" >&2; exit 2;; esac
+case "$tree" in m14*|d[0-9]*) ;; *) echo "tree name must start with m14 or d<N>: $tree" >&2; exit 2;; esac
 case "$tree" in */*|*..*) echo "bad tree name: $tree" >&2; exit 2;; esac
 case "$build" in /*) ;; *) build=$repo/$build;; esac
 run=$work/run/$tree
-logs=$work/logs/m14
+case "$tree" in d[0-9]*) logs=${logs:-$work/logs/${tree%%-*}};; esac
+logs=${logs:-$work/logs/m14}
 mkdir -p "$logs"
 
 # EditPackages, in order ([Editor.EditorEngine] of DefaultXbox.ini), and the source folder of each.

@@ -15,6 +15,8 @@
 # with SIGTERM (the normal way out here). Run 2 starts from the SAME tree (M10_KEEP=1: nothing reset), opens the
 # profile page, expects the saved profile in the list, selects it, and asks the engine which profile the
 # viewport holds (`getall PlayerProfile ProfileName`). The listings diff is the file inventory of C-2.
+# Since D-3 (Engine/Src/UC2Profiles.cpp) the restarted game is in the saved profile from the start; run 2 checks
+# that first (tools/dev/d3-profiles.sh is the full restart test).
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
@@ -144,7 +146,7 @@ wait OpenMenu \[UCMenu.UC2MainMenu\] 90
 sleep 3
 focus
 chan exec getall PlayerProfile ProfileName
-expect s2-before-selecting-the-viewport-profile-is-the-default ProfileName = \\\$\\\$Default\\\$\\\$ 10
+expect s2-at-start-the-viewport-profile-is-the-saved-one ProfileName = $name\s*$ 10
 key Down
 key Down
 key Down

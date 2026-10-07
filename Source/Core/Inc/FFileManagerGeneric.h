@@ -237,7 +237,11 @@ public:
 		guard(DeleteFiles);
 		FString Dir(FilePattern);
 		// Strip off the trailing file pattern, so it is a pure directory
-		INT Index = Dir.InStr(TEXT("\\"),1);
+		// engine-uc2: at the last separator of EITHER kind. Epic looked for '\\' only, so with the POSIX
+		// file managers' '/' the pattern stayed in Dir and every file was deleted as "<dir>/*/<file>":
+		// nothing was deleted, DeleteDirectory(Tree) then failed on a non-empty directory, and deleting a
+		// saved profile (ULoadSaveManager::DeleteGameObject) never worked on Linux (D-3).
+		INT Index = Max( Dir.InStr(TEXT("\\"),1), Dir.InStr(TEXT("/"),1) );
 		if (Index != -1)
 		{
 			Dir = Dir.Left(Index + 1);

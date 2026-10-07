@@ -10,6 +10,9 @@
 #   M14_TREE      run tree with them [m14-run]; M14_SHIP the same build with the shipped .u [m14-ship]
 #   M14_BUILD     build directory [build-native]
 #   M14_NO_MKRUN  1: use the trees as they are
+#   M14_PREFIX    the name every tree of this run starts with [m14]: a D-phase task uses its own (d3-m14 makes
+#                 d3-m14-run, d3-m14-ship, d3-m14-census-*, d3-m14-movies, d3-m14-net); M14_OUT the summary's
+#                 directory [<WorkUC2>/logs/m14/check]
 # Output: <WorkUC2>/logs/m14/check/ (summary m14-summary.txt); the suites write to <WorkUC2>/logs/<tree>.
 #
 # Checks:
@@ -34,12 +37,15 @@ set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 capped=$work/bin/capped
+prefix=${M14_PREFIX:-m14}
+case "$prefix" in ""|*/*|*..*) echo "bad M14_PREFIX: $prefix" >&2; exit 2;; esac
 scripts=${M14_SCRIPTS:-$work/run/m14-make/System}
-tree=${M14_TREE:-m14-run}
-ship=${M14_SHIP:-m14-ship}
+tree=${M14_TREE:-$prefix-run}
+ship=${M14_SHIP:-$prefix-ship}
 build=${M14_BUILD:-build-native}
-case "$tree$ship" in m14*m14*) ;; *) echo "M14_TREE and M14_SHIP must start with m14" >&2; exit 2;; esac
-out=$work/logs/m14/check
+case "$tree" in "$prefix"*) ;; *) echo "M14_TREE must start with $prefix" >&2; exit 2;; esac
+case "$ship" in "$prefix"*) ;; *) echo "M14_SHIP must start with $prefix" >&2; exit 2;; esac
+out=${M14_OUT:-$work/logs/m14/check}
 mkdir -p "$out"
 summary=$out/m14-summary.txt
 : > "$summary"
@@ -167,7 +173,7 @@ census_of() {	# census_of <name> <port> <scripts dir or ''>
 }
 
 check_census() {
-  local a=m14-census-run b=m14-census-ship sa sb n p diffs
+  local a=$prefix-census-run b=$prefix-census-ship sa sb n p diffs
   : > "$out/census-hung.txt"
   census_of $a 7790 "$scripts"
   census_of $b 7795 ""
@@ -183,28 +189,28 @@ check_census() {
 
 check_movies() {
   local rc
-  ( cd "$repo" && UC2_SCRIPTS=$scripts python3 tools/dev/m9-movies.py --tree m14-movies ) > "$out/movies.txt" 2>&1; rc=$?
+  ( cd "$repo" && UC2_SCRIPTS=$scripts python3 tools/dev/m9-movies.py --tree $prefix-movies ) > "$out/movies.txt" 2>&1; rc=$?
   local f p; f=$(grep -a -c "^FAIL" "$out/movies.txt"); p=$(grep -a -c "^PASS" "$out/movies.txt")
-  cmp -s "$work/run/m14-movies/System/UCMenu.u" "$scripts/UCMenu.u" || { result FAIL movies "the m14-movies tree does not hold the rebuilt packages"; return; }
+  cmp -s "$work/run/$prefix-movies/System/UCMenu.u" "$scripts/UCMenu.u" || { result FAIL movies "the $prefix-movies tree does not hold the rebuilt packages"; return; }
   [ $rc = 0 ] && [ "$f" = 0 ] && [ "$p" -gt 0 ] && result PASS movies "$p PASS, 0 FAIL (rebuilt packages); $out/movies.txt" \
     || result FAIL movies "exit $rc, $p PASS, $f FAIL; see $out/movies.txt"
 }
 
 check_net() {
   local rc
-  ( cd "$repo" && UC2_SCRIPTS=$scripts NET_TREE=m14-net NET_SOAK_MIN=2 NET_PORT=7860 tools/dev/net-test.sh dedicated2 travel ) > "$out/net.txt" 2>&1; rc=$?
+  ( cd "$repo" && UC2_SCRIPTS=$scripts NET_TREE=$prefix-net NET_SOAK_MIN=2 NET_PORT=7860 tools/dev/net-test.sh dedicated2 travel ) > "$out/net.txt" 2>&1; rc=$?
   local f p; f=$(grep -a -c "^FAIL" "$out/net.txt"); p=$(grep -a -c "^PASS" "$out/net.txt")
-  cmp -s "$work/run/m14-net/System/UCMenu.u" "$scripts/UCMenu.u" || { result FAIL net "the m14-net tree does not hold the rebuilt packages"; return; }
-  [ $rc = 0 ] && [ "$f" = 0 ] && result PASS net "$p PASS, 0 FAIL (dedicated2 travel, rebuilt packages); $work/logs/m14-net/net-summary.txt" \
+  cmp -s "$work/run/$prefix-net/System/UCMenu.u" "$scripts/UCMenu.u" || { result FAIL net "the $prefix-net tree does not hold the rebuilt packages"; return; }
+  [ $rc = 0 ] && [ "$f" = 0 ] && result PASS net "$p PASS, 0 FAIL (dedicated2 travel, rebuilt packages); $work/logs/$prefix-net/net-summary.txt" \
     || result FAIL net "exit $rc, $p PASS, $f FAIL; see $out/net.txt"
 }
 
 check_leftovers() {
   local left="" p
   for p in $(pgrep -x uc2.bin; pgrep -x ucc-bin; pgrep -x Xvfb); do
-    case "$(readlink /proc/$p/cwd 2>/dev/null)" in "$work"/run/m14*) left="$left $p";; esac
+    case "$(readlink /proc/$p/cwd 2>/dev/null)" in "$work"/run/"$prefix"*) left="$left $p";; esac
   done
-  [ -z "$left" ] && result PASS leftovers "no uc2.bin/ucc-bin/Xvfb running in an m14 tree" || result FAIL leftovers "still running:$left"
+  [ -z "$left" ] && result PASS leftovers "no uc2.bin/ucc-bin/Xvfb running in a $prefix tree" || result FAIL leftovers "still running:$left"
 }
 
 checks=${*:-verify menu deadbolt patcher controls audio effects census movies net leftovers}
