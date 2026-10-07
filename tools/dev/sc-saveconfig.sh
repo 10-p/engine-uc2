@@ -80,6 +80,10 @@ nolog() {	# nolog <fixed text> <log...>: none of the logs has the line
   for f in "$@"; do grep -a -q -F -- "$text" "$f" 2>/dev/null && { echo "'$text' is in $(basename "$f")"; return 1; }; done
   echo "no '$text' in $(for f in "$@"; do basename "$f"; done | paste -sd' ')"
 }
+eqv() {	# eqv <actual> <expected>: equal, printing both
+  [ "$1" = "$2" ] && echo "$1" || { echo "got '$1', expected '$2'"; return 1; }
+}
+export -f eqv
 # fromresult <result file> <check name>: re-print one of the game scenario's own checks
 fromresult() {
   local line; line=$(grep -a -P "^(PASS|FAIL)\t$2\t" "$1" 2>/dev/null | head -1)
@@ -92,9 +96,11 @@ fromresult() {
 # ---------------------------------------------------------------------------------------------------------------
 # uccprep <sys>: our tracked inis, nothing derived, no logs
 uccprep() { cp -f "$repo"/Engine/Config/*.ini "$1/"; rm -f "$1/Avaris.ini" "$1/User.ini" "$1"/*.log "$1"/*.log.*; }
-# ucc <L> <sys> <name> <args...>: one saveconfigtest run; output $out/<L>-<name>.out, the log $out/<L>-<name>.log
+# ucc <L> <mode> <args...>: one saveconfigtest run (<mode> static|instance|keys|get ...); L u = native in $sys, w = wasm in
+# $wsys. Output $out/<L>-<mode>.out, the engine's log $out/<L>-<mode>.log
 ucc() {
-  local L=$1 s=$2 name=$3; shift 3
+  local L=$1 name=$2 s=$sys; shift 1
+  [ "$L" = w ] && s=$wsys
   rm -f "$s"/*.log
   if [ "$L" = w ]; then ( cd "$s" && "$capped" 3G 600 -- node ucc-bin.js saveconfigtest "$@" > "$out/$L-$name.out" 2>&1 ); local rc=$?
   else ( cd "$s" && "$capped" 3G 300 -- ./ucc-bin saveconfigtest "$@" > "$out/$L-$name.out" 2>&1 ); local rc=$?; fi
@@ -105,21 +111,22 @@ ucc() {
 gotvalue() { grep -a -E -m1 "$3" "$out/$1-$2.out" | tr -d '\r'; }
 
 ucc_checks() {
-  local L=$1 s=$2 base=$s/DefUser.ini
+  local L=$1 s=$2
+  local base=$s/DefUser.ini
   echo "== $L: ucc-bin saveconfigtest ($( [ "$L" = w ] && echo 'wasm under Node' || echo native ), tree $s)"
 
   # static: SetHand's case. A class save of Engine.PlayerController after Handedness changed.
   uccprep "$s"
   ucc $L static Engine.PlayerController Handedness -1 load=UCGameplay; rc=$?
-  check $L-static-exits-ok test "$rc" = 0
+  check $L-static-exits-ok eqv "exit $rc" "exit 0"
   cp -f "$s/User.ini" "$out/$L-static-User.ini"
   check $L-static-writes-the-changed-key expect_ini "$s/User.ini" Engine.Controller Handedness -1.000000
   check $L-static-writes-nothing-else bash -c "newkeys '$base' '$s/User.ini' > '$out/$L-static-written.txt'; n=\$(wc -l < '$out/$L-static-written.txt'); if [ \$n = 1 ]; then cat '$out/$L-static-written.txt'; else echo \"\$n keys written:\"; head -5 '$out/$L-static-written.txt'; exit 1; fi"
   check $L-static-is-logged logline 'Script SaveConfig: StaticSaveConfig on Engine.PlayerController' "$out/$L-static.log"
   ucc $L get UCGameplay.UCPlayerController Handedness;
-  check $L-restart-reads-handedness-back test "$(gotvalue $L get '^-?[0-9]')" = "-1.000000"
+  check $L-restart-reads-handedness-back eqv "$(gotvalue $L get '^-?[0-9]')" "-1.000000"
   ucc $L get UCGameplay.UCPlayerController DesiredFOV
-  check $L-restart-fov-is-still-90 test "$(gotvalue $L get '^-?[0-9]')" = "90.000000"
+  check $L-restart-fov-is-still-90 eqv "$(gotvalue $L get '^-?[0-9]')" "90.000000"
 
   # shadow: a changed globalconfig property that UCPlayerController sets on purpose (DesiredFOV=90) is not written
   uccprep "$s"
@@ -127,7 +134,7 @@ ucc_checks() {
   check $L-shadow-not-written absent_ini "$s/User.ini" Engine.PlayerController DesiredFOV
   check $L-shadow-is-logged logline 'not written, another class sets its own default' "$out/$L-static.log"
   ucc $L get UCGameplay.UCPlayerController DesiredFOV
-  check $L-shadow-fov-stays-90 test "$(gotvalue $L get '^-?[0-9]')" = "90.000000"
+  check $L-shadow-fov-stays-90 eqv "$(gotvalue $L get '^-?[0-9]')" "90.000000"
 
   # instance form (execSaveConfig on a class default), a property the class declares and the ini has no key for
   uccprep "$s"
@@ -152,7 +159,7 @@ ucc_checks() {
   ucc $L instance Engine.PlayerInput MouseSmoothingMode 2 "$off"
   ucc $L keys UCGameplay.UCPlayerInput MouseLookSensitivity 1.75 "$off"
   check $L-off-keys-answers-off logline 'SaveConfigKeys: off' "$out/$L-keys.out"
-  check $L-off-writes-nothing cmp "$out/$L-off-before-User.ini" "$s/User.ini"
+  check $L-off-writes-nothing bash -c "cmp '$out/$L-off-before-User.ini' '$s/User.ini' && echo 'User.ini byte for byte as before the three commands'"
 
   # the default: on, and in the derived Avaris.ini
   uccprep "$s"
@@ -287,8 +294,8 @@ SCEN
   check g3-off-is-logged logline 'Script SaveConfig: off' "$gout/g3-Avaris.log"
   # what the script wrote in g1: the difference between g1 and g3 (same flow, same engine; only ScriptSaveConfig differs)
   newkeys "$gout/g3-User.ini" "$gout/g1-User.ini" > "$gout/g1-vs-g3-written.txt"
-  check g1-script-wrote-exactly-the-three-keys bash -c "cat '$gout/g1-vs-g3-written.txt'; [ \$(wc -l < '$gout/g1-vs-g3-written.txt') = 3 ] && grep -a -q '^\[engine.controller\].handedness=-1.000000\$' '$gout/g1-vs-g3-written.txt' && grep -a -q '^\[ucgameplay.ucplayerinput\].mouselooksensitivity=1.500000\$' '$gout/g1-vs-g3-written.txt' && grep -a -q '^\[ucgameplay.ucplayerinput\].binvertmouselook=true\$' '$gout/g1-vs-g3-written.txt'"
-  check g1-vs-g3-avaris-ini-differs-only-by-the-setting bash -c "d=\$(LC_ALL=C comm -3 <(keys '$gout/g1-Avaris.ini') <(keys '$gout/g3-Avaris.ini') | tr -d '\t' | LC_ALL=C sort | tr '\n' ' '); echo \"\$d\"; [ \"\$d\" = '[engine.engine].scriptsaveconfig=false [engine.engine].scriptsaveconfig=true ' ]"
+  check g1-script-wrote-exactly-the-three-keys bash -c "cat '$gout/g1-vs-g3-written.txt'; [ \$(wc -l < '$gout/g1-vs-g3-written.txt') = 3 ] && grep -a -i -q '^\[engine.controller\].handedness=-1.000000\$' '$gout/g1-vs-g3-written.txt' && grep -a -i -q '^\[ucgameplay.ucplayerinput\].mouselooksensitivity=1.500000\$' '$gout/g1-vs-g3-written.txt' && grep -a -i -q '^\[ucgameplay.ucplayerinput\].binvertmouselook=true\$' '$gout/g1-vs-g3-written.txt'"
+  check g1-vs-g3-avaris-ini-differs-only-by-the-setting bash -c "d=\$(LC_ALL=C comm -3 <(keys '$gout/g1-Avaris.ini') <(keys '$gout/g3-Avaris.ini') | tr -d '\t' | tr 'A-Z' 'a-z' | LC_ALL=C sort | tr '\n' ' '); echo \"\$d\"; [ \"\$d\" = '[engine.engine].scriptsaveconfig=false [engine.engine].scriptsaveconfig=true ' ]"
 fi
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -384,7 +391,7 @@ SCEN
     check $r-no-critical nolog Critical "$gout/$r.out"
   done
   check m-user-ini-identical-with-the-natives-on-and-off bash -c "d=\$(LC_ALL=C comm -3 <(keys '$gout/m1-User.ini') <(keys '$gout/m2-User.ini') | tr -d '\t'); [ -z \"\$d\" ] && echo 'every key and value the same' || { echo \"\$d\" | head; exit 1; }"
-  check m-avaris-ini-differs-only-by-the-setting bash -c "d=\$(LC_ALL=C comm -3 <(keys '$gout/m1-Avaris.ini') <(keys '$gout/m2-Avaris.ini') | tr -d '\t' | LC_ALL=C sort | tr '\n' ' '); echo \"\$d\"; [ \"\$d\" = '[engine.engine].scriptsaveconfig=false [engine.engine].scriptsaveconfig=true ' ]"
+  check m-avaris-ini-differs-only-by-the-setting bash -c "d=\$(LC_ALL=C comm -3 <(keys '$gout/m1-Avaris.ini') <(keys '$gout/m2-Avaris.ini') | tr -d '\t' | tr 'A-Z' 'a-z' | LC_ALL=C sort | tr '\n' ' '); echo \"\$d\"; [ \"\$d\" = '[engine.engine].scriptsaveconfig=false [engine.engine].scriptsaveconfig=true ' ]"
   # The allow-list: every key a full session wrote (new or changed against the files the engine derives at its first
   # start), with who writes it. Written by the ENGINE'S C++ (SaveURLConfig, the profile remember-poll, the window
   # settings), not by script. Anything else is a FAIL.
@@ -400,7 +407,7 @@ ALLOW
   # the derived files of a first start: a run to the main menu only, then compared with the finished session
   echo "== m0: the files a first start derives (main menu only), the baseline for the allow-list"
   cat > "$gout/m0.scen" <<'SCEN'
-wait OpenMenu \[UCMenu.UC2MainMenu\] 90
+expect m0-main-menu-up OpenMenu \[UCMenu.UC2MainMenu\] 90
 sleep 4
 SCEN
   rm -f "$sys"/*.log "$sys"/*.log.*

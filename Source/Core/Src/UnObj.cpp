@@ -1486,6 +1486,9 @@ void UC2NoteDefaultOverrides( UClass* Class )
 			INT Ofs = It->Offset + i*It->ElementSize;
 			if( !bDeclared && It->Identical( Mine + Ofs, Parent + Ofs ) )
 				continue;
+			// ExportText writes into the 1024-character buffer SaveConfig uses too: leave out a longer string
+			if( Cast<UStrProperty>(It) && ((FString*)(Mine + Ofs))->Len() > 900 )
+				continue;
 			TCHAR Text[1024]=TEXT("");
 			It->ExportText( i, Text, (BYTE*)Mine, (BYTE*)Mine, 0 );
 			if( !GConfigRecords )
