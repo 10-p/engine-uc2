@@ -40,7 +40,7 @@ visible difference by arithmetic; to be shown with pictures.
 
 ### Terrain (item 2): one pass of three layers instead of three passes
 
-`UTerrainSector::StaticLight`/the pass builder (`UnTerrain.cpp` 419-494) takes `MaxSimultaneousTerrainLayers` from the
+`UTerrainSector::GenerateTriangles` (`UnTerrain.cpp` 419-494) takes `MaxSimultaneousTerrainLayers` from the
 device caps on PC (1 here, as at M5); on Xbox it is hard-coded 3. With 3, runs of three opaque layers become one
 `RM_CombinedWeightMap` pass drawn by `PS_Terrain3Layer` (`(w1 t1 + w2 t2 + w3 t3) x 2 v0`, one clamp at the end);
 with 1, each layer is a pass `min(1, 2 v0 t_i) x w_i` added to the framebuffer (one clamp per layer, one 8-bit
