@@ -371,5 +371,7 @@ pointer lock: rawPointerLock.ts), how the rigid camera feels on stairs and dodge
 mouse now), and the pad on a real controller. Not done: an in-game slider for the mouse (D-9's menu), keeping the
 camera's movement smoothing for the mouse (possible as a lag on the pivot only), saving the console's mouse
 settings (UC2's script cannot write config; an engine command could), the pad's frame-rate-dependent slow turns
-(Epic's whole rotation units per tick lose up to one unit a frame: at 144 fps a 0.35 deflection turns ~40% slower
-than at 30; carrying the fraction would fix it but changes Epic's pad, so it is an owner decision).
+(Epic's whole rotation units per tick lose up to one unit a frame: with the profile's 0.8 sensitivity a deflection
+just past the dead zone turns 1024 x 0.8 x 32 x ((d-0.3)/0.7)^2 units/s, so below about 0.335 nothing turns at 60 fps
+and below about 0.352 nothing at 144 fps, where the Xbox at 30 fps turned from about 0.32; carrying the fraction would
+fix it but changes Epic's pad arithmetic, so it is an owner decision).
