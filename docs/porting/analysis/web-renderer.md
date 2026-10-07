@@ -887,3 +887,65 @@ DM-Deadbolt, static part of the pinned view, `-glnos3tc` against the same bindin
 (max 3), desktop mean 0.019 (max 3); 0 GL errors (`logs/m11f/s3tc-*.out`, `logs/m11fd/s3tc-*.out`). Affected
 before the fix: any WebGL 1 context without `WEBGL_compressed_texture_s3tc` (most phones), which would have
 crashed at the first level.
+
+## Gate, 2026-10-07 (engine `93c2f27` and before; frontend `17758ef`)
+
+**(a) Builds** (all `capped 6G`): native `cmake --build build-native` -> `[100%] Built target SDLLaunch`
+(`logs/m11/build-native-56.log`); wasm-perf -> `Built target SDLLaunch` (`build-wasm-perf-18.log`); wasm (debug
+preset, configured fresh) -> `Built target SDLLaunch` (`build-wasm-1.log`, `build-wasm-2.log`); windows: `cmake
+--preset windows && cmake --build build-windows -j4` FAILED in openal-soft's PipeWire backend
+(`/usr/include/pipewire-0.3/pipewire/utils.h:10: fatal error: sys/un.h`: since `libpipewire-0.3-dev` is
+installed on the host, openal-soft's configure finds the HOST PipeWire headers for the MinGW build; not this
+branch's code, main has the same CMake). With `-DALSOFT_BACKEND_PIPEWIRE=OFF` on the configure line (no file
+changed) it links: `uc2.exe`, `ucc.exe` (`build-windows-2.log`, `-3.log`). The build system needs that option
+for the windows preset (coordinator's / audio area).
+
+**(b) `tools/dev/m11-twin.sh`, run 2** (`logs/m11t/m11-twin-run2.txt`, binary of `518b5f5`: AA and fallbacks in,
+fx-fixes port not yet): `29 PASS, 5 FAIL lines`. PASS: shaders, gputest, boot (0 GL errors, Mesa errors 0),
+selftest (11/11 both bindings), progtest (420 programs, largest difference 1 of 255), pinned (0.380 against the
+desktop without LOD bias), 13 of 14 effects, m6 4 views, fallbacks glnos3tc / glnomaxlevel / glnofragdepth /
+glnouintindex, leftovers. FAIL: `effect-blur` 7.388 > 6 (below), `effects` (that one), `fallback-glnodepthtexture`
+(not implemented, by design of the line), `fallbacks` (that one), `movies` (`menu-movie-shots`: the portrait
+changed by PSNR 24.0 dB in 2 s where the check wants < 20; the same check passed on a less loaded run,
+`logs/m11f/m9-nobgra.txt`, 16.3 dB; the movie log check `menu-movie-log` passed: frames advance). Run 1 (before the
+fixes): `26 PASS, 7 FAIL`, with `fallback-glnos3tc` crashing (fixed since) and praxis-panes unlucky in 10 starts.
+- Blur, explained: the effect's ghost copies move with time and the B pictures are taken at a wall-clock time,
+  at different frame rates; two runs of the TWIN against each other differ by 5.17, two desktop runs by 2.95, the
+  desktop against the twin by 5.2 (run 1), 7.4 (run 2), 6.6 (rerun). Picture `logs/m11t/fx-blur-b-desktop-twin.png`:
+  the same ghosting at a different phase. Within the effect's own noise; the threshold 6 is too tight for it.
+- DM-Azure sky (open, explained only in part): unchanged from the checkpoint section; the azure effect pair is
+  3.0 in run 2. Not resolved: the fog formula is equal on both bindings (self-test), the difference is in how the
+  fogged sky-zone layers come out through gl4es' fixed-function emulation; candidates are listed above.
+- DM-Deadbolt residue: 0.380 mean, 0% above 32 levels, against the desktop without LOD bias: per-stage
+  rounding of gl4es' generated combiner shaders against Mesa's fixed function, not proven (pictures
+  `logs/m11t/pinned-deadbolt-off-nolodbias-diff.png`).
+
+**(c) Browser, through the harness** (`yarn build --target uc2 --engine-artifact .../build-wasm-perf/...` then
+`capped 6G 600 -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=12 -- --target uc2 uc2-wasm-boot.spec.js`,
+`UC2_E2E_TWIN_MENU/MAP` = `logs/m11/twin-ref/{menu,deadbolt}-1024x768-fxaa.png`): run 23 `3 passed (3.0m)`, run 24
+`3 passed (3.0m)`, run 25 (after the fx-fixes port) `3 passed (2.9m)`. Run 24: menu vs twin 6.356 (tolerance 10),
+DM-Deadbolt vs twin 1.124 (tolerance 3), 0 GL errors in every test, DM-Deadbolt `39.79 ms/frame` over 300 frames
+(machine loaded by the twin script and other agents' builds; 25-26 ms in runs 12/16 on a quieter machine and before
+anisotropy and FXAA), 98.6 draws, 34,399 primitives, 3 snapshots + 1 depth-as-colour per frame; browser PSS peak
+1376-1719 MiB, cgroup peak 3296 MiB, wasm memory 256 MiB, JS heap 24 MiB; play test every step ok (W 638 units,
+mouse 300 px = 15,725 yaw units, pointer lock not granted in the headless page). Run 23 had first failed (run 22)
+because the cooked start-up logos now play first: the spec passes `-nostartupmovies` (frontend `17758ef`).
+Published after runs 20, 24 and 25 (`serve/PUBLISHED.txt`).
+
+**(d) Desktop regressions on fresh trees**: `tools/dev/m7-effects.sh m11r selftest` -> `fx selftest summary: 11
+passed, 0 failed` (and after the fx-fixes port, tree m11x: `11 passed, 0 failed`); `./ucc-bin verifyclasses` ->
+`All native class layouts match`; `M10_TREE=m11r tools/dev/m10-controls.sh keyboard` -> `PASS keyboard (16 checks,
+0 Critical)` with `-glnoaa` in the script (its first two runs with the new default 4x MSAA failed at menu steps on
+the loaded machine, keys handled but menus late: `logs/m10/keyboard.result` of those runs); the effects lines of the
+desktop side are those of (b): 14 of 14 `critical=0 glerrors=0 programs_failed=0+0` (`logs/m11/fx-lines.txt`).
+
+## fx-fixes ported (coordinator, 2026-10-07)
+
+Main's `fx-fixes` (merge d3e88e7) changed the driver; re-applied by hand here (`93c2f27`), not merged: (1)
+`UploadMip` takes a NULL face (zeroed data, all three upload paths incl. this branch's driver DXT decoder and the
+GLES mip-chain completion), the cube branch uploads all six faces; (2) `DistortionCullDistance` (ini 15000 in
+`[UC2GLDrv.UC2GLRenderDevice]`, also in the generated web ini, compiled 5000; console `DISTORTIONCULLDISTANCE`);
+(3) `GLPIXTRACE` and `UC2GLPixelTrace.cpp`, with one change: on a multisampled main framebuffer it reads the
+resolve. Verified: builds (native, wasm-perf, wasm, windows), desktop self-test 11/11, a twin DM-Azure run with 0
+GL errors and a working `GLPIXTRACE`, browser run 25 green. NOT verified: the DM-Azure pool's cube map picture on
+the twin or in the browser (the view was not reproduced here).
