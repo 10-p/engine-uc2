@@ -262,3 +262,76 @@ Of the materials drawn in these views, 23 of 72 (AcidRain) and 26 of 74 (Tempest
 `logs/o9/o9-acidrain-nvidia-before-after.png`: before, on the owner's GPU, most walls and the floor gratings of
 that view were nearly black (MULTIPLYADD / AddToCurrent stages with the base colour dropped); after, textured as
 on Mesa.
+
+## Gate (2026-10-07, branch `o9-nvidia`; every run through `<WorkUC2>/bin/capped`, no ceiling hit, no exit 137)
+
+(a) Builds:
+- native: `capped 6G 3600 -- cmake --preset native && cmake --build build-native -j6` (`logs/o9/build-0.log`),
+  then incremental `capped 6G 1800 -- cmake --build build-native -j6` after each change (`build-1..6.log`), all
+  exit 0, `[100%] Built target SDLLaunch`; the last code change is in `build-6`.
+- windows: `capped 6G 3600 -- cmake --preset windows && cmake --build build-windows -j6` -> `[100%] Built
+  target SDLLaunch`, `Built target UCC`, `windows build exit 0` (`logs/o9/gate-windows-build.log`).
+- wasm-perf: `capped 6G 5400 -- source env.sh && cmake --preset wasm-perf && cmake --build build-wasm-perf -j6`
+  -> `[100%] Built target SDLLaunch`, `wasm build exit 0` (`logs/o9/gate-wasm-build.log`).
+
+(b) `tools/dev/o9-nvidia.sh` on a fresh tree (`logs/o9/o9-nvidia-final.txt`): **12 PASS, 0 FAIL**:
+combiner-mesa-programs 35/35 (worst 0.50/255), -texenv-combine3 35/35, -texenv-combine4 35/35, -before 22
+passed / 11 failed = exactly the three-operand cases; combiner-gpu-programs 35/35 (worst 0.56), -texenv-combine4
+33 passed / 2 skipped (4 units), -before 11 three-operand failures; combiner-twin 33 passed / 2 skipped (no LOD
+bias on ES; worst 0.80); caps; pictures (pillar 59.8 -> 0.76, cobra 5.35 -> 0.29, Mesa before/after 0.000,
+combine4 vs programs 0.10 / 0.000); pictures-other (AcidRain 16.2 -> 0.75, Tempest 13.9 -> 0.58); leftovers.
+
+(c) Regressions on fresh trees:
+- `tools/dev/m7-effects.sh o9gate` (`logs/o9/gate-m7-effects.txt`, `gate-m7-selftest.txt`): 14 effect lines, every
+  one `critical=0 glerrors=0 programs_failed=0+0 left_behind=0`; self-test `11 passed, 0 failed`. (The self-test
+  of the first call did not start: the script writes `logs/<tree>/fx-selftest.report` before that folder exists
+  on a brand-new tree; rerun with `m7-effects.sh o9gate selftest`.)
+- Pinned DM-Deadbolt `-nopostprocess` (`deadbolt-pinned.scen` through `m10-controls.sh --file`, this branch in
+  `run/o9pin` against main's executable `uc2-before.bin` in `run/o9ref`): same view `loc=(1531.9,3111.5,-34.1)
+  rot=(0,-40880,0)` on both, `pinned-compare.py`: `OK 99.997 90.6 28.08` (static part 99.997% within 2 levels),
+  0 GL errors, 0 Critical. So the 4-stage change and the programs leave this view unchanged on Mesa.
+- `M11_DESKTOP_TREE=o9m11 M11_TWIN_TREE=o9m11t tools/dev/m11-twin.sh` (`logs/o9/gate-m11-twin.txt`,
+  `logs/o9/gate-m11-twin-summary-run1.txt`): **29 PASS, 5 FAIL** (main's run: 31 PASS, 3 FAIL). Failing:
+  `fallback-glnodepthtexture` + `fallbacks` (known: not implemented); `movies` with two of nine m9 checks:
+  `menu-movie-shots` (known timing-sensitive, failed on main too) and `logos-clean` ("None GL errors": the check
+  reads the "frame 600, N GL errors so far" line, and under the machine's load of 24-37 at the time the twin
+  presented 267 (rerun: 306) pictures in the 20 s of the logos movie against 791 in main's run, so no such line
+  was written; rerun alone: same); `effect-liandri` + `effects` (B picture desktop vs twin mean 9.26 > 6: the
+  effect's scan-line noise is random: two desktop runs of the same branch binary differ by 9.37, `o9gate` vs
+  `o9m11`; this branch's desktop `o9gate` vs this twin: 4.02; main's run had 2.80). Every PASS line of main's run
+  passes here, including pinned (no LOD bias: mean 0.380; main 0.374 in the M11 notes), progtest 420/420, self-test
+  11/11 on both bindings, m6 4/4, the four implemented fallbacks.
+- `./ucc-bin verifyclasses` in `run/o9gate`: `All native class layouts match`, exit 0
+  (`logs/o9/gate-verifyclasses.txt`).
+
+Performance (NVIDIA, DM-Azure pillar view, 1280x720, AA 4x, post-processing on, `-glstats`, one run with
+`FFPROGRAMS` toggled every 8 s, machine load 13-20 from other work): programs 12.35 / 11.35 / 12.06 / 12.15 ms per
+frame, texture environment (combine4) 12.01 / 11.52 / 11.37 / 12.16 / 11.95 ms: no difference beyond the noise
+(about 0.2 ms, 1.5%). Not measured on an idle machine.
+
+Logs outside `logs/o9`: the shared scripts name their log folder after the run tree, so `logs/o9c0..2` (census),
+`logs/o9gate`, `logs/o9m11`, `logs/o9m11t` exist too (all mine, all run trees `run/o9*`).
+
+## What the owner will see on the NVIDIA GPU (and what changes elsewhere)
+
+- DM-Azure: the wooden pillars are wood (were orange metal), the cobra statue golden as on Mesa (was redder);
+  over all maps 327 materials that used the caps fallback now compile as on Mesa/Epic, and the stages with
+  MULTIPLYADD / "add to current" no longer lose their base colour: whole walls, floors and columns that were nearly
+  black or wrongly tinted (DM-AcidRain, DM-Tempest pictures) are textured. Pictures: `logs/o9/o9-azure-nvidia-before-after.png`,
+  `o9-azure-cobra-nvidia-before-after.png`, `o9-acidrain-nvidia-before-after.png`, `o9-tempest-nvidia-before-after.png`
+  (left before, right after; post-processing on, as played), `o9-*-nvidia-vs-mesa.png`.
+- On every GPU and the web: 15 materials (the Raiden beam body, the cobra waterfall shader, some banners, floor
+  panels, the Horizon and ViperPit waters...) are split into passes as Epic's 4-stage compiler split them.
+- Switch for comparison: `FixedFunctionPrograms=False` / `-glnoffprograms` / console `FFPROGRAMS 0` (texture
+  environment; on NVIDIA now with combine4, 4 stages); `-glstages=8` gives the old 8-stage split.
+
+## Unsure / not done
+
+- AMD and Intel GPUs were not available: the program path is plain GLSL 1.20 on the compatibility profile; the
+  one vendor difference met (NVIDIA's signed `gl_FogFragCoord`) is handled and tested on both signs.
+- "4 stages is the Xbox's picture" rests on Epic's code (both platforms clamp to 4), not on an Xbox picture.
+- The census's compile-only "lit" context is wider than the game's; the only 4-stage compile error it found
+  (ViperPit ocean, lit) does not occur in the game (drawn unlit). Other runtime contexts (projectors on these
+  materials, LightingOnly) were not enumerated.
+- The web build was compiled, not run in a browser here: the web path is unchanged except the 4-stage split
+  (gl4es' fixed-function emulation, checked numerically on the twin).
