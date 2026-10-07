@@ -15,7 +15,12 @@ wait test: exec God 10
 chan exec GiveAmmo
 wait test: exec GiveAmmo 10
 sleep 2
-tryseek 8 P['_'].weapon=='UCWeap_SniperRifle' ;; chan exec NextWeapon
+# SwitchWeapon 2 = the energy weapons' group (UCWeap_SniperRifle InventoryGroup=2); a weapon change takes about a
+# second (put down, bring up), so it is asked once and given time
+chan exec SwitchWeapon 2
+wait test: exec SwitchWeapon 2 10
+sleep 4
+tryseek 3 P['_'].weapon=='UCWeap_SniperRifle' ;; chan exec SwitchWeapon 2
 sleep 4
 probe rifle
 click 3
