@@ -194,8 +194,9 @@ UCMenu           different-explained exports 10100, byte-identical  9940, neutra
 ```
 
 0 unexplained differences. "neutral" = explained, no effect on what runs, each recognised by a rule (the rule list
-is at the end of the details file): stripsource marks, Line/TextPos and dependency CRCs/lists of the 55 classes
-whose script text changed after retail (own-text CRC differs; the shipped CRC of every other class equals ours,
+is at the end of the details file): stripsource marks, Line/TextPos and dependency CRCs/lists of the 17 classes
+whose script text changed after retail (the 16 classes the patches touch, plus `Engine.PSDistortionBaseMaterial`,
+whose `cpptext` block M7 lengthened by two lines: cpptext lines stay in ScriptText as `// (cpptext)` markers) (own-text CRC differs; the shipped CRC of every other class equals ours,
 i.e. Epic compiled exactly our text), import time stamps and lazy-array file offsets of #exec textures (pixel
 data compared mip by mip: identical), MipZero (unused colour average) off by one in 6 Editor textures, FName case,
 patch-appended objects in another order, names the patch appends that only Epic's later ini-loaded defaults
@@ -232,4 +233,6 @@ tree already contains each change, and the patch existed because the shipped .u 
 
 Script bugs seen while proving (recorded, not touched): see the findings above (the CTFFlag patch is Epic's
 tooling bug; the scripts are fine). `GUIController.uc` warns "'Empty' : local variable used before assigned a
-value" (2x, compiler warning from `ucc make`, source line in the make log).
+value" (GUIController.uc 3365, 3387), `ClientBeaconReceiver.uc(19)` 'zeroBeacon' and `UCWeap_SniperRifle.uc(604)`
+'OldDist' used before assigned, plus unused locals (StartMenu.uc 521-524, UCWeapAttch_Melee.uc 9-10): compiler
+warnings, recorded for later.
