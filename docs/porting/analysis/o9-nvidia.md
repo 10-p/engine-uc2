@@ -381,3 +381,18 @@ the panes as a strong pink/blue swirl where the oracle (Epic's D3D8 path under w
   its name (m7-effects runs have no `?Name=`).
 - `m7-effects.sh` praxis-panes: `-glexec=46:NETPLACE+LocalPlayer+-1220+288+680+5220+0@48:...` (placed twice: the
   pitch holds once the pawn stands), one run (`tries=1`); picture A must still match the oracle below 8.
+
+## Step 3: the checks again on main + O-9b
+
+- One deterministic run of `m7-effects.sh o9b praxis-panes` (Mesa): `place LocalPlayer ok loc=(-1220.0,288.0,680.0)
+  yaw=5220` twice, `tries=1`, picture A against the wine reference mean 2.641 (`logs/o9b/fx-praxis-panes-a.png`).
+- A pane pixel traced (GLPIXTRACE 300 400, close view, NVIDIA, `logs/o9b/fx-pt-*-gpu.out`): the pass is
+  `PSDistortionMaterial DM-Praxis.Effects.T_Praxis_Largewindow_Dists01`, 1 stage, MODULATE(TEXTURE, DIFFUSE),
+  256x256 with 9 mips, trilinear, texture transform on, **LOD bias -0.50** (the device's `DefaultTexMipBias`, as
+  every stage; the distortion handler's -1.8 belongs to the accumulation pass with post-processing on), result
+  (135,138,255) with programs and (134,139,255) with the texture environment.
+- `tools/dev/o9-nvidia.sh` (fresh tree, fx-owner.sh now with AutoFOV off and the pre-D-2 UI for reference pictures):
+  **12 PASS, 0 FAIL** (`logs/o9/o9b-o9-nvidia.txt`): pillar NVIDIA before 59.8 / after 0.74, cobra 5.34 / 0.29,
+  AcidRain 16.1 / 0.73, Tempest 13.9 / 0.67; all combiner lines as before.
+- Pictures: `logs/o9b/o9b-praxis-oracle-view-wine-main-before.png` (wine | main | main before O-9, Mesa, same camera)
+  and `logs/o9b/o9b-praxis-near-main-before.png` (close view: main | before O-9, the same swirl).
