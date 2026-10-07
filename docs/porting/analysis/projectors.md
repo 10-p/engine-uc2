@@ -64,3 +64,66 @@ CPU to the vertex shader (`ProjectorAtten.vsh`) is the attenuation; where it can
 
 None of these is a difference in the common case (single, non-gradient projector on BSP). The census below finds
 what the maps actually contain.
+
+## Step 1. Census of the maps (`GLSCENECENSUS`, `tools/dev/m7b-census.sh`; 2026-10-07)
+
+`UC2GLSceneCensus.cpp` lists every projector actor of the loaded level (class, place, texture, blending, flags,
+the surfaces its geometry lies on) and every terrain (layers, render combinations, passes per method).
+`tools/dev/m7b-census.sh` runs it on every map with a projector or a terrain (47 maps; the export tables of all
+59 `.unr` say which, `upkg151.py`), three runs at a time, no match started. All census lines:
+`<WorkUC2>/logs/m7b/census-pc.txt` (PC paths, the binary before any M7b capability).
+
+- **236 projector actors in 36 maps**, 222 of them level-static (map projectors: wire-mesh and grate light
+  patterns, light pools, tracks, vehicle tracks...), 14 shadow projectors (ambient creatures of the ACT maps; the
+  players' shadows appear once a match runs), 0 decals at load (they are spawned by weapon hits in play).
+  113 have `bGradient`; every one of these has `DistanceAttenScale` 1.0, every other one 1000 (Projector.uc
+  PostBeginPlay), so the Xbox's distance attenuation is PC's on every map projector. 88 clip (`bClipBSP` or
+  `bClipStaticMesh`). 145 also project on actors (`bProjectActor`). **No map contains Xbox pre-batched
+  primitives** (0 `StaticProjectorClippedPrim` exports in the PC packages): the Xbox build batched at load
+  (`UGameEngine::LoadMap`, `_XBOX` only).
+- Blending: 195 modulate with no material blending (the common case), 16 additive, 2 alpha, 4 "none"; **19
+  projectors in 7 maps blend with the surface's own material** (`MaterialBlendingOp` modulate/add/alpha):
+  CTF-Recoil 8 (wire mesh, modulate), DM-Meridian 4 (pagoda pattern on static meshes and terrain), OD-Cancer 2,
+  OD-Prism 1 (`FX_Shadow_PrismTop`, additive, on 439 BSP nodes), DM-Legacy 2, ACT-SelketCheats 2.
+- **43 terrains in 32 maps**; with one layer per pass (PC) every pass is a single-layer weight map pass; 39 of the
+  43 terrains have three or more opaque layers.
+
+## Step 2. Shadows (item 3): implemented, numerically checked + seen
+
+Engine: `FRenderCaps::XboxShadows`, `RenDevHasXboxShadows()` (`UnRenDev.h`, `UnRenderResource.cpp`); in
+`UnShadowProjector.cpp` the two `_XBOX && NEW_SHADOW_BLEND` sites (caster colour in
+`FShadowBitmapRenderInterface::SetMaterial`, the filter in `UShadowBitmapMaterial::Get`) take the Xbox branch at
+run time for a device with the capability, the PC branch otherwise; both bodies unchanged (`RI->InsertFence()`
+stays `_XBOX`). The PC-only 256x256 size override is left alone (every player shadow is `SD_Normal` = 256 on both).
+Driver: `UseXboxShadows` (default True; `-noxboxshadows`/`-xboxshadows`, console `XBOXSHADOWS [0|1]`); the
+capability is reported while the `PS_Blur` family is drawn (post-processing on: `PS_ShadowBlur` shares its
+handler), so `-nopostprocess` also gives PC shadows.
+
+**Numeric check, end to end** (`GLSHADOWCHECK`, `UC2GLShadowCheck.cpp`): both render targets of every shadow
+material are read back after a frame and the shadow texture is recomputed on the CPU from the caster target
+with the formula of the branch the engine took. Player shadow (Anubis) in DM-DeepCore, DM-Praxis, DM-Azure, same
+numbers each time:
+
+```
+branch=pc   caster values (red/alpha:texels): 127/a255:55579 127/a55:9957;  shadow min=27 neutral=126; recomputed: largest error 0.00 of 255
+branch=xbox caster values (red/alpha:texels): 127/a255:55586 200/a255:9950; shadow min=55 neutral=128; recomputed: largest error 0.56 of 255
+```
+
+So the engine's Xbox branch runs as specified (caster drawn in ShadowDarkness grey 200 on 127; four horizontal
+taps at -1, -1/3, +1/3, +1 texel, weights 1/6, 2/6, 2/6, 1/6, negated) and the PC branch too (exactly). The shadow
+texture's core is 55 instead of 27 and its neutral 128 instead of 126: after the 2x modulate the floor under the
+shadow keeps twice the light it keeps on PC (43% instead of 21% at full attenuation), and the PC's whole projection
+square was 1.6% darker than its surroundings, the Xbox's is not.
+
+**Pictures** (`<WorkUC2>/logs/m7b/`, 1280x720, time frozen, the same frame drawn with `XBOXSHADOWS 0` then `1`;
+controls: two frames of the same branch 0.5 s apart): `fx-shadow-deepcore-pc.png` / `-xbox.png` (DM-DeepCore, lit
+metal floor under the wire-mesh projector, camera above and in front of the pawn), 2x crop
+`m7b-shadow-deepcore-pc-xbox-2x.png`, difference x8 `m7b-shadow-deepcore-diff-x8.png`. Mean difference PC vs Xbox
+0.305 (5.9% of pixels above 2 levels) against 0.023 / 0.024 between two frames of one branch. What I see: the
+shadow of the head, horns and gun on the floor in front of the pawn is a dark, soft silhouette on PC and a lighter,
+slightly crisper one with the Xbox filter; nothing else in the frame changes. Per pixel (pawn excluded) the PC
+floor is more than 10% darker than the Xbox one in 8,047 pixels and more than 20% darker in 355; the darkest
+part of the shadow is under the pawn's body, out of view. The same pairs in DM-Praxis (`fx-shadow-praxis-*`) and
+DM-Azure (`fx-shadow-azure2-*`) show the shadow on dark floors, where the difference is hard to see.
+**No Xbox reference**: the owner's xemu pictures (`temp/`) show the player but no shadow I can make out on those
+dark floors.
