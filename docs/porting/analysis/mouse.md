@@ -261,3 +261,33 @@ updated for D-6 (mouse 10.012 units/count within 2% and `MouseLookInvert`; pad d
 "both" pad turn held 0.4 s, since with the Xbox's acceleration a 1 s full-stick turn passes 180 degrees and wraps):
 keyboard 16, mouse 18, text 7, pad 33, both 14 checks, all PASS, 0 Critical (binary before the migration; the
 migration acts only on a kept User.ini, and these runs start from DefUser.ini).
+
+## The switch: what D-6 needs in the asset tree and the web (proposal for the coordinator)
+
+What needs a rebuilt package: the mouse separation, the pad-only adhesion/auto-centre, the camera under the mouse,
+lock-on with a mouse, the stick scale on PC, keys as stick, the tutorial's invert: all in `UCGameplay.u`. Engine.u
+and every other package are unchanged (script-diff: only UCGameplay "different"; GUI.u = D-4's, already in the
+tree). The engine-side parts (User.ini migration, `-maxfps`, the test channel) arrive with the next build.
+
+The ini and the package are COUPLED: the D-6 `DefUser.ini` binds the mouse to `aTurn/aLookUp`, which the SHIPPED
+`UCPlayerInput` overwrites from the stick, so with the shipped `UCGameplay.u` the mouse would not turn the view at
+all (and the engine's migration moves kept User.inis to those bindings too). So merging D-6 and switching
+`UCGameplay.u` must happen together, natively and on the web.
+
+Proposal (the D-4 way, one more package):
+1. `tools/dev/mkassets-uc2.sh` with `UC2_SCRIPTS=<WorkUC2>/run/d6-make/System` (or a script build of merged main)
+   and `UC2_SCRIPT_PACKAGES="GUI UCGameplay"`: the shipped `System/UCGameplay.u` moves to
+   `assets/uc2-shipped/System/`, the rebuilt one comes in; `System/SCRIPTS.txt` lists both.
+2. Frontend: regenerate `targets/uc2/file-manifest.json` and `dependency-manifest.json` for that tree (one entry
+   changes: `system/ucgameplay.u`, 1,579,260 -> 1,584,207 bytes in this build; the dependency check passes: 208
+   packages, all resolved, `logs/d6/web/`); `Core.u` is untouched, so the target's fingerprint holds.
+3. UCGameplay IS a server package (`Default.ini` `ServerPackages=UCGameplay`): a client and the server it joins
+   must have the same `UCGameplay.u`. The rebuilt file keeps the shipped GUID and adds a generation (conformed); a
+   peer with the shipped file and one with the rebuilt file were not tested together and are not a goal (M14).
+   In practice: native dedicated servers and every client (native, web) switch at once; an old native run tree
+   (or an old web cache, if the frontend's manifest does not change the file's identity) must not be mixed with new
+   ones. `tools/dev/m14-scripts-check.sh` net (dedicated2 + travel) on the rebuilt tree is the check (step 6).
+4. The load-time patcher skips the rebuilt `UCGameplay.u` (its Epic patches are in the source, M14), and still
+   patches the shipped packages.
+Without the switch (shipped `UCGameplay.u`, D-6 engine and inis) the game would have NO mouse look: do not merge the
+ini without the package.
