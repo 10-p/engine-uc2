@@ -333,3 +333,25 @@ apart; 1440x1080 waits 70 s to settle.
 rule came (at most one game run of an agent at a time; do not judge timing failures above a load of ~16). It runs
 the two bindings at once, so it was stopped by PID during the effects check (my processes and their Xvfb only).
 `M11_SERIAL=1` now makes it run them one after the other; the rest (effects, m6, fallbacks, movies) is rerun so.
+
+## Step 9. The measurement on the final binary (2026-10-08 00:40; `uc2.bin` 47d2cd24, code `7f58c55`)
+
+`tools/dev/pp-scale.sh`, one game run at a time. Lines from `logs/pp/final.txt`, `logs/pp2/final.txt` (00:00, load
+60: only the lines that were valid) and the reruns of the timing-invalid ones at a load of 13-24 with the guarded
+script (`logs/pp/rerun-glow.txt`, `rerun-dof.txt`, `rerun-radial.txt`):
+
+| Check | 640x480 | 1440x1080 new (old) | 2880x2160 new (old) | Line |
+|---|---|---|---|---|
+| glow width, % of height | 8.54 | 8.54 (4.17) | 8.33 (3.12) | PASS (2880: final.txt; 640/1440: rerun-glow.txt) |
+| glow peak, levels | 12.88 (final.txt 12.63) | 12.95 (21.75) | 13.08 (19.72) | PASS |
+| depth of field sigma, 480-line px | 3.10 | 3.15 (1.45) | 3.10 (0.70) | PASS (1440: final.txt; 2880: rerun-dof.txt) |
+| radial blur, equivalent inset, 640x480 px | 9.10 | 9.20 (4.70) | 9.20 (2.30) | PASS (1440: final.txt; 2880: rerun-radial.txt) |
+| concussion sigma (new / reference 0, same frame) | 3.20 / 3.20 | 3.10 / 3.25 | 3.15 / 3.00 | PASS blur, blur-setting (final.txt) |
+| 16:9 AutoFOV on (1920x1080): glow width, peak | | new 8.33%, 12.70; main 4.17%, 20.47 | | PASS aspect |
+| self-test | | 15/15 | 15/15 (5x5 samples) | PASS selftest |
+| identity 640x480 vs main | 0 differing pixels outside the spinning pickups (twice) | | | PASS identity |
+
+Sheets for the owner (`tools/dev/pp-scale.sh pp sheets`): `logs/pp/sheets/` - per effect `<effect>-1440x1080.png`
+and `-2880x2160.png` (640x480 | before | now, whole pictures at the 480-line scale) and `-detail.png` (a part
+enlarged twice from each picture's own resolution), and `aspect-1920x1080-autofov*.png` (main's binary and this
+one, 16:9 with AutoFOV on and the UI box).
