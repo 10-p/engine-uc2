@@ -217,6 +217,18 @@ void CMainLoop::RunLoop()
 	if( !GIsBenchmarking && IncludeMessaging )
 	{
 		FLOAT MaxTickRate = Engine->GetMaxTickRate();
+		// D-6: -maxfps=<n> caps the frame rate of a game that has no cap of its own (a standalone game or a
+		// listen server: GetMaxTickRate returns 0 there). Tests use it for frame-rate-dependent behaviour
+		// (Epic's integer view rotation per tick, the lazy camera) without a GPU: the null renderer otherwise
+		// runs at a thousand frames a second.
+		static FLOAT MaxFps = -1.f;
+		if( MaxFps < 0.f )
+		{
+			MaxFps = 0.f;
+			Parse( appCmdLine(), TEXT("MAXFPS="), MaxFps );
+		}
+		if( MaxFps > 0.f && (MaxTickRate <= 0.f || MaxFps < MaxTickRate) )
+			MaxTickRate = MaxFps;
 		if( MaxTickRate>0.0 )
 		{
 			FLOAT Delta = (1.0/MaxTickRate) - (appSeconds()-OldTime);
