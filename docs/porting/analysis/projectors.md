@@ -260,3 +260,15 @@ e4ce0a5 is built from `git archive` in `<WorkUC2>/run/m7b-mainsrc/build-native`)
 pinned DM-Deadbolt `-nopostprocess` picture against main's binary (`pinned-compare.py`); `verifyclasses`.
 Claims still from reading only: that the Xbox ignores the base opacity of masked surfaces under a projector
 (step 3, point 3: not seen on screen).
+
+## Step 5. Gate runs (2026-10-07, from 22:55)
+
+- `./ucc-bin verifyclasses` (run tree m7b, binary of this branch, capped 2G): exit 0, `All native class layouts
+  match` (no script-mirrored class changed: `FRenderCaps` is a plain C++ struct; the device's new members are in a
+  native-only class).
+- Pinned DM-Deadbolt `-nopostprocess` (`tools/dev/m12/deadbolt-pinned.scen` through `m10-controls.sh --file`, run
+  trees m7b-pin = this branch, m7b-pinmain = main's commit e4ce0a5 built from `git archive`): both PASS, same view
+  `loc=(1531.9,3111.5,-34.1) rot=(0,-40880,0)`; `pinned-compare.py`: `OK 100.000 91.4 32.95` (static part 100.000%
+  within 2 levels); `0 GL errors in 350 frames`. With post-processing off the shadow capability is off (it needs
+  the `PS_Blur` family), DM-Deadbolt has no projector and terrain stays one layer per pass by default: nothing of
+  M7b is on there, and nothing changed.
