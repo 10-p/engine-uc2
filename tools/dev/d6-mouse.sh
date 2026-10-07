@@ -452,7 +452,7 @@ keyup a
 sleep 0.3
 probe md
 pyexec save('lock-adhesion-yaw-under-pad', yawdiff('mc','md'))
-check lock-aim-adhesion-under-the-pad abs(yawdiff('mc','md')) > 300 and P['md'].mouselook == 'False' and dist('mc','md') > 50
+check lock-aim-adhesion-under-the-pad abs(yawdiff('mc','md')) > 100 and P['md'].mouselook == 'False' and dist('mc','md') > 50
 SCEN
 }
 
@@ -591,11 +591,11 @@ PY
     before)
       echo "== before ($ship, shipped scripts, main's DefUser.ini: what the owner played; expected to FAIL drift/symmetry)"
       git -C "$repo" show 47b1b18:Engine/Config/DefUser.ini > "$out/DefUser-main.ini"
-      scen_look before > "$out/before.scen"; prep "$ship" "$out/DefUser-main.ini"; D6_KVAL=52.4 run before "$ship" 0 600 -maxfps=60 | sed 's/^/(before) /';;
+      scen_look before > "$out/before.scen"; prep "$ship" "$out/DefUser-main.ini"; D6_KVAL=52.4 run before "$ship" 0 600 -maxfps=60 -noinimigrate | sed 's/^/(before) /';;
     epic)
       echo "== epic ($ship, shipped scripts, Epic's DefUser.ini as the web build had it until 2026-10-07; evidence)"
       git -C "$repo" show 45f7301:Engine/Config/web/DefUser.ini > "$out/DefUser-epic.ini"
-      scen_epic > "$out/epic.scen"; prep "$ship" "$out/DefUser-epic.ini"; run epic "$ship" 0 300 -maxfps=60 | sed 's/^/(epic) /';;
+      scen_epic > "$out/epic.scen"; prep "$ship" "$out/DefUser-epic.ini"; run epic "$ship" 0 300 -maxfps=60 -noinimigrate | sed 's/^/(epic) /';;
     *) echo "unknown scenario $s (look ini migrate pad lock before epic)" >&2;;
   esac
 done

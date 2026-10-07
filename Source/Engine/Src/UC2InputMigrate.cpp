@@ -92,6 +92,12 @@ static void UC2ApplyMigration( const FUC2IniMigration& M )
 ENGINE_API void UC2MigrateUserIni()
 {
 	guard(UC2MigrateUserIni);
+	// -noinimigrate: leave User.ini as it is (A/B comparisons with what an earlier build did)
+	if( ParseParam( appCmdLine(), TEXT("NOINIMIGRATE") ) )
+	{
+		debugf( NAME_Init, TEXT("Input: -noinimigrate: User.ini values from before D-6 are kept") );
+		return;
+	}
 	for( INT i=0; i<ARRAY_COUNT(GUC2InputMigrations); i++ )
 		UC2ApplyMigration( GUC2InputMigrations[i] );
 
