@@ -225,3 +225,38 @@ would only brighten blend zones where a layer saturates under strong vertex ligh
 that. **Decision: `UseTerrain3Layer=False` by default** (the owner's rule: implement where the Xbox looks
 different; here it does not), kept as a switch because it saves draw calls (`m7b.sh terrain` prints them) and
 because it is the exact Xbox structure.
+
+## Checkpoint, 2026-10-07 22:55 (after a usage-limit stop; everything known so far)
+
+State per item (branch `m7b-projectors`, 7b07076 and the docs commit after it):
+
+- **Shadows (item 3): implemented, default on, numerically checked + seen.** `tools/dev/m7b.sh m7b shadow`
+  (desktop, rerun after the criterion change; `logs/m7b/m7b-desktop-shadow2.txt`): `shadow-filter` PASS (PC branch
+  recomputed exactly, 0.00/255, core 27; Xbox branch 0.56/255, core 55); `shadow-picture` PASS with the pixel
+  measure `tools/dev/m7b-darker.py` (the earlier "mean difference with the pawn masked" criterion failed on a
+  rerun because the mask hides most of the shadow): PC frame more than 10% darker than the Xbox frame in 10,744
+  pixels (more than 20%: 3,094), the Xbox frame darker than PC in 5,115 (the sharper edge), two PC frames 0.
+  Same on the GL4ES twin (`logs/m7b/m7b-twin2.txt`): filter PASS with identical numbers, 10,769 / 1,337 pixels.
+  **Shared code with the post-process work:** the Xbox branch draws through `UPSBlurMaterial` with
+  `BLUR_SHADOW` (the driver's `SetMatState_PS_Blur`, which selects `PS_ShadowBlur`), four `UTexMatrix` offsets
+  and one `FScreenPrimUtil` tile, into the shadow material's own two 256x256 `FAuxRenderTarget`s (not the
+  render-target pool, not `FilterCopyRenderTarget`). The capability is reported only while the `PS_Blur` family
+  is drawn, i.e. with post-processing on. A change to `FScreenPrimUtil` or the `PS_Blur` handler would reach it.
+- **Projectors (item 1): level-static projectors implemented (Xbox batching at load), default on, numerically
+  checked against the PC path + seen.** Desktop `m7b.sh` (`logs/m7b/m7b-desktop.txt`, run 1, 11 PASS 0 FAIL):
+  census 24/24 and 8/8 batched; projector-agree (DM-DeepCore floor) mean 0.173, largest 4; projector-differ
+  (CTF-Recoil grid) mean 9.0; draw calls per frame PC/Xbox 85/81 (DM-DeepCore camera), 81/75 (CTF-Recoil).
+  Twin (`m7b-twin2.txt`): agree mean 0.014 largest 3, differ mean 8.7, twin vs desktop pictures mean 1.1-1.9.
+  Dynamic projectors stay on the PC path (reason in step 3). Not done: OD-Prism (no stable camera found: the
+  pawn falls through the prism roof; its pictures are not comparable), DM-Meridian (static meshes).
+- **Terrain (item 2): implemented as a switch, default off (no visible difference).** Desktop and twin
+  `m7b.sh terrain` PASS (one vs three layers per pass: largest 2 levels on the DM-Ascension ground; draw calls
+  60 -> 56 CTF-Judgment, 53 -> 51 DM-Ascension on the desktop).
+
+What remained at this checkpoint (the gate): Windows and wasm-perf builds; `tools/dev/m7-effects.sh` on a run
+tree of mine; `tools/dev/o9-nvidia.sh` (`O9_TREE=m7b-o9`, main's binary as `uc2-before.bin`: main's commit
+e4ce0a5 is built from `git archive` in `<WorkUC2>/run/m7b-mainsrc/build-native`); `tools/dev/m11-twin.sh`
+(`M11_DESKTOP_TREE=m7b-m11 M11_TWIN_TREE=m7b-m11t`; it now expects 97 fragment shaders and 485 programs); the
+pinned DM-Deadbolt `-nopostprocess` picture against main's binary (`pinned-compare.py`); `verifyclasses`.
+Claims still from reading only: that the Xbox ignores the base opacity of masked surfaces under a projector
+(step 3, point 3: not seen on screen).
