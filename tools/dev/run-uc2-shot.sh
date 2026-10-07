@@ -22,7 +22,8 @@
 #   UC2_AA=1             keep the device's anti-aliasing (O-8: on by default since M11); without it every run gets
 #                        -glnoaa, so pictures compare with the references made before anti-aliasing existed
 #
-# Everything runs inside <WorkUC2>/bin/capped 2G (CLAUDE.md, "Running anything: memory ceiling, always").
+# Everything runs inside <WorkUC2>/bin/capped 2G (CLAUDE.md, "Running anything: memory ceiling, always");
+#   UC2_CAP=3G           another ceiling (pp-scale: 3G for 2880x2160 and larger windows)
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
@@ -96,7 +97,7 @@ PY
 fi
 wait \$pid
 INNER
-"$work/bin/capped" 2G "$secs" -- xvfb-run -a -s "-screen 0 1280x720x24" bash "$inner" "$@"
+"$work/bin/capped" "${UC2_CAP:-2G}" "$secs" -- xvfb-run -a -s "-screen 0 1280x720x24" bash "$inner" "$@"
 rc=$?
 rm -f "$inner"
 n=0
