@@ -33,6 +33,10 @@ limit=${JIT_LIMIT:-1.0}
 # back, the camera never shortened by a wall (measured: arm 205-214 units in all four segments); the view pitched at
 # -1400, the pad's auto-centring target (AUTOPITCH_THIRDPERSON), so the pad's runs keep their view still too.
 place=${JIT_PLACE:-1977.8 583.7 -34.1 33000 -1400}
+# JIT_VIEW=1p: first person (ToggleThirdCam after the placement); the screen measures then say nothing (the pawn is
+# behind the camera), the slope b of jit-analyze.py does (the eye computed before or after the pawn's move).
+firstperson=""; [ "${JIT_VIEW:-}" = 1p ] && firstperson=$'chan exec ToggleThirdCam\nsleep 1'
+
 m10=$repo/tools/dev/m10-controls.sh
 mkdir -p "$out"
 [ -x "$work/run/$tree/System/uc2.bin" ] || { echo "no run tree $work/run/$tree (tools/dev/mkrun-uc2.sh)" >&2; exit 2; }
@@ -75,6 +79,7 @@ sleep 1
 chan exec NETPLACE LocalPlayer $place
 sleep 1.5
 probe placed
+${firstperson}
 check jit-placed abs(P['placed'].loc[0] - ($(echo "$place" | cut -d' ' -f1))) < 2 and abs(P['placed'].loc[1] - ($(echo "$place" | cut -d' ' -f2))) < 2
 SCEN
   if [ "$input" = pad ]; then

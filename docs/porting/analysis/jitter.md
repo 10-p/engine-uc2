@@ -161,3 +161,63 @@ the pawn is on average, a chart of its height on the screen per frame) and `stri
   (every long frame throws the pawn ahead, every short one drops it back: up to 25 px between two frames)
 - after:  40:+5.4 55:+5.7 70:+0.2 40:-3.7 70:-6.4 40:-4.7 40:-1.1 55:+4.1 70:+5.9 40:+3.6 70:-3.1 40:-5.9
   (a smooth sine whatever the frame length: the walk bob)
+
+## Step 4 (2026-10-08): first person, the browser, the regressions, the builds
+
+First person (`JIT_VIEW=1p tools/dev/jit-trace.sh`, keyboard + mouse, uneven; `logs/jit/trace/1p-*`): **b = 0.000 in
+every segment before AND after** (measured): `CalculateAimInfo` calls `PlayerCalcView` only in third person
+(`UCGameplay.cpp:176`, `bThirdPerson && !bIsZoomed`), so the first view of a first-person frame is the drawing's,
+after the move. Nothing to fix there; it also confirms the cause is that one call. (The screen columns of a 1p trace
+mean nothing: the pawn is behind the camera.)
+
+Browser (frontend clone, uc2 branch; spec `packages/e2e/uc2-wasm-jitter.spec.js`, opt-in line in
+`playwright.config.js`, ufrontend commit aeaacc4, local): this worktree's wasm-perf (`SDLLaunch.wasm` sha256
+b559394aa3525c79...; the same before and after every run: `logs/jit/web/engine-proof-*.txt`); sound to a null sink
+`uc2jit` loaded and unloaded by module index; one harness machine-wide (checked first); `bin/capped 6G 1500 -- node
+packages/e2e/tools/e2e-mem-guard.mjs --max-gb=14 -- --target uc2 uc2-wasm-jitter.spec.js`; mem-guard peak 12.2 GB
+machine-wide each time. Canvas 1024x768 (AutoFOV 90 = 4:3), the browser's own frame times.
+- before: serve-web from the stock assets (UCGameplay.u 17c1750c), `UC2_E2E_JITTER_EXPECT=defect`: **1 passed**
+  (`logs/jit/web/e2e-jitter-before-2.txt`): frame times 20.8-57.0 ms; judder RMS 4.07 / 7.34 / 11.42 / 10.91 px (fwd,
+  back, right, left), b = 1.000 / 1.000 / 1.079 / 0.951 (jit-analyze.py on the same lines, pawn + bob: 1.000, 1.000,
+  0.999, 0.999). The first try ran W 1.6 s and D ran into a wall (0 steady frames): the spec now runs the native
+  scenario's four 1.3 s segments in its order.
+- after: serve-web from `run/jit-webassets` (the asset tree hard-linked, only `System/UCGameplay.u` = this branch's,
+  9ca783e7...) with manifests regenerated into `logs/jit/web/` (1,224 files; against the committed manifest only
+  `system/ucgameplay.u` differs; deps: 208 packages, all resolved), `EXPECT=fixed`: **1 passed**
+  (`logs/jit/web/e2e-jitter-after.txt`; the engine's `ScriptPatcher: UCGameplay ... rebuilt from source` line proves the
+  served package): frame times 21.7-53.8 ms; judder RMS 0.78 / 0.50 / 0.56 / 0.53 px, b = -0.000 / 0.000 / -0.001 /
+  -0.001 (pawn + bob); with the bob taken out: jitter 0.03 px, judder 0.02-0.03 px in all four.
+- boot spec once on the "after" assembly: `uc2-wasm-boot.spec.js` **4 passed (2.8m)** (`logs/jit/web/e2e-boot.txt`;
+  the D-6 mouse test: 10 / 10.0125 / 10.01 / 10.01 units per pixel, the view still after the mouse stops).
+
+Regressions (native, run tree `jit-fix`):
+- `ucc-bin verifyclasses`: "All native class layouts match" (`logs/jit/verifyclasses-fix.txt`).
+- `D6_TREE=jit-fix D6_SHIP_TREE=jit-ship tools/dev/d6-mouse.sh look ini migrate pad lock before`: **68 PASS, 1 FAIL**
+  (`logs/jit/d6-mouse-fix.txt`): every camera check passes (camera does not lag the circle, no drift after the circle
+  or a flick, follows a flick at once); `before` evidence fails where it should. The 1 FAIL is
+  `lock-pulls-back-after-the-mouse-stops`, and it depends on the random spawn, not on this change: that run spawned at
+  (1977.8, 583.7, -34.1) yaw 33000; the lock scenario re-run alone passed on both trees (other spawns, `logs/jit/
+  d6-lock-jit-*`), and pinned to that spawn with NETPLACE it fails identically on main's scripts and on the fix, twice
+  each (offset 1801 -> 1801: no pull-back at all; `logs/jit/d6-lock-pinned/`). Note for the coordinator: the check is
+  spawn-sensitive (that spot is a PlayerStart); no expectation was changed. (The fix cannot act there: the pawn stands
+  still, so `Pawn.Location == OldPawnLocation` and PlayerCalcView behaves exactly as before.)
+- `M10_TREE=jit-fix tools/dev/m10-controls.sh`: keyboard 16, mouse 18, text 7, pad 33, both 14: **all PASS**, 0
+  Critical (`logs/jit/m10-fix.txt`).
+- Scripts: `script-build.sh --tree jit-make compare`: every package 0 problems except UCGameplay 19 (was 18 since
+  D-6/SaveConfig: + `PlayerCalcView`; the others in the changed code: `MouseLookCamera`, the new
+  `MouseCameraLeftBehind`, `UCPlayerInput.MouseCameraTime`) and UCMenu 5 (D-9's, unchanged)
+  (`logs/jit/script-compare.txt`, `logs/jit/jit-make-compare.txt`).
+
+Builds at the final engine code (nothing in `Source/` changed after 12:22): native `bin/capped 6G 3600 -- cmake --build
+build-native -j4` rc 0 (`logs/jit/build-native-4.log`); wasm-perf `source env.sh && bin/capped 4G 1200 -- cmake
+--preset wasm-perf` + `bin/capped 6G 7200 -- cmake --build build-wasm-perf -j4` rc 0, 0 errors
+(`logs/jit/build-wasm-perf-1.log`); windows `bin/capped 4G 1200 -- cmake --preset windows` + `bin/capped 6G 5400 --
+cmake --build build-windows -j4` rc 0, 0 errors (`logs/jit/build-windows-1.log`). No ceiling was hit.
+
+## The switch (for the coordinator)
+
+`UCGameplay.u` only (a SERVER package: every native tree, dedicated server and web client switch together). Rebuild it
+from merged main (`tools/dev/script-build.sh`), overlay it in the asset tree as for D-6/SaveConfig
+(`mkassets-uc2.sh`, `UC2_SCRIPT_PACKAGES="GUI UCGameplay UCMenu"`), regenerate the frontend manifest (only
+`system/ucgameplay.u` changes). The engine part (FRAMETRACE, `-framepattern`) is test tooling, quiet by default; the
+fix itself needs no engine change, but the jitter spec needs an engine with FRAMETRACE.
