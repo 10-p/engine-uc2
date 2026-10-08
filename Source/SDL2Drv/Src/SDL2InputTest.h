@@ -21,6 +21,9 @@
 	                                              probe's "other" lines) to <distance> units from ours, at <yaw>
 	                                              degrees from our view's yaw, at our height
 	  aim <i>                                     D-6 lock-on set-up: turn our view to the i-th other pawn
+	  keys <tag> <Key> [<Key>...]                 D-9: one "SDL2Input: keys <tag> <Key>="<binding>" ..." line
+	                                              with the first viewport's bindings of those keys
+	The probe also logs "probe4 <tag> caption=..." (D-9): the focused control's Caption.
 	The test tools/dev/m10-controls.sh writes these and reads the log.
 =============================================================================*/
 

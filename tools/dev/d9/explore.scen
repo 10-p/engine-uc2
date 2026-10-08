@@ -1,0 +1,66 @@
+# D-9 exploration: main menu -> OPTIONS -> KEYBOARD / MOUSE, pictures of the page.
+wait OpenMenu \[UCMenu.UC2MainMenu\] 90
+sleep 3
+focus
+move 140 146
+sleep 0.5
+move 140 299
+wait Mouse hover selects UC2MainMenu 5
+sleep 0.5
+key Return
+expect x-options-opens OpenMenu \[UCMenu.UC2Settings_Main\] 15
+wait OpenMenu \[GUI.GUIMessageBox\] 20
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
+key Escape
+wait CloseMenu \[GUIMessageBox\] 10
+sleep 2
+shot settings
+seek 8 'KEYBOARD' in P['_'].caption ;; key Down
+key Return
+expect x-keys-page-opens OpenMenu \[UCMenu.UC2Settings_Keys\] 15
+sleep 3
+probe k0
+shot keys
+key Right
+key Right
+sleep 0.5
+probe k0b
+shot keys-sens
+key Down
+sleep 0.5
+key Down
+sleep 1
+probe k1
+shot keys-list
+key Return
+sleep 1
+shot keys-capture
+key j
+sleep 1
+probe k2
+shot keys-bound
+key Right
+sleep 0.3
+key Down
+sleep 0.3
+key Return
+sleep 0.5
+key c
+sleep 1
+shot keys-swap
+key Down
+key Down
+key Down
+key Down
+sleep 0.5
+key Return
+sleep 0.5
+key Escape
+sleep 0.5
+key Return
+sleep 0.5
+key BackSpace
+sleep 1
+shot keys-clear
+keys k3 J W Up S Down C Space Tab

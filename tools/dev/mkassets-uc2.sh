@@ -67,7 +67,9 @@ link_cooked Textures/Movies
 # (never deleted), and SCRIPTS.txt in the tree says which packages are rebuilt. GUI is not a server package, so
 # shipped and rebuilt peers still play together; Core.u (the frontend's fingerprint) stays the shipped file.
 rebuilt_dir=${UC2_REBUILT_SCRIPTS:-$here/../assets/uc2-scripts/System}
-rebuilt_pkgs=${UC2_REBUILT_PACKAGES-GUI UCGameplay}
+# D-9 adds UCMenu.u (the KEYBOARD / MOUSE settings page; not a server package). A package missing from rebuilt_dir
+# keeps the shipped file (the note below), so the list may run ahead of the copies.
+rebuilt_pkgs=${UC2_REBUILT_PACKAGES-GUI UCGameplay UCMenu}
 shipped_dir=$here/../assets/uc2-shipped/System
 : > "$dst/System/SCRIPTS.txt"
 for pkg in $rebuilt_pkgs; do
