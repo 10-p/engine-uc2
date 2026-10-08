@@ -199,3 +199,50 @@ UCMenu: `different, exports 10100 (shipped) / 10464 (rebuilt), byte-identical 99
 - findings: `UC2Settings_Main` defaults gain `btn_Keys = KeysSettingsButton`; `ConnectionFailureMenu.ProbeMask` (M14's,
   as before).
 GUI.u and UCGameplay.u rebuild byte-identical to the asset tree's: the package to switch is UCMenu.u only.
+
+## Step 4 (2026-10-08): regressions, the browser, and two more test scenarios
+
+- Page: DEFAULTS with a DefUser.ini that has no `[Engine.Input]` (fewer than 20 keys found) keeps every key and says
+  "DEFAULT KEYS NOT FOUND" instead of clearing them all (`nodefaults` scenario). A new action works once bound
+  (`actions`: from the pause menu PISTOLS := U; in the game E takes melee, U the pistols back: UC2's own RaceWeapon).
+- Native regressions (`logs/d9/reg/`, run tree d9 = asset tree + the rebuilt UCMenu.u; binary of 84c3082, i.e.
+  before the Core fix, and the UCMenu.u of c401614; neither difference reaches these flows): `m10-controls.sh`
+  keyboard 16, mouse 18, text 7, pad 33, both 14 PASS; `d3-profiles.sh` ALL PASS (27); `d5-text.sh` ALL PASS;
+  `sc-saveconfig.sh u g m` ALL PASS (69); `d6-mouse.sh` 67 PASS, 2 FAIL, both in `lock`
+  (`lock-pulls-back-after-the-mouse-stops`, `lock-aim-adhesion-under-the-pad`) at load 9-16. Reruns of `lock`: on d9
+  11/1 then 12/0; on `d9-base` (the asset tree's own UCMenu.u, no D-9 script) 12/0 then 11/1 (adhesion): the lock
+  checks are flaky on main too (bot positions); D-9 changes nothing in a match (the GUI controller's key path runs
+  only while a menu is up; UCGameplay.u is the asset tree's, byte for byte).
+- On the FINAL binary (e2b3a8c's engine code; nothing in `Source/` changed after it) and the final UCMenu.u
+  (sha256 7ecefc43...): `d9-rebind.sh menu match restart nodefaults pad actions look` **132 PASS, 0 FAIL**
+  (`logs/d9/final/summary.txt`); `m10-controls.sh` 5/5 PASS (`logs/d9/final-m10.txt`); `sc-saveconfig.sh u w` ALL
+  PASS (44, the wasm ucc under Node included); `ucc-bin verifyclasses`: "All native class layouts match".
+- Builds: native (`build-native-0..3.log`), windows (`build-windows-0.log` full, `-1.log` incremental with the Core fix:
+  it compiled UnObj.cpp at the new line numbers), wasm-perf (`build-wasm-perf-0.log`, from scratch after the fix):
+  rc 0, 0 `error:` each; SDLLaunch.wasm sha256 d2113b3fb1a584ac...
+- Browser: web asset tree `run/d9-webassets` (hard links to the asset tree, only `System/UCMenu.u` replaced; the asset
+  tree's inode untouched), manifests regenerated with the glue's tools into `logs/d9/web/` (1,224 files; against the
+  committed `targets/uc2/file-manifest.json` only `system/ucmenu.u` differs; deps: 208 packages, 1,804 references,
+  all resolved); `yarn build --target uc2 --assets ... --manifest ... --deps ... --engine-artifact <this worktree>`;
+  sha256 of `serve-web/SDLLaunch.wasm` = this build's before and after each run (`logs/d9/e2e-engine-proof*.txt`);
+  sound to the null sink `uc2d9`. New opt-in spec `uc2-wasm-keys.spec.js` (ufrontend 48657a4, local; README section
+  "Keys and mouse settings in game"): run 1 17/18 (its `getall UCPlayerInput` answer came back empty: the check
+  now reads User.ini, and the page's own line proves the running value), run 2 **1 passed, 19/19 steps**
+  (`logs/d9/e2e-keys-2.txt`): main menu -> OPTIONS -> KEYBOARD / MOUSE, sensitivity 3.0, JUMP / DODGE := J, Escape
+  saves (`J=SmartJump 0`, `Space=`, `MouseLookSensitivity=3.000000` in the engine's User.ini), the daemon stores
+  User.ini in IndexedDB, a new tab: User.ini back, J jump/dodge, Space free, the page shows J and 3.00. Mem-guard peak
+  11.8 GB machine-wide (9.4 GB in use before it started). `yarn lint` (after Prettier on the spec) and `yarn test` pass.
+  My mistake: I removed the null sink with `pactl unload-module module-null-sink`, which unloads every null-sink
+  module, not only mine (by index would have been right); afterwards only the desktop's ALSA sink was listed.
+
+## Gate (2026-10-08, branch d9-rebind)
+
+(a) Builds as in step 4 (native, windows, wasm-perf rc 0, 0 errors); `tools/dev/script-build.sh --tree d9-make`
+`Success - 0 error(s), 85 warning(s)`.
+(b) `tools/dev/d9-rebind.sh`: 132 PASS, 0 FAIL.
+(c) m10 5/5; d6 67/2 (lock flake, step 4); sc 69 + 44; d3 ALL PASS; d5 ALL PASS; browser keys spec 1 passed.
+(d) Script: UCMenu only (step 3's compare). Engine: `Source/GUI/Src/UnGUICore.cpp:1025-1029,1158-1194` (raw capture),
+`Source/Core/Src/UnObj.cpp:4484-4490` (conform import sort), `Source/SDL2Drv/Src/SDL2InputTest.cpp:324-338,498-515`
+(test channel). Package to switch: `UCMenu.u` (`run/d9-make/System/UCMenu.u`, not a server package);
+`tools/dev/mkassets-uc2.sh` now lists it.
+(e) The list as shipped: the row log of step 2 (`KeyBinds: rows (loaded)`), in the report.
