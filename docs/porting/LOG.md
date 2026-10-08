@@ -473,3 +473,16 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   sc-saveconfig 91/0; d6-mouse 69/0; d3-profiles, d5-text PASS; controls 5/5; browser boot 4/4, audio 3/3, saves
   1/1, keys 1/1. Republished to the owner's preview. Owner choices now on that page: C/V order, Space dodge (bind
   Space to JUMP ONLY), conflict swap vs clear.
+- 2026-10-08 — **E-2 green (web multiplayer over WebRTC).** Merged `e2-webrtc` (9b63f3c): `Source/WebRTCDrv`
+  (web build only) ported from engine-ut2004 and adapted (UC2's standby clock fed per packet, a closed data
+  channel closes the connection, listen status for the glue, no per-tick sleep); web inis select
+  `WebRTCDrv.WebRTCNetDriver` (ConnectionTimeout 60); `Browse` turns the launcher's `<key>?connect` into a network
+  URL; frontend (ufrontend 6f2a302..4ac0d6d): uc2 `network` modes (p2p only), `serverName` from Avaris.ini (the
+  profile only overwrites the class default), notices, host/client milestones, `uc2-wasm-net.spec.js`.
+  Coordinator's run on main (`logs/coord/a13/summary.txt`): native/windows/wasm-perf build; verifyclasses; native
+  net dedicated1/dedicated2/listen/travel 32/0; browser boot 4/4, net 2/2 (host + guest: join, spawn, the guest's
+  walk seen on the host, a death replicated, a clean leave; the launcher's host/invite-link flow), audio 3/3; saves
+  and keys were stopped by the memory guard (11-14 GB in use from other work) and passed on a rerun (saves 1/1 with a
+  harness teardown complaint: a browser profile outlived the test -- spec hygiene, with the Enter-retry overshoot).
+  Not done: in-game server discovery (UC2's System Link uses UDP broadcast), two guests, travel over WebRTC.
+  Republished the owner's preview.
