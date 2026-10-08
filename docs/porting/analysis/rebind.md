@@ -137,3 +137,43 @@ written`, `Input.j=SmartJump 0 written`; back in the game J jumps (z -34.2 -> 41
 an FName keeps the spelling of its first use; config keys are case-insensitive, so this is cosmetic.)
 
 Next: the committed test `tools/dev/d9-rebind.sh`.
+
+## Step 2 (2026-10-08): the test, `tools/dev/d9-rebind.sh`, first full pass
+
+Scenarios (each a game run through `m10-controls.sh --file`, Xvfb inside `bin/capped 2G`; one PASS/FAIL line per check;
+the tree's User.ini is kept between `menu`, `match` and `restart`, so `match` and `restart` are restarts):
+- `menu` (software GL, 640x480, from the main menu): 46 PASS. The slider by mouse (a click at 3/4 of the bar gives
+  7.x, a click on its plus end +0.1) and CANCEL (Black, key E) undoing it; the slider by keyboard to 5.0; invert on; a
+  click on STRAFE RIGHT's key 2 captures and G goes in (Period, the cell's old key, is freed; G's `Grab` replaced); the
+  Enter that starts a capture is not the key (`Raw key capture: ignored the release of Enter`); S in a capture binds S
+  and does not move the selection; a conflict (MOVE FORWARD key 1 := S: MOVE BACK gets W); JUMP / DODGE := J; Escape
+  cancels a capture and the page stays; JUMP ONLY key 2 := mouse button 4 (X11 button 8); X, Delete, and Backspace in a
+  capture clear; the MENU row is fixed; leaving saves exactly 10 keys + the two mouse settings; the live bindings; the
+  pad keys and Escape are the same before and after (the transient profile's layout `Joy1=SmartJump 0 | Axis aUp...`
+  included); the page reopens with them; User.ini differs from DefUser.ini in exactly those 10 keys, the 22 pad keys are
+  DefUser.ini's, `MouseLookSensitivity=5`, `bInvertMouseLook=True`.
+- `match` (a new process: DM-Deadbolt, null renderer, 60 fps): 27 + 4 ini PASS. Everything back after the restart; J
+  jumps (z +74), Space does not, mouse button 4 jumps; S walks forward and W back; 500 mouse counts turn 2 x 10.012 per
+  count within 1% (sensitivity 5.0; D-6's measurement) and the mouse moving up looks down (invert); from the PAUSE menu
+  (OPTIONS, a "no profile" box, KEYBOARD / MOUSE) the page shows the saved keys and mouse; DEFAULTS (White, key Q) loads
+  DefUser.ini's keys and mouse 2.5/off, CANCEL (key E) brings the saved ones back, DEFAULTS again and leave: 10 keys
+  written back, Space jumps, J does not, the default turn per count, up looks up; User.ini = DefUser.ini again.
+- `restart` (a new process): the defaults persisted (live, User.ini, mouse 2.5 and its measured turn): 4 + 4 PASS.
+- `pad` (virtual SDL pad): D-pad to the list, pad A captures, pad B in a capture cancels it ("PAD BUTTONS ARE SET ON THE
+  CONTROLLER PAGE"), pad A + keyboard K (a swap: 1ST / 3RD PERSON gets Space), D-pad right = key 2 (`;` replaces
+  `ThrowWeapon`), pad B leaves and saves: 12 PASS.
+- `look`: pictures at 640x480 and 1920x1080 (the D-2 box: the page scales with the rest of the menus, sharp text) and in
+  a match from the pause menu (`logs/d9/rebind/look*.png`, `lookgame-*.png`).
+
+Found by the test and decided:
+- The console key during a capture opens the console: the Console is a script global interaction, processed before
+  the GUI controller (`UnInteractionMaster.cpp:160`), so the capture never sees it. Escape closes the console (D-7: its
+  release does not reach the page) and the capture is still waiting; a second Escape cancels it. Left so (the page's
+  "opens the console" refusal stays for a console that is not there); asserted by the test.
+- Replacing a cell frees the cell's old key (STRAFE RIGHT key 2 := G freed Period): the page binds the key you press
+  in that cell and the old one goes; a key elsewhere in the list is swapped instead.
+- The pad bindings are the profile's: the live `Joy1` is `SmartJump 0 | Axis aUp Speed=+1200.0` (KeyBinds.ini Layout_0's
+  "Jump") while DefUser.ini says `SmartJump 0`; the page neither reads nor writes `Joy*`, and the test compares them
+  before and after.
+- Footer: the slider's left/right glyphs stayed on the A button when the list took the focus (UpdateActionButton
+  changes only what it knows): the list puts A back. Punctuation keys are written as words (COMMA, PERIOD...).
