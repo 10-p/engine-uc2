@@ -2,7 +2,7 @@
 # D-9 check (native): the KEYBOARD / MOUSE settings page (UCMenu.UC2Settings_Keys): rebinding keys in game, the mouse
 # sensitivity slider and invert, persistence across a restart. One PASS/FAIL line per check on stdout, then a summary.
 #
-#   tools/dev/d9-rebind.sh [scenario...]        (default: menu match restart pad)
+#   tools/dev/d9-rebind.sh [scenario...]        (default: menu match restart nodefaults pad actions)
 #
 #   menu     from the main menu (OPTIONS -> KEYBOARD / MOUSE, software GL, 640x480): the page opens with DefUser.ini's
 #            keys; the slider by mouse (a click on the bar, on its plus end) and CANCEL; the slider by keyboard to 5.0;
@@ -19,8 +19,12 @@
 #            (invert); then from the PAUSE menu (OPTIONS -> KEYBOARD / MOUSE): the page shows them, DEFAULTS and CANCEL
 #            and DEFAULTS again, leave: Space jumps, J does not, the mouse turns the default amount and up looks up
 #   restart  another new process: the defaults persisted (live bindings and User.ini = DefUser.ini's, mouse 2.5)
+#   nodefaults  (after restart, on its User.ini) a DefUser.ini without [Engine.Input]: DEFAULTS says so and changes
+#            no key (instead of clearing them all), leaving writes nothing
 #   pad      the page with the game pad (virtual SDL pad): D-pad to the list, A captures, a pad button cancels a
 #            capture, the keyboard key goes in, D-pad right picks key 2, B leaves and saves
+#   actions  (fresh inis) a new action works once bound: from the pause menu PISTOLS := U (no key by default; UC2's own
+#            RaceWeapon), then in the game E takes the melee weapon and U the pistols back
 #   look     pictures only (no checks of their own): the page from the main menu at 640x480 and 1920x1080 (the D-2 box),
 #            the list, a capture, and the page from the pause menu in a match
 #
@@ -479,6 +483,56 @@ check $P-pad-session-saved K['p2']['K'] == 'SmartJump 0' and K['p2']['Space'] ==
 SCEN
 }
 
+scen_nodefaults() {
+  menu_to_page
+  cat <<'SCEN'
+keys n0 J Space W Tab
+key q
+expect $P-defaults-missing-said KeyBinds: DEFAULT KEYS NOT FOUND 10
+expect $P-defaults-missing-keeps-the-keys KeyBinds: rows \(defaults\): MOVE FORWARD=W,Up; .*JUMP / DODGE=Space,; 10
+sleep 0.5
+key Escape
+expect $P-page-closes CloseMenu \[UC2Settings_Keys\] 10
+sleep 2
+keys n1 J Space W Tab
+check $P-no-key-changed K['n1'] == K['n0'] and K['n1']['Space'] == 'SmartJump 0'
+SCEN
+}
+
+scen_actions() {
+  start_match
+  pause_to_page
+  cat <<'SCEN'
+wait KeyBinds: rows \(loaded\) 15
+sleep 2
+key Down
+key Down
+sleep 0.5
+seek 40 P['_'].item == 'PISTOLS|17' ;; key Down
+key Left
+key Return
+wait KeyBinds: PRESS A KEY 10
+sleep 0.3
+key u
+expect $P-pistols-to-u KeyBinds: U: PISTOLS\. 10
+sleep 0.5
+key Escape
+expect $P-saved KeyBinds: saved 1 key\(s\) to User.ini \[Engine.Input\]: U=RaceWeapon 10
+SCEN
+  back_to_game
+  cat <<'SCEN'
+probe a0
+key e
+sleep 2.5
+probe a1
+check $P-e-takes-melee P['a1'].weapon.startswith('UCWeap_Melee') and not P['a0'].weapon.startswith('UCWeap_Melee')
+key u
+sleep 2.5
+probe a2
+check $P-u-takes-the-pistols P['a2'].weapon == P['a0'].weapon
+SCEN
+}
+
 # pictures only: the page at the window size of the run (M10_RES), the list and a capture
 scen_look() {
   menu_to_page
@@ -550,7 +604,7 @@ PY
 }
 
 scenarios=("$@")
-[ ${#scenarios[@]} -eq 0 ] && scenarios=(menu match restart pad)
+[ ${#scenarios[@]} -eq 0 ] && scenarios=(menu match restart nodefaults pad actions)
 summary=$out/summary.txt
 : > "$summary"
 for s in "${scenarios[@]}"; do
@@ -572,11 +626,35 @@ for s in "${scenarios[@]}"; do
       echo "== restart"
       run restart 240 M10_URL="DM-Deadbolt?NumBots=0" -- -nullrenderer -maxfps=60
       ini_check restart;;
+    nodefaults)
+      [ -f "$sys/User.ini" ] || { echo "FAIL nodefaults: no User.ini (run restart first)"; continue; }
+      cp -f "$sys/DefUser.ini" "$out/DefUser.ini.saved"
+      python3 - "$sys/DefUser.ini" <<'PY2'
+import sys
+p = sys.argv[1]
+out, skip = [], False
+for line in open(p, encoding='latin-1'):
+    if line.strip().startswith('['):
+        skip = line.strip() == '[Engine.Input]'
+    if not skip:
+        out.append(line)
+open(p, 'w', encoding='latin-1').writelines(out)
+PY2
+      scen_nodefaults | sed 's/\$P/nodefaults/g' > "$out/nodefaults.scen"
+      echo "== nodefaults (DefUser.ini without [Engine.Input])"
+      run nodefaults 300
+      cp -f "$out/DefUser.ini.saved" "$sys/DefUser.ini"
+      ini_check nodefaults;;
     pad)
       prep
       scen_pad | sed 's/\$P/pad/g' > "$out/pad.scen"
       echo "== pad"
       run pad 300;;
+    actions)
+      prep
+      scen_actions | sed 's/\$P/actions/g' > "$out/actions.scen"
+      echo "== actions"
+      run actions 420 M10_URL="DM-Deadbolt?NumBots=0" -- -nullrenderer -maxfps=60;;
     look)
       prep
       scen_look | sed 's/\$P/look/g' > "$out/look640.scen"
