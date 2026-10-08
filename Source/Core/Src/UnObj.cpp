@@ -4482,8 +4482,12 @@ UBOOL UObject::SavePackage( UObject* InOuter, UObject* Base, DWORD TopLevelFlags
 			}
 
 			// Sort imports by usage count.
+			// uc2 port (D-9): sort only the imports after the conformed ones, as the names and exports are sorted. Epic's
+			// line sorted Num()-SortStartPosition entries FROM 0: a conformed save that added imports reordered that many
+			// of the previous generation's (UCMenu.u with the keys page: imports 17 and 19 swapped, and the operand bytes
+			// of every function that names them changed). It ran only in a conformed save that adds imports.
 			GTempSave = Linker;
-			appQsort( &Imports(0), Imports.Num() - SortStartPosition, sizeof(Imports(0)), LinkerImportSort );
+			appQsort( &Imports(SortStartPosition), Imports.Num() - SortStartPosition, sizeof(Imports(0)), LinkerImportSort );
 			Linker->Summary.ImportCount = Linker->ImportMap.Num();
 		}
 
