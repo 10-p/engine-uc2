@@ -177,3 +177,25 @@ Found by the test and decided:
   before and after.
 - Footer: the slider's left/right glyphs stayed on the A button when the list took the focus (UpdateActionButton
   changes only what it knows): the list puts A back. Punctuation keys are written as words (COMMA, PERIOD...).
+
+## Step 3 (2026-10-08): script-diff showed unchanged functions changed: Epic's conform sorted the wrong imports (Core fix)
+
+The first full `script-build.sh --tree d9-make` compare listed UCMenu with 14 problems; besides the intended ones
+(UC2Settings_Main.InitOptions/CloseComplete/Free, the btn_Advanced->btn_Keys property link, the appended exports of
+the two new classes) seven UNCHANGED functions differed "only in operand bytes" (UC2PageBase.UpdateActionButton,
+PerspectivePanel.CreateOption, the InternalOnChange of UC2CheatMenu, UC2MidGame_Config, UC2OnlineOptions,
+UC2Settings_Advanced, Arena_PanelServerMain.ModifiedRule), and imports 17/19 were swapped (`GUI.moTextOption` <->
+`Core.StrProperty`, `tools/dev/upkg151.py` on both files). Cause, `Source/Core/Src/UnObj.cpp` SavePackage: after
+conforming the import map to the previous generation, Epic's line `appQsort( &Imports(0), Imports.Num() -
+SortStartPosition, ...)` sorted as many entries as were ADDED, but starting at 0, i.e. it reordered the first 21
+conformed imports by usage count (the names and exports sorts start at SortStartPosition). D-4/D-6 never met it: their
+packages added no import. Fixed (e2b3a8c): sort from SortStartPosition. Only conformed saves (ucc make, the strip's
+-CONFORM) run it; the game never saves a package.
+
+After the fix (`logs/d9/d9-make-compare.txt`): `Success - 0 error(s), 85 warning(s)`; every package as on main except
+UCMenu: `different, exports 10100 (shipped) / 10464 (rebuilt), byte-identical 9932, neutral 223, findings 2, problems 5`:
+- problems: the appended exports (UC2Settings_Keys, KeyBindingPanel and their members), `UC2Settings_Main.btn_Advanced`
+  next property `None -> btn_Keys` (the new property), `UC2Settings_Main.InitOptions`, `.CloseComplete`, `.Free`;
+- findings: `UC2Settings_Main` defaults gain `btn_Keys = KeysSettingsButton`; `ConnectionFailureMenu.ProbeMask` (M14's,
+  as before).
+GUI.u and UCGameplay.u rebuild byte-identical to the asset tree's: the package to switch is UCMenu.u only.
