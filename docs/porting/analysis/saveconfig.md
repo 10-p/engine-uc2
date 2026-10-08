@@ -241,3 +241,22 @@ total** for a ucc start with Engine, UCGameplay and everything they pull in (`UC
 
 What remained: re-running the regression suites on the very binary of the final commit (the idle machine allows it: load 1.3),
 the gate and the report. Done below.
+
+## Gate (2026-10-08, branch `saveconfig`; engine code at f72face, nothing in `Source/` except the ucc test hook changed after it)
+
+(a) Builds, 0 `error:` lines each: native `bin/capped 6G 3600 -- cmake --build build-native -j4` rc 0 (`logs/sc/build-native-18.log`;
+the from-scratch build `build-native-0.log`); windows `bin/capped 4G 900 -- cmake --preset windows` + `bin/capped 6G 3600 --
+cmake --build build-windows -j4` rc 0 (`logs/sc/build-windows-3.log`; full build `build-windows-1.log`); wasm-perf `source env.sh &&
+bin/capped 4G 1200 -- cmake --preset wasm-perf` + `bin/capped 6G 9000 -- cmake --build build-wasm-perf -j4` rc 0
+(`logs/sc/build-wasm-perf-3.log`; full build `-1.log`), SDLLaunch.wasm sha256 37123ee0...; `ucc-bin verifyclasses`: "All native
+class layouts match". Script: `tools/dev/script-build.sh --tree d10-sc --logs <WorkUC2>/logs/sc`: `Success - 0 error(s),
+85 warning(s)`.
+(b) `tools/dev/sc-saveconfig.sh` (parts u w g m): **91 PASS, 0 FAIL** on the final binaries (`logs/sc/sc-all-final2.txt`).
+(c) Regressions on the final binaries (`logs/sc/reg2/`): `d3-profiles.sh` ALL PASS (27), `c1-saves.sh` ALL PASS (11),
+`c1-ini-overrides.sh` ALL PASS (30), `d6-mouse.sh look ini migrate lock` 60 PASS 0 FAIL (two checks added for the saved console
+commands), `m10-controls.sh`: keyboard 16, mouse 18, text 7 PASS; pad and both each failed ONE timing check at load average 16-24
+(`pd-stick-just-outside-dead-zone-moves`, `both-keyboard-fires-during-pad-move`) and passed on the rerun: pad 33, both 14, 0 Critical
+(`logs/sc/reg2/m10b/`). The same suite passed 5/5 on the earlier run of the same engine code (`logs/sc/reg/`, load 18-24).
+(d) The call-site table is "Step 1" at the top; what changed for each site is in "Step 2"/"Step 3".
+Memory: builds 6G (-j4), configures 4G, script make/strip 3G, ucc 3G (wasm under Node 3G), games 2G through `m10-controls.sh`; no
+ceiling was hit (no exit 137, no "STOPPED AT THE" in any log).
