@@ -460,3 +460,16 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   controls 5/5; `pp-scale.sh` selftest/glow/dof/radial 6/0; `m7-effects.sh` self-test 15/15 and 14/14 effect lines
   clean; `m11-twin.sh` 31 PASS, 3 known FAIL (depth-texture fallback not implemented x2, menu-movie timing);
   browser boot 4/4, audio 3/3, saves 1/1. Published to the owner's preview.
+- 2026-10-08 — **D-9 green (in-game KEYBOARD / MOUSE page); the owner's addendum is complete.** Merged
+  `d9-rebind` (e319f56). OPTIONS gains KEYBOARD / MOUSE (PC only, `!Level.IsXBox()`), from the main menu and the
+  pause menu, in UC2's own components: mouse sensitivity slider (0.022 deg x value per count), invert, and every PC
+  action with two keys; capture any key or mouse button raw, conflicts swap (and say what moved), clear, defaults
+  from our DefUser.ini; only changed keys saved (`SET Input` + `SAVECONFIGKEYS Engine.Input`), pad bindings never
+  touched. Shared-code fixes: the GUI's raw key capture took the starting Enter's release / auto-repeat as the new
+  key; an Epic bug in package saving reordered existing imports when a script build added new ones. Asset tree:
+  `UCMenu.u` rebuilt (not a server package) next to GUI.u and UCGameplay.u; ufrontend manifest committed, new
+  opt-in spec `uc2-wasm-keys.spec.js`. Coordinator's run on main (`logs/coord/a12/summary.txt`): native/windows/
+  wasm-perf build; scripts: only UCGameplay (18), UCMenu (5) intended problems; verifyclasses; d9-rebind 119/0;
+  sc-saveconfig 91/0; d6-mouse 69/0; d3-profiles, d5-text PASS; controls 5/5; browser boot 4/4, audio 3/3, saves
+  1/1, keys 1/1. Republished to the owner's preview. Owner choices now on that page: C/V order, Space dodge (bind
+  Space to JUMP ONLY), conflict swap vs clear.
