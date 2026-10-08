@@ -676,6 +676,21 @@ public:
 	void GenerateStreakFilter( EMultiSampleType InType, FLOAT Angle, FLOAT Scale=1.0f );
 };
 
+// UC2 port (pp-scale): the picture the post-process sizes and distances refer to. Epic's camera
+// effects were made for the Xbox's 640x480 back buffer: their targets are fractions of it and
+// their taps and insets are its pixels. With a reference height R (FRenderCaps::
+// PostProcessReferenceHeight, normally 480) the reference picture is R lines tall and as wide as
+// the back buffer's aspect gives (square pixels), whatever the real resolution; one of its pixels
+// is PixelScale = H / R back-buffer pixels. Without a reference (R = 0) it is the back buffer
+// itself and PixelScale is 1: Epic's behaviour. docs/porting/analysis/pp-scale.md.
+struct FPostProcessReference
+{
+	FLOAT	Width,			// the reference picture, in its own pixels
+			Height,
+			PixelScale;		// back-buffer pixels per reference pixel
+};
+ENGINE_API FPostProcessReference GetPostProcessReference( INT BackBufferWidth, INT BackBufferHeight );
+
 // scion sz
 // Used for different blurring and sampling routines
 void ENGINE_API FilterCopyRenderTarget( FRenderTarget* DestTarget,

@@ -2357,6 +2357,25 @@ void ENGINE_API FMultiSampleFilter::GenerateStreakFilter( EMultiSampleType InTyp
 	unguard;
 }
 
+//
+// UC2 port (pp-scale): see UnRenderUtil.h.
+//
+ENGINE_API FPostProcessReference GetPostProcessReference( INT BackBufferWidth, INT BackBufferHeight )
+{
+	FPostProcessReference Reference;
+	Reference.Width			= BackBufferWidth;
+	Reference.Height		= BackBufferHeight;
+	Reference.PixelScale	= 1.f;
+	INT ReferenceHeight = RenDevPostProcessReferenceHeight();
+	if( ReferenceHeight > 0 && BackBufferWidth > 0 && BackBufferHeight > 0 && BackBufferHeight != ReferenceHeight )
+	{
+		Reference.Height		= ReferenceHeight;
+		Reference.Width			= (FLOAT)BackBufferWidth * ReferenceHeight / BackBufferHeight;
+		Reference.PixelScale	= (FLOAT)BackBufferHeight / ReferenceHeight;
+	}
+	return Reference;
+}
+
 /* scion ======================================================================
  * FilterCopyRenderTarget
  * Author: sz
@@ -2449,6 +2468,19 @@ void ENGINE_API FilterCopyRenderTarget( FRenderTarget* DestTarget, FRenderTarget
 
 	FLOAT OneTexelU = 1.0f / (FLOAT)SrcTarget->GetWidth();
 	FLOAT OneTexelV = 1.0f / (FLOAT)SrcTarget->GetHeight();
+
+	// UC2 port (pp-scale): a source given with its viewport is the back buffer (the first pass of
+	// the depth-of-field and emissive chains). Its taps were pixels of the Xbox's 640x480 back
+	// buffer; here they are pixels of the reference picture (GetPostProcessReference: PixelScale
+	// back-buffer pixels each; 1 at 480 lines or without a reference), so the pass reaches the
+	// same share of the picture at any resolution. The device reads such a pass from its
+	// 480-line copy of the back buffer (UC2GLDrv: the reference copy), as the Xbox read its own.
+	if( SrcViewport )
+	{
+		FLOAT PixelScale = GetPostProcessReference( SrcTarget->GetWidth(), SrcTarget->GetHeight() ).PixelScale;
+		OneTexelU *= PixelScale;
+		OneTexelV *= PixelScale;
+	}
 
 	FScreenPrimUtil TextureCanvas( DestTarget, RI );
 	RI->SetRenderTarget( DestTarget );

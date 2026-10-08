@@ -791,6 +791,14 @@ struct FRenderCaps
 	// (AProjector::RebuildStaticPrimsBatch; RenDevHasXboxProjectors below). 0 for every device
 	// that does not set it.
 	UBOOL	XboxProjectors;
+	// UC2 port (pp-scale): the height of the picture the Xbox post-processing was made for (480:
+	// the Xbox's 640x480). The camera effects size their blur targets for a picture of this many
+	// lines (and the back buffer's aspect) and measure their back-buffer taps and screen
+	// distances in its pixels, so that every blur covers the same share of the picture at any
+	// resolution (GetPostProcessReference, UnRenderUtil.h). 0 = Epic's code as it was: sizes and
+	// distances in pixels of the real back buffer. Set by the device (UC2GLDrv:
+	// PostProcessReferenceHeight); docs/porting/analysis/pp-scale.md.
+	INT		PostProcessReferenceHeight;
 
 	// set default render caps in constructor
 	FRenderCaps()
@@ -800,7 +808,8 @@ struct FRenderCaps
 		XboxPostProcess(0),
 		ShippedDOFBlurAlpha(0),
 		XboxShadows(0),
-		XboxProjectors(0)
+		XboxProjectors(0),
+		PostProcessReferenceHeight(0)
 	{}
 };
 
@@ -896,6 +905,10 @@ ENGINE_API UBOOL RenDevHasXboxShadows();
 // the lifted "_XBOX" static-projector batching in UGameEngine::LoadMap (UnGame.cpp).
 //
 ENGINE_API UBOOL RenDevHasXboxProjectors();
+// UC2 port (pp-scale): FRenderCaps::PostProcessReferenceHeight of the engine's render device;
+// 0 without a client, a device or a reference (sizes and distances in back-buffer pixels).
+//
+ENGINE_API INT RenDevPostProcessReferenceHeight();
 
 #endif
 /*------------------------------------------------------------------------------------

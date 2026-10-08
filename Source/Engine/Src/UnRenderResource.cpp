@@ -86,6 +86,19 @@ ENGINE_API UBOOL RenDevHasXboxShadows()
 	return Caps && Caps->XboxShadows;
 }
 
+//
+// UC2 port (pp-scale): FRenderCaps::PostProcessReferenceHeight of the engine's render device
+// (0 without a client, a device or a reference: sizes and distances in back-buffer pixels).
+//
+ENGINE_API INT RenDevPostProcessReferenceHeight()
+{
+	UClient* Client = UTexture::__Client;
+	if( !Client || !Client->Engine || !Client->Engine->GRenDev )
+		return 0;
+	FRenderCaps* Caps = Client->Engine->GRenDev->GetRenderCaps();
+	return Caps ? Max( Caps->PostProcessReferenceHeight, 0 ) : 0;
+}
+
 /* scion ======================================================================
 * FRenderTarget::RemovePoolRef
 * Author: sz

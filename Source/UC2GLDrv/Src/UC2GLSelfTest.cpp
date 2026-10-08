@@ -18,6 +18,14 @@
 	  remap        PS_ColorRemap + ColorRemap.vsh: luminance -> lookup coordinate
 	  luminance    PS_LuminanceTexIndex into the 16x16 target the dynamic gamma reads
 	  fog          fixed-function linear fog (M11)
+	  pp-sizes     (pp-scale) the camera effects' pooled blur targets are the fractions of the
+	               reference picture (PostProcessReferenceHeight) Epic's formulas give
+	  ref-copy     (pp-scale) the 480-line reference copy of the back buffer, against the CPU
+	  ref-taps     (pp-scale) FilterCopyRenderTarget from the back buffer: taps in reference
+	               pixels, read from the reference copy
+	  bb-copy-ref  (pp-scale) UpdateBackBufferCopyTarget with the reference picture
+	               (the tests above pp-sizes run with the reference height 0, as Epic's code;
+	               the three ref tests need a back buffer taller than 480 lines)
 	  index-narrow only without 32-bit indices (M11 fallback): 32-bit index data stored as
 	               16-bit and drawn
 
@@ -738,6 +746,180 @@ struct FSelfTest
 	}
 
 	/*-------------------------------------------------------------------------
+		pp-scale (docs/porting/analysis/pp-scale.md): the reference picture.
+	-------------------------------------------------------------------------*/
+
+	// pp-sizes: the blur targets the camera effects hold in the render-target pool are the
+	// fractions of the reference picture Epic's formulas give (UCCameraEffects.cpp, the shipped
+	// script's scales: depth of field 0.5, bloom and emissive 0.25; each level halves one side),
+	// and the back-buffer copy is half the back buffer. Run first, before the other tests touch
+	// the pool, with the reference height the frames before were drawn with.
+	void TestTargetSizes()
+	{
+		FPostProcessReference Ref = GetPostProcessReference( RenDev->MainWidth, RenDev->MainHeight );
+		struct FSize { INT W, H, Flags; };
+		TArray<FSize> Expected;
+		#define UCPP_EXPECT(w,h,f) { FSize S; S.W = Max((INT)(w),1); S.H = Max((INT)(h),1); S.Flags = (f); Expected.AddItem( S ); }
+		const INT C = FRenderTarget::RT_CREATE_COLOR, CD = FRenderTarget::RT_CREATE_COLOR | FRenderTarget::RT_CREATE_DEPTH;
+		// UUCScreenDOF: (W/2, H/4), (W/4, H/4).
+		UCPP_EXPECT( Ref.Width * 0.5f, Ref.Height * 0.25f, C );
+		UCPP_EXPECT( Ref.Width * 0.25f, Ref.Height * 0.25f, C );
+		// UUCScreenBloom: select (W/4, H/4) with depth, (W/8, H/4), (W/8, H/8).
+		UCPP_EXPECT( Ref.Width * 0.25f, Ref.Height * 0.25f, CD );
+		UCPP_EXPECT( Ref.Width * 0.125f, Ref.Height * 0.25f, C );
+		UCPP_EXPECT( Ref.Width * 0.125f, Ref.Height * 0.125f, C );
+		// UUCScreenEmissive (its select target is not pooled): (W/4, H/4), (W/4, H/8), (W/8, H/8).
+		INT EW = Max( (INT)(Ref.Width * 0.25f), 1 ), EH = Max( (INT)(Ref.Height * 0.25f), 1 );
+		UCPP_EXPECT( EW, EH, C );
+		UCPP_EXPECT( EW, EH * 0.5f, C );
+		UCPP_EXPECT( EW * 0.5f, EH * 0.5f, C );
+		// The back-buffer copy (and distortion accumulation target): half the back buffer.
+		UCPP_EXPECT( RenDev->MainWidth * 0.5f, RenDev->MainHeight * 0.5f, CD );
+		#undef UCPP_EXPECT
+
+		FRenderTargetPool* Pool = RI->GetRenderTargetPool();
+		FString Live, Unexpected, Missing;
+		INT Compared = 0, Wrong = 0;
+		for( INT i=0; i<Pool->RenderTargets.Num(); i++ )
+		{
+			FRenderTarget* T = Pool->RenderTargets(i);
+			if( !T || Pool->RefCounts(i) <= 0 )
+				continue;
+			Compared++;
+			Live += FString::Printf( TEXT(" %ix%i%s"), T->GetWidth(), T->GetHeight(), (T->CreationFlags & FRenderTarget::RT_CREATE_DEPTH) ? TEXT("+depth") : TEXT("") );
+			UBOOL Found = 0;
+			for( INT e=0; e<Expected.Num(); e++ )
+				Found |= Expected(e).W == T->GetWidth() && Expected(e).H == T->GetHeight() && Expected(e).Flags == T->CreationFlags;
+			if( !Found )
+			{
+				Wrong++;
+				Unexpected += FString::Printf( TEXT(" %ix%i"), T->GetWidth(), T->GetHeight() );
+			}
+		}
+		for( INT e=0; e<Expected.Num(); e++ )
+		{
+			UBOOL Found = 0;
+			for( INT i=0; i<Pool->RenderTargets.Num(); i++ )
+				if( Pool->RenderTargets(i) && Pool->RefCounts(i) > 0 )
+					Found |= Expected(e).W == Pool->RenderTargets(i)->GetWidth() && Expected(e).H == Pool->RenderTargets(i)->GetHeight() && Expected(e).Flags == Pool->RenderTargets(i)->CreationFlags;
+			if( !Found )
+			{
+				Wrong++;
+				Missing += FString::Printf( TEXT(" %ix%i"), Expected(e).W, Expected(e).H );
+			}
+		}
+		Report( TEXT("pp-sizes"), Compared, Wrong ? 255.f : 0.f, 0.f, *FString::Printf( TEXT("back buffer %ix%i, reference height %i: reference picture %.1fx%.1f (%.3f back-buffer pixels each); live pooled targets:%s; not expected:%s; expected but missing:%s"),
+			RenDev->MainWidth, RenDev->MainHeight, RenDev->PostProcessReferenceHeight, Ref.Width, Ref.Height, Ref.PixelScale, *Live, Unexpected.Len() ? *Unexpected : TEXT(" none"), Missing.Len() ? *Missing : TEXT(" none") ) );
+	}
+
+	// The reference copy as the device computes it, on the CPU: N x N bilinear samples evenly over
+	// each reference pixel (GPostReferenceFragmentShader, UC2GL_UpdateReferenceCopy).
+	void ReferenceOf( FTestImage& Source, FTestImage& Out )
+	{
+		INT N = Clamp( appCeil( (FLOAT)Source.H / Out.H - 0.01f ), 1, 8 );
+		FLOAT SU = 1.f / (Out.W * N), SV = 1.f / (Out.H * N);
+		for( INT y=0; y<Out.H; y++ )
+			for( INT x=0; x<Out.W; x++ )
+				for( INT c=0; c<4; c++ )
+				{
+					FLOAT Sum = 0.f;
+					for( INT j=0; j<N; j++ )
+						for( INT i=0; i<N; i++ )
+							Sum += Source.Bilinear( (x + 0.5f) / Out.W + (i - (N - 1) * 0.5f) * SU, (y + 0.5f) / Out.H + (j - (N - 1) * 0.5f) * SV, c );
+					Out.At(x,y,c) = (BYTE)Clamp( appRound( Sum / (N * N) ), 0, 255 );
+				}
+	}
+
+	// ref-copy, ref-taps, bb-copy-ref: with a 480-line reference (whatever the ini says), a random
+	// back buffer. ref-copy: the copy against the CPU. ref-taps: FilterCopyRenderTarget from the
+	// back buffer into the first target of the depth of field (Epic's vertical 1331 kernel), whose
+	// taps must sit +-1 and +-3 REFERENCE pixels apart and read the reference copy; expected values
+	// from the copy as read back. bb-copy-ref: UpdateBackBufferCopyTarget, taps (+-1,+-1) reference
+	// pixels into the half-size target, read from the copy.
+	void TestReference()
+	{
+		const INT RefH = 480;
+		INT W = RenDev->MainWidth, H = RenDev->MainHeight;
+		if( H <= RefH || !RenDev->PostReferenceProgram )
+		{
+			debugf( NAME_Init, TEXT("UC2GLDrv: selftest ref-copy, ref-taps, bb-copy-ref: not run (back buffer %ix%i: %s)"), W, H,
+				H <= RefH ? TEXT("480 lines or fewer, no reference copy is made") : TEXT("the reference copy program did not build") );
+			return;
+		}
+		RenDev->PostProcessReferenceHeight = RefH;
+		RenDev->SampleReference = 0;
+		FPostProcessReference Ref = GetPostProcessReference( W, H );
+
+		FTestImage Pattern( W, H );
+		Pattern.Randomize( 7, 3 );
+		SetMainColor( Pattern );
+
+		// ref-copy
+		RenDev->DefaultRenderTarget->SetMaterialUsage( FRenderTarget::RT_MATERIAL_USE_BACKBUFFER );
+		RenDev->SampleReference = 1;
+		RenDev->UpdateSampledTexture( RI->CacheTexture( RenDev->DefaultRenderTarget ) );
+		RenDev->SampleReference = 0;
+		RI->InvalidateHardwareState();
+		INT RW = RenDev->ReferenceWidth, RH = RenDev->ReferenceHeight;
+		FTestImage Copy( RW, RH ), Expected( RW, RH );
+		ReadFramebuffer( RenDev->ReferenceFramebuffer, Copy );
+		ReferenceOf( Pattern, Expected );
+		FLOAT MaxError = 0.f;
+		for( INT y=0; y<RH; y++ )
+			for( INT x=0; x<RW; x++ )
+				for( INT c=0; c<3; c++ )
+					MaxError = Max( MaxError, Abs( (FLOAT)Copy.At(x,y,c) - Expected.At(x,y,c) ) );
+		INT N = Clamp( appCeil( (FLOAT)H / RH - 0.01f ), 1, 8 );
+		Report( TEXT("ref-copy"), RW*RH*3, MaxError, 2.f, *FString::Printf( TEXT("back buffer %ix%i -> reference copy %ix%i, %ix%i bilinear samples per pixel"), W, H, RW, RH, N, N ) );
+
+		// ref-taps
+		if( RenDev->PixelShaderFamilyReady( PS_Blur ) )
+		{
+			INT DW = Max( (INT)(Ref.Width * 0.5f), 1 ), DH = Max( (INT)(Ref.Height * 0.25f), 1 );
+			FAuxRenderTarget* Dest = new FAuxRenderTarget( DW, DH, TEXF_RGBA8, FRenderTarget::RT_CREATE_COLOR );
+			FMultiSampleFilter Sampler( FMultiSampleFilter::MULTI_SAMPLE_VERT_1331 );
+			INT CopiesBefore = RenDev->ReferenceCopies, SnapshotsBefore = RenDev->SnapshotCopies;
+			FilterCopyRenderTarget( Dest, RenDev->DefaultRenderTarget, Viewport, Sampler, RI );
+			FTestImage Got( DW, DH );
+			ReadTarget( Dest, Got );
+			// Taps in reference pixels: the offsets of the filter times PixelScale back-buffer pixels.
+			FFourSampleFilter F = Sampler.FilterList(0);
+			for( INT t=0; t<4; t++ )
+			{
+				F.SamplePoints[t].OffsetU *= Ref.PixelScale * RW / W;
+				F.SamplePoints[t].OffsetV *= Ref.PixelScale * RH / H;
+			}
+			FLOAT TapError = CompareFilter( Copy, Got, 0.f, 0.f, 1.f, 1.f, F );
+			Report( TEXT("ref-taps"), DW*DH*3, TapError, 2.f, *FString::Printf( TEXT("FilterCopyRenderTarget(back buffer, viewport, vertical 1331) -> %ix%i: taps (0,+-1) (0,+-3) reference pixels = %.3f back-buffer pixels each, read from the reference copy (%i reference copies, %i snapshots during the pass)"),
+				DW, DH, Ref.PixelScale, RenDev->ReferenceCopies - CopiesBefore, RenDev->SnapshotCopies - SnapshotsBefore ) );
+			delete Dest;
+		}
+		else
+			Report( TEXT("ref-taps"), 0, 255.f, 0.f, TEXT("PS_Blur is not available") );
+
+		// bb-copy-ref
+		RI->UpdateBackBufferCopyTarget( Viewport );
+		FRenderTarget* BBCopy = RI->BackBufferCopyTarget;
+		if( BBCopy && BBCopy != RenDev->DefaultRenderTarget )
+		{
+			FTestImage Got( BBCopy->GetWidth(), BBCopy->GetHeight() );
+			ReadTarget( BBCopy, Got );
+			FFourSampleFilter F;
+			static const FLOAT Off[4][2] = { {-1,-1}, {1,-1}, {-1,1}, {1,1} };
+			for( INT t=0; t<4; t++ )
+			{
+				F.SamplePoints[t].OffsetU	= Off[t][0] * Ref.PixelScale * RW / W;
+				F.SamplePoints[t].OffsetV	= Off[t][1] * Ref.PixelScale * RH / H;
+				F.SamplePoints[t].Weight	= 0.25f;
+			}
+			FLOAT BBError = CompareFilter( Copy, Got, 0.f, 0.f, 1.f, 1.f, F );
+			Report( TEXT("bb-copy-ref"), Got.W*Got.H*3, BBError, 2.f, *FString::Printf( TEXT("UpdateBackBufferCopyTarget %ix%i -> %ix%i (half, as before), taps (+-1,+-1) reference pixels, read from the reference copy"), W, H, Got.W, Got.H ) );
+		}
+		else
+			Report( TEXT("bb-copy-ref"), 0, 255.f, 0.f, TEXT("no back-buffer copy target") );
+	}
+
+	/*-------------------------------------------------------------------------
 		dof-ramp: depth -> ramp -> blend alpha, as UUCScreenDOF::PostRender draws it.
 	-------------------------------------------------------------------------*/
 
@@ -953,6 +1135,13 @@ struct FSelfTest
 			return;
 		}
 		RI->PushState();
+		// pp-scale: the targets the frames before this one were drawn with; then the primitives
+		// as Epic's code specifies them, in back-buffer pixels (no reference picture: the tests
+		// below were written for that and stay unchanged); then the reference picture.
+		INT ConfiguredReference = RenDev->PostProcessReferenceHeight;
+		TestTargetSizes();
+		RenDev->PostProcessReferenceHeight = 0;
+		RenDev->SampleReference = 0;
 		TestSnapshot();
 		TestDepth();
 		TestBlur( TEXT("blur-h"),   FMultiSampleFilter::MULTI_SAMPLE_HORIZ_1221, 64, 32, 32, 32, 21 );
@@ -964,6 +1153,9 @@ struct FSelfTest
 		TestLuminance();
 		TestFog();
 		TestIndexNarrow();
+		TestReference();
+		RenDev->PostProcessReferenceHeight = ConfiguredReference;
+		RenDev->SampleReference = 0;
 		RI->PopState();
 
 		// Leave a defined frame behind.

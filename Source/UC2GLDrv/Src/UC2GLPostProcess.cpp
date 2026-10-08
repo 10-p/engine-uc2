@@ -109,6 +109,45 @@ static const char* GPostDepthCopyFragmentShader =
 	"	gl_FragColor = vec4( 0.0 );\n"
 	"}\n";
 
+// pp-scale: the reference copy (docs/porting/analysis/pp-scale.md). One pixel of it is the average
+// of the k x k back-buffer pixels under it (k = back-buffer lines per reference line), read as
+// N x N bilinear samples spread evenly over them: uStep = the distance between two samples in source
+// texture coordinates (a reference pixel divided by N). N = ceil(k), at most 8, is a constant of the
+// program (UC2_TAPS, put in front of this text; the program is built again when N changes): a loop
+// with a uniform bound and a break ran about 4 ms slower per frame at 3840x2160 on the owner's
+// NVIDIA card than the snapshot it replaces (the 25 reads of 5x5 could not be issued together).
+static const char* GPostReferenceFragmentShader =
+	"uniform sampler2D uSource;\n"
+	"uniform vec4 uStep;\n"
+	"varying vec2 vTexCoord;\n"
+	"void main()\n"
+	"{\n"
+	"	vec2 Origin = vTexCoord - uStep.xy * (float(UC2_TAPS - 1) * 0.5);\n"
+	"	vec4 Sum = vec4( 0.0 );\n"
+	"	for( int j = 0; j < UC2_TAPS; j++ )\n"
+	"		for( int i = 0; i < UC2_TAPS; i++ )\n"
+	"			Sum += texture2D( uSource, Origin + uStep.xy * vec2( float(i), float(j) ) );\n"
+	"	gl_FragColor = Sum * (1.0 / float(UC2_TAPS * UC2_TAPS));\n"
+	"}\n";
+
+static GLuint UC2GL_BuildPostProgram( UUC2GLRenderDevice* RenDev, const char* FragmentBody, const TCHAR* What, GLint& RectLoc );
+
+// The reference copy's program for N x N samples (0 if it does not build).
+static GLuint UC2GL_BuildReferenceProgram( UUC2GLRenderDevice* RenDev, INT N )
+{
+	if( RenDev->PostReferenceProgram && RenDev->PostReferenceTaps == N )
+		return RenDev->PostReferenceProgram;
+	if( RenDev->PostReferenceProgram )
+		RenDev->glDeleteProgram( RenDev->PostReferenceProgram );
+	ANSICHAR Body[2048];
+	appSprintf( Body, "#define UC2_TAPS %i\n%s", N, GPostReferenceFragmentShader );
+	RenDev->PostReferenceProgram = UC2GL_BuildPostProgram( RenDev, Body, TEXT("reference copy"), RenDev->PostReferenceRectLoc );
+	RenDev->PostReferenceTaps = RenDev->PostReferenceProgram ? N : 0;
+	if( RenDev->PostReferenceProgram )
+		RenDev->PostReferenceStepLoc = RenDev->glGetUniformLocation( RenDev->PostReferenceProgram, "uStep" );
+	return RenDev->PostReferenceProgram;
+}
+
 static GLuint UC2GL_BuildPostProgram( UUC2GLRenderDevice* RenDev, const char* FragmentBody, const TCHAR* What, GLint& RectLoc )
 {
 	GLuint Shaders[2] = { 0, 0 };
@@ -168,9 +207,18 @@ UBOOL UUC2GLRenderDevice::InitPostProcess()
 		ExitPostProcess();
 		return 0;
 	}
+	// pp-scale: without it the downsampling passes read the full-size snapshot (sparser, but the
+	// same positions): not a reason to switch post-processing off.
+	// (Built here for 2 x 2 samples to know it builds; UC2GL_UpdateReferenceCopy builds it again for the
+	// back buffer's N.)
+	UC2GL_BuildReferenceProgram( this, 2 );
 	debugf( NAME_Init, TEXT("UC2GLDrv: post-processing %s (UsePostProcess=%s%s)"),
 		(UsePostProcess && UsePixelShaders) ? TEXT("on: render targets, back-buffer and depth copies, the Xbox post-process paths of the engine run") : TEXT("off: as at M6"),
 		UsePostProcess ? TEXT("True") : TEXT("False"), UsePixelShaders ? TEXT("") : TEXT(", but pixel shaders are off") );
+	debugf( NAME_Init, TEXT("UC2GLDrv: post-process reference height %i (%s)"), PostProcessReferenceHeight,
+		!PostProcessReferenceHeight ? TEXT("blurs in back-buffer pixels, as before") :
+		PostReferenceProgram ? TEXT("blurs sized for a picture of that many lines, read from a copy of the back buffer that size") :
+		TEXT("blurs sized for a picture of that many lines; the reference copy program failed, the full-size snapshot is read instead") );
 	return 1;
 
 	unguard;
@@ -184,18 +232,22 @@ void UUC2GLRenderDevice::DestroyPostProcessTargets()
 		if( SnapshotTexture )		glDeleteTextures( 1, &SnapshotTexture );
 		if( DepthColorFramebuffer )	glDeleteFramebuffers( 1, &DepthColorFramebuffer );
 		if( DepthColorTexture )		glDeleteTextures( 1, &DepthColorTexture );
+		if( ReferenceFramebuffer )	glDeleteFramebuffers( 1, &ReferenceFramebuffer );
+		if( ReferenceTexture )		glDeleteTextures( 1, &ReferenceTexture );
 	}
 	SnapshotFramebuffer = SnapshotTexture = DepthColorFramebuffer = DepthColorTexture = 0;
-	SnapshotVersion = DepthColorVersion = -1;
+	ReferenceFramebuffer = ReferenceTexture = 0;
+	ReferenceWidth = ReferenceHeight = 0;
+	SnapshotVersion = DepthColorVersion = ReferenceVersion = -1;
 }
 
 void UUC2GLRenderDevice::ExitPostProcess()
 {
 	guard(UUC2GLRenderDevice::ExitPostProcess);
 
-	if( SnapshotCopies || DepthColorCopies || DepthBufferCopies )
-		debugf( NAME_Init, TEXT("UC2GLDrv: post-processing: %i back-buffer snapshots, %i depth-as-colour copies, %i depth buffer copies in %i frames"), SnapshotCopies, DepthColorCopies, DepthBufferCopies, FrameCounter );
-	SnapshotCopies = DepthColorCopies = DepthBufferCopies = 0;
+	if( SnapshotCopies || DepthColorCopies || DepthBufferCopies || ReferenceCopies )
+		debugf( NAME_Init, TEXT("UC2GLDrv: post-processing: %i back-buffer snapshots, %i reference copies, %i depth-as-colour copies, %i depth buffer copies in %i frames"), SnapshotCopies, ReferenceCopies, DepthColorCopies, DepthBufferCopies, FrameCounter );
+	SnapshotCopies = DepthColorCopies = DepthBufferCopies = ReferenceCopies = 0;
 
 	DestroyPostProcessTargets();
 	if( ContextAlive() )
@@ -203,9 +255,12 @@ void UUC2GLRenderDevice::ExitPostProcess()
 		if( PostCopyProgram )			glDeleteProgram( PostCopyProgram );
 		if( PostDepthEncodeProgram )	glDeleteProgram( PostDepthEncodeProgram );
 		if( PostDepthCopyProgram )		glDeleteProgram( PostDepthCopyProgram );
+		if( PostReferenceProgram )		glDeleteProgram( PostReferenceProgram );
 		if( GammaRampTexture )			glDeleteTextures( 1, &GammaRampTexture );
 	}
-	PostCopyProgram = PostDepthEncodeProgram = PostDepthCopyProgram = 0;
+	PostCopyProgram = PostDepthEncodeProgram = PostDepthCopyProgram = PostReferenceProgram = 0;
+	PostReferenceTaps = 0;
+	SampleReference = 0;
 	GammaRampTexture	= 0;
 	GammaRampActive		= 0;
 
@@ -313,10 +368,68 @@ GLuint UUC2GLRenderDevice::GetSampledTexture( FOpenGLTexture* Texture )
 {
 	if( Texture->IsDefaultTarget && PostProcessActive() )
 	{
-		GLuint Copy = Texture->DefaultUsage == FRenderTarget::RT_MATERIAL_USE_DEPTHBUFFER ? DepthColorTexture : SnapshotTexture;
+		GLuint Copy =	Texture->DefaultUsage == FRenderTarget::RT_MATERIAL_USE_DEPTHBUFFER ? DepthColorTexture :
+						SampleReference ? ReferenceTexture : SnapshotTexture;
 		return Copy ? Copy : NullTextureID;
 	}
 	return Texture->TextureID;
+}
+
+//
+// pp-scale: is there a reference copy to make? Post-processing on, a reference height, its
+// program, and a back buffer taller than the reference picture (at 480 lines or fewer the
+// downsampling passes read the snapshot exactly as before).
+//
+UBOOL UUC2GLRenderDevice::ReferenceCopyActive()
+{
+	return PostProcessActive() && PostReferenceProgram && PostProcessReferenceHeight > 0 && MainHeight > PostProcessReferenceHeight;
+}
+
+//
+// pp-scale: the reference copy, brought up to date (see the header and GPostReferenceFragmentShader).
+//
+static void UC2GL_UpdateReferenceCopy( UUC2GLRenderDevice* RenDev )
+{
+	INT H = RenDev->PostProcessReferenceHeight;
+	INT W = Max( appRound( (FLOAT)RenDev->MainWidth * H / RenDev->MainHeight ), 1 );
+	if( !RenDev->ReferenceTexture || RenDev->ReferenceWidth != W || RenDev->ReferenceHeight != H )
+	{
+		if( RenDev->ReferenceFramebuffer )	RenDev->glDeleteFramebuffers( 1, &RenDev->ReferenceFramebuffer );
+		if( RenDev->ReferenceTexture )		RenDev->glDeleteTextures( 1, &RenDev->ReferenceTexture );
+		UC2GL_CreateColorTarget( RenDev, RenDev->ReferenceTexture, RenDev->ReferenceFramebuffer, W, H );
+		RenDev->ReferenceWidth	= W;
+		RenDev->ReferenceHeight	= H;
+		RenDev->ReferenceVersion = -1;
+		debugf( NAME_Init, TEXT("UC2GLDrv: reference copy %ix%i of the %ix%i back buffer (%ix%i samples per pixel)"), W, H, RenDev->MainWidth, RenDev->MainHeight,
+			Clamp( appCeil( (FLOAT)RenDev->MainHeight / H - 0.01f ), 1, 8 ), Clamp( appCeil( (FLOAT)RenDev->MainHeight / H - 0.01f ), 1, 8 ) );
+	}
+	if( RenDev->ReferenceVersion == RenDev->MainColorVersion )
+		return;
+
+	// The main framebuffer is bottom row first, the copy top row first (convention 2).
+	static const FLOAT FlipRect[4] = { 1.f, -1.f, 0.f, 1.f };
+	INT N = Clamp( appCeil( (FLOAT)RenDev->MainHeight / H - 0.01f ), 1, 8 );
+	RenDev->ResolveMain( 1, 0 );
+	if( !UC2GL_BuildReferenceProgram( RenDev, N ) )
+	{
+		UC2GL_LOG_ONCE( TEXT("UC2GLDrv: the reference copy program for %ix%i samples does not build; the reference copy stays as it is"), N, N );
+		return;
+	}
+	RenDev->glUseProgram( RenDev->PostReferenceProgram );
+	RenDev->glUniform4f( RenDev->PostReferenceStepLoc, 1.f / (W * N), 1.f / (H * N), 0.f, 0.f );
+	// The samples fall between texels: bilinear for this pass (every other reader of the main
+	// colour samples texel centres; FXAA wants it bilinear anyway).
+	RenDev->glActiveTexture( GL_TEXTURE0 );
+	RenDev->glBindTexture( GL_TEXTURE_2D, RenDev->MainColorTexture );
+	RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+	RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+	RenDev->DrawPostQuad( RenDev->PostReferenceProgram, RenDev->PostReferenceRectLoc, RenDev->MainColorTexture, RenDev->ReferenceFramebuffer, W, H, FlipRect, 0 );
+	RenDev->glActiveTexture( GL_TEXTURE0 );
+	RenDev->glBindTexture( GL_TEXTURE_2D, RenDev->MainColorTexture );
+	RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, RenDev->PresentFXAA ? GL_LINEAR : GL_NEAREST );
+	RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, RenDev->PresentFXAA ? GL_LINEAR : GL_NEAREST );
+	RenDev->ReferenceVersion = RenDev->MainColorVersion;
+	RenDev->ReferenceCopies++;
 }
 
 //
@@ -370,6 +483,11 @@ void UUC2GLRenderDevice::UpdateSampledTexture( FOpenGLTexture* Texture )
 			DepthColorVersion = MainDepthVersion;
 			DepthColorCopies++;
 		}
+	}
+	else if( SampleReference )
+	{
+		// pp-scale: a downsampling pass reads the back buffer as the reference picture.
+		UC2GL_UpdateReferenceCopy( this );
 	}
 	else
 	{
@@ -447,6 +565,21 @@ void FOpenGLRenderInterface::RestoreAfterDeviceDraw()
 void FOpenGLRenderInterface::PrepareSampledTargets( FOpenGLMaterialState* MaterialState )
 {
 	UBOOL Nudge = 0;
+	// pp-scale: a pass that draws the back buffer into a render target of at most three quarters
+	// of its height is a downsampling pass of the post-processing (the first pass of the depth of
+	// field, the emissive and bloom selections, the back-buffer copy, the luminance target; the
+	// targets are at most half the back buffer). It reads the reference copy: the back buffer as a
+	// picture of PostProcessReferenceHeight lines, which is what the Xbox's taps were made for.
+	// Every other reader (full-screen passes into the back buffer, distortion) reads the snapshot.
+	const FOpenGLRenderTargetState* Target = SavedRenderTargetState.GetCurrentState();
+	UBOOL Reference = RenDev->ReferenceCopyActive() && Target->RenderTarget && Target->Framebuffer != RenDev->MainFramebuffer
+		&& Target->Height * 4 <= RenDev->MainHeight * 3;
+	if( Reference != RenDev->SampleReference )
+	{
+		// The stages bind another texture for the default render target: rebind them.
+		RenDev->SampleReference = Reference;
+		InvalidateHardwareState();
+	}
 	if( RenDev->PostProcessActive() )
 	{
 		INT StagesUsed = Min<INT>( MaterialState->StagesUsed, RenDev->NumTextureUnits );
@@ -605,6 +738,16 @@ void FOpenGLRenderInterface::UpdateBackBufferCopyTarget( UViewport* InViewport )
 	// weights should default to 0.25f
 	FLOAT OneTexelU = 1.0f / (FLOAT)FullScreenSizeX;
 	FLOAT OneTexelV = 1.0f / (FLOAT)FullScreenSizeY;
+	// UC2GLDrv (pp-scale): the taps are pixels of the reference picture (k back-buffer pixels;
+	// GetPostProcessReference, 1 at 480 lines), read from the reference copy (PrepareSampledTargets:
+	// the target is half the back buffer), so the blurred copy is as blurred, for its share of the
+	// picture, as the Xbox's. The target itself stays half the back buffer: it is also the
+	// distortion accumulation target and its depth copy (UnRender.cpp, FPostProcessRender), whose
+	// edges stay sharper with more texels; the distortion amounts are scaled separately
+	// (UC2GLShaders.cpp, PixelScale).
+	FLOAT PixelScale = GetPostProcessReference( FullScreenSizeX, FullScreenSizeY ).PixelScale;
+	OneTexelU *= PixelScale;
+	OneTexelV *= PixelScale;
 
 	// tex0 offset
 	SourceTexMatrix[0]->Matrix.M[2][0] = OneTexelU * -1.0f;

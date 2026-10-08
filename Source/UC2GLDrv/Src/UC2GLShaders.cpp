@@ -1070,7 +1070,9 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 			// Xbox: x and y are pixels of a 640x480 back buffer, z and w the ratio of the
 			// back-buffer texture to the back buffer (1). Here: the same fraction of the
 			// picture, in texture coordinates of the back-buffer copy.
-			FLOAT PixelScale = MainH / 480.f;
+			// pp-scale: pixels of the post-process reference picture (PostProcessReferenceHeight;
+			// 480, the Xbox's, also when it is 0: the distortion was scaled so from M7 on).
+			FLOAT PixelScale = MainH / (FLOAT)(RenDev->PostProcessReferenceHeight > 0 ? RenDev->PostProcessReferenceHeight : 480);
 			RenDev->glUniform4f( Program->DistortionScaleLoc, DistortionScale[0] * PixelScale / MainW, DistortionScale[1] * PixelScale / MainH, 0.f, 0.f );
 			// GL window coordinates of the current viewport, as coordinates of the copy (top row first).
 			FLOAT	VPX	= VPState->ViewportX,
