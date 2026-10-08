@@ -82,6 +82,7 @@ class UWebRTCNetDriver : public UNetDriver
 	UBOOL		bDetached;			// a newer client driver took the one client transport slot
 	TArray<INT>	ParkedAccepts;		// incoming pipes the level told us to IGNORE (not refuse)
 	DOUBLE		LastStatusPush;
+	DOUBLE		LastStatsLog;		// the per-connection traffic line, every 10 s (LogStats)
 
 	// Constructor.
 	UWebRTCNetDriver()
@@ -101,6 +102,7 @@ class UWebRTCNetDriver : public UNetDriver
 	UWebRTCConnection* GetServerConnection();
 	void NormalizeConfigDefaults( const TCHAR* Context );
 	void PushListenStatus();
+	void LogStats();
 };
 
 #define AUTO_INITIALIZE_REGISTRANTS_WEBRTCDRV \

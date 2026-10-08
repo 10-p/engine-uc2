@@ -31,6 +31,12 @@ UWebRTCConnection::UWebRTCConnection( INT InWebRTCConnId, UNetDriver* InDriver, 
 		WebRTCConnId,
 		State==USOCK_Pending ? TEXT("Pending") : State==USOCK_Open ? TEXT("Open") : TEXT("Other"),
 		(INT)OpenedLocally, (INT)MaxPacket );
+#if DO_ENABLE_NET_TEST
+	// Epic's loss/lag simulation (UNetConnection's constructor reads PktLoss=/PktLag=/PktDup=/PktOrder= from the
+	// command line, where a launch URL's options are too): say when it is armed.
+	if( PktLoss || PktLag || PktDup || PktOrder )
+		debugf( NAME_DevNet, TEXT("[WebRTC] connId=%i simulates PktLoss=%i PktLag=%i PktDup=%i PktOrder=%i"), WebRTCConnId, PktLoss, PktLag, PktDup, PktOrder );
+#endif
 
 	unguard;
 }
