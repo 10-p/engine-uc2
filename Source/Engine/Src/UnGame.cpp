@@ -30,6 +30,9 @@ ENGINE_API void UC2MigrateUserIni();	// uc2 port (D-6): UC2InputMigrate.cpp
 ENGINE_API UBOOL UC2ProfileNamesThePlayer( UClient* Client );	// D-4
 ENGINE_API void UC2ProfileNameInURL( UViewport* Viewport, FURL& URL );	// D-4
 ENGINE_API UBOOL UC2ProfilesExec( UClient* Client, const TCHAR* Cmd, FOutputDevice& Ar );	// D-3: PROFILESTATE
+// uc2 port (jitter): FRAMETRACE, one line per drawn frame (UC2FrameTrace.cpp); quiet unless asked for.
+ENGINE_API UBOOL UC2FrameTraceExec( const TCHAR* Cmd, FOutputDevice& Ar );
+ENGINE_API void UC2FrameTraceDraw( UViewport* Viewport, const FVector& CamLoc, const FRotator& CamRot, FLOAT DeltaSeconds );
 
 /*-----------------------------------------------------------------------------
 	Object class implementation.
@@ -455,6 +458,8 @@ UBOOL UGameEngine::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	if( ufrontAutoFovExec( Cmd, Ar ) )		// D-8: AUTOFOV [Off|HorPlus|Adaptive]
 		return 1;
 	if( UC2ProfilesExec( Client, Cmd, Ar ) )	// uc2 port (D-3): PROFILESTATE (UC2Profiles.cpp)
+		return 1;
+	if( UC2FrameTraceExec( Cmd, Ar ) )		// uc2 port (jitter): FRAMETRACE <frames> [tag]
 		return 1;
 	const TCHAR* Str=Cmd;
 #if WITH_PORTABLE_MOVIES
@@ -3400,6 +3405,9 @@ void UGameEngine::Draw( UViewport* Viewport, FLOAT DeltaSeconds, UBOOL Blit, BYT
 		Viewport->Unlock();
 		Viewport->PendingFrame = Blit ? 1 : 0;		
 	}
+
+	// uc2 port (jitter): the camera this frame was drawn with and where the pawn is on the screen (FRAMETRACE).
+	UC2FrameTraceDraw( Viewport, CameraLocation, CameraRotation, DeltaSeconds );
 
 	Viewport->Actor->Level->LevelAction = SavedAction;
 

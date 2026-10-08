@@ -229,7 +229,38 @@ void CMainLoop::RunLoop()
 		}
 		if( MaxFps > 0.f && (MaxTickRate <= 0.f || MaxFps < MaxTickRate) )
 			MaxTickRate = MaxFps;
-		if( MaxTickRate>0.0 )
+		// jitter (port, docs/porting/analysis/jitter.md): -framepattern=<ms>:<ms>:... gives the frames these
+		// lengths in turn (a game without a cap of its own only; it takes the place of -maxfps): uneven frame
+		// pacing, as a browser has it, made repeatable for the frame trace (FRAMETRACE, UC2FrameTrace.cpp).
+		static INT   PatternNum = -1;
+		static FLOAT Pattern[32];
+		static INT   PatternIndex = 0;
+		if( PatternNum < 0 )
+		{
+			PatternNum = 0;
+			FString Spec;
+			if( Parse( appCmdLine(), TEXT("FRAMEPATTERN="), Spec ) )
+			{
+				const TCHAR* S = *Spec;
+				while( *S && PatternNum < ARRAY_COUNT(Pattern) )
+				{
+					FLOAT Ms = appAtof( S );
+					if( Ms > 0.f )
+						Pattern[PatternNum++] = Ms / 1000.f;
+					while( *S && *S != ':' )	// not ',': Parse() ends a value at a comma
+						S++;
+					if( *S == ':' )
+						S++;
+				}
+				debugf( NAME_Init, TEXT("-framepattern: %i frame lengths"), PatternNum );
+			}
+		}
+		if( PatternNum > 0 && Engine->GetMaxTickRate() <= 0.f )
+		{
+			FLOAT Delta = Pattern[PatternIndex++ % PatternNum] - (appSeconds()-OldTime);
+			appSleep( Max(0.f,Delta) );
+		}
+		else if( MaxTickRate>0.0 )
 		{
 			FLOAT Delta = (1.0/MaxTickRate) - (appSeconds()-OldTime);
 			appSleep( Max(0.f,Delta) );

@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# Jitter trace (native): where the player's own pawn is on the screen, frame by frame, while it runs with the
+# third-person camera following (docs/porting/analysis/jitter.md). One summary line per segment and an overall
+# PASS/FAIL per configuration on stdout.
+#
+#   tools/dev/jit-trace.sh <name> <tree> <input> <pacing> [engine arguments...]
+#     <tree>    run tree under <WorkUC2>/run (tools/dev/mkrun-uc2.sh)
+#     <input>   kbm  keyboard (W/S/D/A) with the mouse owning the look (the PC default; a 1-count mouse move first)
+#               pad  the virtual pad's left stick, the pad owning the look (a short right-stick push first)
+#     <pacing>  60        -maxfps=60
+#               uneven    -framepattern=16.7:33.3:16.7:16.7:25:33.3 (frame lengths in turn, ms: a browser's
+#                         uneven pacing made repeatable; mean 23.6 ms)
+#               uncapped  no cap (the null renderer's ~1,000 frames a second)
+#
+# Each segment runs 1.3 s (forward, back, right, left) with `FRAMETRACE` on (Source/Engine/Src/UC2FrameTrace.cpp:
+# a line per drawn frame: the camera of the frame, the pawn, its projected screen position); tools/dev/jit-analyze.py
+# measures the steady part. The game runs as the M10 scenarios do (tools/dev/m10-controls.sh --file: Xvfb inside
+# <WorkUC2>/bin/capped 2G, -nullrenderer, DM-Deadbolt without bots, God after the spawn), at 1920x1080 (16:9:
+# AutoFOV on, as the owner plays), the player put at JIT_PLACE (NETPLACE, default "1977.8 583.7 -34.1 33000": room
+# for every segment). Output: JIT_OUT (default <WorkUC2>/logs/jit/trace)/<name>.{scen,out,result,
+# summary,json}.
+#
+# JIT_LIMIT=<px> (default 1.0): the configuration PASSes when every segment's frame-to-frame jitter RMS is below it.
+set -u
+repo=$(cd "$(dirname "$0")/../.." && pwd)
+work=$(cd "$repo/.." && pwd)
+name=${1:?name}; tree=${2:?tree}; input=${3:?input}; pacing=${4:?pacing}; shift 4
+out=${JIT_OUT:-$work/logs/jit/trace}
+limit=${JIT_LIMIT:-1.0}
+# A fixed start with room for every segment (the spawn is random): forward 560 units, back, right down a ramp, left
+# back, the camera never shortened by a wall (measured: arm 205-214 units in all four segments).
+place=${JIT_PLACE:-1977.8 583.7 -34.1 33000}
+m10=$repo/tools/dev/m10-controls.sh
+mkdir -p "$out"
+[ -x "$work/run/$tree/System/uc2.bin" ] || { echo "no run tree $work/run/$tree (tools/dev/mkrun-uc2.sh)" >&2; exit 2; }
+
+case $pacing in
+  60) pace=(-maxfps=60);;
+  uneven) pace=(-framepattern=16.7:33.3:16.7:16.7:25:33.3);;
+  uncapped) pace=();;
+  *) echo "unknown pacing $pacing (60 uneven uncapped)" >&2; exit 2;;
+esac
+
+segment() {   # segment <tag> <start command> <stop command>
+  cat <<SCEN
+chan exec FRAMETRACE 1000000 $1
+wait frametrace $1 armed 10
+$2
+sleep 1.3
+$3
+sleep 0.4
+chan exec FRAMETRACE 0 end-$1
+wait frametrace end-$1 armed 10
+probe $1
+SCEN
+}
+
+{
+  cat <<SCEN
+wait Bringing Level DM-Deadbolt.MyLevel up for play 120
+sleep 4
+focus
+key Alt_L 0.3
+sleep 3
+tryseek 6 P['_'].pawn == 1 ;; key Alt_L 0.3
+probe spawn
+check jit-spawned P['spawn'].pawn==1 and P['spawn'].level=='DM-Deadbolt'
+chan exec God
+wait test: exec God 10
+chan exec NETPLACE LocalPlayer $place
+sleep 1
+chan exec NETPLACE LocalPlayer $place
+sleep 1.5
+probe placed
+check jit-placed abs(P['placed'].loc[0] - ($(echo "$place" | cut -d' ' -f1))) < 2 and abs(P['placed'].loc[1] - ($(echo "$place" | cut -d' ' -f2))) < 2
+SCEN
+  if [ "$input" = pad ]; then
+    cat <<SCEN
+pad attach
+wait SDL2 pads: pad 0 connected 10
+sleep 1
+pad axis rightx 16000
+sleep 0.15
+pad axis rightx 0
+sleep 0.5
+probe owner
+check jit-pad-owns-the-look P['owner'].mouselook == 'False'
+SCEN
+    segment fwd   "pad axis lefty -32767" "pad axis lefty 0"
+    segment back  "pad axis lefty 32767"  "pad axis lefty 0"
+    segment right "pad axis leftx 32767"  "pad axis leftx 0"
+    segment left  "pad axis leftx -32767" "pad axis leftx 0"
+  else
+    cat <<SCEN
+chan mouse 1 0
+sleep 0.5
+probe owner
+SCEN
+    segment fwd   "keydown w" "keyup w"
+    segment back  "keydown s" "keyup s"
+    segment right "keydown d" "keyup d"
+    segment left  "keydown a" "keyup a"
+  fi
+} > "$out/$name.scen"
+
+echo "== $name: tree $tree, input $input, pacing $pacing ${pace[*]:-} $*  (load: $(cut -d' ' -f1-3 /proc/loadavg))"
+M10_TREE=$tree M10_OUT=$out M10_SECS=300 M10_URL="DM-Deadbolt?NumBots=0" M10_RES=1920x1080 \
+  "$m10" --file "$out/$name.scen" "$name" -nullrenderer "${pace[@]}" "$@" | sed 's/^/    /'
+python3 "$repo/tools/dev/jit-analyze.py" "$out/$name.out" --json "$out/$name.json" --tags fwd,back,right,left \
+  > "$out/$name.summary"
+sed 's/^/    /' "$out/$name.summary"
+python3 - "$out/$name.json" "$limit" "$name" <<'PY'
+import json, math, sys
+r = json.load(open(sys.argv[1])); limit = float(sys.argv[2]); name = sys.argv[3]
+worst = 0.0; ok = True; segs = 0
+for tag in ('fwd', 'back', 'right', 'left'):
+    s = r.get(tag, {})
+    if not s.get('steady') or s['steady'] < 20:
+        ok = False; print(f"    {tag}: too few steady frames ({s.get('steady', 0)})"); continue
+    segs += 1
+    worst = max(worst, s['jitter']['rms'])
+ok = ok and worst < limit
+print(f"{'PASS' if ok else 'FAIL'} {name}: worst segment jitter RMS {worst:.2f} px (limit {limit} px), {segs}/4 segments measured")
+PY

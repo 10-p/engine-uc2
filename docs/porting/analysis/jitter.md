@@ -45,3 +45,39 @@ Plan: (1) a quiet-by-default per-frame trace in `UGameEngine::Draw` (camera used
 velocity, WalkBob, the mesh's root bone as drawn, frame dt, the pawn's projected screen position) and a native
 scenario (keyboard+mouse, pad; shipped and rebuilt UCGameplay.u; 60 fps, uneven frame times, uncapped), a browser
 spec logging the same; (2) cause with evidence; (3) fix at the cause; (4) verify.
+
+## Step 1 (2026-10-08): the trace, the scenario, the first numbers
+
+Engine, quiet unless asked for:
+- `Source/Engine/Src/UC2FrameTrace.cpp`: console command `FRAMETRACE <frames> [tag]` (also the test channel's `exec`,
+  the web's `ue_exec_command`) or `-frametrace=<frames>`: one line per frame the first viewport draws, logged by
+  `UGameEngine::Draw` after the frame (`UnGame.cpp`, before `LevelAction` is restored; the AutoFOV scope still
+  applies): `frametrace <tag> <i> t= dt= cam=() camrot=() fov= view=WxH pawn=() vel=() bob=() root=() scr=() rscr=()
+  phys= look=`. `cam/camrot` = what the frame was drawn with; `root` = the skeletal mesh's root bone as posed for the
+  frame (`GetBoneCoords(0)`); `scr/rscr` = pawn / root projected as `FCameraSceneNode::UpdateMatrices` does (viewport
+  pixels); `look` = `UCPlayerInput.bMouseOwnsLook`. The engine's log lines carry no log-name prefix, hence the literal
+  `frametrace`.
+- `Source/SDLLaunch/Src/SDLLaunch.cpp`: `-framepattern=<ms>:<ms>:...` gives the frames these lengths in turn (a game
+  without a cap of its own): a browser's uneven pacing, repeatable natively. (`:` because `Parse()` stops a value at
+  a comma: the first try parsed one length.)
+- `tools/dev/jit-trace.sh <name> <tree> <kbm|pad> <60|uneven|uncapped>`: one game run (m10-controls.sh `--file`:
+  Xvfb inside `capped 2G`, `-nullrenderer`, DM-Deadbolt without bots, God, 1920x1080 = 16:9 with AutoFOV),
+  the player put at a fixed open spot (`NETPLACE LocalPlayer 1977.8 583.7 -34.1 33000`; random spawns had the
+  camera arm shortened by walls in two segments: 190 -> 48 units), four segments of 1.3 s with the trace on
+  (forward, back, strafe right, strafe left; W/S/D/A or the virtual pad's left stick after a right-stick push
+  that gives the pad the look). `uneven` = `-framepattern=16.7:33.3:16.7:16.7:25:33.3` (mean 23.6 ms, the browser's
+  25-48 ms frames in web-renderer.md).
+- `tools/dev/jit-analyze.py`: per segment the steady frames (walking, horizontal speed within 3% of the top, view
+  rotation unchanged, heading within 2 deg); jitter = RMS and max of the frame-to-frame change of the pawn's screen
+  position; `ahead = a + b (v dt)`: the pawn's distance in front of the camera along its velocity against its move
+  of that frame.
+- `tools/dev/script-build.sh`: accepts `jit*` trees (logs in `logs/jit`).
+
+First numbers, main's scripts (asset tree `UCGameplay.u` 17c1750c = what the owner has), keyboard + mouse
+(`logs/jit/trace/before-kbm-{60,uneven}.*`):
+- 60 fps (dt 16.8 ms +-0.1): jitter RMS 1.7-2.3 px, max 2.5-4.9 px; screen sd 8-9 px in x and 6-9 px in y: a smooth
+  sway, the camera's `WalkBob` (max 3.7 units; the mouse's rigid camera carries all of it).
+- uneven: jitter RMS 9.5 (forward), 9.9 (back), 21.4 (right), 21.1 (left) px, max 16.6-32.9 px per frame; and
+  **`ahead = 190.00 + 1.000 x v dt` (forward, residual 0.00), `-190.00 + 1.000 x v dt` (back), `1.018` / `1.010`
+  (strafes)**: in every frame the pawn is drawn exactly its own move of that frame (7.2-15.0 units here) in front of
+  its rest place, i.e. the frame's view is from before the move. The hypothesis of step 0 is measured.
