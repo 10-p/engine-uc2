@@ -218,3 +218,26 @@ Parts u (native ucc), w (wasm ucc under Node), g (game: set/kill/restart/off), m
 natives on and off, allow-list). Results are in the gate at the end of this notebook.
 `tools/dev/d6-mouse.sh` look scenario: two checks added (`look-sensitivity-saved-to-user-ini`,
 `look-mouse-invert-saved-to-user-ini`): its console commands were session-only before and are not now.
+
+## Checkpoint (2026-10-08 03:55, after the usage-limit cut-off at about 01:15)
+
+State found: branch `saveconfig` at 6d0798a (7 commits on 8161ead), worktree clean, no process of mine running, no temporary
+instrumentation in `Source/` or `tools/` (`grep -a "DBGREC\|UC2STAT\|GUC2NoteSeconds"` finds nothing) and none in any built
+binary (`grep -a -c UC2STAT` is 0 in the native, windows and wasm ucc/game binaries; the native, windows and wasm binaries were
+all built from the committed sources: the measurement build below was native only and was rebuilt from the reverted source,
+`cmp build-native/Source/UCC/ucc-bin run/sc/System/ucc-bin` equal).
+
+What had finished before the cut-off, with its evidence: the full `tools/dev/sc-saveconfig.sh` (u, w, g, m) on the final
+binaries, **91 PASS, 0 FAIL** (`logs/sc/sc-all-final2.txt`, 7m08s, load 17-25); the regression suites on the binary of f72face
+(Core unchanged since; 6d0798a only adds the `gameinfo` mode to the ucc test hook): `d3-profiles` 27 PASS, `c1-saves` 11 PASS,
+`c1-ini-overrides` 30 PASS, `d6-mouse look ini migrate lock` 60 PASS / 0 FAIL, `m10-controls` keyboard 16, mouse 18, text 7, pad 33,
+both 14 (`logs/sc/reg/`); builds native/windows/wasm-perf 0 errors (`logs/sc/build-native-18.log`, `build-windows-3.log`,
+`build-wasm-perf-3.log`).
+
+The measurement that was running when the limit hit: the cost of the class records (`UC2NoteDefaultOverrides`, called once per
+class when its default loads its config), instrumented in a scratch edit of UnObj.cpp and reverted: **995 records, 1.5 ms in
+total** for a ucc start with Engine, UCGameplay and everything they pull in (`UC2STAT records=995 seconds=0.001511`); about
+50 KB of memory (a `FString` per record). Not a start-up cost.
+
+What remained: re-running the regression suites on the very binary of the final commit (the idle machine allows it: load 1.3),
+the gate and the report. Done below.
