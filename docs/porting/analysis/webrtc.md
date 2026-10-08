@@ -134,3 +134,36 @@ before and after, null sink by index, removed): **1 passed (1.7 min)**:
   memory.peak 5,676 MiB (ceiling 8G, not hit); machine in use peak 13.4 GB (10.0 GB before the run).
 Frontend committed (ufrontend 6f2a302 target data + README, 079462e spec + profile + e2e README); `yarn test` 28/28,
 `yarn gates` "all CI-tier gates green" (`logs/e2/fe-test-1.txt`, `fe-gates-1.txt`).
+
+### Step 4 (2026-10-08): link statistics; the spec again; Epic's loss/lag simulation over WebRTC
+
+Engine (`Source/WebRTCDrv`): every 10 s one `[WebRTC] stats <server|client> connId=N: in .. B/s .. pkt/s, out ..,
+loss in ..% out ..%, lag .. ms` line per connection (the engine's own UNetConnection statistics of the last stat
+period; "lag not measured yet" until a round trip was measured), and `[WebRTC] connId=N simulates PktLoss=.. PktLag=..`
+when Epic's DO_ENABLE_NET_TEST simulation is armed. wasm-perf rebuilt (sha256 6cea1425ad13fa53...).
+Spec: `UC2_E2E_NET_SIM=<url params>` adds them to both pages' URLs (the launcher passes them on as travel options of
+the engine's first URL, where UNetConnection's constructor Parse()s them from the command line).
+
+- Run 3 (`logs/e2/e2e-net-3.txt`, artifact b83945ee..., the stats line without the lag fix): **1 passed**; walk 701 units,
+  rest agreement 0.4; on localhost the link carries ~28-30 packets/s each way, 0.5-1 KB/s, 0% loss, lag 38-44 ms
+  in play (the frame time of two software-heavy pages on one machine).
+- Loss run 1 (`e2e-loss-1.txt`, `UC2_E2E_NET_SIM='PktLoss=5&PktLag=50'`): join, spawn, walk (713 units, agree 0.0),
+  death/score all PASS; the LEAVE failed the 30 s window: the guest's control-channel close sat in PktLag's delay
+  queue and the guest's driver closed the pipe before it drained (an artefact of the simulation: real packets are
+  not queued). The host then logged `Standby hack detected! ValidClients:1/1` (UC2's "standby cheat" check: no
+  packet from an in-game client for 1 s) and PAUSED (PlayerController.ToggleStandbyMode -> SetPause) until the
+  connection timed out.
+- Loss run 2 (`e2e-loss-2.txt`, the spec allows 100 s for the leave under simulation): **1 passed**; both ends armed
+  (`simulates PktLoss=5 PktLag=50`), measured loss 3.3-8.1% in, 0-12% out per 10 s window, lag 166-183 ms in play
+  (50 ms x2 + frame time), walk 668 units, rest agreement 0.0, death counted on both; the host dropped the guest
+  after 60.9 s by `Connection timed out` (ConnectionTimeout=60), the glue had not reported the pipe closed (its
+  host-side reaper waits RECONNECT_GRACE_MS=90 s for a reconnect). Memory as before (host 1,697 / guest 1,569 MiB).
+
+What this means for real play: the glue's data channel is RELIABLE and ORDERED (`[PIPE] ... rtc=ordered=true/
+maxRetx=null`), so a datagram is never lost while the pipe is up; loss happens only while a pipe is dead and the
+session layer reconnects (it drops sends meanwhile; the engine's resends cover them, with the wrap/packet-0 fixes of
+network.md L2 on both ends). A guest that vanishes without leaving (tab closed, crash) is noticed by the host's
+engine only at ConnectionTimeout (60 s on the web) or by the glue after its 90 s grace; meanwhile UC2's standby
+check pauses the host's game with the standby notice (Epic's Xbox anti-cheat; natively the closed socket's ICMP drops
+the client at once, so the pause is short there). Not changed (Epic's behaviour; the glue's grace is frontend design
+for transparent reconnects): recorded as an owner note.
