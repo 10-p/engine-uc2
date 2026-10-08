@@ -488,8 +488,8 @@ scen_nodefaults() {
   cat <<'SCEN'
 keys n0 J Space W Tab
 key q
-expect $P-defaults-missing-said KeyBinds: DEFAULT KEYS NOT FOUND 10
 expect $P-defaults-missing-keeps-the-keys KeyBinds: rows \(defaults\): MOVE FORWARD=W,Up; .*JUMP / DODGE=Space,; 10
+expect $P-defaults-missing-said KeyBinds: DEFAULT KEYS NOT FOUND 10
 sleep 0.5
 key Escape
 expect $P-page-closes CloseMenu \[UC2Settings_Keys\] 10
