@@ -71,9 +71,9 @@ both() {  # both <name> <secs> <fire> <map> <args...>
   else
     UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D "$name" "$secs" "$fire" "$map" -opengl -glerrors "$@" > "$LD/$name.report" 2>&1 &
   fi
-  local pid=$!
+  local pid=${!:-}
   UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T "$name" "$secs" "$fire" "$map" -gl4es -glerrors "$@" > "$LT/$name.report" 2>&1
-  wait $pid
+  [ -z "$pid" ] || wait $pid
 }
 
 check_shaders() {
@@ -155,10 +155,10 @@ check_effects() {
   else
     ( "$repo/tools/dev/m7-effects.sh" $D $names > "$LD/fx-lines.txt" 2>&1 ) &
   fi
-  local pid=$!
+  local pid=${!:-}
   rm -f "$LT"/fx-*-b.ref.png
   UC2_GLARGS=-gl4es "$repo/tools/dev/m7-effects.sh" $T $names > "$LT/fx-lines.txt" 2>&1
-  wait $pid
+  [ -z "$pid" ] || wait $pid
   local n line dline st ok fails=0
   for n in $names; do
     line=$(grep -a "^fx $n:" "$LT/fx-lines.txt"); dline=$(grep -a "^fx $n:" "$LD/fx-lines.txt")
@@ -207,9 +207,9 @@ check_fallbacks() {
   else
     UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T fb-ref 110 34 DM-Deadbolt -gl4es -glerrors -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$LT/fb-ref.report" 2>&1 &
   fi
-  local pid=$!
+  local pid=${!:-}
   UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D fb-ref 110 34 DM-Deadbolt -opengl -glerrors -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$LD/fb-ref.report" 2>&1
-  wait $pid
+  [ -z "$pid" ] || wait $pid
   local spec sw tree arg fails=0 st s e L
   for spec in "glnos3tc|$T|-gl4es" "glnomaxlevel|$D|-opengl" "glnofragdepth|$T|-gl4es" "glnouintindex|$T|-gl4es"; do
     IFS='|' read -r sw tree arg <<<"$spec"; L=$work/logs/$tree
