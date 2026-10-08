@@ -167,3 +167,17 @@ engine only at ConnectionTimeout (60 s on the web) or by the glue after its 90 s
 check pauses the host's game with the standby notice (Epic's Xbox anti-cheat; natively the closed socket's ICMP drops
 the client at once, so the pause is short there). Not changed (Epic's behaviour; the glue's grace is frontend design
 for transparent reconnects): recorded as an owner note.
+
+### Step 5 (2026-10-08): native regressions; a second browser test (the owner's launcher flow)
+
+- Native build of this branch: `bin/capped 6G 5400 -- logs/e2/build-native.sh native 0` (configure + `-j4`): rc 0,
+  0 `error:`; `build-native/Source/WebRTCDrv` holds only CMake files (the package returns early off the web) and
+  the build log never mentions WebRTC.
+- `NET_TREE=e2 tools/dev/net-test.sh dedicated1 dedicated2 listen travel` (fresh `run/e2`, logs
+  `logs/e2/net-summary.txt`, commit 8d22b06): 31 PASS + leftovers PASS, 0 FAIL (dedicated1 8, dedicated2 9, listen
+  8, travel 6).
+- `run/e2/System/ucc-bin verifyclasses` (capped 2G): "All native class layouts match".
+- Frontend spec, second test (ufrontend bfc37e7): host from the LAUNCHER FORM (map, travel options, "Host a game",
+  Copy invite link captured from the clipboard call, Start) and the guest opening only the copied link: asserts the
+  invite names the server the panel shows (generated on a first visit, not the stock name), the engine listened
+  under that room/name, the join, both spawns, a clean leave.
