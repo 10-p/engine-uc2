@@ -469,7 +469,7 @@ padpress a
 wait KeyBinds: PRESS A KEY 10
 sleep 0.5
 key semicolon
-expect $P-dpad-right-is-key-2 KeyBinds: ;: JUMP / DODGE\. \(IT WAS: ThrowWeapon\) 10
+expect $P-dpad-right-is-key-2 KeyBinds: SEMICOLON: JUMP / DODGE\. \(IT WAS: ThrowWeapon\) 10
 sleep 0.5
 padpress b
 expect $P-pad-b-leaves-and-saves KeyBinds: saved 10
