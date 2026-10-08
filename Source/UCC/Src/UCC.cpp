@@ -408,11 +408,12 @@ static UBOOL ProfileTest( const TCHAR* Parms )
 #endif
 
 #if __STATIC_LINK && !defined(_MSC_VER)
-// saveconfig task: "ucc saveconfigtest static|instance|keys|get <Class> <Property> [<Value>] [load=<Package>]".
+// saveconfig task: "ucc saveconfigtest static|instance|gameinfo|keys|get <Class> <Property> [<Value>] [load=<Package>]".
 // Script's SaveConfig() / StaticSaveConfig() and the SAVECONFIGKEYS command without a game: the default of
 // <Property> of <Class> is set to <Value> (if given), then
 //   static   calls the native behind StaticSaveConfig() (UObject::execStaticSaveConfig) on the class,
 //   instance calls the native behind SaveConfig() (UObject::execSaveConfig) on the class default object,
+//   gameinfo calls it on a new INSTANCE of the class with the property set on that instance (a GameInfo: not saved),
 //   keys     runs "SAVECONFIGKEYS <Class> <Property>" through UObject::StaticExec.
 //   get      prints the class default of <Property> ("GET <Class> <Property>"), which shows what the ini gave it.
 // The natives are called as the script VM calls them (a frame whose code is the end-of-parameters token), so
@@ -449,6 +450,19 @@ static UBOOL SaveConfigTest( const TCHAR* Parms )
 			Defaults->execStaticSaveConfig( Stack, Result );
 		else
 			Defaults->execSaveConfig( Stack, Result );
+		return 1;
+	}
+	if( Mode==TEXT("GAMEINFO") )
+	{
+		// an INSTANCE of the class (a GameInfo: the live rules of a match, DeathMatch.AdjustSkill's call): the property is
+		// set on the instance, then the native behind SaveConfig() runs on it
+		UObject* Instance = ConstructObject<UObject>( Cls );
+		if( Value.Len() )
+			Prop->ImportText( *Value, (BYTE*)Instance + Prop->Offset, 0 );
+		FFrame Stack( Instance );
+		Stack.Code = Code;
+		BYTE Result[64];
+		Instance->execSaveConfig( Stack, Result );
 		return 1;
 	}
 	if( Mode==TEXT("KEYS") )

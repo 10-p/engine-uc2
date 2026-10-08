@@ -95,7 +95,7 @@ fromresult() {
 # u / w: ucc-bin without a game
 # ---------------------------------------------------------------------------------------------------------------
 # uccprep <sys>: our tracked inis, nothing derived, no logs
-uccprep() { cp -f "$repo"/Engine/Config/*.ini "$1/"; rm -f "$1/Avaris.ini" "$1/User.ini" "$1"/*.log "$1"/*.log.*; }
+uccprep() { cp -f "$repo"/Engine/Config/*.ini "$1/"; cp -f "$work/assets/uc2/System/Gametypes.ini" "$1/"; rm -f "$1/Avaris.ini" "$1/User.ini" "$1"/*.log "$1"/*.log.*; }
 # ucc <L> <mode> <args...>: one saveconfigtest run (<mode> static|instance|keys|get ...); L u = native in $sys, w = wasm in
 # $wsys. Output $out/<L>-<mode>.out, the engine's log $out/<L>-<mode>.log
 ucc() {
@@ -141,6 +141,15 @@ ucc_checks() {
   ucc $L instance Engine.PlayerInput MouseSmoothingMode 2
   check $L-instance-writes-the-changed-key expect_ini "$s/User.ini" Engine.PlayerInput MouseSmoothingMode 2
   check $L-instance-writes-nothing-else bash -c "n=\$(newkeys '$base' '$s/User.ini' | wc -l); [ \$n = 1 ] && echo '1 key' || { echo \"\$n keys written\"; exit 1; }"
+
+  # a live game object: DeathMatch.AdjustSkill's SaveConfig() on the match's rules. An instance of a GameInfo is not saved
+  # (its values are the URL's); the class default of the same class (the gametype's own defaults) is
+  uccprep "$s"
+  ucc $L gameinfo UCGameplay.UCDeathMatch GoalScore 99 load=UCGameplay
+  check $L-gameinfo-instance-is-not-saved logline 'not saved (an instance of a GameInfo holds the match' "$out/$L-gameinfo.log"
+  check $L-gameinfo-ini-keeps-the-gametypes-default expect_ini "$s/Gametypes.ini" UCGameplay.UCDeathMatch GoalScore 15
+  ucc $L instance UCGameplay.UCDeathMatch GoalScore 98 load=UCGameplay
+  check $L-gameinfo-class-default-is-saved expect_ini "$s/Gametypes.ini" UCGameplay.UCDeathMatch GoalScore 98
 
   # SAVECONFIGKEYS: one key of the 36 in [UCGameplay.UCPlayerInput]
   uccprep "$s"
