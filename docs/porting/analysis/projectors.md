@@ -294,3 +294,52 @@ Claims still from reading only: that the Xbox ignores the base opacity of masked
   (mean 11.4: the overlay's random noise, the known failure of main noted in LOG.md for O-9b). Stopped during
   `fallbacks` at the coordinator's new rule (at most one game run at a time; the script ran desktop and twin side
   by side): `M11_SERIAL=1` added; fallbacks and movies rerun serially below.
+- `tools/dev/o9-nvidia.sh` rerun (`O9_TREE=m7b-o9`, after the other agent's GPU run ended; `logs/m7b/o9-nvidia-2.txt`,
+  summary `logs/m7b-o9/o9-nvidia-summary.txt`): `o9-nvidia: 10 PASS, 0 FAIL lines` (combiner-gpu-programs 35/0 on
+  the NVIDIA Quadro P620, combiner-gpu-texenv-combine4 33/0/2 skipped, combiner-gpu-before reproduces the defect,
+  caps PASS, pictures-other PASS: DM-AcidRain NVIDIA vs Mesa before 0.774 after 0.729, DM-Tempest 0.607 / 0.593).
+  Main's binary against this branch on Mesa, same session (`fx-<map>-before-*.png` vs `fx-<map>-*.png` in
+  `logs/m7b-o9`), cut into an 8 x 6 grid: the differing cells are the animated pawn (its pose at the shot time),
+  the torches and the rain particles; outside them DM-AcidRain (0 static projectors) is unchanged (floor corners
+  mean 0.00 / 0.12, largest 3) and DM-Tempest (6 static projectors batched) differs on the floor by mean 1.0-1.4,
+  largest 5 levels of 255, nothing above 8: the batched projectors' rounding, the size the projector-agree check
+  measured on DM-DeepCore (largest 4). Nothing visible.
+- `tools/dev/m11-twin.sh` serial rerun (`M11_SERIAL=1`, `logs/m7b/m11-twin-2.txt`): fallbacks 4 of 5 PASS
+  (S3TC, texture max level, gl_FragDepth, 32-bit indices); `glnodepthtexture` FAIL "FALLBACK NOT IMPLEMENTED" (the
+  known missing fallback of main), leftovers PASS. Movies (`logs/m7b/m11-twin-3.txt`, alone, load ~25): 8 of 9;
+  `m9-menu-movie-shots` FAIL (the list region changes between the two shots, PSNR 25.5 dB). The same check fails
+  on main's twin runs (`logs/m11t/m9-summary.txt` 2026-10-07 17:05, `logs/o9m11t/m9-summary.txt`) and M7b touches
+  neither menus nor movies: not caused here; not rerun (load stayed above 16).
+
+## Result (2026-10-08)
+
+Per item:
+
+- **Shadow blur (item 3): numerically checked + seen (no Xbox reference picture).** Capability `XboxShadows`
+  (`RenDevHasXboxShadows()`), setting `UseXboxShadows=True`, `-noxboxshadows`, console `XBOXSHADOWS`. Active only
+  while the `PS_ShadowBlur` family is drawn (post-processing on). What changes for every player: the blob of a
+  player/bot shadow is lighter in its core (the Xbox caster grey 200 over 127 and four 1-D taps keep 43% of the
+  light under the core where the PC path's alpha caster and nine-tile blur keep 21%) and its edge is sharper.
+  Seen on DM-DeepCore and DM-Praxis under the pawn.
+- **Projector batching (item 1): level-static projectors numerically checked against the PC path + seen (no
+  Xbox reference).** Capability `XboxProjectors`, setting `UseXboxProjectors=True`, `-noxboxprojectors`,
+  console `XBOXPROJECTORS` (from the next map load). Where it matches the PC path (113 gradient projectors and
+  the rest without a material blending op) the pictures agree within 4 levels and the frame has fewer draw calls
+  (85 -> 81 DM-DeepCore, 81 -> 75 CTF-Recoil). Where it differs on purpose: the 19 projectors with a
+  `MaterialBlendingOp` (CTF-Recoil 8, DM-Meridian 4, OD-Cancer 2, DM-Legacy 2, ACT-SelketCheats 2, OD-Prism 1).
+  On CTF-Recoil the corridor floors no longer turn dark under the wire-mesh grid projectors: the PC path
+  multiplies the whole unclipped BSP surface, the Xbox path only the projected texture (mean 8.7-9.0 levels over
+  the corridor view, 65% of its pixels above 8). Pictured only on CTF-Recoil; the other five maps not.
+  Dynamic projectors (weapon effects, the 14 shadow projectors): not changed, the push-buffer renderers they use
+  on the Xbox give the same per-pixel result as the PC path.
+- **Three-layer terrain (item 2): implemented as a switch, off by default: no visible difference.** Setting
+  `UseTerrain3Layer=False`, `-terrain3layer`, console `TERRAIN3LAYER`. One pass of three layers against three
+  passes: largest 2 levels of 255 on the DM-Ascension ground, a few draw calls fewer. Left off because it gains
+  nothing anyone sees.
+
+Engine changes are behind the capabilities: a device that does not report them (UC2GL4ESDrv without the
+shaders, the Windows/D3D paths, `-noxbox*`) runs Epic's PC branch unchanged (pinned DM-Deadbolt
+`-nopostprocess` 100.000% against main). `_XBOX` is not defined; both branches stay in the sources.
+Driver fix that came with it: `DrawPrimitive` inside a deferred occlusion query now draws (it skipped every draw
+in a query, which also dropped the real draws of `bUseDeferredHWOcclusionTests` actors; only draws with colour
+and depth writes off are skipped now).
