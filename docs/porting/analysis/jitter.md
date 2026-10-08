@@ -81,3 +81,37 @@ First numbers, main's scripts (asset tree `UCGameplay.u` 17c1750c = what the own
   **`ahead = 190.00 + 1.000 x v dt` (forward, residual 0.00), `-190.00 + 1.000 x v dt` (back), `1.018` / `1.010`
   (strafes)**: in every frame the pawn is drawn exactly its own move of that frame (7.2-15.0 units here) in front of
   its rest place, i.e. the frame's view is from before the move. The hypothesis of step 0 is measured.
+
+## Step 2 (2026-10-08): the cause, and the fix at it
+
+Cause (measured in step 1 and by every rigid-camera run of step 3): the frame is drawn with the view computed in
+`PlayerWalking.PlayerMove` -> `CalculateAimInfo` -> `PlayerCalcView`, i.e. BEFORE the pawn's physics of that tick
+(the pawn ticks after its controller), and `UCPlayerController.PlayerCalcView` returns that cached view to
+`UGameEngine::Draw`. Under D-6's mouse camera (rigid: `MouseLookCamera` puts the camera at `DesiredCameraLocation`)
+the pawn is therefore drawn exactly its own move of that frame ahead of its rest place: `ahead = rest + 1.000 x v dt`
+with a residual of 0.00-0.01 units in all four directions. With even frames that is a constant offset (invisible);
+with uneven frames (any browser; a native hitch: one 37.5 ms frame at "60 fps" moved the pawn 20 px) the pawn lurches
+ahead after a long frame and falls back after a short one. Epic's lazy camera (the pad, the shipped scripts) closes
+`k x dt` of the distance each frame, so its lag `L_n = v dt_n + (1 - k dt_n) L_(n-1)` stays `v/k` whatever `dt_n`
+is: measured judder 0.15-0.44 px on the flat segments at every pacing; it was never a problem there, and D-6 exposed
+it. Not the cause: AutoFOV (FOV 106.26 in every frame of every run), the mesh (the root bone's judder follows the
+pawn's: 9.3 vs 10.5 px before, 0.5-0.9 px after), frame-time clamps (none reached), WalkBob (a smooth sway, judder
+0.03 px once it is taken out, see below).
+
+Fix (`Source/UCGameplay/Classes/UCPlayerController.uc`, `UCPlayerInput.uc`; UCGameplay.u rebuilt): when this frame's
+camera was the mouse's rigid one (`MouseLookCamera` stamps `UCPlayerInput.MouseCameraTime = Level.TimeSeconds`) and
+the pawn has moved since it was computed (`Pawn.Location != OldPawnLocation`, the place the native
+`CalcThirdPersonView` last computed from), `PlayerCalcView` computes the view again instead of returning the cached
+one (`MouseCameraLeftBehind()`): the frame is drawn from where the pawn is drawn. Order of operations, no smoothing.
+The aim (`CalculateAimInfo`) keeps Epic's order; the pad's lazy camera and the end-of-round focused views
+(`CalcFocusedView` in RoundIntermission/GameEnded) are never computed twice in a frame (a second step of a lazy
+camera would change its speed); the new variable lives in the non-native `UCPlayerInput` (no C++ layout change).
+Side effect, wanted: the HUD's and the next tick's `CurrentCameraLocation` is the view that was drawn.
+Script build: `tools/dev/script-build.sh --tree jit-make assemble make strip`: `Success - 0 error(s), 85 warning(s)`
+(M14's count; `logs/jit/jit-make-make.log`). Run tree `run/jit-fix` = asset tree + `run/jit-make/System/UCGameplay.u`.
+
+The camera's walk bob (Epic's `Pawn.CheckBob`, kept for third person on purpose by UC2: `UCPawn.CheckBob` skips
+UnrealPawn's behind-view test) is in the camera's target (`UCGameplay.cpp:418`): the rigid camera carries all of it
+(the pawn sways +-8-9 px at 1080p, smoothly, 1.3 Hz sideways / 2.5 Hz up and down: jitter RMS 2.2 px at 60 fps, judder
+0.26 px), the lazy camera passes about 60-70% of it (|i w / (k + i w)| for k 11-15/s). Left as it is (Epic's design);
+an owner choice in the report.

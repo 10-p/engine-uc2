@@ -16,11 +16,13 @@
 # a line per drawn frame: the camera of the frame, the pawn, its projected screen position); tools/dev/jit-analyze.py
 # measures the steady part. The game runs as the M10 scenarios do (tools/dev/m10-controls.sh --file: Xvfb inside
 # <WorkUC2>/bin/capped 2G, -nullrenderer, DM-Deadbolt without bots, God after the spawn), at 1920x1080 (16:9:
-# AutoFOV on, as the owner plays), the player put at JIT_PLACE (NETPLACE, default "1977.8 583.7 -34.1 33000": room
-# for every segment). Output: JIT_OUT (default <WorkUC2>/logs/jit/trace)/<name>.{scen,out,result,
+# AutoFOV on, as the owner plays), the player put at JIT_PLACE (NETPLACE, default "1977.8 583.7 -34.1 33000 -1400":
+# room for every segment). Output: JIT_OUT (default <WorkUC2>/logs/jit/trace)/<name>.{scen,out,result,
 # summary,json}.
 #
-# JIT_LIMIT=<px> (default 1.0): the configuration PASSes when every segment's frame-to-frame jitter RMS is below it.
+# JIT_LIMIT=<px> (default 1.0): the configuration PASSes when every segment's judder RMS (jit-analyze.py: each frame's
+# distance from the line between its neighbours at their times; a smooth sway such as the camera's walk bob gives ~0,
+# a place that depends on the frame's own length does not) is below it.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
@@ -28,8 +30,9 @@ name=${1:?name}; tree=${2:?tree}; input=${3:?input}; pacing=${4:?pacing}; shift 
 out=${JIT_OUT:-$work/logs/jit/trace}
 limit=${JIT_LIMIT:-1.0}
 # A fixed start with room for every segment (the spawn is random): forward 560 units, back, right down a ramp, left
-# back, the camera never shortened by a wall (measured: arm 205-214 units in all four segments).
-place=${JIT_PLACE:-1977.8 583.7 -34.1 33000}
+# back, the camera never shortened by a wall (measured: arm 205-214 units in all four segments); the view pitched at
+# -1400, the pad's auto-centring target (AUTOPITCH_THIRDPERSON), so the pad's runs keep their view still too.
+place=${JIT_PLACE:-1977.8 583.7 -34.1 33000 -1400}
 m10=$repo/tools/dev/m10-controls.sh
 mkdir -p "$out"
 [ -x "$work/run/$tree/System/uc2.bin" ] || { echo "no run tree $work/run/$tree (tools/dev/mkrun-uc2.sh)" >&2; exit 2; }
@@ -118,7 +121,8 @@ for tag in ('fwd', 'back', 'right', 'left'):
     if not s.get('steady') or s['steady'] < 20:
         ok = False; print(f"    {tag}: too few steady frames ({s.get('steady', 0)})"); continue
     segs += 1
-    worst = max(worst, s['jitter']['rms'])
+    worst = max(worst, s['judder']['rms'])
 ok = ok and worst < limit
-print(f"{'PASS' if ok else 'FAIL'} {name}: worst segment jitter RMS {worst:.2f} px (limit {limit} px), {segs}/4 segments measured")
+line = ' '.join(f"{t}={r[t]['judder']['rms']:.2f}/{r[t]['jitter']['rms']:.2f}" for t in ('fwd', 'back', 'right', 'left') if r.get(t, {}).get('steady'))
+print(f"{'PASS' if ok else 'FAIL'} {name}: worst segment judder RMS {worst:.2f} px (limit {limit} px), {segs}/4 segments; judder/jitter RMS px: {line}")
 PY

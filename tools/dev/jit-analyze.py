@@ -10,7 +10,13 @@ the previous frame's) and, over them:
   scr         the pawn's projected screen position (viewport pixels): standard deviation in x and y, and
   jitter      the RMS and the largest frame-to-frame change of that position (0 = the pawn stands still on the
               screen while it runs with the camera following, which is what a following camera should show)
-  ahead       the pawn's distance from the camera along its own velocity, against v x dt of that frame: the
+  judder      the RMS and the largest distance of each frame's position from the straight line between its two
+              neighbours at their times: a smooth movement on the screen (the camera's walk bob, a slow drift while a
+              lazy camera settles) gives ~0 at any frame time, a position that depends on the frame's own length
+              does not
+  nobob       jitter and judder of the point pawn + WalkBob (the camera's target includes WalkBob: with a rigid
+              camera that point stands still on the screen unless the view is from another moment than the pawn)
+  ahead       the pawn's (+ WalkBob's) distance from the camera along its own velocity, against v x dt of that frame: the
               least-squares slope `ahead = a + b (v dt)`. b = 1: the camera of the frame was computed before the
               pawn's move of that frame (each frame the pawn is drawn its own move ahead of its rest place);
               b = 0: the pawn's place in front of the camera does not depend on the frame time.
@@ -103,13 +109,43 @@ def jitter(frames, key):
     return dict(n=len(d), rms=math.sqrt(sum(x * x for x in d) / len(d)), max=max(d))
 
 
+def project(f, p):
+    """A world point in viewport pixels with the frame's camera, as UC2FrameTrace.cpp / FCameraSceneNode do."""
+    pitch, yaw, roll = (a * math.pi / 32768.0 for a in f['camrot'])
+    cp, sp, cy, sy, cr, sr = math.cos(pitch), math.sin(pitch), math.cos(yaw), math.sin(yaw), math.cos(roll), math.sin(roll)
+    x = (cp * cy, cp * sy, sp)
+    y = (sr * sp * cy - cr * sy, sr * sp * sy + cr * cy, -sr * cp)
+    z = (-(cr * sp * cy + sr * sy), cy * sr - cr * sp * sy, cr * cp)
+    d = [p[i] - f['cam'][i] for i in range(3)]
+    fwd = sum(d[i] * x[i] for i in range(3)); right = sum(d[i] * y[i] for i in range(3)); up = sum(d[i] * z[i] for i in range(3))
+    t = math.tan(f['fov'] * math.pi / 360.0)
+    return (0.5 * f['w'] * (1 + right / (fwd * t)), 0.5 * f['h'] * (1 - up * (f['w'] / f['h']) / (fwd * t)))
+
+
+def judder(frames, key):
+    d = []
+    for r in runs(frames):
+        for a, b, c in zip(r, r[1:], r[2:]):
+            span = c['t'] - a['t']
+            if span <= 0:
+                continue
+            k = (b['t'] - a['t']) / span
+            px = a[key][0] + (c[key][0] - a[key][0]) * k
+            py = a[key][1] + (c[key][1] - a[key][1]) * k
+            d.append(math.hypot(b[key][0] - px, b[key][1] - py))
+    if not d:
+        return dict(n=0, rms=float('nan'), max=float('nan'))
+    return dict(n=len(d), rms=math.sqrt(sum(x * x for x in d) / len(d)), max=max(d))
+
+
 def ahead_fit(frames):
     xs, ys = [], []
     for f in frames:
         v = f['vel'][:2]
         s = math.hypot(*v)
         u = (v[0] / s, v[1] / s)
-        rel = (f['pawn'][0] - f['cam'][0], f['pawn'][1] - f['cam'][1])
+        # pawn + WalkBob: the point the camera's target follows (a strafe's sideways bob is along the velocity)
+        rel = (f['pawn'][0] + f['bob'][0] - f['cam'][0], f['pawn'][1] + f['bob'][1] - f['cam'][1])
         ys.append(rel[0] * u[0] + rel[1] * u[1])
         xs.append(s * f['dt'])
     n = len(xs)
@@ -136,8 +172,16 @@ def analyse(frames):
     res['fov'] = stats([f['fov'] for f in st])
     res['scr_x'] = stats([f['scr'][0] for f in st])
     res['scr_y'] = stats([f['scr'][1] for f in st])
+    for f in st:
+        f['nobob'] = project(f, [f['pawn'][i] + f['bob'][i] for i in range(3)])
+        f['scr_check'] = project(f, f['pawn'])
+    res['projection_check'] = max(math.hypot(f['scr_check'][0] - f['scr'][0], f['scr_check'][1] - f['scr'][1]) for f in st)
     res['jitter'] = jitter(st, 'scr')
+    res['judder'] = judder(st, 'scr')
+    res['nobob_jitter'] = jitter(st, 'nobob')
+    res['nobob_judder'] = judder(st, 'nobob')
     res['root_jitter'] = jitter(st, 'rscr')
+    res['root_judder'] = judder(st, 'rscr')
     res['ahead'] = ahead_fit(st)
     res['bob_max'] = max(math.sqrt(sum(c * c for c in f['bob'])) for f in st)
     return res
@@ -151,8 +195,10 @@ def fmt(tag, r):
             f"speed {r['speed']['mean']:.1f}, dt mean {1000*r['dt']['mean']:.2f} ms "
             f"[{1000*r['dt']['min']:.2f}..{1000*r['dt']['max']:.2f}], fov {r['fov']['mean']:.2f}; "
             f"screen x sd {r['scr_x']['sd']:.2f} px y sd {r['scr_y']['sd']:.2f} px; "
-            f"jitter rms {r['jitter']['rms']:.2f} px max {r['jitter']['max']:.2f} px "
-            f"(root bone rms {r['root_jitter']['rms']:.2f} max {r['root_jitter']['max']:.2f}); "
+            f"jitter rms {r['jitter']['rms']:.2f} px max {r['jitter']['max']:.2f} px, "
+            f"judder rms {r['judder']['rms']:.2f} max {r['judder']['max']:.2f}; "
+            f"without the bob: jitter rms {r['nobob_jitter']['rms']:.2f} judder rms {r['nobob_judder']['rms']:.2f} max {r['nobob_judder']['max']:.2f}; "
+            f"root bone judder rms {r['root_judder']['rms']:.2f}; "
             f"ahead = {a.get('a', float('nan')):.2f} + {a.get('b', float('nan')):.3f} x v*dt "
             f"(v*dt {a['vdt']['min']:.2f}..{a['vdt']['max']:.2f}, residual {a.get('resid', float('nan')):.2f}); "
             f"max |WalkBob| {r['bob_max']:.2f}")
