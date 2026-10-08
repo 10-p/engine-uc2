@@ -176,6 +176,10 @@ Tasks, in the order they will be done (each one ends at an observable check, log
   4.2% at 1440x1080 (Epic sizes the targets as a fraction of the screen but blurs a fixed number of texels).
   Fix: targets sized for a 480-line reference (`PostProcessReferenceHeight=480`), the same share of the screen
   as on the Xbox at any resolution; audit every other pixel distance (radial blur, concussion).
+- O-11 **Third-person character jitter** (owner, 2026-10-08): "the camera moves smoothly, it is the character
+  that moves jittery ... the camera moves forward, but the character stays still in place ... and then it
+  updates." Suspect: D-6's rigid mouse camera exposing a per-frame offset between the pawn's drawn location and
+  the camera's (Epic's lazy camera hid it); measured per frame before fixing.
 - O-8 **Defaults**: anisotropic filtering 16x; anti-aliasing 4x (multisampled main framebuffer; WebGL 1 has
   no multisampled framebuffer objects: WebGL 2 or a post-process AA on the web, decided with evidence).
 
