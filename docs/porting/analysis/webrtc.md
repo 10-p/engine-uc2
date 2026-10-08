@@ -109,3 +109,28 @@ loses a datagram while it is open (loss only when a pipe dies and the session la
 play before the main loop starts (the host's listen peer registers only after them: PEER_OPEN came ~30 s after
 InitListen). Memory (2 s samples from Node): renderer PSS host 1,429 MiB, guest 1,328 MiB; all Chromium processes
 together 3,066 MiB; cgroup memory.peak 5,691 MiB (ceiling 8G); machine in use 13.3 GB peak (9.7 GB before).
+
+### Step 3 (2026-10-08): the spec passes: join, spawn, movement, score, leave over WebRTC
+
+`ueExecResult('Fire')` on the guest: `{"output":"","ok":true,"cmd":"Fire","delivered":4}` (accepted, nobody
+spawned); the spec now spawns with a real left click held 1 s on each canvas (as uc2-wasm-boot.spec.js does).
+Run 2 (`logs/e2/e2e-net-2.txt`, pages' consoles `logs/e2/e2e-net-2-pages/`, serve-web = this build by sha256
+before and after, null sink by index, removed): **1 passed (1.7 min)**:
+- host `[WebRTC] InitListen: room 'uc2net-muze905d' server name 'E2E Host Server'`, peer
+  `uc2-uc2net-muze905d_e2ehostserver-srv` registered; guest join key browsed, pipe open, `Welcomed by server:
+  LEVEL=DM-Deadbolt GAME=UCGameplay.UCDeathmatch LONE=0`, guest level up, host `Join succeeded: JoinPlayer`;
+- both clicked: host `START MATCH`; NETPROBE: host `localpawn=1 pawns=2 conns=1`, guest `net=Client localpawn=1 pawns=2`;
+- W held 1.5 s on the guest page: the host saw the guest pawn go (1531.9,3111.5,-34.1) -> (927.9,3680.0,-386.1),
+  901 units (it walked off a ledge); at rest guest and host agree to 0.0 units;
+- guest `Suicide`: host PRI `score=-1 deaths=1`, the guest's own view the same;
+- guest `disconnect`: host `conns=0 pawns=1 pris=1` (the guest's PRI gone) within one probe; the guest is back on
+  its own (`net=Standalone level=Menu`). The drop came from the engine's own channel-0 close, before the glue's
+  pipe-close path (`PEER_DROPPED` not seen: the glue reaps a closed host pipe only after its reconnect grace).
+- Engine lines worth knowing: guest `Received invalid actor class` + `channel 51: got None` once (the run-time
+  DefaultPhysicsVolume, Epic's, as natively, network.md step 3); host `UdpBeacon ... BindPort: socket failed` /
+  `UdpBeacon failed to bind a port.` (the game spawns its system-link beacon on a listen server; a browser has no
+  UDP sockets; harmless); `Failed to assign pawn class to new player!` in the menu after leaving (also natively).
+- Memory (Node, 2 s): PSS host browser 1,654 MiB, guest browser 1,550 MiB, all Chromium 3,098 MiB; cgroup
+  memory.peak 5,676 MiB (ceiling 8G, not hit); machine in use peak 13.4 GB (10.0 GB before the run).
+Frontend committed (ufrontend 6f2a302 target data + README, 079462e spec + profile + e2e README); `yarn test` 28/28,
+`yarn gates` "all CI-tier gates green" (`logs/e2/fe-test-1.txt`, `fe-gates-1.txt`).

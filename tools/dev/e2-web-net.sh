@@ -3,7 +3,7 @@
 # wasm-perf artifact, under the memory rules of CLAUDE.md ("Running anything").
 #
 #   tools/dev/e2-web-net.sh <tag> [spec] [extra playwright args...]
-#     <tag>   names the logs: <WorkUC2>/logs/e2/e2e-<tag>.txt, .trace, -proof.txt
+#     <tag>   names the logs: <WorkUC2>/logs/e2/e2e-<tag>.txt, .trace, -proof.txt, -pages/<page>-console.txt
 #     spec    default uc2-wasm-net.spec.js
 #
 # What it does, in order (and refuses to start when it cannot do it safely):
@@ -42,7 +42,7 @@ want=$(sha256sum "$ART/SDLLaunch.wasm" | cut -d' ' -f1)
 idx=$(pactl load-module module-null-sink sink_name=uc2e2 sink_properties=device.description=uc2e2 2>/dev/null) || idx=
 echo "null sink module index: ${idx:-none}" >> "$proof"
 echo "machine before: $(free -m | awk '/^Mem:/{print $3" MiB used, "$7" MiB available"}'), load $(cut -d' ' -f1-3 /proc/loadavg)" >> "$proof"
-PULSE_SINK=uc2e2 UFRONT_E2E_TRACE=$OUT/e2e-$tag.trace \
+PULSE_SINK=uc2e2 UFRONT_E2E_TRACE=$OUT/e2e-$tag.trace UC2_E2E_LOG_DIR=$OUT/e2e-$tag-pages \
   $W/bin/capped 8G 1800 -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=16 --log="$OUT/e2e-$tag-guard.log" -- \
   --target uc2 "$spec" "$@" > "$log" 2>&1
 rc=$?
