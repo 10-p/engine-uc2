@@ -379,3 +379,6 @@ boot, selftest 15/15 on both, progtest, pinned: 6 PASS) every non-movie, non-dep
 As the coordinator asks, the final measurement and the Windows/wasm-perf builds are now repeated on a quiet
 machine (load 1.3): the builds with -j4, then `tools/dev/pp-scale.sh pp` with every check in one tree, one game
 at a time, then the sheets. Remaining after that: the final report.
+- Builds repeated (04:05, load 1.3, -j4, the changed sources touched so they recompile; `logs/pp/final-*-build.log`):
+  native, windows, wasm-perf `[100%] Built target SDLLaunch`, exit 0 each; `uc2.bin` 47d2cd24 and `SDLLaunch.wasm`
+  6fe60cb8 bit-identical to the 23:40 builds (the Windows `uc2.exe` hash changes with the link time stamp).
