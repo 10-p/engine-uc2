@@ -382,3 +382,23 @@ at a time, then the sheets. Remaining after that: the final report.
 - Builds repeated (04:05, load 1.3, -j4, the changed sources touched so they recompile; `logs/pp/final-*-build.log`):
   native, windows, wasm-perf `[100%] Built target SDLLaunch`, exit 0 each; `uc2.bin` 47d2cd24 and `SDLLaunch.wasm`
   6fe60cb8 bit-identical to the 23:40 builds (the Windows `uc2.exe` hash changes with the link time stamp).
+
+## Step 11. The final measurement, repeated on a quiet machine (2026-10-08 04:10-05:05)
+
+`tools/dev/pp-scale.sh pp selftest glow dof blur radial identity aspect sheets`, one tree, one game run at a time,
+binary 47d2cd24 (`logs/pp/final2.txt`; load 1-26 during the run, every shot guarded: glow >= 60 frames to settle,
+sigma checks >= 3 frames between shots): **10 PASS, 0 FAIL**.
+
+| Check | 640x480 | 1440x1080 now (before) | 2880x2160 now (before) |
+|---|---|---|---|
+| glow width above 10% of peak, % of picture height | 8.54 | 8.54 (4.17) | 8.33 (3.12) |
+| glow peak brightening, levels of 255 | 12.63 | 12.95 (21.75) | 13.08 (19.72) |
+| depth of field, sigma in 480-line pixels | 3.10 | 3.15 (1.45) | 3.10 (0.70) |
+| radial blur at 30, equivalent inset in 640x480 pixels | 9.10 | 9.20 (4.60) | 9.20 (2.30) |
+| concussion blur (BlurMe), sigma (reference 480 / 0, same frame) | 3.60 / 3.55 | 3.50 / 3.45 | 3.85 / 3.80 |
+| self-test | | 15/15 | 15/15 |
+
+1920x1080 with AutoFOV on (the owner's view; the tube is the same picture as the 4:3 one): now width 8.12%, peak
+13.45; main's binary 4.17%, 21.75 (PASS aspect). Identity at 640x480: main/new 0 differing pixels outside the
+spinning pickups in both pairs, as main/main (PASS). `ucc-bin verifyclasses` on the final build: `All native class
+layouts match`. Sheets regenerated in `logs/pp/sheets/` (19 files). Nothing of this branch is running.
