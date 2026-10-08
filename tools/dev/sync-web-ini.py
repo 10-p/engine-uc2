@@ -20,6 +20,8 @@ DELTAS = [
     ('Default.ini', 'Engine.Engine', 'RenderDevice', 'UC2GLDrv.UC2GLRenderDevice', 'UC2GL4ESDrv.UC2GL4ESRenderDevice', None),
     # game pads through the browser's Gamepad API are untested
     ('Default.ini', 'SDL2Drv.SDL2Client', 'UseJoystick', 'True', 'False', None),
+    # E-2: a browser has no sockets; the WebRTC driver over the frontend's data channels (webrtc.md)
+    ('Default.ini', 'Engine.Engine', 'NetworkDevice', 'IpDrv.TcpNetDriver', 'WebRTCDrv.WebRTCNetDriver', None),
 ]
 
 # Owned by the web build, not derived from the native file: whatever the CURRENT web file says for these is
@@ -27,7 +29,9 @@ DELTAS = [
 # the openal-soft section with its web-only Backends= key, the movie section). A key or section the current web
 # file does not have comes from the native file, or is left out if that has none either.
 WEB_KEYS = [('Default.ini', 'Engine.Engine', 'AudioDevice')]
-WEB_SECTIONS = [('Default.ini', 'UC2ALAudio.UC2ALAudioSubsystem'), ('Default.ini', 'UC2Movie')]
+WEB_SECTIONS = [('Default.ini', 'UC2ALAudio.UC2ALAudioSubsystem'), ('Default.ini', 'UC2Movie'),
+                # E-2: the WebRTC driver's own config section (no native counterpart; docs/porting/analysis/webrtc.md)
+                ('Default.ini', 'WebRTCDrv.WebRTCNetDriver')]
 
 def sections(lines):
     """[(name or None, first line index, end index)] over a list of lines."""

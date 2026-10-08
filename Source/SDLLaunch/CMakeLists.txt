@@ -37,6 +37,11 @@ if(TARGET UC2Movie)
   list(PREPEND LINK_PACKAGES UC2Movie)
   target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_UC2MOVIE=1)
 endif()
+# E-2: the browser's network driver (web build only; Source/WebRTCDrv/CMakeLists.txt).
+if(TARGET WebRTCDrv)
+  list(PREPEND LINK_PACKAGES WebRTCDrv)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_WEBRTCDRV=1)
+endif()
 if(MINGW)
   # M12: uc2.exe. A Windows-subsystem program like Epic's Avaris.exe (no console window; the log is
   # System/Avaris.log, -log still echoes to a console if one is attached). MinGW's CRT calls our main()

@@ -47,6 +47,9 @@ Revision history:
 #if UC2_WITH_UC2MOVIE	// M9
 #include "UC2Movie.h"
 #endif
+#if UC2_WITH_WEBRTCDRV	// E-2: the browser's network driver (web build only)
+#include "WebRTCDrv.h"
+#endif
 #endif
 #include "UnMovie.h"	// M9: appPlayMovieFullscreen (Engine)
 
@@ -344,6 +347,17 @@ static void ReplaceMissingDrivers()
 			GConfig->SetString( TEXT("Engine.Engine"), Drivers[i].Key, Drivers[i].Replacement );
 		}
 	}
+#if UC2_WITH_WEBRTCDRV
+	// E-2: a browser has no sockets. The web Default.ini names the WebRTC driver, but an Avaris.ini derived
+	// by an older web build (the frontend keeps it) still names the TCP one: switch it, as engine-ut2004's
+	// launcher does; the frontend leaves P2P to the engine (its netModeSetting.ts seeds nothing for it).
+	FString NetDevice = GConfig->GetStr( TEXT("Engine.Engine"), TEXT("NetworkDevice") );
+	if( appStricmp( *NetDevice, TEXT("IpDrv.TcpNetDriver") )==0 )
+	{
+		debugf( NAME_Init, TEXT("NetworkDevice=%s cannot work in a browser: using WebRTCDrv.WebRTCNetDriver"), *NetDevice );
+		GConfig->SetString( TEXT("Engine.Engine"), TEXT("NetworkDevice"), TEXT("WebRTCDrv.WebRTCNetDriver") );
+	}
+#endif
 }
 
 /*-----------------------------------------------------------------------------
@@ -509,6 +523,9 @@ int main( int argc, char** argv )
 #endif
 #if UC2_WITH_UC2MOVIE	// M9
 		AUTO_INITIALIZE_REGISTRANTS_UC2MOVIE;
+#endif
+#if UC2_WITH_WEBRTCDRV	// E-2
+		AUTO_INITIALIZE_REGISTRANTS_WEBRTCDRV;
 #endif
 		AUTO_INITIALIZE_REGISTRANTS_IPDRV;
 		AUTO_INITIALIZE_REGISTRANTS_UWEB;

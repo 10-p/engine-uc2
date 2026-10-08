@@ -103,3 +103,14 @@ if(TARGET UC2GL4ESDrv)
   )
 endif()
 # --- end M11 ---
+# --- E-2: the network driver's transport (docs/porting/analysis/webrtc.md) ---------------------------------------
+# WebRTCDrv calls the webrtc_* imports; vendor/glue/webrtc-shim.js (byte-identical to engine-ut2004's and the
+# frontend's ABI v1 copy) defines them as forwarders to Module.UE.net, which the host injects before main(). Its
+# $ueNet rides in through each forwarder's __deps, so nothing is force-included. send/recv are answered on the
+# engine's worker from the glue's shared packet rings (installed by the worker bootstrap of wasmfs-shim.js); the
+# other calls are proxied to the main thread, where RTCPeerConnection lives.
+if(TARGET WebRTCDrv)
+  target_link_options(${PROJECT_NAME} PRIVATE "SHELL:--js-library ${CMAKE_SOURCE_DIR}/vendor/glue/webrtc-shim.js")
+  set_property(TARGET ${PROJECT_NAME} APPEND PROPERTY LINK_DEPENDS "${CMAKE_SOURCE_DIR}/vendor/glue/webrtc-shim.js")
+endif()
+# --- end E-2 ---

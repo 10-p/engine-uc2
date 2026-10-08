@@ -1423,6 +1423,25 @@ UBOOL UGameEngine::Browse( FURL URL, const TMap<FString,FString>* TravelInfo, FS
 		? Client->Viewports(0)
 		: NULL;
 
+#ifdef __EMSCRIPTEN__
+	// E-2 (WebRTCDrv, docs/porting/analysis/webrtc.md): the frontend joins a game by putting
+	// "<room>_<serverSlug>?connect" on the command line (engine-ut2004's convention). A join key has no '.', so
+	// FURL reads it as a local MAP; the connect option says it is the host to dial: browse it as a network URL.
+	// The option is dropped, so that no later URL built from this one (a partial travel copies every option)
+	// turns a real map name into a host.
+	if( URL.IsLocalInternal() && URL.HasOption(TEXT("connect")) && URL.Map.Len() )
+	{
+		debugf( NAME_DevNet, TEXT("Browse: '%s' with ?connect is a WebRTC join key, not a map"), *URL.Map );
+		URL.Host = URL.Map;
+		URL.Map  = FURL::DefaultMap;	// what FURL gives any URL that names a host
+		TArray<FString> Kept;
+		for( INT i=0; i<URL.Op.Num(); i++ )
+			if( appStricmp( *URL.Op(i), TEXT("connect") )!=0 )
+				new(Kept)FString( URL.Op(i) );
+		URL.Op = Kept;
+	}
+#endif
+
 	// Handle normal URL's.
 	if( URL.IsLocalInternal() )
 	{
