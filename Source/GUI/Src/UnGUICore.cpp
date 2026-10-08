@@ -1022,6 +1022,12 @@ static void MouseClickRelease( UGUIController* C );
 // any other press, and once its character has been dropped.
 static BYTE GPadKeyHeld = 0;
 
+// D-9: the keys whose press a raw key capture (OnNeedRawKeyPress) has seen, and the keys held down (a
+// press not yet released, so an auto-repeated press is told from a fresh one); see NativeKeyEvent.
+static BYTE  GRawCapturePressed[256];	// indexed by the BYTE key code
+static BYTE  GRawKeyHeld[256];
+static UBOOL GRawCaptureActive = 0;
+
 static BYTE EmulatedPadCode( BYTE iKey, UBOOL TextEntry )
 {
 	if( !GEmulatedPadLoaded )
@@ -1149,16 +1155,42 @@ UBOOL UGUIController::NativeKeyEvent(BYTE& iKey, BYTE& State, FLOAT Delta )
 	// =============================================================================================
 	// Pass the raw input to the Controllers NeedRawKeyPress delegate (for KeyConfigs)
 	// =============================================================================================
+	// D-9: the delegate gets a key on its release, as Epic's code does, but only a key freshly PRESSED
+	// while the delegate was set: UC2's menus act on presses, so the release of the Enter (pad A) or the
+	// click that started a capture (UCMenu's keys page) came next and was taken as the key to bind; and
+	// SDL's auto-repeat sends more presses of a key that is held down (not fresh: GRawKeyHeld).
+	UBOOL bFreshPress = State == IST_Press && !GRawKeyHeld[iKey];
+	if ( State == IST_Press )
+		GRawKeyHeld[iKey] = 1;
+	else if ( State == IST_Release )
+		GRawKeyHeld[iKey] = 0;
 	if ( DELEGATE_IS_SET(OnNeedRawKeyPress) )
 	{
-		if (State==IST_Release)
-			delegateOnNeedRawKeyPress(iKey);
+		if ( !GRawCaptureActive )
+		{
+			appMemzero( GRawCapturePressed, sizeof(GRawCapturePressed) );
+			GRawCaptureActive = 1;
+		}
+		if ( bFreshPress )
+			GRawCapturePressed[iKey] = 1;
+		else if ( State == IST_Release )
+		{
+			if ( GRawCapturePressed[iKey] )
+			{
+				GRawCapturePressed[iKey] = 0;
+				debugf( NAME_DevUI, TEXT("Raw key capture: %s"), Viewport->Input ? Viewport->Input->GetKeyName(EInputKey(iKey)) : TEXT("?") );
+				delegateOnNeedRawKeyPress(iKey);
+			}
+			else
+				debugf( NAME_DevUI, TEXT("Raw key capture: ignored the release of %s (pressed before the capture began)"), Viewport->Input ? Viewport->Input->GetKeyName(EInputKey(iKey)) : TEXT("?") );
+		}
 
 		if ( DeleteStack.Num() )
 			eventClearDeleteStack();
 
 		return true;
 	}
+	GRawCaptureActive = 0;
 
 	if (iKey==IK_Enter && AltPressed)
 	{
