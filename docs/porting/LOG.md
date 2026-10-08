@@ -486,3 +486,17 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   harness teardown complaint: a browser profile outlived the test -- spec hygiene, with the Enter-retry overshoot).
   Not done: in-game server discovery (UC2's System Link uses UDP broadcast), two guests, travel over WebRTC.
   Republished the owner's preview.
+- 2026-10-08 — **O-11 green (third-person character jitter).** Merged `jitter` (c59c02d). Cause, measured with a new
+  per-frame trace (`FRAMETRACE`, `Source/Engine/Src/UC2FrameTrace.cpp`; `-framepattern=` in SDLLaunch for repeatable
+  uneven frames; `tools/dev/jit-trace.sh`, `jit-analyze.py`): a frame's view is computed in PlayerMove (for the aim)
+  before the pawn's physics, and D-6's rigid mouse camera then drew the pawn its own move of that frame ahead of its
+  place (fit: ahead = 1.000 x v*dt), a different amount every frame when frame times are uneven (the browser); Epic's
+  lazy camera (the pad) hides it. Fix, UCGameplay.u only: `PlayerCalcView` computes the view again when this frame's
+  camera was the mouse's and the pawn has moved (`UCPlayerController.uc` MouseLookCamera/MouseCameraLeftBehind,
+  `UCPlayerInput.uc` MouseCameraTime). Coordinator's run on main (`logs/coord/a14`): native/windows/wasm-perf build;
+  scripts 0 errors; UCGameplay.u switched (9ca783e7; SCRIPTS.txt; ufrontend 21b49eb); verifyclasses; jit-trace kbm
+  uneven 0.53 px (before 10.5-20.7), 60 fps 0.26, uncapped 0.01 (limit 1.0); pad 1.87 px worst segment, identical
+  before the fix (jit-main 17c1750c: 1.87; the lazy camera on the test spot's ramp); m10 5/5; d6-mouse 67/2 (the
+  spawn-dependent lock check, and the pad walk check at a spawn by a wall: rerun twice 21/0, walk -353/+408); browser
+  boot 4/4, jitter 1/1 (judder 0.50-0.70 px), keys 1/1, saves 1/1. What remains on screen is Epic's walk bob (about
+  +-8 px at 1080p, smooth). Preview republished 13:29.
