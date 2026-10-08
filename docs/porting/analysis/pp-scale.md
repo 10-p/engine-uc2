@@ -355,3 +355,12 @@ Sheets for the owner (`tools/dev/pp-scale.sh pp sheets`): `logs/pp/sheets/` - pe
 and `-2880x2160.png` (640x480 | before | now, whole pictures at the 480-line scale) and `-detail.png` (a part
 enlarged twice from each picture's own resolution), and `aspect-1920x1080-autofov*.png` (main's binary and this
 one, 16:9 with AutoFOV on and the UI box).
+
+## Step 10. The twin, one run at a time (2026-10-08 01:10)
+
+`M11_SERIAL=1 M11_DESKTOP_TREE=ppm11 M11_TWIN_TREE=ppm11t tools/dev/m11-twin.sh effects m6 fallbacks movies`: the
+first attempt stopped after the desktop half of `effects` on a bug of my serial mode (`$!` unbound under `set -u`
+when nothing had been started in the background; fixed `2eb317b`). That desktop half is `tools/dev/m7-effects.sh
+ppm11` on the final binary (`logs/pp/m7-effects-ppm11-lines.txt`): **14 lines, every one `critical=0 glerrors=0
+programs_failed=0+0 left_behind=0 tries=1`; praxis-panes A against the wine reference mean 2.040 (first try)**.
+Rerun of the four checks started (`logs/pp/m11-twin-3.txt`).
