@@ -321,6 +321,21 @@ UBOOL FSDL2InputTest::Execute( USDL2Client* Client, const TCHAR* Line )
 	{
 		return 0;
 	}
+	else if( ParseCommand(&Cmd,TEXT("KEYS")) )
+	{
+		// D-9: the first viewport's bindings of the named keys, one line: keys <tag> <Key>="<binding>" ...
+		FString Tag, Name, Out;
+		ParseToken( Cmd, Tag, 0 );
+		UInput* Input = Client->Viewports.Num() ? Client->Viewports(0)->Input : NULL;
+		while( Input && ParseToken( Cmd, Name, 0 ) )
+		{
+			EInputKey Key;
+			FString Value = Input->FindKeyName( *Name, Key ) ? FString(Input->Bindings[Key]) : FString(TEXT("?"));
+			Out += FString::Printf( TEXT(" %s=\"%s\""), *Name, *Value.Replace( TEXT("\""), TEXT("'") ) );
+		}
+		debugf( SDL2INPUT, TEXT("keys %s%s"), *Tag, *Out );
+		return 0;
+	}
 	else if( ParseCommand(&Cmd,TEXT("MOUSE")) )
 	{
 		// D-6: exact relative motion, as SDL delivers a mouse's motion in relative mode (xrel/yrel in counts,
@@ -480,6 +495,24 @@ void FSDL2InputTest::Probe( USDL2Client* Client, const TCHAR* Tag )
 		*GetPropText( PC->PlayerInput, TEXT("bInvertMouseLook") ),
 		*GetPropText( PC->PlayerInput, TEXT("bInvertMouse") ),
 		*GetPropText( PC, TEXT("bAutoCenterPitch") ) );
+	// D-9: the caption of the focused control, or of the nearest control above it in the focus chain that has
+	// one (a GUILabelButton; the slider of a menu option has none, the option has), on a line of its own.
+	FString Caption;
+	{
+		UObject* Chain[17];
+		INT Count = 0;
+		for( UObject* C = Page; C && Count<17; )
+		{
+			Chain[Count++] = C;
+			UObject* Next = GetObjectProp( C, TEXT("FocusedControl") );
+			if( !Next || Next==C )
+				break;
+			C = Next;
+		}
+		for( INT i=Count-1; i>0 && !Caption.Len(); i-- )
+			Caption = GetPropText( Chain[i], TEXT("Caption") );
+	}
+	debugf( SDL2INPUT, TEXT("probe4 %s caption=\"%s\""), Tag, *Caption.Replace( TEXT("\""), TEXT("'") ) );
 	// D-6: the other pawns (lock-on targets), with line of sight and the view rotation that faces them
 	for( INT i=0; ; i++ )
 	{

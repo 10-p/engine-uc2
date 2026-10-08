@@ -40,6 +40,11 @@ D-6 additions (an engine without them prints none of their lines; older scenario
                                   W[tag] (list of dicts: i, t, pitch, yaw, cam, camrot, loc, locked, mouselook)
     pyfile <path>                 run a Python file in the namespace 'check' and 'pyexec' see (helper functions)
     pyexec <python statement>     run one statement in that namespace (e.g. save a measurement)
+D-9 additions:
+    probe <tag>                   also keeps P[tag].caption (the "probe4" line: the focused control's caption, or the
+                                  nearest one above it in the focus chain)
+    keys <tag> <Key> [<Key>...]   the first viewport's bindings of those keys (engine key names: J, Space, LeftMouse)
+                                  into K[tag] (dict key name -> binding text)
 """
 import ctypes, re, sys, time, os, math
 
@@ -272,6 +277,9 @@ PROBE2_RX = re.compile(r'probe2 (\S+) cam=\(([-\d.]+),([-\d.]+),([-\d.]+)\) camr
                        r'enemy=(\S+) mouselook=(\S*) sens=(\S*) invert=(\S*) padinvert=(\S*) autocenter=(\S*)')
 PROBE3_RX = re.compile(r'probe3 (\S+) other (\d+) (\S+) loc=\(([-\d.]+),([-\d.]+),([-\d.]+)\) dist=([-\d.]+) los=(\d) '
                        r'face=\((-?\d+),(-?\d+)\)')
+PROBE4_RX = re.compile(r'probe4 (\S+) caption="(.*)"')
+KEYS_RX = re.compile(r'(\S+)="([^"]*)"')
+K = {}
 WATCH_RX = re.compile(r'watch (\S+) (\d+) t=([-\d.]+) rot=\((-?\d+),(-?\d+)\) cam=\(([-\d.]+),([-\d.]+),([-\d.]+)\) '
                       r'camrot=\((-?\d+),(-?\d+)\) loc=\(([-\d.]+),([-\d.]+),([-\d.]+)\) locked=(\S*) mouselook=(\S*)')
 W = {}
@@ -287,7 +295,7 @@ def probe(tag):
         raise RuntimeError('unparsable probe line: ' + log_lines[i])
     P[tag] = Probe(m)
     pr = P[tag]
-    pr.cam = None; pr.others = []
+    pr.cam = None; pr.others = []; pr.caption = ''
     # The D-6 lines follow the first one in the same call (an engine without them has none: 3 s, then go on).
     if wait_for(r'probe2 ' + re.escape(tag) + ' cam=', 3) is not None:
         time.sleep(0.2)
@@ -300,6 +308,10 @@ def probe(tag):
             pr.locked = g[7] == 'True'; pr.enemy = g[8]; pr.mouselook = g[9]; pr.sens = g[10]
             pr.invert = g[11]; pr.padinvert = g[12]; pr.autocenter = g[13]
             continue
+        m4 = PROBE4_RX.search(line)
+        if m4 and m4.group(1) == tag:
+            pr.caption = m4.group(2)
+            continue
         m3 = PROBE3_RX.search(line)
         if m3 and m3.group(1) == tag:
             g = m3.groups()
@@ -308,7 +320,7 @@ def probe(tag):
             continue
         if 'probe ' in line and ' level=' in line:
             break
-    print(f"  probe {tag}: {P[tag]}" + (f" cam={pr.cam} locked={pr.locked} enemy={pr.enemy} mouselook={pr.mouselook}"
+    print(f"  probe {tag}: {P[tag]}" + (f" caption={pr.caption!r}" if pr.caption else '') + (f" cam={pr.cam} locked={pr.locked} enemy={pr.enemy} mouselook={pr.mouselook}"
                                         f" sens={pr.sens} invert={pr.invert} padinvert={pr.padinvert}"
                                         f" others={[(o['name'], o['los'], round(o['dist'])) for o in pr.others]}"
                                         if pr.cam is not None else ''), flush=True)
@@ -377,7 +389,7 @@ def run():
         execute(line)
 
 
-NS = {'P': P, 'W': W, 'yawdiff': yawdiff, 'pitchdiff': pitchdiff, 'dist': dist, 'fwd': fwd, 'side': side,
+NS = {'P': P, 'W': W, 'K': K, 'yawdiff': yawdiff, 'pitchdiff': pitchdiff, 'dist': dist, 'fwd': fwd, 'side': side,
       'abs': abs, 'min': min, 'max': max, 'math': math, 'os': os, 'chan': chan, 'record': record}
 
 
@@ -456,6 +468,15 @@ def execute(line):
             chan(rest)
         elif cmd == 'probe':
             probe(rest)
+        elif cmd == 'keys':
+            tag, _, names = rest.partition(' ')
+            chan('keys ' + rest)
+            i = wait_for(r'SDL2Input: keys ' + re.escape(tag) + r'( |$)', 20)
+            if i is None:
+                raise RuntimeError('no keys line for ' + tag)
+            body = log_lines[i].split('keys ' + tag, 1)[1]
+            K[tag] = {m.group(1): m.group(2) for m in KEYS_RX.finditer(body)}
+            print(f"  keys {tag}: {K[tag]}", flush=True)
         elif cmd == 'shot':
             chan('exec shot')
             with open(result_path + '.shots', 'a') as f:
