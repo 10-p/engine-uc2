@@ -471,7 +471,7 @@ def execute(line):
         elif cmd == 'keys':
             tag, _, names = rest.partition(' ')
             chan('keys ' + rest)
-            i = wait_for(r'SDL2Input: keys ' + re.escape(tag) + r'( |$)', 20)
+            i = wait_for(r'^(SDL2Input: )?keys ' + re.escape(tag) + r'( |$)', 20)
             if i is None:
                 raise RuntimeError('no keys line for ' + tag)
             body = log_lines[i].split('keys ' + tag, 1)[1]

@@ -15,14 +15,18 @@ sleep 0.5
 key Escape
 wait CloseMenu \[GUIMessageBox\] 10
 sleep 2
-probe s0
 shot settings
-seek 8 'KEYBOARD' in P['_'].text ;; key Down
+seek 8 'KEYBOARD' in P['_'].caption ;; key Down
 key Return
 expect x-keys-page-opens OpenMenu \[UCMenu.UC2Settings_Keys\] 15
 sleep 3
 probe k0
 shot keys
+key Right
+key Right
+sleep 0.5
+probe k0b
+shot keys-sens
 key Down
 sleep 0.5
 key Down
@@ -36,3 +40,27 @@ key j
 sleep 1
 probe k2
 shot keys-bound
+key Right
+sleep 0.3
+key Down
+sleep 0.3
+key Return
+sleep 0.5
+key c
+sleep 1
+shot keys-swap
+key Down
+key Down
+key Down
+key Down
+sleep 0.5
+key Return
+sleep 0.5
+key Escape
+sleep 0.5
+key Return
+sleep 0.5
+key BackSpace
+sleep 1
+shot keys-clear
+keys k3 J W Up S Down C Space Tab
