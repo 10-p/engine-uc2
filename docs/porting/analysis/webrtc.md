@@ -79,3 +79,33 @@ Engine changes (all web-only; the native build compiles nothing new):
   copies every option, so leaving it would turn a later local map into a host).
 
 Build: wasm-perf from scratch, `bin/capped 6G 5400 -- logs/e2/build-wasm-perf.sh 0` (-j4).
+
+Build result: `build-wasm-perf` rc 0, 0 `error:` (`logs/e2/build-wasm-perf-0.log`, ~6 min); the module imports the 9
+webrtc_* calls the driver makes; SDLLaunch.wasm sha256 0426c53b0ef05b93...
+
+### Step 2 (2026-10-08): frontend data + spec; first browser run: the JOIN works over WebRTC
+
+Frontend (ufrontend, branch uc2, uncommitted at this point): `targets/uc2/target.json` network block
+(`serverName` = Avaris.ini [Engine.GameReplicationInfo] ServerName, stock `Another Unreal Server`; `modes` p2p only +
+`networkDevice`), notices (join-failed / join-refused / version-mismatch / host-failed with UC2's own wording),
+capability `webrtc` recommended; `packages/e2e/lib/engines/uc2.profile.js` host/client milestone tables and net
+surface; new `packages/e2e/uc2-wasm-net.spec.js` (shared lib/net-harness.js; NETPROBE through the shell's ueExec;
+memory sampled from Node). New `tools/dev/e2-web-net.sh` (this repo) runs it under the rules.
+
+Run 1 (`logs/e2/e2e-net-1.txt`, serve-web proven = this build by sha256 before/after, null sink by index, removed):
+host listens (`[WebRTC] InitListen: room 'uc2net-muze3adc' server name 'E2E Host Server'`, the launcher's seed
+read from the CONFIG), the glue registers `uc2-uc2net-muze3adc_e2ehostserver-srv`; guest launched from the invite
+URL: `Browse: '...' with ?connect is a WebRTC join key`, `[WebRTC] InitConnect: room key ...`, pipe FULLY OPEN on
+both sides, host `ACCEPTED connection 1`, guest `Welcomed by server: LEVEL=DM-Deadbolt GAME=UCGameplay.UCDeathmatch`,
+guest `Bringing Level DM-Deadbolt.MyLevel up for play`, host `Join request: ...?Name=JoinPlayer...`, `Join
+succeeded: JoinPlayer`; NETPROBE on both pages agrees (2 PRIs, conns=1, net=ListenServer / Client).
+FAILED at the spawn: `ueExec('Fire')` every ~4 s for 120 s spawned nobody (both PRIs stayed spectators, pawns=0).
+The uc2 boot spec spawns with a REAL left click held 1 s (its comment: a second click for the pointer lock); the
+console route of `Fire` is not what it uses. Next: real clicks, plus `ueExecResult('Fire')` once to see the
+engine's answer, and the full console of each page written to disk.
+Observations: the glue's game data channel is `ordered=true/maxRetx=null` (reliable, ordered SCTP), not the
+unordered/unreliable channel network.md assumed: the engine's own acks/resends run on top of a channel that never
+loses a datagram while it is open (loss only when a pipe dies and the session layer reconnects). The startup logos
+play before the main loop starts (the host's listen peer registers only after them: PEER_OPEN came ~30 s after
+InitListen). Memory (2 s samples from Node): renderer PSS host 1,429 MiB, guest 1,328 MiB; all Chromium processes
+together 3,066 MiB; cgroup memory.peak 5,691 MiB (ceiling 8G); machine in use 13.3 GB peak (9.7 GB before).
