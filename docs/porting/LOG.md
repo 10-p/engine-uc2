@@ -438,3 +438,25 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   d4-names, c1-saves, controls 5/5 PASS; browser saves spec: 2 passes by the D-6 agent at load ~16 (the failing
   run at load ~20 was the spec's Enter-retry overshooting when a Right arrived before the rules list was ready:
   spec robustness to fix). Republished the owner's preview.
+- 2026-10-08 — **M7b, script SaveConfig and O-10 merged and verified together; preview republished.**
+  M7b (`m7b-projectors`, 1b33254): the Xbox's level-static projector batching with the 12 `PS_Projector_*`
+  shaders (`FRenderCaps::XboxProjectors`, `UseXboxProjectors`): looks the same as the PC path except the 19
+  projectors with a `MaterialBlendingOp` (CTF-Recoil's grids clearer; 6 maps), fewer draw calls; a driver fix:
+  draws inside deferred occlusion queries were all skipped; the Xbox shadow-texture filter
+  (`FRenderCaps::XboxShadows`, `UseXboxShadows`): blob shadows lighter in the core (43% vs 21% of the light kept)
+  and sharper; `PS_Terrain3Layer` behind `UseTerrain3Layer=False` (no visible difference). No Xbox reference
+  for any picture. Script SaveConfig (`saveconfig`, 10c7605): Epic's `#if 0` natives back on behind
+  `[Engine.Engine] ScriptSaveConfig=True`; a naive enable would have saved a base class's globalconfig defaults
+  (FOV 90 -> 85 after a restart) and ~36 untouched defaults: the engine now writes only changed keys, never a
+  live GameInfo; new `SAVECONFIGKEYS`; mouse sensitivity/invert (UCGameplay.u rebuilt again) and weapon hand
+  persist; the profile wins over the ini where both hold a value. O-10 (`pp-scale`, e42eafb, seven conflicts
+  with M7b resolved by hand): blur, bloom, DOF and emissive targets sized for a 480-line reference picture
+  (`PostProcessReferenceHeight=480`), back-buffer taps in reference pixels through an area-averaged reference
+  copy, radial-blur insets scaled; glow width 8.54% of the height at 640x480 and 1440x1080, 8.33% at 2880x2160
+  (was 4.17% / 3.12%); 4K about 10% faster; fixed Epic's per-frame re-creation of blur targets at sizes like
+  1366x768. Asset tree: `UCGameplay.u` rebuilt from main (17c1750c), ufrontend 6893b45. Coordinator's runs on
+  main (`logs/coord/a9..a11`): native/windows/wasm-perf build; verifyclasses; scripts 0 problems except
+  UCGameplay's intended 18; `m7b.sh` 11/0; `sc-saveconfig.sh` 91/0; `d6-mouse.sh` 69/0; `d3-profiles` PASS;
+  controls 5/5; `pp-scale.sh` selftest/glow/dof/radial 6/0; `m7-effects.sh` self-test 15/15 and 14/14 effect lines
+  clean; `m11-twin.sh` 31 PASS, 3 known FAIL (depth-texture fallback not implemented x2, menu-movie timing);
+  browser boot 4/4, audio 3/3, saves 1/1. Published to the owner's preview.
