@@ -89,3 +89,51 @@ on the D-pad today). Dead or not UC2's: `Strafe`/`LookToggle` (UCPlayerInput nev
 3. Test `tools/dev/d9-rebind.sh` on the m10 harness.
 </content>
 </invoke>
+
+## Step 1 (2026-10-08): the page works natively from the main menu and the pause menu (commits 4567556..3219806)
+
+Builds: `bin/capped 6G 5400 -- cmake --build build-native -j4` from scratch (`logs/d9/build-native-0.log`), then
+incremental (`-1`, `-2`), 0 errors. Scripts: `tools/dev/script-build.sh --tree d9-make` -> `Success - 0 error(s), 85
+warning(s)` (M14's count); GUI.u and UCGameplay.u come out byte-identical to the asset tree's (D-4/D-6 rebuilt ones),
+only UCMenu.u differs. Run tree `run/d9` = `mkrun-uc2.sh build-native d9` with `UC2_SCRIPTS=run/d9-scripts` (UCMenu.u
+only), so it is exactly "today's asset tree + the new UCMenu.u + this engine".
+
+What was done:
+- GUI C++ (`UnGUICore.cpp`, 4567556): the raw capture gets a key only if it was freshly pressed while the capture ran
+  (`GRawCapturePressed`, `GRawKeyHeld` against SDL's auto-repeat presses). Seen in the log:
+  `Raw key capture: ignored the release of Enter (pressed before the capture began)`, then `Raw key capture: J`.
+- UCMenu: `UC2Settings_Keys` + `KeyBindingPanel`, the button on `UC2Settings_Main` (`!Level.IsXBox()`).
+  Design decisions, each from what was seen:
+  - The page edits a copy (Work) of every keyboard/mouse key's binding, read from the live input object
+    (`GetRawInputObject().GetPropertyText(<Key>)`); keys = every `EInputKey` name except the pad (`Joy*`, `JoyX..R`,
+    `JoySlider*`), the mouse axes and `Unknown*`. A key belongs to the row whose command it runs (compared without
+    spaces, any case). Leaving the page (B / Escape, `UC2PageBase.Closed` -> `SaveSettings`) writes the changed keys:
+    `SET Input <Key> <cmd>` (every viewport + the class default) and `SAVECONFIGKEYS Engine.Input <Key>...` (16 a
+    command). Black = cancel (reload from the live object), White = DefUser.ini's PC bindings
+    (`GetConfigValue("DefUser","Engine.Input",<Key>)`), both undoable until the page is left, as on UC2's other
+    settings pages.
+  - Two key columns per action (Left/Right pick one, the heading turns orange); more keys than two show as "+n" in
+    key 2 (NEXT WEAPON has four by default: the wheel both ways, N, /). Cells the player set keep what was put there
+    while the page is open (`Pin1/Pin2`); otherwise keys are ordered by the action's `Order` list, then letters,
+    mouse buttons, digits. (Not persisted: after a restart the order is recomputed; the bindings are the same.)
+  - Capture: Enter/A or a click on a cell; Escape cancels ("NOT CHANGED"), Backspace/Delete clear, a pad button cancels
+    ("PAD BUTTONS ARE SET ON THE CONTROLLER PAGE"), the console key is refused. Outside a capture, X (pad X / key X) and
+    Delete clear the selected cell.
+  - Conflicts: the key moves to the new action; the action that had it gets the cell's old key (swap), or nothing if the
+    cell was empty; a key whose command no row lists (Epic's `SwitchWeapon N`, `Taunt Taunt1` on J, the gamma keys) is
+    simply taken, and the bottom line says what it was (`J: JUMP / DODGE. (IT WAS: Taunt Taunt1)`).
+  - Mouse: slider 0.1-10 step 0.1 with the value in its caption and the degrees per count on the bottom line
+    (0.022 x value, UCPlayerInput.AddMouseLook); a click on its ends steps, on the bar sets the value under the cursor
+    (GUISlider has no mouse handling); invert checkbox. Saved like the D-6 console commands (the live UCPlayerInput, the
+    class default, `SAVECONFIGKEYS UCGameplay.UCPlayerInput ...`).
+- Test channel: `keys <tag> <Key>...` (the live bindings), `probe4` (the focused caption); `m10-inject.py` reads both.
+
+Seen (exploration runs, `logs/d9/explore/explore2..3`, `match1..2`): the button between CONTROLLER and GAMEPLAY on
+OPTIONS; the page in UC2's look (pictures `explore3-*.png`); J bound to MOVE FORWARD key 1 replacing `Taunt Taunt1`; a
+swap (C to MOVE BACK key 2: 1ST / 3RD PERSON moved to DOWN ARROW); Escape in a capture keeps the page open and changes
+nothing; in a match (null renderer, DM-Deadbolt): Space jumps (z -34.1 -> 40.2); pause menu -> OPTIONS (a "no profile"
+box first, as from the main menu) -> KEYBOARD / MOUSE -> JUMP / DODGE key 1 := J -> Escape: `SaveConfigKeys: Input.Space=
+written`, `Input.j=SmartJump 0 written`; back in the game J jumps (z -34.2 -> 41.6). (The engine writes the key as `j`:
+an FName keeps the spelling of its first use; config keys are case-insensitive, so this is cosmetic.)
+
+Next: the committed test `tools/dev/d9-rebind.sh`.
