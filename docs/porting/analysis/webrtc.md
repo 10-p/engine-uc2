@@ -181,3 +181,63 @@ for transparent reconnects): recorded as an owner note.
   Copy invite link captured from the clipboard call, Start) and the guest opening only the copied link: asserts the
   invite names the server the panel shows (generated on a first visit, not the stock name), the engine listened
   under that room/name, the join, both spawns, a clean leave.
+
+### Step 6 (2026-10-08): the gate
+
+(a) Builds of this branch (logs/e2): native `build-native-0.log` rc 0, 0 errors; windows (MinGW) `build-windows-0.log`
+rc 0, 0 errors (uc2.exe, ucc.exe); wasm-perf `build-wasm-perf-2.log` rc 0, 0 errors, SDLLaunch.wasm sha256
+6cea1425ad13fa539d0fa40657c664760972700b74dda620805613af90d1cf9c (the artifact of every run below).
+
+(b) Browser, `tools/dev/e2-web-net.sh final-1` and `final-2` (ufrontend bfc37e7, serve-web proven = the artifact by
+sha256 before and after each run, null sink by module index, removed afterwards): **2 passed, 2 passed**:
+- test 1 (URL host + invite URL guest): walk 687 / 651 units seen on the host, rest agreement 0.0 / 0.0, Suicide
+  `score=-1 deaths=1` on both, leave dropped by the host after 2.6 s by the engine's channel-0 close;
+- test 2 (launcher form + copied invite link): invite names the generated `Another Unreal Server - c12abc` /
+  `- c0f96b`, room `default-public-room`, the engine listened under exactly those, guest joined, both spawned.
+Peaks (2 s samples from Node): host browser PSS 1,666 / 1,850 MiB, guest 1,561 / 1,563 MiB, all Chromium 3,108 /
+3,117 MiB; cgroup memory.peak 5,685-5,721 MiB (ceiling 8G, not hit); machine in use 13.4 GB (10.0 GB before);
+e2e-mem-guard peak 13.1 GB (budget 16). Earlier passes: net-2, net-3 (other artifacts of this branch), loss-2.
+(c) Native regressions: `NET_TREE=e2 tools/dev/net-test.sh dedicated1 dedicated2 listen travel` 31 PASS +
+leftovers, 0 FAIL; `ucc-bin verifyclasses` "All native class layouts match"; browser boot spec
+`uc2-wasm-boot.spec.js` (`e2-web-net.sh boot-1 uc2-wasm-boot.spec.js`) **4 passed** (menu, DM-Deadbolt by URL,
+keyboard+mouse, mouse look), browser PSS peak 2,016 MiB, cgroup peak 3,440 MiB.
+
+## Behaviour over WebRTC (labels as the brief asks)
+
+Asserted by a test (uc2-wasm-net.spec.js, browser, both ends this build): a listen server in a browser page
+registering `uc2-<room>_<serverSlug>-srv` from the URL's room and the launcher-seeded server name; the launcher's own
+host flow (form + Host a game + Copy invite link) on a fresh install; a guest joining from the invite link
+(join-key browse, pipe, `Welcomed by server`, level up, `Join succeeded`); both players spawning (real clicks) and
+the match starting; the guest walking (real W key) seen on the host, positions agreeing at rest; a death counted on
+the host and replicated back to the guest; a clean leave dropping the guest on the host at once; no
+Critical/assertion; the same under Epic's PktLoss=5 PktLag=50 simulation on both ends (except the leave, dropped at
+the 60 s ConnectionTimeout because the simulation's delay queue held the close).
+Seen in a log only: `[WebRTC] stats` per-connection lines (localhost: ~28-30 packets/s each way, 0.5-1 KB/s, 0%
+loss, 38-44 ms in play; simulated: 3-12% loss, 166-183 ms); the host's `UdpBeacon ... BindPort: socket failed`
+(UC2 spawns its system-link beacon on a listen server; no UDP in a browser; harmless); the guest's one `Received
+invalid actor class` (DefaultPhysicsVolume, as natively); the host's standby pause when a guest goes silent.
+Not done (why): in-game discovery (UC2's System Link browser is UdpBeacon/ClientBeaconReceiver over UDP; a web hook
+would mean native IpDrv UdpLink changes mapping beacons to the glue's `webrtc_discover_servers` rows, pseudo
+addresses like the template's 10.199.0.N and UC2's beacon text format, plus GUI-driven browser tests: a task of its
+own); two clients at once (the template's net suites have no such test; memory: a third page adds ~1.6 GB PSS,
+needs a larger cgroup than the 8G of this brief); servertravel/map change over WebRTC (the driver keeps the
+template's one-client-slot detach logic, natively travel passes; not exercised in the browser); hosting from UC2's
+own in-game Network menus (the driver then gets no room=, the glue uses the persisted room; not exercised); a host
+that vanishes (guest side: glue reconnect then grace, or the client's ConnectionTimeout; not exercised); package
+download over WebRTC (every peer has the full asset tree; `AllowDownloads=True`, `Engine.ChannelDownload` only;
+not exercised); NETDROP=/NETPKTID= handshake cases in the browser (they act above the driver and pass natively;
+the reliable data channel never loses a datagram while it is up).
+
+## Notes for the owner (once the coordinator has merged and republished the preview)
+
+- Hosting: open the preview, Multiplayer panel: tick "Host a game (listen mode)", pick a map in Play (e.g.
+  DM-Deadbolt, DeathMatch), Start. Then "Copy invite link" and send it. The server name field is generated on a
+  first visit (`Another Unreal Server - xxxxxx`); rename it there if you like (it is the address: the link carries it).
+- Joining: open the invite link; the game starts and joins by itself. Nobody spawns until EVERY player has clicked
+  (Fire): that is UC2's deathmatch start rule.
+- The broker is the launcher's default PeerServer (`unrealpeer-we.azurewebsites.net`, STUN stun.l.google.com); two
+  browsers on different networks behind strict NATs need a TURN server (Advanced in the Multiplayer panel).
+- Inside the game the server is called by the PROFILE's server name ("Liandri Corporation" by default; the host
+  menu's SESSION NAME); the launcher's name is the address. There is no in-game server list on the web.
+- If a guest closes the tab without leaving, the host's game pauses with UC2's "standby" notice until the engine
+  drops the guest (60 s); leaving through the game's menu is instant.
