@@ -7,6 +7,7 @@
 =============================================================================*/
 
 #include "CorePrivate.h"
+#include "UC2ScriptSaveConfig.h"
 
 // GEARBOX/jmw: This line enables Iterative Garbage Collection, which reduces total stack size needed for the game.
 #define ITERATIVE_GC 1
@@ -1442,6 +1443,120 @@ void UObject::LoadLocalized( UBOOL* bHasLocEntry )
 	unguardobj;
 }
 
+// uc2 port: when set, SaveConfig writes only these properties (SAVECONFIGKEYS, UC2SaveConfigKeys below).
+static const TArray<UProperty*>* GSaveConfigOnly = NULL;
+
+// uc2 port: set while script's SaveConfig() / StaticSaveConfig() run (UC2SaveConfigFromScript below): a globalconfig
+// property that another class deliberately sets is not written, and its name is collected here.
+static UBOOL GSaveConfigKeepSubclasses = 0;
+static FString GSaveConfigNotWritten;
+
+// A globalconfig property is read from the section of the class that DECLARES it, for every subclass of that class,
+// so a value written there replaces what any such class's defaultproperties say: Engine.PlayerController's
+// DesiredFOV=85 pinned UCPlayerController, which sets 90, after a console SetWeaponHand had saved the whole class.
+// When a class default has loaded (UClass::Link / UClass::Serialize, after LoadConfig, so ini keys are applied and
+// the defaults are still the ones script's defaultproperties made), UC2NoteDefaultOverrides records each inherited
+// globalconfig property whose default differs from the superclass's: the class DELIBERATELY sets it. A script save
+// leaves such a property out (UC2SetByAnotherClass). Recorded at load because later the two cannot be told apart: a
+// subclass that did not see a change script made to its parent's default (Handedness after SetHand) differs too.
+// One record per config property a class default holds a value of its own for, taken when the class default has loaded
+// its config: the properties it DECLARES (bOverride 0: no superclass value to compare with later) and the inherited ones
+// it sets differently from its superclass (bOverride 1: its defaultproperties made it so). Text is the value then
+// (UProperty::ExportText, compared with the same call later). Never freed (the static destruction order).
+struct FUC2ConfigRecord { UClass* Class; UProperty* Prop; INT Index; UBOOL bOverride; FString Text; };
+static TArray<FUC2ConfigRecord>* GConfigRecords = NULL;
+
+void UC2NoteDefaultOverrides( UClass* Class )
+{
+	// (not skipped under GIsEditor: ucc sets it for its commandlets, and the records are cheap)
+	if( !Class->Defaults.Num() )
+		return;
+	UClass* Super = Class->GetSuperClass();
+	const BYTE* Mine = (const BYTE*)Class->GetDefaultObject();
+	const BYTE* Parent = (Super && Super->Defaults.Num()) ? (const BYTE*)Super->GetDefaultObject() : NULL;
+	for( UProperty* It = Class->PropertyLink; It; It = It->PropertyLinkNext )
+	{
+		if( !(It->PropertyFlags & CPF_Config) || Cast<UArrayProperty>(It) || Cast<UMapProperty>(It) )
+			continue;
+		UBOOL bDeclared = It->GetOwnerClass()==Class;
+		if( !bDeclared && !Parent )
+			continue;
+		for( INT i=0; i<It->ArrayDim; i++ )
+		{
+			INT Ofs = It->Offset + i*It->ElementSize;
+			if( !bDeclared && It->Identical( Mine + Ofs, Parent + Ofs ) )
+				continue;
+			// ExportText writes into the 1024-character buffer SaveConfig uses too: leave out a longer string
+			if( Cast<UStrProperty>(It) && ((FString*)(Mine + Ofs))->Len() > 900 )
+				continue;
+			TCHAR Text[1024]=TEXT("");
+			It->ExportText( i, Text, (BYTE*)Mine, (BYTE*)Mine, 0 );
+			if( !GConfigRecords )
+				GConfigRecords = new TArray<FUC2ConfigRecord>;
+			FUC2ConfigRecord& R = *new(*GConfigRecords) FUC2ConfigRecord;
+			R.Class = Class;
+			R.Prop = It;
+			R.Index = i;
+			R.bOverride = !bDeclared;
+			R.Text = Text;
+		}
+	}
+}
+
+// Does a class other than this object's own (a descendant of the declaring class) deliberately set Prop?
+static UBOOL UC2SetByAnotherClass( UObject* Object, UProperty* Prop )
+{
+	if( !GConfigRecords )
+		return 0;
+	UClass* Owner = Prop->GetOwnerClass();
+	for( INT i=0; i<GConfigRecords->Num(); i++ )
+	{
+		const FUC2ConfigRecord& R = (*GConfigRecords)(i);
+		if( R.bOverride && R.Prop==Prop && R.Class!=Object->GetClass() && R.Class->IsChildOf(Owner) )
+			return 1;
+	}
+	return 0;
+}
+
+// uc2 port: set while a CLASS DEFAULT is saved for script (StaticSaveConfig): write only what changed. A whole-class dump
+// writes every config property at its current value, which for the ones nobody touched is the compiled default: the ini
+// then holds a stale copy of a script default, shadowing the next build's (a User.ini lives for years; the web keeps it
+// for ever). A property is written when its value differs from the ini's (key present), or, for one the class inherits,
+// from the superclass default's (key absent); one the class declares itself, with no key in the ini, from the value
+// the class default had when it loaded (UC2NoteDefaultOverrides). Arrays and maps are not compared and not written.
+static UBOOL GSaveConfigChangedOnly = 0;
+
+static UBOOL UC2ConfigValueChanged( UObject* Object, UProperty* Prop, INT Index, const TCHAR* Section, const TCHAR* Key, const TCHAR* Filename )
+{
+	BYTE* Current = (BYTE*)Object + Prop->Offset + Index*Prop->ElementSize;
+	TCHAR IniText[1024];
+	if( GConfig->GetString( Section, Key, IniText, ARRAY_COUNT(IniText), Filename ) )
+	{
+		BYTE* Scratch = (BYTE*)appAlloca( Prop->ElementSize );
+		appMemzero( Scratch, Prop->ElementSize );
+		Prop->ImportText( IniText, Scratch, 0 );
+		UBOOL Same = Prop->Identical( Scratch, Current );
+		Prop->DestroyValue( Scratch );
+		return !Same;
+	}
+	// a value of its own the class default had when it loaded: its declared property, or an inherited one it overrides
+	for( INT i=0; GConfigRecords && i<GConfigRecords->Num(); i++ )
+	{
+		const FUC2ConfigRecord& R = (*GConfigRecords)(i);
+		if( R.Class==Object->GetClass() && R.Prop==Prop && R.Index==Index )
+		{
+			TCHAR Text[1024]=TEXT("");
+			Prop->ExportText( Index, Text, (BYTE*)Object, (BYTE*)Object, 0 );
+			return appStrcmp( Text, *R.Text )!=0;
+		}
+	}
+	// declared here but never recorded: no baseline. Inherited and not overridden: the superclass default's value.
+	UClass* Super = Object->GetClass()->GetSuperClass();
+	if( Prop->GetOwnerClass()==Object->GetClass() || !Super || !Super->Defaults.Num() )
+		return 0;
+	return !Prop->Identical( (BYTE*)Super->GetDefaultObject() + Prop->Offset + Index*Prop->ElementSize, Current );
+}
+
 //
 // Save configuration.
 //warning: Must be safe on class-default metaobjects.
@@ -1465,13 +1580,22 @@ void UObject::SaveConfig( DWORD Flags, const TCHAR* InFilename )
 	//epic moelfke: use PropertyLink instead of a slower TFieldIterator
 	for (UProperty* It = GetClass()->PropertyLink; It; It = It->PropertyLinkNext)
 	{
+		if( GSaveConfigOnly && GSaveConfigOnly->FindItemIndex(It)==INDEX_NONE )	// uc2: SAVECONFIGKEYS
+			continue;
 		if( (It->PropertyFlags & Flags)==Flags )
 		{
+			if( GSaveConfigKeepSubclasses && !GSaveConfigChangedOnly && (It->PropertyFlags & CPF_GlobalConfig) && UC2SetByAnotherClass(this,It) )
+			{
+				GSaveConfigNotWritten += FString(GSaveConfigNotWritten.Len() ? TEXT(", ") : TEXT("")) + It->GetName();
+				continue;
+			}
 			TCHAR TempKey[256], Value[1024]=TEXT("");
 			const TCHAR*    Key     = It->GetName();
 			const TCHAR*    Section = PerObject ? GetName() : (It->PropertyFlags & CPF_GlobalConfig) ? It->GetOwnerClass()->GetPathName() : GetClass()->GetPathName();
 			UArrayProperty* Array   = Cast<UArrayProperty>(It);
 			UMapProperty*   Map     = Cast<UMapProperty>(It);
+			if( GSaveConfigChangedOnly && (Array || Map) )	// uc2
+				continue;
 			if( Array )
 			{
 				TMultiMap<FName,FString>* Sec = GConfig->GetSectionPrivate( Section, 1, 0, Filename );
@@ -1508,6 +1632,16 @@ void UObject::SaveConfig( DWORD Flags, const TCHAR* InFilename )
 				{
 					appSprintf( TempKey, TEXT("%s[%i]"), It->GetName(), Index );
 					Key = TempKey;
+				}
+				if( GSaveConfigChangedOnly )	// uc2: StaticSaveConfig() from script
+				{
+					if( !UC2ConfigValueChanged( this, It, Index, Section, Key, Filename ) )
+						continue;
+					if( GSaveConfigKeepSubclasses && (It->PropertyFlags & CPF_GlobalConfig) && UC2SetByAnotherClass(this,It) )
+					{
+						GSaveConfigNotWritten += FString(GSaveConfigNotWritten.Len() ? TEXT(", ") : TEXT("")) + It->GetName();
+						continue;
+					}
 				}
 				It->ExportText( Index, Value, (BYTE*)this, (BYTE*)this, 0 );
 				GConfig->SetString( Section, Key, Value, Filename );
@@ -2594,11 +2728,91 @@ static void ShowClasses( UClass* Class, FOutputDevice& Ar, int Indent )
 			ShowClasses( *It, Ar, Indent+2 );
 }
 
+//
+// uc2 port: script's SaveConfig() / StaticSaveConfig() (UnCorSc.cpp): UObject::SaveConfig, except that a globalconfig
+// property some subclass gives another default is left out (UC2SubclassSetsOtherDefault) and logged.
+//
+void UC2SaveConfigFromScript( UObject* Object, UBOOL bStatic )
+{
+	guard(UC2SaveConfigFromScript);
+	debugf( NAME_Log, TEXT("Script SaveConfig: %s on %s"), bStatic ? TEXT("StaticSaveConfig") : TEXT("SaveConfig"), Object->GetClass()->GetPathName() );
+	GSaveConfigKeepSubclasses = 1;
+	GSaveConfigChangedOnly = Object->GetIndex()==INDEX_NONE;	// a class default: only what changed; an instance: all
+	GSaveConfigNotWritten = TEXT("");
+	Object->SaveConfig();
+	GSaveConfigKeepSubclasses = 0;
+	GSaveConfigChangedOnly = 0;
+	if( GSaveConfigNotWritten.Len() )
+		debugf( NAME_Log, TEXT("Script SaveConfig: %s: not written, another class sets its own default and globalconfig is shared with it: %s"),
+			Object->GetClass()->GetName(), *GSaveConfigNotWritten );
+	unguard;
+}
+
+//
+// uc2 port: SAVECONFIGKEYS <Class> <Property> [<Property>...]
+//
+// Writes the named config properties of the class's default object to the ini, and only those. Script's
+// StaticSaveConfig() writes the whole class, which carries along anything else that was changed in the class
+// default at run time (UCPlayerInput's defaults hold the active profile's pad invert and sensitivity, written
+// there by the profile). A setting that must persist alone (the D-6 mouse settings, UCPlayerInput.MouseLookSens /
+// MouseLookInvert) asks for exactly its keys: ConsoleCommand("SAVECONFIGKEYS UCGameplay.UCPlayerInput <Prop>").
+// Each key is written by UObject::SaveConfig itself (same file, section, ExportText, flush). ScriptSaveConfig=False
+// answers "off" and writes nothing. Reply: one "SaveConfigKeys:" line per property.
+//
+UBOOL UC2SaveConfigKeys( const TCHAR* Args, FOutputDevice& Ar )
+{
+	guard(UC2SaveConfigKeys);
+	if( !UC2ScriptSaveConfigEnabled() )
+	{
+		Ar.Logf( TEXT("SaveConfigKeys: off ([Engine.Engine] ScriptSaveConfig=False): nothing written") );
+		return 1;
+	}
+	TCHAR ClassName[256];
+	UClass* SaveClass = NULL;
+	if( !ParseToken( Args, ClassName, ARRAY_COUNT(ClassName), 1 ) || (SaveClass=FindObject<UClass>( ANY_PACKAGE, ClassName ))==NULL )
+	{
+		Ar.Logf( NAME_ExecWarning, TEXT("SaveConfigKeys: unrecognized class %s"), ClassName );
+		return 1;
+	}
+	TArray<UProperty*> Only;
+	TCHAR PropertyName[256];
+	while( ParseToken( Args, PropertyName, ARRAY_COUNT(PropertyName), 1 ) )
+	{
+		UProperty* Property = FindField<UProperty>( SaveClass, PropertyName );
+		if( !Property )
+			Ar.Logf( NAME_ExecWarning, TEXT("SaveConfigKeys: %s has no property %s"), SaveClass->GetName(), PropertyName );
+		else if( !(Property->PropertyFlags & CPF_Config) )
+			Ar.Logf( NAME_ExecWarning, TEXT("SaveConfigKeys: %s.%s is not a config property"), SaveClass->GetName(), PropertyName );
+		else
+			Only.AddUniqueItem( Property );
+	}
+	if( !Only.Num() )
+	{
+		Ar.Logf( NAME_ExecWarning, TEXT("SaveConfigKeys: usage: SAVECONFIGKEYS <Class> <Property> [<Property>...]") );
+		return 1;
+	}
+	GSaveConfigOnly = &Only;
+	SaveClass->GetDefaultObject()->SaveConfig();
+	GSaveConfigOnly = NULL;
+	for( INT i=0; i<Only.Num(); i++ )
+	{
+		TCHAR Value[256]=TEXT("");
+		Only(i)->ExportText( 0, Value, SaveClass->GetDefaultsSafe(0), SaveClass->GetDefaultsSafe(0), 0 );
+		Ar.Logf( TEXT("SaveConfigKeys: %s.%s=%s written to %s.ini"), SaveClass->GetName(), Only(i)->GetName(), Value, *SaveClass->ClassConfigName );
+		// a script's ConsoleCommand() returns the reply to the script and logs nothing: leave a line for the log
+		debugf( NAME_Log, TEXT("SaveConfigKeys: %s.%s=%s written to %s.ini"), SaveClass->GetName(), Only(i)->GetName(), Value, *SaveClass->ClassConfigName );
+	}
+	return 1;
+	unguard;
+}
+
 UBOOL UObject::StaticExec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UObject::StaticExec);
 	const TCHAR *Str = Cmd;
-	if( ParseCommand(&Str,TEXT("MEM")) )
+	if( ParseCommand(&Str,TEXT("SAVECONFIGKEYS")) )
+		return UC2SaveConfigKeys( Str, Ar );
+	else if( ParseCommand(&Str,TEXT("MEM")) )
 	{
 		GMalloc->DumpAllocs();
 #ifdef USE_GCONTIG

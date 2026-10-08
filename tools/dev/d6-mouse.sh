@@ -179,7 +179,7 @@ check $p-camera-follows-flick-at-once cam_moved('Da','Db') > 5
 check $p-no-drift-after-flick cam_moved('Db','Dc') < 0.5 and P['Db'].rot == P['Dc'].rot
 SCEN
   [ $p = before ] && return 0
-  # 5. the settings: sensitivity (and saved), FOV, mouse invert apart from the pad's (and saved)
+  # 5. the settings: sensitivity (and saved to User.ini), FOV, mouse invert apart from the pad's (and saved to User.ini)
   cat <<SCEN
 check look-default-sensitivity abs(M['500medium'] - $K) < 0.02 and P['Db'].sens.startswith('2.5')
 chan exec MouseLookSens 1.25
@@ -188,6 +188,8 @@ probe Ea
 chan mouse 500 0
 probe Eb
 check look-sensitivity-setting abs(yawdiff('Ea','Eb') - 500*K/2) <= 2
+# saveconfig task: the console command also writes its key to User.ini now (SAVECONFIGKEYS; it was session-only before)
+check look-sensitivity-saved-to-user-ini 'MouseLookSensitivity=1.250000' in open(os.environ['D6_SYS']+'/User.ini',encoding='latin-1').read()
 chan exec MouseLookSens 2.5
 wait test: exec MouseLookSens 2.5 10
 chan exec FOV 45
@@ -206,6 +208,7 @@ probe Ia
 chan mouse 0 -100
 probe Ib
 check look-mouse-invert-flips-the-mouse pitchdiff('Ia','Ib') < 0 and P['Ib'].invert == 'True' and P['Ib'].padinvert == 'False'
+check look-mouse-invert-saved-to-user-ini 'bInvertMouseLook=True' in open(os.environ['D6_SYS']+'/User.ini',encoding='latin-1').read()
 pad attach
 wait SDL2 pads: pad 0 connected 10
 sleep 1

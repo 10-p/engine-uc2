@@ -7,6 +7,7 @@
 =============================================================================*/
 
 #include "CorePrivate.h"
+#include "UC2ScriptSaveConfig.h"
 
 /*-----------------------------------------------------------------------------
 	FPropertyTag.
@@ -1495,6 +1496,7 @@ void UClass::Register()
 
 	// Load defaults.
 	GetDefaultObject()->LoadConfig();
+	UC2NoteDefaultOverrides( this );
 	GetDefaultObject()->LoadLocalized();
 
 	unguardf(( TEXT("(%s)"), GetName() ));
@@ -1874,6 +1876,7 @@ void UClass::Serialize( FArchive& Ar )
 				GetDefaultObject()->InitClassDefaultObject( this );
 				SerializeTaggedProperties( Ar, &Defaults(0), GetSuperClass() );
 				GetDefaultObject()->LoadConfig();
+				UC2NoteDefaultOverrides( this );
 				GetDefaultObject()->LoadLocalized();
 			}
 			else
