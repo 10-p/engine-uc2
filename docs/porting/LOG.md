@@ -421,3 +421,20 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   Agent's gate: m7-effects 11/0 + 14 lines clean, praxis first try; o9-nvidia.sh 12/0 with the AutoFOV-off/Native640
   defaults; m11-twin effects 13/14 (liandri overlay noise differs between any two runs: needs fixed random
   numbers or a mask, not done). Merged `o9b`.
+- 2026-10-08 — **D-6 green (mouse and pad separated); UCGameplay.u rebuilt in the asset tree.** Merged `d6-mouse`
+  (d24a82e). Measured cause of the owner's complaint: the web build had carried Epic's PC DefUser.ini (1.23
+  deg/count, capped per tick, circles 16.6% out of round: the "hexagonal" feel); native was linear but ~5x too
+  sensitive, with the third-person lazy camera sliding and the pad sliders acting on the mouse. Now
+  (`UCPlayerInput.AddMouseLook`, script): mouse look linear at any speed and in both axes (circle within 0.29%),
+  0.022 deg x `MouseLookSensitivity` 2.5 x FOV/90 per count, separate `bInvertMouseLook`, no drift after stopping,
+  aim adhesion and auto-centre only under the pad, mouse-friendly lock-on (break by 25 deg); the pad back on
+  Epic's Xbox curve (within 0.47% of the shipped scripts). `UC2InputMigrate.cpp` rewrites old User.ini values.
+  Binding audit: nothing inverted; dead wheel commands fixed; Space while moving dodges. Asset tree:
+  `UCGameplay.u` rebuilt (a server package: all peers run it), `GUI.u` as before; `tools/dev/script-build.sh`
+  now conforms and compares against epic-sources' shipped packages (it had used the asset tree's, which hold
+  rebuilt files: false problems in GUI/UCMenu). Coordinator's runs on main (`logs/coord/a8/`): windows/wasm-perf
+  build; verifyclasses; d6-mouse 67/0; d3-profiles, d5-text PASS; net dedicated2/listen/travel 24/0; browser boot
+  4/4 (incl. the mouse test), audio 3/3; at load ~61 several menu-timing checks failed, rerun at load ~15:
+  d4-names, c1-saves, controls 5/5 PASS; browser saves spec: 2 passes by the D-6 agent at load ~16 (the failing
+  run at load ~20 was the spec's Enter-retry overshooting when a Right arrived before the rules list was ready:
+  spec robustness to fix). Republished the owner's preview.
