@@ -779,6 +779,18 @@ struct FRenderCaps
 	// UC2 port (M7): not a capability but a review switch a device can expose: 1 = the always-on
 	// depth of field takes its blur alpha as the shipped binary did (UUCScreenDOF::PostRender).
 	UBOOL	ShippedDOFBlurAlpha;
+	// UC2 port (M7b): the device filters projected shadow textures as the Xbox build does
+	// (the caster drawn in ShadowDarkness grey, then one PS_ShadowBlur tile: a horizontal
+	// four-tap blur, negated) instead of PC's alpha-encoded caster and nine-tile box blur.
+	// UShadowBitmapMaterial (UnShadowProjector.cpp) takes the _XBOX && NEW_SHADOW_BLEND branch
+	// where this is set (RenDevHasXboxShadows below). 0 for every device that does not set it.
+	UBOOL	XboxShadows;
+	// UC2 port (M7b): the device draws UProjectorMultiMaterial (the Xbox projector material:
+	// ProjectorAtten.vsh + the PS_Projector_* shaders). UGameEngine::LoadMap then re-packs every
+	// level-static projector into one DT_StaticProjectorBatch actor, as the Xbox build does
+	// (AProjector::RebuildStaticPrimsBatch; RenDevHasXboxProjectors below). 0 for every device
+	// that does not set it.
+	UBOOL	XboxProjectors;
 
 	// set default render caps in constructor
 	FRenderCaps()
@@ -786,7 +798,9 @@ struct FRenderCaps
 		PixelShaderVersion(0),
 		HardwareTL(0),
 		XboxPostProcess(0),
-		ShippedDOFBlurAlpha(0)
+		ShippedDOFBlurAlpha(0),
+		XboxShadows(0),
+		XboxProjectors(0)
 	{}
 };
 
@@ -869,6 +883,19 @@ class ENGINE_API URenderDevice : public USubsystem
 // those keep the PC branch, exactly as before.
 //
 ENGINE_API UBOOL RenDevHasXboxPostProcess();
+
+//
+// UC2 port (M7b): does the engine's render device report FRenderCaps::XboxShadows? The test of
+// the lifted "_XBOX && NEW_SHADOW_BLEND" shadow-texture gates (UnShadowProjector.cpp). False
+// without a client or a device and for any device that leaves the capability unset.
+//
+ENGINE_API UBOOL RenDevHasXboxShadows();
+
+//
+// UC2 port (M7b): does the engine's render device report FRenderCaps::XboxProjectors? The test of
+// the lifted "_XBOX" static-projector batching in UGameEngine::LoadMap (UnGame.cpp).
+//
+ENGINE_API UBOOL RenDevHasXboxProjectors();
 
 #endif
 /*------------------------------------------------------------------------------------

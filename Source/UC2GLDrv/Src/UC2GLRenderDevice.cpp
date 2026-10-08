@@ -41,6 +41,8 @@ static TArray<FLOAT>	GFFToggleTimes;		// O-9: -glfftoggle=<s>,... flips FixedFun
 // (UC2GLCombinerTest.cpp), like GSelfTestPending.
 static INT				GCombinerTestPending = 0;
 static INT				GMatCensusPending = 0;	// O-9: GLMATCENSUS (UC2GLPixelTrace.cpp)
+static INT				GSceneCensusPending = 0;	// M7b: GLSCENECENSUS (UC2GLSceneCensus.cpp)
+static INT				GShadowCheckPending = 0;	// M7b: GLSHADOWCHECK (UC2GLShadowCheck.cpp)
 // -glexec=<seconds>:<command>[@<seconds>:<command>...]: console commands run through the
 // viewport at those times after the first frame; '+' stands for a space in a command
 // (verification: "-glexec=40:BlurMe@50:set+UCScreenBerserk+Enabled+1"). Times ascending.
@@ -179,6 +181,9 @@ void UUC2GLRenderDevice::StaticConstructor()
 	new(GetClass(),TEXT("PrecompileVertexShaders"),RF_Public)UBoolProperty( CPP_PROPERTY(PrecompileVertexShaders), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("UsePostProcess"),		RF_Public)UBoolProperty	( CPP_PROPERTY(UsePostProcess		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("DOFShippedBlurAlpha"),	RF_Public)UBoolProperty	( CPP_PROPERTY(DOFShippedBlurAlpha	), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("UseXboxShadows"),		RF_Public)UBoolProperty	( CPP_PROPERTY(UseXboxShadows		), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("UseTerrain3Layer"),	RF_Public)UBoolProperty	( CPP_PROPERTY(UseTerrain3Layer		), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("UseXboxProjectors"),	RF_Public)UBoolProperty	( CPP_PROPERTY(UseXboxProjectors	), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("LevelOfAnisotropy"),	RF_Public)UIntProperty	( CPP_PROPERTY(LevelOfAnisotropy	), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("AntiAliasing"),		RF_Public)UIntProperty	( CPP_PROPERTY(AntiAliasing			), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("MaxTextureUnits"),		RF_Public)UIntProperty	( CPP_PROPERTY(MaxTextureUnits		), TEXT("Options"), CPF_Config );
@@ -200,6 +205,13 @@ void UUC2GLRenderDevice::StaticConstructor()
 	PrecompileVertexShaders	= 1;
 	UsePostProcess			= 1;
 	DOFShippedBlurAlpha		= 0;
+	// M7b: the Xbox's shadow textures (lighter, sharper than PC's; analysis/projectors.md).
+	UseXboxShadows			= 1;
+	// M7b: terrain drawn three layers at a time as the Xbox build does: no visible difference
+	// (analysis/projectors.md), so off unless asked for.
+	UseTerrain3Layer		= 0;
+	// M7b: the Xbox projector material (projectors on skeletal meshes were drawn with nothing).
+	UseXboxProjectors		= 1;
 	// O-8 (owner, 2026-10-06): 16x anisotropic filtering and 4x anti-aliasing by default, also
 	// for an ini that predates the keys.
 	LevelOfAnisotropy		= 16;
@@ -564,6 +576,21 @@ UBOOL UUC2GLRenderDevice::Init()
 	if( ParseParam( appCmdLine(), TEXT("postprocess") ) )
 		UsePostProcess = 1;
 	ParseTimeList( TEXT("glpptoggle="), GPPToggleTimes );
+	// M7b: -noxboxshadows / -xboxshadows (UseXboxShadows; console XBOXSHADOWS [0|1]).
+	if( ParseParam( appCmdLine(), TEXT("noxboxshadows") ) )
+		UseXboxShadows = 0;
+	if( ParseParam( appCmdLine(), TEXT("xboxshadows") ) )
+		UseXboxShadows = 1;
+	// M7b: -noterrain3layer / -terrain3layer (UseTerrain3Layer; console TERRAIN3LAYER [0|1]).
+	if( ParseParam( appCmdLine(), TEXT("noterrain3layer") ) )
+		UseTerrain3Layer = 0;
+	if( ParseParam( appCmdLine(), TEXT("terrain3layer") ) )
+		UseTerrain3Layer = 1;
+	// M7b: -noxboxprojectors / -xboxprojectors (UseXboxProjectors; console XBOXPROJECTORS [0|1]).
+	if( ParseParam( appCmdLine(), TEXT("noxboxprojectors") ) )
+		UseXboxProjectors = 0;
+	if( ParseParam( appCmdLine(), TEXT("xboxprojectors") ) )
+		UseXboxProjectors = 1;
 	GShotRamp = ParseParam( appCmdLine(), TEXT("glshotramp") );
 	GShotPresented = ParseParam( appCmdLine(), TEXT("glshotpresented") );
 	NoLODBias = ParseParam( appCmdLine(), TEXT("glnolodbias") );
@@ -1872,6 +1899,8 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 			LogPixelShaderStats();
 			UsePixelShaders = Wanted;
 			InitPixelShaders();
+			// M7b: the terrain pixel shader comes and goes with them.
+			RefreshTerrainPasses();
 		}
 		Ar.Logf( TEXT("UC2GLDrv: pixel shaders %s (frame %i)"), UsePixelShaders ? TEXT("on") : TEXT("off"), FrameCounter );
 		return 1;
@@ -2006,6 +2035,61 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		Ar.Logf( TEXT("UC2GLDrv: the material census runs at the start of the next frame; results in the log") );
 		return 1;
 	}
+	else if( ParseCommand(&Cmd,TEXT("XBOXSHADOWS")) )
+	{
+		// M7b: XBOXSHADOWS [0|1] (no argument: toggle). Shadow textures are redrawn every
+		// update, so the next one shows the change.
+		UseXboxShadows = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !UseXboxShadows;
+		Ar.Logf( TEXT("UC2GLDrv: Xbox shadow textures %s%s (frame %i)"), UseXboxShadows ? TEXT("on") : TEXT("off"),
+			(UseXboxShadows && !XboxShadowsActive()) ? TEXT(" but not active (needs post-processing: PS_ShadowBlur is drawn with the blur family)") : TEXT(""), FrameCounter );
+		return 1;
+	}
+	else if( ParseCommand(&Cmd,TEXT("GLSTATS")) )
+	{
+		// M7b: the -glstats line now, for the frames since the last one (or since GLSTATS RESET).
+		if( ParseCommand(&Cmd,TEXT("RESET")) )
+		{
+			StatTime0 = 0.0;
+			LogFrameStats();
+		}
+		else
+			LogFrameStats();
+		return 1;
+	}
+	else if( ParseCommand(&Cmd,TEXT("XBOXPROJECTORS")) )
+	{
+		// M7b: XBOXPROJECTORS [0|1] (no argument: toggle). The engine batches static projectors
+		// when a map loads (UGameEngine::LoadMap), so the change shows from the next map on.
+		// (Switching a loaded level over was tried: the static actor leaf lists of
+		// ULevel::BuildRenderData do not follow a projector re-attached at run time.)
+		UseXboxProjectors = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !UseXboxProjectors;
+		Ar.Logf( TEXT("UC2GLDrv: Xbox projector batching %s from the next map load%s (frame %i)"), UseXboxProjectors ? TEXT("on") : TEXT("off"),
+			(UseXboxProjectors && !XboxProjectorsActive()) ? TEXT(", but not available (pixel shaders off or a projector shader missing)") : TEXT(""), FrameCounter );
+		return 1;
+	}
+	else if( ParseCommand(&Cmd,TEXT("TERRAIN3LAYER")) )
+	{
+		// M7b: TERRAIN3LAYER [0|1] (no argument: toggle). The engine builds a terrain's passes
+		// from the caps when it loads (ATerrainInfo::CheckComputeDataOnLoad -> Update), so every
+		// terrain of the current level is updated the same way again.
+		UseTerrain3Layer = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !UseTerrain3Layer;
+		RefreshTerrainPasses();
+		return 1;
+	}
+	else if( ParseCommand(&Cmd,TEXT("GLSHADOWCHECK")) )
+	{
+		// M7b: shadow textures recomputed from their caster targets (UC2GLShadowCheck.cpp).
+		GShadowCheckPending = 1;
+		Ar.Logf( TEXT("UC2GLDrv: the shadow check runs at the start of the next frame; results in the log") );
+		return 1;
+	}
+	else if( ParseCommand(&Cmd,TEXT("GLSCENECENSUS")) )
+	{
+		// M7b: the level's projectors and terrains (UC2GLSceneCensus.cpp; analysis/projectors.md).
+		GSceneCensusPending = 1;
+		Ar.Logf( TEXT("UC2GLDrv: the scene census runs at the start of the next frame; results in the log") );
+		return 1;
+	}
 	else if( ParseCommand(&Cmd,TEXT("COMBINERTEST")) )
 	{
 		GCombinerTestPending = 1;
@@ -2091,6 +2175,16 @@ FRenderInterface* UUC2GLRenderDevice::Lock( UViewport* Viewport, BYTE* HitData, 
 	{
 		extern void UC2GL_RunMaterialCensus( UUC2GLRenderDevice* RenDev, UViewport* Viewport );
 		UC2GL_RunMaterialCensus( this, Viewport );
+	}
+	if( GShadowCheckPending && Viewport->Actor && Viewport->Actor->Level && --GShadowCheckPending == 0 )
+	{
+		extern void UC2GL_RunShadowCheck( UUC2GLRenderDevice* RenDev, UViewport* Viewport );
+		UC2GL_RunShadowCheck( this, Viewport );
+	}
+	if( GSceneCensusPending && Viewport->Actor && Viewport->Actor->Level && --GSceneCensusPending == 0 )
+	{
+		extern void UC2GL_RunSceneCensus( UUC2GLRenderDevice* RenDev, UViewport* Viewport );
+		UC2GL_RunSceneCensus( this, Viewport );
 	}
 
 	return &RenderInterface;
@@ -2250,18 +2344,66 @@ void UUC2GLRenderDevice::SetEmulationMode( EHardwareEmulationMode Mode )
 
 FRenderCaps* UUC2GLRenderDevice::GetRenderCaps()
 {
-	// The caps stay those of M5: the engine's terrain code picks its render method from them
-	// (one layer per pass, no pixel shader). PS_Terrain3Layer is translated; asking for it
-	// means MaxSimultaneousTerrainLayers = 3 here and the Xbox mask constants in
-	// SetTerrainMaterial (see docs/porting/analysis/shaders.md, deferred).
+	// The engine's terrain code picks its render method from these caps (UnTerrain.cpp). M5 said
+	// one layer per pass, no pixel shader; since M7b the terrain pixel shader is used (below).
 	RenderCaps.HardwareTL					= 1;
 	RenderCaps.PixelShaderVersion			= 0;
-	RenderCaps.MaxSimultaneousTerrainLayers	= 1;
+	// M7b: three when PS_Terrain3Layer is drawn (UseTerrain3Layer): the engine then renders runs
+	// of three opaque layers as one RM_CombinedWeightMap pass (UnTerrain.cpp,
+	// UTerrainSector::GenerateTriangles), as the Xbox build does with its hard-coded 3.
+	RenderCaps.MaxSimultaneousTerrainLayers	= Terrain3LayerActive() ? 3 : 1;
 	// M7: the one capability that lifts the engine's and the game's Xbox-only post-process
 	// paths (docs/porting/analysis/postprocess.md, "Engine gates").
 	RenderCaps.XboxPostProcess				= PostProcessActive() ? 1 : 0;
 	RenderCaps.ShippedDOFBlurAlpha			= DOFShippedBlurAlpha ? 1 : 0;
+	// M7b: the Xbox shadow-texture filter (UnShadowProjector.cpp; analysis/projectors.md).
+	RenderCaps.XboxShadows					= XboxShadowsActive() ? 1 : 0;
+	// M7b: level-static projectors batched and drawn with the Xbox projector material.
+	RenderCaps.XboxProjectors				= XboxProjectorsActive() ? 1 : 0;
 	return &RenderCaps;
+}
+
+UBOOL UUC2GLRenderDevice::ProjectorShadersReady()
+{
+	if( !UsePixelShaders )
+		return 0;
+	if( !ShaderStateKnown )
+		return 1;
+	for( INT Type=PS_Projector_Add_1; Type<=PS_Projector_Modulate_Clip; Type++ )
+		if( PixelShaderState[Type] != PSS_Ready )
+			return 0;
+	return 1;
+}
+
+UBOOL UUC2GLRenderDevice::XboxProjectorsActive()
+{
+	return UseXboxProjectors && ProjectorShadersReady();
+}
+
+UBOOL UUC2GLRenderDevice::Terrain3LayerActive()
+{
+	return UseTerrain3Layer && UsePixelShaders && (!ShaderStateKnown || PixelShaderState[PS_Terrain3Layer] == PSS_Ready);
+}
+
+//
+// M7b: the engine builds a terrain's passes from the caps when it loads (ATerrainInfo::
+// CheckComputeDataOnLoad -> Update); after the caps change every terrain is updated the same way.
+//
+void UUC2GLRenderDevice::RefreshTerrainPasses()
+{
+	INT Updated = 0;
+	for( TObjectIterator<ATerrainInfo> It; It; ++It )
+		if( !It->bDeleteMe && It->XLevel && !It->JustLoaded )
+		{
+			It->Update( 0.f );
+			Updated++;
+		}
+	debugf( NAME_Init, TEXT("UC2GLDrv: terrain layers per pass %i (%i terrains updated, frame %i)"), GetRenderCaps()->MaxSimultaneousTerrainLayers, Updated, FrameCounter );
+}
+
+UBOOL UUC2GLRenderDevice::XboxShadowsActive()
+{
+	return UseXboxShadows && PixelShaderFamilyReady( PS_ShadowBlur );
 }
 
 

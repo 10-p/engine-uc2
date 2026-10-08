@@ -339,6 +339,10 @@ public:
 	class FOpenGLDynamicGamma*	DynamicGamma;			// FD3DDynamicGamma
 	FLOAT					DistortionScale[4];			// VSC_DISTORTION_SCALE (HandlePSVertexShader)
 	FLOAT					ColorRemapConstant[4];		// VSC_COLOR_REMAP
+	// M7b: VSC_PROJ_DIRECTIONS .. VSC_PROJ_LIFESPAN_ATTEN, 13 registers (SetProjectorMultiMaterial;
+	// ProjectorAtten.vsh, TexSourceTexKill3.vsh): directions 0-2, origins 3-5, back faces 6,
+	// inverse trace distances 7, clip planes 8-11, lifespan 12, all in the mesh's local space.
+	FLOAT					ProjectorShaderConstants[13][4];
 	UBOOL					PointSampleNudge;			// see GetGLMatrices
 	// M11, a context without gl_FragDepth (EXT_frag_depth): CopyDepthBuffer cannot write the
 	// scene's depth into the distortion accumulation target, so the program passes drawn into

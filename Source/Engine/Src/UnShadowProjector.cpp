@@ -239,6 +239,19 @@ public:
 #if defined(_XBOX) && defined(NEW_SHADOW_BLEND)
 		ShadowColor->Color = FColor(Darkness,Darkness,Darkness,255);		
 #else
+#if defined(NEW_SHADOW_BLEND)
+		// UC2 port (M7b): the Xbox branch above, chosen at run time by a device with the
+		// XboxShadows capability (UnRenDev.h): the caster is drawn in ShadowDarkness grey, its
+		// opacity ignored, as on Xbox. The blend's material is set back to the constant colour
+		// because the PC branch below may have left its shader there.
+		if( RenDevHasXboxShadows() )
+		{
+			ShadowColor->Color = FColor(Darkness,Darkness,Darkness,255);
+			ShadowCastBlend->Material = ShadowColor;
+		}
+		else
+#endif
+		{
 		UShader*	Shader = Cast<UShader>(Material);
 		ShadowColor->Color = FColor(127,127,127,255 - Darkness);
 		if(Shader)
@@ -254,6 +267,7 @@ public:
 			ShadowShader->Opacity = Shader->Opacity;
 
 			ShadowCastBlend->Material = ShadowShader;
+		}
 		}
 #endif // defined(_XBOX) && defined(NEW_SHADOW_BLEND)		
 
@@ -594,7 +608,12 @@ UBitmapMaterial* UShadowBitmapMaterial::Get(FTime Time,UViewport* Viewport)
 			{
 
 // scion sz - do shadow texture blur using a 4 tap blur pixel shader
-#if defined(_XBOX) && defined(NEW_SHADOW_BLEND)
+// UC2 port (M7b): this was "#if defined(_XBOX) && defined(NEW_SHADOW_BLEND)" ... "#else" ...
+// "#endif". The Xbox branch runs for a device with the XboxShadows capability (UnRenDev.h;
+// it draws through PS_ShadowBlur), PC's nine canvas tiles otherwise. Both bodies unchanged.
+#if defined(NEW_SHADOW_BLEND)
+				if( RenDevHasXboxShadows() )
+				{
 				//scion jg -- Use the special clear function
 				ClearShadowBitmap(ShadowTexture,RI,FColor(255,255,255,255));
 
@@ -666,8 +685,13 @@ UBitmapMaterial* UShadowBitmapMaterial::Get(FTime Time,UViewport* Viewport)
 					FColor(255,255,255,255)
 					);
 				ShadowCanvas.Flush();
+#ifdef _XBOX
 				RI->InsertFence();
-#else
+#endif
+				}
+				else
+#endif // defined(NEW_SHADOW_BLEND)
+				{
 				//scion jg -- Clear color only, not the depth/stencil
 				RI->Clear( 1, FColor(0,0,0),0,0.f,0,0xFF );
 
@@ -734,8 +758,7 @@ UBitmapMaterial* UShadowBitmapMaterial::Get(FTime Time,UViewport* Viewport)
 
 				ShadowCanvas.Flush();
 				RI->SetMaterial(NULL);
-
-#endif // defined(_XBOX) && defined(NEW_SHADOW_BLEND)
+				}
 
 				Invalid = 0;
 				//scion jg -- Pop the render target change

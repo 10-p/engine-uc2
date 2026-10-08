@@ -506,6 +506,8 @@ Level DM-Deadbolt.MyLevel up for play (0)...`, still running at the time limit; 
 ## Deferred
 
 - **M7 (25 shaders)**: listed in S3; hooks `// M7:`.
+- (M7b, `analysis/projectors.md`: the projector shaders and `PS_Terrain3Layer` are compiled and drawn now; the
+  two items below are the state before it.)
 - **Projector shaders (12)**: need the engine's `_XBOX` projector batching and `SetProjectorMultiMaterial`
   (an `_XBOX` body in the material compiler) plus `ProjectorAtten.vsh`/`TexSourceTexKill3.vsh`; PC's
   multi-pass projectors keep working as at M5. Not an M7 item in PLAN.md: needs a decision.

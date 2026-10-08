@@ -30,7 +30,7 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 capped=$work/bin/capped
 imgdiff=$repo/tools/dev/imgdiff.py
-T=o9; sys=$work/run/$T/System; out=$work/logs/$T
+T=${O9_TREE:-o9}; sys=$work/run/$T/System; out=$work/logs/$T   # O9_TREE: another run tree / log folder (M7b)
 ALL="combiner-mesa combiner-gpu combiner-twin caps pictures pictures-other"
 if [ "${1:-}" = list ]; then sed -n '/^#   combiner-mesa/,/^#                   frozen/p' "$0"; exit 0; fi
 want=${*:-$ALL}

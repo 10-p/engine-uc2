@@ -476,9 +476,9 @@ the pixel shader against the interpreter by M6's `--gputest`; never a comparison
 | Texture-index materials | `PS_UseTexIndex`, `UseTexIndexMasked` | `PSUseTexIndexMaterial` | no object, no code | **H** (unreachable) | - |
 | Emissive select without blur | `PS_EmissiveSelect` | `#if 0` in `UUCScreenEmissive::PostRender` | - | **H** (compiled out by Epic) | - |
 | Depth swizzle | `PS_DepthSwizzleColor` | Xbox `CopyDepthBuffer` only | - | not used (replaced by the driver's depth copy) | - |
-| Shadow blur | `PS_ShadowBlur` | `_XBOX` branch of `UnShadowProjector.cpp` | every projected shadow | **off** (gate not lifted: not post-processing, would change every shadow; hook `UnShadowProjector.cpp` ~553-680, `BLUR_SHADOW` in `SetMatState_PS_Blur`) | - |
-| Projector batching | the 12 `PS_Projector_*` | `_XBOX` branches of `UnRenderBatch.cpp`, `UnRenderStaticMesh.cpp`, `UnRenderBSP.cpp`; `SetProjectorMultiMaterial` | every projector | **off** (not attempted, see Deferred) | - |
-| Three-layer terrain | `PS_Terrain3Layer` | `FRenderCaps::MaxSimultaneousTerrainLayers`, `UnTerrain.cpp` | every terrain | **off** (not attempted) | - |
+| Shadow blur | `PS_ShadowBlur` | `_XBOX` branch of `UnShadowProjector.cpp` | every projected shadow | **M7b: on** (`FRenderCaps::XboxShadows`, `UseXboxShadows`; numerically checked end to end + seen: `analysis/projectors.md`) | `GLSHADOWCHECK`, `m7b.sh shadow` |
+| Projector batching | the 12 `PS_Projector_*` | `_XBOX` branches of `UnRenderBatch.cpp`, `UnRenderStaticMesh.cpp`, `UnRenderBSP.cpp`; `SetProjectorMultiMaterial` | every projector | **M7b: level-static projectors on** (`UGameEngine::LoadMap`'s batching, `FRenderCaps::XboxProjectors`, `UseXboxProjectors`); dynamic projectors stay PC (same per-pixel result; `analysis/projectors.md`) | `m7b.sh projector-*` |
+| Three-layer terrain | `PS_Terrain3Layer` | `FRenderCaps::MaxSimultaneousTerrainLayers`, `UnTerrain.cpp` | every terrain | **M7b: implemented, off by default** (`UseTerrain3Layer=False`: no visible difference measured) | `m7b.sh terrain` |
 
 All 25 shaders of M6's waiting list are compiled and reachable by their materials when post-processing is on
 (`UC2GL_IsM7PixelShader` now only applies with it off). Drawn in a run of mine: `Blur`, `DepthOfField`,
@@ -489,6 +489,8 @@ All 25 shaders of M6's waiting list are compiled and reachable by their material
 `DepthSwizzleColor` (13).
 
 ## Deferred, with hooks
+
+(2026-10-07: the projector, terrain and shadow items below were taken up by M7b, `analysis/projectors.md`.)
 
 - **Projector shaders (12)** and **`PS_Terrain3Layer`**: not attempted. The projector batching is not a gate
   to lift but about 560 lines of Xbox renderer (`UnRenderBatch.cpp` 340-905: `FProjectorRenderBatchDef::Render`

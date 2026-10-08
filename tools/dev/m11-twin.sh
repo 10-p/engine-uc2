@@ -12,9 +12,10 @@
 #
 #   shaders    tools/psh2glsl.py --selftest: the 100 pixel shaders, interpreter against Epic's compiled words
 #   gputest    tools/psh2glsl.py --gputest: the GLSL of every pixel shader against the interpreter (desktop GL)
-#   boot       twin: menu for 40 s; device class, 84 fragment + 405 vertex shaders through gl4es, 0 GL errors
+#   boot       twin: menu for 40 s; device class, 97 fragment + 405 vertex shaders through gl4es, 0 GL errors
+#              (84 until M7b, which compiles the 12 projector shaders and PS_Terrain3Layer too)
 #   selftest   -glselftest numeric checks on both bindings: 11 of 11 on each (M7's ten + fixed-function fog), same tolerances
-#   progtest   420 complete programs (84 pixel shaders x 5 vertex shader enums) drawn on both, compared
+#   progtest   485 complete programs (97 pixel shaders x 5 vertex shader enums; 420 = 84 x 5 before M7b) drawn on both, compared
 #   pinned     DM-Deadbolt (first PlayerStart) and the menu, desktop against twin: post-processing off (static
 #              part of the frame) and on
 #   effects    tools/dev/m7-effects.sh on both; the desktop's B pictures are the twin's fx-<effect>-b.ref.png
@@ -25,6 +26,7 @@
 #              and reported, its fallback is NOT implemented (the line says what happens instead)
 #   movies     tools/dev/m9-movies.py scenarios logos, logos-skip, menu-movie on the twin
 #
+# M11_SERIAL=1 runs the two bindings one after the other instead of side by side (one game run at a time).
 # Thresholds are in the check functions, each with its reason; docs/porting/analysis/web-renderer.md has the
 # measurements they come from. A line starting with "INFO" is a measurement that decides nothing.
 set -u
@@ -64,6 +66,12 @@ PIN='set UCDeathmatch NumPlayers 0'
 # Both bindings at once (two trees): desktop in the background, twin in the foreground.
 both() {  # both <name> <secs> <fire> <map> <args...>
   local name=$1 secs=$2 fire=$3 map=$4; shift 4
+  if [ -n "${M11_SERIAL:-}" ]; then
+    # M11_SERIAL=1: one game run at a time (a loaded machine; coordinator's rule of 2026-10-08)
+    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D "$name" "$secs" "$fire" "$map" -opengl -glerrors "$@" > "$LD/$name.report" 2>&1
+    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T "$name" "$secs" "$fire" "$map" -gl4es -glerrors "$@" > "$LT/$name.report" 2>&1
+    return
+  fi
   UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D "$name" "$secs" "$fire" "$map" -opengl -glerrors "$@" > "$LD/$name.report" 2>&1 &
   local pid=$!
   UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T "$name" "$secs" "$fire" "$map" -gl4es -glerrors "$@" > "$LT/$name.report" 2>&1
@@ -87,7 +95,7 @@ check_boot() {
   fs=$(grep -a -o "pixel shaders on: [0-9]* fragment shaders compiled, [0-9]* failed" "$o")
   vs=$(grep -a -o "[0-9]* vertex shaders compiled ([0-9]* failed)" "$o" | head -1)
   e=$(grep -a -o "UC2GLDrv: [0-9]* GL errors in [0-9]* frames ([0-9]* frames with errors)" "$o")
-  if [[ "$cls" == *"UC2GL4ESDrv.UC2GL4ESRenderDevice"* ]] && [[ "$fs" == *"84 fragment shaders compiled, 0 failed" ]] && [[ "$vs" == "405 vertex shaders compiled (0 failed)" ]] \
+  if [[ "$cls" == *"UC2GL4ESDrv.UC2GL4ESRenderDevice"* ]] && [[ "$fs" == *"97 fragment shaders compiled, 0 failed" ]] && [[ "$vs" == "405 vertex shaders compiled (0 failed)" ]] \
      && [[ "$e" == "UC2GLDrv: 0 GL errors in "* ]] && [ "$(crit "$o")" = 0 ] && grep -a -q "Bringing Level Menu.MyLevel up for play" "$o" \
      && [ "$(grep -a -c '^Mesa: error' "$o")" = 0 ]; then
     result PASS boot "$cls; $fs; $vs; ${e#UC2GLDrv: }; Mesa errors 0; $(grep -a -o 'GLES hardware: .*' "$o"); $(grep -a -o 'capabilities: .*' "$o")"
@@ -115,7 +123,7 @@ check_progtest() {
   local line; line=$(python3 "$repo/tools/dev/m11-progcmp.py" "$LD/fx-selftest.out" "$LT/fx-selftest.out" 2 2>&1 | tail -1)
   # Tolerance 2 of 255: both sides compute in 32-bit floats on the same rasteriser; the last step is a
   # rounding to 8 bits (measured: largest difference 1).
-  if [[ "$line" == "progtest: 420 programs on side A, 420 on side B"*", 0 programs outside the tolerance or missing" ]]; then result PASS progtest "$line"; else result FAIL progtest "$line (run 'selftest' first: it makes the two logs)"; fi
+  if [[ "$line" == "progtest: 485 programs on side A, 485 on side B"*", 0 programs outside the tolerance or missing" ]]; then result PASS progtest "$line"; else result FAIL progtest "$line (run 'selftest' first: it makes the two logs)"; fi
 }
 
 check_pinned() {
@@ -194,6 +202,7 @@ check_fallbacks() {
   # isolates the fallback.
   UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T fb-ref 110 34 DM-Deadbolt -gl4es -glerrors -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$LT/fb-ref.report" 2>&1 &
   local pid=$!
+  [ -n "${M11_SERIAL:-}" ] && wait $pid
   UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D fb-ref 110 34 DM-Deadbolt -opengl -glerrors -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$LD/fb-ref.report" 2>&1
   wait $pid
   local spec sw tree arg fails=0 st s e L
