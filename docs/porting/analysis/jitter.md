@@ -115,3 +115,49 @@ UnrealPawn's behind-view test) is in the camera's target (`UCGameplay.cpp:418`):
 (the pawn sways +-8-9 px at 1080p, smoothly, 1.3 Hz sideways / 2.5 Hz up and down: jitter RMS 2.2 px at 60 fps, judder
 0.26 px), the lazy camera passes about 60-70% of it (|i w / (k + i w)| for k 11-15/s). Left as it is (Epic's design);
 an owner choice in the report.
+
+## Step 3 (2026-10-08): the native matrix, before and after (measured)
+
+`tools/dev/jit-trace.sh` for every combination (driver `logs/jit/matrix-1.txt`; logs `logs/jit/trace/<run>.*`; the
+table re-made with the final analyser: `logs/jit/trace/table-1.txt`). Trees: `jit-main` = main's binary and asset
+tree (UCGameplay.u 17c1750c, what the owner has), `jit-fix` = the same + this branch's UCGameplay.u, `jit-ship` = the
+SHIPPED GUI/UCGameplay/UCMenu (lazy camera always; the keyboard only: with D-6's ini the shipped package has no
+mouse look). 1920x1080, AutoFOV 106.26. Judder RMS / max in px, b = slope of the pawn's place against v x dt:
+
+| run | pacing (dt ms) | fwd | back | right | left | b |
+|---|---|---|---|---|---|---|
+| kbm main (before) | uneven 16.8-33.8 | 10.51 / 15.7 | 10.97 / 16.3 | 20.44 / 30.1 | 20.67 / 31.9 | 1.000 (all four) |
+| kbm fix (after) | uneven | 0.53 / 1.0 | 0.34 / 0.7 | 0.51 / 1.0 | 0.52 / 1.0 | 0.000 (all four) |
+| kbm main | 60 (16.8-37.5) | 0.36 / 1.4 | 2.99 / 20.3 | 1.01 / 5.1 | 3.01 / 10.8 | 0.995-1.000 |
+| kbm fix | 60 (16.7-19.8) | 0.26 / 0.4 | 0.18 / 0.3 | 0.27 / 0.4 | 0.26 / 0.4 | 0.000-0.015 |
+| kbm main | uncapped (0.6-4.8) | 0.20 / 2.5 | 0.23 / 2.6 | 0.40 / 3.4 | 0.80 / 5.1 | 0.97-1.08 |
+| kbm fix | uncapped | 0.01 / 0.04 | 0.01 / 0.03 | 0.01 / 0.03 | 0.01 / 0.04 | ~0 |
+| pad main | uneven | 0.36 / 0.7 | 0.43 / 0.8 | 1.03 / 4.3 | 1.56 / 5.0 | (lazy: not a straight line) |
+| pad fix | uneven | 0.38 / 0.7 | 0.44 / 0.9 | 0.97 / 3.3 | 1.82 / 8.5 | |
+| pad main / fix | 60 | 0.15 / 0.15 | 0.18 / 0.17 | 0.56 / 0.74 | 1.95 / 1.88 | |
+| pad main / fix | uncapped | 0.01 / 0.00 | 0.01 / 0.01 | 0.26 / 0.30 | 0.36 / 0.38 | |
+| shipped scripts, kbm | uneven / 60 / uncapped | 0.89 / 0.78 / 0.01 | 0.52 / 0.22 / 0.01 | 1.08 / 0.67 / 0.30 | 2.20 / 2.19 / 0.32 | |
+
+Read:
+- Keyboard + mouse: the defect is the frame time: judder 10-21 px RMS with uneven frames before, 0.3-0.5 px after; at
+  "60 fps" ONE late frame (37.5 ms) moved the pawn 20 px before (back segment), nothing after. With the bob taken out
+  the pawn stands within 0.03-0.04 px of one spot on the screen after the fix, at every pacing (nobob judder; jitter
+  0.04 px RMS). What remains as drawn is the camera's walk bob: a smooth sway, jitter RMS 2.2 px at 60 fps / 3.3 px
+  at uneven frames (its frame-to-frame step grows with the frame length), judder 0.26 / 0.5 px.
+- Pad: unchanged by the fix (the lazy camera is never computed twice), as expected; the shipped scripts behave the same.
+  Its flat segments are clean (0.15-0.44 px). Its strafes keep 0.6-2.2 px judder at EVERY pacing, also at an even 60:
+  not the frame time. The strafe segments run down a ramp (z -34 -> -100) and back up; the lazy camera trails the pawn
+  vertically (`CameraInterpSpeed.Z` 15/s) and the pawn moves on the screen where the slope begins and ends (seen in
+  the frames: screen y +16 px over two frames when the climb stops while the camera keeps rising). Epic's camera,
+  identical in the shipped scripts; not the owner's complaint (the camera's lag on slopes is smooth motion, a few px).
+- Uncapped (the null renderer's 200-1,500 fps): the defect is there but small (v dt 0.3-1.4 units).
+
+The strip for the owner (`tools/dev/jit-strip.sh` + `jit-strip.py`; GPU, headless, `SDL_VIDEODRIVER=offscreen`,
+1280x720, uneven frames 40-70 ms because saving each picture costs ~35-45 ms; the pawn runs forward on the pad's left
+stick with the MOUSE owning the look): `logs/jit/strip/strip-2.png` (12 consecutive frames per row, a fixed cross where
+the pawn is on average, a chart of its height on the screen per frame) and `strip-2.gif` (before | after, slowed to
+150 ms a frame). The pawn's height on the screen, frame by frame (frame length: offset px, + = higher = further ahead):
+- before: 70:+13.2 40:-2.1 40:-4.3 55:-1.2 70:+2.5 40:-12.6 70:+8.2 44:-1.5 41:-1.6 55:+4.8 70:+6.6 40:-12.2
+  (every long frame throws the pawn ahead, every short one drops it back: up to 25 px between two frames)
+- after:  40:+5.4 55:+5.7 70:+0.2 40:-3.7 70:-6.4 40:-4.7 40:-1.1 55:+4.1 70:+5.9 40:+3.6 70:-3.1 40:-5.9
+  (a smooth sine whatever the frame length: the walk bob)
