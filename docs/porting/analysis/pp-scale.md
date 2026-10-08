@@ -364,3 +364,18 @@ when nothing had been started in the background; fixed `2eb317b`). That desktop 
 ppm11` on the final binary (`logs/pp/m7-effects-ppm11-lines.txt`): **14 lines, every one `critical=0 glerrors=0
 programs_failed=0+0 left_behind=0 tries=1`; praxis-panes A against the wine reference mean 2.040 (first try)**.
 Rerun of the four checks started (`logs/pp/m11-twin-3.txt`).
+
+## Checkpoint, 2026-10-08 03:55 (coordinator's second resume message)
+
+From this side nothing was cut off at 01:10: step 9's final measurement (00:40) and the rebuilds (step 7) had
+completed; the twin rerun (`logs/pp/m11-twin-3.txt`, 01:10-02:26, one game at a time) completed too: effects
+14/14 PASS (`m11-effects`: every twin B picture within the threshold of the desktop's, 0 critical, 0 GL errors,
+0 failed programs on both), m6 4 views PASS, fallbacks: S3TC, max level, gl_FragDepth, 32-bit indices PASS,
+depth textures FAIL (fallback not implemented: the known line of M11), movies FAIL `m9-menu-movie-shots`
+(two screenshots 2 s apart: the portrait differs, the title and list do not; the timing-sensitive movie picture
+known since M11); `m11-twin: 25 PASS, 3 FAIL` for those four checks; with the earlier part (shaders, gputest,
+boot, selftest 15/15 on both, progtest, pinned: 6 PASS) every non-movie, non-depth-texture line passes.
+
+As the coordinator asks, the final measurement and the Windows/wasm-perf builds are now repeated on a quiet
+machine (load 1.3): the builds with -j4, then `tools/dev/pp-scale.sh pp` with every check in one tree, one game
+at a time, then the sheets. Remaining after that: the final report.
