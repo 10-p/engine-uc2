@@ -1,6 +1,8 @@
 /*=============================================================================
 	UC2NetTest.cpp: test-only console commands and command file for the network
 	tests (tools/dev/net-test.sh). uc2 port; not Epic's. Quiet unless used.
+	F-1: the four console commands are cheats (UC2Cheats.cpp's guard: a standalone game,
+	or [Engine.GameEngine] AllowNetCheats=True, which net-test.py sets for its processes).
 
 	Console commands (also from the SDL2 test channel's "exec ..." lines):
 	  NETPROBE <tag>                     "NetProbe: <tag> ..." lines: one summary line, one per
@@ -272,6 +274,11 @@ static void Aim( UGameEngine* Engine, const TCHAR* Cmd )
 	debugf( NETPROBE, TEXT("aim %s failed: no such pawn here"), *Name );
 }
 
+// F-1: these show where every player is, move players and aim: cheats, behind the same guard as
+// TELEPORT/WHEREAMI (UC2Cheats.cpp: a standalone game, or [Engine.GameEngine] AllowNetCheats=True for tests),
+// each run logged as "Cheat: <COMMAND> <arguments>".
+ENGINE_API UBOOL UC2CheatsAllowed( UEngine* Engine, APlayerController* PC, const TCHAR* Command, const TCHAR* Args, FOutputDevice& Ar );
+
 ENGINE_API UBOOL UC2NetTestExec( UGameEngine* Engine, const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UC2NetTestExec);
@@ -279,22 +286,26 @@ ENGINE_API UBOOL UC2NetTestExec( UGameEngine* Engine, const TCHAR* Cmd, FOutputD
 	{
 		while( *Cmd==' ' )
 			Cmd++;
-		Probe( Engine, *Cmd ? Cmd : TEXT("-") );
+		if( UC2CheatsAllowed( Engine, NULL, TEXT("NETPROBE"), Cmd, Ar ) )
+			Probe( Engine, *Cmd ? Cmd : TEXT("-") );
 		return 1;
 	}
 	else if( ParseCommand(&Cmd,TEXT("NETPLACE")) )
 	{
-		Place( Engine, Cmd );
+		if( UC2CheatsAllowed( Engine, NULL, TEXT("NETPLACE"), Cmd, Ar ) )
+			Place( Engine, Cmd );
 		return 1;
 	}
 	else if( ParseCommand(&Cmd,TEXT("NETPLACENEAR")) )
 	{
-		PlaceNear( Engine, Cmd );
+		if( UC2CheatsAllowed( Engine, NULL, TEXT("NETPLACENEAR"), Cmd, Ar ) )
+			PlaceNear( Engine, Cmd );
 		return 1;
 	}
 	else if( ParseCommand(&Cmd,TEXT("NETAIM")) )
 	{
-		Aim( Engine, Cmd );
+		if( UC2CheatsAllowed( Engine, NULL, TEXT("NETAIM"), Cmd, Ar ) )
+			Aim( Engine, Cmd );
 		return 1;
 	}
 	return 0;

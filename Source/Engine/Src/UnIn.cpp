@@ -319,7 +319,21 @@ UBOOL UInput::Exec( const TCHAR* Str, FOutputDevice& Ar )
 					// dependent. Pre-divide here so the Xbox-tuned SpeedBase/limits mean the same on PC.
 					// (UT2004 fixed this path by multiplying by the delta instead and retuned its values.)
 					if( GetInputAction()==IST_Hold && GetInputDelta()>0.f )
+					{
 						*Axis += SpeedBase * Speed * Invert * GetInputDelta() / 20.f;
+						// F-1: UC2's compiled scripts scale the stick's walk to the keyboard's range on the Xbox
+						// only (UCPlayerController PlayerMove: aForward/aStrafe x 24000 when Level.IsXBox(), "aForward
+						// range on PC is +/- 24000.0"), so on PC Epic's shipped UCGameplay.u does not walk with the
+						// left stick at all. UCPlayerInput divides the stick by 100, takes the stick's direction from
+						// it (Ctrl_Move_*_Pct: dodges, lock-target search), then adds the keyboard's aBaseY/aBaseX.
+						// The stick's walk, x 24000 after that division, goes into the keyboard's variable as well:
+						// the direction stays the stick's own, the walk is the Xbox's (24000 + 1 times d).
+						APlayerController* PC = Viewport->Actor;
+						if( Axis == &PC->aForward )
+							PC->aBaseY += 240.f * SpeedBase * Speed * Invert * GetInputDelta() / 20.f;
+						else if( Axis == &PC->aStrafe )
+							PC->aBaseX += 240.f * SpeedBase * Speed * Invert * GetInputDelta() / 20.f;
+					}
 					else
 #endif
 					*Axis += SpeedBase * Speed * Invert;

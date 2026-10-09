@@ -213,7 +213,9 @@ sleep 1
 keyup Right
 sleep 0.3
 probe t1
-check kb-right-arrow-turns-right yawdiff('t0','t1') > 4000
+# F-1 (owner, 2026-10-09): the arrows move and strafe as WASD (Epic's PC layout), they never turn (a key turn would be
+# ~16000 units in this second; with Epic's package the pad's aim adhesion may follow a bot by a few hundred)
+check kb-right-arrow-strafes-right side('t0','t1') > 100 and abs(yawdiff('t0','t1')) < 1500
 probe w0
 key e
 sleep 2.5

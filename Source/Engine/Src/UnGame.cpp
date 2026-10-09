@@ -26,7 +26,6 @@
 // uc2 port (D-3): start in the last used profile, remember it (UC2Profiles.cpp).
 ENGINE_API void UC2StartWithLastProfile( UViewport* Viewport );
 ENGINE_API void UC2RememberProfile( UClient* Client );
-ENGINE_API void UC2MigrateUserIni();	// uc2 port (D-6): UC2InputMigrate.cpp
 ENGINE_API UBOOL UC2ProfileNamesThePlayer( UClient* Client );	// D-4
 ENGINE_API void UC2ProfileNameInURL( UViewport* Viewport, FURL& URL );	// D-4
 ENGINE_API UBOOL UC2ProfilesExec( UClient* Client, const TCHAR* Cmd, FOutputDevice& Ar );	// D-3: PROFILESTATE
@@ -189,10 +188,6 @@ void UGameEngine::Init()
 	// If not a dedicated server.
 	if( GIsClient )
 	{	
-		// uc2 port (D-6): bindings and pad settings an earlier build wrote to User.ini move to D-6's, before
-		// any viewport reads them (UC2InputMigrate.cpp)
-		UC2MigrateUserIni();
-
 		// Init client.
 		UClass* ClientClass = StaticLoadClass( UClient::StaticClass(), NULL, TEXT("ini:Engine.Engine.ViewportManager"), NULL, LOAD_NoFail, NULL );
 		Client = ConstructObject<UClient>( ClientClass );
@@ -461,12 +456,15 @@ static INT Compare( const FItem& A, const FItem& B )
 //
 // uc2 port: the network tests' commands (UC2NetTest.cpp).
 ENGINE_API UBOOL UC2NetTestExec( UGameEngine* Engine, const TCHAR* Cmd, FOutputDevice& Ar );
+ENGINE_API UBOOL UC2CheatExec( UEngine* Engine, APlayerController* PC, const TCHAR* Cmd, FOutputDevice& Ar );	// TELEPORT/WHEREAMI
 ENGINE_API void UC2NetTestTick( UGameEngine* Engine );
 
 UBOOL UGameEngine::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UGameEngine::Exec);
-	if( UC2NetTestExec( this, Cmd, Ar ) )	// uc2 port: NETPROBE/NETPLACE/NETAIM
+	if( UC2CheatExec( this, NULL, Cmd, Ar ) )	// uc2 port: TELEPORT/WHEREAMI, cheats (UC2Cheats.cpp)
+		return 1;
+	if( UC2NetTestExec( this, Cmd, Ar ) )	// uc2 port: NETPROBE/NETPLACE/NETAIM, cheats too
 		return 1;
 	if( ufrontAutoFovExec( Cmd, Ar ) )		// D-8: AUTOFOV [Off|HorPlus|Adaptive]
 		return 1;

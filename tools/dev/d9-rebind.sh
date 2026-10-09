@@ -7,14 +7,14 @@
 #   menu     from the main menu (OPTIONS -> KEYBOARD / MOUSE, software GL, 640x480): the page opens with DefUser.ini's
 #            keys; the slider by mouse (a click on the bar, on its plus end) and CANCEL; the slider by keyboard to 5.0;
 #            mouse invert on; a click on a key cell captures; a capture takes letters raw (S does not move the
-#            selection); JUMP / DODGE := J (J's old command replaced); a conflict (MOVE FORWARD := S, MOVE BACK gets
-#            W); Escape cancels a capture and keeps the page; the console key opens the console during a capture
+#            selection); JUMP / DODGE := J (J's old command replaced); a conflict (MOVE FORWARD := S: MOVE BACK
+#            loses S and W is unbound; F-1: clear, not swap); Escape cancels a capture and keeps the page; the console key opens the console during a capture
 #            and the capture waits on; a mouse button (JUMP ONLY :=
 #            mouse button 4); clearing with X, with Delete, with Backspace in a capture; a fixed row; leaving saves;
 #            the live bindings; the page reopens with them; then User.ini: exactly the changed keys differ from
 #            DefUser.ini, the pad's keys are untouched, the mouse settings are there
 #   match    a NEW process on the same User.ini (the restart): DM-Deadbolt, null renderer: the bindings and the mouse
-#            settings are back; J jumps and Space does not; mouse button 4 jumps; S walks forward and W back; the mouse
+#            settings are back; J jumps and Space does not; mouse button 4 jumps; S walks forward and W does nothing (cleared by the conflict, F-1); the mouse
 #            turns twice the default per count (sensitivity 5.0, d6-mouse.sh's measurement) and up looks down
 #            (invert); then from the PAUSE menu (OPTIONS -> KEYBOARD / MOUSE): the page shows them, DEFAULTS and CANCEL
 #            and DEFAULTS again, leave: Space jumps, J does not, the mouse turns the default amount and up looks up
@@ -242,7 +242,7 @@ expect $P-enter-captures KeyBinds: PRESS A KEY 10
 expect $P-the-enter-is-not-the-key Raw key capture: ignored the release of Enter 10
 sleep 0.3
 key s
-expect $P-conflict-swaps KeyBinds: S: MOVE FORWARD\. MOVE BACK MOVED TO W\. 10
+expect $P-conflict-clears KeyBinds: S: MOVE FORWARD\. MOVE BACK LOST S\. 10
 sleep 0.5
 probe l2
 check $P-letters-do-not-navigate-in-a-capture P['l1'].item == 'MOVE FORWARD|0' and P['l2'].item == 'MOVE FORWARD|0'
@@ -331,12 +331,12 @@ expect $P-leaving-saves KeyBinds: saved 10 key\(s\) to User.ini 10
 expect $P-saves-sensitivity KeyBinds: mouse sensitivity 5.00 saved 10
 expect $P-saves-invert KeyBinds: mouse invert True saved 10
 sleep 2
-keys k1 J Space S W G Mouse4 V F9 Home Period
+keys k1 J Space S W G Mouse4 V F9 Home Right Period
 keys k2 Escape Joy1 Joy2 Joy7 Joy8 Joy13 JoyX JoyY JoyU JoyV
 check $P-live-j K['k1']['J'] == 'SmartJump 0'
 check $P-live-space-free K['k1']['Space'] == ''
-check $P-live-swap K['k1']['S'] == 'MoveForward' and K['k1']['W'] == 'MoveBackward'
-check $P-live-g-and-period-replaced K['k1']['G'] == 'StrafeRight' and K['k1']['Period'] == ''
+check $P-live-conflict-cleared K['k1']['S'] == 'MoveForward' and K['k1']['W'] == ''
+check $P-live-g-replaced-right K['k1']['G'] == 'StrafeRight' and K['k1']['Right'] == '' and K['k1']['Period'] == 'StrafeRight'
 check $P-live-mouse4 K['k1']['Mouse4'] == 'Jump'
 check $P-live-cleared K['k1']['V'] == '' and K['k1']['F9'] == '' and K['k1']['Home'] == ''
 check $P-live-escape-and-pad-untouched K['k2'] == K['k0'] and K['k2']['Escape'] == 'ShowMenu'
@@ -353,7 +353,7 @@ scen_match() {
   start_match
   cat <<'SCEN'
 keys r0 J Space S W G Mouse4 V F9 Home
-check $P-restart-keeps-the-keys K['r0']['J'] == 'SmartJump 0' and K['r0']['Space'] == '' and K['r0']['S'] == 'MoveForward' and K['r0']['W'] == 'MoveBackward' and K['r0']['Mouse4'] == 'Jump' and K['r0']['V'] == ''
+check $P-restart-keeps-the-keys K['r0']['J'] == 'SmartJump 0' and K['r0']['Space'] == '' and K['r0']['S'] == 'MoveForward' and K['r0']['W'] == '' and K['r0']['Mouse4'] == 'Jump' and K['r0']['V'] == ''
 probe m0
 check $P-restart-keeps-the-mouse abs(float(P['m0'].sens) - 5.0) < 0.001 and P['m0'].invert == 'True'
 SCEN
@@ -374,7 +374,7 @@ sleep 1
 keyup w
 sleep 0.3
 probe w2
-check $P-w-walks-back fwd('w1','w2') < -150
+check $P-w-does-nothing abs(fwd('w1','w2')) < 20
 SCEN
   turncheck mouse-turns-twice-the-default 500 "$(python3 -c "print($K*2)")"
   cat <<'SCEN'
@@ -465,7 +465,7 @@ padpress a
 wait KeyBinds: PRESS A KEY 10
 sleep 0.5
 key k
-expect $P-keyboard-key-after-pad-a KeyBinds: K: JUMP / DODGE\. 1ST / 3RD PERSON MOVED TO SPACE\. 10
+expect $P-keyboard-key-after-pad-a KeyBinds: K: JUMP / DODGE\. 1ST / 3RD PERSON LOST K\. 10
 sleep 0.5
 padpress dpright
 sleep 0.3
@@ -479,7 +479,7 @@ padpress b
 expect $P-pad-b-leaves-and-saves KeyBinds: saved 10
 sleep 2
 keys p2 K Space C Semicolon
-check $P-pad-session-saved K['p2']['K'] == 'SmartJump 0' and K['p2']['Space'] == 'BlackButton | ToggleThirdCam' and K['p2']['C'] == 'BlackButton | ToggleThirdCam' and K['p2']['Semicolon'] == 'SmartJump 0'
+check $P-pad-session-saved K['p2']['K'] == 'SmartJump 0' and K['p2']['Space'] == '' and K['p2']['C'] == 'BlackButton | ToggleThirdCam' and K['p2']['Semicolon'] == 'SmartJump 0'
 SCEN
 }
 
@@ -584,7 +584,7 @@ u, du = section(user, 'Engine.Input'), section(defuser, 'Engine.Input')
 pu, pd = section(user, 'UCGameplay.UCPlayerInput'), section(defuser, 'UCGameplay.UCPlayerInput')
 def report(name, ok, detail):
     print(f"{'PASS' if ok else 'FAIL'} ini-{stage}-{name}: {detail}")
-want = {'j': 'SmartJump 0', 'space': '', 's': 'MoveForward', 'w': 'MoveBackward', 'g': 'StrafeRight', 'period': '',
+want = {'j': 'SmartJump 0', 'space': '', 's': 'MoveForward', 'w': '', 'g': 'StrafeRight', 'right': '',
         'mouse4': 'Jump', 'v': '', 'f9': '', 'home': ''} if stage == 'menu' else {}
 diff = {k: (du.get(k), u.get(k)) for k in set(u) | set(du) if (u.get(k) or '') != (du.get(k) or '')}
 report('changed-keys-written', all(u.get(k) == v for k, v in want.items()),
