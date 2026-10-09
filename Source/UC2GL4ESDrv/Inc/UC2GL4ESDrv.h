@@ -17,9 +17,14 @@ class UUC2GL4ESRenderDevice : public UUC2GLRenderDevice
 {
 	DECLARE_CLASS(UUC2GL4ESRenderDevice,UUC2GLRenderDevice,CLASS_Config,UC2GL4ESDrv)
 public:
+	// F-3: which OpenGL ES the binding asks for (ini GLESVersion): 3 = OpenGL ES 3.0 / WebGL 2
+	// (the default), 2 = OpenGL ES 2 / WebGL 1. Where a version-3 context cannot be had, the
+	// binding falls back to 2; GLESMajor (base class) says what was obtained.
+	INT GLESVersion;
+
 	UUC2GL4ESRenderDevice();
-	// The config properties are the base class's (declared there once); the values come from
-	// this class's own ini section, [UC2GL4ESDrv.UC2GL4ESRenderDevice].
+	// The config properties are the base class's (declared there once) plus GLESVersion; the
+	// values come from this class's own ini section, [UC2GL4ESDrv.UC2GL4ESRenderDevice].
 	void StaticConstructor();
 
 	// UUC2GLRenderDevice binding.

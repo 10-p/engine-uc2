@@ -85,15 +85,17 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 # (UC2_WEB_EXCEPTION_FLAGS): openal-soft throws and catches internally.
 target_link_options(${PROJECT_NAME} PRIVATE -sPTHREAD_POOL_SIZE=4)
 # --- end M11 audio --------------------------------------------------------------------------------------------
-# --- M11: the GL device on the web (UC2GLDrv behind gl4es on WebGL 1; docs/porting/analysis/web-renderer.md) ---
+# --- M11: the GL device on the web (UC2GLDrv behind gl4es; docs/porting/analysis/web-renderer.md, webgl2.md) ---
 if(TARGET UC2GL4ESDrv)
   target_link_options(${PROJECT_NAME} PRIVATE
     # gl4es and the driver's raw table look GLES entry points up by name (emscripten_webgl_get_proc_address).
     -sGL_ENABLE_GET_PROC_ADDRESS=1
-    # gl4es targets OpenGL ES 2 = WebGL 1 (decision 3); FULL_ES2 is the template's setting (client-side
-    # array emulation for whatever gl4es still sends that way; the driver itself sends none).
+    # F-3: WebGL 2 = OpenGL ES 3.0 through gl4es' ES 3 back end (our fork), with WebGL 1 kept for browsers
+    # without WebGL 2 (UC2GL4ESDrv falls back; MIN 1 keeps Emscripten's WebGL 1 paths and extension names).
+    # FULL_ES2 is the template's setting (client-side array emulation for whatever gl4es still sends that
+    # way; the driver itself sends none).
     -sMIN_WEBGL_VERSION=1
-    -sMAX_WEBGL_VERSION=1
+    -sMAX_WEBGL_VERSION=2
     -sFULL_ES2=1
     # The context is created with explicitSwapControl + renderViaOffscreenBackBuffer and each frame is
     # presented with emscripten_webgl_commit_frame(): both exist only with this flag (without it the call

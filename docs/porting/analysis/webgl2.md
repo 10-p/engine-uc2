@@ -104,3 +104,57 @@ Driver / binding (`Source/UC2GL4ESDrv`, `Source/UC2GLDrv`):
 Web (`Source/SDLLaunch/cmake/Web.cmake`, M11 block only): `-sMAX_WEBGL_VERSION=2` (MIN stays 1 while the WebGL 1
 question is open).
 Tests: `m11-twin.sh` with `MESA_GLES_VERSION_OVERRIDE=3.0` (WebGL 2 = ES 3.0) for the ES3 twin.
+
+## Step 2: the ES3 spike on the native twin (2026-10-09, 02:00-03:30; machine load 12-30 throughout)
+
+Build: every build of this branch is configured with
+`-DFETCHCONTENT_SOURCE_DIR_GL4ES=/home/ion/WorkUC2/engine-uc2-f3-webgl2/.gl4es-dev` (FetchContent's own override:
+the fork clone with the commits below is compiled instead of the fetched branch; the M11 block of the root
+CMakeLists.txt is unchanged). Native: `capped 6G -- cmake --preset native -D... && cmake --build build-native -j4`
+(`logs/f3/build-native-*.log`, all rc=0). The ES3 twin is the twin with `MESA_GLES_VERSION_OVERRIDE=3.0` (WebGL 2 =
+OpenGL ES 3.0; without the override Mesa gives 3.2).
+
+GL4ES fork commits so far (local clone `.gl4es-dev`, branch `fix/cubemap-bind-active-unit`, on top of `98441ed`):
+
+| Commit | What | Why (evidence) |
+|---|---|---|
+| `b53ae966` | GLES 3.0 back end `LIBGL_ES=3`: core features from the version, sized depth formats, DEPTH_STENCIL attachment point, real `glRenderbufferStorageMultisample` and `glBlitFramebuffer` | step 1 reading |
+| `8695cfdc` | GLSL ES 3.00 output on ES3 (token-aware rewrite of the converted 1.00 text) | WebGL 2 gives 1.00 shaders no `EXT_frag_depth` |
+| `7e25d753` | `LIBGL_FORCEHIGHP`: highp for GL4ES' own fixed-function shaders and as the sampler default | the owner's "fragment highp: Set high"; FPE shaders were mediump |
+| `9653a8a1` | the texture unit's LOD bias applied in the fixed-function shaders (bias uniform, one state bit per unit; `lod_bias` stored as a float) | step 4 (proof pending; the commit is dropped if it makes no difference) |
+| `1bd90647` | GLSL ES 3.00: no int overloads of built-ins, no non-constant-initializer extension line | first ES3 run: `present shader does not compile ... A shader cannot redefine or overload built-in function 'clamp' in GLSL ES 3.00` |
+| `6a29a856` | `glBindRenderbuffer(GL_RENDERBUFFER, 0)` unbinds instead of raising `GL_INVALID_OPERATION` | second run: `GL error 0x0502 (GL_INVALID_OPERATION) in frame 1` (gl4es refused to unbind; found by reading `framebuffers.c`) |
+| `6b6bccd4` | a multisampled colour renderbuffer stays the attachment (`LIBGL_FBOFORCETEX`, default on, replaced it by a single-sampled texture) | `4x multisampled main framebuffer incomplete (0x8d56)` = `FRAMEBUFFER_INCOMPLETE_MULTISAMPLE` |
+
+Engine (this branch): `UC2GL4ESDrv` asks for OpenGL ES 3.0 / WebGL 2 (ini `GLESVersion=3`, falls back to 2 when
+the context cannot be had), sets `LIBGL_ES=3` and `LIBGL_FORCEHIGHP=1`; `UC2GLDrv` gets `GLESMajor`, takes depth
+textures / 32-bit indices / `gl_FragDepth` from the version on ES3, and multisamples the main framebuffer on ES3
+through GL4ES (renderbuffers and resolve blit are GL4ES' own); `Web.cmake` (M11 block) `-sMAX_WEBGL_VERSION=2`.
+
+Results (all `logs/f3t/*.out`, 1280x720):
+- `es3-menu-2`: `GLES hardware: llvmpipe ... / OpenGL ES 3.0 Mesa 26.0.8`, `97 fragment shaders compiled, 0 failed`,
+  `405 vertex shaders compiled (0 failed)`: every program of the driver and every fixed-function shader of GL4ES
+  compiles as GLSL ES 3.00.
+- `m11-twin.sh boot selftest progtest` (`M11_SERIAL=1 MESA_GLES_VERSION_OVERRIDE=3.0 M11_DESKTOP_TREE=f3d
+  M11_TWIN_TREE=f3t`, `logs/f3/twin-es3-run1.txt`): **boot PASS** (`binding: OpenGL ES 3 through GL4ES`, 97/405
+  shaders, 0 GL errors, 0 Mesa errors); **progtest PASS: 485 programs, 7760 values, 7760 identical, largest
+  difference 0 of 255** (the ES2 twin had 1 of 255); selftest desktop 15/15, twin **12/15** (depth-color,
+  depth-copy, dof-ramp FAIL: every depth value wrong).
+- The depth failure, located by experiments (each a full self-test run, `fx-selftest-*.out`):
+  | Run | depth-stencil texture storage | attachment | result |
+  |---|---|---|---|
+  | first | through GL4ES (sized) | through GL4ES (`DEPTH_STENCIL_ATTACHMENT`) | 12/15 |
+  | `-rawdepth` (A) | raw, as on ES2 | raw | **15/15** |
+  | `-expB` | raw | through GL4ES | 10/15: GL4ES' record of the texture says 1x1 RGBA, so its attach code re-specifies the storage at 1x1 (`depth upload ... failed (GL error 0x0501)`) |
+  | `-expE` | through GL4ES, unsized (env switch in a scratch build) | through GL4ES | 12/15 |
+  | `-expF` | through GL4ES (sized) | raw | 12/15 |
+  | `-dbg3` | through GL4ES | through GL4ES, with prints in `realize_1texture`/`realize_textures` | 12/15; GL4ES binds texture 4 on unit 0 with NEAREST/CLAMP for each read, as asked |
+  So: whenever GL4ES created the storage, the self-test's depth values (uploaded raw with `glTexSubImage2D`,
+  `GL_NO_ERROR`) are not what the depth passes read; with raw storage they are. Not found further (the upload is a
+  self-test-only path; whether the game's own depth writes are affected the same way was not isolated). Decision,
+  for now: **the depth-stencil texture stays raw on ES3** (sized `DEPTH24_STENCIL8`, one `DEPTH_STENCIL_ATTACHMENT`),
+  the multisampled renderbuffers go through GL4ES. With that: `fx-selftest` **15 passed, 0 failed**, `0 GL errors
+  in 883 frames`; `es3-menu-aa`: `main framebuffer 1280x720 (...; drawn 4x multisampled, resolved into them)`.
+- Fallbacks of the binding: `MESA_GLES_VERSION_OVERRIDE=2.0` (no ES 3.0 context): `no OpenGL ES 3.0 context: trying
+  OpenGL ES 2.0`, `gl4es initialised (GLES2 back end ...)`; `-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:GLESVersion=2`:
+  `OpenGL ES 2.0 context requested`, GLES2 back end. Both draw the menu.

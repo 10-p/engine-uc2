@@ -50,16 +50,25 @@ UUC2GL4ESRenderDevice::UUC2GL4ESRenderDevice()
 
 void UUC2GL4ESRenderDevice::StaticConstructor()
 {
-	// Nothing: UUC2GLRenderDevice::StaticConstructor declared the properties on its class and
-	// set the compiled defaults, which this class's default object starts from.
+	// UUC2GLRenderDevice::StaticConstructor declared the shared properties on its class and set
+	// the compiled defaults, which this class's default object starts from. F-3: GLESVersion.
+	new(GetClass(),TEXT("GLESVersion"),RF_Public)UIntProperty( CPP_PROPERTY(GLESVersion), TEXT("Options"), CPF_Config );
+	GLESVersion = 3;
+}
+
+// The version asked for: 3 unless the ini says 2.
+static INT RequestedGLES( INT GLESVersion )
+{
+	return GLESVersion == 2 ? 2 : 3;
 }
 
 const TCHAR* UUC2GL4ESRenderDevice::BindingName()
 {
+	INT Major = GLESMajor ? GLESMajor : RequestedGLES( GLESVersion );
 #if defined(__EMSCRIPTEN__)
-	return TEXT("WebGL 1 through GL4ES");
+	return Major >= 3 ? TEXT("WebGL 2 through GL4ES") : TEXT("WebGL 1 through GL4ES");
 #else
-	return TEXT("OpenGL ES 2 through GL4ES");
+	return Major >= 3 ? TEXT("OpenGL ES 3 through GL4ES") : TEXT("OpenGL ES 2 through GL4ES");
 #endif
 }
 
@@ -67,7 +76,7 @@ const TCHAR* UUC2GL4ESRenderDevice::BindingName()
 	Context.
 -----------------------------------------------------------------------------*/
 
-void UUC2GL4ESRenderDevice::BindingSetContextAttributes()
+static void SetESContextAttributes( INT Major )
 {
 #if !defined(__EMSCRIPTEN__)
 	// The window's own framebuffer only receives the present pass.
@@ -78,9 +87,15 @@ void UUC2GL4ESRenderDevice::BindingSetContextAttributes()
 	SDL_GL_SetAttribute( SDL_GL_STENCIL_SIZE, 0 );
 	SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
 	SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES );
-	SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 2 );
+	SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, Major );
 	SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 0 );
 #endif
+}
+
+void UUC2GL4ESRenderDevice::BindingSetContextAttributes()
+{
+	// Once a context exists its version stays (GL4ES is initialised for it once).
+	SetESContextAttributes( GLESMajor ? GLESMajor : RequestedGLES( GLESVersion ) );
 }
 
 UBOOL UUC2GL4ESRenderDevice::BindingCreateContext( UViewport* Viewport, UBOOL Fullscreen, INT NewX, INT NewY, UBOOL bSaveSize )
@@ -116,8 +131,10 @@ UBOOL UUC2GL4ESRenderDevice::BindingCreateContext( UViewport* Viewport, UBOOL Fu
 	}
 	EmscriptenWebGLContextAttributes Attrs;
 	emscripten_webgl_init_context_attributes( &Attrs );
-	// WebGL 1 = OpenGL ES 2, what gl4es targets (docs/porting/analysis/web-renderer.md, decision 3).
-	Attrs.majorVersion					= 1;
+	// F-3: WebGL 2 = OpenGL ES 3.0, through GL4ES' ES 3 back end (our fork); WebGL 1 = OpenGL ES 2
+	// where the browser has no WebGL 2 or the ini asks for it (GLESVersion=2).
+	INT Major = RequestedGLES( GLESVersion );
+	Attrs.majorVersion					= Major >= 3 ? 2 : 1;
 	Attrs.minorVersion					= 0;
 	// The canvas only receives the present pass: the scene has its own framebuffer object
 	// with depth and stencil, and the picture is opaque.
@@ -133,22 +150,46 @@ UBOOL UUC2GL4ESRenderDevice::BindingCreateContext( UViewport* Viewport, UBOOL Fu
 	Attrs.explicitSwapControl			= 1;
 	Attrs.renderViaOffscreenBackBuffer	= 1;
 	GWebGLContext = emscripten_webgl_create_context( "#canvas", &Attrs );
+	if( GWebGLContext <= 0 && Major >= 3 )
+	{
+		debugf( NAME_Init, TEXT("UC2GL4ESDrv: no WebGL 2 context on the engine's thread (result %i): trying WebGL 1"), (INT)GWebGLContext );
+		Major = 2;
+		Attrs.majorVersion = 1;
+		GWebGLContext = emscripten_webgl_create_context( "#canvas", &Attrs );
+	}
 	if( GWebGLContext <= 0 )
 	{
-		debugf( NAME_Init, TEXT("UC2GL4ESDrv: could not create a WebGL 1 context on the engine's thread (result %i)"), (INT)GWebGLContext );
+		debugf( NAME_Init, TEXT("UC2GL4ESDrv: could not create a WebGL context on the engine's thread (result %i)"), (INT)GWebGLContext );
 		GWebGLContext = 0;
 		return 0;
 	}
+	GLESMajor = Major;
 	if( emscripten_webgl_make_context_current( GWebGLContext ) != EMSCRIPTEN_RESULT_SUCCESS )
 	{
 		debugf( NAME_Init, TEXT("UC2GL4ESDrv: could not make the WebGL context current") );
 		return 0;
 	}
-	debugf( NAME_Init, TEXT("UC2GL4ESDrv: WebGL 1 context created on the engine's thread (handle %i; alpha 0, depth 0, stencil 0, antialias 0, explicit swap)"), (INT)GWebGLContext );
+	debugf( NAME_Init, TEXT("UC2GL4ESDrv: WebGL %i context created on the engine's thread (handle %i; alpha 0, depth 0, stencil 0, antialias 0, explicit swap)"), Major >= 3 ? 2 : 1, (INT)GWebGLContext );
 	return 1;
 #else
 	// SDL2Drv creates the GL window and context for BLIT_OpenGL, from the attributes above.
-	return Viewport->ResizeViewport( (Fullscreen ? BLIT_Fullscreen : 0) | BLIT_OpenGL, NewX, NewY, bSaveSize );
+	if( Viewport->ResizeViewport( (Fullscreen ? BLIT_Fullscreen : 0) | BLIT_OpenGL, NewX, NewY, bSaveSize ) )
+	{
+		if( !GLESMajor )
+		{
+			GLESMajor = RequestedGLES( GLESVersion );
+			debugf( NAME_Init, TEXT("UC2GL4ESDrv: OpenGL ES %i.0 context requested"), GLESMajor );
+		}
+		return 1;
+	}
+	if( GLESMajor || RequestedGLES( GLESVersion ) < 3 )
+		return 0;
+	debugf( NAME_Init, TEXT("UC2GL4ESDrv: no OpenGL ES 3.0 context: trying OpenGL ES 2.0") );
+	SetESContextAttributes( 2 );
+	if( !Viewport->ResizeViewport( (Fullscreen ? BLIT_Fullscreen : 0) | BLIT_OpenGL, NewX, NewY, bSaveSize ) )
+		return 0;
+	GLESMajor = 2;
+	return 1;
 #endif
 }
 
@@ -218,7 +259,12 @@ UBOOL UUC2GL4ESRenderDevice::BindingInit()
 	// USEVBO: without it gl4es hands GLES client-side pointers for data that IS in buffer
 	// objects, and WebGL has no client-side arrays (Emscripten then copies every vertex
 	// range before every draw). BATCH 0: its draw-call merging was measured as a loss there.
-	setenv( "LIBGL_ES",				"2", 1 );
+	// F-3: GL4ES' OpenGL ES 3 back end (our fork) on an OpenGL ES 3 / WebGL 2 context.
+	setenv( "LIBGL_ES",				GLESMajor >= 3 ? "3" : "2", 1 );
+	// The owner (2026-10-09): "fragment highp: Set high." GL4ES' own fixed-function shaders are
+	// mediump by default and samplers lowp; with this every shader is highp where the hardware
+	// has it (always on OpenGL ES 3 / WebGL 2).
+	setenv( "LIBGL_FORCEHIGHP",		"1", 1 );
 	setenv( "LIBGL_NOBANNER",		"1", 1 );
 	setenv( "LIBGL_NOERROR",		"0", 1 );	// glGetError keeps working (-glerrors)
 	setenv( "LIBGL_USEVBO",			"1", 1 );
@@ -243,7 +289,7 @@ UBOOL UUC2GL4ESRenderDevice::BindingInit()
 	set_getprocaddress( UC2GL4ES_RawGetProcAddress );
 	initialize_gl4es();
 	Initialized = 1;
-	debugf( NAME_Init, TEXT("UC2GL4ESDrv: gl4es initialised (GLES2 back end, real buffer objects, no batching)") );
+	debugf( NAME_Init, TEXT("UC2GL4ESDrv: gl4es initialised (GLES%i back end, real buffer objects, no batching, highp everywhere)"), GLESMajor >= 3 ? 3 : 2 );
 	return 1;
 }
 

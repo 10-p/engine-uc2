@@ -165,6 +165,7 @@ UUC2GLRenderDevice::UUC2GLRenderDevice()
 	GLErrorCount			= 0;
 	appMemzero( &DeviceCaps, sizeof(DeviceCaps) );
 	IsGLES					= 0;
+	GLESMajor				= 0;
 	CapDepthTexture = CapFragDepth = CapUIntIndex = CapTextureMaxLevel = CapFragmentHighp = 1;
 	MainDepthRenderbuffer	= 0;
 	QuadBuffer				= 0;
@@ -764,7 +765,7 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 		// otherwise FXAA in the present pass (OpenGL ES 2 / WebGL 1 have no multisampled
 		// framebuffer objects; the context's own antialias attribute only reaches the default
 		// framebuffer, which receives nothing but the present quad).
-		PresentFXAA = AntiAliasing > 0 && (IsGLES || !SUPPORTS_MSAA);
+		PresentFXAA = AntiAliasing > 0 && ((IsGLES && GLESMajor < 3) || !SUPPORTS_MSAA);
 		debugf( NAME_Init, TEXT("UC2GLDrv: anti-aliasing: %s"),
 			AntiAliasing <= 0 ? TEXT("off") : PresentFXAA ? TEXT("FXAA in the present pass (no multisampled framebuffers on this context)") : *FString::Printf( TEXT("%ix multisampled main framebuffer, resolved before it is read"), AntiAliasing ) );
 
@@ -877,12 +878,16 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 
 	// O-8: the multisampled main framebuffer; the one built above becomes its resolve.
 	MainSamples = 0;
-	if( !IsGLES && !PresentFXAA && AntiAliasing > 1 && SUPPORTS_MSAA && MainDepthStencil )
+	// F-3: OpenGL ES 3 / WebGL 2 as well, through GL4ES (our fork passes multisampled renderbuffer
+	// storage and the resolve blit through; these renderbuffers are GL4ES' own, not raw).
+	if( (!IsGLES || GLESMajor >= 3) && !PresentFXAA && AntiAliasing > 1 && SUPPORTS_MSAA && MainDepthStencil )
 	{
 		GLint MaxSamples = 0;
 		glGetIntegerv( GL_MAX_SAMPLES, &MaxSamples );
 		INT Samples = Min<INT>( AntiAliasing, MaxSamples );
-		if( Samples > 1 )
+		if( Samples <= 1 )
+			debugf( NAME_Init, TEXT("UC2GLDrv: no multisampled main framebuffer: GL_MAX_SAMPLES is %i"), MaxSamples );
+		else
 		{
 			MainResolveFramebuffer = MainFramebuffer;
 			glGenRenderbuffers( 1, &MainMSColorRenderbuffer );
@@ -895,8 +900,13 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 			glGenFramebuffers( 1, &MainFramebuffer );
 			glBindFramebuffer( GL_FRAMEBUFFER, MainFramebuffer );
 			glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, MainMSColorRenderbuffer );
-			glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, MainMSDepthRenderbuffer );
-			glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, MainMSDepthRenderbuffer );
+			if( IsGLES )
+				glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, MainMSDepthRenderbuffer );
+			else
+			{
+				glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, MainMSDepthRenderbuffer );
+				glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, MainMSDepthRenderbuffer );
+			}
 			GLenum MSStatus = glCheckFramebufferStatus( GL_FRAMEBUFFER );
 			if( MSStatus == GL_FRAMEBUFFER_COMPLETE )
 				MainSamples = Samples;
@@ -1057,7 +1067,8 @@ GLuint UUC2GLRenderDevice::CreateDepthStencilTexture( INT Width, INT Height )
 	Raw_glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
 	Raw_glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
 	Raw_glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-	Raw_glTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_STENCIL_OES, Width, Height, 0, GL_DEPTH_STENCIL_OES, GL_UNSIGNED_INT_24_8_OES, NULL );
+	// F-3: OpenGL ES 3 / WebGL 2 want the sized internal format, OpenGL ES 2 / WebGL 1 the unsized one.
+	Raw_glTexImage2D( GL_TEXTURE_2D, 0, GLESMajor >= 3 ? GL_DEPTH24_STENCIL8 : GL_DEPTH_STENCIL_OES, Width, Height, 0, GL_DEPTH_STENCIL_OES, GL_UNSIGNED_INT_24_8_OES, NULL );
 	Raw_glBindTexture( GL_TEXTURE_2D, Bound );
 	glBindTexture( GL_TEXTURE_2D, 0 );
 	return Texture;
@@ -1077,10 +1088,11 @@ GLuint UUC2GLRenderDevice::CreateDepthStencilRenderbuffer( INT Width, INT Height
 	Raw_glGenRenderbuffers( 1, &Renderbuffer );
 	Raw_glBindRenderbuffer( GL_RENDERBUFFER, Renderbuffer );
 #ifdef __EMSCRIPTEN__
-	Raw_glRenderbufferStorage( GL_RENDERBUFFER, GL_DEPTH_STENCIL_OES, Width, Height );		// WebGL 1: DEPTH_STENCIL, core
-#else
-	Raw_glRenderbufferStorage( GL_RENDERBUFFER, GL_DEPTH24_STENCIL8_OES, Width, Height );	// OES_packed_depth_stencil
+	if( GLESMajor < 3 )
+		Raw_glRenderbufferStorage( GL_RENDERBUFFER, GL_DEPTH_STENCIL_OES, Width, Height );		// WebGL 1: DEPTH_STENCIL, core
+	else
 #endif
+	Raw_glRenderbufferStorage( GL_RENDERBUFFER, GL_DEPTH24_STENCIL8_OES, Width, Height );	// OES_packed_depth_stencil; core in ES 3 / WebGL 2
 	Raw_glBindRenderbuffer( GL_RENDERBUFFER, 0 );
 	return Renderbuffer;
 }
@@ -1148,12 +1160,15 @@ void UUC2GLRenderDevice::AttachDepthStencilTexture( GLuint Framebuffer, GLuint T
 		return;
 	}
 	GLint Bound = RawBindFramebuffer( Framebuffer );
-#ifdef __EMSCRIPTEN__
-	Raw_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, Texture, 0 );
-#else
-	Raw_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, Texture, 0 );
-	Raw_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, Texture, 0 );
-#endif
+	// WebGL 1 and OpenGL ES 3 / WebGL 2: one attachment point for the depth-stencil image;
+	// OpenGL ES 2 has none, the image goes on both.
+	if( UseDepthStencilAttachmentPoint() )
+		Raw_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, Texture, 0 );
+	else
+	{
+		Raw_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, Texture, 0 );
+		Raw_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, Texture, 0 );
+	}
 	if( (GLuint)Bound != Framebuffer )
 		Raw_glBindFramebuffer( GL_FRAMEBUFFER, Bound );
 }
@@ -1167,12 +1182,13 @@ void UUC2GLRenderDevice::AttachDepthStencilRenderbuffer( GLuint Framebuffer, GLu
 		return;
 	}
 	GLint Bound = RawBindFramebuffer( Framebuffer );
-#ifdef __EMSCRIPTEN__
-	Raw_glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, Renderbuffer );
-#else
-	Raw_glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, Renderbuffer );
-	Raw_glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, Renderbuffer );
-#endif
+	if( UseDepthStencilAttachmentPoint() )
+		Raw_glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, Renderbuffer );
+	else
+	{
+		Raw_glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, Renderbuffer );
+		Raw_glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, Renderbuffer );
+	}
 	if( (GLuint)Bound != Framebuffer )
 		Raw_glBindFramebuffer( GL_FRAMEBUFFER, Bound );
 }
@@ -1191,6 +1207,7 @@ UBOOL UUC2GLRenderDevice::UploadMainDepth( const DWORD* Rows, INT Width, INT Hei
 {
 	if( !MainDepthStencil )
 		return 0;
+	// (Self-test only; around GL4ES on OpenGL ES.)
 	if( !IsGLES )
 	{
 		glBindTexture( GL_TEXTURE_2D, MainDepthStencil );
@@ -1207,9 +1224,12 @@ UBOOL UUC2GLRenderDevice::UploadMainDepth( const DWORD* Rows, INT Width, INT Hei
 	Raw_glBindTexture( GL_TEXTURE_2D, MainDepthStencil );
 	Raw_glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
 	Raw_glTexSubImage2D( GL_TEXTURE_2D, 0, 0, 0, Width, Height, GL_DEPTH_STENCIL_OES, GL_UNSIGNED_INT_24_8_OES, Rows );
+	GLenum Error = Raw_glGetError();
 	Raw_glBindTexture( GL_TEXTURE_2D, Bound );
 	// gl4es sets the unpack alignment itself before each of its own uploads.
-	return Raw_glGetError() == GL_NO_ERROR;
+	if( Error != GL_NO_ERROR )
+		debugf( NAME_Warning, TEXT("UC2GLDrv: the depth upload of the self-test failed (GL error 0x%04x)"), (INT)Error );
+	return Error == GL_NO_ERROR;
 #endif
 }
 
@@ -1429,6 +1449,11 @@ void UUC2GLRenderDevice::DetectCapabilities()
 							;
 		CapFragDepth		= FindRawExt("GL_EXT_frag_depth") || FindRawExt("EXT_frag_depth");
 		CapUIntIndex		= FindRawExt("GL_OES_element_index_uint") || FindRawExt("OES_element_index_uint");
+		// F-3: OpenGL ES 3.0 / WebGL 2 have depth textures (sized DEPTH24_STENCIL8), 32-bit indices
+		// and, in the GLSL ES 3.00 GL4ES emits there, gl_FragDepth in core: a WebGL 2 context lists
+		// none of the extension names above.
+		if( GLESMajor >= 3 )
+			CapDepthTexture = CapFragDepth = CapUIntIndex = 1;
 		CapTextureMaxLevel	= 0;
 		GLint Range[2] = { 0, 0 }, Precision = 0;
 		if( Raw_glGetShaderPrecisionFormat )
