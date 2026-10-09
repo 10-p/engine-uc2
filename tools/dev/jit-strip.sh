@@ -6,7 +6,7 @@
 #
 # One game run on this machine's GPU, headless (SDL's offscreen video driver: no window on any display; as
 # tools/dev/fx-owner.sh UC2_GPU=1), inside <WorkUC2>/bin/capped 2G, 1280x720, DM-Deadbolt without bots, uneven frame
-# pacing (JIT_STRIP_PATTERN, -framepattern=, default 40:70:40:40:55:70 ms: below). The player
+# pacing (JIT_STRIP_PATTERN, [SDLLaunch] FramePattern set with -ini:, default 40:70:40:40:55:70 ms: below). The player
 # is put at jit-trace.sh's spot, the mouse given the look (one count through the test channel), and runs forward on
 # the virtual pad's LEFT stick (the left stick does not take the look from the mouse; there is no X window for keys);
 # FRAMETRACE is on and once the run is steady, <frames> consecutive frames are saved (one `exec shot` per tick: each
@@ -72,7 +72,7 @@ chan=$out/$name.channel; : > "$chan"
 inner=$(mktemp)
 cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=offscreen ./uc2.bin "DM-Deadbolt?NumBots=0" -log -nostartupmovies -glerrors -framepattern=$pattern -inputtest="$chan" > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy SDL_VIDEODRIVER=offscreen ./uc2.bin "DM-Deadbolt?NumBots=0" -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True "-ini:System:[SDLLaunch]:FramePattern=$pattern" -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" > "$out/$name.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$name.out" "$chan" "$out/$name.result" > "$out/$name.inject" 2>&1
 kill -TERM \$pid 2>/dev/null

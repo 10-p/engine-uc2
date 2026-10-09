@@ -2,7 +2,7 @@
 """M10 input scenario runner (used by tools/dev/m10-controls.sh; not run on its own outside Xvfb).
 
 Drives a running uc2.bin with real X events (XTEST through ctypes: xdotool and python3-xlib are not
-installed on ion-kubuai) and with the engine's input test channel (-inputtest=<file>, SDL2Drv), waits on
+installed on ion-kubuai) and with the engine's input test channel ([SDL2Drv.SDL2Client] InputTestFile=<file> through -ini:, SDL2Drv), waits on
 the engine log, and decides PASS/FAIL from log lines and probe state. Usage:
 
     m10-inject.py <scenario-file> <engine-log> <channel-file> <result-file>

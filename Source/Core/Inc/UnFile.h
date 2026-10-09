@@ -312,6 +312,13 @@ CORE_API UBOOL appIsGlobalOptionToken( const TCHAR* Token );
 // token quoted ("-ini:...=a b"); the value is WRITTEN into the ini (the file is marked dirty), not just
 // overridden for the run. Called once by appInit, right after GConfig->Init.
 CORE_API void appApplyIniOverrides();
+// uc2 port (F-4 follow-up): a TEST key of the system ini (Avaris.ini), set from outside with -ini:. One-shot: read once
+// and taken out of the in-memory ini of every named section, so a test hook never persists into Avaris.ini (a later
+// run of the same tree, or the web's saved ini, cannot inherit it). The value comes from the first section that has
+// the key. Returns whether it was there.
+CORE_API UBOOL appReadTestKey( const TCHAR* Key, FString& Value, const TCHAR* Section, const TCHAR* Section2=NULL, const TCHAR* Section3=NULL );
+// The same for a flag: True/1/Yes/On.
+CORE_API UBOOL appReadTestFlag( const TCHAR* Key, const TCHAR* Section, const TCHAR* Section2=NULL, const TCHAR* Section3=NULL );
 CORE_API const TCHAR* appBaseDir();
 CORE_API const TCHAR* appPackage();
 CORE_API const TCHAR* appComputerName();

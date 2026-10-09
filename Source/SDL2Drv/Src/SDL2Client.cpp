@@ -112,14 +112,27 @@ void USDL2Client::Init( UEngine* InEngine )
 	NAME_SDL2Input = FName( TEXT("SDL2Input") );
 	NAME_SDL2Input.SetFlags( RF_Native );
 
+	// F-1: relative mouse counts exactly as the device sends them (no acceleration, no scaling), what DirectInput
+	// gave WinDrv. These are SDL 2's defaults on every desktop backend (raw input on Windows, XInput2 raw motion on
+	// X11, the unaccelerated relative-pointer deltas on Wayland; MODE_WARP=1 would warp the system cursor and read its
+	// accelerated motion); engine-ut2004's SDL2Drv relies on the same defaults without naming them. Said here so
+	// that a backend or SDL version change cannot bring acceleration in unnoticed. Normal priority: an SDL_MOUSE_*
+	// environment variable still wins (SDL's rule), e.g. for a player who wants warping.
+	// The browser's pointer lock is the frontend's (unadjustedMovement where the browser allows it).
+	SDL_SetHint( SDL_HINT_MOUSE_RELATIVE_MODE_WARP, "0" );
+	SDL_SetHint( SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE, "0" );
+	SDL_SetHint( SDL_HINT_MOUSE_RELATIVE_SPEED_SCALE, "1.0" );
+
 	if( SDL_InitSubSystem( SDL_INIT_VIDEO ) != 0 )
 		appErrorf( TEXT("Couldn't initialize SDL2 video: %s"), appFromAnsi(SDL_GetError()) );
 	debugf( NAME_Init, TEXT("SDL2 video driver: %s"), appFromAnsi(SDL_GetCurrentVideoDriver()) );
 
 	// Pads (M10, SDL2Pads.cpp), and the test channel that drives a virtual one (SDL2InputTest.h).
 	InitPads();
+	// The channel's file: test key [SDL2Drv.SDL2Client] InputTestFile=<file>, set with -ini: (F-4 follow-up; was
+	// -inputtest=<file>), read once and never kept in the ini.
 	FString TestFile;
-	if( Parse( appCmdLine(), TEXT("INPUTTEST="), TestFile ) && PadsInitialized )
+	if( appReadTestKey( TEXT("InputTestFile"), TestFile, TEXT("SDL2Drv.SDL2Client") ) && TestFile.Len() && PadsInitialized )
 		InputTest = new FSDL2InputTest( *TestFile );
 
 	// Text input (WM_CHAR's role). SDL enables it on desktop by default; say so explicitly.

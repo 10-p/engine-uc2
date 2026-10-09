@@ -2030,6 +2030,44 @@ CORE_API void appApplyIniOverrides()
 	unguard;
 }
 
+CORE_API UBOOL appReadTestKey( const TCHAR* Key, FString& Value, const TCHAR* Section, const TCHAR* Section2, const TCHAR* Section3 )
+{
+	guard(appReadTestKey);
+	if( !GConfig )
+		return 0;
+	const TCHAR* Sections[3] = { Section, Section2, Section3 };
+	UBOOL Found = 0;
+	for( INT i=0; i<3; i++ )
+	{
+		if( !Sections[i] )
+			continue;
+		FString V;
+		if( !Found && GConfig->GetString( Sections[i], Key, V, GIni ) )
+		{
+			Value = V;
+			Found = 1;
+		}
+		// Taken out of the cache, and the file marked dirty when something was removed: the -ini: override may already
+		// have been written to Avaris.ini by an earlier flush (the window settings save the ini at start-up), and the
+		// next write must drop it again.
+		TMultiMap<FName,FString>* Sec = GConfig->GetSectionPrivate( Sections[i], 0, 1, GIni );
+		if( Sec && Sec->Remove( FName(Key) ) > 0 )
+			GConfig->GetSectionPrivate( Sections[i], 0, 0, GIni );
+	}
+	if( Found )
+		debugf( NAME_Init, TEXT("Test key [%s] %s=%s (read once, not kept in the ini)"), Section, Key, *Value );
+	return Found;
+	unguard;
+}
+
+CORE_API UBOOL appReadTestFlag( const TCHAR* Key, const TCHAR* Section, const TCHAR* Section2, const TCHAR* Section3 )
+{
+	FString V;
+	if( !appReadTestKey( Key, V, Section, Section2, Section3 ) )
+		return 0;
+	return appStricmp(*V,TEXT("True"))==0 || appStricmp(*V,TEXT("1"))==0 || appStricmp(*V,TEXT("Yes"))==0 || appStricmp(*V,TEXT("On"))==0;
+}
+
 CORE_API void appInit( const TCHAR* InPackage, const TCHAR* InCmdLine, FMalloc* InMalloc, FOutputDevice* InLog, FOutputDeviceError* InError, FFeedbackContext* InWarn, FFileManager* InFileManager, FConfigCache*(*ConfigFactory)(), UBOOL RequireConfig )
 {
 	guard(appInit);

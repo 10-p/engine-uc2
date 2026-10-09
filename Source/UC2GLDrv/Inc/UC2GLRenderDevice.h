@@ -121,7 +121,7 @@ public:
 									MainDepthRenderbuffer;	// ... or renderbuffer (M11: no depth textures)
 	INT								MainWidth,
 									MainHeight;
-	// M11 / O-8, anti-aliasing. AntiAliasing (ini; -glaa=N, -glnoaa) is the number of samples.
+	// M11 / O-8, anti-aliasing. AntiAliasing (ini) is the number of samples.
 	// Desktop GL: MainFramebuffer is then a multisampled framebuffer (renderbuffers), and
 	// MainColorTexture / MainDepthStencil are its resolve, in MainResolveFramebuffer, brought up
 	// to date (ResolveMain) before anything reads them: the copies the post-process samples,
@@ -144,6 +144,10 @@ public:
 	// shaders stay on their fallback, the interface answers what PC's D3DDrv answers.
 	UBOOL							UsePostProcess,
 									DOFShippedBlurAlpha;	// UUCScreenDOF: the blur alpha byte the shipped binary read (65) instead of script's
+	// O-7, F-5: the distance over which screen-space distortion fades out (DistortionAccum.vsh;
+	// Epic's DISTORTION_CULL_DISTANCE, 5000 on the Xbox). A config property like the others, so
+	// each device class reads it from its own ini section (UC2GLMaterialState.cpp).
+	FLOAT							DistortionCullDistance;
 	// M7b (docs/porting/analysis/projectors.md): the Xbox shadow textures (FRenderCaps::XboxShadows:
 	// caster in ShadowDarkness grey, PS_ShadowBlur). Reported only while the PS_Blur family is
 	// drawn (post-processing on): PS_ShadowBlur shares its handler.
@@ -238,14 +242,14 @@ public:
 
 	// O-9 (UC2GLFFProgram.cpp): the texture stages of fixed-function passes as GLSL instead
 	// of GL's texture environment. UseFixedFunctionPrograms is the ini switch
-	// (FixedFunctionPrograms; -glffprograms / -glnoffprograms; console FFPROGRAMS [0|1]);
+	// (FixedFunctionPrograms; console FFPROGRAMS [0|1]);
 	// FFProgramsActive says whether they are in use (desktop GL only). The stage count and
 	// the texture-op caps the material compiler sees follow from it (UpdateTextureCaps).
 	UBOOL							UseFixedFunctionPrograms,
 									FFProgramsActive,
-									LogFFPrograms,			// -glffsource: log every generated program
-									MaskCombine3,			// -glnocombine3: as if GL_ATI_texture_env_combine3 were missing
-									MaskCombine4;			// -glnocombine4: as if GL_NV_texture_env_combine4 were missing
+									LogFFPrograms,			// log every generated program (no switch any more: set in a debugger)
+									MaskCombine3,			// test key MaskCaps=combine3: as if GL_ATI_texture_env_combine3 were missing
+									MaskCombine4;			// test key MaskCaps=combine4: as if GL_NV_texture_env_combine4 were missing
 	INT								GLFixedFunctionUnits,	// GL_MAX_TEXTURE_UNITS: units of the texture environment
 									GLProgramUnits;			// min(GL_MAX_TEXTURE_COORDS, GL_MAX_TEXTURE_IMAGE_UNITS): units a fragment shader can sample with fixed-function texture coordinates
 	INT								FFProgramsLinked, FFProgramsFailed, FFProgramDraws, FFFallbackDraws;
@@ -253,7 +257,7 @@ public:
 	UBOOL HasCombine3() { return SUPPORTS_GL_ATI_texture_env_combine3 && !MaskCombine3; }
 	UBOOL HasCombine4() { return SUPPORTS_GL_NV_texture_env_combine4 && !MaskCombine4; }
 
-	// GL error checking (CheckGLErrors=True or -glerrors).
+	// GL error checking (CheckGLErrors=True).
 	INT								GLErrorFrames,
 									GLErrorCount;
 
@@ -285,7 +289,7 @@ public:
 	UBOOL DepthStencilThroughBinding() { return !IsGLES || GLESMajor >= 3; }
 	// What the context can do; all true on desktop GL. Each has its fallback, and a switch
 	// that masks it so the fallback can be tested where the capability exists
-	// (-glnodepthtexture, -glnofragdepth, -glnos3tc, -glnouintindex).
+	// (test key MaskCaps=depthtexture,fragdepth,s3tc,uintindex,maxlevel).
 	UBOOL							CapDepthTexture,	// a depth-stencil texture can be a framebuffer attachment and be sampled
 									CapFragDepth,		// a fragment shader can write gl_FragDepth
 									CapUIntIndex,		// 32-bit index buffers
@@ -340,13 +344,13 @@ public:
 	TArray<GLuint>					FreeArrayBuffers, FreeElementBuffers;
 	GLuint NewBuffer( GLenum Target );
 	void FreeBuffer( GLenum Target, GLuint& Buffer );
-	// -glnolodbias: every texture LOD bias is 0 (verification: until F-3 GL4ES ignored the LOD
+	// Test key NoLODBias: every texture LOD bias is 0 (verification: until F-3 GL4ES ignored the LOD
 	// bias of the fixed-function path, and this was what the desktop was compared with; our fork
-	// applies it since, and the switch shows the difference it makes).
+	// applies it since, and the key shows the difference it makes).
 	UBOOL							NoLODBias;
-	// -glerrorsdraw: glGetError after every draw call and texture upload, with what it was (slow; to find the call behind an error -glerrors reports).
+	// (no switch any more: set in a debugger) glGetError after every draw call and texture upload, with what it was (slow; to find the call behind an error -glerrors reports).
 	UBOOL							CheckGLErrorsPerDraw;
-	// -glstats: one log line every 300 frames (M11, G5): frame time and what a frame costs
+	// Test key Stats=True: one log line every 300 frames (M11, G5): frame time and what a frame costs
 	// in calls the driver makes (per frame averages over the interval).
 	UBOOL							LogStats;
 	INT								StatDraws,			// draw calls (passes), all

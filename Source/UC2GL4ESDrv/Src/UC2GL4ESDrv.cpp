@@ -271,7 +271,7 @@ UBOOL UUC2GL4ESRenderDevice::BindingInit()
 	// webgl2.md); GL4ES' ES 3 path does not insert them anyway (GLSL ES 3.00 forbids it).
 	setenv( "LIBGL_NOINTOVLHACK",	"1", 1 );
 	setenv( "LIBGL_NOBANNER",		"1", 1 );
-	setenv( "LIBGL_NOERROR",		"0", 1 );	// glGetError keeps working (-glerrors)
+	setenv( "LIBGL_NOERROR",		"0", 1 );	// glGetError keeps working (CheckGLErrors)
 	setenv( "LIBGL_USEVBO",			"1", 1 );
 	setenv( "LIBGL_BATCH",			"0", 1 );
 	setenv( "LIBGL_AVOID16BITS",	"1", 1 );	// no 16-bit downsampling of textures
@@ -284,12 +284,8 @@ UBOOL UUC2GL4ESRenderDevice::BindingInit()
 	// not write into the user's home directory, and the twin should build its programs the
 	// way the browser has to (WebGL has no program binaries).
 	setenv( "LIBGL_NOPSA",			"1", 1 );
-	// -gl4esdebug: gl4es logs every shader it converts (before and after).
-	if( ParseParam( appCmdLine(), TEXT("gl4esdebug") ) )
-	{
-		setenv( "LIBGL_DBGSHADERCONV", "15", 1 );
-		setenv( "LIBGL_LOGSHADERERROR", "1", 1 );
-	}
+	// (F-4 follow-up: the -gl4esdebug switch is gone; gl4es' own LIBGL_DBGSHADERCONV=15 / LIBGL_LOGSHADERERROR=1 in the
+	// environment do the same.)
 
 	set_getprocaddress( UC2GL4ES_RawGetProcAddress );
 	initialize_gl4es();

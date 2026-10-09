@@ -10,7 +10,7 @@
 # (the client with malformed ones), c-ucc.out (ucc-bin), and the inis each run left behind (a-Avaris.ini ...).
 #
 # How "takes effect" is proven: not from our own log line only. The client is started with the override on its
-# command line, the engine's test channel (m10-controls.sh --file, -inputtest=) runs the console command
+# command line, the engine's test channel (m10-controls.sh --file, -ini:System:[SDL2Drv.SDL2Client]:InputTestFile=) runs the console command
 # `get <Class> <Property>`, which prints the class default the config loader produced, and the harness waits for
 # that value in the engine's log. The same run is then stopped with SIGTERM (a normal exit: the config cache
 # flushes) and the inis it left are read, which is how "written back to the ini on exit" is decided.
@@ -138,7 +138,8 @@ else result FAIL b-good-token-after-the-bad-ones-applies "see $out/b.result"; fi
 check b-seven-malformed-tokens-reported count_is 7 'Ini override ignored (expected -ini:<File>:[<Section>]:<Key>=<Value>)' "$out/b-Avaris.log" 
 check b-bad-tokens-name-the-token logline 'ignored (expected -ini:<File>:[<Section>]:<Key>=<Value>): -ini:User:[Section]:NoEquals' "$out/b-Avaris.log" 
 check b-malformed-tokens-wrote-nothing test "$(grep -a -c -E 'Section|EmptyFile|NoColonAfterBracket' "$out/b-User.ini" "$out/b-Avaris.ini" 2>/dev/null | awk -F: '{s+=$NF} END{print s+0}')" = 0
-check b-only-the-good-override-applied count_is 1 'Ini override: [' "$out/b-Avaris.log" 
+# (the runner, tools/dev/m10-controls.sh, passes its own settings and test keys with -ini: too: not counted)
+check b-only-the-good-override-applied count_is 1 'Ini override: [Engine.GameReplicationInfo]' "$out/b-Avaris.log" 
 check b-no-critical test "$(grep -a -c Critical "$out/b.out")" = 0
 check b-reached-the-menu logline 'OpenMenu [UCMenu.UC2MainMenu]' "$out/b.out" 
 

@@ -2,15 +2,15 @@
 # D-6 check (native): mouse look like a PC shooter, the game pad as on the Xbox, measured. One PASS/FAIL line per
 # check on stdout, then a summary line.
 #
-#   tools/dev/d6-mouse.sh [scenario...]        (default: look ini migrate pad lock before)
+#   tools/dev/d6-mouse.sh [scenario...]        (default: look ini lazy pad lock before)
 #
 #   look    linear mouse look: N counts turn N x k at three speeds and three distances, the same k in both axes, a
 #           circle of mouse motion gives a circle of view directions, no camera motion after the mouse stops (a
 #           flick, the circle), the sensitivity, FOV and invert settings (mouse invert apart from the pad's, both
 #           applied), auto-centring only under the pad, the look keys, mouse after stick
 #   ini     the mouse's settings read from User.ini as the launcher passes them (-ini:, which also writes them there)
-#   migrate a User.ini an earlier build left (M10's; Epic's, which the web had): its old mouse/pad values are moved
-#           to D-6's at start-up (Source/Engine/Src/UC2InputMigrate.cpp) and the mouse is D-6's mouse
+#   lazy    F-1: [UCGameplay.UCPlayerInput] bLazyMouseCamera=True: the mouse still turns linearly, the third-person
+#           camera is Epic's lazy one under the mouse too (it moves on after a flick, then rests)
 #   pad     the right stick's turn and look-up curves (rotation reached 0.1-1.0 s after the stick is pushed to
 #           0.35/0.5/0.75/1.0) on our scripts and on the SHIPPED scripts with the same ini: must match; the stick
 #           dead zone 0.3; the left stick walks
@@ -21,12 +21,19 @@
 #   before  the look scenario as the owner played it natively (shipped scripts, main's DefUser.ini at 47b1b18):
 #           evidence, its drift checks are expected to FAIL there (labelled "before-")
 #   epic    (on request) the mouse as Epic's PC leak had it, which the web build used until 2026-10-07: evidence
+#   accel   (on request; F-1) no mouse acceleration: real X motion at two speeds with the X server's acceleration
+#           turned up; the same turn per count (and the SDL warp-mode control run, evidence)
+#   walk    (on request; F-1) steady ground speeds: W, Shift+W, the pad's left stick at 1.0/0.5/0.35 (both trees)
+#   cheat   (on request; F-1) WHEREAMI/TELEPORT allowed and logged standalone and for a listen host
+#   vanilla (on request; F-1) the D6_SHIP_TREE (Epic's shipped scripts) with OUR DefUser.ini: the mouse turns the view
+#           through Epic's PC path (the stick's curve: capped, not linear), up looks up, the Right arrow strafes,
+#           PageUp looks up
 #
 # Trees (<WorkUC2>/run/<name>, made by tools/dev/mkrun-uc2.sh): D6_TREE (rebuilt packages, default d6-run),
 # D6_SHIP_TREE (shipped packages, default d6-ship). Every game run is tools/dev/m10-controls.sh --file (Xvfb inside
-# <WorkUC2>/bin/capped 2G), -nullrenderer with -maxfps=60 (30 for the pad curves, the Xbox's rate): the camera's lag
+# <WorkUC2>/bin/capped 2G), -nullrenderer with [Engine.Engine] FrameRateCap=60 (30 for the pad curves, the Xbox's rate): the camera's lag
 # shows at real frame rates, and software GL runs at a few frames a second here, where a lazy camera arrives in one
-# frame; -maxfps (SDLLaunch) caps the null renderer's thousand), mouse motion as exact counts through the engine's test
+# frame; FrameRateCap, set with -ini:, caps the null renderer's thousand), mouse motion as exact counts through the engine's test
 # channel (`mouse <dx> <dy>`: an SDL motion event; Source/SDL2Drv/Src/SDL2InputTest.h). Output: D6_OUT (default
 # <WorkUC2>/logs/d6/mouse): <scenario>.out (engine log), .result, .inject, .json (measurements).
 set -u
@@ -260,7 +267,8 @@ probe Ae
 pyexec save('look-auto-centre-under-the-pad', [P['Ad'].rot[0], P['Ae'].rot[0]])
 check look-auto-centre-under-the-pad P['Ad'].mouselook == 'False' and abs(((P['Ae'].rot[0]+1400+32768)&65535)-32768) < abs(((P['Ad'].rot[0]+1400+32768)&65535)-32768) - 100
 SCEN
-  # 7. the look keys, and the mouse right after the stick (no adhesion/friction/curve on the mouse)
+  # 7. the keys: the Right arrow strafes and never turns (F-1), PageUp looks up; then the mouse right after the stick
+  # (no adhesion/friction/curve on the mouse)
   cat <<SCEN
 probe Ka
 keydown Right
@@ -268,8 +276,15 @@ sleep 1.0
 keyup Right
 sleep 0.3
 probe Kb
-pyexec save('look-keys-deg-per-s', round(yawdiff('Ka','Kb')*360/65536/1.0,1))
-check look-right-key-turns-right 60*65536/360 < yawdiff('Ka','Kb') < 125*65536/360
+check look-right-arrow-strafes-and-never-turns side('Ka','Kb') > 100 and yawdiff('Ka','Kb') == 0
+probe Kc
+keydown Prior
+sleep 0.5
+keyup Prior
+sleep 0.3
+probe Kd
+pyexec save('look-pageup-deg-per-s', round(pitchdiff('Kc','Kd')*360/65536/0.5,1))
+check look-pageup-looks-up pitchdiff('Kc','Kd') > 500
 pad axis rightx 32767
 sleep 0.2
 pad axis rightx 0
@@ -318,6 +333,10 @@ pad axis rightx 0
 sleep 0.3
 probe zb
 check pad-right-stick-dead-zone-0.3 yawdiff('za','zb') == 0
+chan exec NETPLACE LocalPlayer 1977.8 583.7 -34.1 33000
+sleep 1
+chan exec NETPLACE LocalPlayer 1977.8 583.7 -34.1 33000
+sleep 1.5
 probe la
 pad axis lefty 32767
 sleep 1.0
@@ -329,11 +348,17 @@ sleep 1.0
 pad axis lefty 0
 sleep 0.5
 probe lb2
-pyexec save('pad-left-stick-walk-1s', [round(fwd('la','lb'),1), round(fwd('lb','lb2'),1)])
+pad axis lefty 16384
+sleep 1.0
+pad axis lefty 0
+sleep 0.5
+probe lb3
+pyexec save('pad-left-stick-walk', {'full-1s-a': round(fwd('la','lb'),1), 'full-1s-b': round(fwd('lb','lb2'),1), 'half-1s': round(fwd('lb2','lb3'),1)})
 SCEN
-  # back, then forward over the same ground (a wall may stop one direction; a wrong sign fails both). The shipped
-  # scripts scale the stick for walking on the Xbox only (PlayerMove): measured, not checked, there.
-  [ "${1:-}" = shipped ] || echo "check pad-left-stick-walks (fwd('la','lb') < -150 or fwd('lb','lb2') > 150) and fwd('la','lb') < 20 and fwd('lb','lb2') > -20"
+  # From a fixed open spot (jit-trace.sh's): back, forward, then half forward. The shipped scripts scale the stick
+  # for walking on the Xbox only (PlayerMove); since F-1 the engine does it on PC (UnIn.cpp), for both packages:
+  # checked on both, and the distances compared below.
+  echo "check pad-left-stick-walks (fwd('la','lb') < -150 or fwd('lb','lb2') > 150) and fwd('la','lb') < 20 and fwd('lb','lb2') > -20"
   cat <<SCEN
 probe lc
 pad axis lefty 9175
@@ -515,19 +540,167 @@ check ini-settings-kept-in-user-ini all(s in open(os.environ['D6_SYS']+'/User.in
 SCEN
 }
 
-# migrate <kind>: a User.ini an earlier build wrote (m10: main before D-6; epic: Epic's PC file, the web's until
-# 2026-10-07): the engine moves its mouse/pad values to D-6's (UC2InputMigrate.cpp) and the mouse is D-6's
-scen_migrate() {
-  start migrate-$1
+# lazy: bLazyMouseCamera=True (given as the launcher gives settings, -ini:): the mouse is still the linear mouse; the
+# camera is Epic's lazy one (after a flick it goes on moving toward its place behind the view, then rests); the
+# rebuilt script says which camera it uses
+scen_lazy() {
+  start lazy
   cat <<SCEN
+check lazy-camera-announced any('UCPlayerInput: PC mouse look (rebuilt UCGameplay.u)' in l and 'lazy camera under the mouse' in l for l in __import__('__main__').log_lines)
 probe Na
 chan mouse 500 0
 probe Nb
-check migrate-$1-mouse-is-the-linear-mouse abs(yawdiff('Na','Nb') - 500*K) <= 2 and P['Nb'].mouselook == 'True'
-chan exec getall UCPlayerInput aMouseX_Limit
-expect migrate-$1-pad-limits-are-the-xbox-ones UCPlayerInput.aMouseX_Limit = 100\.000000 10
-chan exec getall UCPlayerInput bNonlinearAccel
-expect migrate-$1-pad-curve-is-the-xbox-one UCPlayerInput.bNonlinearAccel = True 10
+check lazy-mouse-is-still-linear abs(yawdiff('Na','Nb') - 500*K) <= 2 and P['Nb'].mouselook == 'True'
+sleep 1
+probe Da
+chan mouse 400 0
+probe Db
+sleep 2
+probe Dc
+pyexec save('lazy-camera-after-flick', round(cam_moved('Db','Dc'),2))
+check lazy-camera-moves-on-after-the-flick cam_moved('Db','Dc') > 5 and P['Db'].rot == P['Dc'].rot
+sleep 1
+probe Dd
+check lazy-camera-comes-to-rest cam_moved('Dc','Dd') < 0.5
+SCEN
+}
+
+# accel [warp]: no mouse acceleration (F-1 step 6). Real X pointer motion (XTEST, the path m10-controls.sh uses),
+# with the X server's pointer acceleration turned up to 4x above a threshold of 1 (XChangePointerControl on the test's
+# Xvfb): 200 counts slowly (100 events of 2) and fast (5 events of 40), both axes; the view must turn the same per
+# count at both speeds (SDL's relative mode reads raw motion). "warp" is the control run with the environment's
+# SDL_MOUSE_RELATIVE_MODE_WARP=1 (SDL then reads the warped, accelerated system cursor): it shows the test can see
+# acceleration; evidence, not counted.
+scen_accel() {
+  local p=accel${1:+-$1}
+  start $p
+  cat <<SCEN
+pyexec import __main__ as MI; MI.x.XChangePointerControl(MI.d, 1, 1, 4, 1, 1); MI.x.XFlush(MI.d)
+pyexec import ctypes; MI.pc = [ctypes.c_int(), ctypes.c_int(), ctypes.c_int()]; MI.x.XGetPointerControl(MI.d, *[ctypes.byref(v) for v in MI.pc]); save('$p-x-pointer-control', [v.value for v in MI.pc])
+sleep 0.5
+probe Aa
+rmove 200 0 100
+sleep 0.5
+probe Ab
+rmove -200 0 5
+sleep 0.5
+probe Ac
+rmove 0 -100 50
+sleep 0.5
+probe Ad
+rmove 0 100 5
+sleep 0.5
+probe Ae
+pyexec M['ys']=save('$p-yaw-per-count-slow', round(yawdiff('Aa','Ab')/200.0,4)); M['yf']=save('$p-yaw-per-count-fast', round(-yawdiff('Ab','Ac')/200.0,4))
+pyexec M['ps']=save('$p-pitch-per-count-slow', round(pitchdiff('Ac','Ad')/100.0,4)); M['pf']=save('$p-pitch-per-count-fast', round(-pitchdiff('Ad','Ae')/100.0,4))
+check $p-x-acceleration-is-on MI.pc[0].value == 4 and MI.pc[2].value == 1
+check $p-same-turn-per-count-slow-and-fast abs(M['yf']/M['ys']-1) < 0.01 and abs(M['pf']/M['ps']-1) < 0.02
+check $p-n-counts-in-n-counts-out abs(M['ys']/K-1) < 0.01 and abs(M['yf']/K-1) < 0.01
+SCEN
+}
+
+# walk (F-1): does UC2 walk? The steady ground speed (0.6-1.3 s after the start) of W, of the pad's left stick at 1.0,
+# 0.5 and 0.35 deflection, and of W with Shift held, from the same open spot (TELEPORT, jit-trace.sh's spot): numbers
+# for the owner's "Shift = walk" (on both packages: UnIn.cpp scales the stick on PC for both since F-1)
+scen_walk() {
+  start walk
+  local spot="1977.8 583.7 -34.1 33000 0"
+  echo "pad attach"
+  echo "wait SDL2 pads: pad 0 connected 10"
+  local k
+  for k in w:keydown_w pad1.0:32767 pad0.5:16384 pad0.35:11469 shiftw:shift; do
+    local tag=${k%%:*} how=${k#*:}
+    echo "chan exec TELEPORT $spot"
+    echo "sleep 1"
+    echo "chan exec TELEPORT $spot"
+    echo "sleep 1"
+    echo "chan watch 20000 $tag"
+    case $how in
+      keydown_w) printf 'keydown w\nsleep 1.5\nkeyup w\n';;
+      shift) printf 'keydown Shift_L\nkeydown w\nsleep 1.5\nkeyup w\nkeyup Shift_L\n';;
+      *) printf 'pad axis lefty -%s\nsleep 1.5\npad axis lefty 0\n' "$how";;
+    esac
+    echo "sleep 0.5"
+    echo "chan log WALK-$tag-END"
+    echo "watch $tag test: log WALK-$tag-END 30"
+    echo "pyexec M['$tag']=save('walk-speed-$tag', steady_speed('$tag'))"
+  done
+  cat <<SCEN
+check walk-keys-run M['w'] > 300
+check walk-pad-full-runs M['pad1.0'] > 300
+SCEN
+}
+
+# cheat (F-1, F-1b): WHEREAMI and TELEPORT in a standalone game (allowed; "Cheat:" lines; WHEREAMI's output pasted
+# into TELEPORT gives the same place and view), then the same process's map reloaded as a LISTEN server: the host is
+# allowed too (the refusals of clients and dedicated servers: tools/dev/net-test.sh cheats)
+scen_cheat() {
+  start cheat
+  cat <<SCEN
+chan exec WHEREAMI
+expect cheat-whereami-logged ^Cheat: WHEREAMI -?[0-9.]+ -?[0-9.]+ -?[0-9.]+ [0-9]+ -?[0-9]+\s*$ 10
+chan exec TELEPORT 1977.8 583.7 -34.1 33000 -1400
+expect cheat-teleport-logged ^Cheat: TELEPORT 1977.8 583.7 -34.1 33000 -1400 10
+expect cheat-teleport-ok ^Cheat: TELEPORT ok: 1977.8 583.7 -3[0-9].[0-9] 33000 -1400 10
+sleep 0.5
+probe ta
+check cheat-teleport-moved-the-pawn abs(P['ta'].loc[0]-1977.8) < 2 and abs(P['ta'].loc[1]-583.7) < 2 and P['ta'].rot[1] == 33000
+chan exec WHEREAMI
+expect cheat-whereami-gives-the-place ^Cheat: WHEREAMI 1977.8 583.7 -3[0-9].[0-9] 33000 -1400 10
+chan exec TELEPORT 1500 600 -34.1
+expect cheat-teleport-without-view-keeps-it ^Cheat: TELEPORT ok: 1500.0 600.0 -3[0-9].[0-9] 33000 -1400 10
+chan exec NETPROBE standalone
+expect cheat-netprobe-allowed-standalone ^Cheat: NETPROBE standalone 10
+expect cheat-netprobe-runs-standalone ^standalone summary net=Standalone 10
+mark
+chan exec TELEPORT
+sleep 1
+absent cheat-bare-teleport-is-epics-and-not-logged ^Cheat: TELEPORT
+chan exec open DM-Deadbolt?Listen
+wait Bringing Level DM-Deadbolt.MyLevel up for play 120
+sleep 4
+focus
+key Alt_L 0.3
+sleep 3
+tryseek 6 P['_'].pawn == 1 ;; key Alt_L 0.3
+chan exec WHEREAMI
+expect cheat-whereami-allowed-for-a-listen-host ^Cheat: WHEREAMI -?[0-9.]+ -?[0-9.]+ -?[0-9.]+ [0-9]+ -?[0-9]+\s*$ 10
+chan exec TELEPORT 1977.8 583.7 -34.1 33000 0
+expect cheat-teleport-allowed-for-a-listen-host ^Cheat: TELEPORT ok: 1977.8 583.7 -3[0-9].[0-9] 33000 0 10
+chan exec NETPLACE LocalPlayer 1500 600 -34.1 33000
+expect cheat-netplace-allowed-for-a-listen-host ^place LocalPlayer ok 10
+SCEN
+}
+
+# vanilla: Epic's shipped scripts with OUR DefUser.ini (F-1): the mouse is Epic's PC mouse (into the stick's
+# variables, through the pad's clamp and curve): it turns the view, right turns right, up looks up; capped (200
+# counts in one tick turn less than 3x what 20 do); the Right arrow strafes (never turns), PageUp looks up
+scen_vanilla() {
+  start vanilla
+  echo "probe Sa"; mlines 20 0 1; echo "probe Sb"
+  echo "probe Fa"; echo "chan mouse 20 0"; echo "probe Fb"
+  echo "probe Ga"; echo "chan mouse 200 0"; echo "probe Gb"
+  echo "probe Ha"; mlines 0 -20 1; echo "probe Hb"; mlines 0 20 1; echo "probe Hc"
+  cat <<SCEN
+pyexec save('vanilla-yaw-20-counts-1-per-tick', yawdiff('Sa','Sb')); save('vanilla-yaw-20-counts-in-1-tick', yawdiff('Fa','Fb')); save('vanilla-yaw-200-counts-in-1-tick', yawdiff('Ga','Gb'))
+pyexec save('vanilla-pitch-20-counts-up-1-per-tick', pitchdiff('Ha','Hb'))
+check vanilla-mouse-right-turns-right yawdiff('Sa','Sb') > 500 and yawdiff('Fa','Fb') > 0
+check vanilla-mouse-up-looks-up pitchdiff('Ha','Hb') > 500
+check vanilla-mouse-is-epics-capped-path abs(yawdiff('Ga','Gb')) < 3 * abs(yawdiff('Fa','Fb'))
+probe Ka
+keydown Right
+sleep 1.0
+keyup Right
+sleep 0.3
+probe Kb
+check vanilla-right-arrow-strafes-and-never-turns side('Ka','Kb') > 100 and yawdiff('Ka','Kb') == 0
+probe Kc
+keydown Prior
+sleep 0.5
+keyup Prior
+sleep 0.3
+probe Kd
+check vanilla-pageup-looks-up pitchdiff('Kc','Kd') > 500
 SCEN
 }
 
@@ -539,18 +712,18 @@ count() {
   passes=$((passes + $(grep -c '^PASS' "$f"))); fails=$((fails + $(grep -c '^FAIL' "$f")))
 }
 
-for s in ${@:-look ini migrate pad lock before}; do
+for s in ${@:-look ini lazy pad lock before}; do
   case $s in
     look)
       echo "== look ($tree, our DefUser.ini)"
-      scen_look > "$out/look.scen"; prep "$tree"; run look "$tree" 0 600 -maxfps=60; count "$out/look.result";;
+      scen_look > "$out/look.scen"; prep "$tree"; run look "$tree" 0 600 "-ini:System:[Engine.Engine]:FrameRateCap=60"; count "$out/look.result";;
     pad)
       echo "== pad ($tree, ours) and pad-shipped ($ship, the shipped scripts; same DefUser.ini)"
       scen_pad > "$out/pad.scen"; scen_pad shipped > "$out/pad-shipped.scen"
       # at 30 frames a second (the Xbox's): Epic's view rotation is whole units per tick, so the slow end of the
       # curve depends on the frame rate; both runs at the same rate
-      prep "$tree"; run pad "$tree" 0 300 -maxfps=30; count "$out/pad.result"
-      prep "$ship"; run pad-shipped "$ship" 0 300 -maxfps=30 | sed 's/^/(shipped) /'
+      prep "$tree"; run pad "$tree" 0 300 "-ini:System:[Engine.Engine]:FrameRateCap=30"; count "$out/pad.result"
+      prep "$ship"; run pad-shipped "$ship" 0 300 "-ini:System:[Engine.Engine]:FrameRateCap=30" | sed 's/^/(shipped) /'
       python3 - "$out/pad.json" "$out/pad-shipped.json" <<'PY' | tee "$out/pad-compare.result" | sed 's/\t/ /g'
 import json, sys
 def load(p):
@@ -578,28 +751,40 @@ PY
       scen_ini > "$out/ini.scen"; prep "$tree"
       run ini "$tree" 0 200 "-ini:User:[UCGameplay.UCPlayerInput]:MouseLookSensitivity=1.0" "-ini:User:[UCGameplay.UCPlayerInput]:bInvertMouseLook=True"
       count "$out/ini.result";;
-    migrate)
-      git -C "$repo" show 47b1b18:Engine/Config/DefUser.ini > "$out/User-m10.ini"
-      git -C "$repo" show 45f7301:Engine/Config/web/DefUser.ini > "$out/User-epic.ini"
-      for k in m10 epic; do
-        echo "== migrate-$k ($tree, a User.ini from before D-6: $k)"
-        scen_migrate $k > "$out/migrate-$k.scen"; prep "$tree" "" "$out/User-$k.ini"
-        run migrate-$k "$tree" 0 200 -maxfps=60
-        grep -a "Input: User.ini" "$out/migrate-$k.out" | sed 's/^/    engine: /' | cut -c1-200
-        count "$out/migrate-$k.result"
-      done;;
+    lazy)
+      echo "== lazy ($tree, -ini:User:[UCGameplay.UCPlayerInput]:bLazyMouseCamera=True)"
+      scen_lazy > "$out/lazy.scen"; prep "$tree"
+      run lazy "$tree" 0 200 "-ini:System:[Engine.Engine]:FrameRateCap=60" "-ini:User:[UCGameplay.UCPlayerInput]:bLazyMouseCamera=True"
+      count "$out/lazy.result";;
+    walk)
+      echo "== walk ($tree and $ship: steady speeds of W, Shift+W and the left stick at 1.0/0.5/0.35)"
+      scen_walk > "$out/walk.scen"
+      cp "$out/walk.scen" "$out/walk-shipped.scen"
+      prep "$tree"; run walk "$tree" 0 300 "-ini:System:[Engine.Engine]:FrameRateCap=60"; count "$out/walk.result"
+      prep "$ship"; run walk-shipped "$ship" 0 300 "-ini:System:[Engine.Engine]:FrameRateCap=60" | sed 's/^/(shipped) /'; count "$out/walk-shipped.result";;
+    cheat)
+      echo "== cheat ($tree: WHEREAMI/TELEPORT standalone, then as the host of a listen server)"
+      scen_cheat > "$out/cheat.scen"; prep "$tree"; run cheat "$tree" 0 300 "-ini:System:[Engine.Engine]:FrameRateCap=60"; count "$out/cheat.result";;
+    accel)
+      echo "== accel ($tree, real X motion with X pointer acceleration 4x; then the SDL_MOUSE_RELATIVE_MODE_WARP=1 control)"
+      scen_accel > "$out/accel.scen"; prep "$tree"; run accel "$tree" 0 200 "-ini:System:[Engine.Engine]:FrameRateCap=60"; count "$out/accel.result"
+      scen_accel warp > "$out/accel-warp.scen"; prep "$tree"
+      SDL_MOUSE_RELATIVE_MODE_WARP=1 run accel-warp "$tree" 0 200 "-ini:System:[Engine.Engine]:FrameRateCap=60" | sed 's/^/(control) /';;
     lock)
       echo "== lock ($tree, two bots frozen)"
-      scen_lock > "$out/lock.scen"; prep "$tree"; run lock "$tree" 2 400 -maxfps=60; count "$out/lock.result";;
+      scen_lock > "$out/lock.scen"; prep "$tree"; run lock "$tree" 2 400 "-ini:System:[Engine.Engine]:FrameRateCap=60"; count "$out/lock.result";;
     before)
       echo "== before ($ship, shipped scripts, main's DefUser.ini: what the owner played; expected to FAIL drift/symmetry)"
       git -C "$repo" show 47b1b18:Engine/Config/DefUser.ini > "$out/DefUser-main.ini"
-      scen_look before > "$out/before.scen"; prep "$ship" "$out/DefUser-main.ini"; D6_KVAL=52.4 run before "$ship" 0 600 -maxfps=60 -noinimigrate | sed 's/^/(before) /';;
+      scen_look before > "$out/before.scen"; prep "$ship" "$out/DefUser-main.ini"; D6_KVAL=52.4 run before "$ship" 0 600 "-ini:System:[Engine.Engine]:FrameRateCap=60" | sed 's/^/(before) /';;
     epic)
       echo "== epic ($ship, shipped scripts, Epic's DefUser.ini as the web build had it until 2026-10-07; evidence)"
       git -C "$repo" show 45f7301:Engine/Config/web/DefUser.ini > "$out/DefUser-epic.ini"
-      scen_epic > "$out/epic.scen"; prep "$ship" "$out/DefUser-epic.ini"; run epic "$ship" 0 300 -maxfps=60 -noinimigrate | sed 's/^/(epic) /';;
-    *) echo "unknown scenario $s (look ini migrate pad lock before epic)" >&2;;
+      scen_epic > "$out/epic.scen"; prep "$ship" "$out/DefUser-epic.ini"; run epic "$ship" 0 300 "-ini:System:[Engine.Engine]:FrameRateCap=60" | sed 's/^/(epic) /';;
+    vanilla)
+      echo "== vanilla ($ship, Epic's shipped scripts, OUR DefUser.ini: Epic's PC mouse path)"
+      scen_vanilla > "$out/vanilla.scen"; prep "$ship"; run vanilla "$ship" 0 300 "-ini:System:[Engine.Engine]:FrameRateCap=60"; count "$out/vanilla.result";;
+    *) echo "unknown scenario $s (look ini lazy pad lock before epic vanilla accel walk cheat)" >&2;;
   esac
 done
-echo "d6-mouse: $passes PASS, $fails FAIL (scenarios: ${*:-look ini migrate pad lock before}; 'before' is evidence and not counted)"
+echo "d6-mouse: $passes PASS, $fails FAIL (scenarios: ${*:-look ini lazy pad lock before}; 'before' and 'epic' are evidence and not counted)"

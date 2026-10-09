@@ -26,13 +26,15 @@
 // uc2 port (D-3): start in the last used profile, remember it (UC2Profiles.cpp).
 ENGINE_API void UC2StartWithLastProfile( UViewport* Viewport );
 ENGINE_API void UC2RememberProfile( UClient* Client );
-ENGINE_API void UC2MigrateUserIni();	// uc2 port (D-6): UC2InputMigrate.cpp
 ENGINE_API UBOOL UC2ProfileNamesThePlayer( UClient* Client );	// D-4
 ENGINE_API void UC2ProfileNameInURL( UViewport* Viewport, FURL& URL );	// D-4
 ENGINE_API UBOOL UC2ProfilesExec( UClient* Client, const TCHAR* Cmd, FOutputDevice& Ar );	// D-3: PROFILESTATE
 // uc2 port (jitter): FRAMETRACE, one line per drawn frame (UC2FrameTrace.cpp); quiet unless asked for.
 ENGINE_API UBOOL UC2FrameTraceExec( const TCHAR* Cmd, FOutputDevice& Ar );
 ENGINE_API void UC2FrameTraceDraw( UViewport* Viewport, const FVector& CamLoc, const FRotator& CamRot, FLOAT DeltaSeconds );
+// uc2 port (F-2): the frame rate in the log, [Engine.GameEngine] FpsLogSeconds / FPSLOG (UC2FpsLog.cpp); quiet by default.
+ENGINE_API void UC2FpsLogTick( UEngine* Engine );
+ENGINE_API UBOOL UC2FpsLogExec( const TCHAR* Cmd, FOutputDevice& Ar );
 
 /*-----------------------------------------------------------------------------
 	Object class implementation.
@@ -186,10 +188,6 @@ void UGameEngine::Init()
 	// If not a dedicated server.
 	if( GIsClient )
 	{	
-		// uc2 port (D-6): bindings and pad settings an earlier build wrote to User.ini move to D-6's, before
-		// any viewport reads them (UC2InputMigrate.cpp)
-		UC2MigrateUserIni();
-
 		// Init client.
 		UClass* ClientClass = StaticLoadClass( UClient::StaticClass(), NULL, TEXT("ini:Engine.Engine.ViewportManager"), NULL, LOAD_NoFail, NULL );
 		Client = ConstructObject<UClient>( ClientClass );
@@ -353,7 +351,17 @@ void UGameEngine::Init()
 
 	// Handle failure.
 	if( !Success )
+#ifdef __EMSCRIPTEN__
+	{
+		// uc2 port (F-4a, engine-ut2004): on the web a bad start-up map is not fatal (appErrorf is a throw, and
+		// catching is compiled out there). Entry is loaded: stay there and let the player pick from the menus.
+		debugf( NAME_Warning, TEXT("Startup map '%s' failed to load (%s): staying in the entry level"), Parm, *Error );
+		if( !GLevel )
+			GLevel = GEntry;
+	}
+#else
 		appErrorf( LocalizeError(TEXT("FailedBrowse"),TEXT("Engine")), Parm, *Error );
+#endif
 
 	// If RF_TagPersist GC is re-enabled, the following line should be moved up to just after the call to InitAudio()
 	// This screws up initial mouse capture when running in windowed mode, however, so leave it here otherwise
@@ -448,18 +456,23 @@ static INT Compare( const FItem& A, const FItem& B )
 //
 // uc2 port: the network tests' commands (UC2NetTest.cpp).
 ENGINE_API UBOOL UC2NetTestExec( UGameEngine* Engine, const TCHAR* Cmd, FOutputDevice& Ar );
+ENGINE_API UBOOL UC2CheatExec( UEngine* Engine, APlayerController* PC, const TCHAR* Cmd, FOutputDevice& Ar );	// TELEPORT/WHEREAMI
 ENGINE_API void UC2NetTestTick( UGameEngine* Engine );
 
 UBOOL UGameEngine::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UGameEngine::Exec);
-	if( UC2NetTestExec( this, Cmd, Ar ) )	// uc2 port: NETPROBE/NETPLACE/NETAIM
+	if( UC2CheatExec( this, NULL, Cmd, Ar ) )	// uc2 port: TELEPORT/WHEREAMI, cheats (UC2Cheats.cpp)
+		return 1;
+	if( UC2NetTestExec( this, Cmd, Ar ) )	// uc2 port: NETPROBE/NETPLACE/NETPLACENEAR, cheats too
 		return 1;
 	if( ufrontAutoFovExec( Cmd, Ar ) )		// D-8: AUTOFOV [Off|HorPlus|Adaptive]
 		return 1;
 	if( UC2ProfilesExec( Client, Cmd, Ar ) )	// uc2 port (D-3): PROFILESTATE (UC2Profiles.cpp)
 		return 1;
 	if( UC2FrameTraceExec( Cmd, Ar ) )		// uc2 port (jitter): FRAMETRACE <frames> [tag]
+		return 1;
+	if( UC2FpsLogExec( Cmd, Ar ) )			// uc2 port (F-2): FPSLOG [seconds]
 		return 1;
 	const TCHAR* Str=Cmd;
 #if WITH_PORTABLE_MOVIES
@@ -2825,6 +2838,9 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 			PackageMap = Pending->GetDriver()->ServerConnection->PackageMap;
 
 		guard(VerifyPackages);
+#ifdef __EMSCRIPTEN__
+		FString LoadMapFailSoft;	// uc2 port (F-4a): why the verify below failed, without a throw
+#endif
 		try
 		{
 			BeginLoad();
@@ -2842,6 +2858,21 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 						&(*PackageMap->List)(i).Guid
 					);
 				}
+#ifdef __EMSCRIPTEN__
+				// uc2 port (F-4a, engine-ut2004 5f02771): on the web GetPackageLinker answers NULL (no throw) for a
+				// package the join cannot have (not found, or another version than the server's), and VerifyLinker
+				// would call Verify() on NULL. Fail the join here with the reason a native client shows.
+				for (INT i = 0; i < PackageMap->List->Num(); i++)
+					if( !(*PackageMap->List)(i).Linker )
+					{
+						const TCHAR* Name = (*PackageMap->List)(i).Parent->GetName();
+						TCHAR Found[256];
+						const UBOOL HaveFile = appFindPackageFile( Name, &(*PackageMap->List)(i).Guid, Found );
+						LoadMapFailSoft = FString::Printf( HaveFile ? LocalizeError(TEXT("PackageVersion"),TEXT("Core")) : LocalizeError(TEXT("PackageNotFound"),TEXT("Core")), Name );
+						break;
+					}
+				if( LoadMapFailSoft.Len() == 0 )
+#endif
 				for (INT i = 0; i < PackageMap->List->Num(); i++)
 				{
 					VerifyLinker((*PackageMap->List)(i).Linker);
@@ -2851,8 +2882,36 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 					MapParent = (*PackageMap->List)(0).Parent;
 				}
 			}
+#ifdef __EMSCRIPTEN__
+			// uc2 port (F-4a, engine-ut2004): SafeLoadError does not throw on the web, so a failed load arrives
+			// as NULL; it takes the catch's way out below.
+			if( LoadMapFailSoft.Len() == 0 && !LoadObject<ULevel>( MapParent, TEXT("MyLevel"), *URL.Map, LOAD_Verify | LOAD_Throw | LOAD_NoWarn, NULL ) )
+				LoadMapFailSoft = FString::Printf( TEXT("Could not load map '%s'"), *URL.Map );
+#else
 			LoadObject<ULevel>( MapParent, TEXT("MyLevel"), *URL.Map, LOAD_Verify | LOAD_Throw | LOAD_NoWarn, NULL );
+#endif
 			EndLoad();
+#ifdef __EMSCRIPTEN__
+			if( LoadMapFailSoft.Len() )
+			{
+				// The catch's body (below), without a throw.
+				debugf( NAME_Warning, TEXT("LoadMap: %s - failing gracefully (no throw on the web)"), *LoadMapFailSoft );
+				Error = LoadMapFailSoft;
+				if (!bQuiet)
+					SetProgress( LocalizeError(TEXT("UrlFailed"),TEXT("Core")), *LoadMapFailSoft, 6.f );
+				if (GLevel->NetDriver)
+				{
+					GLevel->NetDriver->Notify = Pending;
+					GLevel->NetDriver = NULL;
+				}
+				if (GLevel->DemoRecDriver)
+				{
+					GLevel->DemoRecDriver->Notify = NULL;
+					GLevel->DemoRecDriver = NULL;
+				}
+				return NULL;
+			}
+#endif
 		}
 		#if UNICODE
 		catch( TCHAR* CatchError )
@@ -2930,7 +2989,15 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 		}
 		FString Error;
 		if( !GLevel->Listen( Error ) )
+#ifdef __EMSCRIPTEN__
+			// uc2 port (F-4a): the web build has no exception catching (cmake/UC2Web.cmake), so appErrorf ends
+			// the module. A listen that fails there (a browser game whose WebRTC transport is not up; ucc-bin.js
+			// under Node, whose socket emulation cannot listen) leaves the level running without network
+			// instead. Not in engine-ut2004 (it keeps appErrorf); UC2 needs it to load maps under Node.
+			debugf( NAME_Warning, TEXT("%s (web: the level runs without network)"), *FString::Printf( LocalizeError(TEXT("ServerListen"),TEXT("Engine")), *Error ) );
+#else
 			appErrorf( LocalizeError(TEXT("ServerListen"),TEXT("Engine")), *Error );
+#endif
 	}
 	unguard;
 
@@ -3533,8 +3600,9 @@ void UGameEngine::Tick( FLOAT DeltaSeconds )
 {
 	guard(UGameEngine::Tick);
 	FUNC_CLOCK(TiCyc,TickCycles);
-	UC2NetTestTick( this );	// uc2 port: the -nettest=<file> command file (UC2NetTest.cpp); nothing without it
+	UC2NetTestTick( this );	// uc2 port: the [UC2NetTest] CommandFile=<file> test key (UC2NetTest.cpp); nothing without it
 	UC2RememberProfile( Client );	// uc2 port (D-3): User.ini [Profiles] LastProfile follows the first player's profile
+	UC2FpsLogTick( this );	// uc2 port (F-2): FpsLogSeconds / FPSLOG; nothing unless asked for
 
     if( DeltaSeconds < 0.0f )
         appErrorf(TEXT("Negative delta time!"));

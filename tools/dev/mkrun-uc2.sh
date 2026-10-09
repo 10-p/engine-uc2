@@ -36,9 +36,13 @@ chmod -R u+w "$run/System"
 # only means a silent game.
 cooked=${UC2_COOKED_DIR:-$work/assets/uc2-cooked}
 # Since asset tree v1 (tools/dev/mkassets-uc2.sh) the cooked folders are in the asset tree and arrive with the
-# content folders above; these links only serve an older asset tree.
+# content folders above; these links only serve an older asset tree. F-6: an explicit UC2_COOKED_DIR (a cook
+# that is not installed yet, e.g. <WorkUC2>/logs/f6/cooked) replaces the asset tree's Sounds/ and Music/ links.
 for d in Sounds Music; do
-  if [ -d "$run/$d" ]; then
+  if [ -n "${UC2_COOKED_DIR:-}" ] && [ -d "$cooked/$d" ]; then
+    rm -rf "${run:?}/$d"
+    cp -al "$cooked/$d" "$run/$d"
+  elif [ -d "$run/$d" ]; then
     :
   elif [ -d "$cooked/$d" ]; then
     cp -al "$cooked/$d" "$run/$d"

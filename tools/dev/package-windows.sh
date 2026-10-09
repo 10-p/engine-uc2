@@ -89,7 +89,7 @@ Unreal Championship 2, portable build for Windows (32-bit, MinGW-w64), engine-uc
 
 Start: uc2.exe in this folder (double-click; the working directory must be this System folder, so a shortcut
 needs "Start in" set to it). Useful switches: -log (needs a console: start from cmd.exe), -nullrenderer,
--opengl, -640x480 ... -1600x1200, -glerrors. The log is Avaris.log beside the exe.
+-opengl, -640x480 ... -1600x1200, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True. The log is Avaris.log beside the exe.
 Dedicated server / tools: ucc.exe from cmd.exe in this folder, e.g.  ucc.exe server DM-Deadbolt  or
 ucc.exe verifyclasses. Ctrl+C stops a server cleanly.
 Sound: OpenAL32.dll beside the exe (OpenAL Soft). Delete it to run without sound.

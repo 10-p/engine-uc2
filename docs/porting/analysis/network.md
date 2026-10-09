@@ -126,9 +126,9 @@ UnGame.cpp (`UGameEngine::Exec` start, `UGameEngine::Tick` start):
   connections, local player, GRI, pawn/PRI counts; one line per pawn with name, location, health, local, role,
   class, weapon, FlashCount; one per PRI with name, id, score, deaths, kills, bot, spectator, pawn class and the
   UC2 loadout strings), `NETPLACE <name> x y z yaw` (server: FarMoveActor of that player's pawn; the client
-  follows by the engine's own ClientAdjustPosition), `NETAIM <name>` (a player's own process: turn the local
-  controller to face that pawn). UC2's PlayerController has no ClientSetLocation/ClientSetRotation, so the
-  client's view rotation is set on the client (NETAIM), which is also what a player does.
+  follows by the engine's own ClientAdjustPosition). (A fourth command that turned a client's view toward a pawn
+  was removed in F-1b: test-only commands do not ship; the harness now lines the players up around the client's
+  own view with NETPLACE, `net-test.py` `line_up`/`walk_toward`, vanilla.md F-1b.)
 - `-nettest=<file>` command file for any process (the dedicated server has no other input): `exec <cmd>`
   (UGameEngine::Exec, one per tick), `log <text>`. Clients keep using SDL2Drv's `-inputtest=` channel (virtual
   pad, `probe`, `exec`).
@@ -208,7 +208,7 @@ ULevel::ServerTickClients, not applied); whether the patch-name clamp could ever
 ### Step 7: glshot PASS (looked at); AddressSanitizer build; two findings on the way
 
 - glshot (NetA with the GL renderer under Xvfb/llvmpipe, NetB null; NETPLACENEAR NetB 350 units from NetA,
-  NETAIM on NetA, `shot`): PASS; `logs/net/glshot-NetA-sees-NetB.png` LOOKED AT: third-person NetA in a
+  NetA turned toward NetB, `shot`; since F-1b NetB is lined up in front of NetA's own view instead): PASS; `logs/net/glshot-NetA-sees-NetB.png` LOOKED AT: third-person NetA in a
   DM-Deadbolt corridor, NetB's character standing ahead with its name label "NetB" and the lock-on reticle on
   it, scoreboard "NetA 0 / NetB 0", HUD health/adrenaline bars and the three weapon slots.
 - ASan ucc-bin (`cmake --preset native -B build-asan -DCMAKE_CXX_FLAGS="-fsanitize=address ..."`, target UCC,
@@ -586,5 +586,6 @@ dedicated2, handshake-loss 10/10, handshake-compat 6/6, travel, disconnect, lag,
   also dropped that silent client after 20 s; the harness now starts a GL client in the menu and connects
   with the console `OPEN` once it renders, as a player does.)
 - listen.clientmoves 56.5 units: NetB walked into a wall -- its view rotation is its own client's, not the
-  placement's. The harness now turns the walker to face the other player first (NETAIM), along the path
-  place_near checked clear (dedicated2/lag the same).
+  placement's. The harness now walks the walker toward the other player, along the path
+  place_near checked clear (dedicated2/lag the same; since F-1b by pushing its stick in that direction in its own
+  view frame, `walk_toward`).

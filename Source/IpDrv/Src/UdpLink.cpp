@@ -89,7 +89,11 @@ void AUdpLink::execBindPort( FFrame& Stack, RESULT_DECL )
 			}
 			else Stack.Logf( TEXT("BindPort: socket failed") );
 			closesocket(GetSocket());
-			GetSocket()=0;
+			// uc2 port (F-4a; engine-ut2004 does the same on Android, UdpLink.cpp/TcpLink.cpp): INVALID_SOCKET, not 0.
+			// fd 0 is stdin, and every later test is `!= INVALID_SOCKET`, so with 0 the link went on polling
+			// recvfrom(0) and PostScriptDestroyed closed stdin. Under Node (ucc-bin.js) the socket emulation then
+			// threw a JavaScript TypeError on the first poll and ended the process (UdpBeacon after a failed bind).
+			GetSocket()=INVALID_SOCKET;
 		}
 		else Stack.Logf( TEXT("BindPort: already bound") );
 	}

@@ -17,7 +17,7 @@
 #   server     ucc.exe server DM-Deadbolt: level up, WinSock listening, still running at 30 s, Ctrl+C -> clean
 #              shutdown ("Unloading: Package Engine" at >= 25 s, "Log file closed"), 0 Critical
 #   null       uc2.exe -nullrenderer: menu level up, null device, Ctrl+C at 45 s -> exit 0, "Exiting.", 0 Critical
-#   gl         uc2.exe (OpenGL): GL_VENDOR/RENDERER/VERSION logged, menu up, -glerrors -> 0 GL errors, engine
+#   gl         uc2.exe (OpenGL): GL_VENDOR/RENDERER/VERSION logged, menu up, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -> 0 GL errors, engine
 #              screenshot not blank, Ctrl+C -> exit 0, 0 Critical
 #   pinned     (post-processing off: glow and depth of field spread the moving things over the static part)
 #              DM-Deadbolt from a pinned view (tools/dev/m12/deadbolt-pinned.scen) under wine AND on Linux:
@@ -25,7 +25,7 @@
 #              in >= 99.9% of the pixels outside the player model and the pickups (the only things that move)
 #   audiocheck ucc.exe UC2ALAudio.UC2AudioCheck: "0 failures"
 #   selftest   ucc.exe UC2ALAudio.UC2AudioSelfTest: "39 checks, 0 failed"
-#   capture    uc2.exe -audiowave= on the menu for 60 s (OpenAL32.dll's wave writer) -> the music is NuBattle at
+#   capture    uc2.exe with [UC2ALAudio.UC2ALAudioSubsystem] WaveFile= (-ini:) on the menu for 60 s (OpenAL32.dll's wave writer) -> the music is NuBattle at
 #              -19.0 dB (tools/dev/audio-music-check.py, Recoil as control), 0 Critical
 #   keyboard   the M10 keyboard scenario (real X key events through wine; tools/dev/m10-controls.sh)
 #   pad        the M10 pad scenario (SDL's virtual controller through the engine's test channel)
@@ -99,7 +99,7 @@ client() {
   # The capture wants the cue log (DevSound), as tools/dev/run-uc2-audio.sh does; in this tree's copy only.
   [ "${CLIENT_DEVSOUND:-0}" = 1 ] && sed -i '/^Suppress=DevSound\r\?$/d' "$sys/Default.ini"
   UC2_WINE_STOP_AFTER=$stop "$capped" 3G $((stop + 60)) -- xvfb-run -a -s "-screen 0 1280x720x24" \
-    bash -c 'SDL_AUDIODRIVER=dummy UC2_WINE_DISPLAY=$DISPLAY "$0" "$@"' "$wine" "$sys" uc2.exe "$@" -nostartupmovies > "$out/smoke-$name.out" 2>&1
+    bash -c 'SDL_AUDIODRIVER=dummy UC2_WINE_DISPLAY=$DISPLAY "$0" "$@"' "$wine" "$sys" uc2.exe "$@" -ini:System:[UC2Movie]:StartupMovies=False > "$out/smoke-$name.out" 2>&1
   rc=$?
   cp -f "$sys/Avaris.log" "$out/smoke-$name.log" 2>/dev/null
 }
@@ -120,7 +120,7 @@ check_null() {
 
 check_gl() {
   local o=$out/smoke-gl.out stats
-  client gl 45 -log -glerrors -glshot=30
+  client gl 45 -log -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=30
   [ -f "$sys/Shot00000.bmp" ] && bmp2png "$sys/Shot00000.bmp" "$out/smoke-gl-menu.png"
   stats=$(python3 - "$out/smoke-gl-menu.png" <<'PY' 2>/dev/null
 import sys
@@ -150,14 +150,14 @@ check_pinned() {
   local line wp lp
   rm -rf "$out/smoke-pinned-wine" "$out/smoke-pinned-linux"
   line=$(M10_URL='DM-Deadbolt?NumBots=0' M10_TREE=$treename M10_OUT=$out/smoke-pinned-wine M10_LAUNCH="$wine $sys uc2.exe" \
-    M10_STOPSIG=USR1 M10_MEM=3G M10_PROC=uc2.exe "$repo/tools/dev/m10-controls.sh" --file "$repo/tools/dev/m12/deadbolt-pinned.scen" pinned -glerrors -nopostprocess 2>&1 | tail -1)
+    M10_STOPSIG=USR1 M10_MEM=3G M10_PROC=uc2.exe "$repo/tools/dev/m10-controls.sh" --file "$repo/tools/dev/m12/deadbolt-pinned.scen" pinned -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False 2>&1 | tail -1)
   wp=$out/smoke-pinned-wine/pinned-pinned.png
   if [ ! -x "$ref/uc2.bin" ]; then
     result SKIP pinned "no Linux reference tree at $ref (wine run: $line)"
     return
   fi
   M10_URL='DM-Deadbolt?NumBots=0' M10_TREE=$refname M10_OUT=$out/smoke-pinned-linux \
-    "$repo/tools/dev/m10-controls.sh" --file "$repo/tools/dev/m12/deadbolt-pinned.scen" pinned -glerrors -nopostprocess > /dev/null 2>&1
+    "$repo/tools/dev/m10-controls.sh" --file "$repo/tools/dev/m12/deadbolt-pinned.scen" pinned -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False > /dev/null 2>&1
   lp=$out/smoke-pinned-linux/pinned-pinned.png
   local vw vl cmp errs
   vw=$(grep -a "^probe view" "$out/smoke-pinned-wine/pinned.out" | grep -a -o "loc=([^)]*) rot=([^)]*)")
@@ -194,13 +194,13 @@ check_netjoin() {	# the Linux client joins the server running under wine (UDP on
   UC2_WINE_STOP_AFTER=75 "$capped" 3G 150 -- "$wine" "$sys" ucc.exe server DM-Deadbolt PORT=$np -log > "$so" 2>&1 &
   spid=$!
   sleep 25
-  # Fire (the virtual pad's right trigger, SDL2Drv's -inputtest= channel) a few times once joined: the player
+  # Fire (the virtual pad's right trigger, SDL2Drv's -ini:System:[SDL2Drv.SDL2Client]:InputTestFile= channel) a few times once joined: the player
   # spawns; the SDL2 probe then shows pawn=1. (network.md: the join completes since the net-join fixes.)
   ( sleep 15; echo "pad attach" >> "$cmd"; sleep 1
     for i in 1 2 3 4; do echo "pad axis righttrigger 32767" >> "$cmd"; sleep 0.3; echo "pad axis righttrigger 0" >> "$cmd"; sleep 2; done
     echo "probe NJ" >> "$cmd" ) &
   ( cd "$ref" && "$capped" 2G 70 -- xvfb-run -a -s "-screen 0 1280x720x24" \
-      env SDL_AUDIODRIVER=dummy timeout -s INT 40 ./uc2.bin 127.0.0.1:$np -log -nullrenderer -inputtest=netjoin-input.cmd ) > "$co" 2>&1
+      env SDL_AUDIODRIVER=dummy timeout -s INT 40 ./uc2.bin 127.0.0.1:$np -log -nullrenderer -ini:System:[SDL2Drv.SDL2Client]:InputTestFile=netjoin-input.cmd ) > "$co" 2>&1
   wait $spid
   cp -f "$sys/ucc.log" "$sl" 2>/dev/null
   # PASS = joined (server 'Join succeeded'), spawned (client probe pawn=1), no assertion, clean server shutdown.
@@ -237,7 +237,7 @@ check_selftest() {
 check_capture() {
   local o=$out/smoke-capture.out wav=$out/smoke-capture.wav m
   rm -f "$wav"
-  CLIENT_DEVSOUND=1 client capture 60 -log -audiowave="$wav"
+  CLIENT_DEVSOUND=1 client capture 60 -log "-ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=$wav"
   m=$(python3 "$repo/tools/dev/audio-music-check.py" "$wav" "$work/epic-sources/Music/NuBattle.wav" -19.0 \
       "$work/epic-sources/Music/Recoil.wav" 2>&1); local mrc=$?
   "$repo/tools/dev/audio-capture-report.sh" "$wav" > "$out/smoke-capture.report.txt" 2>&1

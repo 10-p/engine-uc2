@@ -19,11 +19,13 @@ Newest first. Remove an entry when it is resolved and say how in `LOG.md`.
   Only needed if it says more than `reference/community/uc2-test-suite/README_TESTER.md`.
 - Xbox-look visual oracle: **provided 2026-10-06** (`<WorkUC2>/xbox-emulation/run-uc2-iso.sh`, xemu; slow on this
   machine: last resort). The owner's xemu captures are in `<WorkUC2>/temp/`.
-- arm64 (M13): **compiler and qemu-user installed by the owner 2026-10-06**; still missing for the client: `sudo apt install g++-aarch64-linux-gnu qemu-user qemu-user-binfmt` for `cmake --preset arm64`
-  (toolchain file and preset exist since M13, never configured: no compiler here). `ucc-bin` needs nothing more; the
-  client additionally needs the arm64 X11/GL development packages through multiarch (`sudo dpkg --add-architecture
-  arm64`, then `libx11-dev:arm64 libxext-dev:arm64 libxrandr-dev:arm64 libxcursor-dev:arm64 libxi-dev:arm64
-  libxss-dev:arm64 libgl-dev:arm64 libasound2-dev:arm64 libpulse-dev:arm64`) because SDL2 is built from source.
+- arm64 (M13, F-4c): the cross compiler (`g++-aarch64-linux-gnu`, GCC 15.2) and `qemu-user` + `qemu-user-binfmt` are
+  installed (owner, 2026-10-06; checked 2026-10-09 with `dpkg -l`). `cmake --preset arm64` configures and `ucc-bin`
+  builds and verifies under `qemu-aarch64` (F-4c, `analysis/platform-f4.md`). Still missing, for the arm64 **client**
+  only: the arm64 X11/GL development packages through multiarch (`sudo dpkg --add-architecture arm64`, then
+  `libx11-dev:arm64 libxext-dev:arm64 libxrandr-dev:arm64 libxcursor-dev:arm64 libxi-dev:arm64 libxss-dev:arm64
+  libgl-dev:arm64 libasound2-dev:arm64 libpulse-dev:arm64`): without them the fetched SDL2 configures with X11 off.
+  arm64 hardware to run on is an open owner question (M13).
 - **Decided by the owner, 2026-10-06** (`<WorkUC2>/answers.txt`, PLAN.md "Owner review"): canonical config
   and localisation = the leak (unless a difference changes behaviour); depth-of-field alpha = the shipped value
   65 (`DOFShippedBlurAlpha=True` in Default.ini, O-3); dynamic gamma on, as the Xbox ("it works as it should");

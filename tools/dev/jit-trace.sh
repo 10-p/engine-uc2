@@ -7,8 +7,8 @@
 #     <tree>    run tree under <WorkUC2>/run (tools/dev/mkrun-uc2.sh)
 #     <input>   kbm  keyboard (W/S/D/A) with the mouse owning the look (the PC default; a 1-count mouse move first)
 #               pad  the virtual pad's left stick, the pad owning the look (a short right-stick push first)
-#     <pacing>  60        -maxfps=60
-#               uneven    -framepattern=16.7:33.3:16.7:16.7:25:33.3 (frame lengths in turn, ms: a browser's
+#     <pacing>  60        -ini:System:[Engine.Engine]:FrameRateCap=60
+#               uneven    -ini:System:[SDLLaunch]:FramePattern=16.7:33.3:16.7:16.7:25:33.3 (frame lengths in turn, ms: a browser's
 #                         uneven pacing made repeatable; mean 23.6 ms)
 #               uncapped  no cap (the null renderer's ~1,000 frames a second)
 #
@@ -42,8 +42,8 @@ mkdir -p "$out"
 [ -x "$work/run/$tree/System/uc2.bin" ] || { echo "no run tree $work/run/$tree (tools/dev/mkrun-uc2.sh)" >&2; exit 2; }
 
 case $pacing in
-  60) pace=(-maxfps=60);;
-  uneven) pace=(-framepattern=16.7:33.3:16.7:16.7:25:33.3);;
+  60) pace=("-ini:System:[Engine.Engine]:FrameRateCap=60");;
+  uneven) pace=("-ini:System:[SDLLaunch]:FramePattern=16.7:33.3:16.7:16.7:25:33.3");;
   uncapped) pace=();;
   *) echo "unknown pacing $pacing (60 uneven uncapped)" >&2; exit 2;;
 esac

@@ -18,14 +18,28 @@ ENGINE_API void UC2NetTestNoteText( UNetConnection* Connection, const TCHAR* Tex
 // uc2 port: packet ids are _WORDs that wrap modulo MAX_PACKETID-1 (FlushNet), so "later than" must be decided
 // modulo that range, as UT2004 does with MakeRelative on INT ids. Signed distance from B to A.
 #if DO_ENABLE_NET_TEST
-// The network tests' compatibility switch NETOLDACKS: this process keeps Epic's UC2 ack logic (ids from 0 with
-// OutAckPacketId 0, plain comparisons), to run a fixed and an unfixed end against each other.
+// The network tests' compatibility test key [UC2NetTest] OldAcks=True (-ini:; was NETOLDACKS): this process keeps
+// Epic's UC2 ack logic (ids from 0 with OutAckPacketId 0, plain comparisons), to run a fixed and an unfixed end
+// against each other.
 static INT GUC2OldAcks = -1;
 static UBOOL UC2OldAcks()
 {
 	if( GUC2OldAcks<0 )
-		GUC2OldAcks = ParseParam( appCmdLine(), TEXT("NETOLDACKS") ) ? 1 : 0;
+		GUC2OldAcks = appReadTestFlag( TEXT("OldAcks"), TEXT("UC2NetTest") ) ? 1 : 0;
 	return GUC2OldAcks;
+}
+// [UC2NetTest] PacketIdStart=<n> (-ini:; was NETPKTID=): every connection of this process starts its packet ids at n.
+// Read once (test keys are one-shot), kept for every later connection.
+static INT GUC2PacketIdStart = -2;
+static UBOOL UC2PacketIdStart( INT& StartId )
+{
+	if( GUC2PacketIdStart == -2 )
+	{
+		FString V;
+		GUC2PacketIdStart = appReadTestKey( TEXT("PacketIdStart"), V, TEXT("UC2NetTest") ) && V.Len() ? Max( 0, appAtoi(*V) ) : -1;
+	}
+	StartId = GUC2PacketIdStart;
+	return GUC2PacketIdStart >= 0;
 }
 #else
 static UBOOL UC2OldAcks() { return 0; }
@@ -78,13 +92,13 @@ UNetConnection::UNetConnection( UNetDriver* InDriver, const FURL& InURL )
 	Parse(appCmdLine(),TEXT("PktOrder="),PktOrder);
 	Parse(appCmdLine(),TEXT("PktDup="),  PktDup);
 	Parse(appCmdLine(),TEXT("PktLag="),  PktLag);
-	// uc2 port: the network tests' wrap test: NETPKTID=<n> starts this side's packet ids at n, so a short test
+	// uc2 port: the network tests' wrap test: [UC2NetTest] PacketIdStart=<n> starts this side's packet ids at n, so a short test
 	// crosses the packet-id wrap (16382 -> 0) that a real connection reaches after ~16k packets (~4.5 min at 60/s).
 	{
 		INT StartId = 0;
 		if( UC2OldAcks() )
 			OutAckPacketId = InPacketId = 0;
-		if( Parse(appCmdLine(),TEXT("NETPKTID="), StartId) )
+		if( UC2PacketIdStart( StartId ) )
 		{
 			// As on a connection that has been running: everything up to the previous id counts as acked.
 			OutPacketId    = (_WORD)(StartId % (MAX_PACKETID - 1));
@@ -374,7 +388,7 @@ void UNetConnection::FlushNet()
 
 		// Send now.
 #if DO_ENABLE_NET_TEST
-		// uc2 port: the network tests' deterministic packet drop (NETDROP=, UC2NetTest.cpp): the packet is lost
+		// uc2 port: the network tests' deterministic packet drop ([UC2NetTest] Drop=, UC2NetTest.cpp): the packet is lost
 		// as if on the wire; everything below (packet id, lag bookkeeping, LastSendTime) still happens.
 		if( UC2NetTestDropPacket( this ) )
 		{
@@ -444,7 +458,7 @@ void UNetConnection::Serialize( const TCHAR* Data, EName MsgType )
 
 	debugf(NAME_DevNet, TEXT("NetConnection sending text: %s"), Data);
 #if DO_ENABLE_NET_TEST
-	UC2NetTestNoteText( this, Data, 1 );	// uc2 port: NETDROP= triggers (UC2NetTest.cpp)
+	UC2NetTestNoteText( this, Data, 1 );	// uc2 port: [UC2NetTest] Drop= triggers (UC2NetTest.cpp)
 #endif
 
 	// Send data to the control channel.

@@ -29,7 +29,7 @@
 	  index-narrow only without 32-bit indices (M11 fallback): 32-bit index data stored as
 	               16-bit and drawn
 
-	Console: POSTSELFTEST (runs at the start of the next frame). Command line: -glselftest
+	Console: POSTSELFTEST (runs at the start of the next frame). Test key: SelfTest=True
 	(runs once, at the tenth frame with a player). Results: one log line per test,
 	"UC2GLDrv: selftest <name>: PASS|FAIL ...", and a summary line.
 	The frame in which the tests run is overdrawn by them; the next one is normal.
@@ -433,7 +433,7 @@ struct FSelfTest
 
 	/*-------------------------------------------------------------------------
 		M11: 32-bit indices on a context without them (OES_element_index_uint
-		missing, or -glnouintindex). Only run then.
+		missing, or MaskCaps=uintindex). Only run then.
 	-------------------------------------------------------------------------*/
 
 	// A 32-bit index buffer through the engine's path (SetDynamicIndexBuffer), then drawn by
@@ -1022,8 +1022,7 @@ struct FSelfTest
 		SetMainColor( Pattern );
 
 		// A lookup texture that answers with its own coordinates: texel (i,j) = (red i, green j).
-		// The game's colour ramps are 256x1 (T_FX.ColorRamps): -glselftest1d uses that shape.
-		static INT LookupHeight = ParseParam( appCmdLine(), TEXT("glselftest1d") ) ? 1 : 256;
+		static const INT LookupHeight = 256;
 		static UTexture* Lookup = NULL;
 		if( !Lookup )
 		{
@@ -1129,7 +1128,7 @@ struct FSelfTest
 		{
 			// The checks write and read the main framebuffer's textures directly and compare
 			// exactly: they need the single-sampled main framebuffer (O-8).
-			debugf( NAME_Init, TEXT("UC2GLDrv: selftest: anti-aliasing is on (multisampled main framebuffer); the self-test needs it off: -glnoaa") );
+			debugf( NAME_Init, TEXT("UC2GLDrv: selftest: anti-aliasing is on (multisampled main framebuffer); the self-test needs it off: AntiAliasing=0") );
 			Failed = 1;
 			debugf( NAME_Init, TEXT("UC2GLDrv: selftest summary: %i passed, %i failed"), Passed, Failed );
 			return;

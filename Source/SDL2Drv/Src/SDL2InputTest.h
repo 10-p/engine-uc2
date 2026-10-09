@@ -1,5 +1,5 @@
 /*=============================================================================
-	SDL2InputTest.h: the M10 input test channel (-inputtest=<file>).
+	SDL2InputTest.h: the M10 input test channel ([SDL2Drv.SDL2Client] InputTestFile=<file>, set with -ini:).
 
 	A test harness appends command lines to <file>; the client executes them as they
 	arrive, once per tick. Pad commands drive a virtual game controller made with SDL's

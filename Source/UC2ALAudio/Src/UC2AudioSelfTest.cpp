@@ -18,6 +18,8 @@
 	pitch   the sound lasts Frames/Rate / 2^(cents/1200)
 	loops   a play event with Loop Count n lasts n+1 times the wave; an infinite one never ends
 	picker  the variation sequence of N plays follows the playlist type's rule
+	hrtf    (F-6) with OpenAL Soft's HRTF a source to one side reaches the near ear first (an interaural
+	        time difference); plain panning has none. UseHRTF itself is engine-ut2004's ini key.
 =============================================================================*/
 
 #include "UC2ALAudioPrivate.h"
@@ -44,6 +46,26 @@ static void Check( UBOOL bOk, const FString& Line )
 	if( !bOk )
 		GFailures++;
 	GWarn->Logf( TEXT("%s %s"), bOk ? TEXT("PASS") : TEXT("FAIL"), *Line );
+}
+
+// Interaural time difference of the output: the lag (in frames, -Max..Max) that maximises sum L[n]*R[n+lag].
+// A sound that reaches the right ear first has its left channel late: a negative lag.
+static INT CrossLag( const TArray<FLOAT>& Out, INT Max, DOUBLE& Peak )
+{
+	INT Frames = Out.Num()/2, Best = 0;
+	Peak = -1e30;
+	for( INT Lag=-Max; Lag<=Max; Lag++ )
+	{
+		DOUBLE Sum = 0.0;
+		for( INT n=Max; n<Frames-Max; n++ )
+			Sum += (DOUBLE)Out(2*n) * Out(2*(n+Lag)+1);
+		if( Sum > Peak )
+		{
+			Peak = Sum;
+			Best = Lag;
+		}
+	}
+	return Best;
 }
 
 static DOUBLE Log10( DOUBLE X )
@@ -538,6 +560,45 @@ INT UUC2AudioSelfTestCommandlet::Main( const TCHAR* Parms )
 		Check( Inf > 4294966.f, FString::Printf( TEXT("duration of an infinite loop = %.0f s (XACT: 0xFFFFFFFF ms)"), Inf ) );
 		FLOAT Unknown = Audio->GetSoundCueDuration( FName(TEXT("A_Weapon.NoSuchCue")) );
 		Check( Unknown==0.f, FString::Printf( TEXT("duration of an unknown cue = %.1f"), Unknown ) );
+	}
+
+	// --- 7. HRTF (F-6): the same side source as the pan check, with OpenAL Soft's HRTF off and on (alcResetDeviceSOFT
+	// on the loopback device). Off: plain panning, no time difference (|lag| <= 2 frames: the far channel is 16 dB
+	// down and carries the reverb send). On: the near ear leads by a fraction of a millisecond and is still the
+	// louder one. Accepted: 8..48 frames (0.17..1.0 ms) at 48 kHz; a head's own ITD is ~0.6-0.8 ms at 90 degrees, and
+	// the correlation peak also carries the data set's filter delay (first measured: 42 frames, 0.875 ms,
+	// OpenAL Soft's embedded "Default HRTF"; logs/f6/selftest-1.out).
+	GWarn->Logf( TEXT("--- hrtf: a source 2000 units to the right / left, OpenAL Soft's HRTF off and on (interaural time and level difference)") );
+	for( INT On=0; On<=1; On++ )
+	{
+		FString Status;
+		UBOOL bActive = UC2TestSetHRTF( Audio, On, Status );
+		Check( bActive==On, FString::Printf( TEXT("hrtf %s: %s"), On ? TEXT("on ") : TEXT("off"), *Status ) );
+		if( bActive!=On )
+			continue;
+		for( INT Side=-1; Side<=1; Side+=2 )
+		{
+			Out.Empty();
+			UC2TestPlay( Audio, TEXT("A_Weapon.RL_Fire"), FVector( 0, Side*2000.f, 0 ), 0, 0.f, P );
+			UC2TestRender( Audio, 30.f, Out );
+			UC2TestStopAll( Audio );
+			Dump( Out, *FString::Printf( TEXT("hrtf-%s-%s"), On ? TEXT("on") : TEXT("off"), Side>0 ? TEXT("right") : TEXT("left") ) );
+			INT O0, O1;
+			DOUBLE L, R, Peak;
+			OutputEnergy( Out, L, R, O0, O1 );
+			DOUBLE Db = 10.0*Log10( R/Max(L,1e-30) );
+			INT Lag = CrossLag( Out, 48, Peak );
+			INT NearLeads = Side>0 ? -Lag : Lag;		// frames by which the near ear's channel leads
+			UBOOL bOk = Side>0 ? Db>3.0 : Db<-3.0;
+			bOk = bOk && ( On ? (NearLeads>=8 && NearLeads<=48) : Abs(Lag)<=2 );
+			Check( bOk, FString::Printf( TEXT("hrtf %s %s: right minus left %+.1f dB, near ear leads by %d frames (%.3f ms)%s"),
+				On ? TEXT("on ") : TEXT("off"), Side>0 ? TEXT("right") : TEXT("left "), Db, NearLeads, 1000.0*NearLeads/UC2_TEST_RATE,
+				On ? TEXT(" (expected 8..48)") : TEXT(" (expected -2..2)") ) );
+		}
+	}
+	{
+		FString Status;
+		UC2TestSetHRTF( Audio, 0, Status );
 	}
 
 	GWarn->Logf( TEXT("UC2AudioSelfTest: %d checks, %d failed; Pan3D %.2f dB, Pan2D %.2f dB"), GChecks, GFailures,

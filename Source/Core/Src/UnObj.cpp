@@ -3562,7 +3562,15 @@ void UObject::SafeLoadError( DWORD LoadFlags, const TCHAR* Error, const TCHAR* F
 
 	guard(UObject::SafeLoadError);
 	if( !(LoadFlags & LOAD_Quiet)  ) debugf( NAME_Warning, TempStr );
+#ifndef __EMSCRIPTEN__
 	if(   LoadFlags & LOAD_Throw   ) appThrowf( TEXT("%s"), Error   );
+#else
+	// uc2 port (F-4a, engine-ut2004's fail-soft loaders): the web build compiles C++ exception catching
+	// out (cmake/UC2Web.cmake), so a throw is an abort. Do NOT re-throw on LOAD_Throw: each loader
+	// (GetPackageLinker, StaticLoadObject, LoadPackage) has already reported the error and returns NULL,
+	// which its callers handle (DynamicLoadObject -> None, LoadMap -> "could not load map").
+	(void)Error;
+#endif
 	if(   LoadFlags & LOAD_NoFail  ) appErrorf( TEXT("%s"), TempStr );
 	if( !(LoadFlags & LOAD_NoWarn) ) warnf( TEXT("%s"), TempStr );
 	unguard;
@@ -3604,20 +3612,38 @@ ULinkerLoad* UObject::GetPackageLinker
 		{
 			// Resolve filename from package name.
 			if( !InOuter )
+#ifdef __EMSCRIPTEN__
+				return NULL;	// uc2 port (F-4a): fail soft, as engine-ut2004 (see SafeLoadError)
+#else
 				appThrowf( LocalizeError(TEXT("PackageResolveFailed"),TEXT("Core")) );
+#endif
 			if( !appFindPackageFile( InOuter->GetName(), CompatibleGuid, NewFilename ) )
 			{
 				// See about looking in the dll.
 				if( (LoadFlags & LOAD_AllowDll) && InOuter->IsA(UPackage::StaticClass()) && ((UPackage*)InOuter)->DllHandle )
 					return NULL;
+#ifdef __EMSCRIPTEN__
+				// uc2 port (F-4a): fail soft (engine-ut2004): a missing package is a failed load, not an abort.
+				debugf( NAME_Warning, TEXT("Package not found: %s (returning NULL, not throwing)"), InOuter->GetName() );
+				return NULL;
+#else
 				appThrowf( LocalizeError(TEXT("PackageNotFound"),TEXT("Core")), InOuter->GetName() );
+#endif
 			}
 		}
 		else
 		{
 			// Verify that the file exists.
 			if( !appFindPackageFile( InFilename, CompatibleGuid, NewFilename ) )
+#ifdef __EMSCRIPTEN__
+			{
+				// uc2 port (F-4a): fail soft (engine-ut2004). Callers handle a NULL linker.
+				debugf( NAME_Warning, TEXT("Package file not found: %s (returning NULL, not throwing)"), InFilename );
+				return NULL;
+			}
+#else
 				appThrowf( LocalizeError(TEXT("FileNotFound"),TEXT("Core")), InFilename );
+#endif
 
 			// Resolve package name from filename.
 			TCHAR Tmp[256], *T=Tmp;
@@ -3646,7 +3672,14 @@ ULinkerLoad* UObject::GetPackageLinker
 			if( InOuter==NULL )
 			{
 				if( !FilenamePkg )
+#ifdef __EMSCRIPTEN__
+				{
+					debugf( NAME_Warning, TEXT("[PACKAGE-LOAD] Could not derive a package name from file '%s'"), InFilename );
+					return NULL;
+				}
+#else
 					appThrowf( LocalizeError(TEXT("FilenameToPackage"),TEXT("Core")), InFilename );
+#endif
 				InOuter = FilenamePkg;
 				for( INT i=0; i<GObjLoaders.Num() && !Result; i++ )
 					if( GetLoader(i)->LinkerRoot == InOuter )
@@ -3662,12 +3695,33 @@ ULinkerLoad* UObject::GetPackageLinker
 
 		// Make sure the package is accessible in the sandbox.
 		if( Sandbox && !Sandbox->SupportsPackage(InOuter) )
+#ifdef __EMSCRIPTEN__
+		{
+			debugf( NAME_Warning, TEXT("[PACKAGE-LOAD] Package '%s' is not allowed in this context (sandbox)"), InOuter->GetName() );
+			return NULL;
+		}
+#else
 			appThrowf( LocalizeError(TEXT("Sandbox"),TEXT("Core")), InOuter->GetName() );
+#endif
 
 		// Create new linker.
+#ifdef __EMSCRIPTEN__
+		const UBOOL FreshLinker = !Result;	// uc2 port (F-4a, engine-ut2004 bfdd422): only a linker made HERE may be dropped below
+#endif
 		if( !Result )
 		{
 			Result = new ULinkerLoad( InOuter, NewFilename, LoadFlags );
+#ifdef __EMSCRIPTEN__
+			// uc2 port (F-4a, engine-ut2004): the ULinkerLoad constructor fails SOFT on the web (an
+			// unopenable, corrupt or too old package leaves Success != 1 and logs why). Drop the half-built
+			// linker and return NULL: a failed load, not an abort. Only a FRESHLY created linker: a found one
+			// may legitimately be mid-construction (Success == the sentinel) during nested imports.
+			if( Result && Result->Success != 1 )
+			{
+				GObjLoaders.RemoveItem( Result );
+				return NULL;
+			}
+#endif
 #ifndef _XBOX//scion jg -- If editor, load the entire package
 			if (GIsEditor == 1 && GIsUCC == 0)
 			{
@@ -3678,7 +3732,18 @@ ULinkerLoad* UObject::GetPackageLinker
 
 		// Verify compatibility.
 		if( CompatibleGuid && Result->Summary.Guid!=*CompatibleGuid )
+#ifdef __EMSCRIPTEN__
+		{
+			debugf( NAME_Warning, TEXT("[PACKAGE-LOAD] '%s' is an incompatible version of package '%s' (GUID mismatch)"), NewFilename, InOuter->GetName() );
+			// Drop the linker only if it was made HERE: one that was already there belongs to a package in use
+			// (natively the throw leaves it alone too).
+			if( FreshLinker )
+				GObjLoaders.RemoveItem( Result );
+			return NULL;
+		}
+#else
 			appThrowf( LocalizeError(TEXT("PackageVersion"),TEXT("Core")), InOuter->GetName() );
+#endif
 	}
 	catch( const TCHAR* Error )
 	{
@@ -3817,7 +3882,31 @@ UObject* UObject::StaticLoadObject( UClass* ObjectClass, UObject* InOuter, const
 		if( !Result )
 			Result = StaticFindObjectFast( ObjectClass, InOuter, ResolvedName );
 		if( !Result && !(LoadFlags & LOAD_NoRemap) )
+#ifdef __EMSCRIPTEN__
+		{
+			// uc2 port (F-4a, engine-ut2004's fail-soft loaders): no throw on the web (catching is compiled
+			// out there). The same as the catch below does with that error: try a remapped package, then report
+			// the failed load (SafeLoadError does not throw on the web) and return NULL.
+			EndLoad();
+			const FString Error = FString::Printf( LocalizeError(TEXT("ObjectNotFound"),TEXT("Core")), ObjectClass->GetName(), InOuter ? InOuter->GetPathName() : TEXT("None"), ResolvedName );
+			if( InOuter && !Filename )
+			{
+				TArray<FName> Remaps;
+				GObjPackageRemap->MultiFind( InOuter->GetFName(), Remaps );
+				for( INT i=0; i<Remaps.Num(); i++ )
+				{
+					InOuter = CreatePackage( NULL, *Remaps(i) );
+					Result  = StaticLoadObject( ObjectClass, InOuter, InName, Filename, LoadFlags|LOAD_NoRemap, Sandbox );
+					if( Result )
+						return Result;
+				}
+			}
+			SafeLoadError( LoadFlags, *Error, LocalizeError(TEXT("FailedLoadObject"),TEXT("Core")), ObjectClass->GetName(), InOuter ? InOuter->GetPathName() : TEXT("None"), InName, *Error );
+			return NULL;
+		}
+#else
 			appThrowf( LocalizeError(TEXT("ObjectNotFound"),TEXT("Core")), ObjectClass->GetName(), InOuter ? InOuter->GetPathName() : TEXT("None"), ResolvedName );
+#endif
 		else if( !Result )
 		{
 			SafeLoadError( LoadFlags, 

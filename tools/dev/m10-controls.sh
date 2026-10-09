@@ -8,7 +8,7 @@
 # Needs the run tree <WorkUC2>/run/m10 (tools/dev/mkrun-uc2.sh build-native m10). Each scenario is one game
 # run under Xvfb inside <WorkUC2>/bin/capped 2G (CLAUDE.md, "Running anything: memory ceiling, always"); the
 # keyboard and mouse are real X events (XTEST, tools/dev/m10-inject.py), the pad is a virtual SDL game
-# controller driven through the engine's test channel (-inputtest=, Source/SDL2Drv/Src/SDL2InputTest.h), so
+# controller driven through the engine's test channel (-ini:System:[SDL2Drv.SDL2Client]:InputTestFile=, Source/SDL2Drv/Src/SDL2InputTest.h), so
 # the path from SDL onwards is the real one. PASS/FAIL comes from engine log lines and probe state (location,
 # rotation, ammo, menu page, text-field contents), never from a picture; screenshots are taken for people.
 #
@@ -85,7 +85,7 @@ set_res() {
 }
 
 # run_one <name> <scenario-file> <seconds> [uc2.bin args...]
-# (-nostartupmovies: since M9 the logos play first and a full-screen movie owns the input. -glnoaa: the key and
+# (-ini:System:[UC2Movie]:StartupMovies=False: since M9 the logos play first and a full-screen movie owns the input. -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0: the key and
 # button timings here were calibrated without the anti-aliasing that is on by default since M11 (O-8); with its
 # 4x multisampling the software rasteriser's frames are slower and the menu steps came late on a loaded machine.)
 run_one() {
@@ -98,7 +98,7 @@ run_one() {
   inner=$(mktemp)
   cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy UC2_WINE_DISPLAY=\$DISPLAY $launch ${M10_URL:+"$M10_URL"} -log -nostartupmovies -glnoaa -inputtest="$chan" "\$@" > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy UC2_WINE_DISPLAY=\$DISPLAY $launch ${M10_URL:+"$M10_URL"} -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0 -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$name.out" "$chan" "$out/$name.result" > "$out/$name.inject" 2>&1
 kill -$stopsig \$pid 2>/dev/null
@@ -213,7 +213,9 @@ sleep 1
 keyup Right
 sleep 0.3
 probe t1
-check kb-right-arrow-turns-right yawdiff('t0','t1') > 4000
+# F-1 (owner, 2026-10-09): the arrows move and strafe as WASD (Epic's PC layout), they never turn (a key turn would be
+# ~16000 units in this second; with Epic's package the pad's aim adhesion may follow a bot by a few hundred)
+check kb-right-arrow-strafes-right side('t0','t1') > 100 and abs(yawdiff('t0','t1')) < 1500
 probe w0
 key e
 sleep 2.5

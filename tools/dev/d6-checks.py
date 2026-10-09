@@ -133,3 +133,22 @@ def camera_lag(tag, first=None, last=None):
         return {'n': 0, 'median': None, 'max': None}
     out.sort()
     return {'n': len(out), 'median': round(out[len(out) // 2], 2), 'max': round(out[-1], 2)}
+
+
+def steady_speed(tag, start=0.6, end=1.3):
+    """Horizontal ground speed (units/s) between `start` and `end` seconds after the pawn started to move, from a
+    watch trace (F-1: the walk/run speeds of the keys and the stick)."""
+    rows = W[tag]
+    if len(rows) < 3:
+        return 0.0
+    def hd(a, b):
+        return math.hypot(b['loc'][0] - a['loc'][0], b['loc'][1] - a['loc'][1])
+    s = next((i for i in range(1, len(rows)) if hd(rows[0], rows[i]) > 0.5), None)
+    if s is None:
+        return 0.0
+    t0 = rows[s - 1]['t']
+    a = next((r for r in rows[s:] if r['t'] - t0 >= start), None)
+    b = next((r for r in reversed(rows) if r['t'] - t0 <= end), None)
+    if a is None or b is None or b['t'] <= a['t']:
+        return 0.0
+    return round(hd(a, b) / (b['t'] - a['t']), 1)

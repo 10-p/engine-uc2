@@ -10,7 +10,7 @@
 #                       against the desktop's of the tree M7B_REF (default m7b; run that first)
 #   M7B_SECS=240        time limit of each game run (default 150; the twin under load needs more)
 #
-# Every game run is tools/dev/fx-owner.sh's "custom" case (bin/capped 2G, Xvfb, Mesa llvmpipe, 1280x720, -glnoaa
+# Every game run is tools/dev/fx-owner.sh's "custom" case (bin/capped 2G, Xvfb, Mesa llvmpipe, 1280x720, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0
 # via the engine defaults of that runner, AutoFOV off, pre-D-2 UI), the pawn placed with NETPLACE, time frozen
 # (TimeDilation 0.0001) before any picture. Pictures and logs: <WorkUC2>/logs/<tree>/fx-m7b-<case>*.
 set -u
@@ -110,7 +110,7 @@ for c in $want; do
       for cam in deepcore recoil; do
         p=$DEEPCORE; m=DM-DeepCore; [ $cam = recoil ] && { p=$RECOIL; m=CTF-Recoil; }
         { start; place "$p"; printf 'chan exec GLSTATS RESET\nsleep 4\nchan exec GLSTATS\nshot a\nsleep 0.5\nshot b\n'; } > "$tmp/p-$cam.scen"
-        run proj-$cam-pc $m "$tmp/p-$cam.scen" -noxboxprojectors; run proj-$cam-xbox $m "$tmp/p-$cam.scen"
+        run proj-$cam-pc $m "$tmp/p-$cam.scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UseXboxProjectors=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UseXboxProjectors=False; run proj-$cam-xbox $m "$tmp/p-$cam.scen"
       done
       touch "$tmp/proj.done"
     fi

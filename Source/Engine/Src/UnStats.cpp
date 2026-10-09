@@ -399,8 +399,10 @@ void FStats::Render(class UViewport* Viewport, class UEngine* Engine)
 	{
 		FLOAT FrameTime		= DWORDOldStats(GEngineStats.STATS_Frame_TotalCycles) * GSecondsPerCycle;
 		FPSAvg				= FPSAvg ? FPSAvg * 0.98f + FrameTime * 0.02f : FrameTime;
-		INT	AvgFrameRate	= FPSAvg ? 1.f / FPSAvg : 0,
-			FrameRate		= 1.f / FrameTime;
+		// uc2 port (F-2, as engine-ut2004 f7653f1): divide only when there is something to divide by; a
+		// zero-length frame (a clock that did not move) showed ~2^32 fps (1/0 cast to INT is undefined).
+		INT	AvgFrameRate	= FPSAvg > 0.f ? appRound(1.f / FPSAvg) : 0,
+			FrameRate		= FrameTime > 0.f ? appRound(1.f / FrameTime) : 0;
 
 		FLOAT	Width			= 0,
 				Height			= 0;

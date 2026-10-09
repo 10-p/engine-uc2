@@ -234,17 +234,11 @@ UBOOL appCanPlayFullscreenMovie( EFullscreenMovieKind Kind )
 	if( !Viewport )
 		return 0;
 	// The null render device draws nothing (and a dedicated server or a commandlet has no viewport).
-	// -NULLMOVIES (tests, O-2): play them there all the same - the file access, the decoding, the sound and the
-	// clock run as usual, only the picture is not drawn (the web build's audio and movie path before its GL
-	// device exists; a headless run measuring decode cost).
-	if( appStricmp( Viewport->RenDev->GetClass()->GetName(), TEXT("NullRenderDevice") ) == 0 && !ParseParam( appCmdLine(), TEXT("NULLMOVIES") ) )
+	if( appStricmp( Viewport->RenDev->GetClass()->GetName(), TEXT("NullRenderDevice") ) == 0 )
 		return 0;
-	// -NOMOVIE: no full-screen movies at all; -NOSTARTUPMOVIES: no start-up logos (Epic's UE3 switches; UE2
-	// had none). The same per kind in Avaris.ini: [UC2Movie] StartupMovies, Cinematics, LoadingMovie.
-	if( ParseParam( appCmdLine(), TEXT("NOMOVIE") ) )
-		return 0;
-	if( Kind == FSMOVIE_Startup && ParseParam( appCmdLine(), TEXT("NOSTARTUPMOVIES") ) )
-		return 0;
+	// Per kind in Avaris.ini: [UC2Movie] StartupMovies, Cinematics, LoadingMovie (absent = on). Read here, when a movie
+	// is asked for, so an -ini:System:[UC2Movie]:StartupMovies=False on the command line (applied in appInit) is seen by
+	// the start-up logos. (F-4 follow-up: the switches -nostartupmovies, -nomovie and -nullmovies are gone.)
 	const TCHAR* Key = Kind == FSMOVIE_Startup ? TEXT("StartupMovies") : Kind == FSMOVIE_Cinematic ? TEXT("Cinematics") : TEXT("LoadingMovie");
 	UBOOL bOn = 1;
 	GConfig->GetBool( TEXT("UC2Movie"), Key, bOn );
@@ -287,8 +281,9 @@ static void UnwrapPlayer( UMovieMaterial* M )
 	M->ConditionalDestroy();
 }
 
-// -movieshot=<seconds>[,<seconds>...]: the engine's SHOT exec when the first full-screen movie's clock passes
-// those times (verification: the picture is then a known frame of the cooked file, which the log names).
+// Test key [UC2Movie] ShotTimes=<seconds>[,<seconds>...] (-ini:; was -movieshot=): the engine's SHOT exec when the
+// first full-screen movie's clock passes those times (verification: the picture is then a known frame of the cooked
+// file, which the log names).
 static TArray<FLOAT> GMovieShotTimes;
 static void ParseMovieShots()
 {
@@ -296,14 +291,9 @@ static void ParseMovieShots()
 	if( Parsed )
 		return;
 	Parsed = 1;
-	// (Parse() stops at a comma, so the list is read by hand up to the next space.)
-	FString Cmd = FString(appCmdLine()).Caps();
-	INT At = Cmd.InStr( TEXT("MOVIESHOT=") );
-	if( At < 0 )
+	FString List;
+	if( !appReadTestKey( TEXT("ShotTimes"), List, TEXT("UC2Movie") ) )
 		return;
-	FString List = Cmd.Mid( At + 10 );
-	if( List.InStr( TEXT(" ") ) >= 0 )
-		List = List.Left( List.InStr( TEXT(" ") ) );
 	while( List.Len() )
 	{
 		INT Comma = List.InStr( TEXT(",") );

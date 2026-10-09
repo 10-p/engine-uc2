@@ -1378,11 +1378,11 @@ void FOpenGLRenderInterface::UpdateDOFRampLookupTexture( UMaterial* DOFShader, B
 // DistortionAccum.vsh scales each vertex's distortion by 1 - saturate(z / D)^2 (z: camera-space
 // depth), and Epic's driver sets D = DISTORTION_CULL_DISTANCE = 5000 (D3DMaterialState.cpp
 // 1377): at 2500 units 75% is left, at 4000 36%, at 5000 nothing. It is the one place the
-// range of the effect is decided. Here D is GUC2GLDistortionCullDistance: ini
-// [UC2GLDrv.UC2GLRenderDevice] DistortionCullDistance= (read at the first distortion draw;
-// Engine/Config/Default.ini raises it, 5000 is the Xbox value), console
-// DISTORTIONCULLDISTANCE [<units>] (UC2GLRenderDevice.cpp).
-FLOAT GUC2GLDistortionCullDistance = 0.f;
+// range of the effect is decided. Here D is the device's config property DistortionCullDistance
+// (F-5: read like every other device key from the device class's own ini section, so the GL4ES
+// device reads [UC2GL4ESDrv.UC2GL4ESRenderDevice]; compiled default 15000 as the ini; a value that
+// is not positive means the Xbox's 5000), console DISTORTIONCULLDISTANCE [<units>]
+// (UC2GLRenderDevice.cpp).
 
 // scion sz -
 // FOpenGLRenderInterface::HandlePSVertexShader
@@ -1406,17 +1406,15 @@ void FOpenGLRenderInterface::HandlePSVertexShader( UMaterial* InMaterial, FOpenG
 		PixelShaderMaterial->PixelShaderType <= PS_DistortionAccum)
 	{
 		static FLOAT MAX_DISTORTION_AMT_CLAMP = (UTexture::__Client) ? UTexture::__Client->MaxDistortion : 20.f;
-		// UC2GLDrv (O-7): Epic's "static FLOAT DISTORTION_CULL_DISTANCE = 5000.f;" is the setting
-		// above (5000 when the ini has none or an invalid value).
-		if( GUC2GLDistortionCullDistance <= 0.f )
+		// UC2GLDrv (O-7, F-5): Epic's "static FLOAT DISTORTION_CULL_DISTANCE = 5000.f;" is the
+		// device setting above (5000 when it is not positive).
+		static FLOAT LoggedCullDistance = 0.f;
+		FLOAT DISTORTION_CULL_DISTANCE = RenDev->DistortionCullDistance > 0.f ? RenDev->DistortionCullDistance : 5000.f;
+		if( DISTORTION_CULL_DISTANCE != LoggedCullDistance )
 		{
-			GUC2GLDistortionCullDistance = 5000.f;
-			FLOAT Configured = 0.f;
-			if( GConfig->GetFloat( TEXT("UC2GLDrv.UC2GLRenderDevice"), TEXT("DistortionCullDistance"), Configured ) && Configured > 0.f )
-				GUC2GLDistortionCullDistance = Configured;
-			debugf( NAME_Init, TEXT("UC2GLDrv: distortion fades out over %.0f units (DistortionCullDistance; the Xbox's is 5000)"), GUC2GLDistortionCullDistance );
+			LoggedCullDistance = DISTORTION_CULL_DISTANCE;
+			debugf( NAME_Init, TEXT("UC2GLDrv: distortion fades out over %.0f units (DistortionCullDistance of %s; the Xbox's is 5000)"), DISTORTION_CULL_DISTANCE, RenDev->GetClass()->GetPathName() );
 		}
-		FLOAT DISTORTION_CULL_DISTANCE = GUC2GLDistortionCullDistance;
 		// UC2GLDrv: an ini without MaxDistortion (PC's Default.ini has none) reads as 0, which
 		// would switch all distortion off and divide by zero below: Epic's no-client value.
 		if( MAX_DISTORTION_AMT_CLAMP <= 0.f )
@@ -1509,15 +1507,14 @@ UBOOL FOpenGLRenderInterface::SetPixelShaderMaterial( UPixelShaderMaterial* InSh
 	FOpenGLModifierInfo TexModifiers[4];
 
 #ifndef _XBOX
-	// UC2GLDrv test switch, off unless -gldualdiffuse=<n> is on the command line. No package of
+	// UC2GLDrv test key, off unless DualDiffuse=<n> is set (-ini:, read in Init). No package of
 	// the game contains a PSDualDiffuse material (tools/dev/ps-census.py), so the 32 DualDiffuse
 	// shaders and their handler cannot be seen on shipped content. With the switch, every
 	// PSEmissiveShader material that has a diffuse and a specular texture is drawn as a
 	// PSDualDiffuse built from those two textures: n = BlendMode (0 add, 1 modulate, 2 blend)
 	// + 10 * MaskMode (0 none, 1 first texture's alpha, 2 second texture's alpha).
-	static INT TestDualDiffuse = -2;
-	if( TestDualDiffuse == -2 && !Parse( appCmdLine(), TEXT("gldualdiffuse="), TestDualDiffuse ) )
-		TestDualDiffuse = -1;
+	extern INT GTestDualDiffuse;
+	const INT TestDualDiffuse = GTestDualDiffuse;
 	if( TestDualDiffuse >= 0 && InShader->PixelShaderType >= PS_EmissiveShaderDiffuseOnly && InShader->PixelShaderType <= PS_EmissiveShaderSpecLight )
 	{
 		UPSEmissiveShader* Emissive = (UPSEmissiveShader*)InShader;
@@ -3462,13 +3459,6 @@ UBOOL FOpenGLRenderInterface::SetProjectorMultiMaterial( UProjectorMultiMaterial
 
 	// use pixel shader texkill to clip projected area
 	UBOOL bUseClipPlanes = ProjectorMultiMaterial->bFrustumClipPixels;
-	// UC2GLDrv (M7b, debug): -glprojnoclip draws the clipped projectors with the unclipped shaders.
-	static INT NoClip = -1;
-	if( NoClip < 0 )
-		NoClip = ParseParam( appCmdLine(), TEXT("glprojnoclip") ) ? 1 : 0;
-	if( NoClip )
-		bUseClipPlanes = 0;
-
 	// extract the opacity from the base material
 	// this can be both a texture and/or a color modifier	
 	UMaterial*			BaseMaterial = ProjectorMultiMaterial->BaseMaterial;

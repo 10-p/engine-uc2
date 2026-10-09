@@ -5,9 +5,9 @@
 #
 #   tools/dev/f3-ab.sh aa [<fxaa-binary>]   anti-aliasing: twin none | twin FXAA (the binary before FXAA went,
 #                                           on the OpenGL ES 2 path where it ran) | twin 4x MSAA (OpenGL ES 3) |
-#                                           desktop 4x MSAA; pictures after the present pass (-glshotpresented)
+#                                           desktop 4x MSAA; pictures after the present pass (ShotPresented)
 #   tools/dev/f3-ab.sh lodbias              texture LOD bias: desktop with / without its -0.5 bias, twin with /
-#                                           without (-glnolodbias = what GL4ES did before our fork applied it);
+#                                           without (NoLODBias = what GL4ES did before our fork applied it);
 #                                           high-frequency energy of the far floor (tools/dev/hf-energy.py)
 #
 # Trees: F3_DESKTOP_TREE (default f3d), F3_TWIN_TREE (f3t), made from build-native unless F3_NO_MKRUN is set.
@@ -27,9 +27,10 @@ if [ -z "${F3_NO_MKRUN:-}" ]; then
   "$repo/tools/dev/mkrun-uc2.sh" "$repo/build-native" $D > /dev/null || exit 1
   "$repo/tools/dev/mkrun-uc2.sh" "$repo/build-native" $T > /dev/null || exit 1
 fi
-run() {  # run <tree> <name> <mesa-es-version> <args...>: one pinned picture at 44 s
+glini=$repo/tools/dev/glini
+run() {  # run <tree> <name> <mesa-es-version> <args...>: one pinned picture at 44 s (settings and test keys: -ini:)
   local tree=$1 name=$2 es=$3; shift 3
-  MESA_GLES_VERSION_OVERRIDE=$es UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $tree "$name" 75 34 DM-Deadbolt -glerrors -nopostprocess -glshot=44 "$@" > "$work/logs/$tree/$name.report" 2>&1
+  MESA_GLES_VERSION_OVERRIDE=$es UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $tree "$name" 75 34 DM-Deadbolt $("$glini" CheckGLErrors=True UsePostProcess=False ShotTimes=44) "$@" > "$work/logs/$tree/$name.report" 2>&1
   cp -f "$work/logs/$tree/$name-0.png" "$out/ab-$name.png" 2>/dev/null || echo "no picture for $name (see $work/logs/$tree/$name.report)"
   grep -a -o "anti-aliasing: .*\|UC2GLDrv: main framebuffer .*\|binding: [^)]*" "$work/logs/$tree/$name.out" | sed "s/^/  $name: /"
 }
@@ -37,13 +38,15 @@ run() {  # run <tree> <name> <mesa-es-version> <args...>: one pinned picture at 
 case "${1:-}" in
 aa)
   fx=${2:-}
-  run $T aa-none 3.0 -gl4es -glshotpresented
+  SP=$("$glini" ShotPresented=True)
+  run $T aa-none 3.0 -gl4es $SP
   if [ -n "$fx" ]; then
     cp -f "$fx" "$work/run/$T/System/uc2-fxaa.bin"
-    UC2_BIN=uc2-fxaa.bin UC2_AA=1 run $T aa-fxaa 2.0 -gl4es -glshotpresented $ES2
+    # (a binary from before F-3's step 3 reads the old -gl* switches, not the test keys)
+    UC2_BIN=uc2-fxaa.bin UC2_AA=1 run $T aa-fxaa 2.0 -gl4es -glerrors -nopostprocess -glshot=44 -glshotpresented $ES2
   fi
-  UC2_AA=1 run $T aa-msaa 3.0 -gl4es -glshotpresented
-  UC2_AA=1 run $D aa-desktop-msaa 3.0 -opengl -glshotpresented
+  UC2_AA=1 run $T aa-msaa 3.0 -gl4es $SP
+  UC2_AA=1 run $D aa-desktop-msaa 3.0 -opengl $SP
   {
     for n in aa-fxaa aa-msaa aa-desktop-msaa; do
       [ -f "$out/ab-$n.png" ] && echo "$n vs aa-none (static part x>=760): $(python3 "$imgdiff" "$out/ab-aa-none.png" "$out/ab-$n.png" --box 760,0,1280,720)"
@@ -67,9 +70,9 @@ PY
   ;;
 lodbias)
   run $D lod-desktop 3.0 -opengl
-  run $D lod-desktop-nobias 3.0 -opengl -glnolodbias
+  run $D lod-desktop-nobias 3.0 -opengl $("$glini" NoLODBias=True)
   run $T lod-twin 3.0 -gl4es
-  run $T lod-twin-nobias 3.0 -gl4es -glnolodbias
+  run $T lod-twin-nobias 3.0 -gl4es $("$glini" NoLODBias=True)
   # The far floor grating on the right (grazing angle: the mip level decides how much of it survives).
   box=760,470,1200,620
   {
