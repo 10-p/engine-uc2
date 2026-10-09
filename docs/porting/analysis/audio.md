@@ -185,6 +185,9 @@ cue index=<i> name=<Bank\Cue> queue=<0|1> sounds=<sound index:weight,...|->
 Everything the project carries is in the table, including what the runtime does not use yet (EQ, LFOs, EG,
 mix bins, low-pass events, LFE); see "Runtime mapping" for what is played.
 
+Banks that ship but are not in the project (`A_Vehicle`) are cooked from their `.xsb`/`.xwb` into the same
+format (F-6, `audio-f6.md` step 2).
+
 **`Music/<Track>.ogg`**: one Ogg Vorbis file per `Music/*.wav` (23; the project's 21 music banks name 21 of
 them, `AnubisFightsSelket` and `Theme` are cooked too). **`Sounds/cook-report.txt`**: the full report.
 

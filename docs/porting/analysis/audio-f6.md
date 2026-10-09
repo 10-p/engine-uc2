@@ -138,3 +138,65 @@ The 4 silent cues left are the ones with no wave at all in the project (`ST_Prim
   19). Evidence: `scratchpad/f6/xsbstat.py`, byte 14 of the 20-byte `.xsb` sound record.
 - `A_ChemicalDawn` entry 7 (`Machine_Generator03`, 55,808 frames in the tree, 193,472 in the shipped bank) could now be
   taken from the `.xwb` as well; not done (it has a source, and the owner's decision named the 19).
+
+## Step 2 - `A_Vehicle` cooked from the shipped `.xsb`/`.xwb` (2026-10-09)
+
+**What references it (measured, `grep -arli` over `epic-sources`):** nothing that plays it. `A_Vehicle` appears only in
+`XboxDrv/Inc/XboxFileSizes.h:1527,1627` (the Xbox loader's file-size table, compiled into `System/default.xbe` and
+`defaultLL.xbe`), the design spreadsheets `Help/Design/OLDSoundList.xls` and `SoundData/sound list.xls`, and the two
+bank files. No `.uc`, `.u`, `.ini` or map names a cue of it. The vehicle itself is cut content: the "Shenu cycle"
+mesh ships (`Animations/K_Vehicles.ukx`, `XboxAnimations/K_Vehicles.ukx`, material `Engine/Classes/PSShenuSkin.uc`),
+and `UCPawn.uc:4393` mentions "teleport in an object (Shenu)". The project (`Avaris.xap`) has no `A_Vehicle` block,
+but `SoundData/A_Vehicle/` has all 31 source WAVs.
+
+**The `.xsb` had to be read.** The XDK documents no sound-bank layout (only the runtime API in `xact.h`). New
+`tools/uc2xsb.py` reads the plain part of format 11 (layout in its module comment), decoded by comparing the 78
+project banks' `.xsb` with `Avaris.xap` (`scratchpad/f6/xsbcorr.py`, `xsbstat.py`): 20-byte cue records, 20-byte sound
+records (volume `floor((-8192 - (sound+group mB))/16)`, pitch `trunc(cents*4096/1200)`, track count, layer, category,
+flags 1 3D / 2 headroom boost / 4 EQ / 8 one wave / 0x10 variation table, 3D set index, priority, I3DL2 flag, RPC),
+track tables (count | offset << 8), the 12-byte plain play event (header 0, flags 4, loop count, wave, bank) and the
+40-byte 3D records. Anything else (variation tables, timed events, set-volume/pitch events, EQ, RPC) raises
+`XsbUnsupported`, so a bank is cooked faithfully or not at all.
+
+**Checked against the project** (`tools/dev/audio-xsb-verify.py`, `logs/f6/xsb-verify-1.out`), measured:
+```
+sounds read: 2064, equal to the project in every field read: 2059; volume guess = the project's sound + group volume: 2059 of 2064
+fields that differ: {'volume-interval': 5}
+sounds not read (outside the reader's shape): 364: {...variation tables, timed events, set volume/pitch, EQ...}
+plain cues read: 2432, same name and sound as the project: 2432
+```
+The 5 are `LowThrobLoop`/`FusionReactorLoop(2)` in `A_Axon`, `A_ColdFusion`, `A_Fury`, whose stored volume is garbage
+(30732, -24564: an overflow in Epic's tool), not a reader error. The volume is stored at 1/16 of its precision; the
+reader returns the round value inside the stored interval (a multiple of 100, else 50, else 10), which equals the
+project's value on 2,059 of 2,059 readable sounds. Priority: stored as is; the project's "no Priority" is 255 here
+(see step 1, "found on the way").
+
+**Cooking.** The cook (`shipped_only_banks`, default on, `--no-shipped-only` to skip) reads every shipped `.xsb` that
+the project lacks, turns it into the project's own blocks (`Wave Bank` with entry names from the first cue that plays
+each entry and `File = ..\SoundData\<bank>\<leaf>.wav`; `Sound Bank` with sounds, 3D blocks, tracks, play events,
+cues) and appends them to the parsed project, so everything after (source lookup, xwb fallback, encode, cue length,
+the `.xsb`/`.xwb` cross-checks, writers) is the common path. For such a bank, each WAV found by name is compared with
+the shipped wave (decoded): length and SNR; a mismatch would make the cook use the shipped wave instead. Group volume
+is baked into the sound's volume (`group=-`), as the binary stores the sum.
+
+Result (`logs/f6/cook-2.out`), measured:
+```
+SHIPPED-ONLY A_Vehicle.xsb: not in the project; read from the binary: 31 sounds, 31 cues, wave bank A_Vehicle with 31 entries
+SHIPPED-ONLY A_Vehicle.xwb entry 0 A_Vehicle\Shenu_Crash: source SoundData/A_Vehicle/Shenu_Crash.wav, SNR 20.4 dB against the shipped wave, shipped - source = 51 frames
+... all 31 match: SNR 19.0..51.2 dB, shipped - source 0..63 frames (one ADPCM block)
+sound banks: 79, sounds: 2459, cues: 2469
+cues resolved (base language): 2465 fully, 0 partly, 4 with no playable wave
+xsb cross-check: 79 of 79 project sound banks agree ...      xwb cross-check: 182 of 183 ... (Machine_Generator03 as before)
+encoded: 6827 sources (29 now, 6798 from the cache), 0 failures
+```
+**A_Vehicle numbers:** 31 cues, 31 sounds (one cue -> one sound -> one wave each), 31 waves (29 distinct sources:
+`Shenu_ShenuDying` = `Shenu_ShotDying`, `Shenu_ShenuHurt` = `Shenu_ShotHurt`), all 3D (min 250, max 100,000,
+rolloff 0.25, cones off), category FX, priority 255, volume -500 mB (the 16 `Shenu_*` except `ShotDestroyed` -600)
+and -800 mB (the 15 `Vehicle_Traffic_Pass*`), two infinite loops (`Shenu_EngineIdle`, `Shenu_EngineMove`, whole
+wave). Files: `A_Vehicle.ogp` 483,003 bytes, `A_Vehicle.uc2cues` 15,926, `A_Vehicle.uc2wb` 4,555 (shipped: `.xwb`
+919,552 + `.xsb` 2,296). Diff against the installed cook: the 26 files of step 1 plus these 3 new files, nothing else.
+
+Cue names: `A_Vehicle.Shenu_<Crash|CrashHard|CrashShenu|EngineIdle|EngineMove|EngineStart|EngineStop|Ground|GroundHard|
+ShenuDying|ShenuHurt|Shot|ShotDestroyed|ShotDying|ShotHurt|TurboBoost>` and `A_Vehicle.Vehicle_Traffic_Pass<01-08,11-17>`:
+a mod plays them with `PlaySoundCue(Actor, 'A_Vehicle.Shenu_EngineIdle', ...)` like any other cue. Not in the
+frontend's `targets/uc2/file-manifest.json` (frontend work is parked), so the web build does not fetch them yet.
