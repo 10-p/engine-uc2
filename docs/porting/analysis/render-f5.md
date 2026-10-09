@@ -375,3 +375,17 @@ Player shadow on a bright floor (DM-Azure flagstones near the first PlayerStart,
 3p camera behind and above, the shadow of a standing pawn lies under it (light direction (0.2,0,1), `UCPawn.uc`) and is
 hidden by the body; `XBOXSHADOWS 1` vs `0` differ only on the pawn and in PC's 1.6% darker square. A player shadow is only
 comparable while jumping or from a side camera, which the owner cannot place on the Xbox: not requested.
+
+### Gate, part 1 (03:40-04:20; machine load 20-35 from the other agents, game runs one at a time)
+
+- Builds (all `bin/capped 6G`, `-j4`): `build-native` exit 0 (`logs/f5/build-native.log`), `build-windows` exit 0
+  (`uc2.exe` 86,144,641 bytes, `logs/f5/build-windows.log`), `build-wasm-perf` exit 0 (`SDLLaunch.wasm` 14,931,655 bytes,
+  `logs/f5/build-wasm-perf.log`). No ceiling hit.
+- `tools/dev/m7-effects.sh f5g` (`logs/f5/gate-m7-effects.txt`): 14 effect lines, every one critical=0 glerrors=0
+  programs_failed=0+0 left_behind=0; DM-Praxis A vs the wine reference 2.423 (O-9b recorded 2.58 on Mesa). The first
+  self-test attempt did not run (the script writes its report before the log folder of a new tree exists: a missing
+  `mkdir` in `m7-effects.sh`, not changed); rerun: `selftest summary: 15 passed, 0 failed`, `fog` 0.50 of 255 (the new
+  fog distance of step 6 against the CPU model of D3D linear fog).
+- Combiner test (`-glcombinertest`, as `o9-nvidia.sh`): Mesa 35 passed / 0 failed (fog and fog-front 0.50 of 255); the
+  NVIDIA GPU 35 passed / 0 failed (`logs/f5g/ct-mesa.out`, `ct-gpu.out`).
+- `sync-web-ini.py --check`: up to date (step 1; no ini changed since).
