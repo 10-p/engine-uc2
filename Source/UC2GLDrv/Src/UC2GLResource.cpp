@@ -122,10 +122,10 @@ INT FOpenGLTexture::CalculateFootprint()
 //
 //
 // M11: DXT1/3/5 decoded by the driver, from the texture's compressed data (GetTextureData), into
-// B,G,R,A bytes (what GL_BGRA uploads). Used where the hardware takes no S3TC (-glnos3tc, WebGL 1
+// B,G,R,A bytes (what GL_BGRA uploads). Used where the hardware takes no S3TC (MaskCaps=s3tc, WebGL 1
 // without WEBGL_compressed_texture_s3tc). It replaces UTexture::ConvertDXT, which only exists for
 // textures that are UTextures: the BSP lightmaps (DXT1 FTextures of the engine) have none, and the
-// first -glnos3tc run of the twin crashed there (G2, 2026-10-07). Standard S3TC: DXT1 with its
+// first no-S3TC run of the twin crashed there (G2, 2026-10-07). Standard S3TC: DXT1 with its
 // three-colour + transparent mode when c0 <= c1, DXT3 explicit 4-bit alpha, DXT5 interpolated alpha.
 //
 static void UC2GL_Expand565( _WORD C, INT* RGB )
@@ -1110,7 +1110,7 @@ FOpenGLIndexBuffer::~FOpenGLIndexBuffer()
 }
 
 //
-// M11: a context without 32-bit indices (WebGL 1 without OES_element_index_uint; -glnouintindex
+// M11: a context without 32-bit indices (WebGL 1 without OES_element_index_uint; MaskCaps=uintindex
 // masks them anywhere). 32-bit index data is narrowed to 16 bits in place (the WORDs land at or
 // below the DWORDs they come from, so a forward loop is safe). Exact when no index is above
 // 65535, which holds for every index buffer this engine makes (it makes no 32-bit ones: only

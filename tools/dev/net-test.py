@@ -6,9 +6,9 @@ which runs this inside ONE bin/capped scope; not meant to run on its own).
 
 Every process runs from the same System/ with its own ini, user ini and log (INI=, USERINI=, LOG=: Epic's
 appInit / FOutputDeviceFile options) and its own command files:
-  -nettest=<file>    the engine's test command file (Engine/Src/UC2NetTest.cpp): "exec netprobe <tag>",
+  [UC2NetTest] CommandFile=<file> (-ini:)  the engine's test command file (Engine/Src/UC2NetTest.cpp): "exec netprobe <tag>",
                      "exec netplacenear ...", "exec servertravel ..." -- every process has one
-  -inputtest=<file>  SDL2Drv's input test channel (clients and the listen server): the virtual pad
+  [SDL2Drv.SDL2Client] InputTestFile=<file> (-ini:)  SDL2Drv's input test channel (clients and the listen server): the virtual pad
 Each client and the listen server has its own Xvfb display (xvfb-run -a), so a virtual pad never depends on
 which window has the focus. Results: one "PASS|FAIL <check>.<item>: <details>" line per item on stdout and in
 <out>/net-summary.txt; logs as <out>/<check>-<proc>.log/.out. Decided by log lines and probe values only.
@@ -77,7 +77,7 @@ class Proc:
         open(self.netcmd, "w").close()
         open(self.inputcmd, "w").close()
         common = ["INI=Net%s.ini" % self.name, "USERINI=Net%sUser.ini" % self.name, "LOG=" + self.logname,
-                  "-nettest=" + os.path.basename(self.netcmd)]
+                  "-ini:System:[UC2NetTest]:CommandFile=" + os.path.basename(self.netcmd)]
         if self.kind == "server" and self.wine:
             # The MinGW ucc.exe under wine (tools/dev/m12-wine.sh: own prefix, nothing left running).
             argv = [os.path.join(REPO, "tools/dev/m12-wine.sh"), self.sys, "ucc.exe", "server", self.url,
@@ -86,8 +86,8 @@ class Proc:
             argv = ["./ucc-bin", "server", self.url, "PORT=%d" % PORT] + common
         else:
             argv = ["xvfb-run", "-a", "-s", "-screen 0 1024x768x24", "./uc2.bin"] + ([self.url] if self.url else []) + ["-log"] + common
-            # -nostartupmovies: with the GL device the logos would play first and own the input (M9).
-            argv += ["-inputtest=" + os.path.basename(self.inputcmd), "-nostartupmovies"]
+            # StartupMovies=False: with the GL device the logos would play first and own the input (M9).
+            argv += ["-ini:System:[SDL2Drv.SDL2Client]:InputTestFile=" + os.path.basename(self.inputcmd), "-ini:System:[UC2Movie]:StartupMovies=False"]
             if self.kind == "listen":
                 argv += ["PORT=%d" % PORT]
             if self.render == "null":
@@ -239,7 +239,7 @@ def client(check, name, render="null", extra=(), host="127.0.0.1"):
     # A GL client under Xvfb's software GL can stall for 20 s and more while it starts up (shader compiles; seen
     # in a full-suite run under load): connecting from the command line then puts that stall into the handshake,
     # where the server's InitialConnectTimeout drops the silent connection. Start it in the menu and connect
-    # once it renders, as a player does (the console OPEN command, here through -nettest).
+    # once it renders, as a player does (the console OPEN command, here through the CommandFile).
     c = Proc(check, name, "client", "", render=render, extra=extra).start()
     c.wait(r"Bringing Level Menu\.MyLevel up for play", 180)
     time.sleep(5)
@@ -795,7 +795,7 @@ def check_wine():
         finish(ck, procs)
 
 
-# Deterministic loss of one handshake/join packet (NETDROP=, Engine/Src/UC2NetTest.cpp). (case, side, spec)
+# Deterministic loss of one handshake/join packet ([UC2NetTest] Drop=, Engine/Src/UC2NetTest.cpp). (case, side, spec)
 HANDSHAKE_DROPS = [
     ("hello", "client", "HELLO"),          # the client's first packet
     ("challenge", "server", "CHALLENGE"),  # the server's answer (the coordinator's lag hang)
@@ -805,25 +805,25 @@ HANDSHAKE_DROPS = [
     ("welcome", "server", "WELCOME"),
     ("join", "client", "JOIN"),
     ("afterjoin", "server", "<JOIN+3"),    # the server's first three packets after it got JOIN (actor channels)
-    # The server's packet ids start just before the wrap (NETPKTID=16375; ids run 0..16382), so its WELCOME
+    # The server's packet ids start just before the wrap ([UC2NetTest] PacketIdStart=16375; ids run 0..16382), so its WELCOME
     # goes out after the wrap: a loss there needs the ack logic to work across the wrap.
-    ("wrap", "server", "WELCOME", "NETPKTID=16375"),
-    ("wraponly", "server", "NOSUCHTEXT", "NETPKTID=16375"),   # the wrap alone, nothing lost
+    ("wrap", "server", "WELCOME", "-ini:System:[UC2NetTest]:PacketIdStart=16375"),
+    ("wraponly", "server", "NOSUCHTEXT", "-ini:System:[UC2NetTest]:PacketIdStart=16375"),   # the wrap alone, nothing lost
     # The client's ids start at 16381: its JOIN goes out as packet 0 after the wrap.
-    ("wrapclient", "client", "JOIN", "c:NETPKTID=16381"),
+    ("wrapclient", "client", "JOIN", "c:-ini:System:[UC2NetTest]:PacketIdStart=16381"),
 ]
-# Compatibility (check handshake-compat): one end keeps Epic's UC2 ack logic (NETOLDACKS, test switch in UnConn.cpp).
+# Compatibility (check handshake-compat): one end keeps Epic's UC2 ack logic ([UC2NetTest] OldAcks=True, test key in UnConn.cpp).
 # Expected: "join", or "fail" = the unfixed end lost the packet, which it never resends; the fixed client then
 # gives up after InitialConnectTimeout (20 s) and shows ConnectionFailureMenu instead of waiting forever.
 HANDSHAKE_COMPAT = [
-    ("oldclient-challenge", "server", "CHALLENGE", [], ["-NETOLDACKS"], "join"),   # fixed server, unfixed client
-    ("oldserver-challenge", "server", "CHALLENGE", ["-NETOLDACKS"], [], "fail"),   # unfixed server, fixed client
-    ("oldclient-login", "client", "LOGIN", [], ["-NETOLDACKS"], "join"),
-    ("oldserver-login", "client", "LOGIN", ["-NETOLDACKS"], [], "join"),
+    ("oldclient-challenge", "server", "CHALLENGE", [], ["-ini:System:[UC2NetTest]:OldAcks=True"], "join"),   # fixed server, unfixed client
+    ("oldserver-challenge", "server", "CHALLENGE", ["-ini:System:[UC2NetTest]:OldAcks=True"], [], "fail"),   # unfixed server, fixed client
+    ("oldclient-login", "client", "LOGIN", [], ["-ini:System:[UC2NetTest]:OldAcks=True"], "join"),
+    ("oldserver-login", "client", "LOGIN", ["-ini:System:[UC2NetTest]:OldAcks=True"], [], "join"),
     # Unfixed client whose JOIN is its packet 0 after the wrap: it never resends it, a fixed server cannot help;
     # the client sits in the level without a player (it is past WELCOME, so no handshake timeout either).
-    ("oldclient-wrap", "client", "JOIN", [], ["-NETOLDACKS", "NETPKTID=16381"], "nojoin"),
-    ("oldserver-wrap", "server", "WELCOME", ["-NETOLDACKS", "NETPKTID=16375"], [], "fail"),
+    ("oldclient-wrap", "client", "JOIN", [], ["-ini:System:[UC2NetTest]:OldAcks=True", "-ini:System:[UC2NetTest]:PacketIdStart=16381"], "nojoin"),
+    ("oldserver-wrap", "server", "WELCOME", ["-ini:System:[UC2NetTest]:OldAcks=True", "-ini:System:[UC2NetTest]:PacketIdStart=16375"], [], "fail"),
 ]
 
 
@@ -839,8 +839,8 @@ def check_handshake_loss(compat=False):
         if only and case not in only.split(","):
             continue
         sub = "hsloss-" + case
-        s = server(sub, extra=(["NETDROP=" + spec] if side == "server" else []) + sextra)
-        a = client(sub, "NetA", extra=(["NETDROP=" + spec] if side == "client" else []) + cextra)
+        s = server(sub, extra=(["-ini:System:[UC2NetTest]:Drop=" + spec] if side == "server" else []) + sextra)
+        a = client(sub, "NetA", extra=(["-ini:System:[UC2NetTest]:Drop=" + spec] if side == "client" else []) + cextra)
         procs = [s, a]
         try:
             j = s.wait(r"Join succeeded: NetA", limit)

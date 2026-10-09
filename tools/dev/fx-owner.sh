@@ -8,7 +8,7 @@
 #   tools/dev/fx-owner.sh list
 #   UC2_BIN=uc2-before.bin tools/dev/fx-owner.sh fx pool   another executable from the tree's System folder
 #                                                          (the pictures get the suffix "-before")
-#   FX_ARGS="-glmatcensus" tools/dev/fx-owner.sh ...       more uc2.bin arguments (O-9)
+#   FX_ARGS="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:MatCensus=True" tools/dev/fx-owner.sh ...       more uc2.bin arguments (O-9)
 #   FX_SECS=240 (custom case only): another time limit for the run (M7b: the GL4ES twin under load)
 #   UC2_GPU=1 tools/dev/fx-owner.sh fx waterfall-1p        render on this machine's GPU instead of Mesa
 #                                                          llvmpipe: SDL's offscreen video driver (EGL, no
@@ -16,8 +16,8 @@
 #                                                          pictures get the suffix "-gpu"
 #
 # Each case is one game run of tools/dev/m10-inject.py's scenario language (wait/sleep/chan/pad/shot) inside
-# <WorkUC2>/bin/capped 2G, headless (Xvfb, software GL), 1280x720, map URL <map>?Name=FxCam, -nostartupmovies,
-# the engine's input test channel (-inputtest=, SDL2Drv) for console commands and the virtual pad. Output in
+# <WorkUC2>/bin/capped 2G, headless (Xvfb, software GL), 1280x720, map URL <map>?Name=FxCam, -ini:System:[UC2Movie]:StartupMovies=False,
+# the engine's input test channel (-ini:System:[SDL2Drv.SDL2Client]:InputTestFile=, SDL2Drv) for console commands and the virtual pad. Output in
 # <WorkUC2>/logs/<tree>/: fx-<case>[-before]-<shot>.png, fx-<case>[-before].out (game log), .inject (runner),
 # and one line per case: Critical count, GL errors, failed programs, the shots taken, anything left running.
 #
@@ -154,7 +154,7 @@ echo "$CASES" | while IFS='|' read -r name map secs what; do
   inner=$(mktemp)
   cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy $video ./$bin "$map?Name=FxCam" -log -nostartupmovies -glerrors -inputtest="$chan" $fovarg ${FX_ARGS:-} > "$out/$tag.out" 2>&1 &
+SDL_AUDIODRIVER=dummy $video ./$bin "$map?Name=FxCam" -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" $fovarg ${FX_ARGS:-} > "$out/$tag.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$tag.out" "$chan" "$out/$tag.result" > "$out/$tag.inject" 2>&1
 kill -TERM \$pid 2>/dev/null

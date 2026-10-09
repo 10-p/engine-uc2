@@ -14,16 +14,16 @@
 #   gputest    tools/psh2glsl.py --gputest: the GLSL of every pixel shader against the interpreter (desktop GL)
 #   boot       twin: menu for 40 s; device class, 97 fragment + 405 vertex shaders through gl4es, 0 GL errors
 #              (84 until M7b, which compiles the 12 projector shaders and PS_Terrain3Layer too)
-#   selftest   -glselftest numeric checks on both bindings: 15 of 15 on each (M7's ten + fixed-function fog + pp-scale's
+#   selftest   -ini:System:[UC2GLDrv.UC2GLRenderDevice]:SelfTest=True numeric checks on both bindings: 15 of 15 on each (M7's ten + fixed-function fog + pp-scale's
 #              pp-sizes, ref-copy, ref-taps, bb-copy-ref, which run at 1280x720), same tolerances
 #   progtest   485 complete programs (97 pixel shaders x 5 vertex shader enums; 420 = 84 x 5 before M7b) drawn on both, compared
 #   pinned     DM-Deadbolt (first PlayerStart) and the menu, desktop against twin: post-processing off (static
 #              part of the frame) and on
 #   effects    tools/dev/m7-effects.sh on both; the desktop's B pictures are the twin's fx-<effect>-b.ref.png
 #   m6         the M6 pixel-shader pictures (pixel shaders on / off) on both
-#   fallbacks  the twin with each capability masked: -glnos3tc (engine decodes DXT), -glnomaxlevel on the
-#              desktop (mip chains completed by the driver), -glnofragdepth (depth test in the distortion
-#              passes' shaders), -glnouintindex (32-bit indices stored as 16-bit); -glnodepthtexture is run
+#   fallbacks  the twin with each capability masked: -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=s3tc (engine decodes DXT), -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=maxlevel on the
+#              desktop (mip chains completed by the driver), -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=fragdepth (depth test in the distortion
+#              passes' shaders), -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=uintindex (32-bit indices stored as 16-bit); -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=depthtexture is run
 #              and reported, its fallback is NOT implemented (the line says what happens instead)
 #   movies     tools/dev/m9-movies.py scenarios logos, logos-skip, menu-movie on the twin
 #
@@ -69,12 +69,12 @@ PIN='set UCDeathmatch NumPlayers 0'
 both() {  # both <name> <secs> <fire> <map> <args...>
   local name=$1 secs=$2 fire=$3 map=$4; shift 4
   if [ -n "${M11_SERIAL:-}" ]; then
-    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D "$name" "$secs" "$fire" "$map" -opengl -glerrors "$@" > "$LD/$name.report" 2>&1
+    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D "$name" "$secs" "$fire" "$map" -opengl -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True "$@" > "$LD/$name.report" 2>&1
   else
-    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D "$name" "$secs" "$fire" "$map" -opengl -glerrors "$@" > "$LD/$name.report" 2>&1 &
+    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D "$name" "$secs" "$fire" "$map" -opengl -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True "$@" > "$LD/$name.report" 2>&1 &
   fi
   local pid=${!:-}
-  UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T "$name" "$secs" "$fire" "$map" -gl4es -glerrors "$@" > "$LT/$name.report" 2>&1
+  UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T "$name" "$secs" "$fire" "$map" -gl4es -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True "$@" > "$LT/$name.report" 2>&1
   [ -z "$pid" ] || wait $pid
 }
 
@@ -89,7 +89,7 @@ check_gputest() {
 }
 
 check_boot() {
-  UC2_RES=1280x720 "$shot" $T boot 45 0 '' -gl4es -glerrors -glexec=30:exit > "$LT/boot.report" 2>&1
+  UC2_RES=1280x720 "$shot" $T boot 45 0 '' -gl4es -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=30:exit > "$LT/boot.report" 2>&1
   local o=$LT/boot.out cls fs vs e
   cls=$(grep -a -o "Initializing UC2GLDrv (class [^;]*; binding: [^)]*)" "$o")
   fs=$(grep -a -o "pixel shaders on: [0-9]* fragment shaders compiled, [0-9]* failed" "$o")
@@ -105,7 +105,7 @@ check_boot() {
 }
 
 check_selftest() {   # also produces the logs check_progtest compares
-  both fx-selftest 220 34 DM-Deadbolt -glexec=44:POSTSELFTEST@170:exit
+  both fx-selftest 220 34 DM-Deadbolt -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=44:POSTSELFTEST@170:exit
   local t ok=1 txt=""
   for t in $D $T; do
     local o=$work/logs/$t/fx-selftest.out s e
@@ -128,10 +128,10 @@ check_progtest() {
 
 check_pinned() {
   # DM-Deadbolt, first PlayerStart, picture 0 with post-processing off, picture 1 with it on.
-  both pinned-deadbolt 100 34 DM-Deadbolt -nopostprocess -glshot=44,56 -glpptoggle=48
+  both pinned-deadbolt 100 34 DM-Deadbolt -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,56 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=48
   # The desktop once more without texture LOD bias: OpenGL ES has none on the fixed-function path, so this
   # is the picture the twin is expected to equal (web-renderer.md, "Texture LOD bias").
-  UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D pinned-deadbolt-nb 75 34 DM-Deadbolt -opengl -glerrors -nopostprocess -glnolodbias -glshot=44 > "$LD/pinned-deadbolt-nb.report" 2>&1
+  UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D pinned-deadbolt-nb 75 34 DM-Deadbolt -opengl -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NoLODBias=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44 > "$LD/pinned-deadbolt-nb.report" 2>&1
   local a b c ok=1 e
   # Static part of this view: x >= 760 (left of it: the pawn, a pickup, the HUD, which animate).
   a=$("$imgdiff" "$LD/pinned-deadbolt-0.png" "$LT/pinned-deadbolt-0.png" --box 760,0,1280,720 --side "$LT/pinned-deadbolt-off-side.png" --diff "$LT/pinned-deadbolt-off-diff.png")
@@ -185,9 +185,9 @@ check_effects() {
 check_m6() {
   # M6's pictures: picture 0 pixel shaders on, picture 1 off (docs/porting/analysis/shaders.md, S4), no post-processing.
   local fails=0 spec name map secs fire extra a b
-  for spec in "deadbolt|DM-Deadbolt|100|34|" "octane|CTF-Octane|125|38|" "axon|DM-AxonCompressor|110|38|" "dualdiffuse|DM-AxonCompressor|110|38|-gldualdiffuse=12"; do
+  for spec in "deadbolt|DM-Deadbolt|100|34|" "octane|CTF-Octane|125|38|" "axon|DM-AxonCompressor|110|38|" "dualdiffuse|DM-AxonCompressor|110|38|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:DualDiffuse=12"; do
     IFS='|' read -r name map secs fire extra <<<"$spec"
-    both m6-$name "$secs" "$fire" "$map" -nopostprocess -glshot=$((fire+10)),$((fire+20)) -glpstoggle=$((fire+15)) $extra
+    both m6-$name "$secs" "$fire" "$map" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=$((fire+10)),$((fire+20)) -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PixelShaderToggleTimes=$((fire+15)) $extra
     a=$("$imgdiff" "$LD/m6-$name-0.png" "$LT/m6-$name-0.png" --side "$LT/m6-$name-on-side.png" --diff "$LT/m6-$name-on-diff.png" 2>&1)
     b=$("$imgdiff" "$LD/m6-$name-1.png" "$LT/m6-$name-1.png" 2>&1)
     # Threshold: whole frame (animated parts included), mean below 6, as for the effects.
@@ -205,23 +205,23 @@ check_fallbacks() {
   # Reference for each mask: the same binding with the capability, same pinned view, so the comparison
   # isolates the fallback.
   if [ -n "${M11_SERIAL:-}" ]; then
-    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T fb-ref 110 34 DM-Deadbolt -gl4es -glerrors -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$LT/fb-ref.report" 2>&1
+    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T fb-ref 110 34 DM-Deadbolt -gl4es -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=50:POSTSELFTEST@100:exit > "$LT/fb-ref.report" 2>&1
   else
-    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T fb-ref 110 34 DM-Deadbolt -gl4es -glerrors -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$LT/fb-ref.report" 2>&1 &
+    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T fb-ref 110 34 DM-Deadbolt -gl4es -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=50:POSTSELFTEST@100:exit > "$LT/fb-ref.report" 2>&1 &
   fi
   local pid=${!:-}
-  UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D fb-ref 110 34 DM-Deadbolt -opengl -glerrors -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$LD/fb-ref.report" 2>&1
+  UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D fb-ref 110 34 DM-Deadbolt -opengl -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=50:POSTSELFTEST@100:exit > "$LD/fb-ref.report" 2>&1
   [ -z "$pid" ] || wait $pid
   local spec sw tree arg fails=0 st s e L
   for spec in "glnos3tc|$T|-gl4es" "glnomaxlevel|$D|-opengl" "glnofragdepth|$T|-gl4es" "glnouintindex|$T|-gl4es"; do
     IFS='|' read -r sw tree arg <<<"$spec"; L=$work/logs/$tree
-    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $tree fb-$sw 110 34 DM-Deadbolt $arg -glerrors -$sw -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$L/fb-$sw.report" 2>&1
+    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $tree fb-$sw 110 34 DM-Deadbolt $arg -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=${sw#glno} -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=50:POSTSELFTEST@100:exit > "$L/fb-$sw.report" 2>&1
     st=$("$imgdiff" "$L/fb-ref-0.png" "$L/fb-$sw-0.png" --box 760,0,1280,720 --diff "$L/fb-$sw-diff.png" 2>&1)
     s=$(grep -a -o "selftest summary: [0-9]* passed, [0-9]* failed" "$L/fb-$sw.out"); e=$(glerr "$L/fb-$sw.out")
     # Threshold: the static part within a mean of 1 of 255 of the same binding with the capability (another
     # DXT decoder rounds differently; completed mip levels are only seen at extreme minification).
-    # The self-test: every check passes (-glnofragdepth replaces depth-copy by the check of its fallback,
-    # -glnouintindex adds index-narrow: 15 or 16 checks with pp-scale's four).
+    # The self-test: every check passes (-ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=fragdepth replaces depth-copy by the check of its fallback,
+    # -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=uintindex adds index-narrow: 15 or 16 checks with pp-scale's four).
     if le "$(num mean "$st")" 1 && [[ "$s" =~ ^selftest\ summary:\ 1[56]\ passed,\ 0\ failed$ ]] && [ "$e" = 0 ] && [ "$(crit "$L/fb-$sw.out")" = 0 ]; then
       echo "PASS m11-fallback-$sw: $(grep -a -o 'capabilities: .*' "$L/fb-$sw.out" | cut -c1-220); static part vs the same binding with the capability: $st; $s; GL errors $e" | tee -a "$summary"
     else
@@ -230,7 +230,7 @@ check_fallbacks() {
   done
   # The mask whose fallback is not implemented: run, so that what happens is on record.
   for sw in glnodepthtexture; do
-    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T fb-$sw 110 34 DM-Deadbolt -gl4es -glerrors -$sw -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$LT/fb-$sw.report" 2>&1
+    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T fb-$sw 110 34 DM-Deadbolt -gl4es -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=${sw#glno} -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=50:POSTSELFTEST@100:exit > "$LT/fb-$sw.report" 2>&1
     st=$("$imgdiff" "$LT/fb-ref-0.png" "$LT/fb-$sw-0.png" --box 760,0,1280,720 --diff "$LT/fb-$sw-diff.png" 2>&1)
     s=$(grep -a -o "selftest summary: [0-9]* passed, [0-9]* failed" "$LT/fb-$sw.out"); e=$(glerr "$LT/fb-$sw.out")
     fails=$((fails+1))

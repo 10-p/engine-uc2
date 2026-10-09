@@ -144,8 +144,6 @@ void USDL2Client::InitPads()
 		Pads[i].InstanceID = -1;
 		Pads[i].RepeatKey  = IK_None;
 	}
-	if( ParseParam(appCmdLine(),TEXT("inputlog")) )
-		LogInput = 1;
 	if( !UseJoystick )
 	{
 		debugf( NAME_Init, TEXT("SDL2 pads: off (UseJoystick=False)") );

@@ -20,7 +20,7 @@ summary=$work/logs/o9/census-summary.txt
 : > "$summary"
 one() {  # one <slot> <map>
   local t=o9c$1 m=$2
-  "$repo/tools/dev/run-uc2-shot.sh" $t census-$m 150 0 "$m" -glexec=45:GLMATCENSUS@55:exit > /dev/null 2>&1
+  "$repo/tools/dev/run-uc2-shot.sh" $t census-$m 150 0 "$m" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=45:GLMATCENSUS@55:exit > /dev/null 2>&1
   local line; line=$(grep -a "matcensus summary" "$work/logs/$t/census-$m.out" | sed 's/.*matcensus summary: //')
   echo "$m: ${line:-NO CENSUS (see $work/logs/$t/census-$m.out)}" >> "$summary"
 }

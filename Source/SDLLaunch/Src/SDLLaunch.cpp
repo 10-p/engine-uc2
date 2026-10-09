@@ -643,7 +643,7 @@ int main( int argc, char** argv )
 
 			// M9: the start-up logos, as the Xbox launcher played Movies/UC2_Logos.xmv (Launch.cpp:402,
 			// XboxMovieThread.cpp:1049): full screen, skippable by a key or button. Nothing plays with the null
-			// renderer, on a dedicated server, with -NOMOVIE or -NOSTARTUPMOVIES, or with
+			// renderer, on a dedicated server, or with
 			// [UC2Movie] StartupMovies=False (UnMovie.cpp, appCanPlayFullscreenMovie).
 			if( !GIsRequestingExit )
 				appPlayMovieFullscreen( TEXT("..\\Movies\\UC2_Logos.xmv"), FSMOVIE_Startup, 1 );

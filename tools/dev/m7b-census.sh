@@ -25,7 +25,7 @@ all=$work/logs/m7b/census$tag.txt
 : > "$all"
 one() {  # one <slot> <map>
   local t=m7b-c$1 m=$2
-  "$repo/tools/dev/run-uc2-shot.sh" $t "census-$m$tag" 150 0 "$m" -glexec=40:GLSCENECENSUS@46:exit ${M7B_CENSUS_ARGS:-} > /dev/null 2>&1
+  "$repo/tools/dev/run-uc2-shot.sh" $t "census-$m$tag" 150 0 "$m" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=40:GLSCENECENSUS@46:exit ${M7B_CENSUS_ARGS:-} > /dev/null 2>&1
   grep -a "UC2GLDrv: scene " "$work/logs/$t/census-$m$tag.out" | sed "s/^.*UC2GLDrv: scene /$m: /" > "$work/logs/$t/census-$m$tag.lines"
   [ -s "$work/logs/$t/census-$m$tag.lines" ] || echo "$m: NO CENSUS (see $work/logs/$t/census-$m$tag.out)" > "$work/logs/$t/census-$m$tag.lines"
 }

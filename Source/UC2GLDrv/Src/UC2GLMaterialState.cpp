@@ -1507,15 +1507,14 @@ UBOOL FOpenGLRenderInterface::SetPixelShaderMaterial( UPixelShaderMaterial* InSh
 	FOpenGLModifierInfo TexModifiers[4];
 
 #ifndef _XBOX
-	// UC2GLDrv test switch, off unless -gldualdiffuse=<n> is on the command line. No package of
+	// UC2GLDrv test key, off unless DualDiffuse=<n> is set (-ini:, read in Init). No package of
 	// the game contains a PSDualDiffuse material (tools/dev/ps-census.py), so the 32 DualDiffuse
 	// shaders and their handler cannot be seen on shipped content. With the switch, every
 	// PSEmissiveShader material that has a diffuse and a specular texture is drawn as a
 	// PSDualDiffuse built from those two textures: n = BlendMode (0 add, 1 modulate, 2 blend)
 	// + 10 * MaskMode (0 none, 1 first texture's alpha, 2 second texture's alpha).
-	static INT TestDualDiffuse = -2;
-	if( TestDualDiffuse == -2 && !Parse( appCmdLine(), TEXT("gldualdiffuse="), TestDualDiffuse ) )
-		TestDualDiffuse = -1;
+	extern INT GTestDualDiffuse;
+	const INT TestDualDiffuse = GTestDualDiffuse;
 	if( TestDualDiffuse >= 0 && InShader->PixelShaderType >= PS_EmissiveShaderDiffuseOnly && InShader->PixelShaderType <= PS_EmissiveShaderSpecLight )
 	{
 		UPSEmissiveShader* Emissive = (UPSEmissiveShader*)InShader;
@@ -3460,13 +3459,6 @@ UBOOL FOpenGLRenderInterface::SetProjectorMultiMaterial( UProjectorMultiMaterial
 
 	// use pixel shader texkill to clip projected area
 	UBOOL bUseClipPlanes = ProjectorMultiMaterial->bFrustumClipPixels;
-	// UC2GLDrv (M7b, debug): -glprojnoclip draws the clipped projectors with the unclipped shaders.
-	static INT NoClip = -1;
-	if( NoClip < 0 )
-		NoClip = ParseParam( appCmdLine(), TEXT("glprojnoclip") ) ? 1 : 0;
-	if( NoClip )
-		bUseClipPlanes = 0;
-
 	// extract the opacity from the base material
 	// this can be both a texture and/or a color modifier	
 	UMaterial*			BaseMaterial = ProjectorMultiMaterial->BaseMaterial;

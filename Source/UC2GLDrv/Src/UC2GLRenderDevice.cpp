@@ -7,7 +7,7 @@
 	ResetRenderStates, the default render target, the gamma formula, render caps, the
 	hardware workarounds' defaults (CubemapTextureAddressing, IsGeForce, DUMMY_MODULATE2X).
 	New: the main framebuffer object and the present pass, GL error checking per frame, and
-	a screenshot switch for verification (-glshot=<seconds>,...).
+	a screenshot test key for verification (ShotTimes=<seconds>,...).
 =============================================================================*/
 
 #include "UC2GLDrv.h"
@@ -31,30 +31,29 @@ D3DTEXTUREOP DUMMY_MODULATE2X = D3DTOP_MODULATE2X;
 #include "UC2GLRawFuncs.h"
 #undef GL_RAW
 
-// -glshot=<seconds>[,<seconds>...]: run the engine's SHOT exec at those times after the
-// first frame (verification; the files are System/ShotNNNNN.bmp).
+// Test key ShotTimes=<seconds>[,<seconds>...]: run the engine's SHOT exec at those times after the
+// first frame (verification; the files are System/ShotNNNNN.bmp). The test keys are read in Init.
 static TArray<FLOAT>	GShotTimes;
 static TArray<FLOAT>	GPSToggleTimes;
 static TArray<FLOAT>	GPPToggleTimes;
-static TArray<FLOAT>	GFFToggleTimes;		// O-9: -glfftoggle=<s>,... flips FixedFunctionPrograms
-// O-9: COMBINERTEST / -glcombinertest: the numeric test of the texture stages
+// O-9: COMBINERTEST / test key CombinerTest: the numeric test of the texture stages
 // (UC2GLCombinerTest.cpp), like GSelfTestPending.
 static INT				GCombinerTestPending = 0;
 static INT				GMatCensusPending = 0;	// O-9: GLMATCENSUS (UC2GLPixelTrace.cpp)
 static INT				GSceneCensusPending = 0;	// M7b: GLSCENECENSUS (UC2GLSceneCensus.cpp)
 static INT				GShadowCheckPending = 0;	// M7b: GLSHADOWCHECK (UC2GLShadowCheck.cpp)
-// -glexec=<seconds>:<command>[@<seconds>:<command>...]: console commands run through the
+// Test key Exec=<seconds>:<command>[@<seconds>:<command>...]: console commands run through the
 // viewport at those times after the first frame; '+' stands for a space in a command
-// (verification: "-glexec=40:BlurMe@50:set+UCScreenBerserk+Enabled+1"). Times ascending.
+// (verification: "Exec=40:BlurMe@50:set+UCScreenBerserk+Enabled+1"). Times ascending.
 static TArray<FLOAT>	GExecTimes;
 static TArray<FString>	GExecCommands;
-// -glshotramp: screenshots show the dynamic gamma ramp the present pass applies (they are
+// Test key ShotRamp: screenshots show the dynamic gamma ramp the present pass applies (they are
 // read before it otherwise, as D3D's are).
-// POSTSELFTEST / -glselftest: the numeric checks of UC2GLSelfTest.cpp, run at the start of a
+// POSTSELFTEST / test key SelfTest: the numeric checks of UC2GLSelfTest.cpp, run at the start of a
 // frame (0 = no, 1 = at the next frame with a player, n = n frames from now).
 static INT				GSelfTestPending = 0;
 static UBOOL			GShotRamp = 0;
-// -glshotpresented (O-8): -glshot pictures are what the present pass put on the screen (the gamma and
+// Test key ShotPresented (O-8): ShotTimes pictures are what the present pass put on the screen (the gamma and
 // FXAA applied), read from the default framebuffer before the swap, instead of the main framebuffer.
 static UBOOL			GShotPresented = 0;
 static TArray<FColor>	GPresentedPixels;
@@ -62,6 +61,10 @@ static INT				GPresentedWidth = 0, GPresentedHeight = 0;
 static BYTE				GLastGammaRamp[256];
 void UC2GL_RememberGammaRamp( const BYTE* Ramp ) { appMemcpy( GLastGammaRamp, Ramp, 256 ); }
 static DOUBLE			GFirstFrameTime = 0.0;
+// Test keys read by other files of the driver (F-4 follow-up: they were -glmatcensus, -gldualdiffuse=, -glno<cap>).
+UBOOL					GTestMatCensus = 0;		// MatCensus=True (UC2GLPixelTrace.cpp)
+INT						GTestDualDiffuse = -1;	// DualDiffuse=<n> (UC2GLMaterialState.cpp); -1 = not set
+FString					GTestCapMask;			// MaskCaps=..., upper case between commas
 
 /*-----------------------------------------------------------------------------
 	UUC2GLRenderDevice.
@@ -72,14 +75,10 @@ IMPLEMENT_CLASS(UUC2GLRenderDevice);
 #define UC2GL_LOG_ONCE_INIT(...) { static UBOOL Logged = 0; if( !Logged ) { Logged = 1; debugf( NAME_Init, __VA_ARGS__ ); } }
 
 
-// -name=<seconds>,<seconds>,... on the command line.
-static void ParseTimeList( const TCHAR* Key, TArray<FLOAT>& Times )
+// <seconds>,<seconds>,... (a test key's value).
+static void ParseTimeList( const TCHAR* Found, TArray<FLOAT>& Times )
 {
 	Times.Empty();
-	const TCHAR* Found = appStrfind( appCmdLine(), Key );
-	if( !Found )
-		return;
-	Found += appStrlen( Key );
 	while( *Found && *Found != ' ' && *Found != '\t' )
 	{
 		Times.AddItem( appAtof( Found ) );
@@ -555,79 +554,71 @@ UBOOL UUC2GLRenderDevice::Init()
 	ScratchBuffer.Empty();
 	ScratchBuffer.Add( 65536 );
 
-	// Verification switches.
-	CheckGLErrors |= ParseParam( appCmdLine(), TEXT("glerrors") );
-	// (Parse() stops at a comma, so a list of times is read by hand.)
-	ParseTimeList( TEXT("glshot="), GShotTimes );
-
-	// A/B switches for the programmable materials (M6): the command line wins over the ini,
-	// and -glpstoggle=<s>,... flips UsePixelShaders at those times (seconds after the first
-	// frame, like -glshot), so one run can take both pictures from the same camera.
-	if( ParseParam( appCmdLine(), TEXT("nopixelshaders") ) )
-		UsePixelShaders = 0;
-	if( ParseParam( appCmdLine(), TEXT("pixelshaders") ) )
-		UsePixelShaders = 1;
-	ParseTimeList( TEXT("glpstoggle="), GPSToggleTimes );
-	// O-9: -glffprograms / -glnoffprograms (FixedFunctionPrograms), -glunits=N (MaxTextureUnits),
-	// -glnocombine3 / -glnocombine4 (masks: the texture environment as on a GL without them,
-	// e.g. Mesa behaving like the NVIDIA driver), -glffsource (log every generated program),
-	// -glcombinertest (the numeric test of the texture stages, UC2GLCombinerTest.cpp).
-	if( ParseParam( appCmdLine(), TEXT("glnoffprograms") ) )
-		UseFixedFunctionPrograms = 0;
-	if( ParseParam( appCmdLine(), TEXT("glffprograms") ) )
-		UseFixedFunctionPrograms = 1;
-	Parse( appCmdLine(), TEXT("glunits="), MaxTextureUnits );
-	Parse( appCmdLine(), TEXT("glstages="), MaterialStages );
-	MaskCombine3	= ParseParam( appCmdLine(), TEXT("glnocombine3") );
-	MaskCombine4	= ParseParam( appCmdLine(), TEXT("glnocombine4") );
-	LogFFPrograms	= ParseParam( appCmdLine(), TEXT("glffsource") );
-	if( ParseParam( appCmdLine(), TEXT("glcombinertest") ) )
+	// Test keys (F-4 follow-up; they replace the -gl* command-line switches): set from outside with
+	// -ini:System:[UC2GLDrv.UC2GLRenderDevice]:<Key>=<Value>, read once here and never kept in the ini
+	// (appReadTestKey). The GL4ES binding reads its own section first, then the desktop device's, so a test sets
+	// them once for either device. The device's ordinary settings (CheckGLErrors, UsePixelShaders, UsePostProcess,
+	// UseXboxShadows, UseXboxProjectors, UseTerrain3Layer, AntiAliasing, MaxTextureUnits, MaterialStages,
+	// FixedFunctionPrograms) are config properties of the class's own section, set with -ini: like any setting.
+	//   ShotTimes=<s>,<s>...            the engine's SHOT exec at those times after the first frame
+	//   ShotRamp=True                   screenshots show the dynamic gamma ramp of the present pass
+	//   ShotPresented=True              screenshots are what the present pass put on the screen (O-8)
+	//   Exec=<s>:<cmd>[@<s>:<cmd>...]   console commands at those times; '+' stands for a space
+	//   PixelShaderToggleTimes=<s>,...  flip UsePixelShaders at those times (one run, both pictures)
+	//   PostProcessToggleTimes=<s>,...  flip UsePostProcess at those times
+	//   SelfTest=True                   POSTSELFTEST at the 10th frame with a player
+	//   CombinerTest=True               COMBINERTEST likewise (O-9)
+	//   MatCensus=True                  the material census of GLMATCENSUS on every material (O-9)
+	//   Stats=True                      a frame-statistics line every 300 frames
+	//   NoLODBias=True                  texture LOD bias not applied
+	//   MaskCaps=<cap>,...              behave as if a capability were missing: combine3, combine4, depthtexture,
+	//                                   fragdepth, uintindex, maxlevel, s3tc
+	//   DualDiffuse=<n>                 the dual-diffuse test material state (M6, UC2GLMaterialState.cpp)
+	FString OwnSection = GetClass()->GetPathName();
+	const TCHAR* BaseSection = TEXT("UC2GLDrv.UC2GLRenderDevice");
+	const TCHAR* TwinSection = TEXT("UC2GL4ESDrv.UC2GL4ESRenderDevice");
+	#define UC2GL_TESTKEY(Key,Value) appReadTestKey( TEXT(Key), Value, *OwnSection, BaseSection, TwinSection )
+	#define UC2GL_TESTFLAG(Key) appReadTestFlag( TEXT(Key), *OwnSection, BaseSection, TwinSection )
+	FString TestValue;
+	UC2GL_TESTKEY( "ShotTimes", TestValue ) ? ParseTimeList( *TestValue, GShotTimes ) : GShotTimes.Empty();
+	TestValue = TEXT("");
+	UC2GL_TESTKEY( "PixelShaderToggleTimes", TestValue ) ? ParseTimeList( *TestValue, GPSToggleTimes ) : GPSToggleTimes.Empty();
+	TestValue = TEXT("");
+	UC2GL_TESTKEY( "PostProcessToggleTimes", TestValue ) ? ParseTimeList( *TestValue, GPPToggleTimes ) : GPPToggleTimes.Empty();
+	MaskCombine3	= 0;
+	MaskCombine4	= 0;
+	GTestCapMask	= TEXT("");
+	if( UC2GL_TESTKEY( "MaskCaps", GTestCapMask ) )
+	{
+		FString Caps = FString(TEXT(",")) + GTestCapMask.Caps() + TEXT(",");
+		MaskCombine3 = Caps.InStr( TEXT(",COMBINE3,") ) >= 0;
+		MaskCombine4 = Caps.InStr( TEXT(",COMBINE4,") ) >= 0;
+		GTestCapMask = Caps;
+	}
+	LogFFPrograms	= 0;
+	if( UC2GL_TESTFLAG( "CombinerTest" ) )
 		GCombinerTestPending = 10;
-	ParseTimeList( TEXT("glfftoggle="), GFFToggleTimes );
-
-	// The same for render-target post-processing (M7): -nopostprocess / -postprocess, and
-	// -glpptoggle=<s>,... flips UsePostProcess at those times (console: POSTPROCESS [0|1]).
-	if( ParseParam( appCmdLine(), TEXT("nopostprocess") ) )
-		UsePostProcess = 0;
-	if( ParseParam( appCmdLine(), TEXT("postprocess") ) )
-		UsePostProcess = 1;
-	ParseTimeList( TEXT("glpptoggle="), GPPToggleTimes );
-	// M7b: -noxboxshadows / -xboxshadows (UseXboxShadows; console XBOXSHADOWS [0|1]).
-	if( ParseParam( appCmdLine(), TEXT("noxboxshadows") ) )
-		UseXboxShadows = 0;
-	if( ParseParam( appCmdLine(), TEXT("xboxshadows") ) )
-		UseXboxShadows = 1;
-	// M7b: -noterrain3layer / -terrain3layer (UseTerrain3Layer; console TERRAIN3LAYER [0|1]).
-	if( ParseParam( appCmdLine(), TEXT("noterrain3layer") ) )
-		UseTerrain3Layer = 0;
-	if( ParseParam( appCmdLine(), TEXT("terrain3layer") ) )
-		UseTerrain3Layer = 1;
-	// M7b: -noxboxprojectors / -xboxprojectors (UseXboxProjectors; console XBOXPROJECTORS [0|1]).
-	if( ParseParam( appCmdLine(), TEXT("noxboxprojectors") ) )
-		UseXboxProjectors = 0;
-	if( ParseParam( appCmdLine(), TEXT("xboxprojectors") ) )
-		UseXboxProjectors = 1;
-	GShotRamp = ParseParam( appCmdLine(), TEXT("glshotramp") );
-	GShotPresented = ParseParam( appCmdLine(), TEXT("glshotpresented") );
-	NoLODBias = ParseParam( appCmdLine(), TEXT("glnolodbias") );
-	// O-8: -glaa=N (samples; 0 = off), -glnoaa. Tests that compare pictures run with -glnoaa.
-	Parse( appCmdLine(), TEXT("glaa="), AntiAliasing );
-	if( ParseParam( appCmdLine(), TEXT("glnoaa") ) )
-		AntiAliasing = 0;
-	LogStats = ParseParam( appCmdLine(), TEXT("glstats") );
+	GTestMatCensus	= UC2GL_TESTFLAG( "MatCensus" );
+	GShotRamp		= UC2GL_TESTFLAG( "ShotRamp" );
+	GShotPresented	= UC2GL_TESTFLAG( "ShotPresented" );
+	NoLODBias		= UC2GL_TESTFLAG( "NoLODBias" );
+	GTestDualDiffuse = -1;
+	TestValue = TEXT("");
+	if( UC2GL_TESTKEY( "DualDiffuse", TestValue ) )
+		GTestDualDiffuse = appAtoi( *TestValue );
+	LogStats = UC2GL_TESTFLAG( "Stats" );
 	StatDraws = StatPrimitives = StatMaterials = StatBufferUploads = StatBufferBytes = StatTextureUploads = StatPostQuads = 0;
 	StatSnapshots = StatDepthColors = StatDepthCopies = StatFrame0 = 0;
 	StatTime0 = 0.0;
-	CheckGLErrorsPerDraw = ParseParam( appCmdLine(), TEXT("glerrorsdraw") );
-	CheckGLErrors |= CheckGLErrorsPerDraw;
-	if( ParseParam( appCmdLine(), TEXT("glselftest") ) )
+	CheckGLErrorsPerDraw = 0;
+	if( UC2GL_TESTFLAG( "SelfTest" ) )
 		GSelfTestPending = 10;
 	GExecTimes.Empty();
 	GExecCommands.Empty();
-	const TCHAR* ExecList = appStrfind( appCmdLine(), TEXT("glexec=") );
-	if( ExecList )
+	FString ExecSpec;
+	if( UC2GL_TESTKEY( "Exec", ExecSpec ) )
 	{
-		ExecList += 7;
+		const TCHAR* ExecList = *ExecSpec;
 		while( *ExecList && *ExecList != ' ' && *ExecList != '\t' )
 		{
 			FLOAT Time = appAtof( ExecList );
@@ -648,7 +639,8 @@ UBOOL UUC2GLRenderDevice::Init()
 				ExecList++;
 		}
 	}
-
+	#undef UC2GL_TESTKEY
+	#undef UC2GL_TESTFLAG
 
 	return 1;
 
@@ -1377,7 +1369,7 @@ void UUC2GLRenderDevice::BindQuadBuffer()
 //   a draw gl4es calls glGenerateMipmap for it (realize_textures, drawing) without making that
 //   unit active: on whatever texture the ACTIVE unit has, which can be an engine texture with
 //   DXT storage (Mesa with an ES 2.0 context: "GL_INVALID_OPERATION in generate mipmaps on
-//   compressed texture"; gl4es' own glGetError calls hide it from -glerrors).
+//   compressed texture"; gl4es' own glGetError calls hide it from CheckGLErrors).
 // So: every unit starts with a texture of our own under gl4es' "texture 0" (1x1 opaque black,
 // which is what WebGL samples for no texture; gl4es binds a real 0 once it has bound anything
 // else on a unit, and by then has nothing left to set), and texture 0 gets a filter that needs
@@ -1444,12 +1436,12 @@ void UUC2GLRenderDevice::DetectCapabilities()
 		debugf( NAME_Init, TEXT("UC2GLDrv: GLES extensions: %s"), appFromAnsi((ANSICHAR*)Raw_glGetString(GL_EXTENSIONS)) );
 		debugf( NAME_Init, TEXT("UC2GLDrv: GLES fragment highp float: %i bits of precision (range 2^-%i..2^%i)"), Precision, Range[0], Range[1] );
 	}
-	// Masks, to exercise each fallback where the capability exists.
-	if( ParseParam( appCmdLine(), TEXT("glnodepthtexture") ) )	CapDepthTexture = 0;
-	if( ParseParam( appCmdLine(), TEXT("glnofragdepth") ) )		CapFragDepth = 0;
-	if( ParseParam( appCmdLine(), TEXT("glnouintindex") ) )		CapUIntIndex = 0;
-	if( ParseParam( appCmdLine(), TEXT("glnomaxlevel") ) )		CapTextureMaxLevel = 0;
-	if( ParseParam( appCmdLine(), TEXT("glnos3tc") ) )
+	// Masks, to exercise each fallback where the capability exists (test key MaskCaps=..., read in Init).
+	if( GTestCapMask.InStr( TEXT(",DEPTHTEXTURE,") ) >= 0 )	CapDepthTexture = 0;
+	if( GTestCapMask.InStr( TEXT(",FRAGDEPTH,") ) >= 0 )		CapFragDepth = 0;
+	if( GTestCapMask.InStr( TEXT(",UINTINDEX,") ) >= 0 )		CapUIntIndex = 0;
+	if( GTestCapMask.InStr( TEXT(",MAXLEVEL,") ) >= 0 )		CapTextureMaxLevel = 0;
+	if( GTestCapMask.InStr( TEXT(",S3TC,") ) >= 0 )
 	{
 		// GLES: gl4es decodes. Desktop: the engine's decoder.
 		CapRawS3TC = 0;
@@ -1866,7 +1858,7 @@ void UUC2GLRenderDevice::UpdateGamma( UViewport* Viewport )
 	PresentGamma		= Viewport->GetOuterUClient()->Gamma;
 	PresentBrightness	= Viewport->GetOuterUClient()->Brightness;
 	PresentContrast		= Viewport->GetOuterUClient()->Contrast;
-	ApplyGamma			= !ParseParam( appCmdLine(), TEXT("NOGAMMA") );
+	ApplyGamma			= 1;
 	// D3D's SetGammaRamp replaces whatever ramp the dynamic gamma had set.
 	GammaRampActive		= 0;
 	unguard;
@@ -2061,7 +2053,7 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	}
 	else if( ParseCommand(&Cmd,TEXT("GLSTATS")) )
 	{
-		// M7b: the -glstats line now, for the frames since the last one (or since GLSTATS RESET).
+		// M7b: the Stats line now, for the frames since the last one (or since GLSTATS RESET).
 		if( ParseCommand(&Cmd,TEXT("RESET")) )
 		{
 			StatTime0 = 0.0;
@@ -2269,7 +2261,7 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 	if( LogStats && (FrameCounter - StatFrame0 >= 300 || StatTime0 == 0.0) )
 		LogFrameStats();
 
-	// -glshot: the engine's own SHOT exec (ReadPixels -> appCreateBitmap).
+	// ShotTimes: the engine's own SHOT exec (ReadPixels -> appCreateBitmap).
 	if( GFirstFrameTime == 0.0 )
 		GFirstFrameTime = appSeconds();
 	if( GPSToggleTimes.Num() && appSeconds() - GFirstFrameTime >= GPSToggleTimes(0) )
@@ -2281,11 +2273,6 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 	{
 		GPPToggleTimes.Remove(0);
 		Exec( TEXT("POSTPROCESS"), *GLog );
-	}
-	if( GFFToggleTimes.Num() && appSeconds() - GFirstFrameTime >= GFFToggleTimes(0) )
-	{
-		GFFToggleTimes.Remove(0);
-		Exec( TEXT("FFPROGRAMS"), *GLog );
 	}
 	while( GExecTimes.Num() && appSeconds() - GFirstFrameTime >= GExecTimes(0) )
 	{
@@ -2330,7 +2317,7 @@ void UUC2GLRenderDevice::ReadPixels( UViewport* Viewport, FColor* Pixels )
 
 	if( GPresentedWidth )
 	{
-		// -glshotpresented: the picture read after the present pass of this frame.
+		// ShotPresented: the picture read after the present pass of this frame.
 		INT W = Min( Width, GPresentedWidth ), H = Min( Height, GPresentedHeight );
 		for( INT y=0; y<H; y++ )
 			for( INT x=0; x<W; x++ )

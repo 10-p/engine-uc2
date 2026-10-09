@@ -6,7 +6,7 @@
 #   tools/dev/pp-scale.sh pp glow dof
 #   tools/dev/pp-scale.sh list
 #
-#   selftest  the driver's numeric self-test (-glselftest's POSTSELFTEST) at 1440x1080 and 2880x2160: 15 of 15
+#   selftest  the driver's numeric self-test (-ini:System:[UC2GLDrv.UC2GLRenderDevice]:SelfTest=True's POSTSELFTEST) at 1440x1080 and 2880x2160: 15 of 15
 #             (pp-sizes: the pooled blur targets are the reference picture's fractions; ref-copy, ref-taps,
 #             bb-copy-ref with 3x3 and 5x5 samples per reference pixel)
 #   glow      DM-Deadbolt, pinned first PlayerStart, the ceiling tube: the glow post-processing adds (on - off),
@@ -75,7 +75,7 @@ waits() {
 runshot() {  # runshot <name> <res> <secs> <fire> <map> <args...>: one run, pinned, pictures <name>-N.png
   local name=$1 res=$2 secs=$3 fire=$4 map=$5; shift 5
   rm -f "$out/$name"-*.png
-  UC2_CAP=$CAP UC2_RES=$res UC2_PRECMD="$PIN" "$shot" "$tree" "$name" "$secs" "$fire" "$map" -glerrors "$@" > "$out/$name.report" 2>&1
+  UC2_CAP=$CAP UC2_RES=$res UC2_PRECMD="$PIN" "$shot" "$tree" "$name" "$secs" "$fire" "$map" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True "$@" > "$out/$name.report" 2>&1
 }
 RESOLUTIONS=${PP_RESOLUTIONS:-"640x480 1440x1080 2880x2160"}
 
@@ -83,7 +83,7 @@ check_selftest() {
   local res ok=1 txt=""
   for res in 1440x1080 2880x2160; do
     waits $res
-    runshot pp-selftest-$res $res $((80+W1+W1/2)) 34 DM-Deadbolt -glexec=$((44+W1)):POSTSELFTEST@$((50+W1+W1/2)):exit
+    runshot pp-selftest-$res $res $((80+W1+W1/2)) 34 DM-Deadbolt -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=$((44+W1)):POSTSELFTEST@$((50+W1+W1/2)):exit
     local o=$out/pp-selftest-$res.out s
     s=$(grep -a -o "selftest summary: [0-9]* passed, [0-9]* failed" "$o")
     grep -a "UC2GLDrv: selftest \(pp-sizes\|ref-\|bb-copy-ref\)" "$o" | sed -E "s/^UC2GLDrv: //; s/ values compared//; s/^/INFO pp-selftest $res: /" | cut -c1-400 | tee -a "$summary"
@@ -101,8 +101,8 @@ check_glow() {
     # G: seconds between a shot and the next switch, a few frames at that resolution's frame rate (a shot is
     # taken at the end of the first frame after its time; a switch made in between would be in it).
     local on=$((44+G)); local t1=$((on+W1)); local t2=$((t1+G+W2))
-    runshot pp-glow-$res $res $((t2+25)) 34 DM-Deadbolt -nopostprocess -glpptoggle=$on -glshot=44,$t1,$t2 \
-      -glexec=$((on+3)):set+LevelInfo+TimeDilation+0.0001@$((t1+G)):PPREFERENCE+0
+    runshot pp-glow-$res $res $((t2+25)) 34 DM-Deadbolt -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=$on -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,$t1,$t2 \
+      -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=$((on+3)):set+LevelInfo+TimeDilation+0.0001@$((t1+G)):PPREFERENCE+0
     local o=$out/pp-glow-$res
     if [ ! -f "$o-2.png" ]; then result FAIL glow-$res "no pictures ($(runok "$o.out"); see $o.out)"; fails=$((fails+1)); continue; fi
     g1=$($M glow "$o-0.png" "$o-1.png"); g2=$($M glow "$o-0.png" "$o-2.png")
@@ -176,8 +176,8 @@ check_dof() {
   for res in $RESOLUTIONS; do
     waits $res
     local t0=$((52+W1)); local t1=$((t0+2*G+8)); local t2=$((t1+G+W2)); local t3=$((t2+2*G+8))
-    runshot pp-dof-$res $res $((t3+25)) 42 DM-Azure -glshot=$t0,$t1,$t2,$t3 \
-      -glexec=50:set+LevelInfo+TimeDilation+0.0001@$((t0+G)):set+UCScreenDOF+Enabled+0@$((t1+G)):PPREFERENCE+0@$((t2+G)):set+UCScreenDOF+Enabled+1
+    runshot pp-dof-$res $res $((t3+25)) 42 DM-Azure -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=$t0,$t1,$t2,$t3 \
+      -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=50:set+LevelInfo+TimeDilation+0.0001@$((t0+G)):set+UCScreenDOF+Enabled+0@$((t1+G)):PPREFERENCE+0@$((t2+G)):set+UCScreenDOF+Enabled+1
     [ -f "$out/pp-dof-$res-3.png" ] || { info dof-$res "no pictures ($(runok "$out/pp-dof-$res.out"))"; continue; }
     sigmacheck dof $res "${PP_DOF_BOX:-310 186 428 230}" xy 1 0 2 3
   done
@@ -193,8 +193,8 @@ check_blur() {
     waits $res
     # (half waits between the switches: the pairs compared are 0/2 and 1/3, each at one reference height)
     local h=$((W2/2)); local t0=$((42+W1)); local t1=$((t0+G+h)); local t2=$((t1+2*G+h)); local t3=$((t2+G+h))
-    runshot pp-blur-$res $res $((t3+25)) 34 DM-Deadbolt -glshot=$t0,$t1,$t2,$t3 \
-      -glexec=40:set+LevelInfo+TimeDilation+0.0001@$((t0+G)):PPREFERENCE+0@$((t1+G)):PPREFERENCE+480@$((t1+G+1)):BlurMe@$((t2+G)):PPREFERENCE+0
+    runshot pp-blur-$res $res $((t3+25)) 34 DM-Deadbolt -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=$t0,$t1,$t2,$t3 \
+      -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=40:set+LevelInfo+TimeDilation+0.0001@$((t0+G)):PPREFERENCE+0@$((t1+G)):PPREFERENCE+480@$((t1+G+1)):BlurMe@$((t2+G)):PPREFERENCE+0
     [ -f "$out/pp-blur-$res-3.png" ] || { info blur-$res "no pictures ($(runok "$out/pp-blur-$res.out"))"; continue; }
     sigmacheck blur $res "${PP_BLUR_BOX:-360 175 500 255}" xy 0 2 1 3
   done
@@ -219,8 +219,8 @@ check_radial() {
   for res in $RESOLUTIONS; do
     waits $res
     local t0=$((42+W1)); local t1=$((t0+2*G+6)); local t2=$((t1+G+W2)); local t3=$((t2+2*G+6))
-    runshot pp-radial-$res $res $((t3+25)) 34 DM-Deadbolt -glshot=$t0,$t1,$t2,$t3 \
-      -glexec=38:set+UCPlayerController+RadialBlurSpeed+0@38.2:set+UCPlayerController+RadialBlurMinChange+-1@40:set+LevelInfo+TimeDilation+0.0001@$((t0+G)):set+UCScreenRadialBlur+RadialBlurDistance+30@$((t0+G)).2:set+UCScreenRadialBlur+Enabled+1@$((t1+G)):PPREFERENCE+0@$((t2+G)):set+UCScreenRadialBlur+Enabled+0
+    runshot pp-radial-$res $res $((t3+25)) 34 DM-Deadbolt -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=$t0,$t1,$t2,$t3 \
+      -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=38:set+UCPlayerController+RadialBlurSpeed+0@38.2:set+UCPlayerController+RadialBlurMinChange+-1@40:set+LevelInfo+TimeDilation+0.0001@$((t0+G)):set+UCScreenRadialBlur+RadialBlurDistance+30@$((t0+G)).2:set+UCScreenRadialBlur+Enabled+1@$((t1+G)):PPREFERENCE+0@$((t2+G)):set+UCScreenRadialBlur+Enabled+0
     [ -f "$out/pp-radial-$res-3.png" ] || { info radial-$res "no pictures ($(runok "$out/pp-radial-$res.out"))"; continue; }
     sigmacheck radial $res "${PP_RADIAL_BOX:-150 95 620 300}" zoom 0 1 3 2
   done
@@ -239,8 +239,8 @@ check_identity() {
   CAP=2G
   for b in base new; do
     for i in 1 2; do
-      if [ $b = base ]; then UC2_BIN=uc2-base.bin runshot pp-id-$b$i 640x480 45 0 DM-Deadbolt -glexec=0:DYNAMICGAMMA+0@0.1:set+LevelInfo+TimeDilation+0.0001 -glshot=25
-      else runshot pp-id-$b$i 640x480 45 0 DM-Deadbolt -glexec=0:DYNAMICGAMMA+0@0.1:set+LevelInfo+TimeDilation+0.0001 -glshot=25; fi
+      if [ $b = base ]; then UC2_BIN=uc2-base.bin runshot pp-id-$b$i 640x480 45 0 DM-Deadbolt -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=0:DYNAMICGAMMA+0@0.1:set+LevelInfo+TimeDilation+0.0001 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=25
+      else runshot pp-id-$b$i 640x480 45 0 DM-Deadbolt -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=0:DYNAMICGAMMA+0@0.1:set+LevelInfo+TimeDilation+0.0001 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=25; fi
     done
   done
   local o=$out/pp-id p q t bo all txt="" bad=0
@@ -261,10 +261,10 @@ check_aspect() {
   local g1 g2 gb res=1920x1080
   waits 1440x1080
   local t1=$((46+W1)) t2=$((48+W1+W2))
-  UC2_UIBOX=1 UC2_AUTOFOV=1 runshot pp-aspect-new $res $((t2+25)) 34 DM-Deadbolt -nopostprocess -glpptoggle=46 -glshot=44,$t1,$t2 \
-    -glexec=49:set+LevelInfo+TimeDilation+0.0001@$((t1+2)):PPREFERENCE+0
-  UC2_UIBOX=1 UC2_AUTOFOV=1 UC2_BIN=uc2-base.bin runshot pp-aspect-base $res $((t1+25)) 34 DM-Deadbolt -nopostprocess -glpptoggle=46 -glshot=44,$t1 \
-    -glexec=49:set+LevelInfo+TimeDilation+0.0001
+  UC2_UIBOX=1 UC2_AUTOFOV=1 runshot pp-aspect-new $res $((t2+25)) 34 DM-Deadbolt -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=46 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,$t1,$t2 \
+    -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=49:set+LevelInfo+TimeDilation+0.0001@$((t1+2)):PPREFERENCE+0
+  UC2_UIBOX=1 UC2_AUTOFOV=1 UC2_BIN=uc2-base.bin runshot pp-aspect-base $res $((t1+25)) 34 DM-Deadbolt -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=46 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,$t1 \
+    -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=49:set+LevelInfo+TimeDilation+0.0001
   local o=$out/pp-aspect
   g1=$($M glow "$o-new-0.png" "$o-new-1.png" 518 138 10); g2=$($M glow "$o-new-0.png" "$o-new-2.png" 518 138 10)
   gb=$($M glow "$o-base-0.png" "$o-base-1.png" 518 138 10)
@@ -290,7 +290,7 @@ check_perf() {
     local X=${res%x*} Y=${res#*x} b
     for b in uc2.bin uc2-base.bin; do
       UC2_GPU=1 UC2_BIN=$b FX_SCENARIO=$scen FX_MAP=DM-Deadbolt FX_NAME=pp-perf-$res \
-        FX_ARGS="-glnoaa -ini:System:[SDL2Drv.SDL2Client]:WindowedViewportX=$X -ini:System:[SDL2Drv.SDL2Client]:WindowedViewportY=$Y -glexec=1:set+UCDeathmatch+NumPlayers+0@32:set+LevelInfo+TimeDilation+0.0001@40:GLINFO@55:GLINFO@56:PPREFERENCE+0@60:GLINFO@75:GLINFO@76:PPREFERENCE+480@80:GLINFO@95:GLINFO" \
+        FX_ARGS="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0 -ini:System:[SDL2Drv.SDL2Client]:WindowedViewportX=$X -ini:System:[SDL2Drv.SDL2Client]:WindowedViewportY=$Y -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=1:set+UCDeathmatch+NumPlayers+0@32:set+LevelInfo+TimeDilation+0.0001@40:GLINFO@55:GLINFO@56:PPREFERENCE+0@60:GLINFO@75:GLINFO@76:PPREFERENCE+480@80:GLINFO@95:GLINFO" \
         "$repo/tools/dev/fx-owner.sh" "$tree" custom > /dev/null 2>&1
       local suffix=""; [ $b = uc2-base.bin ] && suffix="-base"
       local log=$out/fx-pp-perf-$res$suffix-gpu.out

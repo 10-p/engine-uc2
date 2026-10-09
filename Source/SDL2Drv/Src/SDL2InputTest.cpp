@@ -1,7 +1,7 @@
 /*=============================================================================
 	SDL2InputTest.cpp: the M10 input test channel (see SDL2InputTest.h).
 
-	Only active with -inputtest=<file>. Nothing here runs in a normal game.
+	Only active with the test key [SDL2Drv.SDL2Client] InputTestFile=<file> (-ini:). Nothing here runs in a normal game.
 =============================================================================*/
 
 #include "SDL2Drv.h"

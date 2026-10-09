@@ -130,7 +130,7 @@ for res in ('640x480', '1024x768'):
         same = m is not None and m.group(1) == m.group(2)
         ok = len(o) >= 2 and o[0] == 'OK' and float(o[1]) >= 99.99 and same
         result(f'identical-to-main-{res}', ok,
-               f'pinned DM-Deadbolt, -nopostprocess, static part within 2 levels {o[1] if len(o) > 1 else "?"}% '
+               f'pinned DM-Deadbolt, UsePostProcess=False, static part within 2 levels {o[1] if len(o) > 1 else "?"}% '
                f'(whole frame bit-identical {o[2] if len(o) > 2 else "?"}%, PSNR {o[3] if len(o) > 3 else "?"} dB); '
                f'AutoFOV logged ' + (f'base {m.group(1)} effective {m.group(2)}' if m else 'nothing'))
     else:

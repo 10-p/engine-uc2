@@ -72,7 +72,7 @@ scen=$out/$name.scen
 cp -f "$repo"/Engine/Config/*.ini "$sys/"
 rm -f "$sys/Avaris.ini" "$sys/User.ini" "$out/$name".result*
 chan=$out/$name.channel; : > "$chan"
-args=(-log -nostartupmovies -inputtest="$chan"
+args=(-log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan"
   "-ini:System:[SDL2Drv.SDL2Client]:WindowedViewportX=$w" "-ini:System:[SDL2Drv.SDL2Client]:WindowedViewportY=$h"
   "-ini:System:[SDL2Drv.SDL2Client]:FullscreenViewportX=$w" "-ini:System:[SDL2Drv.SDL2Client]:FullscreenViewportY=$h"
   "$@")

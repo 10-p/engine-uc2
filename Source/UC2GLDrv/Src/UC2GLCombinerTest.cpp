@@ -22,7 +22,7 @@
 	(on stage 0 and stage 5). A case that needs more stages than the device reports is
 	SKIPPED, with that said on its line.
 
-	Console: COMBINERTEST (next frame). Command line: -glcombinertest (tenth frame with a
+	Console: COMBINERTEST (next frame). Test key: CombinerTest=True (tenth frame with a
 	player). Lines: "UC2GLDrv: combinertest <case>: PASS|FAIL|SKIP ..." and a summary line
 	naming the path (fragment programs / texture environment with combine3, combine4 or
 	neither) and the number of stages. Drawn into a 4x4 framebuffer of its own.
@@ -567,7 +567,7 @@ struct FUC2GLCombinerTest
 			Skip( *Name, TEXT("OpenGL ES has no texture LOD bias on the fixed-function path (web-renderer.md)") );
 			return;
 		}
-		// Bias +1 on a texture drawn 1:1 (LOD 0) takes mip level 1 (green); -glnolodbias: level 0 (red).
+		// Bias +1 on a texture drawn 1:1 (LOD 0) takes mip level 1 (green); NoLODBias: level 0 (red).
 		FOpenGLMaterialState MS;
 		InitPass( MS, Stage + 1, Factor[0] );
 		for( INT s=0; s<Stage; s++ )
@@ -596,7 +596,7 @@ struct FUC2GLCombinerTest
 			for( INT c=0; c<4; c++ )
 				MaxError = Max( MaxError, Abs( (FLOAT)Out[p*4+c] - (FLOAT)Expected[c] ) );
 		Report( *Name, 64, MaxError, 0.f, *FString::Printf( TEXT("stage %i biased +1 reads mip level %s (pixel 0: %i,%i,%i; level 0 is red, 1 green, 2 blue)"),
-			Stage, RenDev->NoLODBias ? TEXT("0 (-glnolodbias)") : TEXT("1"), Out[0], Out[1], Out[2] ) );
+			Stage, RenDev->NoLODBias ? TEXT("0 (NoLODBias)") : TEXT("1"), Out[0], Out[1], Out[2] ) );
 	}
 
 	void Run()

@@ -5,20 +5,20 @@
 #   tools/dev/o9-nvidia.sh [check ...]          default: every check, in this order
 #   tools/dev/o9-nvidia.sh list
 #
-#   combiner-mesa   -glcombinertest on Mesa llvmpipe (Xvfb): fragment programs; the texture environment with
-#                   combine3; with combine4 only (-glnocombine3); and "before" = main's NVIDIA path emulated
+#   combiner-mesa   -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CombinerTest=True on Mesa llvmpipe (Xvfb): fragment programs; the texture environment with
+#                   combine3; with combine4 only (-ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=combine3); and "before" = main's NVIDIA path emulated
 #                   (texture environment, no combine3/combine4, 4 units): the three-operand cases must fail
 #                   there and only there
 #   combiner-gpu    the same on this machine's NVIDIA GPU, headless (SDL offscreen video driver, EGL; nothing on
-#                   the display): programs; texture environment (combine4); "before" (-glnocombine4: main's path)
+#                   the display): programs; texture environment (combine4); "before" (-ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=combine4: main's path)
 #   combiner-twin   the same test on the GL4ES / OpenGL ES 2 twin (the browser's code path; gl4es emulates the
 #                   texture environment, combine3 included, in its own shaders)
 #   caps            the material compiler gets the same stage count and the same texture-op caps on NVIDIA and Mesa
 #   pictures-other  DM-AcidRain and DM-Tempest from a PlayerStart (tools/dev/o9/acidrain.scen, tempest.scen):
-#                   views where a fifth of the drawn materials depend on the three-operand caps (-glmatcensus);
+#                   views where a fifth of the drawn materials depend on the three-operand caps (-ini:System:[UC2GLDrv.UC2GLRenderDevice]:MatCensus=True);
 #                   whole frame without the pawn, NVIDIA before/after against Mesa after
 #   pictures        DM-Azure, wooden pillar and cobra statue (tools/dev/o9/azure.scen through fx-owner.sh, time
-#                   frozen, -glnoaa): NVIDIA before (main's binary) and after, Mesa before and after; crops of the
+#                   frozen, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0): NVIDIA before (main's binary) and after, Mesa before and after; crops of the
 #                   shots without post-processing compared (the dynamic gamma depends on the frame rate)
 #
 # Run tree <WorkUC2>/run/o9 (made from build-native unless O9_NO_MKRUN=1; main's executable must be there as
@@ -56,7 +56,7 @@ ctrun() {
   [ $kind = gpu ] && env="$env SDL_VIDEODRIVER=offscreen"
   [ $kind = twin ] && set -- -gl4es "$@"
   "$capped" 2G 180 -- xvfb-run -a -s "-screen 0 1280x720x24" bash -c \
-    "cd '$sys' && $env ./uc2.bin -log -nostartupmovies -glnoaa -glerrors -glcombinertest -glexec=50:exit $* > '$out/ct-$name.out' 2>&1"
+    "cd '$sys' && $env ./uc2.bin -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CombinerTest=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=50:exit $* > '$out/ct-$name.out' 2>&1"
 }
 # Judge one run: expect "all" (0 failed) or "three" (exactly the three-operand cases fail). ctcheck <check> <name> <expect> <what>
 ctcheck() {
@@ -79,11 +79,11 @@ ctcheck() {
 check_combiner_mesa() {
   ctrun mesa-prog mesa
   ctcheck combiner-mesa-programs mesa-prog all "Mesa, fragment programs"
-  ctrun mesa-texenv mesa -glnoffprograms
+  ctrun mesa-texenv mesa -ini:System:[UC2GLDrv.UC2GLRenderDevice]:FixedFunctionPrograms=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:FixedFunctionPrograms=False
   ctcheck combiner-mesa-texenv-combine3 mesa-texenv all "Mesa, texture environment with combine3"
-  ctrun mesa-combine4 mesa -glnoffprograms -glnocombine3
-  ctcheck combiner-mesa-texenv-combine4 mesa-combine4 all "Mesa, texture environment with combine4 only (-glnocombine3)"
-  ctrun mesa-before mesa -glnoffprograms -glnocombine3 -glnocombine4 -glunits=4
+  ctrun mesa-combine4 mesa -ini:System:[UC2GLDrv.UC2GLRenderDevice]:FixedFunctionPrograms=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:FixedFunctionPrograms=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=combine3
+  ctcheck combiner-mesa-texenv-combine4 mesa-combine4 all "Mesa, texture environment with combine4 only (-ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=combine3)"
+  ctrun mesa-before mesa -ini:System:[UC2GLDrv.UC2GLRenderDevice]:FixedFunctionPrograms=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:FixedFunctionPrograms=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=combine3,combine4 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaxTextureUnits=4 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:MaxTextureUnits=4
   ctcheck combiner-mesa-before mesa-before three "Mesa as main's NVIDIA path (texture environment, no combine3/combine4, 4 units): the defect reproduced"
 }
 
@@ -93,9 +93,9 @@ check_combiner_gpu() {
   if [ -n "$(gpu_busy)" ]; then result FAIL combiner-gpu "another headless GPU run of uc2.bin is going on; not started (one GPU run at a time)"; return; fi
   ctrun gpu-prog gpu
   ctcheck combiner-gpu-programs gpu-prog all "NVIDIA $(grep -a -o 'GL_RENDERER *: .*' "$out/ct-gpu-prog.out" | sed 's/GL_RENDERER *: //'), fragment programs"
-  ctrun gpu-texenv gpu -glnoffprograms
+  ctrun gpu-texenv gpu -ini:System:[UC2GLDrv.UC2GLRenderDevice]:FixedFunctionPrograms=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:FixedFunctionPrograms=False
   ctcheck combiner-gpu-texenv-combine4 gpu-texenv all "NVIDIA, texture environment with combine4 (4 units: the 8-stage and stage-5 cases are skipped)"
-  ctrun gpu-before gpu -glnoffprograms -glnocombine4
+  ctrun gpu-before gpu -ini:System:[UC2GLDrv.UC2GLRenderDevice]:FixedFunctionPrograms=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:FixedFunctionPrograms=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=combine4
   ctcheck combiner-gpu-before gpu-before three "NVIDIA, main's path (texture environment without combine4): the defect reproduced"
 }
 
@@ -127,9 +127,9 @@ check_pictures() {
   local b
   # (After first: fx-owner.sh clears fx-azure-*.png, which includes the "-before" pictures.)
   for b in uc2.bin uc2-before.bin; do
-    FX_ARGS=-glnoaa UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/azure.scen" FX_MAP=DM-Azure FX_NAME=azure "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
+    FX_ARGS="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0" UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/azure.scen" FX_MAP=DM-Azure FX_NAME=azure "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
     if [ -n "$(gpu_busy)" ]; then result FAIL pictures "another headless GPU run is going on"; return; fi
-    FX_ARGS=-glnoaa UC2_GPU=1 UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/azure.scen" FX_MAP=DM-Azure FX_NAME=azure "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
+    FX_ARGS="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0" UC2_GPU=1 UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/azure.scen" FX_MAP=DM-Azure FX_NAME=azure "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
   done
   local p=$out/fx-azure ok=1 shot
   for f in "$p-pp.png" "$p-before-gpu-pp.png" "$p-gpu-pp.png" "$p-nopp.png" "$p-before-nopp.png" "$p-gpu-nopp.png" "$p-before-gpu-nopp.png" "$p-gpu-texenv.png" \
@@ -171,9 +171,9 @@ check_pictures_other() {
   for spec in acidrain:DM-AcidRain tempest:DM-Tempest; do
     n=${spec%%:*}; map=${spec#*:}
     for b in uc2.bin uc2-before.bin; do
-      FX_ARGS="-glnoaa -glmatcensus" UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/$n.scen" FX_MAP=$map FX_NAME=$n "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
+      FX_ARGS="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MatCensus=True" UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/$n.scen" FX_MAP=$map FX_NAME=$n "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
       if [ -n "$(gpu_busy)" ]; then result FAIL pictures-other "another headless GPU run is going on"; return; fi
-      FX_ARGS="-glnoaa -glmatcensus" UC2_GPU=1 UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/$n.scen" FX_MAP=$map FX_NAME=$n "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
+      FX_ARGS="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MatCensus=True" UC2_GPU=1 UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/$n.scen" FX_MAP=$map FX_NAME=$n "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
     done
     local p=$out/fx-$n f
     for f in "$p-nopp.png" "$p-gpu-nopp.png" "$p-before-gpu-nopp.png" "$p-before-nopp.png" "$p-gpu-texenv.png"; do

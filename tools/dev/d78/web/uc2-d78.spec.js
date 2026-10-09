@@ -41,7 +41,7 @@ test('uc2 D-7/D-8: the tilde key opens the console, commands run; AutoFOV widens
         .first()
         .click()
         .catch(() => {});
-    await page.fill('#engine-options', '-log -glerrors -nostartupmovies', { timeout: 30000 });
+    await page.fill('#engine-options', '-log -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2Movie]:StartupMovies=False', { timeout: 30000 });
     await page.locator('#start-btn').click();
 
     const count = (re) => t.findLogs(re).length;
