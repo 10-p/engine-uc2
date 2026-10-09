@@ -55,6 +55,9 @@ ctrun() {
   local env="SDL_AUDIODRIVER=dummy"
   [ $kind = gpu ] && env="$env SDL_VIDEODRIVER=offscreen"
   [ $kind = twin ] && set -- -gl4es "$@"
+  # A fresh Avaris.ini every run: the settings passed with -ini: (FixedFunctionPrograms=False ...) are written into it
+  # and would otherwise carry over to the next run (F-4 follow-up: they were switches, which did not persist).
+  rm -f "$sys/Avaris.ini"
   "$capped" 2G 180 -- xvfb-run -a -s "-screen 0 1280x720x24" bash -c \
     "cd '$sys' && $env ./uc2.bin -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CombinerTest=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=50:exit $* > '$out/ct-$name.out' 2>&1"
 }
