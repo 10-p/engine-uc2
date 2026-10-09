@@ -16,8 +16,9 @@
 	fixed-function vertex stage (transform, lighting, texgen, texture matrices, fog
 	coordinate) stays what it was, and the shader does what GL's fixed-function fragment
 	stage did after the combiners: the colour sum (secondary colour) and linear fog (on the
-	absolute value of gl_FogFragCoord: NVIDIA's fixed-function vertex stage hands the signed
-	eye-space z to a fragment shader, Mesa its absolute value; GL's fog uses |z|). Alpha
+	fragment's eye-space |z|, recovered from gl_FragCoord.z and the projection since F-5; before
+	that gl_FogFragCoord, which NVIDIA hands as the signed eye-space z, and Mesa as a value that
+	fogs DM-Azure's sky zone far more than NVIDIA and GL4ES do). Alpha
 	test, blending, depth and stencil are per-fragment operations after the shader, as
 	before. The operations are Direct3D 8's definitions (d3d8types.h / the DirectX 8 SDK's
 	"Texture Blending" pages), every stage result saturated to [0,1] as D3D does:
@@ -229,7 +230,17 @@ static FString FFBuildSource( const FUC2GLFFKey& Key )
 	if( ColorSum )
 		Body += TEXT("\tcur.rgb = clamp( cur.rgb + gl_SecondaryColor.rgb, 0.0, 1.0 );\n");
 	if( Fog )
-		Body += TEXT("\tcur.rgb = mix( gl_Fog.color.rgb, cur.rgb, clamp( (gl_Fog.end - abs( gl_FogFragCoord )) * gl_Fog.scale, 0.0, 1.0 ) );\n");
+	{
+		// F-5: the fog distance is the fragment's own eye-space depth |z|, recovered from its window
+		// depth through the projection (clip z = A z + B, clip w = C z + D; perspective and
+		// orthographic alike): what D3D's table fog uses (D3DRS_FOGTABLEMODE, per pixel, depth;
+		// Epic's Fog.vsh: -camera-space z) and what GL4ES computes on the web. Not
+		// gl_FogFragCoord: Mesa's fixed-function vertex stage hands a larger value for DM-Azure's
+		// sky-zone draws than NVIDIA's and GL4ES' (render-f5.md step 6: the hazy sky on Mesa).
+		Body += TEXT("\tfloat ndc = (2.0 * gl_FragCoord.z - gl_DepthRange.near - gl_DepthRange.far) / gl_DepthRange.diff;\n")
+				TEXT("\tfloat eyeZ = (gl_ProjectionMatrix[3][2] - ndc * gl_ProjectionMatrix[3][3]) / (ndc * gl_ProjectionMatrix[2][3] - gl_ProjectionMatrix[2][2]);\n")
+				TEXT("\tcur.rgb = mix( gl_Fog.color.rgb, cur.rgb, clamp( (gl_Fog.end - abs( eyeZ )) * gl_Fog.scale, 0.0, 1.0 ) );\n");
+	}
 	Body += TEXT("\tgl_FragColor = cur;\n}\n");
 	return Decl + Body;
 }

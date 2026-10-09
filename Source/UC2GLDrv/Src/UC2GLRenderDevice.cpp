@@ -187,6 +187,7 @@ void UUC2GLRenderDevice::StaticConstructor()
 	new(GetClass(),TEXT("PrecompileVertexShaders"),RF_Public)UBoolProperty( CPP_PROPERTY(PrecompileVertexShaders), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("UsePostProcess"),		RF_Public)UBoolProperty	( CPP_PROPERTY(UsePostProcess		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("DOFShippedBlurAlpha"),	RF_Public)UBoolProperty	( CPP_PROPERTY(DOFShippedBlurAlpha	), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("DistortionCullDistance"),RF_Public)UFloatProperty( CPP_PROPERTY(DistortionCullDistance), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("UseXboxShadows"),		RF_Public)UBoolProperty	( CPP_PROPERTY(UseXboxShadows		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("UseTerrain3Layer"),	RF_Public)UBoolProperty	( CPP_PROPERTY(UseTerrain3Layer		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("UseXboxProjectors"),	RF_Public)UBoolProperty	( CPP_PROPERTY(UseXboxProjectors	), TEXT("Options"), CPF_Config );
@@ -211,7 +212,12 @@ void UUC2GLRenderDevice::StaticConstructor()
 	UseFixedFunctionPrograms= 1;
 	PrecompileVertexShaders	= 1;
 	UsePostProcess			= 1;
-	DOFShippedBlurAlpha		= 0;
+	// O-3, F-5 (owner, 2026-10-09: "change in the cpp files to have sensible defaults"): the
+	// depth-of-field blur alpha the shipped binary read (65 in every camera mode), as the ini
+	// says, also for an ini that predates the key.
+	DOFShippedBlurAlpha		= 1;
+	// O-7, F-5: the owner's raised distortion range (the Xbox's is 5000), as the ini says.
+	DistortionCullDistance	= 15000.f;
 	// M7b: the Xbox's shadow textures (lighter, sharper than PC's; analysis/projectors.md).
 	UseXboxShadows			= 1;
 	// M7b: terrain drawn three layers at a time as the Xbox build does: no visible difference
@@ -2010,10 +2016,9 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	{
 		// DISTORTIONCULLDISTANCE [<units>]: the distance over which distortion fades out (O-7,
 		// UC2GLMaterialState.cpp); 5000 is the Xbox's. No argument: show it. (fx-fixes)
-		extern FLOAT GUC2GLDistortionCullDistance;
 		if( appStrlen(Cmd) && appAtof(Cmd) > 0.f )
-			GUC2GLDistortionCullDistance = appAtof(Cmd);
-		Ar.Logf( TEXT("UC2GLDrv: distortion fades out over %.0f units (frame %i)"), GUC2GLDistortionCullDistance, FrameCounter );
+			DistortionCullDistance = appAtof(Cmd);
+		Ar.Logf( TEXT("UC2GLDrv: distortion fades out over %.0f units (frame %i)"), DistortionCullDistance, FrameCounter );
 		return 1;
 	}
 	else if( ParseCommand(&Cmd,TEXT("GLPIXTRACE")) )

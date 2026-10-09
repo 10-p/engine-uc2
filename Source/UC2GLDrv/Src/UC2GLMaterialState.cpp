@@ -1378,11 +1378,11 @@ void FOpenGLRenderInterface::UpdateDOFRampLookupTexture( UMaterial* DOFShader, B
 // DistortionAccum.vsh scales each vertex's distortion by 1 - saturate(z / D)^2 (z: camera-space
 // depth), and Epic's driver sets D = DISTORTION_CULL_DISTANCE = 5000 (D3DMaterialState.cpp
 // 1377): at 2500 units 75% is left, at 4000 36%, at 5000 nothing. It is the one place the
-// range of the effect is decided. Here D is GUC2GLDistortionCullDistance: ini
-// [UC2GLDrv.UC2GLRenderDevice] DistortionCullDistance= (read at the first distortion draw;
-// Engine/Config/Default.ini raises it, 5000 is the Xbox value), console
-// DISTORTIONCULLDISTANCE [<units>] (UC2GLRenderDevice.cpp).
-FLOAT GUC2GLDistortionCullDistance = 0.f;
+// range of the effect is decided. Here D is the device's config property DistortionCullDistance
+// (F-5: read like every other device key from the device class's own ini section, so the GL4ES
+// device reads [UC2GL4ESDrv.UC2GL4ESRenderDevice]; compiled default 15000 as the ini; a value that
+// is not positive means the Xbox's 5000), console DISTORTIONCULLDISTANCE [<units>]
+// (UC2GLRenderDevice.cpp).
 
 // scion sz -
 // FOpenGLRenderInterface::HandlePSVertexShader
@@ -1406,17 +1406,15 @@ void FOpenGLRenderInterface::HandlePSVertexShader( UMaterial* InMaterial, FOpenG
 		PixelShaderMaterial->PixelShaderType <= PS_DistortionAccum)
 	{
 		static FLOAT MAX_DISTORTION_AMT_CLAMP = (UTexture::__Client) ? UTexture::__Client->MaxDistortion : 20.f;
-		// UC2GLDrv (O-7): Epic's "static FLOAT DISTORTION_CULL_DISTANCE = 5000.f;" is the setting
-		// above (5000 when the ini has none or an invalid value).
-		if( GUC2GLDistortionCullDistance <= 0.f )
+		// UC2GLDrv (O-7, F-5): Epic's "static FLOAT DISTORTION_CULL_DISTANCE = 5000.f;" is the
+		// device setting above (5000 when it is not positive).
+		static FLOAT LoggedCullDistance = 0.f;
+		FLOAT DISTORTION_CULL_DISTANCE = RenDev->DistortionCullDistance > 0.f ? RenDev->DistortionCullDistance : 5000.f;
+		if( DISTORTION_CULL_DISTANCE != LoggedCullDistance )
 		{
-			GUC2GLDistortionCullDistance = 5000.f;
-			FLOAT Configured = 0.f;
-			if( GConfig->GetFloat( TEXT("UC2GLDrv.UC2GLRenderDevice"), TEXT("DistortionCullDistance"), Configured ) && Configured > 0.f )
-				GUC2GLDistortionCullDistance = Configured;
-			debugf( NAME_Init, TEXT("UC2GLDrv: distortion fades out over %.0f units (DistortionCullDistance; the Xbox's is 5000)"), GUC2GLDistortionCullDistance );
+			LoggedCullDistance = DISTORTION_CULL_DISTANCE;
+			debugf( NAME_Init, TEXT("UC2GLDrv: distortion fades out over %.0f units (DistortionCullDistance of %s; the Xbox's is 5000)"), DISTORTION_CULL_DISTANCE, RenDev->GetClass()->GetPathName() );
 		}
-		FLOAT DISTORTION_CULL_DISTANCE = GUC2GLDistortionCullDistance;
 		// UC2GLDrv: an ini without MaxDistortion (PC's Default.ini has none) reads as 0, which
 		// would switch all distortion off and divide by zero below: Epic's no-client value.
 		if( MAX_DISTORTION_AMT_CLAMP <= 0.f )

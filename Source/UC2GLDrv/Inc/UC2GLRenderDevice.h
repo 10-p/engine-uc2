@@ -145,6 +145,10 @@ public:
 	// shaders stay on their fallback, the interface answers what PC's D3DDrv answers.
 	UBOOL							UsePostProcess,
 									DOFShippedBlurAlpha;	// UUCScreenDOF: the blur alpha byte the shipped binary read (65) instead of script's
+	// O-7, F-5: the distance over which screen-space distortion fades out (DistortionAccum.vsh;
+	// Epic's DISTORTION_CULL_DISTANCE, 5000 on the Xbox). A config property like the others, so
+	// each device class reads it from its own ini section (UC2GLMaterialState.cpp).
+	FLOAT							DistortionCullDistance;
 	// M7b (docs/porting/analysis/projectors.md): the Xbox shadow textures (FRenderCaps::XboxShadows:
 	// caster in ShadowDarkness grey, PS_ShadowBlur). Reported only while the PS_Blur family is
 	// drawn (post-processing on): PS_ShadowBlur shares its handler.
