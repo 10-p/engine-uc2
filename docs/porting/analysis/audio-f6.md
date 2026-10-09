@@ -297,3 +297,64 @@ accepted range, a guess from a head's ~0.7 ms; the measured 42 (0.875 ms: the da
 geometric ITD) failed it, so the range is 8..48 (the ±1 ms search window) and the reason is in the code comment
 (`logs/f6/selftest-1.out` has the failing run). With HRTF the broadband level difference drops from ±16 dB (pan pot)
 to ±5 dB: HRTF puts the difference into time and spectrum instead.
+
+**In the game, through the wave writer** (`tools/dev/run-uc2-audio.sh`, run tree `run/f6`, measured). HRTF on:
+```
+UC2_PRECMD="set UCDeathmatch NumPlayers 0" tools/dev/run-uc2-audio.sh f6 audio-deadbolt-hrtf 85 28 'DM-Deadbolt?NumBots=3' \
+    '-ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:UseHRTF=True'
+UC2ALAudio: HRTF requested (UseHRTF=True); HRTF is ACTIVE, data set "Default HRTF" (status 0x1)
+SUMMARY audio-deadbolt-hrtf: 83.43 s, peak -2.9 dBFS, RMS -27.9 dBFS, silent seconds 0; cue requests 794: played 388, culled 406, failed 0; Critical 0
+```
+HRTF off = the regression's own `audio-deadbolt` (same scenario, step 5): `UC2ALAudio: HRTF off (UseHRTF=False); HRTF
+is inactive (status 0x0)`. The interaural time difference, `tools/dev/audio-itd.py` (the 120-150 most lateral 1024-frame
+windows, |ILD| >= 3 dB; lag of the normalised cross-correlation of the first differences within ±1 ms;
+`logs/f6/itd-deadbolt-*.txt`):
+
+| capture | windows | near ear leads by >= 8 frames | \|lag\| <= 2 frames | median lead |
+|---|---|---|---|---|
+| audio-deadbolt-hrtf (UseHRTF=True) | 120 | **71 %** | 28 % | **23 frames (0.479 ms)** |
+| audio-deadbolt (UseHRTF=False) | 150 | 1 % | 92 % | 0 |
+| audio-praxis-efx (False) | 150 | 7 % | 82 % | 0 |
+| audio-praxis-dry (False) | 150 | 9 % | 75 % | 0 |
+
+So with `UseHRTF=True` a lateral source reaches the near ear first, by up to the self-test's 0.875 ms; without it the
+channels are in time (plain panning). The two deadbolt runs are not the same game to the sample (bots), only the
+same scenario; the contrast, not the exact share, is the result. Seen only: the HRTF run's level is ~3-4 dB lower
+(RMS -27.9 against -24.3 dBFS): HRTF filtering and its normalisation, not a change of the game's mix.
+
+## Step 5 - regression (2026-10-09)
+
+Run tree `run/f6` = this branch's `build-native` + `UC2_COOKED_DIR=logs/f6/cooked` (the 19 and `A_Vehicle`):
+`tools/dev/audio-regression.sh f6` (`logs/f6/audio-summary.txt`), measured:
+```
+SUMMARY audio-check: 183 index files; waves: 7191 decoded to their exact length of 7191 cooked (0 entries have no cooked wave); music streams: 21 of 21; cues [int]: 2469 in 79 cue tables: 2465 resolve fully, 0 partly, 4 to no decodable wave (0 use a localised bank); UC2AudioCheck: 79 cue tables, 2469 cues, 0 failures
+SUMMARY audio-selftest: UC2AudioSelfTest: 45 checks, 0 failed; Pan3D -1.10 dB, Pan2D -1.52 dB
+SUMMARY audio-menu-music: music NuBattle.wav in audio-menu.wav: envelope correlation 0.835 at 0.35 s, mix gain -19.02 dB (expected -19.00 dB, error -0.02 dB), control track Recoil.wav correlates 0.120: PASS
+SUMMARY audio-menu: 58.47 s, peak -19.0 dBFS, RMS -34.5 dBFS, silent seconds 0; cue requests 1: played 1, culled 0, failed 0; Critical 0
+SUMMARY audio-deadbolt: 83.71 s, peak 1.9 dBFS, RMS -24.3 dBFS, silent seconds 0; cue requests 864: played 406 (50 distinct), culled 458 (54 distinct), failed 0; Critical 0
+SUMMARY audio-praxis-efx: 83.52 s, peak -1.7 dBFS, RMS -23.5 dBFS, silent seconds 0; cue requests 760: played 258 (42 distinct), culled 502 (91 distinct), failed 0; Critical 0
+SUMMARY audio-praxis-dry: 83.58 s, peak -1.5 dBFS, RMS -24.1 dBFS, silent seconds 0; cue requests 826: played 248 (40 distinct), culled 578 (79 distinct), failed 0; Critical 0
+```
+Against the standing numbers (REPORT 40.7): Check 7,141 -> 7,191 waves (+19 decoded, +31 `A_Vehicle`), 2,438 -> 2,469 cues
+(+31), "15 to no decodable wave" -> 4 (spa: 18 -> 4), 0 failures as before; SelfTest 39 -> 45 checks (the 6 HRTF ones),
+0 failed, Pan3D/Pan2D unchanged; menu music identified at -19.02 dB as before (correlation 0.835, the standing range
+0.84-0.87 rounded); every capture 0 silent seconds, 0 failed cues, 0 Critical.
+
+The newly playable cues did not come up by chance in those captures (`LI_Fire` was culled by distance 8 times), so one
+more run plays them on purpose (`UC2_POSTCMD` = four `UC2AUDIO PLAY` joined with `|`, `DM-Deadbolt?NumBots=0`, 60 s):
+```
+UC2Audio: [  34.56] A_Combo.Combo_SentinelFire on UCPlayerController0: played 2D        (an xwb-decoded wave)
+UC2Audio: [  34.57] A_Gameplay.Gib_Explosion_LI on UCPlayerController0: played 2D       (xwb-decoded variations)
+UC2Audio: loaded sound bank A_Vehicle (31 sounds, 31 cues)
+UC2Audio: loaded wave bank A_Vehicle.uc2wb (31 waves)
+UC2Audio: [  34.57] read wave pack A_Vehicle.ogp (483003 bytes) in 0 ms
+UC2Audio: [  34.57] A_Vehicle.Shenu_EngineStart on UCPlayerController0: played 2D
+UC2Audio: [  34.57] A_Combo.Combo_Pounce_Travel on UCPlayerController0: played 2D
+SUMMARY audio-newcues: 58.60 s, peak -3.5 dBFS, RMS -22.8 dBFS, silent seconds 0; cue requests 171: played 171, failed 0; Critical 0
+```
+Web: the reader (`UC2AudioData.cpp`) is unchanged, so the web audio spec was not run (the brief: only if the reader
+changed). The HRTF code also compiles into the web build's device; that build was **not built or run** here.
+
+Memory ceilings used: cook 4G, ucc-bin 2G, game captures 2G (inside `run-uc2-audio.sh`), builds 6G `-j4`, Python
+analysis 2G; none was hit (no exit 137). Game runs were started when no other `uc2.bin` was running or the load was
+under 16, except the HRTF capture: two other agents' games started between the check and the run (seen in `pgrep`).
