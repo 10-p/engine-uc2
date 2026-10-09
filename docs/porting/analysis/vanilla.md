@@ -205,3 +205,28 @@ LOST K.`, Space unbound after it). Space + direction dodging stays (bKeysAsStick
   relative path at two speeds, but it cannot show that the test would catch a desktop's acceleration. Label: the
   control is inconclusive; a real desktop (X11 with libinput, Windows, Wayland) was not measured.
 - Web: pointer lock with `unadjustedMovement` is the frontend's (`rawPointerLock.ts`); not touched (frontend parked).
+
+## Step 7 (2026-10-09, from 02:35): both ways, every suite
+
+Builds at the final engine code (`16d60cb`; nothing in `Source/` outside `Classes/` changed after it): native
+`bin/capped 6G 3600 -- cmake --build build-native -j4` rc 0 (`logs/f1/build-native-3.log`); wasm-perf
+`source env.sh; bin/capped 4G 1200 -- cmake --preset wasm-perf` + `bin/capped 6G 7200 -- cmake --build
+build-wasm-perf -j4` rc 0, 0 errors (`logs/f1/build-wasm-perf-1.log`; `SDLLaunch.wasm` sha256 2b0554bc353e4dcf...;
+its `SDLLaunch.data` carries the web inis with `aMouseX Speed=6.0` and `bLazyMouseCamera=False`); windows below.
+Script build: `tools/dev/script-build.sh --tree f1-make` rc 0, `Success - 0 error(s), 85 warning(s)`.
+
+Null-renderer suites (`logs/f1/s7b/`, driver `logs/f1/s7b.sh`; load 36-41 from other agents):
+- `ucc-bin verifyclasses`: "All native class layouts match" on `f1-van` and `f1-reb`.
+- `jit-trace.sh` at uneven pacing (judder RMS per segment fwd/back/right/left, px; limit 1.0):
+  rebuilt kbm (rigid) 0.53/0.42/0.54/0.53 PASS; rebuilt kbm lazy 0.43/0.53/1.44/1.49; rebuilt pad 0.38/0.45/1.19/1.55;
+  vanilla kbm 0.37/0.48/0.96/1.46; vanilla pad 0.38/0.46/1.17/1.57. Every lazy-camera run (pad on both packages,
+  vanilla's mouse, rebuilt with `bLazyMouseCamera=True`) has the same strafe figure: Epic's lazy camera trailing the
+  pawn down and up the ramp of the strafe segments (jitter.md step 3: "pad strafes 0.6-2.2 judder at every pacing ...
+  identical in the shipped scripts"); forward/back are clean in all five. So the lazy key gives exactly Epic's camera,
+  and the rigid camera keeps the jitter fix (b = 0 there, judder 0.42-0.54 = the walk bob).
+- `net-test.sh --keep-tree listen` (port 7862) on `f1-netvan` and `f1-netreb`: listen.hit, listen.kill, listen.clean,
+  leftovers PASS on both (`logs/f1/s7b/net-*`).
+- `d9-rebind.sh` (menu match restart nodefaults pad actions) on `f1-reb`: **119 PASS, 0 FAIL** (`logs/f1/s7-reb/d9/`),
+  with the clear-on-conflict expectations: "S: MOVE FORWARD. MOVE BACK LOST S.", S = MoveForward and W unbound in the
+  live bindings, in User.ini and after a restart, W walks nowhere in the match, "K: JUMP / DODGE. 1ST / 3RD PERSON
+  LOST K." from the pad, the look keys' new commands listed under TURN LEFT/RIGHT, LOOK UP/DOWN.
