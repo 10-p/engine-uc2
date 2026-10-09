@@ -282,3 +282,70 @@ and unloaded by module index, one run at a time (no other harness was running).
      are applied now, on the desktop as on the twin, and the twin follows the desktop within 0.4 %.
    Verdict: a measurable difference that makes the web picture the desktop's (mean distance halved), small to the
    eye at 1x (the crops need the enlargement to show it). The code stays; the owner may judge from the crops.
+
+## Step 5: the depth-texture gap (commit `e40d6ec`, `tools/dev/m11-twin.sh`)
+
+WebGL 2 has depth textures in core (`DEPTH24_STENCIL8`, sampled), so on the WebGL 2 path the "no depth texture"
+case does not exist: the browser reports `capabilities: ... depth texture yes, gl_FragDepth yes, 32-bit indices
+yes ... fragment highp yes` without any extension (`logs/f3/e2e-run-1.txt`). The case remains only for a browser
+WITHOUT WebGL 2 whose WebGL 1 lacks `WEBGL_depth_texture` (UC2GL4ESDrv falls back to WebGL 1 when no WebGL 2
+context can be had). `m11-twin.sh`: the twin is OpenGL ES 3.0 by default; `-glnodepthtexture` runs on the ES 2
+path and is an INFO line (no longer a FAIL); new check `es2` (boot + self-test of the ES 2 / WebGL 1 path);
+pinned compares with the desktop WITH its LOD bias. Run 3 (`logs/f3/twin-es3-run3.txt`): pinned PASS, fallbacks
+PASS (4 masks; depth texture INFO: `selftest 12 passed, 3 failed` (the three depth readers), static part vs
+the ES 3 twin 0.170, `no depth textures on this context: the depth of field ... stays off`), es2 PASS (`binding:
+OpenGL ES 2 through GL4ES`, `OpenGL ES 2.0 Mesa`, 15/15, 0 GL errors).
+
+**What a WebGL 1-only device gets now** (decision for the owner: support WebGL 1 at all?): the ES 2 path exactly as
+before F-3 minus FXAA: no anti-aliasing at all (no multisampled framebuffers in WebGL 1; FXAA is gone); with
+`WEBGL_depth_texture` everything else as before (depth of field, distortion occlusion); without it no depth of
+field and distortion drawn over nearer geometry (fallback not implemented); without `EXT_frag_depth` the in-shader
+depth test; GLSL ES 1.00 with GL4ES' int-overload helpers (which NVIDIA's own ES driver rejects: step 3). Cost of
+keeping it: `-sMIN_WEBGL_VERSION=1` (Emscripten keeps its WebGL 1 code and extension names), the raw depth-stencil
+path in the driver (about 25 raw GLES calls, below), the `es2` check. Every desktop browser with WebGL 2 (all
+current Chrome, Firefox, Safari 15+) never takes it. Dropping it would be `MIN_WEBGL_VERSION=2`, `GLESVersion` gone,
+and the raw depth path and its `#ifdef __EMSCRIPTEN__` deleted.
+
+## Step 6: "GLES behind GL4ES' back" (commit `b6f5ced`)
+
+The depth-stencil texture through GL4ES on ES3 first failed the self-test (step 2's experiment table). Experiment
+G (`logs/f3x/fx-selftest-expG.out`): the same GL4ES path with the texture UNBOUND through GL4ES after its creation
+(`glBindTexture(GL_TEXTURE_2D, 0)`, as the raw path always did): **15 passed, 0 failed, 0 GL errors**. Left bound,
+a later GL4ES texture call that relies on "the bound texture" reached the depth texture (which call exactly was
+not traced; the unbind is what the raw path did all along). With that, on OpenGL ES 3 / WebGL 2 the depth-stencil
+texture, the depth-stencil renderbuffers (multisampled; and the masked no-depth-texture case) and their attachments
+(one `DEPTH_STENCIL_ATTACHMENT`) go through GL4ES, and so does the self-test's depth upload.
+Run 4 (`logs/f3/twin-es3-run4.txt`): boot PASS, selftest PASS (15/15 both), progtest PASS (7760/7760 identical),
+es2 PASS; `es3-nodepthtex` (ES3, -glnodepthtexture, renderbuffer through GL4ES) and `es3-aa-map` (ES3, MSAA):
+0 GL errors.
+
+The list (all in `Source/UC2GLDrv/Src/UC2GLRenderDevice.cpp`; 58 `Raw_` call sites in the source, unchanged, because
+the ES 2 / WebGL 1 path keeps them):
+
+| Function | Raw calls | Runs on ES 3 / WebGL 2? | Why it stays raw (where it does) |
+|---|---|---|---|
+| `CreateDepthStencilTexture` | 9 | **no** (through GL4ES) | ES 2: GL4ES' unsized/16-bit depth, rejected by WebGL 1 |
+| `CreateDepthStencilRenderbuffer`, `DeleteDepthStencilRenderbuffer` | 4 + 1 | **no** | ES 2: GL4ES splits depth and stencil |
+| `RawBindFramebuffer`, `AttachDepthStencilTexture`, `AttachDepthStencilRenderbuffer` | 3 + 5 + 5 | **no** | ES 2: WebGL 1 wants one `DEPTH_STENCIL_ATTACHMENT`, GL4ES' ES 2 path splits it |
+| `UploadMainDepth` (self-test) | 6 | **no** | ES 2: as above |
+| `CompressedTexImage2D` | 5 | yes | GL4ES always decodes DXT in software (any ES version); a fork change could pass S3TC through where the hardware has it (candidate) |
+| `TexImage2D` (engine textures) | 7 | yes | GL4ES regenerates mip chains from level 0 (seen again in the combiner test, step 4); ES3 has `GL_TEXTURE_MAX_LEVEL`, so a fork change passing levels and max level through would let these and the driver's chain completion go (candidate, not done) |
+| `PrepareGL4ESTextureZero` | 5 | yes | WebGL 2 has no default texture either |
+| `FindRawExt`, `DetectCapabilities`, `CheckGLError` | 4 + 1 | yes | queries of the hardware itself (no state) |
+
+So on WebGL 2 the calls that change GLES state behind GL4ES are now the texture uploads (S3TC and engine
+textures) and texture zero: 17 sites instead of 50; the queries stay. On ES 2 / WebGL 1 nothing changed.
+
+## Step 7: the browser with the final wasm (`b6f5ced`, sha256 `9208758a04e50083a3a293534abec89d999ff45b01aa34b1cf1d00ca1748a596`)
+
+`yarn build` with this artifact; `serve-web/SDLLaunch.wasm` = `9208758a...` before and after each run. Twin
+references: `logs/f3/twin-ref/ref-menu-box-8.png`, `ref-map-box-4.png` (ES 3 twin, 4x MSAA, UI box, AutoFOV).
+- menu test (`e2e-run-final.txt`): binding `WebGL 2 through GL4ES`, `drawn 4x multisampled`, 97 + 405 shaders,
+  `frame 600, 0 GL errors`, **menu vs twin 7.812** (tolerance 10), PSS 1404 MiB, cgroup peak 2780 MiB; FAILS only on
+  the spec's literal "WebGL 1" check.
+- map test (`e2e-run-final-DM-Dea.txt`): **map vs twin 2.922** (tolerance 3), 0 GL errors, 53.02 ms/frame (load 14-16),
+  PSS 1791 MiB, cgroup peak 3389 MiB; fails only on the same literal check.
+- play tests (`e2e-run-final-keyboa.txt`): **2 passed** (keyboard/mouse path, D-6 mouse look).
+- DM-Praxis: no spec of the frontend takes a picture of it (the boot spec uses DM-Deadbolt); not done.
+- The spec needs (frontend agent, after the merge): the two "WebGL 1" regexes (`uc2-wasm-boot.spec.js:293, 335`) and
+  the test title; its twin references made with `UC2_UIBOX=1 UC2_AUTOFOV=1` (the D-2 UI box), as here.
