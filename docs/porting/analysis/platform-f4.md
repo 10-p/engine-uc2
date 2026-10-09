@@ -301,3 +301,54 @@ Both runs FAILED the spec's judder limit (1.5 px; e.g. strafe right 2.17 before 
 machine at load 36 the camera's walk bob alone exceeds it (the O-11 runs had 21-57 ms). The frame times are the
 measurement asked for; one run each, under heavy unrelated load: **seen, not established**. The direction (shorter
 frames after) agrees with removing the invoke_ trampolines; it is not a benchmark.
+
+Native checks after F-4a..F-4e (run tree f4 from build-native at the F-4e source):
+- `ucc-bin verifyclasses` -> `All native class layouts match`; `CENSUS_NAME=f4-census tools/dev/map-census.sh build-native 15 4`
+  (capped 6G) -> `maps: 58  PASS: 58  FAIL: 0`.
+- Windows (build-windows, MinGW i686) under wine, `M12_TREE=f4-win tools/dev/m12-wine-smoke.sh verify capture`: verify PASS;
+  capture FAIL on the first try at load 40 (music correlation 0.445 at 8.60 s: the capture itself was written through
+  the WaveFile key), PASS on the rerun (correlation 0.841 at 0.40 s, gain error -0.01 dB). Flaky under load: seen, not
+  explained further.
+
+F-4e, the tools that were changed, rerun (logs under logs/f4):
+| Tool | What it exercised | Result |
+|---|---|---|
+| jit-trace.sh kbm uneven / kbm 60 | FramePattern / FrameRateCap through -ini: | PASS 0.63 px / PASS 0.30 px; dt mean 23.75 ms (pattern), 17.54 ms (cap 60) |
+| jit-strip.sh | FramePattern | 8 pictures, Critical 0; dt values exactly 40/55/70 ms |
+| d6-mouse.sh look | FrameRateCap=60 | 36 PASS, 0 FAIL |
+| d9-rebind.sh actions | FrameRateCap=60 | 10 PASS, 0 FAIL |
+| sc-saveconfig.sh g | FrameRateCap=60 | ALL PASS (33 checks) |
+| audio-regression.sh f4 (run-uc2-audio.sh) | WaveFile=, UseEFX=False | all items PASS / Critical 0; praxis-dry logs "EFX switched off (UseEFX=False)" |
+| m9-movies.py --only cinematic | WaveFile= | 7 PASS |
+| m12-wine-smoke.sh capture | WaveFile= (wine) | PASS on the rerun (above) |
+| map-census.sh CENSUS_NODE=1 / native | the new mode / unchanged mode | 58/58 / 58/58 |
+| fps-bench.sh | new | PASS (table above) |
+| d6-mouse.sh pad (D6_SHIP_TREE=f4ship: UC2_SCRIPTS=assets/uc2-shipped/System) | FrameRateCap=30, ours and shipped scripts | 9 PASS, 0 FAIL |
+Not rerun: d9-rebind `match`/`restart` (they need the menu scenario's User.ini first; the same FrameRateCap argument as
+`actions`).
+
+## Final builds at 610887e (2026-10-09 03:2x, all inside bin/capped 6G, -j4; logs/f4/build-*-final.log, build-native64.log)
+
+| Preset | Result |
+|---|---|
+| native | exit 0; `uc2.bin` ELF 32-bit i386; verifyclasses all match; census 58/58 |
+| native64 | exit 0 (first build of this worktree); `ucc-bin` ELF 64-bit x86-64; verifyclasses: 401 classes, 0 mismatches, 6,588 scripts scanned |
+| windows | exit 0; `uc2.exe`/`ucc.exe` PE32 i386; wine verify PASS, capture PASS (rerun) |
+| wasm-perf | exit 0; SDLLaunch.wasm 13,668,590 bytes (main: 14,929,569), ucc-bin.wasm 10,845,392 (main: 11,809,272); meta.json gitSha 610887e with gl4es/openal-soft |
+| arm64 | exit 0 (`--target UCC`); `ucc-bin` ELF 64-bit aarch64; verifyclasses under qemu-aarch64: 401 classes, 0 mismatches |
+
+Memory ceilings used: builds 6G (none hit), game/ucc runs 2G, Node census 7G for 3 workers, browser runs 7G scope +
+e2e-mem-guard 18 GB machine-wide (peaks 14.5-17.9 GB machine-wide, of which ~12 GB other agents). No ceiling was hit
+(no exit 137). Leftovers checked after each run: none; the null sink was unloaded by index every time (0 left).
+
+## Open questions for the owner
+
+1. `-sOFFSCREEN_FRAMEBUFFER`: kept (engine-ut99's choice and frontend 2.43's root-cause fix; UC2's GL4ES path renders
+   with it), which differs from engine-ut2004 (dropped there because its gl4es bypassed the redirect). Keep?
+2. `FrameRateCap` default: 0 (uncapped, engine-ut2004) or 120 (engine-ut99/unreal1's default)?
+3. meta.json: UT2004's `repo@branch` only (done), or also the fetched commit (the brief asked; UT2004 says never)?
+4. The F-4e table's undecided rows: `-nostartupmovies`/`-nomovie` (keys exist; every agent uses the switch today),
+   `-inputtest`, the UC2GLDrv switches with existing keys, the test hooks (`-glshot`, `-glexec`, `-glpptoggle`,
+   `-movieshot`, `-nettest`...), the render switches (engine-ut2004 keeps the same table).
+5. Engine/Config's three Epic reference copies (DefaultXbox.ini, DefUserXbox.ini, KeyBinds.ini) are LF now too, so a plain
+   `git diff 7633696` shows every line; `--ignore-cr-at-eol` shows 0. Fine, or keep those three byte-identical (CRLF)?
