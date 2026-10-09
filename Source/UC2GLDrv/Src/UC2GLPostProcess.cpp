@@ -418,7 +418,7 @@ static void UC2GL_UpdateReferenceCopy( UUC2GLRenderDevice* RenDev )
 	RenDev->glUseProgram( RenDev->PostReferenceProgram );
 	RenDev->glUniform4f( RenDev->PostReferenceStepLoc, 1.f / (W * N), 1.f / (H * N), 0.f, 0.f );
 	// The samples fall between texels: bilinear for this pass (every other reader of the main
-	// colour samples texel centres; FXAA wants it bilinear anyway).
+	// colour samples texel centres).
 	RenDev->glActiveTexture( GL_TEXTURE0 );
 	RenDev->glBindTexture( GL_TEXTURE_2D, RenDev->MainColorTexture );
 	RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
@@ -426,8 +426,8 @@ static void UC2GL_UpdateReferenceCopy( UUC2GLRenderDevice* RenDev )
 	RenDev->DrawPostQuad( RenDev->PostReferenceProgram, RenDev->PostReferenceRectLoc, RenDev->MainColorTexture, RenDev->ReferenceFramebuffer, W, H, FlipRect, 0 );
 	RenDev->glActiveTexture( GL_TEXTURE0 );
 	RenDev->glBindTexture( GL_TEXTURE_2D, RenDev->MainColorTexture );
-	RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, RenDev->PresentFXAA ? GL_LINEAR : GL_NEAREST );
-	RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, RenDev->PresentFXAA ? GL_LINEAR : GL_NEAREST );
+	RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
 	RenDev->ReferenceVersion = RenDev->MainColorVersion;
 	RenDev->ReferenceCopies++;
 }

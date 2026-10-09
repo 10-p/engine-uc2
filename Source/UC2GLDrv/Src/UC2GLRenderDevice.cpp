@@ -54,8 +54,8 @@ static TArray<FString>	GExecCommands;
 // frame (0 = no, 1 = at the next frame with a player, n = n frames from now).
 static INT				GSelfTestPending = 0;
 static UBOOL			GShotRamp = 0;
-// -glshotpresented (O-8): -glshot pictures are what the present pass put on the screen (the gamma and
-// FXAA applied), read from the default framebuffer before the swap, instead of the main framebuffer.
+// -glshotpresented (O-8): -glshot pictures are what the present pass put on the screen (the gamma
+// applied), read from the default framebuffer before the swap, instead of the main framebuffer.
 static UBOOL			GShotPresented = 0;
 static TArray<FColor>	GPresentedPixels;
 static INT				GPresentedWidth = 0, GPresentedHeight = 0;
@@ -124,8 +124,6 @@ UUC2GLRenderDevice::UUC2GLRenderDevice()
 	MainSamples				= 0;
 	MainResolveFramebuffer	= MainMSColorRenderbuffer = MainMSDepthRenderbuffer = 0;
 	ResolvedColorVersion	= ResolvedDepthVersion = -1;
-	PresentFXAA				= 0;
-	PresentFXAALoc			= -1;
 	MainWidth				= 0;
 	MainHeight				= 0;
 	PresentProgram			= 0;
@@ -761,13 +759,14 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 			LevelOfAnisotropy, (INT)MaxAnisotropy );
 		if( !SUPPORTS_GL_EXT_texture_compression_s3tc )
 			debugf( NAME_Init, TEXT("UC2GLDrv: no S3TC; DXT textures are decompressed on upload") );
-		// O-8: multisampling where the main framebuffer can be multisampled (desktop GL),
-		// otherwise FXAA in the present pass (OpenGL ES 2 / WebGL 1 have no multisampled
-		// framebuffer objects; the context's own antialias attribute only reaches the default
-		// framebuffer, which receives nothing but the present quad).
-		PresentFXAA = AntiAliasing > 0 && ((IsGLES && GLESMajor < 3) || !SUPPORTS_MSAA);
+		// O-8: multisampling where the main framebuffer can be multisampled: desktop GL and (F-3)
+		// OpenGL ES 3 / WebGL 2. OpenGL ES 2 / WebGL 1 have no multisampled framebuffer objects (the
+		// context's own antialias attribute only reaches the default framebuffer, which receives
+		// nothing but the present quad): no anti-aliasing there. (Until F-3 FXAA in the present
+		// pass stood in for it; removed at the owner's word once real MSAA reached the web.)
+		UBOOL CanMultisample = SUPPORTS_MSAA && (!IsGLES || GLESMajor >= 3);
 		debugf( NAME_Init, TEXT("UC2GLDrv: anti-aliasing: %s"),
-			AntiAliasing <= 0 ? TEXT("off") : PresentFXAA ? TEXT("FXAA in the present pass (no multisampled framebuffers on this context)") : *FString::Printf( TEXT("%ix multisampled main framebuffer, resolved before it is read"), AntiAliasing ) );
+			AntiAliasing <= 1 ? TEXT("off") : !CanMultisample ? TEXT("none (no multisampled framebuffers on this context)") : *FString::Printf( TEXT("%ix multisampled main framebuffer, resolved before it is read"), AntiAliasing ) );
 
 		SupportsCubemaps = UseCubemaps;
 
@@ -839,9 +838,8 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 
 	glGenTextures( 1, &MainColorTexture );
 	glBindTexture( GL_TEXTURE_2D, MainColorTexture );
-	// (FXAA samples between texels; every other reader samples texel centres, the same either way.)
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, PresentFXAA ? GL_LINEAR : GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, PresentFXAA ? GL_LINEAR : GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0 );
@@ -880,7 +878,7 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 	MainSamples = 0;
 	// F-3: OpenGL ES 3 / WebGL 2 as well, through GL4ES (our fork passes multisampled renderbuffer
 	// storage and the resolve blit through; these renderbuffers are GL4ES' own, not raw).
-	if( (!IsGLES || GLESMajor >= 3) && !PresentFXAA && AntiAliasing > 1 && SUPPORTS_MSAA && MainDepthStencil )
+	if( (!IsGLES || GLESMajor >= 3) && AntiAliasing > 1 && SUPPORTS_MSAA && MainDepthStencil )
 	{
 		GLint MaxSamples = 0;
 		glGetIntegerv( GL_MAX_SAMPLES, &MaxSamples );
@@ -1502,43 +1500,15 @@ static const char* GPresentVertexShader =
 // uGamma = ( 1/Gamma, Contrast+0.5, (Brightness-0.5)*0.5 - Contrast*0.5 + 0.25, enabled ).
 // M7: with dynamic gamma the ramp is the 256-entry table FD3DDynamicGamma::UpdateDeviceGamma
 // computes (uRamp, one channel; uUseRamp 1), looked up per colour channel at texel centres.
-// O-8: uFXAA = ( 1/width, 1/height of the scene, enabled ). FXAA where the main framebuffer
-// cannot be multisampled (OpenGL ES 2 / WebGL 1): Timothy Lottes' "FXAA PC simple" filter (the
-// public reduced form: four diagonal neighbours give the edge direction, two or four taps along
-// it, the wider blend kept only if its luma stays within the neighbourhood's range). It runs on
-// the scene before the gamma, i.e. on what the game drew; the HUD and menus are in that picture
-// too (the engine draws them into the same buffer), so their edges are smoothed as well.
 static const char* GPresentFragmentShader =
 	"uniform sampler2D uScene;\n"
 	"uniform sampler2D uRamp;\n"
 	"uniform float uUseRamp;\n"
 	"uniform vec4 uGamma;\n"
-	"uniform vec4 uFXAA;\n"
 	"varying vec2 vTexCoord;\n"
-	"vec3 FXAA( vec2 UV )\n"
-	"{\n"
-	"	vec2 Rcp = uFXAA.xy;\n"
-	"	vec3 NW = texture2D( uScene, UV + vec2( -1.0, -1.0 ) * Rcp ).rgb;\n"
-	"	vec3 NE = texture2D( uScene, UV + vec2( 1.0, -1.0 ) * Rcp ).rgb;\n"
-	"	vec3 SW = texture2D( uScene, UV + vec2( -1.0, 1.0 ) * Rcp ).rgb;\n"
-	"	vec3 SE = texture2D( uScene, UV + vec2( 1.0, 1.0 ) * Rcp ).rgb;\n"
-	"	vec3 M = texture2D( uScene, UV ).rgb;\n"
-	"	vec3 Luma = vec3( 0.299, 0.587, 0.114 );\n"
-	"	float LNW = dot( NW, Luma ), LNE = dot( NE, Luma ), LSW = dot( SW, Luma ), LSE = dot( SE, Luma ), LM = dot( M, Luma );\n"
-	"	float LMin = min( LM, min( min( LNW, LNE ), min( LSW, LSE ) ) );\n"
-	"	float LMax = max( LM, max( max( LNW, LNE ), max( LSW, LSE ) ) );\n"
-	"	vec2 Dir = vec2( -((LNW + LNE) - (LSW + LSE)), (LNW + LSW) - (LNE + LSE) );\n"
-	"	float Reduce = max( (LNW + LNE + LSW + LSE) * (0.25 * 0.125), 1.0 / 128.0 );\n"
-	"	float RcpDirMin = 1.0 / (min( abs( Dir.x ), abs( Dir.y ) ) + Reduce);\n"
-	"	Dir = min( vec2( 8.0 ), max( vec2( -8.0 ), Dir * RcpDirMin ) ) * Rcp;\n"
-	"	vec3 A = 0.5 * (texture2D( uScene, UV + Dir * (1.0 / 3.0 - 0.5) ).rgb + texture2D( uScene, UV + Dir * (2.0 / 3.0 - 0.5) ).rgb);\n"
-	"	vec3 B = A * 0.5 + 0.25 * (texture2D( uScene, UV + Dir * -0.5 ).rgb + texture2D( uScene, UV + Dir * 0.5 ).rgb);\n"
-	"	float LB = dot( B, Luma );\n"
-	"	return (LB < LMin || LB > LMax) ? A : B;\n"
-	"}\n"
 	"void main()\n"
 	"{\n"
-	"	vec3 Scene = uFXAA.z > 0.5 ? FXAA( vTexCoord ) : texture2D( uScene, vTexCoord ).rgb;\n"
+	"	vec3 Scene = texture2D( uScene, vTexCoord ).rgb;\n"
 	"	vec3 Ramp = clamp( uGamma.y * pow( Scene, vec3( uGamma.x ) ) + vec3( uGamma.z ), 0.0, 1.0 );\n"
 	"	vec3 Result = mix( Scene, Ramp, uGamma.w );\n"
 	"	if( uUseRamp > 0.5 )\n"
@@ -1598,7 +1568,6 @@ UBOOL UUC2GLRenderDevice::CreatePresentProgram()
 	PresentGammaLoc		= glGetUniformLocation( PresentProgram, "uGamma" );
 	PresentRampLoc		= glGetUniformLocation( PresentProgram, "uRamp" );
 	PresentUseRampLoc	= glGetUniformLocation( PresentProgram, "uUseRamp" );
-	PresentFXAALoc		= glGetUniformLocation( PresentProgram, "uFXAA" );
 	return 1;
 
 	unguard;
@@ -1633,7 +1602,6 @@ void UUC2GLRenderDevice::DrawPresentPass( UViewport* Viewport )
 	glUniform4f( PresentGammaLoc, 1.f / Gamma, PresentContrast + 0.5f, (PresentBrightness - 0.5f) * 0.5f - PresentContrast * 0.5f + 0.25f, ApplyGamma ? 1.f : 0.f );
 	UBOOL UseRamp = GammaRampActive && GammaRampTexture && ApplyGamma && PostProcessActive();
 	glUniform1f( PresentUseRampLoc, UseRamp ? 1.f : 0.f );
-	glUniform4f( PresentFXAALoc, 1.f / Max( MainWidth, 1 ), 1.f / Max( MainHeight, 1 ), PresentFXAA ? 1.f : 0.f, 0.f );
 	glUniform1i( PresentRampLoc, 1 );
 	if( UseRamp )
 	{

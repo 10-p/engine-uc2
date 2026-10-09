@@ -125,8 +125,9 @@ public:
 	// Desktop GL: MainFramebuffer is then a multisampled framebuffer (renderbuffers), and
 	// MainColorTexture / MainDepthStencil are its resolve, in MainResolveFramebuffer, brought up
 	// to date (ResolveMain) before anything reads them: the copies the post-process samples,
-	// the depth copy, the present pass, ReadPixels. OpenGL ES 2 / WebGL 1 have no multisampled
-	// framebuffers: there the present pass applies FXAA instead (PresentFXAA).
+	// the depth copy, the present pass, ReadPixels. Desktop GL and (F-3) OpenGL ES 3 / WebGL 2 through
+	// GL4ES; OpenGL ES 2 / WebGL 1 have no multisampled framebuffers and get no anti-aliasing (the
+	// FXAA that stood in for it there until F-3 was removed at the owner's word, 2026-10-09).
 	INT								AntiAliasing;
 	INT								MainSamples;			// 0: the main framebuffer is single-sampled
 	GLuint							MainResolveFramebuffer,
@@ -134,8 +135,6 @@ public:
 									MainMSDepthRenderbuffer;
 	INT								ResolvedColorVersion,
 									ResolvedDepthVersion;
-	UBOOL							PresentFXAA;
-	GLint							PresentFXAALoc;
 	void ResolveMain( UBOOL Color, UBOOL Depth );
 	// The framebuffer that holds MainColorTexture / MainDepthStencil (the main one without MSAA).
 	GLuint MainTextureFramebuffer() { return MainSamples ? MainResolveFramebuffer : MainFramebuffer; }
