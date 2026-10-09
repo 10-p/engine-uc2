@@ -419,3 +419,29 @@ The frontend (read-only grep of `/home/ion/WorkUC2/ufrontend`, branch uc2; nothi
 `[UC2Movie] StartupMovies/Cinematics/LoadingMovie` are read by `appCanPlayFullscreenMovie` when a movie is asked for, and
 the logos are asked for after `InitEngine`, long after `appInit` applied the `-ini:` tokens. Measured: every native runner
 (m10-controls, run-uc2-shot, fx-owner...) now passes `-ini:System:[UC2Movie]:StartupMovies=False` and no logo plays.
+
+## The switch table, final (F-4 follow-up; the "done" column is what the code does now)
+
+| Switch (who added it) | Owner's decision | Done | Replacement / where | Tools changed |
+|---|---|---|---|---|
+| `-log`, `-ini:` | keep | kept | | |
+| `-windowed`, `-defaultres` (Epic, WinDrv; engine-ut2004's SDL2Drv too) | keep | kept | | |
+| `-usehomedir` | keep | kept | decides where the ini lives | |
+| `-nullrenderer`, `-opengl`, `-gl4es` (render switches, engine-ut2004's table) | keep | kept | | |
+| commandlet parameters (`CONFORM`, `CONFORMNOCONFIG`, `NOEPICORDER`, `DUMP=`, `LOAD=`, `MAP=`, `REF=`) | keep | kept | | |
+| `-maxfps=` (D-6) | (F-4e) | converted at F-4e | `[Engine.Engine] FrameRateCap` (default 0) | d6-mouse, d9-rebind, jit-trace, sc-saveconfig (F-4e) |
+| `-framepattern=` (jitter) | (F-4e) | converted at F-4e, one-shot now | `[SDLLaunch] FramePattern` test key | jit-trace, jit-strip (F-4e) |
+| `-frametrace=`, `-audiowave=`, `-noefx` | (F-4e) | removed / converted at F-4e | console `FRAMETRACE`; `[UC2ALAudio.UC2ALAudioSubsystem] WaveFile=`, `UseEFX=` | (F-4e) |
+| `-inputtest=` (M10) | convert | converted | `[SDL2Drv.SDL2Client] InputTestFile` (test key) | m10-controls, m10-inject (doc), fx-owner, f5-flicker, jit-strip, fps-bench, net-test.py, m12-wine-smoke, c1-ini-overrides (doc) |
+| `-inputlog` | remove | removed | `[SDL2Drv.SDL2Client] LogInput=True` exists | none used it |
+| `-glshot=`, `-glshotramp`, `-glshotpresented`, `-glexec=`, `-glpptoggle=` | convert | converted | test keys `ShotTimes`, `ShotRamp`, `ShotPresented`, `Exec`, `PostProcessToggleTimes` | run-uc2-shot, m7-effects, m7b-census, o9-census, o9-nvidia, m11-twin, pp-scale, m9-movies, m12-wine-smoke, m13-64bit, m14-scripts-check |
+| `-glpstoggle=` (M6) | (not named; a test hook with users) | converted | test key `PixelShaderToggleTimes` | run-uc2-shot, m11-twin |
+| `-glfftoggle=` (O-9) | (not named; no user) | removed | console `FFPROGRAMS` | none |
+| `-movieshot=` (M9) | convert | converted | `[UC2Movie] ShotTimes` (test key) | m9-movies |
+| `-nettest=`, `NETDROP=`, `NETPKTID=`, `-NETOLDACKS` | convert | converted | `[UC2NetTest] CommandFile`, `Drop`, `PacketIdStart`, `OldAcks` (test keys) | net-test.py |
+| `-nostartupmovies` (M9) | convert if the key works from `-ini:` at that point | converted (it does) | `[UC2Movie] StartupMovies=False` | 16 scripts + the two engine-repo web specs; the frontend's five uc2 specs: replacement strings for the coordinator |
+| `-nomovie`, `-nullmovies` (M9) | (not named; no user) | removed | `[UC2Movie]` keys | none |
+| `-glerrors`, `-[no]pixelshaders`, `-[no]postprocess`, `-[no]xboxshadows`, `-[no]xboxprojectors`, `-[no]terrain3layer`, `-glaa=`/`-glnoaa`, `-glunits=`, `-glstages=`, `-gl[no]ffprograms` | remove (each has its ini key) | removed | `CheckGLErrors`, `UsePixelShaders`, `UsePostProcess`, `UseXboxShadows`, `UseXboxProjectors`, `UseTerrain3Layer`, `AntiAliasing`, `MaxTextureUnits`, `MaterialStages`, `FixedFunctionPrograms`, each in the device's own section (`tools/dev/glini` writes both) | every script that passed them (glerrors 18, nopostprocess 9, glnoaa 7, o9-nvidia's units/ffprograms, m7b's noxboxprojectors); the frontend's `target.json` launcher option `-GL4ES -nopostprocess` (replacement given) |
+| `-glselftest`, `-glcombinertest`, `-glmatcensus`, `-glstats`, `-glnolodbias`, `-glnocombine3/4`, `-glno{depthtexture,fragdepth,uintindex,maxlevel,s3tc}`, `-gldualdiffuse=` | probes used by tools -> test keys | converted | `SelfTest`, `CombinerTest`, `MatCensus`, `Stats`, `NoLODBias`, `MaskCaps=<list>`, `DualDiffuse` | m11-twin, m11-progcmp (doc), m13-64bit, pp-scale, o9-nvidia, fx-owner (doc) |
+| `-glselftest1d`, `-glsnapshotlog`, `-glerrorsdraw`, `-glffsource`, `-glprojnoclip`, `-glnofog`, `-nogamma`, `-gl4esdebug` | unused probes -> delete | removed (code paths deleted; `LogFFPrograms`/`CheckGLErrorsPerDraw` members stay 0 for a debugger) | gl4es' own `LIBGL_DBGSHADERCONV`/`LIBGL_LOGSHADERERROR` environment for the last | none |
+| `-noinimigrate` (D-6) | goes with F-1 | untouched here (F-1 removes UC2InputMigrate) | | d6-mouse (F-1's branch) |
