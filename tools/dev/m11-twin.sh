@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# M11 / G2: every renderer test against the GL4ES/GLES2 twin of the driver, one PASS/FAIL line per check.
+# M11 / G2: every renderer test against the GL4ES twin of the driver, one PASS/FAIL line per check.
 #
 #   tools/dev/m11-twin.sh [check ...]          default: every check, in this order
 #   tools/dev/m11-twin.sh list
 #
-# The twin is the same uc2.bin with -gl4es (render device UC2GL4ESDrv.UC2GL4ESRenderDevice: an OpenGL ES 2
-# context behind gl4es, the code path the browser runs). Reference is always the desktop binding of the same
+# The twin is the same uc2.bin with -gl4es (render device UC2GL4ESDrv.UC2GL4ESRenderDevice: an OpenGL ES 3.0
+# context behind gl4es' ES 3 back end, the code path the browser runs on WebGL 2; F-3, docs/porting/analysis/
+# webgl2.md. The OpenGL ES 2 / WebGL 1 path, kept for browsers without WebGL 2, is check es2). Reference is always the desktop binding of the same
 # binary, run in the same call from the same pinned views. Two run trees are rebuilt from build-native:
 # <WorkUC2>/run/m11 (desktop) and run/m11t (twin); logs and pictures go to logs/m11 and logs/m11t. Every run
 # is inside <WorkUC2>/bin/capped (2G) through tools/dev/run-uc2-shot.sh; nothing is left running.
@@ -23,19 +24,24 @@
 #   m6         the M6 pixel-shader pictures (pixel shaders on / off) on both
 #   fallbacks  the twin with each capability masked: -glnos3tc (engine decodes DXT), -glnomaxlevel on the
 #              desktop (mip chains completed by the driver), -glnofragdepth (depth test in the distortion
-#              passes' shaders), -glnouintindex (32-bit indices stored as 16-bit); -glnodepthtexture is run
-#              and reported, its fallback is NOT implemented (the line says what happens instead)
+#              passes' shaders), -glnouintindex (32-bit indices stored as 16-bit). The last two are WebGL 1
+#              cases (core in WebGL 2) and run on the OpenGL ES 2 path. -glnodepthtexture: a WebGL 1 context
+#              without WEBGL_depth_texture (core in WebGL 2), whose fallback is NOT implemented: run on the
+#              OpenGL ES 2 path and reported as an INFO line (what happens instead); since F-3 it decides
+#              nothing, because only a browser without WebGL 2 can be in that case (owner: keep WebGL 1?)
+#   es2        the OpenGL ES 2 / WebGL 1 path (GLESVersion=2 on an ES 2.0 context): boot and the self-test
 #   movies     tools/dev/m9-movies.py scenarios logos, logos-skip, menu-movie on the twin
 #
 # M11_SERIAL=1 runs the two bindings one after the other instead of side by side (one game run at a time).
 # Thresholds are in the check functions, each with its reason; docs/porting/analysis/web-renderer.md has the
 # measurements they come from. A line starting with "INFO" is a measurement that decides nothing.
 set -u
-# The twin's OpenGL ES context is version 2.0, not the 3.2 Mesa gives by default: ES-3-only leniency would
-# hide what WebGL 1 rejects (web-renderer.md, "A stricter twin"). MESA_DEBUG=1 makes Mesa print every error it
+# The twin's OpenGL ES context is version 3.0 (= WebGL 2), not the 3.2 Mesa gives by default: ES-3.1/3.2
+# leniency would hide what WebGL 2 rejects (web-renderer.md, "A stricter twin"; F-3: 2.0 until then, now the
+# es2 check's context). MESA_DEBUG=1 makes Mesa print every error it
 # raises, including those gl4es' own glGetError calls swallow; the boot check counts those lines. Neither
 # affects a desktop OpenGL context.
-export MESA_GLES_VERSION_OVERRIDE=${MESA_GLES_VERSION_OVERRIDE:-2.0}
+export MESA_GLES_VERSION_OVERRIDE=${MESA_GLES_VERSION_OVERRIDE:-3.0}
 export MESA_DEBUG=${MESA_DEBUG:-1}
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
@@ -46,7 +52,8 @@ imgdiff=$repo/tools/dev/imgdiff.py
 # the whole script without touching the trees of main)
 D=${M11_DESKTOP_TREE:-m11}; T=${M11_TWIN_TREE:-m11t}
 LD=$work/logs/$D; LT=$work/logs/$T
-ALL="shaders gputest boot selftest progtest pinned effects m6 fallbacks movies"
+ALL="shaders gputest boot selftest progtest pinned effects m6 fallbacks es2 movies"
+ES2="-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:GLESVersion=2"
 if [ "${1:-}" = list ]; then sed -n '/^#   shaders/,/^#   movies/p' "$0"; exit 0; fi
 want=${*:-$ALL}
 summary=$LT/m11-twin-summary.txt
@@ -129,8 +136,9 @@ check_progtest() {
 check_pinned() {
   # DM-Deadbolt, first PlayerStart, picture 0 with post-processing off, picture 1 with it on.
   both pinned-deadbolt 100 34 DM-Deadbolt -nopostprocess -glshot=44,56 -glpptoggle=48
-  # The desktop once more without texture LOD bias: OpenGL ES has none on the fixed-function path, so this
-  # is the picture the twin is expected to equal (web-renderer.md, "Texture LOD bias").
+  # The desktop once more without texture LOD bias. Until F-3 GL4ES ignored the bias and this was the picture
+  # the twin was expected to equal; since our fork applies it (webgl2.md, step 4) the twin must be nearer the
+  # desktop WITH the bias than this one: that is the check that the bias reaches the GLES path.
   UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D pinned-deadbolt-nb 75 34 DM-Deadbolt -opengl -glerrors -nopostprocess -glnolodbias -glshot=44 > "$LD/pinned-deadbolt-nb.report" 2>&1
   local a b c ok=1 e
   # Static part of this view: x >= 760 (left of it: the pawn, a pickup, the HUD, which animate).
@@ -139,15 +147,19 @@ check_pinned() {
   c=$("$imgdiff" "$LD/pinned-deadbolt-1.png" "$LT/pinned-deadbolt-1.png" --box 760,0,1280,720 --side "$LT/pinned-deadbolt-on-side.png" --diff "$LT/pinned-deadbolt-on-diff.png")
   e=$(glerr "$LT/pinned-deadbolt.out")
   echo "INFO m11-pinned deadbolt, post-processing off, static part, desktop vs twin: $a" | tee -a "$summary"
-  echo "INFO m11-pinned deadbolt, post-processing off, static part, desktop without LOD bias vs twin: $b" | tee -a "$summary"
+  echo "INFO m11-pinned deadbolt, post-processing off, static part, desktop without LOD bias vs twin (must be the larger): $b" | tee -a "$summary"
   echo "INFO m11-pinned deadbolt, post-processing on, static part, desktop vs twin: $c" | tee -a "$summary"
-  # Thresholds (static part): against the desktop without LOD bias no pixel may be off by more than 32
-  # levels and at most 0.5% by more than 8 (measured 0.20%: the unexplained residue, see the notebook);
-  # with the bias and with post-processing on (glow spreads every difference) the mean stays below 3.
-  le "$(num above32 "$b")" 0 && le "$(num above8 "$b")" 0.5 && le "$(num mean "$b")" 0.8 || ok=0
-  le "$(num mean "$a")" 3 && le "$(num mean "$c")" 3 || ok=0
+  # Thresholds (static part), against the desktop with its LOD bias (F-3; before, against the desktop without
+  # it, with the same numbers): at most 0.01% of the pixels off by more than 32 levels (measured on the ES 3
+  # twin: 0.001%, 4 pixels of an edge) and 0.5% by more than 8 (measured 0.26%: the residue, see the notebook),
+  # mean below 0.8 (measured 0.384); the desktop without the bias further away than the one with it (measured
+  # 0.871 against 0.384; 1.415 against 0.374 the other way round while GL4ES ignored the bias); with
+  # post-processing on (glow spreads every difference) the mean stays below 3.
+  le "$(num above32 "$a")" 0.01 && le "$(num above8 "$a")" 0.5 && le "$(num mean "$a")" 0.8 || ok=0
+  le "$(num mean "$a")" "$(num mean "$b")" && ! le "$(num mean "$b")" "$(num mean "$a")" || ok=0
+  le "$(num mean "$c")" 3 || ok=0
   [ "$e" = 0 ] && [ "$(crit "$LT/pinned-deadbolt.out")" = 0 ] || ok=0
-  [ $ok = 1 ] && result PASS pinned "deadbolt: off, no LOD bias: $b; twin GL errors ${e:-?}" || result FAIL pinned "deadbolt: off '$a' / no LOD bias '$b' / on '$c'; twin GL errors ${e:-?}"
+  [ $ok = 1 ] && result PASS pinned "deadbolt: off: $a (desktop without LOD bias: mean $(num mean "$b")); twin GL errors ${e:-?}" || result FAIL pinned "deadbolt: off '$a' / no LOD bias '$b' / on '$c'; twin GL errors ${e:-?}"
 }
 
 check_effects() {
@@ -228,15 +240,31 @@ check_fallbacks() {
       fails=$((fails+1)); echo "FAIL m11-fallback-$sw: picture '$st' selftest '${s:-none}' GL errors '${e:-?}' critical $(crit "$L/fb-$sw.out")" | tee -a "$summary"
     fi
   done
-  # The mask whose fallback is not implemented: run, so that what happens is on record.
+  # The mask whose fallback is not implemented, on the WebGL 1 path (an OpenGL ES 2.0 context, GLESVersion=2): the
+  # only place where it can happen since F-3 (depth textures are core in WebGL 2). Run, so that what happens is
+  # on record; an INFO line, not a failure: the owner decides whether WebGL 1 stays supported at all (webgl2.md).
   for sw in glnodepthtexture; do
-    UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T fb-$sw 110 34 DM-Deadbolt -gl4es -glerrors -$sw -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$LT/fb-$sw.report" 2>&1
+    MESA_GLES_VERSION_OVERRIDE=2.0 UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T fb-$sw 110 34 DM-Deadbolt -gl4es -glerrors -$sw $ES2 -glshot=44 -glexec=50:POSTSELFTEST@100:exit > "$LT/fb-$sw.report" 2>&1
     st=$("$imgdiff" "$LT/fb-ref-0.png" "$LT/fb-$sw-0.png" --box 760,0,1280,720 --diff "$LT/fb-$sw-diff.png" 2>&1)
     s=$(grep -a -o "selftest summary: [0-9]* passed, [0-9]* failed" "$LT/fb-$sw.out"); e=$(glerr "$LT/fb-$sw.out")
-    fails=$((fails+1))
-    echo "FAIL m11-fallback-$sw: FALLBACK NOT IMPLEMENTED. With the capability masked: critical $(crit "$LT/fb-$sw.out"), GL errors ${e:-?}, ${s:-no selftest summary}, static part vs the twin with the capability: $st; $(grep -a -o 'UC2GLDrv: no [a-zA-Z_ ]* on this context: [^(]*' "$LT/fb-$sw.out" | head -2 | tr '\n' ' ')" | tee -a "$summary"
+    echo "INFO m11-fallback-$sw: WebGL 1 without WEBGL_depth_texture only (core in WebGL 2); FALLBACK NOT IMPLEMENTED. With the capability masked on the OpenGL ES 2 path: critical $(crit "$LT/fb-$sw.out"), GL errors ${e:-?}, ${s:-no selftest summary}, static part vs the ES 3 twin with the capability: $st; $(grep -a -o 'UC2GLDrv: no [a-zA-Z_ ]* on this context: [^(]*' "$LT/fb-$sw.out" | head -2 | tr '\n' ' ')" | tee -a "$summary"
   done
-  result FAIL fallbacks "4 of 5 masks have a working fallback (S3TC, texture max level, gl_FragDepth, 32-bit indices); depth textures do not ($fails failing lines)"
+  [ $fails = 0 ] && result PASS fallbacks "4 masks with a working fallback (S3TC, texture max level, gl_FragDepth, 32-bit indices); depth textures: WebGL 1 only, INFO line above" || result FAIL fallbacks "$fails of 4 masks failed (lines above)"
+}
+
+check_es2() {
+  # The OpenGL ES 2 / WebGL 1 path, kept for browsers without WebGL 2 (UC2GL4ESDrv falls back to it): an ES 2.0
+  # context, GLESVersion=2 (gl4es' ES 2 back end, GLSL ES 1.00, no MSAA). Boot and the self-test, as on ES 3.
+  MESA_GLES_VERSION_OVERRIDE=2.0 UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T es2-selftest 220 34 DM-Deadbolt -gl4es -glerrors $ES2 -glexec=44:POSTSELFTEST@170:exit > "$LT/es2-selftest.report" 2>&1
+  local o=$LT/es2-selftest.out cls s e
+  cls=$(grep -a -o "Initializing UC2GLDrv (class [^;]*; binding: [^)]*)" "$o")
+  s=$(grep -a -o "selftest summary: [0-9]* passed, [0-9]* failed" "$o"); e=$(grep -a -o "[0-9]* GL errors in [0-9]* frames" "$o" | tail -1)
+  if [[ "$cls" == *"binding: OpenGL ES 2 through GL4ES"* ]] && grep -a -q "GLES hardware: .*OpenGL ES 2.0" "$o" && [ "$s" = "selftest summary: 15 passed, 0 failed" ] \
+     && [[ "$e" == "0 GL errors in "* ]] && [ "$(crit "$o")" = 0 ] && grep -a -q "97 fragment shaders compiled, 0 failed" "$o"; then
+    result PASS es2 "$cls; $(grep -a -o 'GLES hardware: .*' "$o" | head -1); $s; $e"
+  else
+    result FAIL es2 "class '$cls' selftest '${s:-none}' errors '${e:-?}' critical $(crit "$o") (see $o)"
+  fi
 }
 
 check_movies() {
