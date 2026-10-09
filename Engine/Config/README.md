@@ -5,6 +5,12 @@ copies of the Epic tree's `System/` files (first commit). `tools/dev/mkrun-uc2.s
 tree's when it assembles a run tree, so this folder is where our defaults live. Every change from Epic's
 file is listed here with its reason; `git log -p Engine/Config` has the exact diff.
 
+Line endings: every `.ini` here and in `web/` is LF (since F-4d, 2026-10-09), as engine-ut2004's and engine-ut99's
+are (owner: "follow what UT2004 UT99 and the rest does"). Epic's files were CRLF; `Default.ini` had been LF since the
+M7 merge, the others still CRLF. `tools/dev/sync-web-ini.py` refuses a CR in any of them. The engine reads both.
+To see the real changes against Epic's import, ignore the line endings: `git diff --ignore-cr-at-eol 7633696 --
+Engine/Config` (214 lines for `Default.ini`, 110 for `DefUser.ini`, 0 for the three reference copies).
+
 | File | Setting | Epic | Ours | Why |
 |---|---|---|---|---|
 | `Default.ini` | `[URL] Port` | 1000 | 7777 | 1000 is the Xbox system-link port and is privileged (below 1024) on Linux, so a server could not listen. 7777 is the Unreal Engine 2 default. |

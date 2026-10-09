@@ -172,7 +172,7 @@ history (import commit 7633696) and in `epic-sources`. `Src/makefile` is left as
 Configuration (`Engine/Config/Default.ini`, rows in `Engine/Config/README.md`): `ViewportManager` ->
 `SDL2Drv.SDL2Client`, `RenderDevice` -> `Engine.NullRenderDevice` (Epic's lines kept as comments), new
 section `[SDL2Drv.SDL2Client]` = copy of `[WinDrv.WindowsClient]`. `AudioDevice` was already
-`Engine.NullAudioDevice`. The file keeps its CRLF line endings (it is a byte copy of Epic's).
+`Engine.NullAudioDevice`. The file keeps its CRLF line endings (it is a byte copy of Epic's). [Superseded: LF since the M7 merge for `Default.ini`, every `Engine/Config` ini LF since F-4d, `platform-f4.md`.]
 
 ## Step 6 - first boots, and what running found
 
