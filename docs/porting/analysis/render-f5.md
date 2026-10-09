@@ -227,3 +227,59 @@ DistortionAccum) are all ported.
 | `UnpackPosition` | left out: needs the packed Xbox vertex format (`FPackedPosition`, `XBOX_ASSET_FORMAT`); PC streams carry plain positions |
 
 Counts: 49 ported, 16 left out, 2 includes; 67 files.
+
+### Step 4 (02:20-03:00): CTF-Aqueduct shadow flicker. NOT reproduced; measured under 9 conditions; no fix made.
+
+**What the shadows are** (`GLSCENECENSUS`, `OBJ DUMP`, logs `logs/f5/fx-aq-*.out`): 16 level-static projectors, all
+with the texture `T_NK_Foliage.Shadows.NKFol_Shadow_Cherry01_Osc`, a `TexOscillator` (U stretch, V pan, rate 0.03 Hz,
+amplitude 0.05: a slow sway, about one cycle in 33 s), modulate, `bGradient` on all, **`bProjectOnBackfaces` on 10 of the
+16** (census letter `k`: Projector0, 8, 9, 10, 13, 1, 4, 15, 5, 7, 16, 17 minus the four without it: 11, 12, 2, 3), projecting
+on BSP/terrain/static meshes/actors; drawn as Xbox static-projector batches (R-14). No shadow projector or decal at load.
+
+**Tools** (committed): `tools/dev/f5-flicker.sh` (one GPU run, headless, SDL offscreen as `fx-owner.sh UC2_GPU=1`;
+consecutive frames, one `exec shot` per tick; phases `run` (time running, camera still), `frozen`, `move` (time
+stopped; per frame the view turns `F5_STEP` yaw units and/or moves `F5_DXY` units: a path that repeats exactly, so a
+run with projectors and one without (`-ini:System:[SDL2Drv.SDL2Client]:Projectors=False`) compare frame by frame),
+`walk` (time running, pad forward); `F5_GL4ES=1 F5_SOFT=1` runs the GLES twin on Mesa). `tools/dev/f5-flicker.py`: the
+measure: a pixel flickers at frame i when its luminance steps more than 24 levels one way and then back (an up-down-up
+toggle; smooth motion and the slow sway do not count); per-frame share, mean change, a map, a strip.
+
+**Measurements** (1280x720, AA 4x, `logs/f5/flicker/`; flicker = mean share of toggling pixels over the frames):
+
+| Run | Condition | flicker | mean change/frame |
+|---|---|---|---|
+| `probe1` | 1p canyon floor (4300,300), time running, camera still | 0.28% (the first-person weapon's idle motion) | 1.12 |
+| `probe1` | same, time stopped, view turned 8 yaw units a frame | 0.008% | 1.72 |
+| `pawn-run` | 3p, pawn standing in the tree shadow at (4280,0), time running | 0.003% | 0.12 |
+| `far-on` / `far-off` | 1p looking down the canyon floor (4300,600) at the far shadows, view turned 24 units a frame; projectors on / off | 0.032% / 0.039% | 3.62 / 3.89 |
+| `fwd-on` / `fwd-off` | 1p walking 12 units a frame through the shadows of Projector10 (4300,400 -> 4300,112), time stopped; on / off | 3.38% / 5.07% (texture detail under translation: more without the shadows) | 10.1 / 12.3 |
+| `fwd-twin` | same path, GLES twin (GL4ES, Mesa) | 3.46%; frame by frame against the desktop: mean 2.4-2.7 of 255 | 10.4 |
+| `walk-desk` | 3p walking with time running (strip seen by eye) | 5.6% (motion) | 14.0 |
+| `v1-on/off` | 1p floating over the canyon at (3813,-299,600) looking down at the projected rocks, frozen, turned 8 units a frame | consecutive frames 1.63 (on) vs 1.76 (off), every step equal | |
+
+In none of them does the projected shadow change more than the scene around it from one frame to the next; frames
+with time stopped and the camera still are identical (0.00-0.05 mean change), so nothing alternates between frames
+(no "shadow texture every other frame", no projector drawn every other frame). The projector contribution (on minus
+off, same frame) is a clean leaf pattern with soft edges, no speckle or stripes (z-fighting would show as noise).
+
+**Why z-fighting is unlikely on this GPU, by arithmetic**: the batched projector geometry is drawn with `SetZBias(1)`
+(`UnProjector.cpp` `RenderStaticPrimsBatch`), our `glPolygonOffset(0, -5)` (`UC2GLRenderInterface.cpp:796`, 5 depth
+units); the near plane is 10 (`Core.cpp:236`), so at 3000 units one depth unit is 0.054 world units, the offset 0.27;
+the copies of the geometry differ from the originals by float rounding (about 3e-4 units at coordinates near 5000).
+
+**"Faces looking away from the light"**: by design of the map, as on the Xbox. 10 of the 16 tree projectors have
+`bProjectOnBackfaces`; Epic's Xbox shader takes `max(N . -D, backface flag)` (`ProjectorAtten.vsh`, ported register
+for register), i.e. full strength on surfaces facing away; the PC path skips its normal cube-map attenuation for them
+too (`UC2GLMaterialState.cpp` 4515). UE2 projectors are not occluded either: the leaf pattern lands on everything in
+the frustum within `MaxTraceDistance`, under overhangs and on rocks facing away included. Not a port defect.
+
+**Side finding (for F-3, not changed)**: the GLES twin on the NVIDIA GPU (`F5_GL4ES=1` without `F5_SOFT`: an OpenGL ES
+3.2 context from the NVIDIA driver) fails at start: "present shader does not compile: implicit cast from float to int"
+and GL4ES-generated shaders with `clamp(float, float, float)`/`min(float, float)` overload errors, then `Assertion failed:
+RenDev` (`logs/f5/flicker/fwd-twin.out` of the first attempt, overwritten; reproduced by the command above). NVIDIA's
+GLSL ES compiler is stricter than Mesa's; the browser goes through ANGLE, so this is not the web path, but it is a
+strictness bug in our present shader or GL4ES' output.
+
+**What I need from the owner to go further**: native or web (and which browser/GPU), window size, AA, standing or
+moving (mouse turn, walk), and a spot: `NETPLACE` coordinates are easiest from the console (`NETPROBE x` prints the
+pawn's location in the log), or a screenshot of the place. Every condition above is re-runnable with one command.
