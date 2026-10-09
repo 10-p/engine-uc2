@@ -250,3 +250,50 @@ file count and a few small fetches, against a second format in the reader, the c
 manifest change in the parked frontend. The real web cost in this area is the 23 persistent cue tables fetched one by
 one at start (1.3 s); the parked precache list (PLAN, "Parked for the frontend merge") fetches them up front, in
 parallel, without any format change. **Not implemented** (stopped at the recommendation, as the brief allows).
+
+## Step 4 - HRTF: `UseHRTF`, as engine-ut2004 (2026-10-09)
+
+**What engine-ut2004 does** (read-only, `WorkUnreal/engine-ut2004/Source/ALAudio/Src/ALAudioSubsystem.cpp:104-108,
+339-379`, ufront 2.61): config key `UseHRTF` in `[ALAudio.ALAudioSubsystem]`, compiled default `0`, `Default.ini`
+`UseHRTF=False` (also the web ini). At device open, whenever the library has `ALC_SOFT_HRTF`, it asks EXPLICITLY:
+`ALC_HRTF_SOFT` (0x1992) = 1/0 in the context attributes, and with `UseHRTF=True` also `ALC_OUTPUT_MODE_SOFT` (0x19AC)
+= `ALC_STEREO_HRTF_SOFT` (0x19B2) when `ALC_SOFT_output_mode` exists (HRTF is a stereo rendering: a 5.1 device would
+otherwise ignore it). It logs the request, then reads back `ALC_HRTF_SOFT` ("HRTF is ACTIVE/inactive"). No
+`alcResetDeviceSOFT` (the setting applies at the next device open). The frontend's target data
+(`unreal-frontend-arch-private/targets/ut2004/target.json:178`): `"audioHrtf": { "iniPath": "System/UT2004.ini",
+"iniToken": "System", "section": "ALAudio.ALAudioSubsystem", "key": "UseHRTF", "on": "True", "off": "False",
+"default": false }`; UT99/Unreal use `NOpenALDrv.NOpenALAudioSubsystem` with the same key; the launcher seeds
+`-ini:System:[<section>]:UseHRTF=` ("Headphone audio (HRTF)", `docs/migration/steps/2.61-openal-soft-web.md:305,401`).
+
+**Done here (the same key, default, request and log):**
+- `Source/UC2ALAudio/Inc/UC2ALAudio.h:38` `UBOOL UseHRTF`; `UC2ALAudioSubsystem.cpp:455` config property, `:467` default 0.
+- `UC2ALAudioSubsystem.cpp:556` attribute array widened to 16; `:593-614` the explicit request (as UT2004, plus: the
+  self-test's loopback device always asks for it off, since its expected values are plain panning); `:689-702` the
+  read-back log line, with the data set name and `ALC_HRTF_STATUS_SOFT`.
+- `Engine/Config/Default.ini:146`, `Engine/Config/web/Default.ini:147` `UseHRTF=False`; `Engine/Config/README.md` one row.
+- Frontend side parked (PLAN "Parked for the frontend merge": the HRTF launcher switch): the uc2 target data would be
+  `"audioHrtf": { "iniPath": "System/Avaris.ini", "iniToken": "System", "section": "UC2ALAudio.UC2ALAudioSubsystem",
+  "key": "UseHRTF", "on": "True", "off": "False", "default": false }` (the section name differs from UT2004's
+  because the class does; the key is the same).
+- OpenAL Soft's data: the fetched 1.25 build embeds its "Default HRTF" (`ALSOFT_EMBED_HRTF_DATA=ON`, the library's
+  default, `build-native/CMakeCache.txt:95`); nothing to install.
+
+**Self-test, a new section (`UC2AudioSelfTest.cpp:571-603`, hook `UC2TestSetHRTF` `UC2ALAudioSubsystem.cpp:2168`, which
+uses `alcResetDeviceSOFT` on the loopback device):** the pan check's source (`A_Weapon.RL_Fire` 2,000 units to the
+right / left) with HRTF off and on; interaural level difference (energy) and time difference (lag of the
+cross-correlation peak, `CrossLag :53`). Measured (`logs/f6/selftest-2.out`, run tree `run/f6`):
+```
+UC2ALAudio: HRTF off (self-test loopback); HRTF is inactive (status 0x0)
+PASS hrtf off: HRTF inactive, status 0x0
+PASS hrtf off left : right minus left -16.3 dB, near ear leads by 1 frames (0.021 ms) (expected -2..2)
+PASS hrtf off right: right minus left +15.8 dB, near ear leads by 0 frames (0.000 ms) (expected -2..2)
+PASS hrtf on : HRTF active, status 0x1, data set "Default HRTF"
+PASS hrtf on  left : right minus left -5.1 dB, near ear leads by 42 frames (0.875 ms) (expected 8..48)
+PASS hrtf on  right: right minus left +4.9 dB, near ear leads by 42 frames (0.875 ms) (expected 8..48)
+UC2AudioSelfTest: 45 checks, 0 failed; Pan3D -1.10 dB, Pan2D -1.52 dB
+```
+(39 old checks unchanged, same Pan3D/Pan2D as the standing numbers; 6 new.) The first run used 8..40 frames as the
+accepted range, a guess from a head's ~0.7 ms; the measured 42 (0.875 ms: the data set's own delays add to the
+geometric ITD) failed it, so the range is 8..48 (the ±1 ms search window) and the reason is in the code comment
+(`logs/f6/selftest-1.out` has the failing run). With HRTF the broadband level difference drops from ±16 dB (pan pot)
+to ±5 dB: HRTF puts the difference into time and spectrum instead.

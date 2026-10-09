@@ -35,6 +35,7 @@ class UUC2ALAudioSubsystem : public UAudioSubsystem
 	UBOOL			UseEFX;					// environmental reverb through EFX when the device has it
 	UBOOL			MusicFades;			// honour PlayMusic/StopMusic fade times (the Xbox ignored them)
 	UBOOL			CueLog;					// one DevSound line per cue request (DevSound is suppressed by default)
+	UBOOL			UseHRTF;				// headphone virtualisation (OpenAL Soft's HRTF, stereo output); engine-ut2004's key, off by default
 
 	// Not configuration: set by UC2AudioSelfTest before Init() to mix into memory (OpenAL Soft's loopback
 	// device, a simulated clock, a fixed listener) instead of opening an output device.
