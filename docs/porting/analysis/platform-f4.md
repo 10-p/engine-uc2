@@ -445,3 +445,51 @@ the logos are asked for after `InitEngine`, long after `appInit` applied the `-i
 | `-glselftest`, `-glcombinertest`, `-glmatcensus`, `-glstats`, `-glnolodbias`, `-glnocombine3/4`, `-glno{depthtexture,fragdepth,uintindex,maxlevel,s3tc}`, `-gldualdiffuse=` | probes used by tools -> test keys | converted | `SelfTest`, `CombinerTest`, `MatCensus`, `Stats`, `NoLODBias`, `MaskCaps=<list>`, `DualDiffuse` | m11-twin, m11-progcmp (doc), m13-64bit, pp-scale, o9-nvidia, fx-owner (doc) |
 | `-glselftest1d`, `-glsnapshotlog`, `-glerrorsdraw`, `-glffsource`, `-glprojnoclip`, `-glnofog`, `-nogamma`, `-gl4esdebug` | unused probes -> delete | removed (code paths deleted; `LogFFPrograms`/`CheckGLErrorsPerDraw` members stay 0 for a debugger) | gl4es' own `LIBGL_DBGSHADERCONV`/`LIBGL_LOGSHADERERROR` environment for the last | none |
 | `-noinimigrate` (D-6) | goes with F-1 | untouched here (F-1 removes UC2InputMigrate) | | d6-mouse (F-1's branch) |
+
+## Step 10 - every tool touched, rerun (2026-10-09 10:00-14:40; machine load 3-36 from the other agents)
+
+Commands: one tool at a time (`scratch/chain*.sh`, logs `logs/f4/f4b-tools/<tool>.txt`), trees `run/f4b*` (`run/m13-f4b`,
+`run/m7b-f4b` where the tool insists on its prefix). Builds: native, windows, native64, wasm-perf at the final source.
+
+| Tool | What it exercised | Result |
+|---|---|---|
+| run-uc2-shot.sh (smoke) | CheckGLErrors, ShotTimes, Exec, Stats; one-shot | 0 GL errors; `-glshot at 40.0 s`; `-glexec at 46.0 s: exit`; Avaris.ini afterwards: `CheckGLErrors=True`, `StartupMovies=False` (settings), no test key |
+| m10-controls.sh (all 5) | InputTestFile, StartupMovies, AntiAliasing | keyboard 16, mouse 18, text 7, pad 33, both 14: PASS (10:05) |
+| m12-wine-smoke.sh (13 checks) | the same under wine; ShotTimes; WaveFile | 13/13 PASS over two runs (keyboard/pad/pinned needed the 4,096-character command line; then PASS) ; final build: verify, gl PASS |
+| fx-owner.sh praxis-near | InputTestFile, CheckGLErrors | GPU: `critical=0 glerrors=0 programs_failed=0+0 shots=[xbox raised]`; software (Mesa) at load 7: both shots, `0 GL errors in 76 frames` (its glerrors field reads the frame-600 line, which a 76-frame run never reaches); at load 22 the match did not start (8 frames: load) |
+| f5-flicker.sh | StartupMovies, CheckGLErrors, InputTestFile | desktop GPU: 12 pictures, 0 GL errors in 1,987 frames; `F5_GL4ES=1` on the NVIDIA GPU: present shader does not compile there (known, render-f5.md "side finding"; the twin needs `F5_SOFT=1`) |
+| jit-strip.sh / jit-trace.sh kbm uneven | FramePattern (one-shot) | 8 pictures, Critical 0, dt exactly the pattern / PASS 0.52 px; `Test key [SDLLaunch] FramePattern=... (read once)` |
+| fps-bench.sh | InputTestFile, StartupMovies | PASS 67.3 fps (10 s, 720p, load 19) |
+| c1-ini-overrides.sh | the -ini: mechanism with the runner's own -ini: tokens | first run: 1 FAIL (the check counted the runner's 4 overrides as well); check narrowed to its own section: ALL PASS |
+| sc-saveconfig.sh u g m / w | settings written back; Node | ALL PASS / ALL PASS |
+| audio-regression.sh (run-uc2-audio.sh) | StartupMovies, WaveFile | all items; menu music FAIL once at load 24 (correlation 0.461 at 8.30 s, the same signature as the wine capture flake of F-4), PASS on the rerun at load 10 (0.817 at 0.25 s, gain error -0.01 dB) |
+| package-windows.sh | (text only) | DLL check PASS |
+| m9-movies.py | [UC2Movie] ShotTimes, StartupMovies, CheckGLErrors | 19 checks, 0 failed |
+| net-test.sh (all but soak, wine) | [UC2NetTest] CommandFile/Drop/PacketIdStart/OldAcks, InputTestFile | every check PASS except `lag.healthseen: NetB did not respawn` (seen twice before in the history; 23 earlier PASSes, 5 other FAILs); handshake-loss/compat/wrap all PASS; `Test key [UC2NetTest] ...` lines for every key |
+| m7-effects.sh (14 + selftest) | UsePostProcess, ShotTimes, PostProcessToggleTimes, Exec, ShotRamp | selftest 15/0; 14 pairs critical=0 glerrors=0 programs_failed=0+0 |
+| m7b.sh (tree m7b-f4b) | UseXboxProjectors, Exec, FX_ARGS | 11 PASS, 0 FAIL |
+| m7b-census.sh / o9-census.sh (3 maps each, own trees) | Exec | census lines for every map (projectors, terrains / matcensus summaries) |
+| o9-nvidia.sh | FixedFunctionPrograms, MaxTextureUnits, MaskCaps, CombinerTest, MatCensus | first run: `o9-caps` FAIL: the settings passed with -ini: persisted in the tree's Avaris.ini into the next run (fixed: fresh Avaris.ini per run, d8516d9); rerun: combiner mesa x4, gpu x3, twin, caps PASS. `pictures`/`pictures-other`: need main's executable as uc2-before.bin, see below |
+| m11-twin.sh (all) | everything above on both devices; MaskCaps, NoLODBias, DualDiffuse, SelfTest | 27 PASS, 7 FAIL: the six F-5 knew (effect-blur, effect-liandri, effects, fallback-glnodepthtexture, fallbacks, movies) plus `m11-pinned`, whose two numbers swapped: desktop-with-LOD-bias vs twin 0.397, without 0.877 (F-5: 0.890 / 0.380). The NoLODBias key was applied to the right run (`Test key ... NoLODBias=True` only in pinned-deadbolt-nb.out); the twin's gl4es is now the fork's tip of 2026-10-09 02:14 (`6b6bccd`, fetched by today's configure; F-5 had `98441ed`), which honours the LOD bias (F-3's work) |
+| pp-scale.sh selftest glow | Exec, ShotTimes, UsePostProcess, PostProcessToggleTimes | PASS x4 |
+| m14-scripts-check.sh verify menu deadbolt effects | CheckGLErrors, ShotTimes, StartupMovies | PASS x4 |
+| d78.sh (ref tree = this build) | UsePostProcess, CheckGLErrors via m10 | 15 PASS, 1 FAIL `world-third-person` 98.10% (>= 98.5): the same number as the run in logs/d78/run (known) |
+| d2-ui-scale.sh run 640x480 1920x1080 | the same | menu and hud runs PASS at both sizes (measure not run: needs the reference trees with main's binaries) |
+| m13-64bit.sh verify controls glselftest leftovers | 64-bit | verify PASS (401 classes, 50 placeholders), glselftest 15/0, leftovers PASS; controls: pad 29/33, both 13/14 (see below) |
+| web: tools/dev/d78/web/uc2-d78.spec.js (frontend harness, my assembly run/f4b-web, wasm sha 24535e2b... before and after) | the -ini: strings through the launcher's Advanced field | 1 passed (37 s); `UC2GLDrv: frame 600, 0 GL errors so far` = CheckGLErrors=True reached the GL4ES device's section; mem-guard peak 13.5 GB machine-wide |
+| map-census.sh CENSUS_NODE=1 | ucc-bin.js with the final Core | 58 / 58 PASS |
+| verifyclasses (native, wine) | | all match |
+
+The pad's left stick (m10 pad and both, m13 controls; 4 + 1 checks): FAILS since the asset tree's GUI.u/UCGameplay.u/UCMenu.u
+were replaced at 11:28 by main's F-1 packages, and it is **not this branch**: (a) the branch BASE b6fcffb, built from
+an export (`run/f4b-basesrc`) and run with ITS OWN tools (the old `-inputtest`), fails the same four checks today;
+(b) main's binary (11:24, with F-1's engine side) with main's tools passes `pad (33 checks)`; (c) this branch passed
+33/33 at 10:05, before the asset change. It goes away when this branch is merged with main (F-1's engine and config).
+
+Not adopted: making `run-uc2-shot.sh` always start from a fresh Avaris.ini (it does so only with UC2_RES; every caller that
+passes different SETTINGS per run sets UC2_RES today). A caller that does not, and passes a setting, inherits it in the next run.
+
+Before/after comparisons with an executable OLDER than this change (`UC2_BIN=uc2-before.bin`, o9-nvidia's pictures,
+d2/d78's reference trees with main's binary, pp-scale's uc2-base.bin) no longer get their test hooks: an old binary reads
+`-inputtest=` and `-glshot=`, not the keys. Its settings still work (`-ini:` exists since C-1). A "before" for these tools has
+to be built from a source with the keys.
