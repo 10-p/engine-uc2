@@ -184,3 +184,24 @@ LOST K.`, Space unbound after it). Space + direction dodging stays (bKeysAsStick
 - Interactions to decide first: Lock + a tapped A/D switches target in UC2 (a double tap while locked would also
   dodge), the timed input sequences that watch the stick (`ProcessInputMatching`), and whether a double tap should
   also wall-dodge in the air (UCPawn.Dodge does if allowed). Estimate: half a day with a test in `d6-mouse.sh`.
+
+## Step 6 (2026-10-09): no mouse acceleration natively
+
+- engine-ut2004 (`/home/ion/WorkUnreal/engine-ut2004/Source/SDL2Drv/Src/SDL2Viewport.cpp`, read-only): no mouse hint
+  at all (`grep SDL_SetHint` finds `SDL_HINT_ORIENTATIONS` only); `SetMouseCapture` is `SDL_SetRelativeMouseMode`
+  and motion is `Ev.motion.xrel/yrel`. So it relies on SDL 2's defaults, which read raw motion in relative mode.
+- `Source/SDL2Drv/Src/SDL2Client.cpp` `Init`, before `SDL_InitSubSystem(SDL_INIT_VIDEO)`: `SDL_HINT_MOUSE_RELATIVE_MODE_WARP
+  "0"`, `SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE "0"`, `SDL_HINT_MOUSE_RELATIVE_SPEED_SCALE "1.0"` (SDL 2.32's
+  `SDL_mouse.c` reads them; `SDL_HINT_MOUSE_RELATIVE_SCALING` acts on an `SDL_Renderer` only, `SDL_render.c:1108`, so
+  it is not set). The same values as the defaults: nothing changes today; it pins them. Normal priority, so an
+  `SDL_MOUSE_*` environment variable still overrides (SDL's own rule).
+- Measured, `tools/dev/d6-mouse.sh accel` on `f1-reb` (`logs/f1/s2-d6/d6/accel.*`): real X pointer motion (XTEST,
+  `rmove`) with the Xvfb server's pointer acceleration set to 4x above a threshold of 1 (`XChangePointerControl`, read
+  back `[4, 1, 1]`): 200 counts slowly (100 events of 2, 20 ms apart) turn **10.010** units per count, 200 counts fast
+  (5 events of 40) **10.005**; pitch 10.010 / 10.000 (the linear mouse's 10.012 per count, within its carried
+  fraction): **N counts in = N counts out at both speeds**. Label: measured.
+- The control run with `SDL_MOUSE_RELATIVE_MODE_WARP=1` (SDL reads the warped system cursor) gave 9.91 / 10.01: Xvfb
+  did not accelerate XTEST's relative motion visibly even then, so this run shows exact counts through SDL's
+  relative path at two speeds, but it cannot show that the test would catch a desktop's acceleration. Label: the
+  control is inconclusive; a real desktop (X11 with libinput, Windows, Wayland) was not measured.
+- Web: pointer lock with `unadjustedMovement` is the frontend's (`rawPointerLock.ts`); not touched (frontend parked).
