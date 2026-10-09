@@ -520,11 +520,17 @@ int main( int argc, char** argv )
 	appArgv0( argv[0] );
 
 	// Command line: everything after the program name (appInit no longer drops a first token off Windows).
-	TCHAR CmdLine[1024]=TEXT("");
+	// 4096 characters, the size of Core's GCmdLine: settings go in as -ini: tokens (F-4 follow-up), and a test run's
+	// line passes 1024 (a token that does not fit is dropped whole, with a warning below).
+	TCHAR CmdLine[4096]=TEXT("");
+	UBOOL CmdLineCut = 0;
 	for( INT i=1; i<argc; i++ )
 	{
 		if( appStrlen(CmdLine) + strlen(argv[i]) + 2 >= ARRAY_COUNT(CmdLine) )
+		{
+			CmdLineCut = 1;
 			break;
+		}
 		if( i>1 )
 			appStrcat( CmdLine, TEXT(" ") );
 		appStrcat( CmdLine, ANSI_TO_TCHAR(argv[i]) );
@@ -547,6 +553,8 @@ int main( int argc, char** argv )
 		GSynchronizeFactory = &SynchFactory;
 		GThreadFactory      = &ThreadFactory;
 		appInit( GPackage, CmdLine, &Malloc, &Log, &Error, &Warn, &FileManager, FConfigCacheIni::Factory, 1 );
+		if( CmdLineCut )
+			debugf( NAME_Warning, TEXT("The command line is longer than %i characters: the arguments after '%s' were dropped"), ARRAY_COUNT(CmdLine), CmdLine + Max(0, appStrlen(CmdLine) - 40) );
 
 		// Static classes: native lookup tables and class registrants of every linked package.
 #if __STATIC_LINK

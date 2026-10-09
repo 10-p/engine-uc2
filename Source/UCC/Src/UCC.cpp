@@ -502,7 +502,9 @@ int main( int argc, char* argv[] )
 		#endif
 		
 		// Parse command line.
-		TCHAR CmdLine[1024], *CmdLinePtr=CmdLine;
+		// 4096, Core's GCmdLine (F-4 follow-up: -ini: tokens make long lines; Epic's 1024 had no bound check here and
+		// overflowed the stack). A token that does not fit is dropped whole.
+		TCHAR CmdLine[4096], *CmdLinePtr=CmdLine;
 		*CmdLinePtr = 0;
 		#if _MSC_VER
 			ANSICHAR* Ch = GetCommandLineA();
@@ -516,6 +518,11 @@ int main( int argc, char* argv[] )
 		#else
 			for( INT i=2; i<argc; i++ )
 			{
+				if( appStrlen(CmdLine) + strlen(argv[i]) + 2 >= ARRAY_COUNT(CmdLine) )
+				{
+					printf( "ucc: command line longer than %i characters: '%s' and what follows are dropped\n", (int)ARRAY_COUNT(CmdLine), argv[i] );
+					break;
+				}
 				if( i>2 )
 					appStrcat( CmdLine, TEXT(" ") );
 				appStrcat( CmdLine, ANSI_TO_TCHAR(argv[i]) );
