@@ -290,8 +290,9 @@ endif()
 # web.cpp: the mixer on its own pthread renders into a ring in the shared wasm memory, an AudioWorklet plays it;
 # every AudioContext call goes to the browser main thread; the context resumes on the page's next pointerdown/
 # keydown/touchend). Settings as engine-ut2004's web block (ufront 2.61), read-only template:
-#  - its scope gets its own compile options: the optimisation level, -pthread and exception catching of the
-#    engine (openal-soft reports every AL error by throwing and catching it internally), plus -msimd128
+#  - its scope gets its own compile options: the optimisation level, -pthread and -fexceptions (exception
+#    catching, which the engine's own code does not have since F-4a: openal-soft reports every AL error by
+#    throwing and catching it internally), plus -msimd128
 #    -msse4.1 so its SSE mixers compile through Emscripten's SIMD translation headers; none of the engine's
 #    clang compatibility flags (-fdelayed-template-parsing miscompiled openal-soft's static tables elsewhere);
 #  - NEON off (its header check passes on Emscripten and the runtime would prefer it), no dlopen, no wave
@@ -335,7 +336,7 @@ if(EMSCRIPTEN)
   set(_UC2_SAVED_C_FLAGS "${CMAKE_C_FLAGS}")
   set(_UC2_SAVED_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
   string(APPEND CMAKE_C_FLAGS " -pthread -msimd128 -msse4.1")
-  string(APPEND CMAKE_CXX_FLAGS " -pthread -sNO_DISABLE_EXCEPTION_CATCHING -msimd128 -msse4.1")
+  string(APPEND CMAKE_CXX_FLAGS " -pthread -fexceptions -msimd128 -msse4.1")   # -fexceptions: as engine-ut2004 (F-4a)
   FetchContent_MakeAvailable(OpenALSoft)
   set(CMAKE_C_FLAGS "${_UC2_SAVED_C_FLAGS}")
   set(CMAKE_CXX_FLAGS "${_UC2_SAVED_CXX_FLAGS}")

@@ -356,7 +356,17 @@ void UGameEngine::Init()
 
 	// Handle failure.
 	if( !Success )
+#ifdef __EMSCRIPTEN__
+	{
+		// uc2 port (F-4a, engine-ut2004): on the web a bad start-up map is not fatal (appErrorf is a throw, and
+		// catching is compiled out there). Entry is loaded: stay there and let the player pick from the menus.
+		debugf( NAME_Warning, TEXT("Startup map '%s' failed to load (%s): staying in the entry level"), Parm, *Error );
+		if( !GLevel )
+			GLevel = GEntry;
+	}
+#else
 		appErrorf( LocalizeError(TEXT("FailedBrowse"),TEXT("Engine")), Parm, *Error );
+#endif
 
 	// If RF_TagPersist GC is re-enabled, the following line should be moved up to just after the call to InitAudio()
 	// This screws up initial mouse capture when running in windowed mode, however, so leave it here otherwise
@@ -2830,6 +2840,9 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 			PackageMap = Pending->GetDriver()->ServerConnection->PackageMap;
 
 		guard(VerifyPackages);
+#ifdef __EMSCRIPTEN__
+		FString LoadMapFailSoft;	// uc2 port (F-4a): why the verify below failed, without a throw
+#endif
 		try
 		{
 			BeginLoad();
@@ -2847,6 +2860,21 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 						&(*PackageMap->List)(i).Guid
 					);
 				}
+#ifdef __EMSCRIPTEN__
+				// uc2 port (F-4a, engine-ut2004 5f02771): on the web GetPackageLinker answers NULL (no throw) for a
+				// package the join cannot have (not found, or another version than the server's), and VerifyLinker
+				// would call Verify() on NULL. Fail the join here with the reason a native client shows.
+				for (INT i = 0; i < PackageMap->List->Num(); i++)
+					if( !(*PackageMap->List)(i).Linker )
+					{
+						const TCHAR* Name = (*PackageMap->List)(i).Parent->GetName();
+						TCHAR Found[256];
+						const UBOOL HaveFile = appFindPackageFile( Name, &(*PackageMap->List)(i).Guid, Found );
+						LoadMapFailSoft = FString::Printf( HaveFile ? LocalizeError(TEXT("PackageVersion"),TEXT("Core")) : LocalizeError(TEXT("PackageNotFound"),TEXT("Core")), Name );
+						break;
+					}
+				if( LoadMapFailSoft.Len() == 0 )
+#endif
 				for (INT i = 0; i < PackageMap->List->Num(); i++)
 				{
 					VerifyLinker((*PackageMap->List)(i).Linker);
@@ -2856,8 +2884,36 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 					MapParent = (*PackageMap->List)(0).Parent;
 				}
 			}
+#ifdef __EMSCRIPTEN__
+			// uc2 port (F-4a, engine-ut2004): SafeLoadError does not throw on the web, so a failed load arrives
+			// as NULL; it takes the catch's way out below.
+			if( LoadMapFailSoft.Len() == 0 && !LoadObject<ULevel>( MapParent, TEXT("MyLevel"), *URL.Map, LOAD_Verify | LOAD_Throw | LOAD_NoWarn, NULL ) )
+				LoadMapFailSoft = FString::Printf( TEXT("Could not load map '%s'"), *URL.Map );
+#else
 			LoadObject<ULevel>( MapParent, TEXT("MyLevel"), *URL.Map, LOAD_Verify | LOAD_Throw | LOAD_NoWarn, NULL );
+#endif
 			EndLoad();
+#ifdef __EMSCRIPTEN__
+			if( LoadMapFailSoft.Len() )
+			{
+				// The catch's body (below), without a throw.
+				debugf( NAME_Warning, TEXT("LoadMap: %s - failing gracefully (no throw on the web)"), *LoadMapFailSoft );
+				Error = LoadMapFailSoft;
+				if (!bQuiet)
+					SetProgress( LocalizeError(TEXT("UrlFailed"),TEXT("Core")), *LoadMapFailSoft, 6.f );
+				if (GLevel->NetDriver)
+				{
+					GLevel->NetDriver->Notify = Pending;
+					GLevel->NetDriver = NULL;
+				}
+				if (GLevel->DemoRecDriver)
+				{
+					GLevel->DemoRecDriver->Notify = NULL;
+					GLevel->DemoRecDriver = NULL;
+				}
+				return NULL;
+			}
+#endif
 		}
 		#if UNICODE
 		catch( TCHAR* CatchError )
@@ -2935,7 +2991,15 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 		}
 		FString Error;
 		if( !GLevel->Listen( Error ) )
+#ifdef __EMSCRIPTEN__
+			// uc2 port (F-4a): the web build has no exception catching (cmake/UC2Web.cmake), so appErrorf ends
+			// the module. A listen that fails there (a browser game whose WebRTC transport is not up; ucc-bin.js
+			// under Node, whose socket emulation cannot listen) leaves the level running without network
+			// instead. Not in engine-ut2004 (it keeps appErrorf); UC2 needs it to load maps under Node.
+			debugf( NAME_Warning, TEXT("%s (web: the level runs without network)"), *FString::Printf( LocalizeError(TEXT("ServerListen"),TEXT("Engine")), *Error ) );
+#else
 			appErrorf( LocalizeError(TEXT("ServerListen"),TEXT("Engine")), *Error );
+#endif
 	}
 	unguard;
 

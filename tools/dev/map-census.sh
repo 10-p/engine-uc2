@@ -8,6 +8,10 @@
 # ticking when the timeout stops it. Result table: <WorkUC2>/logs/census/summary.tsv (+ one log per map).
 # CENSUS_NAME (default census) names the run trees (<name>-N) and the log folder; CENSUS_PORT (default 7780)
 # the first port: a second census (M13's 64-bit one: CENSUS_NAME=m13-census) does not collide with this one.
+# CENSUS_NODE=1: <build-dir> is an Emscripten build and each map runs as `node ucc-bin.js` (the wasm32 objects of the
+# browser build, under Node). Node's socket emulation cannot listen, so the server logs "can't listen ... the level
+# runs without network" (a warning on the web, F-4a) and keeps ticking. A map FAILS there also when the module
+# aborts ("Aborted(" or "RuntimeError" on stdout). Wrap the whole census in <WorkUC2>/bin/capped (about 1.5G per worker).
 set -uo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -31,18 +35,25 @@ run_worker() {
   for map in "${maps[@]}"; do
     if [ $(( i % workers )) -eq "$w" ]; then
       rm -f ucc.log
-      timeout -s TERM "$secs" ./ucc-bin Engine.ServerCommandlet "$map" "PORT=$((port + w))" -log >"$out/$map.stdout.log" 2>&1
-      rc=$?
+      if [ -n "${CENSUS_NODE:-}" ]; then
+        # Node with its pthread workers does not end on SIGTERM: KILL at the time limit, and read 137 as "still running".
+        timeout -s KILL "$secs" node ucc-bin.js Engine.ServerCommandlet "$map" "PORT=$((port + w))" -log >"$out/$map.stdout.log" 2>&1
+        rc=$?; [ "$rc" -eq 137 ] && rc=124
+      else
+        timeout -s TERM "$secs" ./ucc-bin Engine.ServerCommandlet "$map" "PORT=$((port + w))" -log >"$out/$map.stdout.log" 2>&1
+        rc=$?
+      fi
       cp -f ucc.log "$out/$map.log" 2>/dev/null
       # grep -c prints the count and still exits 1 when it is 0, so no `|| echo 0` here.
       warn=$(grep -a -c '^Warning:' "$out/$map.log" 2>/dev/null); warn=${warn:-0}
       crit=$(grep -a -c '^Critical:' "$out/$map.log" 2>/dev/null); crit=${crit:-0}
-      if grep -a -q "Bringing Level .*\.MyLevel up for play" "$out/$map.log" 2>/dev/null && [ "$crit" -eq 0 ] && [ "$rc" -eq 124 ]; then
+      abort=$(grep -a -c 'Aborted(\|RuntimeError\|TypeError\|exception catching is not enabled' "$out/$map.stdout.log" 2>/dev/null); abort=${abort:-0}
+      if grep -a -q "Bringing Level .*\.MyLevel up for play" "$out/$map.log" 2>/dev/null && [ "$crit" -eq 0 ] && [ "$abort" -eq 0 ] && [ "$rc" -eq 124 ]; then
         status=PASS
       else
         status=FAIL
       fi
-      printf '%s\t%s\texit=%s\twarnings=%s\tcritical=%s\t%s\n' "$status" "$map" "$rc" "$warn" "$crit" \
+      printf '%s\t%s\texit=%s\twarnings=%s\tcritical=%s\taborts=%s\t%s\n' "$status" "$map" "$rc" "$warn" "$crit" "$abort" \
         "$(grep -a -m1 '^Critical:' "$out/$map.log" 2>/dev/null | grep -a -v 'appError called' | cut -c1-120)" >>"$out/part-$w.tsv"
     fi
     i=$((i + 1))

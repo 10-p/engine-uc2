@@ -22,7 +22,11 @@ else()
 endif()
 
 target_link_options(${PROJECT_NAME} PRIVATE
-  ${UC2_WEB_EXCEPTION_FLAGS}
+  # Catching is ON at the link, as engine-ut2004's: openal-soft reports every AL error by throwing and catching
+  # it internally, and with catching off the first AL error aborts. Only objects compiled with -fexceptions
+  # (openal-soft's, root CMakeLists.txt) carry landing pads; the engine's own code is compiled without catching
+  # and gains no invoke_ calls (cmake/UC2Web.cmake, F-4a).
+  -sNO_DISABLE_EXCEPTION_CATCHING
   -sENVIRONMENT=web,worker
   # The engine runs on a worker; its blocking main loop yields once per frame through Asyncify
   # (SDLLaunchWeb.cpp). appSleep's emscripten_sleep is the other suspension point.
@@ -81,8 +85,8 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 # when the device opens: the mixer and the context's event thread. Pool 2 -> 4 (main(), Core's file-streaming
 # thread, those two): a thread created with the pool empty still starts, but only after the browser main thread
 # has spun up a worker for it, and the audio ring would absorb that delay as an underrun (engine-ut2004 found
-# this, ufront 2.61). emcc takes the last -s setting, so this overrides the 2 above. Exception catching stays on
-# (UC2_WEB_EXCEPTION_FLAGS): openal-soft throws and catches internally.
+# this, ufront 2.61). emcc takes the last -s setting, so this overrides the 2 above. Exception catching is on at
+# the link (above): openal-soft throws and catches internally.
 target_link_options(${PROJECT_NAME} PRIVATE -sPTHREAD_POOL_SIZE=4)
 # --- end M11 audio --------------------------------------------------------------------------------------------
 # --- M11: the GL device on the web (UC2GLDrv behind gl4es on WebGL 1; docs/porting/analysis/web-renderer.md) ---

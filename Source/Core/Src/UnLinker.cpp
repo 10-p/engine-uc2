@@ -311,12 +311,26 @@ ULinkerLoad::ULinkerLoad( UObject* InParent, const TCHAR* InFilename, DWORD InLo
 	guard(ULinkerLoad::ULinkerLoad);
 	Loader = GFileManager->CreateFileReader( InFilename, 0, GError );
 	if( !Loader )
+#ifdef __EMSCRIPTEN__
+	{
+		// uc2 port (F-4a, engine-ut2004's fail-soft loaders): no throw on the web (catching is compiled out
+		// there). Success stays != 1; GetPackageLinker drops the half-built linker and returns NULL.
+		debugf( NAME_Warning, TEXT("[PACKAGE-LOAD] Could not open package file '%s'"), InFilename );
+		return;
+	}
+#else
 		appThrowf( LocalizeError(TEXT("OpenFailed"),TEXT("Core")) );
+#endif
 
 	// Error if linker already loaded.
 	{for( INT i=0; i<GObjLoaders.Num(); i++ )
 		if( GetLoader(i)->LinkerRoot == LinkerRoot )
-			appThrowf( LocalizeError(TEXT("LinkerExists"),TEXT("Core")), LinkerRoot->GetName() );}
+#ifdef __EMSCRIPTEN__
+		{ debugf( NAME_Warning, TEXT("[PACKAGE-LOAD] Package '%s' is already loaded"), LinkerRoot->GetName() ); return; }
+#else
+			appThrowf( LocalizeError(TEXT("LinkerExists"),TEXT("Core")), LinkerRoot->GetName() );
+#endif
+	}
 
 	// Begin.
 	GWarn->StatusUpdatef( 0, 0, LocalizeProgress(TEXT("Loading"),TEXT("Core")), *Filename );
@@ -348,15 +362,27 @@ ULinkerLoad::ULinkerLoad( UObject* InParent, const TCHAR* InFilename, DWORD InLo
 	if( Summary.Tag != PACKAGE_FILE_TAG )
 	{
 		warnf( LocalizeError(TEXT("BinaryFormat"),TEXT("Core")), *Filename );
+#ifdef __EMSCRIPTEN__
+		debugf( NAME_Warning, TEXT("[PACKAGE-LOAD] '%s' is not a valid Unreal package (corrupt file or wrong format): skipping"), *Filename );
+		return;
+#else
 		throw( LocalizeError(TEXT("Aborted"),TEXT("Core")) );
+#endif
 	}
 	unguard;
 
 	// Validate the summary.
 	guard(CheckVersion);
 	if( Summary.GetFileVersion() < PACKAGE_MIN_VERSION )
+#ifdef __EMSCRIPTEN__
+	{
+		debugf( NAME_Warning, TEXT("[PACKAGE-LOAD] '%s' is an incompatible (older) package: file version %i, the engine needs >= %i"), *Filename, Summary.GetFileVersion(), PACKAGE_MIN_VERSION );
+		return;
+	}
+#else
 		if( !GWarn->YesNof( LocalizeQuery(TEXT("OldVersion"),TEXT("Core")), *Filename ) )
 			throw( LocalizeError(TEXT("Aborted"),TEXT("Core")) );
+#endif
 	unguard;
 
 	// Slack everything according to summary.
@@ -594,7 +620,16 @@ void ULinkerLoad::VerifyImport( INT i )
 						debugf( TEXT("Broken import: %s %s (file %s)"), *Import.ClassName, *GetImportFullName(i), *Import.SourceLinker->Filename );
 						return;
 					}
+#ifdef __EMSCRIPTEN__
+					// uc2 port (F-4a, engine-ut2004): the dependency is present but the referenced object is
+					// private (an incompatible package). Mark broken links, say so, continue: no throw on the web.
+					if( Cast<UPackage>(LinkerRoot) )
+						Cast<UPackage>(LinkerRoot)->PackageFlags |= PKG_BrokenLinks;
+					debugf( NAME_Warning, TEXT("[PACKAGE-LOAD] '%s' references a private/incompatible object: %s %s - skipping (broken link)"), *Import.SourceLinker->Filename, *Import.ClassName, *GetImportFullName(i) );
+					return;
+#else
 					appThrowf( LocalizeError(TEXT("FailedImportPrivate"),TEXT("Core")), *Import.ClassName, *GetImportFullName(i) );
+#endif
 				}
 				Import.SourceIndex = j;
 				break;
@@ -640,7 +675,16 @@ void ULinkerLoad::VerifyImport( INT i )
 				debugf( TEXT("Broken import: %s %s (file %s)"), *Import.ClassName, *GetImportFullName(i), *Import.SourceLinker->Filename );
 				return;
 			}
+#ifdef __EMSCRIPTEN__
+			// uc2 port (F-4a, engine-ut2004): the dependency is present but the referenced object is missing.
+			// Mark broken links, say so, continue: no throw on the web.
+			if( Cast<UPackage>(LinkerRoot) )
+				Cast<UPackage>(LinkerRoot)->PackageFlags |= PKG_BrokenLinks;
+			debugf( NAME_Warning, TEXT("[PACKAGE-LOAD] '%s' is missing referenced content: %s %s - skipping (broken link)"), *Import.SourceLinker->Filename, *Import.ClassName, *GetImportFullName(i) );
+			return;
+#else
 			appThrowf( LocalizeError(TEXT("FailedImport"),TEXT("Core")), *Import.ClassName, *GetImportFullName(i) );
+#endif
 		}
 	}
 	unguard;
