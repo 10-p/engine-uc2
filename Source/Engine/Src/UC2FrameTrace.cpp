@@ -11,7 +11,7 @@
 	  FRAMETRACE <frames> [tag]   one "FrameTrace:" line for each of the next <frames>
 	                              frames the first viewport draws with a pawn to view
 	                              (0 stops it)
-	Command line: -frametrace=<frames> arms it from the start.
+	(F-4e: the -frametrace=<frames> command-line switch is gone; the console command is the only way.)
 
 	A line (all positions world units, rotations Unreal units, screen in viewport pixels):
 	  frametrace <tag> <i> t=<Level.TimeSeconds> dt=<the frame's DeltaSeconds> cam=(x,y,z) camrot=(p,y,r)
@@ -39,30 +39,15 @@ static FName FrameTraceLogName()
 }
 #define FRAMETRACE ((EName)FrameTraceLogName().GetIndex())
 
-static INT		GFrameTraceLeft  = -1;	// -1: the command line not read yet
+static INT		GFrameTraceLeft  = 0;
 static INT		GFrameTraceIndex = 0;
 static FString	GFrameTraceTag;
-
-static void FrameTraceArmFromCommandLine()
-{
-	if( GFrameTraceLeft >= 0 )
-		return;
-	GFrameTraceLeft = 0;
-	INT Frames = 0;
-	if( Parse( appCmdLine(), TEXT("FRAMETRACE="), Frames ) && Frames > 0 )
-	{
-		GFrameTraceLeft  = Frames;
-		GFrameTraceIndex = 0;
-		GFrameTraceTag   = TEXT("cmd");
-	}
-}
 
 ENGINE_API UBOOL UC2FrameTraceExec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UC2FrameTraceExec);
 	if( !ParseCommand(&Cmd,TEXT("FRAMETRACE")) )
 		return 0;
-	FrameTraceArmFromCommandLine();
 	FString Frames, Tag;
 	ParseToken( Cmd, Frames, 0 );
 	if( !ParseToken( Cmd, Tag, 0 ) )
@@ -115,7 +100,6 @@ static const TCHAR* LookOwner( APlayerController* PC )
 ENGINE_API void UC2FrameTraceDraw( UViewport* Viewport, const FVector& CamLoc, const FRotator& CamRot, FLOAT DeltaSeconds )
 {
 	guard(UC2FrameTraceDraw);
-	FrameTraceArmFromCommandLine();
 	if( GFrameTraceLeft <= 0 || !Viewport || !Viewport->Actor )
 		return;
 	APlayerController* PC = Viewport->Actor;
