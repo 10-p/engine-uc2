@@ -3,7 +3,7 @@
 
   tools/dev/m11-progcmp.py <desktop.out> <twin.out> [tolerance, default 2]
 
-`POSTSELFTEST` / `-glselftest` makes the driver draw every usable pixel shader with five vertex-shader enums
+`POSTSELFTEST` / the test key `SelfTest=True` makes the driver draw every usable pixel shader with five vertex-shader enums
 and four sets of inputs each and log the centre pixel (`UC2GLDrv: progtest <n> <name> v<k>: rrggbbaa x4`).
 Prints one summary line and every program whose largest channel difference is above the tolerance; exit 0
 only if the two logs have the same programs and all are within it.

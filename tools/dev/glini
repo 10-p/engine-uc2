@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# The GL device's settings and test keys as -ini: arguments, for both device sections (F-4 follow-up: they replace the
+# -gl* / -no* command-line switches the engine no longer has).
+#
+#   tools/dev/glini <Key>=<Value> [...]        one -ini: token per line, for [UC2GLDrv.UC2GLRenderDevice] (the desktop
+#                                              device) and [UC2GL4ESDrv.UC2GL4ESRenderDevice] (its GL4ES twin, -gl4es)
+#   uc2.bin ... $("$repo/tools/dev/glini" CheckGLErrors=True ShotTimes=44,56 Exec=50:POSTSELFTEST)
+#
+# Both sections, because each device reads its OWN class section for its settings (CheckGLErrors, UsePostProcess,
+# AntiAliasing, UsePixelShaders, UseXboxProjectors, MaxTextureUnits, FixedFunctionPrograms...), and a run may use either
+# (-opengl / -gl4es). Test keys (ShotTimes, ShotRamp, ShotPresented, Exec, PixelShaderToggleTimes,
+# PostProcessToggleTimes, SelfTest, CombinerTest, MatCensus, Stats, NoLODBias, MaskCaps, DualDiffuse) are read once and
+# taken out of the ini of both sections (Source/UC2GLDrv/Src/UC2GLRenderDevice.cpp Init), so they never persist; the
+# settings are written into the run tree's Avaris.ini like any -ini: value (the runners start from a fresh one).
+# Values must not contain spaces: Exec uses '+' for a space, as before.
+for kv in "$@"; do
+  printf -- '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:%s\n-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:%s\n' "$kv" "$kv"
+done

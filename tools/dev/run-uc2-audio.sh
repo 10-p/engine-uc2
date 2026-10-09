@@ -44,8 +44,8 @@ fi
 inner=$(mktemp)
 cat > "$inner" <<INNER
 cd "$sys" || exit 1
-# M9: -nostartupmovies keeps the captures as they were (the logos would add 20 s of their own sound first)
-env ${UC2_AUDIO_ENV:-} ./uc2.bin "$url" -log -nostartupmovies "-ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=$out/$name.wav" "\$@" > "$out/$name.out" 2>&1 &
+# M9: -ini:System:[UC2Movie]:StartupMovies=False keeps the captures as they were (the logos would add 20 s of their own sound first)
+env ${UC2_AUDIO_ENV:-} ./uc2.bin "$url" -log -ini:System:[UC2Movie]:StartupMovies=False "-ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=$out/$name.wav" "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
 if [ "$fire" != 0 ]; then
   sleep \$(( $fire - 4 ))

@@ -40,7 +40,7 @@
 	Desktop GL only: under GL4ES (WebGL) gl4es already generates a shader of the same kind
 	from the fixed-function state, combine3 and combine4 included, with 8 units.
 	Switch: [UC2GLDrv.UC2GLRenderDevice] FixedFunctionPrograms (default True),
-	-glffprograms / -glnoffprograms, console FFPROGRAMS [0|1].
+	ini FixedFunctionPrograms, console FFPROGRAMS [0|1].
 =============================================================================*/
 
 #include "UC2GLDrv.h"

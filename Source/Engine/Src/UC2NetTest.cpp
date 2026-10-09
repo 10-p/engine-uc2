@@ -19,7 +19,8 @@
 	                                     other's, at the first of 16 headings with a clear path for
 	                                     a pawn-sized box between them, facing the other
 
-	Command file: -nettest=<file> (any process; the dedicated server has no other input).
+	Command file: test key [UC2NetTest] CommandFile=<file> (any process; set with -ini:, read once; the dedicated
+	server has no other input). Was -nettest=<file> (F-4 follow-up).
 	A harness appends lines; each tick runs every complete new line:
 	  exec <console command>             through UGameEngine::Exec (e.g. "exec netprobe S1",
 	                                     "exec servertravel DM-Recoil")
@@ -293,7 +294,7 @@ ENGINE_API UBOOL UC2NetTestExec( UGameEngine* Engine, const TCHAR* Cmd, FOutputD
 }
 
 /*-----------------------------------------------------------------------------
-	The -nettest=<file> command file.
+	The [UC2NetTest] CommandFile=<file> command file.
 -----------------------------------------------------------------------------*/
 
 struct FUC2NetTestFile
@@ -314,7 +315,7 @@ ENGINE_API void UC2NetTestTick( UGameEngine* Engine )
 		T.File = NULL;
 		T.PartialLen = 0;
 		FString Path;
-		if( Parse(appCmdLine(), TEXT("NETTEST="), Path) )
+		if( appReadTestKey( TEXT("CommandFile"), Path, TEXT("UC2NetTest") ) && Path.Len() )
 		{
 			T.File = fopen( TCHAR_TO_ANSI(*Path), "r" );
 			debugf( NETPROBE, TEXT("net test file %s: %s"), *Path, T.File ? TEXT("open") : TEXT("cannot open") );
@@ -360,8 +361,8 @@ ENGINE_API void UC2NetTestTick( UGameEngine* Engine )
 }
 
 /*-----------------------------------------------------------------------------
-	NETDROP=<spec>[,<spec>...]: deterministic packet loss for the network tests
-	(tools/dev/net-test.py handshake-loss). Read once from the command line; inert without it.
+	[UC2NetTest] Drop=<spec>[,<spec>...]: deterministic packet loss for the network tests
+	(tools/dev/net-test.py handshake-loss). A test key (-ini:, read once); inert without it. Was NETDROP=.
 	  <TEXT>[#n][+k]    when this process SENDS a control message starting with TEXT for the n-th time
 	                    on a connection (default 1), the packet carrying it is lost, and k more after it
 	  <<TEXT>[#n][+k]   when this process RECEIVES it for the n-th time, its next k outgoing packets on
@@ -394,7 +395,7 @@ static UBOOL DropInit()
 	{
 		Done = 1;
 		FString All;
-		if( Parse(appCmdLine(), TEXT("NETDROP="), All) && All.Len() )
+		if( appReadTestKey( TEXT("Drop"), All, TEXT("UC2NetTest") ) && All.Len() )
 		{
 			GDropSpecs = new TArray<FUC2DropSpec>;
 			GDropState = new TMap<UNetConnection*,FUC2DropState>;

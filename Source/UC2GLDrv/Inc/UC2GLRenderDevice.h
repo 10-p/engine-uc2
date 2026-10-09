@@ -121,7 +121,7 @@ public:
 									MainDepthRenderbuffer;	// ... or renderbuffer (M11: no depth textures)
 	INT								MainWidth,
 									MainHeight;
-	// M11 / O-8, anti-aliasing. AntiAliasing (ini; -glaa=N, -glnoaa) is the number of samples.
+	// M11 / O-8, anti-aliasing. AntiAliasing (ini) is the number of samples.
 	// Desktop GL: MainFramebuffer is then a multisampled framebuffer (renderbuffers), and
 	// MainColorTexture / MainDepthStencil are its resolve, in MainResolveFramebuffer, brought up
 	// to date (ResolveMain) before anything reads them: the copies the post-process samples,
@@ -243,14 +243,14 @@ public:
 
 	// O-9 (UC2GLFFProgram.cpp): the texture stages of fixed-function passes as GLSL instead
 	// of GL's texture environment. UseFixedFunctionPrograms is the ini switch
-	// (FixedFunctionPrograms; -glffprograms / -glnoffprograms; console FFPROGRAMS [0|1]);
+	// (FixedFunctionPrograms; console FFPROGRAMS [0|1]);
 	// FFProgramsActive says whether they are in use (desktop GL only). The stage count and
 	// the texture-op caps the material compiler sees follow from it (UpdateTextureCaps).
 	UBOOL							UseFixedFunctionPrograms,
 									FFProgramsActive,
-									LogFFPrograms,			// -glffsource: log every generated program
-									MaskCombine3,			// -glnocombine3: as if GL_ATI_texture_env_combine3 were missing
-									MaskCombine4;			// -glnocombine4: as if GL_NV_texture_env_combine4 were missing
+									LogFFPrograms,			// log every generated program (no switch any more: set in a debugger)
+									MaskCombine3,			// test key MaskCaps=combine3: as if GL_ATI_texture_env_combine3 were missing
+									MaskCombine4;			// test key MaskCaps=combine4: as if GL_NV_texture_env_combine4 were missing
 	INT								GLFixedFunctionUnits,	// GL_MAX_TEXTURE_UNITS: units of the texture environment
 									GLProgramUnits;			// min(GL_MAX_TEXTURE_COORDS, GL_MAX_TEXTURE_IMAGE_UNITS): units a fragment shader can sample with fixed-function texture coordinates
 	INT								FFProgramsLinked, FFProgramsFailed, FFProgramDraws, FFFallbackDraws;
@@ -258,7 +258,7 @@ public:
 	UBOOL HasCombine3() { return SUPPORTS_GL_ATI_texture_env_combine3 && !MaskCombine3; }
 	UBOOL HasCombine4() { return SUPPORTS_GL_NV_texture_env_combine4 && !MaskCombine4; }
 
-	// GL error checking (CheckGLErrors=True or -glerrors).
+	// GL error checking (CheckGLErrors=True).
 	INT								GLErrorFrames,
 									GLErrorCount;
 
@@ -282,7 +282,7 @@ public:
 	UBOOL							IsGLES;				// the context is OpenGL ES 2 / WebGL 1 (behind GL4ES)
 	// What the context can do; all true on desktop GL. Each has its fallback, and a switch
 	// that masks it so the fallback can be tested where the capability exists
-	// (-glnodepthtexture, -glnofragdepth, -glnos3tc, -glnouintindex).
+	// (test key MaskCaps=depthtexture,fragdepth,s3tc,uintindex,maxlevel).
 	UBOOL							CapDepthTexture,	// a depth-stencil texture can be a framebuffer attachment and be sampled
 									CapFragDepth,		// a fragment shader can write gl_FragDepth
 									CapUIntIndex,		// 32-bit index buffers
@@ -337,12 +337,12 @@ public:
 	TArray<GLuint>					FreeArrayBuffers, FreeElementBuffers;
 	GLuint NewBuffer( GLenum Target );
 	void FreeBuffer( GLenum Target, GLuint& Buffer );
-	// -glnolodbias: every texture LOD bias is 0 (verification: GLES has no LOD bias for the
+	// Test key NoLODBias: every texture LOD bias is 0 (verification: GLES has no LOD bias for the
 	// fixed-function path, so this is what the desktop driver is compared with).
 	UBOOL							NoLODBias;
-	// -glerrorsdraw: glGetError after every draw call and texture upload, with what it was (slow; to find the call behind an error -glerrors reports).
+	// (no switch any more: set in a debugger) glGetError after every draw call and texture upload, with what it was (slow; to find the call behind an error -glerrors reports).
 	UBOOL							CheckGLErrorsPerDraw;
-	// -glstats: one log line every 300 frames (M11, G5): frame time and what a frame costs
+	// Test key Stats=True: one log line every 300 frames (M11, G5): frame time and what a frame costs
 	// in calls the driver makes (per frame averages over the interval).
 	UBOOL							LogStats;
 	INT								StatDraws,			// draw calls (passes), all

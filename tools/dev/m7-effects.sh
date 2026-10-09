@@ -10,7 +10,7 @@
 # <WorkUC2>/bin/capped 2G with a time limit, headless (Xvfb, software GL), 1280x720, the first PlayerStart
 # pinned (`set UCDeathmatch NumPlayers 0`), Fire injected to start the match, two engine screenshots taken at
 # fixed times after the first frame. Between the two screenshots either post-processing is switched on
-# (-nopostprocess ... -glpptoggle: picture A = off = the M6 picture, picture B = on) or a console command is
+# (-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False ... -glpptoggle: picture A = off = the M6 picture, picture B = on) or a console command is
 # issued (-glexec). Nothing is left running. Output, stable names, in <WorkUC2>/logs/<tree>/:
 #
 #   fx-<effect>-a.png, fx-<effect>-b.png     the pair (what A and B are is in the table below)
@@ -41,20 +41,20 @@ shot=$repo/tools/dev/run-uc2-shot.sh
 
 # name | map | pinned spawn (1/0) | seconds | fire at | "A label" | "B label" | uc2.bin arguments
 EFFECTS='
-bloom|DM-Deadbolt|1|100|34|post-processing off (M6)|on: emissive glow and bloom on the lamps, always-on depth of field|-nopostprocess -glshot=44,56 -glpptoggle=48
-blur|DM-Deadbolt|1|100|34|off|on + BlurMe (UUCScreenBlur, ConcussionBlur: displaced ghost copies)|-nopostprocess -glshot=44,56 -glpptoggle=48 -glexec=52:BlurMe
-berserk|DM-Deadbolt|1|100|34|off|on + berserk colour remap (scene in the ramp colours, pawn excluded)|-nopostprocess -glshot=44,56 -glpptoggle=48 -glexec=40:set+UCScreenBerserk+Enabled+1
-liandri|DM-Deadbolt|1|100|34|off|on + Liandri overlay (grey scale with noise)|-nopostprocess -glshot=44,56 -glpptoggle=48 -glexec=40:set+UCScreenLiandri+Enabled+1
-pause|DM-Deadbolt|1|100|34|off|on + pause-menu colour remap (UCScreenMenuPause alone; its two subclasses switched off again)|-nopostprocess -glshot=44,56 -glpptoggle=48 -glexec=40:set+UCScreenMenuPause+Enabled+1@40.2:set+UCScreenComboFlash+Enabled+0@40.4:set+UCScreenComboSunFlare+Enabled+0
-radial|DM-Deadbolt|1|100|34|off|on + radial blur held at distance 30|-nopostprocess -glshot=44,56 -glpptoggle=48 -glexec=38:set+UCPlayerController+RadialBlurSpeed+0@38.2:set+UCPlayerController+RadialBlurMinChange+-1@38.4:set+UCScreenRadialBlur+RadialBlurDistance+30@40:set+UCScreenRadialBlur+Enabled+1
-dyngamma|DM-Deadbolt|1|100|34|on, dynamic gamma ramp applied to the picture|on, DYNAMICGAMMA 0 (no ramp in the picture)|-glshotramp -glshot=50,60 -glexec=54:DYNAMICGAMMA+0
-dof-alpha|DM-Azure|1|120|42|on, depth-of-field blur alpha as script sets it (third person: 100)|on, DOFSHIPPEDALPHA 1 (as the shipped binary: 65)|-glshot=56,68 -glexec=61:DOFSHIPPEDALPHA+1
-azure|DM-Azure|1|120|42|off|on: depth of field on the distance, glow, water and torch distortion if in view|-nopostprocess -glshot=56,68 -glpptoggle=61
-octane|CTF-Octane|1|125|38|off|on: glow on the corridor lamps and on the emissive team markings of the pawn (no distortion glass is in view from this start)|-nopostprocess -glshot=56,68 -glpptoggle=61
-decay|DM-Decay|1|100|38|off: the icicles in the doorway are flat dark blue shapes|on: translucent ice (blended distortion, colour pass), heat shimmer over the torch on the right|-nopostprocess -glshot=50,62 -glpptoggle=55
-undertow|DM-Undertow|1|100|38|off|on: the green energy column (distortion material) glows|-nopostprocess -glshot=50,62 -glpptoggle=55
-recoil|CTF-Recoil|1|100|38|off|on: glow; a PSPlayerCamMaterial is drawn in this view (program PlayerCam links) but I could not point at it|-nopostprocess -glshot=50,62 -glpptoggle=55
-praxis-panes|DM-Praxis|0|115|40|off: flat periwinkle panes (the PC bug)|on: the sea seen through the panes, distorted|-nopostprocess -glshot=52,66 -glpptoggle=58 -glexec=46:NETPLACE+LocalPlayer+-1220+288+680+5220+0@48:NETPLACE+LocalPlayer+-1220+288+680+5220+0
+bloom|DM-Deadbolt|1|100|34|post-processing off (M6)|on: emissive glow and bloom on the lamps, always-on depth of field|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,56 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=48
+blur|DM-Deadbolt|1|100|34|off|on + BlurMe (UUCScreenBlur, ConcussionBlur: displaced ghost copies)|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,56 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=48 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=52:BlurMe
+berserk|DM-Deadbolt|1|100|34|off|on + berserk colour remap (scene in the ramp colours, pawn excluded)|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,56 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=48 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=40:set+UCScreenBerserk+Enabled+1
+liandri|DM-Deadbolt|1|100|34|off|on + Liandri overlay (grey scale with noise)|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,56 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=48 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=40:set+UCScreenLiandri+Enabled+1
+pause|DM-Deadbolt|1|100|34|off|on + pause-menu colour remap (UCScreenMenuPause alone; its two subclasses switched off again)|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,56 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=48 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=40:set+UCScreenMenuPause+Enabled+1@40.2:set+UCScreenComboFlash+Enabled+0@40.4:set+UCScreenComboSunFlare+Enabled+0
+radial|DM-Deadbolt|1|100|34|off|on + radial blur held at distance 30|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,56 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=48 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=38:set+UCPlayerController+RadialBlurSpeed+0@38.2:set+UCPlayerController+RadialBlurMinChange+-1@38.4:set+UCScreenRadialBlur+RadialBlurDistance+30@40:set+UCScreenRadialBlur+Enabled+1
+dyngamma|DM-Deadbolt|1|100|34|on, dynamic gamma ramp applied to the picture|on, DYNAMICGAMMA 0 (no ramp in the picture)|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=50,60 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=54:DYNAMICGAMMA+0
+dof-alpha|DM-Azure|1|120|42|on, depth-of-field blur alpha as script sets it (third person: 100)|on, DOFSHIPPEDALPHA 1 (as the shipped binary: 65)|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=56,68 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=61:DOFSHIPPEDALPHA+1
+azure|DM-Azure|1|120|42|off|on: depth of field on the distance, glow, water and torch distortion if in view|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=56,68 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=61
+octane|CTF-Octane|1|125|38|off|on: glow on the corridor lamps and on the emissive team markings of the pawn (no distortion glass is in view from this start)|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=56,68 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=61
+decay|DM-Decay|1|100|38|off: the icicles in the doorway are flat dark blue shapes|on: translucent ice (blended distortion, colour pass), heat shimmer over the torch on the right|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=50,62 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=55
+undertow|DM-Undertow|1|100|38|off|on: the green energy column (distortion material) glows|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=50,62 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=55
+recoil|CTF-Recoil|1|100|38|off|on: glow; a PSPlayerCamMaterial is drawn in this view (program PlayerCam links) but I could not point at it|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=50,62 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=55
+praxis-panes|DM-Praxis|0|115|40|off: flat periwinkle panes (the PC bug)|on: the sea seen through the panes, distorted|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=52,66 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=58 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=46:NETPLACE+LocalPlayer+-1220+288+680+5220+0@48:NETPLACE+LocalPlayer+-1220+288+680+5220+0
 '
 
 if [ "${1:-}" = list ]; then
@@ -78,7 +78,7 @@ PY
 
 # The numeric self-test of the primitives (UC2GLSelfTest.cpp), unless effects were named and it is not among them.
 if [ "$want" = "  " ] || [ "${want#* selftest }" != "$want" ]; then
-  UC2_RES=1280x720 UC2_PRECMD="set UCDeathmatch NumPlayers 0" "$shot" "$tree" fx-selftest 60 34 DM-Deadbolt -glerrors -glexec=44:POSTSELFTEST ${UC2_GLARGS:-} > "$out/fx-selftest.report" 2>&1
+  UC2_RES=1280x720 UC2_PRECMD="set UCDeathmatch NumPlayers 0" "$shot" "$tree" fx-selftest 60 34 DM-Deadbolt -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=44:POSTSELFTEST ${UC2_GLARGS:-} > "$out/fx-selftest.report" 2>&1
   grep -a "UC2GLDrv: selftest" "$out/fx-selftest.out" | sed -E 's/^UC2GLDrv: //; s/;.*//' | sed 's/^/fx /'
   grep -a -q "selftest summary" "$out/fx-selftest.out" || echo "fx selftest: FAILED to run (see $out/fx-selftest.out)"
 fi
@@ -98,9 +98,9 @@ echo "$EFFECTS" | while IFS='|' read -r name map pinned secs fire la lb args; do
     try=$((try+1))
     rm -f "$out/fx-$name-0.png" "$out/fx-$name-1.png" "$out/fx-$name-a.png" "$out/fx-$name-b.png" "$out/fx-$name-ab.png"
     if [ "$pinned" = 1 ]; then
-      report=$(UC2_RES=1280x720 UC2_PRECMD="set UCDeathmatch NumPlayers 0" "$shot" "$tree" "fx-$name" "$secs" "$fire" "$map" -glerrors $args ${UC2_GLARGS:-} 2>&1)
+      report=$(UC2_RES=1280x720 UC2_PRECMD="set UCDeathmatch NumPlayers 0" "$shot" "$tree" "fx-$name" "$secs" "$fire" "$map" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True $args ${UC2_GLARGS:-} 2>&1)
     else
-      report=$(UC2_RES=1280x720 "$shot" "$tree" "fx-$name" "$secs" "$fire" "$map" -glerrors $args ${UC2_GLARGS:-} 2>&1)
+      report=$(UC2_RES=1280x720 "$shot" "$tree" "fx-$name" "$secs" "$fire" "$map" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True $args ${UC2_GLARGS:-} 2>&1)
     fi
     ok=1
     if [ "$name" = praxis-panes ] && [ -f "$out/fx-$name-0.png" ] && [ -f "$work/logs/oracle/DM-Praxis-windows-A.png" ]; then

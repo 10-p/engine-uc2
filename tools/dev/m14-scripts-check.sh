@@ -75,7 +75,7 @@ check_verify() {
 }
 
 shot() {	# shot <tree> <name> <secs> <fire-at> <map>
-  ( cd "$repo" && tools/dev/run-uc2-shot.sh "$1" "$2" "$3" "$4" "$5" -nostartupmovies -glerrors -glshot=$(( $4 > 0 ? $4 + 15 : 25 )),$(( $4 > 0 ? $4 + 30 : 35 )) ) > "$out/$1-$2.txt" 2>&1
+  ( cd "$repo" && tools/dev/run-uc2-shot.sh "$1" "$2" "$3" "$4" "$5" -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=$(( $4 > 0 ? $4 + 15 : 25 )),$(( $4 > 0 ? $4 + 30 : 35 )) ) > "$out/$1-$2.txt" 2>&1
 }
 glerrs() { grep -a -o "[0-9]* GL errors so far" "$1" | tail -1 | awk '{print $1}'; }
 

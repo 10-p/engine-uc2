@@ -241,7 +241,8 @@ void CMainLoop::RunLoop()
 		// jitter (port, docs/porting/analysis/jitter.md): [SDLLaunch] FramePattern=<ms>:<ms>:... gives the frames
 		// these lengths in turn (a game without a cap of its own only; it takes the place of FrameRateCap): uneven
 		// frame pacing, as a browser has it, made repeatable for the frame trace (FRAMETRACE, UC2FrameTrace.cpp).
-		// A test hook, set with -ini:System:[SDLLaunch]:FramePattern=16.7:33.3:... (F-4e: was -framepattern=).
+		// A test key, set with -ini:System:[SDLLaunch]:FramePattern=16.7:33.3:... (F-4e: was -framepattern=), read once
+		// and never kept in the ini (appReadTestKey).
 		static INT   PatternNum = -1;
 		static FLOAT Pattern[32];
 		static INT   PatternIndex = 0;
@@ -249,7 +250,7 @@ void CMainLoop::RunLoop()
 		{
 			PatternNum = 0;
 			FString Spec;
-			if( GConfig->GetString( TEXT("SDLLaunch"), TEXT("FramePattern"), Spec, GIni ) && Spec.Len() )
+			if( appReadTestKey( TEXT("FramePattern"), Spec, TEXT("SDLLaunch") ) && Spec.Len() )
 			{
 				const TCHAR* S = *Spec;
 				while( *S && PatternNum < ARRAY_COUNT(Pattern) )
@@ -520,11 +521,17 @@ int main( int argc, char** argv )
 	appArgv0( argv[0] );
 
 	// Command line: everything after the program name (appInit no longer drops a first token off Windows).
-	TCHAR CmdLine[1024]=TEXT("");
+	// 4096 characters, the size of Core's GCmdLine: settings go in as -ini: tokens (F-4 follow-up), and a test run's
+	// line passes 1024 (a token that does not fit is dropped whole, with a warning below).
+	TCHAR CmdLine[4096]=TEXT("");
+	UBOOL CmdLineCut = 0;
 	for( INT i=1; i<argc; i++ )
 	{
 		if( appStrlen(CmdLine) + strlen(argv[i]) + 2 >= ARRAY_COUNT(CmdLine) )
+		{
+			CmdLineCut = 1;
 			break;
+		}
 		if( i>1 )
 			appStrcat( CmdLine, TEXT(" ") );
 		appStrcat( CmdLine, ANSI_TO_TCHAR(argv[i]) );
@@ -547,6 +554,8 @@ int main( int argc, char** argv )
 		GSynchronizeFactory = &SynchFactory;
 		GThreadFactory      = &ThreadFactory;
 		appInit( GPackage, CmdLine, &Malloc, &Log, &Error, &Warn, &FileManager, FConfigCacheIni::Factory, 1 );
+		if( CmdLineCut )
+			debugf( NAME_Warning, TEXT("The command line is longer than %i characters: the arguments after '%s' were dropped"), ARRAY_COUNT(CmdLine), CmdLine + Max(0, appStrlen(CmdLine) - 40) );
 
 		// Static classes: native lookup tables and class registrants of every linked package.
 #if __STATIC_LINK
@@ -643,7 +652,7 @@ int main( int argc, char** argv )
 
 			// M9: the start-up logos, as the Xbox launcher played Movies/UC2_Logos.xmv (Launch.cpp:402,
 			// XboxMovieThread.cpp:1049): full screen, skippable by a key or button. Nothing plays with the null
-			// renderer, on a dedicated server, with -NOMOVIE or -NOSTARTUPMOVIES, or with
+			// renderer, on a dedicated server, or with
 			// [UC2Movie] StartupMovies=False (UnMovie.cpp, appCanPlayFullscreenMovie).
 			if( !GIsRequestingExit )
 				appPlayMovieFullscreen( TEXT("..\\Movies\\UC2_Logos.xmv"), FSMOVIE_Startup, 1 );

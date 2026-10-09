@@ -11,7 +11,7 @@
 #
 # Trees (tools/dev/mkrun-uc2.sh): D2_TREE (default d2) has the build under test; D2_REF_TREE (default d2-ref)
 # has main's binary (the regression anchor at 640x480 and the "before" pictures). Every game run is one
-# tools/dev/m10-controls.sh --file run (Xvfb, software GL, -glnoaa, under <WorkUC2>/bin/capped: 2G, 3G from
+# tools/dev/m10-controls.sh --file run (Xvfb, software GL, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0, under <WorkUC2>/bin/capped: 2G, 3G from
 # 2560x1440 up). Pictures and logs: <WorkUC2>/logs/d2/run/<res>/ (<what>-<shot>.png), measurements in
 # <WorkUC2>/logs/d2/run/summary.txt, the owner's contact sheet in <WorkUC2>/logs/d2/run/contact-sheet.png.
 # Scenarios: tools/dev/d2/menu.scen (main menu, arena page; Fill and Box; the level on and off) and
@@ -34,7 +34,7 @@ one() {
   local dir=$out/$res
   mkdir -p "$dir"
   M10_TREE=$t M10_RES=$res M10_OUT=$dir M10_MEM=$(mem_for "$res") M10_URL=$url \
-    "$ctl" --file "$repo/tools/dev/d2/$scen" "$name" -glerrors "$@" 2>&1 | tail -1 | sed "s|^|[$res] |"
+    "$ctl" --file "$repo/tools/dev/d2/$scen" "$name" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True "$@" 2>&1 | tail -1 | sed "s|^|[$res] |"
 }
 
 run_res() {
@@ -57,12 +57,12 @@ extras() {
   one "$ref" 640x480 ref2-hud deadbolt.scen "DM-Deadbolt?NumBots=0"
   M10_LAUNCH=./uc2-main.bin M10_PROC=uc2-main.bin one "$ref" 640x480 main-hud deadbolt.scen "DM-Deadbolt?NumBots=0"
   # The pinned picture without post-processing (the static-part comparison of M12/M13), main's binary and ours.
-  M10_LAUNCH=./uc2-main.bin M10_PROC=uc2-main.bin one "$ref" 640x480 main-pinned deadbolt.scen "DM-Deadbolt?NumBots=0" -nopostprocess
+  M10_LAUNCH=./uc2-main.bin M10_PROC=uc2-main.bin one "$ref" 640x480 main-pinned deadbolt.scen "DM-Deadbolt?NumBots=0" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False
   # Before (main) at 1920x1080, for the owner and the switch below.
   one "$ref" 1920x1080 ref-menu menu.scen ""
   one "$ref" 1920x1080 ref-hud deadbolt.scen "DM-Deadbolt?NumBots=0"
   fi
-  one "$tree" 640x480 pinned deadbolt.scen "DM-Deadbolt?NumBots=0" -nopostprocess
+  one "$tree" 640x480 pinned deadbolt.scen "DM-Deadbolt?NumBots=0" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False
   # The switch: UIScaleMode=Native640 in Default.ini gives today's behaviour back.
   M10_INI="UIScaleMode=Native640" one "$tree" 1920x1080 native-menu menu.scen ""
   # A marker on an actor (the lock-on reticle, placed by WorldToScreen): boxed and unboxed, same window pixels.

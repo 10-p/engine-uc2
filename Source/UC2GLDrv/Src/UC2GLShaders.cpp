@@ -1129,7 +1129,7 @@ void FOpenGLRenderInterface::EndProgramPass()
 	themselves: tools/dev/m11-twin.sh compares the lines of the desktop binding (whose
 	fragment shaders tools/psh2glsl.py --gputest ties to the reference interpreter) with the
 	lines of the GL4ES binding, i.e. the same programs after gl4es' conversion to GLSL ES
-	1.00 on OpenGL ES. Part of POSTSELFTEST / -glselftest.
+	1.00 on OpenGL ES. Part of POSTSELFTEST / SelfTest=True.
 -----------------------------------------------------------------------------*/
 
 static DWORD UC2GL_ProgTestHash( DWORD A, DWORD B, DWORD C )

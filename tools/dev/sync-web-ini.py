@@ -11,11 +11,18 @@ defaults (key bindings, the menus' key table, pad map, renderer settings) reache
 copying it by hand: at M11 the web copies had fallen behind M7 and M10 and the menus would not have answered
 the keyboard. Bytes are kept as they are (Latin-1), and every file in Engine/Config and Engine/Config/web has LF line
 endings, as engine-ut2004's and engine-ut99's (owner, F-4d: "follow what UT2004 UT99 and the rest does"): the script
-refuses a CR anywhere (--check fails, a rewrite stops) and writes the web files with LF.
+refuses a CR anywhere (--check fails, a rewrite stops) and writes the web files with LF. Except Epic's three reference
+copies (EPIC_COPIES below), which stay byte for byte Epic's (CRLF; owner, F-4 follow-up): `cmp` against
+<WorkUC2>/epic-sources/System/<file> must be silent, and --check says so when it is not.
 """
 import os, re, sys
 here = os.path.dirname(os.path.abspath(__file__))
 cfg = os.path.join(here, '..', '..', 'Engine', 'Config')
+
+# Epic's files kept as reference copies, byte for byte (CRLF): DefaultXbox.ini and DefUserXbox.ini are read by nothing;
+# KeyBinds.ini is read by the game (UCMenu UC2Settings_Controller: GetConfigValue("KeyBinds", "Layout_<n>", ...), the pad
+# layouts) and is unchanged from Epic's, CRLF or not (the config cache reads both).
+EPIC_COPIES = ('DefaultXbox.ini', 'DefUserXbox.ini', 'KeyBinds.ini')
 
 # (file, section, key, native value expected, web value, comment line put before it or None)
 DELTAS = [
@@ -110,6 +117,11 @@ def main():
     for d in ('', 'web'):
         for f in sorted(os.listdir(os.path.join(cfg, d))):
             path = os.path.join(cfg, d, f)
+            if d == '' and f in EPIC_COPIES:
+                epic = os.path.join(cfg, '..', '..', '..', 'epic-sources', 'System', f)
+                if os.path.exists(epic) and open(epic, 'rb').read() != open(path, 'rb').read():
+                    print('%s is not byte for byte epic-sources/System/%s' % (f, f)); bad = 1
+                continue
             if f.lower().endswith('.ini') and b'\r' in open(path, 'rb').read():
                 print('%s has CR line endings: Engine/Config is LF (F-4d, as engine-ut2004)' % os.path.join(d, f)); bad = 1
     for name in ('Default.ini', 'DefUser.ini'):

@@ -227,7 +227,7 @@ def check_shots(name, text, shots, ogv, tmp):
 
 
 def scen_logos(a, tmp):
-    text, shots, dt, left = run_game(a.tree, 'logos', 90, ['-log', '-glerrors', '-movieshot=4,12'])
+    text, shots, dt, left = run_game(a.tree, 'logos', 90, ['-log', '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True', '-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True', '-ini:System:[UC2Movie]:ShotTimes=4,12'])
     m = re.search(r'UC2Movie: full-screen \.\.\\Movies\\UC2_Logos\.xmv \((\d+)x(\d+), (\d+) frames', text)
     result('logos-start', bool(m), m.group(0) if m else 'no full-screen line for UC2_Logos')
     check_shots('logos', text, shots, os.path.join(work, 'run', a.tree, 'Movies', 'UC2_Logos.ogv'), tmp)
@@ -249,7 +249,7 @@ def scen_logos_skip(a, tmp):
 def scen_menu(a, tmp):
     # the arena page: Down to INSTANT ACTION, Return (10 s after start-up: the menu takes input after a few
     # seconds under software GL); it opens with the CTF portrait movie. See docs/porting/analysis/video.md (V5).
-    text, shots, dt, left = run_game(a.tree, 'menu-movie', 90, ['-log', '-nostartupmovies', '-glerrors'] + a.menu_args,
+    text, shots, dt, left = run_game(a.tree, 'menu-movie', 90, ['-log', '-ini:System:[UC2Movie]:StartupMovies=False', '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True', '-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True'] + a.menu_args,
                                      inject=a.menu_inject)
     mats = re.findall(r'UC2Movie: MovieMaterial (\S+) frame (\d+) of (\d+)', text)
     names = sorted(set(m[0] for m in mats))
@@ -295,8 +295,8 @@ def cine_exec(tree):
 def scen_cinematic(a, tmp):
     out = os.path.join(work, 'logs', a.tree)
     wav = os.path.join(out, 'm9-cinematic.wav')
-    text, shots, dt, left = run_game(a.tree, 'cinematic', 150, [cine_exec(a.tree), '-log', '-nostartupmovies', '-glerrors',
-                                     '-movieshot=5,14', '-ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=%s' % wav], alsoft='wave')
+    text, shots, dt, left = run_game(a.tree, 'cinematic', 150, [cine_exec(a.tree), '-log', '-ini:System:[UC2Movie]:StartupMovies=False', '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True', '-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True',
+                                     '-ini:System:[UC2Movie]:ShotTimes=5,14', '-ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=%s' % wav], alsoft='wave')
     ls = re.search(r'UC2Movie: loading screen for DM-Deadbolt[^\n]*', text)
     result('cinematic-loading-screen', bool(ls), ls.group(0) if ls else 'no loading screen line')
     st = re.search(r'UC2Movie: opened \.\./Movies/%s\.ogv for D:\\Movies\\%s\.xmv: [^\n]*' % (CINE, CINE), text)
@@ -332,9 +332,9 @@ def scen_cinematic(a, tmp):
 
 
 def scen_cinematic_skip(a, tmp):
-    # -glshot=60: with -glerrors the driver logs its frame counter at the picture, so "the level renders
+    # ShotTimes=60: with CheckGLErrors the driver logs its frame counter at the picture, so "the level renders
     # afterwards" does not depend on reaching the periodic 600-frame line (missed on a loaded machine).
-    text, shots, dt, left = run_game(a.tree, 'cinematic-skip', 120, [cine_exec(a.tree), '-log', '-nostartupmovies', '-glerrors', '-glshot=60'],
+    text, shots, dt, left = run_game(a.tree, 'cinematic-skip', 120, [cine_exec(a.tree), '-log', '-ini:System:[UC2Movie]:StartupMovies=False', '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True', '-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True', '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=60'],
                                      inject='UC2Movie: full-screen D:|3.0|Return')
     s = re.search(r'UC2Movie: D:\\Movies\\%s\.xmv skipped by a key or button at movie time ([\d.]+) s[^\n]*' % CINE, text)
     after = text[s.end():] if s else ''
@@ -376,7 +376,7 @@ def main():
     ap.add_argument('--no-mkrun', action='store_true')
     # the menu page with a MovieMaterial and how to reach it (see the notebook, V5)
     ap.add_argument('--menu-inject', default='Startup time|10.0|Down,Return')
-    ap.add_argument('--menu-args', default='-glshot=26,28')
+    ap.add_argument('--menu-args', default='-ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=26,28')
     # expected level of the movie's sound in the capture: 0 dB at the source (no category, no headroom: the
     # Xbox played XMV sound outside XACT) plus OpenAL Soft's gain for a centred 2D stereo source (measured, see
     # the notebook)

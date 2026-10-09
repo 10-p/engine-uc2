@@ -129,8 +129,10 @@ void USDL2Client::Init( UEngine* InEngine )
 
 	// Pads (M10, SDL2Pads.cpp), and the test channel that drives a virtual one (SDL2InputTest.h).
 	InitPads();
+	// The channel's file: test key [SDL2Drv.SDL2Client] InputTestFile=<file>, set with -ini: (F-4 follow-up; was
+	// -inputtest=<file>), read once and never kept in the ini.
 	FString TestFile;
-	if( Parse( appCmdLine(), TEXT("INPUTTEST="), TestFile ) && PadsInitialized )
+	if( appReadTestKey( TEXT("InputTestFile"), TestFile, TEXT("SDL2Drv.SDL2Client") ) && TestFile.Len() && PadsInitialized )
 		InputTest = new FSDL2InputTest( *TestFile );
 
 	// Text input (WM_CHAR's role). SDL enables it on desktop by default; say so explicitly.

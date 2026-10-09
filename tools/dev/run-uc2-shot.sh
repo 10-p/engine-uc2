@@ -3,7 +3,8 @@
 # and collect the engine's own screenshots.
 #
 #   tools/dev/run-uc2-shot.sh <tree> <name> <seconds> <fire-at> <map-or-''> [uc2.bin arguments...]
-#   tools/dev/run-uc2-shot.sh m6 deadbolt 60 28 DM-Deadbolt -glerrors -glshot=38,44 -glpstoggle=41
+#   tools/dev/run-uc2-shot.sh m6 deadbolt 60 28 DM-Deadbolt $(tools/dev/glini CheckGLErrors=True ShotTimes=38,44 PixelShaderToggleTimes=41)
+#   (the GL device's settings and test keys go in with -ini:, tools/dev/glini writes them for both device sections)
 #
 # <tree>      run tree under <WorkUC2>/run (made by tools/dev/mkrun-uc2.sh)
 # <name>      output prefix: <WorkUC2>/logs/<tree>/<name>.out, <name>-N.png (from System/Shot0000N.bmp)
@@ -20,7 +21,7 @@
 #                        tree; default uc2.bin)
 #
 #   UC2_AA=1             keep the device's anti-aliasing (O-8: on by default since M11); without it every run gets
-#                        -glnoaa, so pictures compare with the references made before anti-aliasing existed
+#                        AntiAliasing=0 (-ini:), so pictures compare with the references made before anti-aliasing existed
 #
 # Everything runs inside <WorkUC2>/bin/capped 2G (CLAUDE.md, "Running anything: memory ceiling, always");
 #   UC2_CAP=3G           another ceiling (pp-scale: 3G for 2880x2160 and larger windows)
@@ -50,7 +51,7 @@ if [ -n "${UC2_POSTCMD:-}" ]; then
   postcmd=1
 fi
 
-aaarg=-glnoaa; [ -n "${UC2_AA:-}" ] && aaarg=""
+aaarg=$("$repo/tools/dev/glini" AntiAliasing=0 | tr '\n' ' '); [ -n "${UC2_AA:-}" ] && aaarg=""
 # AutoFOV off unless UC2_AUTOFOV is set: the reference pictures these runs are compared with (the M7 effect
 # pairs, the wine oracle's DM-Praxis view, the O-9 before/after pairs) were made with the 4:3 field of view, and
 # at 16:9 D-8's Hor+ widens the framing. tools/dev/d78.sh measures AutoFOV itself and does not use this runner.
@@ -65,7 +66,7 @@ cd "$sys" || exit 1
 echo "\$DISPLAY" > "$out/$name.display"
 # M8: OpenAL Soft renders to its null backend unless ALSOFT_DRIVERS says otherwise (headless runs stay quiet).
 # M9: no logos (the fire-at times assume none)
-SDL_AUDIODRIVER=dummy ALSOFT_DRIVERS=${ALSOFT_DRIVERS:-null} ./${UC2_BIN:-uc2.bin} $map -log -nostartupmovies $aaarg $fovarg "\$@" > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy ALSOFT_DRIVERS=${ALSOFT_DRIVERS:-null} ./${UC2_BIN:-uc2.bin} $map -log -ini:System:[UC2Movie]:StartupMovies=False $aaarg $fovarg "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
 if [ "$fire" != 0 ]; then
   sleep \$(( $fire - 4 ))

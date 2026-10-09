@@ -163,7 +163,7 @@ void UC2GL_PixelTraceLog( FOpenGLRenderInterface* RI, INT Pass, const FColor& Be
 }
 
 /*-----------------------------------------------------------------------------
-	O-9: material census (-glmatcensus). Every distinct compilation of a material is
+	O-9: material census (test key MatCensus=True). Every distinct compilation of a material is
 	logged once, as the material compiler left it: passes, blending, and per stage the
 	colour and alpha operation with their arguments and the texture target. Comparing the
 	census of two runs (e.g. 8 stages and exact operations against 4 stages without
@@ -199,8 +199,9 @@ static FString UC2GL_PassSignature( FOpenGLRenderInterface* RI )
 
 void UC2GL_MaterialCensus( FOpenGLRenderInterface* RI, UMaterial* Requested, UMaterial* Used )
 {
+	extern UBOOL GTestMatCensus;	// test key MatCensus=True (UC2GLRenderDevice.cpp Init)
 	if( GMatCensus < 0 )
-		GMatCensus = ParseParam( appCmdLine(), TEXT("glmatcensus") ) ? 1 : 0;
+		GMatCensus = GTestMatCensus ? 1 : 0;
 	if( GMatCensus != 1 || !Requested )
 		return;
 	static TMap<FString,INT> Seen;

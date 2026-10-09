@@ -93,14 +93,14 @@ class USDL2Client : public UClient, public FNotifyHook
 	BITFIELD			PadRumble;				// drive the pad motors from the player's WaveformManager
 	FLOAT				PadRumbleScale;
 	FLOAT				JoyDeadZone;			// stored by SETDEADZONE, as UXboxClient (nothing reads it there either)
-	BITFIELD			LogInput;				// SDL2Input log lines for every pad event (also -inputlog)
+	BITFIELD			LogInput;				// SDL2Input log lines for every pad event
 
 	// Variables.
 	UBOOL				InMenuLoop;
 	FSDL2Pad			Pads[SDL2DRV_MAX_PADS];
 	FSDL2PadMapEntry	PadMap[SDL2DRV_PAD_SOURCES];
 	UBOOL				PadsInitialized;
-	FSDL2InputTest*		InputTest;				// -inputtest=<file>: the M10 test channel
+	FSDL2InputTest*		InputTest;				// test key InputTestFile=<file>: the M10 test channel
 
 	// Constructors.
 	USDL2Client();
@@ -214,7 +214,7 @@ class USDL2Viewport : public UViewport
 	void SetClientTravel( const TCHAR* NextURL, UBOOL bItems, ETravelType NextTravelType );
 };
 
-// SDL2Input: the log name of every M10 input line (quiet unless LogInput/-inputlog/-inputtest).
+// SDL2Input: the log name of every M10 input line (quiet unless LogInput or the test channel).
 extern FName NAME_SDL2Input;
 #define SDL2INPUT ((EName)NAME_SDL2Input.GetIndex())
 

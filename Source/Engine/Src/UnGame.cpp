@@ -3600,7 +3600,7 @@ void UGameEngine::Tick( FLOAT DeltaSeconds )
 {
 	guard(UGameEngine::Tick);
 	FUNC_CLOCK(TiCyc,TickCycles);
-	UC2NetTestTick( this );	// uc2 port: the -nettest=<file> command file (UC2NetTest.cpp); nothing without it
+	UC2NetTestTick( this );	// uc2 port: the [UC2NetTest] CommandFile=<file> test key (UC2NetTest.cpp); nothing without it
 	UC2RememberProfile( Client );	// uc2 port (D-3): User.ini [Profiles] LastProfile follows the first player's profile
 	UC2FpsLogTick( this );	// uc2 port (F-2): FpsLogSeconds / FPSLOG; nothing unless asked for
 

@@ -26,7 +26,7 @@
 #   controls   tools/dev/m10-controls.sh, all five scenarios
 #   audio      tools/dev/audio-regression.sh: check, self-test 39/0, the menu music level, four captures
 #   movies     tools/dev/movie-selftest.sh 96/0 and tools/dev/m9-movies.py
-#   glselftest tools/dev/m7-effects.sh selftest (the -glselftest primitives) 10/10
+#   glselftest tools/dev/m7-effects.sh selftest (the -ini:System:[UC2GLDrv.UC2GLRenderDevice]:SelfTest=True primitives) 10/10
 #   effects    tools/dev/m7-effects.sh: every effect critical=0 glerrors=0 programs_failed=0+0
 #   pinned     the pinned DM-Deadbolt view (tools/dev/m12/deadbolt-pinned.scen) on the 64-bit and the 32-bit
 #              tree, post-processing off: same position/rotation, static part >= 99.9% within 2 levels
@@ -195,7 +195,7 @@ check_pinned() {
   for t in "$tree" "$ref"; do
     rm -rf "$out/pinned-$t"
     M10_URL='DM-Deadbolt?NumBots=0' M10_TREE=$t M10_OUT=$out/pinned-$t \
-      "$repo/tools/dev/m10-controls.sh" --file "$repo/tools/dev/m12/deadbolt-pinned.scen" pinned -glerrors -nopostprocess > /dev/null 2>&1
+      "$repo/tools/dev/m10-controls.sh" --file "$repo/tools/dev/m12/deadbolt-pinned.scen" pinned -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False > /dev/null 2>&1
   done
   lp=$out/pinned-$ref/pinned-pinned.png; wp=$out/pinned-$tree/pinned-pinned.png
   vw=$(grep -a "^probe view" "$out/pinned-$tree/pinned.out" | grep -a -o "loc=([^)]*) rot=([^)]*)")
@@ -254,7 +254,7 @@ SCEN
         printf '%s\t%s\n' $(( $(date +%s) - t0 )) "$(awk '/^VmRSS/{print $2}' /proc/$p/status 2>/dev/null)" >> "$rss"
       done; sleep 30; done ) &
   pid=$!
-  M10_TREE=$tree M10_OUT=$out/soak M10_MEM=3G M10_SECS=$((soak + 300)) "$repo/tools/dev/m10-controls.sh" --file "$scen" soak -glerrors > "$out/soak.line" 2>&1
+  M10_TREE=$tree M10_OUT=$out/soak M10_MEM=3G M10_SECS=$((soak + 300)) "$repo/tools/dev/m10-controls.sh" --file "$scen" soak -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True > "$out/soak.line" 2>&1
   kill $pid 2>/dev/null; wait $pid 2>/dev/null
   local line; line=$(tail -1 "$out/soak.line")
   # Flat RSS: over the second map (from 3 min after it came up to the end) the growth stays under 5%.
@@ -320,7 +320,7 @@ check_base32() {	# gate (c): the 32-bit build after M13 behaves as before (tree 
   for t in "$ref" "$base"; do
     rm -rf "$o/pinned-$t"
     M10_URL='DM-Deadbolt?NumBots=0' M10_TREE=$t M10_OUT=$o/pinned-$t \
-      "$repo/tools/dev/m10-controls.sh" --file "$repo/tools/dev/m12/deadbolt-pinned.scen" pinned -glerrors -nopostprocess > /dev/null 2>&1
+      "$repo/tools/dev/m10-controls.sh" --file "$repo/tools/dev/m12/deadbolt-pinned.scen" pinned -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False > /dev/null 2>&1
   done
   vr=$(grep -a "^probe view" "$o/pinned-$ref/pinned.out" | grep -a -o "loc=([^)]*) rot=([^)]*)")
   vb=$(grep -a "^probe view" "$o/pinned-$base/pinned.out" | grep -a -o "loc=([^)]*) rot=([^)]*)")
@@ -343,8 +343,8 @@ check_asan() {	# not in the default list: the sanitizer build (preset native64-a
   export UBSAN_OPTIONS=${UBSAN_OPTIONS:-print_stacktrace=1:halt_on_error=0}
   ( cd "$s" && "$capped" 6G 900 -- ./ucc-bin verifyclasses > "$o/verify.out" 2>&1 )
   ( cd "$s" && "$capped" 6G 120 -- timeout -s INT 60 ./ucc-bin Engine.ServerCommandlet 'DM-Deadbolt?NumBots=4' -log > "$o/server.out" 2>&1 )
-  ( cd "$s" && "$capped" 6G 200 -- xvfb-run -a -s "-screen 0 1280x720x24" timeout -s INT 90 ./uc2.bin -log -nostartupmovies -glerrors > "$o/menu.out" 2>&1 )
-  ( cd "$s" && "$capped" 6G 300 -- xvfb-run -a -s "-screen 0 1280x720x24" timeout -s INT 150 ./uc2.bin 'DM-Deadbolt?NumBots=4' -log -nostartupmovies -glerrors > "$o/map.out" 2>&1 )
+  ( cd "$s" && "$capped" 6G 200 -- xvfb-run -a -s "-screen 0 1280x720x24" timeout -s INT 90 ./uc2.bin -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True > "$o/menu.out" 2>&1 )
+  ( cd "$s" && "$capped" 6G 300 -- xvfb-run -a -s "-screen 0 1280x720x24" timeout -s INT 150 ./uc2.bin 'DM-Deadbolt?NumBots=4' -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True > "$o/map.out" 2>&1 )
   asan=$(cat "$o"/*.out | grep -a -c 'ERROR: AddressSanitizer')
   ub=$(cat "$o"/*.out | grep -a 'runtime error:' | sed -E 's/^.*\/Source\///' | sort -u | tee "$o/ubsan-unique.txt" | wc -l)
   n=$(grep -a -h -c 'Bringing Level' "$o"/server.out "$o"/menu.out "$o"/map.out | paste -sd+ | bc)

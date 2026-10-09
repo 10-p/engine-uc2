@@ -352,3 +352,144 @@ e2e-mem-guard 18 GB machine-wide (peaks 14.5-17.9 GB machine-wide, of which ~12 
    `-movieshot`, `-nettest`...), the render switches (engine-ut2004 keeps the same table).
 5. Engine/Config's three Epic reference copies (DefaultXbox.ini, DefUserXbox.ini, KeyBinds.ini) are LF now too, so a plain
    `git diff 7633696` shows every line; `--ignore-cr-at-eol` shows 0. Fine, or keep those three byte-identical (CRLF)?
+
+# F-4 follow-up: the owner's answers (2026-10-09, worktree engine-uc2-f4b, branch f4b-switches from main b6fcffb)
+
+The owner's decisions on the five questions: (1) switches: keep `-log`, `-ini:`, `-windowed`, `-defaultres`, `-usehomedir`,
+`-nullrenderer`/`-opengl`/`-gl4es` and the commandlet parameters; convert the test switches to ini keys set with `-ini:`;
+remove the UC2GLDrv on/off twins and the unused probes. (2) `FrameRateCap` default 0. (3) meta.json: branch only.
+(4) `-sOFFSCREEN_FRAMEBUFFER`: keep. (5) the three Epic reference inis back to Epic's bytes.
+
+## Step 7 - (5) Epic's three reference inis (commit 9d5683a)
+
+`Engine/Config/{DefaultXbox,DefUserXbox,KeyBinds}.ini` copied from `epic-sources/System/`: `cmp` silent for all three
+(`file -k`: "ASCII text, with CRLF line terminators"). `sync-web-ini.py`: `EPIC_COPIES` skipped by the CR rule and checked
+with a byte comparison against epic-sources (`--check` fails if one differs); `--check` -> both web files up to date.
+Who reads them (grep -a of Source, .uc included, and tools): **KeyBinds.ini IS read by the game**:
+`Source/UCMenu/Classes/UC2Settings_Controller.uc:106` `GetConfigValue("KeyBinds", "Layout_" $ i, "Title", ...)` (the pad
+layout page), from the run tree's System/KeyBinds.ini that mkrun copies from Engine/Config; it is Epic's file unchanged
+(only its line endings had changed in F-4d; the config cache reads CRLF and LF alike). `DefaultXbox.ini` and
+`DefUserXbox.ini`: read by nothing (the engine derives Avaris.ini/User.ini from Default.ini/DefUser.ini only).
+README (Engine/Config) and CLAUDE.md say so.
+
+## Step 8 - (2) FrameRateCap, (3) meta.json, (4) OFFSCREEN_FRAMEBUFFER
+
+- (2) Confirmed: `Engine/Config/Default.ini:25` and `web/Default.ini:25` `FrameRateCap=0`; absent key = 0 too
+  (`SDLLaunch.cpp:234`: `MaxFps = 0`, then `GetFloat`); nothing caps a standalone game.
+- (3) No change: `toolchain.<lib> = owner/repo@branch` (engine-ut2004's rule).
+- (4) Kept. The reason, read in Emscripten 5.0.7 (`src/settings.js:1766-1782`, `src/lib/libhtml5_webgl.js:150-210,270-300`,
+  `src/lib/libwebgl.js:720-730,856-862,1135`): Emscripten documents `-sOFFSCREEN_FRAMEBUFFER` as the polyfill for explicit
+  swap control (and for WebGL from a pthread) where OffscreenCanvas is missing, and with OffscreenCanvas support compiled in
+  as well "allows one to utilize OffscreenCanvas where available, and to fall back to Offscreen Framebuffer otherwise".
+  **But** `UC2GL4ESDrv.cpp` creates its context with `explicitSwapControl = 1` AND `renderViaOffscreenBackBuffer = 1`
+  requested explicitly, and Emscripten honours the second whenever the flag is linked: `GL.createContext` then makes the
+  emulated default framebuffer (`createOffscreenFramebuffer`, `preserveDrawingBuffer` forced on) even on the normal
+  OffscreenCanvas path, and `emscripten_webgl_commit_frame()` blits it (`blitOffscreenFramebuffer`) every frame. So in
+  UC2's configuration it is not only the fallback: it IS the present path (the frontend's 2.43 fix: without the flag
+  `commit_frame` is a stub and presentation is the implicit end-of-task one, ~1 frame/s on Windows/D3D11). The
+  coordinator's wording "the normal path does not use it" would be true only if the driver stopped requesting
+  `renderViaOffscreenBackBuffer` (the binding belongs to F-3's agent; not changed here).
+
+## Step 9 - (1) the switches (commits c00a538, then the command-line commit)
+
+Mechanism. Core `appReadTestKey(Key, Value, Section[, Section2, Section3])` / `appReadTestFlag` (`Core/Inc/UnFile.h`,
+`Core/Src/UnMisc.cpp` after `appApplyIniOverrides`): a TEST key of the system ini, set with `-ini:`, read ONCE and taken
+out of the in-memory ini of every named section; the file is marked dirty when something was removed (the first try
+did not mark it, and the window-settings save at start-up had already written the override into Avaris.ini: the smoke
+run showed `ShotTimes=40`/`Exec=46:exit` left in the tree's Avaris.ini; fixed and re-checked: only `CheckGLErrors=True`
+(a setting) and `StartupMovies=False` remain). A log line `Test key [<section>] <Key>=<Value> (read once, not kept in the
+ini)` says what was taken. The GL device reads its own class section, then `[UC2GLDrv.UC2GLRenderDevice]`, and removes
+the key from both device sections. The device's ordinary SETTINGS keep their normal config semantics (own class section;
+written back like any `-ini:` value). `tools/dev/glini KEY=VALUE...` prints the `-ini:` tokens for both device sections.
+
+Found on the way: `SDLLaunch.cpp` cut the command line at 1,024 characters (at an argument boundary, silently) and `UCC.cpp`
+had a 1,024-character buffer with NO bound check (stack overflow). With settings as `-ini:` tokens a test run passes 1,024:
+the wine pad run lost its `InputTestFile` token and its channel never opened (`FAIL pad ... no probe line`). Both now 4,096
+(Core's `GCmdLine`), a token that does not fit is dropped whole and a warning says so.
+
+The frontend (read-only grep of `/home/ion/WorkUC2/ufrontend`, branch uc2; nothing changed there):
+- `packages/e2e/uc2-wasm-boot.spec.js:150` `ENGINE_OPTIONS = '-log -glerrors -glstats -nostartupmovies'`
+- `uc2-wasm-keys.spec.js:41`, `uc2-wasm-saves.spec.js:48` `'-log -nostartupmovies'`; `uc2-wasm-audio.spec.js:205`
+  `launch(page, '-log -nostartupmovies')`; `uc2-wasm-jitter.spec.js:33` `'-log -glerrors -nostartupmovies'`
+- `targets/uc2/target.json:134` the launcher's video-driver choice "GL4ES without post-processing": `-GL4ES -nopostprocess`
+  (a user-facing option, not a spec; it stops working with this change; the replacement below; and note that an `-ini:`
+  value is written into the browser's saved Avaris.ini, so that choice would then stick for later launches until changed
+  back, unlike the old switch).
+`-nostartupmovies` is converted too (coordinator: if the key works from `-ini:` at that point of start-up): the keys
+`[UC2Movie] StartupMovies/Cinematics/LoadingMovie` are read by `appCanPlayFullscreenMovie` when a movie is asked for, and
+the logos are asked for after `InitEngine`, long after `appInit` applied the `-ini:` tokens. Measured: every native runner
+(m10-controls, run-uc2-shot, fx-owner...) now passes `-ini:System:[UC2Movie]:StartupMovies=False` and no logo plays.
+
+## The switch table, final (F-4 follow-up; the "done" column is what the code does now)
+
+| Switch (who added it) | Owner's decision | Done | Replacement / where | Tools changed |
+|---|---|---|---|---|
+| `-log`, `-ini:` | keep | kept | | |
+| `-windowed`, `-defaultres` (Epic, WinDrv; engine-ut2004's SDL2Drv too) | keep | kept | | |
+| `-usehomedir` | keep | kept | decides where the ini lives | |
+| `-nullrenderer`, `-opengl`, `-gl4es` (render switches, engine-ut2004's table) | keep | kept | | |
+| commandlet parameters (`CONFORM`, `CONFORMNOCONFIG`, `NOEPICORDER`, `DUMP=`, `LOAD=`, `MAP=`, `REF=`) | keep | kept | | |
+| `-maxfps=` (D-6) | (F-4e) | converted at F-4e | `[Engine.Engine] FrameRateCap` (default 0) | d6-mouse, d9-rebind, jit-trace, sc-saveconfig (F-4e) |
+| `-framepattern=` (jitter) | (F-4e) | converted at F-4e, one-shot now | `[SDLLaunch] FramePattern` test key | jit-trace, jit-strip (F-4e) |
+| `-frametrace=`, `-audiowave=`, `-noefx` | (F-4e) | removed / converted at F-4e | console `FRAMETRACE`; `[UC2ALAudio.UC2ALAudioSubsystem] WaveFile=`, `UseEFX=` | (F-4e) |
+| `-inputtest=` (M10) | convert | converted | `[SDL2Drv.SDL2Client] InputTestFile` (test key) | m10-controls, m10-inject (doc), fx-owner, f5-flicker, jit-strip, fps-bench, net-test.py, m12-wine-smoke, c1-ini-overrides (doc) |
+| `-inputlog` | remove | removed | `[SDL2Drv.SDL2Client] LogInput=True` exists | none used it |
+| `-glshot=`, `-glshotramp`, `-glshotpresented`, `-glexec=`, `-glpptoggle=` | convert | converted | test keys `ShotTimes`, `ShotRamp`, `ShotPresented`, `Exec`, `PostProcessToggleTimes` | run-uc2-shot, m7-effects, m7b-census, o9-census, o9-nvidia, m11-twin, pp-scale, m9-movies, m12-wine-smoke, m13-64bit, m14-scripts-check |
+| `-glpstoggle=` (M6) | (not named; a test hook with users) | converted | test key `PixelShaderToggleTimes` | run-uc2-shot, m11-twin |
+| `-glfftoggle=` (O-9) | (not named; no user) | removed | console `FFPROGRAMS` | none |
+| `-movieshot=` (M9) | convert | converted | `[UC2Movie] ShotTimes` (test key) | m9-movies |
+| `-nettest=`, `NETDROP=`, `NETPKTID=`, `-NETOLDACKS` | convert | converted | `[UC2NetTest] CommandFile`, `Drop`, `PacketIdStart`, `OldAcks` (test keys) | net-test.py |
+| `-nostartupmovies` (M9) | convert if the key works from `-ini:` at that point | converted (it does) | `[UC2Movie] StartupMovies=False` | 16 scripts + the two engine-repo web specs; the frontend's five uc2 specs: replacement strings for the coordinator |
+| `-nomovie`, `-nullmovies` (M9) | (not named; no user) | removed | `[UC2Movie]` keys | none |
+| `-glerrors`, `-[no]pixelshaders`, `-[no]postprocess`, `-[no]xboxshadows`, `-[no]xboxprojectors`, `-[no]terrain3layer`, `-glaa=`/`-glnoaa`, `-glunits=`, `-glstages=`, `-gl[no]ffprograms` | remove (each has its ini key) | removed | `CheckGLErrors`, `UsePixelShaders`, `UsePostProcess`, `UseXboxShadows`, `UseXboxProjectors`, `UseTerrain3Layer`, `AntiAliasing`, `MaxTextureUnits`, `MaterialStages`, `FixedFunctionPrograms`, each in the device's own section (`tools/dev/glini` writes both) | every script that passed them (glerrors 18, nopostprocess 9, glnoaa 7, o9-nvidia's units/ffprograms, m7b's noxboxprojectors); the frontend's `target.json` launcher option `-GL4ES -nopostprocess` (replacement given) |
+| `-glselftest`, `-glcombinertest`, `-glmatcensus`, `-glstats`, `-glnolodbias`, `-glnocombine3/4`, `-glno{depthtexture,fragdepth,uintindex,maxlevel,s3tc}`, `-gldualdiffuse=` | probes used by tools -> test keys | converted | `SelfTest`, `CombinerTest`, `MatCensus`, `Stats`, `NoLODBias`, `MaskCaps=<list>`, `DualDiffuse` | m11-twin, m11-progcmp (doc), m13-64bit, pp-scale, o9-nvidia, fx-owner (doc) |
+| `-glselftest1d`, `-glsnapshotlog`, `-glerrorsdraw`, `-glffsource`, `-glprojnoclip`, `-glnofog`, `-nogamma`, `-gl4esdebug` | unused probes -> delete | removed (code paths deleted; `LogFFPrograms`/`CheckGLErrorsPerDraw` members stay 0 for a debugger) | gl4es' own `LIBGL_DBGSHADERCONV`/`LIBGL_LOGSHADERERROR` environment for the last | none |
+| `-noinimigrate` (D-6) | goes with F-1 | untouched here (F-1 removes UC2InputMigrate) | | d6-mouse (F-1's branch) |
+
+## Step 10 - every tool touched, rerun (2026-10-09 10:00-14:40; machine load 3-36 from the other agents)
+
+Commands: one tool at a time (`scratch/chain*.sh`, logs `logs/f4/f4b-tools/<tool>.txt`), trees `run/f4b*` (`run/m13-f4b`,
+`run/m7b-f4b` where the tool insists on its prefix). Builds: native, windows, native64, wasm-perf at the final source.
+
+| Tool | What it exercised | Result |
+|---|---|---|
+| run-uc2-shot.sh (smoke) | CheckGLErrors, ShotTimes, Exec, Stats; one-shot | 0 GL errors; `-glshot at 40.0 s`; `-glexec at 46.0 s: exit`; Avaris.ini afterwards: `CheckGLErrors=True`, `StartupMovies=False` (settings), no test key |
+| m10-controls.sh (all 5) | InputTestFile, StartupMovies, AntiAliasing | keyboard 16, mouse 18, text 7, pad 33, both 14: PASS (10:05) |
+| m12-wine-smoke.sh (13 checks) | the same under wine; ShotTimes; WaveFile | 13/13 PASS over two runs (keyboard/pad/pinned needed the 4,096-character command line; then PASS) ; final build: verify, gl PASS |
+| fx-owner.sh praxis-near | InputTestFile, CheckGLErrors | GPU: `critical=0 glerrors=0 programs_failed=0+0 shots=[xbox raised]`; software (Mesa) at load 7: both shots, `0 GL errors in 76 frames` (its glerrors field reads the frame-600 line, which a 76-frame run never reaches); at load 22 the match did not start (8 frames: load) |
+| f5-flicker.sh | StartupMovies, CheckGLErrors, InputTestFile | desktop GPU: 12 pictures, 0 GL errors in 1,987 frames; `F5_GL4ES=1` on the NVIDIA GPU: present shader does not compile there (known, render-f5.md "side finding"; the twin needs `F5_SOFT=1`) |
+| jit-strip.sh / jit-trace.sh kbm uneven | FramePattern (one-shot) | 8 pictures, Critical 0, dt exactly the pattern / PASS 0.52 px; `Test key [SDLLaunch] FramePattern=... (read once)` |
+| fps-bench.sh | InputTestFile, StartupMovies | PASS 67.3 fps (10 s, 720p, load 19) |
+| c1-ini-overrides.sh | the -ini: mechanism with the runner's own -ini: tokens | first run: 1 FAIL (the check counted the runner's 4 overrides as well); check narrowed to its own section: ALL PASS |
+| sc-saveconfig.sh u g m / w | settings written back; Node | ALL PASS / ALL PASS |
+| audio-regression.sh (run-uc2-audio.sh) | StartupMovies, WaveFile | all items; menu music FAIL once at load 24 (correlation 0.461 at 8.30 s, the same signature as the wine capture flake of F-4), PASS on the rerun at load 10 (0.817 at 0.25 s, gain error -0.01 dB) |
+| package-windows.sh | (text only) | DLL check PASS |
+| m9-movies.py | [UC2Movie] ShotTimes, StartupMovies, CheckGLErrors | 19 checks, 0 failed |
+| net-test.sh (all but soak, wine) | [UC2NetTest] CommandFile/Drop/PacketIdStart/OldAcks, InputTestFile | every check PASS except `lag.healthseen: NetB did not respawn` (seen twice before in the history; 23 earlier PASSes, 5 other FAILs); handshake-loss/compat/wrap all PASS; `Test key [UC2NetTest] ...` lines for every key |
+| m7-effects.sh (14 + selftest) | UsePostProcess, ShotTimes, PostProcessToggleTimes, Exec, ShotRamp | selftest 15/0; 14 pairs critical=0 glerrors=0 programs_failed=0+0 |
+| m7b.sh (tree m7b-f4b) | UseXboxProjectors, Exec, FX_ARGS | 11 PASS, 0 FAIL |
+| m7b-census.sh / o9-census.sh (3 maps each, own trees) | Exec | census lines for every map (projectors, terrains / matcensus summaries) |
+| o9-nvidia.sh | FixedFunctionPrograms, MaxTextureUnits, MaskCaps, CombinerTest, MatCensus | first run: `o9-caps` FAIL: the settings passed with -ini: persisted in the tree's Avaris.ini into the next run (fixed: fresh Avaris.ini per run, d8516d9); rerun: combiner mesa x4, gpu x3, twin, caps PASS. `pictures`/`pictures-other`: need main's executable as uc2-before.bin, see below |
+| m11-twin.sh (all) | everything above on both devices; MaskCaps, NoLODBias, DualDiffuse, SelfTest | 27 PASS, 7 FAIL: the six F-5 knew (effect-blur, effect-liandri, effects, fallback-glnodepthtexture, fallbacks, movies) plus `m11-pinned`, whose two numbers swapped: desktop-with-LOD-bias vs twin 0.397, without 0.877 (F-5: 0.890 / 0.380). The NoLODBias key was applied to the right run (`Test key ... NoLODBias=True` only in pinned-deadbolt-nb.out); the twin's gl4es is now the fork's tip of 2026-10-09 02:14 (`6b6bccd`, fetched by today's configure; F-5 had `98441ed`), which honours the LOD bias (F-3's work) |
+| pp-scale.sh selftest glow | Exec, ShotTimes, UsePostProcess, PostProcessToggleTimes | PASS x4 |
+| m14-scripts-check.sh verify menu deadbolt effects | CheckGLErrors, ShotTimes, StartupMovies | PASS x4 |
+| d78.sh (ref tree = this build) | UsePostProcess, CheckGLErrors via m10 | 15 PASS, 1 FAIL `world-third-person` 98.10% (>= 98.5): the same number as the run in logs/d78/run (known) |
+| d2-ui-scale.sh run 640x480 1920x1080 | the same | menu and hud runs PASS at both sizes (measure not run: needs the reference trees with main's binaries) |
+| m13-64bit.sh verify controls glselftest leftovers | 64-bit | verify PASS (401 classes, 50 placeholders), glselftest 15/0, leftovers PASS; controls: pad 29/33, both 13/14 (see below) |
+| web: tools/dev/d78/web/uc2-d78.spec.js (frontend harness, my assembly run/f4b-web, wasm sha 24535e2b... before and after) | the -ini: strings through the launcher's Advanced field | 1 passed (37 s); `UC2GLDrv: frame 600, 0 GL errors so far` = CheckGLErrors=True reached the GL4ES device's section; mem-guard peak 13.5 GB machine-wide |
+| map-census.sh CENSUS_NODE=1 | ucc-bin.js with the final Core | 58 / 58 PASS |
+| verifyclasses (native, wine) | | all match |
+
+The pad's left stick (m10 pad and both, m13 controls; 4 + 1 checks): FAILS since the asset tree's GUI.u/UCGameplay.u/UCMenu.u
+were replaced at 11:28 by main's F-1 packages, and it is **not this branch**: (a) the branch BASE b6fcffb, built from
+an export (`run/f4b-basesrc`) and run with ITS OWN tools (the old `-inputtest`), fails the same four checks today;
+(b) main's binary (11:24, with F-1's engine side) with main's tools passes `pad (33 checks)`; (c) this branch passed
+33/33 at 10:05, before the asset change. It goes away when this branch is merged with main (F-1's engine and config).
+
+Not adopted: making `run-uc2-shot.sh` always start from a fresh Avaris.ini (it does so only with UC2_RES; every caller that
+passes different SETTINGS per run sets UC2_RES today). A caller that does not, and passes a setting, inherits it in the next run.
+
+Before/after comparisons with an executable OLDER than this change (`UC2_BIN=uc2-before.bin`, o9-nvidia's pictures,
+d2/d78's reference trees with main's binary, pp-scale's uc2-base.bin) no longer get their test hooks: an old binary reads
+`-inputtest=` and `-glshot=`, not the keys. Its settings still work (`-ini:` exists since C-1). A "before" for these tools has
+to be built from a source with the keys.
