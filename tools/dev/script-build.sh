@@ -7,7 +7,7 @@
 #     stages: assemble make strip compare (default: all four, in that order)
 #     --build <dir>     build directory with Source/UCC/ucc-bin (default build-native)
 #     --tree <name>     output tree <WorkUC2>/run/<name>; must start with m14, d<N> (a D-phase task's prefix,
-#                       e.g. d3-make) or jit (default m14-make)
+#                       e.g. d3-make), f<N> (an F-task's, e.g. f1-make) or jit (default m14-make)
 #     --logs <dir>      where the logs go (default <WorkUC2>/logs/m14; a d<N> tree: <WorkUC2>/logs/d<N>; jit: logs/jit)
 #     --mem <size>      memory ceiling of the `ucc-bin make` run (default 3G)
 #     --headers         also export the C++ headers (into <tree>/<Pkg>/Inc, a scratch copy, never Source/)
@@ -51,11 +51,11 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ ${#stages[@]} -eq 0 ] && stages=(assemble make strip compare)
-case "$tree" in m14*|d[0-9]*|jit*) ;; *) echo "tree name must start with m14, d<N> or jit: $tree" >&2; exit 2;; esac
+case "$tree" in m14*|d[0-9]*|f[0-9]*|jit*) ;; *) echo "tree name must start with m14, d<N>, f<N> or jit: $tree" >&2; exit 2;; esac
 case "$tree" in */*|*..*) echo "bad tree name: $tree" >&2; exit 2;; esac
 case "$build" in /*) ;; *) build=$repo/$build;; esac
 run=$work/run/$tree
-case "$tree" in d[0-9]*) logs=${logs:-$work/logs/${tree%%-*}};; jit*) logs=${logs:-$work/logs/jit};; esac
+case "$tree" in d[0-9]*|f[0-9]*) logs=${logs:-$work/logs/${tree%%-*}};; jit*) logs=${logs:-$work/logs/jit};; esac
 logs=${logs:-$work/logs/m14}
 mkdir -p "$logs"
 
