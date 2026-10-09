@@ -443,12 +443,15 @@ static INT Compare( const FItem& A, const FItem& B )
 //
 // uc2 port: the network tests' commands (UC2NetTest.cpp).
 ENGINE_API UBOOL UC2NetTestExec( UGameEngine* Engine, const TCHAR* Cmd, FOutputDevice& Ar );
+ENGINE_API UBOOL UC2CheatExec( UEngine* Engine, APlayerController* PC, const TCHAR* Cmd, FOutputDevice& Ar );	// TELEPORT/WHEREAMI
 ENGINE_API void UC2NetTestTick( UGameEngine* Engine );
 
 UBOOL UGameEngine::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UGameEngine::Exec);
-	if( UC2NetTestExec( this, Cmd, Ar ) )	// uc2 port: NETPROBE/NETPLACE/NETAIM
+	if( UC2CheatExec( this, NULL, Cmd, Ar ) )	// uc2 port: TELEPORT/WHEREAMI, cheats (UC2Cheats.cpp)
+		return 1;
+	if( UC2NetTestExec( this, Cmd, Ar ) )	// uc2 port: NETPROBE/NETPLACE/NETAIM, cheats too
 		return 1;
 	if( ufrontAutoFovExec( Cmd, Ar ) )		// D-8: AUTOFOV [Off|HorPlus|Adaptive]
 		return 1;

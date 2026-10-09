@@ -76,8 +76,10 @@ class Proc:
                 os.remove(p)
         open(self.netcmd, "w").close()
         open(self.inputcmd, "w").close()
+        # NETPROBE/NETPLACE/NETPLACENEAR/NETAIM are cheats (F-1, Source/Engine/Src/UC2Cheats.cpp): a network game
+        # refuses them unless the process's own ini allows them for tests.
         common = ["INI=Net%s.ini" % self.name, "USERINI=Net%sUser.ini" % self.name, "LOG=" + self.logname,
-                  "-nettest=" + os.path.basename(self.netcmd)]
+                  "-nettest=" + os.path.basename(self.netcmd), "-ini:System:[Engine.GameEngine]:AllowNetCheats=True"]
         if self.kind == "server" and self.wine:
             # The MinGW ucc.exe under wine (tools/dev/m12-wine.sh: own prefix, nothing left running).
             argv = [os.path.join(REPO, "tools/dev/m12-wine.sh"), self.sys, "ucc.exe", "server", self.url,
