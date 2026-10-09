@@ -33,6 +33,9 @@ ENGINE_API UBOOL UC2ProfilesExec( UClient* Client, const TCHAR* Cmd, FOutputDevi
 // uc2 port (jitter): FRAMETRACE, one line per drawn frame (UC2FrameTrace.cpp); quiet unless asked for.
 ENGINE_API UBOOL UC2FrameTraceExec( const TCHAR* Cmd, FOutputDevice& Ar );
 ENGINE_API void UC2FrameTraceDraw( UViewport* Viewport, const FVector& CamLoc, const FRotator& CamRot, FLOAT DeltaSeconds );
+// uc2 port (F-2): the frame rate in the log, [Engine.GameEngine] FpsLogSeconds / FPSLOG (UC2FpsLog.cpp); quiet by default.
+ENGINE_API void UC2FpsLogTick( UEngine* Engine );
+ENGINE_API UBOOL UC2FpsLogExec( const TCHAR* Cmd, FOutputDevice& Ar );
 
 /*-----------------------------------------------------------------------------
 	Object class implementation.
@@ -460,6 +463,8 @@ UBOOL UGameEngine::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	if( UC2ProfilesExec( Client, Cmd, Ar ) )	// uc2 port (D-3): PROFILESTATE (UC2Profiles.cpp)
 		return 1;
 	if( UC2FrameTraceExec( Cmd, Ar ) )		// uc2 port (jitter): FRAMETRACE <frames> [tag]
+		return 1;
+	if( UC2FpsLogExec( Cmd, Ar ) )			// uc2 port (F-2): FPSLOG [seconds]
 		return 1;
 	const TCHAR* Str=Cmd;
 #if WITH_PORTABLE_MOVIES
@@ -3535,6 +3540,7 @@ void UGameEngine::Tick( FLOAT DeltaSeconds )
 	FUNC_CLOCK(TiCyc,TickCycles);
 	UC2NetTestTick( this );	// uc2 port: the -nettest=<file> command file (UC2NetTest.cpp); nothing without it
 	UC2RememberProfile( Client );	// uc2 port (D-3): User.ini [Profiles] LastProfile follows the first player's profile
+	UC2FpsLogTick( this );	// uc2 port (F-2): FpsLogSeconds / FPSLOG; nothing unless asked for
 
     if( DeltaSeconds < 0.0f )
         appErrorf(TEXT("Negative delta time!"));
