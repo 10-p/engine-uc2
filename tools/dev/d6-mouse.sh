@@ -23,8 +23,11 @@
 #   epic    (on request) the mouse as Epic's PC leak had it, which the web build used until 2026-10-07: evidence
 #   accel   (on request; F-1) no mouse acceleration: real X motion at two speeds with the X server's acceleration
 #           turned up; the same turn per count (and the SDL warp-mode control run, evidence)
+#   walk    (on request; F-1) steady ground speeds: W, Shift+W, the pad's left stick at 1.0/0.5/0.35 (both trees)
+#   cheat   (on request; F-1) WHEREAMI/TELEPORT allowed and logged standalone, refused on a listen server
 #   vanilla (on request; F-1) the D6_SHIP_TREE (Epic's shipped scripts) with OUR DefUser.ini: the mouse turns the view
-#           through Epic's PC path (the stick's curve: capped, not linear), up looks up, the look keys turn
+#           through Epic's PC path (the stick's curve: capped, not linear), up looks up, the Right arrow strafes,
+#           PageUp looks up
 #
 # Trees (<WorkUC2>/run/<name>, made by tools/dev/mkrun-uc2.sh): D6_TREE (rebuilt packages, default d6-run),
 # D6_SHIP_TREE (shipped packages, default d6-ship). Every game run is tools/dev/m10-controls.sh --file (Xvfb inside
@@ -264,7 +267,8 @@ probe Ae
 pyexec save('look-auto-centre-under-the-pad', [P['Ad'].rot[0], P['Ae'].rot[0]])
 check look-auto-centre-under-the-pad P['Ad'].mouselook == 'False' and abs(((P['Ae'].rot[0]+1400+32768)&65535)-32768) < abs(((P['Ad'].rot[0]+1400+32768)&65535)-32768) - 100
 SCEN
-  # 7. the look keys, and the mouse right after the stick (no adhesion/friction/curve on the mouse)
+  # 7. the keys: the Right arrow strafes and never turns (F-1), PageUp looks up; then the mouse right after the stick
+  # (no adhesion/friction/curve on the mouse)
   cat <<SCEN
 probe Ka
 keydown Right
@@ -272,8 +276,15 @@ sleep 1.0
 keyup Right
 sleep 0.3
 probe Kb
-pyexec save('look-keys-deg-per-s', round(yawdiff('Ka','Kb')*360/65536/1.0,1))
-check look-right-key-turns-right 60*65536/360 < yawdiff('Ka','Kb') < 125*65536/360
+check look-right-arrow-strafes-and-never-turns side('Ka','Kb') > 100 and yawdiff('Ka','Kb') == 0
+probe Kc
+keydown Prior
+sleep 0.5
+keyup Prior
+sleep 0.3
+probe Kd
+pyexec save('look-pageup-deg-per-s', round(pitchdiff('Kc','Kd')*360/65536/0.5,1))
+check look-pageup-looks-up pitchdiff('Kc','Kd') > 500
 pad axis rightx 32767
 sleep 0.2
 pad axis rightx 0
@@ -588,9 +599,79 @@ check $p-n-counts-in-n-counts-out abs(M['ys']/K-1) < 0.01 and abs(M['yf']/K-1) <
 SCEN
 }
 
+# walk (F-1): does UC2 walk? The steady ground speed (0.6-1.3 s after the start) of W, of the pad's left stick at 1.0,
+# 0.5 and 0.35 deflection, and of W with Shift held, from the same open spot (TELEPORT, jit-trace.sh's spot): numbers
+# for the owner's "Shift = walk" (on both packages: UnIn.cpp scales the stick on PC for both since F-1)
+scen_walk() {
+  start walk
+  local spot="1977.8 583.7 -34.1 33000 0"
+  echo "pad attach"
+  echo "wait SDL2 pads: pad 0 connected 10"
+  local k
+  for k in w:keydown_w pad1.0:32767 pad0.5:16384 pad0.35:11469 shiftw:shift; do
+    local tag=${k%%:*} how=${k#*:}
+    echo "chan exec TELEPORT $spot"
+    echo "sleep 1"
+    echo "chan exec TELEPORT $spot"
+    echo "sleep 1"
+    echo "chan watch 20000 $tag"
+    case $how in
+      keydown_w) printf 'keydown w\nsleep 1.5\nkeyup w\n';;
+      shift) printf 'keydown Shift_L\nkeydown w\nsleep 1.5\nkeyup w\nkeyup Shift_L\n';;
+      *) printf 'pad axis lefty -%s\nsleep 1.5\npad axis lefty 0\n' "$how";;
+    esac
+    echo "sleep 0.5"
+    echo "chan log WALK-$tag-END"
+    echo "watch $tag test: log WALK-$tag-END 30"
+    echo "pyexec M['$tag']=save('walk-speed-$tag', steady_speed('$tag'))"
+  done
+  cat <<SCEN
+check walk-keys-run M['w'] > 300
+check walk-pad-full-runs M['pad1.0'] > 300
+SCEN
+}
+
+# cheat (F-1): WHEREAMI and TELEPORT in a standalone game (allowed; "Cheat:" lines; WHEREAMI's output pasted into
+# TELEPORT gives the same place and view), then the same process's map reloaded as a LISTEN server: refused
+scen_cheat() {
+  start cheat
+  cat <<SCEN
+chan exec WHEREAMI
+expect cheat-whereami-logged ^Cheat: WHEREAMI -?[0-9.]+ -?[0-9.]+ -?[0-9.]+ [0-9]+ -?[0-9]+\s*$ 10
+chan exec TELEPORT 1977.8 583.7 -34.1 33000 -1400
+expect cheat-teleport-logged ^Cheat: TELEPORT 1977.8 583.7 -34.1 33000 -1400 10
+expect cheat-teleport-ok ^Cheat: TELEPORT ok: 1977.8 583.7 -3[0-9].[0-9] 33000 -1400 10
+sleep 0.5
+probe ta
+check cheat-teleport-moved-the-pawn abs(P['ta'].loc[0]-1977.8) < 2 and abs(P['ta'].loc[1]-583.7) < 2 and P['ta'].rot[1] == 33000
+chan exec WHEREAMI
+expect cheat-whereami-gives-the-place ^Cheat: WHEREAMI 1977.8 583.7 -3[0-9].[0-9] 33000 -1400 10
+chan exec TELEPORT 1500 600 -34.1
+expect cheat-teleport-without-view-keeps-it ^Cheat: TELEPORT ok: 1500.0 600.0 -3[0-9].[0-9] 33000 -1400 10
+chan exec NETPROBE standalone
+expect cheat-netprobe-allowed-standalone ^Cheat: NETPROBE standalone 10
+expect cheat-netprobe-runs-standalone ^standalone summary net=Standalone 10
+mark
+chan exec TELEPORT
+sleep 1
+absent cheat-bare-teleport-is-epics-and-not-logged ^Cheat: TELEPORT
+chan exec open DM-Deadbolt?Listen
+wait Bringing Level DM-Deadbolt.MyLevel up for play 120
+sleep 4
+key Alt_L 0.3
+sleep 3
+chan exec WHEREAMI
+expect cheat-whereami-refused-on-a-listen-server ^Cheat: WHEREAMI refused: 10
+chan exec TELEPORT 1977.8 583.7 -34.1
+expect cheat-teleport-refused-on-a-listen-server ^Cheat: TELEPORT refused: 10
+chan exec NETPLACE LocalPlayer 1977.8 583.7 -34.1 33000
+expect cheat-netplace-refused-on-a-listen-server ^Cheat: NETPLACE refused: 10
+SCEN
+}
+
 # vanilla: Epic's shipped scripts with OUR DefUser.ini (F-1): the mouse is Epic's PC mouse (into the stick's
 # variables, through the pad's clamp and curve): it turns the view, right turns right, up looks up; capped (200
-# counts in one tick turn less than 3x what 20 do); the look keys turn
+# counts in one tick turn less than 3x what 20 do); the Right arrow strafes (never turns), PageUp looks up
 scen_vanilla() {
   start vanilla
   echo "probe Sa"; mlines 20 0 1; echo "probe Sb"
@@ -609,8 +690,7 @@ sleep 1.0
 keyup Right
 sleep 0.3
 probe Kb
-pyexec save('vanilla-look-keys-deg-per-s', round(yawdiff('Ka','Kb')*360/65536/1.0,1))
-check vanilla-right-key-turns-right 45*65536/360 < yawdiff('Ka','Kb') < 150*65536/360
+check vanilla-right-arrow-strafes-and-never-turns side('Ka','Kb') > 100 and yawdiff('Ka','Kb') == 0
 probe Kc
 keydown Prior
 sleep 0.5
@@ -673,6 +753,15 @@ PY
       scen_lazy > "$out/lazy.scen"; prep "$tree"
       run lazy "$tree" 0 200 -maxfps=60 "-ini:User:[UCGameplay.UCPlayerInput]:bLazyMouseCamera=True"
       count "$out/lazy.result";;
+    walk)
+      echo "== walk ($tree and $ship: steady speeds of W, Shift+W and the left stick at 1.0/0.5/0.35)"
+      scen_walk > "$out/walk.scen"
+      cp "$out/walk.scen" "$out/walk-shipped.scen"
+      prep "$tree"; run walk "$tree" 0 300 -maxfps=60; count "$out/walk.result"
+      prep "$ship"; run walk-shipped "$ship" 0 300 -maxfps=60 | sed 's/^/(shipped) /'; count "$out/walk-shipped.result";;
+    cheat)
+      echo "== cheat ($tree: WHEREAMI/TELEPORT standalone, then refused on a listen server)"
+      scen_cheat > "$out/cheat.scen"; prep "$tree"; run cheat "$tree" 0 300 -maxfps=60; count "$out/cheat.result";;
     accel)
       echo "== accel ($tree, real X motion with X pointer acceleration 4x; then the SDL_MOUSE_RELATIVE_MODE_WARP=1 control)"
       scen_accel > "$out/accel.scen"; prep "$tree"; run accel "$tree" 0 200 -maxfps=60; count "$out/accel.result"
@@ -692,7 +781,7 @@ PY
     vanilla)
       echo "== vanilla ($ship, Epic's shipped scripts, OUR DefUser.ini: Epic's PC mouse path)"
       scen_vanilla > "$out/vanilla.scen"; prep "$ship"; run vanilla "$ship" 0 300 -maxfps=60; count "$out/vanilla.result";;
-    *) echo "unknown scenario $s (look ini lazy pad lock before epic vanilla accel)" >&2;;
+    *) echo "unknown scenario $s (look ini lazy pad lock before epic vanilla accel walk cheat)" >&2;;
   esac
 done
 echo "d6-mouse: $passes PASS, $fails FAIL (scenarios: ${*:-look ini lazy pad lock before}; 'before' and 'epic' are evidence and not counted)"

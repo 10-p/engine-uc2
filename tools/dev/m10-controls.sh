@@ -213,7 +213,8 @@ sleep 1
 keyup Right
 sleep 0.3
 probe t1
-check kb-right-arrow-turns-right yawdiff('t0','t1') > 4000
+# F-1 (owner, 2026-10-09): the arrows move and strafe as WASD (Epic's PC layout), they never turn
+check kb-right-arrow-strafes-right side('t0','t1') > 100 and yawdiff('t0','t1') == 0
 probe w0
 key e
 sleep 2.5

@@ -289,3 +289,68 @@ stick (Lock + D target switch, Space dodge by keyboard), the D-4 name rule (d4 n
 
 Memory: builds 6G (-j4), configures 4G, script make 3G, game runs 2G, net listen 6G, frontend build 4G, browser 6G
 (mem-guard 14 then 18 machine-wide, see above); no `capped` ceiling was hit (no exit 137).
+
+## Follow-up (2026-10-09, from 09:40): the owner's decisions after the F-1 report
+
+Decisions (coordinator's message): (1) the `UnIn.cpp` left-stick fix accepted as made; (2) keyboard "PC friendly":
+movement keys strafe, never turn; WASD and the arrows move/strafe (Epic's PC layout for the arrows), PageUp/PageDown may
+stay look keys; Shift held = walk if UC2 has a way; (3) `bKeysAsStick` and `MouseLockBreakAngle` hard-wired, their ini
+keys and README rows removed; (4) WHEREAMI/TELEPORT as cheats, the NET* test commands behind the same guard, documented
+for the other engines; (5) the gate again, both ways.
+
+Not done as asked: main's `-maxfps` -> `[Engine.Engine] FrameRateCap` change (14d1b99) could not be brought onto
+this branch (cherry-pick refused by the session's permission rules; "do not merge main"), so this branch's engine
+still has `-maxfps` and the scripts here still pass it. At the merge, the new lines in `tools/dev/d6-mouse.sh`
+(scenarios vanilla, lazy, accel, walk, cheat) need main's form `"-ini:System:[Engine.Engine]:FrameRateCap=60"`.
+
+### F-1b: the keyboard moves and strafes; does UC2 walk? (measured)
+
+- `Engine/Config/DefUser.ini`: `Left=StrafeLeft`, `Right=StrafeRight` (Epic's PC file; Up/Down were already
+  MoveForward/MoveBackward); PageUp/PageDown stay the look stick at 0.8. D-9 rows: STRAFE LEFT/RIGHT list `A,Left` /
+  `D,Right`; TURN LEFT/RIGHT stay as actions with no key by default ("THE MOUSE TURNS").
+- **UC2 has no walk mode.** No `bIsWalking`/`bRun`/`WalkingPct` in any UC2 class (`APawn`'s is commented out,
+  `UnController.cpp:122`); `Shift=Walking` (Epic's binding) names an alias no package defines. Movement speed: the
+  stick (or a key) sets the acceleration (`aForward x 24000`), clamped to `AccelRate` 2048 (`UnPhysic.cpp:1036`),
+  and the speed grows to `GroundSpeed` whatever the acceleration (`calcVelocity`); `CalcMaxSpeed` only slows
+  backpedalling. So a half-pushed stick runs at full speed on the Xbox too.
+- Measured, `tools/dev/d6-mouse.sh walk` (from a fixed open spot, steady speed 0.6-1.3 s after the start; watch
+  traces at 60 fps; `logs/f1/u1/d6/walk*.json`), on BOTH packages: W **430.0**, pad left stick 1.0 **430.0**, 0.5
+  **430.0**, 0.35 **430.0**, Shift+W **430.0** units/s. A Shift that made the keys a half stick would therefore not
+  slow the pawn at all; it would only stop Space from dodging (SmartJump dodges above `fSmartJumpDodgePct` 0.5) and
+  Lock + A/D from switching. Not implemented: **owner decision needed** (a walk speed is new gameplay: it would need
+  a speed scale in the rebuilt script, e.g. in `PlayerMove`, and has no Xbox counterpart). `Shift=Walking` left as
+  Epic bound it (dead).
+
+### F-1c: bKeysAsStick and MouseLockBreakAngle hard-wired
+
+`UCPlayerInput.uc`: the two `globalconfig` properties and their defaults removed; `KeysAsStick()` runs whenever a
+movement key is held; `MouseBreaksLock` uses 25.0 (a literal: a `const` added a link-order "problem" in script-diff).
+`DefUser.ini` keys and their comments removed; README rows rewritten. Script build `--tree f1-make3`: 0 errors, 85
+warnings; compare UCGameplay 19 problems (as before), UCMenu 5, GUI different-explained.
+
+### F-1d: WHEREAMI / TELEPORT, cheats, and the NET* test commands behind the same guard
+
+- New `Source/Engine/Src/UC2Cheats.cpp`: `UC2CheatsAllowed` (the guard) and `UC2CheatExec` (WHEREAMI, TELEPORT).
+  Native, in Engine, so the commands exist with Epic's packages too. Guard: the local `PlayerController` has a
+  `CheatManager` (UC2's rule, `PlayerController.AddCheats`: standalone only), or `[Engine.GameEngine]
+  AllowNetCheats=True` (a test key in no shipped ini). Refusals and every run log `Cheat: ...` on `NAME_Log` (the
+  engine's log has no name prefix, so the prefix is in the text).
+- Hooks: `Source/Engine/Src/UnPlayer.cpp` `UPlayer::Exec`, first thing after the `Actor` check (Epic's
+  `CheatManager.Teleport()` has no parameters and would otherwise take `TELEPORT x y z`; bare `TELEPORT` stays
+  Epic's); `UnGame.cpp` `UGameEngine::Exec` before `UC2NetTestExec` (the -nettest file, a process without a player).
+- `UC2NetTest.cpp`: NETPROBE, NETPLACE, NETPLACENEAR, NETAIM call the guard first.
+- `tools/dev/net-test.py`: every process gets `-ini:System:[Engine.GameEngine]:AllowNetCheats=True`. The other users
+  (`jit-trace.sh`, `jit-strip.sh`, `m7-effects.sh`, `m7b.sh`, `o9/*.scen`; on main also `fx-owner.sh`,
+  `fps-bench.sh`, `f5-flicker.sh`) run standalone games, where the guard allows them: no change needed (checked by
+  reading each launch: a map URL without `?Listen`, no server).
+- Frontend (not touched, parked): `packages/e2e/uc2-wasm-net.spec.js` sends `NETPROBE` in a browser network game; it
+  will be refused unless its launch adds `-ini:System:[Engine.GameEngine]:AllowNetCheats=True`.
+  `uc2-wasm-jitter.spec.js` uses NETPLACE standalone: unaffected.
+- Reference for other engines: `docs/CHEAT-COMMANDS.md` (names, format, guard, log lines; for the coordinator to copy
+  into the frontend's docs).
+- Measured, `tools/dev/d6-mouse.sh cheat` on `f1-reb` (`logs/f1/u2/d6/cheat.*`): **13 PASS, 0 FAIL**: `Cheat:
+  WHEREAMI 1229.6 -672.9 -130.1 40448 0`; `TELEPORT 1977.8 583.7 -34.1 33000 -1400` -> `Cheat: TELEPORT ok: 1977.8
+  583.7 -34.1 33000 -1400` and the probe there; WHEREAMI gives it back exactly; TELEPORT without yaw/pitch keeps the
+  view; NETPROBE allowed and logged standalone; bare TELEPORT is Epic's and logs nothing; after `open
+  DM-Deadbolt?Listen`: WHEREAMI, TELEPORT and NETPLACE each `Cheat: ... refused: cheats are only for a standalone
+  game (UC2's CheatManager rule)`.

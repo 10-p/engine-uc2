@@ -331,12 +331,12 @@ expect $P-leaving-saves KeyBinds: saved 10 key\(s\) to User.ini 10
 expect $P-saves-sensitivity KeyBinds: mouse sensitivity 5.00 saved 10
 expect $P-saves-invert KeyBinds: mouse invert True saved 10
 sleep 2
-keys k1 J Space S W G Mouse4 V F9 Home Period
+keys k1 J Space S W G Mouse4 V F9 Home Right Period
 keys k2 Escape Joy1 Joy2 Joy7 Joy8 Joy13 JoyX JoyY JoyU JoyV
 check $P-live-j K['k1']['J'] == 'SmartJump 0'
 check $P-live-space-free K['k1']['Space'] == ''
 check $P-live-conflict-cleared K['k1']['S'] == 'MoveForward' and K['k1']['W'] == ''
-check $P-live-g-and-period-replaced K['k1']['G'] == 'StrafeRight' and K['k1']['Period'] == ''
+check $P-live-g-replaced-right K['k1']['G'] == 'StrafeRight' and K['k1']['Right'] == '' and K['k1']['Period'] == 'StrafeRight'
 check $P-live-mouse4 K['k1']['Mouse4'] == 'Jump'
 check $P-live-cleared K['k1']['V'] == '' and K['k1']['F9'] == '' and K['k1']['Home'] == ''
 check $P-live-escape-and-pad-untouched K['k2'] == K['k0'] and K['k2']['Escape'] == 'ShowMenu'
@@ -584,7 +584,7 @@ u, du = section(user, 'Engine.Input'), section(defuser, 'Engine.Input')
 pu, pd = section(user, 'UCGameplay.UCPlayerInput'), section(defuser, 'UCGameplay.UCPlayerInput')
 def report(name, ok, detail):
     print(f"{'PASS' if ok else 'FAIL'} ini-{stage}-{name}: {detail}")
-want = {'j': 'SmartJump 0', 'space': '', 's': 'MoveForward', 'w': '', 'g': 'StrafeRight', 'period': '',
+want = {'j': 'SmartJump 0', 'space': '', 's': 'MoveForward', 'w': '', 'g': 'StrafeRight', 'right': '',
         'mouse4': 'Jump', 'v': '', 'f9': '', 'home': ''} if stage == 'menu' else {}
 diff = {k: (du.get(k), u.get(k)) for k in set(u) | set(du) if (u.get(k) or '') != (du.get(k) or '')}
 report('changed-keys-written', all(u.get(k) == v for k, v in want.items()),
