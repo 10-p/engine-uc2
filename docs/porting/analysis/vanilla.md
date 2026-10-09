@@ -96,6 +96,47 @@ So, with Epic's packages, our engine and main's curated ini: keyboard walking, m
 profiles work; **the mouse, the look keys and the pad's left stick do not** (three defects, all ours: two ini
 bindings Epic's script overwrites, and the left stick's PC scale that Epic's script applies only on the Xbox).
 
+## Steps 2 and 3 (2026-10-09 02:10-02:50): Epic's mouse path in the ini, the PC mouse on top, the lazy camera key
+
+Changes (worktree; file:line at the commit):
+- `Engine/Config/DefUser.ini` (and the generated `web/DefUser.ini`): `MouseX/MouseY=Count bXAxis | Axis aMouseX
+  Speed=6.0` (Epic's PC and retail binding, byte for byte); `Left/Right=Axis aMouseX Speed=-/+4.0`,
+  `PageUp/PageDown=Axis aMouseY Speed=+/-4.0`; new `[UCGameplay.UCPlayerInput] bLazyMouseCamera=False`; comments say
+  which package reads what. The pad section is the retail disc's, unchanged (it already was).
+- `Source/Engine/Src/UC2InputMigrate.cpp` deleted, its call and declaration in `UnGame.cpp` removed (that part of
+  `UGameEngine::Init` is Epic's again); `-noinimigrate` gone with it. No start-up warning from the engine either: the
+  rebuilt script logs one line per level, `UCPlayerInput: PC mouse look (rebuilt UCGameplay.u),
+  MouseLookSensitivity=2.5, rigid|lazy camera under the mouse`; Epic's package logs nothing (and the existing
+  `ScriptPatcher: UCGameplay patched` / `... not the package the patch was made for` line already says which one).
+- `Source/Engine/Src/UnIn.cpp` AXIS branch: the stick's walk on PC (see "Decisions"), for both packages.
+- Rebuilt `UCGameplay.u`: `UCPlayerInput.PlayerInput` takes the mouse's share out of `aMouseX/aMouseY` by the Count
+  bytes (step 0's design) and feeds it to D-6's unchanged `AddMouseLook` as `aMouseX / 6`; the x24000 is gone,
+  `KeysAsStick` leaves the stick's walk out; `bLazyMouseCamera` (globalconfig, default false):
+  `UCPlayerController.MouseLookCamera` returns at once when it is set, so Epic's lazy camera runs under the mouse
+  and `MouseCameraLeftBehind` (the jitter fix) never fires (it needs the rigid camera's time stamp), which is what
+  the lazy camera always had.
+- Script build `tools/dev/script-build.sh --tree f1-make` (3G): `Success - 0 error(s), 85 warning(s)`; compare:
+  UCGameplay 19 problems (the changed functions, as at the jitter gate), UCMenu 5, GUI different-explained (D-4),
+  every other package as shipped (`logs/f1/f1-make-compare.txt`).
+- Tests: `tools/dev/d6-mouse.sh`: `migrate` (and `-noinimigrate`) removed; new `vanilla` (Epic's package with our
+  ini: the mouse turns through Epic's PC path, the look keys turn), `lazy`, `accel` (step 6); the pad scenario walks
+  from a fixed spot (jit-trace's) and checks the walk on BOTH trees, and the walk is compared like the curves.
+
+Measured (`logs/f1/s2-d6/`, trees `f1-reb` = this branch's packages, `f1-van` = Epic's, same binary and inis; load
+22-28): **76 PASS, 1 FAIL**.
+- vanilla 6/6: 20 counts at one a tick turn 4,466 units, 20 in one tick 440, 200 in one tick 440 (Epic's PC mouse:
+  the stick's clamp; D-6's `epic` evidence had 4,442/440/440), pitch 4,432; Right arrow 91.1 deg/s, PageUp looks up.
+- look 36/36 on the rebuilt package: 10.012 units per count at every speed and distance, circle, camera, settings,
+  invert, auto-centre under the pad only, the mouse right after the stick still linear (a pad attached: its Count
+  baseline 1 per tick is told apart). ini 4/4.
+- lazy 5/5: still 10.012 per count, the camera moves on 17.2 units in the 2 s after a 400-count flick and then rests,
+  the start-up line says "lazy camera under the mouse".
+- pad 4/4 + curves vs Epic's package within 0.17% (worst: pitch 0.5, 0.17%; yaw 0.35/0.5/0.75/1.0: 0.13/0.10/0.08/
+  0.09%); **the left stick walks on Epic's package now** (fixed spot: -163.9 / +399.2 / -353.4 units with Epic's,
+  -163.9 / +408.4 / -353.8 with ours; 2.3% on one segment, frame quantisation of the 1.0 s hold at 30 fps).
+- lock 11/12: `lock-pulls-back-after-the-mouse-stops` (offset 1,773 -> 1,757, wanted -50): the check the jitter task
+  already found spawn-sensitive (jitter.md step 4); re-run in step 7. Adhesion 0 under the mouse, 215 under the pad.
+
 ## Step 4 (2026-10-09, written while step 1 ran): review of bKeysAsStick, the stick on PC, the binding audit
 
 The owner (2026-10-09): "Keys weren't backwards, just really hard to use on the PC and maybe we needed better
