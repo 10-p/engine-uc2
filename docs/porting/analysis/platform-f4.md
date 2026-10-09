@@ -37,6 +37,41 @@ web-smoke.md, runtime-port.md. engine-ut2004 template findings are recorded unde
   `PASS fps-bench f4-DM-Praxis-1280x720: 8.01 s 441 frames 55.1 fps; ... renderer 'Quadro P620/PCIe/SSE2'`.
   The numbers for the F-2 questions are taken at low load (below).
 
+### F-2 answers (measured 2026-10-09 03:00-03:10, machine load 19-30 from other agents' builds, the Quadro P620 also
+### drives the owner's desktop and a Sunshine stream: numbers are this machine at this time, not a clean benchmark)
+
+Is the frame rate uncapped natively? **Yes.** `UGameEngine::GetMaxTickRate()` (`UnGame.cpp:3502`) is 0 for a standalone
+game and a listen server (dedicated server: Net/LanServerMaxTickRate 60, clamped 10-120; a network client with
+`bCapFramerate`: min(90, netspeed/MoveRepSize)); `UseVSync=False` in every render-device section of Default.ini (and the
+compiled default 0, `UC2GLRenderDevice.cpp:206`), applied with `SDL_GL_SetSwapInterval(0)`; nothing else sleeps. The null
+renderer runs DM-Praxis at **1,336 fps** (`f4-praxis-720-null`: 26,726 frames in 20 s, frame avg 0.75 ms): the game
+tick itself is far from any limit. Since F-4e a cap exists only if asked for: `[Engine.Engine] FrameRateCap` (default 0).
+`__GL_SYNC_TO_VBLANK=0` changes nothing (61.2 vs 63.0 fps): no hidden vsync on the offscreen EGL path.
+
+What caps the web: see F-4b's section (the 0 ms timer clamped to >= 4 ms per frame, plus the Asyncify unwind and the
+commit blit; no cap of the engine's own). Browser frame times measured there: 42-59 ms p50 at load 36 (not a benchmark).
+
+Can it reach 120 fps on this machine on DM-Praxis? `tools/dev/fps-bench.sh f4 DM-Praxis 20 <WxH>` (GPU, headless):
+
+| Run (20 s each) | fps | frame ms avg / min / max / p99 | 1% low |
+|---|---|---|---|
+| turn on the ledge, 1280x720 | 63.0 | 15.88 / 8.34 / 92.18 / 64.39 | 13.7 |
+| turn on the ledge, 1920x1080 | 69.6 | 14.36 / 8.33 / 90.76 / 28.40 | 21.2 |
+| turn on the ledge, 640x480 | 68.6 | 14.58 / 7.81 / 90.59 / 62.67 | 12.8 |
+| turn, 1280x720, `UsePostProcess=False` | 95.2 | 10.51 / 5.83 / 73.25 / 19.47 | 40.0 |
+| fixed: the ledge facing the round room (`FPS_TURN=0`), 1280x720 | 50.7 | 19.74 / 15.86 / 46.16 / 27.44 | 31.7 |
+| the spawn view, no placement, 1280x720 | 132.5 | 7.55 / 5.16 / 34.23 / 15.87 | 44.3 |
+| null renderer, 1280x720 | 1336.3 | 0.75 / 0.49 / 5.04 / 1.47 | 548.5 |
+
+So: **not on the benchmark path, at 720p or 1080p** (63-70 fps average, 50 on the heaviest view); yes on light views (132
+at the spawn). The rate does not depend on the resolution (640x480 68.6, 1280x720 63.0, 1920x1080 69.6): the frame is
+not fill-bound on this GPU; it is per-draw/per-pass work (the post-processing alone is about 5 ms a frame: 95 fps
+without it), which is where F-3/F-5 (WebGL 2, the renderer items) and a profile of UC2GLDrv would look. The isolated
+90 ms frames on the turning path come with the teleports (NETPLACE every 0.25 s; the fixed view's worst is 46 ms).
+
+Native before/after F-4a (the F-2 binary `logs/f4/bin-f2/uc2.bin` vs the F-4 binary, alternated, the same path, 720p):
+69.9 / 68.0 / 69.6 / 70.7 fps: no difference, as expected (F-4a changes nothing natively but the socket sentinel).
+
 ## Step 2 - F-4a: exceptions off, fail-soft loaders (in progress)
 
 engine-ut2004 (read-only) facts:
@@ -126,3 +161,143 @@ engine-ut2004 sources read: `git log` (bc05013, f7653f1, 5af159b, 4a68972, f71d6
 
 Not done: the arm64 client (packages missing), any arm64 run beyond qemu-user, a census at arm64 (58 maps under qemu would take
 hours; the one map above loads).
+
+## Step 3 - F-4b: frame yield and pacing, line by line against engine-ut2004 and engine-ut99 (commit d9226d1)
+
+Read: engine-ut2004 `Source/SDLLaunch/Src/SDLLaunch.cpp` (yield 31-66, main loop 400-480, visibility 15-28 and 1435),
+`Source/SDLLaunch/CMakeLists.txt` (link flags), `Source/GL4ESDrv/Src/GL4ESRenderDevice.cpp:1432`, git 682643d (the revert);
+engine-ut99 `Source/UnrealTournament/Src/Launch.cpp` (18-66, 680-730), `Source/NSDLDrv/Src/NSDLViewport.cpp:515-530,888`,
+`Source/UnrealTournament/CMakeLists.txt:99-190`; engine-unreal1 `Source/Unreal/Src/SDLLaunch.cpp:545-580`; the frontend's
+`docs/migration/steps/2.43-frame-pacing.md`.
+
+| Item | engine-ut2004 | engine-ut99 (and unreal1) | UC2 before | UC2 now |
+|---|---|---|---|---|
+| Resume primitive | `EM_ASYNC_JS` awaiting `setTimeout(0)` (2.43: MessagePort lost 44% of frames to coalescing; worker rAF rejected by the owner: 60/30 hopping) | the same | the same (`SDLLaunchWeb.cpp`) | unchanged |
+| Place in the frame | after Tick and the tick-rate limiter, before `UpdateInput` (the message pump) | after Tick; `emscripten_sleep(ms)` when the cap leaves >1 ms, else the yield | the same as ut2004 | unchanged |
+| When | every frame unless the limiter slept (`GUseFixedTimeStep \|\| !IncludeMessaging \|\| GetMaxTickRate()<=0`) | every frame (sleep or yield) | the engine-rate test: with the launcher's own cap (`-maxfps`, `-framepattern`) the limiter slept AND yielded (two event-loop turns per frame) | **yield iff the limiter did not sleep** (`LimiterSlept`), the same rule as ut2004's |
+| Frame cap | none (uncapped standalone; net client capped by the engine) | `[Engine.Engine] FrameRateCap`, default 120, the launcher writes it with `-ini:` | `-maxfps=` (tests only) | `[Engine.Engine] FrameRateCap`, default 0 = uncapped (ut2004); F-4e |
+| Present | `explicitSwapControl` + `renderViaOffscreenBackBuffer`, `emscripten_webgl_commit_frame()` per frame, but **no** `-sOFFSCREEN_FRAMEBUFFER` (reverted 682643d: its gl4es took raw entry points past Emscripten's bind-0 -> defaultFbo redirect, so the canvas was black with the flag; commit is then a stub and Chromium composites when the worker task ends) | the same attributes **with** `-sOFFSCREEN_FRAMEBUFFER` (2.43's root cause: without it the implicit path showed ~1 frame/s on Windows/D3D11) | with the flag, and the canvas renders (UC2GL4ESDrv hands gl4es `emscripten_webgl_get_proc_address`; web-renderer.md G3 checked `blitOffscreenFramebuffer` in the loader; why ut2004's gl4es got past the redirect and UC2's does not is NOT established) | **kept, a deliberate difference from ut2004**: ut99's lesson applies and ut2004's reason does not (the boot spec below draws the menu with it). The M11 link block belongs to f3-webgl2 now: not touched |
+| `-sASYNCIFY_IMPORTS` | `['emscripten_sleep','emscripten_set_main_loop','__syscall_openat']` | the same | not set (Emscripten's defaults) | **ut2004's list** (Emscripten appends its defaults, so no functional change) |
+| Hidden tab | `emscripten_set_visibilitychange_callback`: `alListenerf(AL_GAIN, 0/1)`, the engine keeps ticking (D-16) | nothing | nothing | **ut2004's callback** (`SDLLaunchWeb.cpp`, registered once the engine exists; UC2ALAudio never sets the listener gain) |
+| Timers while hidden | the worker's setTimeout is not throttled like a background page's main thread; nothing special | the same | the same | unchanged |
+| Exceptions in the frame | catching off for the engine (F-4a) | the same family | catching on (invoke_ trampolines, Asyncify around them) | off (F-4a) |
+| Pool, stack | `PTHREAD_POOL_SIZE=4`, `STACK_SIZE=2MB`, `ASYNCIFY_STACK_SIZE=256K` | the same | the same | unchanged |
+
+What caps the web's frame rate (answer for F-2, by reading; not measured in a browser here): nothing on purpose (no cap,
+UseVSync does not apply to a worker's WebGL context). In practice each frame pays the yield: a `setTimeout(0)` that
+Chromium clamps to >= 4 ms once timers nest (each resume runs the next frame inside the previous timer's task;
+2.43 measured the timer's p50 wait at 4.0 ms), plus the Asyncify unwind/rewind of the engine stack, plus the blit of
+`commit_frame`. So the web's ceiling is about 1000 / (frame work + ~4 ms), and the browser's compositor shows at most
+the display rate.
+
+## Step 5 - F-4d: files and docs (commits e178ae8, 81bed5d)
+
+Line endings and encoding, checked in the siblings (`file -k`, read-only):
+- engine-ut2004 `Engine/Config/{Default,DefUser}.ini` and `web/*.ini`: LF ("ASCII text", "with escape sequences", one
+  UTF-8 web DefUser.ini). engine-ut99 `Config/System/*.ini`: LF. engine-unreal1 `Engine/Config/*.ini`: LF.
+- Sources: engine-ut2004 kept Epic's CRLF in 1,736 of 1,788 `.cpp/.h/.uc` (its UC2-like files that it rewrote are LF)
+  and Latin-1 (35 ISO-8859 files); engine-ut99 (326 `.cpp/.h`) and engine-unreal1 (883) are LF throughout, 0 CRLF.
+  UC2: every source LF since the import (0 CRLF files among `git ls-files Source` `.cpp/.h/.uc`), 161 ISO-8859 files kept
+  as Latin-1. So UC2 matches ut99/unreal1 on line endings and ut2004/ut99 on encoding; recorded in CLAUDE.md. Nothing
+  re-encoded.
+- Done: `Engine/Config/{DefUser,DefaultXbox,DefUserXbox,KeyBinds}.ini` and `web/DefUser.ini` CRLF -> LF (only `\r`
+  bytes removed: 355 + 399 + 345 + 139 + 355 lines; no lone CR anywhere). `file -k` now says "ASCII text" for all seven.
+  `tools/dev/sync-web-ini.py` refuses a CR in any `Engine/Config` or `web` ini (--check fails, a rewrite stops) and
+  writes LF. `--check`: both web files up to date.
+- Diff size against Epic's import (`git diff --numstat 7633696`): Default.ini 936 changed lines both before and after
+  (it was already LF; the real change is 214 lines with `--ignore-cr-at-eol`); DefUser.ini 110 before (still CRLF, the
+  real 110) and 664 after (every line's ending); the three reference copies 0 -> 798 / 690 / 278. The meaningful diff
+  is `git diff --ignore-cr-at-eol 7633696 -- Engine/Config`: 214 / 110 / 0 / 0 / 0 (Engine/Config/README.md says so).
+
+Docs: README.md (what / changes / status / building, as engine-ut2004's README), BUILD.md (status, a web section with the
+three modes and the artifact, meta.json, arm64, the frame-rate log, the fetched libraries with GL4ES), CLAUDE.md (the
+encoding facts), BLOCKERS.md (arm64 entry no longer contradicts itself), docs/SOURCE-LAYOUT.md and client-boot.md (the
+ini CRLF statements). AGENTS.md is a pointer to CLAUDE.md, as engine-ut2004's: not stale, unchanged.
+`UC2_ASSETS_DIR`: the CMake cache variable (`CMakeLists.txt:33`) was read by nothing: removed, and its BUILD.md row.
+The tools' environment variable of the same name (mkrun-uc2.sh, map-census.sh, script-build.sh, package-windows.sh:
+`${UC2_ASSETS_DIR:-$work/assets/uc2}`) is a working override and stays.
+
+meta.json (engine-ut2004's fields): `cmake/ArtifactDeps.cmake` copied byte for byte from engine-ut2004 (ufront 2.70);
+`Source/SDLLaunch/cmake/Web.cmake` passes `--dep-gl4es` and `--dep-openal-soft` from `GL4ES_GIT_*`/`OPENALSOFT_GIT_*` (the
+cache variables FetchContent reads), the emitter (already engine-ut2004's) turns them into `toolchain.<lib> =
+owner/repo@branch`. Not a commit: engine-ut2004 records the branch on purpose ("never a commit, because the branch tip is
+what a rebuild takes"); the brief asked for a commit too: not added, because the owner's rule is "we follow what UT2004
+does" (if wanted, a `toolchain.<lib>Commit` field from `_deps/<lib>-src` HEAD at link time is a few lines). SDL2 on the
+web is Emscripten's port (named by `emscripten`), so it is not listed, as in engine-ut2004 (which lists karma too).
+`buildFlags`: engine-ut2004's nine plus what UC2 links that it does not. Example (build-wasm-perf at e178ae8):
+```
+"toolchain": { "emscripten": "5.0.7", "gl4es": "10-p/gl4es@fix/cubemap-bind-active-unit",
+               "openal-soft": "10-p/openal-soft-web@ufront/web" },
+"buildFlags": [ "-sASYNCIFY", "-sFULL_ES2", "-sALLOW_MEMORY_GROWTH", "-sFORCE_FILESYSTEM", "-sWASMFS", "-pthread",
+  "-sPROXY_TO_PTHREAD", "-sOFFSCREENCANVAS_SUPPORT", "-sOFFSCREENCANVASES_TO_PTHREAD=#canvas", "-sPTHREAD_POOL_SIZE=4",
+  "-sMAXIMUM_MEMORY=2147483648", "-sMIN_WEBGL_VERSION=1", "-sMAX_WEBGL_VERSION=1", "-sOFFSCREEN_FRAMEBUFFER",
+  "-sNO_DISABLE_EXCEPTION_CATCHING" ]
+```
+(f3-webgl2 moves the WebGL limits to 2: the list must follow it.)
+
+## Step 6 - F-4e: every command-line switch we added, and what happens to it (2026-10-09)
+
+Census: every `Parse/ParseParam(appCmdLine()|CmdLine|Parms, TEXT("..."))` and `appStrfind(appCmdLine(), ...)` in the
+built packages, compared with the import (`git show 7633696:...`): 131 tokens, of which the ones below are ours (the
+rest are Epic's: `-LOG`, `LOG=`, `INI=`, `USERINI=`, `-SERVER`, `-LAZY`, `-BENCHMARK`, `SECONDS=`, `RECORDMOVIE`, `EXEC=`,
+`FirstRun`, `consolecommand=`, `testrendev=`, `TestRenDev`, `-nosound`, `-lanplay`, `CPUSPEED=`, `-NOMMX`/`-NOSSE`,
+`MULTIHOME=`, `PRIMARYNET`, `PORT=`, `PktLoss=`/`PktOrder=`/`PktDup=`/`PktLag=`, `-norunaway`, `-NOGC`, `-CONFLICTS`,
+`-profilestats`, `-safe`/`readini`, `ONLYLOGLOWFPS`, `UPT`, the `-320x240`..`-1600x1200` resolution switches of
+`Launch.cpp`, and the editor/commandlet parameters). `-ini:` and `-log` stay. "Tools" = tools/dev scripts that pass it
+(grep), "Epic" = the token exists in Epic's import.
+
+| Switch | Where | Tools | Epic | Proposal / done |
+|---|---|---|---|---|
+| `-maxfps=<n>` (D-6) | SDLLaunch.cpp | d6-mouse, d9-rebind, jit-trace, sc-saveconfig | `MAXFPS=` only as the PC benchmark's score cap (UnEngineWin.h:948), not a limiter | **converted**: `[Engine.Engine] FrameRateCap=<fps>` (the key engine-ut99 and engine-unreal1 read and the frontend's launcher writes with `-ini:`); default 0 = uncapped as engine-ut2004 |
+| `-framepattern=<ms>:...` (jitter) | SDLLaunch.cpp | jit-trace, jit-strip | no | **converted**: `[SDLLaunch] FramePattern=` (test hook, not written to any ini) |
+| `-frametrace=<n>` (jitter) | UC2FrameTrace.cpp | none (the tools use the console command) | no | **removed**; console `FRAMETRACE <n> [tag]` stays |
+| `-audiowave=<file>` (M8) | UC2ALAudioSubsystem.cpp | run-uc2-audio, m9-movies.py, m12-wine-smoke | no | **converted** to the existing key `[UC2ALAudio.UC2ALAudioSubsystem] WaveFile=` |
+| `-noefx` (M8) | UC2ALAudioSubsystem.cpp | audio-regression | no | **converted** to the existing key `UseEFX=False` |
+| `-nostartupmovies`, `-nomovie` (M9) | UnMovie.cpp | -nostartupmovies: 15 scripts (fps-bench, fx-owner, jit-strip, m10-controls, m12-wine-smoke, m13-64bit, m14-scripts-check, m9-movies, net-test, o9-nvidia, run-uc2-audio, run-uc2-shot, sc-saveconfig, d2 web, ...) and every agent brief | no (UE3's names) | proposed: **remove**, the keys exist (`[UC2Movie] StartupMovies=False`, `Cinematics=`, `LoadingMovie=`); not done here: every running agent passes it today, so it is one sweep across all scripts at a merge point (owner/coordinator) |
+| `-nullmovies` (M9) | UnMovie.cpp | none | no | proposed: ini key `[UC2Movie] NullRendererMovies=True` or remove (no user) |
+| `-movieshot=<s>,...` (M9) | UnMovie.cpp:301 | m9-movies.py | no | proposed: `[UC2Movie] ShotTimes=` test key (not done: time) |
+| `-nettest=<file>`, `-netdrop=` (net-join) | UC2NetTest.cpp | net-test.py (`-nettest`) | no | proposed: a `[UC2NetTest]` section (`CommandFile=`, `Drop=`); not done (time; net-test needs 3 processes) |
+| `-netpktid=`, `-netoldacks` (net-loss) | UnConn.cpp | net-test.py (`-netoldacks`) | no (Epic has `PktLoss=` etc. in the same place) | proposed: `[UC2NetTest] PacketIdStart=`, `OldAcks=`; or keep next to Epic's `Pkt*=` network-emulation switches (owner) |
+| `-noinimigrate` (D-6) | UC2InputMigrate.cpp | d6-mouse | no | goes with UC2InputMigrate (F-1 removes it) |
+| `-inputtest=<file>` (M10) | SDL2Drv SDL2Client.cpp | m10-controls, m10-inject, fx-owner, fps-bench, jit-strip, c1-ini-overrides, m12-wine-smoke, net-test | no | owner decision: it is the test channel every game test drives; proposed `[SDL2Drv.SDL2Client] InputTestFile=` (f1-vanilla owns SDL2Drv now) |
+| `-inputlog` (M10) | SDL2Pads.cpp | none | no | proposed: **remove**, `[SDL2Drv.SDL2Client] LogInput=True` exists |
+| `-defaultres`, `-windowed` | SDL2Drv | none | yes (WinDrv; engine-ut2004's SDL2Drv has both) | keep (Epic's) |
+| `-usehomedir` | FFileManagerUnix.h | none | no; engine-ut2004 has the same opt-in (cedc623) | keep: it decides where the ini lives, so it cannot be an ini key |
+| `-nullrenderer`, `-opengl`, `-gl4es` | SDLLaunch.cpp render-switch table | 18 / 6 / 15 uses | no; engine-ut2004 has the same table (`-NULLRENDERER`, `-OPENGLRENDERER`, `-GL4ESRENDERER`) | keep (engine-ut2004's convention); `-ini:System:[Engine.Engine]:RenderDevice=...` does the same |
+| `-glerrors`, `-nopixelshaders`/`-pixelshaders`, `-nopostprocess`/`-postprocess`, `-noxboxshadows`/`-xboxshadows`, `-noxboxprojectors`/`-xboxprojectors`, `-noterrain3layer`/`-terrain3layer`, `-glaa=`/`-glnoaa`, `-glunits=`, `-glstages=`, `-glnoffprograms`/`-glffprograms` | UC2GLDrv | glerrors 39, nopostprocess 34, glnoaa 14 ... | no | proposed: **remove**, each has its key in `[UC2GLDrv.UC2GLRenderDevice]` (CheckGLErrors, UsePixelShaders, UsePostProcess, UseXboxShadows, UseXboxProjectors, UseTerrain3Layer, AntiAliasing, MaxTextureUnits, MaterialStages, FixedFunctionPrograms): tools pass `-ini:` (f5-render owns UC2GLDrv now) |
+| `-glshot=`, `-glshotramp`, `-glshotpresented`, `-glexec=`, `-glpptoggle=` | UC2GLDrv | glshot 39, glexec 32, glpptoggle 17 | no | proposed: test keys (e.g. `[UC2GLDrv.UC2GLRenderDevice] ShotTimes=`, `ExecList=`, `PostProcessToggleTimes=`); the most used test hooks after -inputtest (f5) |
+| `-glselftest`, `-glselftest1d`, `-glcombinertest`, `-glmatcensus`, `-glsnapshotlog`, `-glstats`, `-glerrorsdraw`, `-glffsource`, `-gldualdiffuse=`, `-glprojnoclip`, `-glnofog`, `-glnolodbias`, `-glnocombine3/4`, `-glnodepthtexture`, `-glnofragdepth`, `-glnouintindex`, `-glnomaxlevel`, `-glnos3tc`, `-nogamma` | UC2GLDrv | a few each (m11-twin, o9-nvidia, m7-effects, pp-scale) or none | no | proposed: diagnostics with a user -> test keys; without a user (glselftest1d, glsnapshotlog, glstats, glerrorsdraw, glffsource, glprojnoclip, glnofog, nogamma) -> remove (f5) |
+| `-gl4esdebug` | UC2GL4ESDrv | none | no | proposed: remove or a key (f3-webgl2 owns the binding) |
+| `CONFORM`, `CONFORMNOCONFIG`, `NOEPICORDER` | Editor commandlets | script-build | no | keep: `ucc make`/`stripsource` commandlet parameters, not game switches |
+| `DUMP=`, `LOAD=`, `MAP=`, `REF=` | UCC/UC2ALAudio/UC2Movie commandlets | several | no | keep: commandlet parameters |
+
+Done now (separate commits, each with its tools): FrameRateCap + FramePattern; FRAMETRACE's switch; WaveFile/UseEFX. The rest
+waits for the owner's decision per row (and, for SDL2Drv/UC2GLDrv/UC2GL4ESDrv, for the agents that own those files now).
+
+## Results of the gate runs (2026-10-09, 02:20-02:51; machine load 20-38 from the other agents' builds throughout)
+
+F-4a, measured:
+- `CENSUS_NODE=1 CENSUS_NAME=f4-node-census CENSUS_PORT=7900 capped 7G 2400 -- tools/dev/map-census.sh build-wasm-perf 45 3`
+  -> `maps: 58  PASS: 58  FAIL: 0` (`logs/f4-node-census/summary.tsv`): every map `up for play`, critical 0, aborts 0,
+  still running at 45 s (56 maps 2 warnings = TransBuffer + the listen warning; 2 maps 1). The ucc-bin.js of 3c6a8f4's
+  code (catching off). Before the UdpLink fix the first try ended with a JavaScript `TypeError` in SOCKFS (fd 0).
+- Sizes (wasm-perf, -O3): `SDLLaunch.wasm` 14,929,569 (main c59c02d, catching on) -> 13,668,962 bytes (-8.4%);
+  `ucc-bin.wasm` 11,809,272 -> 10,845,392 (-8.2%). Compile flags checked in `build-wasm-perf/Source/*/flags.make`: no
+  `NO_DISABLE_EXCEPTION_CATCHING`/`-fexceptions` on any engine target, `-fexceptions` on openal-soft's two.
+- Browser boot spec, artifact snapshot `logs/f4/artifact-f4ab` (F-4a+F-4b, wasm sha256 c61ec550...; the same before
+  and after the run), assembled with `yarn build --target uc2 --engine-artifact <snapshot> --out run/f4-web-after`,
+  served from there (`scratch/e2e-run.sh`: refuses if another e2e-mem-guard or :8080 exists; null sink by module index):
+  **4 passed (4.8m)** (`logs/f4/e2e-boot-after.txt`), browser PSS peak 1517 MiB, machine in-use peak 17.9 GB (others ~12).
+  The menu and DM-Deadbolt draw with `-sOFFSCREEN_FRAMEBUFFER` kept.
+F-4b, browser frame times (`uc2-wasm-jitter.spec.js`, the frame trace's `dt` of every traced frame: 4 segments of
+running), back to back at the same load (35-36), main's artifact (c59c02d) vs F-4a+F-4b:
+
+| | frames | mean | p50 | p90 | p99 | min | max | > 2x median | successive swing > 1.5x |
+|---|---|---|---|---|---|---|---|---|---|
+| before (main) | 134 | 60.95 ms (16.4 fps) | 58.71 | 81.40 | 131.24 | 31.63 | 172.83 | 2.2% | 17.3% |
+| after (F-4a+b) | 175 | 46.62 ms (21.4 fps) | 41.94 | 66.10 | 100.18 | 26.82 | 193.46 | 3.4% | 13.2% |
+
+Both runs FAILED the spec's judder limit (1.5 px; e.g. strafe right 2.17 before / 1.56 after): at 40-60 ms frames on a
+machine at load 36 the camera's walk bob alone exceeds it (the O-11 runs had 21-57 ms). The frame times are the
+measurement asked for; one run each, under heavy unrelated load: **seen, not established**. The direction (shorter
+frames after) agrees with removing the invoke_ trampolines; it is not a benchmark.
