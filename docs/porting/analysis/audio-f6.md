@@ -34,7 +34,7 @@ bank. The 19 entries are all Xbox ADPCM (the 16 effects mono 22,050 Hz; the 3 Sp
 **Xbox ADPCM block layout, decided by measurement, not by documentation.** 36 bytes per channel per block (4-byte
 header: s16 sample, u8 step index, u8 0; 32 bytes of codes, low nibble first; channels interleaved in 4-byte words).
 Three readings tried on `A_Combo` entry 22 (`Combo_Pounce_Travel`, which has its source WAV), SNR against the source
-in the first and the last quarter (`scratchpad/f6/variant.py`):
+in the first and the last quarter (`logs/f6/scripts/variant.py`):
 
 | reading | frames/block | first quarter | last quarter |
 |---|---|---|---|
@@ -135,7 +135,7 @@ The 4 silent cues left are the ones with no wave at all in the project (`ST_Prim
   UC2ALAudio treats lower as more important: those 674 sounds (FX 284 with no group, Ambience 243, Voice 82, Machines 52, other 13) win every
   voice-stealing contest instead of losing it. Matters only when all 64 voices are busy. A one-line cook fix
   (`priority` default 255) that changes 674 lines of the cue tables; not done here (the step's diff must stay at the
-  19). Evidence: `scratchpad/f6/xsbstat.py`, byte 14 of the 20-byte `.xsb` sound record.
+  19). Evidence: `logs/f6/scripts/xsbstat.py`, byte 14 of the 20-byte `.xsb` sound record.
 - `A_ChemicalDawn` entry 7 (`Machine_Generator03`, 55,808 frames in the tree, 193,472 in the shipped bank) could now be
   taken from the `.xwb` as well; not done (it has a source, and the owner's decision named the 19).
 
@@ -151,7 +151,7 @@ but `SoundData/A_Vehicle/` has all 31 source WAVs.
 
 **The `.xsb` had to be read.** The XDK documents no sound-bank layout (only the runtime API in `xact.h`). New
 `tools/uc2xsb.py` reads the plain part of format 11 (layout in its module comment), decoded by comparing the 78
-project banks' `.xsb` with `Avaris.xap` (`scratchpad/f6/xsbcorr.py`, `xsbstat.py`): 20-byte cue records, 20-byte sound
+project banks' `.xsb` with `Avaris.xap` (`logs/f6/scripts/xsbcorr.py`, `xsbstat.py`): 20-byte cue records, 20-byte sound
 records (volume `floor((-8192 - (sound+group mB))/16)`, pitch `trunc(cents*4096/1200)`, track count, layer, category,
 flags 1 3D / 2 headroom boost / 4 EQ / 8 one wave / 0x10 variation table, 3D set index, priority, I3DL2 flag, RPC),
 track tables (count | offset << 8), the 12-byte plain play event (header 0, flags 4, loop count, wave, bank) and the
@@ -230,7 +230,7 @@ The reader decodes each wave with vorbisfile over its byte range; it never looks
 
 **The variant that does fit: the wave index inside its own pack.** The index (`.uc2wb`) is needed exactly when its
 pack is (first resolve, then first decode, normally the same cue), and it is per wave bank including the language.
-Spike (scratchpad `f6/spike/`, measured): `A_Announcer` (the largest index, 181 lines, 23,677 B), one Vorbis comment
+Spike (`logs/f6/scripts/parse.py`, `meta.txt`; measured): `A_Announcer` (the largest index, 181 lines, 23,677 B), one Vorbis comment
 field per index line (`UC2WB00000=uc2wb 1`, ...) written into the first wave's comment header by
 `ffmpeg -i first.ogg -i meta.txt -map 0 -map_metadata:s:a:0 1 -c copy -fflags +bitexact first-meta.ogg`:
 the first stream grows from 27,940 to 54,227 B (+26,287 B: the index plus field names); its decoded PCM is unchanged
