@@ -230,3 +230,62 @@ Null-renderer suites (`logs/f1/s7b/`, driver `logs/f1/s7b.sh`; load 36-41 from o
   with the clear-on-conflict expectations: "S: MOVE FORWARD. MOVE BACK LOST S.", S = MoveForward and W unbound in the
   live bindings, in User.ini and after a restart, W walks nowhere in the match, "K: JUMP / DODGE. 1ST / 3RD PERSON
   LOST K." from the pad, the look keys' new commands listed under TURN LEFT/RIGHT, LOOK UP/DOWN.
+- windows: `bin/capped 4G 1200 -- cmake --preset windows` + `bin/capped 6G 5400 -- cmake --build build-windows -j4`
+  rc 0, 0 errors (`logs/f1/build-windows-1.log`; `uc2.exe` built 02:58).
+
+GL suites (software GL, Xvfb; `logs/f1/s7-reb/`, `logs/f1/s7-van/`, driver `logs/f1/suite.sh`; load 20-43 from other
+agents throughout):
+
+| Suite | (b) rebuilt `f1-reb` | (a) vanilla `f1-van` | Difference expected? |
+|---|---|---|---|
+| m10 keyboard | 16/16 | 16/16 | |
+| m10 mouse | 18/18 | 16/18: `ms-mouse-turn-amount` (10.012/count), `ms-invert-option-flips-pitch` (`MouseLookInvert`) | yes: the linear PC mouse and its invert command are the rebuilt package's |
+| m10 text | 7/7 | 7/7 | |
+| m10 pad | 14/33 at load 37 (the menu never reached the armory: cascade), re-run below | **33/33** (the left stick walks with Epic's package now) | no |
+| m10 both | 13/14 (`both-keyboard-move-and-pad-turn-together`: 96 units, wanted 100), re-run below | 14/14 | no |
+| d9 | 119/0 (all scenarios) | menu 2/6: no KEYBOARD / MOUSE button | yes: the page is the rebuilt UCMenu.u |
+| d3 profiles | ALL PASS | ALL PASS (step 1's one failure was load) | |
+| d4 names | ALL PASS | n1/n2/n4 name checks FAIL (the character's name, Epic's rule) | yes: D-4 is the rebuilt GUI.u |
+| d5 text | ALL PASS | ALL PASS | |
+
+Re-runs (`logs/f1/s7-reb/m10r*`, `d6lock*`, `logs/f1/s7-rerun.txt`):
+- m10 pad on `f1-reb`: at load 37 twice 14/33, both times the same cascade: the character page took the pad's A
+  while its open animation was still blocking (log: the "Unblocking animation" line comes AFTER the A), so the armory
+  opened one press late and every later step missed (frame-counted menu animations under software GL, as in
+  mouse.md steps 8-10); with `M10_SLOW=2` 32/33 (the right-stick turn, held 1.0 s instead of 0.5, passed 180 degrees
+  and wrapped: 49,431 units); at load 30 normally: **33/33**.
+- m10 both on `f1-reb`: **14/14** (the first run's 96-vs-100 units was the turn swinging the walk).
+- d6 lock on `f1-reb`, twice: **12/12** both times (the step-2 failure was the spawn-sensitive check).
+
+Browser (frontend clone, uc2 branch, nothing committed there): `run/f1-webassets` = the asset tree hard-linked with
+`System/GUI.u`, `UCGameplay.u`, `UCMenu.u` replaced by this branch's (the canonical tree untouched: its UCGameplay.u
+is still 9ca783e7); manifests regenerated into `logs/f1/web/` (1,224 files; 208 packages, 1,804 references all
+resolved); `corepack yarn build --target uc2 --assets run/f1-webassets --manifest ... --deps ... --engine-artifact
+<worktree>/build-wasm-perf/Source/SDLLaunch` (4G); `serve-web/SDLLaunch.wasm` sha256 2b0554bc353e4dcf... = this
+build's, before and after every run (`logs/f1/web/engine-proof.txt`); null sink `uc2f1` loaded and unloaded by module
+index; `PULSE_SINK=uc2f1 bin/capped 6G 1500 -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=N -- --target uc2
+uc2-wasm-boot.spec.js`. Attempt 1 (`--max-gb=14`) and 2 (`--max-gb=18`) were stopped by the guard before or during
+the second test: the machine already had 13.5-13.6 GB in use by other agents at the start (the guard's budget is
+machine-wide); attempt 3 (18, with 11 GB in use at the start): **4 passed (4.9m)**, peak 13.4 GB machine-wide
+(`logs/f1/web/e2e-boot-3.txt`): menu drawn, DM-Deadbolt drawn, keyboard + mouse path, and "mouse look (D-6)": 10 /
+10.0125 / 10.01 / 10.01 rotation units per pixel (100 px slow, 400 px slow, 400 px fast, 100 px up) with the mouse on
+Epic's binding through the rebuilt package (`ScriptPatcher: UCGameplay is not the package the patch was made for
+... rebuilt from source`). No ceiling (`capped`) was hit.
+
+Final script build at HEAD (`tools/dev/script-build.sh --tree f1-make2`): `Success - 0 error(s), 85 warning(s)`;
+GUI.u, UCGameplay.u, UCMenu.u byte-identical to `f1-make`'s (the tested packages). The packages to switch:
+
+| Package | sha256 | vs the asset tree now |
+|---|---|---|
+| GUI.u | 4e5b1af0add70b57d88893694498b84249a98ffc96484912847819a6e780f204 | identical (D-4's; unchanged) |
+| UCGameplay.u | 5d76f3de819ba7d613fd5e852c5cbb50d7884f3285d0acac5946dace26660acb | replaces 9ca783e7d17da28a (server package: all peers together) |
+| UCMenu.u | a31eb5d9ca4804649e4199710827090118603004265aa9c61122c25d819db2ff | replaces fa149401ff492b4f |
+
+Expected differences between (a) vanilla and (b) rebuilt, all seen and no other: the linear PC mouse (m10
+`ms-mouse-turn-amount`, `ms-invert-option-flips-pitch`; d6 look/ini/lazy/lock/accel are rebuilt-only scenarios; with
+Epic's package the mouse is Epic's PC mouse, d6 `vanilla`), the rigid camera under the mouse (jit kbm), keys as a
+stick (Lock + D target switch, Space dodge by keyboard), the D-4 name rule (d4 n1/n2/n4), the D-9 page (d9). The pad
+(curves, dead zones, left-stick walk), keyboard, menus, text, profiles, network: the same on both.
+
+Memory: builds 6G (-j4), configures 4G, script make 3G, game runs 2G, net listen 6G, frontend build 4G, browser 6G
+(mem-guard 14 then 18 machine-wide, see above); no `capped` ceiling was hit (no exit 137).
