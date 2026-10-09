@@ -215,3 +215,67 @@ Tasks, in the order they will be done (each one ends at an observable check, log
   change (the `-ini:` setting) and a map of languages to values (e.g. `"English": "int"`); uses C-1.
 - E-5 GitHub + CI (after the owner's go-ahead), then the real-pad and real-Windows sessions from CI builds.
 - Then M15 (content polish), M16 (original Xbox assets), M17 (close-out), as planned.
+
+## Owner review of 2026-10-09 (after REPORT.md) and the tasks it creates
+
+Standing rules from this review (also in the coordinator's memory):
+- **No frontend work until UC2 is merged into the main frontend.** Target data edits are allowed only when asked.
+- **The engine adapts to the compiled scripts.** Epic's shipped `.u` (and a retail disc, M16) must play with the
+  original behaviour and Epic's exact gamepad tuning. The rebuilt packages are optional extras: the PC mouse is
+  the only thing that needs them ("just keep rebuilt packages as the only way to get the PC mouse").
+- **No command-line pollution.** Switches are fine while A/B developing; afterwards they go, unless kept on
+  purpose. Settings belong in the ini and are set from outside with `-ini:` ("that's why we have it").
+- **Follow engine-ut2004 (and UT99) for platform choices**: exceptions off + fail-soft loaders, frame yield,
+  encoding, docs, meta.json. Fetched libraries stay on branches, latest wins.
+- **No auto-migration of user inis** (`UC2InputMigrate` goes): the curated ini in the repo is the way.
+
+**Parked for the frontend merge** (a frontend agent does these once UC2 is in the main frontend): E-1 split-screen,
+E-3 gamepad, E-4 language (both have a step-0 notebook on branches `e1-splitscreen`, `e4-language`), E-5 Windows
+CI, the web profile layout (directory wildcard in `userFiles`, then revert `22e9dbf`; every engine adapts), the
+asset compression ignore list (ogg/oga/mp4 and other media stay uncompressed, the upload marks them so, a
+compress-everything flag for simple servers), the UC2 precache list (start empty, everything in `System/`, plus
+whatever a test sees loaded up to the menu), the HRTF launcher switch (engine ini key done here, F-7), and the
+menu-click wonkiness (Epic's GUI items without OnClick; the owner comes back to it).
+
+Decisions: keep the walk bob (no ini for it); O-14 closed (bindings were "weird", not reversed; rebinding
+covers it); D-9: Space+direction dodges as on the Xbox, conflicts CLEAR the other binding (not swap); pad turns at
+high frame rates stay as Epic wrote them (the owner tests natively); DOF alpha stays 65 (it is an alpha, not a
+radius; no A/B); O-6 closed ("everything seems fixed"); fetched libraries unpinned; dynamic gamma stays on.
+
+Tasks, in the order agreed (each ends at an observable check logged in LOG.md):
+
+**F-1 Vanilla scripts play as Epic shipped them** (first: it changes how the others are done). With the shipped
+`GUI.u`/`UCGameplay.u`/`UCMenu.u` the game must be fully playable with keyboard, mouse (Epic's PC mouse path) and
+pad (Epic's exact tuning): the curated `DefUser.ini` must not depend on rebuilt scripts (today the mouse does not
+turn the view at all with the shipped `UCGameplay.u`). The rebuilt packages add the PC mouse on top, selected by
+the packages present, not by the ini. Also: an ini switch in the rebuilt script for the lazy (Xbox) camera under
+the mouse; remove `UC2InputMigrate`; review `bKeysAsStick` and the "backwards bindings" work and report before
+changing it (the owner: "make sure you haven't overthought things"); no mouse acceleration natively (SDL
+relative-mode hints, as engine-ut2004); D-9 conflict = clear; explore what UT2004-style double-tap dodge would
+take (report only). Then the asset tree may keep the rebuilt packages, but every test suite runs both ways.
+
+**F-2 FPS counter in the log** (UC2 has `STAT FPS` on screen; add a periodic log line usable for benchmarks),
+answer "is the frame rate uncapped, can it reach 120" (engine tick cap, `UseVSync` default), measure.
+
+**F-3 GL4ES on WebGL 2**: explore retargeting our GL4ES fork to an ES3/WebGL2 context under Emscripten (no raw
+driver). Goals: core depth textures (the DOF/distortion-occlusion fallback gap closes), multisampled framebuffers
+(real MSAA, then remove FXAA), fragment `highp` everywhere, fewer "GLES behind GL4ES' back" calls, texture LOD bias
+applied (fix the fork; prove a difference with pictures). A/B with F-2 on the Quadro.
+
+**F-4 Platform like UT2004**: exceptions off + fail-soft loaders (stub `Editor.TransBuffer` so loading does not
+throw), frame yield/pacing exactly as engine-ut2004 (ufront 2.43; compare UT99 too), examine engine-ut2004's
+arm64/Android layout fixes and apply the same, Default.ini line endings unified and encoding as UT2004 does,
+docs updated (README/BUILD status, web section, `UC2_ASSETS_DIR` removed), web `meta.json` records fetched
+libraries, command-line audit: every switch we added either becomes an ini key (set with `-ini:`) or is removed,
+listed with the owner's decision per switch.
+
+**F-5 Renderer items**: `DOFShippedBlurAlpha` compiled default = True; `DistortionCullDistance` one source of
+truth; occlusion queries explored (what the Xbox used them for, whether engine-ut2004 uses them; real queries on
+desktop/WebGL2 if cheap); the CTF-Aqueduct shadow flicker under the canyon trees (z-fighting / back faces?);
+shadow strength compared with the Xbox (the owner supplies a xemu shot later; look first); the DM-Azure sky haze
+desktop vs twin A/B pictures; the shader inventory: every shader that a material can reference (including
+post-process layers) must be ported; shaders no material can use may stay.
+
+**F-6 Audio**: decode the 19 missing waves from the shipped `.xwb`; cook `A_Vehicle`; spike "cue tables inside the
+Ogg packs" (Vorbis comment header) and report cost/benefit; HRTF ini key in UC2ALAudio as UT2004's.
+
