@@ -10,6 +10,7 @@
 #     WxH        window size, default 1280x720 (set with -ini:, as every other setting)
 #   FPS_PLACE="x y z yaw pitch"   where the camera stands (default: a fixed spot for DM-Praxis and DM-Deadbolt, else
 #                                 the spawn point, which is random)
+#   FPS_TURN=0                    no turn: the view stays where FPS_PLACE put it (a fixed view, no teleports)
 #   FPS_SOFT=1                    Mesa llvmpipe under Xvfb instead of the GPU
 #   FPS_OUT=<dir>                 output (default <WorkUC2>/logs/fps): <name>.out (game log), .scen, .inject
 #   FPS_NAME=<name>               output name (default <tree>-<map>-<WxH>)
@@ -58,7 +59,7 @@ scen=$out/$name.scen
   echo "chan exec FPSLOG $secs"
   steps=$(( secs * 4 + 4 ))
   for i in $(seq 1 $steps); do
-    if [ -n "$place" ]; then
+    if [ -n "$place" ] && [ "${FPS_TURN:-1}" != 0 ]; then
       echo "chan exec NETPLACE FpsCam $x $y $z $(( (yaw + i * 4096) % 65536 )) $pitch"
     fi
     echo "sleep 0.25"
