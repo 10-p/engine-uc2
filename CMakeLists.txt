@@ -30,8 +30,6 @@ endif()
 option(UC2_ALLOW_64BIT "Build x86_64 instead of demoting to -m32 (32-bit is the default; it matches wasm32)" OFF)
 option(UC2_WEB_PERF    "Emscripten: shipping build -- -O3, no assertions, no debug info" OFF)
 option(UC2_WEB_DEBUG   "Emscripten: -O0 instead of the -O2 dev default" OFF)
-set(UC2_ASSETS_DIR "${CMAKE_SOURCE_DIR}/../assets/uc2" CACHE PATH
-    "Canonical UC2 asset tree (never in this repo). Read only for the files the web build preloads.")
 
 # Every package is a static library: Epic's own __STATIC_LINK scheme, the one the Xbox XBE used.
 set(LIB_TYPE STATIC)

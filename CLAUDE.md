@@ -30,7 +30,11 @@ Read in this order: `docs/porting/PLAN.md` (milestones and gates), `docs/porting
 - Removing a broken effect is not a fix. The community "fixed maps" are reference only.
 - TCHAR is ANSI on every target. Never add `-fshort-wchar` or `UNICODE`.
 - `grep` here is ugrep and skips Latin-1 files silently: always `grep -a`. `find` is bfs.
-- Sources are Latin-1 with LF endings; do not re-encode. Windows project files keep CRLF.
+- Sources (`.cpp .h .uc` ...) are Latin-1 with LF endings; do not re-encode. Windows project files keep CRLF.
+  `Engine/Config/*.ini` and `Engine/Config/web/*.ini` are LF too (`tools/dev/sync-web-ini.py` refuses a CR).
+  Checked against the siblings (F-4d, 2026-10-09): engine-ut2004 keeps Latin-1 (35 ISO-8859 files) and LF inis,
+  but kept Epic's CRLF in most of its sources (1,736 of 1,788 `.cpp/.h/.uc`); engine-ut99 and engine-unreal1 are LF
+  throughout. UC2 converted its sources to LF once, at the import (`docs/SOURCE-LAYOUT.md`), and stays so.
 - Vendored libraries live in `Thirdparty/`, never under `Source/`. Fetched ones (SDL2, GL4ES, OpenAL Soft)
   stay fetched.
 - Never commit assets, `build-*/`, or anything from `reference/`.

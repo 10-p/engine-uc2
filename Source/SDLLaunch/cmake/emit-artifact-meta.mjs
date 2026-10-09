@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // emit-artifact-meta.mjs — write <out>/meta.json for the just-linked WASM artifact (docs/05 §4).
-// engine-uc2 (M4w): copied from engine-ut2004 and adapted: targetId uc2, repo engine-uc2, no fetched
-// libraries on the web yet, buildFlags as in Source/SDLLaunch/cmake/Web.cmake.
+// engine-uc2 (M4w): copied from engine-ut2004 and adapted: targetId uc2, repo engine-uc2, buildFlags as in
+// Source/SDLLaunch/cmake/Web.cmake. Since F-4d the fetched libraries (gl4es, openal-soft) arrive as --dep-*
+// from Web.cmake (cmake/ArtifactDeps.cmake), exactly as in engine-ut2004.
 // Run by SDLLaunch's POST_BUILD, AFTER the .js is finalized (the MAX_TEMP_BUFFER sed), so the js
 // checksum is of the served file. Self-contained (node stdlib only — no monorepo dep; the artifact
 // + its descriptor travel together across the public/private seam). The monorepo's packages/build
@@ -63,10 +64,14 @@ const meta = {
   provenance: { repo: 'engine-uc2', gitSha, builtAt },
   toolchain: { emscripten: args.emcc || 'unknown', ...deps },
   buildFlags: [
-    // Descriptive, hand-maintained: keep in step with Source/SDLLaunch/cmake/Web.cmake. Threaded-only
-    // artifact: the host must provide SharedArrayBuffer (cross-origin isolation) and OffscreenCanvas.
-    '-sASYNCIFY', '-sALLOW_MEMORY_GROWTH', '-sFORCE_FILESYSTEM', '-sWASMFS', '-sNO_DISABLE_EXCEPTION_CATCHING',
+    // Descriptive, hand-maintained: keep in step with Source/SDLLaunch/cmake/Web.cmake (engine-ut2004's list,
+    // plus what this build links that it does not: the WebGL 1 limits, -sOFFSCREEN_FRAMEBUFFER, the pool size,
+    // catching at the link for openal-soft). Threaded-only artifact: the host must provide SharedArrayBuffer
+    // (cross-origin isolation) and OffscreenCanvas.
+    '-sASYNCIFY', '-sFULL_ES2', '-sALLOW_MEMORY_GROWTH', '-sFORCE_FILESYSTEM', '-sWASMFS',
     '-pthread', '-sPROXY_TO_PTHREAD', '-sOFFSCREENCANVAS_SUPPORT', '-sOFFSCREENCANVASES_TO_PTHREAD=#canvas',
+    '-sPTHREAD_POOL_SIZE=4', '-sMAXIMUM_MEMORY=2147483648', '-sMIN_WEBGL_VERSION=1', '-sMAX_WEBGL_VERSION=1',
+    '-sOFFSCREEN_FRAMEBUFFER', '-sNO_DISABLE_EXCEPTION_CATCHING',
   ],
   exports: { symbolContract: 1 },
   checksums

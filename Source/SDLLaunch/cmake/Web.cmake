@@ -77,10 +77,22 @@ if(EXISTS "${EMSCRIPTEN_ROOT_PATH}/emscripten-version.txt")
   file(READ "${EMSCRIPTEN_ROOT_PATH}/emscripten-version.txt" _emcc_ver)
   string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" META_EMCC "${_emcc_ver}")
 endif()
+# Every library this build fetches, as <repo>@<branch> from the same cache variables FetchContent read
+# (cmake/ArtifactDeps.cmake, a byte copy of engine-ut2004's; ufront 2.70). On the web SDL2 is Emscripten's own
+# port (cmake/UC2Web.cmake), not fetched: the emscripten version names it.
+include(${CMAKE_SOURCE_DIR}/cmake/ArtifactDeps.cmake)
+set(META_DEPS)
+if(DEFINED GL4ES_GIT_REPOSITORY)
+  ufront_artifact_dep(META_DEPS gl4es GL4ES "${GL4ES_GIT_REPOSITORY}" "${GL4ES_GIT_TAG}")
+endif()
+if(DEFINED OPENALSOFT_GIT_REPOSITORY)
+  ufront_artifact_dep(META_DEPS openal-soft OpenALSoft "${OPENALSOFT_GIT_REPOSITORY}" "${OPENALSOFT_GIT_TAG}")
+endif()
 find_program(NODE_EXECUTABLE node REQUIRED)
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
   COMMAND ${NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/emit-artifact-meta.mjs
     --out=$<TARGET_FILE_DIR:${PROJECT_NAME}> --target=uc2 --abi=${UE_ABI_VERSION} --emcc=${META_EMCC}
+    ${META_DEPS}
   COMMENT "Emitting artifact meta.json"
   VERBATIM)
 
