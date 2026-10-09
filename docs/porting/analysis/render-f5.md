@@ -58,3 +58,39 @@ Evidence (tree `run/f5v` with both keys deleted from both device sections of its
   out over 7000 units (DistortionCullDistance of UC2GL4ESDrv.UC2GL4ESRenderDevice ...)`, console
   `DISTORTIONCULLDISTANCE` shows 7000; 0 GL errors.
 - `tools/dev/sync-web-ini.py --check`: both web files up to date (no ini change was needed).
+
+### Step 2 (02:20): occlusion queries. Explored; not implemented (no visible use on the Xbox). Read only.
+
+**What UC2 uses them for** (all read in `epic-sources`, nothing run): one system, `FOcclusionQueryManager`
+(`Engine/Src/UnRenderVisibility.cpp:319-909`, Scion's "jg" code; not in UT2004), culling of **dynamic actors**:
+- Which actors: `AActor::bUseHWOcclusionTests` (`Actor.uc:47`), true in the defaults of `StaticMeshActor`, `Pawn`,
+  `Emitter`, `Pickup`, `FluidSurfaceInfo`, `Projector`, `UCAmbient_Creature`; boxes larger than 2048 units across are
+  never tested (`UnRender.cpp:917-928`, `MAX_BOX_SIZE`), nor anything within 64 units of the camera, nor skyboxes,
+  shadow/child scene nodes or the editor (`CanUseHardwareOcclusion`, `UnRender.h:695`).
+- How: an actor seen last frame is drawn normally inside a query ("deferred": `Projector.uc` sets
+  `bUseDeferredHWOcclusionTests`, `Pawn.uc` explicitly not); otherwise its world bounding box is drawn as a **wireframe**
+  unit cube scaled to the box, colour/alpha/depth writes off, depth test on (`SubmitQueries`, `RenderQuery` :427-461; the
+  Xbox through a push buffer and the compressed-mesh vertex shader, PC through `DrawPrimitive`). Next frame
+  `UpdateQueryResults` (:720-783) reads the pixel count: 0 = the actor is skipped by the visibility pass
+  (`UnRenderVisibility.cpp:1673, 1709, 2670`: not added to the draw lists, and not offered to the corona list).
+  Unfinished queries keep the actor visible and are retried. Epic's comment: "UE2X can render 1500 bounding boxes in
+  ~3.4ms (CPU) on an Xbox": a vertex/fill-rate saving for the NV2A.
+- Coronas do **not** depend on it: `FCoronaRender::IsOccluded` (`UnRender.cpp:110-150`) fades coronas with its own line
+  traces (`SingleLineCheck`), as in UT2004. Nothing else reads the result (no gameplay, sound or AI use; only
+  `AActor::LastRenderTime` is not refreshed for an occluded actor, which is "not rendered" in both cases).
+- Epic's PC D3DDrv: `Begin/EndOcclusionQuery` return 1, `GetOcclusionQueryResults` returns 1 and **never writes the count**
+  (`D3DDrv/Src/D3DRenderInterface.cpp:3713-3777`); the caller pre-sets `dwPixels = 1`, so PC = "always visible". Ours
+  writes `0x7fffffff` (`UC2GLRenderInterface.cpp:2305`) and skips drawing the query boxes (`:2072-2079`), same result.
+
+**engine-ut2004** (`/home/ion/WorkUnreal/engine-ut2004`, read only): `OpenGLDrv`/`GL4ESDrv` have no occlusion query at all
+(`grep -ri occlusion Source/` finds only the `glext.h` headers); UT2004's `FRenderInterface` has no such methods. So this
+is a UC2/UE2X (Xbox) addition, not UT2004 behaviour.
+
+**Decision: stop here, as the brief says for a non-visible use.** The Xbox used queries only to skip drawing actors
+that were already hidden: the picture is the same with "always visible", the cost is draw time only (on this GPU the
+frame time is ~9-12 ms with everything on, R-1/R-13). A real implementation on desktop GL (core since 1.5:
+`glGenQueries`, `glBeginQuery(GL_SAMPLES_PASSED)`, `GL_QUERY_RESULT_AVAILABLE`) is about half a day, but would bring
+the Xbox's one-frame-late visibility (an actor coming round a corner is missing for a frame) and the wireframe-box
+test (an actor whose box edges are all hidden but which shows through a gap is culled wrongly): both artefacts, no
+gain the player sees. GL4ES/WebGL 1 have no occlusion query (WebGL 2 has `ANY_SAMPLES_PASSED` only, F-3's area).
+Revisit only if a profile shows draw calls of hidden actors dominate a frame.
