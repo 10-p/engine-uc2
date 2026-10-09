@@ -38,6 +38,13 @@ import uc2xsb    # tools/uc2xsb.py and uc2xwb.py, beside this script
 import uc2xwb
 
 FORMAT_VERSION = 1
+
+# Entries whose project WAV is not the wave the Xbox shipped: taken from the shipped .xwb even though the WAV exists
+# (owner decision 2026-10-09, F-6). (wave bank file stem, entry index): reason.
+XWB_PREFERRED = {
+    ('A_ChemicalDawn', 7): 'Machine_Generator03: the tree\'s WAV has 55,808 frames; the project\'s play region '
+                           '193,426 and the shipped entry 193,472',
+}
 LANGS = ('deu', 'fra', 'ita', 'spa')
 
 
@@ -354,7 +361,9 @@ class WaveBank:
 def build_sound(node, report, bankname):
     s = collections.OrderedDict()
     s['name'] = node.get('Name')
-    s['priority'] = num(node.get('Priority'))
+    # No Priority key = 255 (the least important): the shipped .xsb stores 255 for every one of the 674 sounds
+    # without the key (owner decision 2026-10-09, F-6; the cook of 2026-10-04 wrote 0, the most important).
+    s['priority'] = num(node.get('Priority'), 255)
     s['volume'] = num(node.get('Volume'))
     s['pitch'] = num(node.get('Pitch'))
     s['category'] = node.get('Category', '-')
@@ -957,12 +966,16 @@ def main():
                 # Music entries name ..\Music\<Track>.wma or .wav; the cook uses Music/<Track>.wav (the source).
                 stem = os.path.splitext(os.path.basename(e.file.replace('\\', '/')))[0]
                 path = src_index.find('Music/%s.wav' % stem)
-            if path is None and not wb.music and not args.no_xwb_sources and wb.stem in xwb_files:
-                # No WAV in the project: the Xbox's own copy of the wave, decoded from the shipped bank.
-                path, note = source_from_xwb(xwb_files[wb.stem], wb, e, cache)
-                if path:
+            preferred = XWB_PREFERRED.get((wb.stem, e.index))
+            if (path is None or preferred) and not wb.music and not args.no_xwb_sources and wb.stem in xwb_files:
+                # No WAV in the project (or one that is not the shipped wave): the Xbox's own copy of the wave,
+                # decoded from the shipped bank.
+                xpath, note = source_from_xwb(xwb_files[wb.stem], wb, e, cache)
+                if xpath:
+                    path = xpath
                     e.src_label = 'xwb:%s.xwb:%d' % (wb.stem, e.index)
-                    from_xwb.append((wb.bank_file, e.index, e.name, note))
+                    from_xwb.append((wb.bank_file, e.index, e.name,
+                                     ('PREFERRED over the WAV of the tree (%s); ' % preferred if preferred else '') + note))
                 else:
                     say('XWB-SOURCE %s entry %d %s: not decoded (%s)' % (wb.bank_file, e.index, e.name, note))
             if path is None:
@@ -1008,10 +1021,13 @@ def main():
                         wb.bank_file, e.name, start, length, h['frames']))
                     length = max(0, h['frames'] - start)
                 e.loop = (start, length)
-    say('wave entries: %d in %d banks, %d without a usable source file, %d decoded from the shipped .xwb' % (
-        sum(len(wb.entries) for wb in wavebanks), len(wavebanks), len(missing), len(from_xwb)))
+    say('wave entries: %d in %d banks, %d without a usable source file, %d decoded from the shipped .xwb (%d of them '
+        'preferred over an existing WAV)' % (sum(len(wb.entries) for wb in wavebanks), len(wavebanks), len(missing),
+                                             len(from_xwb), sum(1 for m in from_xwb if m[3].startswith('PREFERRED'))))
     for m in from_xwb:
-        say('XWB-SOURCE %s entry %d %s: no WAV in the project, decoded from the shipped bank: %s' % m)
+        say('XWB-SOURCE %s entry %d %s: %s, decoded from the shipped bank: %s' % (
+            m[0], m[1], m[2], 'the tree\'s WAV is not the shipped wave' if m[3].startswith('PREFERRED') else
+            'no WAV in the project', m[3]))
     for m in missing:
         say('MISSING %s entry %d %s <- %s' % m)
 

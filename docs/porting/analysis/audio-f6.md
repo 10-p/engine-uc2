@@ -119,8 +119,8 @@ The 4 silent cues left are the ones with no wave at all in the project (`ST_Prim
 
 ### Diff against the installed cook (measured; `logs/f6/cook-diff-*.txt`)
 
-- File list identical (161 `.ogp`, 182 `.uc2wb`, 78 `.uc2cues`, music untouched). 26 files differ: 13 `.ogp` and
-  13 `.uc2wb` of the banks that hold the 19 (packs +841,182 bytes in all), and 4 `.uc2cues`.
+- File list identical (161 `.ogp`, 182 `.uc2wb`, 78 `.uc2cues`, music untouched). 26 files differ: 11 `.ogp` and
+  11 `.uc2wb` of the banks ("13" in the first version of this entry was a miscount) that hold the 19 (packs +841,182 bytes in all), and 4 `.uc2cues`.
 - `.uc2wb`, ignoring `offset=` (later waves move in the pack): exactly 19 lines differ, each `missing=no-file` ->
   `offset=... frames=... loop=... src=xwb:...`.
 - `.uc2cues`: exactly 7 lines differ, all `length=` of a sound that references one of the 19 (`Combo_Pounce_Travel`
@@ -360,3 +360,60 @@ analysis 2G; none was hit (no exit 137). The rule "one game test machine-wide ab
 the HRTF capture started right after a check found no game, but two other agents' games had started in between
 (load ~30); the regression started at load 22 beside one other agent's game; the new-cues run at load 14.6 beside one.
 My runs were one at a time.
+
+## Follow-up (2026-10-09): owner decisions applied, re-cook, re-diff, re-test, install command
+
+Owner's decisions (through the coordinator): (1) a sound without a `Priority` key gets 255, as the shipped `.xsb`
+stores it; (2) `A_ChemicalDawn` entry 7 (`Machine_Generator03`) comes from the shipped `.xwb`, through the same path,
+marked in the report.
+
+**Changes** (`tools/cook-audio.py`): `build_sound` `num(node.get('Priority'), 255)` with the reason in a comment;
+`XWB_PREFERRED = {('A_ChemicalDawn', 7): ...}` beside `FORMAT_VERSION`: such an entry is decoded from the shipped bank
+even though its WAV exists; the report line says `the tree's WAV is not the shipped wave ... PREFERRED over the WAV
+of the tree (...)` and the count line `20 decoded from the shipped .xwb (1 of them preferred over an existing WAV)`.
+`audio.md` "Units" table: Priority absent = 255.
+
+**Cook** (`logs/f6/cook-3.out`, `.cache` reused: 0 new encodes on the final run), measured:
+```
+wave entries: 7212 in 183 banks, 0 without a usable source file, 20 decoded from the shipped .xwb (1 of them preferred over an existing WAV)
+XWB-SOURCE A_ChemicalDawn.xwb entry 7 A_Machines\Machine_Generator03: the tree's WAV is not the shipped wave, decoded from the shipped bank: PREFERRED over the WAV of the tree (...); XboxADPCM 1 ch 22050 Hz, 108828 bytes, 193472 frames decoded, 193426 kept (the project's play region), ...
+cues resolved (base language): 2465 fully, 0 partly, 4 with no playable wave
+xsb cross-check: 79 of 79 ...        xwb cross-check: 183 of 183 project wave banks agree (was 181 of 182: Machine_Generator03 now agrees)
+encoded: 6828 sources (0 now, 6828 from the cache), 0 failures
+```
+`Machine_Generator03`: `frames=193426 loop=0,193426 src=xwb:A_ChemicalDawn.xwb:7`; the old "LOOP ... clamped" line is gone.
+
+**Diff against `assets/uc2-cooked`** (`logs/f6/cook3-diff-*.txt`), measured: 81 files differ (12 `.ogp`, 12 `.uc2wb`,
+57 `.uc2cues`) + 3 new (`A_Vehicle.*`) + `cook-report.txt`; `Music/` identical in content.
+- `.uc2wb`, ignoring `offset=`: 20 lines, all `src=xwb:` (the 19 + `Machine_Generator03`).
+- `.uc2cues`: 681 lines = 674 `priority=0` -> `priority=255` only + 7 `length=` only (the step-1 seven); nothing else
+  (checked field by field, `other 0`).
+
+**Tests** on `run/f6` rebuilt with `UC2_COOKED_DIR=logs/f6/cooked` (machine idle, load 2), `tools/dev/audio-regression.sh f6`
+(`logs/f6/audio-summary-2.txt`), measured:
+```
+SUMMARY audio-check: 183 index files; waves: 7191 decoded to their exact length of 7191 cooked (0 entries have no cooked wave); music streams: 21 of 21; cues [int]: 2469 in 79 cue tables: 2465 resolve fully, 0 partly, 4 to no decodable wave (0 use a localised bank); UC2AudioCheck: 79 cue tables, 2469 cues, 0 failures
+SUMMARY audio-selftest: UC2AudioSelfTest: 45 checks, 0 failed; Pan3D -1.10 dB, Pan2D -1.52 dB
+SUMMARY audio-menu-music: ... envelope correlation 0.843 at 0.35 s, mix gain -19.02 dB (expected -19.00 dB, error -0.02 dB), control track Recoil.wav correlates 0.118: PASS
+SUMMARY audio-menu: 58.50 s, peak -19.0 dBFS, RMS -34.5 dBFS, silent seconds 0; cue requests 1: played 1, failed 0; Critical 0
+SUMMARY audio-deadbolt: 83.52 s, peak 1.2 dBFS, RMS -22.3 dBFS, silent seconds 0; cue requests 782: played 304, culled 478, failed 0; Critical 0
+SUMMARY audio-praxis-efx: 82.90 s, peak -2.4 dBFS, RMS -23.7 dBFS, silent seconds 0; cue requests 837: played 254, culled 583, failed 0; Critical 0
+SUMMARY audio-praxis-dry: 83.48 s, peak -2.6 dBFS, RMS -25.0 dBFS, silent seconds 0; cue requests 798: played 231, culled 567, failed 0; Critical 0
+```
+(spa also resolves 2465/0/4.) The priority change only matters when all 64 voices are busy; no capture exhausts them,
+so it is checked in the data (diff) only, not heard.
+
+**Install (for the coordinator; not run here).** `logs/f6/install-files.txt` lists the 85 files (82 changed, 3 new,
+`cook-report.txt`); a checksum dry run selects exactly those (80 `>fcst`, 2 `>fc.t`, 3 `>f+++`). The packs in
+`assets/uc2-cooked/Sounds` are hard-linked into `assets/uc2/Sounds` and into every run tree made since (link count
+210 on `A_Combo.ogp`): rsync must REPLACE (temp file + rename, the default; never `--inplace`), so trees in use keep
+their old inodes, and then the asset tree's links are renewed:
+```
+cd /home/ion/WorkUC2
+rsync -a --checksum --files-from=logs/f6/install-files.txt logs/f6/cooked/Sounds/ assets/uc2-cooked/Sounds/
+while read -r f; do ln -f "assets/uc2-cooked/Sounds/$f" "assets/uc2/Sounds/$f"; done < logs/f6/install-files.txt
+rsync -a --ignore-existing logs/f6/cooked/.cache/ assets/uc2-cooked/.cache/     # optional: the 20 xwb decodes + new encodes
+```
+Run trees built before stay on the old cook until `mkrun-uc2.sh` rebuilds them. The frontend manifest
+(`targets/uc2/file-manifest.json`, size + mtime per file) is stale for the 82 changed files and lacks `A_Vehicle.*`
+until it is regenerated (frontend parked).
