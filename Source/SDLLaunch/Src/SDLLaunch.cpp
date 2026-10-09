@@ -241,7 +241,8 @@ void CMainLoop::RunLoop()
 		// jitter (port, docs/porting/analysis/jitter.md): [SDLLaunch] FramePattern=<ms>:<ms>:... gives the frames
 		// these lengths in turn (a game without a cap of its own only; it takes the place of FrameRateCap): uneven
 		// frame pacing, as a browser has it, made repeatable for the frame trace (FRAMETRACE, UC2FrameTrace.cpp).
-		// A test hook, set with -ini:System:[SDLLaunch]:FramePattern=16.7:33.3:... (F-4e: was -framepattern=).
+		// A test key, set with -ini:System:[SDLLaunch]:FramePattern=16.7:33.3:... (F-4e: was -framepattern=), read once
+		// and never kept in the ini (appReadTestKey).
 		static INT   PatternNum = -1;
 		static FLOAT Pattern[32];
 		static INT   PatternIndex = 0;
@@ -249,7 +250,7 @@ void CMainLoop::RunLoop()
 		{
 			PatternNum = 0;
 			FString Spec;
-			if( GConfig->GetString( TEXT("SDLLaunch"), TEXT("FramePattern"), Spec, GIni ) && Spec.Len() )
+			if( appReadTestKey( TEXT("FramePattern"), Spec, TEXT("SDLLaunch") ) && Spec.Len() )
 			{
 				const TCHAR* S = *Spec;
 				while( *S && PatternNum < ARRAY_COUNT(Pattern) )
