@@ -346,8 +346,9 @@ public:
 	TArray<GLuint>					FreeArrayBuffers, FreeElementBuffers;
 	GLuint NewBuffer( GLenum Target );
 	void FreeBuffer( GLenum Target, GLuint& Buffer );
-	// -glnolodbias: every texture LOD bias is 0 (verification: GLES has no LOD bias for the
-	// fixed-function path, so this is what the desktop driver is compared with).
+	// -glnolodbias: every texture LOD bias is 0 (verification: until F-3 GL4ES ignored the LOD
+	// bias of the fixed-function path, and this was what the desktop was compared with; our fork
+	// applies it since, and the switch shows the difference it makes).
 	UBOOL							NoLODBias;
 	// -glerrorsdraw: glGetError after every draw call and texture upload, with what it was (slow; to find the call behind an error -glerrors reports).
 	UBOOL							CheckGLErrorsPerDraw;

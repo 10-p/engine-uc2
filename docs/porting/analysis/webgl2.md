@@ -158,3 +158,127 @@ Results (all `logs/f3t/*.out`, 1280x720):
 - Fallbacks of the binding: `MESA_GLES_VERSION_OVERRIDE=2.0` (no ES 3.0 context): `no OpenGL ES 3.0 context: trying
   OpenGL ES 2.0`, `gl4es initialised (GLES2 back end ...)`; `-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:GLESVersion=2`:
   `OpenGL ES 2.0 context requested`, GLES2 back end. Both draw the menu.
+
+## Step 2, continued: the whole twin script on ES 3.0 (run 2, `logs/f3/twin-es3-run2.txt`, binary of `ae1400c`)
+
+`M11_SERIAL=1 MESA_GLES_VERSION_OVERRIDE=3.0 M11_DESKTOP_TREE=f3d M11_TWIN_TREE=f3t tools/dev/m11-twin.sh` (the
+script as on main; its expectations unchanged for this run). So far: shaders PASS, gputest PASS, boot PASS
+(`binding: OpenGL ES 3 through GL4ES`, 97 + 405 shaders, 0 GL errors, 0 Mesa errors), selftest PASS (15/15 both,
+0 GL errors), progtest PASS (485 programs, **7760 of 7760 values identical**), pinned FAIL by its old thresholds,
+which assumed the twin has NO LOD bias:
+- desktop (with its -0.5 bias) vs twin: **mean 0.384**, above8 0.262 %, above32 0.001 % (4 pixels);
+- desktop without LOD bias vs twin: **mean 0.871**, above8 0.509 %;
+- post-processing on, desktop vs twin: mean 0.550.
+On main (ES 2 twin, GL4ES ignoring the bias) the two were the other way round: 1.415 with the bias, 0.374
+without (REPORT.md R-19). So the fork's LOD-bias commit makes the twin draw what the desktop draws: step 4's
+numeric proof, before the pictures. The thresholds move to the comparison with the bias (step 5 edits the script).
+
+## Step 3: FXAA out (commit `8adc4a1`)
+
+The FXAA function of the present shader, its uniform (`uFXAA`), `PresentFXAA`/`PresentFXAALoc`, the bilinear
+filtering of the main colour texture it needed (main colour and the reference copy's restore are NEAREST again,
+as before O-8) and the self-test's FXAA refusal are removed. `AntiAliasing` stays: the sample count of the
+multisampled main framebuffer (desktop GL and OpenGL ES 3 / WebGL 2). On OpenGL ES 2 / WebGL 1 the log says
+`anti-aliasing: none (no multisampled framebuffers on this context)`. The switches `-glaa=N` / `-glnoaa` are the
+MSAA test switches of O-8 (the picture tests run with `-glnoaa`), not FXAA's; nothing else of FXAA existed (no ini
+key of its own). Binaries kept for the A/B pictures: `scratch/bin/uc2-ae1400c.bin` (sha256 `c8b1d211...`, FXAA
+still on the ES 2 path), `uc2-nofxaa.bin` (`28d00441...`).
+
+F-2 (the FPS log line) is on main (`2a58dbc`, merged after this branch was made); this branch is not rebased
+(standing rule: no merges/rebases by agents), so the frame-time numbers below come from the driver's own
+`-glstats` line (`UC2GLDrv: stats: frames a-b: x ms/frame (y frames/s)`, every 300 frames).
+
+### Step 2 run 2, the rest (`logs/f3/twin-es3-run2.txt`)
+
+effects 13/14 PASS (blur PASS this time at 3.07; **liandri FAIL 6.33**: the overlay's random noise, a known
+timing FAIL in REPORT.md's open issues), m6 4/4 PASS, fallbacks: s3tc / maxlevel / fragdepth / uintindex PASS,
+depthtexture "not implemented" FAIL (step 5), movies 8/9 (menu-movie-shots, the known timing FAIL), leftovers PASS.
+So against main's known FAILs (depth texture x2, menu-movie timing) the only new FAIL is pinned, by its old
+thresholds (above).
+
+## Step 3: the A/B pictures and the frame time (2026-10-09 04:40-05:10)
+
+Pictures (`tools/dev/f3-ab.sh aa scratch/bin/uc2-ae1400c.bin`, `logs/f3/ab-aa-*.png`, `ab-aa.txt`): DM-Deadbolt,
+pinned view, post-processing off, after the present pass, 1280x720, same frame:
+
+| Variant | vs no AA (static part x>=760) |
+|---|---|
+| twin, FXAA (binary before step 3, OpenGL ES 2 path) | mean 1.751, above8 6.26 % (FXAA also softens textures and the poster: every high-contrast texel) |
+| twin, 4x MSAA (OpenGL ES 3) | mean 0.166, above8 0.74 % (only geometry edges change) |
+| desktop, 4x MSAA | mean 0.513, above8 1.02 % |
+| twin MSAA vs desktop MSAA | mean 0.356, above32 0.011 % |
+
+Crops (3x, `ab-aa-crops.png`, none | FXAA | MSAA twin | MSAA desktop): the lamp, the poster frame: FXAA blurs the
+poster picture itself; MSAA smooths the frame's edges and leaves the texture as it is, as on the desktop.
+
+Frame time, GPU (Quadro P620, headless EGL, `tools/dev/f3-gpu-fps.sh`, `logs/f3/gpu-fps.txt`, DM-Deadbolt pre-match
+view, 1280x720, mean of the -glstats lines after the first; machine load 12-16):
+
+| Variant | ms/frame |
+|---|---|
+| desktop GL, no AA / 4x MSAA | 11.72 / 12.27 (+0.55) |
+| GL4ES on OpenGL ES 3 (NVIDIA ES 3.2), no AA / 4x MSAA | 5.91 / 6.31 (+0.40, 6.8 %) |
+| GL4ES on OpenGL ES 2 path (FXAA binary) | **does not start on NVIDIA's ES driver**: `present shader does not compile: ... unable to find compatible overloaded function "clamp(float, float, float)"`: GL4ES' int overloads of built-ins (inserted on its ES 2 path) break NVIDIA's GLSL ES 1.00 overload resolution. Old, not caused here (the ES 2 twin only ever ran on Mesa; ANGLE in the browser accepts them); the ES 3 path does not insert them (fork `1bd90647`). Recorded as an open item. |
+
+(Why GL4ES on ES is twice as fast as the desktop binding on this GPU was not looked into.)
+
+Frame time, browser (headless Chromium, ANGLE/Vulkan on the Quadro, spec test 2 = DM-Deadbolt with
+post-processing, -glstats over 300 frames; machine load 13-21, other agents' builds and games running: **noisy,
+not a benchmark**):
+
+| Build | frames 2-301 / 302-601 ms/frame |
+|---|---|
+| main `2a58dbc` (WebGL 1, FXAA; also F-4's frame pacing) | 55.67 / 46.45 |
+| this branch, WebGL 2, AntiAliasing=0 (the same wasm with the preloaded ini patched, `scratch/wasm-noaa`) | 53.23 / 54.09 |
+| this branch, WebGL 2, 4x MSAA (run 2 and run msaa2) | 70.08 / 63.27; 71.74 / 58.05 |
+
+MSAA costs about 4-9 ms a frame in the browser here (7-17 %), much more than on the native GPU path (0.4 ms):
+ANGLE's multisampled renderbuffers and resolves on Vulkan (4 resolve blits a frame with post-processing: colour and
+depth) are the suspects, not measured further. WebGL 2 without AA vs main's WebGL 1 + FXAA: within the noise of
+this machine. A quiet-machine measurement (or F-2's FPS line once this branch carries it) is still owed.
+
+## Browser (the frontend's harness, read-only checkout; my wasm proven by sha256)
+
+`yarn build --target uc2 --engine-artifact <worktree>/build-wasm-perf/Source/SDLLaunch` (capped 4G):
+`serve-web/SDLLaunch.wasm` sha256 `f29cd354dae3218ec825b404dab2b399004da7a5664523013569471644a4907b` = this build's,
+before and after each harness run. Harness: `PULSE_SINK=uc2f3 capped 6G 900|1200 -- node
+packages/e2e/tools/e2e-mem-guard.mjs --max-gb=14 -- --target uc2 uc2-wasm-boot.spec.js [-g ...]`, null sink loaded
+and unloaded by module index, one run at a time (no other harness was running).
+- test 1 (menu), `logs/f3/e2e-run-1.txt`: **FAILS on the spec's literal check** `binding: WebGL 1 through GL4ES`
+  (the spec asserts WebGL 1; the frontend is not mine to change: two regexes, lines 293 and 335, and the test's
+  title). Everything else the test prints is right: `binding: WebGL 2 through GL4ES`, `GLES hardware: WebKit WebGL /
+  OpenGL ES 3.0 (WebGL 2.0 (OpenGL ES 3.0 Chromium))`, `capabilities: S3TC yes, depth texture yes, gl_FragDepth yes,
+  32-bit indices yes, ... fragment highp yes`, `main framebuffer 1024x768 (...; drawn 4x multisampled, resolved into
+  them)`, 97 fragment + 405 vertex shaders compiled (GLSL ES 3.00), `frame 600, 0 GL errors so far`, PSS peak 1412
+  MiB, cgroup peak 2766 MiB. Menu vs twin: the spec's reference method was stale (run-uc2-shot's references
+  are drawn with the pre-D-2 UI and AutoFOV off; the browser has the UI box): 18.6 against both the old FXAA
+  reference and a new one; with `UC2_UIBOX=1 UC2_AUTOFOV=1` twin pictures (`logs/f3/twin-ref/ref-menu-box-*.png`)
+  the nearest is **4.505** (tolerance 10; the menu camera flies on wall-clock time).
+- test 2 (DM-Deadbolt by URL), `-g "DM-Deadbolt by URL"`, `e2e-run-2.txt`: the same WebGL 1 assertion fails; its
+  printout: **browser vs twin (ES3, MSAA, UI box) 2.928** (tolerance 3), 0 GL errors at frame 600, post-processing
+  on, 104 draws/frame, PSS 1817 MiB, cgroup peak 3375 MiB, wasm memory 256 MiB.
+- tests 3 and 4 (keyboard and mouse play test, D-6 mouse look), `-g "keyboard and mouse|mouse look"`,
+  `e2e-run-3.txt`: **2 passed (2.8m)** on WebGL 2.
+- main's wasm (sha256 `7d9a411e...`) test 2 for the frame-time reference: 1 passed.
+
+## Step 4: texture LOD bias on GLES (fork `9653a8a1`; combiner test `Source/UC2GLDrv/Src/UC2GLCombinerTest.cpp`)
+
+1. Numeric, exact: the combiner test's `lod-bias-stage0/5` (a 4x4/2x2/1x1 texture whose levels are red/green/blue,
+   drawn 1:1 with bias +1, must read level 1) ran only on desktop ("OpenGL ES has no texture LOD bias"). Now on the
+   ES 3 twin: `lod-bias-stage0: PASS ... reads mip level 1 (pixel 0: 0,255,0)`, `stage5` the same, **35 passed, 0
+   failed**; with `-glnolodbias` level 0 (255,0,0), 35/35; desktop 35/35. (Two fixes of the test were needed for
+   GLES: its levels went through GL4ES, which regenerates a chain from level 0 (everything red); and a raw-only
+   upload left GL4ES without a record of the texture, so the stage was disabled (the diffuse colour came out).
+   The test now prepares the texture as every engine texture is prepared, `FOpenGLTexture::PrepareStorage`.)
+2. The pinned picture, whole static part: twin vs desktop **0.384** (desktop without bias 0.871); on main 1.415 (and
+   0.374 without), i.e. the twin now draws the desktop's picture where it drew the bias-less one.
+3. The far floor and wall of the pinned view (`tools/dev/f3-ab.sh lodbias`, box 760,470-1200,620, `ab-lodbias.txt`,
+   `ab-lod-crops.png` = desktop | desktop without bias | twin | twin without bias, `ab-lod-twin-diff.png` x8):
+   - twin vs desktop **0.658** (above8 1.09 %); twin without bias vs desktop 1.465 (above8 1.56 %); the bias changes
+     the twin's far floor by 1.137 (above2 14.3 %);
+   - high-frequency energy (mean squared Laplacian): desktop 1361.6, desktop without bias 1412.7, twin 1366.4, twin
+     without bias 1416.8. **The bias LOWERS the energy here**: on this floor the detail texture dominates the fine
+     scale, and its bias is +0.8 (`DetailTexMipBias`, D3DDrv's value), against -0.5 for the base texture; both
+     are applied now, on the desktop as on the twin, and the twin follows the desktop within 0.4 %.
+   Verdict: a measurable difference that makes the web picture the desktop's (mean distance halved), small to the
+   eye at 1x (the crops need the enlargement to show it). The code stays; the owner may judge from the crops.

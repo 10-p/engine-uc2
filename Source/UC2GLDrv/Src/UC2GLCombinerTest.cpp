@@ -189,6 +189,14 @@ struct FUC2GLCombinerTest
 		// Three mip levels of one colour each: which one a lookup takes shows its LOD.
 		Mip = NewTexture( 0, 3 );
 		RenDev->glBindTexture( GL_TEXTURE_2D, Mip->TextureID );
+		if( RenDev->IsGLES )
+		{
+			// GL4ES' record of the texture first, as FOpenGLTexture::PrepareStorage gives every engine
+			// texture: one texel, mipmaps "taken care of"; the levels themselves go around it below.
+			static const BYTE Texel[4] = { 255, 255, 255, 255 };
+			RenDev->glTexParameteri( GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE );
+			RenDev->glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, Texel );
+		}
 		for( INT l=0; l<3; l++ )
 		{
 			INT		Size = 4 >> l;
@@ -200,7 +208,9 @@ struct FUC2GLCombinerTest
 				Level[i*4+2] = (BYTE)(l == 2 ? 255 : 0);
 				Level[i*4+3] = 255;
 			}
-			RenDev->glTexImage2D( GL_TEXTURE_2D, l, GL_RGBA, Size, Size, 0, GL_RGBA, GL_UNSIGNED_BYTE, Level );
+			// (Through the driver's storage helper, as engine textures: on GLES it goes around GL4ES,
+			// which would replace levels 1 and 2 by a chain generated from level 0. F-3.)
+			RenDev->TexImage2D( GL_TEXTURE_2D, Mip->TextureID, GL_TEXTURE_2D, l, GL_RGBA, Size, Size, GL_RGBA, GL_UNSIGNED_BYTE, Level );
 		}
 		if( !RenDev->IsGLES )
 			RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 2 );
@@ -562,11 +572,8 @@ struct FUC2GLCombinerTest
 			Skip( *Name, *FString::Printf( TEXT("needs %i stages, this path has %i"), Stage + 1, RenDev->NumTextureUnits ) );
 			return;
 		}
-		if( RenDev->IsGLES )
-		{
-			Skip( *Name, TEXT("OpenGL ES has no texture LOD bias on the fixed-function path (web-renderer.md)") );
-			return;
-		}
+		// (F-3: on OpenGL ES, GL4ES' fixed-function shaders apply the unit's bias since our fork's
+		// "Apply the texture unit's LOD bias" commit; before, this case was skipped there.)
 		// Bias +1 on a texture drawn 1:1 (LOD 0) takes mip level 1 (green); -glnolodbias: level 0 (red).
 		FOpenGLMaterialState MS;
 		InitPass( MS, Stage + 1, Factor[0] );
