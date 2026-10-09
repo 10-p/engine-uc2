@@ -5,11 +5,13 @@ copies of the Epic tree's `System/` files (first commit). `tools/dev/mkrun-uc2.s
 tree's when it assembles a run tree, so this folder is where our defaults live. Every change from Epic's
 file is listed here with its reason; `git log -p Engine/Config` has the exact diff.
 
-Line endings: every `.ini` here and in `web/` is LF (since F-4d, 2026-10-09), as engine-ut2004's and engine-ut99's
-are (owner: "follow what UT2004 UT99 and the rest does"). Epic's files were CRLF; `Default.ini` had been LF since the
-M7 merge, the others still CRLF. `tools/dev/sync-web-ini.py` refuses a CR in any of them. The engine reads both.
-To see the real changes against Epic's import, ignore the line endings: `git diff --ignore-cr-at-eol 7633696 --
-Engine/Config` (214 lines for `Default.ini`, 110 for `DefUser.ini`, 0 for the three reference copies).
+Line endings: `Default.ini`, `DefUser.ini` and `web/*.ini` are LF (since F-4d, 2026-10-09), as engine-ut2004's and
+engine-ut99's are (owner: "follow what UT2004 UT99 and the rest does"); `tools/dev/sync-web-ini.py` refuses a CR in them.
+Epic's three reference copies `DefaultXbox.ini`, `DefUserXbox.ini` and `KeyBinds.ini` stay byte for byte Epic's (CRLF;
+owner, F-4 follow-up): `cmp` against `<WorkUC2>/epic-sources/System/<file>` is silent and `sync-web-ini.py --check`
+checks it. (`KeyBinds.ini` is read by the game, the pad layouts of `UC2Settings_Controller`; the other two by nothing.)
+The engine reads both endings. To see the real changes of the two LF files against Epic's import, ignore the line
+endings: `git diff --ignore-cr-at-eol 7633696 -- Engine/Config` (214 lines for `Default.ini`, 110 for `DefUser.ini`).
 
 | File | Setting | Epic | Ours | Why |
 |---|---|---|---|---|
