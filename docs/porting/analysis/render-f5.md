@@ -94,3 +94,136 @@ the Xbox's one-frame-late visibility (an actor coming round a corner is missing 
 test (an actor whose box edges are all hidden but which shows through a gap is culled wrongly): both artefacts, no
 gain the player sees. GL4ES/WebGL 1 have no occlusion query (WebGL 2 has `ANY_SAMPLES_PASSED` only, F-3's area).
 Revisit only if a profile shows draw calls of hidden actors dominate a frame.
+
+### Step 3 (02:40): shader inventory against "can a material or a post-process layer select it?". Read + counted.
+
+Criterion (the owner): a shader that a material (including a post-process layer) can be assigned must be ported; one
+that no material can reach may stay. Sources: `Shaders/EPixelShader.tsv` (the `_XBOX` switch of Epic's
+`GetPixelShader`), every `.uc` class under `PixelShaderMaterial` (script below), the handler table of
+`UC2GLPSMaterialState.cpp` (Epic's 24 handlers, all present, none stubbed), the engine sites that set `PixelShaderType`
+themselves, and `FD3DCombinedVertexShader` (`D3DResource.cpp` 2230-2640) for the vertex side.
+
+**Result: nothing reachable is missing; no new port was needed, so there is no newly ported shader to give a golden
+test.** The existing golden tests already cover every reachable pixel shader: `psh2glsl.py --selftest` (100 shaders,
+interpreter against Epic's compiled definition words), `--gputest` (the GLSL of all 100 + 7 synthetic against the
+interpreter), `m11-twin.sh progtest` (all 97 enumerated shaders, 5 vertex shaders each = 485 complete programs, desktop
+against GL4ES). "Never drawn by shipped content" (R-8's 12) is not "not ported": each of those is compiled and has its
+handler; a map or mod that references the class gets it.
+
+Material classes (script, `Source/*/Classes`), with the enum each selects by default (handlers switch within the family):
+`PSAdditiveDistortion` (AdditiveDistortion), `PSBackBufferEffect` (MaskedLuminance), `PSBloomSelectMaterial`,
+`PSBlurMaterial`, `PSColorRemapMaterial` (ColorRemap, Masked), `PSDepthOfFieldMaterial`, `PSDiffuseOpacity`,
+`PSDiffuseOpacitySpecularMask` (+SpecLight, 2), `PSDistortionMaterial`, `PSDualDiffuse` (32 variants by its properties),
+`PSEmissiveConstColor`, `PSEmissiveShader` (DiffuseOnly/Spec/SpecLight), `PSEmissiveSkinShader` (+SpecLight, Alpha),
+`PSEmissiveSpecular`, `PSLuminanceTexIndexMaterial`, `PSModulatedDistortionMaterial`, `PSMotionBlurMaterial`,
+`PSPlayerCamMaterial` (+Noise, TwoNoise), `PSRefractionMaterial`, `PSShenuSkin`, `PSSkinShader` (+SpecLight),
+`PSSkinShaderOpacity` (+SpecLight), `PSSubtractiveDistortion`, `PSTeamShader` (+SpecLight, NoSpec, TeamBSPShader),
+`PSTeamSkinShader` (+SpecLight, SpecLightAlpha), `PSTeamSkinShaderOpacity` (+SpecLight), `PSUseTexIndexMaterial`
+(UseTexIndex, Masked). Engine-made objects: `UCScreenMotionBlur` (Mask), `UCScreenEmissive` (EmissiveSelectBlur),
+`UCScreenLiandri` (ColorRemapGrayScale), `UShadowBitmapMaterial` (ShadowBlur), `UProjectorMultiMaterial` (the 12
+projector shaders), terrain (Terrain3Layer). Post-process `SubAction`s: only `SubActionCameraEffect` (adds a camera
+effect object: the same classes); `MotionBlur`/`ScreenFlash`/`ScreenFade` (Engine `CameraEffect`s) draw with ordinary
+`Shader`/`FinalBlend` materials, no pixel shader.
+
+**Pixel shaders (100 `.psh`, 98 enum values)**
+
+| Enum values | Shaders | Selected by | Status |
+|---|---|---|---|
+| 1 | Terrain3Layer | terrain pass, `MaxSimultaneousTerrainLayers=3` | ported (R-16; `UseTerrain3Layer`, off by default: no visible difference) |
+| 2 | Terrain4Layer | terrain with 4 layers per pass: a PC ps.1.4 cap no Xbox and no device of ours reports | **left out: no Xbox shader exists** (Epic's is inline PC ps.1.4 text in `D3DRenderDevice.cpp:2353`, no `.psh`), and no material selects it |
+| 3-6, 8, 10 | Blur, DOF, Mask, MotionBlur, BloomSelect, EmissiveSelectBlur | `PSBlurMaterial`, `PSDepthOfFieldMaterial`, `UCScreenMotionBlur`, `PSMotionBlurMaterial`, `PSBloomSelectMaterial`, `UCScreenEmissive` | ported (M7); Mask never drawn by content (no script creates a `UCScreenMotionBlur`) |
+| 7 | Refraction | `PSRefractionMaterial` | ported (M7); no object in any shipped package |
+| 9 | EmissiveSelect | only a static object inside Epic's `#if 0` (`UCCameraEffects.cpp:1222`) | ported (compiled, handler present); no live selector |
+| 11, 12, 90 | LuminanceTexIndex, UseTexIndex, UseTexIndexMasked | `PSLuminanceTexIndexMaterial` (and dynamic gamma), `PSUseTexIndexMaterial` | ported (M7); UseTexIndex* in no shipped package |
+| 13-17 | Distortion, Modulated/Additive/SubtractiveDistortion, DistortionAccum | the distortion classes; accumulation by `FPostProcessRender` | ported (M7); additive/subtractive never drawn by content |
+| 18-26 | the skin shaders | `PSSkinShader`, `PSTeamSkinShader`, `PSSkinShaderOpacity`, `PSTeamSkinShaderOpacity` | ported (M6) |
+| 27-30 | TeamShader family | `PSTeamShader` | ported (M6) |
+| 31-62 | 32 DualDiffuse variants | `PSDualDiffuse` | ported (M6); no shipped package (tested with `-gldualdiffuse=`) |
+| 63-67 | DiffuseOpacitySpecularMask family, ShenuSkin | `PSDiffuseOpacitySpecularMask`, `PSShenuSkin` | ported (M6) |
+| 68-75 | emissive skin / emissive shaders, EmissiveSpecular, EmissiveConstColor | the emissive classes | ported (M6) |
+| 76-87 | 12 projector shaders | `UProjectorMultiMaterial` (static projector batching) | ported (M7b) |
+| 88 | MaskedLuminance | `PSBackBufferEffect` | ported (M7); never drawn by content |
+| 89 | ShadowBlur | `UShadowBitmapMaterial` (Xbox shadows) | ported (M7b) |
+| 91-93 | PlayerCam, Noise, TwoNoise | `PSPlayerCamMaterial` | ported (M7); noise variants never drawn by content |
+| 94 | DiffuseOpacity | `PSDiffuseOpacity` | ported (M6) |
+| 95, 96, 98 | ColorRemap, ColorRemapMasked, ColorRemapGrayScale | `PSColorRemapMaterial`, sniper overlay, `UCScreenLiandri` | ported (M7); Masked never drawn by content |
+| 97 | DepthSwizzleColor | only the Xbox driver's own `CopyDepthBuffer` (no material) | ported (compiled); our driver copies depth its own way (R-6) |
+| none | `DistortionBlended.psh`, `DOF_Debug.psh`, `LuminanceTransform.psh` | no enum value: `GetPixelShader` never returns them | translated by `psh2glsl.py` (golden-tested), not compiled by the driver: **no material can select them** |
+
+**Vertex-shader fragments (67 `.vsh`)**: 49 ported, 2 are include files, 16 left out, every one for a stated reason.
+(R-4's "19 of 67" counted fragment kinds; the 49 counts files: each of the 4 stages' `TexSource*`, `TexPass*`,
+`TexTransform*`, `TexSourcePass*`, `TexSourceTransform*_m4x2/m4x3z/m4x3w` is generated by the same loop.) The five unique
+vertex shaders Epic defines (`EUniqueVertexShader`: Distortion, Projector_Atten, Projector_Atten_Clip, ColorRemap,
+DistortionAccum) are all ported.
+
+| `.vsh` | status |
+|---|---|
+| `AddVertexRGB` | ported |
+| `AddVertexSpec` | left out: no code selects it (in Epic's fragment table, `D3DResource.cpp:2034`, never spliced) |
+| `ColorRemap` | ported (M7) |
+| `DefaultPosition` | ported |
+| `Distortion` | ported (M7) |
+| `DistortionAccum` | ported (M7) |
+| `Fog` | ported |
+| `InitLighting` | left out: no class selects it (Epic compiled the per-light path out: `HARDCODED_VS_LIGHTS`, `UnRenDev.h`; `D3DResource.cpp` 2357-2400 `#else` branch) |
+| `InitRGB` | ported |
+| `LightAmbient` | ported |
+| `LightDirectional` | left out: as InitLighting |
+| `LightHardDirectional5` | ported (the only light path Epic compiles: `HARDCODED_VS_LIGHTS`) |
+| `LightPoint` | left out: as InitLighting |
+| `LightSpot` | left out: as InitLighting |
+| `MulVertexSpec` | ported |
+| `NextLight` | left out: as InitLighting |
+| `NotBoned` | ported |
+| `OutLightRGB` | ported |
+| `OutVertexRGB` | left out: no code selects it (`D3DResource.cpp:2031`, never spliced) |
+| `ProjectorAtten` | ported (M7b) |
+| `ProjectorAttenOut` | left out: not even in Epic's fragment table (dead source file) |
+| `ProjectorDistanceAtten` | left out: not even in Epic's fragment table (dead source file) |
+| `Screenspace` | ported (GL's own viewport transform does its job) |
+| `ShaderConstants` | not a fragment: register-name include |
+| `ShaderRegisters` | not a fragment: register-name include |
+| `SkelFourBoned` | left out: as SkelOneBoned |
+| `SkelOneBoned` | left out: GPU skinning, needs the Xbox GPU vertex stream (`VS_UnpackPosition|VS_SkelThreeBoned`, `GHardwareSkinning`, which only the Xbox sets; PC skins on the CPU) |
+| `SkelThreeBoned` | left out: as SkelOneBoned |
+| `SkelTwoBoned` | left out: as SkelOneBoned |
+| `TerrainSpecial` | left out: needs the packed Xbox terrain vertex (`VS_TerrainSpecial`, set only under `_XBOX`, `UnTerrain.cpp:3544`) |
+| `TexCamNormal` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexCamPosition` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexCamReflect` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexPass0` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexPass1` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexPass2` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexPass3` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSource0` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSource1` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSource2` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSource3` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourceCamNorm` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourceCamPos` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourceCamRef` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourcePass0` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourcePass1` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourcePass2` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourcePass3` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourceTerrainSpec` | left out: same, terrain texcoords derived from the packed vertex |
+| `TexSourceTexKill3` | ported (M7b) |
+| `TexSourceTransform0_m4x2` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourceTransform0_m4x3w` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourceTransform0_m4x3z` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourceTransform1_m4x2` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourceTransform1_m4x3w` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourceTransform1_m4x3z` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourceTransform2_m4x2` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourceTransform2_m4x3w` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourceTransform2_m4x3z` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourceTransform3_m4x2` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourceTransform3_m4x3w` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexSourceTransform3_m4x3z` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexTransform0` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexTransform1` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexTransform2` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `TexTransform3` | ported (texture-coordinate loop of `BuildVertexShaderSource`) |
+| `UnpackPosition` | left out: needs the packed Xbox vertex format (`FPackedPosition`, `XBOX_ASSET_FORMAT`); PC streams carry plain positions |
+
+Counts: 49 ported, 16 left out, 2 includes; 67 files.
