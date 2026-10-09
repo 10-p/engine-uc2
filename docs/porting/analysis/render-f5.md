@@ -327,3 +327,51 @@ perspective and orthographic alike; GLSL 1.20 built-ins `gl_ProjectionMatrix`, `
 `gl_FogFragCoord`. Desktop GL only (GL4ES generates its own fog code from `vertex.z`, unchanged). The texture
 environment path (`FixedFunctionPrograms=False`, a comparison switch) still uses GL's own fog. Numeric check: the
 self-test `fog` (nine cases, CPU model of D3D linear fog on camera-space depth) runs in the gate below.
+
+### Step 5 (03:35-04:00): shadow strength against the Xbox. Analysis + our reference pictures; the owner's xemu shot is requested.
+
+**What Epic's code says, per kind of shadow** (read; the numbers marked "measured" were run):
+
+1. *Player shadow texture* (the local player's silhouette; bots and other players get Epic's blob texture: `UCPawn.SetupPlayerShadow`
+   sets `bBlobShadow` unless the pawn is locally and humanly controlled, `Characters.ini bBlobShadow=False`). The Xbox branch of
+   `UShadowBitmapMaterial::Get` (M7b, R-15) runs: caster in `ShadowDarkness` grey (200, `ShadowBitmapMaterial.uc`) on 127,
+   four horizontal taps, `1 - x`: core 0.216, neutral 0.502; measured against a CPU recomputation to 0.56/255 (`GLSHADOWCHECK`,
+   projectors.md step 2). After the 2x modulate the floor keeps 43% of its light in the core (PC branch: 21%). So **our player
+   shadow is half as dark as it was before M7b, by Epic's Xbox code**; that is the most likely meaning of "recover the
+   shadow strength as it were" if the owner compares with earlier builds.
+2. *Projection of dynamic projectors* (player shadows): on the Xbox, `FProjectorRenderBatchDef::Render` (`UnRenderBatch.cpp`
+   340-410, `_XBOX`) draws them with the same `UProjectorMultiMaterial` as the static batches: per-vertex distance fade
+   `1 - d/MaxTraceDistance` (`ProjectorAtten.vsh`) times `N . -D`, then `Proj_Modulate_1`: `lerp(0.5, t, atten)`. Ours
+   (PC path, kept since M7b) blends with `GRADIENT_Fade` per pixel and the normal cube map. `GRADIENT_Fade` is 8x64, alpha
+   5 / 129 / 0 at rows 0 / 31 / 63 (`GLTEXELS`, measured): a linear ramp from 255 just in front of the projector to 0 at
+   `MaxTraceDistance` (row 0 is the guard texel behind it), so the two fades agree to first order; the Xbox's is per vertex
+   (interpolated over the floor's triangles), ours per pixel. For a player shadow (`MaxTraceDistance` 150, projector at the
+   root bone about 45 units above the floor) both give atten ~0.7, i.e. the core keeps `2 x lerp(0.5, 0.216, 0.7)` = 60% of
+   the floor's light. No difference found that would make the Xbox darker.
+3. *Static (map) projectors*, e.g. CTF-Aqueduct's tree shadows: Xbox batches since M7b (R-14), Epic's formula register for
+   register. On CTF-Aqueduct the batch draws the leaf shadows weaker than the PC path did before M7b: mean |with - without
+   projectors| over 12 elevated views (`logs/f5/fx-aq-survey*-gpu-*.png`, copied to `logs/f5/shadow/`) 3.9 (Xbox batch,
+   default) against 5.9 (PC path, `-noxboxprojectors`), the PC path stronger in 11 of 12 views (measured). From the canyon
+   floor (the reference view below) the two paths differ little: 5.67 vs 6.11, Xbox vs PC 1.11. Likely reasons, inferred:
+   the Xbox's per-vertex fade and `N . -D` on large terrain/BSP triangles (a vertex beyond `MaxTraceDistance` is clamped to 0
+   and drags the whole triangle down), against PC's per-pixel gradient and cube map.
+
+**The xemu shots we have** (`<WorkUC2>/temp/`, looked at again): `AzureWaterDistortion.png`, `PraxisWindowPanesClose.png`,
+`PraxisWindowPanesDistance.png` are the Xbox ones; the player's feet are at the bottom edge or on dark floors, no
+shadow can be made out. Nothing to compare with.
+
+**Request for the owner (xemu)**: CTF-Aqueduct, third person, standing still on the canyon floor under the trees, looking
+east along the canyon with the camera a little above the pawn, as in our picture
+`<WorkUC2>/logs/f5/shadow/aq-ref-xbox-frozen-00.png` (1280x960; our `NETPLACE LocalPlayer 4300 300 900 0 -3000`: the pawn
+lands at (4300,300,-177); view yaw 0 = east, pitch -3000). Window: xemu's 640x480 output at 2x (1280x960 client area), any
+time of day (the map has none), no other player near. What it settles: the darkness of the leaf shadows on the grass and
+on the rock wall ahead (Xbox batch vs PC path) and, if the pawn's own shadow is visible at the feet, its darkness.
+Our three versions of that frame: `aq-ref-xbox-frozen-00.png` (default: Xbox projectors + Xbox shadows),
+`aq-ref-pc-frozen-00.png` (`-noxboxprojectors`, `XBOXSHADOWS 0`: before M7b), `aq-ref-none-frozen-00.png` (projectors
+off); side by side `aq-shadow-ref-sheet.png`. Tool: `F5_RES=1280x960 F5_MAP=CTF-Aqueduct F5_VIEW=3p F5_PHASES=frozen
+F5_PLACE="4300 300 900 0 -3000" tools/dev/f5-flicker.sh <name> <tree> 1`.
+
+Player shadow on a bright floor (DM-Azure flagstones near the first PlayerStart, `logs/f5/shadow/down-x1/x0*`): with the
+3p camera behind and above, the shadow of a standing pawn lies under it (light direction (0.2,0,1), `UCPawn.uc`) and is
+hidden by the body; `XBOXSHADOWS 1` vs `0` differ only on the pawn and in PC's 1.6% darker square. A player shadow is only
+comparable while jumping or from a side camera, which the owner cannot place on the Xbox: not requested.
