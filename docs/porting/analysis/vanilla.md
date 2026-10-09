@@ -354,3 +354,31 @@ warnings; compare UCGameplay 19 problems (as before), UCMenu 5, GUI different-ex
   view; NETPROBE allowed and logged standalone; bare TELEPORT is Epic's and logs nothing; after `open
   DM-Deadbolt?Listen`: WHEREAMI, TELEPORT and NETPLACE each `Cheat: ... refused: cheats are only for a standalone
   game (UC2's CheatManager rule)`.
+
+### F-1e: the gate again, both ways (2026-10-09 10:00-10:55; load 11-30 from other agents)
+
+Builds at `77897e7`: native `bin/capped 6G 3600 -- cmake --build build-native -j4` rc 0 (`logs/f1/build-native-5.log`);
+wasm-perf `bin/capped 6G 7200 -- cmake --build build-wasm-perf -j4` rc 0, 0 errors (`build-wasm-perf-2.log`,
+`SDLLaunch.wasm` sha256 7f059866125f88d9...); windows `bin/capped 6G 5400 -- cmake --build build-windows -j4` rc 0, 0
+errors (`build-windows-2.log`). Scripts `tools/dev/script-build.sh --tree f1-make3`: `Success - 0 error(s), 85
+warning(s)`; compare UCGameplay 19 problems, UCMenu 5, GUI different-explained, all else as shipped.
+
+| Suite | (b) rebuilt `f1-reb` | (a) vanilla `f1-van` | Expected difference |
+|---|---|---|---|
+| d6 (vanilla look ini lazy pad lock accel walk cheat) | 97 PASS, 0 FAIL (one run, `logs/f1/s8/d6.txt`); vanilla 6/6 and pad-shipped/walk-shipped run on (a) inside it | | |
+| pad curve vs Epic's package | worst 0.43% (yaw 0.35, frame quantisation at the slow end), 0.17/0.04/0.18% (yaw 0.5/0.75/1.0), 0.02% (pitch 0.5); left-stick walk 2.44% | | within 0.5% |
+| walk speeds | W, pad 1.0/0.5/0.35, Shift+W: 430.0 units/s each | the same, 430.0 each | none |
+| m10 keyboard/mouse/text/pad/both | 16/18/7/33/14, all PASS | keyboard 15/16 (E-melee once; 16/16 on two re-runs after the strafe check allowed aim adhesion's yaw), mouse 16/18, text 7, pad 33, both 14 | mouse 2 (linear PC mouse) |
+| d9 | 119 PASS, 0 FAIL | menu 2/6 | the page is UCMenu.u's |
+| d3 / d4 / d5 | ALL PASS / ALL PASS / ALL PASS | ALL PASS / n1,n2,n4 name checks / ALL PASS | D-4 is GUI.u's |
+| verifyclasses | layouts match | layouts match | |
+| jit-trace uneven (judder RMS fwd/back/right/left px) | kbm rigid 0.54/0.39/0.53/0.53 PASS; pad 0.38/0.48/0.98/2.09 | kbm 0.44/0.49/0.96/1.60; pad 0.36/0.44/1.56/1.68 | every lazy-camera run: Epic's camera on the strafes' ramp (as in jitter.md step 3) |
+| net-test (with `AllowNetCheats` for the harness) | dedicated1 8, dedicated2 9, listen 7, travel 6, leftovers: all PASS | dedicated2 + listen all PASS | |
+| dedicated server without the key | `Cheat: NETPROBE / NETPLACE / WHEREAMI / TELEPORT refused: ...` (`run/f1-netreb/System/Netref.log`) | | |
+| m7-effects praxis-panes (NETPLACE via -glexec, standalone) | `Cheat: NETPLACE LocalPlayer ...` then `place ... ok`, the A/B pair as before (diff 25.47%, critical 0) | | |
+| browser boot spec | 4 passed (3.7m), wasm 7f059866 before and after, UCGameplay 4ed72f0b served, mouse 10/10.0125/10.01/10.01; mem-guard peak 12.3 GB | | |
+
+Packages to switch (`run/f1-make3/System`): GUI.u 4e5b1af0add70b57d88893694498b84249a98ffc96484912847819a6e780f204
+(unchanged), UCGameplay.u 4ed72f0baba99fd0636b39367bcc44a6edb799550b7ed54347cf9951d095e6f5, UCMenu.u
+b9202a59c2af4820b1028ebffe88b693422081171952bd8c42d0882ee4c1e8a5.
+Memory: builds 6G, script make 3G, game runs 2G, net 6G, frontend build 4G, browser 6G (mem-guard 18); no ceiling hit.
