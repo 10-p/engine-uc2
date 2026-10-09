@@ -19,6 +19,7 @@
 #                                  (the pawn then stays where it is put, also with time running)
 #   F5_ARGS="..."                  more uc2.bin arguments; F5_GL4ES=1 runs the GLES twin instead of the desktop device;
 #                                  F5_SOFT=1 renders with Mesa llvmpipe on the Xvfb display instead of the GPU
+#   F5_BIN=uc2.bin                 another executable of the tree's System folder (before/after pictures)
 #   F5_RES=1280x720                window size; F5_SECS=300: time limit of the run (software GL under load: more)
 #   F5_OUT=<WorkUC2>/logs/f5/flicker  output folder
 # Output: <out>/<name>.{out,inject,result}, <name>-<phase>-NN.png. Inside <WorkUC2>/bin/capped 2G; nothing is left
@@ -96,7 +97,7 @@ video="SDL_VIDEODRIVER=offscreen"; [ -n "${F5_SOFT:-}" ] && video="MESA_GLES_VER
 inner=$(mktemp)
 cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy $video ./uc2.bin "$map?Name=FxCam" -log -nostartupmovies -glerrors $dev -inputtest="$chan" ${F5_ARGS:-} > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy $video ./${F5_BIN:-uc2.bin} "$map?Name=FxCam" -log -nostartupmovies -glerrors $dev -inputtest="$chan" ${F5_ARGS:-} > "$out/$name.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$name.out" "$chan" "$out/$name.result" > "$out/$name.inject" 2>&1
 kill -TERM \$pid 2>/dev/null

@@ -283,3 +283,47 @@ strictness bug in our present shader or GL4ES' output.
 **What I need from the owner to go further**: native or web (and which browser/GPU), window size, AA, standing or
 moving (mouse turn, walk), and a spot: `NETPLACE` coordinates are easiest from the console (`NETPROBE x` prints the
 pawn's location in the log), or a screenshot of the place. Every condition above is re-runnable with one command.
+
+### Step 6 (03:00-03:30): DM-Azure sky haze A/B. Cause found (Mesa's fixed-function fog coordinate), fixed in our FF programs. Measured.
+
+**The A/B** (one frame: `NETPLACE 9002 2629 -706 -16268 1500` = the first PlayerStart of DM-Azure, third person, time
+stopped; 1280x720; AA off by `-ini:...:AntiAliasing=0` in both device sections; post-processing on, and off with
+`UsePostProcess=False`; tool `tools/dev/f5-flicker.sh` (`F5_MAP=DM-Azure F5_PHASES=frozen`), numbers and sheet
+`tools/dev/f5-haze.py`; pictures `logs/f5/haze/f5-haze-ab.png` (before), `f5-haze-ab-after.png`, numbers in the `.txt`
+next to them. Sky box (590,10)-(740,230), far-mountain box (612,345)-(732,412); differences are 0-255, mean of R,G,B.)
+
+| post-processing | pair | sky mean / max before | sky mean / max after |
+|---|---|---|---|
+| on | desktop on the GPU (NVIDIA) vs twin (GL4ES on Mesa) | 1.48 / 13 | 1.48 / 13 |
+| on | desktop on Mesa llvmpipe vs twin | **60.72 / 99** | 2.20 / 23 |
+| off | desktop GPU vs twin | 1.07 / 15 | 0.37 / 13 |
+| off | desktop Mesa vs twin | **46.75 / 80** | 2.49 / 26 |
+
+Sky mean colour, post-processing off: desktop GPU (102,105,111), twin (102,105,111), desktop Mesa before (140,153,165),
+after (102,105,111). Far mountains: within 0.2-1.4 mean everywhere (the max 229 after is the crosshair, which sits in
+that box in one run).
+
+**Finding: the haze was never "desktop vs GL4ES".** On the owner's GPU the desktop device already showed the clouds
+exactly as the GLES/web path does; only the desktop device on **Mesa** (llvmpipe here; the M11 measurements and
+`logs/m11t/crop-azure-sky.png` were all made on Mesa, as is the wine oracle's `logs/oracle/DM-Azure.png`) fogged the
+sky zone almost flat. Steps that located it: Mesa's texture-environment path (`-glnoffprograms`) is as hazy as our
+fixed-function programs (identical pixels), so the difference comes from Mesa's fixed-function **vertex** stage, the
+only common part; `GL_FOG_DISTANCE_MODE_NV` reads `GL_EYE_PLANE_ABSOLUTE_NV` on Mesa, and setting it explicitly or
+dropping `GL_FOG_HINT GL_NICEST` changes nothing (experiments with throw-away binaries, not committed). So the fog
+coordinate Mesa's vertex stage hands to the fragment stage (`gl_FogFragCoord`) is larger than |eye z| for these
+draws (the sky zone: fog 230-1600, very large far triangles); why exactly, without Mesa's source here, is not known.
+Mesa's hardware drivers (AMD radeonsi, Intel iris) share that fixed-function code, so Linux players with those GPUs
+would have seen the haze too (inferred, not run).
+
+**Which is right**: D3D's table fog (what Epic's PC driver uses on every card with `D3DPRASTERCAPS_FOGTABLE`,
+`D3DRenderDevice.cpp` 503-511, 1319-1327; the Xbox sets `D3DFOG_LINEAR` table fog) and Epic's `Fog.vsh`
+(`-R_CAMERASPACE_POSITION.z`) use the eye-space depth per pixel: the clouds visible, as NVIDIA, GL4ES and now Mesa
+show. The wine oracle is not a witness here (wine turns D3D fog into GL fog on Mesa).
+
+**Fix** (`Source/UC2GLDrv/Src/UC2GLFFProgram.cpp`, `FFBuildSource`, and the file header): the generated
+fixed-function fragment program computes the fog distance itself: eye z from the fragment's window depth through the
+projection (`ndc = (2 gl_FragCoord.z - near - far)/diff`, `z = (P[3][2] - ndc P[3][3]) / (ndc P[2][3] - P[2][2])`,
+perspective and orthographic alike; GLSL 1.20 built-ins `gl_ProjectionMatrix`, `gl_DepthRange`), instead of reading
+`gl_FogFragCoord`. Desktop GL only (GL4ES generates its own fog code from `vertex.z`, unchanged). The texture
+environment path (`FixedFunctionPrograms=False`, a comparison switch) still uses GL's own fog. Numeric check: the
+self-test `fog` (nine cases, CPU model of D3D linear fog on camera-space depth) runs in the gate below.
