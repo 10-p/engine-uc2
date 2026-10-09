@@ -19,7 +19,10 @@ frontend build 4G, browser only through the frontend harness, one harness run ma
 
 ## Status
 
-- 2026-10-10 01:55: notebook created; step 1 (exploration, read-only) in progress.
+- 2026-10-09 01:55: notebook created. 07:10: steps 1-7 done; final engine commit `b7ae205`, final wasm sha256
+  `a6a3941ab139418bab8765a33063e4beb56b8eb7e52644846c60624cc927f7bd`; GL4ES fork commits `b53ae966..6b6bccd4` (7) in
+  `.gl4es-dev`, not pushed. Open: the spec's literal WebGL 1 checks (frontend), the owner's WebGL 1 decision, the
+  browser MSAA cost on a quiet machine, the two texture-upload candidates of step 6.
 
 ## Step 1: what exists (read-only exploration, 2026-10-09)
 
@@ -349,3 +352,20 @@ references: `logs/f3/twin-ref/ref-menu-box-8.png`, `ref-map-box-4.png` (ES 3 twi
 - DM-Praxis: no spec of the frontend takes a picture of it (the boot spec uses DM-Deadbolt); not done.
 - The spec needs (frontend agent, after the merge): the two "WebGL 1" regexes (`uc2-wasm-boot.spec.js:293, 335`) and
   the test title; its twin references made with `UC2_UIBOX=1 UC2_AUTOFOV=1` (the D-2 UI box), as here.
+
+## Final runs (engine `b7ae205`)
+
+- Twin, run 5 (`logs/f3/twin-es3-run5.txt`, binary of `b6f5ced`): pinned PASS (0.384; without the desktop's
+  bias 0.871), **effects 14/14 PASS** (liandri 4.04 this time), fallbacks PASS (+ the depth-texture INFO line),
+  movies 8/9 (menu-movie-shots, the known timing FAIL), leftovers PASS. With run 4 (boot, selftest, progtest, es2
+  PASS) every check of the script has run on the final depth path.
+- `b7ae205` (coordinator's side note: the twin did not start on NVIDIA's own ES context): GL4ES' ES 2 int
+  overloads of built-ins off (`LIBGL_NOINTOVLHACK=1`); ES 2 path on the Quadro's ES 3.2 context: `0 GL errors` in
+  12000 frames, 4.81 ms/frame (`logs/f3/gpu-es2-final.out`); run 6: boot and es2 PASS on Mesa. The ES 3 path on
+  the Quadro's ES context worked before already (`gpu-fps-es3-*.out`).
+- GPU frame time again (`tools/dev/f3-gpu-fps.sh`, final-but-one binary, load 13): desktop 10.16 / 10.55 ms
+  (no AA / MSAA), GL4ES ES 3 4.76 / 5.17 ms.
+- Browser, wasm `a6a3941a...` (`e2e-run-final2-*.txt`): map vs twin **2.900**, 0 GL errors (fails only on the WebGL 1
+  literal), play tests **2 passed**. Screenshots: `logs/f3/e2e-final2/uc2-map.png`, `logs/f3/e2e-final/uc2-menu.png`.
+- `git merge-tree` of this branch with main `2a58dbc` (F-4/F-2): clean (my CMake edit stays inside the M11 block;
+  F-4 changed other parts of the same `Web.cmake`).
