@@ -216,6 +216,7 @@ void CMainLoop::RunLoop()
 	unguard;
 
 	// Enforce optional maximum tick rate.
+	UBOOL LimiterSlept = 0;	// F-4b: as engine-ut2004, the web yields only when the limiter did not sleep
 	guard(EnforceTickRate);
 	if( !GIsBenchmarking && IncludeMessaging )
 	{
@@ -262,20 +263,27 @@ void CMainLoop::RunLoop()
 		{
 			FLOAT Delta = Pattern[PatternIndex++ % PatternNum] - (appSeconds()-OldTime);
 			appSleep( Max(0.f,Delta) );
+			LimiterSlept = 1;
 		}
 		else if( MaxTickRate>0.0 )
 		{
 			FLOAT Delta = (1.0/MaxTickRate) - (appSeconds()-OldTime);
 			appSleep( Max(0.f,Delta) );
+			LimiterSlept = 1;
 		}
 	}
 	unguard;
 
 #ifdef __EMSCRIPTEN__
-	// M4w: give the engine worker's event loop one turn per frame (input, host commands); the limiter
-	// above already did when it slept. SDLLaunchWeb.cpp says why.
-	if( GIsBenchmarking || !IncludeMessaging || Engine->GetMaxTickRate() <= 0.f )
+	// M4w: give the engine worker's event loop one turn per frame (input, host commands, the frame's present);
+	// the limiter above already did when it slept (appSleep is emscripten_sleep, the same kind of yield), so
+	// exactly one yield per frame, as engine-ut2004's WorkerYield. F-4b: the test is whether the limiter slept,
+	// not the engine's own tick rate (the launcher's frame cap sleeps with an engine rate of 0, and yielded
+	// twice per frame). SDLLaunchWeb.cpp says why.
+	if( !LimiterSlept )
 		UC2WebYieldFrame();
+#else
+	(void)LimiterSlept;
 #endif
 
 	// Handle all incoming messages.

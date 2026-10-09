@@ -35,6 +35,10 @@ target_link_options(${PROJECT_NAME} PRIVATE
   -sPTHREAD_POOL_SIZE=2                # main() + Core's file-streaming thread
   -sASYNCIFY
   -sASYNCIFY_STACK_SIZE=262144
+  # As engine-ut2004 (F-4b). Emscripten appends its defaults to this list (__asyncjs__*, which covers the
+  # frame yield's EM_ASYNC_JS, and invoke_* while indirect calls are not ignored), and emscripten_sleep is an
+  # async JS function in any case: so the list is UT2004's for identity, and changes nothing measurable.
+  "-sASYNCIFY_IMPORTS=['emscripten_sleep','emscripten_set_main_loop','__syscall_openat']"
   -sSTACK_SIZE=2097152
   -sINITIAL_MEMORY=268435456
   -sALLOW_MEMORY_GROWTH=1
@@ -88,6 +92,10 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 # this, ufront 2.61). emcc takes the last -s setting, so this overrides the 2 above. Exception catching is on at
 # the link (above): openal-soft throws and catches internally.
 target_link_options(${PROJECT_NAME} PRIVATE -sPTHREAD_POOL_SIZE=4)
+# F-4b: SDLLaunchWeb.cpp mutes the listener while the tab is hidden (engine-ut2004's visibility callback).
+if(TARGET OpenAL)
+  target_include_directories(${PROJECT_NAME} PRIVATE $<TARGET_PROPERTY:OpenAL,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
 # --- end M11 audio --------------------------------------------------------------------------------------------
 # --- M11: the GL device on the web (UC2GLDrv behind gl4es on WebGL 1; docs/porting/analysis/web-renderer.md) ---
 if(TARGET UC2GL4ESDrv)
