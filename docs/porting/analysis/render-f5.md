@@ -389,3 +389,15 @@ comparable while jumping or from a side camera, which the owner cannot place on 
 - Combiner test (`-glcombinertest`, as `o9-nvidia.sh`): Mesa 35 passed / 0 failed (fog and fog-front 0.50 of 255); the
   NVIDIA GPU 35 passed / 0 failed (`logs/f5g/ct-mesa.out`, `ct-gpu.out`).
 - `sync-web-ini.py --check`: up to date (step 1; no ini changed since).
+
+### Gate, part 2 (04:20-04:50)
+
+- `M7B_SECS=300 tools/dev/m7b.sh f5b` (`logs/f5/gate-m7b.txt`): `m7b summary: 11 PASS, 0 FAIL` (shadow filter PC 0.00 /
+  Xbox 0.56 of 255; projector-agree mean 0.023; projector-differ 8.780; terrain; draw counts 85 -> 81, 81 -> 75).
+- `fx-owner.sh` pinned scenes, before/after on the GPU (`UC2_GPU=1`; "before" = this branch's binary with
+  `UC2GLFFProgram.cpp` of 1372dec, i.e. without the step-6 fog change; step 1 changes no picture since the inis carry
+  the keys): `pool`, `praxis-near`, `praxis-far`, `waterfall-3p`, all critical=0 glerrors=0 programs_failed=0+0
+  left_behind=0 (`logs/f5/gate-fx-owner.txt`). Before vs after (`logs/f5/gate-fx-owner-compare.txt`): mean 0.30-1.05 per
+  shot, `waterfall-3p-behind` 4.02 (animated pool surface; time is not stopped in that case); control, the same binary
+  twice: 0.41-1.27, `behind` 3.89. So no change beyond run-to-run noise on these indoor views (on NVIDIA
+  `gl_FogFragCoord` already was |z|; the change matters on Mesa and where fog is strong).
