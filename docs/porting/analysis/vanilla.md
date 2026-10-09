@@ -67,3 +67,79 @@ Decisions taken while step 1 runs (code in the worktree, uncommitted until measu
   `SDL_HINT_ORIENTATIONS`); it relies on SDL 2's defaults, which are unaccelerated (raw input / XInput2 raw / Wayland
   unaccelerated). `SDL2Client::Init` now names the three that matter at normal priority (`MODE_WARP=0`,
   `SYSTEM_SCALE=0`, `SPEED_SCALE=1.0`; `RELATIVE_SCALING` only acts on an `SDL_Renderer`, not used, so not set).
+
+## Step 1 (2026-10-09 02:10-02:30): the vanilla state measured (main 1372dec's engine and inis, Epic's packages)
+
+Tree `run/f1-van0`: `build-native` at 1372dec, `UC2_SCRIPTS=assets/uc2-shipped/System` (GUI.u 2eb7e899, UCGameplay.u
+c675a442, UCMenu.u 4538a4ba = Epic's), main's `Engine/Config` (run from an export of 1372dec's `tools/` and
+`Engine/`, `logs/f1/base`, so that the worktree could change meanwhile). Driver `logs/f1/suite.sh s1-van0 f1-van0`,
+results `logs/f1/s1-van0/`. Load average 7 at the start, 21-34 during d6-d5 (other agents): timing-sensitive menu
+checks there are not judged.
+
+| Suite | Result | Failures, and whether expected (needs a rebuilt package) or a defect (vanilla should work) |
+|---|---|---|
+| m10 keyboard | 15/16 | `kb-right-arrow-turns-right`: **defect** (arrows on `aTurn`, overwritten by Epic's script) |
+| m10 mouse | 13/18 | `ms-mouse-right-turns-right`, `-left-turns-back`, `-up-looks-up`: **defect** (the mouse does not move the view at all); `ms-mouse-turn-amount` (10.012/count) and `ms-invert-option-flips-pitch` (`MouseLookInvert`): expected (PC mouse = rebuilt) |
+| m10 text | 7/7 | |
+| m10 pad | 29/33 | `pd-left-stick-moves-forward`, `-at-0.6-moves-backward`, `-just-outside-dead-zone-moves`, `-x-strafes-the-right-way`: **defect** (the left stick walks nowhere on PC with Epic's script) |
+| m10 both | 11/14 | `both-keyboard-move-and-pad-turn-together`, `both-pad-stick-moves-during-mouse-and-keys`, `both-mouse-turns-during-pad-move`: **defect** (the same two causes) |
+| d6 vanilla (new) | 1/6 | mouse turns, up looks up, Epic's capped path, Right arrow, PageUp: all **defect** (nothing moves) |
+| d6 look | 5/18 | every mouse measurement 0: **defect** for "moves at all", expected for the linear numbers |
+| d6 pad | 3/4 + 5/5 curves | `pad-left-stick-walks`: **defect**; the right stick's curves (vs itself here) fine |
+| d6 lock | 6/12 | mouse-driven lock checks: expected (PC mouse); `lock-switches-target-with-lock-and-d`: expected (keys as stick is rebuilt-only) |
+| d9 menu | 2/6 | no KEYBOARD / MOUSE button: expected (UCMenu.u) |
+| d3 profiles | all but 1 | `r1-character-changed-from-the-default` at load 18-34: re-run in step 7 (not a package feature) |
+| d4 names | n3 PASS, n1/n2/n4 FAIL | n1/n2/n4 name checks: expected (D-4 is GUI.u); `n1-deadbolt-up`/`match-started`: cascade at load 34, re-run in step 7 |
+| d5 text | ALL PASS | |
+
+So, with Epic's packages, our engine and main's curated ini: keyboard walking, menus, text, the right stick and
+profiles work; **the mouse, the look keys and the pad's left stick do not** (three defects, all ours: two ini
+bindings Epic's script overwrites, and the left stick's PC scale that Epic's script applies only on the Xbox).
+
+## Step 4 (2026-10-09, written while step 1 ran): review of bKeysAsStick, the stick on PC, the binding audit
+
+The owner (2026-10-09): "Keys weren't backwards, just really hard to use on the PC and maybe we needed better
+controls. Review all the work you've done here to make sure you haven't overthought things and that they're positive
+changes." Assessment per change (nothing changed for this step except where step 2 forced it, marked FORCED):
+
+| Change (where) | What it does | Verdict | Why |
+|---|---|---|---|
+| `bKeysAsStick` (rebuilt `UCPlayerInput.KeysAsStick`, ini key, default True) | WASD count as a full left stick in `Ctrl_Move_*_Pct`: Space while moving dodges / wall-dodges, Lock + A/D switches target, the "push the stick" prompts can be answered | **keep** | It is the mechanism of the owner's own decision "Space + direction dodges, as on the Xbox: keep". Without it a keyboard player can never dodge (`SmartJump` reads only `Ctrl_Move_*_Pct` against `fSmartJumpDodgePct=0.5`). The ini key is the off switch the standing rules ask for; 20 lines. Possible simplification (owner's call): drop the key and keep the behaviour always on. |
+| The stick's walk on PC (rebuilt script x24000) | the shipped scripts multiply the stick by 24000 only on the Xbox, so on PC the left stick walked nowhere | **FORCED: moved to the engine** (`UnIn.cpp`), removed from the script | Step 2 needs Epic's shipped package to walk with a pad; once the engine does it the script's own scale would double the walk. Simpler: one place, both packages. `KeysAsStick` now leaves the stick's share of `aBaseX/aBaseY` out (5 lines). |
+| Wheel `NextSkill/PrevSkill` -> `NextWeapon` both ways (`DefUser.ini`) | Epic's commands exist in no script package (dead wheel); UC2's `PrevWeapon` is empty | **keep** | A dead control made live; ini only. |
+| Look keys (Left/Right/PageUp/PageDown) | M10 made the arrows turn (UT2004's default; Epic's PC file strafed with them); D-6 put them on the mouse's linear `aTurn/aLookUp` | **FORCED: simplified** to the look stick at 0.8 (`Axis aMouseX/aMouseY Speed=+-4.0`) | `aTurn/aLookUp` are dead with the shipped script. Same feel with both packages now (about 90 deg/s, Epic's curve, no hold acceleration). Open for the owner: arrows turn (kept) or strafe as in Epic's PC file. |
+| "Backwards" audit (`mouse.md` step 4) | every binding looked up; nothing inverted | **keep as a record, nothing to do** | Matches the owner's clarification. The C/V order and the dead commands Epic left bound (Shift `Walking`, G `Grab`, ...) stay as they are: harmless, and rebinding covers taste. |
+| `MouseLockBreakAngle` (ini key, 25 deg) | how far the mouse must push past a lock's clamp to break it | **simplify candidate** (owner's call) | The behaviour is needed (Epic's break-away is a stick push held 0.25 s, which a mouse cannot do); the ini key is probably more than anyone needs. Left as it is. |
+| Pad-only aim adhesion and auto-centre, lock pull held off while the mouse pushes against it, tutorial invert per device (rebuilt) | the pad's aim assists do not act on a mouse | **keep** | Part of "the PC mouse"; each one fixed a measured symptom (adhesion 881 units under the pad, 0 under the mouse). Rebuilt package only. |
+| D-6's `aTurn/aLookUp` still read as linear input (rebuilt) | a User.ini from D-6 (mouse on `aTurn`) still gets the PC mouse | **keep (zero code)** | It is the same two lines that read the mouse; dropping it would not simplify anything. The curated ini no longer binds them. |
+
+## Step 5 (2026-10-09): D-9 conflicts clear; exploration of UT2004's double-tap dodge (report only, no code)
+
+Code: `Source/UCMenu/Classes/UC2Settings_Keys.uc` `AssignKey`: the action that had the new key loses it (its cell
+cleared, "MOVE BACK LOST S."), the cell's old key is unbound; `sSwapped` removed. `tools/dev/d9-rebind.sh` follows
+(`conflict-clears`, `live-conflict-cleared`, W walks nowhere after the conflict, `K: JUMP / DODGE. 1ST / 3RD PERSON
+LOST K.`, Space unbound after it). Space + direction dodging stays (bKeysAsStick, step 4).
+
+**What UT2004-style double-tap dodging would take in UC2** (read, not built):
+- The machinery is all there and runs every tick: `UCPlayerController.PlayerWalking.PlayerMove`
+  (`UCPlayerController.uc:3942`) calls `ModifyDoubleClickMove( PlayerInput.CheckForDoubleClickMove(DeltaTime) )`;
+  UC2 overrides `CheckForDoubleClickMove` in `UCPlayerInput.uc:951-1010` (UT2004's code: edges, `DoubleClickTimer`,
+  `DoubleClickTime` = 0.25 s from `Engine.PlayerInput` defaults), and `ProcessMove` -> `UCPawn.Dodge` handles any
+  direction, on the ground and against walls (the wall dodge), replicated through `ReplicateMove` as in UT2004.
+- Two things switch it off in UC2, both deliberate: (1) `ModifyDoubleClickMove` (`:4007-4045`, "Only allow double
+  click dodge to pass if Dodge key has been pressed") drops every double-click result unless the dodge key set
+  `bWantsToDodge`; (2) `UCPlayerInput.PlayerInput` computes the edges `bEdgeForward/...` from `aForward/aStrafe`
+  before the keyboard's `aBaseY/aBaseX` are added (`UCPlayerInput.uc:388-395`), i.e. from the stick only, so a key
+  tap never makes an edge (UT2004's `PlayerInput` used `aBaseY` for forward/back).
+- What it would take: in `UCPlayerInput.PlayerInput`, when a new ini key (say `bDoubleTapDodge`, default False) is on,
+  compute the four edges from the keys (`aBaseY/aBaseX` minus the stick's share, as `KeysAsStick` does): about 10
+  lines; in `PlayerWalking.ModifyDoubleClickMove`, when it is on, pass a direction from `CheckForDoubleClickMove`
+  through (`bWantsToDodge` style, honouring `UCPawn.Dodge`'s own tests and the delay-dodge timer): about 8 lines; the
+  ini key and `DoubleClickTime` in `DefUser.ini`. Script only (UnrealScript, no native, no engine change), about
+  20-30 lines, all in classes of `UCGameplay.u`, so **it can live in the rebuilt `UCGameplay.u` only**; Epic's shipped
+  package would keep Space + direction. `PlayerSpidering`/other states that call `ModifyDoubleClickMove` need the same
+  look (`:4098` area). UCGameplay is a server package, but the dodge itself is already replicated by Epic's code; a
+  rebuilt client and a rebuilt server is the supported pair anyway.
+- Interactions to decide first: Lock + a tapped A/D switches target in UC2 (a double tap while locked would also
+  dodge), the timed input sequences that watch the stick (`ProcessInputMatching`), and whether a double tap should
+  also wall-dodge in the air (UCPawn.Dodge does if allowed). Estimate: half a day with a test in `d6-mouse.sh`.
