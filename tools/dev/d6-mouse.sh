@@ -24,9 +24,9 @@
 #
 # Trees (<WorkUC2>/run/<name>, made by tools/dev/mkrun-uc2.sh): D6_TREE (rebuilt packages, default d6-run),
 # D6_SHIP_TREE (shipped packages, default d6-ship). Every game run is tools/dev/m10-controls.sh --file (Xvfb inside
-# <WorkUC2>/bin/capped 2G), -nullrenderer with -maxfps=60 (30 for the pad curves, the Xbox's rate): the camera's lag
+# <WorkUC2>/bin/capped 2G), -nullrenderer with [Engine.Engine] FrameRateCap=60 (30 for the pad curves, the Xbox's rate): the camera's lag
 # shows at real frame rates, and software GL runs at a few frames a second here, where a lazy camera arrives in one
-# frame; -maxfps (SDLLaunch) caps the null renderer's thousand), mouse motion as exact counts through the engine's test
+# frame; FrameRateCap, set with -ini:, caps the null renderer's thousand), mouse motion as exact counts through the engine's test
 # channel (`mouse <dx> <dy>`: an SDL motion event; Source/SDL2Drv/Src/SDL2InputTest.h). Output: D6_OUT (default
 # <WorkUC2>/logs/d6/mouse): <scenario>.out (engine log), .result, .inject, .json (measurements).
 set -u
@@ -543,14 +543,14 @@ for s in ${@:-look ini migrate pad lock before}; do
   case $s in
     look)
       echo "== look ($tree, our DefUser.ini)"
-      scen_look > "$out/look.scen"; prep "$tree"; run look "$tree" 0 600 -maxfps=60; count "$out/look.result";;
+      scen_look > "$out/look.scen"; prep "$tree"; run look "$tree" 0 600 "-ini:System:[Engine.Engine]:FrameRateCap=60"; count "$out/look.result";;
     pad)
       echo "== pad ($tree, ours) and pad-shipped ($ship, the shipped scripts; same DefUser.ini)"
       scen_pad > "$out/pad.scen"; scen_pad shipped > "$out/pad-shipped.scen"
       # at 30 frames a second (the Xbox's): Epic's view rotation is whole units per tick, so the slow end of the
       # curve depends on the frame rate; both runs at the same rate
-      prep "$tree"; run pad "$tree" 0 300 -maxfps=30; count "$out/pad.result"
-      prep "$ship"; run pad-shipped "$ship" 0 300 -maxfps=30 | sed 's/^/(shipped) /'
+      prep "$tree"; run pad "$tree" 0 300 "-ini:System:[Engine.Engine]:FrameRateCap=30"; count "$out/pad.result"
+      prep "$ship"; run pad-shipped "$ship" 0 300 "-ini:System:[Engine.Engine]:FrameRateCap=30" | sed 's/^/(shipped) /'
       python3 - "$out/pad.json" "$out/pad-shipped.json" <<'PY' | tee "$out/pad-compare.result" | sed 's/\t/ /g'
 import json, sys
 def load(p):
@@ -584,21 +584,21 @@ PY
       for k in m10 epic; do
         echo "== migrate-$k ($tree, a User.ini from before D-6: $k)"
         scen_migrate $k > "$out/migrate-$k.scen"; prep "$tree" "" "$out/User-$k.ini"
-        run migrate-$k "$tree" 0 200 -maxfps=60
+        run migrate-$k "$tree" 0 200 "-ini:System:[Engine.Engine]:FrameRateCap=60"
         grep -a "Input: User.ini" "$out/migrate-$k.out" | sed 's/^/    engine: /' | cut -c1-200
         count "$out/migrate-$k.result"
       done;;
     lock)
       echo "== lock ($tree, two bots frozen)"
-      scen_lock > "$out/lock.scen"; prep "$tree"; run lock "$tree" 2 400 -maxfps=60; count "$out/lock.result";;
+      scen_lock > "$out/lock.scen"; prep "$tree"; run lock "$tree" 2 400 "-ini:System:[Engine.Engine]:FrameRateCap=60"; count "$out/lock.result";;
     before)
       echo "== before ($ship, shipped scripts, main's DefUser.ini: what the owner played; expected to FAIL drift/symmetry)"
       git -C "$repo" show 47b1b18:Engine/Config/DefUser.ini > "$out/DefUser-main.ini"
-      scen_look before > "$out/before.scen"; prep "$ship" "$out/DefUser-main.ini"; D6_KVAL=52.4 run before "$ship" 0 600 -maxfps=60 -noinimigrate | sed 's/^/(before) /';;
+      scen_look before > "$out/before.scen"; prep "$ship" "$out/DefUser-main.ini"; D6_KVAL=52.4 run before "$ship" 0 600 "-ini:System:[Engine.Engine]:FrameRateCap=60" -noinimigrate | sed 's/^/(before) /';;
     epic)
       echo "== epic ($ship, shipped scripts, Epic's DefUser.ini as the web build had it until 2026-10-07; evidence)"
       git -C "$repo" show 45f7301:Engine/Config/web/DefUser.ini > "$out/DefUser-epic.ini"
-      scen_epic > "$out/epic.scen"; prep "$ship" "$out/DefUser-epic.ini"; run epic "$ship" 0 300 -maxfps=60 -noinimigrate | sed 's/^/(epic) /';;
+      scen_epic > "$out/epic.scen"; prep "$ship" "$out/DefUser-epic.ini"; run epic "$ship" 0 300 "-ini:System:[Engine.Engine]:FrameRateCap=60" -noinimigrate | sed 's/^/(epic) /';;
     *) echo "unknown scenario $s (look ini migrate pad lock before epic)" >&2;;
   esac
 done
