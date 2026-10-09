@@ -76,3 +76,53 @@ CMake: `cmake/UC2Web.cmake` no longer adds `-sNO_DISABLE_EXCEPTION_CATCHING` to 
 `tools/dev/map-census.sh`: `CENSUS_NODE=1` runs `node ucc-bin.js` and fails a map on an abort.
 Baseline for sizes: main's `build-wasm-perf` (built at c59c02d = the same Source as 1372dec): SDLLaunch.wasm
 14,929,569 bytes, SDLLaunch.js 349,270 bytes.
+
+## Step 4 - F-4c: arm64 layout hazards, the first arm64 build (2026-10-09)
+
+Toolchain: `aarch64-linux-gnu-g++` GCC 15.2.0-16ubuntu1cross1, `qemu-aarch64` 10.2.1, `qemu-user-binfmt` (dpkg). No arm64
+X11/GL `-dev` packages (multiarch not enabled), so SDL2 configures with X11 off (`SDL_X11 (Wanted: ON): OFF`).
+- `capped 4G 900 -- cmake --preset arm64` -> rc 0, `Target arch: arm64; pointer width: 8 bytes` (logs/f4/cfg-arm64.log).
+  (SDL2's configure also put the host's `-isystem/usr/include/pipewire-0.3` etc. into its EXTRA_CFLAGS; the UCC target
+  does not build SDL2, the client would: to be looked at with the arm64 packages.)
+- `capped 6G 7200 -- cmake --build build-arm64 -j4 --target UCC` -> exit 0 (logs/f4/build-arm64-ucc.log):
+  `ucc-bin: ELF 64-bit LSB pie executable, ARM aarch64`, 55,280,712 bytes. `tools/dev/m13-cast-census.sh` on that log:
+  `ptr-to-int sites: 0  int-to-ptr sites: 0`.
+- `mkrun-uc2.sh build-arm64 f4-arm64`; `cd run/f4-arm64/System && capped 2G 900 -- qemu-aarch64 -L /usr/aarch64-linux-gnu
+  ./ucc-bin verifyclasses` -> rc 0, `VERIFY: 64-bit native size check: 401 classes, 0 mismatches while linking`, every
+  placeholder found at its C++ size, `bytecode scan: 6588 scripts read for placeholder references`, `VERIFY: all native
+  class layouts match`. (x86_64 said 400 classes / 6,578 scripts at M13; the extra class and 10 scripts are what main
+  gained since, e.g. the rebuilt UCGameplay.u in the asset tree.)
+- Extra: `qemu-aarch64 ./ucc-bin server DM-Deadbolt` -> `Game class is 'UCDeathmatch'`, `Bringing Level DM-Deadbolt.MyLevel
+  up for play`; SIGINT at 150 s -> `appRequestExit(0)`, the shutdown under emulation did not finish before capped's
+  200 s limit (not judged). The client (`uc2.bin`) was not built (needs the packages above).
+
+Checklist: engine-ut2004's arm64/armv7 (Android) fixes and the brief's hazard list, each against UC2.
+engine-ut2004 sources read: `git log` (bc05013, f7653f1, 5af159b, 4a68972, f71d613, b4cd9eb), the `__ANDROID__`/`__arm__`/
+`__aarch64__`/`__LP64__` sites in Core, Engine, IpDrv, BUILD.md "UT_ALLOW_64BIT", "Windows x64".
+
+| # | Hazard (where UT2004 met it) | UC2 | Result |
+|---|---|---|---|
+| 1 | 64-bit detection must include aarch64 (`Core.h:111`) | `Core.h:101` `PLATFORM_64BITS` on x86_64, `_WIN64`, `__aarch64__`, any `__LP64__` | already done (M13); the arm64 build says pointer width 8 |
+| 2 | No x86 intrinsics/asm off x86 (`UnGnuG.h:105`, `UT_NO_X86_INTRIN`) | `UnGnuG.h:110`; rdtsc/cpuid, `FloatToInt`, x87 transforms and SSE blocks gated `__i386__`/`__x86_64__`/`__HAS_SSE__` | compiled for aarch64 with no asm error: verified |
+| 3 | `appCycles()` returned 0 on arm/wasm (f7653f1): STAT FPS showed 2^32 | microsecond counter from `appSecondsSlow` on non-x86 (`UnGnuG.h:381-405`), `GSecondsPerCycle` 1e-6 (`UnUnix.cpp:3015`) | already done; plus F-2's division guard in UnStats.cpp |
+| 4 | armv7 unaligned bytecode reads (`UnScript.h:74`, `UnCorSc.cpp:2752` copy reads under `__ANDROID__ && __arm__`) | AArch64 allows unaligned normal loads (LDR/LDP fault only with SCTLR.A or on exclusive/atomic access); UC2 reads `*(INT*)Code` as x86_64 does | not applicable (armv7 is not a target); verifyclasses' 6,588-script bytecode walk ran on aarch64 under qemu (qemu does not enforce alignment either, so this is by reading) |
+| 5 | armv7 unaligned WAV header reads (`UnAudio.cpp:1015`) | same reasoning; UC2's audio is the cooked Ogg packs, `UnAudio.cpp` RIFF reads only at import | not applicable |
+| 6 | Native class larger than the 32-bit `.u` size tolerated on Android (`UnGame.cpp:2470`, warning instead of appErrorf) | UC2 is stricter: the placeholder table widens script layout to the C++ size and a mismatch is fatal | not adopted on purpose (UC2's guard proves 0 mismatches on aarch64) |
+| 7 | 32-byte padding of every allocation at 64-bit (`FMallocAnsi.h` MALLOC_PADDING, Ryan Gordon's "four bytes extra at the end on the Hammer") | not adopted (REPORT.md section 10): the size guard replaces it | unchanged; same as x86_64 |
+| 8 | UTF-16 text files read with `Size/sizeof(TCHAR)` on an ANSI build: 2x over-read (`UnMisc.cpp:1694`, fixed for Android only) | the same Epic code (`Core/Src/UnMisc.cpp:1472-1482`) on every UC2 target (TCHAR is ANSI everywhere) | not triggered: no UTF-16 file in `assets/uc2/System` or its Localization (checked: no `FF FE` BOM). Left as Epic wrote it; noted for the owner |
+| 9 | `pthread_join` on a detached resolve thread aborts on bionic (`UnIpDrv.h:162`) | glibc on arm64 Linux: EINVAL, harmless (the same as x86_64) | not applicable to Linux arm64 |
+| 10 | socket reset to 0 = stdin after a failed bind (`UdpLink.cpp:91`, `TcpLink.cpp:93`, Android only) | the same Epic bug in UC2; it ended `ucc-bin.js` under Node (JS TypeError) once F-4a let the server run without listening | **fixed on every target** (INVALID_SOCKET), F-4a commit |
+| 11 | Thread stack sizes at 64-bit (bc05013: Android's 1 MB SDLThread, Karma's stack arrays doubled) | no Karma; main thread 8 MB (Linux default) as x86_64, which runs every map; web STACK_SIZE 2 MB (32-bit) | unchanged |
+| 12 | `-m32` put back by side doors (f71d613) | `UC2_PTR_BYTES`; `file` says ELF 64-bit ARM aarch64 | verified |
+| 13 | `#pragma pack` / `GCC_PACK` on mirrors | `GCC_PACK(n)` = `aligned(n)` (UT2004's), mirrors `#pragma pack(4)` (M13 list) | verified by verifyclasses on aarch64 |
+| 14 | 64-bit pointers in script ints | 50-entry placeholder table, `SERIAL_POINTER_INDEX` for every 64-bit target (`UnObjBas.h:15`, aarch64 included) | verified (placeholder lines + bytecode scan) |
+| 15 | FName/FString/TArray layouts | FName 4 bytes, FString/TArray = pointer + two INTs (16 bytes, 8-aligned at LP64), the same on x86_64 and aarch64 (both LP64 SysV-like ABIs) | verified indirectly: the 401 class sizes and offsets match on aarch64 |
+| 16 | `appAlloca` | `((size+7)&~7)` through `alloca` (`UnGnuG.h:329`), identical to UT2004; aarch64 alloca is 16-aligned | nothing to do |
+| 17 | Bitfields | `BITFIELD` stays `unsigned int` (4 bytes), never `long` (64bit.md) | verified by the layout check |
+| 18 | `FPlane`/SIMD alignment | no `GCC_ALIGN(16)` on FPlane/FVector in UC2 (none in `Core/Inc`), no SSE path off MSVC, no NEON code | nothing to do |
+| 19 | `char` signedness (arm's is unsigned) | `-fsigned-char` on every target incl. arm64; the x86_64 `-funsigned-char` audit build found one Epic difference (`ToAnsi`) | unchanged (64bit.md step 11) |
+| 20 | Weak memory ordering (ARM, not x86 TSO): plain flags shared between threads | `FFileStream` streaming thread: data under `FScopeLock`, the `Destroyed` flag polled around `usleep`; `UnThreadingPosix` uses `__atomic` SEQ_CST for `TimeToDie`; no `volatile`-only handshakes found in Core/Engine/UC2Movie/UC2ALAudio (grep) | read only; no change |
+| 21 | `va_list` passed MSVC-style | `GET_VARARGS` through `va_list` (`UnGnuG.h:202-224`), same as x86_64 where va_list is also not a pointer | nothing to do |
+
+Not done: the arm64 client (packages missing), any arm64 run beyond qemu-user, a census at arm64 (58 maps under qemu would take
+hours; the one map above loads).
