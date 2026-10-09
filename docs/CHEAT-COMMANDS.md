@@ -76,5 +76,12 @@ accepts a teleport from a client.
 - engine-uc2's older test commands `NETPROBE`, `NETPLACE` and `NETPLACENEAR` (`UC2NetTest.cpp`: every player's
   position, move a named player, put a player near another) are cheats too: the same guard, the same `Cheat:`
   lines. (They are test commands; whether they stay in the shipped binary is the owner's decision.)
+- **One exception, `NETPROBE` on a network client without the test key:** it is not refused but answers about the
+  local player only: the summary line (net mode, level, the local player's name, whether it has a pawn, counts),
+  a `<tag> self only (network client)` line, then only the player's OWN pawn line and OWN PlayerReplicationInfo line
+  (position, health, weapon, score, deaths: what the player's HUD shows anyway). Nothing about other players, and
+  no `Cheat:` line, because it is not one. With the key, or for a standalone game or a listen host, the full answer.
+- `WHEREAMI` stays a cheat on a network client (refused there) although it is only the player's own position: the
+  owner asked for the pair to be marked and protected as cheats, and a client has no use for it in play.
 - Keys can be bound to them like any console command, e.g. `F11=WHEREAMI`.
 - The web frontend can send them through its console bridge (`ue_exec_command` in engine-uc2).

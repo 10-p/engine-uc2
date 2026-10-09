@@ -7,6 +7,8 @@
 	Console commands (also from the SDL2 test channel's "exec ..." lines):
 	  NETPROBE <tag>                     "NetProbe: <tag> ..." lines: one summary line, one per
 	                                     pawn and one per PlayerReplicationInfo in this process's level
+	                                     (F-1c: on a network client without cheats, the local player's
+	                                     own pawn and PRI only, after a "<tag> self only" line)
 	  NETPLACE <name> <x> <y> <z> <yaw> [<pitch>]  server/listen server: move that player's pawn there
 	                                     (the client follows through the engine's own position
 	                                     correction); the optional pitch turns the view up or down
@@ -75,7 +77,7 @@ static APlayerController* LocalPlayer( UGameEngine* Engine )
 	return NULL;
 }
 
-static void Probe( UGameEngine* Engine, const TCHAR* Tag )
+static void Probe( UGameEngine* Engine, const TCHAR* Tag, UBOOL SelfOnly=0 )
 {
 	ULevel* Level = Engine->GLevel;
 	if( !Level || !Level->GetLevelInfo() )
@@ -103,10 +105,15 @@ static void Probe( UGameEngine* Engine, const TCHAR* Tag )
 		Tag, NetModeName(Info->NetMode), Level->GetOuter()->GetName(), Info->TimeSeconds, Conns,
 		PC && PC->PlayerReplicationInfo ? *Token(PC->PlayerReplicationInfo->PlayerName) : TEXT("None"),
 		PC && PC->Pawn ? 1 : 0, Info->GRI ? 1 : 0, NumPawns, NumPRIs );
+	if( SelfOnly )
+		debugf( NETPROBE, TEXT("%s self only (network client)"), Tag );
 	for( INT i=0; i<Level->Actors.Num(); i++ )
 	{
 		AActor* A = Level->Actors(i);
 		if( !A || A->bDeleteMe )
+			continue;
+		// F-1c: a network client without cheats hears about its own player only (what its HUD shows anyway)
+		if( SelfOnly && !(PC && (A==PC->Pawn || A==PC->PlayerReplicationInfo)) )
 			continue;
 		if( A->IsA(APawn::StaticClass()) )
 		{
@@ -249,6 +256,7 @@ static void PlaceNear( UGameEngine* Engine, const TCHAR* Cmd )
 // TELEPORT/WHEREAMI (UC2Cheats.cpp: a standalone game, or [Engine.GameEngine] AllowNetCheats=True for tests),
 // each run logged as "Cheat: <COMMAND> <arguments>".
 ENGINE_API UBOOL UC2CheatsAllowed( UEngine* Engine, APlayerController* PC, const TCHAR* Command, const TCHAR* Args, FOutputDevice& Ar );
+ENGINE_API UBOOL UC2CheatsWouldAllow( UEngine* Engine, APlayerController* PC, INT* OutNetMode, UBOOL* OutByKey );
 
 // (F-1b: the command that turned a player's view to face another is gone: the owner, 2026-10-09: test-only commands
 // do not ship; the network tests line the players up with NETPLACE instead, tools/dev/net-test.py line_up.)
@@ -259,7 +267,12 @@ ENGINE_API UBOOL UC2NetTestExec( UGameEngine* Engine, const TCHAR* Cmd, FOutputD
 	{
 		while( *Cmd==' ' )
 			Cmd++;
-		if( UC2CheatsAllowed( Engine, NULL, TEXT("NETPROBE"), Cmd, Ar ) )
+		// F-1c: on a network client without cheats NETPROBE is not a cheat: it answers about the local player only
+		// (the summary, its own pawn and its own PlayerReplicationInfo), with no refusal and no "Cheat:" line
+		INT NetMode = 0;
+		if( !UC2CheatsWouldAllow( Engine, NULL, &NetMode, NULL ) && NetMode==NM_Client )
+			Probe( Engine, *Cmd ? Cmd : TEXT("-"), 1 );
+		else if( UC2CheatsAllowed( Engine, NULL, TEXT("NETPROBE"), Cmd, Ar ) )
 			Probe( Engine, *Cmd ? Cmd : TEXT("-") );
 		return 1;
 	}

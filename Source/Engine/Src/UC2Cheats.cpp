@@ -53,31 +53,44 @@ static APlayerController* FirstLocalPlayer( UEngine* Engine )
 // May cheats run in this process now? Logs the refusal. PC: the local player the command came
 // from (NULL: the first viewport's, if any).
 //
-ENGINE_API UBOOL UC2CheatsAllowed( UEngine* Engine, APlayerController* PC, const TCHAR* Command, const TCHAR* Args, FOutputDevice& Ar )
+//
+// The same rule without logging anything (F-1c: NETPROBE on a network client answers about the local player only
+// when cheats are off, UC2NetTest.cpp). Out: the net mode, and whether only the test key allowed it.
+//
+ENGINE_API UBOOL UC2CheatsWouldAllow( UEngine* Engine, APlayerController* PC, INT* OutNetMode, UBOOL* OutByKey )
 {
-	guard(UC2CheatsAllowed);
+	guard(UC2CheatsWouldAllow);
 	if( !PC )
 		PC = FirstLocalPlayer( Engine );
-	// The process's net mode: the local player's level, else the game engine's (a dedicated server has no player)
 	INT NetMode = NM_DedicatedServer;
 	if( PC && PC->Level )
 		NetMode = PC->Level->NetMode;
 	else if( Engine && Engine->IsA(UGameEngine::StaticClass()) && ((UGameEngine*)Engine)->GLevel && ((UGameEngine*)Engine)->GLevel->GetLevelInfo() )
 		NetMode = ((UGameEngine*)Engine)->GLevel->GetLevelInfo()->NetMode;
+	if( OutNetMode )
+		*OutNetMode = NetMode;
+	if( OutByKey )
+		*OutByKey = 0;
+	if( PC && ( PC->CheatManager || NetMode==NM_ListenServer ) )
+		return 1;
+	UBOOL NetCheats = 0;
+	GConfig->GetBool( TEXT("Engine.GameEngine"), TEXT("AllowNetCheats"), NetCheats, GIni );
+	if( NetCheats && OutByKey )
+		*OutByKey = 1;
+	return NetCheats;
+	unguard;
+}
 
-	// F-1b (coordinator's rule, 2026-10-09): the local player of a standalone game (UC2's own rule: the
-	// CheatManager, PlayerController.AddCheats) and the local player of a LISTEN server (the host is the server's
-	// authority; UT2004's admin/host precedent). Every network client and a dedicated server: refused.
-	UBOOL Allowed = PC && ( PC->CheatManager || NetMode==NM_ListenServer );
-	const TCHAR* Why = TEXT("");
-	if( !Allowed )
-	{
-		// The test key opens them for the network tests (tools/dev/net-test.py) on clients and dedicated servers.
-		UBOOL NetCheats = 0;
-		GConfig->GetBool( TEXT("Engine.GameEngine"), TEXT("AllowNetCheats"), NetCheats, GIni );
-		if( NetCheats )
-			Allowed = 1, Why = TEXT(" (AllowNetCheats: a test setting)");
-	}
+ENGINE_API UBOOL UC2CheatsAllowed( UEngine* Engine, APlayerController* PC, const TCHAR* Command, const TCHAR* Args, FOutputDevice& Ar )
+{
+	guard(UC2CheatsAllowed);
+	// F-1b (coordinator's rule, 2026-10-09; UC2CheatsWouldAllow above): the local player of a standalone game (UC2's
+	// own rule: the CheatManager, PlayerController.AddCheats) and the local player of a LISTEN server (the host is the
+	// server's authority; UT2004's admin/host precedent). Every network client and a dedicated server: refused, unless
+	// the test key [Engine.GameEngine] AllowNetCheats opens them for the network tests (tools/dev/net-test.py).
+	UBOOL ByKey = 0;
+	UBOOL Allowed = UC2CheatsWouldAllow( Engine, PC, NULL, &ByKey );
+	const TCHAR* Why = ByKey ? TEXT(" (AllowNetCheats: a test setting)") : TEXT("");
 	if( !Allowed )
 	{
 		CheatLog( Ar, *FString::Printf( TEXT("%s refused: cheats are only for a standalone game or the host of a listen server"), Command ) );

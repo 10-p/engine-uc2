@@ -965,8 +965,9 @@ def check_handshake_loss(compat=False):
 
 def check_cheats():
     """F-1b: the cheat guard in a network game (Source/Engine/Src/UC2Cheats.cpp). Without the test key anywhere: the
-    listen host's own NETPROBE and WHEREAMI work (the host is the server); a client's NETPROBE and WHEREAMI are
-    refused. Then a client WITH the key: its NETPROBE works; NETAIM no longer exists (removed from the engine)."""
+    listen host's own NETPROBE and WHEREAMI work (the host is the server); a client's NETPROBE answers about its own
+    player only (F-1c) and its WHEREAMI is refused. Then a client WITH the key: its NETPROBE is the full answer;
+    NETAIM no longer exists (removed from the engine)."""
     ck = "cheats"
     l = Proc(ck, "L", "listen", "DM-Deadbolt?Listen?Name=NetL", cheatkey=False).start()
     procs = [l]
@@ -984,10 +985,22 @@ def check_cheats():
         l.send("exec WHEREAMI")
         m = l.wait(r"Cheat: WHEREAMI .*$", 15)
         result(bool(m) and "refused" not in m.group(0), ck + ".host-whereami-without-key", m.group(0) if m else "no line")
-        for cmd in ("NETPROBE C0", "WHEREAMI"):
-            b.send("exec " + cmd)
-            m = b.wait(r"Cheat: %s refused: .*$" % cmd.split()[0], 15)
-            result(bool(m), ck + ".client-%s-refused-without-key" % cmd.split()[0].lower(), m.group(0) if m else "not refused")
+        # F-1c: a client's NETPROBE without the key answers about its own player only (no refusal, no "Cheat:" line)
+        time.sleep(3)
+        b.send("exec NETPROBE C0")
+        m = b.wait(r"^NetProbe: C0 summary net=Client.*$", 15)
+        self_line = b.wait(r"^NetProbe: C0 self only \(network client\)$", 5)
+        time.sleep(0.5)
+        lines = re.findall(r"^NetProbe: C0 (pawn|pri) name=(\S+)", b.text(), re.M)
+        names = sorted(set(n for _, n in lines))
+        refused = re.search(r"Cheat: NETPROBE", b.text())
+        result(bool(m) and bool(self_line) and ("pri", "NetC") in lines and names == ["NetC"] and not refused,
+               ck + ".client-netprobe-self-only-without-key",
+               "summary %s; self-only line %s; pawn/pri lines about %s (want only NetC); refusal or Cheat line: %s"
+               % (bool(m), bool(self_line), names, bool(refused)))
+        b.send("exec WHEREAMI")
+        m = b.wait(r"Cheat: WHEREAMI refused: .*$", 15)
+        result(bool(m), ck + ".client-whereami-refused-without-key", m.group(0) if m else "not refused")
         b.stop()
         time.sleep(2)
         b2 = Proc(ck, "NetK", "client", "127.0.0.1:%d?Name=NetK" % PORT, cheatkey=True).start()
@@ -996,7 +1009,10 @@ def check_cheats():
         time.sleep(3)
         b2.send("exec NETPROBE K0")
         m = b2.wait(r"NetProbe: K0 summary net=Client.*$", 15)
-        result(bool(m), ck + ".client-netprobe-with-key", m.group(0)[:120] if m else "no answer")
+        time.sleep(0.5)
+        names = sorted(set(re.findall(r"^NetProbe: K0 pri name=(\S+)", b2.text(), re.M)))
+        result(bool(m) and "NetL" in names and not re.search(r"^NetProbe: K0 self only", b2.text(), re.M),
+               ck + ".client-netprobe-full-with-key", "pri lines about %s (want NetL too)" % names)
         b2.send("exec NETAIM NetL")
         m = b2.wait(r"Cheat: NETAIM", 5)
         result(not m, ck + ".netaim-does-not-exist", "no 'Cheat: NETAIM' line (the command was removed)" if not m else m.group(0))
