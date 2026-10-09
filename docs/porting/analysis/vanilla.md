@@ -338,7 +338,7 @@ warnings; compare UCGameplay 19 problems (as before), UCMenu 5, GUI different-ex
 - Hooks: `Source/Engine/Src/UnPlayer.cpp` `UPlayer::Exec`, first thing after the `Actor` check (Epic's
   `CheatManager.Teleport()` has no parameters and would otherwise take `TELEPORT x y z`; bare `TELEPORT` stays
   Epic's); `UnGame.cpp` `UGameEngine::Exec` before `UC2NetTestExec` (the -nettest file, a process without a player).
-- `UC2NetTest.cpp`: NETPROBE, NETPLACE, NETPLACENEAR, NETAIM call the guard first.
+- `UC2NetTest.cpp`: NETPROBE, NETPLACE, NETPLACENEAR call the guard first (a fourth, aiming command was removed in F-1b).
 - `tools/dev/net-test.py`: every process gets `-ini:System:[Engine.GameEngine]:AllowNetCheats=True`. The other users
   (`jit-trace.sh`, `jit-strip.sh`, `m7-effects.sh`, `m7b.sh`, `o9/*.scen`; on main also `fx-owner.sh`,
   `fps-bench.sh`, `f5-flicker.sh`) run standalone games, where the guard allows them: no change needed (checked by
@@ -382,3 +382,81 @@ Packages to switch (`run/f1-make3/System`): GUI.u 4e5b1af0add70b57d88893694498b8
 (unchanged), UCGameplay.u 4ed72f0baba99fd0636b39367bcc44a6edb799550b7ed54347cf9951d095e6f5, UCMenu.u
 b9202a59c2af4820b1028ebffe88b693422081171952bd8c42d0882ee4c1e8a5.
 Memory: builds 6G, script make 3G, game runs 2G, net 6G, frontend build 4G, browser 6G (mem-guard 18); no ceiling hit.
+
+## F-1b (2026-10-09, worktree engine-uc2-f1b, branch f1b-cheats from main 9764bc8): the cheat guard, final rule
+
+Coordinator's decision, then the owner's (replacing its point 2): allowed without any key for a standalone game AND
+the local player of a listen server (the host is the server); refused for every network client and a dedicated
+server; `[Engine.GameEngine] AllowNetCheats=True` opens them for the network tests only and must never be in a
+shipped ini. The aiming test command is DELETED from the engine (owner: "test-specific commands do not ship in the
+binary; general mechanisms such as -ini: may"); the tests do without it.
+
+Code:
+- `Source/Engine/Src/UC2Cheats.cpp` `UC2CheatsAllowed` (`:56-87`): the net mode is the local player's level's, else
+  the game engine's level's (a dedicated server has no player); `Allowed = PC && (PC->CheatManager || NetMode ==
+  NM_ListenServer)` (`:71`); otherwise the test key (`:73-80`); refusal: "Cheat: X refused: cheats are only for a
+  standalone game or the host of a listen server".
+- `Source/Engine/Src/UC2NetTest.cpp`: the aiming command, its help text and its dispatch removed (`:253` notes it, without its name);
+  NETPROBE, NETPLACE, NETPLACENEAR keep the guard. The engine binary has no "NETAIM" string (`strings | grep -ic
+  netaim` = 0).
+- `tools/dev/net-test.py`: a client's view cannot be turned from outside (UC2's Controller.ClientSetRotation exists
+  but would need a command to send it), so the players are lined up around the client's OWN view:
+  `view_of` (the client's SDL2 probe: loc, rot), `line_up` (victim at P0 = jit-trace's open spot, the shooter
+  NETPLACEd 300 units behind it along its own yaw), `first_person` (the shooter's own `ToggleThirdCam`: UC2's
+  third-person shot leaves the camera ~93 units above the pawn, so a level view passes over a pawn on the same
+  floor; measured cam z - pawn z = 93 in third, 48 in first person), `walk_toward` (the walker's left stick pushed
+  toward the other player in its own view frame). `fight` lines up every 5 shots; the health sequence too; glshot
+  lines up at 350. New check `cheats` (listen host and a client without the key, then a client with it; its players
+  NetC/NetK). The first try without first person: every shot missed (hit 0/40, the camera's level ray over the
+  victim's head).
+- `tools/dev/d6-mouse.sh cheat`: the listen part expects the host to be allowed (WHEREAMI, TELEPORT, NETPLACE).
+- `docs/CHEAT-COMMANDS.md`, `Engine/Config/README.md`, `analysis/network.md` follow. No script changed.
+
+Results (native build of this worktree rc 0; `logs/f1b/`):
+- `D6_TREE=f1b-reb tools/dev/d6-mouse.sh cheat`: **13 PASS, 0 FAIL** (`d6b/`): standalone as before; on the listen
+  host `Cheat: WHEREAMI 1531.9 3111.5 -34.1 24656 0`, `Cheat: TELEPORT ok: 1977.8 583.7 -34.1 33000 0`, `place
+  LocalPlayer ok`.
+- `NET_TREE=f1b-net tools/dev/net-test.sh --keep-tree cheats dedicated1 dedicated2 listen travel` (`net-7`): **all
+  PASS** (cheats 8 + clean, dedicated1 8, dedicated2 9: hit on shot 6, kill after 14, health seen alike by all three;
+  listen 8: hit on shot 1, kill after 9; travel 6; leftovers). The first shots of dedicated2 missed until the second
+  line-up (the first was taken right after the toggle to first person: not investigated further).
+- Earlier runs of this step (with the server-side aiming that is now deleted): `net-1`..`net-6`; one `listen.kill`
+  failure in `net-1` from an unexplained SIGINT to a client at 35 s, not reproduced.
+- Browser: `uc2-wasm-net.spec.js` once (wasm e48cbf22..., before the deletion; host = listen server): **2 failed**
+  (`logs/f1b/web/e2e-net.txt`). The host's NETPROBE answered every time (E2EH1..E2EH14, net=ListenServer: the
+  host is allowed now), but the spec ALSO probes the guest (`probe(clientPage, client, 'C')`, spec :320, :371,
+  :386) and a client's NETPROBE is refused without the key, so "the guest player spawned" got null. It passes again
+  only with a frontend change (the guest page's launch with `-ini:System:[Engine.GameEngine]:AllowNetCheats=True`,
+  or the spec reading the guest's state from the host's probe): parked frontend work, not done.
+- Builds at the end of F-1b: native rc 0 (`logs/f1b/build-native-3.log`), wasm-perf rc 0, 0 errors
+  (`build-wasm-perf-3.log`, `SDLLaunch.wasm` sha256 04dce632a959d418...; no aiming-command string in it). The browser
+  spec was not re-run with this final wasm: its guest probe needs the frontend change above whatever the wasm.
+
+## F-1c (2026-10-09 11:40-11:55): NETPROBE on a network client answers about the local player only
+
+Coordinator's rule: a client's NETPROBE without the key reads only the client's own state (what its HUD shows), so
+it is not a cheat there.
+- `Source/Engine/Src/UC2Cheats.cpp` `UC2CheatsWouldAllow` (`:60-80`): the rule without logging (standalone or
+  listen host: `:74`; else the test key); `UC2CheatsAllowed` (`:84-`) uses it, so the rule lives in one place.
+- `Source/Engine/Src/UC2NetTest.cpp`: NETPROBE (`:271-279`): on a network client that the rule does not allow,
+  `Probe(..., SelfOnly=1)`: the summary line as before, a "`<tag> self only (network client)`" line (`:108-109`),
+  then only the local player's own pawn and PRI lines (`:115-117`); no refusal and no `Cheat:` line. Elsewhere the
+  guard as before (full answer with the key, standalone or a listen host; a dedicated server without the key
+  refused).
+- WHEREAMI stays a cheat on clients (refused): the owner asked for the pair to be marked as cheats; documented in
+  `docs/CHEAT-COMMANDS.md`, which also describes the self-only NETPROBE; `Engine/Config/README.md` row follows.
+- `tools/dev/net-test.py` `cheats`: asserts the self-only answer (summary + "self only" line + pawn/pri lines about
+  NetC only, no `Cheat:` line) and the full answer with the key (pri lines about NetK and NetL).
+
+Results:
+- `NET_TREE=f1b-net tools/dev/net-test.sh --keep-tree cheats listen` (`logs/f1b/net-8`): **all PASS** (cheats 8
+  including `client-netprobe-self-only-without-key`: "NetProbe: C0 summary net=Client ... local=NetC", "NetProbe: C0
+  self only (network client)", "NetProbe: C0 pri name=NetC ..." and nothing about NetL; `client-netprobe-full-with-key`:
+  pri lines about NetK and NetL; listen 8: hit on shot 1, kill after 9).
+- wasm-perf rc 0 (`logs/f1b/build-wasm-perf-4.log`), `SDLLaunch.wasm` sha256
+  a6bafa7e10b79805bb6d1c350d4f3ff8002a974e744d032c5fe18eb2e74319bc (contains the "self only" string).
+- Browser, `uc2-wasm-net.spec.js` once (serve-web assembled with that wasm, sha256 equal before and after; asset tree
+  `run/f1-webassets`; null sink by module index; mem-guard 18): **2 passed (4.0m)**, peak 13.9 GB
+  (`logs/f1b/web2/e2e-net.txt`).
+- Noticed, not mine: `ufrontend` has an uncommitted change to `targets/uc2/file-manifest.json` dated 11:28:28, when I
+  ran no frontend command (my frontend builds ran at 11:15 and 11:48). Left untouched.

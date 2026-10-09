@@ -1,12 +1,14 @@
 /*=============================================================================
 	UC2NetTest.cpp: test-only console commands and command file for the network
 	tests (tools/dev/net-test.sh). uc2 port; not Epic's. Quiet unless used.
-	F-1: the four console commands are cheats (UC2Cheats.cpp's guard: a standalone game,
+	F-1: the three console commands are cheats (UC2Cheats.cpp's guard: a standalone game,
 	or [Engine.GameEngine] AllowNetCheats=True, which net-test.py sets for its processes).
 
 	Console commands (also from the SDL2 test channel's "exec ..." lines):
 	  NETPROBE <tag>                     "NetProbe: <tag> ..." lines: one summary line, one per
 	                                     pawn and one per PlayerReplicationInfo in this process's level
+	                                     (F-1c: on a network client without cheats, the local player's
+	                                     own pawn and PRI only, after a "<tag> self only" line)
 	  NETPLACE <name> <x> <y> <z> <yaw> [<pitch>]  server/listen server: move that player's pawn there
 	                                     (the client follows through the engine's own position
 	                                     correction); the optional pitch turns the view up or down
@@ -16,8 +18,6 @@
 	  NETPLACENEAR <name> <other> <dist> [<first>] server: put that player's pawn <dist> units from the
 	                                     other's, at the first of 16 headings with a clear path for
 	                                     a pawn-sized box between them, facing the other
-	  NETAIM <name>                      a player's own process: turn the local player controller
-	                                     to face that player's pawn as this process sees it
 
 	Command file: -nettest=<file> (any process; the dedicated server has no other input).
 	A harness appends lines; each tick runs every complete new line:
@@ -77,7 +77,7 @@ static APlayerController* LocalPlayer( UGameEngine* Engine )
 	return NULL;
 }
 
-static void Probe( UGameEngine* Engine, const TCHAR* Tag )
+static void Probe( UGameEngine* Engine, const TCHAR* Tag, UBOOL SelfOnly=0 )
 {
 	ULevel* Level = Engine->GLevel;
 	if( !Level || !Level->GetLevelInfo() )
@@ -105,10 +105,15 @@ static void Probe( UGameEngine* Engine, const TCHAR* Tag )
 		Tag, NetModeName(Info->NetMode), Level->GetOuter()->GetName(), Info->TimeSeconds, Conns,
 		PC && PC->PlayerReplicationInfo ? *Token(PC->PlayerReplicationInfo->PlayerName) : TEXT("None"),
 		PC && PC->Pawn ? 1 : 0, Info->GRI ? 1 : 0, NumPawns, NumPRIs );
+	if( SelfOnly )
+		debugf( NETPROBE, TEXT("%s self only (network client)"), Tag );
 	for( INT i=0; i<Level->Actors.Num(); i++ )
 	{
 		AActor* A = Level->Actors(i);
 		if( !A || A->bDeleteMe )
+			continue;
+		// F-1c: a network client without cheats hears about its own player only (what its HUD shows anyway)
+		if( SelfOnly && !(PC && (A==PC->Pawn || A==PC->PlayerReplicationInfo)) )
 			continue;
 		if( A->IsA(APawn::StaticClass()) )
 		{
@@ -247,38 +252,14 @@ static void PlaceNear( UGameEngine* Engine, const TCHAR* Cmd )
 	debugf( NETPROBE, TEXT("placenear %s failed: no clear spot at %.0f"), *Name, Dist );
 }
 
-static void Aim( UGameEngine* Engine, const TCHAR* Cmd )
-{
-	FString Name;
-	ParseToken( Cmd, Name, 0 );
-	APlayerController* PC = LocalPlayer( Engine );
-	if( !PC || !PC->Pawn )
-	{
-		debugf( NETPROBE, TEXT("aim %s failed: no local pawn"), *Name );
-		return;
-	}
-	ULevel* Level = PC->GetLevel();
-	for( INT i=0; i<Level->Actors.Num(); i++ )
-	{
-		APawn* T = Cast<APawn>( Level->Actors(i) );
-		if( !T || T->bDeleteMe || T==PC->Pawn || !SameName(T->PlayerReplicationInfo, *Name) )
-			continue;
-		FVector Eye = PC->Pawn->Location + FVector( 0, 0, PC->Pawn->BaseEyeHeight );
-		FRotator R = (T->Location - Eye).Rotation();
-		R.Roll = 0;
-		PC->Rotation = R;
-		debugf( NETPROBE, TEXT("aim %s ok rot=(%i,%i,%i) dist=%.1f"), *Name, R.Pitch & 65535, R.Yaw & 65535, R.Roll,
-			(T->Location - Eye).Size() );
-		return;
-	}
-	debugf( NETPROBE, TEXT("aim %s failed: no such pawn here"), *Name );
-}
-
-// F-1: these show where every player is, move players and aim: cheats, behind the same guard as
+// F-1: these show where every player is and move players: cheats, behind the same guard as
 // TELEPORT/WHEREAMI (UC2Cheats.cpp: a standalone game, or [Engine.GameEngine] AllowNetCheats=True for tests),
 // each run logged as "Cheat: <COMMAND> <arguments>".
 ENGINE_API UBOOL UC2CheatsAllowed( UEngine* Engine, APlayerController* PC, const TCHAR* Command, const TCHAR* Args, FOutputDevice& Ar );
+ENGINE_API UBOOL UC2CheatsWouldAllow( UEngine* Engine, APlayerController* PC, INT* OutNetMode, UBOOL* OutByKey );
 
+// (F-1b: the command that turned a player's view to face another is gone: the owner, 2026-10-09: test-only commands
+// do not ship; the network tests line the players up with NETPLACE instead, tools/dev/net-test.py line_up.)
 ENGINE_API UBOOL UC2NetTestExec( UGameEngine* Engine, const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UC2NetTestExec);
@@ -286,7 +267,12 @@ ENGINE_API UBOOL UC2NetTestExec( UGameEngine* Engine, const TCHAR* Cmd, FOutputD
 	{
 		while( *Cmd==' ' )
 			Cmd++;
-		if( UC2CheatsAllowed( Engine, NULL, TEXT("NETPROBE"), Cmd, Ar ) )
+		// F-1c: on a network client without cheats NETPROBE is not a cheat: it answers about the local player only
+		// (the summary, its own pawn and its own PlayerReplicationInfo), with no refusal and no "Cheat:" line
+		INT NetMode = 0;
+		if( !UC2CheatsWouldAllow( Engine, NULL, &NetMode, NULL ) && NetMode==NM_Client )
+			Probe( Engine, *Cmd ? Cmd : TEXT("-"), 1 );
+		else if( UC2CheatsAllowed( Engine, NULL, TEXT("NETPROBE"), Cmd, Ar ) )
 			Probe( Engine, *Cmd ? Cmd : TEXT("-") );
 		return 1;
 	}
@@ -300,12 +286,6 @@ ENGINE_API UBOOL UC2NetTestExec( UGameEngine* Engine, const TCHAR* Cmd, FOutputD
 	{
 		if( UC2CheatsAllowed( Engine, NULL, TEXT("NETPLACENEAR"), Cmd, Ar ) )
 			PlaceNear( Engine, Cmd );
-		return 1;
-	}
-	else if( ParseCommand(&Cmd,TEXT("NETAIM")) )
-	{
-		if( UC2CheatsAllowed( Engine, NULL, TEXT("NETAIM"), Cmd, Ar ) )
-			Aim( Engine, Cmd );
 		return 1;
 	}
 	return 0;

@@ -13,7 +13,7 @@ Each client and the listen server has its own Xvfb display (xvfb-run -a), so a v
 which window has the focus. Results: one "PASS|FAIL <check>.<item>: <details>" line per item on stdout and in
 <out>/net-summary.txt; logs as <out>/<check>-<proc>.log/.out. Decided by log lines and probe values only.
 """
-import os, re, signal, subprocess, sys, time
+import math, os, re, signal, subprocess, sys, time
 
 SYS, OUT = sys.argv[1], sys.argv[2]
 CHECKS = sys.argv[3:]
@@ -57,8 +57,9 @@ def dist(a, b):
 class Proc:
     """One engine process: kind 'server' (ucc-bin server), 'listen' (uc2.bin <map>?Listen) or 'client'."""
 
-    def __init__(self, check, name, kind, url, render="null", extra=(), sysdir=None, wine=False):
+    def __init__(self, check, name, kind, url, render="null", extra=(), sysdir=None, wine=False, cheatkey=True):
         self.check, self.name, self.kind, self.url = check, name, kind, url
+        self.cheatkey = cheatkey
         self.render, self.extra = render, list(extra)
         self.wine = wine
         self.sys = sysdir or SYS
@@ -76,10 +77,12 @@ class Proc:
                 os.remove(p)
         open(self.netcmd, "w").close()
         open(self.inputcmd, "w").close()
-        # NETPROBE/NETPLACE/NETPLACENEAR/NETAIM are cheats (F-1, Source/Engine/Src/UC2Cheats.cpp): a network game
-        # refuses them unless the process's own ini allows them for tests.
+        # NETPROBE/NETPLACE/NETPLACENEAR are cheats (F-1, Source/Engine/Src/UC2Cheats.cpp): a client and a
+        # dedicated server refuse them unless the process's own ini allows them for tests (a listen host needs no
+        # key). NETAIM is gone (F-1b): the players are lined up around the shooter's own view (line_up).
         common = ["INI=Net%s.ini" % self.name, "USERINI=Net%sUser.ini" % self.name, "LOG=" + self.logname,
-                  "-nettest=" + os.path.basename(self.netcmd), "-ini:System:[Engine.GameEngine]:AllowNetCheats=True"]
+                  "-nettest=" + os.path.basename(self.netcmd)]
+        common += ["-ini:System:[Engine.GameEngine]:AllowNetCheats=%s" % ("True" if self.cheatkey else "False")]
         if self.kind == "server" and self.wine:
             # The MinGW ucc.exe under wine (tools/dev/m12-wine.sh: own prefix, nothing left running).
             argv = [os.path.join(REPO, "tools/dev/m12-wine.sh"), self.sys, "ucc.exe", "server", self.url,
@@ -395,9 +398,100 @@ def ranged(attacker, aname, tag):
         time.sleep(1.0)
 
 
+# F-1b: NETAIM is gone from the engine (test-only commands do not ship). A client's view cannot be turned from outside,
+# so the players are lined up around the client's OWN view instead: the shooter's view (its own SDL2 test-channel
+# probe: loc and rot of the local player) and the server's NETPLACE (allowed on the server with the test key, and for
+# a listen host). P0 is an open, flat spot of DM-Deadbolt with room around it (jit-trace.sh's spot).
+P0 = (1977.8, 583.7, -34.1)
+
+
+def view_of(c, tag):
+    """The local player's (loc, yaw, pitch) from this process's SDL2 probe, or None."""
+    c.input("probe " + tag)
+    m = c.wait(r"probe %s (.*)$" % re.escape(tag), 10)
+    if not m:
+        return None
+    kv = parse_kv(m.group(1))
+    loc, rot = kv.get("loc"), kv.get("rot")
+    if not isinstance(loc, tuple) or not isinstance(rot, tuple):
+        return None
+    pitch = int(rot[0]) & 65535
+    return loc, int(rot[1]) & 65535, pitch - 65536 if pitch >= 32768 else pitch
+
+
+def camera_height(c, tag):
+    """How far the camera is above the local pawn (SDL2 probe + probe2 lines), or None."""
+    c.input("probe " + tag)
+    m = c.wait(r"probe %s (.*)$" % re.escape(tag), 10)
+    m2 = c.wait(r"probe2 %s (.*)$" % re.escape(tag), 5)
+    if not m or not m2:
+        return None
+    loc, cam = parse_kv(m.group(1)).get("loc"), parse_kv(m2.group(1)).get("cam")
+    return cam[2] - loc[2] if isinstance(loc, tuple) and isinstance(cam, tuple) else None
+
+
+def first_person(c, tag="FP"):
+    """The shooter aims with its own view: in UC2's third person the shot leaves the camera, ~90 units above the
+    pawn, so a level view passes over a pawn standing on the same floor; in first person it leaves the eyes. The
+    player's own console command ToggleThirdCam (the C key), until the camera is at eye height."""
+    for k in range(3):
+        h = camera_height(c, "%s%d" % (tag, k))
+        if h is not None and h < 70:
+            return True
+        c.input("exec ToggleThirdCam")
+        time.sleep(1.0)
+    h = camera_height(c, tag + "x")
+    return h is not None and h < 70
+
+
+def place(srv, name, x, y, z, yaw):
+    srv.send("exec netplace %s %.1f %.1f %.1f %d" % (name, x, y, z, yaw))
+    m = srv.wait(r"^NetProbe: place %s (ok|failed).*$" % name, 15)
+    return bool(m) and m.group(1) == "ok"
+
+
+def line_up(srv, shooter, aname, vname, d=300, tag="LU"):
+    """Put <vname> at P0 and the shooter <aname> d units behind it along the shooter's own view yaw: the shooter
+    then looks straight at the victim (pitch as it is: level after a spawn; first_person first, see there). Returns
+    the shooter's (yaw, pitch) or None."""
+    v = view_of(shooter, tag)
+    if not v:
+        return None
+    _, yaw, pitch = v
+    a = yaw * math.pi / 32768.0
+    ok1 = place(srv, vname, P0[0], P0[1], P0[2], (yaw + 32768) & 65535)
+    ok2 = place(srv, aname, P0[0] - d * math.cos(a), P0[1] - d * math.sin(a), P0[2], yaw)
+    time.sleep(1.0)
+    return (yaw, pitch) if ok1 and ok2 else None
+
+
+def walk_toward(walker, wname, srv, target_name, secs=1.2, tag="WT"):
+    """The walker's left stick pushed toward <target_name>'s pawn (as the server sees both), in the walker's own view
+    frame: forward = its view yaw, right = yaw + 90 degrees."""
+    v = view_of(walker, tag)
+    sp = srv.probe(tag + "s")
+    me, it = pawn_of(sp, wname), pawn_of(sp, target_name)
+    if not v or not me or not it:
+        return False
+    _, yaw, _ = v
+    dx, dy = it["loc"][0] - me["loc"][0], it["loc"][1] - me["loc"][1]
+    n = math.hypot(dx, dy) or 1.0
+    a = yaw * math.pi / 32768.0
+    fwd = (dx * math.cos(a) + dy * math.sin(a)) / n
+    right = (-dx * math.sin(a) + dy * math.cos(a)) / n
+    walker.input("pad axis leftx %d" % round(right * 32767))
+    walker.input("pad axis lefty %d" % round(-fwd * 32767))
+    time.sleep(secs)
+    walker.input("pad axis leftx 0")
+    walker.input("pad axis lefty 0")
+    return True
+
+
+
 def fight(ck, srvproc, attacker, victim, aname, vname, max_shots=40):
     """attacker aims at victim and fires until the victim dies on the server; returns (first-hit, kill) dicts."""
     ranged(attacker, aname, "RW")
+    first_person(attacker)
     sp0 = srvproc.probe("F0")
     v0 = pawn_of(sp0, vname)
     h0 = int(v0["health"]) if v0 else None
@@ -405,7 +499,8 @@ def fight(ck, srvproc, attacker, victim, aname, vname, max_shots=40):
     kill = None
     deaths0 = num(sp0["pris"].get(vname, {}).get("deaths")) if sp0 else None
     for i in range(max_shots):
-        attacker.send("exec netaim " + vname)
+        if i % 5 == 0:   # the victim in front of the shooter's own view (it may have been knocked back)
+            line_up(srvproc, attacker, aname, vname, tag="LU%d" % i)
         time.sleep(0.2)
         attacker.fire(0.3)
         time.sleep(0.6)
@@ -445,13 +540,9 @@ def check_dedicated2(ck="dedicated2", srv_extra=(), cli_extra=()):
         d2 = dist(sA["loc"], bA["loc"]) if sA and bA else 1e9
         result(d1 < 40 and d2 < 40, ck + ".seeother", "NetA sees NetB %.1f units from the server's NetB; NetB sees NetA %.1f from the server's"
                % (d1, d2))
-        # Movement of B changes what A sees. B first faces A (its view rotation is its own client's, not the
-        # placement's), so it walks along the path place_near checked clear instead of into a wall.
-        b.send("exec netaim NetA")
-        time.sleep(0.3)
-        b.input("pad axis lefty -32768")
-        time.sleep(1.2)
-        b.input("pad axis lefty 0")
+        # Movement of B changes what A sees. B walks toward A, along the path place_near checked clear (its stick
+        # pushed in A's direction in B's own view frame: walk_toward), instead of into a wall.
+        walk_toward(b, "NetB", s, "NetA", tag="WB")
         time.sleep(1.0)
         sp2, ap2 = s.probe("P2"), a.probe("P2")
         sB2, aB2 = pawn_of(sp2, "NetB"), pawn_of(ap2, "NetB")
@@ -482,11 +573,12 @@ def check_dedicated2(ck="dedicated2", srv_extra=(), cli_extra=()):
         if pb2:
             place_near(s, "NetB", "NetA", tag="PH")
             ranged(a, "NetA", "RH")
+            first_person(a, "FPH")
             h_before = pawn_of(s.probe("H0"), "NetB")
             got = None
             for i in range(20):
-                a.send("exec netaim NetB")
-                time.sleep(0.2)
+                if i % 5 == 0:
+                    line_up(s, a, "NetA", "NetB", tag="LH%d" % i)
                 a.fire(0.3)
                 time.sleep(1.0)
                 sv, av, bv = s.probe("H%d" % (i + 1)), a.probe("H%d" % (i + 1)), b.probe("H%d" % (i + 1))
@@ -529,11 +621,7 @@ def check_listen():
         d1 = dist(pawn_of(lp, "NetB")["loc"], pawn_of(bp, "NetB")["loc"]) if pawn_of(lp, "NetB") and pawn_of(bp, "NetB") else 1e9
         d2 = dist(pawn_of(lp, "NetL")["loc"], pawn_of(bp, "NetL")["loc"]) if pawn_of(lp, "NetL") and pawn_of(bp, "NetL") else 1e9
         result(d1 < 40 and d2 < 40, ck + ".seeother", "NetB: client vs listen server %.1f units; NetL: %.1f" % (d1, d2))
-        b.send("exec netaim NetL")   # walk along the checked path (see dedicated2)
-        time.sleep(0.3)
-        b.input("pad axis lefty -32768")
-        time.sleep(1.2)
-        b.input("pad axis lefty 0")
+        walk_toward(b, "NetB", l, "NetL", tag="WB")   # along the checked path (see dedicated2)
         time.sleep(1.0)
         lp2 = l.probe("P2")
         mv = dist(pawn_of(lp, "NetB")["loc"], pawn_of(lp2, "NetB")["loc"]) if pawn_of(lp, "NetB") and pawn_of(lp2, "NetB") else 0
@@ -745,8 +833,8 @@ def check_glshot():
         pa, pb = spawn_all([a, b], "spawn", tries=20)
         result(bool(pa and pb), ck + ".spawn", "NetA (GL) localpawn=%s, NetB localpawn=%s" % (bool(pa), bool(pb)))
         place_near(s, "NetB", "NetA", 350)
-        a.send("exec netaim NetB")
-        time.sleep(2.0)
+        line_up(s, a, "NetA", "NetB", 350, tag="LG")
+        time.sleep(1.0)
         for f in os.listdir(SYS):
             if f.startswith("Shot") and f.endswith(".bmp"):
                 os.remove(os.path.join(SYS, f))
@@ -875,7 +963,64 @@ def check_handshake_loss(compat=False):
             finish(sub, procs)
 
 
-ALL = {"dedicated1": check_dedicated1, "dedicated2": check_dedicated2, "listen": check_listen,
+def check_cheats():
+    """F-1b: the cheat guard in a network game (Source/Engine/Src/UC2Cheats.cpp). Without the test key anywhere: the
+    listen host's own NETPROBE and WHEREAMI work (the host is the server); a client's NETPROBE answers about its own
+    player only (F-1c) and its WHEREAMI is refused. Then a client WITH the key: its NETPROBE is the full answer;
+    NETAIM no longer exists (removed from the engine)."""
+    ck = "cheats"
+    l = Proc(ck, "L", "listen", "DM-Deadbolt?Listen?Name=NetL", cheatkey=False).start()
+    procs = [l]
+    try:
+        l.wait(r"TcpNetDriver on port|Listen", 90)
+        # own player names (NetC, NetK): Proc.stop finds an engine by its LOG= name, which other checks' NetB shares
+        b = Proc(ck, "NetC", "client", "127.0.0.1:%d?Name=NetC" % PORT, cheatkey=False).start()
+        procs.append(b)
+        j = l.wait(r"Join succeeded: ", 60)
+        result(bool(j), ck + ".join", "listen server: %s" % (j.group(0) if j else "no join in 60 s"))
+        time.sleep(3)
+        l.send("exec NETPROBE H0")
+        m = l.wait(r"NetProbe: H0 summary net=ListenServer.*$", 15)
+        result(bool(m), ck + ".host-netprobe-without-key", m.group(0)[:120] if m else "no answer")
+        l.send("exec WHEREAMI")
+        m = l.wait(r"Cheat: WHEREAMI .*$", 15)
+        result(bool(m) and "refused" not in m.group(0), ck + ".host-whereami-without-key", m.group(0) if m else "no line")
+        # F-1c: a client's NETPROBE without the key answers about its own player only (no refusal, no "Cheat:" line)
+        time.sleep(3)
+        b.send("exec NETPROBE C0")
+        m = b.wait(r"^NetProbe: C0 summary net=Client.*$", 15)
+        self_line = b.wait(r"^NetProbe: C0 self only \(network client\)$", 5)
+        time.sleep(0.5)
+        lines = re.findall(r"^NetProbe: C0 (pawn|pri) name=(\S+)", b.text(), re.M)
+        names = sorted(set(n for _, n in lines))
+        refused = re.search(r"Cheat: NETPROBE", b.text())
+        result(bool(m) and bool(self_line) and ("pri", "NetC") in lines and names == ["NetC"] and not refused,
+               ck + ".client-netprobe-self-only-without-key",
+               "summary %s; self-only line %s; pawn/pri lines about %s (want only NetC); refusal or Cheat line: %s"
+               % (bool(m), bool(self_line), names, bool(refused)))
+        b.send("exec WHEREAMI")
+        m = b.wait(r"Cheat: WHEREAMI refused: .*$", 15)
+        result(bool(m), ck + ".client-whereami-refused-without-key", m.group(0) if m else "not refused")
+        b.stop()
+        time.sleep(2)
+        b2 = Proc(ck, "NetK", "client", "127.0.0.1:%d?Name=NetK" % PORT, cheatkey=True).start()
+        procs.append(b2)
+        l.wait(r"Join succeeded: ", 60)
+        time.sleep(3)
+        b2.send("exec NETPROBE K0")
+        m = b2.wait(r"NetProbe: K0 summary net=Client.*$", 15)
+        time.sleep(0.5)
+        names = sorted(set(re.findall(r"^NetProbe: K0 pri name=(\S+)", b2.text(), re.M)))
+        result(bool(m) and "NetL" in names and not re.search(r"^NetProbe: K0 self only", b2.text(), re.M),
+               ck + ".client-netprobe-full-with-key", "pri lines about %s (want NetL too)" % names)
+        b2.send("exec NETAIM NetL")
+        m = b2.wait(r"Cheat: NETAIM", 5)
+        result(not m, ck + ".netaim-does-not-exist", "no 'Cheat: NETAIM' line (the command was removed)" if not m else m.group(0))
+    finally:
+        finish(ck, procs)
+
+
+ALL = {"cheats": check_cheats, "dedicated1": check_dedicated1, "dedicated2": check_dedicated2, "listen": check_listen,
        "travel": check_travel, "disconnect": check_disconnect, "soak": check_soak, "lag": check_lag,
        "glshot": check_glshot, "wine": check_wine,
        "handshake-loss": check_handshake_loss, "handshake-compat": lambda: check_handshake_loss(True)}

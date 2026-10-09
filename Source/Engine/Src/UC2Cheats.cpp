@@ -19,14 +19,15 @@
 	                                   Epic's CheatManager.Teleport (to the surface looked at),
 	                                   unchanged.
 
-	The guard (UC2CheatsAllowed): cheats exist where UC2 creates a CheatManager, i.e. for
-	the local player of a standalone game (PlayerController.AddCheats: NetMode ==
-	NM_Standalone). A listen server, a network client and a dedicated server refuse:
+	The guard (UC2CheatsAllowed): allowed for the local player of a standalone game (UC2's
+	CheatManager rule, PlayerController.AddCheats) and for the local player of a listen
+	server (the host is the server). Every network client and a dedicated server refuse:
 	"Cheat: <COMMAND> refused: ..." in the log and on the console. Test harnesses that
-	need these commands in network games (tools/dev/net-test.py) set
-	[Engine.GameEngine] AllowNetCheats=True in that process's ini (-ini:System:...).
+	need these commands there (tools/dev/net-test.py) set [Engine.GameEngine]
+	AllowNetCheats=True in that process's ini (-ini:System:...); it must never be in a
+	shipped ini.
 	Every command that runs logs one "Cheat: <COMMAND> <arguments>" line. The test
-	commands NETPROBE, NETPLACE, NETPLACENEAR and NETAIM (UC2NetTest.cpp) use the same
+	commands NETPROBE, NETPLACE and NETPLACENEAR (UC2NetTest.cpp) use the same
 	guard and log the same way.
 =============================================================================*/
 
@@ -52,23 +53,47 @@ static APlayerController* FirstLocalPlayer( UEngine* Engine )
 // May cheats run in this process now? Logs the refusal. PC: the local player the command came
 // from (NULL: the first viewport's, if any).
 //
+//
+// The same rule without logging anything (F-1c: NETPROBE on a network client answers about the local player only
+// when cheats are off, UC2NetTest.cpp). Out: the net mode, and whether only the test key allowed it.
+//
+ENGINE_API UBOOL UC2CheatsWouldAllow( UEngine* Engine, APlayerController* PC, INT* OutNetMode, UBOOL* OutByKey )
+{
+	guard(UC2CheatsWouldAllow);
+	if( !PC )
+		PC = FirstLocalPlayer( Engine );
+	INT NetMode = NM_DedicatedServer;
+	if( PC && PC->Level )
+		NetMode = PC->Level->NetMode;
+	else if( Engine && Engine->IsA(UGameEngine::StaticClass()) && ((UGameEngine*)Engine)->GLevel && ((UGameEngine*)Engine)->GLevel->GetLevelInfo() )
+		NetMode = ((UGameEngine*)Engine)->GLevel->GetLevelInfo()->NetMode;
+	if( OutNetMode )
+		*OutNetMode = NetMode;
+	if( OutByKey )
+		*OutByKey = 0;
+	if( PC && ( PC->CheatManager || NetMode==NM_ListenServer ) )
+		return 1;
+	UBOOL NetCheats = 0;
+	GConfig->GetBool( TEXT("Engine.GameEngine"), TEXT("AllowNetCheats"), NetCheats, GIni );
+	if( NetCheats && OutByKey )
+		*OutByKey = 1;
+	return NetCheats;
+	unguard;
+}
+
 ENGINE_API UBOOL UC2CheatsAllowed( UEngine* Engine, APlayerController* PC, const TCHAR* Command, const TCHAR* Args, FOutputDevice& Ar )
 {
 	guard(UC2CheatsAllowed);
-	if( !PC )
-		PC = FirstLocalPlayer( Engine );
-	UBOOL Allowed = PC && PC->CheatManager;	// UC2's own rule (PlayerController.AddCheats)
-	const TCHAR* Why = TEXT("");
+	// F-1b (coordinator's rule, 2026-10-09; UC2CheatsWouldAllow above): the local player of a standalone game (UC2's
+	// own rule: the CheatManager, PlayerController.AddCheats) and the local player of a LISTEN server (the host is the
+	// server's authority; UT2004's admin/host precedent). Every network client and a dedicated server: refused, unless
+	// the test key [Engine.GameEngine] AllowNetCheats opens them for the network tests (tools/dev/net-test.py).
+	UBOOL ByKey = 0;
+	UBOOL Allowed = UC2CheatsWouldAllow( Engine, PC, NULL, &ByKey );
+	const TCHAR* Why = ByKey ? TEXT(" (AllowNetCheats: a test setting)") : TEXT("");
 	if( !Allowed )
 	{
-		UBOOL NetCheats = 0;
-		GConfig->GetBool( TEXT("Engine.GameEngine"), TEXT("AllowNetCheats"), NetCheats, GIni );
-		if( NetCheats )
-			Allowed = 1, Why = TEXT(" (AllowNetCheats: a test setting)");
-	}
-	if( !Allowed )
-	{
-		CheatLog( Ar, *FString::Printf( TEXT("%s refused: cheats are only for a standalone game (UC2's CheatManager rule)"), Command ) );
+		CheatLog( Ar, *FString::Printf( TEXT("%s refused: cheats are only for a standalone game or the host of a listen server"), Command ) );
 		return 0;
 	}
 	while( Args && *Args==' ' )

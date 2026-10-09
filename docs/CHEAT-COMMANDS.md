@@ -47,16 +47,23 @@ Cheat: TELEPORT refused: cheats are only for a standalone game (...)
 - **A single-player (standalone) game: yes.** This is the rule each game already has for its cheats; the engine
   uses the game's own rule rather than inventing one. In the Unreal engines: the local `PlayerController` has a
   `CheatManager`, which `PlayerController.AddCheats` creates only when `Level.NetMode == NM_Standalone`.
-- **A network game (listen server, client, dedicated server): no.** The command is refused with a `Cheat: ...
-  refused` log line and a console message. A client could not move its pawn anyway (the server owns it).
-- **Test harnesses** that need positions in network games set a test-only ini key in that process
+- **The host of a listen server (its local player): yes.** The host is the server: it holds the authority over
+  every pawn already, so a cheat there cannot be used against a server (UT2004's precedent: the host/admin).
+- **A network client: no. A dedicated server: no** (it has no local player; its console and command file are
+  refused too). The command is refused with a `Cheat: ... refused` log line and a console message.
+- **Test harnesses** that need positions on clients or dedicated servers set a test-only ini key in that process
   (engine-uc2: `[Engine.GameEngine] AllowNetCheats=True`, given on the command line as
-  `-ini:System:[Engine.GameEngine]:AllowNetCheats=True`). It is not in any shipped ini. With it, the log line
-  says so: `Cheat: TELEPORT ... (AllowNetCheats: a test setting)`.
+  `-ini:System:[Engine.GameEngine]:AllowNetCheats=True`). **The key must never be in a shipped ini** (a default
+  ini, a web ini, a frontend profile). With it, the log line says so: `Cheat: NETPROBE ... (AllowNetCheats: a test
+  setting)`.
+- **No aiming command.** engine-uc2 had a test command that turned a player's view toward another (`NETAIM`, an
+  aimbot); it was removed (the owner: test-only commands do not ship in the binary). Tests line players up
+  around the shooter's own view with the position commands instead.
 
-What "protected" means here: the commands do nothing in normal network play, and every use leaves a `Cheat:`
-line. It is not anti-cheat: anyone who edits their own ini or binary can do anything on their own machine; a
-server never accepts a teleport from a client.
+What "protected" means here: the commands do nothing for a network client or a dedicated server in normal play,
+there is no aiming command at all, and every use leaves a `Cheat:` line.
+It is not anti-cheat: anyone who edits their own binary can do anything on their own machine; a server never
+accepts a teleport from a client.
 
 ## Engine notes
 
@@ -66,7 +73,15 @@ server never accepts a teleport from a client.
   still Epic's. UT2004 has the same `CheatManager.Teleport` and needs the same order.
 - The engine moves the pawn with `FarMoveActor` (no sweep) and clears its velocity; the server's movement
   correction is told the new spot (UC2 returns a pawn to its last `ServerMove` position otherwise).
-- engine-uc2's older test commands `NETPROBE`, `NETPLACE`, `NETPLACENEAR` and `NETAIM` (`UC2NetTest.cpp`: every
-  player's position, move a named player, aim at a player) are cheats too: the same guard, the same `Cheat:` lines.
+- engine-uc2's older test commands `NETPROBE`, `NETPLACE` and `NETPLACENEAR` (`UC2NetTest.cpp`: every player's
+  position, move a named player, put a player near another) are cheats too: the same guard, the same `Cheat:`
+  lines. (They are test commands; whether they stay in the shipped binary is the owner's decision.)
+- **One exception, `NETPROBE` on a network client without the test key:** it is not refused but answers about the
+  local player only: the summary line (net mode, level, the local player's name, whether it has a pawn, counts),
+  a `<tag> self only (network client)` line, then only the player's OWN pawn line and OWN PlayerReplicationInfo line
+  (position, health, weapon, score, deaths: what the player's HUD shows anyway). Nothing about other players, and
+  no `Cheat:` line, because it is not one. With the key, or for a standalone game or a listen host, the full answer.
+- `WHEREAMI` stays a cheat on a network client (refused there) although it is only the player's own position: the
+  owner asked for the pair to be marked and protected as cheats, and a client has no use for it in play.
 - Keys can be bound to them like any console command, e.g. `F11=WHEREAMI`.
 - The web frontend can send them through its console bridge (`ue_exec_command` in engine-uc2).
