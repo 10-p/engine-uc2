@@ -145,13 +145,14 @@ keywords and keys (forward compatibility); the first line names the format and i
 ```
 uc2wb 1
 bank name=<wave bank name> file=<Xbox .xwb file> lang=<deu|fra|ita|spa|-> data=<data file, relative to Sounds/> stream=<0|1> entries=<n>
-wave index=<i> name=<entry name> offset=<byte> size=<bytes> rate=<Hz> channels=<n> frames=<sample frames> loop=<start>,<length> src=<source file name>
+wave index=<i> name=<entry name> offset=<byte> size=<bytes> rate=<Hz> channels=<n> frames=<sample frames> loop=<start>,<length> src=<source file name | xwb:<bank>.xwb:<index>>
 wave index=<i> name=<entry name> missing=<no-file|unreadable|encode-failed> src=<as the project names it>
 ```
 `data` is `<bank>.ogp` (sound effects, speech) or `../Music/<Track>.ogg` with `stream=1` (the 21 `M_*` music
 banks). `offset/size` delimit one complete Ogg Vorbis stream inside `data`. `frames` and `loop` are in sample
 frames of the source; `loop=0,0` = no loop region (a looping play event then loops the whole wave). A localised
 bank has the same `name` as its base bank and its own `file`.
+`src=xwb:...` (F-6, `audio-f6.md`): the project has no WAV for the entry; it was decoded from the shipped `.xwb`.
 
 **`Sounds/<WaveBankFile>.ogp`**: the bank's waves, each a complete, independent Ogg Vorbis physical stream
 (libvorbis, sample rate and channel count of the source, no tags), concatenated in index order with no padding.

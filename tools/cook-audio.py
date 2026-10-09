@@ -2,7 +2,8 @@
 """cook-audio.py: cook Unreal Championship 2's XACT audio project into the files UC2ALAudio plays.
 
 Input (read only): the XACT project as text (Sounds/Avaris.xap), the source WAVs it names (SoundData/,
-Music/) and, for a cross-check only, the shipped Xbox sound banks (Sounds/*.xsb).
+Music/) and the shipped Xbox banks (Sounds/*.xsb, *.xwb): a cross-check, and the source of a wave whose WAV is
+not in SoundData/ (decoded from the .xwb by tools/uc2xwb.py; the report lists them as XWB-SOURCE).
 
 Output (never committed; default <WorkUC2>/assets/uc2-cooked):
   Sounds/<WaveBankFile>.uc2wb    wave bank index (text): one line per wave entry
@@ -15,7 +16,7 @@ Output (never committed; default <WorkUC2>/assets/uc2-cooked):
 The formats are specified in docs/porting/analysis/audio.md ("Cooked format"). Usage:
 
   tools/cook-audio.py [--epic <epic-sources>] [--out <dir>] [--jobs 6] [--banks A_Music,A_Weapon]
-                      [--no-encode] [--quality 4] [--music-quality 5]
+                      [--no-encode] [--quality 4] [--music-quality 5] [--no-xwb-sources]
 
 Run it under the memory ceiling: <WorkUC2>/bin/capped 4G 3600 -- tools/cook-audio.py
 """
@@ -31,6 +32,8 @@ import struct
 import subprocess
 import sys
 import threading
+
+import uc2xwb    # tools/uc2xwb.py, beside this script
 
 FORMAT_VERSION = 1
 LANGS = ('deu', 'fra', 'ita', 'spa')
@@ -322,6 +325,7 @@ class WaveEntry:
         self.loop_length = num(node.get('Loop Region Length'))
         self.file_type = num(node.get('File Type'))
         self.source = None      # resolved path
+        self.src_label = None   # what the index's src= says when the source is not a project file
         self.header = None
         self.missing = None     # reason
         self.loop = (0, 0)      # loop region in sample frames (start, length)
@@ -565,46 +569,53 @@ def read_xsb(path):
 
 
 # ------------------------------------------------------------------------------------------------------------
-# .xwb entry table (Xbox wave bank, XDK xactwb.h, version 3) - cross-check only; the runtime reader is M16.
-# Gives per entry the format (PCM / Xbox ADPCM / WMA, channels, rate) and the byte length of its data, from
-# which the length in sample frames follows (Xbox ADPCM: 36 bytes per 64 frames per channel).
+# .xwb (Xbox wave bank, XDK xactwb.h version 3): tools/uc2xwb.py reads the entry table (cross-check) and decodes
+# the waves whose source WAV is missing from the project (Xbox ADPCM -> 16-bit PCM WAV in the cache).
 # ------------------------------------------------------------------------------------------------------------
 
 def read_xwb(path):
-    with open(path, 'rb') as f:
-        d = f.read()
-    sig, ver = struct.unpack_from('<4sI', d, 0)
-    if sig != b'WBND':
-        raise ValueError('not a WBND file')
-    segs = [struct.unpack_from('<II', d, 8 + 8 * i) for i in range(4)]
-    bd = segs[0][0]
-    flags, count = struct.unpack_from('<II', d, bd)
-    name = d[bd + 8:bd + 24].split(b'\0')[0].decode('latin-1')
-    mdsize, _, align, cfmt = struct.unpack_from('<IIII', d, bd + 24)
+    try:
+        b = uc2xwb.read_xwb(path)
+    except uc2xwb.XwbError as ex:
+        raise ValueError(str(ex))
+    return dict(version=b['version'], name=b['name'], flags=b['flags'],
+                ents=[dict(length=e['length'], tag=e['tag'], ch=e['channels'], rate=e['rate'], frames=e['frames'])
+                      for e in b['entries']])
 
-    def fmt(v):
-        return dict(tag=v & 3, ch=(v >> 2) & 7, rate=(v >> 5) & ((1 << 26) - 1), bits16=v >> 31)
-    ents = []
-    if flags & 0x20000:     # WAVEBANK_FLAGS_COMPACT: offset in sectors + length deviation, one shared format
-        offs = []
-        for i in range(count):
-            v = struct.unpack_from('<I', d, segs[1][0] + 4 * i)[0]
-            offs.append(((v & ((1 << 21) - 1)) * align, v >> 21))
-        for i, (o, dev) in enumerate(offs):
-            nxt = offs[i + 1][0] if i + 1 < count else segs[3][1]
-            ents.append(dict(length=nxt - o - dev, **fmt(cfmt)))
-    else:
-        for i in range(count):
-            _, fv, _, pl, _, _ = struct.unpack_from('<6I', d, segs[1][0] + mdsize * i)
-            ents.append(dict(length=pl, **fmt(fv)))
-    for e in ents:
-        if e['tag'] == 1:
-            e['frames'] = e['length'] // (36 * max(1, e['ch'])) * 64
-        elif e['tag'] == 0:
-            e['frames'] = e['length'] // ((2 if e['bits16'] else 1) * max(1, e['ch']))
-        else:
-            e['frames'] = None
-    return dict(version=ver, name=name, flags=flags, ents=ents)
+
+def source_from_xwb(xwb_path, wb, e, cache_dir):
+    """Decodes entry e of the shipped bank to <cache>/xwb/<bank>.<index>.wav, cut to the project's play region
+    (the source's length; ADPCM pads to 64 frames). Returns (path, note) or (None, reason)."""
+    try:
+        bank = uc2xwb.read_xwb(xwb_path)
+    except uc2xwb.XwbError as ex:
+        return None, str(ex)
+    if e.index >= len(bank['entries']):
+        return None, 'entry %d not in the shipped bank (%d entries)' % (e.index, len(bank['entries']))
+    xe = bank['entries'][e.index]
+    if xe['channels'] != e.channels or xe['rate'] != e.rate:
+        return None, 'shipped entry is %d ch %d Hz, the project says %d ch %d Hz' % (
+            xe['channels'], xe['rate'], e.channels, e.rate)
+    try:
+        rate, ch, samples = uc2xwb.decode_entry(bank, e.index)
+    except uc2xwb.XwbError as ex:
+        return None, str(ex)
+    decoded = len(samples) // ch
+    frames = decoded
+    if e.play_length:
+        want = e.play_length // (2 * ch)        # the project's play region: 16-bit source bytes
+        if want > decoded:
+            return None, 'the project says %d frames, the shipped entry has %d' % (want, decoded)
+        frames = want
+    samples = samples[:frames * ch]
+    out = os.path.join(cache_dir, 'xwb', '%s.%d.wav' % (wb.stem, e.index))
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    uc2xwb.write_wav(out + '.part', rate, ch, samples)
+    os.replace(out + '.part', out)
+    peak, clipped, rms = uc2xwb.stats(samples)
+    return out, '%s %d ch %d Hz, %d bytes, %d frames decoded, %d kept (the project\'s play region), peak %d, ' \
+        '%d samples at full scale, RMS %.1f dBFS' % (uc2xwb.TAG_NAMES.get(xe['tag'], '?'), ch, rate, xe['length'],
+                                                     decoded, frames, peak, clipped, rms)
 
 
 # ------------------------------------------------------------------------------------------------------------
@@ -659,7 +670,7 @@ def write_wavebank(wb, out_sounds, music_rel):
         lines.append('bank name=%s file=%s lang=%s data=%s stream=0 entries=%d' % (
             esc(wb.name), esc(wb.bank_file), wb.lang or '-', esc(wb.stem + '.ogp'), len(wb.entries)))
     for e in wb.entries:
-        src = os.path.basename(e.source) if e.source else esc(e.file.replace('\\', '/'))
+        src = e.src_label or (os.path.basename(e.source) if e.source else esc(e.file.replace('\\', '/')))
         if e.missing:
             lines.append('wave index=%d name=%s missing=%s src=%s' % (e.index, esc(e.name), esc(e.missing), esc(src)))
             continue
@@ -750,6 +761,9 @@ def main():
     ap.add_argument('--music-quality', default='5', help='libvorbis quality for music')
     ap.add_argument('--banks', default='', help='comma list of sound banks to cook (default: all)')
     ap.add_argument('--no-encode', action='store_true', help='parse, check and cross-check only')
+    ap.add_argument('--no-xwb-sources', action='store_true',
+                    help='do not decode a wave whose source WAV is missing from the shipped .xwb (the cook of '
+                         '2026-10-04: such entries are cooked as missing and their cues are silent)')
     ap.add_argument('--relink-localised', action='store_true',
                     help='re-order localised wave banks to the base bank by wave name (repairs Epic data; '
                          'off by default because the Xbox played them in their own order)')
@@ -803,7 +817,10 @@ def main():
             say('WAVE BANK %s: file %s does not match its name' % (wb.name, wb.bank_file))
 
     src_index = SourceIndex(args.epic)
+    xwb_files = {os.path.splitext(f)[0]: os.path.join(sounds_dir, f) for f in os.listdir(sounds_dir)
+                 if f.lower().endswith('.xwb')}
     missing = []
+    from_xwb = []
     for wb in wavebanks:
         for e in wb.entries:
             rel = os.path.normpath(os.path.join('Sounds', e.file.replace('\\', '/'))).replace(os.sep, '/')
@@ -821,6 +838,14 @@ def main():
                 # Music entries name ..\Music\<Track>.wma or .wav; the cook uses Music/<Track>.wav (the source).
                 stem = os.path.splitext(os.path.basename(e.file.replace('\\', '/')))[0]
                 path = src_index.find('Music/%s.wav' % stem)
+            if path is None and not wb.music and not args.no_xwb_sources and wb.stem in xwb_files:
+                # No WAV in the project: the Xbox's own copy of the wave, decoded from the shipped bank.
+                path, note = source_from_xwb(xwb_files[wb.stem], wb, e, cache)
+                if path:
+                    e.src_label = 'xwb:%s.xwb:%d' % (wb.stem, e.index)
+                    from_xwb.append((wb.bank_file, e.index, e.name, note))
+                else:
+                    say('XWB-SOURCE %s entry %d %s: not decoded (%s)' % (wb.bank_file, e.index, e.name, note))
             if path is None:
                 e.missing = 'no-file'
                 missing.append((wb.bank_file, e.index, e.name, e.file))
@@ -838,7 +863,7 @@ def main():
                 if h['channels'] != e.channels or h['rate'] != e.rate:
                     say('SOURCE %s\\%s: xap says %d ch %d Hz, file has %d ch %d Hz (file wins)' % (
                         wb.bank_file, e.name, e.channels, e.rate, h['channels'], h['rate']))
-                if h['kind'] == 'wav' and (h['data_offset'] != e.play_offset or h['data_bytes'] != e.play_length):
+                if h['kind'] == 'wav' and not e.src_label and (h['data_offset'] != e.play_offset or h['data_bytes'] != e.play_length):
                     say('SOURCE %s\\%s: play region %d+%d differs from the data chunk %d+%d' % (
                         wb.bank_file, e.name, e.play_offset, e.play_length, h['data_offset'], h['data_bytes']))
             if e.loop_length:
@@ -849,8 +874,10 @@ def main():
                         wb.bank_file, e.name, start, length, h['frames']))
                     length = max(0, h['frames'] - start)
                 e.loop = (start, length)
-    say('wave entries: %d in %d banks, %d without a usable source file' % (
-        sum(len(wb.entries) for wb in wavebanks), len(wavebanks), len(missing)))
+    say('wave entries: %d in %d banks, %d without a usable source file, %d decoded from the shipped .xwb' % (
+        sum(len(wb.entries) for wb in wavebanks), len(wavebanks), len(missing), len(from_xwb)))
+    for m in from_xwb:
+        say('XWB-SOURCE %s entry %d %s: no WAV in the project, decoded from the shipped bank: %s' % m)
     for m in missing:
         say('MISSING %s entry %d %s <- %s' % m)
 
@@ -998,8 +1025,6 @@ def main():
         'wave banks' % (agree, len(xap_banks)))
 
     # --- .xwb cross-check: the shipped wave banks have the project's entries in the project's order ----------
-    xwb_files = {os.path.splitext(f)[0]: os.path.join(sounds_dir, f) for f in os.listdir(sounds_dir)
-                 if f.lower().endswith('.xwb')}
     agree = 0
     for stem in sorted(set(xwb_files) - set(by_file)):
         say('XWB %s.xwb: not in the project' % stem)
