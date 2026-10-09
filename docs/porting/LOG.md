@@ -500,3 +500,50 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   spawn-dependent lock check, and the pad walk check at a spawn by a wall: rerun twice 21/0, walk -353/+408); browser
   boot 4/4, jitter 1/1 (judder 0.50-0.70 px), keys 1/1, saves 1/1. What remains on screen is Epic's walk bob (about
   +-8 px at 1080p, smooth). Preview republished 13:29.
+- 2026-10-09 — **Owner review of 2026-10-09: F-4, F-5, F-6, F-1 green and merged** (PLAN.md's new section has the
+  decisions). Coordinator's checks on main: `logs/coord/a15` (F-4, 2a58dbc), `a17` (F-5, b6fcffb), `a18` + followup
+  (F-1 + F-6, 9764bc8), `a16` (quiet WebGL 1 vs 2 browser frame times for F-3).
+  - **F-2/F-4 platform like UT2004** (2a58dbc): `[Engine.GameEngine] FpsLogSeconds` / `FPSLOG` and `tools/dev/fps-bench.sh`;
+    the frame rate is uncapped natively (`FrameRateCap=0`; DM-Praxis turn 63-70 fps on the Quadro at any resolution,
+    132 at the spawn, 1336 on the null renderer; post-processing ~5 ms); web exceptions OFF with engine-ut2004's
+    fail-soft loaders (wasm -8%; 58/58 maps under Node, 0 aborts; the "TransBuffer throws" story was wrong: it never
+    threw); frame yield as engine-ut2004 (one yield per frame, hidden tab mutes); first arm64 build ever (verifyclasses
+    under qemu-aarch64: 401 classes, 0 mismatches) and the 21-item hazard checklist; inis LF; docs; meta.json records
+    the fetched libraries; `-maxfps`->`FrameRateCap`, `-framepattern`->`[SDLLaunch] FramePattern`, `-audiowave`/`-NOEFX`
+    -> `WaveFile=`/`UseEFX=`. a15: builds, verifyclasses, jit 0.52 px, d6 41/4 (the 4 were a stale shipped tree:
+    rerun 9/0, pad curves 0.04-0.27% of Epic's), m10 5/5, fps-bench 66.9 fps, audio regression, Node census 58/58,
+    boot 4/4, audio 3/3; jitter spec failed under load only.
+  - **F-5 renderer** (b6fcffb): `DOFShippedBlurAlpha` compiled default True (value 65 unchanged); `DistortionCullDistance`
+    a per-device config key; dynamic gamma stays on (Epic's split-screen manager forces it too); occlusion queries:
+    Xbox-only actor culling, nothing visible depends on it, UT2004 has none, not implemented; shaders: every one a
+    material or effect can select is ported (16 vertex fragments left out with reasons); CTF-Aqueduct flicker NOT
+    reproduced in nine conditions (`bProjectOnBackfaces` on 12 of 16 tree projectors is the map's design; waiting for
+    the owner's conditions); shadow strength: xemu shot requested (`logs/f5/shadow`); **DM-Azure sky haze found and
+    fixed**: Mesa's fixed-function fog value, not GL4ES; the generated FF programs compute the fog distance from depth
+    (sky difference vs the twin 46.75 -> 2.49). a17: builds, verifyclasses, sync-web-ini, m7-effects 14/14 +
+    self-test 15/15, m7b 11/0, fx-owner GPU scenes clean, boot 4/4.
+  - **F-6 audio** (812361e + 54a509b): `tools/uc2xwb.py` reads the shipped Xbox wave banks (ADPCM layout settled against
+    643 source WAVs); the 19 missing waves + `Machine_Generator03` decoded from the `.xwb` (cues 2465 fully / 0 partly
+    / 4 none, was 2417/6/15); A_Vehicle cooked (31 cues, cut content); priority 255 for sounds without one (674 lines);
+    cue tables inside the Ogg packs: recommended NO (banks do not line up, start-up would read 37x more; spike kept);
+    `[UC2ALAudio.UC2ALAudioSubsystem] UseHRTF` as engine-ut2004 (interaural delay measured). Cook installed into
+    assets/uc2-cooked (85 files) and the asset tree; ufrontend manifest 6e77b28. a18: audio-check 7191/7191,
+    self-test 45/45, deadbolt capture clean, web audio spec 3/3.
+  - **F-1 vanilla scripts** (9764bc8, 01139e3): Epic's shipped GUI.u/UCGameplay.u/UCMenu.u play as Epic shipped them
+    with the curated inis (Epic's PC mouse path; pad curve within 0.17-0.43% of Epic's; the left stick walks on PC
+    through `UnIn.cpp:324`, non-Xbox builds only, since Epic's script scales it only under `IsXBox()`); the rebuilt
+    UCGameplay.u adds the linear PC mouse on top from the SAME ini; `UC2InputMigrate` removed; `bLazyMouseCamera`
+    (Epic's lazy camera under the mouse, default off); arrows strafe (Epic's PC layout), `bKeysAsStick` and the 25
+    degree lock break hard-wired; D-9 conflicts clear; SDL relative-mouse hints as engine-ut2004 (N counts in = N out
+    at two speeds); UC2 has NO walk mode (owner: leave it); cheats `WHEREAMI` / `TELEPORT x y z [yaw [pitch]]` in
+    `Source/Engine/Src/UC2Cheats.cpp`, allowed for a standalone game or a listen host, refused and logged elsewhere
+    (`[Engine.GameEngine] AllowNetCheats` for the tests only, never shipped), NETPLACE/NETPLACENEAR/NETPROBE behind the
+    same guard (a client's NETPROBE answers about itself only), NETAIM deleted (owner: test-specific commands do not
+    ship); `docs/CHEAT-COMMANDS.md` for the frontend. Packages switched: UCGameplay.u 4ed72f0b, UCMenu.u b9202a59
+    (ufrontend 227e5c3). a18 + followup: builds, scripts 0 errors, verifyclasses, jit 0.52 px, d6 89/2 then 16/0 and
+    15/1 (the vanilla arrow-strafe check is spawn-dependent: a wall; to pin), m10 rebuilt 5/5 and vanilla 2/2,
+    d9 119/0 on a fresh tree, d4 PASS, net listen 9/9, boot 4/4, keys 1/1, audio 3/3, saves 1/1; the browser net
+    spec 2/2 on the f1b branch. Preview republished 13:55 with the 9764bc8 build (the cheat-guard build follows with
+    the next publish).
+  - F-3 (GL4ES on WebGL 2) is verified on its branch and the 7 fork commits are pushed (10-p/gl4es
+    fix/cubemap-bind-active-unit 6b6bccd4); it merges after the F-4b switch conversion.
