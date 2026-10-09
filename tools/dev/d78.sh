@@ -22,7 +22,7 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 tree=${D78_TREE:-d78}
 ref=${D78_REF_TREE:-d78-ref}
-out=$work/logs/d78/run
+out=${D78_OUT:-$work/logs/d78/run}   # D78_OUT: pictures and summary elsewhere (another worktree's rerun)
 ctl=$repo/tools/dev/m10-controls.sh
 mkdir -p "$out"
 

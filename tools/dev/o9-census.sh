@@ -11,15 +11,17 @@ set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 maps=${*:-$(cd "$work/assets/uc2/Maps" && ls DM-*.unr CTF-*.unr OD-*.unr | sed 's/\.unr$//')}
-mkdir -p "$work/logs/o9"
+# O9_CENSUS_PREFIX (default o9c): the three run trees <prefix>0..2; O9_CENSUS_LOG (default <WorkUC2>/logs/o9): the summary.
+pre=${O9_CENSUS_PREFIX:-o9c}; logdir=${O9_CENSUS_LOG:-$work/logs/o9}
+mkdir -p "$logdir"
 for i in 0 1 2; do
-  [ -d "$work/run/o9c$i/System" ] || "$work/bin/capped" 2G 600 -- "$repo/tools/dev/mkrun-uc2.sh" "$repo/build-native" "o9c$i" > /dev/null
-  cp -f "$repo/build-native/Source/SDLLaunch/uc2.bin" "$work/run/o9c$i/System/uc2.bin"
+  [ -d "$work/run/$pre$i/System" ] || "$work/bin/capped" 2G 600 -- "$repo/tools/dev/mkrun-uc2.sh" "$repo/build-native" "$pre$i" > /dev/null
+  cp -f "$repo/build-native/Source/SDLLaunch/uc2.bin" "$work/run/$pre$i/System/uc2.bin"
 done
-summary=$work/logs/o9/census-summary.txt
+summary=$logdir/census-summary.txt
 : > "$summary"
 one() {  # one <slot> <map>
-  local t=o9c$1 m=$2
+  local t=$pre$1 m=$2
   "$repo/tools/dev/run-uc2-shot.sh" $t census-$m 150 0 "$m" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=45:GLMATCENSUS@55:exit > /dev/null 2>&1
   local line; line=$(grep -a "matcensus summary" "$work/logs/$t/census-$m.out" | sed 's/.*matcensus summary: //')
   echo "$m: ${line:-NO CENSUS (see $work/logs/$t/census-$m.out)}" >> "$summary"
