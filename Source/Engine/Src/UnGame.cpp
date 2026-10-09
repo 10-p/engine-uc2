@@ -464,7 +464,7 @@ UBOOL UGameEngine::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	guard(UGameEngine::Exec);
 	if( UC2CheatExec( this, NULL, Cmd, Ar ) )	// uc2 port: TELEPORT/WHEREAMI, cheats (UC2Cheats.cpp)
 		return 1;
-	if( UC2NetTestExec( this, Cmd, Ar ) )	// uc2 port: NETPROBE/NETPLACE/NETAIM, cheats too
+	if( UC2NetTestExec( this, Cmd, Ar ) )	// uc2 port: NETPROBE/NETPLACE/NETPLACENEAR, cheats too
 		return 1;
 	if( ufrontAutoFovExec( Cmd, Ar ) )		// D-8: AUTOFOV [Off|HorPlus|Adaptive]
 		return 1;

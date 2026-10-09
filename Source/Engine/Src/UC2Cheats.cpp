@@ -24,10 +24,10 @@
 	server (the host is the server). Every network client and a dedicated server refuse:
 	"Cheat: <COMMAND> refused: ..." in the log and on the console. Test harnesses that
 	need these commands there (tools/dev/net-test.py) set [Engine.GameEngine]
-	AllowNetCheats=True in that process's ini (-ini:System:...); it never opens NETAIM
-	on a network client (an aimbot), and it must never be in a shipped ini.
+	AllowNetCheats=True in that process's ini (-ini:System:...); it must never be in a
+	shipped ini.
 	Every command that runs logs one "Cheat: <COMMAND> <arguments>" line. The test
-	commands NETPROBE, NETPLACE, NETPLACENEAR and NETAIM (UC2NetTest.cpp) use the same
+	commands NETPROBE, NETPLACE and NETPLACENEAR (UC2NetTest.cpp) use the same
 	guard and log the same way.
 =============================================================================*/
 
@@ -72,19 +72,15 @@ ENGINE_API UBOOL UC2CheatsAllowed( UEngine* Engine, APlayerController* PC, const
 	const TCHAR* Why = TEXT("");
 	if( !Allowed )
 	{
-		// The test key opens the rest for the network tests (tools/dev/net-test.py), never NETAIM on a client:
-		// turning a client's view onto another player is an aimbot.
+		// The test key opens them for the network tests (tools/dev/net-test.py) on clients and dedicated servers.
 		UBOOL NetCheats = 0;
 		GConfig->GetBool( TEXT("Engine.GameEngine"), TEXT("AllowNetCheats"), NetCheats, GIni );
-		if( NetCheats && !(NetMode==NM_Client && appStricmp(Command, TEXT("NETAIM"))==0) )
+		if( NetCheats )
 			Allowed = 1, Why = TEXT(" (AllowNetCheats: a test setting)");
 	}
 	if( !Allowed )
 	{
-		const TCHAR* Rule = NetMode==NM_Client && appStricmp(Command, TEXT("NETAIM"))==0
-			? TEXT("never on a network client")
-			: TEXT("only for a standalone game or the host of a listen server");
-		CheatLog( Ar, *FString::Printf( TEXT("%s refused: cheats are %s"), Command, Rule ) );
+		CheatLog( Ar, *FString::Printf( TEXT("%s refused: cheats are only for a standalone game or the host of a listen server"), Command ) );
 		return 0;
 	}
 	while( Args && *Args==' ' )

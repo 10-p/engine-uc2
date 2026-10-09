@@ -56,12 +56,12 @@ Cheat: TELEPORT refused: cheats are only for a standalone game (...)
   `-ini:System:[Engine.GameEngine]:AllowNetCheats=True`). **The key must never be in a shipped ini** (a default
   ini, a web ini, a frontend profile). With it, the log line says so: `Cheat: NETPROBE ... (AllowNetCheats: a test
   setting)`.
-- **Aiming at another player on a client is refused always**, even with the test key (engine-uc2: `NETAIM` on a
-  client: "never on a network client"): it is an aimbot. A test that needs a client to face someone has the
-  server do it (`NETAIM <who> <target>` on the server sends the view to that client, as a game forces a view).
+- **No aiming command.** engine-uc2 had a test command that turned a player's view toward another (`NETAIM`, an
+  aimbot); it was removed (the owner: test-only commands do not ship in the binary). Tests line players up
+  around the shooter's own view with the position commands instead.
 
 What "protected" means here: the commands do nothing for a network client or a dedicated server in normal play,
-the one client-side command that would be an aimbot cannot be enabled at all, and every use leaves a `Cheat:` line.
+there is no aiming command at all, and every use leaves a `Cheat:` line.
 It is not anti-cheat: anyone who edits their own binary can do anything on their own machine; a server never
 accepts a teleport from a client.
 
@@ -73,8 +73,8 @@ accepts a teleport from a client.
   still Epic's. UT2004 has the same `CheatManager.Teleport` and needs the same order.
 - The engine moves the pawn with `FarMoveActor` (no sweep) and clears its velocity; the server's movement
   correction is told the new spot (UC2 returns a pawn to its last `ServerMove` position otherwise).
-- engine-uc2's older test commands `NETPROBE`, `NETPLACE`, `NETPLACENEAR` and `NETAIM` (`UC2NetTest.cpp`: every
-  player's position, move a named player, aim at a player) are cheats too: the same guard, the same `Cheat:` lines;
-  `NETAIM <name>` turns the local player, `NETAIM <who> <target>` (server or listen host) turns a named player.
+- engine-uc2's older test commands `NETPROBE`, `NETPLACE` and `NETPLACENEAR` (`UC2NetTest.cpp`: every player's
+  position, move a named player, put a player near another) are cheats too: the same guard, the same `Cheat:`
+  lines. (They are test commands; whether they stay in the shipped binary is the owner's decision.)
 - Keys can be bound to them like any console command, e.g. `F11=WHEREAMI`.
 - The web frontend can send them through its console bridge (`ue_exec_command` in engine-uc2).
