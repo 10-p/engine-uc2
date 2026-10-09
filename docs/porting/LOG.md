@@ -547,3 +547,29 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
     the next publish).
   - F-3 (GL4ES on WebGL 2) is verified on its branch and the 7 fork commits are pushed (10-p/gl4es
     fix/cubemap-bind-active-unit 6b6bccd4); it merges after the F-4b switch conversion.
+- 2026-10-09 — **F-4b and F-3 green and merged; preview republished 17:07 (abb4cc8).**
+  - **F-4b command-line audit** (ab007a3): every test switch we added is now an ini key read ONCE through
+    `appReadTestKey`/`appReadTestFlag` (`Core/Inc/UnFile.h:319`) and removed from the ini so it is never saved:
+    `[SDL2Drv.SDL2Client] InputTestFile`, UC2GLDrv `ShotTimes/ShotRamp/ShotPresented/Exec/PixelShaderToggleTimes/
+    PostProcessToggleTimes/SelfTest/CombinerTest/MatCensus/Stats/NoLODBias/MaskCaps/DualDiffuse`, `[UC2Movie] ShotTimes`
+    + `StartupMovies`, `[UC2NetTest] CommandFile/Drop/PacketIdStart/OldAcks`; the on/off twins and unused probes are
+    deleted (kept: `-log`, `-ini:`, `-windowed`, `-defaultres`, `-usehomedir`, the three renderer selectors, commandlet
+    parameters); `tools/dev/glini` writes GL keys for both device sections; two bugs fixed on the way (the command
+    line was cut at 1,024 characters, silently in SDLLaunch and unchecked in UCC: now 4,096 with a warning;
+    o9-nvidia reused a tree's Avaris.ini between runs); Epic's three reference inis byte-identical again
+    (sync-web-ini --check compares them); `FrameRateCap` default 0; meta.json branch only; `-sOFFSCREEN_FRAMEBUFFER`
+    kept (UC2GL4ESDrv asks for `renderViaOffscreenBackBuffer`, the 2.43 present fix). Frontend 1fdc55d: the uc2 specs
+    pass `-ini:` keys; the "GL4ES without post-processing" launcher option removed.
+  - **F-3 GL4ES on WebGL 2** (c4aee1b, ff abb4cc8; fork 10-p/gl4es fix/cubemap-bind-active-unit 98441ed -> 6b6bccd4,
+    7 commits: ES 3.0 back end `LIBGL_ES=3`, GLSL ES 3.00 output, `LIBGL_FORCEHIGHP`, LOD bias applied, real
+    multisample + blit, two fixes): `[UC2GL4ESDrv.UC2GL4ESRenderDevice] GLESVersion=3` (ES 2 / WebGL 1 fallback kept:
+    owner), core depth textures (the WEBGL_depth_texture gap closes on WebGL 2), 4x MSAA on ES3/WebGL 2, FXAA removed,
+    highp everywhere, the twin's LOD bias matches the desktop (pinned 0.384 with / 0.871 without), 33 raw GLES
+    call sites gone on ES3. Quiet browser A/B (`logs/coord/a16`): WebGL 1 + FXAA 27.5-35.4 ms vs WebGL 2 + MSAA
+    29.8-36.3 ms per frame at 1024x768 (owner: negligible on a slow GPU).
+  - Coordinator's full check `logs/coord/a19` (+followup): builds with the fork fetched from GitHub (6b6bccd4),
+    verifyclasses, sync-web-ini, m11-twin 33/34 (menu-movie timing), m7-effects 14/14 + self-test 15/15, m7b 11/11 on
+    rerun, fx-owner GPU 4 clean, jit 0.52 px, d6 87/4 then 52/1 and 53/0 (the arrow-strafe probe depends on the random
+    spawn: to pin), m10 rebuilt 5/5 and vanilla 2/2 on rerun, d9 119/0, audio 7191/7191 + 45/45, net cheats 9/9 +
+    listen, Node census 58/58, browser boot 4/4, net 2/2, keys, audio 3/3, saves; the jitter spec's strafe-right slope
+    0.217-0.247 against a 0.2 limit on WebGL 2 (forward/back 0.000; native 0.000 everywhere): OPEN, needs a quiet look.
