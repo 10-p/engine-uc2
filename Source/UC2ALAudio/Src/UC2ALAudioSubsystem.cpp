@@ -452,6 +452,7 @@ void UUC2ALAudioSubsystem::StaticConstructor()
 	new(GetClass(),TEXT("UseEFX"),       RF_Public)UBoolProperty (CPP_PROPERTY(UseEFX),       TEXT("Audio"), CPF_Config );
 	new(GetClass(),TEXT("MusicFades"),   RF_Public)UBoolProperty (CPP_PROPERTY(MusicFades),   TEXT("Audio"), CPF_Config );
 	new(GetClass(),TEXT("CueLog"),       RF_Public)UBoolProperty (CPP_PROPERTY(CueLog),       TEXT("Audio"), CPF_Config );
+	new(GetClass(),TEXT("UseHRTF"),      RF_Public)UBoolProperty (CPP_PROPERTY(UseHRTF),      TEXT("Audio"), CPF_Config );
 	// Compiled defaults = Default.ini's [UC2ALAudio.UC2ALAudioSubsystem].
 	MaxVoices	= 64;
 #if !defined(__EMSCRIPTEN__) && !defined(_WIN32)
@@ -463,6 +464,7 @@ void UUC2ALAudioSubsystem::StaticConstructor()
 	UseEFX		= 1;
 	MusicFades	= 1;
 	CueLog		= 1;
+	UseHRTF		= 0;		// F-6: as engine-ut2004 (ufront 2.61): the player's choice, off by default
 	unguard;
 }
 
@@ -551,7 +553,7 @@ UBOOL UUC2ALAudioSubsystem::Init()
 	Order = TEXT("web (the only backend of the web build)");
 #endif
 	UC2ALCaptureLog( 1 );
-	ALCint Attribs[] = { ALC_MAX_AUXILIARY_SENDS, 1, 0, 0, 0, 0, 0, 0, 0 };
+	ALCint Attribs[16] = { ALC_MAX_AUXILIARY_SENDS, 1, 0 };
 	if( LoopbackTest )
 	{
 		// Self-test: mix into memory, 48 kHz stereo float, at a simulated time (ALC_SOFT_loopback).
@@ -587,6 +589,28 @@ UBOOL UUC2ALAudioSubsystem::Init()
 			Names += FString::Printf( TEXT("%s\"%s\""), Names.Len() ? TEXT(", ") : TEXT(""), appFromAnsi(P) );
 		debugf( NAME_Init, TEXT("UC2ALAudio: output devices of that backend: %s"), Names.Len() ? *Names : TEXT("none") );
 		return 1;
+	}
+	// HRTF (F-6), exactly as engine-ut2004's ALAudio (ufront 2.61, ALAudioSubsystem.cpp): asked for EXPLICITLY,
+	// on or off, whenever the library knows ALC_SOFT_HRTF, because left to itself OpenAL Soft turns HRTF on when it
+	// believes the output is headphones (a browser can never tell it, a desktop only sometimes), and HRTF over
+	// speakers sounds wrong. HRTF is a stereo rendering: on a 5.1/7.1 device OpenAL Soft would render surround and
+	// ignore the request, so UseHRTF=True also asks for the stereo-HRTF output mode. The self-test's loopback device
+	// always asks for it off (its expected values are plain panning; it switches HRTF on itself, UC2TestSetHRTF).
+	const UBOOL bHasHRTF = GAL.alcIsExtensionPresent( S->Device, "ALC_SOFT_HRTF" );
+	const UBOOL bWantHRTF = UseHRTF && !LoopbackTest;
+	if( bHasHRTF )
+	{
+		INT n = 0;
+		while( Attribs[n] )
+			n += 2;
+		Attribs[n++] = ALC_HRTF_SOFT;
+		Attribs[n++] = bWantHRTF ? ALC_TRUE : ALC_FALSE;
+		if( bWantHRTF && GAL.alcIsExtensionPresent( S->Device, "ALC_SOFT_output_mode" ) )
+		{
+			Attribs[n++] = ALC_OUTPUT_MODE_SOFT;
+			Attribs[n++] = ALC_STEREO_HRTF_SOFT;
+		}
+		Attribs[n] = 0;
 	}
 	S->Context = GAL.alcCreateContext( S->Device, Attribs );
 	if( !S->Context || !GAL.alcMakeContextCurrent( S->Context ) )
@@ -663,6 +687,20 @@ UBOOL UUC2ALAudioSubsystem::Init()
 		S->Voices.Num(), !S->bEFX ? TEXT("off (no EFX: dry sound)") : S->bEAXReverb ? TEXT("EFX (EAX reverb)") : TEXT("EFX (standard reverb)"),
 		S->bLoopPoints ? TEXT("yes") : TEXT("no"),
 		Wave.Len() ? *FString::Printf( TEXT(", writing %s"), *Wave ) : TEXT("") );
+	// A request is not a result (no HRTF data set, a mono or surround device without the output mode): read back.
+	if( !bHasHRTF )
+		debugf( NAME_Init, TEXT("UC2ALAudio: HRTF not supported by this OpenAL (UseHRTF=%s)"), UseHRTF ? TEXT("True") : TEXT("False") );
+	else
+	{
+		ALCint Active = 0, Status = 0;
+		GAL.alcGetIntegerv( S->Device, ALC_HRTF_SOFT, 1, &Active );
+		GAL.alcGetIntegerv( S->Device, ALC_HRTF_STATUS_SOFT, 1, &Status );
+		const ALCchar* Name = Active ? GAL.alcGetString( S->Device, ALC_HRTF_SPECIFIER_SOFT ) : NULL;
+		debugf( NAME_Init, TEXT("UC2ALAudio: HRTF %s; HRTF is %s%s (status 0x%x)"),
+			LoopbackTest ? TEXT("off (self-test loopback)") : UseHRTF ? TEXT("requested (UseHRTF=True)") : TEXT("off (UseHRTF=False)"),
+			Active ? TEXT("ACTIVE") : TEXT("inactive"),
+			Name ? *FString::Printf( TEXT(", data set \"%s\""), appFromAnsi(Name) ) : TEXT(""), Status );
+	}
 	debugf( NAME_Init, TEXT("UC2ALAudio: category volumes (default profile): Music %.2f, FX %.2f, Voice %.2f"),
 		S->CategoryVolumes[VOLUME_Music], S->CategoryVolumes[VOLUME_FX], S->CategoryVolumes[VOLUME_Voice] );
 	if( !S->bEFX )
@@ -2123,6 +2161,38 @@ INT UC2TestRender( UUC2ALAudioSubsystem* Audio, FLOAT MaxSeconds, TArray<FLOAT>&
 			break;
 	}
 	return Frames;
+	unguard;
+}
+
+// F-6: HRTF on or off on the self-test's loopback device (alcResetDeviceSOFT keeps sources and buffers).
+// Returns whether HRTF is active afterwards; Status says what the library reported.
+UBOOL UC2TestSetHRTF( UUC2ALAudioSubsystem* Audio, UBOOL bOn, FString& Status )
+{
+	guard(UC2TestSetHRTF);
+	FUC2AudioState* S = Audio->State;
+	Status = TEXT("no loopback device");
+	if( !S || !S->bTest || !S->Device )
+		return 0;
+	LPALCRESETDEVICESOFT Reset = (LPALCRESETDEVICESOFT)GAL.alcGetProcAddress( S->Device, "alcResetDeviceSOFT" );
+	if( !GAL.alcIsExtensionPresent( S->Device, "ALC_SOFT_HRTF" ) || !Reset )
+	{
+		Status = TEXT("ALC_SOFT_HRTF not supported");
+		return 0;
+	}
+	ALCint Attribs[] = { ALC_MAX_AUXILIARY_SENDS, 1, ALC_FORMAT_CHANNELS_SOFT, ALC_STEREO_SOFT, ALC_FORMAT_TYPE_SOFT,
+		ALC_FLOAT_SOFT, ALC_FREQUENCY, UC2_TEST_RATE, ALC_HRTF_SOFT, bOn ? ALC_TRUE : ALC_FALSE, 0 };
+	if( !Reset( S->Device, Attribs ) )
+	{
+		Status = TEXT("alcResetDeviceSOFT failed");
+		return 0;
+	}
+	ALCint Active = 0, Code = 0;
+	GAL.alcGetIntegerv( S->Device, ALC_HRTF_SOFT, 1, &Active );
+	GAL.alcGetIntegerv( S->Device, ALC_HRTF_STATUS_SOFT, 1, &Code );
+	const ALCchar* Name = Active ? GAL.alcGetString( S->Device, ALC_HRTF_SPECIFIER_SOFT ) : NULL;
+	Status = FString::Printf( TEXT("HRTF %s, status 0x%x%s"), Active ? TEXT("active") : TEXT("inactive"), Code,
+		Name ? *FString::Printf( TEXT(", data set \"%s\""), appFromAnsi(Name) ) : TEXT("") );
+	return Active!=0;
 	unguard;
 }
 

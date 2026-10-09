@@ -126,7 +126,7 @@ directory: `xbox_xact_authoring_dxaudio.htm` "Track Event Overview", `cd_aud_wp_
 | `Relative Value = 1` | adds to the track's other values (else replaces) | guide "Use relative values"; all 165 events are relative |
 | `Playlist Type` | 0 Random, 1 Ordered, 2 Shuffle, 3 Parameter-controlled, 4 Random (no immediate repeats), 5 Ordered from random | the guide lists the six alphabetically (no numbers). `xact.exe` STRINGTABLE (UTF-16): "Random", "Ordered", "Shuffle" consecutive (file offset 0xd351c), later "Parameter-controlled", "Random (no immediate repeats)", "Ordered from random" (0xd7aa2-0xd7b08). Data: 2,515 events omit it (default 0 = Random, the tool's natural default), 43 set 4 and they are all footsteps, melee swings, pain and chant sounds (exactly where an immediate repeat is audible), 1 sets 1 (`Combo_EMP`). Inferred, consistent |
 | `Weight` (Registered Wave) | 0..10000, absent = equal | `XACT_VARIATION_TABLE_WEIGHT_MAX 10000` (`xact.h:501`); only 15 waves carry one |
-| `Priority` | 0..255, **lower = more important**; absent = 0 | not stated in this SDK. Data by group: announcer 40/50, weapons/melee 100, character/footsteps 150, combo 180, taunts 225, ambience 240-254. Stealing rule from `cd_aud_wp_bp_chap10.htm:148`: a lower-priority sound is stopped for a higher one; at equal priority the oldest is stopped. Inferred |
+| `Priority` | 0..255, **lower = more important**; absent = 255 (F-6: the shipped `.xsb` stores 255 for all 674 such sounds; cooked as 0 until 2026-10-09) | not stated in this SDK. Data by group: announcer 40/50, weapons/melee 100, character/footsteps 150, combo 180, taunts 225, ambience 240-254. Stealing rule from `cd_aud_wp_bp_chap10.htm:148`: a lower-priority sound is stopped for a higher one; at equal priority the oldest is stopped. Inferred |
 | `3D` block | DirectSound 3D buffer parameters, distances in game units | `Minimum/Maximum Distance`, `Rolloff Factor`, cones; `Cone Outside Volume` is 0 everywhere (cones have no effect); doppler unused by the game (`XACTAudioSubsystem.cpp:500`) |
 | `Headroom Boost = 1` | the 6 dB per-voice headroom removed (sound 6 dB louder than one without) | `cd_aud_wp_xactsounds.htm` "6 dB gain boost option" |
 | non-3D sound played on a 3D source | DirectSound default 3D properties (min distance 1, rolloff 1) | `cd_aud_wp_xactsounds.htm`, table "Mixing and Matching 2D/3D Sounds" |
@@ -145,13 +145,14 @@ keywords and keys (forward compatibility); the first line names the format and i
 ```
 uc2wb 1
 bank name=<wave bank name> file=<Xbox .xwb file> lang=<deu|fra|ita|spa|-> data=<data file, relative to Sounds/> stream=<0|1> entries=<n>
-wave index=<i> name=<entry name> offset=<byte> size=<bytes> rate=<Hz> channels=<n> frames=<sample frames> loop=<start>,<length> src=<source file name>
+wave index=<i> name=<entry name> offset=<byte> size=<bytes> rate=<Hz> channels=<n> frames=<sample frames> loop=<start>,<length> src=<source file name | xwb:<bank>.xwb:<index>>
 wave index=<i> name=<entry name> missing=<no-file|unreadable|encode-failed> src=<as the project names it>
 ```
 `data` is `<bank>.ogp` (sound effects, speech) or `../Music/<Track>.ogg` with `stream=1` (the 21 `M_*` music
 banks). `offset/size` delimit one complete Ogg Vorbis stream inside `data`. `frames` and `loop` are in sample
 frames of the source; `loop=0,0` = no loop region (a looping play event then loops the whole wave). A localised
 bank has the same `name` as its base bank and its own `file`.
+`src=xwb:...` (F-6, `audio-f6.md`): the project has no WAV for the entry; it was decoded from the shipped `.xwb`.
 
 **`Sounds/<WaveBankFile>.ogp`**: the bank's waves, each a complete, independent Ogg Vorbis physical stream
 (libvorbis, sample rate and channel count of the source, no tags), concatenated in index order with no padding.
@@ -183,6 +184,9 @@ cue index=<i> name=<Bank\Cue> queue=<0|1> sounds=<sound index:weight,...|->
 `length` = the longest track (timestamp + delay + longest variation x (loops+1)), -1 if anything loops forever.
 Everything the project carries is in the table, including what the runtime does not use yet (EQ, LFOs, EG,
 mix bins, low-pass events, LFE); see "Runtime mapping" for what is played.
+
+Banks that ship but are not in the project (`A_Vehicle`) are cooked from their `.xsb`/`.xwb` into the same
+format (F-6, `audio-f6.md` step 2).
 
 **`Music/<Track>.ogg`**: one Ogg Vorbis file per `Music/*.wav` (23; the project's 21 music banks name 21 of
 them, `AnubisFightsSelket` and `Theme` are cooked too). **`Sounds/cook-report.txt`**: the full report.

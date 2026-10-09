@@ -2,7 +2,8 @@
 """cook-audio.py: cook Unreal Championship 2's XACT audio project into the files UC2ALAudio plays.
 
 Input (read only): the XACT project as text (Sounds/Avaris.xap), the source WAVs it names (SoundData/,
-Music/) and, for a cross-check only, the shipped Xbox sound banks (Sounds/*.xsb).
+Music/) and the shipped Xbox banks (Sounds/*.xsb, *.xwb): a cross-check, and the source of a wave whose WAV is
+not in SoundData/ (decoded from the .xwb by tools/uc2xwb.py; the report lists them as XWB-SOURCE).
 
 Output (never committed; default <WorkUC2>/assets/uc2-cooked):
   Sounds/<WaveBankFile>.uc2wb    wave bank index (text): one line per wave entry
@@ -15,7 +16,7 @@ Output (never committed; default <WorkUC2>/assets/uc2-cooked):
 The formats are specified in docs/porting/analysis/audio.md ("Cooked format"). Usage:
 
   tools/cook-audio.py [--epic <epic-sources>] [--out <dir>] [--jobs 6] [--banks A_Music,A_Weapon]
-                      [--no-encode] [--quality 4] [--music-quality 5]
+                      [--no-encode] [--quality 4] [--music-quality 5] [--no-xwb-sources]
 
 Run it under the memory ceiling: <WorkUC2>/bin/capped 4G 3600 -- tools/cook-audio.py
 """
@@ -24,6 +25,7 @@ import argparse
 import collections
 import concurrent.futures
 import hashlib
+import math
 import os
 import re
 import shutil
@@ -32,7 +34,17 @@ import subprocess
 import sys
 import threading
 
+import uc2xsb    # tools/uc2xsb.py and uc2xwb.py, beside this script
+import uc2xwb
+
 FORMAT_VERSION = 1
+
+# Entries whose project WAV is not the wave the Xbox shipped: taken from the shipped .xwb even though the WAV exists
+# (owner decision 2026-10-09, F-6). (wave bank file stem, entry index): reason.
+XWB_PREFERRED = {
+    ('A_ChemicalDawn', 7): 'Machine_Generator03: the tree\'s WAV has 55,808 frames; the project\'s play region '
+                           '193,426 and the shipped entry 193,472',
+}
 LANGS = ('deu', 'fra', 'ita', 'spa')
 
 
@@ -322,6 +334,7 @@ class WaveEntry:
         self.loop_length = num(node.get('Loop Region Length'))
         self.file_type = num(node.get('File Type'))
         self.source = None      # resolved path
+        self.src_label = None   # what the index's src= says when the source is not a project file
         self.header = None
         self.missing = None     # reason
         self.loop = (0, 0)      # loop region in sample frames (start, length)
@@ -342,12 +355,15 @@ class WaveBank:
         self.entries = [WaveEntry(self, i, e) for i, e in enumerate(node.kids('Entry'))]
         self.music = all(e.file and e.file.replace('\\', '/').lower().startswith('../music/') for e in self.entries) \
             and bool(self.entries)
+        self.from_binary = num(node.get('From Binary'))     # rebuilt from a shipped .xsb/.xwb (shipped_only_banks)
 
 
 def build_sound(node, report, bankname):
     s = collections.OrderedDict()
     s['name'] = node.get('Name')
-    s['priority'] = num(node.get('Priority'))
+    # No Priority key = 255 (the least important): the shipped .xsb stores 255 for every one of the 674 sounds
+    # without the key (owner decision 2026-10-09, F-6; the cook of 2026-10-04 wrote 0, the most important).
+    s['priority'] = num(node.get('Priority'), 255)
     s['volume'] = num(node.get('Volume'))
     s['pitch'] = num(node.get('Pitch'))
     s['category'] = node.get('Category', '-')
@@ -565,46 +581,163 @@ def read_xsb(path):
 
 
 # ------------------------------------------------------------------------------------------------------------
-# .xwb entry table (Xbox wave bank, XDK xactwb.h, version 3) - cross-check only; the runtime reader is M16.
-# Gives per entry the format (PCM / Xbox ADPCM / WMA, channels, rate) and the byte length of its data, from
-# which the length in sample frames follows (Xbox ADPCM: 36 bytes per 64 frames per channel).
+# .xwb (Xbox wave bank, XDK xactwb.h version 3): tools/uc2xwb.py reads the entry table (cross-check) and decodes
+# the waves whose source WAV is missing from the project (Xbox ADPCM -> 16-bit PCM WAV in the cache).
 # ------------------------------------------------------------------------------------------------------------
 
 def read_xwb(path):
-    with open(path, 'rb') as f:
-        d = f.read()
-    sig, ver = struct.unpack_from('<4sI', d, 0)
-    if sig != b'WBND':
-        raise ValueError('not a WBND file')
-    segs = [struct.unpack_from('<II', d, 8 + 8 * i) for i in range(4)]
-    bd = segs[0][0]
-    flags, count = struct.unpack_from('<II', d, bd)
-    name = d[bd + 8:bd + 24].split(b'\0')[0].decode('latin-1')
-    mdsize, _, align, cfmt = struct.unpack_from('<IIII', d, bd + 24)
+    try:
+        b = uc2xwb.read_xwb(path)
+    except uc2xwb.XwbError as ex:
+        raise ValueError(str(ex))
+    return dict(version=b['version'], name=b['name'], flags=b['flags'],
+                ents=[dict(length=e['length'], tag=e['tag'], ch=e['channels'], rate=e['rate'], frames=e['frames'])
+                      for e in b['entries']])
 
-    def fmt(v):
-        return dict(tag=v & 3, ch=(v >> 2) & 7, rate=(v >> 5) & ((1 << 26) - 1), bits16=v >> 31)
-    ents = []
-    if flags & 0x20000:     # WAVEBANK_FLAGS_COMPACT: offset in sectors + length deviation, one shared format
-        offs = []
-        for i in range(count):
-            v = struct.unpack_from('<I', d, segs[1][0] + 4 * i)[0]
-            offs.append(((v & ((1 << 21) - 1)) * align, v >> 21))
-        for i, (o, dev) in enumerate(offs):
-            nxt = offs[i + 1][0] if i + 1 < count else segs[3][1]
-            ents.append(dict(length=nxt - o - dev, **fmt(cfmt)))
-    else:
-        for i in range(count):
-            _, fv, _, pl, _, _ = struct.unpack_from('<6I', d, segs[1][0] + mdsize * i)
-            ents.append(dict(length=pl, **fmt(fv)))
-    for e in ents:
-        if e['tag'] == 1:
-            e['frames'] = e['length'] // (36 * max(1, e['ch'])) * 64
-        elif e['tag'] == 0:
-            e['frames'] = e['length'] // ((2 if e['bits16'] else 1) * max(1, e['ch']))
-        else:
-            e['frames'] = None
-    return dict(version=ver, name=name, flags=flags, ents=ents)
+
+def source_from_xwb(xwb_path, wb, e, cache_dir):
+    """Decodes entry e of the shipped bank to <cache>/xwb/<bank>.<index>.wav, cut to the project's play region
+    (the source's length; ADPCM pads to 64 frames). Returns (path, note) or (None, reason)."""
+    try:
+        bank = uc2xwb.read_xwb(xwb_path)
+    except uc2xwb.XwbError as ex:
+        return None, str(ex)
+    if e.index >= len(bank['entries']):
+        return None, 'entry %d not in the shipped bank (%d entries)' % (e.index, len(bank['entries']))
+    xe = bank['entries'][e.index]
+    if xe['channels'] != e.channels or xe['rate'] != e.rate:
+        return None, 'shipped entry is %d ch %d Hz, the project says %d ch %d Hz' % (
+            xe['channels'], xe['rate'], e.channels, e.rate)
+    try:
+        rate, ch, samples = uc2xwb.decode_entry(bank, e.index)
+    except uc2xwb.XwbError as ex:
+        return None, str(ex)
+    decoded = len(samples) // ch
+    frames = decoded
+    if e.play_length:
+        want = e.play_length // (2 * ch)        # the project's play region: 16-bit source bytes
+        if want > decoded:
+            return None, 'the project says %d frames, the shipped entry has %d' % (want, decoded)
+        frames = want
+    samples = samples[:frames * ch]
+    out = os.path.join(cache_dir, 'xwb', '%s.%d.wav' % (wb.stem, e.index))
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    uc2xwb.write_wav(out + '.part', rate, ch, samples)
+    os.replace(out + '.part', out)
+    peak, clipped, rms = uc2xwb.stats(samples)
+    return out, '%s %d ch %d Hz, %d bytes, %d frames decoded, %d kept (the project\'s play region), peak %d, ' \
+        '%d samples at full scale, RMS %.1f dBFS' % (uc2xwb.TAG_NAMES.get(xe['tag'], '?'), ch, rate, xe['length'],
+                                                     decoded, frames, peak, clipped, rms)
+
+
+# ------------------------------------------------------------------------------------------------------------
+# Banks that ship as .xsb/.xwb but are not in the project (A_Vehicle: 31 vehicle cues of cut content). The .xsb is
+# read by tools/uc2xsb.py (plain sounds only, checked against the project's 78 banks by
+# tools/dev/audio-xsb-verify.py) and turned into the project's own blocks, so the rest of the cook treats them like
+# any other bank. Waves: SoundData/<bank>/<cue leaf>.wav when it exists and matches the shipped wave, else the
+# shipped wave decoded.
+# ------------------------------------------------------------------------------------------------------------
+
+def mknode(name, items, children=()):
+    n = Node(name, 0)
+    n.items = [(k, str(v)) for k, v in items]
+    n.children = list(children)
+    return n
+
+
+def shipped_only_banks(root, sounds_dir, say):
+    """Adds a 'Wave Bank' and a 'Sound Bank' block to root for every shipped .xsb the project lacks."""
+    known = {os.path.splitext(n.get('Bank File'))[0].lower() for n in root.kids('Sound Bank')}
+    known_wb = {os.path.splitext(n.get('Bank File'))[0].lower() for n in root.kids('Wave Bank')}
+    cats = tuple(c.get('Name') for c in root.kids('Sound Category'))
+    lays = tuple(c.get('Name') for c in root.kids('Sound Layer'))
+    for fn in sorted(os.listdir(sounds_dir)):
+        stem, ext = os.path.splitext(fn)
+        if ext.lower() != '.xsb' or stem.lower() in known:
+            continue
+        try:
+            x = uc2xsb.read_xsb(os.path.join(sounds_dir, fn), cats, lays)
+            if len(x['wavebanks']) != 1 or x['wavebanks'][0].lower() != stem.lower() or stem.lower() in known_wb:
+                raise uc2xsb.XsbUnsupported('wave banks %s (one of its own name is read)' % ','.join(x['wavebanks']))
+            xwb = uc2xwb.read_xwb(os.path.join(sounds_dir, stem + '.xwb'))
+        except (uc2xsb.XsbError, uc2xwb.XwbError, OSError) as ex:
+            say('SHIPPED-ONLY %s: not cooked (%s)' % (fn, ex))
+            continue
+        # Wave entry names: the leaf of the first cue whose sound plays the entry (the .xwb carries no names).
+        names = {}
+        for s in x['sounds']:
+            for tr in s['tracks']:
+                for ev in tr:
+                    names.setdefault(ev['entry'], s['name'].split('\\')[-1])
+        entries = []
+        for e in xwb['entries']:
+            leaf = names.get(e['index'], 'Entry%d' % e['index'])
+            entries.append(mknode('Entry', [
+                ('Name', '%s\\%s' % (x['name'], leaf)), ('File', '..\\SoundData\\%s\\%s.wav' % (x['name'], leaf)),
+                ('Format Tag', 0), ('Channels', e['channels']), ('Sampling Rate', e['rate']), ('Bits Per Sample', 16)]))
+        root.children.append(mknode('Wave Bank', [('Name', xwb['name']), ('Bank File', stem + '.xwb'),
+                                                  ('Streaming', 0), ('From Binary', 1)], entries))
+        sounds = []
+        for s in x['sounds']:
+            items = [('Name', s['name']), ('Priority', s['priority']), ('Volume', s['volume']), ('Pitch', s['pitch']),
+                     ('Headroom Boost', s['headroomboost']), ('3D', s['is3d'])]
+            if s['category'] != '-':
+                items.append(('Category', s['category']))
+            if s['layer'] != '-':
+                items.append(('Layer', s['layer']))
+            if s['i3dl2_flag']:
+                items.append(('I3DL2 Level', -300))     # the project's value on 733 of the 734 flagged sounds
+            kids = []
+            if s['d3']:
+                d = s['d3']
+                kids.append(mknode('3D', [('Mode', d['mode']), ('Inside Cone Angle', d['cone_in']),
+                                          ('Outside Cone Angle', d['cone_out']), ('Cone Outside Volume', d['cone_vol']),
+                                          ('Minimum Distance', d['min']), ('Maximum Distance', d['max']),
+                                          ('Distance Factor', d['distfactor']), ('Rolloff Factor', d['rolloff']),
+                                          ('Doppler Factor', d['doppler'])]))
+            for tr in s['tracks']:
+                evs = []
+                for ev in tr:
+                    leaf = names.get(ev['entry'], 'Entry%d' % ev['entry'])
+                    evs.append(mknode('Play with Pitch and Volume Variation', [('Loop Count', ev['loops'])], [
+                        mknode('Registered Wave', [('Wave Bank', ev['bank']), ('Wave Entry', '%s\\%s' % (
+                            x['name'], leaf)), ('Wave Entry Index', ev['entry'])])]))
+                kids.append(mknode('Track', [], evs))
+            sounds.append(mknode('Sound', items, kids))
+        cues = [mknode('Cue', [('Name', c['name'])], [mknode('Sound', [('Sound', x['sounds'][c['sound']]['name']),
+                                                                       ('Sound Index', c['sound'])])])
+                for c in x['cues']]
+        root.children.append(mknode('Sound Bank', [('Name', x['name']), ('Bank File', fn)], sounds + cues))
+        say('SHIPPED-ONLY %s: not in the project; read from the binary: %d sounds, %d cues, wave bank %s with %d '
+            'entries (volumes are the round value inside the stored 1/16 interval; priority as stored)' % (
+                fn, len(x['sounds']), len(x['cues']), xwb['name'], len(xwb['entries'])))
+        for s in x['sounds']:
+            say('SHIPPED-ONLY %s sound %s: priority %d volume %d (stored interval %d..%d] pitch %d category %s '
+                '3d %d%s tracks %s' % (fn, s['name'], s['priority'], s['volume'], s['volume_range'][0],
+                                       s['volume_range'][1], s['pitch'], s['category'], s['is3d'],
+                                       ' min %g max %g rolloff %g' % (s['d3']['min'], s['d3']['max'],
+                                                                      s['d3']['rolloff']) if s['d3'] else '',
+                                       ';'.join(','.join('entry %d loops %d' % (ev['entry'], ev['loops']) for ev in tr)
+                                                for tr in s['tracks'])))
+
+
+def check_against_xwb(xwb_path, wb, e, cache_dir):
+    """For a bank rebuilt from the binary: does the WAV found by name hold the shipped wave? Returns (ok, note)."""
+    try:
+        bank = uc2xwb.read_xwb(xwb_path)
+        _, ch, dec = uc2xwb.decode_entry(bank, e.index)
+        _, sch, ref = uc2xwb.read_wav_pcm16(e.source)
+    except uc2xwb.XwbError as ex:
+        return False, str(ex)
+    if sch != ch:
+        return False, '%d channels, the shipped wave %d' % (sch, ch)
+    pad = (len(dec) - len(ref)) // ch
+    m = min(len(dec), len(ref))
+    sig = sum(v * v for v in ref[:m])
+    err = sum((a - b) * (a - b) for a, b in zip(dec[:m], ref[:m]))
+    snr = 10 * math.log10(sig / err) if sig and err else 99.0
+    note = 'SNR %.1f dB against the shipped wave, shipped - source = %d frames' % (snr, pad)
+    return (0 <= pad < 64 and snr >= 8), note
 
 
 # ------------------------------------------------------------------------------------------------------------
@@ -659,7 +792,7 @@ def write_wavebank(wb, out_sounds, music_rel):
         lines.append('bank name=%s file=%s lang=%s data=%s stream=0 entries=%d' % (
             esc(wb.name), esc(wb.bank_file), wb.lang or '-', esc(wb.stem + '.ogp'), len(wb.entries)))
     for e in wb.entries:
-        src = os.path.basename(e.source) if e.source else esc(e.file.replace('\\', '/'))
+        src = e.src_label or (os.path.basename(e.source) if e.source else esc(e.file.replace('\\', '/')))
         if e.missing:
             lines.append('wave index=%d name=%s missing=%s src=%s' % (e.index, esc(e.name), esc(e.missing), esc(src)))
             continue
@@ -750,6 +883,11 @@ def main():
     ap.add_argument('--music-quality', default='5', help='libvorbis quality for music')
     ap.add_argument('--banks', default='', help='comma list of sound banks to cook (default: all)')
     ap.add_argument('--no-encode', action='store_true', help='parse, check and cross-check only')
+    ap.add_argument('--no-xwb-sources', action='store_true',
+                    help='do not decode a wave whose source WAV is missing from the shipped .xwb (the cook of '
+                         '2026-10-04: such entries are cooked as missing and their cues are silent)')
+    ap.add_argument('--no-shipped-only', action='store_true',
+                    help='do not cook the shipped banks the project lacks (A_Vehicle), read from their .xsb/.xwb')
     ap.add_argument('--relink-localised', action='store_true',
                     help='re-order localised wave banks to the base bank by wave name (repairs Epic data; '
                          'off by default because the Xbox played them in their own order)')
@@ -786,6 +924,10 @@ def main():
     say('categories: ' + ' '.join(c.get('Name') for c in root.kids('Sound Category')))
     say('layers: ' + ' '.join(c.get('Name') for c in root.kids('Sound Layer')))
 
+    # --- banks that ship but are not in the project ------------------------------------------------------------
+    if not args.no_shipped_only:
+        shipped_only_banks(root, sounds_dir, say)
+
     # --- wave banks + sources -------------------------------------------------------------------------------
     wavebanks = [WaveBank(n) for n in root.kids('Wave Bank')]
     by_file = {wb.stem: wb for wb in wavebanks}
@@ -803,7 +945,10 @@ def main():
             say('WAVE BANK %s: file %s does not match its name' % (wb.name, wb.bank_file))
 
     src_index = SourceIndex(args.epic)
+    xwb_files = {os.path.splitext(f)[0]: os.path.join(sounds_dir, f) for f in os.listdir(sounds_dir)
+                 if f.lower().endswith('.xwb')}
     missing = []
+    from_xwb = []
     for wb in wavebanks:
         for e in wb.entries:
             rel = os.path.normpath(os.path.join('Sounds', e.file.replace('\\', '/'))).replace(os.sep, '/')
@@ -821,6 +966,18 @@ def main():
                 # Music entries name ..\Music\<Track>.wma or .wav; the cook uses Music/<Track>.wav (the source).
                 stem = os.path.splitext(os.path.basename(e.file.replace('\\', '/')))[0]
                 path = src_index.find('Music/%s.wav' % stem)
+            preferred = XWB_PREFERRED.get((wb.stem, e.index))
+            if (path is None or preferred) and not wb.music and not args.no_xwb_sources and wb.stem in xwb_files:
+                # No WAV in the project (or one that is not the shipped wave): the Xbox's own copy of the wave,
+                # decoded from the shipped bank.
+                xpath, note = source_from_xwb(xwb_files[wb.stem], wb, e, cache)
+                if xpath:
+                    path = xpath
+                    e.src_label = 'xwb:%s.xwb:%d' % (wb.stem, e.index)
+                    from_xwb.append((wb.bank_file, e.index, e.name,
+                                     ('PREFERRED over the WAV of the tree (%s); ' % preferred if preferred else '') + note))
+                else:
+                    say('XWB-SOURCE %s entry %d %s: not decoded (%s)' % (wb.bank_file, e.index, e.name, note))
             if path is None:
                 e.missing = 'no-file'
                 missing.append((wb.bank_file, e.index, e.name, e.file))
@@ -838,9 +995,24 @@ def main():
                 if h['channels'] != e.channels or h['rate'] != e.rate:
                     say('SOURCE %s\\%s: xap says %d ch %d Hz, file has %d ch %d Hz (file wins)' % (
                         wb.bank_file, e.name, e.channels, e.rate, h['channels'], h['rate']))
-                if h['kind'] == 'wav' and (h['data_offset'] != e.play_offset or h['data_bytes'] != e.play_length):
+                if h['kind'] == 'wav' and not e.src_label and not wb.from_binary and (
+                        h['data_offset'] != e.play_offset or h['data_bytes'] != e.play_length):
                     say('SOURCE %s\\%s: play region %d+%d differs from the data chunk %d+%d' % (
                         wb.bank_file, e.name, e.play_offset, e.play_length, h['data_offset'], h['data_bytes']))
+            if wb.from_binary and not e.src_label:
+                ok, note = check_against_xwb(xwb_files[wb.stem], wb, e, cache)
+                say('SHIPPED-ONLY %s entry %d %s: source %s, %s%s' % (
+                    wb.bank_file, e.index, e.name, os.path.relpath(e.source, args.epic), note,
+                    '' if ok else ' (does not match: the shipped wave is used)'))
+                if not ok:
+                    path, note = source_from_xwb(xwb_files[wb.stem], wb, e, cache)
+                    if not path:
+                        e.missing, e.source, e.header = 'no-file', None, None
+                        missing.append((wb.bank_file, e.index, e.name, note))
+                        continue
+                    e.source, e.src_label = path, 'xwb:%s.xwb:%d' % (wb.stem, e.index)
+                    from_xwb.append((wb.bank_file, e.index, e.name, note))
+                    e.header = h = read_wav_header(path)
             if e.loop_length:
                 align = h['align'] or 1
                 start, length = e.loop_offset // align, e.loop_length // align
@@ -849,8 +1021,13 @@ def main():
                         wb.bank_file, e.name, start, length, h['frames']))
                     length = max(0, h['frames'] - start)
                 e.loop = (start, length)
-    say('wave entries: %d in %d banks, %d without a usable source file' % (
-        sum(len(wb.entries) for wb in wavebanks), len(wavebanks), len(missing)))
+    say('wave entries: %d in %d banks, %d without a usable source file, %d decoded from the shipped .xwb (%d of them '
+        'preferred over an existing WAV)' % (sum(len(wb.entries) for wb in wavebanks), len(wavebanks), len(missing),
+                                             len(from_xwb), sum(1 for m in from_xwb if m[3].startswith('PREFERRED'))))
+    for m in from_xwb:
+        say('XWB-SOURCE %s entry %d %s: %s, decoded from the shipped bank: %s' % (
+            m[0], m[1], m[2], 'the tree\'s WAV is not the shipped wave' if m[3].startswith('PREFERRED') else
+            'no WAV in the project', m[3]))
     for m in missing:
         say('MISSING %s entry %d %s <- %s' % m)
 
@@ -998,8 +1175,6 @@ def main():
         'wave banks' % (agree, len(xap_banks)))
 
     # --- .xwb cross-check: the shipped wave banks have the project's entries in the project's order ----------
-    xwb_files = {os.path.splitext(f)[0]: os.path.join(sounds_dir, f) for f in os.listdir(sounds_dir)
-                 if f.lower().endswith('.xwb')}
     agree = 0
     for stem in sorted(set(xwb_files) - set(by_file)):
         say('XWB %s.xwb: not in the project' % stem)
