@@ -5,7 +5,7 @@
 
 Rebuilds the run tree <WorkUC2>/run/<tree> from the build (tools/dev/mkrun-uc2.sh), then runs each scenario
 headless (Xvfb, Mesa software GL) inside <WorkUC2>/bin/capped 2G, with OpenAL Soft's null backend or its wave
-writer (-audiowave=, for the sound evidence). Writes logs, screenshots and captures to <WorkUC2>/logs/<tree>/
+writer ([UC2ALAudio.UC2ALAudioSubsystem] WaveFile= through -ini:, for the sound evidence). Writes logs, screenshots and captures to <WorkUC2>/logs/<tree>/
 under stable names (m9-<scenario>.*). Decisions come from log lines and measurements:
   logos           start, advance (two engine screenshots at known movie times, each compared with the cooked
                   file's frame shown at that time: PSNR against its own frame and against the other's), end on
@@ -296,7 +296,7 @@ def scen_cinematic(a, tmp):
     out = os.path.join(work, 'logs', a.tree)
     wav = os.path.join(out, 'm9-cinematic.wav')
     text, shots, dt, left = run_game(a.tree, 'cinematic', 150, [cine_exec(a.tree), '-log', '-nostartupmovies', '-glerrors',
-                                     '-movieshot=5,14', '-audiowave=%s' % wav], alsoft='wave')
+                                     '-movieshot=5,14', '-ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=%s' % wav], alsoft='wave')
     ls = re.search(r'UC2Movie: loading screen for DM-Deadbolt[^\n]*', text)
     result('cinematic-loading-screen', bool(ls), ls.group(0) if ls else 'no loading screen line')
     st = re.search(r'UC2Movie: opened \.\./Movies/%s\.ogv for D:\\Movies\\%s\.xmv: [^\n]*' % (CINE, CINE), text)

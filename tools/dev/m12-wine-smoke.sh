@@ -25,7 +25,7 @@
 #              in >= 99.9% of the pixels outside the player model and the pickups (the only things that move)
 #   audiocheck ucc.exe UC2ALAudio.UC2AudioCheck: "0 failures"
 #   selftest   ucc.exe UC2ALAudio.UC2AudioSelfTest: "39 checks, 0 failed"
-#   capture    uc2.exe -audiowave= on the menu for 60 s (OpenAL32.dll's wave writer) -> the music is NuBattle at
+#   capture    uc2.exe with [UC2ALAudio.UC2ALAudioSubsystem] WaveFile= (-ini:) on the menu for 60 s (OpenAL32.dll's wave writer) -> the music is NuBattle at
 #              -19.0 dB (tools/dev/audio-music-check.py, Recoil as control), 0 Critical
 #   keyboard   the M10 keyboard scenario (real X key events through wine; tools/dev/m10-controls.sh)
 #   pad        the M10 pad scenario (SDL's virtual controller through the engine's test channel)
@@ -237,7 +237,7 @@ check_selftest() {
 check_capture() {
   local o=$out/smoke-capture.out wav=$out/smoke-capture.wav m
   rm -f "$wav"
-  CLIENT_DEVSOUND=1 client capture 60 -log -audiowave="$wav"
+  CLIENT_DEVSOUND=1 client capture 60 -log "-ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=$wav"
   m=$(python3 "$repo/tools/dev/audio-music-check.py" "$wav" "$work/epic-sources/Music/NuBattle.wav" -19.0 \
       "$work/epic-sources/Music/Recoil.wav" 2>&1); local mrc=$?
   "$repo/tools/dev/audio-capture-report.sh" "$wav" > "$out/smoke-capture.report.txt" 2>&1

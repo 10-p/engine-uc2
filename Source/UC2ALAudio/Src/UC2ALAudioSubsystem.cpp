@@ -488,9 +488,9 @@ UBOOL UUC2ALAudioSubsystem::Init()
 	S->CategoryVolumes[VOLUME_VoiceChat]= Clamp( DefaultProfile->VoiceChatVolume, 0.f, 1.f );
 
 	// Render to a file instead of a device (tests): OpenAL Soft's wave writer, chosen through its
-	// configuration before the library starts.
+	// configuration before the library starts. Set with -ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=<file>
+	// (F-4e: the -audiowave=<file> switch is gone; the key always existed).
 	FString Wave = WaveFile;
-	Parse( appCmdLine(), TEXT("AUDIOWAVE="), Wave );
 #ifndef __EMSCRIPTEN__
 	if( Wave.Len() )
 	{
@@ -628,8 +628,9 @@ UBOOL UUC2ALAudioSubsystem::Init()
 	}
 
 	// Environmental reverb (the Xbox's I3DL2 listener) through EFX, if the device has it.
-	// (-NOEFX: dry sound for comparison, as on a device without EFX.)
-	UBOOL bWantEFX = UseEFX && !ParseParam( appCmdLine(), TEXT("NOEFX") );
+	// (UseEFX=False, e.g. -ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:UseEFX=False: dry sound for comparison, as on a
+	// device without EFX. F-4e: the -NOEFX switch is gone.)
+	UBOOL bWantEFX = UseEFX;
 	if( bWantEFX && GAL.alcIsExtensionPresent( S->Device, "ALC_EXT_EFX" ) && UC2ALBindEFX() )
 	{
 		GAL.alGetError();
@@ -666,7 +667,7 @@ UBOOL UUC2ALAudioSubsystem::Init()
 		S->CategoryVolumes[VOLUME_Music], S->CategoryVolumes[VOLUME_FX], S->CategoryVolumes[VOLUME_Voice] );
 	if( !S->bEFX )
 		debugf( NAME_Init, TEXT("UC2ALAudio: %s: zone reverb is off, sound is dry"),
-			bWantEFX ? TEXT("the device has no EFX reverb") : TEXT("EFX switched off (UseEFX=False or -NOEFX)") );
+			bWantEFX ? TEXT("the device has no EFX reverb") : TEXT("EFX switched off (UseEFX=False)") );
 
 	// The persistent banks (XACT :215-237). Only their cue tables load now; wave data loads on first play.
 	DOUBLE BanksStart = appSeconds();
@@ -2192,7 +2193,7 @@ public:
 			}
 		}
 		S->MovieStreams.AddItem( this );
-		// Log, not DevSound: the time is where the movie's sound starts in a -audiowave capture.
+		// Log, not DevSound: the time is where the movie's sound starts in a WaveFile= capture.
 		debugf( NAME_Log, TEXT("UC2Audio: [%7.2f] movie sound stream opened (%i Hz, %i ch%s)"), (FLOAT)(NowOf(S) - S->T0),
 			Rate, Channels, bExclusive ? TEXT(", exclusive: other sounds paused") : TEXT("") );
 	}
