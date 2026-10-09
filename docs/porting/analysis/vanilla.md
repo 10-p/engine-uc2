@@ -382,3 +382,41 @@ Packages to switch (`run/f1-make3/System`): GUI.u 4e5b1af0add70b57d88893694498b8
 (unchanged), UCGameplay.u 4ed72f0baba99fd0636b39367bcc44a6edb799550b7ed54347cf9951d095e6f5, UCMenu.u
 b9202a59c2af4820b1028ebffe88b693422081171952bd8c42d0882ee4c1e8a5.
 Memory: builds 6G, script make 3G, game runs 2G, net 6G, frontend build 4G, browser 6G (mem-guard 18); no ceiling hit.
+
+## F-1b (2026-10-09, worktree engine-uc2-f1b, branch f1b-cheats from main 9764bc8): the cheat guard, final rule
+
+Coordinator's decision: allowed without any key for a standalone game AND the local player of a listen server (the
+host is the server); refused for every network client and a dedicated server; NETAIM refused on a client always,
+even with `[Engine.GameEngine] AllowNetCheats=True` (an aimbot); the key keeps opening the rest for the tests and must
+never be in a shipped ini.
+
+Code:
+- `Source/Engine/Src/UC2Cheats.cpp` `UC2CheatsAllowed` (`:55-96`): the net mode is the local player's level's, else
+  the game engine's level's (a dedicated server has no player); `Allowed = PC && (PC->CheatManager || NetMode ==
+  NM_ListenServer)` (`:71`); the key opens the rest unless the command is NETAIM on a client (`:79`); refusals log
+  "Cheat: X refused: cheats are only for a standalone game or the host of a listen server" or "... are never on a
+  network client".
+- `Source/Engine/Src/UC2NetTest.cpp` `AimOther` (`:255-280`): `NETAIM <who> <target>` on a server or a listen host
+  turns that player's view to the target and sends it to the player's client with `Controller.ClientSetRotation`
+  (replicated server -> owning client; `ProcessEvent` on the server goes out through `ProcessRemoteFunction`).
+  The network tests used the client-side `NETAIM <target>` on clients (fights, walking toward the other player);
+  `tools/dev/net-test.py` now sends `NETAIM <who> <target>` to the server/listen host instead (5 places).
+- `tools/dev/net-test.py`: new check `cheats` (also first in net-test.sh's default list): a listen host and a client
+  without the key, then a second client with it. Its players are NetC and NetK (Proc.stop finds an engine by its LOG=
+  name; the first run, where this check's client was also "NetB", had the next check's NetB stopped mid-fight by an
+  unexplained SIGINT at 35 s: not reproduced in two re-runs, the names separated anyway).
+- `tools/dev/d6-mouse.sh cheat`: the listen part now expects the host to be allowed (WHEREAMI, TELEPORT, NETPLACE).
+- `docs/CHEAT-COMMANDS.md` and the `Engine/Config/README.md` row follow. No script changed: the packages are the same.
+
+Results (native build of this worktree, `bin/capped 6G -- cmake --build build-native -j4` rc 0):
+- `D6_TREE=f1b-reb tools/dev/d6-mouse.sh cheat`: **13 PASS, 0 FAIL** (`logs/f1b/d6/`): standalone as before; on the
+  listen host `Cheat: WHEREAMI 1531.9 3111.5 -34.1 24656 0`, `Cheat: TELEPORT ok: 1977.8 583.7 -34.1 33000 0`, `place
+  LocalPlayer ok loc=(1500.0,600.0,-34.1)`.
+- `NET_TREE=f1b-net tools/dev/net-test.sh --keep-tree cheats listen dedicated2` (`logs/f1b/net-1`): cheats 9/9 (the
+  host's NETPROBE and WHEREAMI work without the key; the client's NETPROBE, WHEREAMI, NETAIM refused without it; with
+  the key the client's NETPROBE works and its NETAIM is still refused), dedicated2 9/9 (server-side NETAIM: hit on shot
+  1, kill after 9 shots, all views agree), listen 7/8: `listen.kill` FAIL, NetB's client got a SIGINT ("CTRL-C has
+  been pressed") at 35 s in the fight (after 6 hits, health 44). Re-runs: `listen` alone 9/9 (`net-2`), `cheats
+  listen` 18/18 (`net-3`), `cheats` with the renamed players 10/10 (`net-4`).
+  Note: the host's WHEREAMI in the cheats check ran before the host's pawn spawned, so its line is "Cheat: WHEREAMI "
+  (allowed; the position line follows only with a pawn); d6 cheat checks the host's WHEREAMI with a pawn.

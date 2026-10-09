@@ -24,7 +24,7 @@
 #   accel   (on request; F-1) no mouse acceleration: real X motion at two speeds with the X server's acceleration
 #           turned up; the same turn per count (and the SDL warp-mode control run, evidence)
 #   walk    (on request; F-1) steady ground speeds: W, Shift+W, the pad's left stick at 1.0/0.5/0.35 (both trees)
-#   cheat   (on request; F-1) WHEREAMI/TELEPORT allowed and logged standalone, refused on a listen server
+#   cheat   (on request; F-1) WHEREAMI/TELEPORT allowed and logged standalone and for a listen host
 #   vanilla (on request; F-1) the D6_SHIP_TREE (Epic's shipped scripts) with OUR DefUser.ini: the mouse turns the view
 #           through Epic's PC path (the stick's curve: capped, not linear), up looks up, the Right arrow strafes,
 #           PageUp looks up
@@ -631,8 +631,9 @@ check walk-pad-full-runs M['pad1.0'] > 300
 SCEN
 }
 
-# cheat (F-1): WHEREAMI and TELEPORT in a standalone game (allowed; "Cheat:" lines; WHEREAMI's output pasted into
-# TELEPORT gives the same place and view), then the same process's map reloaded as a LISTEN server: refused
+# cheat (F-1, F-1b): WHEREAMI and TELEPORT in a standalone game (allowed; "Cheat:" lines; WHEREAMI's output pasted
+# into TELEPORT gives the same place and view), then the same process's map reloaded as a LISTEN server: the host is
+# allowed too (the refusals of clients and dedicated servers: tools/dev/net-test.sh cheats)
 scen_cheat() {
   start cheat
   cat <<SCEN
@@ -658,14 +659,16 @@ absent cheat-bare-teleport-is-epics-and-not-logged ^Cheat: TELEPORT
 chan exec open DM-Deadbolt?Listen
 wait Bringing Level DM-Deadbolt.MyLevel up for play 120
 sleep 4
+focus
 key Alt_L 0.3
 sleep 3
+tryseek 6 P['_'].pawn == 1 ;; key Alt_L 0.3
 chan exec WHEREAMI
-expect cheat-whereami-refused-on-a-listen-server ^Cheat: WHEREAMI refused: 10
-chan exec TELEPORT 1977.8 583.7 -34.1
-expect cheat-teleport-refused-on-a-listen-server ^Cheat: TELEPORT refused: 10
-chan exec NETPLACE LocalPlayer 1977.8 583.7 -34.1 33000
-expect cheat-netplace-refused-on-a-listen-server ^Cheat: NETPLACE refused: 10
+expect cheat-whereami-allowed-for-a-listen-host ^Cheat: WHEREAMI -?[0-9.]+ -?[0-9.]+ -?[0-9.]+ [0-9]+ -?[0-9]+\s*$ 10
+chan exec TELEPORT 1977.8 583.7 -34.1 33000 0
+expect cheat-teleport-allowed-for-a-listen-host ^Cheat: TELEPORT ok: 1977.8 583.7 -3[0-9].[0-9] 33000 0 10
+chan exec NETPLACE LocalPlayer 1500 600 -34.1 33000
+expect cheat-netplace-allowed-for-a-listen-host ^place LocalPlayer ok 10
 SCEN
 }
 
@@ -760,7 +763,7 @@ PY
       prep "$tree"; run walk "$tree" 0 300 "-ini:System:[Engine.Engine]:FrameRateCap=60"; count "$out/walk.result"
       prep "$ship"; run walk-shipped "$ship" 0 300 "-ini:System:[Engine.Engine]:FrameRateCap=60" | sed 's/^/(shipped) /'; count "$out/walk-shipped.result";;
     cheat)
-      echo "== cheat ($tree: WHEREAMI/TELEPORT standalone, then refused on a listen server)"
+      echo "== cheat ($tree: WHEREAMI/TELEPORT standalone, then as the host of a listen server)"
       scen_cheat > "$out/cheat.scen"; prep "$tree"; run cheat "$tree" 0 300 "-ini:System:[Engine.Engine]:FrameRateCap=60"; count "$out/cheat.result";;
     accel)
       echo "== accel ($tree, real X motion with X pointer acceleration 4x; then the SDL_MOUSE_RELATIVE_MODE_WARP=1 control)"

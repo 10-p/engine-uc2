@@ -16,8 +16,10 @@
 	  NETPLACENEAR <name> <other> <dist> [<first>] server: put that player's pawn <dist> units from the
 	                                     other's, at the first of 16 headings with a clear path for
 	                                     a pawn-sized box between them, facing the other
-	  NETAIM <name>                      a player's own process: turn the local player controller
-	                                     to face that player's pawn as this process sees it
+	  NETAIM <name>                      the local player turns to face that player's pawn (a standalone
+	                                     game or a listen host; never on a network client, F-1b)
+	  NETAIM <who> <target>              server or listen host: turn player <who>'s view to face
+	                                     <target> (ClientSetRotation to <who>'s client)
 
 	Command file: -nettest=<file> (any process; the dedicated server has no other input).
 	A harness appends lines; each tick runs every complete new line:
@@ -247,10 +249,45 @@ static void PlaceNear( UGameEngine* Engine, const TCHAR* Cmd )
 	debugf( NETPROBE, TEXT("placenear %s failed: no clear spot at %.0f"), *Name, Dist );
 }
 
+// F-1b: NETAIM <who> <target> on a server or a listen host: the server turns player <who>'s view to face <target>'s
+// pawn and sends it to that player's client with Controller.ClientSetRotation (replicated, as a game does when it
+// forces a view). This replaces the client-side form in the network tests: NETAIM never runs on a client.
+static void AimOther( UGameEngine* Engine, const FString& Who, const FString& Target )
+{
+	ULevel* Level = Engine->GLevel;
+	if( !Level || !Level->GetLevelInfo() || Level->GetLevelInfo()->NetMode==NM_Client )
+	{
+		debugf( NETPROBE, TEXT("aim %s %s failed: no server level here"), *Who, *Target );
+		return;
+	}
+	AController* C = FindPlayer( Level, *Who );
+	AController* T = FindPlayer( Level, *Target );
+	if( !C || !C->Pawn || !T || !T->Pawn )
+	{
+		debugf( NETPROBE, TEXT("aim %s %s failed: both players need a pawn"), *Who, *Target );
+		return;
+	}
+	FVector Eye = C->Pawn->Location + FVector( 0, 0, C->Pawn->BaseEyeHeight );
+	FRotator R = (T->Pawn->Location - Eye).Rotation();
+	R.Roll = 0;
+	C->Rotation = R;
+	struct { FRotator NewRotation; BITFIELD bControllerOnly; } Parms;
+	Parms.NewRotation = R;
+	Parms.bControllerOnly = 1;
+	C->ProcessEvent( C->FindFunctionChecked( FName(TEXT("ClientSetRotation")) ), &Parms );
+	debugf( NETPROBE, TEXT("aim %s %s ok rot=(%i,%i,%i) dist=%.1f"), *Who, *Target, R.Pitch & 65535, R.Yaw & 65535, R.Roll,
+		(T->Pawn->Location - Eye).Size() );
+}
+
 static void Aim( UGameEngine* Engine, const TCHAR* Cmd )
 {
-	FString Name;
+	FString Name, Target;
 	ParseToken( Cmd, Name, 0 );
+	if( ParseToken( Cmd, Target, 0 ) )
+	{
+		AimOther( Engine, Name, Target );
+		return;
+	}
 	APlayerController* PC = LocalPlayer( Engine );
 	if( !PC || !PC->Pawn )
 	{

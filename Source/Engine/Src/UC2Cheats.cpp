@@ -19,12 +19,13 @@
 	                                   Epic's CheatManager.Teleport (to the surface looked at),
 	                                   unchanged.
 
-	The guard (UC2CheatsAllowed): cheats exist where UC2 creates a CheatManager, i.e. for
-	the local player of a standalone game (PlayerController.AddCheats: NetMode ==
-	NM_Standalone). A listen server, a network client and a dedicated server refuse:
+	The guard (UC2CheatsAllowed): allowed for the local player of a standalone game (UC2's
+	CheatManager rule, PlayerController.AddCheats) and for the local player of a listen
+	server (the host is the server). Every network client and a dedicated server refuse:
 	"Cheat: <COMMAND> refused: ..." in the log and on the console. Test harnesses that
-	need these commands in network games (tools/dev/net-test.py) set
-	[Engine.GameEngine] AllowNetCheats=True in that process's ini (-ini:System:...).
+	need these commands there (tools/dev/net-test.py) set [Engine.GameEngine]
+	AllowNetCheats=True in that process's ini (-ini:System:...); it never opens NETAIM
+	on a network client (an aimbot), and it must never be in a shipped ini.
 	Every command that runs logs one "Cheat: <COMMAND> <arguments>" line. The test
 	commands NETPROBE, NETPLACE, NETPLACENEAR and NETAIM (UC2NetTest.cpp) use the same
 	guard and log the same way.
@@ -57,18 +58,33 @@ ENGINE_API UBOOL UC2CheatsAllowed( UEngine* Engine, APlayerController* PC, const
 	guard(UC2CheatsAllowed);
 	if( !PC )
 		PC = FirstLocalPlayer( Engine );
-	UBOOL Allowed = PC && PC->CheatManager;	// UC2's own rule (PlayerController.AddCheats)
+	// The process's net mode: the local player's level, else the game engine's (a dedicated server has no player)
+	INT NetMode = NM_DedicatedServer;
+	if( PC && PC->Level )
+		NetMode = PC->Level->NetMode;
+	else if( Engine && Engine->IsA(UGameEngine::StaticClass()) && ((UGameEngine*)Engine)->GLevel && ((UGameEngine*)Engine)->GLevel->GetLevelInfo() )
+		NetMode = ((UGameEngine*)Engine)->GLevel->GetLevelInfo()->NetMode;
+
+	// F-1b (coordinator's rule, 2026-10-09): the local player of a standalone game (UC2's own rule: the
+	// CheatManager, PlayerController.AddCheats) and the local player of a LISTEN server (the host is the server's
+	// authority; UT2004's admin/host precedent). Every network client and a dedicated server: refused.
+	UBOOL Allowed = PC && ( PC->CheatManager || NetMode==NM_ListenServer );
 	const TCHAR* Why = TEXT("");
 	if( !Allowed )
 	{
+		// The test key opens the rest for the network tests (tools/dev/net-test.py), never NETAIM on a client:
+		// turning a client's view onto another player is an aimbot.
 		UBOOL NetCheats = 0;
 		GConfig->GetBool( TEXT("Engine.GameEngine"), TEXT("AllowNetCheats"), NetCheats, GIni );
-		if( NetCheats )
+		if( NetCheats && !(NetMode==NM_Client && appStricmp(Command, TEXT("NETAIM"))==0) )
 			Allowed = 1, Why = TEXT(" (AllowNetCheats: a test setting)");
 	}
 	if( !Allowed )
 	{
-		CheatLog( Ar, *FString::Printf( TEXT("%s refused: cheats are only for a standalone game (UC2's CheatManager rule)"), Command ) );
+		const TCHAR* Rule = NetMode==NM_Client && appStricmp(Command, TEXT("NETAIM"))==0
+			? TEXT("never on a network client")
+			: TEXT("only for a standalone game or the host of a listen server");
+		CheatLog( Ar, *FString::Printf( TEXT("%s refused: cheats are %s"), Command, Rule ) );
 		return 0;
 	}
 	while( Args && *Args==' ' )

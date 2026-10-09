@@ -57,8 +57,9 @@ def dist(a, b):
 class Proc:
     """One engine process: kind 'server' (ucc-bin server), 'listen' (uc2.bin <map>?Listen) or 'client'."""
 
-    def __init__(self, check, name, kind, url, render="null", extra=(), sysdir=None, wine=False):
+    def __init__(self, check, name, kind, url, render="null", extra=(), sysdir=None, wine=False, cheatkey=True):
         self.check, self.name, self.kind, self.url = check, name, kind, url
+        self.cheatkey = cheatkey
         self.render, self.extra = render, list(extra)
         self.wine = wine
         self.sys = sysdir or SYS
@@ -76,10 +77,12 @@ class Proc:
                 os.remove(p)
         open(self.netcmd, "w").close()
         open(self.inputcmd, "w").close()
-        # NETPROBE/NETPLACE/NETPLACENEAR/NETAIM are cheats (F-1, Source/Engine/Src/UC2Cheats.cpp): a network game
-        # refuses them unless the process's own ini allows them for tests.
+        # NETPROBE/NETPLACE/NETPLACENEAR/NETAIM are cheats (F-1, Source/Engine/Src/UC2Cheats.cpp): a client and a
+        # dedicated server refuse them unless the process's own ini allows them for tests (a listen host needs no
+        # key); NETAIM never runs on a client, so the server aims a client's view: "NETAIM <who> <target>".
         common = ["INI=Net%s.ini" % self.name, "USERINI=Net%sUser.ini" % self.name, "LOG=" + self.logname,
-                  "-nettest=" + os.path.basename(self.netcmd), "-ini:System:[Engine.GameEngine]:AllowNetCheats=True"]
+                  "-nettest=" + os.path.basename(self.netcmd)]
+        common += ["-ini:System:[Engine.GameEngine]:AllowNetCheats=%s" % ("True" if self.cheatkey else "False")]
         if self.kind == "server" and self.wine:
             # The MinGW ucc.exe under wine (tools/dev/m12-wine.sh: own prefix, nothing left running).
             argv = [os.path.join(REPO, "tools/dev/m12-wine.sh"), self.sys, "ucc.exe", "server", self.url,
@@ -405,7 +408,7 @@ def fight(ck, srvproc, attacker, victim, aname, vname, max_shots=40):
     kill = None
     deaths0 = num(sp0["pris"].get(vname, {}).get("deaths")) if sp0 else None
     for i in range(max_shots):
-        attacker.send("exec netaim " + vname)
+        srvproc.send("exec netaim %s %s" % (aname, vname))   # the server aims (NETAIM refuses on a client)
         time.sleep(0.2)
         attacker.fire(0.3)
         time.sleep(0.6)
@@ -447,7 +450,7 @@ def check_dedicated2(ck="dedicated2", srv_extra=(), cli_extra=()):
                % (d1, d2))
         # Movement of B changes what A sees. B first faces A (its view rotation is its own client's, not the
         # placement's), so it walks along the path place_near checked clear instead of into a wall.
-        b.send("exec netaim NetA")
+        s.send("exec netaim NetB NetA")
         time.sleep(0.3)
         b.input("pad axis lefty -32768")
         time.sleep(1.2)
@@ -485,7 +488,7 @@ def check_dedicated2(ck="dedicated2", srv_extra=(), cli_extra=()):
             h_before = pawn_of(s.probe("H0"), "NetB")
             got = None
             for i in range(20):
-                a.send("exec netaim NetB")
+                s.send("exec netaim NetA NetB")
                 time.sleep(0.2)
                 a.fire(0.3)
                 time.sleep(1.0)
@@ -529,7 +532,7 @@ def check_listen():
         d1 = dist(pawn_of(lp, "NetB")["loc"], pawn_of(bp, "NetB")["loc"]) if pawn_of(lp, "NetB") and pawn_of(bp, "NetB") else 1e9
         d2 = dist(pawn_of(lp, "NetL")["loc"], pawn_of(bp, "NetL")["loc"]) if pawn_of(lp, "NetL") and pawn_of(bp, "NetL") else 1e9
         result(d1 < 40 and d2 < 40, ck + ".seeother", "NetB: client vs listen server %.1f units; NetL: %.1f" % (d1, d2))
-        b.send("exec netaim NetL")   # walk along the checked path (see dedicated2)
+        l.send("exec netaim NetB NetL")   # walk along the checked path (see dedicated2); the host aims B
         time.sleep(0.3)
         b.input("pad axis lefty -32768")
         time.sleep(1.2)
@@ -745,7 +748,7 @@ def check_glshot():
         pa, pb = spawn_all([a, b], "spawn", tries=20)
         result(bool(pa and pb), ck + ".spawn", "NetA (GL) localpawn=%s, NetB localpawn=%s" % (bool(pa), bool(pb)))
         place_near(s, "NetB", "NetA", 350)
-        a.send("exec netaim NetB")
+        s.send("exec netaim NetA NetB")
         time.sleep(2.0)
         for f in os.listdir(SYS):
             if f.startswith("Shot") and f.endswith(".bmp"):
@@ -875,7 +878,48 @@ def check_handshake_loss(compat=False):
             finish(sub, procs)
 
 
-ALL = {"dedicated1": check_dedicated1, "dedicated2": check_dedicated2, "listen": check_listen,
+def check_cheats():
+    """F-1b: the cheat guard in a network game (Source/Engine/Src/UC2Cheats.cpp). Without the test key anywhere: the
+    listen host's own NETPROBE and WHEREAMI work (the host is the server); a client's NETPROBE, WHEREAMI and NETAIM
+    are refused. Then a client WITH the key: its NETPROBE works, its NETAIM is still refused (an aimbot)."""
+    ck = "cheats"
+    l = Proc(ck, "L", "listen", "DM-Deadbolt?Listen?Name=NetL", cheatkey=False).start()
+    procs = [l]
+    try:
+        l.wait(r"TcpNetDriver on port|Listen", 90)
+        # own player names (NetC, NetK): Proc.stop finds an engine by its LOG= name, which other checks' NetB shares
+        b = Proc(ck, "NetC", "client", "127.0.0.1:%d?Name=NetC" % PORT, cheatkey=False).start()
+        procs.append(b)
+        j = l.wait(r"Join succeeded: ", 60)
+        result(bool(j), ck + ".join", "listen server: %s" % (j.group(0) if j else "no join in 60 s"))
+        time.sleep(3)
+        l.send("exec NETPROBE H0")
+        m = l.wait(r"NetProbe: H0 summary net=ListenServer.*$", 15)
+        result(bool(m), ck + ".host-netprobe-without-key", m.group(0)[:120] if m else "no answer")
+        l.send("exec WHEREAMI")
+        m = l.wait(r"Cheat: WHEREAMI .*$", 15)
+        result(bool(m) and "refused" not in m.group(0), ck + ".host-whereami-without-key", m.group(0) if m else "no line")
+        for cmd in ("NETPROBE C0", "WHEREAMI", "NETAIM NetL"):
+            b.send("exec " + cmd)
+            m = b.wait(r"Cheat: %s refused: .*$" % cmd.split()[0], 15)
+            result(bool(m), ck + ".client-%s-refused-without-key" % cmd.split()[0].lower(), m.group(0) if m else "not refused")
+        b.stop()
+        time.sleep(2)
+        b2 = Proc(ck, "NetK", "client", "127.0.0.1:%d?Name=NetK" % PORT, cheatkey=True).start()
+        procs.append(b2)
+        l.wait(r"Join succeeded: ", 60)
+        time.sleep(3)
+        b2.send("exec NETPROBE K0")
+        m = b2.wait(r"NetProbe: K0 summary net=Client.*$", 15)
+        result(bool(m), ck + ".client-netprobe-with-key", m.group(0)[:120] if m else "no answer")
+        b2.send("exec NETAIM NetL")
+        m = b2.wait(r"Cheat: NETAIM refused: cheats are never on a network client.*$", 15)
+        result(bool(m), ck + ".client-netaim-refused-even-with-key", m.group(0) if m else "not refused")
+    finally:
+        finish(ck, procs)
+
+
+ALL = {"cheats": check_cheats, "dedicated1": check_dedicated1, "dedicated2": check_dedicated2, "listen": check_listen,
        "travel": check_travel, "disconnect": check_disconnect, "soak": check_soak, "lag": check_lag,
        "glshot": check_glshot, "wine": check_wine,
        "handshake-loss": check_handshake_loss, "handshake-compat": lambda: check_handshake_loss(True)}
