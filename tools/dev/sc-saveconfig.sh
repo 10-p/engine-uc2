@@ -194,7 +194,7 @@ game() {
   rm -f "$sys"/*.log "$sys"/*.log.*
   ( [ "$mode" = keep ] && export M10_KEEP=1
     M10_STOPSIG=$sig M10_TREE=$tree M10_OUT=$gout M10_SECS=420 M10_URL='DM-Deadbolt?NumBots=0' \
-      "$m10" --file "$scen" "$name" -nullrenderer -maxfps=60 "$@" | sed 's/^/    /' )
+      "$m10" --file "$scen" "$name" -nullrenderer "-ini:System:[Engine.Engine]:FrameRateCap=60" "$@" | sed 's/^/    /' )
   cp -f "$sys/Avaris.log" "$gout/$name-Avaris.log" 2>/dev/null
   cp -f "$sys/User.ini" "$gout/$name-User.ini" 2>/dev/null
   cp -f "$sys/Avaris.ini" "$gout/$name-Avaris.ini" 2>/dev/null

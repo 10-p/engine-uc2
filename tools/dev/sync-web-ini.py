@@ -9,7 +9,9 @@ native files with the differences listed in DELTAS below, and the keys and secti
 WEB_SECTIONS kept as the current web file has them (the web audio and movie set-up), and nothing else, so that a change of the native
 defaults (key bindings, the menus' key table, pad map, renderer settings) reaches the browser without anybody
 copying it by hand: at M11 the web copies had fallen behind M7 and M10 and the menus would not have answered
-the keyboard. Bytes are kept as they are (Latin-1, CRLF).
+the keyboard. Bytes are kept as they are (Latin-1), and every file in Engine/Config and Engine/Config/web has LF line
+endings, as engine-ut2004's and engine-ut99's (owner, F-4d: "follow what UT2004 UT99 and the rest does"): the script
+refuses a CR anywhere (--check fails, a rewrite stops) and writes the web files with LF.
 """
 import os, re, sys
 here = os.path.dirname(os.path.abspath(__file__))
@@ -79,7 +81,9 @@ def keep_web_owned(name, lines, nl):
 
 def build(name):
     data = open(os.path.join(cfg, name), 'rb').read().decode('latin-1')
-    nl = '\r\n' if '\r\n' in data else '\n'
+    if '\r' in data:
+        sys.exit('%s has CR line endings: Engine/Config is LF (F-4d, as engine-ut2004)' % name)
+    nl = '\n'
     lines = keep_web_owned(name, data.split(nl), nl)
     for f, section, key, native, web, _ in DELTAS:
         if f != name:
@@ -102,6 +106,12 @@ def build(name):
 def main():
     check = '--check' in sys.argv
     bad = 0
+    # LF everywhere in Engine/Config (F-4d): the native files, the web files, Epic's reference copies.
+    for d in ('', 'web'):
+        for f in sorted(os.listdir(os.path.join(cfg, d))):
+            path = os.path.join(cfg, d, f)
+            if f.lower().endswith('.ini') and b'\r' in open(path, 'rb').read():
+                print('%s has CR line endings: Engine/Config is LF (F-4d, as engine-ut2004)' % os.path.join(d, f)); bad = 1
     for name in ('Default.ini', 'DefUser.ini'):
         want = build(name)
         path = os.path.join(cfg, 'web', name)

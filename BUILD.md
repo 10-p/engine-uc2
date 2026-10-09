@@ -1,7 +1,14 @@
-# Building engine-uc2
+# Building engine-uc2 (native, Windows, WebAssembly)
 
-Status: M0. The presets configure; the engine packages join the build milestone by milestone
-(`docs/porting/PLAN.md`). This file grows with them.
+This is the private engine repo for the Unreal Championship 2 port: engine source only. Game content (maps,
+textures, sounds, movies, the compiled `.u` packages) lives out of tree in `<WorkUC2>/assets/uc2` and is never
+tracked here; no build step reads it (the web build preloads only the two boot inis of `Engine/Config/web`).
+Run trees are assembled from a build and the asset tree by `tools/dev/mkrun-uc2.sh`.
+
+> Status (2026-10-09): every preset below configures and builds. `native` (the reference), `native64`,
+> `windows`, `windows64` and `wasm-perf` are built at every merge; `arm64` was configured and built for the
+> first time in F-4c (`docs/porting/analysis/platform-f4.md`); `native64-uchar`, `native64-asan`, `wasm`,
+> `wasm-debug` are opt-in.
 
 ## Prerequisites
 
@@ -17,7 +24,7 @@ already installed. Emscripten 5.0.7 is private to the workspace: `source /home/i
 | `native64` | `build-native64/` | Linux x86_64 (LP64; M13) |
 | `native64-uchar` | `build-native64-uchar/` | x86_64 with `-funsigned-char` (arm's char; an audit build) |
 | `native64-asan` | `build-native64-asan/` | x86_64 with AddressSanitizer + UBSan |
-| `arm64` | `build-arm64/` | Linux aarch64, cross (build-only; needs `g++-aarch64-linux-gnu`) |
+| `arm64` | `build-arm64/` | Linux aarch64, cross (`g++-aarch64-linux-gnu`; `ucc-bin` runs under `qemu-aarch64`) |
 | `wasm` | `build-wasm/` | Web, `-O2 -g` dev build |
 | `wasm-debug` | `build-wasm-debug/` | Web, `-O0` |
 | `wasm-perf` | `build-wasm-perf/` | Web, `-O3`, what ships |
@@ -27,7 +34,51 @@ already installed. Emscripten 5.0.7 is private to the workspace: `source /home/i
 ```
 cmake --preset native
 cmake --build build-native -j12
+#   -> build-native/Source/SDLLaunch/uc2.bin, build-native/Source/UCC/ucc-bin
 ```
+
+## Web (Emscripten; M4w, M11)
+
+```
+source /home/ion/WorkUC2/env.sh                 # Emscripten 5.0.7, private to the workspace ($EMSDK)
+cmake --preset wasm-perf
+cmake --build build-wasm-perf -j4               # inside bin/capped 6G (CLAUDE.md)
+#   -> build-wasm-perf/Source/SDLLaunch/SDLLaunch.{js,wasm,data} + meta.json   (the browser artifact)
+#   -> build-wasm-perf/Source/UCC/ucc-bin.{js,wasm}                           (the same engine under Node)
+```
+
+- The artifact names are fixed (`SDLLaunch.js`, `.wasm`, `.data`, `meta.json`): the frontend (`ufrontend`,
+  target `uc2`) consumes them (`yarn build --target uc2 --engine-artifact <dir>`). The page must be
+  cross-origin isolated (SharedArrayBuffer) and support OffscreenCanvas: the engine runs on a worker
+  (`-sPROXY_TO_PTHREAD`), yields to the browser once per frame through Asyncify (a 0 ms timer task, as
+  engine-ut2004), reads game files through the frontend's WasmFS backend (`vendor/glue/wasmfs-shim.js`) and
+  has an explicit 2 GB memory ceiling. Every link flag and why: `Source/SDLLaunch/cmake/Web.cmake`.
+- C++ exception catching is off for the engine's code (as engine-ut2004): the package loaders fail soft on the
+  web instead of throwing; openal-soft alone is compiled with `-fexceptions` (`cmake/UC2Web.cmake`).
+- Boot configuration: `Engine/Config/web/{Default,DefUser}.ini`, generated from the native files by
+  `tools/dev/sync-web-ini.py` and preloaded as `/System/Default.ini`, `/System/DefUser.ini`.
+- `ucc-bin.js` under Node is the wasm32 test vehicle (`cd <run>/System && node ucc-bin.js verifyclasses`;
+  `CENSUS_NODE=1 tools/dev/map-census.sh build-wasm-perf` loads every map).
+
+The three web modes (`UC2_WEB_PERF`, `UC2_WEB_DEBUG`, set by the presets):
+
+| Preset | Compile and link | For |
+|---|---|---|
+| `wasm-perf` | `-O3 -g0`, no assertions, `--emit-symbol-map` (a side file: never publish it) | what ships |
+| `wasm` | `-O2`, link `-g2` (names, no DWARF), assertions and stack checks | development |
+| `wasm-debug` | `-O0 -g` | last resort, under Node only (a DWARF module does not fit a browser here) |
+
+### `meta.json` records what was fetched
+
+As engine-ut2004's (ufront 2.70): `toolchain` names Emscripten's version and every repository FetchContent
+pulled for the web artifact as `<repo>@<branch>`, never a commit (the branch tip is what a rebuild takes):
+`gl4es` (`10-p/gl4es@fix/cubemap-bind-active-unit`) and `openal-soft` (`10-p/openal-soft-web@ufront/web`). The
+values come from the cache variables `FetchContent_Declare` read (`cmake/ArtifactDeps.cmake`, engine-ut2004's
+file: `GL4ES_GIT_*`, `OPENALSOFT_GIT_*`); a local checkout override shows up as `local:<path>`. SDL2 on the web
+is Emscripten's own port (named by the Emscripten version). `buildFlags` is descriptive and hand-maintained
+(`Source/SDLLaunch/cmake/emit-artifact-meta.mjs`); `checksums` are of the files next to it;
+`provenance.gitSha` is resolved when the artifact is linked. A branch is re-fetched on every configure, never
+by a plain `cmake --build`.
 
 ## Windows (MinGW-w64, cross-compiled here; M12)
 
@@ -55,6 +106,20 @@ tools/dev/package-windows.sh build-windows                        # <WorkUC2>/ru
 - Under wine: `tools/dev/m12-wine.sh <dir> <prog.exe> [args]` (inside `capped`) runs one program in the private
   prefix `<WorkUC2>/.cache/wine-m12` and kills its wineserver afterwards.
 - `windows64` (x86_64): see "64-bit" below.
+
+## arm64 (aarch64 Linux, cross-compiled; F-4c)
+
+```
+bin/capped 4G 900 -- cmake --preset arm64                         # aarch64-linux-gnu-g++ (GCC 15), LP64
+bin/capped 6G 7200 -- cmake --build build-arm64 -j4 --target UCC  # ucc-bin
+tools/dev/mkrun-uc2.sh build-arm64 f4-arm64
+(cd ../run/f4-arm64/System && ../../../bin/capped 2G 900 -- qemu-aarch64 -L /usr/aarch64-linux-gnu ./ucc-bin verifyclasses)
+```
+
+The same LP64 code as `native64` (64-bit layout contract, placeholders, `-fsigned-char`). This machine has no
+arm64 X11/GL development packages, so the fetched SDL2 is configured without X11 (the client builds for the
+offscreen/KMS paths only); a desktop arm64 client needs them through multiarch (`BLOCKERS.md`). The layout
+hazards engine-ut2004 met on Android and how each one stands here: `docs/porting/analysis/platform-f4.md`.
 
 ## 64-bit (M13)
 
@@ -114,7 +179,6 @@ tools/dev/script-build.sh --tree m14-hdr --headers assemble make   # also export
 | `UC2_UNSIGNED_CHAR_AUDIT` | OFF | `-funsigned-char` instead of `-fsigned-char` (audit build) |
 | `UC2_SANITIZE` | empty | `-fsanitize=` list, e.g. `address,undefined` |
 | `UC2_WEB_PERF`, `UC2_WEB_DEBUG` | OFF | the three web build modes (see the presets) |
-| `UC2_ASSETS_DIR` | `../assets/uc2` | the asset tree; read only for the files the web build preloads |
 
 ## Things that are fixed on purpose
 
@@ -124,6 +188,16 @@ tools/dev/script-build.sh --tree m14-hdr --headers assemble make   # also export
 
 ## Fetched libraries
 
-SDL2 (`release-2.32.x`) and OpenAL Soft are fetched by CMake at configure time into `build-*/_deps/` (native and
-Windows builds; the root `CMakeLists.txt` says why each option is set). The first `cmake --preset native` therefore needs network
-access; later configures reuse the checkout.
+SDL2 (`libsdl-org/SDL@release-2.32.x`; native and Windows), OpenAL Soft (`10-p/openal-soft-web@ufront/web`; native
+as a shared library, Windows as `OpenAL32.dll`, web static) and GL4ES (`10-p/gl4es@fix/cubemap-bind-active-unit`;
+Linux and web) are fetched by CMake at configure time into `build-*/_deps/`, on their branches (not pinned: the
+latest wins; the root `CMakeLists.txt` says why each option is set). The first configure of each preset therefore
+needs network access; later configures re-fetch the branch tips. Vendored in `Thirdparty/`: zlib, Ogg/Vorbis,
+Theora (decoder).
+
+## Frame rate
+
+`[Engine.GameEngine] FpsLogSeconds=<s>` (default 0 = off; console `FPSLOG <s>`) logs one `FPS:` line every `<s>`
+seconds: frames, fps, frame time avg/min/max/p99, the 1% low. `tools/dev/fps-bench.sh <tree> <map> <seconds>
+[WxH]` runs a fixed camera turn on this machine's GPU, headless, and prints one line. Nothing caps a standalone
+game's frame rate natively (`UseVSync=False`, the engine's tick limit is 0 outside network play).

@@ -216,25 +216,32 @@ void CMainLoop::RunLoop()
 	unguard;
 
 	// Enforce optional maximum tick rate.
+	UBOOL LimiterSlept = 0;	// F-4b: as engine-ut2004, the web yields only when the limiter did not sleep
 	guard(EnforceTickRate);
 	if( !GIsBenchmarking && IncludeMessaging )
 	{
 		FLOAT MaxTickRate = Engine->GetMaxTickRate();
-		// D-6: -maxfps=<n> caps the frame rate of a game that has no cap of its own (a standalone game or a
-		// listen server: GetMaxTickRate returns 0 there). Tests use it for frame-rate-dependent behaviour
-		// (Epic's integer view rotation per tick, the lazy camera) without a GPU: the null renderer otherwise
-		// runs at a thousand frames a second.
+		// A frame-rate cap for a game that has no cap of its own (a standalone game or a listen server:
+		// GetMaxTickRate returns 0 there): [Engine.Engine] FrameRateCap=<fps>, the key engine-ut99 and
+		// engine-unreal1 read (the frontend's launcher writes it with -ini:System:[Engine.Engine]:FrameRateCap=<n>).
+		// Absent or <= 0: uncapped, as engine-ut2004 (which has no cap). F-4e: it replaces D-6's -maxfps=<n>
+		// switch; tests set it with -ini: for frame-rate-dependent behaviour (Epic's integer view rotation per
+		// tick, the lazy camera) without a GPU, where the null renderer otherwise runs at a thousand frames a second.
 		static FLOAT MaxFps = -1.f;
 		if( MaxFps < 0.f )
 		{
 			MaxFps = 0.f;
-			Parse( appCmdLine(), TEXT("MAXFPS="), MaxFps );
+			GConfig->GetFloat( TEXT("Engine.Engine"), TEXT("FrameRateCap"), MaxFps, GIni );
+			MaxFps = Max( 0.f, MaxFps );
+			if( MaxFps > 0.f )
+				debugf( NAME_Init, TEXT("FrameRateCap=%g: a game without a tick rate of its own is capped at %g fps"), MaxFps, MaxFps );
 		}
 		if( MaxFps > 0.f && (MaxTickRate <= 0.f || MaxFps < MaxTickRate) )
 			MaxTickRate = MaxFps;
-		// jitter (port, docs/porting/analysis/jitter.md): -framepattern=<ms>:<ms>:... gives the frames these
-		// lengths in turn (a game without a cap of its own only; it takes the place of -maxfps): uneven frame
-		// pacing, as a browser has it, made repeatable for the frame trace (FRAMETRACE, UC2FrameTrace.cpp).
+		// jitter (port, docs/porting/analysis/jitter.md): [SDLLaunch] FramePattern=<ms>:<ms>:... gives the frames
+		// these lengths in turn (a game without a cap of its own only; it takes the place of FrameRateCap): uneven
+		// frame pacing, as a browser has it, made repeatable for the frame trace (FRAMETRACE, UC2FrameTrace.cpp).
+		// A test hook, set with -ini:System:[SDLLaunch]:FramePattern=16.7:33.3:... (F-4e: was -framepattern=).
 		static INT   PatternNum = -1;
 		static FLOAT Pattern[32];
 		static INT   PatternIndex = 0;
@@ -242,7 +249,7 @@ void CMainLoop::RunLoop()
 		{
 			PatternNum = 0;
 			FString Spec;
-			if( Parse( appCmdLine(), TEXT("FRAMEPATTERN="), Spec ) )
+			if( GConfig->GetString( TEXT("SDLLaunch"), TEXT("FramePattern"), Spec, GIni ) && Spec.Len() )
 			{
 				const TCHAR* S = *Spec;
 				while( *S && PatternNum < ARRAY_COUNT(Pattern) )
@@ -250,32 +257,39 @@ void CMainLoop::RunLoop()
 					FLOAT Ms = appAtof( S );
 					if( Ms > 0.f )
 						Pattern[PatternNum++] = Ms / 1000.f;
-					while( *S && *S != ':' )	// not ',': Parse() ends a value at a comma
+					while( *S && *S != ':' )
 						S++;
 					if( *S == ':' )
 						S++;
 				}
-				debugf( NAME_Init, TEXT("-framepattern: %i frame lengths"), PatternNum );
+				debugf( NAME_Init, TEXT("FramePattern: %i frame lengths"), PatternNum );
 			}
 		}
 		if( PatternNum > 0 && Engine->GetMaxTickRate() <= 0.f )
 		{
 			FLOAT Delta = Pattern[PatternIndex++ % PatternNum] - (appSeconds()-OldTime);
 			appSleep( Max(0.f,Delta) );
+			LimiterSlept = 1;
 		}
 		else if( MaxTickRate>0.0 )
 		{
 			FLOAT Delta = (1.0/MaxTickRate) - (appSeconds()-OldTime);
 			appSleep( Max(0.f,Delta) );
+			LimiterSlept = 1;
 		}
 	}
 	unguard;
 
 #ifdef __EMSCRIPTEN__
-	// M4w: give the engine worker's event loop one turn per frame (input, host commands); the limiter
-	// above already did when it slept. SDLLaunchWeb.cpp says why.
-	if( GIsBenchmarking || !IncludeMessaging || Engine->GetMaxTickRate() <= 0.f )
+	// M4w: give the engine worker's event loop one turn per frame (input, host commands, the frame's present);
+	// the limiter above already did when it slept (appSleep is emscripten_sleep, the same kind of yield), so
+	// exactly one yield per frame, as engine-ut2004's WorkerYield. F-4b: the test is whether the limiter slept,
+	// not the engine's own tick rate (the launcher's frame cap sleeps with an engine rate of 0, and yielded
+	// twice per frame). SDLLaunchWeb.cpp says why.
+	if( !LimiterSlept )
 		UC2WebYieldFrame();
+#else
+	(void)LimiterSlept;
 #endif
 
 	// Handle all incoming messages.

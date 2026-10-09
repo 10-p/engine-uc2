@@ -619,12 +619,12 @@ for s in "${scenarios[@]}"; do
       [ -f "$sys/User.ini" ] || { echo "FAIL match: no User.ini (run the menu scenario first)"; continue; }
       scen_match | sed 's/\$P/match/g' > "$out/match.scen"
       echo "== match (a new process: the restart)"
-      run match 480 M10_URL="DM-Deadbolt?NumBots=0" -- -nullrenderer -maxfps=60
+      run match 480 M10_URL="DM-Deadbolt?NumBots=0" -- -nullrenderer "-ini:System:[Engine.Engine]:FrameRateCap=60"
       ini_check match;;
     restart)
       scen_restart | sed 's/\$P/restart/g' > "$out/restart.scen"
       echo "== restart"
-      run restart 240 M10_URL="DM-Deadbolt?NumBots=0" -- -nullrenderer -maxfps=60
+      run restart 240 M10_URL="DM-Deadbolt?NumBots=0" -- -nullrenderer "-ini:System:[Engine.Engine]:FrameRateCap=60"
       ini_check restart;;
     nodefaults)
       [ -f "$sys/User.ini" ] || { echo "FAIL nodefaults: no User.ini (run restart first)"; continue; }
@@ -654,7 +654,7 @@ PY2
       prep
       scen_actions | sed 's/\$P/actions/g' > "$out/actions.scen"
       echo "== actions"
-      run actions 420 M10_URL="DM-Deadbolt?NumBots=0" -- -nullrenderer -maxfps=60;;
+      run actions 420 M10_URL="DM-Deadbolt?NumBots=0" -- -nullrenderer "-ini:System:[Engine.Engine]:FrameRateCap=60";;
     look)
       prep
       scen_look | sed 's/\$P/look/g' > "$out/look640.scen"

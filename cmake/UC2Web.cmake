@@ -6,23 +6,21 @@
 # Notebook: docs/porting/analysis/web-smoke.md.
 #=============================================================================
 
-# C++ exceptions are CAUGHT, as on every native target. UC2's loaders report a missing or incompatible
-# package or object by throwing (appThrowf) and catch it a few frames up (UObject::StaticLoadObject,
-# GetPackageLinker, LoadPackage, UGameEngine::LoadMap...). Natively this is ordinary control flow: 56 of
-# the 58 maps import the editor's Editor.TransBuffer, which is not built, and load because that throw is
-# caught. Emscripten's default (-sDISABLE_EXCEPTION_CATCHING=1) compiles every catch away, so the first
-# such throw would abort the module. Setting it at COMPILE time is what keeps the catch blocks; the link
-# of every executable must say the same (UC2_WEB_EXCEPTION_FLAGS below).
-#
-# Why JavaScript-based exceptions and not -fwasm-exceptions: the browser client uses Asyncify for its
-# per-frame yield, and Emscripten 5.0.7 refuses -fwasm-exceptions with ASYNCIFY=1 (wasm-opt: "Module::
-# getFunction: __asyncify_get_call_index does not exist"). JS exceptions do work under Asyncify in this
-# version (it lists env.invoke_* as Asyncify imports): measured with a throw, a catch and an
-# emscripten_sleep inside the try (web-smoke.md, W0). The cost is an invoke_ trampoline around calls that
-# can throw; engine-ut2004 instead compiles its engine with catching off and patches every loader to
-# fail soft. That is a performance question for M11, not one for a smoke test.
-add_compile_options(-sNO_DISABLE_EXCEPTION_CATCHING)
-set(UC2_WEB_EXCEPTION_FLAGS -sNO_DISABLE_EXCEPTION_CATCHING)
+# C++ exception CATCHING is OFF for the engine's own code (Emscripten's default), as engine-ut2004 builds its
+# engine (owner, 2026-10-09: "Ok, lets disable exception handling. Lets do like UT2004."). So the engine's
+# objects carry no invoke_ trampolines and Asyncify instruments none of them; a throw from engine code is an
+# abort. The loaders therefore fail SOFT on the web instead of throwing: engine-ut2004's patches, ported
+# under __EMSCRIPTEN__ in Core/Src/UnObj.cpp (SafeLoadError, GetPackageLinker, StaticLoadObject),
+# Core/Src/UnLinker.cpp (ULinkerLoad's constructor, VerifyImport) and Engine/Src/UnGame.cpp (LoadMap, the
+# start-up map). Native builds keep catching, as engine-ut2004's do. A fatal appErrorf logs "appError
+# called:" and its message, then the module aborts (engine-ut2004's shipping build does the same).
+# Measured before the change (gdb, `catch throw`, native client and server boots): the only throws in a
+# normal boot are a script DynamicLoadObject of a name with no package and ucc's commandlet-name lookup;
+# the Editor.TransBuffer import of 56 of 58 maps takes VerifyImport's "Missing" path and never threw.
+# openal-soft is the exception to the rule: it reports every AL error by throwing and catching it inside
+# the library, so it alone is compiled with -fexceptions (root CMakeLists.txt) and the executables link
+# with -sNO_DISABLE_EXCEPTION_CATCHING (SDLLaunch/cmake/Web.cmake, UCC/CMakeLists.txt), exactly as
+# engine-ut2004 links SDLLaunch. Notebook: docs/porting/analysis/platform-f4.md (F-4a).
 
 # Stores a destructor makes to its own object are KEPT. Epic's code calls destructors explicitly and then
 # reuses the object: UArrayProperty::DestroyValue runs `DestArray->~FArray()`, whose `Data=NULL;

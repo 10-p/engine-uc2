@@ -60,7 +60,8 @@ else()
   # Static link: appGetDllHandle answers the "in this binary" sentinel on Emscripten, so nothing needs
   # exporting dynamically.
   target_link_options(${PROJECT_NAME} PRIVATE
-    ${UC2_WEB_EXCEPTION_FLAGS}
+    -sNO_DISABLE_EXCEPTION_CATCHING   # for openal-soft only (UC2ALAudio links it); the engine's code is compiled
+                                      #   without catching and its loaders fail soft (cmake/UC2Web.cmake, F-4a)
     -sENVIRONMENT=node
     -sNODERAWFS=1                     # the host file system, relative to the working directory
     -pthread                          # every object is compiled -pthread (atomics); Core starts the

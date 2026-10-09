@@ -9,6 +9,10 @@
 
 // Before the engine headers: emscripten.h pulls in <time.h>, and UnFile.h #defines clock().
 #include <emscripten.h>
+#include <emscripten/html5.h>
+#if UC2_WITH_UC2ALAUDIO
+#include <AL/al.h>	// openal-soft, linked into the module through UC2ALAudio (Web.cmake adds its include path)
+#endif
 
 #include "SDLLaunchPrivate.h"
 #include "SDLLaunchWeb.h"
@@ -16,9 +20,29 @@
 // The engine for ue_exec_command (set after InitEngine, cleared before shutdown).
 static UEngine* GUC2WebEngine = NULL;
 
+//
+// The tab hidden: the engine keeps ticking, only the sound is silenced (engine-ut2004's SDLLaunch.cpp, D-16 /
+// BRWSR-03; F-4b). The listener gain is the master volume of the current OpenAL context, which UC2ALAudio never
+// sets (it sets each source's gain), so this does not fight the game's own volumes. Registered from the engine's
+// worker, so the callback runs on that thread, between frames (at the yield).
+//
+static EM_BOOL UC2WebVisibilityChange( int EventType, const EmscriptenVisibilityChangeEvent* Event, void* UserData )
+{
+#if UC2_WITH_UC2ALAUDIO
+	alListenerf( AL_GAIN, Event->hidden ? 0.0f : 1.0f );
+#endif
+	return EM_TRUE;
+}
+
 void UC2WebSetEngine( UEngine* Engine )
 {
 	GUC2WebEngine = Engine;
+	static UBOOL Registered = 0;
+	if( Engine && !Registered )
+	{
+		Registered = 1;
+		emscripten_set_visibilitychange_callback( NULL, EM_TRUE, UC2WebVisibilityChange );
+	}
 }
 
 //

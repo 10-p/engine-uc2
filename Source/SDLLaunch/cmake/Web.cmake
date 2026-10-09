@@ -22,7 +22,11 @@ else()
 endif()
 
 target_link_options(${PROJECT_NAME} PRIVATE
-  ${UC2_WEB_EXCEPTION_FLAGS}
+  # Catching is ON at the link, as engine-ut2004's: openal-soft reports every AL error by throwing and catching
+  # it internally, and with catching off the first AL error aborts. Only objects compiled with -fexceptions
+  # (openal-soft's, root CMakeLists.txt) carry landing pads; the engine's own code is compiled without catching
+  # and gains no invoke_ calls (cmake/UC2Web.cmake, F-4a).
+  -sNO_DISABLE_EXCEPTION_CATCHING
   -sENVIRONMENT=web,worker
   # The engine runs on a worker; its blocking main loop yields once per frame through Asyncify
   # (SDLLaunchWeb.cpp). appSleep's emscripten_sleep is the other suspension point.
@@ -31,6 +35,10 @@ target_link_options(${PROJECT_NAME} PRIVATE
   -sPTHREAD_POOL_SIZE=2                # main() + Core's file-streaming thread
   -sASYNCIFY
   -sASYNCIFY_STACK_SIZE=262144
+  # As engine-ut2004 (F-4b). Emscripten appends its defaults to this list (__asyncjs__*, which covers the
+  # frame yield's EM_ASYNC_JS, and invoke_* while indirect calls are not ignored), and emscripten_sleep is an
+  # async JS function in any case: so the list is UT2004's for identity, and changes nothing measurable.
+  "-sASYNCIFY_IMPORTS=['emscripten_sleep','emscripten_set_main_loop','__syscall_openat']"
   -sSTACK_SIZE=2097152
   -sINITIAL_MEMORY=268435456
   -sALLOW_MEMORY_GROWTH=1
@@ -69,10 +77,22 @@ if(EXISTS "${EMSCRIPTEN_ROOT_PATH}/emscripten-version.txt")
   file(READ "${EMSCRIPTEN_ROOT_PATH}/emscripten-version.txt" _emcc_ver)
   string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" META_EMCC "${_emcc_ver}")
 endif()
+# Every library this build fetches, as <repo>@<branch> from the same cache variables FetchContent read
+# (cmake/ArtifactDeps.cmake, a byte copy of engine-ut2004's; ufront 2.70). On the web SDL2 is Emscripten's own
+# port (cmake/UC2Web.cmake), not fetched: the emscripten version names it.
+include(${CMAKE_SOURCE_DIR}/cmake/ArtifactDeps.cmake)
+set(META_DEPS)
+if(DEFINED GL4ES_GIT_REPOSITORY)
+  ufront_artifact_dep(META_DEPS gl4es GL4ES "${GL4ES_GIT_REPOSITORY}" "${GL4ES_GIT_TAG}")
+endif()
+if(DEFINED OPENALSOFT_GIT_REPOSITORY)
+  ufront_artifact_dep(META_DEPS openal-soft OpenALSoft "${OPENALSOFT_GIT_REPOSITORY}" "${OPENALSOFT_GIT_TAG}")
+endif()
 find_program(NODE_EXECUTABLE node REQUIRED)
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
   COMMAND ${NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/emit-artifact-meta.mjs
     --out=$<TARGET_FILE_DIR:${PROJECT_NAME}> --target=uc2 --abi=${UE_ABI_VERSION} --emcc=${META_EMCC}
+    ${META_DEPS}
   COMMENT "Emitting artifact meta.json"
   VERBATIM)
 
@@ -81,9 +101,13 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 # when the device opens: the mixer and the context's event thread. Pool 2 -> 4 (main(), Core's file-streaming
 # thread, those two): a thread created with the pool empty still starts, but only after the browser main thread
 # has spun up a worker for it, and the audio ring would absorb that delay as an underrun (engine-ut2004 found
-# this, ufront 2.61). emcc takes the last -s setting, so this overrides the 2 above. Exception catching stays on
-# (UC2_WEB_EXCEPTION_FLAGS): openal-soft throws and catches internally.
+# this, ufront 2.61). emcc takes the last -s setting, so this overrides the 2 above. Exception catching is on at
+# the link (above): openal-soft throws and catches internally.
 target_link_options(${PROJECT_NAME} PRIVATE -sPTHREAD_POOL_SIZE=4)
+# F-4b: SDLLaunchWeb.cpp mutes the listener while the tab is hidden (engine-ut2004's visibility callback).
+if(TARGET OpenAL)
+  target_include_directories(${PROJECT_NAME} PRIVATE $<TARGET_PROPERTY:OpenAL,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
 # --- end M11 audio --------------------------------------------------------------------------------------------
 # --- M11: the GL device on the web (UC2GLDrv behind gl4es on WebGL 1; docs/porting/analysis/web-renderer.md) ---
 if(TARGET UC2GL4ESDrv)
