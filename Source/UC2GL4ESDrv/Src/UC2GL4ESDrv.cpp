@@ -265,6 +265,11 @@ UBOOL UUC2GL4ESRenderDevice::BindingInit()
 	// mediump by default and samplers lowp; with this every shader is highp where the hardware
 	// has it (always on OpenGL ES 3 / WebGL 2).
 	setenv( "LIBGL_FORCEHIGHP",		"1", 1 );
+	// GL4ES' ES 2 shader conversion inserts int overloads of pow/max/min/clamp/mod for desktop GLSL
+	// that mixes int and float; the driver's shaders are written in the GLSL ES subset and need none.
+	// NVIDIA's own OpenGL ES driver rejects those overloads (the ES 2 path did not start there: F-3,
+	// webgl2.md); GL4ES' ES 3 path does not insert them anyway (GLSL ES 3.00 forbids it).
+	setenv( "LIBGL_NOINTOVLHACK",	"1", 1 );
 	setenv( "LIBGL_NOBANNER",		"1", 1 );
 	setenv( "LIBGL_NOERROR",		"0", 1 );	// glGetError keeps working (-glerrors)
 	setenv( "LIBGL_USEVBO",			"1", 1 );
