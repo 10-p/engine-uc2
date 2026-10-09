@@ -279,16 +279,10 @@ public:
 	// multisampled framebuffers, gl_FragDepth and fragment highp in core; GL4ES emits GLSL ES 3.00)
 	// or 2 (OpenGL ES 2 / WebGL 1: each of those an extension, with the fallbacks). 0 on desktop GL.
 	INT								GLESMajor;
-	// The depth-stencil image is attached to GL_DEPTH_STENCIL_ATTACHMENT (WebGL 1, OpenGL ES 3 /
-	// WebGL 2) rather than to the depth and the stencil points (OpenGL ES 2 has no such point).
-	UBOOL UseDepthStencilAttachmentPoint()
-	{
-#ifdef __EMSCRIPTEN__
-		return 1;
-#else
-		return GLESMajor >= 3;
-#endif
-	}
+	// Depth-stencil storage and attachments go through the binding on desktop GL and (F-3) on
+	// OpenGL ES 3 / WebGL 2 through GL4ES (our fork sizes depth formats and passes the DEPTH_STENCIL
+	// attachment point, multisampled storage and blits through); around GL4ES on OpenGL ES 2 / WebGL 1.
+	UBOOL DepthStencilThroughBinding() { return !IsGLES || GLESMajor >= 3; }
 	// What the context can do; all true on desktop GL. Each has its fallback, and a switch
 	// that masks it so the fallback can be tested where the capability exists
 	// (-glnodepthtexture, -glnofragdepth, -glnos3tc, -glnouintindex).
