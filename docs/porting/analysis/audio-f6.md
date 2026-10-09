@@ -356,5 +356,7 @@ Web: the reader (`UC2AudioData.cpp`) is unchanged, so the web audio spec was not
 changed). The HRTF code also compiles into the web build's device; that build was **not built or run** here.
 
 Memory ceilings used: cook 4G, ucc-bin 2G, game captures 2G (inside `run-uc2-audio.sh`), builds 6G `-j4`, Python
-analysis 2G; none was hit (no exit 137). Game runs were started when no other `uc2.bin` was running or the load was
-under 16, except the HRTF capture: two other agents' games started between the check and the run (seen in `pgrep`).
+analysis 2G; none was hit (no exit 137). The rule "one game test machine-wide above load 16" was not fully kept:
+the HRTF capture started right after a check found no game, but two other agents' games had started in between
+(load ~30); the regression started at load 22 beside one other agent's game; the new-cues run at load 14.6 beside one.
+My runs were one at a time.
