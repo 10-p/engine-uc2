@@ -369,3 +369,40 @@ references: `logs/f3/twin-ref/ref-menu-box-8.png`, `ref-map-box-4.png` (ES 3 twi
   literal), play tests **2 passed**. Screenshots: `logs/f3/e2e-final2/uc2-map.png`, `logs/f3/e2e-final/uc2-menu.png`.
 - `git merge-tree` of this branch with main `2a58dbc` (F-4/F-2): clean (my CMake edit stays inside the M11 block;
   F-4 changed other parts of the same `Web.cmake`).
+
+## Merge of main `ab007a3` (F-4b test keys, F-5, F-1) into this branch (2026-10-09 afternoon)
+
+The owner approved the work (WebGL 1 stays as the fallback, the LOD bias stays); the fork commits are pushed
+(`10-p/gl4es` `fix/cubemap-bind-active-unit` = `6b6bccd4`). Merge commit `c4aee1b` (`git merge main`, the one exception
+to the no-merge rule, asked by the coordinator). Six conflicts, each resolved keeping both intents:
+- `Engine/Config/README.md`: main's AntiAliasing row (`-ini:`, `AntiAliasing=0` in the runners) + F-3's text (MSAA on
+  desktop and ES3/WebGL 2, none on WebGL 1, FXAA removed).
+- `UC2GLRenderDevice.h`: main's "test key NoLODBias" + F-3's "GL4ES applies the bias now".
+- `UC2GLCombinerTest.cpp`: F-3's LOD-bias case on GLES (no skip) with main's NoLODBias wording.
+- `UC2GLRenderDevice.cpp`: main's "test key ShotPresented" comment without FXAA.
+- `UC2GLSelfTest.cpp`: F-3's message (multisampled framebuffer only) with main's `AntiAliasing=0` hint.
+- `tools/dev/m11-twin.sh`: main's `-ini:` test keys everywhere; F-3's ES 3 twin, LOD-bias-aware pinned check,
+  depth-texture INFO line on the ES 2 path (`MaskCaps=depthtexture` + `GLESVersion=2`) and the `es2` check in key form.
+Also `tools/dev/f3-ab.sh`, `f3-gpu-fps.sh` now use the keys (`tools/dev/glini`); only the A/B run of the OLD FXAA binary
+passes that binary's own switches. No switch came back into the engine.
+
+Verification (all builds WITHOUT the FetchContent override, `-UFETCHCONTENT_SOURCE_DIR_GL4ES`):
+- native: rc=0; `build-native/_deps/gl4es-src` = `6b6bccd Keep a multisampled colour renderbuffer ...`, origin
+  `https://github.com/10-p/gl4es.git`; wasm-perf: rc=0, the same `6b6bccd`, wasm sha256
+  `a15832ad71eb311c4b6132719525de83db0a4304d5d7ca49ed8446617db6baaa`; windows: rc=0 (`uc2.exe`, `ucc.exe`).
+- `M11_SERIAL=1 M11_DESKTOP_TREE=f3d M11_TWIN_TREE=f3t tools/dev/m11-twin.sh` (`logs/f3/twin-merge-run1.txt`): shaders,
+  gputest, boot (97 + 405, ES 3), selftest 15/15 both, progtest 485 programs 7760/7760 identical, pinned (0.384; without
+  the desktop's bias 0.871), effects 14/14, m6 4/4, fallbacks (4 PASS + the depth-texture INFO on `OpenGL ES 2 through
+  GL4ES`, `depth texture NO`), es2 (15/15), leftovers: PASS; movies 8/9 (menu-movie-shots, the known timing FAIL).
+- `tools/dev/m7-effects.sh f3m`: 14 effects `critical=0 glerrors=0 programs_failed=0+0`, praxis-panes vs wine 2.318;
+  its own self-test step printed "FAILED to run" (no summary within the 60 s run; the log was overwritten by the next
+  call, not diagnosed); `m7-effects.sh f3m selftest` right after: **15 passed, 0 failed**.
+- Browser (main's frontend `1fdc55d`, its specs with `-ini:` keys and "WebGL [12]"; `serve-web/SDLLaunch.wasm` =
+  `a15832ad...` before and after): `uc2-wasm-boot.spec.js` **4 passed** (menu vs twin 9.055 / 10, map vs twin 2.900 / 3,
+  0 GL errors, `binding: WebGL 2 through GL4ES`, `drawn 4x multisampled`, `[PERF] 22.52 ms/frame` DM-Deadbolt with
+  post-processing). The first attempt was stopped by the mem guard's machine-wide budget (14 GB: the owner's desktop
+  apps held 12.4 GB before the run, one of them 6.4 GB); rerun with `--max-gb=17` (machine total, within the owner's
+  24 GB for parallel work; my run itself capped at 6G, cgroup peak 3.2 GB).
+- Frame time on a quiet machine (load 2.6-2.7): `uc2-wasm-jitter.spec.js` 1 passed; third-person running, 4x MSAA,
+  frame time per segment 30.92 / 31.75 / 25.59 / 29.38 ms (W / S / A / D; mean of the four 29.4 ms), judder RMS
+  0.43-0.68 px, |b| <= 0.139. (F-2's FPS log line was not used: the jitter spec reports frame times itself.)
