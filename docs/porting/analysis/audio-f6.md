@@ -200,3 +200,53 @@ Cue names: `A_Vehicle.Shenu_<Crash|CrashHard|CrashShenu|EngineIdle|EngineMove|En
 ShenuDying|ShenuHurt|Shot|ShotDestroyed|ShotDying|ShotHurt|TurboBoost>` and `A_Vehicle.Vehicle_Traffic_Pass<01-08,11-17>`:
 a mod plays them with `PlaySoundCue(Actor, 'A_Vehicle.Shenu_EngineIdle', ...)` like any other cue. Not in the
 frontend's `targets/uc2/file-manifest.json` (frontend work is parked), so the web build does not fetch them yet.
+
+## Step 3 - cue tables inside the Ogg packs: spike and recommendation (2026-10-09)
+
+**Today's layout (measured on `logs/f6/cooked`, which includes the 19 and `A_Vehicle`):** `Sounds/` holds 425 files:
+162 packs `.ogp` (123.4 MB; 95,632 B to 4.34 MB), 183 wave indexes `.uc2wb` (1.10 MB; 194 B to 29.5 KB), 79 cue
+tables `.uc2cues` (1.22 MB; 1.6 KB to 75 KB), `cook-report.txt`; `Music/` 23 `.ogg` (65.4 MB). The installed tree has 3
+fewer (no `A_Vehicle`); the frontend manifest lists Sounds 421 / Music 23. Each wave in a pack is a complete Ogg Vorbis
+stream with its own (empty) comment header.
+
+**How the runtime reads them** (`UC2ALAudioSubsystem.cpp`): the 23 persistent cue tables at device start
+(`GPersistentBanks :36`, `GetSoundBank :238`), a level's cue table when the level registers it; a wave index when a
+variation of it is first resolved (`GetWaveBank :266`); the pack, whole, at the first decode (`EnsureBuffer :339`,
+`appLoadFileToArray`). On the web every file is fetched whole on first open; web-audio.md measured "23 persistent cue
+tables read: 1,345 ms" (about 58 ms per small file, latency-bound) and 27 Sounds files (1 MiB) fetched for the menu.
+The reader decodes each wave with vorbisfile over its byte range; it never looks at the comment header (no
+`ov_comment` anywhere), so it would need new code to read one.
+
+**Why the cue table does not fit in a pack (measured):**
+- A cue table belongs to a *sound* bank, a pack to a *wave* bank, and they are not 1:1: 7 of the 79 sound banks play
+  waves of other wave banks, 4 packs (`A_Combo` 2, `A_Gameplay` 4, `A_Weapon` 3, `A_Character` 2 sound banks) serve
+  several sound banks, and 84 packs are localised copies (`_deu/_fra/_ita/_spa`): in German the game reads
+  `A_Announcer_deu.ogp`, so the cue table would have to be duplicated into 5 packs or the English pack fetched for
+  its header only.
+- The cue tables are needed early, the packs late. The 23 persistent cue tables are 837 KB; their 23 packs are
+  30.8 MB. With the tables inside the packs, start-up (native: read; web: fetch) grows from 0.84 MB to 30.8 MB (x37),
+  and every one of those packs stays resident from the start instead of at first use. The file count saved (79) does
+  not pay for that.
+
+**The variant that does fit: the wave index inside its own pack.** The index (`.uc2wb`) is needed exactly when its
+pack is (first resolve, then first decode, normally the same cue), and it is per wave bank including the language.
+Spike (scratchpad `f6/spike/`, measured): `A_Announcer` (the largest index, 181 lines, 23,677 B), one Vorbis comment
+field per index line (`UC2WB00000=uc2wb 1`, ...) written into the first wave's comment header by
+`ffmpeg -i first.ogg -i meta.txt -map 0 -map_metadata:s:a:0 1 -c copy -fflags +bitexact first-meta.ogg`:
+the first stream grows from 27,940 to 54,227 B (+26,287 B: the index plus field names); its decoded PCM is unchanged
+(same MD5 through ffmpeg); a page reader of 25 lines (`parse.py`: Ogg pages from byte 0, packets 0 and 1 of the first
+stream, the comment fields) gets the index back identical, reading 29,932 B before the first audio page, in 0.32 ms
+in Python. Ogg allows it (a comment packet may span any number of pages; fields are `NAME=value` UTF-8).
+What it would take: the cook writes the comment (ffmpeg remux as above, or our own Ogg page writer with the CRC) and
+must make the offsets self-consistent (they move by the comment's own size: offsets relative to the end of the first
+stream, or a fixed point); the runtime gets a page/comment parser (libogg is vendored; ~60 lines of C) and reads the
+pack at the index's moment; both formats stay readable (the `.uc2wb` wins when present: the installed packs keep
+working); the frontend manifest loses 162 entries. Gain: 162 fewer files (Sounds 425 -> 263) and one fewer fetch per
+wave bank at first use on the web (~58 ms each by the figure above, e.g. ~2 of the 27 menu fetches).
+
+**Recommendation:** do not embed the cue tables (the numbers above: x37 start-up bytes, many-to-many banks, five
+languages). Do not implement the index-in-pack variant now either: it works (the spike proves it) but its gain is a
+file count and a few small fetches, against a second format in the reader, the cook's offset fixed point and a
+manifest change in the parked frontend. The real web cost in this area is the 23 persistent cue tables fetched one by
+one at start (1.3 s); the parked precache list (PLAN, "Parked for the frontend merge") fetches them up front, in
+parallel, without any format change. **Not implemented** (stopped at the recommendation, as the brief allows).
