@@ -352,3 +352,70 @@ e2e-mem-guard 18 GB machine-wide (peaks 14.5-17.9 GB machine-wide, of which ~12 
    `-movieshot`, `-nettest`...), the render switches (engine-ut2004 keeps the same table).
 5. Engine/Config's three Epic reference copies (DefaultXbox.ini, DefUserXbox.ini, KeyBinds.ini) are LF now too, so a plain
    `git diff 7633696` shows every line; `--ignore-cr-at-eol` shows 0. Fine, or keep those three byte-identical (CRLF)?
+
+# F-4 follow-up: the owner's answers (2026-10-09, worktree engine-uc2-f4b, branch f4b-switches from main b6fcffb)
+
+The owner's decisions on the five questions: (1) switches: keep `-log`, `-ini:`, `-windowed`, `-defaultres`, `-usehomedir`,
+`-nullrenderer`/`-opengl`/`-gl4es` and the commandlet parameters; convert the test switches to ini keys set with `-ini:`;
+remove the UC2GLDrv on/off twins and the unused probes. (2) `FrameRateCap` default 0. (3) meta.json: branch only.
+(4) `-sOFFSCREEN_FRAMEBUFFER`: keep. (5) the three Epic reference inis back to Epic's bytes.
+
+## Step 7 - (5) Epic's three reference inis (commit 9d5683a)
+
+`Engine/Config/{DefaultXbox,DefUserXbox,KeyBinds}.ini` copied from `epic-sources/System/`: `cmp` silent for all three
+(`file -k`: "ASCII text, with CRLF line terminators"). `sync-web-ini.py`: `EPIC_COPIES` skipped by the CR rule and checked
+with a byte comparison against epic-sources (`--check` fails if one differs); `--check` -> both web files up to date.
+Who reads them (grep -a of Source, .uc included, and tools): **KeyBinds.ini IS read by the game**:
+`Source/UCMenu/Classes/UC2Settings_Controller.uc:106` `GetConfigValue("KeyBinds", "Layout_" $ i, "Title", ...)` (the pad
+layout page), from the run tree's System/KeyBinds.ini that mkrun copies from Engine/Config; it is Epic's file unchanged
+(only its line endings had changed in F-4d; the config cache reads CRLF and LF alike). `DefaultXbox.ini` and
+`DefUserXbox.ini`: read by nothing (the engine derives Avaris.ini/User.ini from Default.ini/DefUser.ini only).
+README (Engine/Config) and CLAUDE.md say so.
+
+## Step 8 - (2) FrameRateCap, (3) meta.json, (4) OFFSCREEN_FRAMEBUFFER
+
+- (2) Confirmed: `Engine/Config/Default.ini:25` and `web/Default.ini:25` `FrameRateCap=0`; absent key = 0 too
+  (`SDLLaunch.cpp:234`: `MaxFps = 0`, then `GetFloat`); nothing caps a standalone game.
+- (3) No change: `toolchain.<lib> = owner/repo@branch` (engine-ut2004's rule).
+- (4) Kept. The reason, read in Emscripten 5.0.7 (`src/settings.js:1766-1782`, `src/lib/libhtml5_webgl.js:150-210,270-300`,
+  `src/lib/libwebgl.js:720-730,856-862,1135`): Emscripten documents `-sOFFSCREEN_FRAMEBUFFER` as the polyfill for explicit
+  swap control (and for WebGL from a pthread) where OffscreenCanvas is missing, and with OffscreenCanvas support compiled in
+  as well "allows one to utilize OffscreenCanvas where available, and to fall back to Offscreen Framebuffer otherwise".
+  **But** `UC2GL4ESDrv.cpp` creates its context with `explicitSwapControl = 1` AND `renderViaOffscreenBackBuffer = 1`
+  requested explicitly, and Emscripten honours the second whenever the flag is linked: `GL.createContext` then makes the
+  emulated default framebuffer (`createOffscreenFramebuffer`, `preserveDrawingBuffer` forced on) even on the normal
+  OffscreenCanvas path, and `emscripten_webgl_commit_frame()` blits it (`blitOffscreenFramebuffer`) every frame. So in
+  UC2's configuration it is not only the fallback: it IS the present path (the frontend's 2.43 fix: without the flag
+  `commit_frame` is a stub and presentation is the implicit end-of-task one, ~1 frame/s on Windows/D3D11). The
+  coordinator's wording "the normal path does not use it" would be true only if the driver stopped requesting
+  `renderViaOffscreenBackBuffer` (the binding belongs to F-3's agent; not changed here).
+
+## Step 9 - (1) the switches (commits c00a538, then the command-line commit)
+
+Mechanism. Core `appReadTestKey(Key, Value, Section[, Section2, Section3])` / `appReadTestFlag` (`Core/Inc/UnFile.h`,
+`Core/Src/UnMisc.cpp` after `appApplyIniOverrides`): a TEST key of the system ini, set with `-ini:`, read ONCE and taken
+out of the in-memory ini of every named section; the file is marked dirty when something was removed (the first try
+did not mark it, and the window-settings save at start-up had already written the override into Avaris.ini: the smoke
+run showed `ShotTimes=40`/`Exec=46:exit` left in the tree's Avaris.ini; fixed and re-checked: only `CheckGLErrors=True`
+(a setting) and `StartupMovies=False` remain). A log line `Test key [<section>] <Key>=<Value> (read once, not kept in the
+ini)` says what was taken. The GL device reads its own class section, then `[UC2GLDrv.UC2GLRenderDevice]`, and removes
+the key from both device sections. The device's ordinary SETTINGS keep their normal config semantics (own class section;
+written back like any `-ini:` value). `tools/dev/glini KEY=VALUE...` prints the `-ini:` tokens for both device sections.
+
+Found on the way: `SDLLaunch.cpp` cut the command line at 1,024 characters (at an argument boundary, silently) and `UCC.cpp`
+had a 1,024-character buffer with NO bound check (stack overflow). With settings as `-ini:` tokens a test run passes 1,024:
+the wine pad run lost its `InputTestFile` token and its channel never opened (`FAIL pad ... no probe line`). Both now 4,096
+(Core's `GCmdLine`), a token that does not fit is dropped whole and a warning says so.
+
+The frontend (read-only grep of `/home/ion/WorkUC2/ufrontend`, branch uc2; nothing changed there):
+- `packages/e2e/uc2-wasm-boot.spec.js:150` `ENGINE_OPTIONS = '-log -glerrors -glstats -nostartupmovies'`
+- `uc2-wasm-keys.spec.js:41`, `uc2-wasm-saves.spec.js:48` `'-log -nostartupmovies'`; `uc2-wasm-audio.spec.js:205`
+  `launch(page, '-log -nostartupmovies')`; `uc2-wasm-jitter.spec.js:33` `'-log -glerrors -nostartupmovies'`
+- `targets/uc2/target.json:134` the launcher's video-driver choice "GL4ES without post-processing": `-GL4ES -nopostprocess`
+  (a user-facing option, not a spec; it stops working with this change; the replacement below; and note that an `-ini:`
+  value is written into the browser's saved Avaris.ini, so that choice would then stick for later launches until changed
+  back, unlike the old switch).
+`-nostartupmovies` is converted too (coordinator: if the key works from `-ini:` at that point of start-up): the keys
+`[UC2Movie] StartupMovies/Cinematics/LoadingMovie` are read by `appCanPlayFullscreenMovie` when a movie is asked for, and
+the logos are asked for after `InitEngine`, long after `appInit` applied the `-ini:` tokens. Measured: every native runner
+(m10-controls, run-uc2-shot, fx-owner...) now passes `-ini:System:[UC2Movie]:StartupMovies=False` and no logo plays.

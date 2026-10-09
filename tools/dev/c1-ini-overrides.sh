@@ -138,7 +138,8 @@ else result FAIL b-good-token-after-the-bad-ones-applies "see $out/b.result"; fi
 check b-seven-malformed-tokens-reported count_is 7 'Ini override ignored (expected -ini:<File>:[<Section>]:<Key>=<Value>)' "$out/b-Avaris.log" 
 check b-bad-tokens-name-the-token logline 'ignored (expected -ini:<File>:[<Section>]:<Key>=<Value>): -ini:User:[Section]:NoEquals' "$out/b-Avaris.log" 
 check b-malformed-tokens-wrote-nothing test "$(grep -a -c -E 'Section|EmptyFile|NoColonAfterBracket' "$out/b-User.ini" "$out/b-Avaris.ini" 2>/dev/null | awk -F: '{s+=$NF} END{print s+0}')" = 0
-check b-only-the-good-override-applied count_is 1 'Ini override: [' "$out/b-Avaris.log" 
+# (the runner, tools/dev/m10-controls.sh, passes its own settings and test keys with -ini: too: not counted)
+check b-only-the-good-override-applied count_is 1 'Ini override: [Engine.GameReplicationInfo]' "$out/b-Avaris.log" 
 check b-no-critical test "$(grep -a -c Critical "$out/b.out")" = 0
 check b-reached-the-menu logline 'OpenMenu [UCMenu.UC2MainMenu]' "$out/b.out" 
 
