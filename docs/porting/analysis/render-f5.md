@@ -401,3 +401,27 @@ comparable while jumping or from a side camera, which the owner cannot place on 
   shot, `waterfall-3p-behind` 4.02 (animated pool surface; time is not stopped in that case); control, the same binary
   twice: 0.41-1.27, `behind` 3.89. So no change beyond run-to-run noise on these indoor views (on NVIDIA
   `gl_FogFragCoord` already was |z|; the change matters on Mesa and where fog is strong).
+
+### Gate, part 3 (04:30-06:05): `M11_SERIAL=1 M11_DESKTOP_TREE=f5d M11_TWIN_TREE=f5t tools/dev/m11-twin.sh`
+
+`logs/f5/gate-m11-twin.txt` (summary also `logs/f5t/m11-twin-summary.txt`): 28 PASS, 6 FAIL, every FAIL a known one.
+- PASS: shaders (100 shaders, 6336 cases, max difference 0), gputest (107 shaders, 6848 cases, worst 0.5 step),
+  boot (`97 fragment shaders compiled, 0 failed; 405 vertex shaders compiled`), selftest (`15 passed, 0 failed` on both
+  bindings, 0 GL errors), progtest (`485 programs on side A, 485 on side B ... largest difference 1 of 255`), pinned
+  (DM-Deadbolt without LOD bias 0.380; with it 0.890, M11 recorded 1.415), m6 x4, 12 of 14 effects, fallbacks S3TC /
+  max level / frag depth / uint index, leftovers.
+- FAIL, known before this branch: `effect-liandri` (random noise, 7.645), `effect-blur` (6.416 > 6: the concussion blur's
+  phase between two runs; M11's gate had 7.388), `effects` (their sum line), `fallback-glnodepthtexture` + `fallbacks`
+  (fallback not implemented), `movies` (`m9-menu-movie-shots`: the menu-movie timing; 8 of 9 m9 checks pass).
+So the numbers the brief asked to keep, 97 / 485 / 15, are unchanged.
+
+## Result
+
+| Step | Result | Label |
+|---|---|---|
+| 1 | `DOFShippedBlurAlpha` compiled 1; `DistortionCullDistance` a per-class config property (compiled 15000), the GL4ES device reads its own section; dynamic gamma confirmed on (device + Epic's split-screen manager) | measured (`get`, log lines, both devices) |
+| 2 | occlusion queries: Xbox culled hidden dynamic actors with them (wireframe boxes, results a frame late); no visible feature (coronas trace for themselves); UT2004 has none; not implemented | read only |
+| 3 | inventory: 97 enumerated pixel shaders ported and golden-tested; Terrain4Layer has no Xbox shader; 3 `.psh` without an enum value; 49 of 67 `.vsh` ported, 16 left out with reasons (packed Xbox vertex format 6, per-light path Epic compiled out 5, never spliced or not in Epic's table 4, plus `UnpackPosition`: see the table), 2 includes | counted from the sources |
+| 4 | CTF-Aqueduct flicker not reproduced in 9 conditions (GPU, twin, on/off, still/turn/walk); back-face projection is the map's flag (12 of 16) and Epic's Xbox formula; owner's conditions needed | measured, not reproduced |
+| 5 | shadow strength: player shadow half as dark as before M7b by Epic's Xbox code; tree shadows weaker with the Xbox batch (3.9 vs 5.9 over 12 views); reference view requested | analysis + measured contrasts; no Xbox picture |
+| 6 | sky haze was Mesa's fixed-function fog coordinate, not GL4ES; FF programs now take the fog distance from the fragment depth; Mesa desktop sky vs twin 46.75 -> 2.49 | measured, fixed |
