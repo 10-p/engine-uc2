@@ -431,3 +431,32 @@ Results (native build of this worktree rc 0; `logs/f1b/`):
 - Builds at the end of F-1b: native rc 0 (`logs/f1b/build-native-3.log`), wasm-perf rc 0, 0 errors
   (`build-wasm-perf-3.log`, `SDLLaunch.wasm` sha256 04dce632a959d418...; no aiming-command string in it). The browser
   spec was not re-run with this final wasm: its guest probe needs the frontend change above whatever the wasm.
+
+## F-1c (2026-10-09 11:40-11:55): NETPROBE on a network client answers about the local player only
+
+Coordinator's rule: a client's NETPROBE without the key reads only the client's own state (what its HUD shows), so
+it is not a cheat there.
+- `Source/Engine/Src/UC2Cheats.cpp` `UC2CheatsWouldAllow` (`:60-80`): the rule without logging (standalone or
+  listen host: `:74`; else the test key); `UC2CheatsAllowed` (`:84-`) uses it, so the rule lives in one place.
+- `Source/Engine/Src/UC2NetTest.cpp`: NETPROBE (`:271-279`): on a network client that the rule does not allow,
+  `Probe(..., SelfOnly=1)`: the summary line as before, a "`<tag> self only (network client)`" line (`:108-109`),
+  then only the local player's own pawn and PRI lines (`:115-117`); no refusal and no `Cheat:` line. Elsewhere the
+  guard as before (full answer with the key, standalone or a listen host; a dedicated server without the key
+  refused).
+- WHEREAMI stays a cheat on clients (refused): the owner asked for the pair to be marked as cheats; documented in
+  `docs/CHEAT-COMMANDS.md`, which also describes the self-only NETPROBE; `Engine/Config/README.md` row follows.
+- `tools/dev/net-test.py` `cheats`: asserts the self-only answer (summary + "self only" line + pawn/pri lines about
+  NetC only, no `Cheat:` line) and the full answer with the key (pri lines about NetK and NetL).
+
+Results:
+- `NET_TREE=f1b-net tools/dev/net-test.sh --keep-tree cheats listen` (`logs/f1b/net-8`): **all PASS** (cheats 8
+  including `client-netprobe-self-only-without-key`: "NetProbe: C0 summary net=Client ... local=NetC", "NetProbe: C0
+  self only (network client)", "NetProbe: C0 pri name=NetC ..." and nothing about NetL; `client-netprobe-full-with-key`:
+  pri lines about NetK and NetL; listen 8: hit on shot 1, kill after 9).
+- wasm-perf rc 0 (`logs/f1b/build-wasm-perf-4.log`), `SDLLaunch.wasm` sha256
+  a6bafa7e10b79805bb6d1c350d4f3ff8002a974e744d032c5fe18eb2e74319bc (contains the "self only" string).
+- Browser, `uc2-wasm-net.spec.js` once (serve-web assembled with that wasm, sha256 equal before and after; asset tree
+  `run/f1-webassets`; null sink by module index; mem-guard 18): **2 passed (4.0m)**, peak 13.9 GB
+  (`logs/f1b/web2/e2e-net.txt`).
+- Noticed, not mine: `ufrontend` has an uncommitted change to `targets/uc2/file-manifest.json` dated 11:28:28, when I
+  ran no frontend command (my frontend builds ran at 11:15 and 11:48). Left untouched.
