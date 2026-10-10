@@ -262,3 +262,49 @@ regenerates). serve-web holds this branch's artifact (ecdb59aa...). Open questio
 3. AA: the cost was not measurable on this desktop; a laptop measurement would confirm the owner's reason.
 4. The new closed-tab net test adds ~2.7 min to `uc2-wasm-net.spec.js` and took that run's cgroup to 6,065 MiB of 6 GiB:
    run the net spec under 7G, or make the test opt-in.
+
+# G-10b: the client half of the standby check over WebRTC (2026-10-10)
+
+Coordinator, after the G-10 merge (main d6caa7f; the G-10 frontend patch is uc2 b7c3a64): make the client half
+consistent, the least invasive way; TcpNetDriver byte-for-byte Epic's. Worktree `/home/ion/WorkUC2/engine-uc2-g10b`,
+branch `g10b-standby-client` from main d6caa7f; logs `logs/g10/g10b/`; frontend patch `logs/g10/frontend-g10b.patch`
+(on top of b7c3a64).
+
+## Step 0 - what the client half does to a web guest
+
+`UNetDriver::TickDispatch`'s client branch: `ServerConnection && ServerConnection->State == USOCK_Open && Time -
+LastReceiveTime > STANDBYCHEAT_TIMEOUT * 3` (3 s) -> `NotifyStandbyHack(true)` -> `ToggleStandbyMode(true)` on the
+guest's PlayerController: `SetPause` (on a client `Level.Game` is None: no pause, an Accessed None) and
+`GUIController.NotifyStandbyMode` -> `OpenMenu("UCMenu.StandbyWaitMenu")`, which takes the input until a packet comes.
+A guest whose host vanished therefore sat behind the standby page until its connection timed out.
+`ShouldIncludeInStandbyCheck` is not consulted on that branch; applying it to the server connection would change
+TcpNetDriver too (its base returns false while the connection has no Actor), so not that.
+
+## Step 1 - the change
+
+- `Source/Engine/Inc/UnNetDrv.h`: `virtual UBOOL StandbyCheckEnabled() const { return 1; }` (after
+  `ShouldIncludeInStandbyCheck`).
+- `Source/Engine/Src/UnNetDrv.cpp` `TickDispatch`: `if( bEnableStandbyCheatDetection && StandbyCheckEnabled() )`
+  around Epic's block, unchanged inside. Every native driver returns 1: the same code path as before.
+- `Source/WebRTCDrv`: `UWebRTCNetDriver::StandbyCheckEnabled()` returns 0; it replaces G-10's
+  `ShouldIncludeInStandbyCheck` override (one switch for both halves; the server half's evidence is re-run below).
+- Frontend: a fourth net test, "the host's tab is closed mid-match: the guest plays on and leaves at its timeout":
+  join, spawn, `hostPage.close()`, 5 s later the guest walks its own pawn (> 100 units) and its level clock runs (> 2 s
+  over the walk), then the guest must be back on its own (`net` != Client) within 150 s with `Connection timed out`
+  or the closed pipe in its log, and no `Standby hack|ToggleStandbyMode|NotifyStandby|StandbyWaitMenu` line.
+- Harness runner `logs/g10/run-e2e-g10b.sh`: as before, cgroup 7G (G-10's three-test run peaked at 6,065 MiB of 6G).
+
+## Step 2 - builds and native evidence
+
+- `logs/g10/build-g10b.sh native 1 4` and `wasm-perf 1 4` in `bin/capped 6G`: both rc 0, 0 errors (the warnings
+  are the known `UC2ALAudio.h` -Wwrite-strings ones). wasm sha256 12a71c15dce2a571..., data cf63ad1bfa07... (the same
+  data as G-10: no ini change) (`logs/g10/g10b/wasm-sha.txt`).
+- Native, TcpNetDriver unchanged: `NET_TREE=g10bnet tools/dev/net-test.sh listen disconnect` (fresh tree from this
+  branch, load 9-14, `logs/g10/g10b/net-native.txt`): **15/15 PASS** (listen 8/8 including hit and kill, disconnect 6/6,
+  leftovers); the check still runs and fires on the native server: `logs/g10bnet/disconnect-srv.log`: `DevNet: Standby
+  hack detected!  ValidClients:1/1   Time:23.179447  LastReceiveTime:22.170284  DeltaTime:0.016753`, `Standby hack
+  status change detected!  Status now True.`, `... Now False.`
+- Browser run 1 (`run-e2e-g10b.sh net-1 3600 uc2-wasm-net.spec.js`): stopped by the memory guard during the first test
+  ("21.0 GB in use, over the 21 GB budget"): the machine was at 17.6 GB before the run started (the owner's
+  missioncenter alone holds 9.7 GB RSS), so two browser pages cross 21. Not a test result; rerun once the machine is
+  below ~16.3 GB in use.

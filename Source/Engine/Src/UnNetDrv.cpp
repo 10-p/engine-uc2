@@ -258,7 +258,8 @@ void UNetDriver::TickDispatch( FLOAT DeltaTime )
 	// from any clients. If there is a gap, notify the game engine to handle it.
 
 	// Ignore hitches in frame rate that are more than half the cheat timeout
-	if( bEnableStandbyCheatDetection )
+	// (G-10b: a driver may opt out of the check as a whole, StandbyCheckEnabled; every native driver keeps it.)
+	if( bEnableStandbyCheatDetection && StandbyCheckEnabled() )
 	{
 		if ( DeltaTime > STANDBYCHEAT_FRAMERATECAP )
 		{

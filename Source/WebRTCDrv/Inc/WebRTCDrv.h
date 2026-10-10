@@ -99,8 +99,8 @@ class UWebRTCNetDriver : public UNetDriver
 	// As UTcpNetDriver (IpDrv/Inc/UnTcpNetDriver.h): connections still loading are not force-failed at a
 	// server travel, which is what the native travel tests verified.
 	void PreServerTravel() {}
-	// G-10 (owner: "yes exclude webrtc"): no web guest counts for UC2's standby check (see the .cpp).
-	UBOOL ShouldIncludeInStandbyCheck( const UNetConnection* Connection ) const;
+	// G-10/G-10b (owner: "yes exclude webrtc"): no standby check over WebRTC, neither half (see the .cpp).
+	UBOOL StandbyCheckEnabled() const;
 
 	// UWebRTCNetDriver interface.
 	UWebRTCConnection* GetServerConnection();
