@@ -303,6 +303,9 @@ Task audit (owner: "make sure that all of them are needed or close them"):
   REPORT.md); D-4 test hygiene (pin the spawn in the arrow-strafe scenario, the browser strafe slope 0.22 vs 0.2 on
   WebGL 2, the m7-effects self-test window, the twin's two known timing FAILs).
 - NEEDS THE OWNER (N-1..N-5): N-1 which shipped test console commands stay (recommended: keep the guarded cheats
-  and the diagnostics the tests need, delete the pure A/B toggles); N-2 arm64 client multiarch packages (sudo);
+  and the diagnostics the tests need, delete the pure A/B toggles); N-2 arm64 client: PARKED by the owner (2026-10-10, "leave it until I can test on a phone"); the UT2004 arm64/Android lessons are already applied (F-4c's 21-item checklist);
   N-3 PipeWire i386 package (sudo) or stay on the PulseAudio fallback; N-4 the character class without a profile
   (profiles revisit); N-5 the M8 XACT inferences (no Xbox check possible: keep as a note).
+
+Owner, 2026-10-10: up to 8 agents is fine, but the machine is delicate at 100% CPU: watch for test failures caused by load
+and timeouts (rerun quietly before calling anything a regression; serialize game/browser runs when the load stays high).
