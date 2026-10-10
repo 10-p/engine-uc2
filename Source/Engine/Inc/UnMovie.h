@@ -124,6 +124,11 @@ ENGINE_API UBOOL appPlayMovieFullscreen( const TCHAR* Name, EFullscreenMovieKind
 // Xbox did the same for a movie it could not open, but there every movie existed). Logged once per material.
 ENGINE_API FPortableMoviePlayer* appUpdateMovieMaterial( class UMovieMaterial* Material, UBOOL& bOutFallback );
 
+// Test key [UC2Movie] MaterialShotTimes (D-4): set when a MovieMaterial's clock passes one of those times. A
+// material is updated in the middle of drawing a frame, where a screenshot would read half a frame, so the
+// render device takes it (SHOT) once the frame is complete and clears the flag (UC2GLDrv: in Present).
+extern ENGINE_API UBOOL GMovieMaterialShotPending;
+
 // A message for the player about movies being unavailable (no cooked movies at all, or no movie player in
 // this build), to be shown once on the console by whoever can do so safely outside rendering (the
 // full-screen player, the audio device's update). Returns 1 and the text once.

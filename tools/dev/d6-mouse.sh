@@ -80,6 +80,32 @@ run() {
   sed -n 's/^\(PASS\|FAIL\)\t\([^\t]*\)\t\(.*\)$/\1 \2: \3/p' "$out/$name.result" | cut -c1-240
 }
 
+# The open spot of tools/dev/jit-trace.sh (DM-Deadbolt; room for every move the scenarios make: forward 560 units,
+# back, right down a ramp, left back; the camera arm never shortened by a wall). The spawn is random and a pawn next
+# to a wall slides along it or stops (look-right-arrow-strafes-and-never-turns failed 1 of 2 runs on 2026-10-09), so
+# every scenario that measures the pawn's or the camera's movement starts from here: TELEPORT (the guarded cheat,
+# allowed in the standalone game these runs are; native, so the shipped scripts have it too), twice as jit-trace.sh
+# places, then checked. D6_SPOT overrides it ("x y z yaw pitch").
+SPOT=${D6_SPOT:-1977.8 583.7 -34.1 33000 -1400}
+# The lock scenario's spot: a PlayerStart where all twelve lock checks passed in two earlier runs (logs/jit/d6-lock-jit-main,
+# logs/d9/reg/d6-lock-base1: the pull-back 2021 -> 1742). At the open spot above the lock's pull-back never happens
+# (1753 -> 1753, 1799 -> 1799, every time: jitter.md step 4, d34-docs-tests.md), nor at (-2367.6, 3733.8) (1773 ->
+# 1757); those two PlayerStarts were what made the lock checks "spawn-dependent".
+LOCK_SPOT=${D6_LOCK_SPOT:-1025.2 1698.1 -528.2 22112 0}
+# place <probe> <check> [spot]: put the pawn at $SPOT (or the spot given) and check that it is there
+place() {
+  local spot=${3:-$SPOT} x y
+  read -r x y _ <<<"$spot"
+  cat <<SCEN
+chan exec TELEPORT $spot
+sleep 1
+chan exec TELEPORT $spot
+sleep 1.5
+probe $1
+check $2 abs(P['$1'].loc[0] - ($x)) < 2 and abs(P['$1'].loc[1] - ($y)) < 2
+SCEN
+}
+
 # The start of every scenario: the level, a spawn (Fire), God, the helpers.
 start() {
   cat <<SCEN
@@ -271,8 +297,9 @@ probe Ae
 pyexec save('look-auto-centre-under-the-pad', [P['Ad'].rot[0], P['Ae'].rot[0]])
 check look-auto-centre-under-the-pad P['Ad'].mouselook == 'False' and abs(((P['Ae'].rot[0]+1400+32768)&65535)-32768) < abs(((P['Ad'].rot[0]+1400+32768)&65535)-32768) - 100
 SCEN
-  # 7. the keys: the Right arrow strafes and never turns (F-1), PageUp looks up; then the mouse right after the stick
-  # (no adhesion/friction/curve on the mouse)
+  # 7. the keys, from the open spot: the Right arrow strafes and never turns (F-1), PageUp looks up; then the mouse
+  # right after the stick (no adhesion/friction/curve on the mouse)
+  place Kp $p-placed-for-the-keys
   cat <<SCEN
 probe Ka
 keydown Right
@@ -377,6 +404,7 @@ SCEN
 # lock: two bots, frozen, placed 400 units in front (0 and +30 degrees)
 scen_lock() {
   start lock
+  place Lp lock-placed "$LOCK_SPOT"
   cat <<SCEN
 chan exec PlayersOnly
 wait test: exec PlayersOnly 10
@@ -450,7 +478,9 @@ probe lj
 check lock-stick-break-away-unchanged not P['lj'].locked
 SCEN
   # aim adhesion: one target in front (the other one put behind us), our pawn strafes; the view follows it under the
-  # pad only (Epic's adhesion: 20% of the target's angular motion when it is near the crosshair)
+  # pad only (Epic's adhesion: 20% of the target's angular motion when it is near the crosshair). From the open spot
+  # again (the lock checks above turned the view).
+  place Ap lock-placed-for-adhesion "$LOCK_SPOT"
   cat <<SCEN
 chan place 0 500 0
 chan place 1 600 180
@@ -549,6 +579,7 @@ SCEN
 # rebuilt script says which camera it uses
 scen_lazy() {
   start lazy
+  place Zp lazy-placed
   cat <<SCEN
 check lazy-camera-announced any('UCPlayerInput: PC mouse look (rebuilt UCGameplay.u)' in l and 'lazy camera under the mouse' in l for l in __import__('__main__').log_lines)
 probe Na
@@ -691,6 +722,9 @@ pyexec save('vanilla-pitch-20-counts-up-1-per-tick', pitchdiff('Ha','Hb'))
 check vanilla-mouse-right-turns-right yawdiff('Sa','Sb') > 500 and yawdiff('Fa','Fb') > 0
 check vanilla-mouse-up-looks-up pitchdiff('Ha','Hb') > 500
 check vanilla-mouse-is-epics-capped-path abs(yawdiff('Ga','Gb')) < 3 * abs(yawdiff('Fa','Fb'))
+SCEN
+  place Kp vanilla-placed-for-the-keys
+  cat <<SCEN
 probe Ka
 keydown Right
 sleep 1.0
@@ -856,15 +890,23 @@ ours, ship = load(sys.argv[1]), load(sys.argv[2])
 keys = [k for k in ship if k.startswith('pad-') and isinstance(ship[k], dict)]
 if not keys:
     print('FAIL\tpad-curves-match-shipped\tno shipped measurements'); sys.exit()
+# The walk is a distance after the stick is held for 1.0 s of wall clock: 30 or 31 frames at 30 fps, so the measure's
+# resolution is one frame of running, 430/30 = 14.3 units (12.2 backwards), 3.5% of the 341-unit half-stick segment
+# (D-4: 353.0 vs 340.9 on two runs of the same build). A walk passes within 3% or one frame, whichever is larger.
+FRAME_MOVE = 430.0 / 30
 for k in sorted(keys):
     a, b = ours.get(k, {}), ship[k]
-    worst = 0.0
+    worst = 0.0; ok = True
     for m, vb in b.items():
         va = a.get(m)
         if va is None:
-            worst = 1.0; continue
-        worst = max(worst, abs(va - vb) / max(abs(vb), 300.0))
-    print(f"{'PASS' if worst < 0.03 else 'FAIL'}\tpad-matches-shipped-{k[4:]}\tworst {worst*100:.2f}% of the shipped value (limit 3%); ours {a} shipped {b}")
+            worst = 1.0; ok = False; continue
+        d = abs(va - vb)
+        worst = max(worst, d / max(abs(vb), 300.0))
+        lim = max(0.03 * max(abs(vb), 300.0), FRAME_MOVE + 0.5) if k == 'pad-left-stick-walk' else 0.03 * max(abs(vb), 300.0)
+        ok = ok and d < lim
+    note = 'limit 3% or one frame of running' if k == 'pad-left-stick-walk' else 'limit 3%'
+    print(f"{'PASS' if ok else 'FAIL'}\tpad-matches-shipped-{k[4:]}\tworst {worst*100:.2f}% of the shipped value ({note}); ours {a} shipped {b}")
 PY
       count "$out/pad-compare.result";;
     ini)

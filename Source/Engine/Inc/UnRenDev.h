@@ -892,8 +892,8 @@ class ENGINE_API URenderDevice : public USubsystem
 //
 // UC2 port (M7): does the engine's render device report FRenderCaps::XboxPostProcess?
 // The one test every lifted "#ifdef _XBOX" post-process gate uses (UnRender.cpp,
-// UnPixelShaderMaterial.cpp, PSDistortionBaseMaterial, UCCameraEffects.cpp,
-// USubActionDepthOfField.cpp). False without a client or a device (dedicated server,
+// UnPixelShaderMaterial.cpp, which also answers for PSDistortionBaseMaterial, and
+// UCCameraEffects.cpp). False without a client or a device (dedicated server,
 // commandlets), for the null device and for any device that leaves the capability unset:
 // those keep the PC branch, exactly as before.
 //

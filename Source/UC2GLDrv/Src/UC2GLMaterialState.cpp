@@ -836,7 +836,7 @@ UBOOL FOpenGLRenderInterface::HandleCombinedMaterial( UMaterial* InMaterial, INT
 	else
 	if( (ConstantMaterial=CheckMaterial<UConstantMaterial,MRH_ConstantMaterial>(this, InMaterial, &ModifierInfo)) != NULL )
 	{
-		FColor	Color = ConstantMaterial->GetColor(Viewport->Actor->Level->TimeSeconds);
+		FColor	Color = ConstantMaterial->GetColor(UC2GLMaterialTime(Viewport->Actor->Level));
 
 		if(CurrentState->MaterialPasses[PassesUsed]->TFactorColor == 0 || CurrentState->MaterialPasses[PassesUsed]->TFactorColor == Color.DWColor())
 		{
@@ -1019,7 +1019,7 @@ UBOOL FOpenGLRenderInterface::HandleCombinedMaterial( UMaterial* InMaterial, INT
 				}
 				else if( (ConstantMaterial=CheckMaterial<UConstantMaterial,MRH_ConstantMaterial>(this, Combiner->Mask)) != NULL)
 				{
-					FColor	Color = ConstantMaterial->GetColor(Viewport->Actor->Level->TimeSeconds);
+					FColor	Color = ConstantMaterial->GetColor(UC2GLMaterialTime(Viewport->Actor->Level));
 
 					if(CurrentState->MaterialPasses[PassesUsed]->TFactorColor == 0 || CurrentState->MaterialPasses[PassesUsed]->TFactorColor == Color.DWColor())
 					{
@@ -1752,7 +1752,7 @@ UBOOL FOpenGLRenderInterface::SetMultiPassMaterial( UMultiPassMaterial* MultiPas
 				{
 					if( StagesUsed < MaxTextureStages+FreeStagesUsed )
 					{
-						FColor	Color = ConstantMaterial->GetColor(Viewport->Actor->Level->TimeSeconds);
+						FColor	Color = ConstantMaterial->GetColor(UC2GLMaterialTime(Viewport->Actor->Level));
 						if(CurrentState->MaterialPasses[PassesUsed]->TFactorColor == 0 || CurrentState->MaterialPasses[PassesUsed]->TFactorColor == Color.DWColor())
 						{
 							CurrentState->MaterialPasses[PassesUsed]->TFactorColor = Color.DWColor();
@@ -2063,7 +2063,7 @@ UBOOL FOpenGLRenderInterface::SetShaderMaterial( UShader* InShader, FOpenGLModif
 				// We can fit single-pass specular
 				if( SpecularityMaskConstant )
 				{
-					BYTE SpecularAlpha = SpecularityMaskConstant->GetColor(Viewport->Actor->Level->TimeSeconds).A;
+					BYTE SpecularAlpha = SpecularityMaskConstant->GetColor(UC2GLMaterialTime(Viewport->Actor->Level)).A;
 					//!!MAT check for TFactor use
 					CurrentState->MaterialPasses[PassesUsed]->TFactorColor = (D3DCOLOR)(FColor(SpecularAlpha,SpecularAlpha,SpecularAlpha,SpecularAlpha));
 				}
@@ -2240,7 +2240,7 @@ UBOOL FOpenGLRenderInterface::SetShaderMaterial( UShader* InShader, FOpenGLModif
 			{
 				if( StagesUsed < MaxTextureStages+FreeStagesUsed )
 				{
-					FColor	Color = ConstantMaterial->GetColor(Viewport->Actor->Level->TimeSeconds);
+					FColor	Color = ConstantMaterial->GetColor(UC2GLMaterialTime(Viewport->Actor->Level));
 
 					if(CurrentState->MaterialPasses[PassesUsed]->TFactorColor == 0 || CurrentState->MaterialPasses[PassesUsed]->TFactorColor == Color.DWColor())
 					{

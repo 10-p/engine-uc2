@@ -38,13 +38,19 @@ tree=m7
 if [ $# -gt 0 ] && [ -d "$work/run/$1" ]; then tree=$1; shift; fi
 out=$work/logs/$tree
 shot=$repo/tools/dev/run-uc2-shot.sh
+# The self-test's report below is redirected by this shell before run-uc2-shot.sh makes the folder: on a brand-new
+# tree it said "FAILED to run" (render-f5.md, D-4).
+mkdir -p "$out"
 
 # name | map | pinned spawn (1/0) | seconds | fire at | "A label" | "B label" | uc2.bin arguments
+# liandri: the overlay's noise is three panned textures (UCScreenLiandri Noise1-3), so its picture depends on the
+# level time of the shot's frame; MaterialTime=100 (a GL test key, D-4) pins the time materials see: the same noise
+# in every run, which m11-twin.sh's desktop vs twin comparison needs.
 EFFECTS='
 bloom|DM-Deadbolt|1|100|34|post-processing off (M6)|on: emissive glow and bloom on the lamps, always-on depth of field|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,56 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=48
 blur|DM-Deadbolt|1|100|34|off|on + BlurMe (UUCScreenBlur, ConcussionBlur: displaced ghost copies)|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,56 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=48 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=52:BlurMe
 berserk|DM-Deadbolt|1|100|34|off|on + berserk colour remap (scene in the ramp colours, pawn excluded)|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,56 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=48 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=40:set+UCScreenBerserk+Enabled+1
-liandri|DM-Deadbolt|1|100|34|off|on + Liandri overlay (grey scale with noise)|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,56 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=48 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=40:set+UCScreenLiandri+Enabled+1
+liandri|DM-Deadbolt|1|100|34|off|on + Liandri overlay (grey scale with noise)|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,56 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=48 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=40:set+UCScreenLiandri+Enabled+1 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaterialTime=100
 pause|DM-Deadbolt|1|100|34|off|on + pause-menu colour remap (UCScreenMenuPause alone; its two subclasses switched off again)|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,56 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=48 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=40:set+UCScreenMenuPause+Enabled+1@40.2:set+UCScreenComboFlash+Enabled+0@40.4:set+UCScreenComboSunFlare+Enabled+0
 radial|DM-Deadbolt|1|100|34|off|on + radial blur held at distance 30|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,56 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=48 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=38:set+UCPlayerController+RadialBlurSpeed+0@38.2:set+UCPlayerController+RadialBlurMinChange+-1@38.4:set+UCScreenRadialBlur+RadialBlurDistance+30@40:set+UCScreenRadialBlur+Enabled+1
 dyngamma|DM-Deadbolt|1|100|34|on, dynamic gamma ramp applied to the picture|on, DYNAMICGAMMA 0 (no ramp in the picture)|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=50,60 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=54:DYNAMICGAMMA+0
@@ -77,8 +83,11 @@ PY
 }
 
 # The numeric self-test of the primitives (UC2GLSelfTest.cpp), unless effects were named and it is not among them.
+# POSTSELFTEST 44 s after the first frame, the game quits itself 10 s later; the wall-clock limit (220 s, as
+# m11-twin.sh's) only stops a hung run. The old 60 s limit ended the run before the self-test whenever the first
+# frame came more than 16 s after the launch (a loaded machine: webgl2.md, "FAILED to run").
 if [ "$want" = "  " ] || [ "${want#* selftest }" != "$want" ]; then
-  UC2_RES=1280x720 UC2_PRECMD="set UCDeathmatch NumPlayers 0" "$shot" "$tree" fx-selftest 60 34 DM-Deadbolt -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=44:POSTSELFTEST ${UC2_GLARGS:-} > "$out/fx-selftest.report" 2>&1
+  UC2_RES=1280x720 UC2_PRECMD="set UCDeathmatch NumPlayers 0" "$shot" "$tree" fx-selftest 220 34 DM-Deadbolt -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=44:POSTSELFTEST@54:exit ${UC2_GLARGS:-} > "$out/fx-selftest.report" 2>&1
   grep -a "UC2GLDrv: selftest" "$out/fx-selftest.out" | sed -E 's/^UC2GLDrv: //; s/;.*//' | sed 's/^/fx /'
   grep -a -q "selftest summary" "$out/fx-selftest.out" || echo "fx selftest: FAILED to run (see $out/fx-selftest.out)"
 fi
