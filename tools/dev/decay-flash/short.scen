@@ -1,0 +1,11 @@
+# The owner's view only (as rotate.scen's start): two pictures one second apart.
+chan exec TELEPORT -337.1 2.3 -418.4 32950 1193
+sleep 3
+chan exec TELEPORT -337.1 2.3 -418.4 32950 -3000
+sleep 2
+chan exec TELEPORT -337.1 2.3 -418.4 32950 1193
+sleep 2
+chan exec WHEREAMI
+shot r0
+sleep 1
+shot r0b

@@ -91,3 +91,34 @@ Open, next steps: the same GL4ES defect for fixed-function draws (a unit > 0 who
 when unit 0 has a cube map: the water's own stage 1 mask) and for the interface's pixel-shader programs with a cube
 on stage 0; the GL4ES fix itself (fork; needs the owner's go-ahead to push); native GPU, AA 4, 2285x1290; mouse
 rotation; regressions.
+
+### Step 2 (13:58-14:20): the cause proved from the GL4ES side too; native GPU, the owner's size, AA 0/4, mouse
+
+**GL4ES-side proof.** `docs/porting/analysis/decay-flash-gl4es.patch` (against the fork's `fix/cubemap-bind-active-unit`
+at `6b6bccd`, `src/gl/texture_params.c` `realize_textures`): the target of unit i from unit i's enables, and with a
+cube map enabled the unit's GLES 2D slot is still made to hold its 2D texture (a GLSL sampler2D reads it). Built
+into a test binary **with the driver fix switched off** (`uc2-gl4esonly.bin`, not kept): the twin's owner view
+36.9 / 37.8 instead of 210 / 162 (`df-twin-repro-gl4esonly-*`). Either side removes the cloud. Not pushed: the fork
+is shared with engine-ut2004 and its pushes need the owner's go-ahead; the build here fetches the branch as it is,
+so the shipped fix is the driver's. Against the desktop the GL4ES patch changes nothing measurable in these views
+(desktop vs twin mean |diff| 0.8-1.5 of 255 with either fix; animated water and pawn).
+
+**Native, Quadro P620 (`UC2_GPU=1`, SDL offscreen; GL4ES on NVIDIA's ES 3.2), `rotate.scen`** (the owner's view, then
+the camera turned with relative mouse motion through the input channel, 2002 yaw units = 11 degrees per step,
+6 steps right, 12 left, back): before the fix (`uc2-before.bin` = main `81fd44e`'s driver) the twin shows the cloud
+from yaw 30948 to 38957 (about 44 degrees: shots r0-r2, l4-l7: 207 / 154 each, identical frame to frame: "it
+doesn't move"), and it is gone at 40959 and beyond and at 28946 and below (36-44 / 33-42): exactly the owner's "I can
+rotate the camera quite a bit and it doesn't go away and it doesn't move" (the water stays the last scene draw over
+that range). After the fix every step is 34-43 / 34-42 (`df-gpu-twin-rotate-{before,fix}.lum`). The desktop device
+on the GPU never shows it, before or after (`df-gpu-desk-rotate-{before,fix}`: r0 36.8 / 36.6).
+
+**The owner's size 2285x1290, GPU twin**: AA 0 before 207.0 / 154.1, after 36.3 / 38.5; AA 4 before 206.6 / 153.4,
+after 36.7 / 38.7 (`df-gpu-twin-owner-aa{0,4}-{before,fix}-r0.png`; side by side
+`logs/b2/owner-view-before-after-gpu-twin.png`: the "before" is the owner's `blownout.png`).
+(The runner converts the engine's BMPs itself: `appCreateBitmap`, Core `UnMisc.cpp:1558`, writes 24-bit rows without
+the 4-byte padding, which PIL rejects at widths like 2285. Epic's defect, harmless at 1280; not touched.)
+
+**The effect is still there.** With the fix, the dump of the cloud frame (`logs/b2/twin-dump-fix/`): every reference
+copy equals the back buffer (mean |diff| 0.39 of 255 against the main colour downsized, alpha 0 like the back
+buffer). Post-processing on minus off at the owner's view: twin 0.83, desktop 0.88 mean |diff| (`df-*-ab-fix-on/nopp`),
+and desktop vs twin with it on: 0.33: the glow and bloom contribute the same on both bindings.

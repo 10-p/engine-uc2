@@ -70,7 +70,12 @@ if [ -f "$out/$tag.result.shots" ]; then
   i=0
   while read -r shot; do
     bmp=$(printf "%s/Shot%05d.bmp" "$sys" "$i")
-    [ -f "$bmp" ] && python3 -c "import sys; from PIL import Image; Image.open(sys.argv[1]).save(sys.argv[2])" "$bmp" "$out/$tag-$shot.png" && shots="$shots $shot"
+    # appCreateBitmap (Core UnMisc.cpp) writes rows without the BMP's 4-byte padding: read the 24-bit rows as they are
+    [ -f "$bmp" ] && python3 -c "
+import sys, struct
+from PIL import Image
+d = open(sys.argv[1], 'rb').read(); off, = struct.unpack_from('<I', d, 10); w, h = struct.unpack_from('<ii', d, 18)
+Image.frombytes('RGB', (w, h), d[off:off + 3*w*h], 'raw', 'BGR', 0, -1).save(sys.argv[2])" "$bmp" "$out/$tag-$shot.png" && shots="$shots $shot"
     i=$((i+1))
   done < "$out/$tag.result.shots"
   rm -f "$sys"/Shot*.bmp

@@ -1,0 +1,39 @@
+diff --git a/src/gl/texture_params.c b/src/gl/texture_params.c
+index 726878d..587db52 100644
+--- a/src/gl/texture_params.c
++++ b/src/gl/texture_params.c
+@@ -866,8 +866,8 @@ void realize_textures(int drawing) {
+     DBG(printf("realize_textures(%d), glstate->bound_changed=%d, glstate->enable.texture[0]=%X glsate->actual_tex2d[0]=%u\n", drawing, glstate->bound_changed, glstate->enable.texture[0], glstate->actual_tex2d[0]);)
+ #endif
+     for (int i=0; i<glstate->bound_changed; i++) {
+-        // get highest priority texture unit
+-        int tmp = glstate->enable.texture[glstate->texture.active];
++        // get highest priority texture target of unit i (was the ACTIVE unit's flags for every unit)
++        int tmp = glstate->enable.texture[i];
+         int tgt = ENABLED_TEX2D; // default to TEX2D
+         if(IS_TEX3D(tmp))
+             tgt = ENABLED_TEX3D;
+@@ -882,8 +882,12 @@ void realize_textures(int drawing) {
+ 
+         GLenum target = map_tex_target(to_target(tgt));
+         gltexture_t *tex = glstate->texture.bound[i][tgt];
+-        GLuint t = tex->glname;
+-        if(tgt!=ENABLED_CUBE_MAP) {// CUBE MAP are immediately bound
++        // CUBE MAP are immediately bound (gl4es_glBindTexture), but the GLES 2D slot of the unit still has to
++        // hold the unit's 2D texture: a GLSL program's sampler2D on this unit reads it whatever the
++        // fixed-function enables say (before: the 2D bind was skipped and the slot kept a stale texture).
++        gltexture_t *tex2d = (tgt==ENABLED_CUBE_MAP)?glstate->texture.bound[i][ENABLED_TEX2D]:tex;
++        GLuint t = tex2d->glname;
++        {
+ #ifdef TEXSTREAM
+             if(glstate->bound_stream[i]) {
+                 realize_active();
+@@ -945,6 +949,8 @@ void realize_textures(int drawing) {
+             }
+         }
+         realize_1texture(target, i, tex, glstate->samplers.sampler[i]);
++        if(tex2d!=tex)
++            realize_1texture(GL_TEXTURE_2D, i, tex2d, glstate->samplers.sampler[i]);
+     }
+     glstate->bound_changed = 0;
+ }

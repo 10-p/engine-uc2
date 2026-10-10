@@ -1,0 +1,251 @@
+# The owner's view, then the camera turned with the mouse (relative motion through the input channel, as a mouse
+# delivers it), WHEREAMI after each step for the yaw, a picture per step; then back, then a short walk away.
+chan exec TELEPORT -337.1 2.3 -418.4 32950 1193
+sleep 3
+chan exec TELEPORT -337.1 2.3 -418.4 32950 -3000
+sleep 2
+chan exec TELEPORT -337.1 2.3 -418.4 32950 1193
+sleep 2
+chan exec WHEREAMI
+shot r0
+sleep 1
+shot r0b
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+sleep 0.8
+chan exec WHEREAMI
+shot r1
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+sleep 0.8
+chan exec WHEREAMI
+shot r2
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+sleep 0.8
+chan exec WHEREAMI
+shot r3
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+sleep 0.8
+chan exec WHEREAMI
+shot r4
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+sleep 0.8
+chan exec WHEREAMI
+shot r5
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+chan mouse 40 0
+sleep 0.05
+sleep 0.8
+chan exec WHEREAMI
+shot r6
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+sleep 0.8
+chan exec WHEREAMI
+shot l1
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+sleep 0.8
+chan exec WHEREAMI
+shot l2
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+sleep 0.8
+chan exec WHEREAMI
+shot l3
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+sleep 0.8
+chan exec WHEREAMI
+shot l4
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+sleep 0.8
+chan exec WHEREAMI
+shot l5
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+sleep 0.8
+chan exec WHEREAMI
+shot l6
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+sleep 0.8
+chan exec WHEREAMI
+shot l7
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+sleep 0.8
+chan exec WHEREAMI
+shot l8
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+sleep 0.8
+chan exec WHEREAMI
+shot l9
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+sleep 0.8
+chan exec WHEREAMI
+shot l10
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+sleep 0.8
+chan exec WHEREAMI
+shot l11
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+chan mouse -40 0
+sleep 0.05
+sleep 0.8
+chan exec WHEREAMI
+shot l12
+chan exec TELEPORT -337.1 2.3 -418.4 32950 1193
+sleep 2
+shot back
+sleep 2
+shot back2
