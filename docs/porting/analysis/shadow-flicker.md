@@ -192,3 +192,13 @@ near the pawn and the crosshatched band are gone, the canopy shadow lies over th
 `logs/b1/b1-strip-r7-before-after.png` (12 frames each: before desktop, after desktop, before twin, after twin),
 `logs/b1/b1-strip-r6-before-after.png`, `logs/b1/b1-diff-r7-before-after.png` (|frame 1 - frame 0| x 4: before
 desktop/twin show whole triangles, after only the small motion).
+
+## Step 4. Regressions (2026-10-10, binary of commit 5107cf9)
+
+- `tools/dev/m7b.sh b1m7b` (desktop, Mesa llvmpipe; `logs/b1/m7b-desktop.txt`): **11 PASS, 0 FAIL**: census 24/24 and
+  8/8 batched; shadow-filter PC 0.00/255, Xbox 0.56/255 (the shadow texture's own render passes, which also carry
+  ZBias calls, unchanged); projector-agree DM-DeepCore mean 0.143 max 4 (M7b: 0.136-0.173, max 4); projector-differ
+  CTF-Recoil mean 8.86 (M7b 8.7-9.0); draw calls 85/81 and 81/75 (as M7b); terrain PASS.
+- `tools/dev/m7-effects.sh b1fx` (`logs/b1/m7-effects.txt`, pictures `logs/b1fx/`): 14 effect lines, every one
+  critical=0 glerrors=0 programs_failed=0+0 left_behind=0 tries=1; praxis-panes A vs the wine reference 2.800 (below 8);
+  self-test (`logs/b1/m7-selftest.txt`) 15 passed, 0 failed.
