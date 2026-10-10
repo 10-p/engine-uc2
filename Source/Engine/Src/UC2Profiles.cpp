@@ -60,15 +60,42 @@ static FString ActiveProfileName( UViewport* Viewport )
 	return Profile->ProfileName;
 }
 
+// G-7 (2026-10-10): the web build kept a profile as ONE flat file, Profiles/<name>.PRO, from 2026-10-07 until the
+// frontend learned a directory wildcard (ufrontend userFiles: System/Profiles/<*>/AVARIS_PROFILE.PRO); it now uses
+// Epic's layout like every other build. A flat file a web preview player still has is MOVED into Epic's folder
+// once, before the last profile is loaded; if that folder already exists the flat file is an older copy and is
+// deleted. The web host keeps the flat glob for this transition, so it sees the flat file go and forgets it.
+// Not migration machinery for inis: one rename per file, logged. Delete with the flat glob when no preview
+// player is left. (`<*>` stands for a bare `*` segment: a star and a slash would end this comment.)
+static void UC2MoveFlatProfiles( ULoadSaveManager* Manager )
+{
+	// = ULoadSaveManager::GetProfileRoot (protected there; the PC layout, not the Xbox subclass's)
+	FString Root = FString::Printf( TEXT("%s%sProfiles%s"), *GFileManager->GetDefaultDirectory(), PATH_SEPARATOR, PATH_SEPARATOR );
+	TArray<FString> Flat = GFileManager->FindFiles( *(Root + TEXT("*.PRO")), 1, 0 );
+	for( INT i=0; i<Flat.Num(); i++ )
+	{
+		FString Name = Flat(i).Left( Flat(i).Len() - 4 ), From = Root + Flat(i);
+		UBOOL Older = Manager->ExistsGameObject( Name );
+		UBOOL Done = Older ? GFileManager->Delete( *From, 0, 1 ) : GFileManager->MakeDirectory( *(Root + Name), 1 )
+			&& GFileManager->Move( *(Root + Name + PATH_SEPARATOR + SAVE_FILE_NAME), *From, 0, 1 );
+		debugf( NAME_Init, TEXT("Profiles: flat profile file %s %s%s"), *From, Older ? TEXT("deleted (Epic's folder exists)")
+			: TEXT("moved into Epic's folder"), Done ? TEXT("") : TEXT(": FAILED, left as it is") );
+	}
+}
+
 ENGINE_API void UC2StartWithLastProfile( UViewport* Viewport )
 {
 	guard(UC2StartWithLastProfile);
 
 	ReadRememberedProfile();
-	if( !Viewport || !Viewport->Profile || GIsEditor || !GRememberedProfile.Len() )
+	if( !Viewport || !Viewport->Profile || GIsEditor )
+		return;
+	ULoadSaveManager* Manager = Cast<ULoadSaveManager>(GLoadSaveManager);
+	if( Manager )
+		UC2MoveFlatProfiles( Manager );
+	if( !GRememberedProfile.Len() )
 		return;
 
-	ULoadSaveManager* Manager = Cast<ULoadSaveManager>(GLoadSaveManager);
 	if( !Manager || !Manager->ExistsGameObject(GRememberedProfile) )
 	{
 		debugf( NAME_Init, TEXT("Profiles: the last profile \"%s\" does not exist; starting with no profile"), *GRememberedProfile );
@@ -125,6 +152,9 @@ ENGINE_API void UC2RememberProfile( UClient* Client )
 	name a transient profile uses (D-4, GUI.u) and the name the web launcher reads back into
 	its name field. LoadMap asks this first and leaves [DefaultPlayer] Name alone while a
 	profile names the player.
+	G-7: the same for [DefaultPlayer] Class. With a profile the URL's Class is the
+	profile's character (below); written back, it became the character of the next launch
+	WITHOUT a profile. [DefaultPlayer] Class stays the profile-less player's own character.
 -----------------------------------------------------------------------------*/
 
 ENGINE_API UBOOL UC2ProfileNamesThePlayer( UClient* Client )
@@ -133,26 +163,69 @@ ENGINE_API UBOOL UC2ProfileNamesThePlayer( UClient* Client )
 }
 
 /*-----------------------------------------------------------------------------
-	D-4: a local player with an active profile logs in under the profile's name.
+	D-4 / G-7: a local player with an active profile logs in as the profile: its
+	name (D-4) and its character (G-7).
 
-	The menus put the profile's name in every URL they build (GameStartInfo.GetName), and
-	GUIController.SetProfilePlayerName renames the player whenever the profile changes, but
-	only once the GUI has bound that delegate (when a menu is first shown). A level loaded
-	from the command line, by the web launcher's Play form (`DM-Deadbolt?Name=<launcher's
-	name>`) or by a console `open` logged the player in under the URL's Name, so a profile
-	made at the menus did not name the player in a map started directly (seen in
-	tools/dev/d3-profiles.sh r2m once the profile's name stopped leaking into [DefaultPlayer]).
-	MatchViewportsToActors spawns the primary viewport's PlayerController with a copy of the
-	URL whose Name is the profile's (PlayerName: the underscore form the URLs use).
+	The menus put the profile's name and character in every URL they build
+	(GameStartInfo.GetName, PlayerProfile.GetURL), and the profile updates the
+	viewport's PlayerURL when it changes (SetCharacterClassName -> UpdateURL), which
+	Browse adds to a partial travel (UViewport::InitializeURL). A level loaded from
+	the command line (the web launcher's Play form: `DM-Deadbolt?Name=<launcher's
+	name>`) is an ABSOLUTE travel: the login URL is the command line on top of
+	User.ini [DefaultPlayer] alone, so the player was named and dressed by
+	[DefaultPlayer] (Name: the launcher's; Class: whatever map was loaded last, which
+	after switching profiles without playing is the OTHER profile's character:
+	BLOCKERS "the character", owner's N-4, 2026-10-10).
+	MatchViewportsToActors spawns the primary viewport's PlayerController with a copy
+	of the URL whose Name is the profile's (PlayerName: the underscore form the URLs
+	use) and whose Class is the profile's character, computed by Epic's own script
+	(PlayerProfile.GetURL: "?Class=<class>", the variant rule included). Without a
+	saved profile nothing changes: [DefaultPlayer] Class (and the URL) decide. A
+	ladder rung still names its own character (UCDeathMatch.GetPlayerClassName).
 -----------------------------------------------------------------------------*/
 
-ENGINE_API void UC2ProfileNameInURL( UViewport* Viewport, FURL& URL )
+#pragma pack(push,4)	// as the generated _Parms structs (EngineClasses.h)
+struct UC2PlayerProfile_GetURL_Parms	// PlayerProfile.GetURL( optional bool bOptions, bWeapons, bClientOnly )
 {
-	guard(UC2ProfileNameInURL);
+	BITFIELD bOptions;
+	BITFIELD bWeapons;
+	BITFIELD bClientOnly;
+	FString ReturnValue;
+};
+#pragma pack(pop)
+
+// The profile's character as PlayerProfile.GetURL() puts it in a URL ("Class=<class>"), or "" (none, or no GetURL).
+static FString ProfileClassOption( UPlayerProfile* Profile )
+{
+	UFunction* GetURL = Profile->FindFunction( FName(TEXT("GetURL"), FNAME_Find) );
+	if( !GetURL )
+		return FString();
+	UC2PlayerProfile_GetURL_Parms Parms;
+	Parms.bOptions = Parms.bWeapons = Parms.bClientOnly = 0;
+	Profile->ProcessEvent( GetURL, &Parms );
+	INT At = Parms.ReturnValue.InStr( TEXT("?Class=") );
+	if( At < 0 )
+		return FString();
+	FString Option = Parms.ReturnValue.Mid( At + 1 );
+	INT End = Option.InStr( TEXT("?") );
+	return End < 0 ? Option : Option.Left( End );
+}
+
+ENGINE_API void UC2ProfileInURL( UViewport* Viewport, FURL& URL )
+{
+	guard(UC2ProfileInURL);
 	UPlayerProfile* Profile = Viewport ? Viewport->Profile : NULL;
-	if( !Profile || Profile->IsTransient() || !Profile->PlayerName.Len() )
+	if( !Profile || Profile->IsTransient() )
 		return;
-	URL.AddOption( *(FString(TEXT("Name=")) + Profile->PlayerName) );
+	if( Profile->PlayerName.Len() )
+		URL.AddOption( *(FString(TEXT("Name=")) + Profile->PlayerName) );
+	FString ClassOption = ProfileClassOption( Profile );
+	if( ClassOption.Len() > 6 )	// "Class=" and a class
+	{
+		debugf( NAME_Log, TEXT("Profiles: profile \"%s\" logs in with %s (URL had Class=%s)"), *Profile->ProfileName,
+			*ClassOption, URL.GetOption( TEXT("Class="), TEXT("") ) );
+		URL.AddOption( *ClassOption );
+	}
 	unguard;
 }
 

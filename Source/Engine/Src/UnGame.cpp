@@ -27,7 +27,7 @@
 ENGINE_API void UC2StartWithLastProfile( UViewport* Viewport );
 ENGINE_API void UC2RememberProfile( UClient* Client );
 ENGINE_API UBOOL UC2ProfileNamesThePlayer( UClient* Client );	// D-4
-ENGINE_API void UC2ProfileNameInURL( UViewport* Viewport, FURL& URL );	// D-4
+ENGINE_API void UC2ProfileInURL( UViewport* Viewport, FURL& URL );	// D-4 (name), G-7 (character)
 ENGINE_API UBOOL UC2ProfilesExec( UClient* Client, const TCHAR* Cmd, FOutputDevice& Ar );	// D-3: PROFILESTATE
 // uc2 port (jitter): FRAMETRACE, one line per drawn frame (UC2FrameTrace.cpp); quiet unless asked for.
 ENGINE_API UBOOL UC2FrameTraceExec( const TCHAR* Cmd, FOutputDevice& Ar );
@@ -1177,11 +1177,12 @@ static void MatchViewportsToActors( UClient* Client, ULevel* Level, const FURL& 
 				// else spawn player using level URL
 				FString Error;
 				debugf( NAME_Log, TEXT("Spawning new actor for Viewport %s"), Viewport->GetName() );
-				// uc2 port (D-4): with a saved profile active the player logs in under the profile's name, whatever
-				// the URL says (a map from the command line or the web launcher): UC2Profiles.cpp.
+				// uc2 port (D-4, G-7): with a saved profile active the player logs in under the profile's name and
+				// with its character, whatever the URL says (a map from the command line or the web launcher):
+				// UC2Profiles.cpp.
 				FURL PlayerURL( URL );
 				if( Viewport == Client->Viewports(0) )
-					UC2ProfileNameInURL( Viewport, PlayerURL );
+					UC2ProfileInURL( Viewport, PlayerURL );
 				if( !Level->SpawnPlayActor( Viewport, ROLE_SimulatedProxy, PlayerURL, Error ) )
 					appErrorf( TEXT("%s"), *Error );
 			}
@@ -3030,12 +3031,14 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 #ifndef _XBOX
 	if( GIsClient )
 	{
-		// uc2 port (D-4): not while a saved profile names the player (the URL then carries the profile's name;
-		// [DefaultPlayer] Name is the player's own name, used without a profile): UC2Profiles.cpp.
-		if( !UC2ProfileNamesThePlayer( Client ) )
+		// uc2 port (D-4, G-7): not while a saved profile names the player (the URL then carries the profile's name
+		// and character; [DefaultPlayer] Name and Class are the player's own, used without a profile): UC2Profiles.cpp.
+		UBOOL ProfileOwnsThem = UC2ProfileNamesThePlayer( Client );
+		if( !ProfileOwnsThem )
 			URL.SaveURLConfig( TEXT("DefaultPlayer"), TEXT("Name" ), TEXT("User") );
 		URL.SaveURLConfig( TEXT("DefaultPlayer"), TEXT("Team" ), TEXT("User") );
-		URL.SaveURLConfig( TEXT("DefaultPlayer"), TEXT("Class"), TEXT("User") );
+		if( !ProfileOwnsThem )
+			URL.SaveURLConfig( TEXT("DefaultPlayer"), TEXT("Class"), TEXT("User") );
 		URL.SaveURLConfig( TEXT("DefaultPlayer"), TEXT("Skin" ), TEXT("User") );
 		URL.SaveURLConfig( TEXT("DefaultPlayer"), TEXT("Face" ), TEXT("User") );
 		URL.SaveURLConfig( TEXT("DefaultPlayer"), TEXT("Voice" ), TEXT("User") );

@@ -348,7 +348,7 @@ static UBOOL ProfileTest( const TCHAR* Parms )
 	ULoadSaveManager* Manager = ConstructObject<ULoadSaveManager>( ULoadSaveManager::StaticClass() );
 	Manager->Init( NULL );
 	// C-2: "list" writes the names ListGameObjects finds (one per line) to <export.txt>; "exists" and "delete" return
-	// whether the profile <profile> exists / was deleted (the web build keeps profiles as Profiles/<name>.PRO).
+	// whether the profile <profile> exists / was deleted (Profiles/<name>/AVARIS_PROFILE.PRO on every build since G-7).
 	if( Mode==TEXT("LIST") )
 	{
 		TArray<FString> Names;
