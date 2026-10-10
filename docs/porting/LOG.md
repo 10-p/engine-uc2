@@ -573,3 +573,17 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
     spawn: to pin), m10 rebuilt 5/5 and vanilla 2/2 on rerun, d9 119/0, audio 7191/7191 + 45/45, net cheats 9/9 +
     listen, Node census 58/58, browser boot 4/4, net 2/2, keys, audio 3/3, saves; the jitter spec's strafe-right slope
     0.217-0.247 against a 0.2 limit on WebGL 2 (forward/back 0.000; native 0.000 everywhere): OPEN, needs a quiet look.
+- 2026-10-06 (logged 2026-10-10, D-3) — **O-3 decided by the owner: the depth of field keeps the shipped blur alpha
+  (65).** The always-on depth of field (`UUCScreenDOF`, every map beyond z = 0.98) blends its blur with alpha 65 in
+  both camera modes, as the shipped Xbox binary did: Epic's stale `UCCameraEffects.h` made that binary read
+  `FirstPersonAlpha`'s byte (65) where the script meant `AbsoluteBlurAlpha` (100 in third person); our header is
+  fixed (`44f81c6`), so the shipped value is chosen explicitly by `FRenderCaps::ShippedDOFBlurAlpha` from the
+  device key `DOFShippedBlurAlpha` (`UCCameraEffects.cpp` `UUCScreenDOF::PostRender`; console `DOFSHIPPEDALPHA 0|1`).
+  The picture pair the owner asked for is `fx-dof-alpha` (DM-Azure, `tools/dev/m7-effects.sh`, postprocess.md P5b:
+  the far region less softened with 65; mean difference 1.4/255 there, 4.2 between DOF off and on). The owner's
+  review of 2026-10-06 (`answers.txt` asked why 100 vs 65; the decision is PLAN.md O-3 and BLOCKERS.md "Decided by the
+  owner"): "default `DOFShippedBlurAlpha` to the shipped value (65) so the look matches the Xbox binary";
+  commit `2208566` set `DOFShippedBlurAlpha=True` in `Default.ini` (README row 18); F-5 (`b6fcffb`, 2026-10-09)
+  made the compiled default True as well, so an ini without the key gets 65 too; the owner's review of 2026-10-09
+  confirmed it (PLAN.md: "DOF alpha stays 65 (it is an alpha, not a radius; no A/B)"). Off switch: `DOFShippedBlurAlpha=False` (the script's
+  100 in third person). Never compared with an Xbox picture.
