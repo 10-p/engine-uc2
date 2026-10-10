@@ -671,10 +671,10 @@ def check_profile_login():
         pl, pb = spawn_all([l, b], "spawn")
         lp = l.probe("PL")
         pri = lp["pris"].get(prof) if lp else None
-        result(bool(pri) and pri.get("pawnclass", "").endswith(char), ck + ".server-pri",
+        result(bool(pri) and pri.get("pawnclass", "") == char.split(".")[-1], ck + ".server-pri",
                "listen server's PRI for the client: %s" % (pri if pri else "none named %s (have %s)" % (prof, list(lp["pris"]) if lp else "no probe")))
         pw = pawn_of(lp, prof)
-        result(bool(pw) and pw.get("class", "").endswith(char.split(".")[-1]), ck + ".server-pawn",
+        result(bool(pw) and pw.get("class", "") == char.split(".")[-1], ck + ".server-pawn",
                "listen server's pawn for the client: %s" % pw)
         result("NetB" not in (lp["pris"] if lp else {}), ck + ".not-url-name", "no PRI named NetB (the URL's Name)")
     finally:

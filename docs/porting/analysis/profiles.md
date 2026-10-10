@@ -513,3 +513,36 @@ below 16 (17-28; the coordinator's rule: no timing-sensitive browser run above 1
   PULSE_SINK=<null sink> <WorkUC2>/bin/capped 6G 1800 -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=<N> -- \
   --target uc2 uc2-wasm-saves.spec.js
 (check `sha256sum serve-web/SDLLaunch.wasm` = 7c2440eb... before and after).
+
+### Step G7-5 (coordinator, 2026-10-10): a network join logs in as the profile too
+
+Accepted by the coordinator: the flat-file decision (removed at the close-out milestone), `[DefaultPlayer] Class` not
+overwritten while a profile is active, the profile over a `?Class=` on the command line; mem-guard budget 21 GB.
+
+- The join path: `UGameEngine::Browse`, network branch -> `new UNetPendingLevel( this, URL )`; on the server's
+  challenge the client sends `LOGIN RESPONSE=.. URL=<PartialURL>` (UnPenLev.cpp:288), `PartialURL` = that URL without
+  the host; the server's `Login` parses Name/Class out of it. A command-line join (`<host>[:<port>]`, the web's
+  `<room>?connect` after its conversion at the top of Browse) is TRAVEL_Absolute, so `InitializeURL` (the viewport's
+  PlayerURL) is not added: only `[DefaultPlayer]` reached the server.
+- Change: `UnGame.cpp` Browse network branch, right before `new UNetPendingLevel`: `UC2ProfileInURL( PrimaryViewport,
+  URL )` (the same function as MatchViewportsToActors, same `Profiles: profile ".." logs in with ..` line). No-op
+  without a saved profile.
+- `UCC.cpp` `profiletest make <profile> <out> [Character=<class>]`: a profile with the class DEFAULTS (a playable new
+  profile, unlike `save`'s test pattern) and that character. Test tool only.
+- `tools/dev/net-test.py` check `profile-login` (also in net-test.sh's default list): `ucc-bin profiletest make NetProf
+  Character=UCCharacters.UCPawn_Human_Sapphire`, a listen host NetL without a profile, a client joining from the
+  command line `127.0.0.1:<port>?Name=NetB` with `-ini:User:[Profiles]:LastProfile=NetProf` and
+  `-ini:User:[DefaultPlayer]:Class=...Malcolm`; checks: the client starts in NetProf, its `logs in with
+  Class=...Sapphire (URL had Class=...Malcolm)` line, the server's `Join succeeded: NetProf`, the server's PRI named
+  NetProf with pawnclass Sapphire, the server's pawn of class Sapphire, no PRI named NetB, clean logs.
+- Builds: native `cmake --build build-native -j4` rc 0 (`build-native-2.log`); wasm-perf -j4 rc 0, 0 errors
+  (`build-wasm-perf-3.log`), SDLLaunch.wasm sha256 `4c6d7aac72ee7271ef87d19e14c740c179b52eb9e58ab759e0a84067510a5de8`.
+- `NET_TREE=g7net NET_PORT=7871 tools/dev/net-test.sh profile-login listen` (load 14-19): profile-login **8/8 PASS**
+  in runs 2 and 4 (`logs/g7/net-test-run2.txt`, `-run4.txt`; run 1 failed only the PRI check's own comparison:
+  the probe prints the short class name, fixed). In those runs `listen.hit`/`listen.kill` FAILED (the shooter's 40
+  shots miss), while every other listen item passed. Diagnosis: a harness order effect, not G-7: `listen` alone on
+  the same binary PASSES (`run3-listen-fresh.txt`: hit at shot 6, kill after 14), `listen listen` passes the first and
+  fails the second (`run5-listen-twice.txt`), main's binary passes listen after profile-login (whose profile could
+  not be made there: `net-test-control-main-2.txt`) and alone (`net-test-control-main-listen.txt`), and the g6 agent's
+  runs at dba0ca7 (no G-7 code) failed listen.hit the same way. No G-7 code runs in a profile-less listen game (no
+  `Profiles:` line in those logs).
