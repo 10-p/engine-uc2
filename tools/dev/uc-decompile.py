@@ -114,6 +114,10 @@ class World:
             for o in self.objs[p]:
                 pk.exp_paths[o.path] = o
                 self.index.setdefault(o.key.lower(), o)
+        # Any enum yields a ByteConst for its n-th tag: the fallback when the context's enum is unknown (an enum
+        # tag assigned to an int, e.g. `m_CTIState = ECrossTitleInvite.CTI_None`). The largest of Core/Engine.
+        self.fallback_enum = max((o for p in ('Core', 'Engine') for o in self.objs[p] if o.cls == 'Enum'),
+                                 key=lambda o: len(o.f['names']))
         self.natives = {}
         for p in sd.PACKAGES:
             for o in self.objs[p]:
@@ -209,12 +213,15 @@ class Typer:
         self.world, self.cls = world, cls
         self.chain = super_chain(cls)
         self.chain_keys = {c.key for c in self.chain}
+        self.deps = []      # classes of this package whose types are used: `dependson` (parse order)
 
     def scoped(self, o):
         """Name of a struct/enum o as usable from self.cls."""
         oc = owner_class(o)
         if oc is None or oc.key in self.chain_keys:
             return o.name
+        if oc.pkgname == self.cls.pkgname and oc not in self.deps:
+            self.deps.append(oc)
         return '%s.%s' % (oc.name, o.name)
 
     def type_of(self, p, in_array=False):
@@ -281,6 +288,8 @@ def var_flags(p, in_func=False):
     elif fl & CPF_EditInline:
         words.append('editinline')
     if in_func:
+        # parameters and locals: only the parameter keywords (the save adds export/editinline to object properties)
+        words = ['const'] if fl & 0x2 and fl & CPF_Parm else []
         if fl & CPF_OptionalParm:
             words.append('optional')
         if fl & CPF_OutParm and not fl & CPF_ReturnParm:
@@ -294,24 +303,60 @@ def var_flags(p, in_func=False):
 
 # --- bytecode to expressions -------------------------------------------------------------------------------------
 CASTS = {0x39: 'vector', 0x3A: 'int', 0x3B: 'bool', 0x3C: 'float', 0x3D: 'byte', 0x3E: 'bool', 0x3F: 'float',
-         0x40: 'byte', 0x41: 'int', 0x42: 'float', 0x43: 'byte', 0x44: 'int', 0x45: 'bool', 0x46: 'bool',
-         0x47: 'bool', 0x48: 'bool', 0x49: 'bool', 0x4A: 'bool', 0x4B: 'bool', 0x4C: 'bool', 0x4D: 'bool',
-         0x4E: 'bool', 0x4F: 'bool', 0x50: 'vector', 0x51: 'rotator', 0x52: 'string', 0x53: 'string',
-         0x54: 'string', 0x55: 'string', 0x56: 'string', 0x57: 'string', 0x58: 'string', 0x59: 'string',
-         0x5A: 'string', 0x5B: 'string', 0x5C: 'string', 0x5D: 'string', 0x5E: 'string', 0x5F: 'string',
-         0x60: 'byte', 0x61: 'int', 0x62: 'bool', 0x63: 'float', 0x64: 'name', 0x65: 'vector', 0x66: 'rotator',
-         0x67: 'string', 0x68: 'string'}
+         0x40: 'byte', 0x41: 'int', 0x42: 'float', 0x43: 'byte', 0x44: 'int', 0x45: 'bool', 0x47: 'bool',
+         0x48: 'bool', 0x49: 'byte', 0x4A: 'int', 0x4B: 'bool', 0x4C: 'float', 0x4D: 'vector', 0x4E: 'rotator',
+         0x4F: 'bool', 0x50: 'rotator', 0x51: 'bool', 0x52: 'string', 0x53: 'string', 0x54: 'string',
+         0x55: 'string', 0x56: 'string', 0x57: 'string', 0x58: 'string', 0x59: 'string', 0x5A: 'name',
+         0x5B: 'string'}   # ECastToken, Source/Core/Inc/UnStack.h
 
 
 class E:
     """Expression node: text plus a kind used by the statement builder."""
-    __slots__ = ('t', 'k', 'a')
+    __slots__ = ('t', 'k', 'a', 'en')
 
-    def __init__(self, t, k='expr', a=None):
-        self.t, self.k, self.a = t, k, a
+    def __init__(self, t, k='expr', a=None, en=None):
+        self.t, self.k, self.a, self.en = t, k, a, en
 
     def __repr__(self):
         return self.t
+
+
+def prop_enum(o):
+    """The enum of a byte property (or of an array's byte inner), else None."""
+    if o is None or isinstance(o, tuple):
+        return None
+    if o.cls == 'ByteProperty':
+        return o.ref('enum')
+    if o.cls == 'ArrayProperty':
+        return prop_enum(o.ref('inner'))
+    return None
+
+
+def bc(e, en):
+    """A byte constant (or its implicit int conversion) printed as the enum tag when the context's enum is known:
+    the compiler emits ByteConst only for enum tags; a bare number would compile to an int constant."""
+    if en is not None and e.k in ('byteconst', 'castbyteconst'):
+        names = en.f['names']
+        tag = names[e.a] if e.a < len(names) else 'EnumCount'
+        return E('%s.%s' % (en.name, tag), 'enumconst', e.a, en)
+    return e
+
+
+def to_enum(e, en):
+    """Assigning a plain byte to an enum byte needs `EnumName(x)` (no code: same type)."""
+    e = bc(e, en)
+    if en is not None and e.en is not en and e.k not in ('enumconst', 'nothing') and e.k != 'byteconst':
+        return E('%s(%s)' % (en.name, e.t), e.k if e.k == 'call' else 'expr', e.a, en)
+    return e
+
+
+def params_of(fn):
+    if fn is None or isinstance(fn, tuple):
+        return [], None
+    kids = fn.children()
+    ps = [c for c in kids if c.cls in PROPS and c.f['flags'] & CPF_Parm and not c.f['flags'] & CPF_ReturnParm]
+    rs = [c for c in kids if c.cls in PROPS and c.f['flags'] & CPF_ReturnParm]
+    return ps, (rs[0] if rs else None)
 
 
 class Code:
@@ -410,8 +455,9 @@ class Code:
                 out.append((at, None, 'gotolabel', self.expr()))
             elif t == 0x09:
                 self.i += 1
-                self.w()
-                out.append((at, None, 'assert', self.expr()))
+                line = self.w()
+                e = self.expr()
+                out.append((at, None, 'assert', E(e.t, e.k, line)))
             elif t == 0x0E:
                 self.i += 1
                 self.i32()
@@ -437,6 +483,21 @@ class Code:
 
     def call(self, fn, args, how, name=None):
         """Text of a call to function Obj fn (how: final/virtual/global/native/delegate)."""
+        if fn is None and name is not None:
+            fn = self.dec.find_function(name)
+        ps, rp = params_of(fn)
+        ren = prop_enum(rp)
+        if fn is not None and not isinstance(fn, tuple) and fn.f['funcflags'] & FUNC_Operator and len(args) == 2:
+            en = args[0].en or args[1].en
+            args = [bc(args[0], en), bc(args[1], en)]
+        else:
+            args = [to_enum(a, prop_enum(ps[n])) if n < len(ps) else a for n, a in enumerate(args)]
+        e = self.call0(fn, args, how, name)
+        if e.en is None:
+            e.en = ren
+        return e
+
+    def call0(self, fn, args, how, name=None):
         if fn is not None and not isinstance(fn, tuple):
             ff = fn.f['funcflags']
             if ff & FUNC_Operator:
@@ -465,17 +526,17 @@ class Code:
             return self.call(fn, self.args(), 'native')
         if t in (0x00, 0x01, 0x49):
             o = self.obj()
-            return E(self.objname(o), 'var', o)
+            return E(self.objname(o), 'var', o, prop_enum(o))
         if t == 0x02:
             o = self.obj()
-            return E('default.' + self.objname(o), 'var', o)
+            return E('default.' + self.objname(o), 'var', o, prop_enum(o))
         if t == 0x2D:
             return self.expr()
         if t == 0x17:
             return E('self')
         if t in (0x0F, 0x14, 0x45):
             l = self.expr()
-            r = self.expr()
+            r = to_enum(self.expr(), l.en)
             return E('%s = %s' % (l.t, r.t), 'let')
         if t == 0x1B:
             name = self.nm()
@@ -505,14 +566,19 @@ class Code:
             self.b()
             m = self.expr()
             if t == 0x12:
+                if m.k not in ('call', 'var') and not m.t.startswith('default.'):
+                    return E('%s.const.%s' % (ctx.t, self.const_named(ctx, m)), 'expr', None, m.en)
                 if m.t.startswith('default.'):
-                    return E('%s.%s' % (ctx.t, m.t))
-                return E('%s.static.%s' % (ctx.t, m.t), 'call' if m.k == 'call' else 'expr')
-            return E('%s.%s' % (ctx.t, m.t), m.k if m.k in ('call', 'var') else 'expr')
+                    return E('%s.%s' % (ctx.t, m.t), 'expr', None, m.en)
+                return E('%s.static.%s' % (ctx.t, m.t), 'call' if m.k == 'call' else 'expr', None, m.en)
+            if m.k not in ('call', 'var') and not m.t.startswith('default.'):
+                # `obj.const.NAME`: the compiler emits Context(obj, <the constant's value>)
+                return E('%s.const.%s' % (ctx.t, self.const_named(ctx, m)), 'expr', None, m.en)
+            return E('%s.%s' % (ctx.t, m.t), m.k if m.k in ('call', 'var') else 'expr', None, m.en)
         if t in (0x1A, 0x10):
             idx = self.expr()
             arr = self.expr()
-            return E('%s[%s]' % (arr.t, idx.t), 'var')
+            return E('%s[%s]' % (arr.t, idx.t), 'var', None, arr.en)
         if t == 0x37:
             a = self.expr()
             return E('%s.Length' % a.t, 'var')
@@ -539,7 +605,9 @@ class Code:
             x = self.expr()
             self.w()
             y = self.expr()
-            return E('(%s ? %s : %s)' % (c.t, x.t, y.t))
+            en = x.en or y.en
+            x, y = bc(x, en), bc(y, en)
+            return E('(%s ? %s : %s)' % (c.t, x.t, y.t), 'expr', None, en)
         if t == 0x11:
             outer, name, flags, cls = self.expr(), self.expr(), self.expr(), self.expr()
             parts = [outer.t, name.t, flags.t]
@@ -567,7 +635,7 @@ class Code:
             return E(esc_str(''.join(chars)))
         if t == 0x20:
             o = self.obj()
-            return E(self.objconst(o))
+            return E(self.objconst(o), 'objconst', o)
         if t == 0x21:
             return E("'%s'" % self.nm())
         if t == 0x22:
@@ -576,7 +644,10 @@ class Code:
             return E('vect(%s,%s,%s)' % (fmt_float(self.f32()), fmt_float(self.f32()), fmt_float(self.f32())))
         if t == 0x35:
             return E('rng(%s,%s)' % (fmt_float(self.f32()), fmt_float(self.f32())))
-        if t in (0x24, 0x2C):
+        if t == 0x24:
+            n = self.b()
+            return E(str(n), 'byteconst', n)
+        if t == 0x2C:
             return E(str(self.b()))
         if t == 0x25:
             return E('0')
@@ -603,7 +674,10 @@ class Code:
             e = self.expr()
             if c not in CASTS:
                 raise DecompileError('cast 0x%02x' % c)
-            return E('%s(%s)' % (CASTS[c], e.t))
+            if c == 0x3A and e.k == 'byteconst':
+                fb = bc(E('', 'castbyteconst', e.a), self.world.fallback_enum)
+                return E(fb.t, 'castbyteconst', e.a)
+            return E('%s(%s)' % (CASTS[c], e.t), 'expr', None, e.en if c == 0x3A else None)
         if t in (0x32, 0x33):
             self.obj()
             a = self.expr()
@@ -612,11 +686,37 @@ class Code:
         if t == 0x36:
             m = self.obj()
             e = self.expr()
-            return E('%s.%s' % (e.t, self.objname(m)), 'var')
+            return E('%s.%s' % (e.t, self.objname(m)), 'var', m, prop_enum(m))
         if t == 0x18:
             self.w()
             return self.expr()
         raise DecompileError('token 0x%02x at %d in expression' % (t, at))
+
+    def const_named(self, ctx, m):
+        p = ctx.a if ctx.k in ('var', 'objconst') else None
+        if p is None or isinstance(p, tuple):
+            raise DecompileError('const access through %s' % ctx.t)
+        if p.cls == 'Class':
+            c = p
+        elif p.cls == 'ObjectProperty':
+            c = self.world.resolve(p.pkgname, p.f['propertyclass'])
+        elif p.cls == 'ClassProperty':
+            c = self.world.resolve(p.pkgname, p.f['metaclass'])
+        else:
+            raise DecompileError('const access through %s' % ctx.t)
+        want = m.t
+        while c is not None:
+            for k in c.children():
+                if k.cls == 'Const':
+                    v = k.f['value'].strip()
+                    try:
+                        same = str(int(v, 0)) == want
+                    except ValueError:
+                        same = v == want
+                    if same:
+                        return k.name
+            c = c.ref('super')
+        raise DecompileError('no const %s in the class of %s' % (want, ctx.t))
 
     def objconst(self, o):
         if o is None:
@@ -633,6 +733,7 @@ class Structurer:
         self.code, self.st, self.labels, self.in_state = code, stmts, labels, in_state
         self.at = {s[0]: k for k, s in enumerate(stmts)}
         self.gotos = []
+        self.ret_enum = None
 
     def idx(self, off):
         if off in self.at:
@@ -693,7 +794,8 @@ class Structurer:
                 els = None
                 if t - 1 > k and self.st[t - 1][2] == 'jump':
                     e = self.st[t - 1][3]
-                    if pl[0] <= e <= self.off(hi) and not (e == ctx.get('brk') and e > self.off(hi)):
+                    # a jump to the if's own end is a break of an inner switch, not an empty else
+                    if pl[0] < e <= self.off(hi) and not (e == ctx.get('brk') and e > self.off(hi)):
                         els = self.idx(e)
                 out.append('%sif (%s)' % (pad, pl[1].t))
                 out.append('%s{' % pad)
@@ -748,13 +850,14 @@ class Structurer:
                 k = self.switch(k, hi, ctx, ind, out)
                 continue
             if kind == 'return':
-                out.append('%sreturn%s;' % (pad, ' ' + pl.t if pl is not None else ''))
+                out.append('%sreturn%s;' % (pad, ' ' + bc(pl, self.ret_enum).t if pl is not None else ''))
             elif kind == 'stop':
                 out.append('%sstop;' % pad)
             elif kind == 'gotolabel':
                 out.append('%sgoto %s;' % (pad, pl.t))
             elif kind == 'assert':
-                out.append('%sassert(%s);' % (pad, pl.t))
+                # the compiler stores the source line in the bytecode: the line is padded to it at the end
+                out.append('\x01%d\x01%sassert(%s);' % (pl.a, pad, pl.t))
             elif kind in ('nop', 'destroyret', 'labeltable'):
                 pass
             elif kind == 'expr':
@@ -804,7 +907,7 @@ class Structurer:
                     break
                 out.append('%s\tdefault:' % pad)
             else:
-                out.append('%s\tcase %s:' % (pad, ce.t))
+                out.append('%s\tcase %s:' % (pad, bc(ce, e.en).t))
             out += self.block(c + 1, nxt, sctx, ind + 2)
         out.append('%s}' % pad)
         return endk
@@ -820,8 +923,6 @@ class Decompiler:
         self.typer = Typer(self.world, cls)
         self.errors = []
         lines = []
-        lines.append(self.header(cls))
-        lines.append('')
         kids = cls.children()
         rep = self.replication(cls, kids)
         kids = self.decl_order(kids)
@@ -833,13 +934,33 @@ class Decompiler:
                 lines.append('// DECOMPILE ERROR %s: %s' % (o.name, e))
         if rep:
             lines += rep
+        if cls.f['cpptext'] != 'None':
+            # the C++ text is stripped in the shipped file (" "); a one-line block recreates the buffer (an empty
+            # one creates none: UnEdFact.cpp)
+            lines += ['', 'cpptext', '{', '// stripped from the shipped package', '}']
         lines.append('')
         try:
             lines += self.defaults(cls)
         except (DecompileError, sd.ParseError, IndexError, KeyError, struct.error) as e:
             self.errors.append('%s defaultproperties: %s' % (cls.key, e))
             lines += ['defaultproperties', '{', '// DECOMPILE ERROR %s' % e, '}']
-        return '\n'.join(lines) + '\n'
+        return '\n'.join(self.pad_lines([self.header(cls), ''] + lines)) + '\n'
+
+    def pad_lines(self, lines):
+        """Resolve '\\x01<line>\\x01' marks: blank lines are inserted so the marked line lands on <line>."""
+        out = []
+        for l in lines:
+            for part in l.split('\n'):
+                if part.startswith('\x01'):
+                    _, n, rest = part.split('\x01', 2)
+                    n = int(n)
+                    if len(out) + 1 > n:
+                        self.errors.append('%s: line %d wanted for an assert, already at %d' % (self.cls.key, n, len(out) + 1))
+                    while len(out) + 1 < n:
+                        out.append('')
+                    part = rest
+                out.append(part)
+        return out
 
     @staticmethod
     def decl_order(kids):
@@ -901,7 +1022,7 @@ class Decompiler:
         if sup is not None:
             words += ['extends', sup.name]
         sf = sup.f if sup is not None else {'classflags': 0, 'within': 'None', 'configname': 'None', 'hidecategories': []}
-        if sup is not None and f['within'] != sf['within'] and f['within'] != 'None':
+        if sup is not None and f['within'] != sf['within'] and f['within'] not in ('None', 'Core.Object'):
             words += ['within', f['within'].split('.')[-1]]
         fl = f['classflags']
         sfl = sf['classflags']
@@ -927,6 +1048,8 @@ class Decompiler:
             words.append('config(%s)' % f['configname'])
         hid = [h for h in f['hidecategories'] if h not in sf['hidecategories']]
         shown = [h for h in sf['hidecategories'] if h not in f['hidecategories']]
+        for d in self.typer.deps:
+            words.append('dependson(%s)' % d.name)
         if hid:
             words.append('hidecategories(%s)' % ','.join(hid))
         if shown:
@@ -1082,6 +1205,8 @@ class Decompiler:
             if st and st[-1][2] == 'return' and st[-1][3] is None:
                 st.pop()
         s = Structurer(code, st, labels, in_state)
+        if o.cls == 'Function':
+            s.ret_enum = prop_enum(params_of(o)[1])
         try:
             return s.block(0, len(st), {}, ind)
         except (DecompileError, IndexError, KeyError, struct.error, ValueError) as e:
@@ -1135,6 +1260,9 @@ class Decompiler:
             lines.append('\tBegin Object Class=%s Name=%s' % (so.cls, so.name))
             sc = self.world.index.get(self.class_key(so).lower())
             for t in so.f.get('@props', []):
+                if t[0].startswith('__') and t[0].endswith('__Delegate') and len(t[5]) == 8 and \
+                        self.world.resolve_index(so.pkgname, struct.unpack('<i', t[5][:4])[0]) is so:
+                    continue    # bound to the subobject itself: comes from its class's defaults when instanced
                 lines.append('\t\t' + self.tagtext(t, sc, so.pkgname))
             lines.append('\tEnd Object')
         for t in tags:
@@ -1147,6 +1275,25 @@ class Decompiler:
         if c < 0:
             return o.pkg.import_path(-c - 1)
         return o.pkgname + '.' + o.pkg.export_path(c - 1)
+
+    def find_function(self, name):
+        """A function called by name (virtual call) from the class being decompiled, for its parameter types."""
+        c = self.cls
+        lname = name.lower()
+        while c is not None:
+            for k in c.children():
+                if k.cls == 'Function' and k.name.lower() == lname:
+                    return k
+            c = c.ref('super')
+        w = self.cls.f['within']
+        if w != 'None':
+            c = self.world.resolve(self.cls.pkgname, w)
+            while c is not None:
+                for k in c.children():
+                    if k.cls == 'Function' and k.name.lower() == lname:
+                        return k
+                c = c.ref('super')
+        return None
 
     def findprop(self, cls, name):
         c = cls
@@ -1163,6 +1310,8 @@ class Decompiler:
         if p is None:
             raise DecompileError('default %s: property not found' % key)
         val = self.value(p, typ, value, boolval, pkgname, item)
+        if key.startswith('__') and key.endswith('__Delegate'):
+            key = key[2:-10]
         if p.cls == 'ArrayProperty':
             return '\n'.join('\t%s(%d)=%s' % (key, n, v) for n, v in enumerate(val)).lstrip('\t') if val else '%s=()' % key
         if p.f['arraydim'] > 1 or idx:
@@ -1200,7 +1349,7 @@ class Decompiler:
             if isinstance(o, tuple):
                 return "%s'%s'" % (o[2], o[1])
             if o.outer() is not None and o.outer().cls == 'Class' and o.cls != 'Class' and o.pkgname == pkgname:
-                return o.name
+                return "%s'%s'" % (o.cls, o.name)
             return "%s'%s'" % (o.cls, o.key)
         if c == 'StructProperty':
             st = p.ref('struct')
@@ -1218,8 +1367,7 @@ class Decompiler:
                     raise DecompileError('struct member %s' % t[0])
                 v = self.item(m, sd.Reader(self.world.pkgs[pkgname], t[5]), pkgname, t[1], t[6])
                 if m.cls == 'ArrayProperty':
-                    for n, x in enumerate(v):
-                        parts.append('%s(%d)=%s' % (m.name, n, x))
+                    parts.append('%s=(%s)' % (m.name, ','.join(v)))
                 elif m.f['arraydim'] > 1 or t[3]:
                     parts.append('%s(%d)=%s' % (m.name, t[3], v))
                 else:
@@ -1230,8 +1378,14 @@ class Decompiler:
             inner = p.ref('inner')
             return [self.item(inner, r, pkgname) for _ in range(n)]
         if c == 'DelegateProperty':
-            r.i32()
-            return r.name()
+            o = self.world.resolve_index(pkgname, r.i32())
+            n = r.name()
+            if n == 'None':
+                return 'None'
+            if o is not None and not isinstance(o, tuple) and o.cls != 'Class' and o.outer() is not None \
+                    and o.outer().cls == 'Class':
+                return '%s.%s' % (o.name, n)
+            return n
         raise DecompileError('default of %s' % c)
 
 
