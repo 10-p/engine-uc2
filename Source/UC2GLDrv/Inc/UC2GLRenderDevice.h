@@ -387,6 +387,7 @@ public:
 
 	// Main framebuffer and present pass.
 	UBOOL CreateMainFramebuffer( INT Width, INT Height );
+	static void GetFrameSize( UViewport* Viewport, INT& Width, INT& Height );	// G-6: the window, not the viewport
 	void DestroyMainFramebuffer();
 	UBOOL CreatePresentProgram();
 	void DrawPresentPass( UViewport* Viewport );
