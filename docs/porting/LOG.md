@@ -643,3 +643,49 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   - BLOCKERS audited with the owner: 23 entries closed, 8 open. Preview republished 12:48.
   - Open for the owner: the FOV column, the pad-only rule natively, the four-player full-detail cost,
     `UseTerrain3Layer` on by default (A/B: never slower, up to 20% faster), the flicker conditions, the xemu shot.
+- 2026-10-10 (evening) — **The owner's two render bugs (B-1, B-2), the split HUD (B-3), the pad rule (G-11), the
+  decisions.** Checks on main `logs/coord/a22` (built before G-11), `a23` (c44d0c7: native/windows/wasm-perf, layouts,
+  twin 34/34, m7b 11/11, fx-owner GPU 4 clean, decay repro clean, boot spec 5/5; published 21:10) and `a24` (9018f39,
+  GL4ES fork tip b0df7bec fetched: see its summary).
+  - **B-1 shadow flicker** (f6817e6): CTF-Aqueduct tree shadows flickering on the terrain (owner's repro: first person,
+    RMODE 7, `TELEPORT 5284.9 858.1 -104.6 30811 418`). Cause: the driver turned `ZBias` into a constant polygon offset;
+    the XDK's d3d8.lib turns it into a slope-scaled one. Now `glPolygonOffset(-0.25*ZBias, -5*ZBias)` (`Source/UC2GLDrv/
+    Src/UC2GLRenderInterface.cpp:803`), a CPU depth model and a stipple measure prove it on both bindings, AA 0/4, RMODE 6/7,
+    projectors-off control; m7b, m7-effects, fps-bench unchanged. The projector's strength was right all along (the dark
+    band the owner saw is the cliff's lightmap: closed).
+  - **B-2 blown-out overlay** (a6ca0a9, 9cd292d; GL4ES fork b0df7bec): DM-Decay's full-screen white flash and DM-Fury's
+    layout switch (owner's repro spots and video; the owner's clue "particle textures" was right). Cause in GL4ES: after a
+    cube-mapped draw on texture unit 0 it kept the cube enable, so the engine's own GLSL copy pass bound its 2D texture to
+    a unit it treated as cube-mapped and the post-process reference copy read the last particle texture instead. Driver
+    side (`BindProgramTexture2D`, `UC2GLRenderDevice.cpp`): the device's own GLSL draws bind their 2D textures with the
+    unit's enables set to 2D; fork side: per-unit texture enables, pushed as `10-p/gl4es@fix/cubemap-bind-active-unit`
+    b0df7bec with tag `before-per-unit-textures` (6b6bccd4) for an A/B; the combiner self-test gained `cube-then-2d`
+    (fails on the old tip, passes on the new). UC2's water materials were never affected (anisotropy on every stage makes
+    GL4ES bind at once); a WebGL context without anisotropic filtering would have been. Heads-up for the sibling
+    engines: `docs/porting/analysis/gl4es-heads-up-ut2004-ut99.md` (engine-ut2004 fetches the branch: no change expected;
+    engine-ut99/UTGLR fetch upstream: unreached). Notebook `docs/porting/analysis/decay-flash.md`.
+  - **B-3/B-3b split HUD** (65a73d9, 2407b2f): the two-player split HUD measured against Epic's 4:3 layout (identical
+    within 0.7 design px: the health bar's gap and the lower reticle of player one are Epic's; owner: "apply Epic's
+    rule"); for three and four players the safe-zone offset follows the view's row (`HUDLayoutRow`, `Source/Engine/Src/
+    UnSplitScreenMgr.cpp`; Epic's bottom-half offset below the split line). `g6-splitscreen.sh hud/hudmenu` phases.
+  - **G-11 pad rule** (c44d0c7; ufrontend 1fa63c0): G-9's `KeyboardIsPlayer` renamed `[SDL2Drv.SDL2Client]
+    PadsStartAtPlayerTwo` (default False on every platform: keyboard, mouse and the first pad are all player one and
+    can be swapped freely; a second player plugs a second pad). True: pads take ports 2+, the keyboard and mouse own
+    port 1. No "press a button" hints or pad notices; no controller-removed page and no pause when the keyboard's
+    player's pad is pulled out (re-plugged it walks player one again). Frontend: the "Force gamepads to start with
+    second player" checkbox (`gamepadPorts` target data) with the owner's one-line blurb; the fake-pad spec runs in
+    both modes. Leftover: the port a re-plugged pad takes (device memory) is SDL's order, not the player's.
+  - **Decisions applied** (f56c924, 321db38, 245d414): split screen uses one player's FOV for every viewport
+    (`[ufront.AutoFOV] SplitClampToFullScreen=True`, computed from the whole window once per resize: the owner's
+    "option 3"); Epic's detail reductions kept in split screen (`SplitScreenFullDetail=False`: the owner took the
+    performance argument); `UseTerrain3Layer=True` on both platforms (terrain in one pass as the Xbox: A/B never
+    slower, up to 20% faster, same picture within the m7b terrain tolerance). The FOV sheet is re-measured by a24.
+  - **Asset archives** for the owner's `unreal-assets.sqfs`: `/home/ion/WorkUnreal/assets/uc2-assets.tar.gz` (1.2 GB,
+    1343 files, sha256 bbe11526…: the canonical tree, enough for the web and the native exe) and `uc2-retail-assets.tar.gz`
+    (1.6 GB, 1598 files, 60a07b94…: the disc minus xbe/bin/media). Written at the owner's request; nothing else in
+    WorkUnreal touched.
+  - Still open with the owner: N-1 (which shipped test console commands stay; the projector question is closed, so it
+    can be revisited), N-5 (XACT inferences note), real-pad rumble feel and real Windows (owner's hardware), menu-click
+    wonkiness (P8, held), WMA with M16's video decoder, M15/M16 video/M17. Next: the UnrealScript-out-of-the-repo
+    restructuring (patches per feature, CMake script rules, decompiled base, history rewrite), after everything above is
+    published.
