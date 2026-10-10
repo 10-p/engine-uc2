@@ -266,6 +266,9 @@ off, same frame) is a clean leaf pattern with soft edges, no speckle or stripes 
 (`UnProjector.cpp` `RenderStaticPrimsBatch`), our `glPolygonOffset(0, -5)` (`UC2GLRenderInterface.cpp:796`, 5 depth
 units); the near plane is 10 (`Core.cpp:236`), so at 3000 units one depth unit is 0.054 world units, the offset 0.27;
 the copies of the geometry differ from the originals by float rounding (about 3e-4 units at coordinates near 5000).
+**Correction (B-1, 2026-10-10, `shadow-flicker.md`)**: this arithmetic was wrong. The owner's spot (terrain ramp seen at a
+grazing angle, close) shows the flicker on both bindings; there the two passes' depths differ by tens of depth units, in
+proportion to the depth slope, and a constant offset of 5 does not cover it. Fixed by the Xbox's slope-scaled ZBIAS.
 
 **"Faces looking away from the light"**: by design of the map, as on the Xbox. 12 of the 16 tree projectors have
 `bProjectOnBackfaces`; Epic's Xbox shader takes `max(N . -D, backface flag)` (`ProjectorAtten.vsh`, ported register

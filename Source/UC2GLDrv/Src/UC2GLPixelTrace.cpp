@@ -118,6 +118,20 @@ void UC2GL_PixelTraceLog( FOpenGLRenderInterface* RI, INT Pass, const FColor& Be
 		MS->AlphaBlending, BlendName(MS->SrcBlend), BlendName(MS->DestBlend), (INT)MS->BlendOp, MS->AlphaTest, MS->AlphaRef, MS->ZTest, MS->ZWrite,
 		MS->ColorWriteMask, (INT)MS->PixelShader, MS->UsePixelShaderProgram ? TEXT("program") : TEXT("ff"), (QWORD)MS->MaterialVertexShaderEnum, MS->StagesUsed,
 		Before.R, Before.G, Before.B, Before.A, After.R, After.G, After.B, After.A );
+	if( Main )
+	{
+		// B-1: the depth state of the pass and the depth buffer at the pixel after it (24-bit units; the
+		// depth/stencil read works on a single-sample target only, so with anti-aliasing it reads 0)
+		GLfloat Factor = 0.f, Units = 0.f;
+		GLuint DS = 0;
+		RI->RenDev->glGetFloatv( GL_POLYGON_OFFSET_FACTOR, &Factor );
+		RI->RenDev->glGetFloatv( GL_POLYGON_OFFSET_UNITS, &Units );
+		while( RI->RenDev->glGetError() != GL_NO_ERROR );
+		RI->RenDev->glReadPixels( X, Y, 1, 1, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, &DS );
+		while( RI->RenDev->glGetError() != GL_NO_ERROR );
+		debugf( NAME_Init, TEXT("UC2GLDrv: pixtrace #%i   depth: zbias=%i offset=%g,%g depth after=%u"), GPixTraceDraw,
+			RI->CurrentState->ZBias, Factor, Units, DS >> 8 );
+	}
 	if( !Main && RI->PostProcessStage == FRenderInterface::PP_STAGE_ACCUMULATE && RT->Width > 0 && RT->Height > 0 )
 	{
 		TArray<BYTE> Pixels( RT->Width * RT->Height * 4 );

@@ -84,3 +84,71 @@ seven `ProjectorMultiMaterial` passes (the Xbox static batches, `ps=82`, `Projec
 where the pixel is grey one batch pass darkens it (241 -> 191); in frames where it is white the same seven passes run
 and none changes it. The batches do not depend on the camera (static, world space, per-vertex attenuation), so between
 two frames that differ by a 0.05 degree turn only the depth test can change their result.
+
+## Step 2. The cause, with evidence (2026-10-10)
+
+**The two passes.** At the owner's pixel the terrain is drawn by GL's fixed-function vertex stage (modelview and
+projection loaded separately, `FOpenGLRenderInterface::CommitMatrices`), the projector batch over it by our vertex
+shader (`gl_Position = u_clip * a_position`, `u_clip` = modelview x projection multiplied on the CPU,
+`UC2GLShaders.cpp` ~981). The vertices are the same world positions (`ATerrainInfo::Vertices`, `UnTerrain.cpp` 402
+and `UTerrainSector::GetVertexPos`), the triangulation the same (edge-turn bits honoured in `AttachProjector`); the
+projector is meant to win the `GL_LEQUAL` test by its `SetZBias(1)` alone, which this driver turned into
+`glPolygonOffset(0, -5)` (`UC2GLRenderInterface.cpp` 790-793 before the fix): 5 depth units, no slope term.
+
+**A/B with throw-away binaries** (an environment knob for the two offset parameters and one that makes the vertex
+shaders use `gl_ModelViewProjectionMatrix`, i.e. the matrix the fixed-function stage uses; neither committed). Desktop,
+AA 0, RMODE 7, the owner's spot, phase `move` (time stopped, the view turned 8 yaw units a frame by NETPLACE: exactly
+repeatable) and `mousefz`; ramp box; logs `logs/b1/ab-*.txt`, frames `logs/b1/ab/`:
+
+| polygon offset (factor, units) | vertex shader position | move: toggle mean / stipple | mousefz: toggle mean |
+|---|---|---|---|
+| (0, -5) the port | u_clip | **20.4%** / 0.21% | **10.4%** |
+| (-0.25, -1) the Xbox's ZBIAS 1 | u_clip | 0.002% / 0.010% | 0.020% |
+| (-1, -1) engine-ut2004 OpenGLDrv | u_clip | 0.002% / 0.010% | 0.020% |
+| (-0.25, -5) | u_clip | 0.002% / 0.010% | 0.020% |
+| (0, -50) | u_clip | 0.002% / 0.010% | **11.3%** |
+| (0, 0) | u_clip | **19.1%** / 0.58% | |
+| (0, 0) | gl_ModelViewProjectionMatrix | 0.002% / 0.010% | |
+| (0, -1) | gl_ModelViewProjectionMatrix | **14.0%** / 0.41% | |
+| (0, -5) | gl_ModelViewProjectionMatrix | **23.8%** / 0.40% | |
+| (0, +5) | gl_ModelViewProjectionMatrix | 0.93% (mostly unshadowed) | |
+| (0, -20), (0, -100) | gl_ModelViewProjectionMatrix | 0.005%, 0.002% | |
+
+(0.002% / 0.010% is the floor: the HUD-free ramp with time stopped and nothing toggling; the 0.010% "stipple" is the
+terrain's own shading.) Reading:
+
+1. With the port's transforms and no offset the shadow flickers as with the port's offset: the two paths do not
+   produce the same depth (non-invariant), and the difference changes sign as the view turns.
+2. With the same matrix in both paths and **no** offset the depths are identical and nothing flickers; but **any**
+   non-zero constant offset of 1-5 units brings the flicker back on this GPU, and 20 units removes it: when an offset
+   is applied, the rasterised depth of the second pass carries an error of several units here (the NVIDIA rasteriser's
+   own; on a surface whose depth changes by ~2,600 units per pixel, a 1/256-pixel difference in where depth is
+   evaluated is 10 units).
+3. Every offset with a slope term removes it, whatever the constant; a constant of 50 units without one does not
+   (`mousefz`).
+
+Pixel trace with the depth buffer (GLPIXTRACE now logs the pass's ZBias, the GL polygon offset in force and the 24-bit
+depth after it; run `dmt-u1`, invariant transform, offset (0,-1), pixel (940,472)): the GL state is what the engine
+asked for in every frame (terrain 0,0; projectors 0,-1); the terrain's depth moves smoothly 16168305 -> 16203406 over the
+12 frames, and the projector pass that shades the pixel passes in frames 1, 2, 5, 6, 7, 9 and fails in 3, 4, 8, 10-12.
+
+**CPU model** (`tools/dev/b1-depth-model.py`: both transform orders emulated in float32 for the owner's camera, a 12
+degree ramp under it, FOV 90, 1280x960): the two orders differ by 5-25 depth units on average, up to 56, growing
+towards the camera (rows 500-900: 489 to 120 units away); the ramp's depth slope is 2,642 units per pixel. So the
+port's 5 units are of the order of the difference (the stipple band is where it crosses 5; the white part near the
+pawn is where it exceeds 5), while the Xbox's slope term gives 0.25 x 2,642 + 1 = 661 units there. The model's
+numbers depend on the GPU's rounding (fused operations); it gives the size, not the exact values.
+
+**Cause**: `FOpenGLRenderInterface::SetZBias` mapped D3D's ZBIAS to a constant polygon offset only. D3D's ZBIAS on the
+Xbox is slope-scaled (`D3DDevice_SetRenderState_ZBias`: slope -0.25 x ZBias, constant -ZBias; step 0), and so is
+Epic's own OpenGL driver for UT2004 (`OpenGLRenderInterface.cpp` 1098-1104: `glPolygonOffset(-ZBias, -ZBias)`). The
+depth of a second pass over the same surface differs from the first by an amount that grows with the depth slope
+(rasterisation, and this driver's two transform orders), which only a slope term covers. It is the same on GL4ES/WebGL:
+`glPolygonOffset` is passed through to OpenGL ES (`gl4es` `wrap/gles.c` 1700), and the twin flickers alike (step 1).
+Not the cause: the depth format (24-bit everywhere), the projector texture or attenuation (camera-independent), the
+batching drawing twice or on back faces (the trace shows each batch once; the failing pass is the one that shades the
+pixel in the next frame), MSAA (AA 0 here).
+
+**Face-on check** (DM-DeepCore, wire-mesh light on the metal floor, first person looking straight down at about 100
+units, `move` phase, runs `dc-cur`/`dc-mix`): the port's offset 0.005% toggle, with the slope 0.0005%: a face-on
+surface had no visible problem (its depth slope is small), so the constant needs no change.

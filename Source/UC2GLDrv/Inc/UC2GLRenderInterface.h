@@ -421,6 +421,7 @@ public:
 	virtual void SetPrecacheMode( EPrecacheMode PrecacheMode );
 	virtual EPrecacheMode GetPrecacheMode(void);
 	virtual void SetZBias(INT ZBias);
+	void ApplyZBias( INT ZBias );		// B-1: the engine's ZBias (0..16) as glPolygonOffset, the Xbox's slope scale
 
 	virtual void AddVertexShaderEnum( QWORD VertexShaderEnum );
 	virtual INT SetVertexStreams(QWORD VertexShaderEnum,FVertexStream** Streams,INT NumStreams);
