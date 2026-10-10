@@ -297,6 +297,28 @@ void UUC2GLRenderDevice::SetPostProcess( UBOOL Enable )
 }
 
 //
+// B-2: a 2D texture for one of the device's own GLSL draws (the copies below, the present pass), on <Unit>,
+// which is left active. Through GL4ES (the twin and the web) the fixed-function texture enables are still
+// state at a GLSL draw: GL4ES puts a unit's 2D texture into the GLES 2D slot only when the enable flags of the
+// ACTIVE unit say 2D (realize_textures, texture_params.c). A fixed-function pass that left GL_TEXTURE_CUBE_MAP
+// enabled on unit 0 (an environment-mapped material: DM-Decay's water) made the bind below a no-op, and the
+// draw sampled whatever 2D texture GL4ES had last made real on that unit (a smoke particle's cloud; the
+// reference copy, and with it the emissive glow and the bloom, became that texture: a white cloud fixed on the
+// screen). Desktop GL ignores the enables while a program is in use; units beyond the texture environment
+// have none. docs/porting/analysis/decay-flash.md.
+//
+void UUC2GLRenderDevice::BindProgramTexture2D( INT Unit, GLuint Texture )
+{
+	glActiveTexture( GL_TEXTURE0 + Unit );
+	if( Unit < GLFixedFunctionUnits )
+	{
+		glDisable( GL_TEXTURE_CUBE_MAP );
+		glEnable( GL_TEXTURE_2D );
+	}
+	glBindTexture( GL_TEXTURE_2D, Texture );
+}
+
+//
 // One quad of Source into a framebuffer through one of the copy programs. Leaves the GL
 // state for the interface to restore (RestoreAfterDeviceDraw).
 //
@@ -325,8 +347,7 @@ void UUC2GLRenderDevice::DrawPostQuad( GLuint Program, GLint RectLoc, GLuint Sou
 		glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
 	}
 
-	glActiveTexture( GL_TEXTURE0 );
-	glBindTexture( GL_TEXTURE_2D, SourceTexture );
+	BindProgramTexture2D( 0, SourceTexture );
 	glUseProgram( Program );
 	glUniform4f( RectLoc, Rect[0], Rect[1], Rect[2], Rect[3] );
 
@@ -631,8 +652,7 @@ void UUC2GLRenderDevice::DrawViewportRamps( UViewport* Viewport, INT DrawableX, 
 		glEnable( GL_SCISSOR_TEST );
 		glScissor( appRound( R.X * SX ), appRound( (MainHeight - R.Y - R.H) * SY ), appRound( R.W * SX ), appRound( R.H * SY ) );
 		glUniform1f( PresentUseRampLoc, 1.f );
-		glActiveTexture( GL_TEXTURE1 );
-		glBindTexture( GL_TEXTURE_2D, R.Texture );
+		BindProgramTexture2D( 1, R.Texture );
 		glActiveTexture( GL_TEXTURE0 );
 		glDrawArrays( GL_TRIANGLE_STRIP, 0, 4 );
 		Drawn = 1;

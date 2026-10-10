@@ -1630,8 +1630,10 @@ void UUC2GLRenderDevice::DrawPresentPass( UViewport* Viewport )
 	glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
 	glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
 
-	glActiveTexture( GL_TEXTURE0 );
-	glBindTexture( GL_TEXTURE_2D, MainColorTexture );
+	// B-2: the 2D enables too (GL4ES; UC2GLPostProcess.cpp, BindProgramTexture2D).
+	if( GammaRampActive && GammaRampTexture && ApplyGamma && PostProcessActive() )
+		BindProgramTexture2D( 1, GammaRampTexture );
+	BindProgramTexture2D( 0, MainColorTexture );
 
 	glUseProgram( PresentProgram );
 	glUniform1i( PresentTextureLoc, 0 );
@@ -1640,12 +1642,6 @@ void UUC2GLRenderDevice::DrawPresentPass( UViewport* Viewport )
 	UBOOL UseRamp = GammaRampActive && GammaRampTexture && ApplyGamma && PostProcessActive();
 	glUniform1f( PresentUseRampLoc, UseRamp ? 1.f : 0.f );
 	glUniform1i( PresentRampLoc, 1 );
-	if( UseRamp )
-	{
-		glActiveTexture( GL_TEXTURE1 );
-		glBindTexture( GL_TEXTURE_2D, GammaRampTexture );
-		glActiveTexture( GL_TEXTURE0 );
-	}
 
 	BindQuadBuffer();
 	glVertexAttribPointer( 0, 2, GL_FLOAT, GL_FALSE, 0, NULL );
