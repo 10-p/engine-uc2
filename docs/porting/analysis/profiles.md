@@ -546,3 +546,26 @@ overwritten while a profile is active, the profile over a `?Class=` on the comma
   not be made there: `net-test-control-main-2.txt`) and alone (`net-test-control-main-listen.txt`), and the g6 agent's
   runs at dba0ca7 (no G-7 code) failed listen.hit the same way. No G-7 code runs in a profile-less listen game (no
   `Profiles:` line in those logs).
+
+### Step G7-6: the browser runs (budget 21 GB), and a correction to step 4
+
+Correction to step 4: the "load never below 16 from 03:05 to 05:33" was WRONG. My waiting loop tested
+`pgrep -f e2e-mem-guard`, which matched its own shell's command line (the loop's text contains that word), so it
+could never end; the load was below 16 at times then (10.5 at 02:48, 13.6 at 05:37). Fixed with
+`pgrep -a node | grep -q e2e-mem-guard`.
+
+serve-web reassembled with the step-5 wasm (`yarn build --target uc2 --engine-artifact ...`, `logs/g7/fe-build-2.txt`);
+`serve-web/SDLLaunch.wasm` sha256 `4c6d7aac...5de8` = the build's, identical before and after both runs. Null sink by
+index (536870917), removed after each run. `capped 6G -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=21 --
+--target uc2 <spec>`, PLAYWRIGHT_BROWSERS_PATH from env.sh:
+- `uc2-wasm-net.spec.js` (load 12.1 -> 16.9, `logs/g7/e2e-net-1.txt`): **2 passed (3.7m)** (listen server + guest
+  from the invite link; the launcher form hosts, the guest joins from the copied link). Harness exit 1 only from
+  the global teardown: "1 browser profile(s) outlived their test: profile-bcNyi1" — the profile directory left by my
+  step-4 attempt 2, which the mem-guard killed mid-test; the teardown removed it. Mem-guard machine peak 19.7 GB.
+  (No profile is active in that spec: it is a regression run for the join path, the profile login itself is proven
+  natively by profile-login.)
+- `uc2-wasm-saves.spec.js` (load 15.5 -> 13.1, `logs/g7/e2e-saves-3.txt`): **1 passed (2.8m)**, every step ok: the
+  engine writes `/System/Profiles/WebSaWdX/AVARIS_PROFILE.PRO` (56,951 bytes), no flat file, the daemon stores it,
+  the reopened tab has it byte-identical and starts in it; session 3: the preview's flat row restored as
+  `/System/Profiles/WebSaWdX.PRO`, `Profiles: flat profile file /System/Profiles/WebSaWdX.PRO moved into Epic's
+  folder`, started in the profile, same bytes, flat file gone, IndexedDB holds the folder copy only. Peak 18.1 GB.
