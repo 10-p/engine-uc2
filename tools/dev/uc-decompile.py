@@ -573,9 +573,15 @@ class Code:
                 raise DecompileError('final call to unknown %s' % fn[1])
             return self.call(fn, self.args(), 'final')
         if t == 0x43:
-            self.obj()
+            dp = self.obj()
             name = self.nm()
-            return E('%s(%s)' % (name, ', '.join(x.t for x in self.args())), 'call')
+            fn = dp.ref('function') if dp is not None and not isinstance(dp, tuple) else None
+            cc, self.ctx_class = self.ctx_class, None
+            args = self.args()
+            self.ctx_class = cc
+            if fn is None:
+                return E('%s(%s)' % (name, ', '.join(x.t for x in args)), 'call')
+            return self.call(fn, args, 'delegate', name)
         if t == 0x48:
             self.obj()
             name = self.nm()
@@ -801,6 +807,7 @@ class Structurer:
     def block(self, lo, hi, ctx, ind):
         out = []
         k = lo
+        last_expr = None
         while k < hi:
             at, end, kind, pl = self.st[k]
             for name, loff in reversed(self.labels):     # the label list is built by prepending
@@ -818,6 +825,20 @@ class Structurer:
                 bs = self.st[back]
                 if kind == 'jumpifnot' and pl[0] > at and self.idx(pl[0]) - 1 == back and bs[2] == 'jump':
                     t = self.idx(pl[0])
+                    inc = back - 1
+                    if inc > k and self.st[inc][2] == 'expr' and last_expr is not None and last_expr[0] == k - 1 \
+                            and last_expr[1] == len(out) - 1 and any(
+                                self.st[x][2] == 'jump' and self.st[x][3] == self.st[inc][0] for x in range(k + 1, inc)):
+                        # `for (init; cond; inc)` whose `continue` jumps to the increment (a `while` would jump
+                        # to the back jump)
+                        init = out.pop().strip().rstrip(';')
+                        body = self.block(k + 1, inc, {'brk': pl[0], 'cont': self.st[inc][0], 'iter': False}, ind + 1)
+                        out.append('%sfor (%s; %s; %s)' % (pad, init, pl[1].t, self.st[inc][3].t))
+                        out.append('%s{' % pad)
+                        out += body
+                        out.append('%s}' % pad)
+                        k = t
+                        continue
                     body = self.block(k + 1, back, {'brk': pl[0], 'cont': bs[0], 'iter': False}, ind + 1)
                     out.append('%swhile (%s)' % (pad, pl[1].t))
                     out.append('%s{' % pad)
@@ -925,6 +946,7 @@ class Structurer:
                 pass
             elif kind == 'expr':
                 out.append('%s%s;' % (pad, pl.t))
+                last_expr = (k, len(out) - 1)
             elif kind == 'case':
                 raise DecompileError('stray case at %d' % at)
             else:
@@ -1304,7 +1326,7 @@ class Decompiler:
             sup = k.ref('super') if k.cls == 'Function' else None
             if k.cls == 'Function' and not k.f['funcflags'] & (FUNC_Defined | FUNC_Native) \
                     and k.f['script'] in (b'', b'\x04\x0b') and sup is not None and sup.outer().cls == 'Class' \
-                    and k.f["funcflags"] == sup.f["funcflags"] & 0xA221D \
+                    and k.f["funcflags"] == sup.f["funcflags"] & 0xA221D and k.name not in PROBES.values() \
                     and not [c for c in k.children() if c.cls in PROPS and not c.f['flags'] & CPF_Parm]:
                 # `ignores X`: an empty function whose super is the class-level X (UnScrCom.cpp); an empty
                 # `function X() {}` in a state would take the parent state's X as its super

@@ -989,7 +989,7 @@ class Comparison:
                 return None
             if relocated(va, old.exports[i]['offset'], vb, new.exports[i]['offset']):
                 return 'lazy-offsets'
-            if cls == 'StaticMesh' and self.name == 'Editor' and len(va) == len(vb):
+            if cls == 'StaticMesh' and self.name == 'Editor' and va is not None and vb is not None and len(va) == len(vb):
                 n = sum(1 for x, y in zip(va, vb) if x != y)
                 return ('FINDING: %d of %d bytes differ (low bits of floats computed when `#exec NEW StaticMesh` imports '
                         'the .ase); an editor-only mesh (texture browser preview), never loaded by the game' % (n, len(va)))
