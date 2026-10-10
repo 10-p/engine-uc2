@@ -136,3 +136,10 @@ and desktop vs twin with it on: 0.33: the glow and bloom contribute the same on 
   pickups and timing: blur and dyngamma are the timing-sensitive ones the report lists); praxis A against the wine
   reference 2.34 (before 2.56; limit 8). One `left_behind=1` (berserk) was the next run's process starting under load.
   Strict desktop identity is the pp-scale `identity` check below.
+- `tools/dev/pp-scale.sh b2` (all default checks; `run/b2/System/uc2-base.bin` = main's driver; load 20-23 throughout;
+  `logs/b2/pp-scale-new.txt`): PASS selftest (15/15 at 1440x1080 and 2880x2160), glow at 640x480 / 1440x1080 /
+  2880x2160, dof, blur-setting, radial, **identity** (640x480, post-processing on, frozen frame: base vs new 0
+  differing pixels outside the two spinning pickups' rows, as base vs base), aspect (new peak 13.45 width 8.12% =
+  main's binary exactly). FAIL pp-blur: the concussion blur's sigma 3.25 / 2.10 / 3.85 at the three sizes (tolerance
+  0.30); BlurMe's blur decays over time, so a shot's sigma depends on when it lands after the command, and the
+  machine was at load 22. Main's binary in the same check: below.
