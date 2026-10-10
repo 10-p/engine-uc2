@@ -241,3 +241,39 @@ ScriptPatches; UCMenu not needed (its text ships). Remaining work, in days of on
   and config, flag/default changes: **5-10 days** with real crash risk (memory layout of live objects), each patch
   tied to the exact shipped file (NameCount/ExportCount). And the result is not source: changing a patched function
   later means editing source somewhere anyway. Not recommended.
+
+## Final run (2026-10-10, the committed decompiler; `logs/s1/rerun{2,3,4}-summary.txt`)
+
+Every package round-tripped alone (its classes decompiled, Epic's text for the other 16, `make`, `strip`, `compare`
+against `epic-sources/System`). "= shipped" means: every difference is neutral (Line/TextPos, dependency
+records) except Epic's ScriptPatches.h entries, which the decompiled RETAIL text lacks by construction.
+
+| Package | classes | decompiled without error | `make` | compare (exports: byte-identical / neutral) | verdict | what still fails (one example) |
+|---|---|---|---|---|---|---|
+| Core | 4 | 4 | ok | 1011: 782 / 454 | **equivalent** | - |
+| UCAnnouncements | 104 | 104 | ok | 215: 110 / 106 | **equivalent** | - |
+| UnrealEd | 10 | 10 | ok | 127: 117 / 10 | **equivalent** | - |
+| IpDrv | 13 | 13 | ok | 526: 399 / 241 | **equivalent** | - |
+| UWeb | 7 | 7 | ok | 153: 105 / 87 | **equivalent** | - |
+| UCCharacters | 271 | 271 | ok | 2704: 1833 / 1473 | **equivalent** | - |
+| UnrealGame | 20 | 20 | ok | 882: 657 / 434 | **= shipped** (1 problem: Epic's DeathMatch.EndGame patch) | - |
+| UCInventory | 137 | 137 | ok | 1924: 1302 / 1125 | **= shipped** (1: Epic's SniperRifle.ServerSetZoomLevel patch) | - |
+| UCMutators | 60 | 60 | ok | 579: 421 / 264 | **= shipped** (6: Epic's 3 patches and their objects) | - |
+| **GUI** | 94 | 94 | ok | 3526: 2712 / 1528; all 720 functions/states bytecode-identical (Line/TextPos only) | **= shipped** (2: Epic's 2 GUIController patches) | - |
+| **UCGameplay** | 232 | 232 | ok | 10842: 8149 / 5178 | **= shipped** (8: Epic's 7 patches + 1 appended import) | - |
+| GamePlay | 102 | 102 | ok | 974: 655 / 512 | different (14 problems, 6 findings) | only the `#exec`-imported content: 4 textures + 2 palettes absent, and the 6 class defaults that point at them (`Dispatcher.Texture = S_Dispatcher`) |
+| Editor | 16 | 16 | ok | 446: 351 / 131 | different (27 problems, 1 finding) | only the `#exec` content (6 textures, 5 palettes, 2 static meshes) and EditorEngine's defaults pointing at them (its text ships anyway) |
+| UCElements | 41 | 41 | 3 default lines rejected | 2956: 2672 / 268 | different (248) | a defaultproperties line over the importer's line limit (~1 KB: a `Scripts=(...)` struct with an object array): its subobjects are then unreferenced |
+| UCEffects | 672 | 657 | ok | 3535: 2485 / 950 | different (473) | subobjects nested in subobjects (ActionMoveCamera -> SubActionOrientation) are not emitted |
+| **UCMenu** | 171 | 169 | 34 default lines rejected | 10100: 7260 / 4921 | different (19 problems, 205 findings) | static arrays inside struct defaults (`LabelPosn(0)=` rejected), `for` loops whose `continue` is in a nested `if` chain, `Outer.Delegate` context; NOT NEEDED: UCMenu ships with its full text |
+| Engine | 262 | 261 | **crash** (SIGSEGV while parsing, after TerrainMaterial; exit 139, not the memory ceiling) | - | not compared | not diagnosed (time box); Engine also has 68 `#exec` textures that cannot come back |
+
+Memory: every `ucc-bin` run under `bin/capped 3G` (script-build.sh default), Python 2G, the build 6G (-j2); no
+ceiling hit (no exit 137; the one non-zero exit is Engine's SIGSEGV, 139).
+
+Answer to the spike's question: **yes for the three packages we patch** (GUI and UCGameplay decompile into text
+that `ucc-bin make` compiles to the shipped bytecode, every function byte-identical, the only differences being
+Line/TextPos bookkeeping and Epic's load-time patches; UCMenu needs no decompiler). Not for all 17 from the `.u`
+alone: Engine/Editor/GamePlay contain `#exec`-imported content that no decompiler can turn back into source, and
+the prototype still has known gaps in UCElements/UCEffects/UCMenu/Engine.
+

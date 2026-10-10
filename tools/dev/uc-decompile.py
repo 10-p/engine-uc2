@@ -1322,9 +1322,10 @@ class Decompiler:
             if not mask >> bit & 1 and bit in PROBES:
                 ign.append(PROBES[bit])
         fns = []
+        prefix = True       # `ignores` is parsed before the state's functions: its functions come first
         for k in kids:
             sup = k.ref('super') if k.cls == 'Function' else None
-            if k.cls == 'Function' and not k.f['funcflags'] & (FUNC_Defined | FUNC_Native) \
+            if prefix and k.cls == 'Function' and not k.f['funcflags'] & (FUNC_Defined | FUNC_Native) \
                     and k.f['script'] in (b'', b'\x04\x0b') and sup is not None and sup.outer().cls == 'Class' \
                     and k.f["funcflags"] == sup.f["funcflags"] & 0xA221D and k.name not in PROBES.values() \
                     and not [c for c in k.children() if c.cls in PROPS and not c.f['flags'] & CPF_Parm]:
@@ -1332,6 +1333,8 @@ class Decompiler:
                 # `function X() {}` in a state would take the parent state's X as its super
                 ign.append(k.name)
             else:
+                if k.cls == 'Function':
+                    prefix = False
                 fns.append(k)
         if ign:
             lines.append('\tignores %s;' % ', '.join(ign))
