@@ -51,11 +51,13 @@ listed at the end with the reason; PLAN.md "Owner review of 2026-10-10" has the 
   `DownloadManagers=IpDrv.HTTPDownload` therefore names a class that does not exist here (package download has
   never been exercised). Found by the header-export comparison.
 
-- **Not closed (needs a profile-aware change and a two-profile test)**: the character. A menu-driven launch takes it from
-  the active profile; a launch that names no class (the web launcher's Play form, a console `open`) takes
-  `[DefaultPlayer] Class`, the previous launch's character, which after switching profile without launching is the OTHER
-  profile's. Fix, if wanted: put the profile's `CharacterClassName` (URL form, `CharacterInformation.GetCharacterClass`) into
-  the player's login URL in `MatchViewportsToActors`, like `UC2ProfileNameInURL` does for the name.
+- **Closed on branch `g7-profiles` (G-7, 2026-10-10; merge pending)**: the character. A launch straight into a map with a
+  saved profile active now plays the profile's character (`UC2Profiles.cpp` `UC2ProfileInURL`: Epic's
+  `PlayerProfile.GetURL` puts the `Class=` into the primary viewport's login URL in `MatchViewportsToActors`), and
+  `[DefaultPlayer] Class` is no longer overwritten while a profile is active, so without a profile the ini's class
+  plays. Two-profile test `tools/dev/d3-character.sh` ALL PASS; on main's engine it fails at exactly these points
+  (analysis/profiles.md G-7 step 3). Still open: a direct NETWORK join from the command line logs in with
+  `[DefaultPlayer]` Name and Class (not on the `MatchViewportsToActors` path).
 
 ## Closed in the 2026-10-10 audit
 
