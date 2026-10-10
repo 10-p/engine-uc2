@@ -192,3 +192,12 @@ of 0.9-2.1 million with our packages; up to 5,448 with the shipped ones, all ins
 engine log still names each HUD by client index ("gets its HUD again ... viewport 2 of 5"): unchanged on purpose.
 Sheets (Epic 4:3 | before | after | after with shipped .u, picture and HUD alone measured): `logs/b3b/sheet-n3.png`,
 `logs/b3b/sheet-n4.png` (n1/n2 for completeness).
+
+Regressions and builds (commit a0c0448's source):
+- `g6-splitscreen.sh b3b render menu` (`logs/b3b/g6`, load 21-28): `PASS g6-render` 7 checks, g6-measure 0 failed (the
+  HUD-inside checks now read top-row quarters t91 b62 and bottom-row t62 b91 px in 640x360: the row rule; G-6 only
+  requires the HUD inside, no expectation changed), `PASS g6-menu` 9 checks.
+- Two players: the `-as-epic640` checks above (unchanged to the design pixel); single player never reaches the new
+  code (one view: the row is -1).
+- Builds (`bin/capped 6G`, `-j4` native, `-j2` windows and wasm-perf at load 21-28): native, windows (MinGW, uc2.exe),
+  wasm-perf: rc 0, 0 errors each (`logs/b3b/build-{native-0,windows,wasm-perf}.log`). No script changed.
