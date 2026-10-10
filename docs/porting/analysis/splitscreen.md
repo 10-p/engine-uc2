@@ -754,3 +754,27 @@ Change (file:line at this step):
   Start closes the page; ports [0, 1].
 
 Native build at this source: `build-native` 0 errors (`logs/g11/build-native-0.log`; the strings are in `uc2.bin`).
+
+### G-11 step 2 - native results (binary build-native at 2e17abe; run trees g11, g11ship = Epic's shipped GUI/UCGameplay/UCMenu)
+
+| test | logs | result |
+|---|---|---|
+| `g6-splitscreen.sh g11 unplug` (new, default ini) | `logs/g11/unplug1` | PASS 26/26 (load 15.9 at start, 18.9 at the end) |
+| `g6-splitscreen.sh g11 input menu kbplayer` | `logs/g11/g6` | input PASS 39, menu PASS 9, kbplayer (`PadsStartAtPlayerTwo=True`) PASS 34, kbmenu PASS 11 (load 15.8 at start, 22-24 during) |
+| `m10-controls.sh` all five (M10_TREE=g11, default ini: the virtual pad is player one) | `logs/g11/m10`, `logs/g11/m10b` | first run: mouse 18, text 7, both 14 PASS; keyboard 15/16, pad 30/33; rerun (load < 16): keyboard PASS 16, pad PASS 34 |
+| `d6-mouse.sh look pad` (D6_TREE=g11, D6_SHIP_TREE=g11ship) | `logs/g11/d6`, `logs/g11/d6.txt` | 48 PASS 0 FAIL (pad curves vs shipped worst 0.11%) |
+
+Numbers from the unplug run (`logs/g11/unplug1/g11-unplug.inject`): pad 0's stick walked player one 442.2/329.6 units
+(forward/back), the keyboard 450.5/364.9; after the pull: probe menu None, paused 0, viewport 0 still port 0, the keyboard
+walked 543.8/365.9; pad 0 back: `SDL2 pads: pad 0 connected: UC2 M10 virtual pad (rumble) (player one, with the keyboard
+and mouse)`, its stick 505.6/420.3, the keyboard 508.5/453.0; pad 1 joined (ports [0, 1]); pad 1 pulled:
+`GUI.GUIController OpenMenu [UCMenu.ControllerRemovedMenu]`, probe menu `ControllerRemovedMenu*`; back on port 1, its
+Start closed the page, ports [0, 1].
+
+m10's first-run failures: the `pad` scenario's three unplug checks were written for Epic's page on player one's pad
+(`pd-unplug-sends-joyslider2`, `pd-unplug-pauses-with-controller-removed-menu`, `pd-start-after-replug-resumes`): exactly
+what the owner's rule removes. The scenario now checks the rule (`tools/dev/m10-controls.sh` `scen_pad`): the disconnect
+line, no `JoySlider2`, no `ControllerRemovedMenu`, menu None and not paused, the re-plug line "player one, with the
+keyboard and mouse" and the re-plugged stick walking player one (442 units). `keyboard`'s `kb-e-switches-to-melee` (w1
+held a SniperRifle, a bot 62 units away and locked on) passed in the rerun with the same binary: not pad-related; the
+keyboard scenario never touches a pad.
