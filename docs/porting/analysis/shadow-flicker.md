@@ -219,3 +219,33 @@ desktop/twin show whole triangles, after only the small motion).
   fix (tree b1m7b), load 5-9 (`logs/b1/fps/`): before 82.3, 77.3, 77.4 fps (1% low 48.4, 45.6, 47.4); after 76.4,
   77.2, 79.3 fps (1% low 42.9, 43.8, 47.9). The same within the run-to-run spread (about 3 fps here): a slope-scaled
   offset costs nothing measurable.
+- Owner's window size on the twin (1872x1202 after SDL's rounding of 1871, GL4ES on the Quadro, AA 0, RMODE 7, box
+  (1050,450)-(1700,780); `logs/b1/proof/*-owner-*`): before toggle mousefz 5.93% (max 26.2), mouse 1.00% (max 5.81),
+  stipple up to 1.49%; after 0.018% / 0.017%, stipple 0.009-0.018% (the floor).
+- Builds of this commit (bin/capped 6G): `build-native` (`logs/b1/build-fix.log`), `build-windows` (exit 0,
+  `uc2.exe` 87,140,001 bytes, `logs/b1/build-windows.log`), `build-wasm-perf` (exit 0, `SDLLaunch.wasm` 13,841,295
+  bytes, `logs/b1/build-wasm-perf.log`). No ceiling hit in any run of this item (games 2G, builds 6G).
+
+## Result (2026-10-10)
+
+- **Reproduced** at the owner's spot on both bindings on the Quadro (desktop UC2GLDrv and the GLES twin through GL4ES
+  on the NVIDIA ES context), AA 0 and 4, RMODE 7 and 6: numerically (toggle and stipple measures) and seen.
+- **Cause**: `SetZBias` gave a constant polygon offset only; the Xbox's ZBIAS (and Epic's UT2004 OpenGL driver) is
+  slope-scaled. On the terrain seen at a grazing angle the projector batch's depth differs from the terrain's by more
+  than the constant, varying with the view, so whole triangles lost or regained the tree shadows from frame to frame,
+  with a z-fighting crosshatch at the borders. Numerically checked by A/B (step 2), the pixel trace with depth and the
+  GL state, and a CPU model of the two transform orders.
+- **Fix**: `ApplyZBias` = `glPolygonOffset(-0.25 x ZBias, -5 x ZBias)` (`Source/UC2GLDrv/Src/UC2GLRenderInterface.cpp`),
+  one place for both bindings. Proof: toggling and stipple at the floor of the projectors-off control on both
+  bindings, both AA settings, both render modes and the owner's window size; regressions all PASS; frame rate unchanged.
+- **Labels**: the flicker and its removal on the Quadro, desktop and twin: numerically checked. The canopy shadow
+  reading as one grey pattern over the ramp: seen. fx-owner scenes unchanged: seen. In a real browser (Chromium,
+  WebGL 2 through ANGLE): never exercised here (the rules keep test pages out of browsers on this machine; the twin
+  is the browser's code path down to `glPolygonOffset`, which WebGL has with the same two parameters). Windows
+  executable: built, not run. Mesa llvmpipe at the owner's spot: not run (m11-twin's llvmpipe runs pass).
+- **Unsure**: (1) why on this GPU any non-zero constant offset adds several units of depth error to a pass whose
+  transform matches the first one exactly (step 2, reading 2) is inferred, not documented; the slope term covers it
+  either way. (2) The constant stays at 5 units (the Xbox's is 1); a face-on surface at short range (DM-DeepCore floor)
+  showed no problem with either, so the choice is the port's margin, not measured to be needed. (3) The driver's two
+  transform orders (fixed-function stage vs `u_clip`) remain non-invariant; making them invariant (e.g. the shaders
+  using the fixed-function matrix) was tried as an experiment only and is not needed once the slope term is there.
