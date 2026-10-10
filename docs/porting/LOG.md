@@ -587,3 +587,59 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   made the compiled default True as well, so an ini without the key gets 65 too; the owner's review of 2026-10-09
   confirmed it (PLAN.md: "DOF alpha stays 65 (it is an alpha, not a radius; no A/B)"). Off switch: `DOFShippedBlurAlpha=False` (the script's
   100 in third person). Never compared with an Xbox picture.
+- 2026-10-10 — **The parked items done (owner: "work on them now"), the task audit, M16 audio.** Coordinator's checks
+  on main `logs/coord/a20` (full, after G-4..G-8, D-1..D-4, M16 audio) and `a21` (+followup; G-9, G-10, G-10b).
+  Repository on GitHub since today: `10-p/engine-uc2` (private; no CI).
+  - **G-4 language** (7e7fc5b; ufrontend 7b540c8): a Language control in Advanced for every target from target data
+    (uc2 int/deu/fra/ita/spa; ut2004 int/det/frt/itt/est; the three UT99/Unreal 1 targets ship English only: no
+    control); per game (THE RULE: one home, the ini); browser spec: French seeded, `Joueur`, back to `int`, no seed
+    when unchanged; UC2 natively in all five languages (menu caption, loading screen, cinematic track, announcer bank).
+  - **G-5 gamepad on the web** (9ce41dd; ufrontend 1d9beff): Emscripten's SDL2 port delivers the browser's pads to the
+    engine thread by itself; the launcher gets a generic `gamepad` target block, a "Game pad" switch, a "press any
+    button" hint and connect/disconnect notices (UC2 only declares it; written for any target); `UseJoystick=True` in
+    the web ini; the spec (fake gamepad) drives menus, spawns, fires, walks, turns, hot-plugs: 26/26; triggers are
+    digital on the web (SDL's mapping); rumble: see G-10.
+  - **G-6 split screen on PC** (b4debbd): Start on an unbound pad joins players 2-4 (UC2's menus allow two; 3-4 join
+    in a match, `SplitScreenJoinInMatch`), Epic's layouts in one window, a pad per player, keyboard+mouse player 1,
+    HUD/UI box, post-processing, dynamic gamma and AutoFOV per viewport, audio once; shipped scripts unchanged;
+    tools/dev/g6-splitscreen.sh input 35-39 checks, render 59/59 (g6-measure), menu 9/9, audio cues once; no cost
+    when not split (fps-bench); single-player audio unchanged (cue tables identical without bots).
+  - **G-9** (18f2421): FOV A/B sheets for the owner (`logs/g9/fov-{2,3,4}players.png`; `[ufront.AutoFOV]
+    SplitClampToFullScreen` proposal, off); full detail in split screen (`SplitScreenFullDetail=True`; two Epic bugs
+    fixed on the way: per-view corona lists, a stale projector cache crashing with four players); keyboard+mouse a
+    player of their own (`KeyboardIsPlayer=True` natively; pads take ports 1-3; the web keeps the pad as player one:
+    `False` there, 495cbe6); kbplayer 34/34, old input phase 39/39.
+  - **G-7 profiles** (d846e75; ufrontend e845bec): the frontend's userFiles accept one directory wildcard, the web
+    build uses Epic's `Profiles/<name>/AVARIS_PROFILE.PRO` again (22e9dbf reverted; a preview player's flat file is
+    moved once); the active profile's character on direct launches and network joins (`UC2ProfileInURL` from
+    `MatchViewportsToActors` and `Browse`); d3-character ALL PASS with a negative control; profile-login 8/8; saves
+    spec and net spec in the browser.
+  - **G-8 double-tap dodge** (9357aec; ufrontend d0151bf): `[UCGameplay.UCPlayerInput] bDoubleTapDodge` (off) in the
+    rebuilt package, keys and stick, wall dodge, Lock rules (Lock held: taps pick targets; locked on: a double tap
+    dodges and keeps the target); the frontend's unit tests read the target's own defaults (5 targets green).
+  - **G-1/2/3** (ufrontend 5433972): uc2 `audioHrtf` switch (HRTF ACTIVE in the engine log); the precache list from a
+    capture (all of System + the 118 files the menu loads, 480 files / 408 MiB, 20% of the cache budget): the
+    engine's own start Start->menu 14.6 -> 7.8 s, cue tables 1.0-1.3 -> 0.36 s; media stored uncompressed by default
+    (ogg/oga/ogv/mp4/jpg/png/gif/avi: under 10% gain), `--compress-all`, the manifest marks them; publish 43% faster
+    for 0.2% more download; a generator mtime bug fixed; `.ogp` packs still compress 23% (shared Vorbis headers: M15).
+  - **D-1/D-2** (352dd5a): the "exit-time crash" was `timeout`'s second SIGTERM taking Epic's abort path inside the
+    handler (deadlocks, self-waits): a repeated exit signal is ignored, the crash report bounded by `alarm(10)`,
+    `FFileStream::Destroy` waits 5 s as engine-ut2004; censuses 58/58 at both widths and under ASan (no use-after-free);
+    `HTTPDownload` in IpDrv and its `EINPROGRESS` fix (HTTP download works for the first time), `Prefab` in Editor;
+    `map-census.sh` FAILs on a hang; a note for engine-ut2004 (`logs/d12/engine-ut2004-note.md`).
+  - **D-3/D-4** (14719eb): REPORT.md section 60 "changes since" + regenerated appendices (`tools/dev/
+    report-appendices.py`), stale comments fixed, O-3 logged above; d6 scenarios pinned to fixed spots; the browser
+    strafe slope was the spec's fit without the walk bob (frontend 275273e); m7-effects self-test window;
+    `MaterialTime` and `[UC2Movie] MaterialShotTimes` test keys make the twin 34/34.
+  - **M16 audio** (d334834): the shipped `.xwb/.xsb` load and play at run time (`Source/UC2ALAudio/Src/UC2XboxBanks.cpp`),
+    PCM byte-identical to the Python readers (371 waves), the `.xsb` tables equal to the cooked ones but documented
+    rounding (2459 sounds, 2469 cues); a disc-only `Sounds/` tree plays everything (20 of 21 songs: `M_Adoratrice.xwb`
+    is WMA: cooked Ogg first (G-10), WMA with M16's video decoder, else silence); F-6's "5 overflowed volumes" were
+    LFE levels in the same field.
+  - **G-10/G-10b** (d6caa7f, c93514c; ufrontend b7c3a64, d589ecd): WebRTC connections excluded from the Xbox standby
+    check on both ends (`UNetDriver::StandbyCheckEnabled()`; a vanished guest or host no longer pauses the other side:
+    net spec 4/4); web rumble through the browser's `vibrationActuator` (effects recorded: Nakhti 0.51/0.77 for
+    0.25 s, death 0.8/0.8 for 0.75 s); AA off by default on the web; Adoratrice from the cooked Ogg on a disc tree.
+  - BLOCKERS audited with the owner: 23 entries closed, 8 open. Preview republished 12:48.
+  - Open for the owner: the FOV column, the pad-only rule natively, the four-player full-detail cost,
+    `UseTerrain3Layer` on by default (A/B: never slower, up to 20% faster), the flicker conditions, the xemu shot.
