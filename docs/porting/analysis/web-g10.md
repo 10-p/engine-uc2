@@ -133,3 +133,39 @@ Music/).
   (0.217 is what a -19 dB song under a capture 5.8 dB louder than the song alone gives: r = gain x |song| / |capture|.)
   Label: numerically checked (gain, correlation against a control and a no-music capture); not listened to.
 - Not done: the WMA decoder (owner: deferred to M16's video work); the web build plays cooked music only, unaffected.
+
+## Step 3 - item 2, rumble in the browser: green (2026-10-10)
+
+wasm-perf of this branch (`logs/g10/build-wasm-perf-4.log`, rc 0, no warning in the touched files; the first build
+failed: an `EM_ASM` block may not hold a top-level comma (the macro splits there) nor a `//` comment (the block is
+stringified into one line); fixed, noted in the code): `SDLLaunch.wasm` sha256 ecdb59aa891582c9..., `.data`
+cf63ad1bfa07... (`logs/g10/wasm-sha-g10-1.txt`). `yarn build --target uc2 --engine-artifact <this>/build-wasm-perf/
+Source/SDLLaunch` in `bin/capped 4G` (`fe-build-1.txt`), served sha256 = built, the same before and after each run.
+
+- Run `pad-1` (`logs/g10/run-e2e.sh pad-1 1800 uc2-wasm-gamepad.spec.js`): every step ok except my own new death
+  check, which expected 100 %/100 %: the death effect was strong 0.800 weak 0.800, i.e. KilledWaveform x the profile's
+  rumble scale (`PlayerProfile.SensitivityRumble` -> `PlayerController.SetRumbleScale` ->
+  `WaveformManager.ScaleAllWaveformsBy`, 0.8 on a fresh profile). The check now asks for both motors equal and
+  >= 0.75, a 600..900 ms effect and its reset 650..1000 ms later.
+- Run `pad-2`: **1 passed (3.1m), 29 steps ok, 0 FAIL**; `SDL2 pads: pad 0 rumble through the browser: Gamepad 0
+  vibrationActuator, dual-rumble`; 31 rumble requests (all `-> browser dual-rumble`, none to SDL); the re-plug without an
+  actuator: `SDL2 pads: pad 0 has no rumble: SDL has none in the browser and this browser gives the pad no
+  vibrationActuator (dual-rumble: Chrome, Edge)`. Machine-wide peak (others' work included) 19.5 GB, 16.9 GB at start.
+
+The recorded effects (`[PAD-FX]` of `pad-2.out`, times from the first effect), against the waveforms in the scripts:
+
+| what | recorded | expected from the waveform | check |
+|---|---|---|---|
+| fire, `UCWeap_Race_Nakhti` FireRumble (`UCWeap_Race_Nakhti.uc:101`: left 64 %, right 96 %, both LinearDecreasing over 0.25 s, then 0.2 s of 0) x scale 0.8 | 28 effects in 2.0 s of held fire, e.g. +0 ms strong 0.191 weak 0.287 143 ms; +109 ms 0.366 / 0.548 229 ms; +277 ms 0.022 / 0.033 61 ms; +1510 ms 0.429 / 0.643 259 ms; 3 resets | strong = 0.512 x remaining/0.25 s, weak = 1.5 x strong, duration = remaining + 50 ms | weak/strong 1.50 in every row; strong / (duration-50 ms) = 2.04-2.05 per second (0.366/0.179, 0.289/0.141, 0.022/0.011) = 0.512/0.25; max strong 0.429 < 0.512 (a frame of 40-70 ms elapses before the first sample) |
+| death (Suicide), Engine.DamageType KilledWaveform (100 %/100 % for 0.75 s) x 0.8 | +3920 ms strong 0.800 weak 0.800 630 ms; reset at +4609 ms (689 ms later) | 0.7996 both; 0.75 s minus the first frame, + 50 ms; stop after ~0.75 s | equal, 0.7996; held 689 ms |
+
+  The engine sends a new effect per change of level, so a ramp is a staircase of effects at the frame rate (here 40-80
+  ms apart: two software-rendered pages' frame time), each lasting to the end of its sample, the next one replacing it.
+  Label: numerically checked against the fake actuator (what the page asks the browser for); NOT felt on a real pad in
+  Chrome (no pad on this machine): an owner check.
+- Native unchanged: `M10_TREE=g10m M10_OUT=logs/g10/m10 tools/dev/m10-controls.sh pad` (tree from this branch's
+  build-native): **`PASS pad (33 checks, 0 Critical, capped exit 0)`**, `pad 0 rumble 17736 26605 ->
+  SDL_GameControllerRumble 0` and `virtual pad: rumble request reached the device: low 17736 high 26605`.
+- Epic's waveform code evaluates the Sin functions with the frame's delta, not the elapsed time
+  (`UnForceFeedbackWaveform.cpp` `WF_Sin0to90` etc.), so those levels depend on the frame rate on every platform; not
+  touched (Epic's behaviour).
