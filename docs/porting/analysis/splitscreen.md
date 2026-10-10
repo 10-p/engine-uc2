@@ -536,3 +536,63 @@ nine bCorona lights, a ring over the round room; GPU):
   first gets a corona state of its own (four at most; more falls back to the shared one); `Viewports(0)` (the single
   player, the first split view) keeps `GCoronaRender`, so one viewport is exactly as before; the three places where
   Epic reset the global reset them all.
+
+### G-9 step 3 - keyboard+mouse a player of their own (`[SDL2Drv.SDL2Client] KeyboardIsPlayer=True`)
+
+Epic's model, read before choosing (G-6 notes, controls.md "Routing", `UnGUICore.cpp:1114-1149`): a player is a
+viewport; a pad is bound to the viewport whose `GamepadID` is its port (`GetPadViewport`), read only by it, and an
+unbound pad reaches the menus only (`MasterProcessKeyEvent`), where Start joins (`PadJoin`); on PC the keyboard and
+the mouse are events of the window's viewport, and `ULevel::SpawnPlayActor` fakes `GamepadID 0` for it ("for
+development on the PC"), so the first pad (port 0) and the keyboard were one player. The GUI routes every key by
+`Engine->ActiveControllerId`: `ControllerMask & (1 << id)`, `FindViewportIndex(id)` = the viewport with that
+`GamepadID`, per-port arrays `RepeatKey[LAST_VIEWPORT]` (`Object.uc:220 LAST_VIEWPORT=4`: "highest supported
+controller port"), and UCMenu's pages use `1 << PC.GamepadID` masks. The keyboard's events carry the resting
+`ActiveControllerId` 0 (every pad read restores it: `UpdateBoundPad`, `UpdateUnboundPads`, `USDL2Client::Tick`).
+
+Design: the keyboard and the mouse KEEP port 0 (the id the GUI already gives their events, Epic's PC fake), and the
+pads move to ports 1-3. A "pad -1"/255 for the keyboard was rejected: `GamepadID` is a BYTE, 255 is
+`INVALID_GAMEPAD_ID` ("no pad": PadJoin would hand that viewport to the first pad), and `1 << 255` / arrays of four in
+the shipped GUI.u would break. With four ports that is keyboard + three pads = MaxSplitScreens 4; a fourth pad finds
+no port ("SDL2 pads: all 3 ports in use (port 0 is the keyboard's: KeyboardIsPlayer), pad ignored").
+- `SDL2Drv.h` / `SDL2Client.cpp`: config `KeyboardIsPlayer` (Input), compiled default 1, `Default.ini` and the web copy
+  `True` with a comment; `False` = G-6's model (the first pad drives player one with the keyboard).
+- `SDL2Pads.cpp` `PadAdded`: first free port from 1 when `KeyboardIsPlayer`; the connect line says so.
+- `SDL2Client.cpp` `PadJoin`: the Xbox's "a pad takes a viewport that has no pad yet" never takes the window's viewport
+  (the keyboard's player) when `KeyboardIsPlayer`, even before its controller got port 0.
+- Nothing else changes: an unbound pad is Epic's unbound pad (menus only, Start joins: in a match through G-6's
+  `SplitScreenJoinInMatch`, on the title and character pages through UC2's own `AllowControllerJoin`); the joined pad
+  is read by its viewport only; keyboard and mouse events go to the window's viewport only (G-6), so the rebuilt
+  package's PC mouse (F-1/D-6: `UCPlayerInput` separates the mouse from the stick by the Count bytes, per player) only
+  ever sees the mouse on the keyboard's player and only ever sees a stick on a pad's: Epic's pad tuning is untouched
+  on the pads' viewports. `UnLevAct.cpp` only gained a comment.
+- Menus (D-2/D-5): the keyboard's player is the window's viewport and port 0, so the menus' ownership is Epic's: its
+  keys reach the page the way a pad on port 0 would; a pause menu opened by a pad player belongs to that player
+  (`ActiveChildViewport`, `UnGUICore.cpp:1120`), as on the Xbox. Text entry (D-5) is the window's keyboard as before.
+- Profiles: player one (the keyboard's) has the profile D-3 loads at start (`UC2StartWithLastProfile`, G-7's name and
+  class); a pad player made by `CreateSplitPlayer` without `Viewport->Profile` logs in with `[DefaultPlayer]` (User.ini:
+  the launcher's/ini's name and class, i.e. player one's defaults: two players can carry the same name), exactly as in
+  G-6 and on the Xbox for a player without a profile; UC2's character page asks player two to load a profile. Nothing
+  per player was added.
+- Consequence to know (owner question below): with `KeyboardIsPlayer=True` a person with only a pad never gets
+  player one: the pad's Start joins as player two next to an idle keyboard player (in a match, and on the title page
+  `StartMenu.AllowsControllerJoin` makes it a split player in the menus). Pad-only play needs `KeyboardIsPlayer=False`.
+- Tests that use the virtual pad as player one (the G-6 model) now say so with
+  `-ini:System:[SDL2Drv.SDL2Client]:KeyboardIsPlayer=False`: `g6-splitscreen.sh` input/render/menu/audio/fov/detail/
+  corona/bench4 (`$KBOLD`), `m10-controls.sh` (and so d6-mouse, d9-rebind, jit-trace), `fx-owner.sh` (and m7b),
+  `fps-bench.sh`, `g4-language.sh`, `m12-wine-smoke.sh`, `jit-strip.sh`, `f5-flicker.sh`, `net-test.py`. `m10-inject.py`'s
+  `pyexec` namespace gained `click`.
+
+Test: `tools/dev/g6-splitscreen.sh g9 kbplayer` (Xvfb; `-ini:...KeyboardIsPlayer=True`): game 1 in a match, game 2 UC2's
+menu flow with one pad (`menu_kb=1 scen_menu`). First run (`logs/g9/reg`, load 15): 22 of 32 in the match (everything up
+to the unplug passed; the unplug opened Epic's `ControllerRemovedMenu`, which pauses the game until the pad's owner
+presses Start: the scenario did not, so everything after it failed), menu flow failed on `click` missing from the
+inject namespace. Scenario fixed (Start on the re-plugged pad closes the menu, Epic's `ConfirmControllerAdded`; the
+expect order of the menu's log line); second run (`logs/g9/kb`, load 5): 33 of 34 (the one: the expect order) and the
+menu flow 11/11. Numbers (`logs/g9/kb/g9-kbplayer.inject`): unjoined pad's stick moved player one 0.0; after the join
+ports [0, 1], both views with their own rectangle and split HUD; keys W S A D: the keyboard's pawn accelerates
+(+-939,+-1820)/(+-1820,+-939), the pad's (0,0); walks 185.9/158.1/186.0/186.0 vs 0.0; the pad's left stick: 0.0 vs
+186.6/158.9; the mouse turned 2002 vs 0, the right stick 0 vs 10483; mouse fire 2 shots vs 0, pad fire 0 vs 3.
+
+Final run on the binary with the corona fix (`logs/g9/final`, load 15.7 at start, 22 by the end: my own windows build
+ran meanwhile): `PASS g9-kbplayer (34 checks)`, `PASS g9-kbmenu (11 checks)`; G-6's model (`KeyboardIsPlayer=False`):
+`PASS g6-input (39 checks)`, `PASS g6-menu (9 checks)`.

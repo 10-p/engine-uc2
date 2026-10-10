@@ -96,6 +96,7 @@ class USDL2Client : public UClient, public FNotifyHook
 	BITFIELD			LogInput;				// SDL2Input log lines for every pad event
 	BITFIELD			SplitScreenJoinInMatch;	// G-6: Start on an unbound pad during a match adds a split-screen player
 	BITFIELD			SplitScreenFullDetail;	// G-9: split-screen players keep the single player's detail (else the Xbox's)
+	BITFIELD			KeyboardIsPlayer;		// G-9: keyboard+mouse are a player of their own (pad port 0); pads use ports 1-3
 
 	// Variables.
 	UBOOL				InMenuLoop;

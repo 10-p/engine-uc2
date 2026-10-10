@@ -52,6 +52,7 @@ void USDL2Client::StaticConstructor()
 	new(GetClass(),TEXT("LogInput"),          RF_Public)UBoolProperty (CPP_PROPERTY(LogInput),          TEXT("Input"),    CPF_Config );
 	new(GetClass(),TEXT("SplitScreenJoinInMatch"),RF_Public)UBoolProperty(CPP_PROPERTY(SplitScreenJoinInMatch),TEXT("Input"),CPF_Config );
 	new(GetClass(),TEXT("SplitScreenFullDetail"),RF_Public)UBoolProperty(CPP_PROPERTY(SplitScreenFullDetail),TEXT("Display"),CPF_Config );
+	new(GetClass(),TEXT("KeyboardIsPlayer"),RF_Public)UBoolProperty(CPP_PROPERTY(KeyboardIsPlayer),TEXT("Input"),CPF_Config );
 
 	// Compiled defaults for the inherited UClient settings, equal to Default.ini's [SDL2Drv.SDL2Client]
 	// (a copy of [WinDrv.WindowsClient]). UClient::StaticConstructor registers them without values, so
@@ -92,6 +93,7 @@ void USDL2Client::StaticConstructor()
 	LogInput			= 0;
 	SplitScreenJoinInMatch	= 1;	// G-6: players 3 and 4 (UC2's menus stop at two; splitscreen.md)
 	SplitScreenFullDetail	= 1;	// G-9: the owner keeps full detail in split screen on PC (splitscreen.md)
+	KeyboardIsPlayer		= 1;	// G-9: keyboard+mouse are a player of their own; the first pad joins as player two
 	UIScaleMode			= UISCALE_Fit43;	// D-2: the UI in a centred 4:3 box (Native640 = as before)
 	UIMenuBackground	= UIMENUBG_Fill;	// D-2: menu backgrounds fill the window (ui-scale.md)
 	UISharpText			= 1;				// D-2: glyphs from bigger sizes of the font when the UI is scaled up
@@ -300,7 +302,9 @@ USDL2Viewport* USDL2Client::FindViewport( DWORD WindowID )
 
 // Game pads: SDL2Pads.cpp (USDL2Client::PollGamepads and the rest). Keyboard and mouse never
 // change Engine->ActiveControllerId: on PC they are pad 0, the id ULevel::SpawnPlayActor gives the
-// first viewport ("fake the GamepadID", UnLevAct.cpp), so they and the first pad drive player one.
+// first viewport ("fake the GamepadID", UnLevAct.cpp). G-9: with KeyboardIsPlayer (the default) port 0
+// is theirs alone and the pads take ports 1-3, so a pad joins as a player of its own; with
+// KeyboardIsPlayer=False the first pad takes port 0 and drives player one with them (G-6).
 
 //
 // Perform timer-tick processing on all visible viewports.  This causes
@@ -475,7 +479,9 @@ UBOOL USDL2Client::PadJoin( INT Slot )
 		return 0;
 	if( AllowControllerJoin() )
 	{
-		for( INT i=0; i<Viewports.Num(); i++ )
+		// G-9: with KeyboardIsPlayer the window's viewport is the keyboard's player (port 0) even before its
+		// controller was given that port: a pad never takes it, it joins as a player of its own.
+		for( INT i=KeyboardIsPlayer ? 1 : 0; i<Viewports.Num(); i++ )
 			if( Viewports(i)->GetGamepadID()==UViewport::INVALID_GAMEPAD_ID && Viewports(i)->Actor )
 			{
 				// The first binding at start-up: the press also goes on to the menus (Xbox).

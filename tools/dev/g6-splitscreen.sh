@@ -404,8 +404,9 @@ SCEN
 # G-9: split-screen detail where the single player shows coronas, shadows and decals: DM-Praxis (DM-Deadbolt has no
 # corona light at all: the t3d export has none of its 176 lights with bCorona). The spots (found with the corona part):
 # P1 looks up at the ring of corona lights over the round room, P2 looks at the ceiling slab the ring is behind (no
-# corona in a single player's view: the corona's line check is occluded), P3/P4 elsewhere; PD looks down at the floor
-# in front (shots leave decals there, the pawn's shadow falls there). Single player: every spot shot with the client's
+# corona in a single player's view: the corona's line check is occluded), P3/P4 elsewhere (path nodes, not player
+# starts: a player who spawns on a start would be telefragged by the one placed there); PD looks steeply down at the
+# floor in front (the three shots leave decals there, the pawn's shadow falls there). Single player: every spot shot with the client's
 # coronas on and off (s<k>, s<k>nc), then PD after three shots (sd). Four players at P1..P4: the picture with coronas
 # on and off (q, qnc), then player one at PD after three shots (qd). tools/dev/g6/g9-detail.py --praxis counts, per
 # quadrant, the pixels a corona lights and compares them with the single player at the same spot: player one's
@@ -413,9 +414,9 @@ SCEN
 # another player drawn through a wall). Run with each SplitScreenFullDetail (G6_ARGS).
 G9_P1="632 503 380 26372 9000"
 G9_P2="-1220 288 690 3929 7000"
-G9_P3="154 -486 552 0 0"
-G9_P4="-937 -867 360 0 0"
-G9_PD="632 503 380 26372 -2500"
+G9_P3="265 138 360 0 0"
+G9_P4="436 1220 360 32768 0"
+G9_PD="632 503 380 26372 -8000"
 # coronas: single player on DM-Praxis, each of G9_SPOTS ("x y z yaw pitch;...") shot with the client's coronas on and
 # off (g9-corona-c<i>.png / -c<i>nc.png): where a view shows coronas (finding the spot for the detail part).
 scen_corona() {
