@@ -91,6 +91,9 @@ class ENGINE_API UNetDriver : public USubsystem
 
 	// determines whether this connection should be considered when detecting standby hacks
 	virtual UBOOL ShouldIncludeInStandbyCheck( const UNetConnection* Connection ) const;
+	// G-10b: whether this driver runs the standby check at all (both halves: the server's and the
+	// client's). 1 = Epic's behaviour; the browser's WebRTC driver returns 0 (web-g10.md).
+	virtual UBOOL StandbyCheckEnabled() const { return 1; }
 
 	void SetStandbyCheatStatus( UBOOL bStandbyEnabled );
 	void UpdateLastReceiveTime();
