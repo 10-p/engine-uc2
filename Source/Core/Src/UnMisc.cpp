@@ -2209,6 +2209,9 @@ CORE_API void appInit( const TCHAR* InPackage, const TCHAR* InCmdLine, FMalloc* 
 	if( GConfig->GetString( TEXT("Engine.Engine"), TEXT("Language"), Temp, ARRAY_COUNT(Temp) ) )
 		UObject::SetLanguage( Temp );
 #endif
+	// G-4: say which language this run uses ([Engine.Engine] Language, the launcher's Language setting), so a
+	// log alone tells which menu text, voice banks and movie tracks to expect.
+	debugf( NAME_Init, TEXT("Language: %s"), UObject::GetLanguage() );
 
 	// Object initialization.
 	UObject::StaticInit();

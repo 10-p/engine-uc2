@@ -81,3 +81,37 @@ files by extension; "core" = the engine/game packages the menus come from):
 | ut99 | 29 | none | English only |
 | ut99-436-compat | 140 | det 13, est 13: only the MonsterHunt mod's files (no Core/Engine/Botpack/UnrealShare/UnrealI copy) | English only |
 | unreal1 | 18 | none | English only |
+
+## Step 3 - UC2 natively (2026-10-10)
+
+Engine change (the only one so far): `Source/Core/Src/UnMisc.cpp`, appInit, right after the language is set: the
+log says `Init: Language: <value>`. Before it, only the override line (`Init: Ini override: [Engine.Engine]
+Language=deu (System)`) was there, which proves the switch arrived, not that the engine took it. It is in the engine's
+log file (`System/Avaris.log`; the console echo of -log starts after appInit) - the browser spec reads the MEMFS log.
+
+Test: `tools/dev/g4-language.sh [<tree>] [menu-<lang> | match-<lang> ...]` (run tree `g4`, from `build-native` of this
+branch; `capped 2G`, Xvfb; `UC2_GPU=1` for SDL's offscreen driver on the GPU). Output in `<WorkUC2>/logs/g4/native/`.
+The menu case unsuppresses DevUI/DevGUI in the run tree's Default.ini only (the scenario waits on `OpenMenu`).
+
+Measured, software GL, 1280x720 (main-menu pictures `menu-<lang>-main-menu*.png`):
+
+| run | log | `GameInfo::InitGame : bEnableStatLogging` (Core GFalse) | focused main-menu caption (probe4) |
+|---|---|---|---|
+| menu-int | `Init: Language: int` | False | STORY MODE |
+| menu-deu | `Init: Language: deu` | Falsch | STORYMODUS |
+| menu-fra | `Init: Language: fra` | Faux | MODE HISTOIRE |
+| menu-ita | `Init: Language: ita` | Falso | MODO STORIA |
+| menu-spa | `Init: Language: spa` | Falso | MODO HISTORIA |
+
+Italian works although 10 of its files have lower-case names (`ucmenu.ita`, `ucgameplay.ita`, `engine.ita`, ...): the
+case-insensitive lookup of `FFileManagerUnix` (`appUnixPath`) finds them. The German picture shows every main-menu
+item, the hint line and the button legend in German (SOFORT SPIELEN, NETZWERKGEFECHT, PROFILE, OPTIONEN, NICHT
+ANGEMELDET, BETRETE EINZELSPIELER-TURNIER, AUSWÄHLEN); the hint line is typed in, so a picture taken too early has
+it empty (seen once; the later picture of the same run has it).
+
+Match (from the menu, `open DM-Deadbolt?StartCinematic=04a_AscPre5`; a map on the command line loads before the window
+exists, so no movie or loading screen can show there - m9-movies.py travels from the menu for the same reason):
+- loading screen: `UC2Movie: loading screen for DM-Deadbolt (static: the first picture of UI_LoadingMovie, "LÄDT...")`
+  (Core.deu `[Progress] Loading="LÄDT %s"`).
+- cinematic: `... Vorbis 44100 Hz 2 ch from ../Movies/04a_AscPre5_deu.oga ...; language deu: audio track 1 from
+  ../Movies/04a_AscPre5_deu.oga`.
