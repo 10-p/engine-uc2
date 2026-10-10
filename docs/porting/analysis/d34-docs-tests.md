@@ -106,3 +106,16 @@ lock spot problem of step 3). The wasm-perf build (started -j4) was stopped and 
 (`logs/d34/build-wasm-perf-2.log`). Every timing run now goes through `logs/d34/quiet-runs.sh`, which waits for a
 1-minute load below 16 and 10 GB available before EACH game/twin run and logs the load at its start
 (`logs/d34/quiet-runs.txt`).
+
+## Step 7: REPORT.md section 60, the superseded notes, the appendices (D-3 1)
+
+- New top-level section `# 60. Changes since this report (2026-10-09/10)` before the appendices: the truth table
+  (task -> LOG.md entry -> notebook), then per section/feature: 00 (start here, decisions, found-while-writing,
+  milestones), 10 features 8, 9, 13 (+ arm64, new Engine files), 20 R-10, R-11, R-18, R-20, open issue 12, 30.5, 30.7,
+  30.8, 30.16, 30.18 and the open issues, 40.1, 40.2, 40.8, 40.15, the frontend, 50, the appendices.
+- 57 one-line notes "Superseded (2026-10-09/10): see section 60, <key>." after the paragraphs/bullets/tables that no
+  longer hold; the reviewed text itself is unchanged (`git diff -U0`: insertions only above the appendices).
+- Appendices regenerated for main `2ed330f` with `report-appendices.py` (a note under the heading says how to get the
+  reviewed `4813dd9` version): 140 modified Epic files, 189 new, Default.ini 118 / DefUser.ini 54 keys.
+- `REPORT.html` rebuilt with `tools/dev/report-html.cjs` (the committed HTML was in step: regenerating HEAD's md gives
+  the committed html except the build stamp). The file was written through a temp file + `os.replace`.

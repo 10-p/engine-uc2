@@ -58,6 +58,7 @@ and the notebooks, labelled *measured*, *seen only* or *not verified*.
    - `UCPlayerInput` saves them before Epic's stick code overwrites the look axes, then adds them back linearly
      (script, `UCGameplay.u`).
    - `DefUser.ini` binds the mouse to `aTurn/aLookUp`, and `UC2InputMigrate.cpp` updates old User.ini files.
+     *(Superseded (2026-10-09/10): see section 60, 00 and 30.5.)*
    - The section has a table of your complaints against the measured cause, before and after.
 4. **The renderer aims at the Xbox look, mostly without an Xbox picture to compare (section 20).**
    - Glow/bloom strength, dynamic gamma, distortion size, the Xbox shadow filter and the projectors are "seen only"
@@ -66,6 +67,7 @@ and the notebooks, labelled *measured*, *seen only* or *not verified*.
      5000 (O-7), blurs sized for 480 lines (O-10), AA 4x / anisotropy 16x (O-8).
 5. **The web build is WebGL 1 only, through GL4ES.** A device without `WEBGL_depth_texture` loses depth of field
    and distortion occlusion (no fallback yet).
+   *(Superseded (2026-10-09/10): see section 60, 00 and R-20.)*
 6. **Audio follows Xbox XACT behaviour on OpenAL Soft, with zone reverb. Nobody has compared it with a real Xbox**
    (mix level, HRTF colour, reverb loudness) (section 40). Movies are Theora/Vorbis, and their picture in a real
    browser has never been checked by a test.
@@ -94,6 +96,8 @@ and the notebooks, labelled *measured*, *seen only* or *not verified*.
 | 10 | E-5 GitHub + CI: go-ahead, repo name, visibility (also unlocks the real-pad and real-Windows sessions) | |
 | 11 | When to resume E-1 split-screen, E-3 frontend gamepad, E-4 language option (stopped 2026-10-08 on your order; each has only its step-0 notebook on its branch) | |
 
+> Superseded (2026-10-09/10): see section 60, 00 (decisions).
+
 ## Found while writing this report (not fixed: nothing was changed for the report)
 
 - **Renderer**
@@ -120,6 +124,8 @@ and the notebooks, labelled *measured*, *seen only* or *not verified*.
   - Frontend `branding/help.md`, `portal-notes.json` ("must not be published as playable"), the target README and
     `STATE.md` still describe the first-light build.
   - The web manifest is 1,991 MB against a 2,048 MB cache budget; sound, music and movies are not precached.
+
+> Superseded (2026-10-09/10): see section 60, 00 ("Found while writing").
 
 ## Never verified (by any test or person)
 
@@ -185,6 +191,7 @@ There have been 533 engine commits from the import (`7633696`, 2026-10-04) to th
   - O-11 (jitter).
 - **Open:** O-6 (needs your spot), O-14 (needs your example), E-1, E-3, E-4 (stopped), E-5 (needs your go-ahead),
   M15 content polish, M16 original Xbox assets, M17 close-out.
+  *(Superseded (2026-10-09/10): see section 60, 00 (milestones).)*
 
 ## The rules every change followed
 
@@ -885,6 +892,7 @@ engine does not take to the first viewport`, `941326a` WebRTC)
   - `cmake/UC2Web.cmake` (44 lines), included from `CMakeLists.txt:174-178`: `-sNO_DISABLE_EXCEPTION_CATCHING` at compile time for
     every target and `UC2_WEB_EXCEPTION_FLAGS` for every link (`:24-25`); `-fno-lifetime-dse` for clang (`:34`); the
     `SDL2::SDL2-static` INTERFACE target carrying `-sUSE_SDL=2` (`:39-44`).
+    *(Superseded (2026-10-09/10): see section 60, 10, feature 8.)*
   - `Source/SDLLaunch/cmake/Web.cmake` (116 lines), included from `Source/SDLLaunch/CMakeLists.txt:61-64`; output `SDLLaunch.js`
     + `.wasm` + `.data` (`:10`), then `meta.json` as a POST_BUILD step (`:64-77`). Link flags:
 
@@ -904,6 +912,8 @@ engine does not take to the first viewport`, `941326a` WebRTC)
     | dev: `-O2 -g2 -sASSERTIONS=2 -sSTACK_OVERFLOW_CHECK=2`; perf: `-O3 -g0 --emit-symbol-map -sASSERTIONS=0 -sSTACK_OVERFLOW_CHECK=0` | the dev link at plain `-g` was 45 MiB and did not fit 3 GB; `-O2 -g2` is 9 MiB, about 0.5 GB |
     | with UC2GL4ESDrv: `-sGL_ENABLE_GET_PROC_ADDRESS=1 -sMIN_WEBGL_VERSION=1 -sMAX_WEBGL_VERSION=1 -sFULL_ES2=1 -sOFFSCREEN_FRAMEBUFFER` | gl4es targets GLES 2 = WebGL 1; `emscripten_webgl_commit_frame()` is a stub without `-sOFFSCREEN_FRAMEBUFFER` |
     | with WebRTCDrv: `--js-library vendor/glue/webrtc-shim.js` | the `webrtc_*` imports forward to `Module.UE.net` |
+
+    *Superseded (2026-10-09/10): see section 60, 10, feature 8.*
 
   - `Source/SDLLaunch/Src/SDLLaunchWeb.cpp`/`.h` (new, compiled only under Emscripten): `UC2WebYieldFrame()` = an
     `EM_ASYNC_JS` that awaits `setTimeout(0)` (`:36-43`); `ue_exec_command` (`:50-64`), the frozen ABI export (`vendor/glue/ue_abi.h`):
@@ -949,6 +959,7 @@ the module is threaded because the engine needs a streaming thread and OpenAL So
   compiled away, first throw aborts) cannot be used.
 - **engine-ut2004's "Asyncify fail-soft loader patches" were not ported** (they compile catching off and patch every loader
   to return soft); real catching was used instead. Confirmed in the code: no `FreshLinker` or fail-soft branch exists in Core or Engine.
+  *(Superseded (2026-10-09/10): see section 60, 10, feature 8.)*
 - Keep the file-streaming thread on the web (idles at 1 ms; nothing creates streams yet).
 - Timer task (`setTimeout(0)`) rather than a MessagePort task for the frame yield: engine-ut2004 measured (ufront 2.43) that a timer task
   also gives the compositor a rendering opportunity between frames.
@@ -964,6 +975,7 @@ the module is threaded because the engine needs a streaming thread and OpenAL So
 - `meta.json` is less informative than the template intends: `buildFlags` is hand-maintained and omits the pool size and the GL4ES flags;
   `toolchain` lists only the Emscripten version although gl4es and OpenAL Soft are fetched for the web build (Web.cmake passes no
   `--dep-*`); the file's header comment still says "no fetched libraries on the web yet".
+  *(Superseded (2026-10-09/10): see section 60, 10, feature 8.)*
 - Pool size is a hard-coded count (4) tied to what OpenAL Soft's web backend starts; a new thread user needs the number raised.
 - Node cannot be used to test networking: its socket emulation has no `SO_BROADCAST`, so `ucc-bin.js server` loads the map and then
   stops with `Dedicated server can't listen` (accepted for W0).
@@ -1039,6 +1051,7 @@ covers both. Without the frontend calling `flushconfig` the web persistence daem
 
 **Disadvantages, risks, deviations**
 - A value with a double quote inside it ends the token. The command line is limited to 1,023 characters.
+  *(Superseded (2026-10-09/10): see section 60, 10, feature 9.)*
 - The `RemoveNames` flush is a behaviour change on every platform: the ini files are written at every level change when dirty (not on the
   Xbox build). It writes nothing when nothing is dirty.
 - An override persists: a launcher that sends `Name=` once overwrites the ini value for later runs without the switch.
@@ -1345,6 +1358,8 @@ values; a new key in `Default.ini` reaches an existing player's ini only through
 compiled defaults" for most new keys), through a migration in code (`UC2InputMigrate.cpp` for old input values; the `ConsoleKey` Tab -> tilde mapping at
 `UnGame.cpp:284`; `ReplaceMissingDrivers`), or not at all. On the web the host keeps `Avaris.ini`/`User.ini` (persisted engine files) and `flushconfig`.
 
+> Superseded (2026-10-09/10): see section 60, 10, feature 13.
+
 **Why** - `Default.ini` is Epic's PC ini; the retail disc's `DefaultXbox.ini` is a slightly later variant (net rates 7000 -> 10000/20000, four log suppressions on).
 The owner's rule (2026-10-06): "canonical config and localisation = the leak (unless a difference changes behaviour)".
 
@@ -1359,6 +1374,7 @@ The owner's rule (2026-10-06): "canonical config and localisation = the leak (un
   of Epic's)"). Since the M7 merge (`225b0d5`, hand-resolved conflict) `Default.ini` and `web/Default.ini` are LF, while `DefUser.ini` and `web/DefUser.ini` are
   CRLF. `git diff` against Epic's `Default.ini` is therefore 935 changed lines in the diff stat for about 213 real ones. The engine parses both; `sync-web-ini.py` keeps
   whichever the native file uses. The code wins over the notebook.
+  *(Superseded (2026-10-09/10): see section 60, 10, feature 13.)*
 - An existing `Avaris.ini` is never refreshed; stale values (an `Engine.NullRenderDevice` from an early run, `ConsoleKey=9`) stay unless a migration exists. A
   player who ran an older build keeps old defaults; the web persists the ini for ever (`Core/Src/UnObj.cpp` comments say a stale baked default shadows the next
   build's).
@@ -2356,6 +2372,8 @@ modes, as the shipped Xbox binary did. With the script's intended value it would
 which byte native reads. Without the ini key the compiled default is **0** (`UC2GLRenderDevice.cpp:214`), i.e. the
 script's value 100 in third person.
 
+> Superseded (2026-10-09/10): see section 60, R-10.
+
 **Why.** Owner's review O-3 (PLAN.md): the owner could not see the DOF; decision "default `DOFShippedBlurAlpha` to
 the shipped value (65) so the look matches the Xbox binary".
 
@@ -2365,12 +2383,15 @@ consistent with "keep the Xbox behaviour". The alternative (100 in third person)
 **Disadvantages, risks, deviations.**
 - Ini and compiled default disagree (ini True, code 0): an ini without the key (an old user ini) gets the
   non-shipped value. Worth aligning.
+  *(Superseded (2026-10-09/10): see section 60, R-10.)*
 - O-3 also asked for an explanatory picture pair: `fx-dof-alpha` and `fx-azure` exist (postprocess.md P5b); the
   effect is subtle (mean difference 1.4/255 in the far region between 65 and 100).
 
 **Status.** Seen: `fx-dof-alpha` pair (DM-Azure, far region less softened with 65). Measured as part of O-10: DOF
 blur sigma 3.10 reference pixels, alpha 0.228 = 65/255 x the ramp. LOG.md has no O-3 line (PLAN.md says "see O-3
 in LOG.md when done"): the change is recorded only in commit `2208566` and BLOCKERS.md "Decided by the owner".
+
+> Superseded (2026-10-09/10): see section 60, R-10.
 
 **Off switch.** `DOFShippedBlurAlpha=False` or `DOFSHIPPEDALPHA 0` (script value); `set UCScreenDOF Enabled 0`
 removes the DOF.
@@ -2392,6 +2413,7 @@ there AND THEN increase it").
   the first distortion draw from `[UC2GLDrv.UC2GLRenderDevice] DistortionCullDistance` (missing or not positive =
   5000, the Xbox value). `DistortionAccum.vsh` scales each vertex's distortion by `1 - saturate(z/D)^2`. Console
   `DISTORTIONCULLDISTANCE [<units>]` (`UC2GLRenderDevice.cpp:2013-2016`).
+  *(Superseded (2026-10-09/10): see section 60, R-11.)*
 - ini: `DistortionCullDistance=15000` (`Default.ini:402`, commit `7463d9c`; ported into the M11 driver by `93c2f27`);
   README row 22.
 - Tools: `tools/dev/fx-owner.sh` (scenarios `praxis-far`, `praxis-near`; `UC2_GPU=1` runs on the NVIDIA GPU
@@ -2412,6 +2434,7 @@ was not restructured; the mip LOD bias of -1.8 (a second, smaller factor) left a
   (Xbox 72%), 89% at 5000 (Xbox 0).
 - The GL4ES subclass reads this key from the `[UC2GLDrv.UC2GLRenderDevice]` section (hard-coded section name),
   not its own; the web ini has both sections, so it works, but the GL4ES section's own copy of the key is ignored.
+  *(Superseded (2026-10-09/10): see section 60, R-11.)*
 - The size of the effect (height/480 scaling) is unverified against an Xbox; the owner called the close-up Praxis
   panes "spot on".
 - The splash distortion fade (O-5's second sentence) was analysed as fading with particle alpha exactly as on the
@@ -2706,6 +2729,8 @@ not), menu movie advancing, 0 GL errors. Native: `m9-movies.py` 19/0, movie self
 the scene 4x multisampled; the browser (and the GLES twin) applies FXAA in the present pass; textures are
 filtered with 16x anisotropy wherever the hardware allows.
 
+> Superseded (2026-10-09/10): see section 60, R-18.
+
 **Where.**
 - `Src/UC2GLRenderDevice.cpp`: `SUPPORTS_MSAA` (:359, GL 3.0 or `ARB_framebuffer_object`); the choice (:764-769:
   `PresentFXAA = AntiAliasing > 0 && (IsGLES || !SUPPORTS_MSAA)`); `CreateMainFramebuffer` (:880-893: multisampled
@@ -2715,6 +2740,7 @@ filtered with 16x anisotropy wherever the hardware allows.
   depth. `GPresentFragmentShader` (:1480-1520): "FXAA PC simple" (Timothy Lottes' public reduced form) inside the
   present pass, `uFXAA` uniform. Switches `-glaa=N`, `-glnoaa` (:607-609), `-glshotpresented` (screenshot after the
   present pass).
+  *(Superseded (2026-10-09/10): see section 60, R-18.)*
 - `Inc/UC2GLFuncs.h:144-147` the two optional entry points.
 - Anisotropy: `Src/UC2GLRenderInterface.cpp:1449`: a linear minifying filter on a mipmapped texture gets
   `GL_TEXTURE_MAX_ANISOTROPY_EXT = LevelOfAnisotropy` (clamped to the hardware's maximum); point-filtered
@@ -2740,6 +2766,8 @@ rejected (it would multisample only the canvas, which receives one full-screen q
 formats: it would move the web renderer to an untested context class); FXAA in the existing present pass chosen
 (no extra pass or target).
 
+> Superseded (2026-10-09/10): see section 60, R-18.
+
 **Disadvantages, risks, deviations.**
 - FXAA also smooths the HUD and menus (drawn into the same frame); 9 texture reads per pixel in the present pass.
 - MSAA costs memory and resolve blits per read (3-4 per frame with post-processing); on software GL it slowed
@@ -2755,6 +2783,8 @@ Browser: `anisotropy 1 of 16` was reported with the old ini; with the new defaul
 re-logged in the notebook).
 
 **Off switch.** `AntiAliasing=0` or `-glnoaa`; `-glaa=N`; `LevelOfAnisotropy=1`.
+
+> Superseded (2026-10-09/10): see section 60, R-18.
 
 ### R-19 The GL4ES binding (`UC2GL4ESDrv`) and the native GLES "twin" (M11)
 
@@ -2842,6 +2872,8 @@ floor (liandri random). Every GL4ES defect listed was found by these tests.
 works), with post-processing, effects, movies; in the harness it runs on the real GPU (ANGLE/Vulkan on the
 Quadro P620).
 
+> Superseded (2026-10-09/10): see section 60, R-20.
+
 **Where.**
 - `Source/UC2GL4ESDrv/Src/UC2GL4ESDrv.cpp` (`__EMSCRIPTEN__`): the WebGL 1 context is created by the device on
   the engine's worker (`emscripten_webgl_create_context("#canvas")`, :118-147: `majorVersion 1`, alpha/depth/
@@ -2853,6 +2885,7 @@ Quadro P620).
   -sMAX_WEBGL_VERSION=1` (**no WebGL 2**), `-sFULL_ES2=1`, `-sOFFSCREEN_FRAMEBUFFER` (without it
   `commit_frame` is a stub and presentation depends on the compositor: about 1 frame/s on Windows in the sibling
   ports). Commit `34b4ed2`.
+  *(Superseded (2026-10-09/10): see section 60, R-20.)*
 - Frame pacing (launcher, not the driver; `Source/SDLLaunch/Src/SDLLaunchWeb.cpp:25-42`, M4w `45f7301`): one
   Asyncify yield per frame through `setTimeout(0)`; a standalone client's max tick rate is 0, so there is no
   frame cap and no `requestAnimationFrame` pacing: the browser composites whatever was committed.
@@ -2869,6 +2902,8 @@ Quadro P620).
   | `WEBGL_depth_texture` (`-glnodepthtexture`) | depth of field off (picture stays sharp, log line) and distortion drawn over nearer geometry | **NOT implemented** (needs a second draw of every depth-writing primitive; about doubles draw calls on exactly the weak devices); every desktop ANGLE back end has the extension |
   | fragment `highp` | not handled (the depth encode needs it); the log says so | open |
 
+  *Superseded (2026-10-09/10): see section 60, R-20.*
+
 - ini: `Engine/Config/web/Default.ini:19` `RenderDevice=UC2GL4ESDrv.UC2GL4ESRenderDevice`; otherwise the render
   sections are identical to native (generated by `tools/dev/sync-web-ini.py`, which keeps only listed web
   deltas: render device, `UseJoystick=False`, network device, and the web-owned audio/movie sections).
@@ -2884,6 +2919,8 @@ native except AA (FXAA instead of MSAA, R-18).
 
 **Decisions and alternatives.** WebGL 1 only (R-18, R-19). Context on the worker (template's approach).
 Depth-texture fallback deferred with a written reason (web-renderer.md "Fallbacks").
+
+> Superseded (2026-10-09/10): see section 60, R-20.
 
 **Disadvantages, risks, deviations.**
 - Tested in one browser/GPU combination only (headless Chromium, ANGLE on Vulkan, NVIDIA): every extension present,
@@ -2902,6 +2939,8 @@ Depth-texture fallback deferred with a written reason (web-renderer.md "Fallback
 the browser; any phone or Safari/Firefox.
 
 **Off switch.** None for the web renderer itself; masks (`-glnos3tc` etc.) are test switches.
+
+> Superseded (2026-10-09/10): see section 60, R-20.
 
 ### R-21 Test and diagnostic hooks compiled into the driver, and the renderer test scripts
 
@@ -3020,10 +3059,12 @@ Not ini keys but Epic's client properties the device sets at its first frame wit
     `PS_Terrain3Layer` are not drawn (done by M7b); the `UnRenDev.h` comment lists `USubActionDepthOfField.cpp`
     among the gate users (that file has no gate); the comment on `UseXboxProjectors`'s compiled default says
     projectors on skeletal meshes "were drawn with nothing" (the notebook's pixel trace shows PC draws them).
+    *(Superseded (2026-10-09/10): see section 60, 20, open issue 12.)*
 13. **Smaller deviations kept on purpose:** occlusion queries always "visible" (no occlusion culling); NV2A 8-bit
     combiner precision not modelled (no banding); `DistortionCullDistance` read only from the `UC2GLDrv` section;
     the emissive streak falloff is per frame (frame-rate dependent, as Epic's); no frame cap or
     `requestAnimationFrame` pacing on the web.
+    *(Superseded (2026-10-09/10): see section 60, R-11 and R-20.)*
 
 ## Places where we changed Epic's shared code (renderer)
 
@@ -3080,6 +3121,7 @@ Notebooks behind this section: `docs/porting/analysis/` `client-boot.md` (M4), `
    breaks if a package is missing**: the D-6 `DefUser.ini` binds the mouse to `aTurn/aLookUp`, which the shipped
    `UCPlayerInput` overwrites, so with the shipped `UCGameplay.u` the mouse does not turn the view at all (the
    engine logs a warning saying so). The table below lists every feature against every layer.
+   *(Superseded (2026-10-09/10): see section 60, 30.5 and 30.18.)*
 3. **The mouse is a PC mouse now, the pad is the Xbox pad.** Mouse: linear, 0.022 deg x `MouseLookSensitivity`
    (2.5) per count, no clamp/curve/acceleration/friction/adhesion, own invert, rigid third-person camera while the
    mouse owns the look. Pad: Epic's Xbox curve, acceleration, dead zone 0.3, friction, adhesion, auto-centre
@@ -3115,9 +3157,12 @@ asset tree v2). Every feature not listed with a script part works with the shipp
 | Rebinding page (D-9) | `UnGUICore.cpp` raw capture, `SAVECONFIGKEYS` | `UC2Settings_Keys`, `KeyBindingPanel`, `UC2Settings_Main` in **UCMenu.u** | DefUser.ini as "defaults" | keys spec | **no KEYBOARD / MOUSE button**; keys only by editing User.ini or console `SET Input` + `SAVECONFIGKEYS` |
 | Script compiler (M14) | Editor package, Core fixes | none changed by M14 itself | none | none | n/a (tooling) |
 
+> Superseded (2026-10-09/10): see section 60, 30.5, 30.7, 30.8.
+
 Package couplings that are not obvious:
 - `UCGameplay.u` and `DefUser.ini` must change together (D-6). A kept User.ini from an earlier build is rewritten
   at start-up by `UC2InputMigrate.cpp` only where a value is exactly an old default.
+  *(Superseded (2026-10-09/10): see section 60, 30.7.)*
 - `UCMenu.u` (D-9) refers to `UCPlayerInput.MouseLookSensitivity`/`bInvertMouseLook` (`UC2Settings_Keys.uc:546-580`),
   which exist only in the rebuilt `UCGameplay.u`. The rebuilt `UCMenu.u` with the shipped `UCGameplay.u` was never
   tried; expect unresolved imports at load. Treat the three rebuilt packages as one set.
@@ -3404,6 +3449,7 @@ device that moved last "owns" the look.
     and the start-up warning when the mouse is bound to `aTurn/aLookUp` but the loaded `UCGameplay.u` has no
     `MouseLookSensitivity` (`:111-117`, commit `6857174`).
   - Test channel `mouse`/`watch`/`place`/`aim` and `probe2/probe3` (30.3, `792407e`); SDLLaunch `-maxfps` (`1efa52e`).
+    *(Superseded (2026-10-09/10): see section 60, 30.5.)*
 - Script, all in the rebuilt **`UCGameplay.u`** (commits `49d4705` UCGameplay: D-6 mouse look separated from the
   pad, `0475725` camera at its place at once, exact FOV scale, `d75990b`, `e3e927d` console commands persist):
   - `UCGameplay/Classes/UCPlayerInput.uc:84-96` new properties (`MouseLookSensitivity`, `bInvertMouseLook`,
@@ -3441,6 +3487,8 @@ device that moved last "owns" the look.
 | `bNonlinearAccel`, `aMouseX_Limit`/`aTurn_Limit`, `bAccelMultipliers`, friction ranges (`:321-344`) | `true`, 100/1024, `true`, `0.75`/`0.65` | the retail disc's: same, friction `0.95`/`0.9` | the pad's curve; friction now acts on the stick only |
 | `[UCGameplay.UCPlayerController] bAutoCenterPitch` (`:285`), `LockSearchTimer` (`:253`) | `true`, `0.1` | `true`, `0.3` (retail) | auto-centre is the pad's now |
 
+> Superseded (2026-10-09/10): see section 60, 30.5.
+
 - Frontend: `ufrontend` `51cab98` test "mouse look (D-6)" in `packages/e2e/uc2-wasm-boot.spec.js` and the
   `targets/uc2/README.md` "Mouse look" section; manifests for the rebuilt package `40216a2`, `6893b45`.
 - Tools: `tools/dev/d6-mouse.sh` (`look ini migrate pad lock before epic`), `tools/dev/d6-checks.py` (circle
@@ -3462,6 +3510,7 @@ device that moved last "owns" the look.
 - **Without the ini change** (rebuilt package, a User.ini that still says `Axis aMouseX`): the mouse goes back
   through the stick's curve (capped, accelerated, hexagonal, with friction and adhesion): what the owner
   complained about. `UC2InputMigrate.cpp` rewrites exactly-old values at start-up (30.7).
+  *(Superseded (2026-10-09/10): see section 60, 30.5.)*
 - **Web**: the same package and inis; the browser's pointer lock delivers `movementX/Y` to SDL; on a Linux desktop
   the browser applies the desktop's pointer acceleration (frontend note, 30.1).
 
@@ -3509,6 +3558,8 @@ browser test ran without it. **Felt by a person: not verified.**
 **Off switch.** No single switch. `MouseLookSensitivity`, `bInvertMouseLook`, `MouseLockBreakAngle` in
 `User.ini [UCGameplay.UCPlayerInput]`; binding `MouseX/MouseY` back to `aMouseX/aMouseY` sends the mouse through
 the pad's curve again (Epic's behaviour, with our script). `-noinimigrate` keeps an old User.ini untouched.
+
+> Superseded (2026-10-09/10): see section 60, 30.5.
 
 ### 30.6 PC control defaults: `DefUser.ini` and `KeyBinds.ini` (M10, revised by D-6)
 
@@ -3565,6 +3616,8 @@ the view key, the combo key X.
 
 ### 30.7 Old `User.ini` values moved at start-up (`UC2InputMigrate`, D-6)
 
+> Superseded (2026-10-09/10): see section 60, 30.7 (removed).
+
 **What the player/owner sees.** A player whose User.ini came from an earlier build (natively, or the copy the
 browser keeps) gets D-6's mouse and pad without deleting anything; the log says what moved.
 
@@ -3615,6 +3668,7 @@ pad's left stick walks on PC with Epic's own binding.
 - Ini: `DefUser.ini:316` `bKeysAsStick=True`; `:214-215` wheel `NextWeapon` both ways (Epic: `NextSkill`/`PrevSkill`,
   which exist in no script package; UC2's `PrevWeapon` is an empty function); `:197-198` `JoyX/JoyY SpeedBase=100.0
   DeadZone=0.3` (M10 had `SpeedBase=2400000` to work around the missing scale).
+  *(Superseded (2026-10-09/10): see section 60, 30.8.)*
 - Tools: `d6-mouse.sh lock` (Lock + D switches target), `d6-mouse.sh pad` (0.28 deflection walks/turns nothing) and
   `m10-controls.sh pad` (the left stick walks at 0.35 and at full deflection).
 
@@ -3623,6 +3677,8 @@ keyboard never dodges or switches target, and the left stick does not move the p
 with the shipped scripts and `SpeedBase=100`). M10's ini work-around made the stick walk but was undone by any
 profile that swaps the sticks (`ControllerConfiguration.ApplyJoysticks` writes `SpeedBase=100`) and saturated
 `Ctrl_Move_*_Pct` at any deflection.
+
+> Superseded (2026-10-09/10): see section 60, 30.8.
 
 **Why.** The owner's "keyboard bindings being backwards" (no example given). The audit (`mouse.md` step 4) looked
 up every `[Engine.Input]` command as an alias, an exec function or an engine command and checked every direction
@@ -3634,6 +3690,8 @@ stick's curve. The reddit guide's other advice ("turn OFF Centerview") is the au
 SmartJump design: Space while moving dodges; Backspace stays a plain jump (owner choice open: bind Space to JUMP
 ONLY on the D-9 page).
 
+> Superseded (2026-10-09/10): see section 60, 30.8.
+
 **Disadvantages, risks.** Changes gameplay on PC compared with Epic's PC build (which could not dodge by keyboard
 at all); the owner's example is still needed (PLAN.md "Needed from the owner", O-14) to know whether "backwards"
 meant something else, e.g. the C/V order.
@@ -3642,6 +3700,8 @@ meant something else, e.g. the C/V order.
 0.28; the keyboard dodge itself is not asserted by a test (seen through the binding audit and the code).
 
 **Off switch.** `bKeysAsStick=False`.
+
+> Superseded (2026-10-09/10): see section 60, 30.8.
 
 ### 30.9 The UI in a centred 4:3 box (D-2)
 
@@ -4050,6 +4110,8 @@ any key or mouse button binds it; Escape cancels, Backspace/Delete clear; a key 
 bottom line says what moved); White = DEFAULTS (our `DefUser.ini`), Black = CANCEL, B/Escape = save and back. Pad
 buttons are never listed or changed (they belong to the profile's controller layout).
 
+> Superseded (2026-10-09/10): see section 60, 30.16.
+
 **Where.**
 - Script, the rebuilt **`UCMenu.u`** (commits `07d0d06` UCMenu: KEYBOARD / MOUSE settings page, first version,
   `3219806`, `c401614`, `c9982ee`):
@@ -4092,10 +4154,14 @@ conflicts swap rather than clear; a key bound to a command no row lists (Epic's 
 is simply taken and the hint says what it was; defaults read from `DefUser.ini` at run time; a `DefUser.ini`
 without `[Engine.Input]` keeps every key ("DEFAULT KEYS NOT FOUND").
 
+> Superseded (2026-10-09/10): see section 60, 30.16.
+
 **Disadvantages, risks, deviations.** A new UI of about 1,570 lines of UnrealScript in Epic's style that we
 maintain. The cell order is recomputed after a restart (bindings unchanged). The engine writes a key as `j` (FName
 spelling; cosmetic). The console key during a capture opens the console. Owner choices still open: C/V order,
 Space dodge, swap vs clear (LOG.md).
+
+> Superseded (2026-10-09/10): see section 60, 30.16.
 
 **Status.** Measured: `d9-rebind.sh` **132 PASS, 0 FAIL** (`logs/d9/final/summary.txt`; coordinator 119/0 in a12):
 slider by mouse and keyboard, capture by click and Enter, swaps, clearing, defaults, cancel, pad capture refused,
@@ -4210,6 +4276,8 @@ packages (coordinator a12: UCGameplay 18, UCMenu 5, all intended).
 | `UCMenu/Classes/UC2Settings_Keys.uc` | 1,246 (new) | the page | **UCMenu.u** | D-9 |
 | `UCMenu/Classes/KeyBindingPanel.uc` | 323 (new) | the key list | **UCMenu.u** | D-9 |
 
+> Superseded (2026-10-09/10): see section 60, 30.18.
+
 **What each rebuilt package differs in** (`script-diff.py` against the shipped packages): GUI.u: one function
 (`GUIController.SetProfilePlayerName`) plus the two `config` flags; UCGameplay.u: 18 "problems", all in the changed
 code (`PlayerInput`, `Get*AdhesionAdjust`, the new functions and properties, `UpdateRotation`, `CalcBehindView`,
@@ -4251,6 +4319,8 @@ table at the top of this section lists what reverting to the shipped packages wo
 only feature that then stops working outright, and it would need `DefUser.ini` and `UC2InputMigrate.cpp` reverted
 with it.
 
+> Superseded (2026-10-09/10): see section 60, 30.18.
+
 ## Open issues in this area
 
 1. **O-11, third-person character jitter**: fixed after this snapshot (main `c59c02d`, section 50). The cause was
@@ -4258,6 +4328,7 @@ with it.
    UCGameplay.u only.
 2. **O-14, "keyboard bindings being backwards"**: no example from the owner yet; the audit found nothing inverted
    (30.8). Candidates if it was meant: the C/V order, arrows turning instead of strafing.
+   *(Superseded (2026-10-09/10): see section 60, 30, open issue 2.)*
 3. **No physical pad has been tried** (all pad evidence is SDL's virtual controller); pads are off on the web
    (`UseJoystick=False`, browser Gamepad API untested; frontend gamepad support is E-3); real-pad sessions are
    planned from CI builds (E-5).
@@ -4267,8 +4338,10 @@ with it.
 5. **The pad's slow turns at high frame rates** (Epic's integer rotation per tick): just past the dead zone nothing
    turns below about 0.335 deflection at 60 fps. Carrying the fraction would fix it but changes Epic's pad
    arithmetic: owner decision.
+   *(Superseded (2026-10-09/10): see section 60, 30, open issue 5.)*
 6. Owner choices left on the D-9 page: C/V order, Space dodging while moving (vs JUMP ONLY), swap vs clear on a
    key conflict.
+   *(Superseded (2026-10-09/10): see section 60, 30, open issue 6.)*
 7. Not done, needs script: button glyphs that show the bound key (the hints still show Xbox A/B/X/Y), hover on list
    rows, an on-screen console output area, camera movement smoothing for the mouse.
 8. Split screen on PC (E-1): Start on a second pad does not join; the UI box has code for split viewports, never run.
@@ -4485,9 +4558,12 @@ implementation; the PC build ran `Engine.NullAudioDevice`. Owner decision (PLAN,
   playable wave (e.g. `Combo_BladeRush_Travel`, `Gib_Explosion_LI`, seven level ambient loops) and play nothing.
   Decoding them from the `.xwb` was considered and **not done** (the brief said not to invent data; open in
   `BLOCKERS.md`: "decode those 19 from the .xwb ... or leave them out").
+  *(Superseded (2026-10-09/10): see section 60, 40.1.)*
 - `A_Vehicle.xsb/.xwb` (31 vehicle cues) ship but are not in the project, so they are not cooked.
+  *(Superseded (2026-10-09/10): see section 60, 40.1.)*
 - One source differs from the shipped bank: `A_ChemicalDawn` entry 7 (`Machine_Generator03`): the tree's WAV is 55,808
   frames, the Xbox's 193,472; the cook uses ours with its loop region clamped.
+  *(Superseded (2026-10-09/10): see section 60, 40.1.)*
 - Vorbis `q4` is lossy; the encode starts from the project's source WAVs, not from the Xbox's ADPCM, so there is one lossy
   generation, not two.
 - The script finds `bin/capped` by a fixed relative path (`<WorkUC2>/bin/capped`) and ffmpeg on `PATH`: it is a
@@ -4500,6 +4576,8 @@ generator above). Every cooked wave has the Xbox wave's length to within one 64-
 worst case) except that one. Inferences without documentation, listed so the owner can veto them: playlist type
 numbering (consistent with the data: the 43 "no immediate repeat" events are footsteps, swings, pain), priority
 direction (lower value = more important), "Recurring = fade".
+
+> Superseded (2026-10-09/10): see section 60, 40.1.
 
 **Off switch.** None (offline tool). A tree without `Sounds/` simply has no sound.
 
@@ -4597,6 +4675,7 @@ XACT-shaped, and the web build settings follow engine-ut2004's (O-2).
   to listen to (LOG 2026-10-04); no reply is recorded.
 - No HRTF (the Xbox used "full HRTF" on 3D voices): plain stereo/surround panning; OpenAL Soft's own configuration
   (`alsoft.conf`) decides what a real device does.
+  *(Superseded (2026-10-09/10): see section 60, 40.2.)*
 - Inferred semantics (documentation does not say): priority direction, "Recurring" = fade, default weight of an
   unset variation (counted as 10,000 when others are set), cue radius of sounds with no 3D block (4), "Parameter
   controlled" playlist (takes the first; nothing in UC2 sets it). The non-3D radius means other players' combo
@@ -4614,6 +4693,8 @@ XACT-shaped, and the web build settings follow engine-ut2004's (O-2).
 78 cue tables / 2,438 cues, 0 failures; 2,417 cues resolve fully, 6 partly, 15 to nothing); `UC2AudioSelfTest` 39
 checks, 0 failed (details in 40.7). *Seen/heard by a person*: nothing recorded. *Not verified*: absolute level
 against the Xbox, HRTF colour, stealing, split screen, pause.
+
+> Superseded (2026-10-09/10): see section 60, 40.2.
 
 **Off switch.** `AudioDevice=Engine.NullAudioDevice` in `Avaris.ini`, or `-nosound` for one run (Epic's switch). The
 device object then stays but plays nothing; without `libopenal` it also stays and plays nothing.
@@ -4861,6 +4942,8 @@ the wasm32 build under Node.
 **What the player/owner sees.** In German, French, Italian and Spanish the Sapphire taunts 40-53 (and one tutorial
 line in Spanish) are the wrong lines for their names, exactly as on the Xbox; 15 cues are silent.
 
+> Superseded (2026-10-09/10): see section 60, 40.8.
+
 **Where.** Data: `A_TauntSapphire_{deu,fra,ita,spa}` entries 40-53 are shifted by one against the English bank (99 entries
 in all, found by comparing lengths with the shipped `.xwb`); `tools/cook-audio.py --relink-localised` (line 753, 872-885)
 re-orders by name; the default does not. Nothing in the engine.
@@ -4873,6 +4956,8 @@ the cook and costs nothing to enable later.
 
 **Disadvantages, risks, deviations.** Players of those four languages hear mismatched taunts. The 19 missing source
 WAVs (40.1) remain open in `BLOCKERS.md`; decoding them from the `.xwb` was not decided.
+
+> Superseded (2026-10-09/10): see section 60, 40.8.
 
 **Status.** Measured: lengths of localised entries match the shipped `.xwb`'s order (entry 40 of `A_TauntSapphire_deu`
 is 21,564 ADPCM bytes = the 76,626-byte `Sorry` source, not the `Spammer` of the base bank). Not verified by ear.
@@ -5346,6 +5431,7 @@ which a browser cannot send; mapping beacons to the glue's server rows is "a tas
   channel `webrtc.md` and `WebRTCDrv.h` describe: while the pipe is up a datagram is never lost, loss happens only while a pipe is
   dead and the session layer reconnects. The engine's resends run on top of that (the wrap and packet-0 fixes of 40.13 apply).
   Head-of-line blocking under bad networks is therefore possible; never measured on a real connection.
+  *(Superseded (2026-10-09/10): see section 60, 40.15.)*
 - **Not done:** in-game discovery; **two guests at once** (the third page costs ~1.6 GB of browser memory; the spec has no
   such test); servertravel / map change over WebRTC (the one-slot detach logic is the template's and passes natively, but
   was not run in a browser); hosting from UC2's own in-game network menus (no `room=` then; the glue uses the persisted
@@ -5747,13 +5833,184 @@ The agent's own numbers:
 
 ---
 
+# 60. Changes since this report (2026-10-09/10)
+
+Added 2026-10-10 (task D-3). Sections 00-50 are left as you reviewed them; where a paragraph no longer holds, a
+one-line "Superseded (2026-10-09/10): see section 60" note follows it. This section says, per report section and
+feature, what changed after the snapshot `4813dd9` and where the current truth is. The work came from your review of
+2026-10-09 (PLAN.md "Owner review of 2026-10-09": F-1..F-6) and of 2026-10-10 (D-1..D-4, G-1..G-6). Main is `2ed330f`
+at the time of writing: 620 engine commits since the import, 88 since the snapshot.
+
+Where the current truth is:
+
+| Task | LOG.md entry | Notebook |
+|---|---|---|
+| O-11 jitter (already section 50) | 2026-10-08 "O-11 green" | `jitter.md` |
+| F-1 vanilla scripts (+ F-1b/c cheats) | 2026-10-09 "Owner review of 2026-10-09", F-1 | `vanilla.md` |
+| F-2 / F-4 platform like UT2004 | 2026-10-09, F-2/F-4 | `platform-f4.md` |
+| F-4b command-line audit | 2026-10-09 "F-4b and F-3 green" | `platform-f4.md` (steps 7-10) |
+| F-3 GL4ES on WebGL 2 | 2026-10-09 "F-4b and F-3 green" | `webgl2.md` |
+| F-5 renderer items | 2026-10-09, F-5 | `render-f5.md` |
+| F-6 audio | 2026-10-09, F-6 | `audio-f6.md` |
+| O-3 depth-of-field alpha (no LOG entry until now) | the entry D-3 wrote for the coordinator: `logs/d34/log-o3.md` | `postprocess.md` P5b |
+| D-3 / D-4 stale text and test hygiene | (the coordinator's entry for D-3/D-4) | `d34-docs-tests.md` |
+
+## 00 Overview
+
+- "Start here" item 3: the mouse no longer needs `UC2InputMigrate.cpp` (deleted, F-1) nor the D-6 bindings; see 30.5.
+  Item 5: the web build draws on WebGL 2 since F-3 (WebGL 1 is the fallback); see R-20.
+- "Decisions waiting for you", decided since: 1 walk bob kept (no ini key); 2 O-14 closed (the bindings were "weird",
+  not reversed; rebinding covers it); 3 D-9: Space + direction dodges as on the Xbox, a conflict CLEARS the other
+  binding, the C/V order stays (rebinding covers taste); 4 the pad's turns at high frame rates stay as Epic wrote
+  them; 6 the 19 waves decoded (40.1); 7 O-6 closed by you ("everything seems fixed"); 8 fetched libraries stay on
+  branches, latest wins; 11 E-1/E-3/E-4 restarted as G-6/G-5/G-4. Still open: 5 (the standby pause), 9 (the web
+  profile layout, with the profiles revisit), 10 (GitHub: a private `10-p/engine-uc2` exists since 2026-10-10; CI
+  after the merge).
+- "Found while writing this report", all handled: `DOFShippedBlurAlpha`'s compiled default (F-5), dynamic gamma (F-5:
+  stays on, Epic's split-screen manager turns it on too), `DistortionCullDistance` (F-5), the stale text (D-3, this
+  task: `UnRenDev.h`, `UseXboxProjectors`' comment, `WebRTCDrv.h`, `webrtc.md`, `audio.md`, the frontend files as
+  a patch), README/BUILD status and the web section, `UC2_ASSETS_DIR` (F-4d), meta.json (F-4d), BLOCKERS arm64
+  (F-4d, audited 2026-10-10), the ini line endings (F-4d), the fail-soft loaders (F-4a), the test console commands
+  (F-1b: guarded cheats; N-1 asks which stay), `-NETOLDACKS` (F-4b: a test key). Still open: the exit-time
+  dedicated-server crash/hang (D-1) and the web manifest vs cache budget (G-2 precache).
+- "Milestones": F-1..F-6 done; open now: G-1..G-6 (running), D-1..D-4, N-1..N-5 (yours).
+
+## 10. Platform, build and runtime
+
+- **Feature 8, the web runtime (F-4a, F-4b step 3, F-4d, F-3).** C++ exception catching is OFF for the engine on
+  the web, with engine-ut2004's fail-soft loaders (`Core/Src/UnObj.cpp`, `UnLinker.cpp`, `Engine/Src/UnGame.cpp`,
+  `IpDrv/Src/TcpLink.cpp`, `UdpLink.cpp`); only openal-soft keeps exceptions. The report's reason for real catching
+  was wrong: `Editor.TransBuffer` never threw (`VerifyImport`'s SafeReplace branch logs it). wasm -8%, Node census
+  58/58 maps, 0 aborts. Frame yield exactly as engine-ut2004 (one yield per frame, only when the limiter did not
+  sleep; a hidden tab mutes the listener; ut2004's `ASYNCIFY_IMPORTS`); `-sOFFSCREEN_FRAMEBUFFER` kept on purpose.
+  `meta.json` records the fetched libraries (`cmake/ArtifactDeps.cmake`, `--dep-gl4es`, `--dep-openal-soft`). The
+  WebGL link limits are 1..2 since F-3 (`Source/SDLLaunch/cmake/Web.cmake:121-123`). Truth: `platform-f4.md` steps
+  2, 3, 5; LOG.md 2026-10-09.
+- **Feature 9, `-ini:` (F-4b).** The command line holds 4,096 characters (was 1,023, cut silently in SDLLaunch):
+  a token that does not fit is dropped whole with a warning (`SDLLaunch.cpp:524-526`). Every test switch we had added
+  is now a test key read ONCE with `appReadTestKey`/`appReadTestFlag` (`Core/Inc/UnFile.h:319`) and never kept in the
+  ini; kept switches: `-log`, `-ini:`, `-windowed`, `-defaultres`, `-usehomedir`, the three renderer selectors,
+  commandlet parameters. `-ini:` itself is unchanged. Truth: `platform-f4.md` "The switch table, final".
+- **Feature 13, the inis (F-4d, F-4 follow-up, F-1).** `Default.ini`, `DefUser.ini` and the web pair are LF; Epic's
+  three reference copies (`DefaultXbox.ini`, `DefUserXbox.ini`, `KeyBinds.ini`) are Epic's bytes again (CRLF,
+  `9d5683a`); `sync-web-ini.py` refuses a CR in our inis and `--check` compares the three with Epic's. No migration in
+  code any more: `UC2InputMigrate.cpp` is gone (F-1, owner: "the curated ini is the way"). New keys since:
+  `[Engine.Engine] FrameRateCap` (0 = uncapped) and `FpsLogSeconds`, `[UC2ALAudio.UC2ALAudioSubsystem] UseHRTF`,
+  `WaveFile`, `UseEFX`, `[UC2GL4ESDrv.UC2GL4ESRenderDevice] GLESVersion=3`, `[UCGameplay.UCPlayerInput]
+  bLazyMouseCamera`; `bKeysAsStick` and `MouseLockBreakAngle` removed (hard-wired). Appendix C has them all.
+- Also in 10: the arm64 preset configured and built for the first time (F-4c: `ucc-bin verifyclasses` under qemu,
+  401 classes, 0 mismatches); "Never verified: an arm64 configure or build" no longer holds (no arm64 hardware run).
+  `UC2_ASSETS_DIR` removed from CMake (F-4d). New in Engine: `UC2Cheats.cpp` (WHEREAMI, TELEPORT; NETPLACE/NETPROBE
+  behind the same guard), `UC2FpsLog.cpp` (F-2), `UC2FrameTrace.cpp` (O-11).
+
+## 20. The renderer
+
+- **R-10 DOF alpha (F-5, O-3).** The compiled default of `DOFShippedBlurAlpha` is True
+  (`Source/UC2GLDrv/Src/UC2GLRenderDevice.cpp:217`), so an ini without the key also gets the shipped 65; ini and code
+  agree. You confirmed 65 (it is an alpha, not a radius; no A/B). LOG.md's missing O-3 line: written for the
+  coordinator in `logs/d34/log-o3.md`.
+- **R-11 `DistortionCullDistance` (F-5).** One source of truth: a config property of each device class, read from
+  the device's own section (`[UC2GLDrv.UC2GLRenderDevice]` on the desktop, `[UC2GL4ESDrv.UC2GL4ESRenderDevice]` for
+  GL4ES); the global `GUC2GLDistortionCullDistance` and the hard-coded section are gone; compiled default 15000
+  (`UC2GLRenderDevice.cpp:219`). Measured: the twin reads 7000 from its own section while the desktop keeps 15000
+  (`render-f5.md` step 1). Open issue 13's "read only from the UC2GLDrv section" no longer holds.
+- **R-18 anti-aliasing (F-3, F-4b).** FXAA is removed (`8adc4a1`). OpenGL ES 3 / WebGL 2 (the web and the twin, through
+  GL4ES' ES 3 back end) gets real 4x multisampling with resolve, as the desktop; OpenGL ES 2 / WebGL 1 has no
+  anti-aliasing. The switches `-glaa=N`, `-glnoaa`, `-glshotpresented` are gone: `AntiAliasing=<n>` in the device
+  section (set with `-ini:`, `tools/dev/glini`), test key `ShotPresented`. Quiet A/B: WebGL 1 + FXAA 27.5-35.4 ms vs
+  WebGL 2 + MSAA 29.8-36.3 ms per frame (`logs/coord/a16`).
+- **R-20 the web renderer (F-3).** The device asks for WebGL 2 (`GLESVersion=3`, GLSL ES 3.00, `LIBGL_ES=3` in our
+  GL4ES fork `10-p/gl4es` `fix/cubemap-bind-active-unit`) and falls back to WebGL 1. On WebGL 2 depth textures,
+  `gl_FragDepth`, 32-bit indices and fragment `highp` are core, so the `WEBGL_depth_texture` gap of the fallbacks
+  table closes there (still NOT implemented for a WebGL 1 context without the extension); 33 raw GLES calls behind
+  GL4ES' back are gone on ES 3; the texture LOD bias is applied (the twin matches the desktop: 0.384 with, 0.871
+  without). The masks `-glno*` are the test key `MaskCaps=<list>`. Truth: `webgl2.md`; LOG.md 2026-10-09.
+- **Open issue 12 (stale text)**: done by D-3 (`UnRenDev.h:887-889`, `UC2GLRenderDevice.cpp:224-226`), BLOCKERS by
+  the audit of 2026-10-10. Also F-5: occlusion queries explored, not implemented (nothing visible depends on them);
+  the shader inventory (every shader a material or effect can select is ported); the DM-Azure sky haze found and
+  fixed (Mesa's fixed-function fog coordinate; sky difference vs the twin 46.75 -> 2.49); CTF-Aqueduct flicker not
+  reproduced (your conditions wanted); shadow strength waits for your xemu shot.
+
+## 30. Input, UI, scripts, profiles and saves
+
+- **30.5 the mouse (F-1, O-11).** Epic's shipped `UCGameplay.u` now plays with our inis: `DefUser.ini` binds the
+  mouse as Epic's PC file and the retail disc do (`MouseX=Count bXAxis | Axis aMouseX Speed=6.0`, `:101-102`), so the
+  shipped package turns the view through Epic's PC path (the stick's clamp and curve). The rebuilt `UCGameplay.u`
+  takes the mouse's share out of `aMouseX/aMouseY` by the `Count` bytes and adds D-6's linear mouse on top, from
+  the SAME ini (a D-6 User.ini with `aTurn/aLookUp` still works with it). `UC2InputMigrate.cpp`, its warning and
+  `-noinimigrate` are gone; `-maxfps` became `[Engine.Engine] FrameRateCap`. New `bLazyMouseCamera` (Epic's lazy
+  camera under the mouse, default off). Native: SDL's relative-mouse hints as engine-ut2004 (N counts in = N out at
+  two speeds; no acceleration). The look keys: PageUp/PageDown are the look stick at 0.8 (`Axis aMouseY
+  Speed=+-4.0`), the arrows strafe (Epic's PC layout). The rigid camera's jitter: section 50. Truth: `vanilla.md`
+  steps 2-3, 6; LOG.md 2026-10-09 F-1.
+- **30.7 `UC2InputMigrate`: removed** (F-1, owner: no auto-migration of user inis). The call in `UnGame.cpp` is gone;
+  that part of `UGameEngine::Init` is Epic's again.
+- **30.8 keys as a stick (F-1).** `bKeysAsStick` and `MouseLockBreakAngle` are hard-wired (the ini keys are gone;
+  25 degrees). The stick's walk on PC moved from the rebuilt script into the engine, for BOTH packages
+  (`Source/Engine/Src/UnIn.cpp:320-335`, non-Xbox builds: Epic's script scales the stick only under `IsXBox()`).
+  Measured: W, the left stick at 1.0/0.5/0.35 and Shift+W all run at 430 units/s (UC2 has no walk mode; you: leave it).
+  O-14 closed by you.
+- **30.16 the KEYBOARD / MOUSE page (F-1).** A key another action had is now CLEARED from that action (your D-9
+  decision), not swapped (`UC2Settings_Keys.uc` `AssignKey`); STRAFE LEFT/RIGHT list `A, Left` / `D, Right`; TURN
+  LEFT/RIGHT have no key by default ("THE MOUSE TURNS"). The owner choices listed as open are decided (00 above).
+- **30.18 the `.uc` files and the rebuilt packages (O-11, F-1).** `UCPlayerController.uc` (83 lines now) and
+  `UCPlayerInput.uc` (221) changed again (the jitter fix, F-1's mouse share, `bLazyMouseCamera`, the hard-wired keys);
+  the asset tree carries `UCGameplay.u` 4ed72f0b and `UCMenu.u` b9202a59 (`SCRIPTS.txt`). Reverting to the shipped
+  packages now costs only the PC mouse, the player name without a profile and the KEYBOARD / MOUSE page: no ini to
+  revert, no migration. Every suite runs both ways (`d6-mouse.sh vanilla`, `m10-controls.sh` on a shipped tree).
+- **Open issues 2, 5, 6** decided (O-14 closed; the pad's turns stay; D-9 choices made). Item 12: the d6 lock checks
+  were "flaky" because two PlayerStarts cannot show the pull-back; D-4 starts every movement scenario at a fixed spot
+  (`d34-docs-tests.md` step 3).
+
+## 40. Audio, movies, networking and the frontend
+
+- **40.1 the cook (F-6).** `tools/uc2xwb.py` reads the shipped Xbox wave banks (the ADPCM layout settled against 643
+  source WAVs); the 19 waves without a source and the long `Machine_Generator03` are decoded from the `.xwb`;
+  `A_Vehicle` is cooked from the shipped `.xsb`/`.xwb` (31 cues; cut content); the 674 sounds without a priority
+  get 255, as the shipped `.xsb` stores. Cues: 2,465 fully, 0 partly, 4 with no wave anywhere in the project (was
+  2,417 / 6 / 15). Cue tables inside the Ogg packs: spiked and NOT recommended. Installed in `assets/uc2-cooked` (85
+  files) and the asset tree; ufrontend manifest `6e77b28`. Truth: `audio-f6.md`; LOG.md 2026-10-09 F-6.
+- **40.2 the device (F-6, F-4b).** `[UC2ALAudio.UC2ALAudioSubsystem] UseHRTF` as engine-ut2004 (default off; the
+  interaural delay measured when on): "No HRTF" no longer holds. `-NOEFX` and `-audiowave=` are the ini keys `UseEFX`
+  and `WaveFile`. Status now: audio-check 7,191/7,191 waves, self-test 45/45. `audio.md`'s "below 0.1 = silence"
+  corrected (D-3).
+- **40.8 the missing WAVs (F-6).** Decoded from the shipped banks (above); 4 cues stay silent (no wave exists in the
+  project: `ST_Primary`, `JG_JumpChargeEthereal`, ...). The localised taunt order is unchanged (kept as the Xbox had it).
+- **40.15 WebRTC.** `WebRTCDrv.h` and `webrtc.md` now say what was measured: the glue's channel is reliable and
+  ordered (D-3).
+- **Frontend (40.16-40.20).** Since `4ac0d6d` the frontend's `uc2` branch has the F-1/F-6 manifests (`227e5c3`,
+  `6e77b28`) and the specs passing their test settings as `-ini:` keys (`1fdc55d`, the "without post-processing"
+  launcher option removed). Its first-light texts (help.md, portal-notes.json, the target README, the root README row,
+  STATE.md) have replacement text in `logs/d34/frontend-docs.patch` (not committed: frontend work is the
+  coordinator's). The jitter spec's strafe slope (0.217-0.247 on WebGL 2) was the spec's fit leaving out the walk bob:
+  `logs/d34/frontend-jitter-spec.patch`, `d34-docs-tests.md` step 6.
+
+## 50. Third-person jitter
+
+Unchanged. Decision 1 (the walk bob): kept, no ini key (your review of 2026-10-09).
+
+## Appendices
+
+Regenerated on 2026-10-10 for main `2ed330f` by `tools/dev/report-appendices.py` (the coordinator's method, now a
+script; `report-appendices.py 4813dd9` reproduces the appendices this report had, byte for byte). Since the snapshot:
+140 modified Epic files (was 136: `Engine/Src/UnPlayer.cpp` for the cheats, `Core/Src/UnLinker.cpp`,
+`IpDrv/Src/TcpLink.cpp`, `UdpLink.cpp` for the fail-soft loaders); 189 new files (was 187: `UC2InputMigrate.cpp`
+deleted; `UC2Cheats.cpp`, `UC2FpsLog.cpp`, `UC2FrameTrace.cpp` added); ini keys that differ from Epic's: Default.ini
+118 (was 114), DefUser.ini 54 (was 59).
+
+
+---
+
 # Appendices (generated from git)
 
-## Appendix A. Epic's files we modified (136), with the commits that touched them
+> Regenerated on 2026-10-10 for main `2ed330f` by `tools/dev/report-appendices.py` (section 60). The appendices as
+> reviewed (snapshot `4813dd9`): `tools/dev/report-appendices.py 4813dd9`, byte for byte.
 
-Generated from `git diff --name-status 7633696 4813dd9 -- Source` (files that existed in Epic's tree). +/- = lines added/removed. The commit list is every commit since the import that touched the file, oldest first.
+## Appendix A. Epic's files we modified (140), with the commits that touched them
 
-### Engine (68 files)
+Generated from `git diff --name-status 7633696 2ed330f -- Source` (files that existed in Epic's tree). +/- = lines added/removed. The commit list is every commit since the import that touched the file, oldest first.
+
+### Engine (69 files)
 
 - `Source/Engine/Classes/PSDistortionBaseMaterial.uc` (+5/-3)
   - 94654e2 Engine, UCGameplay: the Xbox post-process paths run for a device with the XboxPostProcess capability (M7 P2)
@@ -5858,10 +6115,11 @@ Generated from `git diff --name-status 7633696 4813dd9 -- Source` (files that ex
   - 8a5b0e2 Core: package map counts only the package file's exports and names (patched-in ones differed between client and server); net diagnostics under
   - 006e725 Engine, UCC: connection destroys (not deletes) its channels during GC, routed channel destroy marked as routed; commandlet rooted while it run
   - d27dfc6 Engine, tools: deterministic packet drop (NETDROP=) and packet-id start (NETPKTID=) for the net tests; handshake-loss check; notebook: the lag
-- `Source/Engine/Src/UnConn.cpp` (+75/-9)
+- `Source/Engine/Src/UnConn.cpp` (+89/-9)
   - 006e725 Engine, UCC: connection destroys (not deletes) its channels during GC, routed channel destroy marked as routed; commandlet rooted while it run
   - d27dfc6 Engine, tools: deterministic packet drop (NETDROP=) and packet-id start (NETPKTID=) for the net tests; handshake-loss check; notebook: the lag
   - 84aea3e Engine: wrap-aware packet ack/NAK and NAK-able packet 0 (UC2 never resent a lost first packet or anything after the id wrap); pending handshak
+  - c00a538 Core, Engine, SDL2Drv, UC2GLDrv, UC2GL4ESDrv, tools: the remaining test switches become one-shot ini test keys set with -ini:; the on/off twin
 - `Source/Engine/Src/UnController.cpp` (+24/-2)
   - 14d9738 Engine: the UI's 640x480 design space in a centred 4:3 box (UIScaleMode=Fit43)
   - 6f9a9fa Engine: AutoFOV (Hor+) for every view of the player, console key off Tab (D-7, D-8)
@@ -5870,7 +6128,7 @@ Generated from `git diff --name-status 7633696 4813dd9 -- Source` (files that ex
   - 61c9f48 Engine: FLUSHCONFIG console command (the web host's 'write the config now'); tools: c1-saves.sh (C-2 file inventory and profile restart check)
 - `Source/Engine/Src/UnFont.cpp` (+1/-1)
   - 9b303b8 UCC: ucc-bin links (M2); 4-byte struct packing on every target
-- `Source/Engine/Src/UnGame.cpp` (+157/-14)
+- `Source/Engine/Src/UnGame.cpp` (+233/-14)
   - 604a8a3 Core, Engine: a leading Key=Value token is a global option, not the map
   - 7dd3d3b Engine: lift the Xbox cinematic/loading-movie hooks in LoadMap through WITH_PORTABLE_MOVIES; guard ResetRenderStates (no level/device on PC's 
   - be21a3c Engine: test-only net commands NETPROBE/NETPLACE/NETAIM and the -nettest= command file (UC2NetTest.cpp)
@@ -5884,9 +6142,20 @@ Generated from `git diff --name-status 7633696 4813dd9 -- Source` (files that ex
   - 784596a Engine, UC2GLDrv: Xbox static projector batching behind FRenderCaps::XboxProjectors; caps before the GL context; deferred occlusion queries dr
   - 1b33254 Merge branch 'm7b-projectors': Xbox projector batching, Xbox shadow blur, three-layer terrain switch (M7b)
   - 941326a WebRTCDrv: the browser's network driver, ported from engine-ut2004 and adapted to UC2 (E-2)
-- `Source/Engine/Src/UnIn.cpp` (+15/-4)
+  - c46bb34 Engine: FRAMETRACE, a per-frame trace of the view and the pawn on the screen; tools: jit-trace
+  - c59c02d Merge branch 'jitter': the mouse's rigid third-person camera is drawn from where the pawn is drawn (O-11)
+  - 27569b4 Engine, tools: the frame rate in the log ([Engine.GameEngine] FpsLogSeconds, FPSLOG) and tools/dev/fps-bench.sh (F-2)
+  - 3c6a8f4 Core, Engine, IpDrv, build: C++ exception catching off for the web engine, loaders fail soft as engine-ut2004 (F-4a)
+  - b38973f UCGameplay, config, Engine: Epic's mouse binding plays with the shipped scripts; the rebuilt UCPlayerInput takes the PC mouse from it; lazy ca
+  - 6c155f5 Engine: WHEREAMI and TELEPORT <x> <y> <z> [<yaw> [<pitch>]] as cheats; NETPROBE/NETPLACE/NETPLACENEAR/NETAIM behind the same guard
+  - c00a538 Core, Engine, SDL2Drv, UC2GLDrv, UC2GL4ESDrv, tools: the remaining test switches become one-shot ini test keys set with -ini:; the on/off twin
+  - 9764bc8 Merge branch 'f1-vanilla': Epic's shipped scripts play as shipped, the rebuilt packages add the PC mouse on top; UC2InputMigrate removed; lazy
+  - 94971e1 Engine, tools: NETAIM removed from the engine; the network tests line players up around the shooter's own view
+  - ab007a3 Merge branch 'f4b-switches': test switches become once-read ini keys, unused switches removed, Epic's reference inis byte-identical, command l
+- `Source/Engine/Src/UnIn.cpp` (+29/-4)
   - de94c55 Engine: stick axes mean on PC what they mean on the Xbox (UnIn.cpp SpeedBase scaling)
   - f60b44e Core, Engine, GUI, UCGameplay, UWeb, IpDrv, UCC: 64-bit layout contract and the verifyclasses 64-bit mode (M13)
+  - b38973f UCGameplay, config, Engine: Epic's mouse binding plays with the shipped scripts; the rebuilt UCPlayerInput takes the PC mouse from it; lazy ca
 - `Source/Engine/Src/UnInteraction.cpp` (+5/-0)
   - f700305 Engine: compiles with GCC 15 (-m32) and emcc 5.0.7
 - `Source/Engine/Src/UnInteractionMaster.cpp` (+38/-1)
@@ -5909,6 +6178,8 @@ Generated from `git diff --name-status 7633696 4813dd9 -- Source` (files that ex
   - e3c66ac Engine: pending handshake give-up measured from the last server message, after dispatch (fired after a long GL frame); tools: GL client connec
 - `Source/Engine/Src/UnPixelShaderMaterial.cpp` (+70/-18)
   - 94654e2 Engine, UCGameplay: the Xbox post-process paths run for a device with the XboxPostProcess capability (M7 P2)
+- `Source/Engine/Src/UnPlayer.cpp` (+6/-0)
+  - 6c155f5 Engine: WHEREAMI and TELEPORT <x> <y> <z> [<yaw> [<pitch>]] as cheats; NETPROBE/NETPLACE/NETPLACENEAR/NETAIM behind the same guard
 - `Source/Engine/Src/UnRender.cpp` (+200/-5)
   - f700305 Engine: compiles with GCC 15 (-m32) and emcc 5.0.7
   - 94654e2 Engine, UCGameplay: the Xbox post-process paths run for a device with the XboxPostProcess capability (M7 P2)
@@ -5940,9 +6211,10 @@ Generated from `git diff --name-status 7633696 4813dd9 -- Source` (files that ex
   - d2d1648 Engine, tools: the script patcher leaves rebuilt packages alone and logs; mkrun UC2_SCRIPTS, net-test NET_TREE (M14 S3)
 - `Source/Engine/Src/UnShadowProjector.cpp` (+27/-4)
   - bec8014 Engine, UC2GLDrv: M7b capabilities: Xbox shadow textures (XboxShadows), three terrain layers per pass, the Xbox projector material in the driv
-- `Source/Engine/Src/UnStats.cpp` (+10/-10)
+- `Source/Engine/Src/UnStats.cpp` (+14/-12)
   - f700305 Engine: compiles with GCC 15 (-m32) and emcc 5.0.7
   - f60b44e Core, Engine, GUI, UCGameplay, UWeb, IpDrv, UCC: 64-bit layout contract and the verifyclasses 64-bit mode (M13)
+  - 27569b4 Engine, tools: the frame rate in the log ([Engine.GameEngine] FpsLogSeconds, FPSLOG) and tools/dev/fps-bench.sh (F-2)
 - `Source/Engine/Src/UnTex.cpp` (+2/-2)
   - f700305 Engine: compiles with GCC 15 (-m32) and emcc 5.0.7
 - `Source/Engine/Src/UnUCRibbonEmitter.cpp` (+1/-1)
@@ -5953,7 +6225,7 @@ Generated from `git diff --name-status 7633696 4813dd9 -- Source` (files that ex
   - f700305 Engine: compiles with GCC 15 (-m32) and emcc 5.0.7
   - 1e7f700 UCC, SDLLaunch, Engine: ucc.exe and uc2.exe link with MinGW-w64
 
-### Core (31 files)
+### Core (32 files)
 
 - `Source/Core/Inc/Core.h` (+17/-2)
   - 82c9fd3 Core: shared headers and sources compile with GCC 15 and em++
@@ -5974,10 +6246,11 @@ Generated from `git diff --name-status 7633696 4813dd9 -- Source` (files that ex
   - f60b44e Core, Engine, GUI, UCGameplay, UWeb, IpDrv, UCC: 64-bit layout contract and the verifyclasses 64-bit mode (M13)
 - `Source/Core/Inc/UnCoreNative.h` (+7/-1)
   - 75e4258 Core: static native lookup ignores case (an ini key 'Delete' broke UObject's 'delete')
-- `Source/Core/Inc/UnFile.h` (+61/-4)
+- `Source/Core/Inc/UnFile.h` (+68/-4)
   - 82c9fd3 Core: shared headers and sources compile with GCC 15 and em++
   - 604a8a3 Core, Engine: a leading Key=Value token is a global option, not the map
   - 7bfdd62 Core: port engine-ut2004's -ini:<File>:[<Section>]:<Key>=<Value> command-line overrides (appApplyIniOverrides); docs: web-ini-saves notebook s
+  - c00a538 Core, Engine, SDL2Drv, UC2GLDrv, UC2GL4ESDrv, tools: the remaining test switches become one-shot ini test keys set with -ini:; the on/off twin
 - `Source/Core/Inc/UnGnuG.h` (+183/-173)
   - 82c9fd3 Core: shared headers and sources compile with GCC 15 and em++
   - 1ccb0d2 Core: FMovieThread/FMoviePlayer move unchanged to UnMovieBase.h, included by both platform headers (WIP: not yet built)
@@ -6031,15 +6304,18 @@ Generated from `git diff --name-status 7633696 4813dd9 -- Source` (files that ex
   - 8a5b0e2 Core: package map counts only the package file's exports and names (patched-in ones differed between client and server); net diagnostics under
 - `Source/Core/Src/UnGUID.cpp` (+2/-2)
   - 82c9fd3 Core: shared headers and sources compile with GCC 15 and em++
-- `Source/Core/Src/UnMisc.cpp` (+88/-6)
+- `Source/Core/Src/UnLinker.cpp` (+45/-1)
+  - 3c6a8f4 Core, Engine, IpDrv, build: C++ exception catching off for the web engine, loaders fail soft as engine-ut2004 (F-4a)
+- `Source/Core/Src/UnMisc.cpp` (+126/-6)
   - 63bb34e Core: do not eat the first command-line argument off Windows; default port 7777
   - dcf245f Core: Windows wildcard semantics in FindFiles (registry works); appItoa off MSVC
   - 604a8a3 Core, Engine: a leading Key=Value token is a global option, not the map
   - 7bfdd62 Core: port engine-ut2004's -ini:<File>:[<Section>]:<Key>=<Value> command-line overrides (appApplyIniOverrides); docs: web-ini-saves notebook s
   - e3e927d Core: script SaveConfig()/StaticSaveConfig() write the ini on PC; SAVECONFIGKEYS; a base-class save leaves out what a subclass sets
+  - c00a538 Core, Engine, SDL2Drv, UC2GLDrv, UC2GL4ESDrv, tools: the remaining test switches become one-shot ini test keys set with -ini:; the on/off twin
 - `Source/Core/Src/UnName.cpp` (+3/-0)
   - 82c9fd3 Core: shared headers and sources compile with GCC 15 and em++
-- `Source/Core/Src/UnObj.cpp` (+272/-24)
+- `Source/Core/Src/UnObj.cpp` (+361/-24)
   - 82c9fd3 Core: shared headers and sources compile with GCC 15 and em++
   - 44f81c6 Runtime: objects construct correctly and native class layouts match the shipped .u
   - 56298d5 Core: 64-bit bytecode object slots hold object indices; registration stashes in pointer-sized fields (M13, WIP)
@@ -6051,6 +6327,7 @@ Generated from `git diff --name-status 7633696 4813dd9 -- Source` (files that ex
   - 7a5dac9 Core: a script StaticSaveConfig writes only what changed, an unchanged default is never baked into the ini
   - f72face Core: the class records leave out a config string too long for ExportText's buffer
   - e2b3a8c Core: a conformed package save sorts only the new imports (Epic's bug; D-9)
+  - 3c6a8f4 Core, Engine, IpDrv, build: C++ exception catching off for the web engine, loaders fail soft as engine-ut2004 (F-4a)
 - `Source/Core/Src/UnProp.cpp` (+3/-1)
   - f60b44e Core, Engine, GUI, UCGameplay, UWeb, IpDrv, UCC: 64-bit layout contract and the verifyclasses 64-bit mode (M13)
 - `Source/Core/Src/UnUnix.cpp` (+1822/-429)
@@ -6094,6 +6371,29 @@ Generated from `git diff --name-status 7633696 4813dd9 -- Source` (files that ex
 - `Source/Editor/Src/UnVisi.cpp` (+3/-3)
   - 93686c0 Editor: builds natively and ucc-bin make compiles all 17 script packages (M14 S1)
 
+### IpDrv (8 files)
+
+- `Source/IpDrv/Inc/IpDrvClasses.h` (+7/-7)
+  - 44f81c6 Runtime: objects construct correctly and native class layouts match the shipped .u
+  - f60b44e Core, Engine, GUI, UCGameplay, UWeb, IpDrv, UCC: 64-bit layout contract and the verifyclasses 64-bit mode (M13)
+- `Source/IpDrv/Inc/UnIpDrv.h` (+16/-3)
+  - 754ce47 build, IpDrv, UC2ALAudio: every package library compiles for Windows (MinGW i686)
+  - 1e7f700 UCC, SDLLaunch, Engine: ucc.exe and uc2.exe link with MinGW-w64
+- `Source/IpDrv/Inc/UnSocket.h` (+1/-0)
+  - 482cfbb IpDrv, UWeb, UnrealGame, UCElements, UCGameplay, GUI: build natively and for the web
+- `Source/IpDrv/Src/MasterServerClient.cpp` (+2/-2)
+  - f60b44e Core, Engine, GUI, UCGameplay, UWeb, IpDrv, UCC: 64-bit layout contract and the verifyclasses 64-bit mode (M13)
+- `Source/IpDrv/Src/MasterServerUplink.cpp` (+3/-3)
+  - 482cfbb IpDrv, UWeb, UnrealGame, UCElements, UCGameplay, GUI: build natively and for the web
+  - f60b44e Core, Engine, GUI, UCGameplay, UWeb, IpDrv, UCC: 64-bit layout contract and the verifyclasses 64-bit mode (M13)
+- `Source/IpDrv/Src/TcpLink.cpp` (+5/-1)
+  - 3c6a8f4 Core, Engine, IpDrv, build: C++ exception catching off for the web engine, loaders fail soft as engine-ut2004 (F-4a)
+- `Source/IpDrv/Src/UdpLink.cpp` (+5/-1)
+  - 3c6a8f4 Core, Engine, IpDrv, build: C++ exception catching off for the web engine, loaders fail soft as engine-ut2004 (F-4a)
+- `Source/IpDrv/Src/UnSocket.cpp` (+4/-1)
+  - 482cfbb IpDrv, UWeb, UnrealGame, UCElements, UCGameplay, GUI: build natively and for the web
+  - 754ce47 build, IpDrv, UC2ALAudio: every package library compiles for Windows (MinGW i686)
+
 ### GUI (6 files)
 
 - `Source/GUI/Classes/GUIComponent.uc` (+2/-2)
@@ -6120,35 +6420,21 @@ Generated from `git diff --name-status 7633696 4813dd9 -- Source` (files that ex
   - 18b839d GUI: real-keyboard Backspace clears a selected keyboard-page field; the key that opened a keyboard page is not typed into it (D-5)
   - 4567556 GUI: a raw key capture takes only keys pressed while it runs (D-9)
 
-### IpDrv (6 files)
-
-- `Source/IpDrv/Inc/IpDrvClasses.h` (+7/-7)
-  - 44f81c6 Runtime: objects construct correctly and native class layouts match the shipped .u
-  - f60b44e Core, Engine, GUI, UCGameplay, UWeb, IpDrv, UCC: 64-bit layout contract and the verifyclasses 64-bit mode (M13)
-- `Source/IpDrv/Inc/UnIpDrv.h` (+16/-3)
-  - 754ce47 build, IpDrv, UC2ALAudio: every package library compiles for Windows (MinGW i686)
-  - 1e7f700 UCC, SDLLaunch, Engine: ucc.exe and uc2.exe link with MinGW-w64
-- `Source/IpDrv/Inc/UnSocket.h` (+1/-0)
-  - 482cfbb IpDrv, UWeb, UnrealGame, UCElements, UCGameplay, GUI: build natively and for the web
-- `Source/IpDrv/Src/MasterServerClient.cpp` (+2/-2)
-  - f60b44e Core, Engine, GUI, UCGameplay, UWeb, IpDrv, UCC: 64-bit layout contract and the verifyclasses 64-bit mode (M13)
-- `Source/IpDrv/Src/MasterServerUplink.cpp` (+3/-3)
-  - 482cfbb IpDrv, UWeb, UnrealGame, UCElements, UCGameplay, GUI: build natively and for the web
-  - f60b44e Core, Engine, GUI, UCGameplay, UWeb, IpDrv, UCC: 64-bit layout contract and the verifyclasses 64-bit mode (M13)
-- `Source/IpDrv/Src/UnSocket.cpp` (+4/-1)
-  - 482cfbb IpDrv, UWeb, UnrealGame, UCElements, UCGameplay, GUI: build natively and for the web
-  - 754ce47 build, IpDrv, UC2ALAudio: every package library compiles for Windows (MinGW i686)
-
 ### UCGameplay (6 files)
 
-- `Source/UCGameplay/Classes/UCPlayerController.uc` (+55/-4)
+- `Source/UCGameplay/Classes/UCPlayerController.uc` (+78/-5)
   - 49d4705 UCGameplay: D-6 mouse look separated from the pad (linear mouse channel, pad-only adhesion/auto-centre, rigid camera orbit under the mouse, lo
   - 0475725 tools: D-6 mouse/pad measurement (tools/dev/d6-mouse.sh), probe2/probe3/watch parsing in m10-inject.py; UCGameplay: camera at its place at onc
-- `Source/UCGameplay/Classes/UCPlayerInput.uc` (+176/-0)
+  - 51d1ffc UCGameplay: draw the mouse's rigid third-person camera from where the pawn is drawn
+  - b38973f UCGameplay, config, Engine: Epic's mouse binding plays with the shipped scripts; the rebuilt UCPlayerInput takes the PC mouse from it; lazy ca
+- `Source/UCGameplay/Classes/UCPlayerInput.uc` (+221/-0)
   - 49d4705 UCGameplay: D-6 mouse look separated from the pad (linear mouse channel, pad-only adhesion/auto-centre, rigid camera orbit under the mouse, lo
   - 0475725 tools: D-6 mouse/pad measurement (tools/dev/d6-mouse.sh), probe2/probe3/watch parsing in m10-inject.py; UCGameplay: camera at its place at onc
   - d75990b UCGameplay: D-6 mouse console commands are for the session (script SaveConfig is a no-op in UC2); tools: d6-mouse look+ini scenarios, circle f
   - e3e927d Core: script SaveConfig()/StaticSaveConfig() write the ini on PC; SAVECONFIGKEYS; a base-class save leaves out what a subclass sets
+  - 51d1ffc UCGameplay: draw the mouse's rigid third-person camera from where the pawn is drawn
+  - b38973f UCGameplay, config, Engine: Epic's mouse binding plays with the shipped scripts; the rebuilt UCPlayerInput takes the PC mouse from it; lazy ca
+  - 77897e7 UCGameplay, config, UCMenu: the keyboard moves and strafes (arrows as Epic's PC file); keys-as-stick and the 25-degree lock break fixed, their
 - `Source/UCGameplay/Classes/UCTrainingController.uc` (+28/-3)
   - 49d4705 UCGameplay: D-6 mouse look separated from the pad (linear mouse channel, pad-only adhesion/auto-centre, rigid camera orbit under the mouse, lo
 - `Source/UCGameplay/Inc/UCCameraEffects.h` (+17/-3)
@@ -6163,7 +6449,7 @@ Generated from `git diff --name-status 7633696 4813dd9 -- Source` (files that ex
 
 ### SDLLaunch (2 files)
 
-- `Source/SDLLaunch/Src/SDLLaunch.cpp` (+370/-891)
+- `Source/SDLLaunch/Src/SDLLaunch.cpp` (+426/-893)
   - 3d7e719 SDLLaunch: uc2.bin, the SDL2 game launcher; portable client in Default.ini
   - 34dd131 SDLLaunch: register UC2GLDrv, -opengl switch; GL device is the default; docs: gl-renderer notebook
   - 45f7301 SDLLaunch: browser build (SDLLaunch.js/.wasm/.data + meta.json), per-frame Asyncify yield, ue_exec_command
@@ -6174,6 +6460,13 @@ Generated from `git diff --name-status 7633696 4813dd9 -- Source` (files that ex
   - 8ff02cd UC2GL4ESDrv: the GL4ES binding as a subclass of the UC2GLDrv device; launcher registration and -gl4es (M11, work in progress)
   - 1efa52e SDLLaunch: -maxfps=<n> caps a standalone game's frame rate (tests of frame-rate-dependent behaviour on the null renderer); tools: d6 pad curve
   - 941326a WebRTCDrv: the browser's network driver, ported from engine-ut2004 and adapted to UC2 (E-2)
+  - c46bb34 Engine: FRAMETRACE, a per-frame trace of the view and the pawn on the screen; tools: jit-trace
+  - c59c02d Merge branch 'jitter': the mouse's rigid third-person camera is drawn from where the pawn is drawn (O-11)
+  - d9226d1 SDLLaunch: frame yield and hidden tab as engine-ut2004 (F-4b)
+  - 14d1b99 SDLLaunch, tools: -maxfps becomes [Engine.Engine] FrameRateCap, -framepattern becomes [SDLLaunch] FramePattern (F-4e)
+  - c00a538 Core, Engine, SDL2Drv, UC2GLDrv, UC2GL4ESDrv, tools: the remaining test switches become one-shot ini test keys set with -ini:; the on/off twin
+  - 9eb4427 SDLLaunch, UCC: command lines up to 4096 characters (Core's GCmdLine), a token that does not fit is dropped whole and said so
+  - 82b66dc SDLLaunch: [SDLLaunch] FramePattern is a one-shot test key like the others (never kept in the ini)
 - `Source/SDLLaunch/Src/SDLLaunchPrivate.h` (+2/-1)
   - 3d7e719 SDLLaunch: uc2.bin, the SDL2 game launcher; portable client in Default.ini
 
@@ -6186,7 +6479,7 @@ Generated from `git diff --name-status 7633696 4813dd9 -- Source` (files that ex
 
 ### UCC (1 files)
 
-- `Source/UCC/Src/UCC.cpp` (+426/-63)
+- `Source/UCC/Src/UCC.cpp` (+434/-64)
   - 9b303b8 UCC: ucc-bin links (M2); 4-byte struct packing on every target
   - 44f81c6 Runtime: objects construct correctly and native class layouts match the shipped .u
   - 8db663c SDLLaunch, UCC: register UC2ALAudio; Default.ini selects it; run trees get libopenal and the cooked audio
@@ -6203,6 +6496,7 @@ Generated from `git diff --name-status 7633696 4813dd9 -- Source` (files that ex
   - 434ac53 Editor, UCC: Editor layouts match (GCC bitfield tagging), verifyclasses checks them; Editor 32-bit Linux only (M14 S1)
   - e3e927d Core: script SaveConfig()/StaticSaveConfig() write the ini on PC; SAVECONFIGKEYS; a base-class save leaves out what a subclass sets
   - 6d0798a tools: ucc-bin saveconfigtest gameinfo (a live GameInfo instance is not saved, its class default is); sc-saveconfig.sh checks
+  - 9eb4427 SDLLaunch, UCC: command lines up to 4096 characters (Core's GCmdLine), a token that does not fit is dropped whole and said so
 
 ### UCMenu (1 files)
 
@@ -6214,24 +6508,24 @@ Generated from `git diff --name-status 7633696 4813dd9 -- Source` (files that ex
 - `Source/UWeb/Inc/UWeb.h` (+6/-0)
   - f60b44e Core, Engine, GUI, UCGameplay, UWeb, IpDrv, UCC: 64-bit layout contract and the verifyclasses 64-bit mode (M13)
 
-## Appendix B. New files of ours under Source/ (187), by module
+## Appendix B. New files of ours under Source/ (189), by module
 
 | Module | Files | Lines | Examples |
 |---|---|---|---|
-| UC2GLDrv | 127 | 35332 | `CMakeLists.txt`, `Inc/UC2GLBinding.h`, `Inc/UC2GLD3DTypes.h`, `Inc/UC2GLDrv.h` |
-| UC2ALAudio | 9 | 4459 | `CMakeLists.txt`, `Inc/UC2ALAudio.h`, `Src/UC2ALAudio.cpp`, `Src/UC2ALAudioPrivate.h` |
-| SDL2Drv | 8 | 2957 | `CMakeLists.txt`, `Inc/SDL2Drv.h`, `Src/SDL2Client.cpp`, `Src/SDL2Drv.cpp` |
+| UC2GLDrv | 127 | 35333 | `CMakeLists.txt`, `Inc/UC2GLBinding.h`, `Inc/UC2GLD3DTypes.h`, `Inc/UC2GLDrv.h` |
+| UC2ALAudio | 9 | 4593 | `CMakeLists.txt`, `Inc/UC2ALAudio.h`, `Src/UC2ALAudio.cpp`, `Src/UC2ALAudioPrivate.h` |
+| Engine | 8 | 1936 | `CMakeLists.txt`, `Inc/UnMovie.h`, `Src/UC2Cheats.cpp`, `Src/UC2FpsLog.cpp` |
+| SDL2Drv | 8 | 2968 | `CMakeLists.txt`, `Inc/SDL2Drv.h`, `Src/SDL2Client.cpp`, `Src/SDL2Drv.cpp` |
 | Core | 6 | 2050 | `CMakeLists.txt`, `Inc/FFileManagerUnix.h`, `Inc/UnMovieBase.h`, `Inc/UnThreadingPosix.h` |
-| Engine | 6 | 1614 | `CMakeLists.txt`, `Inc/UnMovie.h`, `Src/UC2InputMigrate.cpp`, `Src/UC2NetTest.cpp` |
 | UC2Movie | 6 | 1443 | `CMakeLists.txt`, `Inc/UC2Movie.h`, `Src/UC2Movie.cpp`, `Src/UC2MoviePlayer.cpp` |
-| SDLLaunch | 5 | 334 | `CMakeLists.txt`, `Src/SDLLaunchWeb.cpp`, `Src/SDLLaunchWeb.h`, `cmake/Web.cmake` |
+| SDLLaunch | 5 | 389 | `CMakeLists.txt`, `Src/SDLLaunchWeb.cpp`, `Src/SDLLaunchWeb.h`, `cmake/Web.cmake` |
 | WebRTCDrv | 5 | 587 | `CMakeLists.txt`, `Inc/WebRTCDrv.h`, `Src/WebRTCConnection.cpp`, `Src/WebRTCDrv.cpp` |
 | Editor | 3 | 771 | `CMakeLists.txt`, `Src/UC2EditorRegistrants.cpp`, `Src/UC2EpicClassOrder.h` |
-| UC2GL4ESDrv | 3 | 329 | `CMakeLists.txt`, `Inc/UC2GL4ESDrv.h`, `Src/UC2GL4ESDrv.cpp` |
-| UCMenu | 2 | 1569 | `Classes/KeyBindingPanel.uc`, `Classes/UC2Settings_Keys.uc` |
+| UC2GL4ESDrv | 3 | 381 | `CMakeLists.txt`, `Inc/UC2GL4ESDrv.h`, `Src/UC2GL4ESDrv.cpp` |
+| UCMenu | 2 | 1559 | `Classes/KeyBindingPanel.uc`, `Classes/UC2Settings_Keys.uc` |
 | GUI | 1 | 14 | `CMakeLists.txt` |
 | IpDrv | 1 | 14 | `CMakeLists.txt` |
-| UCC | 1 | 82 | `CMakeLists.txt` |
+| UCC | 1 | 83 | `CMakeLists.txt` |
 | UCElements | 1 | 14 | `CMakeLists.txt` |
 | UCGameplay | 1 | 14 | `CMakeLists.txt` |
 | UWeb | 1 | 14 | `CMakeLists.txt` |
@@ -6239,19 +6533,21 @@ Generated from `git diff --name-status 7633696 4813dd9 -- Source` (files that ex
 
 ## Appendix C. Every ini key that differs from Epic's
 
-Generated by comparing our `Engine/Config/*.ini` (snapshot 4813dd9) with `epic-sources/System/*.ini`, key by key. Multi-valued keys (Paths, EditPackages, ServerPackages…) show only the values added (+) or removed (−). The comment column is the comment we wrote above the key, when there is one.
+Generated by comparing our `Engine/Config/*.ini` (snapshot 2ed330f) with `epic-sources/System/*.ini`, key by key. Multi-valued keys (Paths, EditPackages, ServerPackages…) show only the values added (+) or removed (−). The comment column is the comment we wrote above the key, when there is one.
 
 ### Default.ini (native; the System ini, "Avaris.ini" at run time)
 
-114 keys differ.
+118 keys differ.
 
 | Section | Key | Epic | Ours | Our comment in the ini |
 |---|---|---|---|---|
 | URL | Port | 1000 | 7777 |  |
 | Engine.Engine | RenderDevice | D3DDrv.D3DRenderDevice | UC2GLDrv.UC2GLRenderDevice |  |
 | Engine.Engine | AudioDevice | Engine.NullAudioDevice | UC2ALAudio.UC2ALAudioSubsystem |  |
+| Engine.Engine | FrameRateCap | (absent) | 0 |  |
 | Engine.Engine | ViewportManager | WinDrv.WindowsClient | SDL2Drv.SDL2Client |  |
 | Engine.Engine | ScriptSaveConfig | (absent) | True |  |
+| Engine.GameEngine | FpsLogSeconds | (absent) | 0 |  |
 | UC2ALAudio.UC2ALAudioSubsystem (new section) | OutputDevice | (absent) |  |  |
 | UC2ALAudio.UC2ALAudioSubsystem (new section) | WaveFile | (absent) |  |  |
 | UC2ALAudio.UC2ALAudioSubsystem (new section) | MaxVoices | (absent) | 64 |  |
@@ -6259,6 +6555,7 @@ Generated by comparing our `Engine/Config/*.ini` (snapshot 4813dd9) with `epic-s
 | UC2ALAudio.UC2ALAudioSubsystem (new section) | UseEFX | (absent) | True |  |
 | UC2ALAudio.UC2ALAudioSubsystem (new section) | MusicFades | (absent) | True |  |
 | UC2ALAudio.UC2ALAudioSubsystem (new section) | CueLog | (absent) | True |  |
+| UC2ALAudio.UC2ALAudioSubsystem (new section) | UseHRTF | (absent) | False |  |
 | SDL2Drv.SDL2Client (new section) | UseJoystick | (WindowsClient: False) | True |  |
 | SDL2Drv.SDL2Client (new section) | MaxDistortion | (absent) | 35.0 |  |
 | SDL2Drv.SDL2Client (new section) | UIScaleMode | (absent) | Fit43 | --- D-2 UI scaling (docs/porting/analysis/ui-scale.md): Fit43 draws the menus and the HUD (designed for 640x480) in a centred 4:3 box scaled to the window, the 3D world fills the window; Native640 = as before D-2 (the UI 1:1 from the top-left). UIMenuBackground: a menu page's full-screen background  |
@@ -6308,6 +6605,7 @@ Generated by comparing our `Engine/Config/*.ini` (snapshot 4813dd9) with `epic-s
 | UC2GLDrv.UC2GLRenderDevice (new section) | UseXboxProjectors | (absent) | True |  |
 | UC2GLDrv.UC2GLRenderDevice (new section) | UseTerrain3Layer | (absent) | False |  |
 | UC2GLDrv.UC2GLRenderDevice (new section) | PostProcessReferenceHeight | (absent) | 480 |  |
+| UC2GL4ESDrv.UC2GL4ESRenderDevice (new section) | GLESVersion | (absent) | 3 |  |
 | UC2GL4ESDrv.UC2GL4ESRenderDevice (new section) | UseMipmapping | (absent) | True |  |
 | UC2GL4ESDrv.UC2GL4ESRenderDevice (new section) | LevelOfAnisotropy | (D3DRenderDevice: 1) | 16 |  |
 | UC2GL4ESDrv.UC2GL4ESRenderDevice (new section) | AntiAliasing | (absent) | 4 |  |
@@ -6364,7 +6662,7 @@ Generated by comparing our `Engine/Config/*.ini` (snapshot 4813dd9) with `epic-s
 
 ### DefUser.ini (native; the user ini)
 
-59 keys differ.
+54 keys differ.
 
 | Section | Key | Epic | Ours | Our comment in the ini |
 |---|---|---|---|---|
@@ -6372,13 +6670,9 @@ Generated by comparing our `Engine/Config/*.ini` (snapshot 4813dd9) with `epic-s
 | Engine.Input | MiddleMouse | Zoom | Lock 1 \| onrelease Lock 0 |  |
 | Engine.Input | Tab | Type | ShowScores |  |
 | Engine.Input | Ctrl | Jump | SmartJump 1 |  |
-| Engine.Input | PageDown | LookDown | Axis aLookUp Speed=-16.0 |  |
+| Engine.Input | PageDown | LookDown | Axis aMouseY Speed=-4.0 |  |
 | Engine.Input | End | CenterView \| ACTOR ALIGN SNAPTOFLOOR ALIGN=1 | CenterView |  |
-| Engine.Input | Left | StrafeLeft | Axis aTurn Speed=-16.0 |  |
-| Engine.Input | Right | StrafeRight | Axis aTurn Speed=+16.0 |  |
-| Engine.Input | MouseX | Count bXAxis \| Axis aMouseX Speed=6.0 | Count bXAxis \| Axis aTurn Speed=1.0 |  |
-| Engine.Input | MouseY | Count bYAxis \| Axis aMouseY Speed=6.0 | Count bYAxis \| Axis aLookUp Speed=1.0 |  |
-| Engine.Input | PageUp |  | Axis aLookUp Speed=+16.0 |  |
+| Engine.Input | PageUp |  | Axis aMouseY Speed=+4.0 |  |
 | Engine.Input | home | CenterView \| ACTOR ALIGN SNAPTOFLOOR ALIGN=0 | CenterView |  |
 | Engine.Input | E |  | MeleeWeapon \| MeleeHeavyAttack \| MeleePounceAttack |  |
 | Engine.Input | I | set d3drenderdevice reducemouselag false \| onrelease set d3drenderdevice reducem |  |  |
@@ -6412,7 +6706,7 @@ Generated by comparing our `Engine/Config/*.ini` (snapshot 4813dd9) with `epic-s
 | Engine.Input | Joy14 | (absent) | ShowScores |  |
 | Engine.Input | Joy15 | (absent) | SmartJump 1 |  |
 | Engine.Input | Joy16 | (absent) | Lock 1 \| onrelease Lock 0 |  |
-| Engine.Input | JoyX | (absent) | Axis aStrafe SpeedBase=100.0 DeadZone=0.3 | The sticks as the Xbox binds them (retail DefUser.ini): the right stick is the pad's look (aMouseX/aMouseY, UCPlayerInput's curve, acceleration, friction, adhesion); the mouse and the look keys use aTurn/aLookUp (UCPlayerInput adds them linearly). D-6, docs/porting/analysis/mouse.md. |
+| Engine.Input | JoyX | (absent) | Axis aStrafe SpeedBase=100.0 DeadZone=0.3 | The sticks as the Xbox binds them (retail DefUser.ini). The mouse (MouseX/MouseY) is bound as Epic bound it (Count bXAxis \| Axis aMouseX Speed=6.0), into the same variables as the right stick: with Epic's shipped UCGameplay.u it goes through the stick's curve as on Epic's PC build; the rebuilt UCGam |
 | Engine.Input | JoyY | (absent) | Axis aForward SpeedBase=100.0 DeadZone=0.3 |  |
 | Engine.Input | JoyU | (absent) | Axis aMouseX SpeedBase=100.0 DeadZone=0.3 \| Count bXAxis |  |
 | Engine.Input | JoyV | (absent) | Axis aMouseY SpeedBase=100.0 DeadZone=0.3 \| Count bYAxis |  |
@@ -6421,10 +6715,9 @@ Generated by comparing our `Engine/Config/*.ini` (snapshot 4813dd9) with `epic-s
 | Engine.Input | MouseWheelDown | PrevSkill | NextWeapon |  |
 | Engine.Input | MouseWheelUp | NextSkill | NextWeapon |  |
 | UCGameplay.UCPlayerController | LockSearchTimer | 0.1 | 0.3 |  |
-| UCGameplay.UCPlayerInput | MouseLookSensitivity | (absent) | 2.5 | D-6: the MOUSE (and the look keys Left/Right/PageUp/PageDown). Turn per mouse count at the default FOV is 0.022 degrees x MouseLookSensitivity (the Quake/Source scale: 2.5 gives 0.055 deg/count, about 21 cm per 360 degrees at 800 dpi); it follows the zoom (x DesiredFOV/90). Linear: no clamp, curve,  |
+| UCGameplay.UCPlayerInput | MouseLookSensitivity | (absent) | 2.5 | D-6: the MOUSE, with the rebuilt UCGameplay.u only (Epic's shipped package ignores these keys and sends the mouse through the pad's curve below, as Epic's PC build did). Turn per mouse count at the default FOV is 0.022 degrees x MouseLookSensitivity (the Quake/Source scale: 2.5 gives 0.055 deg/count |
 | UCGameplay.UCPlayerInput | bInvertMouseLook | (absent) | False |  |
-| UCGameplay.UCPlayerInput | MouseLockBreakAngle | (absent) | 25.0 | degrees of mouse motion against a lock-on's clamp that break the lock |
-| UCGameplay.UCPlayerInput | bKeysAsStick | (absent) | True | the movement keys count as a full left stick where the game reads the stick's direction (SmartJump dodges and wall-dodges, Lock + A/D switches target, the on-screen stick prompts) |
+| UCGameplay.UCPlayerInput | bLazyMouseCamera | (absent) | False | F-1: the third-person camera under the mouse: False = rigid (it sits behind the view at once, D-6), True = Epic's lazy camera (it lags behind and follows the turn, as under the pad and on the Xbox) |
 | UCGameplay.UCPlayerInput | aTurn_FrictionRange | (Min=1.0,Max=0.75) | (Min=1.0,Max=0.95) |  |
 | UCGameplay.UCPlayerInput | aLookUp_FrictionRange | (Min=1.0,Max=0.65) | (Min=1.0,Max=0.9) |  |
 
