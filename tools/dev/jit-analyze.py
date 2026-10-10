@@ -20,6 +20,12 @@ the previous frame's) and, over them:
               least-squares slope `ahead = a + b (v dt)`. b = 1: the camera of the frame was computed before the
               pawn's move of that frame (each frame the pawn is drawn its own move ahead of its rest place);
               b = 0: the pawn's place in front of the camera does not depend on the frame time.
+              The bob MUST be in it (D-4, 2026-10-10): the camera's target is pawn + WalkBob, and on a strafe the
+              bob's sideways sway (+-3.4 units at 430 units/s, about 1.3 Hz) lies along the velocity, so the fit of
+              the pawn alone takes that sway for a frame-time dependence wherever a 1.3 s segment's frame times
+              happen to correlate with its phase: the browser spec's b = 0.217-0.247 on strafe right (a19) was
+              exactly that (the same trace: 0.000 with the bob, 0.217 without; forward and back are unaffected,
+              their bob is across the velocity). `ahead_nobob` reports the fit without the bob for comparison only.
   root        the same jitter for the mesh's root bone as posed for the frame (rscr)
   bob         the largest |WalkBob| (the camera's target includes it)
 """
@@ -138,14 +144,15 @@ def judder(frames, key):
     return dict(n=len(d), rms=math.sqrt(sum(x * x for x in d) / len(d)), max=max(d))
 
 
-def ahead_fit(frames):
+def ahead_fit(frames, bob=True):
     xs, ys = [], []
     for f in frames:
         v = f['vel'][:2]
         s = math.hypot(*v)
         u = (v[0] / s, v[1] / s)
         # pawn + WalkBob: the point the camera's target follows (a strafe's sideways bob is along the velocity)
-        rel = (f['pawn'][0] + f['bob'][0] - f['cam'][0], f['pawn'][1] + f['bob'][1] - f['cam'][1])
+        bx, by = (f['bob'][0], f['bob'][1]) if bob else (0.0, 0.0)
+        rel = (f['pawn'][0] + bx - f['cam'][0], f['pawn'][1] + by - f['cam'][1])
         ys.append(rel[0] * u[0] + rel[1] * u[1])
         xs.append(s * f['dt'])
     n = len(xs)
@@ -183,6 +190,7 @@ def analyse(frames):
     res['root_jitter'] = jitter(st, 'rscr')
     res['root_judder'] = judder(st, 'rscr')
     res['ahead'] = ahead_fit(st)
+    res['ahead_nobob'] = ahead_fit(st, bob=False)
     res['bob_max'] = max(math.sqrt(sum(c * c for c in f['bob'])) for f in st)
     return res
 
@@ -200,7 +208,8 @@ def fmt(tag, r):
             f"without the bob: jitter rms {r['nobob_jitter']['rms']:.2f} judder rms {r['nobob_judder']['rms']:.2f} max {r['nobob_judder']['max']:.2f}; "
             f"root bone judder rms {r['root_judder']['rms']:.2f}; "
             f"ahead = {a.get('a', float('nan')):.2f} + {a.get('b', float('nan')):.3f} x v*dt "
-            f"(v*dt {a['vdt']['min']:.2f}..{a['vdt']['max']:.2f}, residual {a.get('resid', float('nan')):.2f}); "
+            f"(v*dt {a['vdt']['min']:.2f}..{a['vdt']['max']:.2f}, residual {a.get('resid', float('nan')):.2f}; "
+            f"without the bob, for comparison only: b {r['ahead_nobob'].get('b', float('nan')):.3f}); "
             f"max |WalkBob| {r['bob_max']:.2f}")
 
 

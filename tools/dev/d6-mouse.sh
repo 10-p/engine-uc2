@@ -83,14 +83,19 @@ run() {
 # allowed in the standalone game these runs are; native, so the shipped scripts have it too), twice as jit-trace.sh
 # places, then checked. D6_SPOT overrides it ("x y z yaw pitch").
 SPOT=${D6_SPOT:-1977.8 583.7 -34.1 33000 -1400}
-# place <probe> <check>: put the pawn at $SPOT and check that it is there
+# The lock scenario's spot: a PlayerStart where all twelve lock checks passed in two earlier runs (logs/jit/d6-lock-jit-main,
+# logs/d9/reg/d6-lock-base1: the pull-back 2021 -> 1742). At the open spot above the lock's pull-back never happens
+# (1753 -> 1753, 1799 -> 1799, every time: jitter.md step 4, d34-docs-tests.md), nor at (-2367.6, 3733.8) (1773 ->
+# 1757); those two PlayerStarts were what made the lock checks "spawn-dependent".
+LOCK_SPOT=${D6_LOCK_SPOT:-1025.2 1698.1 -528.2 22112 0}
+# place <probe> <check> [spot]: put the pawn at $SPOT (or the spot given) and check that it is there
 place() {
-  local x y
-  read -r x y _ <<<"$SPOT"
+  local spot=${3:-$SPOT} x y
+  read -r x y _ <<<"$spot"
   cat <<SCEN
-chan exec TELEPORT $SPOT
+chan exec TELEPORT $spot
 sleep 1
-chan exec TELEPORT $SPOT
+chan exec TELEPORT $spot
 sleep 1.5
 probe $1
 check $2 abs(P['$1'].loc[0] - ($x)) < 2 and abs(P['$1'].loc[1] - ($y)) < 2
@@ -395,7 +400,7 @@ SCEN
 # lock: two bots, frozen, placed 400 units in front (0 and +30 degrees)
 scen_lock() {
   start lock
-  place Lp lock-placed
+  place Lp lock-placed "$LOCK_SPOT"
   cat <<SCEN
 chan exec PlayersOnly
 wait test: exec PlayersOnly 10
@@ -471,7 +476,7 @@ SCEN
   # aim adhesion: one target in front (the other one put behind us), our pawn strafes; the view follows it under the
   # pad only (Epic's adhesion: 20% of the target's angular motion when it is near the crosshair). From the open spot
   # again (the lock checks above turned the view).
-  place Ap lock-placed-for-adhesion
+  place Ap lock-placed-for-adhesion "$LOCK_SPOT"
   cat <<SCEN
 chan place 0 500 0
 chan place 1 600 180
