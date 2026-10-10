@@ -314,3 +314,74 @@ player two at spot A right after joining (n2b) showed its view from a camera at 
 against the single-player third-person picture, same rotation, same spot); a camera-mode difference of a freshly
 joined player, not a rendering error; player one (n2a, n3, n4) and player four (n4d) are counted. Owner pictures:
 `logs/g6/owner-{1player,2players,3players,4players}-gpu.png`, `owner-menu-*.png`.
+
+## G-6, step 9 - the audio-deadbolt cue counts settled (coordinator's request, 2026-10-10)
+
+The difference in step 8 (audio-deadbolt 400/216 and 594/281 requests/played on this branch, 761/400 and 876/427 on
+main's binary) came from captures WITH bots (`NumBots=3`): the bots' AI and their footsteps/weapons decide most of the
+count. Deterministic comparison without bots, both binaries (run/g6base = main 4a72bfb with main's Default.ini,
+run/g6 = this branch), alternating, load 15-22, per cue name and outcome
+(`tools/dev/g6/g6-cuetab.py <run>.out ...`, the cue log of UC2ALAudio):
+
+1. `audio-praxis-dry` item without bots: `UC2_PRECMD="set UCDeathmatch NumPlayers 0" UC2_POSTCMD="Ghost"
+   tools/dev/run-uc2-audio.sh <tree> praxis-dry-<i> 85 28 'DM-Praxis?NumBots=0' -ini:...UseEFX=False`:
+
+```
+cue                                           outcome e/praxis-dry-1 e/praxis-dry-2 6/praxis-dry-1 6/praxis-dry-2
+A_Ann_Female.Play                             played               1              1              1              1
+A_Gameplay.Countdown                          played               3              3              3              3
+A_Gameplay.Teleport                           played               1              1              1              1
+A_Gameplay.Teleport.PlayerSpawn               played               1              1              1              1
+A_Pickup.Item_Spawn                           culled               2              2              2              2
+A_Praxis.Amb_Room_Loop06                      played               3              3              3              3
+A_Praxis.Env_Underwater_02                    played               2              2              2              2
+A_Praxis.PR_BlueGearAmbLoop                   played               1              2              1              2
+A_Praxis.PR_GreenChamberBubbles               played               5              5              5              5
+A_Praxis.PR_GreenChamberLoop                  played               2              2              2              2
+A_Praxis.PR_OrangeMonitorLoop                 played               2              2              2              2
+A_Praxis.PR_PlasmaFloorLoop                   played               1              1              1              1
+A_Praxis.PR_PurpleAmbLoop                     played               2              2              2              2
+A_WeaponRace.Nakhti.NK_Fire                   played              91            102             94             95
+A_WeaponRace.Nakhti.NK_FireImpact             culled              27             29             27             26
+A_WeaponRace.Nakhti.NK_FireImpact             played              19             22             21             24
+A_WeaponRace.Nakhti.NK_FreezeCharging         played              14             14             15             15
+A_WeaponRace.Nakhti.NK_FreezeStart            played              14             14             15             15
+A_WeaponRace.Nakhti.NK_Raise                  played               1              1              1              1
+A_WeaponRace.Nakhti.NK_Reload                 played               1              1              1              1
+TOTAL                                                            193            210            200            204
+```
+
+2. The same walk on DM-Deadbolt without Ghost (footsteps on the floors), `'DM-Deadbolt?NumBots=0'`:
+
+```
+cue                                           outcome se/deadbolt0-1 se/deadbolt0-2 g6/deadbolt0-1 g6/deadbolt0-2
+A_Ann_Female.Play                             played               1              1              1              1
+A_Character.Footstep_Default                  played               0             15              0              0
+A_Character.Footstep_Metal                    played               3              3              4              4
+A_Character.Footstep_Stone                    played              18             10             18             18
+A_Character.NK_Anubis_Dodge                   played               1              1              1              1
+A_Character.NK_Anubis_Jump                    played               8              8              8              8
+A_Deadbolt.Env_Wind_Cold3b                    played               1              1              1              1
+A_Deadbolt.LightsHumLoop5                     played               3              3              3              3
+A_Deadbolt.LowThrobLoop                       played               3              3              3              3
+A_Deadbolt.Machine_Deadbolt                   played               1              1              1              1
+A_Deadbolt.amb_room_texture01                 played               2              2              2              2
+A_Gameplay.Countdown                          played               3              3              3              3
+A_Gameplay.Teleport                           played               1              1              1              1
+A_Gameplay.Teleport.PlayerSpawn               played               1              1              1              1
+A_Pickup.Item_Spawn                           culled               3              3              3              3
+A_WeaponRace.Nakhti.NK_Fire                   played              94             96            103            100
+A_WeaponRace.Nakhti.NK_FireImpact             played              94             96            103            100
+A_WeaponRace.Nakhti.NK_FreezeCharging         played              15             15             16             15
+A_WeaponRace.Nakhti.NK_FreezeStart            played              15             15             16             15
+A_WeaponRace.Nakhti.NK_Raise                  played               1              1              1              1
+A_WeaponRace.Nakhti.NK_Reload                 played               1              1              1              1
+TOTAL                                                            269            280            290            282
+```
+
+Result: every zone ambient, countdown, teleport, pickup and reload cue is identical; the player's footsteps (21/28
+main, 22/22 branch; main's run 2 walked onto a Default-surface floor 15 times) and weapon cues (fire 91/102 vs 94/95
+on Praxis, 94/96 vs 103/100 on Deadbolt: the fire rate follows the frame rate of a software-GL run) differ run to
+run on BOTH binaries by about as much as between them, and the branch is not lower. No change in single-player audio:
+nothing to fix. (Single player never takes the split path: one viewport, Blit on it as before, `Audio->Update()` from
+the one viewport with bShowMenu+bShowScene as before; UC2ALAudio was not changed.)
