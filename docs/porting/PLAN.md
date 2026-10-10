@@ -309,3 +309,11 @@ Task audit (owner: "make sure that all of them are needed or close them"):
 
 Owner, 2026-10-10: up to 8 agents is fine, but the machine is delicate at 100% CPU: watch for test failures caused by load
 and timeouts (rerun quietly before calling anything a regression; serialize game/browser runs when the load stays high).
+
+Owner decisions of 2026-10-10 (afternoon): split screen keeps full detail, the keyboard+mouse become a player of
+their own, AutoFOV applies per viewport (A/B pictures first: G-9); the precache list stays as built (System, cue
+tables, everything the menu loads, movies included); Adoratrice's music: cooked Ogg first, then WMA (deferred to
+M16's video decoder), then silence; web guests excluded from the Xbox standby check (not a shorter timeout); web
+rumble through the browser's vibration API; the language option stays per game; anti-aliasing OFF by default on
+the web (people enable it in the ini): G-10. Still open: `UseTerrain3Layer` on by default (measured never slower,
+up to 20% faster; waiting for a yes).
