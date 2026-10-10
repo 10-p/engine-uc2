@@ -1168,10 +1168,27 @@ enum EAutoFovMode
 	AUTOFOV_Adaptive = 2,
 };
 
-// The window size a viewport's FOV is corrected for: SizeX x SizeY for the one full-window viewport;
-// for a split-screen viewport the whole window's (SizeX/ScaleX x SizeY/ScaleY), because the Xbox split
-// layouts were designed on the 4:3 screen they divide (a top/bottom half is 8:3 there).
+// The size a viewport's FOV is corrected for: its own SizeX x SizeY (G-6: a split-screen viewport too,
+// AutoFOV per viewport aspect; D-8 had used the whole window's for it).
 ENGINE_API void ufrontAutoFovSize( UViewport* Viewport, INT& SizeX, INT& SizeY );
+
+// G-6: the ScaleFOVX/ScaleFOVY that make a split-screen viewport (ScaleX/ScaleY below 1) show exactly Fov
+// horizontally with square pixels. FCameraSceneNode::UpdateMatrices scales camera space by ScaleX/ScaleY and
+// the half-angle by ScaleFOVX/Y (Epic's Xbox maths: the SSDetailLevels' ReduceFOV, 0.5 for three and four
+// players, a 79 degree quarter and a 45 degree top strip of three); the edge of the view is then
+// tan(ScaleFOV*h)/ScaleX, so ScaleFOV = atan(ScaleX*tan(h))/h puts it at tan(h). Returns 0 (nothing to do)
+// for a full-window viewport or with AutoFOV off (Epic's view, ReduceFOV and all).
+ENGINE_API UBOOL ufrontSplitFovScale( UViewport* Viewport, FLOAT Fov, FLOAT& OutScale );
+
+// Sets that scale for a scope (a frame, a projection, a canvas-drawn actor) and puts the viewport's back.
+struct FScopedSplitFovScale
+{
+	UViewport*	Viewport;
+	FLOAT		SavedX, SavedY;
+	UBOOL		bSet;
+	FScopedSplitFovScale( UViewport* InViewport, FLOAT Fov );
+	~FScopedSplitFovScale();
+};
 
 // Effective horizontal FOV for a window of SizeX x SizeY. BaseFov unchanged when off, at the reference
 // aspect (within 1e-4) or for a degenerate size. bLog: the one-line report (only the primary view).

@@ -9,7 +9,8 @@
 #                  back to the main menu)
 #          render  the machine's GPU through SDL's offscreen driver (as tools/dev/fx-owner.sh UC2_GPU=1): one
 #                  view single-player, the same view as player 1 and as player 2 with 2, 3 and 4 players,
-#                  post-processing on/off, the HUD alone (TOGGLERENDERLEVEL); measured by g6-measure.py
+#                  post-processing on/off, the HUD alone (TOGGLERENDERLEVEL); pictures with the dynamic gamma
+#                  ramps applied as the present pass applies them (test key ShotRamp); measured by g6-measure.py
 #          (default: input render menu)
 #   G6_RES=1280x720   window size;   G6_OUT=<dir>  output (default <WorkUC2>/logs/g6)
 #
@@ -112,12 +113,11 @@ sleep 0.3
 pad $1 button start 0
 expect join-pad$1 Split screen: pad $1 Start in the match: joined 20
 sleep 3
+check join-pad$1-spawned spawn($1)
+chan exec set PlayerController bGodMode True
+chan exec set UCPlayerController bAutoCenterPitch False
+sleep 1
 SCEN
-  local i
-  for i in 1 2 3 4; do
-    printf 'pad %s axis righttrigger 32767\nsleep 0.3\npad %s axis righttrigger 0\nsleep 1.5\n' "$1" "$1"
-  done
-  echo "sleep 2"
 }
 
 scen_input() {
@@ -245,6 +245,7 @@ SPOT_A="1977.8 583.7 -34.1 33000 -1400"
 SPOT_B="-2367.6 3733.8 -482.1 0 -600"
 SPOT_C="-1908.7 -1097.8 -130.1 16384 -600"
 SPOT_D="1025.2 1698.1 -528.2 -16384 -600"
+SPOT_E="1531.9 3111.5 -34.1 0 -600"
 
 shots() {  # shots <tag>: the picture, post-processing off, the HUD alone, the picture without HUD
   cat <<SCEN
@@ -274,13 +275,17 @@ SCEN
 }
 
 # place_all <spot of split 0> <spot of split 1> ...
+# The player going to spot A is placed last, after whoever stood there has left (a pawn put onto another is a
+# telefrag).
 place_all() {
   echo "vprobe _p"
-  local i=0 s
-  for s in "$@"; do place_cmd $i "$s"; i=$((i+1)); done
-  echo "sleep 2"
-  i=0; for s in "$@"; do place_cmd $i "$s"; i=$((i+1)); done
-  echo "sleep 2"
+  local pass i s
+  for pass in 1 2; do
+    i=0; for s in "$@"; do [ "$s" != "$SPOT_A" ] && place_cmd $i "$s"; i=$((i+1)); done
+    echo "sleep 1"
+    i=0; for s in "$@"; do [ "$s" = "$SPOT_A" ] && place_cmd $i "$s"; i=$((i+1)); done
+    echo "sleep 2"
+  done
 }
 
 scen_render() {
@@ -295,18 +300,22 @@ chan exec set LevelInfo TimeDilation 0.0001
 SCEN
   shots n1
   echo "chan exec set LevelInfo TimeDilation 1"
+  # Every move goes to a free spot (a pawn put onto another is a telefrag, god mode or not): the targets below
+  # never name a spot someone else still stands on, and the player for spot A moves last.
   join 1
   place_all "$SPOT_B" "$SPOT_A"; echo "chan exec set LevelInfo TimeDilation 0.0001"; shots n2b
   echo "chan exec set LevelInfo TimeDilation 1"
-  place_all "$SPOT_A" "$SPOT_B"; echo "chan exec set LevelInfo TimeDilation 0.0001"; shots n2a
+  place_all "$SPOT_A" "$SPOT_C"; echo "chan exec set LevelInfo TimeDilation 0.0001"; shots n2a
   echo "chan exec set LevelInfo TimeDilation 1"
   join 2
-  place_all "$SPOT_A" "$SPOT_B" "$SPOT_C"; echo "chan exec set LevelInfo TimeDilation 0.0001"; shots n3
+  place_all "$SPOT_A" "$SPOT_C" "$SPOT_D"; echo "chan exec set LevelInfo TimeDilation 0.0001"; shots n3
   echo "chan exec set LevelInfo TimeDilation 1"
   join 3
-  place_all "$SPOT_A" "$SPOT_B" "$SPOT_C" "$SPOT_D"; echo "chan exec set LevelInfo TimeDilation 0.0001"; shots n4
+  place_all "$SPOT_A" "$SPOT_C" "$SPOT_D" "$SPOT_E"; echo "chan exec set LevelInfo TimeDilation 0.0001"; shots n4
   echo "chan exec set LevelInfo TimeDilation 1"
   place_all "$SPOT_B" "$SPOT_C" "$SPOT_D" "$SPOT_A"; echo "chan exec set LevelInfo TimeDilation 0.0001"; shots n4d
+  echo "pyexec print('  pawns', [r['pawn'] for r in vsplit('n4d')])"
+  echo "check render-every-player-alive-at-the-end all(r['pawn'] == 1 for r in vsplit('n4d'))"
 }
 
 # The menus' own flow (UC2's two-player split screen): main menu -> Instant Action -> DeathMatch -> DM-Deadbolt ->
@@ -391,7 +400,7 @@ for part in $parts; do
   scen=$(mktemp)
   case $part in
     input)  scen_input  > "$scen"; run_game g6-input  0 420 "DM-Deadbolt?NumBots=0" "$scen";;
-    render) scen_render > "$scen"; run_game g6-render 1 420 "DM-Deadbolt?NumBots=0" "$scen"
+    render) scen_render > "$scen"; run_game g6-render 1 480 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True
             python3 "$repo/tools/dev/g6/g6-measure.py" "$out" > "$out/g6-measure.txt" 2>&1; tail -n 30 "$out/g6-measure.txt";;
     menu)   scen_menu   > "$scen"; run_game g6-menu   0 420 "" "$scen";;
     *) echo "unknown part $part" >&2;;

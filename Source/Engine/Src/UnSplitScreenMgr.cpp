@@ -1059,6 +1059,24 @@ void USplitScreenMgr::RefreshPlayerHUDs()
 			debugf( NAME_DevSplitScreen, TEXT("Split screen: %s gets its HUD again (%s, viewport %i of %i)"), PC->GetName(), HUDClass->GetName(), i, Client->Viewports.Num() );
 			PC->ProcessEvent( ClientSetHUD, &Parms );
 		}
+		// The weapons' crosshairs, which UCPlayerController caches (ScriptedCrosshairs), are squeezed for a split
+		// HUD when a weapon first makes them (UCWeapon.CreateScriptedCrosshair: ScaleY = 0.5 if the HUD
+		// IsSplitScreen, i.e. more than one viewport); one made before the layout changed keeps the old
+		// shape (the crosshair of a player who was alone sat on the bottom edge of a half screen). Give them
+		// the shape that rule gives now. (By name: the classes are UCGameplay's and UCElements' scripts.)
+		UArrayProperty* Crosshairs = FindField<UArrayProperty>( PC->GetClass(), TEXT("ScriptedCrosshairs") );
+		if( Crosshairs && Cast<UObjectProperty>(Crosshairs->Inner) )
+		{
+			FArray* Array = (FArray*)((BYTE*)PC + Crosshairs->Offset);
+			for( INT c=0; c<Array->Num(); c++ )
+			{
+				UObject* Crosshair = ((UObject**)Array->GetData())[c];
+				UFloatProperty* ScaleY = Crosshair ? FindField<UFloatProperty>( Crosshair->GetClass(), TEXT("ScaleY") ) : NULL;
+				if( ScaleY )
+					*(FLOAT*)((BYTE*)Crosshair + ScaleY->Offset) = Client->Viewports.Num() > 1 ? 0.5f
+						: *(FLOAT*)((BYTE*)Crosshair->GetClass()->GetDefaultObject() + ScaleY->Offset);
+			}
+		}
 	}
 
 	unguard;
@@ -1087,10 +1105,14 @@ void USplitScreenMgr::UpdateDetailLevels()
 	// dynamic gamma adjusts the device gamma ramp
 	// so it is a full screen effect and doesn't make sense
 	// when any split views are active
+	// uc2 port (G-6): unless the render device applies it per viewport (FRenderCaps::ViewportDynamicGamma)
+	URenderDevice* RenDev = Client->Viewports(0)->RenDev;
+	UBOOL bViewportGamma = RenDev && RenDev->GetRenderCaps() && RenDev->GetRenderCaps()->ViewportDynamicGamma;
 	if( NumActiveSplitViews() != 0 )
 	{
 		// disable dynamic gamma
-		Client->Exec( TEXT("DYNAMICGAMMA 0") );
+		if( !bViewportGamma )
+			Client->Exec( TEXT("DYNAMICGAMMA 0") );
 		// disable dynamic draw scale
 		LevelInfo->bUseDynamicDrawScale = 0;
 	}

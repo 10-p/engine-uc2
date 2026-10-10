@@ -1429,7 +1429,10 @@ void UCanvas::DrawActor( AActor* Actor, UBOOL WireFrame, UBOOL ClearZ, FLOAT Dis
 		Viewport->Actor->RendMap = REN_Wire;
 	if( ClearZ )
 		Viewport->RI->Clear(0,FColor(0,0,0),1,1.0f,0);
-    FActorSceneNode(Viewport,&Viewport->RenderTarget,Actor,CameraActor,CameraLocation,CameraRotation,DisplayFOV).Render(Viewport->RI);
+	{
+		FScopedSplitFovScale SplitFov( Viewport, DisplayFOV );	// G-6: the actor's FOV in a split-screen viewport
+		FActorSceneNode(Viewport,&Viewport->RenderTarget,Actor,CameraActor,CameraLocation,CameraRotation,DisplayFOV).Render(Viewport->RI);
+	}
 	Viewport->Actor->RendMap = OldRendMap;
 //	unclock(GStats.DWORDStats(GEngineStats.STATS_Game_CanvasCycles));
 //	clock(GScriptCycles);

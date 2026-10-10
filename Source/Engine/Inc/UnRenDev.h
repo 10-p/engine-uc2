@@ -799,6 +799,11 @@ struct FRenderCaps
 	// distances in pixels of the real back buffer. Set by the device (UC2GLDrv:
 	// PostProcessReferenceHeight); docs/porting/analysis/pp-scale.md.
 	INT		PostProcessReferenceHeight;
+	// UC2 port (G-6): the device applies dynamic gamma per viewport (a luminance histogram of each viewport's
+	// rectangle, its ramp applied to that rectangle), so it is not a full-screen effect there and split screen
+	// keeps it (USplitScreenMgr::UpdateDetailLevels switches it off otherwise, as on the Xbox, whose ramp was
+	// the display's).
+	UBOOL	ViewportDynamicGamma;
 
 	// set default render caps in constructor
 	FRenderCaps()
@@ -809,7 +814,8 @@ struct FRenderCaps
 		ShippedDOFBlurAlpha(0),
 		XboxShadows(0),
 		XboxProjectors(0),
-		PostProcessReferenceHeight(0)
+		PostProcessReferenceHeight(0),
+		ViewportDynamicGamma(0)
 	{}
 };
 

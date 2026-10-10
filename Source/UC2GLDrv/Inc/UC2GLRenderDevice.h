@@ -215,6 +215,21 @@ public:
 									XboxClientDefaultsApplied;
 	GLint							PresentRampLoc,
 									PresentUseRampLoc;
+	// G-6: the ramps of split-screen viewports, each applied by the present pass to its own rectangle.
+	struct FViewportRamp
+	{
+		UViewport*	Viewport;
+		GLuint		Texture;
+		INT			X, Y, W, H;
+		DWORD		Frame;
+		BYTE		Ramp[256];
+	};
+	TArray<FViewportRamp>			ViewportRamps;
+	void SetViewportGammaRamp( UViewport* Viewport, const BYTE* Ramp );
+	FViewportRamp* FindViewportRamp( UViewport* Viewport, UBOOL bRecent );
+	void DrawViewportRamps( UViewport* Viewport, INT DrawableX, INT DrawableY );
+	void ClearViewportRamps();
+	static UBOOL IsSplitViewport( UViewport* Viewport ) { return Viewport && (Viewport->ScaleX != 1.f || Viewport->ScaleY != 1.f); }
 
 	// Present pass.
 	GLuint							PresentProgram;

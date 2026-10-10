@@ -75,3 +75,16 @@ def dump(path):
     with open(path, 'w') as f:
         json.dump({'V': V, 'VS': VS}, f, indent=1)
     return True
+
+
+def spawn(k, tries=10):
+    """Press pad k's fire until its split player has a pawn (no shots once it has one)."""
+    for _ in range(tries):
+        vprobe('_s')
+        rows = [r for r in V['_s'] if r['pad'] == k and r['split'] >= 0]
+        if rows and rows[0]['pawn']:
+            print(f'  spawn: pad {k} has a pawn', flush=True)
+            return True
+        chan(f'pad {k} axis righttrigger 32767'); time.sleep(0.3)
+        chan(f'pad {k} axis righttrigger 0'); time.sleep(1.5)
+    return False

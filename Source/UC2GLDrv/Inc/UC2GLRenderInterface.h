@@ -336,7 +336,9 @@ public:
 	EPostProcessStage		PostProcessStage;
 
 	// M7 (UC2GLPostProcess.cpp).
-	class FOpenGLDynamicGamma*	DynamicGamma;			// FD3DDynamicGamma
+	class FOpenGLDynamicGamma*	DynamicGamma;			// FD3DDynamicGamma (the window's viewport)
+	TArray<class FOpenGLDynamicGamma*> ViewportDynamicGammas;	// G-6: one per split-screen viewport
+	class FOpenGLDynamicGamma*	CurrentDynamicGamma;	// G-6: the one of the viewport being drawn
 	FLOAT					DistortionScale[4];			// VSC_DISTORTION_SCALE (HandlePSVertexShader)
 	FLOAT					ColorRemapConstant[4];		// VSC_COLOR_REMAP
 	// M7b: VSC_PROJ_DIRECTIONS .. VSC_PROJ_LIFESPAN_ATTEN, 13 registers (SetProjectorMultiMaterial;

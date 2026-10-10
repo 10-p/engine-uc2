@@ -1641,6 +1641,8 @@ void UUC2GLRenderDevice::DrawPresentPass( UViewport* Viewport )
 	glVertexAttribPointer( 0, 2, GL_FLOAT, GL_FALSE, 0, NULL );
 	glEnableVertexAttribArray( 0 );
 	glDrawArrays( GL_TRIANGLE_STRIP, 0, 4 );
+	// G-6: split-screen viewports' own dynamic gamma ramps, each over its rectangle (nothing when not split).
+	DrawViewportRamps( Viewport, DrawableX, DrawableY );
 	glDisableVertexAttribArray( 0 );
 	glBindBuffer( GL_ARRAY_BUFFER, 0 );
 	glUseProgram( 0 );
@@ -2367,11 +2369,22 @@ void UUC2GLRenderDevice::ReadPixels( UViewport* Viewport, FColor* Pixels )
 		{
 			FColor C = Rows( (Height - 1 - y) * Width + x );
 			C.A = 255;
-			if( GShotRamp && GammaRampActive && PostProcessActive() )
+			if( GShotRamp && PostProcessActive() )
 			{
-				C.R = GLastGammaRamp[C.R];
-				C.G = GLastGammaRamp[C.G];
-				C.B = GLastGammaRamp[C.B];
+				// G-6: the ramp of the split-screen viewport the pixel is in, as the present pass applies it.
+				const BYTE* Ramp = GammaRampActive ? GLastGammaRamp : NULL;
+				for( INT r=0; r<ViewportRamps.Num(); r++ )
+				{
+					const FViewportRamp& R = ViewportRamps(r);
+					if( R.Frame + 16 >= FrameCounter && X0+x >= R.X && X0+x < R.X+R.W && Y0+y >= R.Y && Y0+y < R.Y+R.H )
+						Ramp = R.Ramp;
+				}
+				if( Ramp )
+				{
+					C.R = Ramp[C.R];
+					C.G = Ramp[C.G];
+					C.B = Ramp[C.B];
+				}
 			}
 			Pixels[ y * Viewport->SizeX + x ] = C;
 		}
@@ -2405,6 +2418,8 @@ FRenderCaps* UUC2GLRenderDevice::GetRenderCaps()
 	// pp-scale: the picture height the camera effects size their blurs for (UnRenderUtil.h,
 	// GetPostProcessReference).
 	RenderCaps.PostProcessReferenceHeight	= Max( PostProcessReferenceHeight, 0 );
+	// G-6: dynamic gamma per viewport (UC2GLPostProcess.cpp, SetViewportGammaRamp), with the post-processing.
+	RenderCaps.ViewportDynamicGamma			= PostProcessActive() ? 1 : 0;
 	return &RenderCaps;
 }
 

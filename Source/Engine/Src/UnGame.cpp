@@ -3184,19 +3184,38 @@ struct FScopedAutoFov
 	FLOAT				Saved;
 	FLOAT				Applied;
 	INT					SizeX, SizeY;
+	UViewport*			View;
+	FLOAT				SavedScaleFOVX, SavedScaleFOVY;
+	UBOOL				bSplitFov;
 	FScopedAutoFov( UViewport* Viewport )
 	:	Actor( Viewport->Actor )
 	,	Saved( Viewport->Actor->FovAngle )
+	,	View( Viewport )
+	,	SavedScaleFOVX( Viewport->ScaleFOVX )
+	,	SavedScaleFOVY( Viewport->ScaleFOVY )
+	,	bSplitFov( 0 )
 	{
 		ufrontAutoFovSize( Viewport, SizeX, SizeY );
-		Applied = ufrontEffectiveFov( Saved, SizeX, SizeY, 1 );
+		Applied = ufrontEffectiveFov( Saved, SizeX, SizeY, Viewport==Viewport->GetOuterUClient()->Viewports(0) );
 		GAutoFovScopeActor		= Actor;
 		GAutoFovFrameBase		= Saved;
 		GAutoFovFrameEffective	= Applied;
 		Actor->FovAngle			= Applied;
+		// G-6: a split-screen viewport shows the effective FOV of its own aspect (ufrontSplitFovScale).
+		FLOAT Scale;
+		if( ufrontSplitFovScale( Viewport, Applied, Scale ) )
+		{
+			Viewport->ScaleFOVX = Viewport->ScaleFOVY = Scale;
+			bSplitFov = 1;
+		}
 	}
 	~FScopedAutoFov()
 	{
+		if( bSplitFov )
+		{
+			View->ScaleFOVX = SavedScaleFOVX;
+			View->ScaleFOVY = SavedScaleFOVY;
+		}
 		if( Actor->FovAngle != Applied )
 		{
 			// Back to base units; a value that round-trips to the saved or the desired FOV (the effect

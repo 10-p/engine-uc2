@@ -461,6 +461,7 @@ def run():
 
 
 NS = {'P': P, 'W': W, 'K': K, 'V': V, 'VS': VS, 'vsplit': vsplit, 'vrects': vrects, 'vdist': vdist, 'vyaw': vyaw,
+      'vprobe': vprobe, 'time': time,
       'yawdiff': yawdiff, 'pitchdiff': pitchdiff, 'dist': dist, 'fwd': fwd, 'side': side,
       'abs': abs, 'min': min, 'max': max, 'math': math, 'os': os, 'chan': chan, 'record': record}
 
