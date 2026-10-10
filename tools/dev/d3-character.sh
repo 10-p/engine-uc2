@@ -14,7 +14,9 @@
 #   c0   fresh tree, NO profile, direct DM-Deadbolt with -ini:User:[DefaultPlayer]:Class=<Z> (Malcolm): plays Z.
 #   c1   menus: create profile "Alpha" (on-screen keyboard), Instant Action, two Rights on the character page (X), play.
 #   c1m  direct: plays X (Alpha's).                       User.ini [DefaultPlayer] Class stays Z after c1 and c1m.
-#   c2   menus: starts in Alpha; create "Bravo", Instant Action, three Rights on the character page (Y), play.
+#   c2   menus: starts in Alpha; create "Bravo", Instant Action, its character page left as it is (Y: a new
+#        profile's default, Anubis; a fresh profile has two characters unlocked, Anubis and Sapphire, and Right
+#        stops at Sapphire: run 2), play.
 #   c2m  direct: plays Y (Bravo's).
 #   c3   menus: starts in Bravo; select Alpha on the Profiles page; quit WITHOUT playing (the BLOCKERS case: before
 #        G-7 the next direct launch took [DefaultPlayer] Class, the class of the last map played = Bravo's).
@@ -186,7 +188,7 @@ check c1m-engine-line grep -a -m1 "Profiles: profile \"Alpha\" logs in with Clas
 check c1m-user-ini-class-kept bash -c "[ '$(ini DefaultPlayer Class)' = '$Z' ] && echo '[DefaultPlayer] Class=$(ini DefaultPlayer Class)'"
 
 # --- c2: profile Bravo, character Y ------------------------------------------------------------------------------
-{ at_start c2; to_profiles c2; new_profile c2 Bravo 0; play_with c2 3; } > "$out/c2.scen"
+{ at_start c2; to_profiles c2; new_profile c2 Bravo 0; play_with c2 0; } > "$out/c2.scen"
 run c2 420
 Y=$(profchar c2)
 check c2-started-in-alpha bash -c "[ '$(active_first c2)' = Alpha ] && echo Alpha"

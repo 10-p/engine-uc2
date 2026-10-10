@@ -476,3 +476,24 @@ Part B. Where the class of a launch comes from:
   no match) then c3m plays Alpha's Anubis; c4m (Profiles removed) plays the ini's Malcolm; `[DefaultPlayer] Class`
   stayed Malcolm through every profile session; c5m: `Alpha.PRO moved into Epic's folder`, `Bravo.PRO deleted (Epic's
   folder exists)`, started in Alpha, both folder files byte-identical to the saved copies, no flat file left.
+
+### Step G7-3: the native gate
+
+- `tools/dev/d3-character.sh` run 2 (load 14-19, `logs/g7/d3-character-run2.txt`): 1 FAIL from the test: with three
+  Rights Bravo also ended on Sapphire. The log shows why (`c2.out` 229-237): every Right is handled, but a fresh
+  profile has two characters unlocked (Anubis, Sapphire) and Right stops at the last one. So Bravo keeps a new
+  profile's default (Anubis) and Alpha takes Sapphire; X, Y and Z stay three different classes. Everything else passed.
+- **Run 3** (load 14.9 -> 17.6, `logs/g7/d3-character-run3.txt`, out `logs/g7/character3/`): **d3-character: ALL PASS**
+  (36 PASS lines; X = Sapphire, Y = Anubis, Z = Malcolm): c0 no profile plays the ini's Malcolm; c1 menu launch
+  Alpha = Sapphire; c1m direct Alpha plays Sapphire, `Profiles: profile "Alpha" logs in with
+  Class=UCCharacters.UCPawn_Human_Sapphire (URL had Class=UCCharacters.UCPawn_Human_Malcolm)`; c2/c2m Bravo plays
+  Anubis; c3 switch to Alpha without playing, c3m direct plays Sapphire (not Bravo's Anubis); c4m no profile plays
+  Malcolm; `[DefaultPlayer] Class` = Malcolm after every run; c5m flat Alpha.PRO moved, Bravo.PRO deleted, started in
+  Alpha, plays Sapphire, folder files byte-identical.
+- **Negative control** (same script, tree g7old = main's `build-native` uc2.bin of 2026-10-09 17:01, which has D-3/D-4
+  but not G-7; `logs/g7/d3-character-control-main.txt`): 10 FAILED exactly where G-7 acts: c3m played
+  `UCPawn_Nakhti_Anubis` with Alpha (Sapphire) active (the BLOCKERS case: `[DefaultPlayer] Class=...Anubis`, Bravo's,
+  written by c2m's map load), c4m without a profile played Anubis instead of the ini's Malcolm, `[DefaultPlayer] Class`
+  overwritten by every profile launch, no flat-file move. c1m and c2m passed there too (the leak happened to carry
+  the right class): the test needs c3m and c4m to tell the two engines apart, and it does.
+- `tools/dev/d3-profiles.sh` on tree g7 (`logs/g7/d3-profiles-run1.txt`, load 10-20): **ALL PASS** (27 PASS lines).
