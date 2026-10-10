@@ -552,3 +552,20 @@ stick's double flick: **not exercised** (the same edges; the pad scenario only p
 
 Pad (`logs/g8/d6-pad`, load 15.1): `d6-mouse.sh pad` **10 PASS, 0 FAIL**: right-stick curves against the shipped
 scripts worst 0.27% (yaw 0.35), 0.08% (0.5), 0.12% (0.75), 0.17% (1.0), pitch 0.07%; left-stick walk 2.36% (limit 3%).
+
+Lock regression with the key off (`d6-mouse.sh lock`, Lock + D, mouse break-away, adhesion): on `g8-run` at load 15.7
+11 PASS + 1 FAIL twice, a different check each time: `lock-aim-adhesion-under-the-pad` (`logs/g8/d6-lock`: the pawn
+strafed only 44 units, the check wants 50; adhesion yaw 75 < 100) and `lock-pulls-back-after-the-mouse-stops`
+(`logs/g8/d6-lock2`: offsets [1801, 1801]; the same non-pulling values [1753, 1753] / [1773, 1757] are in earlier
+agents' main-based runs, `logs/d6/mouse/lock.json`, `logs/jit/d6/lock.json`). Quieter (load 14): main's package
+(`run/g8-base`, `logs/g8/d6-lock-base`) **12 PASS, 0 FAIL**, this package (`logs/g8/d6-lock3`) **12 PASS, 0 FAIL**.
+Read as the scenario's known timing flakes under load, not a change of behaviour (key off, the edges and
+ModifyDoubleClickMove's result are Epic's).
+
+### Gate (G-8)
+
+`tools/dev/d6-mouse.sh dodge` 17/17 (`logs/g8/d6-2`), `pad` 10/10 with the curves within 0.27% of the shipped scripts
+(`logs/g8/d6-pad`), `lock` 12/12 (`logs/g8/d6-lock3`); script build 0 errors, compare shows only
+ModifyDoubleClickMove and PlayerInput (+ KeyAxis, KeyX/KeyY, bDoubleTapDodge); UCGameplay.u sha256 45dd2558....
+Open: the asset tree switch (coordinator: `assets/uc2/System/UCGameplay.u` from `run/g8-make/System`, and every
+network peer with it); the web build's ini already has the key (False).
