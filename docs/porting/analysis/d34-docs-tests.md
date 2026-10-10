@@ -150,3 +150,21 @@ The size of the chance correlation depends on how a segment's frame times fall o
 native pattern averages out more than the browser's irregular times). Decision: measurement, not a web-only
 dependency; nothing to fix in the engine or UCGameplay.u; the spec fits pawn + bob as jit-analyze.py always did
 (patch), the limit stays 0.2. The browser runs of the patched spec follow (step 10).
+
+## Step 10: d6-mouse three times on a quiet machine (`logs/d34/d6q-{1,2,3}`, 02:44-03:00, load at the starts 11.6-15.6)
+
+| scenario | run 1 | run 2 | run 3 |
+|---|---|---|---|
+| look (placed for the keys) | 38/0 | 38/0 | 38/0 |
+| vanilla (placed for the keys) | 7/0 | 7/0 | 7/0 |
+| lock (at LOCK_SPOT) | 14/0, pull-back 2021 -> 1829 | 14/0, 2021 -> 1829 | 14/0, 2021 -> 1829 |
+| lazy (placed) | 6/0 | 6/0 | 6/0 |
+| pad (NETPLACE, as before) | 9/1 (*) | 10/0 | 10/0 |
+| walk (TELEPORT, as before) | 6/0 | 6/0 | 6/0 |
+
+(*) `pad-matches-shipped-left-stick-walk`: half-stick segment 353.0 (ours) vs 340.9 (shipped), 3.55% against 3%: the
+difference is ONE frame of running (the stick is held 1.0 s of wall clock = 30 or 31 frames at 30 fps; 12.1 units at
+365/s backwards). The measure cannot resolve 3% of that segment, so the check now allows 3% or one frame (14.8
+units), whichever is larger (commit e935d29); run 1's numbers pass under it; runs 2 and 3 ran with it (3.0 and 0.1
+units). Every other number is identical in all three runs (the lock offsets exactly). The arrow-strafe checks
+(`look-` and `vanilla-right-arrow-strafes-and-never-turns`) passed 6 of 6.
