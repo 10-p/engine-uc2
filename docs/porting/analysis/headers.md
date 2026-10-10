@@ -72,3 +72,15 @@ Not in the table on purpose: UnrealEd's `WBrowserLIPSincPtr`, `WBrowserAnimation
 editor-window pointers, exported as `INT`): UnrealEd's C++ is the editor application, not built anywhere, and the
 Editor package is 32-bit only (root CMakeLists, M14 block); a 64-bit editor would need rows for them.
 
+## Step 3 (2026-10-10): the other differences, decided
+
+| Difference | Decision | Why |
+|---|---|---|
+| `UHTTPDownload`/`UPrefab` registrants | nothing to do | already resolved by e0bce15 (step 1): the C++ `DECLARE_CLASS` names IpDrv/Editor, the exporter lists them there, as Epic's leaked IpDrvClasses.h/EditorClasses.h do. No tolerated deviation needed |
+| 3 comment lines in `UPSDistortionBaseMaterial`'s cpptext | take the exporter's output (3 blank lines) | the exporter writes cpptext after the preprocessor has stripped comments. The comment is ours (M7) and its content is already in the .cpp, above the two definitions it explains (`Source/Engine/Src/UnPixelShaderMaterial.cpp:401-406`), and stays in the `.uc` cpptext (`Source/Engine/Classes/PSDistortionBaseMaterial.uc:40-42`), where comments are free; the `.uc` is not touched (script sources are T1's) |
+| `UmakeCommandlet` (committed, = Epic's leak) vs `UMakeCommandlet` (exported) | take the exporter's | the C++ class is `UMakeCommandlet` (`Source/Editor/Src/UMakeCommandlet.cpp:21`, also Epic's); the exporter prints the class's FName, whose case is the first spelling the name table saw. Epic's DLL build loaded Editor.dll after UCC had looked up the typed `make` + `Commandlet`, so its table held `makeCommandlet`; our static build registers the class before the command line is read. `UmakeCommandlet::StaticClass()` would not compile; nothing compiles this list (`AUTO_INITIALIZE_REGISTRANTS_EDITOR` is mirrored by hand in `Source/Editor/Src/UC2EditorRegistrants.cpp`, which says `X(UMakeCommandlet)`). The line also moves to its case-sensitive sorted place |
+| 8 `GCC_PACK(4)` on UnrealEd first members | take the exporter's | the rule (tag the first member of a class, as engine-ut2004's exporter does) was restored at M3; the committed UnrealEdClasses.h predates it. UnrealEd's C++ is not built: no `Source/UnrealEd/CMakeLists.txt`, not in `UC2_PACKAGES`, the only includer of UnrealEdClasses.h is `Source/UnrealEd/Inc/UnrealEd.h`, which no other package includes, and no `compiler_depend.make` of build-native names `UnrealEd/Inc` |
+
+So every header can be the exporter's output byte for byte (LF line endings: the exporter writes CRLF, the repo
+keeps LF; the copy strips CR, as `script-build.sh`'s diff always did).
+
