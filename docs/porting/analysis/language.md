@@ -147,3 +147,13 @@ What the cooked assets carry, and what is NOT localised (and why):
 No engine gap was found beyond the missing log line: menu text, voice banks, the cinematic track and the loading
 screen all follow `[Engine.Engine] Language` already (M8/M9 built them that way); Italian's lower-case file names are
 handled by the case-insensitive lookup.
+
+## Step 4 - the browser (2026-10-10)
+
+Frontend `uc2-language` (`/home/ion/WorkUC2/ufrontend-language`, notebook `docs/migration/notes/language-option.md`):
+the Advanced "Language" for every target, target data `language` in each target.json. The uc2 browser spec
+(`uc2-wasm-language.spec.js`) with this branch's wasm-perf (sha256 `4691bb01...22ea`) PASSED: French seeded ->
+`Language: fra` in /System/Avaris.log, `GET GameInfo DefaultPlayerName` -> `Joueur`; the reload shows French; English
+seeded back -> `int`, `Player`; an unchanged relaunch sends nothing and stays `int`. ut2004's spec was stopped by the
+machine's memory (see the frontend notebook); the UE1 targets carry English only.
+No engine patch for the sibling engines (all read the key after their `-ini:` overrides): no `logs/g4/<engine>.patch`.
