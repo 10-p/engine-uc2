@@ -158,3 +158,45 @@ Observed:
   --tree hdr-t2-stale`) with `var int T2StaleCheck;` added after `PrivateResolveInfo` in IpDrv's InternetLink.uc:
   rc 1, `IpDrv/Inc/IpDrvClasses.h: STALE`, diff `+    INT T2StaleCheck;` after `PTRINT PrivateResolveInfo;`
   (`logs/t2/check-headers-stale-script.out`).
+- A hand edit the generator would not make (the old way of keeping a 64-bit header: `PTRINT LogAr` turned back into
+  `INT LogAr` in the committed EngineClasses.h, restored afterwards with `git checkout`): rc 1,
+  `Engine/Inc/EngineClasses.h: STALE`, diff `-    INT LogAr GCC_PACK(4);` / `+    PTRINT LogAr GCC_PACK(4);`
+  (`logs/t2/check-headers-stale-header.out`).
+- A non-pointer placeholder in an exported class (scratch sources, `noexport` commented out of UWeb's
+  WebResponse.uc): rc 2, `check-headers: ucc-bin make did not succeed (Failure - 1 error(s), 86 warning(s))`, the
+  log says `Error: Native placeholder UWeb.WebResponse.ReplacementMap has no C++ spelling: its class must be
+  noexport (Core/Src/UnClass.cpp GNativePlaceholders)` (`logs/t2/check-headers-noexport-demo.out`).
+- After all commits: `cmake --build build-native --target check-headers` rc 0, `check-headers: all 8 generated
+  headers are current` (`logs/t2/check-headers-final.out`).
+
+Memory: every ucc run inside `bin/capped 3G` (script-build.sh's default), builds 6G, verify 3G/2G + DWARF 4G (the
+m13-64bit.sh ceilings); no ceiling was hit (no exit 137).
+
+## Step 6: the paragraph for REPORT.md section 60 (for the coordinator; REPORT.md not edited)
+
+> **T2 generated C++ headers regenerate from scratch** (2026-10-10, `headers.md`). The ten `<Pkg>Classes.h` the
+> script compiler exports (eight exist: Core and UWeb export none) had been hand-edited for 64 bits, so they could
+> only be compared with the exporter's output, never regenerated (section 30, M14, "The C++ headers are compared,
+> never regenerated": superseded). The exporter now takes the C++ spelling of each script `int` that holds a C++
+> pointer from the same table `UStruct::Link` uses at 64 bits (`GNativePlaceholders`, Core/Src/UnClass.cpp, one
+> row per member, a new `CppType` column; compiled at every width because `ucc-bin make` is 32-bit): 17 members
+> come out `PTRINT` (13 Engine, 1 GUI, 3 IpDrv), arrays as `TArrayNoInit<PTRINT>`; rows with no C++ spelling (object
+> header, vtables, maps) make the export fail if their class is ever exported. The committed headers were replaced
+> by the regenerated ones; the only changed lines were three earlier hand deviations, each taken from the
+> generator: `UMakeCommandlet` for Epic's `UmakeCommandlet` in an uncompiled registrant list, a three-line M7 comment
+> in a cpptext block (its content is in the .cpp), and `GCC_PACK(4)` on UnrealEd's first members (not built). Native,
+> native64, MinGW and wasm-perf build; `ucc-bin verifyclasses` passes at 32 and 64 bits, nothing new.
+> `tools/dev/check-headers.sh` (CMake target `check-headers`, native preset) exports and compares byte for byte and
+> fails with the diff when a script change was not followed; `tools/dev/regen-headers.sh` regenerates. Both take
+> `--classes-root` for the build-generated script tree of T1/T3. Deviations: none left in the generated headers;
+> UnrealEd's two editor-window pointer ints stay `INT` (32-bit-only editor, not built).
+
+## Open questions
+
+- `check-headers` is a separate target, not part of ALL nor of a test suite: it needs the asset tree and compiles
+  all 17 packages (about 30 s). Whether the coordinator wants it wired into a gate script (e.g. m14-scripts-check.sh)
+  or CI is open.
+- When T3 moves the script sources to a build-generated tree, the CMake cache variable `UC2_HEADERS_CLASSES_ROOT`
+  (or a dependency on the generating target) has to point the check there.
+- UnrealEd's `WBrowserLIPSincPtr`/`WBrowserAnimationPtr`/`OldArrayCount`-style pointer ints have no placeholder rows;
+  they matter only if a 64-bit editor is ever built.

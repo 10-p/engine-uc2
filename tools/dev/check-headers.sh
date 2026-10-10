@@ -61,7 +61,7 @@ verdict=$(grep -a -o '\(Success\|Failure\) - [0-9]* error(s), [0-9]* warning(s)'
 case "$verdict" in
   "Success - 0 error(s)"*) ;;
   *) echo "check-headers: ucc-bin make did not succeed (${verdict:-no verdict}); log $log" >&2
-     grep -a "Error\|error" "$log" 2>/dev/null | head -20 >&2
+     grep -a "^Error\|) : Error," "$log" 2>/dev/null | head -20 >&2
      exit 2;;
 esac
 
