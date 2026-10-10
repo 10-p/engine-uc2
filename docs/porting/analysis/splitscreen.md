@@ -254,3 +254,55 @@ Results at commit after these fixes (load 15-25 while measured; nothing here is 
   over both, FORFEIT GAME back to the main menu with one viewport: 9/9 PASS.
 - audio (Xvfb, wave writer, cue log): player one's fire cue 1.0 per shot alone and with four players, player three's
   1.0 per shot, all 2D (each shooter is its own viewer): not multiplied per viewport.
+
+## G-6, step 8 - regressions, builds, what is open (2026-10-10)
+
+Builds at the final source (all `capped 6G`, `-j2` while load > 24): native, native64, windows (MinGW, uc2.exe),
+wasm-perf: 0 errors each (`logs/g6/build-*.log`). No script changed: no package to switch.
+
+Regressions (run trees g6 = rebuilt packages of the asset tree, g6ship = Epic's shipped GUI.u/UCGameplay.u/UCMenu.u):
+- m10-controls all five on g6: keyboard 16, mouse 18, text 7, pad 33, both 14 checks: PASS; keyboard on g6ship 16 PASS.
+- d6-mouse look pad (D6_TREE=g6, D6_SHIP_TREE=g6ship): 47 PASS 0 FAIL (curves vs shipped worst 1.30%).
+- g6-splitscreen input on g6ship: 35/35 PASS (second run; the first had 2 keyboard FAILs, see below); menu 9/9 PASS.
+- net-test listen (NET_TREE=g6net): join, spawn, place, seeother, clientmoves, clean, leftovers PASS; listen.hit and
+  listen.kill FAIL - and FAIL identically with the baseline binary (main 4a72bfb, tree g6base, `--keep-tree`), load
+  17-26: not caused by G-6; to rerun on a quiet machine.
+- verifyclasses (ucc-bin, g6 and g6ship): "All native class layouts match".
+- audio regression items: audio-menu identical to base (1 cue played, peak -19.0 dBFS, 0 silent s); audio-deadbolt
+  new 400/216 and 594/281 cue requests/played vs base 761/400 and 876/427 (bots decide most of it; the player's own
+  2D footsteps 24 vs 38 in the last pair). 0 failed, 0 Critical. Not explained; see "unsure" below.
+- fps-bench DM-Deadbolt 20 s 1280x720 GPU, alternating: base 84.6 / 89.6 fps, new 88.1 / 86.5 fps (load 15.6-18.6):
+  no cost when not split, within the noise.
+- single-player picture new vs base (Xvfb, same spot, time frozen): mean |diff| 0.29, differences only on the pawn's
+  pose, the crosshair's animation and one animated sign (time-dependent), the world identical.
+- browser boot spec: NOT RUN to the end - the frontend's mem guard (--max-gb=17) stopped it before the first test: the
+  machine had 15.7 GB in use before the start (an owner's desktop app, missioncenter, held 8.5 GB). serve-web's wasm
+  = this build's (sha256 ae8be733...b6e before and after). Null sink made and removed by module index.
+
+Seen but not fixed / open:
+- Keyboard walking in split screen failed twice (input run 1 on g6ship, and kb-ship) with the key pressed in the input
+  system (KeyDown(W)=1, PlayerWalking) and 0.0 units moved; 6 other runs (both packages) walked 150-500 units.
+  Not reproduced on demand; machine load 20-29 at the time. Cause unknown.
+- HUD of the viewport at index 1 of the client gets the script's bottom-half safe-zone offset (SafeZoneOffsetY -29):
+  the top-right quarter's HUD sits a little higher in its quarter (still inside: margins >= 3 px measured).
+- Epic's scripts do not give a player who JOINS while split the always-on depth of field (UCPlayerController.uc:678
+  `!IsSplitScreen()`); player one, who was alone, keeps his. Script behaviour, left as shipped.
+- Split detail levels (SplitScreenMgr.uc SSDetailLevels, script defaults): 2 players: no coronas, blob shadows,
+  DetailMode 1, particles x0.6; 3-4: also no decals/projectors/deco layers, particles x0.4. Epic's Xbox trade-offs,
+  kept (they are not "an effect switched off to make it work", but the owner may want PC values).
+- Profiles per player: UC2's character page asks player two to load a profile (picture
+  owner-menu-character-page-two-players.png); loading one for player two was not exercised.
+- Network split screen (a client with split players, UChildConnection/JOINSPLIT): not touched, not tested.
+
+What the web needs later (G-5's area): the engine side is the same code (one window = one canvas, sub-viewports,
+present-pass ramps with glScissor, all through GL4ES/WebGL 2); the web ini has `UseJoystick=False` (sync-web-ini.py
+DELTAS) - pads through the browser's Gamepad API into SDL's game controllers are G-5's; then Start on a second pad
+joins as natively. Keyboard and mouse stay player one (pointer lock is the frontend's). Untested in a browser; four
+scene renders per frame will cost on the web (single-player browser frame was 22.5 ms in F-3).
+
+SDL2Drv edits (for G-5's merge): SDL2Drv.h (USDL2Client: SplitScreenJoinInMatch, PadJoin, UpdateSplitLayout,
+CursorWanted, SplitScreenViewports; USDL2Viewport: SubViewport, WindowSizeX/Y, GetWindowViewport); SDL2Client.cpp
+(StaticConstructor key, Destroy order, Tick, GetInitScreenSize, the split-screen section); SDL2Viewport.cpp
+(Destroy, IsWindowCommand + Exec forwarding + SHOT, OpenWindow sub-viewport, IsFullscreen, GetWindow,
+UpdateWindowFrame/capture via CursorWanted, ResizeViewport, UpdateMousePosition, UpdateInput, key log lines);
+SDL2Pads.cpp (header comment, SendButtonEdges: Start -> PadJoin); SDL2InputTest.* (pad index, viewports probe).
