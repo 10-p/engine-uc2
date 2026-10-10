@@ -21,6 +21,13 @@
 #       rebuilds: uc-patches.py compare (bytecode of every function and state, every default, every declaration;
 #       names, imports and exports as sets).
 #   P3  determinism: decompile twice (two Python hash seeds), apply twice, build twice: identical bytes.
+#
+#   tools/scripts/uc-patches-proof.sh rebase --old-decompiler <file> [--new-decompiler <file>] [--patches-out <dir>]
+#       when uc-decompile.py changes: the sets (patches/) were made against the base of the OLD decompiler (e.g.
+#       `git show <rev>:tools/scripts/uc-decompile.py > old.py`); for every set k the old base + sets 1..k is built
+#       and decompiled with the NEW one (default: tools/scripts/uc-decompile.py), `uc-patches.py rebase` re-makes
+#       each set against the new base into --patches-out (default: the repo's patches/), and the proof builds
+#       new base + rebased sets and compares it with the old chain's build (uc-patches.py compare: equal).
 set -uo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
@@ -32,9 +39,13 @@ capped=$work/bin/capped
 SP=$repo/Source/Engine/Inc/ScriptPatches.h
 engine_tex=$work/epic-sources/Engine
 proofs=() build_args=()
+old_dec="" new_dec=$repo/tools/scripts/uc-decompile.py pout=$repo/patches
 while [ $# -gt 0 ]; do
   case "$1" in
-    p1|p2|p3) proofs+=("$1"); shift;;
+    p1|p2|p3|rebase) proofs+=("$1"); shift;;
+    --old-decompiler) old_dec=$2; shift 2;;
+    --new-decompiler) new_dec=$2; shift 2;;
+    --patches-out) pout=$2; shift 2;;
     --work) W=$2; shift 2;;
     --ref) ref=$2; shift 2;;
     --engine-textures) engine_tex=$2; shift 2;;
@@ -48,7 +59,8 @@ done
 mkdir -p "$W"
 fails=0
 py() { PYTHONHASHSEED=${SEED:-0} "$capped" 2G 1800 -- python3 "$@"; }
-dec() { py "$repo/tools/scripts/uc-decompile.py" "$@" --content "$content"; }
+DEC=$repo/tools/scripts/uc-decompile.py
+dec() { py "$DEC" "$@" --content "$content"; }
 up() { py "$repo/tools/scripts/uc-patches.py" "$@"; }
 # base <dir> <Pkg...>: the base tree of these packages
 base() {
@@ -148,6 +160,38 @@ EOP
     done
     echo "  $n1"; echo "  $n2"; echo "  $n3"
     if [ $ok = 1 ]; then echo "PASS P3: decompile, apply and build are deterministic"; else echo "FAIL P3"; fails=$((fails+1)); fi
+    ;;
+  rebase)
+    [ -n "$old_dec" ] || { echo "FAIL rebase: --old-decompiler <file> is required"; fails=$((fails+1)); continue; }
+    R=$W/rebase; rm -rf "$R"; mkdir -p "$R/stages"
+    CUR_SETS=$(up sets --default); WITH_EPIC=
+    mapfile -t sets < <(up sets --default | tr , '\n')
+    mapfile -t pk < <(up packages --default)
+    mapfile -t dpk < <(up packages --default --compile-list "$shipped" | awk '{print $1}')
+    list=$(IFS=,; echo "${pk[*]}")
+    DEC=$old_dec base "$R/old-base" "${dpk[@]}" > "$R/decompile.txt" 2>&1 || { echo "FAIL rebase: old decompile"; fails=$((fails+1)); continue; }
+    DEC=$new_dec base "$R/new-base" "${dpk[@]}" >> "$R/decompile.txt" 2>&1 || { echo "FAIL rebase: new decompile"; fails=$((fails+1)); continue; }
+    done_sets=""; ok=1
+    for k in "${sets[@]}"; do
+      done_sets=${done_sets:+$done_sets,}$k
+      st=$R/stages/${k//\//_}
+      up apply --base "$R/old-base" --sets "$done_sets" --out "$R/tree-$k" > /dev/null || { ok=0; break; }
+      build "$R/tree-$k" "$R/build-$k" "$list" > "$R/build-$k.txt" 2>&1 || { echo "  build of old base + $done_sets failed"; ok=0; break; }
+      for p in "${dpk[@]}"; do
+        # (uc-build.sh delivers UCMenu.u unstripped, as it shipped: its text is the stage's text)
+        if [ "$p" = UCMenu ]; then DEC=$new_dec dec "$R/build-$k/System/UCMenu.u" --out "$st/$p/Classes" --shipped-text
+        else DEC=$new_dec dec "$R/build-$k/System/$p.u" --out "$st/$p/Classes"; fi > /dev/null 2>&1 || { echo "  decompile of stage $k/$p failed"; ok=0; }
+      done
+    done
+    [ $ok = 1 ] || { echo "FAIL rebase: stages"; fails=$((fails+1)); continue; }
+    if [ "$(cd "$pout" 2>/dev/null && pwd)" != "$(cd "$repo/patches" && pwd)" ]; then rm -rf "$pout"; cp -a "$repo/patches" "$pout"; fi
+    up rebase --new-base "$R/new-base" --stages "$R/stages" --sets "$CUR_SETS" --patches "$pout" || { echo "FAIL rebase: re-make"; fails=$((fails+1)); continue; }
+    up apply --base "$R/new-base" --default --out "$R/new-tree" --patches "$pout" || { echo "FAIL rebase: apply"; fails=$((fails+1)); continue; }
+    build "$R/new-tree" "$R/new-build" "$list" > "$R/new-build.txt" 2>&1 || { echo "FAIL rebase: build"; fails=$((fails+1)); continue; }
+    last=${sets[${#sets[@]}-1]}
+    bad=0
+    for p in "${pk[@]}"; do up compare "$R/new-build/System/$p.u" "$R/build-$last/System/$p.u" --report "$R/compare-$p.txt" | head -6 || bad=1; done
+    if [ $bad = 0 ]; then echo "PASS rebase: sets re-made in $pout; new base + sets builds the same as old base + sets"; else echo "FAIL rebase"; fails=$((fails+1)); fi
     ;;
   esac
 done

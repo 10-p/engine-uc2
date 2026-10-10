@@ -19,9 +19,11 @@ when a package loads); the patch sets are optional extras.
 2. **Apply.** `tools/scripts/uc-patches.py apply --base <base> --default --out <tree>` applies the sets in the
    order of `sets.txt`. A hunk must match its context exactly (no fuzz); if it does not, the command stops and
    says which hunk.
-3. **Build.** `tools/scripts/uc-build.sh --classes <tree> --packages GUI,UCGameplay,UCMenu --out <dir>` compiles
-   each package with the game's own script compiler (`ucc-bin make`) against your shipped packages and strips
-   the text as Epic did. The result is `<dir>/System/<Pkg>.u`.
+3. **Build.** `tools/scripts/uc-build.sh --classes <tree> --packages UCAnnouncements,UCGameplay,GUI,UCMenu
+   --keep UCGameplay,GUI,UCMenu --out <dir>` compiles each package with the game's own script compiler
+   (`ucc-bin make`) against your shipped packages and strips the text as Epic did. The result is
+   `<dir>/System/<Pkg>.u`. UCAnnouncements is compiled only so UCGameplay can be (the shipped one refers to
+   packages that come after it); `uc-patches.py packages --default --compile-list <System>` prints the list.
 
 `uc-patches.py packages --default` prints the packages the default sets rebuild. Those are the only packages that
 change: every other package stays the shipped one.

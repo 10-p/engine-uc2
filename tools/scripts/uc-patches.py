@@ -22,7 +22,8 @@ docs/porting/analysis/script-patches.md (T1); patches/README.md for users.
       --with-epic-only); with --compile-list also the packages that must be compiled first to build them
       against the shipped ones (see compile_list)
   uc-patches.py compare <a.u> <b.u> [--system-a <dir>] [--system-b <dir>]   P2: same content, index order aside
-  uc-patches.py rebase --old-base <tree> --new-base <tree> --built <dir> --sets ... (see `rebase` below)
+  uc-patches.py rebase --new-base <tree> --stages <dir> --sets ...   re-make every set against a new base (see
+      cmd_rebase; tools/scripts/uc-patches-proof.sh rebase drives it)
 
 Bytes in, bytes out: every file is read and written as Latin-1 bytes, lines split at LF only (0x02, 0x85 and CR
 bytes inside a line are line content), so a patch carries 0x02 glyph bytes unchanged.
@@ -194,11 +195,13 @@ def cmd_make(name, base, changed, packages, pdir):
         raise PatchError('classes removed in the changed tree (a set cannot delete a class): %s' % ', '.join(gone))
     sdir = os.path.join(pdir, name)
     os.makedirs(sdir, exist_ok=True)
+    # the set's files for the packages in scope are replaced; with --packages, the others are kept
     for f in os.listdir(sdir):
-        if f.endswith('.diff'):
+        if f.endswith('.diff') and (not packages or f[:-5] in packages):
             os.remove(os.path.join(sdir, f))
-    if os.path.isdir(os.path.join(sdir, 'new')):
-        shutil.rmtree(os.path.join(sdir, 'new'))
+    for pk in (os.listdir(os.path.join(sdir, 'new')) if os.path.isdir(os.path.join(sdir, 'new')) else []):
+        if not packages or pk in packages:
+            shutil.rmtree(os.path.join(sdir, 'new', pk))
     per_pkg = {}
     stats = []
     for rel in sorted(cf):
@@ -578,44 +581,58 @@ def main():
     raise PatchError('unknown command %s' % cmd)
 
 
-def cmd_rebase(a, pdir):
-    """rebase --old-base <tree> --new-base <tree> --stages <dir> --sets a,b,...
+def name_norm(t):
+    """A line with names lower-cased (outside string literals): an FName keeps the case of its first creation,
+    which depends on what was loaded before, so a package compiled here may spell `T_UI_2` as `t_ui_2`."""
+    return re.sub(r'"(?:[^"\\]|\\.)*"|[^"]+', lambda m: m.group(0) if m.group(0).startswith('"') else m.group(0).lower(), t)
 
-    When uc-decompile changes, the base text changes and the sets must be re-made against it. The stages folder
-    holds, for every set k of the list, <stages>/<k>/<Pkg>/Classes: the NEW decompiler's text of the packages built
-    from old-base + sets 1..k (tools/scripts/uc-patches-proof.sh rebase builds and decompiles them). Each set is
-    re-made as the difference between consecutive stages (the first against new-base), new classes kept as they
-    are. The proof that nothing moved is the build: the old and the new chains compile to the same content
-    (uc-patches.py compare, run by the proof script)."""
-    old, new, stages, sl = opt(a, '--old-base'), opt(a, '--new-base'), opt(a, '--stages'), opt(a, '--sets')
-    if a or not (old and new and stages and sl):
-        raise PatchError('usage: rebase --old-base <tree> --new-base <tree> --stages <dir> --sets a,b,...')
+
+def same_case(prev, stage):
+    """stage, with every line that differs from prev's line only in the case of names put back as prev has it
+    (rebase: a stage is decompiled from a package compiled here; the base from the shipped one)."""
+    out = []
+    sm = difflib.SequenceMatcher(None, prev, stage, autojunk=False)
+    for tag, a1, a2, b1, b2 in sm.get_opcodes():
+        if tag == 'replace' and a2 - a1 == b2 - b1:
+            out += [x if name_norm(x) == name_norm(y) else y for x, y in zip(prev[a1:a2], stage[b1:b2])]
+        else:
+            out += stage[b1:b2]
+    return out
+
+
+def cmd_rebase(a, pdir):
+    """rebase --new-base <tree> --stages <dir> --sets a,b,...
+
+    When uc-decompile changes, the base text changes and every set must be re-made against it. <stages>/<k>/ holds,
+    for each set k of the list (in order), the NEW decompiler's text of the packages compiled from the OLD base +
+    sets 1..k (tools/scripts/uc-patches-proof.sh rebase builds and decompiles them). Each set is re-made as the
+    difference between consecutive stages, the first against new-base. Only classes the new base has are taken
+    from a stage: classes a set adds (new/) are our own text and are carried over as they are. The proof that
+    nothing moved is the build (the proof script compares the new chain's build with the old chain's)."""
+    new, stages, sl = opt(a, '--new-base'), opt(a, '--stages'), opt(a, '--sets')
+    if a or not (new and stages and sl):
+        raise PatchError('usage: rebase --new-base <tree> --stages <dir> --sets a,b,...')
     sets = resolve_sets(pdir, sl.split(','), False)
-    prev = new
-    for s in sets:
-        st = os.path.join(stages, s.replace('/', '_'))
-        diffs, newcls = set_files(pdir, s)
-        keep = {rel: read_lines(p) for rel, p in newcls.items()}
-        changed = tempfile.mkdtemp(prefix='uc-rebase-')
-        try:
-            shutil.copytree(prev, os.path.join(changed, 't'))
+    base_classes = set(tree_files(new))
+    work = tempfile.mkdtemp(prefix='uc-rebase-')
+    try:
+        prev = new
+        for n, s in enumerate(sets):
+            st = os.path.join(stages, s.replace('/', '_'))
+            _, newcls = set_files(pdir, s)
+            keep = {rel: read_lines(p) for rel, p in newcls.items()}
+            cur = os.path.join(work, '%02d' % n)
+            shutil.copytree(prev, cur)
             for rel, p in tree_files(st).items():
-                if rel in keep:
-                    continue
-                write_lines(os.path.join(changed, 't', rel), read_lines(p))
+                if rel in base_classes and os.path.isdir(os.path.join(cur, rel.split('/')[0])):
+                    write_lines(os.path.join(cur, rel), same_case(read_lines(os.path.join(cur, rel)), read_lines(p)))
             for rel, lines in keep.items():
-                write_lines(os.path.join(changed, 't', rel), lines)
-            cmd_make(s, prev, os.path.join(changed, 't'), None, pdir)
-            nxt = tempfile.mkdtemp(prefix='uc-rebase-next-')
-            shutil.rmtree(nxt)
-            shutil.copytree(os.path.join(changed, 't'), nxt)
-        finally:
-            shutil.rmtree(changed)
-        if prev != new:
-            shutil.rmtree(prev)
-        prev = nxt
-    if prev != new:
-        shutil.rmtree(prev)
+                write_lines(os.path.join(cur, rel), lines)
+            # only the packages of the new base are re-made; a set's diffs for other packages are kept
+            cmd_make(s, prev, cur, sorted({r.split('/')[0] for r in base_classes}), pdir)
+            prev = cur
+    finally:
+        shutil.rmtree(work)
     return 0
 
 
