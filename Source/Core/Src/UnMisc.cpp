@@ -1867,8 +1867,18 @@ void FFileStream::Destroy()
 		Destroyed = 1;
 #ifndef _XBOX
 		debugf(TEXT("Waiting for file streaming thread to finish..."));
-		while (Destroyed == 1)
-			appSleep(1);
+		// uc2 port (D-1): bounded. A crash report runs appExit() on the thread that crashed or got the signal, which
+		// can be the file-stream thread itself (seen: a SIGTERM handled on it); it would wait here for ever for itself.
+		// Polled every 0.1 s as engine-ut2004's stream manager does (Epic's appSleep(1) made every exit take 1 s); the
+		// thread notices within 1 ms. If it has not finished after 5 s, its streams are left alone: it may still use them.
+		DOUBLE GiveUp = appSeconds() + 5.0;
+		while (Destroyed == 1 && appSeconds() < GiveUp)
+			appSleep(0.1f);
+		if (Destroyed == 1)
+		{
+			debugf(NAME_Warning, TEXT("File streaming thread did not finish in 5 s; not waiting for it."));
+			return;
+		}
 #endif
 		if ( Streams )
 		{
