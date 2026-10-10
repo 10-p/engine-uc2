@@ -11,7 +11,9 @@
 #                  view single-player, the same view as player 1 and as player 2 with 2, 3 and 4 players,
 #                  post-processing on/off, the HUD alone (TOGGLERENDERLEVEL); pictures with the dynamic gamma
 #                  ramps applied as the present pass applies them (test key ShotRamp); measured by g6-measure.py
-#          (default: input render menu)
+#          audio   Xvfb, audio to a .wav through OpenAL Soft's wave writer, the cue log (DevSound): player one's
+#                  weapon single-player and with four players, player three's with four: cue lines per shot
+#          (default: input render menu audio)
 #   G6_RES=1280x720   window size;   G6_OUT=<dir>  output (default <WorkUC2>/logs/g6)
 #
 # Every game run is one <WorkUC2>/bin/capped 2G run (CLAUDE.md). Settings go in with -ini: (no switches): the test
@@ -22,7 +24,7 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 tree=g6
 if [ $# -gt 0 ] && [ -d "$work/run/$1" ]; then tree=$1; shift; fi
-parts=${*:-input render menu}
+parts=${*:-input render menu audio}
 sys=$work/run/$tree/System
 out=${G6_OUT:-$work/logs/g6}
 res=${G6_RES:-1280x720}; W=${res%x*}; H=${res#*x}
@@ -35,7 +37,7 @@ mkdir -p "$out"
 run_game() {
   local name=$1 gpu=$2 secs=$3 url=$4 scen=$5; shift 5
   cp -f "$repo"/Engine/Config/*.ini "$sys/"
-  sed -i '/^Suppress=DevUI\r\?$/d; /^Suppress=DevGUI\r\?$/d; /^Suppress=DevSplitScreen\r\?$/d' "$sys/Default.ini"
+  sed -i '/^Suppress=DevUI\r\?$/d; /^Suppress=DevGUI\r\?$/d; /^Suppress=DevSplitScreen\r\?$/d; /^Suppress=DevSound\r\?$/d' "$sys/Default.ini"
   rm -f "$sys/Avaris.ini" "$sys/User.ini" "$sys"/Shot*.bmp "$out/$name".result* "$out/$name"-*.png
   rm -rf "$sys/Profiles" "$work/run/$tree/Save"/*.pro 2>/dev/null; mkdir -p "$sys/Profiles"
   local chan=$out/$name.channel; : > "$chan"
@@ -404,6 +406,32 @@ check menu-players-leave-back-to-one-viewport layout_ok('back') and VS['back'][0
 SCEN
 }
 
+# fire_seg <tag> <pad>: a log-marked segment in which only that pad fires, three times.
+fire_seg() {
+  cat <<SCEN
+sleep 1.5
+chan log g6audio $1 begin
+vprobe $1a
+SCEN
+  local i
+  for i in 1 2 3; do printf 'pad %s axis righttrigger 32767\nsleep 0.4\npad %s axis righttrigger 0\nsleep 1.2\n' "$2" "$2"; done
+  cat <<SCEN
+sleep 1
+vprobe $1b
+pyexec print('  shots', '$1', fired('$1a','$1b') if vsplit('$1a') else (V['$1b'][0]['shots'] - V['$1a'][0]['shots']) & 255)
+pyexec open('$out/g6-audio-shots.txt', 'a').write('$1 ' + str(fired('$1a','$1b')[$2] if vsplit('$1a') else (V['$1b'][0]['shots'] - V['$1a'][0]['shots']) & 255) + '\n')
+chan log g6audio $1 end
+SCEN
+}
+
+scen_audio() {
+  match_start
+  fire_seg single 0
+  join 1; join 2; join 3
+  fire_seg split4-p1 0
+  fire_seg split4-p3 2
+}
+
 for part in $parts; do
   scen=$(mktemp)
   case $part in
@@ -411,6 +439,33 @@ for part in $parts; do
     render) scen_render > "$scen"; run_game g6-render 1 480 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True
             python3 "$repo/tools/dev/g6/g6-measure.py" "$out" > "$out/g6-measure.txt" 2>&1; tail -n 30 "$out/g6-measure.txt";;
     menu)   scen_menu   > "$scen"; run_game g6-menu   0 420 "" "$scen";;
+    audio)  rm -f "$out/g6-audio-shots.txt" "$out/g6-audio.wav"
+            scen_audio  > "$scen"; run_game g6-audio  0 420 "DM-Deadbolt?NumBots=0" "$scen" "-ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=$out/g6-audio.wav"
+            python3 - "$out" <<'PY'
+import re, sys, os
+out = sys.argv[1]
+lines = open(os.path.join(out, 'g6-audio.out'), encoding='latin-1').read().split('\n')
+shots = dict(l.split() for l in open(os.path.join(out, 'g6-audio-shots.txt')) if l.strip())
+seg, counts = None, {}
+for l in lines:
+    m = re.search(r'test: log g6audio (\S+) (begin|end)', l)
+    if m:
+        seg = m.group(1) if m.group(2) == 'begin' else None
+        continue
+    if seg and re.search(r'Fire on \S+: played', l):
+        mode = '2D' if 'played 2D' in l else '3D'
+        counts.setdefault(seg, {}).setdefault(mode, 0)
+        counts[seg][mode] += 1
+fails = 0
+ratio = {}
+for seg in ['single', 'split4-p1', 'split4-p3']:
+    c = counts.get(seg, {}); n = int(shots.get(seg, '0')); total = sum(c.values())
+    ratio[seg] = total / n if n else None
+    print(f"audio {seg}: {n} shots, fire cues played {c} -> {ratio[seg]} per shot")
+ok = ratio['single'] and ratio['split4-p1'] == ratio['single'] and counts.get('split4-p1', {}).get('3D', 0) == 0 and counts.get('split4-p3', {}).get('3D', 0) == 0 and ratio['split4-p3']
+print(f"{'PASS' if ok else 'FAIL'} g6-audio-cues-once: player one's fire cue {ratio['split4-p1']} per shot with four players, {ratio['single']} alone; every shooter's cues 2D (its own viewer)")
+PY
+            ;;
     *) echo "unknown part $part" >&2;;
   esac
   cp "$scen" "$out/g6-$part.scen"; rm -f "$scen"
