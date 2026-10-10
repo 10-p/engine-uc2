@@ -218,3 +218,16 @@ shots, log, clean). One picture stays time-dependent and close to its threshold:
 5.718 against 6; the concussion blur fades with the level time since BlurMe: `UUCScreenBlur::PostRender` BlurTime,
 which MaterialTime does not pin). Not one of the task's two FAILs; noted for the coordinator (a fix would pin the
 blur's remaining time, e.g. a longer BlurTime or a shot keyed to it).
+
+## Step 15: the browser spec (D-4 2), status
+
+- The spec's OWN code, extracted from the file and run under Node on the a19b browser trace
+  (`logs/d34/jit/spec-measure-check.cjs`): unpatched (the frontend's `uc2` 1fdc55d) fwd/back/right/left b = -0.000 /
+  0.001 / **0.217 FAIL** / -0.039 (exactly a19b's numbers); patched (`frontend-jitter-spec.patch`) -0.000 / 0.001 /
+  **-0.000** / -0.000, judder 0.66 / 0.31 / 0.45 / 0.50 px: all ok.
+- Live runs: the wasm of fc4d7c4 (sha256 `fa492eed...48b7d0342`, built -j2, `logs/d34/wasm-sha256.txt`) is in
+  `run/d34-ufrontend/serve-web`. Two attempts at 02:35 were stopped by the harness's own guard in 15 s (machine-wide
+  17 GB budget, 16.5 GB already in use at the start: no test result). Since then the machine has had 15 GB available
+  (16 GB in use) at every check; the largest user is the desktop's `missioncenter` (8.7 GB RSS, not ours), so a
+  browser run (+3 GB) cannot start under the 17 GB budget. `logs/d34/final-runs.sh` keeps waiting (load < 16, >= 19 GB
+  available, no other harness) and logs to `logs/d34/quiet-runs.txt`.
