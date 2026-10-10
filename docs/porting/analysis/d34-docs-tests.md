@@ -168,3 +168,9 @@ difference is ONE frame of running (the stick is held 1.0 s of wall clock = 30 o
 units), whichever is larger (commit e935d29); run 1's numbers pass under it; runs 2 and 3 ran with it (3.0 and 0.1
 units). Every other number is identical in all three runs (the lock offsets exactly). The arrow-strafe checks
 (`look-` and `vanilla-right-arrow-strafes-and-never-turns`) passed 6 of 6.
+
+## Step 11: m7-effects self-test (quiet; `logs/d34/m7-selftest-{1,2}.txt`)
+
+Tree `run/d34-m7new` made fresh and `logs/d34-m7new` removed first (the brand-new-tree case): run 1 `fx selftest
+summary: 15 passed, 0 failed` (57 s; `run-uc2-shot: exit 0`, the game ended itself: `appRequestExit(0)` from the
+`@54:exit`; nothing left running); run 2 the same (58 s).
