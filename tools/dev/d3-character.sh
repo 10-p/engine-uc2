@@ -12,9 +12,9 @@
 # one PASS/FAIL line per check on stdout.
 #
 #   c0   fresh tree, NO profile, direct DM-Deadbolt with -ini:User:[DefaultPlayer]:Class=<Z> (Malcolm): plays Z.
-#   c1   menus: create profile "Alpha" (on-screen keyboard), Instant Action, one Right on the character page (X), play.
+#   c1   menus: create profile "Alpha" (on-screen keyboard), Instant Action, two Rights on the character page (X), play.
 #   c1m  direct: plays X (Alpha's).                       User.ini [DefaultPlayer] Class stays Z after c1 and c1m.
-#   c2   menus: starts in Alpha; create "Bravo", Instant Action, two Rights on the character page (Y), play.
+#   c2   menus: starts in Alpha; create "Bravo", Instant Action, three Rights on the character page (Y), play.
 #   c2m  direct: plays Y (Bravo's).
 #   c3   menus: starts in Bravo; select Alpha on the Profiles page; quit WITHOUT playing (the BLOCKERS case: before
 #        G-7 the next direct launch took [DefaultPlayer] Class, the class of the last map played = Bravo's).
@@ -53,8 +53,8 @@ run() {  # run <name> <seconds> [uc2.bin args...]  (scenario in $out/<name>.scen
 }
 
 # A direct start into DM-Deadbolt: wait for the match, ask who plays whom.
-direct_scen() {
-  cat <<'SCEN'
+direct_scen() {  # direct_scen <run>
+  cat <<SCEN
 wait Bringing Level DM-Deadbolt.MyLevel up for play 120
 sleep 6
 focus
@@ -63,6 +63,7 @@ wait PlayerProfile Package.PlayerProfile.ProfileName = 10
 key Alt_L 0.2
 sleep 4
 probe spawn
+check $1-match-started P['spawn'].pawn==1 and P['spawn'].level=='DM-Deadbolt'
 chan exec getall PlayerController PawnClass
 wait PawnClass = 10
 chan exec getall PlayerReplicationInfo PlayerName
@@ -71,7 +72,7 @@ SCEN
 }
 direct() {  # direct <run> [uc2.bin args...]
   local n=$1; shift
-  direct_scen > "$out/$n.scen"
+  direct_scen "$n" > "$out/$n.scen"
   M10_URL=DM-Deadbolt run "$n" 200 "$@"
 }
 
@@ -123,7 +124,7 @@ key Return
 sleep 2
 key Return
 expect $1-launch-confirm-opens OpenMenu \[UCMenu.ConfirmLaunchMenu\] 15
-sleep 1.5
+sleep 3
 key Return
 expect $1-deadbolt-up Bringing Level DM-Deadbolt.MyLevel up for play 120
 sleep 6
@@ -171,7 +172,7 @@ check c0-no-profile-class-line bash -c "! grep -a -q 'logs in with' '$out/c0.out
 check c0-user-ini-class bash -c "[ '$(ini DefaultPlayer Class)' = '$Z' ] && echo '[DefaultPlayer] Class=$(ini DefaultPlayer Class)'"
 
 # --- c1: profile Alpha, character X ------------------------------------------------------------------------------
-{ at_start c1; to_profiles c1; new_profile c1 Alpha 1; play_with c1 1; } > "$out/c1.scen"
+{ at_start c1; to_profiles c1; new_profile c1 Alpha 1; play_with c1 2; } > "$out/c1.scen"
 run c1 420
 X=$(profchar c1)
 check c1-alpha-has-a-character-of-its-own bash -c "[ -n '$X' ] && [ '$X' != '$Z' ] && echo 'X=$X'"
@@ -179,21 +180,21 @@ check c1-menu-launch-plays-x bash -c "[ '$(pawnclass c1)' = '$X' ] && echo 'Pawn
 check c1-user-ini-class-kept bash -c "[ '$(ini DefaultPlayer Class)' = '$Z' ] && echo '[DefaultPlayer] Class=$(ini DefaultPlayer Class)'"
 
 direct c1m
-check c1m-alpha-active bash -c "[ '$(active_first c1m)' = Alpha ]"
+check c1m-alpha-active bash -c "[ '$(active_first c1m)' = Alpha ] && echo Alpha"
 check c1m-plays-x bash -c "[ '$(pawnclass c1m)' = '$X' ] && echo 'PawnClass $(pawnclass c1m)'"
 check c1m-engine-line grep -a -m1 "Profiles: profile \"Alpha\" logs in with Class=$X" "$out/c1m.out"
 check c1m-user-ini-class-kept bash -c "[ '$(ini DefaultPlayer Class)' = '$Z' ] && echo '[DefaultPlayer] Class=$(ini DefaultPlayer Class)'"
 
 # --- c2: profile Bravo, character Y ------------------------------------------------------------------------------
-{ at_start c2; to_profiles c2; new_profile c2 Bravo 0; play_with c2 2; } > "$out/c2.scen"
+{ at_start c2; to_profiles c2; new_profile c2 Bravo 0; play_with c2 3; } > "$out/c2.scen"
 run c2 420
 Y=$(profchar c2)
-check c2-started-in-alpha bash -c "[ '$(active_first c2)' = Alpha ]"
+check c2-started-in-alpha bash -c "[ '$(active_first c2)' = Alpha ] && echo Alpha"
 check c2-bravo-has-another-character bash -c "[ -n '$Y' ] && [ '$Y' != '$X' ] && [ '$Y' != '$Z' ] && echo 'Y=$Y'"
 check c2-menu-launch-plays-y bash -c "[ '$(pawnclass c2)' = '$Y' ] && echo 'PawnClass $(pawnclass c2)'"
 
 direct c2m
-check c2m-bravo-active bash -c "[ '$(active_first c2m)' = Bravo ]"
+check c2m-bravo-active bash -c "[ '$(active_first c2m)' = Bravo ] && echo Bravo"
 check c2m-plays-y bash -c "[ '$(pawnclass c2m)' = '$Y' ] && echo 'PawnClass $(pawnclass c2m)'"
 
 # --- c3: switch to Alpha at the menus, quit without playing; c3m: direct -----------------------------------------
@@ -214,11 +215,11 @@ sleep 2
 SCEN
 } > "$out/c3.scen"
 run c3 240
-check c3-started-in-bravo bash -c "[ '$(active_first c3)' = Bravo ]"
+check c3-started-in-bravo bash -c "[ '$(active_first c3)' = Bravo ] && echo Bravo"
 check c3-user-ini-alpha bash -c "[ '$(ini Profiles LastProfile)' = Alpha ] && echo 'LastProfile=Alpha, [DefaultPlayer] Class=$(ini DefaultPlayer Class)'"
 
 direct c3m
-check c3m-alpha-active bash -c "[ '$(active_first c3m)' = Alpha ]"
+check c3m-alpha-active bash -c "[ '$(active_first c3m)' = Alpha ] && echo Alpha"
 check c3m-plays-x-not-y bash -c "[ '$(pawnclass c3m)' = '$X' ] && echo 'PawnClass $(pawnclass c3m) (X=$X, Y=$Y)'"
 
 # --- c4m: no profile at all ----------------------------------------------------------------------------------------

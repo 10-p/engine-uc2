@@ -453,3 +453,26 @@ Part B. Where the class of a launch comes from:
   = Y, c3/c3m switch to Alpha at the menus without playing then a direct launch = X, c4m no profile = Z, c5m the flat
   files moved/deleted). `tools/dev/c1-web-saves.sh`: Epic's layout, and the frontend's folder glob
   (`C1_UFRONT_GLUE=<ufrontend-profiles>/packages/glue/src/target/user-files.js`).
+
+### Step G7-2: builds; d3-character run 1 (under load); c1-web-saves under Node
+
+- Builds: native `bin/capped 6G 5400 -- cmake --preset native && cmake --build build-native -j4` rc 0, 0 `error:`
+  (`logs/g7/build-native-1.log`); wasm-perf started at -j4, stopped and resumed at -j2 when the coordinator set the
+  load rule (`build-wasm-perf-1.log` rc 143 = my stop, `build-wasm-perf-2.log` rc 0, 0 errors). SDLLaunch.wasm sha256
+  `7c2440eb...f6b1` (`logs/g7/wasm-sha256.txt`).
+- `tools/dev/c1-web-saves.sh` (tree g7w = native + wasm-perf, `C1_UFRONT_GLUE=<ufrontend-profiles>`): **ALL PASS**
+  (16): the wasm build writes `Profiles/WebProf/AVARIS_PROFILE.PRO` (no flat file), native writes the same path with
+  the same 845 bytes, each loads the other's, delete removes the folder, the frontend's compiler accepts
+  `System/Profiles/*/AVARIS_PROFILE.PRO` and it matches the nested path and not the flat one (`logs/g7/c1-web-saves-run1.txt`).
+- `tools/dev/d3-character.sh` run 1 (load 16-30; `logs/g7/d3-character-run1.txt`): 9 FAIL, all from the test, not
+  the engine: (a) the direct scenarios had no check of their own (`grep -c PASS` = 0 counted as a failure): each now
+  checks the match started; (b) one Right on the character page left Alpha on the default (Anubis: the first key
+  went to the page's focus), so X = Anubis; (c) in c2 the launch confirmation's Return was lost (no DM-Deadbolt), so
+  Bravo's character change was never saved (the profile is saved with the match): c2m then logged `profile "Bravo"
+  logs in with Class=UCCharacters.UCPawn_Nakhti_Anubis` = Bravo's SAVED character, correct, but not Y. Fixed: two
+  Rights for Alpha, three for Bravo, 3 s before the confirmation's Return.
+  What run 1 already shows (measured, to be repeated on a quiet machine): c0 no profile + ini Malcolm plays Malcolm;
+  c1m Alpha plays Alpha's Anubis with `URL had Class=...Malcolm` (the fix at work); c3 (Bravo -> Alpha at the menus,
+  no match) then c3m plays Alpha's Anubis; c4m (Profiles removed) plays the ini's Malcolm; `[DefaultPlayer] Class`
+  stayed Malcolm through every profile session; c5m: `Alpha.PRO moved into Epic's folder`, `Bravo.PRO deleted (Epic's
+  folder exists)`, started in Alpha, both folder files byte-identical to the saved copies, no flat file left.
