@@ -122,3 +122,17 @@ the 4-byte padding, which PIL rejects at widths like 2285. Epic's defect, harmle
 copy equals the back buffer (mean |diff| 0.39 of 255 against the main colour downsized, alpha 0 like the back
 buffer). Post-processing on minus off at the owner's view: twin 0.83, desktop 0.88 mean |diff| (`df-*-ab-fix-on/nopp`),
 and desktop vs twin with it on: 0.33: the glow and bloom contribute the same on both bindings.
+
+### Step 3 (14:15-15:20): regressions, part 1 (machine load 15-20 from another agent's llvmpipe runs)
+
+- Builds of `1f351a8`+: native (`logs/b2/build-native.log`, exit 0), windows (`build-windows.log`, exit 0; the only
+  warnings in the touched headers are the pre-existing `UC2GLRenderDevice.h:70` -Wwrite-strings), wasm-perf
+  (`build-wasm-perf.log`, exit 0; `SDLLaunch.wasm` sha256 `e1b2b839...afbc9`). All inside `bin/capped 6G`.
+- `tools/dev/m7-effects.sh b2`, desktop binding: first with `UC2_BIN=uc2-before.bin` (main's driver;
+  `logs/b2/m7-before.txt`), its B pictures installed as `fx-*-b.ref.png`, then the fixed `uc2.bin`
+  (`m7-after.txt`). Self-test 15 / 15 both. Every effect: critical 0, GL errors 0, programs failed 0+0; B against
+  main's B: bloom 0.29, blur 3.53, berserk 0.47, liandri 0.73, pause 0.25, radial 0.81, dyngamma 1.80, dof-alpha 0.54,
+  azure 0.60, octane 0.73, decay 1.12, undertow 0.18, recoil 0.31, praxis-panes 0.53 (mean of 255; animated pawn,
+  pickups and timing: blur and dyngamma are the timing-sensitive ones the report lists); praxis A against the wine
+  reference 2.34 (before 2.56; limit 8). One `left_behind=1` (berserk) was the next run's process starting under load.
+  Strict desktop identity is the pp-scale `identity` check below.
