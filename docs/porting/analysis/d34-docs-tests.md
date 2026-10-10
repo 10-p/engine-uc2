@@ -36,3 +36,63 @@ Proof: `report-appendices.py 4813dd9` is byte-identical to the appendices in REP
   migration), `branding/help.md`, `branding/portal-notes.json`, `target.json`'s two comments (WebGL 1,
   -nopostprocess); `docs/migration/STATE.md` gets a new top entry (written at the end of D-4).
 - O-3 entry for the coordinator: `logs/d34/log-o3.md`.
+
+## Step 3: d6-mouse.sh pinned (D-4 1), commits b9904f0, 3d343c1
+
+`place <probe> <check> [spot]` in `tools/dev/d6-mouse.sh`: TELEPORT twice (as jit-trace.sh places), then a check that
+the pawn is there. Used before the arrow-strafe keys of `look` and `vanilla`, at the start of `lazy` (its camera
+measure depends on walls) and at the start and before the adhesion part of `lock`. `pad` (NETPLACE) and `walk`
+(TELEPORT) already placed. The open spot is jit-trace.sh's `1977.8 583.7 -34.1 33000 -1400` (D6_SPOT).
+
+Found in run 1: at that spot the lock's pull-back never happens (`lock-offset-after-mouse-and-1s-later` 1799 ->
+1799). The table of every earlier lock run (spawn -> offset after the mouse stops and 1 s later):
+
+| spawn (PlayerStart) | runs | offsets | pull-back |
+|---|---|---|---|
+| 1977.8 583.7 -34.1 yaw 33000 | f1/s1-van0, jit/d6, d9/reg/d6-lock2, d34/d6-1 | 7->7, 1753->1753 (x2), 1799->1799 | never |
+| -2367.6 3733.8 -482.1 yaw 48624 | f1/s2-d6, d9/reg/d6, d6/mouse | 1773->1757 (x3) | 16 < 50: FAIL |
+| 1025.2 1698.1 -528.2 yaw -43424 | jit/d6-lock-jit-main, d9/reg/d6-lock-base1 | 2021->1742 (x2) | 279, all 12 checks PASS both |
+| 1229.6 -672.9 -130.1 yaw 40448 | jit/d6-lock-jit-fix, d9/reg/d6-lock-base2 | 1891->1813 (x2) | 78 (one run failed adhesion) |
+| others (5 spawns) | | | 230-808 |
+
+So the "spawn-dependent lock check" was two PlayerStarts where the pull-back cannot be seen. `lock` now starts at
+`LOCK_SPOT` = `1025.2 1698.1 -528.2 22112 0` (D6_LOCK_SPOT). Runs: `logs/d34/d6-3x.sh` (look vanilla lock lazy pad
+walk, three times; run 1's lock still at the open spot), results below.
+
+## Step 4: m7-effects.sh self-test (D-4 3), commit b9904f0
+
+- `mkdir -p "$out"` before the self-test's report redirect (the shell opened `fx-selftest.report` before
+  run-uc2-shot.sh made the folder: "FAILED to run" on a brand-new tree).
+- The 60 s window: `Exec=44:POSTSELFTEST` is 44 s after the FIRST FRAME, the 60 s limit is wall-clock from the launch,
+  so any start-up slower than 16 s lost the self-test. Now `Exec=44:POSTSELFTEST@54:exit` with a 220 s limit (as
+  m11-twin.sh's own self-test): the game ends itself 10 s after the self-test; the limit only stops a hang.
+
+## Step 5: the twin's two timing FAILs (D-4 4), commit b9904f0
+
+- Liandri: the "random" noise is three TexPanners (`UCScreenLiandri` Noise1-3 = `T_HUD.HUD_LI_Static_Pan01/02`,
+  `HUD_LI_Lines_Pan`): no random numbers, the pan offset is `Level->TimeSeconds x PanRate` of the shot's frame,
+  different in every run (desktop vs twin mean 4.4-9.3 of 255 against a threshold of 6; the diff picture is the noise
+  bands). A seed cannot fix it. New GL test key `MaterialTime=<s>` (`UC2GLRenderInterface.h` `UC2GLMaterialTime`,
+  read in Init, -1 = off): texture modifiers, constant colours and PreSetMaterial see that time instead of the level's.
+  `m7-effects.sh` liandri passes `MaterialTime=100`.
+- Menu movie: the a19 FAIL had the title and list changing between the two shots (26 s and 28 s after the first frame:
+  PSNR 28.7 / 26.6 dB): the page was still changing at those wall-clock times on a loaded machine. New test key
+  `[UC2Movie] MaterialShotTimes=<s>,...` (`Engine/Src/UnMovie.cpp`): SHOT when the first MovieMaterial with a picture
+  passes those movie times; `m9-movies.py --menu-args` default `MaterialShotTimes=3,5` (2 s apart, 3 s after the
+  page opened, on any machine).
+
+## Step 6: the browser strafe slope (D-4 2): measurement, found
+
+The a19b browser trace survived in the frontend's test-results (`logs/d34/jit/a19b-browser-trace.log`, 306 lines).
+`jit-analyze.py` on it: b = -0.000 / 0.001 / -0.000 / -0.000 (fwd/back/right/left), residual 0.00-0.01. The spec on
+the same frames: 0.000 / 0.001 / **0.217** / -0.039. The difference: the spec fits the pawn alone
+(`ys.push(pawn - cam ...)`, its parse does not even keep `bob=`), jit-analyze.py fits pawn + WalkBob, the point the
+camera's target follows. Along the velocity the bob is 0 on forward/back and +-3.4 units on strafes (measured on these
+frames), about 1.7 cycles in a 1.3 s segment, so its phase correlates with the frame times by chance: any sign, any
+size (0.217, 0.247, -0.039). Not a per-frame dependency on the web: the drawn pawn + bob stands within 0.02-0.03 px of
+one spot with the bob removed (nobob judder), as natively. The browser frame-time spikes are not the cause either
+(the 0.247 run had no frame above 29 ms).
+- `tools/dev/jit-analyze.py`: the reason written in its docstring; `ahead_nobob` (the fit without the bob) printed
+  for comparison only.
+- The spec's fix (frontend; patch only): `logs/d34/frontend-jitter-spec.patch` (parse `bob`, fit pawn + bob). To be
+  run twice from a scratch copy of the frontend with this worktree's wasm-perf (no write in the frontend checkout).
