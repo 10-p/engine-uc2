@@ -182,6 +182,8 @@ ENGINE_API UBOOL UC2ProfileNamesThePlayer( UClient* Client )
 	(PlayerProfile.GetURL: "?Class=<class>", the variant rule included). Without a
 	saved profile nothing changes: [DefaultPlayer] Class (and the URL) decide. A
 	ladder rung still names its own character (UCDeathMatch.GetPlayerClassName).
+	A network join gets the same in UGameEngine::Browse (the URL UNetPendingLevel sends
+	with LOGIN), so a join from the command line logs in as the profile too.
 -----------------------------------------------------------------------------*/
 
 #pragma pack(push,4)	// as the generated _Parms structs (EngineClasses.h)

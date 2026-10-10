@@ -1492,6 +1492,11 @@ UBOOL UGameEngine::Browse( FURL URL, const TMap<FString,FString>* TravelInfo, FS
 		// please document why
 		if ( PrimaryViewport && PrimaryViewport->TravelType != TRAVEL_Absolute  )
 			PrimaryViewport->InitializeURL(URL);
+		// uc2 port (G-7): a join logs in as the active saved profile (its name and character), as a local map does
+		// in MatchViewportsToActors: a join from the command line (`<host>[:<port>]`, the web's `<room>?connect`) is
+		// an absolute travel and carried only User.ini [DefaultPlayer]. The URL is what UNetPendingLevel sends as
+		// the LOGIN's URL= (UnPenLev.cpp). UC2Profiles.cpp.
+		UC2ProfileInURL( PrimaryViewport, URL );
 
 		GPendingLevel = new UNetPendingLevel( this, URL );
 		if( !GPendingLevel->NetDriver )

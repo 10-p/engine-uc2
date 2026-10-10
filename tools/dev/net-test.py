@@ -13,6 +13,7 @@ Each client and the listen server has its own Xvfb display (xvfb-run -a), so a v
 which window has the focus. Results: one "PASS|FAIL <check>.<item>: <details>" line per item on stdout and in
 <out>/net-summary.txt; logs as <out>/<check>-<proc>.log/.out. Decided by log lines and probe values only.
 """
+import shutil
 import math, os, re, signal, subprocess, sys, time
 
 SYS, OUT = sys.argv[1], sys.argv[2]
@@ -640,6 +641,47 @@ def check_listen():
         finish(ck, procs, allow_invalid_class=1)
 
 
+def check_profile_login():
+    """G-7: a client that joins from the command line (127.0.0.1:<port>?Name=NetB) with a saved profile active logs in
+    as the profile: the listen server's PlayerReplicationInfo is named after the profile and has its character, not
+    the URL's Name and the ini's [DefaultPlayer] Class. The profile is made first with `ucc-bin profiletest make`
+    (a new player's default profile + Character=) in the shared System/Profiles; only the client remembers it
+    (-ini:User:[Profiles]:LastProfile=, its own NetBUser.ini), so the listen host NetL plays without a profile."""
+    ck = "profile-login"
+    prof, char, inichar = "NetProf", "UCCharacters.UCPawn_Human_Sapphire", "UCCharacters.UCPawn_Human_Malcolm"
+    shutil.rmtree(os.path.join(SYS, "Profiles", prof), ignore_errors=True)
+    mk = subprocess.run(["./ucc-bin", "profiletest", "make", prof, os.path.join(OUT, ck + "-make.txt"),
+                         "Character=" + char], cwd=SYS, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    made = os.path.exists(os.path.join(SYS, "Profiles", prof, "AVARIS_PROFILE.PRO"))
+    result(mk.returncode == 0 and made, ck + ".made", "ucc-bin profiletest make %s Character=%s: rc %d, file %s"
+           % (prof, char, mk.returncode, made))
+    l = Proc(ck, "L", "listen", "DM-Deadbolt?Listen?Name=NetL").start()
+    procs = [l]
+    try:
+        l.wait(r"TcpNetDriver on port|Listen", 90)
+        b = client(ck, "NetB", extra=["-ini:User:[Profiles]:LastProfile=" + prof,
+                                       "-ini:User:[DefaultPlayer]:Class=" + inichar])
+        procs.append(b)
+        st = b.wait(r'Profiles: started with the last profile "%s"' % prof, 60, from_start=True)
+        result(bool(st), ck + ".client-in-profile", st.group(0) if st else "the client did not start in " + prof)
+        lg = b.wait(r'Profiles: profile "%s" logs in with Class=(\S+) \(URL had Class=(\S*)\)' % prof, 60, from_start=True)
+        result(bool(lg) and lg.group(1) == char, ck + ".client-url", lg.group(0) if lg else "no 'logs in with' line on the client")
+        j = l.wait(r"Join succeeded: (\S+)", 60)
+        result(bool(j) and j.group(1) == prof, ck + ".join-name", "listen server: %s" % (j.group(0) if j else "no join in 60 s"))
+        pl, pb = spawn_all([l, b], "spawn")
+        lp = l.probe("PL")
+        pri = lp["pris"].get(prof) if lp else None
+        result(bool(pri) and pri.get("pawnclass", "").endswith(char), ck + ".server-pri",
+               "listen server's PRI for the client: %s" % (pri if pri else "none named %s (have %s)" % (prof, list(lp["pris"]) if lp else "no probe")))
+        pw = pawn_of(lp, prof)
+        result(bool(pw) and pw.get("class", "").endswith(char.split(".")[-1]), ck + ".server-pawn",
+               "listen server's pawn for the client: %s" % pw)
+        result("NetB" not in (lp["pris"] if lp else {}), ck + ".not-url-name", "no PRI named NetB (the URL's Name)")
+    finally:
+        finish(ck, procs, allow_invalid_class=1)
+        shutil.rmtree(os.path.join(SYS, "Profiles", prof), ignore_errors=True)
+
+
 def check_travel():
     ck = "travel"
     s = server(ck)
@@ -1021,6 +1063,7 @@ def check_cheats():
 
 
 ALL = {"cheats": check_cheats, "dedicated1": check_dedicated1, "dedicated2": check_dedicated2, "listen": check_listen,
+       "profile-login": check_profile_login,
        "travel": check_travel, "disconnect": check_disconnect, "soak": check_soak, "lag": check_lag,
        "glshot": check_glshot, "wine": check_wine,
        "handshake-loss": check_handshake_loss, "handshake-compat": lambda: check_handshake_loss(True)}
