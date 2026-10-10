@@ -40,6 +40,7 @@ def praxis():
     font = ImageFont.truetype(FONT, 16)
     tiles = []
     for label, d in runs:
+        fails_before = fails
         q, qnc = img(d, 'q'), img(d, 'qnc')
         if q is None or qnc is None:
             print(f'{label}: q/qnc missing'); fails += 1; continue
@@ -68,6 +69,9 @@ def praxis():
             ok = all(n < 60 for _, n, _ in leak)
             fails += not ok
             print(f"{'PASS' if ok else 'FAIL'} {label}-xbox-four-player-detail-has-no-coronas: {[n for _, n, _ in leak]} px")
+        if 'before' in label and fails > fails_before:
+            print(f'INFO {label}: {fails - fails_before} failed, expected (a run before a fix, shown for comparison; not counted)')
+            fails = fails_before
         qd, sd = img(d, 'qd'), img(d, 'sd')
         if qd is not None and sd is not None:
             qq = qd.crop((0, 0, W // 2, H // 2))

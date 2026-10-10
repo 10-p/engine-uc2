@@ -818,6 +818,7 @@ FDynamicActor::FDynamicActor(AActor* InActor)
 	ActorLights = NULL;
 	ActorProjectors = NULL;
 	LastLightUpdateTime = 0.f;
+	LastProjectorGeneration = GProjectorRenderInfoGeneration;
 
 	if( Actor->DrawType == DT_StaticProjectorBatch )
 	{
@@ -2885,13 +2886,15 @@ void FActorSceneNode::Render(FRenderInterface* RI)
 	// Find lights that affect this actor.
 	if( !bShadowScene && 
 		Viewport->IsLit() && 
-		DynamicActor->LastLightUpdateTime != RenderActor->Level->TimeSeconds )
+		( DynamicActor->LastLightUpdateTime != RenderActor->Level->TimeSeconds
+		||	DynamicActor->LastProjectorGeneration != GProjectorRenderInfoGeneration ) )	// uc2 port (G-9): UnProjector.h
 	{
 		// need to update these
 		DynamicActor->EmptyLights();
 		DynamicActor->EmptyProjectors();
 		// set cur time since it is updating
 		DynamicActor->LastLightUpdateTime = RenderActor->Level->TimeSeconds;
+		DynamicActor->LastProjectorGeneration = GProjectorRenderInfoGeneration;
 
 		FDynamicLight*	Consider[256];
 		INT				NumConsider = 0;

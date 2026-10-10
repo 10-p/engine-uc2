@@ -596,3 +596,42 @@ ports [0, 1], both views with their own rectangle and split HUD; keys W S A D: t
 Final run on the binary with the corona fix (`logs/g9/final`, load 15.7 at start, 22 by the end: my own windows build
 ran meanwhile): `PASS g9-kbplayer (34 checks)`, `PASS g9-kbmenu (11 checks)`; G-6's model (`KeyboardIsPlayer=False`):
 `PASS g6-input (39 checks)`, `PASS g6-menu (9 checks)`.
+
+### G-9 step 2b - a crash at full detail with four players: Scion's per-tick projector cache
+
+`logs/g9/final/g6-render.out` (binary cf60be5f: steps 2 and 3 plus the corona fix, full detail): SIGSEGV in
+`RenderStaticMesh` (`UnRenderStaticMesh.cpp:1067`, `ProjectorInfo->Projector->bProjectStaticMesh` of the "dynamic
+projectors hitting the static mesh" loop; addr2line on the build's uc2.bin) during the four-player shots, right after
+a POSTPROCESS toggle, time frozen (`TimeDilation 0.0001`). render-full (the same code without the corona fix) had
+passed the same scenario: intermittent.
+
+Cause (read, Epic's shared code): `FDynamicActor` caches the projectors that hit it (`ActorProjectors`: raw pointers,
+no reference held) and rebuilds the list only when `Level->TimeSeconds` changed since the last build (Scion's "only
+update its lighting once per frame": `UnRenderVisibility.cpp` RenderActor and `UnRender.cpp` FActorSceneNode::Render).
+`AProjector::Detach` (a pawn's shadow projector re-attaches as the pawn animates) sets the info's `Projector=NULL`,
+`Expires=now` and drops its reference; the level's list drops the info in the next visibility pass, after which it is
+deleted. With `TimeDilation 0.0001` at TimeSeconds ~100 the tick (16 ms x 0.0001) is below the float's resolution, so
+TimeSeconds stands still and the cached lists live on across ticks: `RenderStaticMesh` then calls `Render()` on an
+info it holds no reference to (which removes someone else's reference when it has expired) or on a deleted one. The
+Xbox's four-player detail had projectors off (`SSDetailLevels`), so its four-player frames never had shadow projectors
+to cache; with full detail they do (four pawns, four views).
+
+Fix (`UnProjector.h`/`.cpp`, `UnRender.h`/`.cpp`, `UnRenderVisibility.cpp`): `GProjectorRenderInfoGeneration`, bumped
+by `AProjector::Detach`, `AProjector::Abandon` and `~FProjectorRenderInfo`; an `FDynamicActor` remembers the value its
+`ActorProjectors` was built with (`LastProjectorGeneration`) and rebuilds when it changed, as when TimeSeconds
+changed. In normal play nothing changes: TimeSeconds moves every tick, so the lists were rebuilt every tick anyway, and
+a detach happens in a tick, not between the views of one frame.
+
+Corona proof after the corona fix (binary 00fd3b32, which also has this fix; `logs/g9/detail2-full`, `detail2-xbox`,
+sheet `logs/g9/detail-praxis.png`, `logs/g9/detail-praxis.txt`): corona pixels per quadrant / the single player at the
+same spot: full detail P1 2,077 / 2,086 (player one sees its coronas), P2 11 / 144, P3 10 / 85, P4 14 / 4 (no corona
+from another view); Xbox detail 2 / 2,256, 8 / 102, 8 / 73, 21 / 34 (no coronas at four players, Epic's level 3);
+before the fix P2 3,329 / 44. `PASS g9-detail-praxis` (the before-fix run reported, not counted). Decals and
+projectors: the log line says they are on at four players with full detail and off with the Xbox's; the pictures did
+not show them apart (three Nakhti shots at the floor in front, PD, left no decal I can see in either; the pawn's shadow
+is not separable at that size): **seen only as settings**, not numerically checked. That four-player frames now carry
+shadow projectors is what step 2b's crash showed. Harness note: in these four-player runs one player was sometimes
+dead in the frozen frame (a frag at spawn; "You are dead" scoreboard in its quadrant), which only touches the P3/P4
+baselines. Single-player shot of `render`/`fov` (n1): in 2 of 5 runs the frozen frame showed a first-person view with
+no pawn or the old place (render-xbox, final2: every same-view check then fails at ~16-17); the frame was frozen 2 s
+after the second placement, soon after the spawn's teleport-in; the scenario now waits 5 s.

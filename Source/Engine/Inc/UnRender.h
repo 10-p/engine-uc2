@@ -423,6 +423,7 @@ public:
 	FLightList*	ActorLights;
 	FProjectorList*	ActorProjectors;
 	FLOAT	LastLightUpdateTime;
+	DWORD	LastProjectorGeneration;	// uc2 port (G-9): GProjectorRenderInfoGeneration when ActorProjectors was built
 
 	// scion sz - deferred rendering flags used depending on current FSceneNode::TFilterMode state
 	EPostProcessMaterialType IsPostProcess;

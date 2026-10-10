@@ -319,7 +319,7 @@ vprobe _p
 pyexec chan('exec NETPLACE ' + V['_p'][0]['player'] + ' $SPOT_A')
 sleep 2
 pyexec chan('exec NETPLACE ' + V['_p'][0]['player'] + ' $SPOT_A')
-sleep 2
+sleep 5
 chan exec set LevelInfo TimeDilation 0.0001
 SCEN
   shots n1
@@ -369,7 +369,7 @@ vprobe _p
 pyexec chan('exec NETPLACE ' + V['_p'][0]['player'] + ' $SPOT_A')
 sleep 2
 pyexec chan('exec NETPLACE ' + V['_p'][0]['player'] + ' $SPOT_A')
-sleep 2
+sleep 5
 chan exec set LevelInfo TimeDilation 0.0001
 SCEN
   fovshots n1

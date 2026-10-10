@@ -1115,13 +1115,15 @@ static void RenderActor(FRenderState& RenderState,FDynamicActor* DynamicActor,UB
 	// scion sz - 
 	// Don't do lighting/projector calcs when in post processing mode
 	// Also always use the BaseLitActor for lighting and only update its lighting once per frame
-	if(	BaseLitDynActor->LastLightUpdateTime != BaseLitActor->Level->TimeSeconds &&
+	if(	( BaseLitDynActor->LastLightUpdateTime != BaseLitActor->Level->TimeSeconds
+		||	BaseLitDynActor->LastProjectorGeneration != GProjectorRenderInfoGeneration ) &&	// uc2 port (G-9): UnProjector.h
 		RenderState.SceneNode->FilterMode != FSceneNode::Filter_PostProcess )
 	{
 		// need to update these		
 		BaseLitDynActor->EmptyProjectors();	
 		// set cur time since it is updating
 		BaseLitDynActor->LastLightUpdateTime = BaseLitActor->Level->TimeSeconds;
+		BaseLitDynActor->LastProjectorGeneration = GProjectorRenderInfoGeneration;
 
 		if( !BaseLitActor->bUnlit && 
 			!RenderActor->bUnlit && 
