@@ -579,6 +579,11 @@ class ENGINE_API UClient : public UObject
 	virtual UViewport* GetLastCurrent()=0;
 	virtual void ZSortViewports();
 	virtual void GetInitScreenSize( INT& SizeX, INT& SizeY )=0;
+	// uc2 port (G-6): the capability the Xbox client has by construction. A client that draws split-screen
+	// viewports as rectangles of one screen (UXboxClient; SDL2Drv's USDL2Client) gets the Xbox's split-screen
+	// paths (SPLIT ADD/REMOVE make and remove real players); WinDrv's one-window-per-viewport client keeps
+	// Epic's PC stand-ins.
+	virtual UBOOL SplitScreenViewports() { return 0; }
 
     INT GetTextureLODBias (ELODSet LODSet);
 

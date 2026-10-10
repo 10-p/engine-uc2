@@ -3283,7 +3283,9 @@ void APlayerController::execWorldToScreen( FFrame& Stack, RESULT_DECL )
 	AActor*		ViewActor = NULL;
 	CameraActor->eventPlayerCalcView( 0.f, ViewActor, CameraActor->Location, CameraActor->Rotation, 0 );
 
-	FCameraSceneNode	SceneNode(View,&View->RenderTarget,ViewActor, CameraActor->Location, CameraActor->Rotation,AutoFovViewFov(CameraActor,View));
+	FLOAT				ViewFov = AutoFovViewFov(CameraActor,View);
+	FScopedSplitFovScale SplitFov( View, ViewFov );	// G-6: as the frame draws it (UnGame.cpp FScopedAutoFov)
+	FCameraSceneNode	SceneNode(View,&View->RenderTarget,ViewActor, CameraActor->Location, CameraActor->Rotation,ViewFov);
 	FCanvasUtil			CanvasUtil(&View->RenderTarget,View->RI);
 	
 #if 0
@@ -3334,7 +3336,9 @@ void APlayerController::execScreenToWorld( FFrame& Stack, RESULT_DECL )
 
 	CameraActor->eventPlayerCalcView( 0.f, ViewActor, CameraActor->Location, CameraActor->Rotation, 0 );
 
-	FCameraSceneNode	SceneNode(View,&View->RenderTarget,ViewActor, CameraActor->Location, CameraActor->Rotation, AutoFovViewFov(CameraActor,View));
+	FLOAT				ViewFov = AutoFovViewFov(CameraActor,View);
+	FScopedSplitFovScale SplitFov( View, ViewFov );	// G-6: as the frame draws it (UnGame.cpp FScopedAutoFov)
+	FCameraSceneNode	SceneNode(View,&View->RenderTarget,ViewActor, CameraActor->Location, CameraActor->Rotation, ViewFov);
 	FCanvasUtil			CanvasUtil(&View->RenderTarget,View->RI);
 
 	// D-2: X/Y are the viewport canvas's coordinates (design pixels when the UI is boxed), as WorldToScreen gives

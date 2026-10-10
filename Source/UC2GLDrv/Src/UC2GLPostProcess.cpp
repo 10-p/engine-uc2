@@ -263,6 +263,7 @@ void UUC2GLRenderDevice::ExitPostProcess()
 	SampleReference = 0;
 	GammaRampTexture	= 0;
 	GammaRampActive		= 0;
+	ClearViewportRamps();
 
 	unguard;
 }
@@ -532,6 +533,100 @@ void UUC2GLRenderDevice::SetGammaRamp( const BYTE* Ramp )
 	UC2GL_RememberGammaRamp( Ramp );
 	GammaRampActive = 1;
 	RenderInterface.InvalidateHardwareState();
+}
+
+/*-----------------------------------------------------------------------------
+	G-6: dynamic gamma per split-screen viewport. FD3DDynamicGamma set the display's ramp, one for the
+	screen, so Epic's split screen switched it off (USplitScreenMgr::UpdateDetailLevels); the ramp is ours
+	(the present pass applies it), so each viewport gets its own, applied to its rectangle
+	(FRenderCaps::ViewportDynamicGamma lifts the switch-off).
+-----------------------------------------------------------------------------*/
+
+//
+// The viewport's ramp (Ramp NULL: only note that the viewport was drawn this frame, and where).
+//
+void UUC2GLRenderDevice::SetViewportGammaRamp( UViewport* Viewport, const BYTE* Ramp )
+{
+	FViewportRamp* Entry = FindViewportRamp( Viewport, 0 );
+	if( !Entry )
+	{
+		if( !Ramp )
+			return;
+		Entry = &ViewportRamps( ViewportRamps.AddZeroed() );
+		Entry->Viewport = Viewport;
+		glGenTextures( 1, &Entry->Texture );
+		glBindTexture( GL_TEXTURE_2D, Entry->Texture );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0 );
+	}
+	Entry->X		= Viewport->OffsetX;
+	Entry->Y		= Viewport->OffsetY;
+	Entry->W		= Viewport->SizeX;
+	Entry->H		= Viewport->SizeY;
+	Entry->Frame	= FrameCounter;
+	if( Ramp )
+	{
+		appMemcpy( Entry->Ramp, Ramp, 256 );
+		glBindTexture( GL_TEXTURE_2D, Entry->Texture );
+		glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
+		glTexImage2D( GL_TEXTURE_2D, 0, GL_LUMINANCE, 256, 1, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, Ramp );
+		RenderInterface.InvalidateHardwareState();
+	}
+}
+
+//
+// bRecent: only a ramp of a viewport drawn in the last frames (a frame locks the device once per viewport).
+//
+UUC2GLRenderDevice::FViewportRamp* UUC2GLRenderDevice::FindViewportRamp( UViewport* Viewport, UBOOL bRecent )
+{
+	for( INT i=0; i<ViewportRamps.Num(); i++ )
+		if( ViewportRamps(i).Viewport == Viewport && (!bRecent || ViewportRamps(i).Frame + 16 >= FrameCounter) )
+			return &ViewportRamps(i);
+	return NULL;
+}
+
+void UUC2GLRenderDevice::ClearViewportRamps()
+{
+	for( INT i=0; i<ViewportRamps.Num(); i++ )
+		if( ViewportRamps(i).Texture && ContextAlive() )
+			glDeleteTextures( 1, &ViewportRamps(i).Texture );
+	ViewportRamps.Empty();
+}
+
+//
+// Present pass, after the whole picture: each split-screen viewport's rectangle again, through its own ramp.
+//
+void UUC2GLRenderDevice::DrawViewportRamps( UViewport* Viewport, INT DrawableX, INT DrawableY )
+{
+	if( !ViewportRamps.Num() || !ApplyGamma || !PostProcessActive() )
+		return;
+	UClient* Client = Viewport->GetOuterUClient();
+	FLOAT SX = (FLOAT)DrawableX / Max( MainWidth, 1 ), SY = (FLOAT)DrawableY / Max( MainHeight, 1 );
+	UBOOL Drawn = 0;
+	for( INT i=ViewportRamps.Num()-1; i>=0; i-- )
+	{
+		FViewportRamp& R = ViewportRamps(i);
+		if( Client->Viewports.FindItemIndex( R.Viewport ) == INDEX_NONE || R.Frame + 16 < FrameCounter )
+		{
+			if( ContextAlive() )
+				glDeleteTextures( 1, &R.Texture );
+			ViewportRamps.Remove(i);
+			continue;
+		}
+		glEnable( GL_SCISSOR_TEST );
+		glScissor( appRound( R.X * SX ), appRound( (MainHeight - R.Y - R.H) * SY ), appRound( R.W * SX ), appRound( R.H * SY ) );
+		glUniform1f( PresentUseRampLoc, 1.f );
+		glActiveTexture( GL_TEXTURE1 );
+		glBindTexture( GL_TEXTURE_2D, R.Texture );
+		glActiveTexture( GL_TEXTURE0 );
+		glDrawArrays( GL_TRIANGLE_STRIP, 0, 4 );
+		Drawn = 1;
+	}
+	if( Drawn )
+		glDisable( GL_SCISSOR_TEST );
 }
 
 /*-----------------------------------------------------------------------------
@@ -1078,6 +1173,8 @@ public:
 	};
 
 	FOpenGLRenderInterface*	RI;
+	UViewport*				Owner;			// G-6: the split-screen viewport this one is for (NULL: the window's)
+	INT						RampCount;		// G-6: per instance (the log line every 200th ramp)
 	FLOAT					UpdateRate,
 							TransitionRate,
 							LastUpdateTime;
@@ -1089,8 +1186,10 @@ public:
 	FLOAT					CurMinL, CurMaxL, CurAvgL;
 	BYTE					GammaRamp[256];
 
-	FOpenGLDynamicGamma( FOpenGLRenderInterface* InRI ) :
+	FOpenGLDynamicGamma( FOpenGLRenderInterface* InRI, UViewport* InOwner=NULL ) :
 		RI(InRI),
+		Owner(InOwner),
+		RampCount(0),
 		UpdateRate(0.05f),
 		TransitionRate(0.05f),
 		LastUpdateTime(0),
@@ -1153,10 +1252,17 @@ void FOpenGLDynamicGamma::UpdateLuminanceTarget()
 	BackBufferTexMatrix->Material = RI->GetBackBufferMaterial();
 	PSLuminanceTransform->TextureStage0 = BackBufferTexMatrix;
 
-	static FLOAT U1[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-	static FLOAT V1[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-	static FLOAT U2[4] = {1.0f,	1.0f, 1.0f,	1.0f};
-	static FLOAT V2[4] = {1.0f,	1.0f, 1.0f,	1.0f};
+	// G-6: the viewport's rectangle of the back buffer (all of it for the window's viewport): a split-screen
+	// viewport's ramp follows its own picture. (Epic: always 0..1, the whole back buffer.)
+	UViewport* VP = RI->Viewport;
+	FLOAT MW = Max( RI->RenDev->MainWidth, 1 ), MH = Max( RI->RenDev->MainHeight, 1 );
+	FLOAT u1 = VP->OffsetX / MW, v1 = VP->OffsetY / MH, u2 = (VP->OffsetX + VP->SizeX) / MW, v2 = (VP->OffsetY + VP->SizeY) / MH;
+	if( !UUC2GLRenderDevice::IsSplitViewport( VP ) )
+		u1 = v1 = 0.f, u2 = v2 = 1.f;
+	FLOAT U1[4] = {u1, u1, u1, u1};
+	FLOAT V1[4] = {v1, v1, v1, v1};
+	FLOAT U2[4] = {u2, u2, u2, u2};
+	FLOAT V2[4] = {v2, v2, v2, v2};
 
 	FScreenPrimUtil(LuminanceTarget,RI).DrawTile(
 		0,0,LuminanceSampleWidth,LuminanceSampleHeight,
@@ -1305,7 +1411,8 @@ void FOpenGLDynamicGamma::UpdateDeviceGamma()
 	}
 
 	// UC2GLDrv: the present pass has no ramp yet after UpdateGamma replaced it.
-	if( !DeviceUpdateRequired && !ForceUpdate && RI->RenDev->GammaRampActive )
+	UBOOL RampInPlace = Owner ? RI->RenDev->FindViewportRamp( Owner, 0 )!=NULL : RI->RenDev->GammaRampActive;
+	if( !DeviceUpdateRequired && !ForceUpdate && RampInPlace )
 		return;
 
 	// distance between current max and min luminosity
@@ -1340,14 +1447,17 @@ void FOpenGLDynamicGamma::UpdateDeviceGamma()
 		}
 	}
 
-	RI->RenDev->SetGammaRamp( GammaRamp );
+	if( Owner )
+		RI->RenDev->SetViewportGammaRamp( Owner, GammaRamp );	// G-6: this viewport's rectangle only
+	else
+		RI->RenDev->SetGammaRamp( GammaRamp );
 	ForceUpdate = 0;
 
-	// UC2GLDrv: evidence for the log, every 200th ramp.
-	static INT RampCount = 0;
+	// UC2GLDrv: evidence for the log, every 200th ramp (G-6: of each viewport; "viewport" = its index).
 	if( (RampCount++ % 200) == 0 )
-		debugf( NAME_Init, TEXT("UC2GLDrv: dynamic gamma ramp %i: luminance min %.3f max %.3f average %.3f (histogram %.3f %.3f %.3f), exponent %.3f, ramp[64,128,192] = %i %i %i"),
-			RampCount, CurMinL, CurMaxL, CurAvgL, Histogram.MinL, Histogram.MaxL, Histogram.AvgL, Power, GammaRamp[64], GammaRamp[128], GammaRamp[192] );
+		debugf( NAME_Init, TEXT("UC2GLDrv: dynamic gamma ramp %i%s: luminance min %.3f max %.3f average %.3f (histogram %.3f %.3f %.3f), exponent %.3f, ramp[64,128,192] = %i %i %i"),
+			RampCount, Owner ? *FString::Printf( TEXT(" (viewport %i at %i,%i %ix%i)"), Owner->GetOuterUClient()->Viewports.FindItemIndex(Owner), Owner->OffsetX, Owner->OffsetY, Owner->SizeX, Owner->SizeY ) : TEXT(""),
+			CurMinL, CurMaxL, CurAvgL, Histogram.MinL, Histogram.MaxL, Histogram.AvgL, Power, GammaRamp[64], GammaRamp[128], GammaRamp[192] );
 
 	unguard;
 }
@@ -1362,19 +1472,49 @@ void FOpenGLRenderInterface::UpdateDynamicGamma()
 	if( !RenDev->PostProcessActive() || !RenDev->PixelShaderFamilyReady( PS_LuminanceTexIndex ) )
 		return;
 
-	if( !DynamicGamma )
-		DynamicGamma = new FOpenGLDynamicGamma(this);
+	// G-6: one dynamic gamma per split-screen viewport (its own histogram, adaptation and ramp), the
+	// window's for a viewport that is the whole window. Those of viewports that are gone are deleted.
+	FOpenGLDynamicGamma* Gamma = NULL;
+	if( UUC2GLRenderDevice::IsSplitViewport( Viewport ) )
+	{
+		UClient* Client = Viewport->GetOuterUClient();
+		for( INT i=ViewportDynamicGammas.Num()-1; i>=0; i-- )
+		{
+			if( ViewportDynamicGammas(i)->Owner == Viewport )
+				Gamma = ViewportDynamicGammas(i);
+			else if( Client->Viewports.FindItemIndex( ViewportDynamicGammas(i)->Owner ) == INDEX_NONE )
+			{
+				delete ViewportDynamicGammas(i);
+				ViewportDynamicGammas.Remove(i);
+			}
+		}
+		if( !Gamma )
+		{
+			Gamma = new FOpenGLDynamicGamma( this, Viewport );
+			ViewportDynamicGammas.AddItem( Gamma );
+		}
+	}
+	else
+	{
+		if( !DynamicGamma )
+			DynamicGamma = new FOpenGLDynamicGamma(this);
+		Gamma = DynamicGamma;
+	}
+	CurrentDynamicGamma = Gamma;
 
 	if( Viewport->GetOuterUClient()->DynamicGamma )
 	{
-		DynamicGamma->UpdateLuminanceTarget();
-		DynamicGamma->UpdateDeviceGamma();
+		Gamma->UpdateLuminanceTarget();
+		Gamma->UpdateDeviceGamma();
+		if( Gamma->Owner )
+			RenDev->SetViewportGammaRamp( Viewport, NULL );	// still drawn this frame, rectangle as it is now
 	}
-	else if( RenDev->GammaRampActive )
+	else if( RenDev->GammaRampActive || RenDev->ViewportRamps.Num() )
 	{
 		// UC2GLDrv: DYNAMICGAMMA 0 calls UEngine::UpdateGamma on Xbox, which sets the static
 		// ramp again; make sure of it here.
 		RenDev->GammaRampActive = 0;
+		RenDev->ClearViewportRamps();
 	}
 
 	// Viewport->bDebugShowGamma (FD3DDynamicGamma::ShowDebug, a histogram overlay) is not ported.
@@ -1387,9 +1527,10 @@ void FOpenGLRenderInterface::UpdateDynamicGamma()
 FLOAT FOpenGLRenderInterface::GetAverageSceneLuminosity()
 {
 	FLOAT AverageSceneLuminosity = 0.5f;
-	if( DynamicGamma )
+	FOpenGLDynamicGamma* Gamma = CurrentDynamicGamma ? CurrentDynamicGamma : DynamicGamma;	// G-6: this viewport's
+	if( Gamma )
 	{
-		AverageSceneLuminosity = (DynamicGamma->CurMaxL - DynamicGamma->CurMinL) * 0.5f ;
+		AverageSceneLuminosity = (Gamma->CurMaxL - Gamma->CurMinL) * 0.5f ;
 	}
 	return AverageSceneLuminosity;
 }
@@ -1418,6 +1559,11 @@ void UC2GL_DeleteDynamicGamma( FOpenGLRenderInterface* RI )
 	if( RI->DynamicGamma )
 		delete RI->DynamicGamma;
 	RI->DynamicGamma = NULL;
+	for( INT i=0; i<RI->ViewportDynamicGammas.Num(); i++ )
+		delete RI->ViewportDynamicGammas(i);
+	RI->ViewportDynamicGammas.Empty();
+	RI->CurrentDynamicGamma = NULL;
+	RI->RenDev->ClearViewportRamps();
 }
 
 /*-----------------------------------------------------------------------------

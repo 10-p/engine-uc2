@@ -1800,12 +1800,43 @@ static void ufrontParseAutoFov()
 
 ENGINE_API void ufrontAutoFovSize( UViewport* Viewport, INT& SizeX, INT& SizeY )
 {
+	// G-6: per viewport aspect. (D-8 used SizeX/ScaleX x SizeY/ScaleY for a split view, the window's.)
 	SizeX = Viewport ? Viewport->SizeX : 0;
 	SizeY = Viewport ? Viewport->SizeY : 0;
-	if( Viewport && Viewport->ScaleX > 0.01f && Viewport->ScaleY > 0.01f && (Viewport->ScaleX != 1.f || Viewport->ScaleY != 1.f) )
+}
+
+ENGINE_API UBOOL ufrontSplitFovScale( UViewport* Viewport, FLOAT Fov, FLOAT& OutScale )
+{
+	if( !GAutoFovParsed )
+		ufrontParseAutoFov();
+	if( GAutoFovMode == AUTOFOV_Off || !Viewport || Viewport->ScaleX <= 0.01f || Viewport->ScaleY <= 0.01f
+	||	(Viewport->ScaleX == 1.f && Viewport->ScaleY == 1.f) )
+		return 0;
+	DOUBLE H = Clamp( Fov, 1.0f, 170.0f ) * PI / 360.0;
+	OutScale = (FLOAT)( appAtan( Viewport->ScaleX * appTan( H ) ) / H );
+	return 1;
+}
+
+FScopedSplitFovScale::FScopedSplitFovScale( UViewport* InViewport, FLOAT Fov )
+:	Viewport( InViewport )
+,	SavedX( InViewport ? InViewport->ScaleFOVX : 1.f )
+,	SavedY( InViewport ? InViewport->ScaleFOVY : 1.f )
+,	bSet( 0 )
+{
+	FLOAT Scale;
+	if( ufrontSplitFovScale( Viewport, Fov, Scale ) )
 	{
-		SizeX = appRound( Viewport->SizeX / Viewport->ScaleX );
-		SizeY = appRound( Viewport->SizeY / Viewport->ScaleY );
+		Viewport->ScaleFOVX = Viewport->ScaleFOVY = Scale;
+		bSet = 1;
+	}
+}
+
+FScopedSplitFovScale::~FScopedSplitFovScale()
+{
+	if( bSet )
+	{
+		Viewport->ScaleFOVX = SavedX;
+		Viewport->ScaleFOVY = SavedY;
 	}
 }
 

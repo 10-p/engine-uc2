@@ -800,7 +800,9 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 		if( CheckGLErrors ) CheckGLError( TEXT("SetRes: pixel and vertex shaders") );
 	}
 
-	if( !CreateMainFramebuffer( Viewport->SizeX, Viewport->SizeY ) )
+	INT FrameX, FrameY;
+	GetFrameSize( Viewport, FrameX, FrameY );
+	if( !CreateMainFramebuffer( FrameX, FrameY ) )
 		return 0;
 	if( CheckGLErrors ) CheckGLError( TEXT("SetRes: main framebuffer") );
 
@@ -822,6 +824,26 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 /*-----------------------------------------------------------------------------
 	Main framebuffer and present pass.
 -----------------------------------------------------------------------------*/
+
+//
+// G-6: the size of the frame the viewport is drawn in: the window (the client's screen size) when the client
+// draws split-screen viewports as rectangles of one window, else the viewport itself as before.
+//
+void UUC2GLRenderDevice::GetFrameSize( UViewport* Viewport, INT& Width, INT& Height )
+{
+	Width	= Viewport->SizeX;
+	Height	= Viewport->SizeY;
+	UClient* Client = Viewport->GetOuterUClient();
+	if( Client && Client->SplitScreenViewports() )
+	{
+		INT ScreenX = 0, ScreenY = 0;
+		Client->GetInitScreenSize( ScreenX, ScreenY );
+		if( ScreenX > 0 && ScreenY > 0 )
+			Width = ScreenX, Height = ScreenY;
+	}
+	Width	= Max( Width, Viewport->OffsetX + Viewport->SizeX );
+	Height	= Max( Height, Viewport->OffsetY + Viewport->SizeY );
+}
 
 UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 {
@@ -1619,6 +1641,8 @@ void UUC2GLRenderDevice::DrawPresentPass( UViewport* Viewport )
 	glVertexAttribPointer( 0, 2, GL_FLOAT, GL_FALSE, 0, NULL );
 	glEnableVertexAttribArray( 0 );
 	glDrawArrays( GL_TRIANGLE_STRIP, 0, 4 );
+	// G-6: split-screen viewports' own dynamic gamma ramps, each over its rectangle (nothing when not split).
+	DrawViewportRamps( Viewport, DrawableX, DrawableY );
 	glDisableVertexAttribArray( 0 );
 	glBindBuffer( GL_ARRAY_BUFFER, 0 );
 	glUseProgram( 0 );
@@ -2154,9 +2178,12 @@ FRenderInterface* UUC2GLRenderDevice::Lock( UViewport* Viewport, BYTE* HitData, 
 	LastViewport = Viewport;
 
 	// The window may have been resized without SetRes (SDL2Drv calls SetRes for that, but
-	// keep the framebuffer honest either way).
-	if( Viewport->SizeX != MainWidth || Viewport->SizeY != MainHeight )
-		CreateMainFramebuffer( Viewport->SizeX, Viewport->SizeY );
+	// keep the framebuffer honest either way). G-6: the window's size; a split-screen viewport is a
+	// rectangle of it (OffsetX/OffsetY/SizeX/SizeY), as the Xbox's viewports were of its back buffer.
+	INT FrameX, FrameY;
+	GetFrameSize( Viewport, FrameX, FrameY );
+	if( FrameX != MainWidth || FrameY != MainHeight )
+		CreateMainFramebuffer( FrameX, FrameY );
 
 	// M7: the client settings the Xbox build has and PC's ini and UClient::Init do not give,
 	// applied the first time a frame is drawn with post-processing on.
@@ -2312,17 +2339,19 @@ void UUC2GLRenderDevice::ReadPixels( UViewport* Viewport, FColor* Pixels )
 	if( !Viewport || !Pixels || !ValidContext )
 		return;
 
-	INT Width = Min( Viewport->SizeX, MainWidth ), Height = Min( Viewport->SizeY, MainHeight );
+	// G-6: the viewport's rectangle of the frame (all of it for a viewport that is the whole window).
+	INT X0 = Clamp( Viewport->OffsetX, 0, MainWidth ), Y0 = Clamp( Viewport->OffsetY, 0, MainHeight );
+	INT Width = Min( Viewport->SizeX, MainWidth - X0 ), Height = Min( Viewport->SizeY, MainHeight - Y0 );
 	appMemzero( Pixels, sizeof(FColor) * Viewport->SizeX * Viewport->SizeY );
 
 	if( GPresentedWidth )
 	{
 		// ShotPresented: the picture read after the present pass of this frame.
-		INT W = Min( Width, GPresentedWidth ), H = Min( Height, GPresentedHeight );
+		INT W = Min( Width, GPresentedWidth - X0 ), H = Min( Height, GPresentedHeight - Y0 );
 		for( INT y=0; y<H; y++ )
 			for( INT x=0; x<W; x++ )
 			{
-				FColor C = GPresentedPixels( (GPresentedHeight - 1 - y) * GPresentedWidth + x );
+				FColor C = GPresentedPixels( (GPresentedHeight - 1 - (Y0 + y)) * GPresentedWidth + X0 + x );
 				C.A = 255;
 				Pixels[ y * Viewport->SizeX + x ] = C;
 			}
@@ -2333,18 +2362,29 @@ void UUC2GLRenderDevice::ReadPixels( UViewport* Viewport, FColor* Pixels )
 	ResolveMain( 1, 0 );
 	glBindFramebuffer( GL_FRAMEBUFFER, MainTextureFramebuffer() );
 	glPixelStorei( GL_PACK_ALIGNMENT, 1 );
-	TArray<FColor> Rows( Width * Height );
-	glReadPixels( 0, 0, Width, Height, GL_BGRA, GL_UNSIGNED_BYTE, &Rows(0) );
+	TArray<FColor> Rows( Max( Width * Height, 1 ) );
+	glReadPixels( X0, MainHeight - Y0 - Height, Width, Height, GL_BGRA, GL_UNSIGNED_BYTE, &Rows(0) );
 	for( INT y=0; y<Height; y++ )
 		for( INT x=0; x<Width; x++ )
 		{
 			FColor C = Rows( (Height - 1 - y) * Width + x );
 			C.A = 255;
-			if( GShotRamp && GammaRampActive && PostProcessActive() )
+			if( GShotRamp && PostProcessActive() )
 			{
-				C.R = GLastGammaRamp[C.R];
-				C.G = GLastGammaRamp[C.G];
-				C.B = GLastGammaRamp[C.B];
+				// G-6: the ramp of the split-screen viewport the pixel is in, as the present pass applies it.
+				const BYTE* Ramp = GammaRampActive ? GLastGammaRamp : NULL;
+				for( INT r=0; r<ViewportRamps.Num(); r++ )
+				{
+					const FViewportRamp& R = ViewportRamps(r);
+					if( R.Frame + 16 >= FrameCounter && X0+x >= R.X && X0+x < R.X+R.W && Y0+y >= R.Y && Y0+y < R.Y+R.H )
+						Ramp = R.Ramp;
+				}
+				if( Ramp )
+				{
+					C.R = Ramp[C.R];
+					C.G = Ramp[C.G];
+					C.B = Ramp[C.B];
+				}
 			}
 			Pixels[ y * Viewport->SizeX + x ] = C;
 		}
@@ -2378,6 +2418,8 @@ FRenderCaps* UUC2GLRenderDevice::GetRenderCaps()
 	// pp-scale: the picture height the camera effects size their blurs for (UnRenderUtil.h,
 	// GetPostProcessReference).
 	RenderCaps.PostProcessReferenceHeight	= Max( PostProcessReferenceHeight, 0 );
+	// G-6: dynamic gamma per viewport (UC2GLPostProcess.cpp, SetViewportGammaRamp), with the post-processing.
+	RenderCaps.ViewportDynamicGamma			= PostProcessActive() ? 1 : 0;
 	return &RenderCaps;
 }
 

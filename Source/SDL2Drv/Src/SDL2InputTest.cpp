@@ -154,35 +154,36 @@ static UObject* FindEditBoxByName( UObject* Obj, INT Depth )
 FSDL2InputTest::FSDL2InputTest( const TCHAR* InPath )
 :	File( NULL )
 ,	PartialLen( 0 )
-,	Virtual( NULL )
-,	VirtualID( -1 )
 ,	WatchLeft( 0 )
 ,	WatchIndex( 0 )
 {
+	for( INT i=0; i<MAX_VIRTUAL; i++ )
+		Virtual[i] = NULL, VirtualID[i] = -1;
 	File = fopen( TCHAR_TO_ANSI(InPath), "r" );
 	debugf( SDL2INPUT, TEXT("input test channel %s: %s"), InPath, File ? TEXT("open") : TEXT("cannot open") );
 }
 
 FSDL2InputTest::~FSDL2InputTest()
 {
-	Detach();
+	for( INT i=0; i<MAX_VIRTUAL; i++ )
+		Detach( i );
 	if( File )
 		fclose( File );
 }
 
-void FSDL2InputTest::Detach()
+void FSDL2InputTest::Detach( INT Pad )
 {
-	if( !Virtual )
+	if( !Virtual[Pad] )
 		return;
-	SDL_JoystickClose( Virtual );
-	Virtual = NULL;
+	SDL_JoystickClose( Virtual[Pad] );
+	Virtual[Pad] = NULL;
 	for( INT i=0; i<SDL_NumJoysticks(); i++ )
-		if( SDL_JoystickGetDeviceInstanceID(i)==VirtualID )
+		if( SDL_JoystickGetDeviceInstanceID(i)==VirtualID[Pad] )
 		{
 			SDL_JoystickDetachVirtual( i );
 			break;
 		}
-	VirtualID = -1;
+	VirtualID[Pad] = -1;
 }
 
 //
@@ -232,6 +233,18 @@ UBOOL FSDL2InputTest::Execute( USDL2Client* Client, const TCHAR* Line )
 	const TCHAR* Cmd = Line;
 	if( ParseCommand(&Cmd,TEXT("PAD")) )
 	{
+		// G-6: an optional virtual pad index first ("pad 2 button start 1"); without one, pad 0.
+		INT Pad = 0;
+		while( *Cmd==' ' )
+			Cmd++;
+		if( appIsDigit(*Cmd) )
+		{
+			Pad = Clamp( appAtoi(Cmd), 0, (INT)MAX_VIRTUAL-1 );
+			while( appIsDigit(*Cmd) )
+				Cmd++;
+		}
+		SDL_Joystick*& Virtual = this->Virtual[Pad];
+		SDL_JoystickID& VirtualID = this->VirtualID[Pad];
 		if( ParseCommand(&Cmd,TEXT("ATTACH")) )
 		{
 			if( Virtual )
@@ -244,7 +257,8 @@ UBOOL FSDL2InputTest::Execute( USDL2Client* Client, const TCHAR* Line )
 			Desc.nbuttons    = VPAD_BUTTONS;
 			Desc.button_mask = (1u << VPAD_BUTTONS) - 1;
 			Desc.axis_mask   = (1u << VPAD_AXES) - 1;
-			Desc.name        = "UC2 M10 virtual pad";
+			static const char* Names[MAX_VIRTUAL] = { "UC2 M10 virtual pad", "UC2 M10 virtual pad 2", "UC2 M10 virtual pad 3", "UC2 M10 virtual pad 4" };
+			Desc.name        = Names[Pad];
 			Desc.Rumble      = VirtualPadRumble;
 			INT Index = SDL_JoystickAttachVirtualEx( &Desc );
 			if( Index < 0 )
@@ -260,13 +274,13 @@ UBOOL FSDL2InputTest::Execute( USDL2Client* Client, const TCHAR* Line )
 				SDL_JoystickSetVirtualAxis( Virtual, SDL_CONTROLLER_AXIS_TRIGGERLEFT, -32768 );
 				SDL_JoystickSetVirtualAxis( Virtual, SDL_CONTROLLER_AXIS_TRIGGERRIGHT, -32768 );
 			}
-			debugf( SDL2INPUT, TEXT("virtual pad: attached as joystick %i, game controller %i"), Index, SDL_IsGameController(Index) );
+			debugf( SDL2INPUT, TEXT("virtual pad %i: attached as joystick %i, game controller %i"), Pad, Index, SDL_IsGameController(Index) );
 			return 1;
 		}
 		else if( ParseCommand(&Cmd,TEXT("DETACH")) )
 		{
-			Detach();
-			debugf( SDL2INPUT, TEXT("virtual pad: detached") );
+			Detach( Pad );
+			debugf( SDL2INPUT, TEXT("virtual pad %i: detached"), Pad );
 			return 1;
 		}
 		else if( ParseCommand(&Cmd,TEXT("BUTTON")) )
@@ -309,6 +323,11 @@ UBOOL FSDL2InputTest::Execute( USDL2Client* Client, const TCHAR* Line )
 	else if( ParseCommand(&Cmd,TEXT("PROBE")) )
 	{
 		Probe( Client, Cmd );
+		return 0;
+	}
+	else if( ParseCommand(&Cmd,TEXT("VIEWPORTS")) )
+	{
+		ProbeViewports( Client, Cmd );
 		return 0;
 	}
 	else if( ParseCommand(&Cmd,TEXT("EXEC")) )
@@ -524,6 +543,46 @@ void FSDL2InputTest::Probe( USDL2Client* Client, const TCHAR* Tag )
 		debugf( SDL2INPUT, TEXT("probe3 %s other %i %s loc=(%.1f,%.1f,%.1f) dist=%.1f los=%i face=(%i,%i)"),
 			Tag, i, Other->GetName(), Other->Location.X, Other->Location.Y, Other->Location.Z,
 			(Other->Location - Pawn->Location).Size(), (INT)PC->LineOfSightTo( Other ), To.Pitch & 65535, To.Yaw & 65535 );
+	}
+	unguard;
+}
+
+//
+// G-6: every viewport of the client: its rectangle of the window, scales, the split-screen flags, its pad and
+// its player (pawn location and view rotation, HUD class), for tools/dev/g6-splitscreen.sh.
+//
+void FSDL2InputTest::ProbeViewports( USDL2Client* Client, const TCHAR* Tag )
+{
+	guard(FSDL2InputTest::ProbeViewports);
+	while( *Tag==' ' )
+		Tag++;
+	USplitScreenMgr* Mgr = Client->GetSplitScreenMgr();
+	INT ScreenX = 0, ScreenY = 0;
+	Client->GetInitScreenSize( ScreenX, ScreenY );
+	debugf( SDL2INPUT, TEXT("vps %s n=%i split=%i screen=%ix%i"), Tag, Client->Viewports.Num(), Mgr ? Mgr->NumActiveSplitViews() : 0, ScreenX, ScreenY );
+	for( INT i=0; i<Client->Viewports.Num(); i++ )
+	{
+		USDL2Viewport* V = (USDL2Viewport*)Client->Viewports(i);
+		APlayerController* PC = V->Actor;
+		APawn* Pawn = PC ? PC->Pawn : NULL;
+		INT SplitIndex = -1;
+		if( Mgr )
+			for( INT s=0; s<Mgr->NumActiveSplitViews(); s++ )
+				if( Mgr->GetSplitView(s)==V )
+					SplitIndex = s;
+		debugf( SDL2INPUT,
+			TEXT("vp %s %i name=%s pad=%i rect=(%i,%i,%i,%i) scale=(%.3f,%.3f) fovscale=(%.3f,%.3f) menu=%i scene=%i disabled=%i split=%i overlay=%i window=%i actor=%s pawn=%i loc=(%.1f,%.1f,%.1f) rot=(%i,%i,%i) hud=%s fov=%.3f player=%s gui=%i shots=%i acc=(%.0f,%.0f)"),
+			Tag, i, V->GetName(), (INT)V->GamepadID, V->OffsetX, V->OffsetY, V->SizeX, V->SizeY, V->ScaleX, V->ScaleY,
+			V->ScaleFOVX, V->ScaleFOVY, (INT)V->bShowMenu, (INT)V->bShowScene, (INT)V->bDisableDraw, SplitIndex,
+			Mgr && Mgr->IsOverlayViewport(V) ? 1 : 0, V->Window ? 1 : 0,
+			PC ? PC->GetClass()->GetName() : TEXT("None"), Pawn ? 1 : 0,
+			Pawn ? Pawn->Location.X : 0.f, Pawn ? Pawn->Location.Y : 0.f, Pawn ? Pawn->Location.Z : 0.f,
+			PC ? PC->Rotation.Pitch : 0, PC ? PC->Rotation.Yaw : 0, PC ? PC->Rotation.Roll : 0,
+			PC && PC->myHUD ? PC->myHUD->GetClass()->GetName() : TEXT("None"), PC ? PC->FovAngle : 0.f,
+			PC && PC->PlayerReplicationInfo ? *PC->PlayerReplicationInfo->PlayerName.Replace(TEXT(" "),TEXT("_")) : TEXT("None"),
+			V->GUIController ? (INT)V->GUIController->bActive : -1,
+			Pawn && Pawn->Weapon ? (INT)Pawn->Weapon->FlashCount : -1,
+			Pawn ? Pawn->Acceleration.X : 0.f, Pawn ? Pawn->Acceleration.Y : 0.f );
 	}
 	unguard;
 }

@@ -1017,6 +1017,71 @@ void USplitScreenMgr::UpdateSizes()
 	unguard;
 }
 
+/* uc2 port (G-6) ===========================================================
+* USplitScreenMgr::RefreshPlayerHUDs
+* ============================================================================
+* On the Xbox the split-screen layout only changes in the menus, and every player gets its HUD when the next
+* map logs it in (PlayerController.ClientSetHUD: the <HUD>_Split class and SetSplitPosition when more than one
+* viewport is up). A player joining or leaving during a match (SDL2Drv's SplitScreenJoinInMatch, SPLIT ADD/
+* REMOVE) changes the layout of players who are already in: they get their HUD again the way Epic's own
+* PlayerController.PostBeginPlay re-sends it ("so that if we are a splitscreen client we can set up the HUD
+* correctly"), from the HUD's base class, so ClientSetHUD picks the split or the full-screen one itself.
+* ============================================================================
+*/
+void USplitScreenMgr::RefreshPlayerHUDs()
+{
+	guard(USplitScreenMgr::RefreshPlayerHUDs);
+
+	if( IsMenuGameActive() )
+		return;
+
+	UFunction* ClientSetHUD = NULL;
+	for( INT i=0; i<Client->Viewports.Num(); i++ )
+	{
+		UViewport* Viewport = Client->Viewports(i);
+		APlayerController* PC = Viewport ? Viewport->Actor : NULL;
+		if( !PC || !PC->myHUD || IsOverlayViewport(Viewport) || PC->bDeleteMe )
+			continue;
+		UClass* HUDClass = PC->myHUD->GetClass();
+		FString Name = HUDClass->GetName();
+		if( Name.Len() > 6 && appStricmp( *Name.Right(6), TEXT("_Split") )==0 )
+		{
+			UClass* Base = FindObject<UClass>( HUDClass->GetOuter(), *Name.LeftChop(6) );
+			if( Base )
+				HUDClass = Base;
+		}
+		struct { UClass* NewHUDClass; UClass* NewScoringType; } Parms;
+		Parms.NewHUDClass		= HUDClass;
+		Parms.NewScoringType	= PC->myHUD->ScoreBoard ? ((UObject*)PC->myHUD->ScoreBoard)->GetClass() : NULL;
+		ClientSetHUD = PC->FindFunction( FName(TEXT("ClientSetHUD")) );
+		if( ClientSetHUD )
+		{
+			debugf( NAME_DevSplitScreen, TEXT("Split screen: %s gets its HUD again (%s, viewport %i of %i)"), PC->GetName(), HUDClass->GetName(), i, Client->Viewports.Num() );
+			PC->ProcessEvent( ClientSetHUD, &Parms );
+		}
+		// The weapons' crosshairs, which UCPlayerController caches (ScriptedCrosshairs), are squeezed for a split
+		// HUD when a weapon first makes them (UCWeapon.CreateScriptedCrosshair: ScaleY = 0.5 if the HUD
+		// IsSplitScreen, i.e. more than one viewport); one made before the layout changed keeps the old
+		// shape (the crosshair of a player who was alone sat on the bottom edge of a half screen). Give them
+		// the shape that rule gives now. (By name: the classes are UCGameplay's and UCElements' scripts.)
+		UArrayProperty* Crosshairs = FindField<UArrayProperty>( PC->GetClass(), TEXT("ScriptedCrosshairs") );
+		if( Crosshairs && Cast<UObjectProperty>(Crosshairs->Inner) )
+		{
+			FArray* Array = (FArray*)((BYTE*)PC + Crosshairs->Offset);
+			for( INT c=0; c<Array->Num(); c++ )
+			{
+				UObject* Crosshair = ((UObject**)Array->GetData())[c];
+				UFloatProperty* ScaleY = Crosshair ? FindField<UFloatProperty>( Crosshair->GetClass(), TEXT("ScaleY") ) : NULL;
+				if( ScaleY )
+					*(FLOAT*)((BYTE*)Crosshair + ScaleY->Offset) = Client->Viewports.Num() > 1 ? 0.5f
+						: *(FLOAT*)((BYTE*)Crosshair->GetClass()->GetDefaultObject() + ScaleY->Offset);
+			}
+		}
+	}
+
+	unguard;
+}
+
 /* scion =====================================================================
 * USplitScreenMgr::UpdateDetailLevels
 * Author: sz
@@ -1040,10 +1105,14 @@ void USplitScreenMgr::UpdateDetailLevels()
 	// dynamic gamma adjusts the device gamma ramp
 	// so it is a full screen effect and doesn't make sense
 	// when any split views are active
+	// uc2 port (G-6): unless the render device applies it per viewport (FRenderCaps::ViewportDynamicGamma)
+	URenderDevice* RenDev = Client->Viewports(0)->RenDev;
+	UBOOL bViewportGamma = RenDev && RenDev->GetRenderCaps() && RenDev->GetRenderCaps()->ViewportDynamicGamma;
 	if( NumActiveSplitViews() != 0 )
 	{
 		// disable dynamic gamma
-		Client->Exec( TEXT("DYNAMICGAMMA 0") );
+		if( !bViewportGamma )
+			Client->Exec( TEXT("DYNAMICGAMMA 0") );
 		// disable dynamic draw scale
 		LevelInfo->bUseDynamicDrawScale = 0;
 	}

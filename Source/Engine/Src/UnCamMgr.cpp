@@ -277,20 +277,45 @@ UBOOL UClient::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		if( ParseCommand(&Cmd,TEXT("ADD")) )
 		{
 			Parse(Cmd, TEXT("ID="), GamepadID);
+#ifndef _XBOX
+			if( SplitScreenViewports() )	// uc2 port (G-6): the Xbox branch, on a client that can draw it
+			{
+				debugf( NAME_DevSplitScreen, TEXT("TEST: Adding splitscreen  GamepadID:%i"), GamepadID );
+				if( BeginSplitScreen( this, GamepadID ) )
+					GetSplitScreenMgr()->RefreshPlayerHUDs();
+			}
+			else
+#endif
 #ifdef _XBOX
 			debugf( NAME_DevSplitScreen, TEXT("TEST: Adding splitscreen  GamepadID:%i"), GamepadID );
 			BeginSplitScreen( this, GamepadID );
 #else
+			{
 			UViewport* Viewport = Viewports(0);
 			INT NewSizeY = Max<INT>( Viewport->SizeY * 0.5, 240 );
 			Cast<UViewport>(Viewport->GetClass()->GetDefaultObject())->SizeY = Viewport->SizeY;
 			debugf(NAME_DevSplitScreen, TEXT("Setting viewport height to %i"), NewSizeY);
 			Viewport->SizeY = NewSizeY;
+			}
 #endif
 		}
 
 		if( ParseCommand(&Cmd,TEXT("REMOVE")) )
 		{
+#ifndef _XBOX
+			if( SplitScreenViewports() )	// uc2 port (G-6): the Xbox branch below
+			{
+				USplitScreenMgr* SplitScreenMgr = GetSplitScreenMgr();
+				check(SplitScreenMgr);
+				debugf( NAME_DevSplitScreen, TEXT("TEST: Removing splitscreen") );
+				if( SplitScreenMgr->NumActiveSplitViews() )
+				{
+					SplitScreenMgr->RemoveSplitViewport( SplitScreenMgr->GetSplitView( SplitScreenMgr->NumActiveSplitViews()-1 ) );
+					SplitScreenMgr->RefreshPlayerHUDs();
+				}
+			}
+			else
+#endif
 #ifdef _XBOX
 			debugf( NAME_DevSplitScreen, TEXT("TEST: Removing splitscreen") );
 			USplitScreenMgr* SplitScreenMgr = GetSplitScreenMgr();
@@ -303,11 +328,13 @@ UBOOL UClient::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 				SplitScreenMgr->RemoveSplitViewport( RemoveView );
 			}
 #else
+			{
 			UViewport* Viewport = Viewports(0);
 			INT NewSizeY = Cast<UViewport>(Viewport->GetClass()->GetDefaultObject())->SizeY;
 			debugf(NAME_DevSplitScreen, TEXT("Setting viewport height to %i"), NewSizeY);
 
 			Viewport->SizeY = NewSizeY;
+			}
 #endif
 		}
 

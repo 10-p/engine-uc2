@@ -99,6 +99,7 @@ FOpenGLRenderInterface::FOpenGLRenderInterface(UUC2GLRenderDevice* InRenDev)
 	PostProcessStage		= PP_STAGE_NONE;
 
 	DynamicGamma			= NULL;
+	CurrentDynamicGamma		= NULL;
 	appMemzero( DistortionScale, sizeof(DistortionScale) );
 	appMemzero( ColorRemapConstant, sizeof(ColorRemapConstant) );
 	PointSampleNudge		= 0;

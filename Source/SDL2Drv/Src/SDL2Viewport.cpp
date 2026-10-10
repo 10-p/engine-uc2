@@ -140,6 +140,9 @@ USDL2Viewport::USDL2Viewport()
 	ViewportButtonFlags	= 0;
 	Captured			= 0;
 	HasFocus			= 0;
+	SubViewport			= 0;
+	WindowSizeX			= 0;
+	WindowSizeY			= 0;
 
 	// The engine only runs in 32-bit colour (UWindowsViewport sets 4 whatever the desktop depth).
 	ColorBytes			= 4;
@@ -150,6 +153,19 @@ USDL2Viewport::USDL2Viewport()
 void USDL2Viewport::Destroy()
 {
 	guard(USDL2Viewport::Destroy);
+	// G-6: a split-screen viewport borrows the window's render device. UViewport::Destroy would Flush the
+	// shared device (every cached texture and buffer of the running level) for it; the Xbox's device had
+	// nothing to lose there, ours re-uploads the level. The device stays with the viewport that owns it.
+	// Likewise the console it shares with viewport 0 (USplitScreenMgr gives every split view and the
+	// overlay "the default global console"; its own removal clears the pointer, a shutdown does not).
+	if( SubViewport )
+	{
+		RenDev = NULL;
+		USDL2Client* C = GetOuterUSDL2Client();
+		for( INT i=0; i<C->Viewports.Num(); i++ )
+			if( C->Viewports(i)!=this && C->Viewports(i)->Console==Console )
+				Console = NULL;
+	}
 	Super::Destroy();
 	if( BlitFlags & BLIT_Temporary )
 	{
@@ -189,15 +205,45 @@ static void ParseResolution( const TCHAR*& Cmd, INT& X, INT& Y, INT& BPP )
 	Cmd = CmdTemp;
 }
 
+//
+// G-6: the commands below that act on the window (mode, size, cursor, position).
+//
+static UBOOL IsWindowCommand( const TCHAR* Cmd )
+{
+	static const TCHAR* Names[] = { TEXT("ENDFULLSCREEN"), TEXT("TOGGLEFULLSCREEN"), TEXT("GETCURRENTRES"), TEXT("SETRES"),
+		TEXT("TEMPSETRES"), TEXT("SETMOUSE"), TEXT("LOADWINDOWPOSITION") };
+	for( INT i=0; i<ARRAY_COUNT(Names); i++ )
+	{
+		const TCHAR* Probe = Cmd;
+		if( ParseCommand( &Probe, Names[i] ) )
+			return 1;
+	}
+	return 0;
+}
+
 UBOOL USDL2Viewport::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(USDL2Viewport::Exec);
 	const TCHAR* OrigCmd = Cmd;
 	while( *OrigCmd==' ' )
 		OrigCmd++;
+	// G-6: while split, SHOT takes the whole window as the players see it: the overlay viewport (the menus'
+	// viewport, drawn last) is the one that covers all of it. A viewport's own rectangle: RenDev->ReadPixels.
+	{
+		const TCHAR* Probe = Cmd;
+		USplitScreenMgr* Mgr = GetOuterUSDL2Client()->GetSplitScreenMgr();
+		if( ParseCommand( &Probe, TEXT("SHOT") ) && Mgr && Mgr->OverlayView && Mgr->OverlayView!=this && Mgr->OverlayView->Actor && Mgr->OverlayView->RenDev )
+			return Mgr->OverlayView->Exec( Cmd, Ar );
+	}
 	if( UViewport::Exec( Cmd, Ar ) )
 	{
 		return 1;
+	}
+	else if( SubViewport && GetWindowViewport()!=this && IsWindowCommand( Cmd ) )
+	{
+		// G-6: the window's commands, from a split-screen viewport (the overlay viewport owns the menus
+		// while split, so the settings page's SETRES comes from it), are the window viewport's.
+		return GetWindowViewport()->Exec( OrigCmd, Ar );
 	}
 	else if( ParseCommand(&Cmd,TEXT("GETSYSTEMLANGUAGE")) )
 	{
@@ -225,7 +271,8 @@ UBOOL USDL2Viewport::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	}
 	else if( ParseCommand(&Cmd,TEXT("GETCURRENTRES")) )
 	{
-		Ar.Logf( TEXT("%ix%i"), SizeX, SizeY );
+		// G-6: the window's size (viewport 0's own shrinks to its rectangle when split).
+		Ar.Logf( TEXT("%ix%i"), WindowSizeX ? WindowSizeX : SizeX, WindowSizeY ? WindowSizeY : SizeY );
 		return 1;
 	}
 	else if( ParseCommand(&Cmd,TEXT("GETCURRENTCOLORDEPTH")) )
@@ -249,7 +296,7 @@ UBOOL USDL2Viewport::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		UBOOL Temp = appStrfind( OrigCmd, TEXT("TEMPSETRES") )==OrigCmd;
 		INT X, Y, BPP;
 		ParseResolution( Cmd, X, Y, BPP );
-		UBOOL Fullscreen = IsFullscreen() || FullscreenOnly;
+		UBOOL Fullscreen = (BlitFlags & BLIT_Fullscreen) || FullscreenOnly;	// G-6: the window's mode (IsFullscreen is per rectangle)
 		if( appStrchr(Cmd,'w') || appStrchr(Cmd,'W') )
 			Fullscreen = 0;
 		else if( appStrchr(Cmd,'f') || appStrchr(Cmd,'F') )
@@ -316,8 +363,28 @@ UBOOL USDL2Viewport::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 void USDL2Viewport::OpenWindow( DWORD InParentWindow, UBOOL IsTemporary, INT NewX, INT NewY, INT OpenX, INT OpenY )
 {
 	guard(USDL2Viewport::OpenWindow);
-	check(Actor);
 	USDL2Client* C = GetOuterUSDL2Client();
+
+	// G-6: a viewport opened with a parent is a split-screen viewport (USplitScreenMgr opens the overlay
+	// and every new split view with OpenWindow(1,...)): as UXboxViewport::OpenWindow, it shares the render
+	// device and creates nothing. Its rectangle of the window is set by USplitScreenMgr::UpdateSizes.
+	USDL2Viewport* Main = C->Viewports.Num() ? (USDL2Viewport*)C->Viewports(0) : NULL;
+	if( InParentWindow && !IsTemporary && Main && Main!=this && Main->Window )
+	{
+		SubViewport	= 1;
+		RenDev		= Main->RenDev;
+		BlitFlags	= Main->BlitFlags & ~BLIT_Temporary;
+		ColorBytes	= Main->ColorBytes;
+		if( !SizeX || !SizeY )
+		{
+			SizeX = Main->WindowSizeX ? Main->WindowSizeX : Main->SizeX;
+			SizeY = Main->WindowSizeY ? Main->WindowSizeY : Main->SizeY;
+		}
+		debugf( NAME_Log, TEXT("Opened split-screen viewport %s in the window of %s"), GetName(), Main->GetName() );
+		return;
+	}
+	check(Actor);
+
 	if( NewX!=INDEX_NONE )
 		NewX = Align( NewX, 2 );
 
@@ -433,8 +500,27 @@ void USDL2Viewport::Repaint( UBOOL Blit, FLOAT DeltaSeconds )
 UBOOL USDL2Viewport::IsFullscreen()
 {
 	guard(USDL2Viewport::IsFullscreen);
-	return (BlitFlags & BLIT_Fullscreen)!=0;
+	// G-6: the window is in fullscreen mode and this viewport covers all of it. A split-screen rectangle
+	// is not fullscreen (UXboxViewport::IsFullscreen: "fullscreen iff it matches the initial screen size";
+	// the renderer skips FullscreenOnly camera effects on such viewports).
+	USDL2Viewport* Main = GetWindowViewport();
+	if( !(Main->BlitFlags & BLIT_Fullscreen) )
+		return 0;
+	INT ScreenX = 0, ScreenY = 0;
+	GetOuterUSDL2Client()->GetInitScreenSize( ScreenX, ScreenY );
+	return SizeX==ScreenX && SizeY==ScreenY;
 	unguard;
+}
+
+//
+// G-6: the viewport that owns the window this one is drawn in (itself, or viewport 0 for a split-screen viewport).
+//
+USDL2Viewport* USDL2Viewport::GetWindowViewport()
+{
+	USDL2Client* C = GetOuterUSDL2Client();
+	if( SubViewport && C->Viewports.Num() && C->Viewports(0)!=this )
+		return (USDL2Viewport*)C->Viewports(0);
+	return this;
 }
 
 //
@@ -452,9 +538,17 @@ void USDL2Viewport::UpdateWindowFrame()
 
 	bFullScreen = (BlitFlags & BLIT_Fullscreen) ? 1 : 0;
 
+	// G-6: a split-screen viewport's menu cursor (the overlay viewport's GUI) is the window's.
+	if( SubViewport )
+	{
+		if( GetWindowViewport()!=this )
+			GetWindowViewport()->UpdateWindowFrame();
+		return;
+	}
+
 	// Keep the capture state in step with the menu's cursor (UWindowsViewport does the same here).
 	if( !GIsEditor && Window )
-		SetMouseCapture( !bShowWindowsMouse, 0, 1 );
+		SetMouseCapture( !GetOuterUSDL2Client()->CursorWanted(), 0, 1 );
 
 	if( !Window || (BlitFlags&BLIT_Fullscreen) || (BlitFlags&BLIT_Temporary) || !Actor )
 		return;
@@ -466,6 +560,9 @@ void USDL2Viewport::UpdateWindowFrame()
 void* USDL2Viewport::GetWindow()
 {
 	guard(USDL2Viewport::GetWindow);
+	// G-6: a split-screen viewport draws into (and the device presents) the window of viewport 0.
+	if( SubViewport )
+		return (void*)GetWindowViewport()->Window;
 	return (void*)Window;
 	unguard;
 }
@@ -560,6 +657,7 @@ void USDL2Viewport::EndFullscreen()
 void USDL2Viewport::ToggleFullscreen()
 {
 	guard(USDL2Viewport::ToggleFullscreen);
+	USDL2Client* Client = GetOuterUSDL2Client();
 	static UBOOL ToggleFullscreenMutex = 0;
 	if( !ToggleFullscreenMutex )
 	{
@@ -567,8 +665,8 @@ void USDL2Viewport::ToggleFullscreen()
 		if( BlitFlags & BLIT_Fullscreen )
 		{
 			EndFullscreen();
-			if( Captured == bShowWindowsMouse )
-				SetMouseCapture( !bShowWindowsMouse, 0, 1 );
+			if( Captured == Client->CursorWanted() )
+				SetMouseCapture( !Client->CursorWanted(), 0, 1 );
 		}
 		else if( !(Actor->ShowFlags & SHOW_ChildWindow) )
 		{
@@ -607,11 +705,21 @@ UBOOL USDL2Viewport::ResizeViewport( DWORD NewBlitFlags, INT InNewX, INT InNewY,
 	if( !(NewBlitFlags & BLIT_Temporary) )
 		ScreenPointer = NULL;
 
+	// G-6: a split-screen viewport has no window: its size is its rectangle (USplitScreenMgr::UpdateSizes).
+	if( SubViewport )
+	{
+		SizeX = NewX;
+		SizeY = NewY;
+		return 1;
+	}
+
 	// Set new info.
 	DWORD OldBlitFlags = BlitFlags;
 	BlitFlags          = NewBlitFlags & ~BLIT_ParameterFlags;
 	SizeX              = NewX;
 	SizeY              = NewY;
+	WindowSizeX        = NewX;
+	WindowSizeY        = NewY;
 
 	// Transitioning out of fullscreen.
 	if( !(NewBlitFlags & BLIT_Fullscreen) && (OldBlitFlags & BLIT_Fullscreen) && Captured )
@@ -663,6 +771,9 @@ UBOOL USDL2Viewport::ResizeViewport( DWORD NewBlitFlags, INT InNewX, INT InNewY,
 		}
 		Client->SaveConfig();
 	}
+
+	// G-6: the split-screen rectangles follow the window.
+	Client->UpdateSplitLayout();
 	return 1;
 	unguard;
 }
@@ -805,7 +916,7 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 				{
 					// WM_SIZE: the window manager resized us.
 					INT NewX = Ev.window.data1, NewY = Ev.window.data2;
-					if( !(BlitFlags & BLIT_Fullscreen) && NewX>0 && NewY>0 && (NewX!=SizeX || NewY!=SizeY) )
+					if( !(BlitFlags & BLIT_Fullscreen) && NewX>0 && NewY>0 && (NewX!=WindowSizeX || NewY!=WindowSizeY) )
 					{
 						if( RenDev && (BlitFlags & (BLIT_OpenGL|BLIT_Direct3D)) )
 							RenDev->SetRes( this, NewX, NewY, 0 );
@@ -838,6 +949,8 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 				ToggleFullscreen();
 				break;
 			}
+			if( Client->LoggingInput() && !Ev.key.repeat )
+				debugf( SDL2INPUT, TEXT("key %s press (viewport %i)"), Input ? Input->GetKeyName(Key) : TEXT("?"), Client->Viewports.FindItemIndex(this) );
 			CauseInputEvent( Key, IST_Press );
 
 			// The control characters WM_CHAR delivers for these keys (never Enter).
@@ -855,8 +968,8 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 			CauseInputEvent( Key, IST_Release );
 
 			// Capture the mouse again if the menu went away while a key was held (WM_KEYUP).
-			if( !GIsEditor && Captured == bShowWindowsMouse )
-				SetMouseCapture( !bShowWindowsMouse, 0, 1 );
+			if( !GIsEditor && Captured == Client->CursorWanted() )
+				SetMouseCapture( !Client->CursorWanted(), 0, 1 );
 			break;
 		}
 		case SDL_TEXTINPUT:
@@ -907,8 +1020,8 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 				{
 					if( Dragging )
 						Dragging = 0;
-					if( Captured == bShowWindowsMouse )
-						SetMouseCapture( !bShowWindowsMouse, 0, 1 );
+					if( Captured == Client->CursorWanted() )
+						SetMouseCapture( !Client->CursorWanted(), 0, 1 );
 				}
 			}
 			break;
@@ -941,8 +1054,8 @@ void USDL2Viewport::FocusChanged( UBOOL Gained )
 	HasFocus = Gained;
 	if( Gained )
 	{
-		if( !GIsEditor && Captured == bShowWindowsMouse && !Dragging )
-			SetMouseCapture( !bShowWindowsMouse, 0, 1 );
+		if( !GIsEditor && Captured == GetOuterUSDL2Client()->CursorWanted() && !Dragging )
+			SetMouseCapture( !GetOuterUSDL2Client()->CursorWanted(), 0, 1 );
 		if( GUIController )
 			GUIController->ResetInput();
 		if( Input )
@@ -1005,11 +1118,16 @@ void USDL2Viewport::SetMouseCapture( UBOOL Capture, UBOOL Clip, UBOOL OnlyFocus 
 void USDL2Viewport::UpdateMousePosition()
 {
 	guard(USDL2Viewport::UpdateMousePosition);
-	if( !Window || Captured )
+	// G-6: a split-screen viewport (the overlay that draws the menus) reads the window's cursor, made
+	// relative to its rectangle.
+	USDL2Viewport* Main = GetWindowViewport();
+	if( !Main->Window || Main->Captured )
 		return;
 	INT X=0, Y=0, WX=0, WY=0;
 	SDL_GetMouseState( &X, &Y );
-	SDL_GetWindowPosition( Window, &WX, &WY );
+	SDL_GetWindowPosition( Main->Window, &WX, &WY );
+	if( Main!=this )
+		X -= OffsetX, Y -= OffsetY;
 	MouseClientPos = FVector( X, Y, 0 );
 	MouseScreenPos = FVector( X+WX, Y+WY, 0 );
 	WindowsMouseX  = X;
@@ -1028,14 +1146,30 @@ void USDL2Viewport::UpdateInput( UBOOL Reset, FLOAT DeltaSeconds )
 	USDL2Client* Client = GetOuterUSDL2Client();
 	Client->PumpEvents();
 
-	if( !Input || !Window )
+	if( !Input || (!Window && !SubViewport) )
 		return;
+
+	// G-6: UXboxViewport::UpdateInput (XboxViewport.cpp:404-418) keeps the viewport's pad and its
+	// controller's in step: a new controller (after a map change) takes the viewport's pad, and a pad the
+	// controller was given by script becomes the viewport's.
+	if( Actor )
+	{
+		if( Actor->GamepadID==INVALID_GAMEPAD_ID && GamepadID!=INVALID_GAMEPAD_ID )
+			SetGamepadID( GamepadID );
+		else if( Actor->GamepadID!=GamepadID )
+			SetGamepadID( Actor->GamepadID );
+	}
 
 	// The pad bound to this viewport (UXboxViewport::UpdateInput). Only from the player tick
 	// (UViewport::ReadInput), whose DeltaSeconds the stick axes and rumble need; the launcher's
 	// once-a-frame pump passes 0.
 	if( DeltaSeconds > 0.f )
 		Client->UpdateBoundPad( this, DeltaSeconds );
+
+	// G-6: the keyboard and the mouse belong to the window's viewport, player one; a split-screen
+	// viewport has its pad only.
+	if( !Window )
+		return;
 
 	BYTE Down[256];
 	appMemzero( Down, sizeof(Down) );
@@ -1059,6 +1193,8 @@ void USDL2Viewport::UpdateInput( UBOOL Reset, FLOAT DeltaSeconds )
 		}
 		else if( !Down[Key] )
 		{
+			if( Client->LoggingInput() )
+				debugf( SDL2INPUT, TEXT("key %s released by UpdateInput (focus %i)"), Input->GetKeyName((EInputKey)Key), Focused );
 			CauseInputEvent( Key, IST_Release );
 		}
 	}
