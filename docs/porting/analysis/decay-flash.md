@@ -180,3 +180,20 @@ post-processing.
 - The coordinator's alternatives (a particle with a NaN/huge size, a projection at the near plane, a large frame
   time, a stale vertex buffer) are excluded by the pass trace: no draw into the main framebuffer brightens the
   traced pixel before the bloom's final quad, and the reference copy differs from the main colour it is made from.
+- `M11_SERIAL=1 M11_DESKTOP_TREE=b2m M11_TWIN_TREE=b2mt tools/dev/m11-twin.sh selftest pinned` (`logs/b2/m11-twin.txt`):
+  PASS selftest (15/15 on both, 0 GL errors), PASS pinned (DM-Deadbolt static part, desktop vs twin: off 0.384 (the
+  F-3 measure was 0.384), on 0.613; twin GL errors 0), PASS leftovers.
+
+### Not done (for the coordinator)
+
+- m11-twin `effects` (the 14 effects on the twin against the desktop), `fx-owner.sh` GPU scenes: not run (machine at
+  load 18-23 most of the afternoon; the coordinator asked for the cause first).
+- The browser through the frontend harness: not run. It writes into `<WorkUC2>/ufrontend` (`yarn build
+  --engine-artifact`, `serve-web/`), outside this agent's write area. The wasm-perf artifact of this branch is
+  `build-wasm-perf/Source/SDLLaunch` (sha256 of the .wasm `e1b2b839...afbc9`).
+- The GL4ES patch (`decay-flash-gl4es.patch`): the defect stays for fixed-function and pixel-shader draws with a cube
+  map on stage 0 and a 2D texture on a later stage (their later stage reads a stale texture on GL4ES: census of
+  O-9's maps: `DM-AcidRain.Water.T_Acidrain_WaterSD02`, `T_Liquid.Water.Liquid_Water_Puddle01_Sd`; DM-Decay's water
+  too). A frozen-frame A/B at DM-Decay's floor pits shows no visible change (desktop vs twin 0.57, vs twin with the
+  patch 1.00 mean in the pit rows; the frozen time differs between runs, inconclusive). Pushing the fork (shared with
+  engine-ut2004) needs the owner's go-ahead.
