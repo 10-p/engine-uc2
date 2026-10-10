@@ -202,3 +202,11 @@ desktop/twin show whole triangles, after only the small motion).
 - `tools/dev/m7-effects.sh b1fx` (`logs/b1/m7-effects.txt`, pictures `logs/b1fx/`): 14 effect lines, every one
   critical=0 glerrors=0 programs_failed=0+0 left_behind=0 tries=1; praxis-panes A vs the wine reference 2.800 (below 8);
   self-test (`logs/b1/m7-selftest.txt`) 15 passed, 0 failed.
+- `UC2_GPU=1 tools/dev/fx-owner.sh b1 <case>` for pool, waterfall-1p, waterfall-3p, praxis-near, praxis-far, with main's
+  driver (`uc2.bin` of run/b1) and the fix (`UC2_BIN=uc2-fix.bin`), on the Quadro (`logs/b1/fx-owner.txt`, pictures
+  `logs/b1/fx-<case>[-fix]-gpu-*.png`): all 10 runs critical=0 glerrors=0 programs_failed=0+0 left_behind=0. Before vs
+  after, luminance: mean 0.30-1.66 on the still views, 2.6-6.3 on the waterfall shots; the difference pictures
+  (`logs/b1/cmp-praxis-near-gpu-xbox.png`, `cmp-pool-gpu-on.png`, `cmp-waterfall-3p-gpu-still-a.png`: before, after,
+  |difference| x 4) show only animated content (the aquarium's water and fish, the pool's surface, the pawn's idle
+  pose, the waterfall); static geometry, decals and HUD are unchanged. Seen, not a numeric pass/fail (no two-run
+  control of the same binary was taken).
