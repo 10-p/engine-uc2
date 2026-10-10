@@ -126,3 +126,18 @@ just made (a bug found with a 1 MB test build, step 4). `UC2AudioCheck` checks t
   6.0 MB / 5.6 MB (Deadbolt), wave packs held 0 KB / 9.3 MB. The disc source holds no compressed data.
 - **Eviction** (a test build with a 1 MB budget, tree `m16-evict`, not committed): first run 38 failed cues (the bug
   above), after the fix `failed 0`, 93 buffers evicted, cache at most 3.0 MB (buffers in use cannot go).
+
+## Step 4 - the other targets (2026-10-10)
+
+- Builds, each `cmake --preset <p> && cmake --build build-<p>` inside `bin/capped 6G` (`logs/m16/builds.txt`,
+  `build-<p>.out`): native rc 0, native64 rc 0 (-j4), windows rc 0 (-j2, load 24), wasm-perf rc 0 (-j4); 0 errors,
+  no warning from the new code. `ucc-bin verifyclasses`: "All native class layouts match" (native and native64).
+- native64 (tree `m16-both64`): the table compare gives the same 1,241 known / 0 NEW, the PCM compare 371 waves 0
+  differ, UC2AudioCheck 0 failures.
+- wasm32 under Node (`node ucc-bin.js`, wasm-perf, tree `m16-web` with both sources, capped 3G): UC2AudioCheck reads
+  and decodes both sources (cooked 7,191 + 21 streams, Xbox 7,191 + 20 streams), 0 failures; the PCM it writes for
+  the 3 banks is byte-identical to the native build's (371 files).
+- Windows under wine (`m12-wine.sh` with a private prefix in the session scratchpad, tree `m16-win`, capped 3G):
+  `ucc.exe UC2ALAudio.UC2AudioCheck`: the same lines, 0 failures.
+- Not run: the browser (frontend parked; its manifest serves the cooked files only, so the web build keeps the
+  cooked source), a game under wine with the disc banks.
