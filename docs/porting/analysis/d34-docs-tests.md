@@ -119,3 +119,16 @@ lock spot problem of step 3). The wasm-perf build (started -j4) was stopped and 
   reviewed `4813dd9` version): 140 modified Epic files, 189 new, Default.ini 118 / DefUser.ini 54 keys.
 - `REPORT.html` rebuilt with `tools/dev/report-html.cjs` (the committed HTML was in step: regenerating HEAD's md gives
   the committed html except the build stamp). The file was written through a temp file + `os.replace`.
+
+## Step 8: builds, the frontend copy, the queue
+
+- `build-wasm-perf` at -j2 rc 0 (`logs/d34/build-wasm-perf-2.log`): `SDLLaunch.wasm` sha256 `488c57bc...13c61`.
+- The frontend is NOT written: an on-disk copy `run/d34-ufrontend` (tar of the checkout at `1fdc55d` without `.git`
+  and test-results; on disk because /tmp is tmpfs) with `logs/d34/frontend-jitter-spec.patch` applied; `yarn build
+  --target uc2 --engine-artifact <this worktree>/build-wasm-perf/Source/SDLLaunch` in it under `capped 4G` rc 0;
+  `serve-web/SDLLaunch.wasm` has the same sha256 (`logs/d34/wasm-sha256.txt`).
+- `logs/d34/quiet-runs.sh`: the browser jitter spec twice (one harness machine-wide, null sink by module index,
+  `capped 6G`, mem-guard 17), then the native jitter traces, d6 x3, the m7 self-test on a brand-new tree x2, the twin
+  in full and its effects + movies again; each start waits for load < 16 and 10 GB available.
+- D-4 (5) `map-census.sh` `timeout -k`: left to the D-1 agent as told; it is done on their branch
+  (`engine-uc2-d12` `3fdbbf6`: `timeout --preserve-status -k "$grace"`), not touched here.
