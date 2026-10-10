@@ -5,6 +5,17 @@
 	beside it) loads every cue table, resolves every cue of every bank to its waves in
 	every language the cook produced, and decodes every wave of every wave bank with the
 	same code the device uses. No audio device is involved.
+
+	M16: the shipped Xbox banks are checked the same way when ../Sounds has them
+	(every .xwb entry decodes to its length, every M_<Song>.xwb streams to its end,
+	every .xsb loads); cues resolve through the device's own choice per bank (the
+	cooked file where there is one, else the .xsb/.xwb). Parameters (all optional):
+	  DUMP=<dir>        write every sound bank's tables as the device holds them, from
+	                    each source present: <dir>/<Bank>.cooked.txt, <dir>/<Bank>.xsb.txt
+	                    (tools/dev/audio-xsb-compare.sh compares them)
+	  PCM=<dir> PCMBANKS=<a+b+c>   write the decoded PCM of every wave of those .xwb files
+	                    (16-bit little-endian, <dir>/<file>.<entry>.pcm) for the byte
+	                    comparison with tools/uc2xwb.py (tools/dev/audio-xwb-pcm-compare.sh)
 =============================================================================*/
 
 #include "UC2ALAudioPrivate.h"
@@ -31,6 +42,49 @@ struct FCheckBank
 	TArray<INT>		Decoded;	// per wave: 0 not tried, 1 decodes to its frames, -1 fails or differs
 };
 
+// M16: one sound bank's tables, every field the device plays, one line per record (DUMP=).
+static void DumpSoundBank( const FUC2SoundBank& B, const FString& File )
+{
+	FString T = FString::Printf( TEXT("bank %s sounds=%d cues=%d\n"), *B.Name, B.Sounds.Num(), B.Cues.Num() );
+	for( INT i=0; i<B.Sounds.Num(); i++ )
+	{
+		const FUC2Sound& S = B.Sounds(i);
+		T += FString::Printf( TEXT("sound %d name=%s priority=%d volume=%d pitch=%d category=%d headroomboost=%d i3dl2=%d 3d=%d min=%g max=%g rolloff=%g length=%d loops=%d ignored=%d\n"),
+			i, *S.Name, S.Priority, S.Volume, S.Pitch, S.Category, S.bHeadroomBoost, S.I3DL2, S.bIs3D, (DOUBLE)S.MinDistance,
+			(DOUBLE)S.MaxDistance, (DOUBLE)S.Rolloff, S.LengthMs, S.Loops, S.IgnoredEvents );
+		for( INT r=0; r<S.Rpcs.Num(); r++ )
+		{
+			FString Pts;
+			for( INT k=0; k<S.Rpcs(r).X.Num(); k++ )
+				Pts += FString::Printf( TEXT("%s%d:%d"), k ? TEXT(",") : TEXT(""), S.Rpcs(r).X(k), S.Rpcs(r).Y(k) );
+			T += FString::Printf( TEXT(" rpc name=%s track=%d points=%s\n"), *S.Rpcs(r).Name, S.Rpcs(r).Track, *Pts );
+		}
+		for( INT t=0; t<S.Tracks.Num(); t++ )
+		{
+			const FUC2Track& K = S.Tracks(t);
+			T += FString::Printf( TEXT(" track %d play=%d time=%d delay=%d loops=%d newvar=%d playlist=%d pitch=%d,%d volume=%d,%d\n"),
+				t, K.bHasPlay, K.PlayTime, K.Delay, K.Loops, K.bNewVariation, K.Playlist, K.PitchLow, K.PitchHigh, K.VolLow, K.VolHigh );
+			for( INT v=0; v<K.Variations.Num(); v++ )
+				T += FString::Printf( TEXT("  wave bank=%s entry=%d weight=%d\n"), *K.Variations(v).BankName, K.Variations(v).Entry, K.Variations(v).Weight );
+			for( INT e=0; e<K.Events.Num(); e++ )
+			{
+				const FUC2Event& E = K.Events(e);
+				T += FString::Printf( TEXT("  event kind=%s mode=%s relative=%d time=%d steps=%d dur=%d lo=%d hi=%d\n"),
+					E.Kind==EV_SetVolume ? TEXT("setvol") : TEXT("setpitch"), E.Mode==EM_Fade ? TEXT("fade") : E.Mode==EM_Random ? TEXT("random") : TEXT("set"),
+					E.bRelative, E.Time, E.Steps, E.Duration, E.Low, E.High );
+			}
+		}
+	}
+	for( INT c=0; c<B.Cues.Num(); c++ )
+	{
+		FString Snds;
+		for( INT k=0; k<B.Cues(c).Sounds.Num(); k++ )
+			Snds += FString::Printf( TEXT("%s%d:%d"), k ? TEXT(",") : TEXT(""), B.Cues(c).Sounds(k), B.Cues(c).Weights(k) );
+		T += FString::Printf( TEXT("cue %d name=%s sounds=%s\n"), c, *B.Cues(c).Name, Snds.Len() ? *Snds : TEXT("-") );
+	}
+	appSaveStringToFile( T, *File );
+}
+
 static const TCHAR* GCheckLangs[] = { TEXT(""), TEXT("deu"), TEXT("fra"), TEXT("ita"), TEXT("spa") };
 
 INT UUC2AudioCheckCommandlet::Main( const TCHAR* Parms )
@@ -39,6 +93,14 @@ INT UUC2AudioCheckCommandlet::Main( const TCHAR* Parms )
 	const FString Dir = TEXT("../Sounds/");
 	INT Failures = 0;
 	TArray<FString> Messages;
+	FString DumpDir, PcmDir, PcmBanks;
+	Parse( Parms, TEXT("DUMP="), DumpDir );
+	Parse( Parms, TEXT("PCM="), PcmDir );
+	Parse( Parms, TEXT("PCMBANKS="), PcmBanks );
+	if( DumpDir.Len() )
+		GFileManager->MakeDirectory( *DumpDir, 1 );
+	if( PcmDir.Len() )
+		GFileManager->MakeDirectory( *PcmDir, 1 );
 
 	// Every wave bank file: load the index and the data, decode every wave.
 	TArray<FString> WbFiles = GFileManager->FindFiles( *(Dir + TEXT("*.uc2wb")), 1, 0 );
@@ -130,13 +192,140 @@ INT UUC2AudioCheckCommandlet::Main( const TCHAR* Parms )
 			}
 		}
 	}
-	GWarn->Logf( TEXT("wave banks: %d index files; waves: %d decoded to their exact length of %d cooked (%d entries have no cooked wave); music streams: %d of %d"),
+	if( WbFiles.Num() )
+		GWarn->Logf( TEXT("wave banks: %d index files; waves: %d decoded to their exact length of %d cooked (%d entries have no cooked wave); music streams: %d of %d"),
 		Banks.Num(), WavesOk, Waves, WavesMissing, StreamsOk, Streams );
-	GWarn->Logf( TEXT("decoder end trim: %d waves decoded past their end-of-stream granule position (at most %d frames) and were cut to the source length"),
-		TrimmedWaves, MaxTrim );
+	if( WbFiles.Num() )
+		GWarn->Logf( TEXT("decoder end trim: %d waves decoded past their end-of-stream granule position (at most %d frames) and were cut to the source length"),
+			TrimmedWaves, MaxTrim );
 
-	// Every cue of every cue table, in every language: at least one variation decodes.
+	// M16: every shipped wave bank (.xwb): the index, then every entry decoded as the device decodes it (read from
+	// the file; ADPCM/PCM to 16-bit PCM) and its length checked; music banks streamed to their end.
+	TArray<FString> XwbFiles = GFileManager->FindFiles( *(Dir + TEXT("*.xwb")), 1, 0 );
+	INT XWaves = 0, XWavesOk = 0, XWma = 0, XStreams = 0, XStreamsOk = 0, PcmWritten = 0;
+	TArray<FString> PcmList;
+	PcmBanks.ParseIntoArray( TEXT("+"), &PcmList );	// (Parse stops an unquoted value at a comma)
+	for( INT i=0; i<XwbFiles.Num(); i++ )
+	{
+		FCheckBank* B = new FCheckBank;
+		FString Error;
+		if( !UC2LoadXwbWaveBank( *(Dir + XwbFiles(i)), B->Bank, Error ) )
+		{
+			GWarn->Logf( TEXT("FAIL %s: %s"), *XwbFiles(i), *Error );
+			Failures++;
+			delete B;
+			continue;
+		}
+		B->Bank.File = XwbFiles(i);
+		ByFile.Set( *XwbFiles(i), Banks.AddItem( B ) );
+		B->Decoded.AddZeroed( B->Bank.Waves.Num() );
+		FString Stem = XwbFiles(i).Left( XwbFiles(i).Len()-4 );
+		UBOOL bMusic = Stem.Left(2)==TEXT("M_");		// the 21 streamed music banks (A_Music plays them)
+		UBOOL bPcm = PcmDir.Len() && PcmList.FindItemIndex( Stem )!=INDEX_NONE;
+		for( INT w=0; w<B->Bank.Waves.Num(); w++ )
+		{
+			FUC2Wave& W = B->Bank.Waves(w);
+			if( W.Format==WF_WMA )
+			{
+				XWma++;
+				B->Decoded(w) = -1;
+				new(Messages) FString( FString::Printf( TEXT("WMA     %s entry %d: %d bytes of WMA (ASF), not decoded: this wave cannot play"), *XwbFiles(i), w, W.Size ) );
+				continue;
+			}
+			if( bMusic )
+			{
+				XStreams++;
+				FUC2XwbStream Stream;
+				INT Frames = 0;
+				if( Stream.Open( *(Dir + XwbFiles(i)), W, Error ) )
+				{
+					TArray<SWORD> Tmp;
+					Tmp.Add( 32768*Stream.Channels );
+					INT Got;
+					while( (Got = Stream.Read( &Tmp(0), 32768 ))>0 )
+						Frames += Got;
+				}
+				if( Frames==W.Frames && Frames>0 )
+				{
+					XStreamsOk++;
+					B->Decoded(w) = 1;
+				}
+				else
+				{
+					GWarn->Logf( TEXT("FAIL %s: stream entry %d: %d frames, the entry has %d %s"), *XwbFiles(i), w, Frames, W.Frames, *Error );
+					Failures++;
+					B->Decoded(w) = -1;
+				}
+				continue;
+			}
+			XWaves++;
+			TArray<SWORD> Pcm;
+			INT Channels = 0, Rate = 0;
+			FString Err;
+			UBOOL bOk = UC2DecodeWave( B->Bank, W, *Dir, Pcm, Channels, Rate, Err ) && Channels==W.Channels && Rate==W.Rate
+				&& Pcm.Num()==W.Frames*W.Channels && W.Frames>0;
+			if( bOk )
+			{
+				XWavesOk++;
+				B->Decoded(w) = 1;
+				if( bPcm )
+				{
+					// Raw 16-bit little-endian, byte by byte (the same bytes on any host).
+					TArray<BYTE> Raw;
+					Raw.Add( Pcm.Num()*2 );
+					for( INT k=0; k<Pcm.Num(); k++ )
+					{
+						Raw(2*k)	= (BYTE)(Pcm(k) & 0xFF);
+						Raw(2*k+1)	= (BYTE)((Pcm(k) >> 8) & 0xFF);
+					}
+					PcmWritten += appSaveArrayToFile( Raw, *FString::Printf( TEXT("%s/%s.%d.pcm"), *PcmDir, *Stem, w ) ) ? 1 : 0;
+				}
+			}
+			else
+			{
+				GWarn->Logf( TEXT("FAIL %s entry %d: decoded %d frames %d Hz %d ch, the entry has %d frames %d Hz %d ch %s"),
+					*XwbFiles(i), w, Channels ? Pcm.Num()/Channels : 0, Rate, Channels, W.Frames, W.Rate, W.Channels, *Err );
+				Failures++;
+				B->Decoded(w) = -1;
+			}
+		}
+	}
+	if( XwbFiles.Num() )
+		GWarn->Logf( TEXT("Xbox wave banks: %d .xwb files; waves: %d decoded to their entry's length of %d (%d WMA entries not decoded); music streams: %d of %d"),
+			XwbFiles.Num(), XWavesOk, XWaves, XWma, XStreamsOk, XStreams );
+	if( PcmDir.Len() )
+		GWarn->Logf( TEXT("PCM: %d waves of %s written to %s"), PcmWritten, *PcmBanks, *PcmDir );
+
+	// Every cue of every cue table, in every language: at least one variation decodes. M16: the sound banks are the
+	// cooked cue tables and the shipped .xsb files; the device takes the cooked one where both exist.
 	TArray<FString> CueFiles = GFileManager->FindFiles( *(Dir + TEXT("*.uc2cues")), 1, 0 );
+	TArray<FString> XsbFiles = GFileManager->FindFiles( *(Dir + TEXT("*.xsb")), 1, 0 );
+	INT XsbOnly = 0, XsbLoaded = 0;
+	for( INT i=0; i<XsbFiles.Num(); i++ )
+	{
+		FString Stem = XsbFiles(i).Left( XsbFiles(i).Len()-4 );
+		FUC2SoundBank XB;
+		FString Error;
+		if( !UC2LoadXsbSoundBank( *(Dir + XsbFiles(i)), XB, Error ) )
+		{
+			GWarn->Logf( TEXT("FAIL %s: %s"), *XsbFiles(i), *Error );
+			Failures++;
+		}
+		else
+		{
+			XsbLoaded++;
+			if( DumpDir.Len() )
+				DumpSoundBank( XB, DumpDir + TEXT("/") + Stem + TEXT(".xsb.txt") );
+		}
+		if( CueFiles.FindItemIndex( Stem + TEXT(".uc2cues") )==INDEX_NONE )
+		{
+			new(CueFiles) FString( XsbFiles(i) );
+			XsbOnly++;
+		}
+	}
+	if( XsbFiles.Num() )
+		GWarn->Logf( TEXT("Xbox sound banks: %d .xsb files, %d load; %d have no cooked cue table (the device reads them)"),
+			XsbFiles.Num(), XsbLoaded, XsbOnly );
 	INT TotalCues = 0;
 	for( INT l=0; l<ARRAY_COUNT(GCheckLangs); l++ )
 	{
@@ -145,7 +334,8 @@ INT UUC2AudioCheckCommandlet::Main( const TCHAR* Parms )
 		{
 			FUC2SoundBank SB;
 			FString Error;
-			if( !UC2LoadSoundBank( *(Dir + CueFiles(f)), SB, Error ) )
+			UBOOL bXsb = CueFiles(f).Right(4)==TEXT(".xsb");
+			if( bXsb ? !UC2LoadXsbSoundBank( *(Dir + CueFiles(f)), SB, Error ) : !UC2LoadSoundBank( *(Dir + CueFiles(f)), SB, Error ) )
 			{
 				if( l==0 )
 				{
@@ -154,6 +344,8 @@ INT UUC2AudioCheckCommandlet::Main( const TCHAR* Parms )
 				}
 				continue;
 			}
+			if( l==0 && DumpDir.Len() && !bXsb )
+				DumpSoundBank( SB, DumpDir + TEXT("/") + CueFiles(f).Left( CueFiles(f).Len()-8 ) + TEXT(".cooked.txt") );
 			for( INT c=0; c<SB.Cues.Num(); c++ )
 			{
 				Cues++;
@@ -167,14 +359,21 @@ INT UUC2AudioCheckCommandlet::Main( const TCHAR* Parms )
 						{
 							FUC2Variation& V = Snd.Tracks(t).Variations(v);
 							Total++;
+							// The device's lookup (GetWaveBank/LoadWaveBankFile): <Bank>_<lang> then <Bank>, each cooked
+							// (.uc2wb) first, else the shipped .xwb.
 							const INT* Bi = NULL;
 							if( *GCheckLangs[l] )
 							{
-								Bi = ByFile.Find( V.BankName + TEXT("_") + GCheckLangs[l] + TEXT(".uc2wb") );
+								FString LangStem = V.BankName + TEXT("_") + GCheckLangs[l];
+								Bi = ByFile.Find( LangStem + TEXT(".uc2wb") );
+								if( !Bi )
+									Bi = ByFile.Find( LangStem + TEXT(".xwb") );
 								bLocal |= Bi!=NULL;
 							}
 							if( !Bi )
 								Bi = ByFile.Find( V.BankName + TEXT(".uc2wb") );
+							if( !Bi )
+								Bi = ByFile.Find( V.BankName + TEXT(".xwb") );
 							if( Bi && V.Entry>=0 && V.Entry<Banks(*Bi)->Decoded.Num() && Banks(*Bi)->Decoded(V.Entry)==1 )
 								Good++;
 						}

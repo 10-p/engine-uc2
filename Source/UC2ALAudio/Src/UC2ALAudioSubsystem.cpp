@@ -28,6 +28,10 @@
 // of a first-time load (8192-frame buffers left audible gaps under software GL: logs/m8/deadbolt-2).
 enum { UC2_MUSIC_SLOTS = 2, UC2_MUSIC_BUFFERS = 4, UC2_MUSIC_BUFFER_FRAMES = 32768 };
 
+// M16: the decoded-wave cache (OpenAL buffers of decoded PCM, both sources) keeps at most this much; least recently
+// used buffers go first. The whole game decoded would be about 1.3 GB (375 MB of Xbox ADPCM); a match uses tens of MB.
+#define UC2_DECODED_BUDGET		(192<<20)
+
 // XACT :64 - an actor must move this far (squared) before its sound sources are moved.
 #define UC2_MIN_UPDATE_DELTA	32.f
 // XACT :2008
@@ -95,12 +99,14 @@ struct FUC2MusicSlot
 	INT					Handle;		// 0 = free
 	FString				Song;
 	FUC2VorbisStream	Stream;
+	FUC2XwbStream		Xwb;		// M16: a shipped M_<Song>.xwb, read from the file as it plays
+	UBOOL				bXwb;
 	ALuint				Source;
 	ALuint				Buffers[UC2_MUSIC_BUFFERS];
 	UBOOL				bLoop, bEnded, bStopAfterFade;
 	INT					Volume;		// the A_Music sound's volume, mB
 	FLOAT				Fade, FadeTarget, FadeRate;
-	FUC2MusicSlot() : Handle(0), Source(0), bLoop(0), bEnded(0), bStopAfterFade(0), Volume(0), Fade(1.f),
+	FUC2MusicSlot() : Handle(0), bXwb(0), Source(0), bLoop(0), bEnded(0), bStopAfterFade(0), Volume(0), Fade(1.f),
 		FadeTarget(1.f), FadeRate(0.f) { appMemzero( Buffers, sizeof(Buffers) ); }
 };
 
@@ -131,6 +137,9 @@ struct FUC2AudioState
 	TArray<FUC2WaveBank*>	WaveBanks;
 	TMap<FName,INT>			CueMap;			// requested name -> (bank << 16) | cue, or -1
 	TMap<FString,INT>		LoggedOnce;
+	INT						DecodedBytes;	// M16: PCM held in OpenAL buffers (the decoded-wave cache), its peak,
+	INT						DecodedPeak;	// waves decoded so far and buffers evicted
+	INT						DecodedWaves, Evicted;
 
 	DOUBLE					T0;				// appSeconds() when the device opened (capture time 0)
 	UBOOL					bTest;			// loopback self-test: simulated clock, listener at the origin
@@ -156,7 +165,8 @@ struct FUC2AudioState
 
 	FUC2AudioState() : bDevice(0), Device(NULL), Context(NULL), bEFX(0), bEAXReverb(0), bLoopPoints(0), Slot(0),
 		Effect(0), ZonePreset(-1), NextMusicHandle(1), Viewport(NULL), NextInstId(1), bPaused(0), PauseStart(0),
-		LastAmbientUpdate(-1.f), bAmbientsListed(0), T0(0.0), bTest(0), TestClock(0.0), RenderSamples(NULL)
+		LastAmbientUpdate(-1.f), bAmbientsListed(0), T0(0.0), bTest(0), TestClock(0.0), RenderSamples(NULL),
+		DecodedBytes(0), DecodedPeak(0), DecodedWaves(0), Evicted(0)
 	{
 		for( INT i=0; i<UAudioSubsystem::VOLUME_Max; i++ )
 			CategoryVolumes[i] = 1.f;
@@ -235,6 +245,7 @@ static INT FindSoundBank( FUC2AudioState* S, const FString& Name )
 }
 
 // XACT GetBankIdx :526 (the sound bank half): load <Bank>.uc2cues once; keep it across levels if persistent.
+// M16: without a cooked cue table, the shipped <Bank>.xsb (a retail disc's Sounds/) gives the same tables.
 static INT GetSoundBank( FUC2AudioState* S, const FString& Name, UBOOL bPersist )
 {
 	guard(GetSoundBank);
@@ -244,9 +255,21 @@ static INT GetSoundBank( FUC2AudioState* S, const FString& Name, UBOOL bPersist 
 		S->SoundBanks(Index)->bPersist |= bPersist;
 		return Index;
 	}
-	FString Error;
+	FString Error, Source;
 	FUC2SoundBank* Bank = new FUC2SoundBank;
-	if( !UC2LoadSoundBank( *(S->SoundsDir + Name + TEXT(".uc2cues")), *Bank, Error ) )
+	FString Cooked = S->SoundsDir + Name + TEXT(".uc2cues"), Xbox = S->SoundsDir + Name + TEXT(".xsb");
+	UBOOL bOk = 0;
+	if( GFileManager->FileSize( *Cooked )>0 || GFileManager->FileSize( *Xbox )<0 )
+	{
+		Source = TEXT("cooked cue table");
+		bOk = UC2LoadSoundBank( *Cooked, *Bank, Error );
+	}
+	else
+	{
+		Source = TEXT("Xbox sound bank .xsb, no cooked cue table");
+		bOk = UC2LoadXsbSoundBank( *Xbox, *Bank, Error );
+	}
+	if( !bOk )
 	{
 		delete Bank;
 		LogOnce( S, FString(TEXT("bank:")) + Name, FString::Printf( TEXT("sound bank %s not loaded (%s)"), *Name, *Error ) );
@@ -254,11 +277,23 @@ static INT GetSoundBank( FUC2AudioState* S, const FString& Name, UBOOL bPersist 
 	}
 	Bank->Name = Name;	// as requested (the file names it the same)
 	Bank->bPersist = bPersist;
-	// Variations without a cooked wave are left out at play time; say so once per bank, at load.
-	debugf( NAME_DevSound, TEXT("UC2Audio: loaded sound bank %s (%d sounds, %d cues)%s"), *Name, Bank->Sounds.Num(),
-		Bank->Cues.Num(), bPersist ? TEXT(", persistent") : TEXT("") );
+	// Variations without a cooked wave are left out at play time; say so once per bank, at load. M16: the source
+	// (cooked or the shipped .xsb) is in the same line, once per bank and run.
+	debugf( NAME_DevSound, TEXT("UC2Audio: loaded sound bank %s (%d sounds, %d cues; %s)%s"), *Name, Bank->Sounds.Num(),
+		Bank->Cues.Num(), *Source, bPersist ? TEXT(", persistent") : TEXT("") );
 	return S->SoundBanks.AddItem( Bank );
 	unguard;
+}
+
+// One wave bank file stem (<Bank> or <Bank>_<lang>): the cooked index <Stem>.uc2wb, else (M16) the shipped
+// <Stem>.xwb, whose waves are read and decoded from it on first play.
+static UBOOL LoadWaveBankFile( FUC2AudioState* S, const FString& Stem, FUC2WaveBank& Bank, FString& Error )
+{
+	Bank.File = Stem + TEXT(".uc2wb");
+	if( GFileManager->FileSize( *(S->SoundsDir + Bank.File) )>0 || GFileManager->FileSize( *(S->SoundsDir + Stem + TEXT(".xwb")) )<0 )
+		return UC2LoadWaveBank( *(S->SoundsDir + Bank.File), Bank, Error );
+	Bank.File = Stem + TEXT(".xwb");
+	return UC2LoadXwbWaveBank( *(S->SoundsDir + Bank.File), Bank, Error );
 }
 
 // The wave bank half of GetBankIdx: <Bank>_<lang> first, then <Bank> (XACT :546-560).
@@ -272,15 +307,11 @@ static INT GetWaveBank( FUC2AudioState* S, const FString& Name )
 	FUC2WaveBank* Bank = new FUC2WaveBank;
 	UBOOL bOk = 0;
 	if( S->Lang.Len() )
-	{
-		Bank->File = Name + TEXT("_") + S->Lang + TEXT(".uc2wb");
-		bOk = UC2LoadWaveBank( *(S->SoundsDir + Bank->File), *Bank, Error );
-	}
+		bOk = LoadWaveBankFile( S, Name + TEXT("_") + S->Lang, *Bank, Error );
 	if( !bOk )
 	{
 		Bank->Waves.Empty();
-		Bank->File = Name + TEXT(".uc2wb");
-		bOk = UC2LoadWaveBank( *(S->SoundsDir + Bank->File), *Bank, Error );
+		bOk = LoadWaveBankFile( S, Name, *Bank, Error );
 	}
 	if( !bOk )
 	{
@@ -293,12 +324,13 @@ static INT GetWaveBank( FUC2AudioState* S, const FString& Name )
 		if( Bank->Waves(i).bMissing )
 		{
 			Missing++;
-			debugf( NAME_DevSound, TEXT("UC2Audio: %s entry %d (%s) has no cooked wave: variations using it are skipped"),
-				*Bank->File, i, *Bank->Waves(i).Name );
+			debugf( NAME_DevSound, TEXT("UC2Audio: %s entry %d (%s) has no %s: variations using it are skipped"),
+				*Bank->File, i, *Bank->Waves(i).Name, Bank->Waves(i).Format==WF_WMA ? TEXT("playable wave (WMA)") : TEXT("cooked wave") );
 		}
 	Bank->Name = Name;
-	debugf( NAME_DevSound, TEXT("UC2Audio: loaded wave bank %s (%d waves%s)"), *Bank->File, Bank->Waves.Num(),
-		Missing ? *FString::Printf( TEXT(", %d missing"), Missing ) : TEXT("") );
+	debugf( NAME_DevSound, TEXT("UC2Audio: loaded wave bank %s (%d waves%s; %s)"), *Bank->File, Bank->Waves.Num(),
+		Missing ? *FString::Printf( TEXT(", %d missing"), Missing ) : TEXT(""),
+		Bank->bXbox ? TEXT("Xbox wave bank, waves decoded from it on first play") : TEXT("cooked") );
 	return S->WaveBanks.AddItem( Bank );
 	unguard;
 }
@@ -317,6 +349,9 @@ static FUC2Wave* ResolveVariation( FUC2AudioState* S, FUC2Variation& V, FUC2Wave
 	return &Bank->Waves(V.Entry);
 }
 
+static INT BufferBytes( const FUC2Wave& W, UBOOL bMono );
+static void TrimDecodedCache( FUC2AudioState* S );
+
 // Decodes a wave into an OpenAL buffer on first use (mono downmix for 3D voices of stereo waves).
 static ALuint EnsureBuffer( FUC2AudioState* S, FUC2WaveBank* Bank, FUC2Wave* W, UBOOL bMono )
 {
@@ -326,13 +361,16 @@ static ALuint EnsureBuffer( FUC2AudioState* S, FUC2WaveBank* Bank, FUC2Wave* W, 
 	UBOOL bDownmix = bMono && W->Channels==2;
 	ALuint& Target = bDownmix ? W->MonoBuffer : W->Buffer;
 	if( Target )
+	{
+		W->LastUsed = NowOf( S );
 		return Target;
+	}
 	if( Bank->bStream )
 	{
 		LogOnce( S, FString(TEXT("stream:")) + Bank->Name, FString::Printf( TEXT("%s is a streamed (music) bank; play it with PlayMusic"), *Bank->Name ) );
 		return 0;
 	}
-	if( !Bank->bDataTried )
+	if( !Bank->bDataTried && !Bank->bXbox )
 	{
 		Bank->bDataTried = 1;
 		DOUBLE ReadStart = appSeconds();
@@ -343,7 +381,7 @@ static ALuint EnsureBuffer( FUC2AudioState* S, FUC2WaveBank* Bank, FUC2Wave* W, 
 			debugf( NAME_Log, TEXT("UC2Audio: [%7.2f] read wave pack %s (%i bytes) in %.0f ms"), (FLOAT)(NowOf(S) - S->T0), *Bank->DataFile,
 				Bank->Data.Num(), 1000.0 * (appSeconds() - ReadStart) );
 	}
-	if( W->Offset<0 || W->Size<=0 || W->Offset+W->Size > Bank->Data.Num() )
+	if( !Bank->bXbox && (W->Offset<0 || W->Size<=0 || W->Offset+W->Size > Bank->Data.Num()) )
 	{
 		W->bDecodeFailed = 1;
 		LogOnce( S, FString(TEXT("range:")) + W->Name, FString::Printf( TEXT("%s: wave %s outside its data file"), *Bank->File, *W->Name ) );
@@ -352,7 +390,8 @@ static ALuint EnsureBuffer( FUC2AudioState* S, FUC2WaveBank* Bank, FUC2Wave* W, 
 	TArray<SWORD> Pcm;
 	INT Channels = 0, Rate = 0;
 	FString Error;
-	if( !UC2DecodeVorbis( &Bank->Data(W->Offset), W->Size, Pcm, Channels, Rate, Error, W->Frames ) || !Channels )
+	// Cooked: Vorbis from the pack in memory. Xbox (M16): the entry's bytes read from the .xwb, then decoded.
+	if( !UC2DecodeWave( *Bank, *W, *S->SoundsDir, Pcm, Channels, Rate, Error ) || !Channels )
 	{
 		W->bDecodeFailed = 1;
 		LogOnce( S, FString(TEXT("dec:")) + W->Name, FString::Printf( TEXT("%s: %s does not decode (%s)"), *Bank->File, *W->Name, *Error ) );
@@ -385,19 +424,92 @@ static ALuint EnsureBuffer( FUC2AudioState* S, FUC2WaveBank* Bank, FUC2Wave* W, 
 		Target = 0;
 		W->bDecodeFailed = 1;
 	}
+	else
+	{
+		// The decoded-wave cache: every buffer counts until it is freed (bank unload, eviction).
+		W->LastUsed = NowOf( S );
+		S->DecodedBytes += BufferBytes( *W, bDownmix || W->Channels!=2 );
+		S->DecodedPeak = Max( S->DecodedPeak, S->DecodedBytes );
+		S->DecodedWaves++;
+		if( S->DecodedBytes > UC2_DECODED_BUDGET )
+			TrimDecodedCache( S );
+	}
 	return Target;
 	unguard;
 }
 
-static void FreeWaveBankBuffers( FUC2WaveBank* Bank )
+// Bytes of PCM an OpenAL buffer of a wave holds (16-bit; the mono downmix has one channel).
+static INT BufferBytes( const FUC2Wave& W, UBOOL bMono )
+{
+	return W.Frames * (bMono ? 1 : Max( W.Channels, 1 )) * (INT)sizeof(SWORD);
+}
+
+static void FreeWaveBankBuffers( FUC2AudioState* S, FUC2WaveBank* Bank )
 {
 	for( INT i=0; i<Bank->Waves.Num(); i++ )
 	{
 		FUC2Wave& W = Bank->Waves(i);
-		if( W.Buffer )		GAL.alDeleteBuffers( 1, &W.Buffer );
-		if( W.MonoBuffer )	GAL.alDeleteBuffers( 1, &W.MonoBuffer );
+		if( W.Buffer )		{ GAL.alDeleteBuffers( 1, &W.Buffer ); S->DecodedBytes -= BufferBytes( W, W.Channels!=2 ); }
+		if( W.MonoBuffer )	{ GAL.alDeleteBuffers( 1, &W.MonoBuffer ); S->DecodedBytes -= BufferBytes( W, 1 ); }
 		W.Buffer = W.MonoBuffer = 0;
 	}
+}
+
+// M16: the decoded-wave cache is bounded. Over UC2_DECODED_BUDGET bytes of decoded PCM, the least recently used
+// buffers go until the cache is at 3/4 of it. A buffer a voice still plays or has queued cannot go: OpenAL refuses
+// to delete it (AL_INVALID_OPERATION) and it stays. An evicted wave is decoded again on its next play.
+static void TrimDecodedCache( FUC2AudioState* S )
+{
+	guard(TrimDecodedCache);
+	INT Target = UC2_DECODED_BUDGET/4*3, Freed = 0, Count = 0;
+	while( S->DecodedBytes > Target )
+	{
+		FUC2Wave* Oldest = NULL;
+		for( INT b=0; b<S->WaveBanks.Num(); b++ )
+			for( INT i=0; i<S->WaveBanks(b)->Waves.Num(); i++ )
+			{
+				FUC2Wave& W = S->WaveBanks(b)->Waves(i);
+				if( (W.Buffer || W.MonoBuffer) && W.LastUsed>=0.0 && (!Oldest || W.LastUsed < Oldest->LastUsed) )
+				{
+					// Never the buffer a voice will queue again (a looping track re-queues its wave).
+					UBOOL bVoice = 0;
+					for( INT v=0; v<S->Voices.Num() && !bVoice; v++ )
+						bVoice = S->Voices(v).Inst && S->Voices(v).Buffer && (S->Voices(v).Buffer==W.Buffer || S->Voices(v).Buffer==W.MonoBuffer);
+					if( bVoice )
+						W.LastUsed = -1.0;
+					else
+						Oldest = &W;
+				}
+			}
+		if( !Oldest )
+			break;
+		ALuint* Bufs[2] = { &Oldest->Buffer, &Oldest->MonoBuffer };
+		for( INT k=0; k<2; k++ )
+		{
+			if( !*Bufs[k] )
+				continue;
+			GAL.alGetError();
+			GAL.alDeleteBuffers( 1, Bufs[k] );
+			if( GAL.alGetError()==AL_NO_ERROR )
+			{
+				INT Bytes = BufferBytes( *Oldest, k==1 || Oldest->Channels!=2 );
+				S->DecodedBytes -= Bytes;
+				Freed += Bytes;
+				Count++;
+				*Bufs[k] = 0;
+			}
+		}
+		// In use (or already gone): not a candidate again in this pass.
+		Oldest->LastUsed = (Oldest->Buffer || Oldest->MonoBuffer) ? -1.0 : 0.0;
+	}
+	for( INT b=0; b<S->WaveBanks.Num(); b++ )
+		for( INT i=0; i<S->WaveBanks(b)->Waves.Num(); i++ )
+			if( S->WaveBanks(b)->Waves(i).LastUsed<0.0 )
+				S->WaveBanks(b)->Waves(i).LastUsed = NowOf( S );
+	S->Evicted += Count;
+	debugf( NAME_DevSound, TEXT("UC2Audio: [%7.2f] decoded-wave cache over %d MB: %d buffers (%d KB) freed, %d KB left"),
+		(FLOAT)(NowOf(S) - S->T0), UC2_DECODED_BUDGET>>20, Count, Freed>>10, S->DecodedBytes>>10 );
+	unguard;
 }
 
 // XACT GetNamedCueIdx/RegisterSoundCue :800-856, 2391-2465: "Bank.Group.Cue" -> bank "Bank", friendly name
@@ -515,14 +627,22 @@ UBOOL UUC2ALAudioSubsystem::Init()
 
 	// The cooked data (O-1): say so when it is not there, here and once on the console, instead of failing
 	// every cue in the (normally suppressed) cue log.
-	UBOOL bSoundData = GFileManager->FileSize( *(S->SoundsDir + TEXT("A_Gameplay.uc2cues")) ) > 0;
-	UBOOL bMusicData = GFileManager->FindFiles( TEXT("../Music/*.ogg"), 1, 0 ).Num() > 0;
+	// M16: or the shipped Xbox banks (a retail disc's Sounds/: <Bank>.xsb + <Bank>.xwb, music in M_<Song>.xwb), which
+	// the device reads itself where no cooked file is there. Which source each bank came from is logged at its load.
+	UBOOL bCooked = GFileManager->FileSize( *(S->SoundsDir + TEXT("A_Gameplay.uc2cues")) ) > 0;
+	UBOOL bXbox = GFileManager->FileSize( *(S->SoundsDir + TEXT("A_Gameplay.xsb")) ) > 0;
+	UBOOL bSoundData = bCooked || bXbox;
+	UBOOL bMusicData = GFileManager->FindFiles( TEXT("../Music/*.ogg"), 1, 0 ).Num() > 0
+		|| GFileManager->FindFiles( *(S->SoundsDir + TEXT("M_*.xwb")), 1, 0 ).Num() > 0;
 	if( !bSoundData )
-		S->Notice = TEXT("Game sound is off (effects, speech, music): no cooked sound data in ../Sounds (tools/cook-audio.py makes it; tools/dev/mkrun-uc2.sh links it into a run tree; a web build needs it in its file manifest).");
+		S->Notice = TEXT("Game sound is off (effects, speech, music): no sound data in ../Sounds, neither cooked (tools/cook-audio.py makes it; tools/dev/mkrun-uc2.sh links it into a run tree; a web build needs it in its file manifest) nor the Xbox disc's .xsb/.xwb banks.");
 	else if( !bMusicData )
-		S->Notice = TEXT("Music is off: no cooked music in ../Music (tools/cook-audio.py makes it; tools/dev/mkrun-uc2.sh links it into a run tree; a web build needs it in its file manifest).");
+		S->Notice = TEXT("Music is off: no cooked music in ../Music (tools/cook-audio.py makes it; tools/dev/mkrun-uc2.sh links it into a run tree; a web build needs it in its file manifest) and no Xbox music banks (../Sounds/M_*.xwb).");
 	if( S->Notice.Len() )
 		debugf( NAME_Init, TEXT("UC2ALAudio: %s"), *S->Notice );
+	else
+		debugf( NAME_Init, TEXT("UC2ALAudio: sound data: %s"), bCooked && bXbox ? TEXT("cooked (../Sounds/*.uc2cues) and the Xbox banks (../Sounds/*.xsb, *.xwb): cooked first, per bank")
+			: bCooked ? TEXT("cooked (../Sounds/*.uc2cues, *.uc2wb, *.ogp; ../Music/*.ogg)") : TEXT("the Xbox banks (../Sounds/*.xsb, *.xwb), read and decoded at run time") );
 
 	FString Why;
 	if( !UC2ALBind( Why ) )
@@ -742,9 +862,10 @@ void UUC2ALAudioSubsystem::Destroy()
 				GAL.alDeleteSources( 1, &S->Music[i].Source );
 				GAL.alDeleteBuffers( UC2_MUSIC_BUFFERS, S->Music[i].Buffers );
 				S->Music[i].Stream.Close();
+				S->Music[i].Xwb.Close();
 			}
 			for( INT i=0; i<S->WaveBanks.Num(); i++ )
-				FreeWaveBankBuffers( S->WaveBanks(i) );
+				FreeWaveBankBuffers( S, S->WaveBanks(i) );
 			if( S->bEFX )
 			{
 				for( TMap<INT,ALuint>::TIterator It(S->SendFilters); It; ++It )
@@ -1572,14 +1693,17 @@ void UUC2ALAudioSubsystem::NoteDestroy( AActor* Actor )
 static UBOOL FillMusicBuffer( FUC2MusicSlot& M, ALuint Buffer )
 {
 	static TArray<SWORD> Tmp;
+	INT Channels = M.bXwb ? M.Xwb.Channels : M.Stream.Channels;
+	INT Rate = M.bXwb ? M.Xwb.Rate : M.Stream.Rate;
 	Tmp.Empty( UC2_MUSIC_BUFFER_FRAMES*2 );
-	Tmp.Add( UC2_MUSIC_BUFFER_FRAMES*Max(M.Stream.Channels,1) );
-	INT Got = M.Stream.Read( &Tmp(0), UC2_MUSIC_BUFFER_FRAMES );
-	if( Got<UC2_MUSIC_BUFFER_FRAMES && M.bLoop && M.Stream.Rewind() )
-		Got += M.Stream.Read( &Tmp(Got*M.Stream.Channels), UC2_MUSIC_BUFFER_FRAMES-Got );
+	Tmp.Add( UC2_MUSIC_BUFFER_FRAMES*Max(Channels,1) );
+	INT Got = M.bXwb ? M.Xwb.Read( &Tmp(0), UC2_MUSIC_BUFFER_FRAMES ) : M.Stream.Read( &Tmp(0), UC2_MUSIC_BUFFER_FRAMES );
+	if( Got<UC2_MUSIC_BUFFER_FRAMES && M.bLoop && (M.bXwb ? M.Xwb.Rewind() : M.Stream.Rewind()) )
+		Got += M.bXwb ? M.Xwb.Read( &Tmp(Got*Channels), UC2_MUSIC_BUFFER_FRAMES-Got )
+			: M.Stream.Read( &Tmp(Got*Channels), UC2_MUSIC_BUFFER_FRAMES-Got );
 	if( Got<=0 )
 		return 0;
-	GAL.alBufferData( Buffer, UC2ALFormat(M.Stream.Channels), &Tmp(0), Got*M.Stream.Channels*sizeof(SWORD), M.Stream.Rate );
+	GAL.alBufferData( Buffer, UC2ALFormat(Channels), &Tmp(0), Got*Channels*sizeof(SWORD), Rate );
 	return 1;
 }
 
@@ -1588,6 +1712,8 @@ static void StopMusicSlot( FUC2MusicSlot& M )
 	GAL.alSourceStop( M.Source );
 	GAL.alSourcei( M.Source, AL_BUFFER, 0 );
 	M.Stream.Close();
+	M.Xwb.Close();
+	M.bXwb = 0;
 	M.Handle = 0;
 	M.Song = TEXT("");
 }
@@ -1617,7 +1743,12 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 		W = ResolveVariation( S, Snd.Tracks(0).Variations(0), &WB );
 	if( !W )
 	{
-		CueLogf( CueLog, S, TEXT("music %s: its wave bank is not cooked"), *Song );
+		// (Logged always, once per song: a retail disc's M_Adoratrice.xwb is WMA, which this build cannot decode.)
+		INT B = Snd.Tracks.Num() && Snd.Tracks(0).Variations.Num() ? Snd.Tracks(0).Variations(0).Bank : -1;
+		UBOOL bWMA = B>=0 && B<S->WaveBanks.Num() && S->WaveBanks(B)->Waves.Num() && S->WaveBanks(B)->Waves(0).Format==WF_WMA;
+		if( bWMA )
+			LogOnce( S, FString(TEXT("wma:")) + Song, FString::Printf( TEXT("music %s: %s holds WMA, which this build cannot decode: no music"), *Song, *S->WaveBanks(B)->File ) );
+		CueLogf( CueLog, S, TEXT("music %s: %s"), *Song, bWMA ? TEXT("WMA, not decoded") : TEXT("its wave bank is not cooked") );
 		return 0;
 	}
 	TArray<BYTE> Data;
@@ -1625,11 +1756,21 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 	FUC2MusicSlot& M = S->Music[0];
 	M.Stream.Frames = W->Frames;
 	DOUBLE ReadStart = appSeconds();
-	UBOOL bRead = appLoadFileToArray( Data, *File );
+	UBOOL bRead;
+	M.bXwb = WB->bXbox;
+	if( M.bXwb )
+	{
+		// M16: the shipped M_<Song>.xwb, decoded from the file a block at a time (nothing read ahead).
+		WB->bStream = 1;	// a music bank: never decoded whole as a cue's wave
+		bRead = M.Xwb.Open( *File, *W, Error );
+	}
+	else
+		bRead = appLoadFileToArray( Data, *File );
 	DOUBLE ReadSeconds = appSeconds() - ReadStart;
-	if( !bRead || !M.Stream.Open( Data, Error ) )
+	if( !bRead || (!M.bXwb && !M.Stream.Open( Data, Error )) )
 	{
 		CueLogf( CueLog, S, TEXT("music %s: cannot play %s (%s)"), *Song, *File, Error.Len() ? *Error : TEXT("unreadable") );
+		M.bXwb = 0;
 		return 0;
 	}
 	M.Handle		= S->NextMusicHandle++;
@@ -1654,9 +1795,9 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 	GAL.alSourcef( M.Source, AL_GAIN, MBToGain( Clamp( MB, -10000.f, 0.f ) ) * M.Fade );
 	GAL.alSourcePlay( M.Source );
 	// (Not only in the cue log: one line per song, and what a web run checks that the music started.)
-	debugf( NAME_Log, TEXT("UC2Audio: [%7.2f] music %s: playing %s (%d Hz, %d ch, %s, volume %d mB, fade in %.1f s; file read in %.0f ms)"),
-		(FLOAT)(NowOf(S) - S->T0), *Song, *File, M.Stream.Rate, M.Stream.Channels, M.bLoop ? TEXT("looping") : TEXT("once"), M.Volume,
-		bFade ? FadeInTime : 0.f, 1000.0 * ReadSeconds );
+	debugf( NAME_Log, TEXT("UC2Audio: [%7.2f] music %s: playing %s (%d Hz, %d ch, %s, volume %d mB, fade in %.1f s; file %s in %.0f ms)"),
+		(FLOAT)(NowOf(S) - S->T0), *Song, *File, M.bXwb ? M.Xwb.Rate : M.Stream.Rate, M.bXwb ? M.Xwb.Channels : M.Stream.Channels, M.bLoop ? TEXT("looping") : TEXT("once"), M.Volume,
+		bFade ? FadeInTime : 0.f, M.bXwb ? TEXT("opened (Xbox wave bank, streamed from it)") : TEXT("read"), 1000.0 * ReadSeconds );
 	return M.Handle;
 	unguard;
 }
@@ -1939,7 +2080,7 @@ void UUC2ALAudioSubsystem::NotifyLevelChange()
 		if( Keep.FindItemIndex( S->WaveBanks(i)->Name )==INDEX_NONE )
 		{
 			if( S->bDevice )
-				FreeWaveBankBuffers( S->WaveBanks(i) );
+				FreeWaveBankBuffers( S, S->WaveBanks(i) );
 			delete S->WaveBanks(i);
 			S->WaveBanks.Remove( i );
 		}
@@ -2039,6 +2180,12 @@ UBOOL UUC2ALAudioSubsystem::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 				Busy += S->Voices(i).Inst ? 1 : 0;
 			Ar.Logf( TEXT("UC2Audio: %d cue instances, %d of %d voices busy, %d emitters, %d sound banks, %d wave banks"),
 				S->Insts.Num(), Busy, S->Voices.Num(), S->Emitters.Num(), S->SoundBanks.Num(), S->WaveBanks.Num() );
+			// M16: what the decoded-wave cache and the wave packs hold (memory of either source).
+			INT Packs = 0;
+			for( INT i=0; i<S->WaveBanks.Num(); i++ )
+				Packs += S->WaveBanks(i)->Data.Num();
+			Ar.Logf( TEXT("UC2Audio: decoded-wave cache: %d KB now, %d KB at most (budget %d MB), %d waves decoded, %d buffers evicted; wave packs in memory: %d KB"),
+				S->DecodedBytes>>10, S->DecodedPeak>>10, UC2_DECODED_BUDGET>>20, S->DecodedWaves, S->Evicted, Packs>>10 );
 			return 1;
 		}
 		if( ParseCommand( &Str, TEXT("ZONE") ) )

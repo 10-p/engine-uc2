@@ -82,8 +82,9 @@ static DOUBLE SourceEnergy( FUC2TestPlay& P, INT& Frames, INT& Rate, INT& First,
 	FString Error;
 	Frames = Rate = 0;
 	First = Last = -1;
-	if( !P.Wave || !P.WaveBank || !P.WaveBank->Data.Num()
-	 || !UC2DecodeVorbis( &P.WaveBank->Data(P.Wave->Offset), P.Wave->Size, Pcm, Channels, Rate, Error, P.Wave->Frames ) )
+	// (M16: either source: the cooked pack the device loaded, or the shipped .xwb entry read again)
+	if( !P.Wave || !P.WaveBank || (!P.WaveBank->bXbox && !P.WaveBank->Data.Num())
+	 || !UC2DecodeWave( *P.WaveBank, *P.Wave, TEXT("../Sounds/"), Pcm, Channels, Rate, Error ) )
 		return 0.0;
 	Frames = Pcm.Num()/Channels;
 	TArray<DOUBLE> Amp;
@@ -203,7 +204,7 @@ static void SourcePower( FUC2TestPlay& P, TArray<DOUBLE>& Power, INT& Rate )
 	INT Channels = 0;
 	FString Error;
 	Power.Empty();
-	if( !P.Wave || !UC2DecodeVorbis( &P.WaveBank->Data(P.Wave->Offset), P.Wave->Size, Pcm, Channels, Rate, Error, P.Wave->Frames ) )
+	if( !P.Wave || !P.WaveBank || !UC2DecodeWave( *P.WaveBank, *P.Wave, TEXT("../Sounds/"), Pcm, Channels, Rate, Error ) )
 		return;
 	for( INT i=0; i<Pcm.Num()/Channels; i++ )
 	{

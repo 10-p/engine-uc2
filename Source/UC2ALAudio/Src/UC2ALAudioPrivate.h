@@ -109,16 +109,28 @@ enum EUC2Playlist
 	PL_OrderedFromRandom	= 5,
 };
 
+// How a wave is stored. Cooked: an Ogg Vorbis stream in the bank's .ogp. Xbox (M16): an entry of a shipped .xwb.
+enum EUC2WaveFormat
+{
+	WF_Vorbis		= 0,
+	WF_PCM8			= 1,
+	WF_PCM16		= 2,
+	WF_XboxADPCM	= 3,
+	WF_WMA			= 4,	// M_Adoratrice.xwb: an ASF file in the bank; not decoded (no WMA decoder)
+};
+
 struct FUC2Wave
 {
 	FString		Name;
 	INT			Offset, Size, Rate, Channels, Frames, LoopStart, LoopLength;
+	INT			Format;			// EUC2WaveFormat; Offset/Size: bytes in the bank's data file (.ogp, or the .xwb)
 	UBOOL		bMissing;
 	ALuint		Buffer;			// decoded as is (0 = not yet)
 	ALuint		MonoBuffer;		// downmixed for 3D voices (stereo waves only)
 	UBOOL		bDecodeFailed;
-	FUC2Wave() : Offset(0), Size(0), Rate(0), Channels(0), Frames(0), LoopStart(0), LoopLength(0),
-		bMissing(0), Buffer(0), MonoBuffer(0), bDecodeFailed(0) {}
+	DOUBLE		LastUsed;		// M16: the decoded-wave cache evicts the least recently used buffers
+	FUC2Wave() : Offset(0), Size(0), Rate(0), Channels(0), Frames(0), LoopStart(0), LoopLength(0), Format(WF_Vorbis),
+		bMissing(0), Buffer(0), MonoBuffer(0), bDecodeFailed(0), LastUsed(0.0) {}
 };
 
 struct FUC2WaveBank
@@ -129,10 +141,11 @@ struct FUC2WaveBank
 	FString				DataFile;	// path relative to the cooked Sounds directory
 	UBOOL				bStream;	// music: streamed from its own file
 	UBOOL				bPersist;
+	UBOOL				bXbox;		// M16: a shipped .xwb (DataFile is the .xwb; waves are read from it one by one)
 	TArray<FUC2Wave>	Waves;
-	TArray<BYTE>		Data;		// the .ogp, loaded on first use
+	TArray<BYTE>		Data;		// the .ogp, loaded on first use (cooked banks only)
 	UBOOL				bDataTried;
-	FUC2WaveBank() : bStream(0), bPersist(0), bDataTried(0) {}
+	FUC2WaveBank() : bStream(0), bPersist(0), bXbox(0), bDataTried(0) {}
 };
 
 struct FUC2Variation
@@ -217,6 +230,43 @@ struct FUC2SoundBank
 // Parsing. Return 0 and fill Error when the file is unusable.
 UBOOL UC2LoadSoundBank( const TCHAR* Path, FUC2SoundBank& Bank, FString& Error );
 UBOOL UC2LoadWaveBank( const TCHAR* Path, FUC2WaveBank& Bank, FString& Error );
+
+/*-----------------------------------------------------------------------------
+	M16: the shipped Xbox banks (UC2XboxBanks.cpp). Formats in tools/uc2xwb.py, tools/uc2xsb.py
+	and docs/porting/analysis/xbox-audio-runtime.md; read little-endian byte by byte (no
+	structure casts), so the readers are the same on every target.
+-----------------------------------------------------------------------------*/
+
+// <Bank>[_<lang>].xwb -> the same wave index a .uc2wb gives (Format, Offset, Size, Frames, LoopStart/Length in
+// frames). Only the header and the entry table are read; DataFile = the .xwb's file name.
+UBOOL UC2LoadXwbWaveBank( const TCHAR* Path, FUC2WaveBank& Bank, FString& Error );
+// <Bank>.xsb -> the same tables a .uc2cues gives. Cue lengths need the waves' lengths: the entry tables of the
+// wave banks the .xsb names are read from the same directory (<Name>.xwb, the base language, as the cook did).
+UBOOL UC2LoadXsbSoundBank( const TCHAR* Path, FUC2SoundBank& Bank, FString& Error );
+// Xbox ADPCM (36 bytes per channel per block, 64 frames per block) to interleaved 16-bit PCM: returns the frames
+// written to Out (room for Size/(36*Channels)*64*Channels samples). The same arithmetic as tools/uc2xwb.py.
+INT UC2DecodeXboxAdpcm( const BYTE* Data, INT Size, INT Channels, SWORD* Out );
+// One wave of either source to interleaved 16-bit PCM: Vorbis from Bank.Data (loaded by the caller), an Xbox
+// entry read from <SoundsDir><Bank.DataFile>. Frames of a Vorbis wave are cut to the index's length.
+UBOOL UC2DecodeWave( const FUC2WaveBank& Bank, const FUC2Wave& W, const TCHAR* SoundsDir, TArray<SWORD>& Pcm,
+	INT& Channels, INT& Rate, FString& Error, INT* Trimmed=NULL );
+
+// Music from a streamed .xwb entry (M_<Song>.xwb), read from the file a block at a time.
+struct FUC2XwbStream
+{
+	FArchive*		Ar;
+	INT				Format, Channels, Rate, Start, Size, Pos;	// Pos: bytes of the entry consumed
+	INT				Frames, Position;
+	TArray<SWORD>	Pending;		// decoded frames not handed out yet
+	INT				PendingAt;
+	FUC2XwbStream() : Ar(NULL), Format(0), Channels(0), Rate(0), Start(0), Size(0), Pos(0), Frames(0), Position(0),
+		PendingAt(0) {}
+	~FUC2XwbStream() { Close(); }
+	UBOOL Open( const TCHAR* Path, const FUC2Wave& W, FString& Error );
+	INT Read( SWORD* Out, INT MaxFrames );
+	UBOOL Rewind();
+	void Close();
+};
 
 // Vorbis from memory. A wave decodes to whole Vorbis blocks when the decoder does not apply the end-of-stream
 // granule position (libvorbis 1.0's vorbisfile does not, for about one wave in ten of ours): Frames > 0 cuts
