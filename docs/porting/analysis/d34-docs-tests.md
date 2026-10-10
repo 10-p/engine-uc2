@@ -174,3 +174,22 @@ units). Every other number is identical in all three runs (the lock offsets exac
 Tree `run/d34-m7new` made fresh and `logs/d34-m7new` removed first (the brand-new-tree case): run 1 `fx selftest
 summary: 15 passed, 0 failed` (57 s; `run-uc2-shot: exit 0`, the game ended itself: `appRequestExit(0)` from the
 `@54:exit`; nothing left running); run 2 the same (58 s).
+
+## Step 12: the twin, full run 1 (`logs/d34/m11-twin-1.txt`, trees d34-twd/d34-twt, 03:02-04:38, load 13.0 at the start)
+
+**33 PASS, 1 FAIL.** `m11-effect-liandri` B desktop vs twin **1.658** of 255 (MaterialTime=100; a19 4.433, earlier
+runs 4.0-9.3 against the threshold 6). Every effect 0.50-3.39 except `blur` 5.485 (its concussion ghosts move with
+the level time since BlurMe, which MaterialTime does not touch; it has been 3.07-6.42 in earlier runs: a third
+time-dependent picture, noted, not one of the two FAILs of the task).
+The one FAIL is `m11-movies` (`menu-movie-shots`, `menu-movie-clean`), and its real cause was not timing:
+- the menu-movie check measures 640x480 regions and requires a 640x480 picture, but in m11-twin.sh the effects step
+  runs first and `run-uc2-shot.sh` (UC2_RES=1280x720) rewrites the tree's Default.ini: the shots were 1280x720 (also
+  in a19's `logs/twt`), so the size test failed and the regions were the wrong pixels (the "timing FAIL" since M11;
+  standalone m9 runs at 640x480 passed, e.g. `logs/f4/f4b-tools/m9-movies.txt`);
+- my first movie times (3 s, 5 s) were too early on the twin: the page was still building (the portrait frame not
+  shown, the description still typing);
+- `menu-movie-clean` read "None GL errors": the GL device's periodic count came only with its ShotTimes, which the
+  scenario no longer uses.
+Fix (tools/dev/m9-movies.py): the menu scenario sets `[SDL2Drv.SDL2Client] WindowedViewportX/Y=640/480` with `-ini:`,
+shoots at the portrait's movie time 10 s and 12 s, ends itself with `Exec=100:exit` (limit 150 s) and `gl_errors`
+also reads the device's last line ("N GL errors in N frames").

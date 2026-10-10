@@ -133,7 +133,8 @@ def criticals(text):
 
 def gl_errors(text):
     m = re.findall(r'UC2GLDrv: frame (\d+), (\d+) GL errors', text)
-    return int(m[-1][1]) if m else None
+    e = re.findall(r'UC2GLDrv: (\d+) GL errors in (\d+) frames', text)	# the device's last line at exit
+    return int(e[-1][0]) if e else (int(m[-1][1]) if m else None)
 
 
 # ------------------------------------------------------------------------------------------------------------
@@ -249,7 +250,13 @@ def scen_logos_skip(a, tmp):
 def scen_menu(a, tmp):
     # the arena page: Down to INSTANT ACTION, Return (10 s after start-up: the menu takes input after a few
     # seconds under software GL); it opens with the CTF portrait movie. See docs/porting/analysis/video.md (V5).
-    text, shots, dt, left = run_game(a.tree, 'menu-movie', 90, ['-log', '-ini:System:[UC2Movie]:StartupMovies=False', '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True', '-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True'] + a.menu_args,
+    # 640x480 whatever the tree's Default.ini says (D-4: run-uc2-shot.sh's UC2_RES leaves a tree at 1280x720, so
+    # in m11-twin.sh, which runs the effects first, the regions below were measured on a 1280x720 picture and the
+    # size test failed: the "menu-movie timing FAIL" of a19 and before). The game ends itself at 100 s after its
+    # first frame (its last line gives the GL error count); the limit of 150 s only stops a hang.
+    text, shots, dt, left = run_game(a.tree, 'menu-movie', 150, ['-log', '-ini:System:[UC2Movie]:StartupMovies=False', '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True', '-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True',
+                                     '-ini:System:[SDL2Drv.SDL2Client]:WindowedViewportX=640', '-ini:System:[SDL2Drv.SDL2Client]:WindowedViewportY=480',
+                                     '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=100:exit'] + a.menu_args,
                                      inject=a.menu_inject)
     mats = re.findall(r'UC2Movie: MovieMaterial (\S+) frame (\d+) of (\d+)', text)
     names = sorted(set(m[0] for m in mats))
@@ -264,9 +271,10 @@ def scen_menu(a, tmp):
         # Regions of the 640x480 arena page (UCMenu.UC2Arena_Main, behind the "no profile" dialog): the game
         # type portrait (a MovieMaterial) and two parts that do not move (the page title, the list).
         # The page's background animates everywhere else.
-        # The shots are taken at the portrait's own movie time 3 s and 5 s ([UC2Movie] MaterialShotTimes, D-4): the
-        # page has then been open 3 s on any machine. At fixed times after the first frame (26 s, 28 s) a loaded
-        # machine caught the page still changing (a19: title and list PSNR 28.7 / 26.6 dB).
+        # The shots are taken at the portrait's own movie time 10 s and 12 s ([UC2Movie] MaterialShotTimes, D-4): the
+        # page has then been open 10 s on any machine (at 3 s and 5 s the twin was still building it: the portrait
+        # frame not yet shown, the description still typing), where fixed times after the first frame depend on when
+        # the injected keys were taken.
         regions = {'portrait': (412, 96, 565, 176), 'title': (495, 40, 600, 68), 'list': (60, 82, 360, 110)}
         p = {k: psnr(crop(x, size, v), crop(y, size, v)) for k, v in regions.items()}
         result('menu-movie-shots', size == (640, 480) and p['portrait'] < 20.0 and p['title'] > 30.0 and p['list'] > 30.0,
@@ -379,7 +387,7 @@ def main():
     ap.add_argument('--no-mkrun', action='store_true')
     # the menu page with a MovieMaterial and how to reach it (see the notebook, V5)
     ap.add_argument('--menu-inject', default='Startup time|10.0|Down,Return')
-    ap.add_argument('--menu-args', default='-ini:System:[UC2Movie]:MaterialShotTimes=3,5')
+    ap.add_argument('--menu-args', default='-ini:System:[UC2Movie]:MaterialShotTimes=10,12')
     # expected level of the movie's sound in the capture: 0 dB at the source (no category, no headroom: the
     # Xbox played XMV sound outside XACT) plus OpenAL Soft's gain for a centred 2D stereo source (measured, see
     # the notebook)
