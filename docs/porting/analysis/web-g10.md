@@ -169,3 +169,34 @@ The recorded effects (`[PAD-FX]` of `pad-2.out`, times from the first effect), a
 - Epic's waveform code evaluates the Sin functions with the frame's delta, not the elapsed time
   (`UnForceFeedbackWaveform.cpp` `WF_Sin0to90` etc.), so those levels depend on the frame rate on every platform; not
   touched (Epic's behaviour).
+
+## Step 4 - item 1, the standby check leaves web guests out: green in the browser (2026-10-10)
+
+Run `net-1` (`logs/g10/run-e2e.sh net-1 3000 uc2-wasm-net.spec.js`, artifact ecdb59aa..., the patch's third test):
+**3 passed (6.3m)**: the two existing tests unchanged (1.9m, 1.7m) and "a guest whose tab is closed mid-match: the host
+plays on and drops it at the timeout" (2.7m). Consoles: `logs/g10/net-1-consoles/` (`gone-host-console.txt` etc.).
+
+- `guest "JoinPlayer" tab closed; host "HostPlayer" plays on`; +8.4 s: the host's own pawn walked 621.5 units
+  (W held 1.5 s) while the silent guest was still connected (`conns=1`, level time 66.8).
+- `host dropped the guest after 61.0 s` (level time 118.8, i.e. the match clock ran the whole minute):
+  `Connection timed out after 60.000000 seconds (60.038578)`, `Close WebRTCConnection webrtc:1`, `Logout
+  DM-Deadbolt.UCPlayerController1 JoinPlayer`; then `conns=0`, `pris=1` (the guest's PRI gone; its dead pawn,
+  name=None health=0, lies there as after any logout).
+- **No line matching `Standby hack|ToggleStandbyMode|NotifyStandby` in the host's console** (and `grep -ci standby` of
+  the whole host console: 0). Before the change the same silence logged `Standby hack detected! ValidClients:1/1` and
+  paused the host (webrtc.md step 4, loss run 1).
+- Memory: host 1.5-1.6 GB, guest 1.6 GB PSS; the run's cgroup peaked at 6,065 MiB of its 6 GiB ceiling (three tests
+  in one Chromium session: close to the ceiling, worth 7G next time); machine-wide 21.3 GB with others' work.
+
+### ConnectionTimeout: 60, not engine-ut2004's 300
+
+engine-ut2004 substitutes 300 s (and InitialConnectTimeout 600) because "the WebRTC handshake plus Emscripten's
+synchronous asset loading dwarf a TCP connect, and no game ticks run while a map streams" (its WebRTCNetDriver.cpp:
+219-224): its engine shares the page's thread, and a busy or hidden page stops sending. Neither holds here: UC2's
+engine runs on a worker under PROXY_TO_PTHREAD and since F-4b keeps ticking, and so sending keep-alives, in a hidden
+tab (platform-f4.md, the "Hidden tab" row; not re-measured in G-10). A guest that is still loading a map, at the join or
+after a server travel, is under `InitialConnectTimeout` (300 s in the web ini), not `ConnectionTimeout`, until its
+level is loaded and precached (`UNetConnection::Tick`, UnConn.cpp:1045-1047: `bShortConnectTimeOut`). So 60 s only
+ever runs against a guest that is in the level and silent, i.e. gone; with the standby pause out of the way it costs
+the host nothing but the guest's pawn standing for a minute (300 would leave it five), and the glue's own reaper
+(90 s grace) comes later anyway. Kept at 60.

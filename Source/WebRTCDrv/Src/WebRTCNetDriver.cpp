@@ -4,7 +4,8 @@
 	engine-ut2004's WebRTCNetDriver.cpp (ufront steps 2.36b, 2.38, 2.40), adapted to UC2:
 	- every received packet updates the driver's receive clock (UNetDriver::UpdateLastReceiveTime, as
 	  UTcpNetDriver does): UC2's "standby cheat" check fires NotifyStandbyHack after 1 s (server) or 3 s
-	  (client) without one;
+	  (client) without one; G-10: a listen server leaves its web guests out of that check
+	  (ShouldIncludeInStandbyCheck), so a vanished guest no longer pauses the host's match;
 	- no emscripten_sleep while waiting for a pipe: the template slept 100 ms per tick (a listen server with
 	  nobody connected ran at 10 frames a second) because its engine once shared the browser's main thread
 	  with PeerJS; here the engine has run on a worker since M4w and the transport lives on the main thread;
@@ -326,6 +327,23 @@ void UWebRTCNetDriver::LowLevelDestroy()
 	if( !bDetached )
 		webrtc_destroy();
 	unguard;
+}
+
+//
+// G-10: the browser's guests are left out of UC2's "standby cheat" check (UNetDriver::TickDispatch: a server that
+// hears from none of its in-game clients for STANDBYCHEAT_TIMEOUT, 1 s, calls ULevel::NotifyStandbyHack, which
+// pauses the match through PlayerController.ToggleStandbyMode until a packet arrives). It was written against a
+// cable modem's Standby button on the Xbox; Epic's own UTcpNetDriverXbox overrides this same function to leave
+// LAN clients out. Over WebRTC it fired on a guest that simply vanished (tab closed, crash, network gone: the glue
+// waits RECONNECT_GRACE_MS for a reconnect before it reports the pipe closed): the host's game stood paused for
+// up to ConnectionTimeout. Without it, such a guest is dropped at ConnectionTimeout while the match goes on, as
+// engine-ut2004's WebRTC driver does (UT2004 has no standby check at all). The check, its pause and every other
+// driver (IpDrv.TcpNetDriver natively) are unchanged. Owner decision of 2026-10-10 ("yes exclude webrtc");
+// docs/porting/analysis/web-g10.md.
+//
+UBOOL UWebRTCNetDriver::ShouldIncludeInStandbyCheck( const UNetConnection* Connection ) const
+{
+	return 0;
 }
 
 UWebRTCConnection* UWebRTCNetDriver::GetServerConnection()
