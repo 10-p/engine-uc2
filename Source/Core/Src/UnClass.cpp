@@ -430,7 +430,6 @@ void UStruct::AddCppProperty( UProperty* Property )
 	unguard;
 }
 
-#if PLATFORM_64BITS
 //
 // M13: native placeholders. The shipped packages were compiled for 32-bit pointers and declare as `int` the
 // script variables that stand in for C++ data script never touches: the object header, vtable pointers of
@@ -440,6 +439,12 @@ void UStruct::AddCppProperty( UProperty* Property )
 // C++ fills with pointers. Lookup by string: a cached FName can be purged and its index reused (ufront 2.83).
 // Proven by `ucc-bin verifyclasses` (sizes, offsets, and that no bytecode reads a placeholder) and
 // tools/dev/m13-layout-check.py; docs/porting/analysis/64bit.md lists every entry and why.
+// uc2 port (T2): the table is also the one source the C++ header exporter reads (any pointer width: `ucc-bin make`
+// is a 32-bit program), so the generated <Pkg>Classes.h are 64-bit-correct as generated. CppType is the C++
+// spelling of one element of the stand-in, written in place of `INT` (`PTRINT Node`, `PTRINT TextureInterfaces[3]`,
+// `TArrayNoInit<PTRINT> OctreeNodes`); NULL for C++ data a script-exported member cannot spell (the object
+// header, base-class vtables, maps): their classes are `noexport` and hand-written, and exporting one is an error
+// (GetNativePlaceholderCppType). docs/porting/analysis/headers.md.
 //
 enum EPlaceholderKind { PH_Member, PH_ArrayElement };
 struct FNativePlaceholder
@@ -449,60 +454,61 @@ struct FNativePlaceholder
 	const TCHAR* Property;
 	INT Size;
 	INT Kind;
+	const TCHAR* CppType;
 };
 static const FNativePlaceholder GNativePlaceholders[] =
 {
 	// vtable, Index, HashNext, HashOuterNext, StateFrame, _Linker, _LinkerIndex: everything before Outer.
-	{ TEXT("Core"),   TEXT("Object"),       TEXT("ObjectInternal"), (INT)(sizeof(UObject) - sizeof(UObject*) - sizeof(DWORD) - sizeof(FName) - sizeof(UClass*)), PH_Member },
-	{ TEXT("Core"),   TEXT("Subsystem"),    TEXT("ExecVtbl"),       (INT)sizeof(FExec),          PH_Member },
-	{ TEXT("Core"),   TEXT("Orientation"),  TEXT("MA"),             (INT)sizeof(void*),          PH_Member },	// UMatSubAction* (FOrientation, Engine.h)
-	{ TEXT("Engine"), TEXT("Player"),       TEXT("vfOut"),          (INT)sizeof(FOutputDevice),  PH_Member },
-	{ TEXT("Engine"), TEXT("Player"),       TEXT("vfExec"),         (INT)sizeof(FExec),          PH_Member },
-	{ TEXT("Engine"), TEXT("ActorRenderDataPtr"),               TEXT("Ptr"), (INT)sizeof(void*), PH_Member },	// FDynamicActor*
-	{ TEXT("Engine"), TEXT("LightRenderDataPtr"),               TEXT("Ptr"), (INT)sizeof(void*), PH_Member },	// FDynamicLight*
-	{ TEXT("Engine"), TEXT("ProjectorRenderInfoPtr"),           TEXT("Ptr"), (INT)sizeof(void*), PH_Member },	// FProjectorRenderInfo*
-	{ TEXT("Engine"), TEXT("StaticMeshProjectorRenderInfoPtr"), TEXT("Ptr"), (INT)sizeof(void*), PH_Member },	// FStaticProjectorInfo*
-	{ TEXT("Engine"), TEXT("Actor"),          TEXT("OctreeNodes"),           (INT)sizeof(void*), PH_ArrayElement },	// FOctreeNode*
-	{ TEXT("Engine"), TEXT("StateInfo"),      TEXT("Node"),                  (INT)sizeof(void*), PH_Member },	// UStruct*
-	{ TEXT("Engine"), TEXT("StateInfo"),      TEXT("StateNode"),             (INT)sizeof(void*), PH_Member },	// UState*
-	{ TEXT("Engine"), TEXT("StateInfo"),      TEXT("Code"),                  (INT)sizeof(void*), PH_Member },	// BYTE*
-	{ TEXT("Engine"), TEXT("FileLog"),        TEXT("LogAr"),                 (INT)sizeof(void*), PH_Member },	// FArchive*
-	{ TEXT("Engine"), TEXT("MovieMaterial"),  TEXT("MovieDecoder"),          (INT)sizeof(void*), PH_Member },	// FMoviePlayer*
-	{ TEXT("Engine"), TEXT("MovieMaterial"),  TEXT("RenderInterface"),       (INT)sizeof(void*), PH_Member },	// FMovieTexture*
-	{ TEXT("Engine"), TEXT("MovieMaterial"),  TEXT("InMemoryDecodingBlock"), (INT)sizeof(void*), PH_Member },	// BYTE*
-	{ TEXT("Engine"), TEXT("MovieMaterial"),  TEXT("ThreadSynch"),           (INT)sizeof(void*), PH_Member },	// FCriticalSection*
-	{ TEXT("Engine"), TEXT("MovieMaterial"),  TEXT("Thread"),                (INT)sizeof(void*), PH_Member },	// FRunnableThread*
-	{ TEXT("Engine"), TEXT("ParticleEmitter"),TEXT("Particles"),             (INT)sizeof(void*), PH_ArrayElement },	// FParticle*
-	{ TEXT("GUI"),    TEXT("GUIController"),  TEXT("Designer"),              (INT)sizeof(void*), PH_Member },	// UPropertyManagerBase*
-	{ TEXT("IpDrv"),  TEXT("InternetLink"),   TEXT("PrivateResolveInfo"),    (INT)sizeof(void*), PH_Member },	// FResolveInfo*
-	{ TEXT("IpDrv"),  TEXT("MasterServerLink"),  TEXT("LinkPtr"),            (INT)sizeof(void*), PH_Member },	// FMasterServer*Link*
-	{ TEXT("IpDrv"),  TEXT("MasterServerClient"),TEXT("MSLinkPtr"),          (INT)sizeof(void*), PH_Member },	// FMasterServerClientLink*
-	{ TEXT("Engine"), TEXT("Texture"),        TEXT("RenderInterface"),       (INT)sizeof(void*), PH_Member },	// FStaticTexture*
-	{ TEXT("Engine"), TEXT("ScriptedTexture"),TEXT("RenderTarget"),          (INT)sizeof(void*), PH_Member },	// FScriptedRenderTarget* (punned)
-	{ TEXT("Engine"), TEXT("ShadowBitmapMaterial"),TEXT("TextureInterfaces"),(INT)(3*sizeof(void*)), PH_Member },	// FAuxRenderTarget*[3] (punned)
-	{ TEXT("Engine"), TEXT("Cubemap"),        TEXT("CubemapRenderInterface"),(INT)sizeof(void*), PH_Member },	// FStaticCubemap*
-	{ TEXT("Engine"), TEXT("Canvas"),         TEXT("pCanvasUtil"),           (INT)sizeof(void*), PH_Member },	// FCanvasUtil*
-	{ TEXT("Engine"), TEXT("MotionBlur"),     TEXT("RenderTargets"),         (INT)(2*sizeof(void*)), PH_Member },	// FAuxRenderTarget*[2]
-	{ TEXT("Engine"), TEXT("FluidSurfaceInfo"),TEXT("Indices"),              (INT)sizeof(void*), PH_Member },	// void*
-	{ TEXT("UCGameplay"), TEXT("UCScreenBloom"),      TEXT("EmissiveResultTarget"), (INT)sizeof(void*), PH_Member },	// FRenderTarget*
-	{ TEXT("UCGameplay"), TEXT("UCScreenEmissive"),   TEXT("BackBufferTarget"),     (INT)sizeof(void*), PH_Member },	// FRenderTarget*
-	{ TEXT("UCGameplay"), TEXT("UCScreenEmissive"),   TEXT("SelectTarget"),         (INT)sizeof(void*), PH_Member },	// FRenderTarget*
-	{ TEXT("UCGameplay"), TEXT("UCScreenEmissive"),   TEXT("BlurTargets"),          (INT)sizeof(void*), PH_ArrayElement },	// FRenderTarget*
-	{ TEXT("UCGameplay"), TEXT("UCScreenDOF"),        TEXT("BackBufferTarget"),     (INT)sizeof(void*), PH_Member },	// FRenderTarget*
-	{ TEXT("UCGameplay"), TEXT("UCScreenDOF"),        TEXT("BlurTargets"),          (INT)sizeof(void*), PH_ArrayElement },	// FRenderTarget*
-	{ TEXT("UCGameplay"), TEXT("UCScreenMotionBlur"), TEXT("BackBufferTarget"),     (INT)sizeof(void*), PH_Member },	// FRenderTarget*
-	{ TEXT("UCGameplay"), TEXT("UCScreenMotionBlur"), TEXT("AccumulationTarget"),   (INT)sizeof(void*), PH_Member },	// FRenderTarget*
-	{ TEXT("UCGameplay"), TEXT("UCScreenRadialBlur"), TEXT("BackBufferTarget"),     (INT)sizeof(void*), PH_Member },	// FRenderTarget*
-	{ TEXT("UCGameplay"), TEXT("UCScreenRadialBlur"), TEXT("AccumulationTarget"),   (INT)sizeof(void*), PH_Member },	// FRenderTarget*
-	{ TEXT("UCGameplay"), TEXT("UCScreenHeatShimmer"),TEXT("BackBufferTarget"),     (INT)sizeof(void*), PH_Member },	// FRenderTarget*
-	{ TEXT("UCGameplay"), TEXT("UCScreenHeatShimmer"),TEXT("OffscreenTarget"),      (INT)sizeof(void*), PH_Member },	// FRenderTarget*
-	{ TEXT("GUI"),    TEXT("UIXInteraction"), TEXT("m_pFont"),               (INT)sizeof(void*), PH_Member },	// CXBFont*
-	{ TEXT("GUI"),    TEXT("UIXInteraction"), TEXT("m_pLiveEngine"),         (INT)sizeof(void*), PH_Member },	// ILiveEngine*
-	{ TEXT("GUI"),    TEXT("UIXInteraction"), TEXT("m_pUIPlugin"),           (INT)sizeof(void*), PH_Member },	// ITitleUIPlugin*
-	{ TEXT("GUI"),    TEXT("UIXInteraction"), TEXT("LiveInterface"),         (INT)sizeof(void*), PH_Member },	// XboxLiveManager*
-	{ TEXT("GUI"),    TEXT("UIXInteraction"), TEXT("FriendsInterface"),      (INT)sizeof(void*), PH_Member },	// LiveFriendsList*
-	{ TEXT("UWeb"),   TEXT("WebResponse"),  TEXT("ReplacementMap"), (INT)sizeof(TMap<FString,FString>),      PH_Member },
-	{ TEXT("UWeb"),   TEXT("WebRequest"),   TEXT("VariableMap"),    (INT)sizeof(TMultiMap<FString,FString>), PH_Member },
+	{ TEXT("Core"),   TEXT("Object"),       TEXT("ObjectInternal"), (INT)(sizeof(UObject) - sizeof(UObject*) - sizeof(DWORD) - sizeof(FName) - sizeof(UClass*)), PH_Member, NULL },
+	{ TEXT("Core"),   TEXT("Subsystem"),    TEXT("ExecVtbl"),       (INT)sizeof(FExec),          PH_Member, NULL },
+	{ TEXT("Core"),   TEXT("Orientation"),  TEXT("MA"),             (INT)sizeof(void*),          PH_Member, TEXT("PTRINT") },	// UMatSubAction* (FOrientation, Engine.h)
+	{ TEXT("Engine"), TEXT("Player"),       TEXT("vfOut"),          (INT)sizeof(FOutputDevice),  PH_Member, NULL },
+	{ TEXT("Engine"), TEXT("Player"),       TEXT("vfExec"),         (INT)sizeof(FExec),          PH_Member, NULL },
+	{ TEXT("Engine"), TEXT("ActorRenderDataPtr"),               TEXT("Ptr"), (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FDynamicActor*
+	{ TEXT("Engine"), TEXT("LightRenderDataPtr"),               TEXT("Ptr"), (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FDynamicLight*
+	{ TEXT("Engine"), TEXT("ProjectorRenderInfoPtr"),           TEXT("Ptr"), (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FProjectorRenderInfo*
+	{ TEXT("Engine"), TEXT("StaticMeshProjectorRenderInfoPtr"), TEXT("Ptr"), (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FStaticProjectorInfo*
+	{ TEXT("Engine"), TEXT("Actor"),          TEXT("OctreeNodes"),           (INT)sizeof(void*), PH_ArrayElement, TEXT("PTRINT") },	// FOctreeNode*
+	{ TEXT("Engine"), TEXT("StateInfo"),      TEXT("Node"),                  (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// UStruct*
+	{ TEXT("Engine"), TEXT("StateInfo"),      TEXT("StateNode"),             (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// UState*
+	{ TEXT("Engine"), TEXT("StateInfo"),      TEXT("Code"),                  (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// BYTE*
+	{ TEXT("Engine"), TEXT("FileLog"),        TEXT("LogAr"),                 (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FArchive*
+	{ TEXT("Engine"), TEXT("MovieMaterial"),  TEXT("MovieDecoder"),          (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FMoviePlayer*
+	{ TEXT("Engine"), TEXT("MovieMaterial"),  TEXT("RenderInterface"),       (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FMovieTexture*
+	{ TEXT("Engine"), TEXT("MovieMaterial"),  TEXT("InMemoryDecodingBlock"), (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// BYTE*
+	{ TEXT("Engine"), TEXT("MovieMaterial"),  TEXT("ThreadSynch"),           (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FCriticalSection*
+	{ TEXT("Engine"), TEXT("MovieMaterial"),  TEXT("Thread"),                (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FRunnableThread*
+	{ TEXT("Engine"), TEXT("ParticleEmitter"),TEXT("Particles"),             (INT)sizeof(void*), PH_ArrayElement, TEXT("PTRINT") },	// FParticle*
+	{ TEXT("GUI"),    TEXT("GUIController"),  TEXT("Designer"),              (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// UPropertyManagerBase*
+	{ TEXT("IpDrv"),  TEXT("InternetLink"),   TEXT("PrivateResolveInfo"),    (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FResolveInfo*
+	{ TEXT("IpDrv"),  TEXT("MasterServerLink"),  TEXT("LinkPtr"),            (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FMasterServer*Link*
+	{ TEXT("IpDrv"),  TEXT("MasterServerClient"),TEXT("MSLinkPtr"),          (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FMasterServerClientLink*
+	{ TEXT("Engine"), TEXT("Texture"),        TEXT("RenderInterface"),       (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FStaticTexture*
+	{ TEXT("Engine"), TEXT("ScriptedTexture"),TEXT("RenderTarget"),          (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FScriptedRenderTarget* (punned)
+	{ TEXT("Engine"), TEXT("ShadowBitmapMaterial"),TEXT("TextureInterfaces"),(INT)(3*sizeof(void*)), PH_Member, TEXT("PTRINT") },	// FAuxRenderTarget*[3] (punned)
+	{ TEXT("Engine"), TEXT("Cubemap"),        TEXT("CubemapRenderInterface"),(INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FStaticCubemap*
+	{ TEXT("Engine"), TEXT("Canvas"),         TEXT("pCanvasUtil"),           (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FCanvasUtil*
+	{ TEXT("Engine"), TEXT("MotionBlur"),     TEXT("RenderTargets"),         (INT)(2*sizeof(void*)), PH_Member, TEXT("PTRINT") },	// FAuxRenderTarget*[2]
+	{ TEXT("Engine"), TEXT("FluidSurfaceInfo"),TEXT("Indices"),              (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// void*
+	{ TEXT("UCGameplay"), TEXT("UCScreenBloom"),      TEXT("EmissiveResultTarget"), (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenEmissive"),   TEXT("BackBufferTarget"),     (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenEmissive"),   TEXT("SelectTarget"),         (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenEmissive"),   TEXT("BlurTargets"),          (INT)sizeof(void*), PH_ArrayElement, TEXT("PTRINT") },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenDOF"),        TEXT("BackBufferTarget"),     (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenDOF"),        TEXT("BlurTargets"),          (INT)sizeof(void*), PH_ArrayElement, TEXT("PTRINT") },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenMotionBlur"), TEXT("BackBufferTarget"),     (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenMotionBlur"), TEXT("AccumulationTarget"),   (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenRadialBlur"), TEXT("BackBufferTarget"),     (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenRadialBlur"), TEXT("AccumulationTarget"),   (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenHeatShimmer"),TEXT("BackBufferTarget"),     (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FRenderTarget*
+	{ TEXT("UCGameplay"), TEXT("UCScreenHeatShimmer"),TEXT("OffscreenTarget"),      (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// FRenderTarget*
+	{ TEXT("GUI"),    TEXT("UIXInteraction"), TEXT("m_pFont"),               (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// CXBFont*
+	{ TEXT("GUI"),    TEXT("UIXInteraction"), TEXT("m_pLiveEngine"),         (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// ILiveEngine*
+	{ TEXT("GUI"),    TEXT("UIXInteraction"), TEXT("m_pUIPlugin"),           (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// ITitleUIPlugin*
+	{ TEXT("GUI"),    TEXT("UIXInteraction"), TEXT("LiveInterface"),         (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// XboxLiveManager*
+	{ TEXT("GUI"),    TEXT("UIXInteraction"), TEXT("FriendsInterface"),      (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// LiveFriendsList*
+	{ TEXT("UWeb"),   TEXT("WebResponse"),  TEXT("ReplacementMap"), (INT)sizeof(TMap<FString,FString>),      PH_Member, NULL },
+	{ TEXT("UWeb"),   TEXT("WebRequest"),   TEXT("VariableMap"),    (INT)sizeof(TMultiMap<FString,FString>), PH_Member, NULL },
 };
 CORE_API INT GetNativePlaceholderCount() { return ARRAY_COUNT(GNativePlaceholders); }
 CORE_API void GetNativePlaceholder( INT i, const TCHAR*& Package, const TCHAR*& Struct, const TCHAR*& Property, INT& Size, INT& Kind )
@@ -525,7 +531,7 @@ static const FNativePlaceholder* FindNativePlaceholder( UStruct* Owner, UPropert
 		(	appStricmp( Property->GetName(), P.Property )==0
 		&&	appStricmp( Owner->GetName(), P.Struct )==0
 		&&	appStricmp( Package->GetName(), P.Package )==0
-		&&	(P.Kind==PH_Member ? Cast<UIntProperty>(Property)!=NULL : Cast<UIntProperty>(((UArrayProperty*)Property)->Inner)!=NULL) )
+		&&	(P.Kind==PH_Member ? Cast<UIntProperty>(Property)!=NULL : Cast<UArrayProperty>(Property) && Cast<UIntProperty>(((UArrayProperty*)Property)->Inner)!=NULL) )
 			return &P;
 	}
 	return NULL;
@@ -535,7 +541,36 @@ CORE_API UBOOL IsNativePlaceholder( UProperty* Property )
 	UStruct* Owner = Cast<UStruct>( Property->GetOuter() );
 	return Owner && FindNativePlaceholder( Owner, Property )!=NULL;
 }
-#endif
+CORE_API const TCHAR* GetNativePlaceholderCppTypeAt( INT i )
+{
+	return GNativePlaceholders[i].CppType;
+}
+//
+// uc2 port (T2): the C++ type the header exporter writes for an `int` property (UIntProperty::ExportCppItem): `INT`,
+// or the table's CppType when the property is a placeholder member (`int X` / `int X[N]` of the table's struct) or
+// the element of a placeholder array (`array<int> X`; the inner property is outered to the array property). Same
+// lookup as Link, by string, at every pointer width. A placeholder with no C++ spelling (NULL CppType) in an exported
+// class is an error in the make log: its class must stay `noexport` (hand-written), or the header would be wrong at
+// 64 bits.
+//
+CORE_API const TCHAR* GetNativePlaceholderCppType( const UProperty* IntProperty )
+{
+	UProperty* Property = (UProperty*)IntProperty;
+	UArrayProperty* Array = Cast<UArrayProperty>( Property->GetOuter() );
+	if( Array && Array->Inner==Property )
+		Property = Array;
+	UStruct* Owner = Cast<UStruct>( Property->GetOuter() );
+	const FNativePlaceholder* P = Owner ? FindNativePlaceholder( Owner, Property ) : NULL;
+	if( !P || (Property==Array)!=(P->Kind==PH_ArrayElement) )
+		return TEXT("INT");
+	if( !P->CppType )
+	{
+		GWarn->Logf( NAME_Error, TEXT("Native placeholder %s.%s.%s has no C++ spelling: its class must be noexport (Core/Src/UnClass.cpp GNativePlaceholders)"), P->Package, P->Struct, P->Property );
+		GWarn->ErrorCount++;	// "Failure - N error(s)" (an NAME_Error line alone counts as a warning)
+		return TEXT("INT");
+	}
+	return P->CppType;
+}
 
 //
 // Link offsets.

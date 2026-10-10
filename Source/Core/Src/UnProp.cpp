@@ -473,7 +473,10 @@ UBOOL UIntProperty::NetSerializeItem( FArchive& Ar, UPackageMap* Map, void* Data
 void UIntProperty::ExportCppItem( FOutputDevice& Out, UBOOL IsParam ) const
 {
 	guard(UIntProperty::ExportCppItem);
-	Out.Log( TEXT("INT") );
+	// uc2 port (T2): a native placeholder (an int standing in for a C++ pointer) is exported as its C++ type,
+	// PTRINT, so the generated headers are right at 64 bits (Core/Src/UnClass.cpp, GNativePlaceholders).
+	extern CORE_API const TCHAR* GetNativePlaceholderCppType( const UProperty* IntProperty );
+	Out.Log( GetNativePlaceholderCppType( this ) );
 	unguardobj;
 }
 void UIntProperty::ExportTextItem( TCHAR* ValueStr, BYTE* PropertyValue, BYTE* DefaultValue, INT PortFlags ) const

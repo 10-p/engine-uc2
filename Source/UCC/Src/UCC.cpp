@@ -160,6 +160,7 @@ extern CORE_API INT GetNativeStructSize( UStruct* Struct );
 extern CORE_API INT GetNativePlaceholderCount();
 extern CORE_API void GetNativePlaceholder( INT i, const TCHAR*& Package, const TCHAR*& Struct, const TCHAR*& Property, INT& Size, INT& Kind );
 extern CORE_API UBOOL IsNativePlaceholder( UProperty* Property );
+extern CORE_API const TCHAR* GetNativePlaceholderCppTypeAt( INT i );
 #endif
 // M13: `verifyclasses DUMP=<file>` writes the linked layout of every class, script struct and function (its
 // parameters) for tools/dev/m13-layout-check.py, which compares it with the DWARF of the same binary. Opt-in on
@@ -254,7 +255,18 @@ static UBOOL VerifyNativeLayouts64( const TCHAR* DumpFile )
 			Mismatch = true;
 		}
 		else
+		{
 			debugf( TEXT("VERIFY: placeholder %s.%s.%s offset %i, C++ size %i (%s)"), Pkg, StructName, PropName, Found->Offset, Size, Kind ? TEXT("array element") : TEXT("member") );
+			// T2: the header exporter writes a PTRINT row as `PTRINT X[ArrayDim]` / `TArrayNoInit<PTRINT> X`; the
+			// size Link gives it must be that spelling's size.
+			const TCHAR* CppType = GetNativePlaceholderCppTypeAt( i );
+			INT Spelled = Kind ? (INT)sizeof(PTRINT) : Found->ArrayDim * (INT)sizeof(PTRINT);
+			if( CppType && appStrcmp(CppType,TEXT("PTRINT"))==0 && Size!=Spelled )
+			{
+				debugf( TEXT("VERIFY: placeholder %s.%s.%s exported as PTRINT (%i bytes) but linked at %i"), Pkg, StructName, PropName, Spelled, Size );
+				Mismatch = true;
+			}
+		}
 	}
 	// 3. No bytecode reads or writes a placeholder: script would see only the low 4 bytes of the C++ data.
 	INT Scanned=0;
