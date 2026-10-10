@@ -21,7 +21,7 @@ Read in this order: `docs/porting/PLAN.md` (milestones and gates), `docs/porting
 ## Rules
 
 - Small stepping stones. A milestone is done when its gate in PLAN.md is observed, not when the code is written.
-- At most 4 agents at a time. Every agent appends what it found and did to
+- At most 8 agents at a time (the owner raised it from 4 on 2026-10-10). Every agent appends what it found and did to
   `docs/porting/analysis/<topic>.md` as it goes, so a successor can continue. The coordinator adds one dated
   line per green gate to `docs/porting/LOG.md`.
 - Be gentle with Epic's code. Never define `_XBOX`, `XBOX_ASSET_FORMAT`, `LIN_LOAD`, `LIN_SAVE` or
