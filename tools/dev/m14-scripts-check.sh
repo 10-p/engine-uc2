@@ -13,6 +13,7 @@
 #   M14_PREFIX    the name every tree of this run starts with [m14]: a D-phase task uses its own (d3-m14 makes
 #                 d3-m14-run, d3-m14-ship, d3-m14-census-*, d3-m14-movies, d3-m14-net); M14_OUT the summary's
 #                 directory [<WorkUC2>/logs/m14/check]
+#   M14_CENSUS_WORKERS  servers at once in the census [4]; 2 while the machine is loaded (owner's rule, 2026-10-10)
 # Output: <WorkUC2>/logs/m14/check/ (summary m14-summary.txt); the suites write to <WorkUC2>/logs/<tree>.
 #
 # Checks:
@@ -158,30 +159,20 @@ print('mean %.2f' % (sum(ImageStat.Stat(ImageChops.difference(a,b)).mean)/3))" "
 }
 
 census_of() {	# census_of <name> <port> <scripts dir or ''>
-  local name=$1 port=$2 scr=$3 w
-  # A server that crashes while exiting after its TERM hangs (BLOCKERS.md); kill such leftovers of these trees
-  # after 75 s, as m13-64bit.sh does.
-  ( while sleep 10; do
-      for p in $(pgrep -x ucc-bin); do
-        case "$(readlink /proc/$p/cwd 2>/dev/null)" in "$work"/run/$name-*) ;; *) continue;; esac
-        age=$(ps -o etimes= -p $p 2>/dev/null | tr -d ' ')
-        [ -n "$age" ] && [ "$age" -gt 75 ] && { echo "$(readlink /proc/$p/cwd)" >> "$out/census-hung.txt"; kill -KILL $p; }
-      done
-    done ) & w=$!
-  ( cd "$repo" && UC2_SCRIPTS=$scr CENSUS_NAME=$name CENSUS_PORT=$port "$capped" 8G 1800 -- tools/dev/map-census.sh "$repo/$build" 15 4 ) > "$out/$name.out" 2>&1
-  kill $w 2>/dev/null; wait $w 2>/dev/null
+  local name=$1 port=$2 scr=$3
+  # map-census.sh itself KILLs a server that has not ended 30 s after its TERM and fails that map (D-1).
+  ( cd "$repo" && UC2_SCRIPTS=$scr CENSUS_NAME=$name CENSUS_PORT=$port "$capped" 8G 1800 -- tools/dev/map-census.sh "$repo/$build" 15 "${M14_CENSUS_WORKERS:-4}" ) > "$out/$name.out" 2>&1
 }
 
 check_census() {
   local a=$prefix-census-run b=$prefix-census-ship sa sb n p diffs
-  : > "$out/census-hung.txt"
   census_of $a 7790 "$scripts"
   census_of $b 7795 ""
   sa=$work/logs/$a/summary.tsv; sb=$work/logs/$b/summary.tsv
   n=$(wc -l < "$sa" 2>/dev/null); p=$(grep -c '^PASS' "$sa" 2>/dev/null)
   diffs=$(diff <(cut -f1,2 "$sa" 2>/dev/null) <(cut -f1,2 "$sb" 2>/dev/null) | grep '^[<>]' | tr '\n' ' ')
   if [ "${n:-0}" -ge 58 ] && [ "$p" = "$n" ] && [ -z "$diffs" ]; then
-    result PASS census "$n maps, $p PASS with the rebuilt packages, the same per-map result as the shipped ones ($(grep -c '^PASS' "$sb") PASS); hung servers killed after exit: $(grep -c . "$out/census-hung.txt"); $sa"
+    result PASS census "$n maps, $p PASS with the rebuilt packages, the same per-map result as the shipped ones ($(grep -c '^PASS' "$sb") PASS; every server exited cleanly after its TERM); $sa"
   else
     result FAIL census "maps ${n:-0}, PASS ${p:-0}; differences to the shipped packages: ${diffs:-none}; $sa"
   fi
