@@ -915,9 +915,13 @@ APlayerController* ULevel::SpawnPlayActor( UPlayer* Player, ENetRole RemoteRole,
 	if ( Player )
 	{
 		// For development on the PC, fake the GamepadID -- rjp
+		// uc2 port (G-6): only for a viewport that has no pad yet (the first player: pad 0 and the keyboard).
+		// A split-screen viewport keeps the pad it joined with across map changes (the Xbox does nothing here;
+		// its viewport's UpdateInput hands the pad on to the new controller): with the fake every split player
+		// read pad 0 after the first travel.
 		UViewport* Viewport = Cast<UViewport>(Player);
 		if ( Viewport )
-			Viewport->SetGamepadID(0);
+			Viewport->SetGamepadID( Viewport->GamepadID==UViewport::INVALID_GAMEPAD_ID ? 0 : Viewport->GamepadID );
 	}
 #endif
 

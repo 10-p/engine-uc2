@@ -35,6 +35,9 @@ public:
 	void UpdateDetailLevels();
 
 	void UpdateDisplayFlags();
+
+	// uc2 port (G-6): the players' HUDs after the layout changed during a match (UnSplitScreenMgr.cpp).
+	void RefreshPlayerHUDs();
 	
 	FORCEINLINE INT NumActiveSplitViews()
 	{

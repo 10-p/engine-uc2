@@ -1000,8 +1000,8 @@ void UCanvas::Update()
 	CanvasToScreen puts it into the largest 4:3 rectangle of the viewport, centred: scale
 	s = min(W/640, H/480), origin ((W-640s)/2, (H-480s)/2) floored to whole pixels. The 3D world is not drawn
 	through the canvas and keeps the whole viewport. At 640x480 this is the identity and the code below takes
-	the exact path it took before D-2. A split-screen viewport (E-1) gets its share of the design space
-	(640*ScaleX x 480*ScaleY, the fractions UnSplitScreenMgr gives it) fitted the same way into its own rectangle.
+	the exact path it took before D-2. A split-screen viewport (G-6) gets 640 x 480*ScaleY (the shape UC2's split
+	HUD is laid out for, see below) fitted the same way into its own rectangle.
 -----------------------------------------------------------------------------*/
 
 void UCanvas::ApplyUIBox( UBOOL bWanted )
@@ -1013,8 +1013,11 @@ void UCanvas::ApplyUIBox( UBOOL bWanted )
 
 	FLOAT W = Viewport->SizeX, H = Viewport->SizeY;
 	FLOAT DW = 640.f, DH = 480.f;
-	if( Viewport->ScaleX > 0.f && Viewport->ScaleX < 1.f )
-		DW *= Viewport->ScaleX;
+	// G-6: a split-screen viewport's design space is 640 wide and its share of 480 high. UC2's split HUD
+	// (UCHUD_Split, WeaponSelectorSplit.huc, UCHUD.SetSplitPosition) is laid out for the Xbox's top/bottom
+	// halves, 640x240, and knows no other shape ("if we are going to support more than 2 split-screen, this
+	// function needs to be adjusted"); a quarter of the screen therefore shows that 640x240 layout fitted
+	// into its rectangle, reticle in its centre, instead of the left half of it (640*ScaleX).
 	if( Viewport->ScaleY > 0.f && Viewport->ScaleY < 1.f )
 		DH *= Viewport->ScaleY;
 

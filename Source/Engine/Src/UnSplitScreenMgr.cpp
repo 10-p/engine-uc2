@@ -1017,6 +1017,53 @@ void USplitScreenMgr::UpdateSizes()
 	unguard;
 }
 
+/* uc2 port (G-6) ===========================================================
+* USplitScreenMgr::RefreshPlayerHUDs
+* ============================================================================
+* On the Xbox the split-screen layout only changes in the menus, and every player gets its HUD when the next
+* map logs it in (PlayerController.ClientSetHUD: the <HUD>_Split class and SetSplitPosition when more than one
+* viewport is up). A player joining or leaving during a match (SDL2Drv's SplitScreenJoinInMatch, SPLIT ADD/
+* REMOVE) changes the layout of players who are already in: they get their HUD again the way Epic's own
+* PlayerController.PostBeginPlay re-sends it ("so that if we are a splitscreen client we can set up the HUD
+* correctly"), from the HUD's base class, so ClientSetHUD picks the split or the full-screen one itself.
+* ============================================================================
+*/
+void USplitScreenMgr::RefreshPlayerHUDs()
+{
+	guard(USplitScreenMgr::RefreshPlayerHUDs);
+
+	if( IsMenuGameActive() )
+		return;
+
+	UFunction* ClientSetHUD = NULL;
+	for( INT i=0; i<Client->Viewports.Num(); i++ )
+	{
+		UViewport* Viewport = Client->Viewports(i);
+		APlayerController* PC = Viewport ? Viewport->Actor : NULL;
+		if( !PC || !PC->myHUD || IsOverlayViewport(Viewport) || PC->bDeleteMe )
+			continue;
+		UClass* HUDClass = PC->myHUD->GetClass();
+		FString Name = HUDClass->GetName();
+		if( Name.Len() > 6 && appStricmp( *Name.Right(6), TEXT("_Split") )==0 )
+		{
+			UClass* Base = FindObject<UClass>( HUDClass->GetOuter(), *Name.LeftChop(6) );
+			if( Base )
+				HUDClass = Base;
+		}
+		struct { UClass* NewHUDClass; UClass* NewScoringType; } Parms;
+		Parms.NewHUDClass		= HUDClass;
+		Parms.NewScoringType	= PC->myHUD->ScoreBoard ? ((UObject*)PC->myHUD->ScoreBoard)->GetClass() : NULL;
+		ClientSetHUD = PC->FindFunction( FName(TEXT("ClientSetHUD")) );
+		if( ClientSetHUD )
+		{
+			debugf( NAME_DevSplitScreen, TEXT("Split screen: %s gets its HUD again (%s, viewport %i of %i)"), PC->GetName(), HUDClass->GetName(), i, Client->Viewports.Num() );
+			PC->ProcessEvent( ClientSetHUD, &Parms );
+		}
+	}
+
+	unguard;
+}
+
 /* scion =====================================================================
 * USplitScreenMgr::UpdateDetailLevels
 * Author: sz
