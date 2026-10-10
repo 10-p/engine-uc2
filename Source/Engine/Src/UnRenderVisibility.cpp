@@ -992,6 +992,36 @@ TList<FProjectorRenderBatch*>*	GProjectorBatchList;
 
 FCoronaRender GCoronaRender;
 
+// uc2 port (G-9): one corona state per split-screen view (UnRender.h).
+#define UC2_SPLIT_CORONA_STATES 4
+static FCoronaRender	GSplitCoronaRender[UC2_SPLIT_CORONA_STATES];
+static UViewport*		GSplitCoronaViewport[UC2_SPLIT_CORONA_STATES];
+
+ENGINE_API FCoronaRender& UC2CoronaRenderFor( UViewport* Viewport )
+{
+	UClient* Client = Viewport ? Viewport->GetOuterUClient() : NULL;
+	if( !Client || !Client->Viewports.Num() || Client->Viewports(0)==Viewport )
+		return GCoronaRender;
+	for( INT i=0; i<UC2_SPLIT_CORONA_STATES; i++ )
+		if( GSplitCoronaViewport[i]==Viewport )
+			return GSplitCoronaRender[i];
+	for( INT i=0; i<UC2_SPLIT_CORONA_STATES; i++ )
+		if( !GSplitCoronaViewport[i] || Client->Viewports.FindItemIndex(GSplitCoronaViewport[i])==INDEX_NONE )
+		{
+			GSplitCoronaViewport[i] = Viewport;
+			GSplitCoronaRender[i].Reset();
+			return GSplitCoronaRender[i];
+		}
+	return GCoronaRender;	// more views than states: Epic's shared one
+}
+
+ENGINE_API void UC2ResetCoronas()
+{
+	GCoronaRender.Reset();
+	for( INT i=0; i<UC2_SPLIT_CORONA_STATES; i++ )
+		GSplitCoronaRender[i].Reset();
+}
+
 //
 //	ExtrudeAntiPortal
 //
@@ -1085,13 +1115,15 @@ static void RenderActor(FRenderState& RenderState,FDynamicActor* DynamicActor,UB
 	// scion sz - 
 	// Don't do lighting/projector calcs when in post processing mode
 	// Also always use the BaseLitActor for lighting and only update its lighting once per frame
-	if(	BaseLitDynActor->LastLightUpdateTime != BaseLitActor->Level->TimeSeconds &&
+	if(	( BaseLitDynActor->LastLightUpdateTime != BaseLitActor->Level->TimeSeconds
+		||	BaseLitDynActor->LastProjectorGeneration != GProjectorRenderInfoGeneration ) &&	// uc2 port (G-9): UnProjector.h
 		RenderState.SceneNode->FilterMode != FSceneNode::Filter_PostProcess )
 	{
 		// need to update these		
 		BaseLitDynActor->EmptyProjectors();	
 		// set cur time since it is updating
 		BaseLitDynActor->LastLightUpdateTime = BaseLitActor->Level->TimeSeconds;
+		BaseLitDynActor->LastProjectorGeneration = GProjectorRenderInfoGeneration;
 
 		if( !BaseLitActor->bUnlit && 
 			!RenderActor->bUnlit && 
@@ -1687,7 +1719,7 @@ static void ProcessLeaf(FRenderState& RenderState,INT iLeaf)
 							&&  CheckCullDistance(RenderState.SceneNode->ViewOrigin,DynamicActor,RenderState.SceneNode->Viewport)   
 							)
 							{
-								GCoronaRender.AddVisibleLight( DynamicActor->Actor );
+								UC2CoronaRenderFor( RenderState.SceneNode->Viewport ).AddVisibleLight( DynamicActor->Actor );
 							}
 						}
 						DynamicActor->VisibilityTag = CurrentVisibilityTag;
@@ -1723,7 +1755,7 @@ static void ProcessLeaf(FRenderState& RenderState,INT iLeaf)
 					&&  CheckCullDistance(RenderState.SceneNode->ViewOrigin,DynamicActor,RenderState.SceneNode->Viewport)   
 					)
 					{
-						GCoronaRender.AddVisibleLight( DynamicActor->Actor );
+						UC2CoronaRenderFor( RenderState.SceneNode->Viewport ).AddVisibleLight( DynamicActor->Actor );
 					}
 				}
 				DynamicActor->VisibilityTag = CurrentVisibilityTag;
@@ -2192,8 +2224,9 @@ void RenderLevel(FLevelSceneNode* SceneNode,FRenderInterface* RI)
 
 	if(!SceneNode->Parent)
 	{
-		GCoronaRender.iVisible	= 0;
-		appMemzero(GCoronaRender.VisibleLights, sizeof(GCoronaRender.VisibleLights));
+		FCoronaRender& CoronaRender = UC2CoronaRenderFor( SceneNode->Viewport );	// uc2 port (G-9)
+		CoronaRender.iVisible	= 0;
+		appMemzero(CoronaRender.VisibleLights, sizeof(CoronaRender.VisibleLights));
 	}
 
 	// Initialize temporary memory stack.
@@ -3066,7 +3099,7 @@ void RenderLevel(FLevelSceneNode* SceneNode,FRenderInterface* RI)
 	if( !SceneNode->Parent && (SceneNode->Viewport->Actor->ShowFlags & SHOW_Coronas) )
 	{
 		RI->PushState();
-		GCoronaRender.RenderCoronas( SceneNode, RI );
+		UC2CoronaRenderFor( SceneNode->Viewport ).RenderCoronas( SceneNode, RI );	// uc2 port (G-9)
 		RI->PopState();
 	}
 

@@ -818,6 +818,7 @@ FDynamicActor::FDynamicActor(AActor* InActor)
 	ActorLights = NULL;
 	ActorProjectors = NULL;
 	LastLightUpdateTime = 0.f;
+	LastProjectorGeneration = GProjectorRenderInfoGeneration;
 
 	if( Actor->DrawType == DT_StaticProjectorBatch )
 	{
@@ -1765,6 +1766,7 @@ static UBOOL	GAutoFovParsed		= 0;
 static INT		GAutoFovMode		= AUTOFOV_Adaptive;
 static FLOAT	GAutoFovRef			= 4.0f / 3.0f;
 static FLOAT	GAutoFovWeapon		= 1.0f;
+static UBOOL	GAutoFovSplitClamp	= 0;	// G-9 proposal: [ufront.AutoFOV] SplitClampToFullScreen
 static INT		GAutoFovLastX		= -1;
 static INT		GAutoFovLastY		= -1;
 static FLOAT	GAutoFovLastBase	= -1.0f;
@@ -1790,11 +1792,12 @@ static void ufrontParseAutoFov()
 		GConfig->GetInt  ( TEXT("ufront.AutoFOV"), TEXT("AutoFOV"),         Mode );
 		GConfig->GetFloat( TEXT("ufront.AutoFOV"), TEXT("ReferenceAspect"), Ref  );
 		GConfig->GetFloat( TEXT("ufront.AutoFOV"), TEXT("WeaponScale"),     Weap );
+		GConfig->GetBool ( TEXT("ufront.AutoFOV"), TEXT("SplitClampToFullScreen"), GAutoFovSplitClamp );
 	}
 	GAutoFovMode   = Clamp( Mode, (INT)AUTOFOV_Off, (INT)AUTOFOV_Adaptive );
 	GAutoFovRef    = (Ref > 0.01f) ? Ref : (4.0f / 3.0f);
 	GAutoFovWeapon = Clamp( Weap, 0.0f, 4.0f );
-	debugf( NAME_Log, TEXT("[AutoFOV] mode=%i referenceAspect=%f weaponScale=%f"), GAutoFovMode, GAutoFovRef, GAutoFovWeapon );
+	debugf( NAME_Log, TEXT("[AutoFOV] mode=%i referenceAspect=%f weaponScale=%f splitClampToFullScreen=%i"), GAutoFovMode, GAutoFovRef, GAutoFovWeapon, GAutoFovSplitClamp );
 	unguard;
 }
 
@@ -1803,6 +1806,57 @@ ENGINE_API void ufrontAutoFovSize( UViewport* Viewport, INT& SizeX, INT& SizeY )
 	// G-6: per viewport aspect. (D-8 used SizeX/ScaleX x SizeY/ScaleY for a split view, the window's.)
 	SizeX = Viewport ? Viewport->SizeX : 0;
 	SizeY = Viewport ? Viewport->SizeY : 0;
+	// G-9 (a proposal for the owner, off by default): a split viewport wider than the window (the two-player
+	// strips, the three-player top strip) is corrected for the window's aspect instead of its own, so its
+	// horizontal FOV is never wider than the full-screen one (106 at 16:9 instead of 139); it shows less
+	// vertically than the single view. Quarters (the window's aspect) are unchanged.
+	if( !GAutoFovParsed )
+		ufrontParseAutoFov();
+	if( GAutoFovSplitClamp && Viewport && SizeX > 0 && SizeY > 0 && Viewport->ScaleX > 0.01f && Viewport->ScaleY > 0.01f
+	&&	(Viewport->ScaleX < 1.f || Viewport->ScaleY < 1.f) )
+	{
+		DOUBLE WindowAspect = ((DOUBLE)SizeX / Viewport->ScaleX) / ((DOUBLE)SizeY / Viewport->ScaleY);
+		if( (DOUBLE)SizeX / (DOUBLE)SizeY > WindowAspect + 1e-6 )
+			SizeX = Max( 1, appRound( (FLOAT)(SizeY * WindowAspect) ) );
+	}
+}
+
+// G-9: the field of view a viewport's picture shows, after AutoFOV and the split-screen scale: one line per viewport
+// whenever it changes, "[AutoFOV] shown viewport=<index> rect=X,Y WxH mode=M base=B effective=E scaleFOV=S
+// horizontal=H vertical=V". FCameraSceneNode::UpdateMatrices: camera x ScaleX/ScaleY, half-angle h x ScaleFOVX/Y,
+// aspect (W*ScaleX)/(H*ScaleY) of the viewport's own render target; so the edge of the view is
+// tan(h*ScaleFOVX)/ScaleX across and tan(h*ScaleFOVY)*H/(W*ScaleX) up.
+ENGINE_API void ufrontLogShownFov( UViewport* Viewport, FLOAT Fov, FLOAT BaseFov )
+{
+	guard(ufrontLogShownFov);
+	if( !Viewport || Viewport->SizeX <= 0 || Viewport->SizeY <= 0 || Viewport->ScaleX <= 0.01f || Viewport->ScaleY <= 0.01f )
+		return;
+	if( !GAutoFovParsed )
+		ufrontParseAutoFov();
+	struct FShownEntry { UViewport* V; INT X, Y, W, H, Mode; FLOAT Fov, Scale; };
+	static FShownEntry Last[8];
+	DOUBLE h  = Clamp( Fov, 1.0f, 170.0f ) * PI / 360.0;
+	DOUBLE TX = appTan( h * Viewport->ScaleFOVX ) / Viewport->ScaleX;
+	DOUBLE TY = appTan( h * Viewport->ScaleFOVY ) * Viewport->SizeY / ( Viewport->SizeX * Viewport->ScaleX );
+	FShownEntry* E = NULL;
+	for( INT i=0; i<ARRAY_COUNT(Last) && !E; i++ )
+		if( Last[i].V == Viewport )
+			E = &Last[i];
+	for( INT i=0; i<ARRAY_COUNT(Last) && !E; i++ )
+		if( !Last[i].V )
+			E = &Last[i];
+	if( !E )
+		E = &Last[0];
+	if( E->V == Viewport && E->X == Viewport->OffsetX && E->Y == Viewport->OffsetY && E->W == Viewport->SizeX && E->H == Viewport->SizeY
+	&&	E->Mode == GAutoFovMode && Abs(E->Fov - Fov) <= 0.5f && Abs(E->Scale - Viewport->ScaleFOVX) < 1e-4f )
+		return;
+	E->V = Viewport; E->X = Viewport->OffsetX; E->Y = Viewport->OffsetY; E->W = Viewport->SizeX; E->H = Viewport->SizeY;
+	E->Mode = GAutoFovMode; E->Fov = Fov; E->Scale = Viewport->ScaleFOVX;
+	UClient* Client = Viewport->GetOuterUClient();
+	debugf( NAME_Log, TEXT("[AutoFOV] shown viewport=%i rect=%i,%i %ix%i mode=%i base=%f effective=%f scaleFOV=%f horizontal=%f vertical=%f"),
+		Client ? Client->Viewports.FindItemIndex( Viewport ) : -1, (INT)Viewport->OffsetX, (INT)Viewport->OffsetY, Viewport->SizeX, Viewport->SizeY,
+		GAutoFovMode, BaseFov, Fov, Viewport->ScaleFOVX, (FLOAT)( 2.0 * appAtan( TX ) * 180.0 / PI ), (FLOAT)( 2.0 * appAtan( TY ) * 180.0 / PI ) );
+	unguard;
 }
 
 ENGINE_API UBOOL ufrontSplitFovScale( UViewport* Viewport, FLOAT Fov, FLOAT& OutScale )
@@ -2832,13 +2886,15 @@ void FActorSceneNode::Render(FRenderInterface* RI)
 	// Find lights that affect this actor.
 	if( !bShadowScene && 
 		Viewport->IsLit() && 
-		DynamicActor->LastLightUpdateTime != RenderActor->Level->TimeSeconds )
+		( DynamicActor->LastLightUpdateTime != RenderActor->Level->TimeSeconds
+		||	DynamicActor->LastProjectorGeneration != GProjectorRenderInfoGeneration ) )	// uc2 port (G-9): UnProjector.h
 	{
 		// need to update these
 		DynamicActor->EmptyLights();
 		DynamicActor->EmptyProjectors();
 		// set cur time since it is updating
 		DynamicActor->LastLightUpdateTime = RenderActor->Level->TimeSeconds;
+		DynamicActor->LastProjectorGeneration = GProjectorRenderInfoGeneration;
 
 		FDynamicLight*	Consider[256];
 		INT				NumConsider = 0;

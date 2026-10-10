@@ -7,6 +7,8 @@
 #include "UnRenderPrivate.h"
 #include <float.h>
 
+ENGINE_API DWORD GProjectorRenderInfoGeneration = 0;	// uc2 port (G-9): UnProjector.h
+
 //
 // FProjectorRenderInfo::GetMaterial
 //
@@ -1342,6 +1344,7 @@ void AProjector::Detach( UBOOL Force )
 	guard(AProjector::Detach);
 	if( RenderInfo )
 	{
+		GProjectorRenderInfoGeneration++;	// uc2 port (G-9)
 		RenderInfo->Projector = NULL;
 		RenderInfo->Expires = Level->TimeSeconds ? Level->TimeSeconds : -1;
 		if( Force )
@@ -1359,6 +1362,7 @@ void AProjector::Abandon()
 	guard(AProjector::Abandon);
 	if( RenderInfo )
 	{
+		GProjectorRenderInfoGeneration++;	// uc2 port (G-9)
         RenderInfo->Projector = NULL; 
 		RenderInfo->RemoveReference();
 		RenderInfo = NULL;

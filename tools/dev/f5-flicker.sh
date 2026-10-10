@@ -97,7 +97,7 @@ video="SDL_VIDEODRIVER=offscreen"; [ -n "${F5_SOFT:-}" ] && video="MESA_GLES_VER
 inner=$(mktemp)
 cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy $video ./${F5_BIN:-uc2.bin} "$map?Name=FxCam" -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True $dev -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" ${F5_ARGS:-} > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy $video ./${F5_BIN:-uc2.bin} "$map?Name=FxCam" -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[SDL2Drv.SDL2Client]:KeyboardIsPlayer=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True $dev -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" ${F5_ARGS:-} > "$out/$name.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$name.out" "$chan" "$out/$name.result" > "$out/$name.inject" 2>&1
 kill -TERM \$pid 2>/dev/null

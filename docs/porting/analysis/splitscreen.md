@@ -413,3 +413,282 @@ gained `acc=(x,y)` (SDL2InputTest.cpp ProbeViewports; m10-inject.py parses it).
 Five runs at load < 16 at start (logs/g6/kb5b.txt, kb5b-1..5): **5/5 PASS** (39 checks each). Acceleration during the
 holds: player one (+-1033,+-1769)/(+-1769,+-1033) by key, the other three (0,0) every time. Walks W/S/A/D: 186.0 / 158.1
 / 186.0 / 185.9 (runs 1-4), 357.9 / 304.3 / 185.9 / 357.9 (run 5); the others 0.0.
+
+## G-9 - the owner's follow-up: FOV pictures, full detail, keyboard+mouse a player of its own (2026-10-10)
+
+Worktree `/home/ion/WorkUC2/engine-uc2-g9-split2`, branch `g9-split2` (from main 486f17e, G-6 merged). Run trees
+`run/g9` (the asset tree's rebuilt packages) and `run/g9ship` (`UC2_SCRIPTS=assets/uc2-shipped/System`: Epic's GUI.u,
+UCGameplay.u, UCMenu.u); logs and pictures `/home/ion/WorkUC2/logs/g9/`. Everything through `bin/capped` (game 2G,
+builds 6G `-j2`/`-j4` by load). The owner's decisions (verbatim): "For split screen fov, can you do a/b screenshot with
+the options? I'll say keep full detail, and keyboard its own player, and yes even AutoFOV for here as well, but let's
+see how aggressive it is."
+
+### G-9 step 1 - the FOV A/B pictures
+
+No change of behaviour, two additions so the pictures can be read and the third variant can be shown:
+- `Source/Engine/Src/UnRender.cpp` `ufrontLogShownFov` (declared in `UnRender.h`), called from `FScopedAutoFov`
+  (`UnGame.cpp`) for every viewport that draws the scene: one line per viewport whenever it changes,
+  `[AutoFOV] shown viewport=<i> rect=X,Y WxH mode=M base=B effective=E scaleFOV=S horizontal=H vertical=V`: the FOV
+  the picture shows after AutoFOV AND the split-screen scale, also with AutoFOV off (the D-8 line is for viewport 0
+  only, and silent when off). Maths from `FCameraSceneNode::UpdateMatrices` (camera x ScaleX/ScaleY, half-angle h x
+  ScaleFOVX/Y, aspect of the viewport's own render target `(W*ScaleX)/(H*ScaleY)`): across `2*atan(tan(h*ScaleFOVX)/
+  ScaleX)`, up `2*atan(tan(h*ScaleFOVY)*H/(W*ScaleX))`.
+- The proposal, NOT the default: `[ufront.AutoFOV] SplitClampToFullScreen` (compiled default and `Default.ini` False).
+  `ufrontAutoFovSize` then corrects a split viewport that is wider than the window (the two-player strips, the
+  three-player top strip) for the WINDOW's aspect instead of its own, so it shows the single player's horizontal FOV
+  (106.26 at 16:9) and less vertically; quarters (the window's aspect) are unchanged. Every consumer of the AutoFOV
+  size (the frame, the weapon, WorldToScreen) agrees because they all ask `ufrontAutoFovSize`.
+- Test: `tools/dev/g6-splitscreen.sh g9 fov` (GPU, SDL offscreen, ShotRamp: G-6's render set-up, the pad as player one
+  with `KeyboardIsPlayer=False`). The frame is frozen (`TimeDilation 0.0001`) at G-6's spot A (player one) for 1, 2,
+  3, 4 players, and shot with `AUTOFOV 2` and `AUTOFOV 0` (the same frozen frame); a second run with
+  `-ini:System:[ufront.AutoFOV]:SplitClampToFullScreen=True` gives the proposal. A `g9fov <tag>` log marker precedes
+  each shot; `tools/dev/g6/g9-fov-sheet.py` takes the `[AutoFOV] shown` lines in force at the marker, writes them into
+  each viewport of the picture, and compares every logged value with the value computed from the rectangle alone.
+
+Result (`logs/g9/fov-run.txt`; load at start < 16, 25 at the end because of my own build: pictures, not timings):
+`PASS g9-fov` 6 checks, `PASS g9-fovclamp` 6 checks, 0 Critical; 12/12 `logged-equals-computed` PASS, worst |logged -
+computed| 0.0000 degrees. The sheets, four panels each (1 player reference with AutoFOV on | AutoFOV on, today's
+default | Epic's maths, AutoFOV=0 | the PROPOSAL, clamped to the single player's FOV), with every viewport's
+"across x up" written in it: **`logs/g9/fov-2players.png`, `logs/g9/fov-3players.png`, `logs/g9/fov-4players.png`**
+(1288x808). 1280x720 window, base FOV 90:
+
+| players | viewport (x,y w x h) | AutoFOV on (default) | Epic's maths (AutoFOV=0) | proposal: clamped |
+|---|---|---|---|---|
+| 1 | 0,0 1280x720 | 106.3 x 73.7 | 90.0 x 58.7 | 106.3 x 73.7 |
+| 2 | each strip 1280x360 | **138.9** x 73.7 | 90.0 x **31.4** | 106.3 x 41.1 |
+| 3 | top strip 1280x360 | **138.9** x 73.7 | **45.0 x 13.3** | 106.3 x 41.1 |
+| 3 | bottom quarters 640x360 | 106.3 x 73.7 | 79.3 x 50.0 | 106.3 x 73.7 |
+| 4 | quarters 640x360 | 106.3 x 73.7 | 79.3 x 50.0 | 106.3 x 73.7 |
+
+(across x up, degrees; the single player's Epic value from the same run's n1-epic line, not in a sheet.) What the pictures say: AutoFOV
+keeps every player's vertical view at the single player's 73.7 and pays for the strips' shape with width (139 across,
+the edges stretched); Epic's maths keeps 90 across and crops the strips to 31 degrees up (three players' top strip:
+45 x 13, a letterbox through a telescope: ReduceFOV 0.5 was made for quarters and never tried on that strip); the
+proposal keeps the single player's 106 across and crops the strips to 41 up. Quarters: AutoFOV and the proposal are
+the single player's view exactly; Epic's are zoomed (79 across). No decision taken here: the owner chooses.
+
+### G-9 step 2 - full detail in split screen (`[SDL2Drv.SDL2Client] SplitScreenFullDetail=True`)
+
+What Epic's code does (`USplitScreenMgr::UpdateDetailLevels`, `UnSplitScreenMgr.cpp`, after every join/leave/map load):
+with N split views it applies `SSDetailLevels(N-1)` (`SplitScreenMgr.uc` defaultproperties) to the client (coronas,
+dynamic lights, decals, deco layers, projectors), the level (`DetailChange(DetailMode)`, `PARTICLEATTEN`) and every
+split viewport (blob shadows, camera effects, `ScaleFOVX/Y = ReduceFOV`); with no split view `SSDetailLevels(0)`. So a
+single player is ALWAYS at entry 0 (DetailMode 2, coronas, decals, projectors, real shadows, particles x1), whatever
+the ini says. `bUseDynamicDrawScale` (pawns drawn bigger with distance from THE player: `AUCPawn::ScalePawn`, only
+with one viewport) is switched off while split: a gameplay aid made for one viewer, not a detail setting; kept.
+
+Change:
+- `UClient::SplitScreenKeepsFullDetail()` (`Source/Engine/Inc/UnCamera.h`, virtual, 0 = Epic's), overridden by
+  `USDL2Client` (`SDL2Drv.h`) with the new config key `SplitScreenFullDetail` (`SDL2Client.cpp`: registered, compiled
+  default 1; `Default.ini` and the web copy `True`).
+- `UpdateDetailLevels`: when the client keeps full detail, every split view gets entry 0 (the single player's settings)
+  except `ReduceFOV`, which stays the layout's (0.5 for three and four players): it is the FOV maths of Epic's view
+  (AutoFOV=0), replaced per frame by AutoFOV anyway, and the FOV is the owner's separate choice (step 1). `False` =
+  the Xbox's reductions, untouched. One log line per update: `Split screen: N views, detail of one player
+  (SplitScreenFullDetail) (DetailMode 2, coronas 1, decals 1, projectors 1, deco layers 1, blob shadows 0, particles
+  x1.0, ReduceFOV 0.50)` / `detail level 3 (Xbox) (DetailMode 0, coronas 0, decals 0, projectors 0, ...)`.
+
+Measured (GPU, `logs/g9/render-full` = default, `logs/g9/render-xbox` = `G6_ARGS=-ini:...SplitScreenFullDetail=False`;
+`tools/dev/g6-splitscreen.sh g9 render`, load < 16 at start):
+- The log lines say what each run set: full = entry 0 for 2, 3, 4 views; xbox = levels 1, 2, 3 (coronas 0 from two
+  players, decals/projectors/deco layers 0 from three, particles x0.6/0.4/0.2, DetailMode 1/0/0, blob shadows).
+- render-full: g6-measure 0 failed (the same-view checks |diff| without post-processing 3.35 / 3.38 / 3.60 / 3.61 for
+  n2a / n3 / n4 / n4d, G-6 had 3.2-3.6 with Epic's reductions in force). render-xbox: g6-measure 8 FAILED, all
+  same-view: that run's single-player picture n1 was NOT at spot A (the pawn was placed there, NETPLACE "ok", but the
+  frozen frame shows a first-person view elsewhere: the third-person camera did not follow before time was frozen;
+  G-6 saw the same for a freshly joined player, n2b, 1 run in 3). Not a detail effect (single player is entry 0 in
+  both runs). `tools/dev/g6/g9-detail.py` therefore compares both runs' spot-A views with the full run's single
+  picture: |diff| without / with post-processing, full vs Xbox: n2a 3.35/5.43 vs 3.36/5.34, n3 3.38/5.11 vs 3.36/5.26,
+  n4 3.60/5.93 vs 3.57/5.58, n4d 3.61/6.08 vs 3.63/6.22: `PASS g9-detail` (full not further from the single player).
+  The difference does not grow; at spot A it does not shrink either: DM-Deadbolt has NO corona light (`ucc-bin
+  batchexport` of the map: 0 of 176 lights with bCorona), no projector actor, and the frozen views show no decals, so
+  what Epic's reductions remove is nearly absent from that picture (`logs/g9/detail-full-vs-xbox.png`: the |full -
+  Xbox| x4 column is dark except the pawns' poses).
+- 4-player frame rate (`g6-splitscreen.sh g9 bench4`, GPU Quadro P620, 1280x720, four players at spots A C D E, FPS
+  log over 20 s, alternating, load 15-18.7 at the starts: NOT a quiet machine):
+
+| run | fps | frame ms avg / p99 / max | 1% low |
+|---|---|---|---|
+| Xbox detail 1 | 19.2 | 52.0 / 64.7 / 72.3 | 14.5 |
+| full detail 1 | 16.2 | 61.8 / 245.7 / 255.9 | 3.9 |
+| Xbox detail 2 | 21.9 | 45.7 / 118.5 / 188.6 | 5.8 |
+| full detail 2 | 16.6 | 60.2 / 226.7 / 264.4 | 3.9 |
+
+  Full detail costs about 10-15 ms a frame with four players here (16.4 against 20.6 fps, -20%), and both full runs
+  had frames of 230-260 ms (1% low 3.9 fps) that the Xbox runs had less of: to look at on a quiet machine (particles
+  x1 against x0.2 and four views of the same emitters is the first suspect). Single-player is not affected (one view:
+  entry 0 before and after; the fps-bench single-player comparison is in the regressions).
+
+Where single player shows coronas, shadows and decals (`tools/dev/g6-splitscreen.sh g9 corona` / `detail`, DM-Praxis:
+nine bCorona lights, a ring over the round room; GPU):
+- `corona` part: six candidate views, each shot with the client's coronas on and off (`set SDL2Client Coronas
+  False`): the ring shows from the round room (2,189 to 22,775 pixels lit by coronas; `logs/g9/corona/`).
+- `detail` part: P1 looks up at the ring, P2 at the ceiling slab the ring is behind (single player: 44 px, i.e. no
+  corona: Epic's line check from the view hides them), P3/P4 elsewhere; four players at P1..P4.
+- **A real bug found** with full detail, before any fix (`logs/g9/detail0-full`, `logs/g9/corona-leak-before-fix.png`):
+  player TWO's quadrant (P2) showed 3,329 corona pixels against the single player's 44 at the same spot: the ring that
+  player ONE sees, drawn through the ceiling. Cause, in Epic's shared code: one global `FCoronaRender GCoronaRender`
+  (`UnRenderVisibility.cpp`) holds the lights seen last, which fade out over a few frames and are drawn with
+  `ZTest=0` (`UnRender.cpp` `RenderCoronas`), and the time of the last draw; every split view drew every light any
+  view had just seen, with its own camera, through walls, and the fade ran on the milliseconds between two views. The
+  Xbox never met it: its split screen had coronas off (`SSDetailLevels` from two players). Fix (`UnRender.h`
+  `UC2CoronaRenderFor` / `UC2ResetCoronas`, `UnRenderVisibility.cpp`, `UnLevel.cpp`): each split view other than the
+  first gets a corona state of its own (four at most; more falls back to the shared one); `Viewports(0)` (the single
+  player, the first split view) keeps `GCoronaRender`, so one viewport is exactly as before; the three places where
+  Epic reset the global reset them all.
+
+### G-9 step 3 - keyboard+mouse a player of their own (`[SDL2Drv.SDL2Client] KeyboardIsPlayer=True`)
+
+Epic's model, read before choosing (G-6 notes, controls.md "Routing", `UnGUICore.cpp:1114-1149`): a player is a
+viewport; a pad is bound to the viewport whose `GamepadID` is its port (`GetPadViewport`), read only by it, and an
+unbound pad reaches the menus only (`MasterProcessKeyEvent`), where Start joins (`PadJoin`); on PC the keyboard and
+the mouse are events of the window's viewport, and `ULevel::SpawnPlayActor` fakes `GamepadID 0` for it ("for
+development on the PC"), so the first pad (port 0) and the keyboard were one player. The GUI routes every key by
+`Engine->ActiveControllerId`: `ControllerMask & (1 << id)`, `FindViewportIndex(id)` = the viewport with that
+`GamepadID`, per-port arrays `RepeatKey[LAST_VIEWPORT]` (`Object.uc:220 LAST_VIEWPORT=4`: "highest supported
+controller port"), and UCMenu's pages use `1 << PC.GamepadID` masks. The keyboard's events carry the resting
+`ActiveControllerId` 0 (every pad read restores it: `UpdateBoundPad`, `UpdateUnboundPads`, `USDL2Client::Tick`).
+
+Design: the keyboard and the mouse KEEP port 0 (the id the GUI already gives their events, Epic's PC fake), and the
+pads move to ports 1-3. A "pad -1"/255 for the keyboard was rejected: `GamepadID` is a BYTE, 255 is
+`INVALID_GAMEPAD_ID` ("no pad": PadJoin would hand that viewport to the first pad), and `1 << 255` / arrays of four in
+the shipped GUI.u would break. With four ports that is keyboard + three pads = MaxSplitScreens 4; a fourth pad finds
+no port ("SDL2 pads: all 3 ports in use (port 0 is the keyboard's: KeyboardIsPlayer), pad ignored").
+- `SDL2Drv.h` / `SDL2Client.cpp`: config `KeyboardIsPlayer` (Input), compiled default 1, `Default.ini` and the web copy
+  `True` with a comment; `False` = G-6's model (the first pad drives player one with the keyboard).
+- `SDL2Pads.cpp` `PadAdded`: first free port from 1 when `KeyboardIsPlayer`; the connect line says so.
+- `SDL2Client.cpp` `PadJoin`: the Xbox's "a pad takes a viewport that has no pad yet" never takes the window's viewport
+  (the keyboard's player) when `KeyboardIsPlayer`, even before its controller got port 0.
+- Nothing else changes: an unbound pad is Epic's unbound pad (menus only, Start joins: in a match through G-6's
+  `SplitScreenJoinInMatch`, on the title and character pages through UC2's own `AllowControllerJoin`); the joined pad
+  is read by its viewport only; keyboard and mouse events go to the window's viewport only (G-6), so the rebuilt
+  package's PC mouse (F-1/D-6: `UCPlayerInput` separates the mouse from the stick by the Count bytes, per player) only
+  ever sees the mouse on the keyboard's player and only ever sees a stick on a pad's: Epic's pad tuning is untouched
+  on the pads' viewports. `UnLevAct.cpp` only gained a comment.
+- Menus (D-2/D-5): the keyboard's player is the window's viewport and port 0, so the menus' ownership is Epic's: its
+  keys reach the page the way a pad on port 0 would; a pause menu opened by a pad player belongs to that player
+  (`ActiveChildViewport`, `UnGUICore.cpp:1120`), as on the Xbox. Text entry (D-5) is the window's keyboard as before.
+- Profiles: player one (the keyboard's) has the profile D-3 loads at start (`UC2StartWithLastProfile`, G-7's name and
+  class); a pad player made by `CreateSplitPlayer` without `Viewport->Profile` logs in with `[DefaultPlayer]` (User.ini:
+  the launcher's/ini's name and class, i.e. player one's defaults: two players can carry the same name), exactly as in
+  G-6 and on the Xbox for a player without a profile; UC2's character page asks player two to load a profile. Nothing
+  per player was added.
+- Consequence to know (owner question below): with `KeyboardIsPlayer=True` a person with only a pad never gets
+  player one: the pad's Start joins as player two next to an idle keyboard player (in a match, and on the title page
+  `StartMenu.AllowsControllerJoin` makes it a split player in the menus). Pad-only play needs `KeyboardIsPlayer=False`.
+- Tests that use the virtual pad as player one (the G-6 model) now say so with
+  `-ini:System:[SDL2Drv.SDL2Client]:KeyboardIsPlayer=False`: `g6-splitscreen.sh` input/render/menu/audio/fov/detail/
+  corona/bench4 (`$KBOLD`), `m10-controls.sh` (and so d6-mouse, d9-rebind, jit-trace), `fx-owner.sh` (and m7b),
+  `fps-bench.sh`, `g4-language.sh`, `m12-wine-smoke.sh`, `jit-strip.sh`, `f5-flicker.sh`, `net-test.py`. `m10-inject.py`'s
+  `pyexec` namespace gained `click`.
+
+Test: `tools/dev/g6-splitscreen.sh g9 kbplayer` (Xvfb; `-ini:...KeyboardIsPlayer=True`): game 1 in a match, game 2 UC2's
+menu flow with one pad (`menu_kb=1 scen_menu`). First run (`logs/g9/reg`, load 15): 22 of 32 in the match (everything up
+to the unplug passed; the unplug opened Epic's `ControllerRemovedMenu`, which pauses the game until the pad's owner
+presses Start: the scenario did not, so everything after it failed), menu flow failed on `click` missing from the
+inject namespace. Scenario fixed (Start on the re-plugged pad closes the menu, Epic's `ConfirmControllerAdded`; the
+expect order of the menu's log line); second run (`logs/g9/kb`, load 5): 33 of 34 (the one: the expect order) and the
+menu flow 11/11. Numbers (`logs/g9/kb/g9-kbplayer.inject`): unjoined pad's stick moved player one 0.0; after the join
+ports [0, 1], both views with their own rectangle and split HUD; keys W S A D: the keyboard's pawn accelerates
+(+-939,+-1820)/(+-1820,+-939), the pad's (0,0); walks 185.9/158.1/186.0/186.0 vs 0.0; the pad's left stick: 0.0 vs
+186.6/158.9; the mouse turned 2002 vs 0, the right stick 0 vs 10483; mouse fire 2 shots vs 0, pad fire 0 vs 3.
+
+Final run on the binary with the corona fix (`logs/g9/final`, load 15.7 at start, 22 by the end: my own windows build
+ran meanwhile): `PASS g9-kbplayer (34 checks)`, `PASS g9-kbmenu (11 checks)`; G-6's model (`KeyboardIsPlayer=False`):
+`PASS g6-input (39 checks)`, `PASS g6-menu (9 checks)`.
+
+### G-9 step 2b - a crash at full detail with four players: Scion's per-tick projector cache
+
+`logs/g9/final/g6-render.out` (binary cf60be5f: steps 2 and 3 plus the corona fix, full detail): SIGSEGV in
+`RenderStaticMesh` (`UnRenderStaticMesh.cpp:1067`, `ProjectorInfo->Projector->bProjectStaticMesh` of the "dynamic
+projectors hitting the static mesh" loop; addr2line on the build's uc2.bin) during the four-player shots, right after
+a POSTPROCESS toggle, time frozen (`TimeDilation 0.0001`). render-full (the same code without the corona fix) had
+passed the same scenario: intermittent.
+
+Cause (read, Epic's shared code): `FDynamicActor` caches the projectors that hit it (`ActorProjectors`: raw pointers,
+no reference held) and rebuilds the list only when `Level->TimeSeconds` changed since the last build (Scion's "only
+update its lighting once per frame": `UnRenderVisibility.cpp` RenderActor and `UnRender.cpp` FActorSceneNode::Render).
+`AProjector::Detach` (a pawn's shadow projector re-attaches as the pawn animates) sets the info's `Projector=NULL`,
+`Expires=now` and drops its reference; the level's list drops the info in the next visibility pass, after which it is
+deleted. With `TimeDilation 0.0001` at TimeSeconds ~100 the tick (16 ms x 0.0001) is below the float's resolution, so
+TimeSeconds stands still and the cached lists live on across ticks: `RenderStaticMesh` then calls `Render()` on an
+info it holds no reference to (which removes someone else's reference when it has expired) or on a deleted one. The
+Xbox's four-player detail had projectors off (`SSDetailLevels`), so its four-player frames never had shadow projectors
+to cache; with full detail they do (four pawns, four views).
+
+Fix (`UnProjector.h`/`.cpp`, `UnRender.h`/`.cpp`, `UnRenderVisibility.cpp`): `GProjectorRenderInfoGeneration`, bumped
+by `AProjector::Detach`, `AProjector::Abandon` and `~FProjectorRenderInfo`; an `FDynamicActor` remembers the value its
+`ActorProjectors` was built with (`LastProjectorGeneration`) and rebuilds when it changed, as when TimeSeconds
+changed. In normal play nothing changes: TimeSeconds moves every tick, so the lists were rebuilt every tick anyway, and
+a detach happens in a tick, not between the views of one frame.
+
+Corona proof after the corona fix (binary 00fd3b32, which also has this fix; `logs/g9/detail2-full`, `detail2-xbox`,
+sheet `logs/g9/detail-praxis.png`, `logs/g9/detail-praxis.txt`): corona pixels per quadrant / the single player at the
+same spot: full detail P1 2,077 / 2,086 (player one sees its coronas), P2 11 / 144, P3 10 / 85, P4 14 / 4 (no corona
+from another view); Xbox detail 2 / 2,256, 8 / 102, 8 / 73, 21 / 34 (no coronas at four players, Epic's level 3);
+before the fix P2 3,329 / 44. `PASS g9-detail-praxis` (the before-fix run reported, not counted). Decals and
+projectors: the log line says they are on at four players with full detail and off with the Xbox's; the pictures did
+not show them apart (three Nakhti shots at the floor in front, PD, left no decal I can see in either; the pawn's shadow
+is not separable at that size): **seen only as settings**, not numerically checked. That four-player frames now carry
+shadow projectors is what step 2b's crash showed. Harness note: in these four-player runs one player was sometimes
+dead in the frozen frame (a frag at spawn; "You are dead" scoreboard in its quadrant), which only touches the P3/P4
+baselines. Single-player shot of `render`/`fov` (n1): in 2 of 5 runs the frozen frame showed a first-person view with
+no pawn or the old place (render-xbox, final2: every same-view check then fails at ~16-17); the frame was frozen 2 s
+after the second placement, soon after the spawn's teleport-in; the scenario now waits 5 s.
+
+### G-9 step 4 - regressions and builds on the final binary (uc2.bin sha256 00fd3b320fb2016b..., commit f39fbdb)
+
+Builds (`bin/capped 6G`, `-j2`/`-j4` by load): native, native64, windows (MinGW uc2.exe), wasm-perf: 0 errors
+(`logs/g9/build-*.log`; the first windows link failed on `GProjectorRenderInfoGeneration` because its objects mixed the
+sources before and after step 2b's edit mid-build; the incremental rebuild linked, `build-windows-2.log`). No script
+changed: no package to switch.
+
+| test | run | result |
+|---|---|---|
+| `g6-splitscreen.sh g9 kbplayer` (KeyboardIsPlayer=True) | `logs/g9/final2` | PASS 34 + kbmenu PASS 11 |
+| `g6-splitscreen.sh g9 input` (G-6's model, KeyboardIsPlayer=False) | `logs/g9/final2` | PASS 39 |
+| `g6-splitscreen.sh g9 menu` | `logs/g9/final2` | PASS 9 |
+| `g6-splitscreen.sh g9 audio` | `logs/g9/final2` | PASS 6; fire cue 1.0 per shot alone, with four (player one), player three; all 2D |
+| `g6-splitscreen.sh g9 render` (full detail) | `logs/g9/final3` | g6-measure 0 failed (same view as single |diff| 3.51/3.21/3.83/3.87, every split rectangle its own ramp); render 6/7: `render-every-player-alive-at-the-end` FAIL, see below |
+| `g6-splitscreen.sh g9 detail` + `g9-detail.py --praxis` | `logs/g9/detail2-*` | PASS (coronas, step 2b section) |
+| `m10-controls.sh` (M10_TREE=g9) | `logs/g9/m10` | keyboard 16, mouse 18, text 7, pad 33, both 14: PASS |
+| `d6-mouse.sh look pad` (D6_TREE=g9, D6_SHIP_TREE=g9ship) | `logs/g9/d6` | 48 PASS 0 FAIL (pad curves vs shipped worst 3.55% walk "one frame of running" rule, 0.13% yaw) |
+| `ucc-bin verifyclasses` (g9, g9ship) | | "All native class layouts match", rc 0 both |
+| `fps-bench.sh DM-Deadbolt 20` single player, alternating, base = main's build (run/g9base, sha256 64be3015...) | `logs/g9/fps` | base 103.4 / 91.5 / 100.5 / 94.6 / 91.6 / 98.9 (mean 96.8) fps; new 90.7 / 89.6 / 97.6 / 91.6 / 97.8 / 99.2 (mean 94.4); load 4.8-11 |
+
+- fps single player: -2.4% on the means, inside the run-to-run spread (89.6-103.4 for the same binary). The first two
+  pairs were both lower for the new binary, so I checked step 2b's cache change, the only per-frame work added for one
+  viewport: a build with the generation test disabled ran 92.9 / 98.0 against the final 97.8 / 99.2 and base 91.6 /
+  98.9 in the same rounds: no cost from it. Unchanged at this machine's noise; a quiet-machine measurement would settle
+  the last percent.
+- `render-every-player-alive-at-the-end` (final3, also render-full): player two was telefragged right after joining.
+  Cause in the log: it spawned on the PlayerStart under SPOT_B and player one was NETPLACEd onto SPOT_B ("FirstBlood",
+  `Gib_Explosion on UCPawn_Nakhti_Anubis1` at distance 106 right after `place Player-1 ok`). All five of G-6's render
+  spots (A-E) are PlayerStarts (the map's t3d: within 22 units), so a joining player can spawn on the next target:
+  a race in G-6's scenario, not caused by G-9 (it passed in final2 and render-xbox). Left open (moving the spots off
+  the starts changes G-6's pictures).
+- G-6's earlier numbers for comparison: input 35-39, render 7 + g6-measure 59/0, menu 9, audio 6, m10 five PASS, d6 47
+  PASS; fps base/new 84.6-89.6.
+
+### G-9 - what is open for the owner
+
+1. **FOV**: choose from `logs/g9/fov-{2,3,4}players.png` (table in step 1): AutoFOV on (139 across on strips, the
+   default today), Epic's maths (90 x 31 strips, 45 x 13 three-player top), or the proposal
+   `[ufront.AutoFOV] SplitClampToFullScreen=True` (106 x 41 strips). Nothing is decided here.
+2. **Pad-only players with KeyboardIsPlayer=True**: a person with only a pad never gets player one; its Start makes it
+   player two beside an idle keyboard player (in the menus too: the title page allows a join). Options: keep (set
+   False for pad-only play, the launcher could offer it), or a rule such as "the first pad takes player one until the
+   keyboard or the mouse is used" (not built: a design change to ask about first).
+3. Keyboard player cannot drop out alone: Epic's `RemoveSplitViewport` never removes the first view's player ("don't
+   delete default player"), and `SPLIT REMOVE` removes the last view. "Leaving in either order" was tested as: the pad
+   player leaves (SPLIT REMOVE) and the keyboard stays player one; the keyboard player ends the session (pause menu,
+   FORFEIT) and everyone leaves, after which the pad's Start on the main menu takes no player.
+4. Four-player cost of full detail: 16-23 fps against 18-26 with the Xbox's detail on the Quadro P620 (two sets of
+   alternating runs, load 11-19: the spread is as large as the difference); frames of 200-260 ms appeared in some full
+   runs. To measure on a quiet machine before telling players what four players cost.
+5. Decals and projectors in split screen: on (log lines), not shown apart in a picture (step 2b section).
+6. G-6's render scenario race (spots on PlayerStarts), above.
+
+SDL2Drv edits of G-9 (for G-5's merge): `SDL2Drv.h` (USDL2Client: SplitScreenFullDetail, KeyboardIsPlayer,
+SplitScreenKeepsFullDetail); `SDL2Client.cpp` (StaticConstructor keys and defaults, the comment above Tick, PadJoin's
+loop start); `SDL2Pads.cpp` (header comment, GetPadViewport comment, PadAdded's first port and log lines).

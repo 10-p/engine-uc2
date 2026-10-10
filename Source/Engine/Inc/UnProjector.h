@@ -15,6 +15,16 @@
 
 class AProjector;
 
+// uc2 port (G-9): bumped whenever a dynamic projector's render info is detached, abandoned or deleted.
+// FDynamicActor caches the projectors that hit it (ActorProjectors, raw pointers, no reference) once per value of
+// Level->TimeSeconds (Scion's per-tick cache, UnRender.cpp FActorSceneNode::Render and UnRenderVisibility.cpp
+// RenderActor). When TimeSeconds does not move from one tick to the next (a TimeDilation so small that the tick is
+// below the float's resolution: the split-screen tests' frozen frames), a projector detached in a tick (a pawn's
+// shadow re-attaches as it animates) stayed in the cached lists: RenderStaticMesh then called Render() on an info
+// it held no reference to (removing someone else's), or on a deleted one (SIGSEGV at UnRenderStaticMesh.cpp:1067,
+// seen with four players at full detail, G-9). The caches are rebuilt when this changed.
+ENGINE_API extern DWORD GProjectorRenderInfoGeneration;
+
 enum EProjectorFlags
 {
 	PRF_Projected		= 0x01,
@@ -49,6 +59,7 @@ struct ENGINE_API FProjectorRenderInfo
 	~FProjectorRenderInfo()
 	{
 		check(ReferenceCount==0);
+		GProjectorRenderInfoGeneration++;	// uc2 port (G-9)
 	}
 	FORCEINLINE FProjectorRenderInfo* AddReference()
 	{

@@ -423,6 +423,7 @@ public:
 	FLightList*	ActorLights;
 	FProjectorList*	ActorProjectors;
 	FLOAT	LastLightUpdateTime;
+	DWORD	LastProjectorGeneration;	// uc2 port (G-9): GProjectorRenderInfoGeneration when ActorProjectors was built
 
 	// scion sz - deferred rendering flags used depending on current FSceneNode::TFilterMode state
 	EPostProcessMaterialType IsPostProcess;
@@ -1003,6 +1004,16 @@ struct FCoronaRender
     void Reset();
 };
 
+// uc2 port (G-9): the corona state of a viewport. Epic's one global FCoronaRender keeps the lights seen last (fading
+// out, drawn without a depth test) and the time of the last draw: with several split-screen views a frame, every
+// view also drew the coronas the others had just seen, through walls, and the fade ran on the time between two views.
+// The Xbox never met it (coronas off while split, SSDetailLevels); SplitScreenFullDetail turns them on, so each split
+// view other than the first gets a state of its own. Viewports(0) (the single player, the first split view) keeps
+// the global, as before.
+ENGINE_API FCoronaRender& UC2CoronaRenderFor( UViewport* Viewport );
+// Every state reset (where Epic reset the global: a level's detail change, destruction, editor reconcile).
+ENGINE_API void UC2ResetCoronas();
+
 // scion sz -
 class FPostProcessRender
 {
@@ -1158,7 +1169,8 @@ void ENGINE_API CalculateVertexCacheHits(UBOOL bIsTriStrip, DWORD dwVertexSize,
 // PlayerCalcView), so the world, the first-person weapon, the HUD's 3D markers, the LOD and shadow
 // biases agree on one value, while everything outside the frame (script's ticks, the mouse:
 // UCPlayerInput scales by DesiredFOV) keeps the player's real FOV. Config: [ufront.AutoFOV]
-// AutoFOV / ReferenceAspect / WeaponScale (the template's section and keys); console AUTOFOV [0|1|2]
+// AutoFOV / ReferenceAspect / WeaponScale (the template's section and keys; G-9 adds SplitClampToFullScreen, a
+// proposal off by default: ufrontAutoFovSize); console AUTOFOV [0|1|2]
 // for the session. At the reference aspect (640x480, 1024x768...) nothing changes, bit for bit.
 //
 enum EAutoFovMode
@@ -1179,6 +1191,11 @@ ENGINE_API void ufrontAutoFovSize( UViewport* Viewport, INT& SizeX, INT& SizeY )
 // tan(ScaleFOV*h)/ScaleX, so ScaleFOV = atan(ScaleX*tan(h))/h puts it at tan(h). Returns 0 (nothing to do)
 // for a full-window viewport or with AutoFOV off (Epic's view, ReduceFOV and all).
 ENGINE_API UBOOL ufrontSplitFovScale( UViewport* Viewport, FLOAT Fov, FLOAT& OutScale );
+
+// G-9: one "[AutoFOV] shown viewport=<i> rect=X,Y WxH mode=M base=B effective=E scaleFOV=S horizontal=H vertical=V"
+// line per viewport whenever it changes: the field of view the picture shows (AutoFOV and the split-screen scale
+// applied; also with AutoFOV off, Epic's ReduceFOV maths). Fov = the FOV drawn with, BaseFov = the player's own.
+ENGINE_API void ufrontLogShownFov( UViewport* Viewport, FLOAT Fov, FLOAT BaseFov );
 
 // Sets that scale for a scope (a frame, a projection, a canvas-drawn actor) and puts the viewport's back.
 struct FScopedSplitFovScale

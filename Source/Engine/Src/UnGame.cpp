@@ -3216,6 +3216,9 @@ struct FScopedAutoFov
 			Viewport->ScaleFOVX = Viewport->ScaleFOVY = Scale;
 			bSplitFov = 1;
 		}
+		// G-9: what the picture shows, per viewport (the split-screen FOV pictures read it).
+		if( Viewport->bShowScene )
+			ufrontLogShownFov( Viewport, Applied, Saved );
 	}
 	~FScopedAutoFov()
 	{

@@ -1137,7 +1137,18 @@ void USplitScreenMgr::UpdateDetailLevels()
 			// subtract one since the 0th entry is the default
 			// detail level we should revert to
 			INT DetailLevelIdx = Min<INT>( NumValidVPs-1, SSDetailLevels.Num()-1 );		
-			FSplitScreenDetailLevel& DetailLevel = SSDetailLevels( DetailLevelIdx );
+			FSplitScreenDetailLevel& SplitDetailLevel = SSDetailLevels( DetailLevelIdx );
+			// uc2 port (G-9): on a client that keeps full detail (SDL2Drv SplitScreenFullDetail, True on PC) every
+			// split view gets entry 0, the single player's settings, except ReduceFOV: that is the FOV maths of
+			// the layout (Epic's view with AutoFOV off; AutoFOV replaces it per frame), not a detail setting.
+			FSplitScreenDetailLevel FullDetailLevel = SSDetailLevels( 0 );
+			FullDetailLevel.ReduceFOV = SplitDetailLevel.ReduceFOV;
+			UBOOL bFullDetail = Client->SplitScreenKeepsFullDetail();
+			FSplitScreenDetailLevel& DetailLevel = bFullDetail ? FullDetailLevel : SplitDetailLevel;
+			debugf( NAME_Log, TEXT("Split screen: %i views, detail %s (DetailMode %i, coronas %i, decals %i, projectors %i, deco layers %i, blob shadows %i, particles x%.1f, ReduceFOV %.2f)"),
+				NumValidVPs, bFullDetail ? TEXT("of one player (SplitScreenFullDetail)") : *FString::Printf(TEXT("level %i (Xbox)"), DetailLevelIdx),
+				DetailLevel.DetailMode, (INT)DetailLevel.bCoronas, (INT)DetailLevel.bDecals, (INT)DetailLevel.bProjectors, (INT)DetailLevel.bTerrainDecoLayers,
+				(INT)DetailLevel.bBlobShadows, DetailLevel.ReduceParticles, DetailLevel.ReduceFOV );
 			for( INT vpIdx=0; vpIdx < NumValidVPs; vpIdx++ )
 			{			
 				SetViewportDetail( ActiveSplitViews(vpIdx), DetailLevel );

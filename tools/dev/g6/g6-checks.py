@@ -113,3 +113,35 @@ def only_moved4(tags, k, far=50.0, still=2.0):
         for i, d in enumerate(moved(a, b)):
             tot[i] += d
     return tot[k] > far and all(t < still for i, t in enumerate(tot) if i != k)
+
+
+# G-9 (KeyboardIsPlayer): the keyboard and the mouse are player one on port 0, a pad joins on port 1..3, so the
+# virtual pad v of the test channel is port v+1. The helpers below take both.
+def spawn_port(port, vpad, tries=10):
+    """Press virtual pad vpad's fire until the split player on port `port` has a pawn."""
+    for _ in range(tries):
+        vprobe('_s')
+        rows = [r for r in V['_s'] if r['pad'] == port and r['split'] >= 0]
+        if rows and rows[0]['pawn']:
+            print(f'  spawn: port {port} has a pawn', flush=True)
+            return True
+        chan(f'pad {vpad} axis righttrigger 32767'); time.sleep(0.3)
+        chan(f'pad {vpad} axis righttrigger 0'); time.sleep(1.5)
+    return False
+
+
+def ports(tag):
+    """The pad port (GamepadID) of every split view in order, or of the one viewport when not split."""
+    return [r['pad'] for r in vsplit(tag)] or [V[tag][0]['pad']]
+
+
+def still_all(a, b, still=2.0):
+    """Nobody's pawn moved between a and b (split views, or the one viewport)."""
+    if vsplit(a):
+        return all(d < still for d in moved(a, b))
+    return dist_v0(a, b) < still
+
+
+def dist_v0(a, b):
+    la, lb = V[a][0]['loc'], V[b][0]['loc']
+    return sum((p - q) ** 2 for p, q in zip(la, lb)) ** 0.5

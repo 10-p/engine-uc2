@@ -17,7 +17,9 @@
 
 	Split screen (G-6): Start on an unbound pad joins a player as UXboxClient::
 	UpdateGamepadUnboundInput does (USDL2Client::PadJoin, SDL2Client.cpp); each bound pad is
-	read by its own viewport only.
+	read by its own viewport only. G-9 ([SDL2Drv.SDL2Client] KeyboardIsPlayer, default True):
+	the keyboard and the mouse are player one on port 0 and the pads take ports 1-3, so the
+	first pad's Start joins player two instead of driving player one.
 =============================================================================*/
 
 #include "SDL2Drv.h"
@@ -255,7 +257,8 @@ INT USDL2Client::FindPadSlot( INT InstanceID )
 //
 // The viewport a pad port belongs to (UXboxClient::GetGamepadViewport): the one whose
 // GamepadID is the port. On PC, ULevel::SpawnPlayActor gives the first viewport GamepadID 0,
-// so the first pad and the keyboard both drive player one.
+// so with KeyboardIsPlayer=False the first pad and the keyboard both drive player one; with
+// KeyboardIsPlayer (G-9, the default) no pad gets port 0 and the keyboard's player is its own.
 //
 UViewport* USDL2Client::GetPadViewport( INT Slot )
 {
@@ -286,7 +289,8 @@ void USDL2Client::SendPadKey( INT Slot, UViewport* Viewport, EInputKey Key, EInp
 }
 
 //
-// A pad was connected: first free port, as the Xbox's four fixed ports.
+// A pad was connected: first free port, as the Xbox's four fixed ports. G-9: with KeyboardIsPlayer port 0
+// belongs to the keyboard and the mouse (player one), so the pads take ports 1-3: a fourth pad finds none.
 //
 void USDL2Client::PadAdded( INT DeviceIndex )
 {
@@ -297,12 +301,13 @@ void USDL2Client::PadAdded( INT DeviceIndex )
 	if( FindPadSlot(ID)!=INDEX_NONE )
 		return;
 	INT Slot = INDEX_NONE;
-	for( INT i=0; i<SDL2DRV_MAX_PADS && Slot==INDEX_NONE; i++ )
+	for( INT i=KeyboardIsPlayer ? 1 : 0; i<SDL2DRV_MAX_PADS && Slot==INDEX_NONE; i++ )
 		if( !Pads[i].Controller )
 			Slot = i;
 	if( Slot==INDEX_NONE )
 	{
-		debugf( NAME_Log, TEXT("SDL2 pads: all %i ports in use, pad ignored"), (INT)SDL2DRV_MAX_PADS );
+		debugf( NAME_Log, TEXT("SDL2 pads: all %i ports in use%s, pad ignored"), (INT)SDL2DRV_MAX_PADS - (KeyboardIsPlayer ? 1 : 0),
+			KeyboardIsPlayer ? TEXT(" (port 0 is the keyboard's: KeyboardIsPlayer)") : TEXT("") );
 		return;
 	}
 	SDL_GameController* GC = SDL_GameControllerOpen( DeviceIndex );
@@ -318,8 +323,9 @@ void USDL2Client::PadAdded( INT DeviceIndex )
 	Pad.RepeatKey  = IK_None;
 	const char* Name = SDL_GameControllerName( GC );
 	appStrncpy( Pad.Name, Name ? appFromAnsi(Name) : TEXT("pad"), ARRAY_COUNT(Pad.Name) );
-	debugf( NAME_Log, TEXT("SDL2 pads: pad %i connected: %s%s"), Slot, Pad.Name,
-		SDL_GameControllerHasRumble(GC) ? TEXT(" (rumble)") : TEXT("") );
+	debugf( NAME_Log, TEXT("SDL2 pads: pad %i connected: %s%s%s"), Slot, Pad.Name,
+		SDL_GameControllerHasRumble(GC) ? TEXT(" (rumble)") : TEXT(""),
+		KeyboardIsPlayer ? TEXT(" (keyboard and mouse are player one on port 0: Start joins)") : TEXT("") );
 #ifdef __EMSCRIPTEN__
 	// G-10: SDL has no rumble here; look for the browser's haptics on this pad (once, at connect).
 	Pad.WebIndex = -1;
