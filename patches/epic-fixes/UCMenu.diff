@@ -1,0 +1,106 @@
+--- a/UCMenu/Classes/ConnectionFailureMenu.uc
++++ b/UCMenu/Classes/ConnectionFailureMenu.uc
+@@ -151,6 +151,12 @@
+ 		
+ 		return false;
+ 	}
++	else if ( TimerCountdown <= 0 )	
++	{
++		Controller.Disconnect();
++		Hide();
++		Controller.RemoveMenu(Self,false,true);
++	}
+ 
+ 	return true;
+ }
+@@ -178,7 +184,16 @@
+ 	{
+ 		Controller.Disconnect();
+ 		Hide();
++
++
++		
++		SetTimer(0.2);
+ 	}
++}
++
++event Timer()
++{
++	Show();
+ }
+ 
+ defaultproperties
+--- a/UCMenu/Classes/ControllerRemovedMenu.uc
++++ b/UCMenu/Classes/ControllerRemovedMenu.uc
+@@ -126,6 +126,7 @@
+ 	}
+ 
+ 	SetupQuestion(Message);
++	OnOpen = InternalOnOpen;
+ 	log(Name$"::"$GetFuncName()@"ControllerPort:'"$ControllerPort$"'"@"Controller.ControllerId:'"$Controller.ControllerId$"'"@"Controller.ControllerMask:'"$Controller.ControllerMask$"'",'DevUI');
+ }
+ 
+@@ -152,6 +153,29 @@
+ 	return false;
+ }
+ 
++function InternalOnOpen()
++{
++	local int i, PlayerGamepadID;
++	local Player P;
++
++	for ( i = 0; i < Controller.GetViewportCount(true); i++ )
++	{
++		P = Controller.GetViewport(i);
++		PlayerGamepadID = P.GetGamepadID();
++		if ( PlayerGamepadID == ControllerPort )
++			return;
++	}
++
++	
++	
++	Controller.ControllerMask = ControllerMask & ~(1<<ControllerPort);
++	if ( Controller.ControllerMask == 0 )
++		Controller.ControllerMask = 255;
++
++	OnCanClose = None;
++	CloseMenu(true);
++}
++
+ defaultproperties
+ {
+ 	sPlayerIndexString=" for player %num%"
+--- a/UCMenu/Classes/UC2Arena_Character.uc
++++ b/UCMenu/Classes/UC2Arena_Character.uc
+@@ -1645,6 +1645,12 @@
+ 	}
+ 
+ 	UpdateJoinText();
++
++	
++	
++	if ( !bResult && bFriendJoin )
++		GameStart.Clear();
++
+ 	return bResult || Super.BClicked();
+ }
+ 
+@@ -1693,11 +1699,14 @@
+ 	{
+ 		
+ 		PlayerIndex = ClosedMenu.Tag;
+-		JoyInput[PlayerIndex].bReady = false;
++		if ( PlayerIndex != -1 )
++		{
++			JoyInput[PlayerIndex].bReady = false;
+ 
+-		if ( !ShouldDisplayHandicap() )
+-		{
+-			ToggleHandicapInput(PlayerIndex, false, true);
++			if ( !ShouldDisplayHandicap() )
++			{
++				ToggleHandicapInput(PlayerIndex, false, true);
++			}
+ 		}
+ 
+ 		UpdateJoinText();

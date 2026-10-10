@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+# uc-build.sh: compile script packages from a patched class tree, against the shipped packages, the way Epic's
+# build machine compiled them (make, then stripsource), one package at a time. T1; docs/porting/analysis/
+# script-patches.md ("interface for the build").
+#
+#   tools/scripts/uc-build.sh --classes <tree> --out <dir> --packages A,B,... [options]
+#
+#   --classes <tree>   <tree>/<Pkg>/Classes/*.uc for every package to build (uc-patches.py apply's output)
+#   --packages A,B     the packages to compile (any order; compiled in EditPackages order): the targets and the
+#                      packages that must be compiled first (`uc-patches.py packages ... --compile-list <shipped>`)
+#   --keep A,B         the packages to deliver in <out>/System (default: all of --packages); the others compiled
+#                      only so the targets could be, and System/ gets the shipped file back for them
+#   --out <dir>        the work tree; the result is <dir>/System/<Pkg>.u (with the shipped .u of every other
+#                      package beside it, so the folder is a complete System for checking)
+#   --shipped <dir>    the shipped script packages (default <WorkUC2>/epic-sources/System = the retail disc's)
+#   --assets <dir>     the game tree: its content folders (Textures, StaticMeshes, ...) are linked into the work tree
+#                      and its System/ provides the .int files and Epic's inis (default <WorkUC2>/assets/uc2)
+#   --retail-inis <d>  the retail disc's System/ for Characters.ini, Gametypes.ini, Maplists.ini, which the shipped
+#                      defaults carry (default <WorkUC2>/reference/iso-extract/System)
+#   --ucc <file>       ucc-bin (default <repo>/build-native/Source/UCC/ucc-bin)
+#   --mem <size>       memory ceiling of each ucc run (default 3G); --capped <file> the bin/capped wrapper
+#   --keep-text        do not strip (all packages keep their script text; for debugging)
+#   --link <rel>=<dir> also link <dir> as <work tree>/<rel> (e.g. Engine/Textures for `#exec TEXTURE IMPORT` files;
+#                      none of GUI, UCGameplay, UCMenu needs one)
+#
+# Stages (each a `ucc-bin` run under bin/capped):
+#   make <Pkg>   for each package to build, in EditPackages order: System/ holds only the packages before it (shipped,
+#                or built by an earlier stage), Avaris.ini = DefaultXbox.ini, User.ini = DefUserXbox.ini (the inis
+#                Epic compiled with, Source/BuildProcess/sync_avaris.pl), and `ucc-bin make -nobind -noh
+#                -CONFORMNOCONFIG endpkg=<Pkg>` compiles exactly that package, conformed to the shipped file
+#                (../GUIRes/<Pkg>.u). Hiding the later packages matters: Epic's build compiled from scratch, so a
+#                default that names a class of a later package (UCGameplay -> UCEffects) did not resolve.
+#   strip        all 17 back in System/, PC inis (Default.ini/DefUser.ini) and the retail per-class inis, `ucc-bin
+#                editor.stripsource -CONFORM` (every .u but Editor.u re-saved with " " text); the built packages
+#                are taken from it, UCMenu.u from before the strip (it shipped with its text).
+# Bash only (coreutils, cp, ln); no Python. Nothing is written outside --out.
+set -euo pipefail
+
+repo=$(cd "$(dirname "$0")/../.." && pwd)
+work=$(cd "$repo/.." && pwd)
+classes="" out="" packages="" keep="" mem=3G keep_text=0 links=()
+shipped=$work/epic-sources/System
+assets=$work/assets/uc2
+retail=$work/reference/iso-extract/System
+ucc=$repo/build-native/Source/UCC/ucc-bin
+capped=$work/bin/capped
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --classes) classes=$2; shift 2;;
+    --out) out=$2; shift 2;;
+    --packages) packages=$2; shift 2;;
+    --keep) keep=$2; shift 2;;
+    --shipped) shipped=$2; shift 2;;
+    --assets) assets=$2; shift 2;;
+    --retail-inis) retail=$2; shift 2;;
+    --ucc) ucc=$2; shift 2;;
+    --mem) mem=$2; shift 2;;
+    --capped) capped=$2; shift 2;;
+    --keep-text) keep_text=1; shift;;
+    --link) links+=("$2"); shift 2;;
+    *) echo "uc-build: unknown argument $1" >&2; exit 2;;
+  esac
+done
+[ -n "$classes" ] && [ -n "$out" ] && [ -n "$packages" ] || { echo "uc-build: --classes, --out and --packages are required" >&2; exit 2; }
+[ -x "$ucc" ] || { echo "uc-build: no ucc-bin at $ucc" >&2; exit 2; }
+[ -x "$capped" ] || { echo "uc-build: no $capped" >&2; exit 2; }
+classes=$(cd "$classes" && pwd)
+
+all=(Core Engine UCAnnouncements Editor UnrealEd IpDrv UWeb GamePlay UnrealGame UCElements UCGameplay
+     UCEffects UCCharacters UCInventory UCMutators GUI UCMenu)
+declare -A want=()
+IFS=, read -r -a req <<< "$packages"
+for p in "${req[@]}"; do
+  ok=0; for q in "${all[@]}"; do [ "$q" = "$p" ] && ok=1; done
+  [ $ok = 1 ] || { echo "uc-build: $p is not a script package" >&2; exit 2; }
+  [ -d "$classes/$p/Classes" ] || { echo "uc-build: no $classes/$p/Classes" >&2; exit 2; }
+  want[$p]=1
+done
+declare -A keepset=()
+IFS=, read -r -a kreq <<< "${keep:-$packages}"
+for p in "${kreq[@]}"; do
+  [ -n "${want[$p]:-}" ] || { echo "uc-build: --keep $p is not in --packages" >&2; exit 2; }
+  keepset[$p]=1
+done
+for p in "${all[@]}"; do [ -f "$shipped/$p.u" ] || { echo "uc-build: no $shipped/$p.u" >&2; exit 2; }; done
+for f in DefaultXbox.ini DefUserXbox.ini Default.ini DefUser.ini; do
+  [ -f "$assets/System/$f" ] || { echo "uc-build: no $assets/System/$f" >&2; exit 2; }
+done
+
+mkdir -p "$out"
+out=$(cd "$out" && pwd)
+case "$out" in /|"$work"|"$repo"|"$assets"*|"$shipped"*) echo "uc-build: refusing --out $out" >&2; exit 2;; esac
+rm -rf "$out/System" "$out/GUIRes" "$out/Hidden" "$out/Unstripped"
+for d in "$out"/*/; do [ -L "${d%/}" ] && rm -f "${d%/}"; done
+for d in "$assets"/*/; do
+  d=$(basename "$d"); [ "$d" = System ] && continue
+  ln -sfn "$assets/$d" "$out/$d"
+done
+mkdir -p "$out/System" "$out/GUIRes" "$out/Hidden" "$out/Save" "$out/Cache"
+# System: the asset tree's System/ (Epic's inis, Localization/ with the .int files that name the commandlets,
+# Ladders/) without its .u, then the shipped .u and ucc-bin
+cp -a "$assets/System/." "$out/System/"
+rm -f "$out/System/"*.u
+for p in "${all[@]}"; do cp -f "$shipped/$p.u" "$out/GUIRes/$p.u"; cp -f "$shipped/$p.u" "$out/System/$p.u"; done
+chmod u+w "$out/System"/* "$out/GUIRes"/*
+cp -f "$ucc" "$out/System/ucc-bin"
+for p in "${all[@]}"; do
+  s=$p; [ "$p" = GamePlay ] && s=Gameplay
+  rm -rf "${out:?}/$s"
+  if [ -n "${want[$p]:-}" ]; then mkdir -p "$out/$s"; ln -s "$classes/$p/Classes" "$out/$s/Classes"; fi
+done
+
+for l in "${links[@]}"; do
+  mkdir -p "$(dirname "$out/${l%%=*}")"; ln -sfn "$(cd "${l#*=}" && pwd)" "$out/${l%%=*}"
+done
+
+log=$out/uc-build.log
+: > "$log"
+t_all=$SECONDS
+for p in "${all[@]}"; do
+  [ -n "${want[$p]:-}" ] || continue
+  # the packages before p are in System/, p and every later one hidden
+  hide=0
+  for q in "${all[@]}"; do
+    [ "$q" = "$p" ] && hide=1
+    if [ $hide = 1 ] && [ -f "$out/System/$q.u" ]; then mv -f "$out/System/$q.u" "$out/Hidden/$q.u"; fi
+  done
+  rm -f "$out/Hidden/$p.u"
+  cp -f "$out/System/DefaultXbox.ini" "$out/System/Avaris.ini"
+  cp -f "$out/System/DefUserXbox.ini" "$out/System/User.ini"
+  rm -f "$out/System/ucc.log"
+  t0=$SECONDS
+  set +e
+  (cd "$out/System" && "$capped" "$mem" 1800 -- ./ucc-bin make -nobind -noh -CONFORMNOCONFIG "endpkg=$p" -log=ucc.log) > "$out/make-$p.out" 2>&1
+  rc=$?
+  set -e
+  cp -f "$out/System/ucc.log" "$out/make-$p.log" 2>/dev/null || true
+  verdict=$(grep -a -o '\(Success\|Failure\) - [0-9]* error(s), [0-9]* warning(s)' "$out/make-$p.log" | tail -1 || true)
+  echo "make $p: exit $rc in $((SECONDS - t0)) s, $verdict" | tee -a "$log"
+  # Epic's ucc exits 1 on warnings; the verdict line and the file decide
+  if [ ! -f "$out/System/$p.u" ] || ! grep -aq 'Success - 0 error(s)' "$out/make-$p.log"; then
+    grep -a 'Error' "$out/make-$p.log" | head -20 >&2 || true
+    echo "uc-build: make $p failed (log $out/make-$p.log)" >&2
+    exit 1
+  fi
+  for q in "${all[@]}"; do [ -f "$out/Hidden/$q.u" ] && mv -f "$out/Hidden/$q.u" "$out/System/$q.u"; done
+done
+mkdir -p "$out/Unstripped"
+for p in "${all[@]}"; do [ -n "${want[$p]:-}" ] && cp -f "$out/System/$p.u" "$out/Unstripped/$p.u"; done
+if [ $keep_text = 0 ]; then
+  # stripsource re-saves every .u in System/; only the built ones are kept from it
+  mkdir -p "$out/Strip"
+  cp -f "$out/System/Default.ini" "$out/System/Avaris.ini"
+  cp -f "$out/System/DefUser.ini" "$out/System/User.ini"
+  if [ -d "$retail" ]; then
+    for f in Characters.ini Gametypes.ini Maplists.ini; do cp -f "$retail/$f" "$out/System/$f"; done
+  else
+    echo "uc-build: note: no $retail: the strip uses the asset tree's per-class inis" | tee -a "$log" >&2
+  fi
+  rm -f "$out/System/ucc.log"
+  t0=$SECONDS
+  set +e
+  (cd "$out/System" && "$capped" "$mem" 1800 -- ./ucc-bin editor.stripsource -CONFORM -log=ucc.log) > "$out/strip.out" 2>&1
+  rc=$?
+  set -e
+  cp -f "$out/System/ucc.log" "$out/strip.log" 2>/dev/null || true
+  echo "strip: exit $rc in $((SECONDS - t0)) s" | tee -a "$log"
+  [ $rc = 0 ] || { echo "uc-build: stripsource failed (log $out/strip.log)" >&2; exit 1; }
+  [ -n "${want[UCMenu]:-}" ] && cp -f "$out/Unstripped/UCMenu.u" "$out/System/UCMenu.u"
+fi
+for p in "${all[@]}"; do
+  # the re-saved shipped ones and the packages compiled only to build the others are not delivered
+  [ -n "${keepset[$p]:-}" ] || cp -f "$shipped/$p.u" "$out/System/$p.u"
+done
+rm -f "$out/System/ucc-bin" "$out/System/ucc.log"
+echo "built ${kreq[*]} in $((SECONDS - t_all)) s: $(for p in "${all[@]}"; do [ -n "${keepset[$p]:-}" ] && printf '%s ' "$out/System/$p.u"; done)" | tee -a "$log"

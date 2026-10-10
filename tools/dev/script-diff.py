@@ -268,6 +268,11 @@ class Comparison:
                     self.problem('patch object %s: cannot parse (%s)' % (vpath, e))
                     continue
                 diffs = [k2 for k2 in set(fa) | set(fb) if k2 != 'script' and fa.get(k2) != fb.get(k2)]
+                if set(diffs) & {'line', 'textpos'}:
+                    # where the function stands in the source text (T1: the decompiled text places Epic's appended
+                    # functions elsewhere than Epic's source did)
+                    diffs = [k2 for k2 in diffs if k2 not in ('line', 'textpos')]
+                    self.neutral_('positions')
                 if 'script' in fa or 'script' in fb:
                     if [t for o, t in disasm(view, fa.get('script', b''))] != [t for o, t in disasm(new, fb.get('script', b''))]:
                         diffs.append('script')

@@ -1,0 +1,43 @@
+--- a/UCMutators/Classes/GameRules_WeaponMaster.uc
++++ b/UCMutators/Classes/GameRules_WeaponMaster.uc
+@@ -12,7 +12,7 @@
+ 	local Controller C;
+ 	local class<Announcement> BonusAnnouncement;
+ 	Super.ScoreKill(Killer, Other, KilledPawn);
+-	if ((((Killer != None) && (Killer != Other)) && (Killer.PlayerReplicationInfo != None)))
++	if (((((Killer != None) && (Killer != Other)) && (Killer.PlayerReplicationInfo != None)) && ((Killer.PlayerReplicationInfo.Team == None) || (Killer.PlayerReplicationInfo.Team != Other.PlayerReplicationInfo.Team))))
+ 	{
+ 		WeaponMasterPRI = WeaponMasterReplicationInfo(Killer.PlayerReplicationInfo.GetExtraPRI(Class'UCMutators.WeaponMasterReplicationInfo'));
+ 		if ((WeaponMasterPRI != None))
+--- a/UCMutators/Classes/MutRadioactive.uc
++++ b/UCMutators/Classes/MutRadioactive.uc
+@@ -45,6 +45,15 @@
+ 	return Effect;
+ }
+ 
++function Reset()
++{
++	local UCEM_RadioactiveGlow Effect;
++	foreach DynamicActors(Class'UCGameplay.UCEM_RadioactiveGlow', Effect)
++	{
++		Effect.Destroy();
++	}
++}
++
+ defaultproperties
+ {
+ 	FriendlyName="Radioactive"
+--- a/UCMutators/Classes/WeaponMasterReplicationInfo.uc
++++ b/UCMutators/Classes/WeaponMasterReplicationInfo.uc
+@@ -38,6 +38,11 @@
+ 	}
+ }
+ 
++function Reset()
++{
++	KillsWithWeapon = 0;
++}
++
+ replication
+ {
+ 	unreliable if (bNetDirty)

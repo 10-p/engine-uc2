@@ -1,0 +1,438 @@
+--- a/UCGameplay/Classes/UCPlayerController.uc
++++ b/UCGameplay/Classes/UCPlayerController.uc
+@@ -2055,7 +2055,7 @@
+ 				{
+ 					TurnAdjust = 0.0;
+ 				}
+-				if ((((aMouseX == float(0)) || ((TurnAdjust < float(0)) && (aMouseX < float(0)))) || ((TurnAdjust > float(0)) && (aMouseX > float(0)))))
++				if (((((aMouseX == float(0)) || ((TurnAdjust < float(0)) && (aMouseX < float(0)))) || ((TurnAdjust > float(0)) && (aMouseX > float(0)))) && !(MouseAgainstLock(TurnAdjust, True))))
+ 				{
+ 					(ViewRotation.Yaw += int(TurnAdjust));
+ 				}
+@@ -2067,7 +2067,7 @@
+ 				{
+ 					LookupAdjust = 0.0;
+ 				}
+-				if ((((aMouseY == float(0)) || ((LookupAdjust < float(0)) && (aMouseY < float(0)))) || ((LookupAdjust > float(0)) && (aMouseY > float(0)))))
++				if (((((aMouseY == float(0)) || ((LookupAdjust < float(0)) && (aMouseY < float(0)))) || ((LookupAdjust > float(0)) && (aMouseY > float(0)))) && !(MouseAgainstLock(LookupAdjust, False))))
+ 				{
+ 					(ViewRotation.Pitch += int(LookupAdjust));
+ 				}
+@@ -2095,6 +2095,10 @@
+ 				else if ((LockPullOffTimer > 0.0))
+ 				{
+ 					LockPullOffTimer = FMax(0.0, (LockPullOffTimer - DeltaTime));
++				}
++				if (((UCPlayerInput(PlayerInput) != None) && UCPlayerInput(PlayerInput).MouseBreaksLock(!(bClamped), DeltaTime)))
++				{
++					bForceUnlock = True;
+ 				}
+ 				if (!(IsSpectating()))
+ 				{
+@@ -2135,6 +2139,10 @@
+ 				ServerUnlock();
+ 			}
+ 		}
++		else if ((UCPlayerInput(PlayerInput) != None))
++		{
++			UCPlayerInput(PlayerInput).LockMousePush = 0.0;
++		}
+ 		if (((Pawn != None) && (Pawn == ViewTarget)))
+ 		{
+ 			if (bThirdPerson)
+@@ -2145,7 +2153,7 @@
+ 			{
+ 				AutoCenterPitchTarget = 0;
+ 			}
+-			if ((((((bAutoCenterPitch && !(bIsLocked)) && (ViewRotation.Pitch != AutoCenterPitchTarget)) && (aLookUp == float(0))) && ((aForward != float(0)) || (aStrafe != float(0)))) && ((UCWeapon(Pawn.Weapon) == None) || (!(Pawn.Weapon.bSniping) && !(UCWeapon(Pawn.Weapon).bLobWeapon)))))
++			if (((((((bAutoCenterPitch && !(bIsLocked)) && !(MouseOwnsLook())) && (ViewRotation.Pitch != AutoCenterPitchTarget)) && (aLookUp == float(0))) && ((aForward != float(0)) || (aStrafe != float(0)))) && ((UCWeapon(Pawn.Weapon) == None) || (!(Pawn.Weapon.bSniping) && !(UCWeapon(Pawn.Weapon).bLobWeapon)))))
+ 			{
+ 				ViewRotation = Normalize(ViewRotation);
+ 				(fAutoCenterCount += DeltaTime);
+@@ -2203,6 +2211,45 @@
+ 	}
+ }
+ 
++final function bool MouseOwnsLook()
++{
++	return ((UCPlayerInput(PlayerInput) != None) && UCPlayerInput(PlayerInput).bMouseOwnsLook);
++}
++
++final function bool MouseAgainstLock(float Adjust, bool bYaw)
++{
++	local int M;
++	if ((UCPlayerInput(PlayerInput) == None))
++	{
++		return False;
++	}
++	if (bYaw)
++	{
++		M = UCPlayerInput(PlayerInput).MouseYaw;
++	}
++	else
++	{
++		M = UCPlayerInput(PlayerInput).MousePitch;
++	}
++	return (((Adjust < float(0)) && (M > 0)) || ((Adjust > float(0)) && (M < 0)));
++}
++
++final function MouseLookCamera(out Vector CameraLocation)
++{
++	if ((((((CameraActor != None) || (Pawn == None)) || (ViewTarget != Pawn)) || !(MouseOwnsLook())) || UCPlayerInput(PlayerInput).bLazyMouseCamera))
++	{
++		return;
++	}
++	CameraLocation = DesiredCameraLocation;
++	OldCameraLoc = DesiredCameraLocation;
++	UCPlayerInput(PlayerInput).MouseCameraTime = Level.TimeSeconds;
++}
++
++final function bool MouseCameraLeftBehind()
++{
++	return ((((((UCPlayerInput(PlayerInput) != None) && (UCPlayerInput(PlayerInput).MouseCameraTime == Level.TimeSeconds)) && (Pawn != None)) && (ViewTarget == Pawn)) && (Pawn.Location != OldPawnLocation)) && MouseOwnsLook());
++}
++
+ final simulated function bool LimitCameraPitch(out int out_Pitch)
+ {
+ 	if (((out_Pitch > 16000) && (out_Pitch < 49536)))
+@@ -2257,7 +2304,7 @@
+ 
+ function PlayerCalcView(float DeltaTime, out Actor ViewActor, out Vector CameraLocation, out Rotator CameraRotation, optional bool bForce)
+ {
+-	if ((((((bForce || (LastCameraTime != Level.TimeSeconds)) || (CurrentCameraViewActor == None)) || (Pawn == None)) || (ViewTarget == None)) || ViewTarget.bDeleteMe))
++	if (((((((bForce || (LastCameraTime != Level.TimeSeconds)) || (CurrentCameraViewActor == None)) || (Pawn == None)) || (ViewTarget == None)) || ViewTarget.bDeleteMe) || MouseCameraLeftBehind()))
+ 	{
+ 		Super.PlayerCalcView(DeltaTime, ViewActor, CameraLocation, CameraRotation, bForce);
+ 		LastCameraTime = Level.TimeSeconds;
+@@ -2327,6 +2374,7 @@
+ 	if (((CameraActor != None) || (bThirdPerson && ((Pawn != None) || (Pawn(ViewTarget) != None)))))
+ 	{
+ 		CalcThirdPersonView(CameraLocation, CameraRotation, dist, DeltaTime);
++		MouseLookCamera(CameraLocation);
+ 	}
+ 	else
+ 	{
+@@ -2947,6 +2995,10 @@
+ 			}
+ 		}
+ 		if ((int(DoubleClickMove) == EDoubleClickDir.DCLICK_Active))
++		{
++			return DoubleClickMove;
++		}
++		else if (((((int(DoubleClickMove) != EDoubleClickDir.DCLICK_None) && !(bWantsToLock)) && (UCPlayerInput(PlayerInput) != None)) && UCPlayerInput(PlayerInput).bDoubleTapDodge))
+ 		{
+ 			return DoubleClickMove;
+ 		}
+--- a/UCGameplay/Classes/UCPlayerInput.uc
++++ b/UCGameplay/Classes/UCPlayerInput.uc
+@@ -33,6 +33,22 @@
+ var globalconfig Range aTurn_AdhesionRange;
+ var globalconfig Range aLookUp_AdhesionLimit;
+ var globalconfig Range aLookUp_AdhesionRange;
++var globalconfig float MouseLookSensitivity;
++var globalconfig bool bInvertMouseLook;
++var globalconfig bool bLazyMouseCamera;
++var byte XAxisCountSeen;
++var byte YAxisCountSeen;
++var int StickCountX;
++var int StickCountY;
++var bool bMouseOwnsLook;
++var bool bLookOwnerKnown;
++var int MouseYaw;
++var int MousePitch;
++var float MouseYawCarry;
++var float MousePitchCarry;
++var float LockMousePush;
++var transient float MouseCameraTime;
++var globalconfig bool bDoubleTapDodge;
+ 
+ final function ProcessInputMatching(float DeltaTime)
+ {
+@@ -191,15 +207,75 @@
+ 	local float AccelX;
+ 	local float AccelY;
+ 	local float FallOff;
++	local float LinearTurn;
++	local float LinearLookUp;
++	local int CountX;
++	local int CountY;
++	local float KeyX;
++	local float KeyY;
++	CountX = ((int(Outer.bXAxis) - int(XAxisCountSeen)) & 255);
++	CountY = ((int(Outer.bYAxis) - int(YAxisCountSeen)) & 255);
++	XAxisCountSeen = Outer.bXAxis;
++	YAxisCountSeen = Outer.bYAxis;
++	if ((Outer.aMouseX == float(0)))
++	{
++		StickCountX = Min(CountX, 1);
++	}
++	if ((Outer.aMouseY == float(0)))
++	{
++		StickCountY = Min(CountY, 1);
++	}
++	LinearTurn = Outer.aTurn;
++	LinearLookUp = Outer.aLookUp;
++	if ((CountX > StickCountX))
++	{
++		(LinearTurn += (Outer.aMouseX / 6.0));
++		Outer.aMouseX = 0.0;
++	}
++	if ((CountY > StickCountY))
++	{
++		(LinearLookUp += (Outer.aMouseY / 6.0));
++		Outer.aMouseY = 0.0;
++	}
++	if (!(bLookOwnerKnown))
++	{
++		bLookOwnerKnown = True;
++		bMouseOwnsLook = !(Outer.Level.IsXBox());
++		if (bLazyMouseCamera)
++		{
++			Log((("UCPlayerInput: PC mouse look (rebuilt UCGameplay.u), MouseLookSensitivity=" $ string(MouseLookSensitivity)) $ ", lazy camera under the mouse"));
++		}
++		else
++		{
++			Log((("UCPlayerInput: PC mouse look (rebuilt UCGameplay.u), MouseLookSensitivity=" $ string(MouseLookSensitivity)) $ ", rigid camera under the mouse"));
++		}
++		if (bDoubleTapDodge)
++		{
++			Log(("UCPlayerInput: double-tap dodge on (bDoubleTapDodge), DoubleClickTime=" $ string(DoubleClickTime)));
++		}
++	}
++	if (((Outer.aMouseX != float(0)) || (Outer.aMouseY != float(0))))
++	{
++		bMouseOwnsLook = False;
++	}
++	if (((LinearTurn != float(0)) || (LinearLookUp != float(0))))
++	{
++		bMouseOwnsLook = True;
++	}
+ 	ProcessInputMatching(DeltaTime);
+-	bEdgeForward = (bWasForward ^^ (Outer.aForward > float(0)));
+-	bEdgeBack = (bWasBack ^^ (Outer.aForward < float(0)));
+-	bEdgeLeft = (bWasLeft ^^ (Outer.aStrafe < float(0)));
+-	bEdgeRight = (bWasRight ^^ (Outer.aStrafe > float(0)));
+-	bWasForward = (Outer.aForward > float(0));
+-	bWasBack = (Outer.aForward < float(0));
+-	bWasLeft = (Outer.aStrafe < float(0));
+-	bWasRight = (Outer.aStrafe > float(0));
++	if (bDoubleTapDodge)
++	{
++		KeyX = KeyAxis(Outer.aBaseX, (Outer.aStrafe / 100.0));
++		KeyY = KeyAxis(Outer.aBaseY, (Outer.aForward / 100.0));
++	}
++	bEdgeForward = (bWasForward ^^ ((Outer.aForward > float(0)) || (KeyY > float(0))));
++	bEdgeBack = (bWasBack ^^ ((Outer.aForward < float(0)) || (KeyY < float(0))));
++	bEdgeLeft = (bWasLeft ^^ ((Outer.aStrafe < float(0)) || (KeyX < float(0))));
++	bEdgeRight = (bWasRight ^^ ((Outer.aStrafe > float(0)) || (KeyX > float(0))));
++	bWasForward = ((Outer.aForward > float(0)) || (KeyY > float(0)));
++	bWasBack = ((Outer.aForward < float(0)) || (KeyY < float(0)));
++	bWasLeft = ((Outer.aStrafe < float(0)) || (KeyX < float(0)));
++	bWasRight = ((Outer.aStrafe > float(0)) || (KeyX > float(0)));
+ 	FOVScale = (Outer.DesiredFOV * 0.01111);
+ 	MouseScale_X = (MouseSensitivity_X * FOVScale);
+ 	MouseScale_Y = (MouseSensitivity_Y * FOVScale);
+@@ -253,10 +329,15 @@
+ 	{
+ 		(Outer.aLookUp *= -1.0);
+ 	}
++	AddMouseLook(LinearTurn, LinearLookUp, (Outer.DesiredFOV / 90.0), DeltaTime);
+ 	(Outer.aForward /= 100.0);
+ 	(Outer.aStrafe /= 100.0);
+ 	Outer.Ctrl_Move_Fwd_Pct = ByteToFloat(FloatToByte(Outer.aForward, True), True);
+ 	Outer.Ctrl_Move_Stf_Pct = ByteToFloat(FloatToByte(Outer.aStrafe, True), True);
++	if (((Outer.aBaseX != float(0)) || (Outer.aBaseY != float(0))))
++	{
++		KeysAsStick();
++	}
+ 	(Outer.aForward += Outer.aBaseY);
+ 	(Outer.aStrafe += Outer.aBaseX);
+ 	if ((int(Outer.bSnapLevel) != 0))
+@@ -293,6 +374,108 @@
+ {
+ 	aMouseX_AccelTime = 0.0;
+ 	aMouseY_AccelTime = 0.0;
++}
++
++final function AddMouseLook(float LinearTurn, float LinearLookUp, float FOVScale, float DeltaTime)
++{
++	local float UnitsPerCount;
++	local float F;
++	MouseYaw = 0;
++	MousePitch = 0;
++	if ((DeltaTime <= 0.0))
++	{
++		return;
++	}
++	UnitsPerCount = ((MouseLookSensitivity * 4.0049777) * FOVScale);
++	F = ((((LinearTurn * DeltaTime) * 5.0) * UnitsPerCount) + MouseYawCarry);
++	MouseYaw = int(F);
++	MouseYawCarry = (F - float(MouseYaw));
++	F = (((LinearLookUp * DeltaTime) * 5.0) * UnitsPerCount);
++	if (bInvertMouseLook)
++	{
++		F = -(F);
++	}
++	(F += MousePitchCarry);
++	MousePitch = int(F);
++	MousePitchCarry = (F - float(MousePitch));
++	if ((MouseYaw > 0))
++	{
++		(Outer.aTurn += ((float(MouseYaw) + 0.5) / (32.0 * DeltaTime)));
++	}
++	else if ((MouseYaw < 0))
++	{
++		(Outer.aTurn += ((float(MouseYaw) - 0.5) / (32.0 * DeltaTime)));
++	}
++	if ((MousePitch > 0))
++	{
++		(Outer.aLookUp += ((float(MousePitch) + 0.5) / (32.0 * DeltaTime)));
++	}
++	else if ((MousePitch < 0))
++	{
++		(Outer.aLookUp += ((float(MousePitch) - 0.5) / (32.0 * DeltaTime)));
++	}
++}
++
++final function KeysAsStick()
++{
++	local float X;
++	local float Y;
++	X = KeyAxis(Outer.aBaseX, Outer.aStrafe);
++	Y = KeyAxis(Outer.aBaseY, Outer.aForward);
++	if (((X != float(0)) && (Y != float(0))))
++	{
++		(X *= 0.70710677);
++		(Y *= 0.70710677);
++	}
++	Outer.Ctrl_Move_Fwd_Pct = FClamp((Outer.Ctrl_Move_Fwd_Pct + Y), -1.0, 1.0);
++	Outer.Ctrl_Move_Stf_Pct = FClamp((Outer.Ctrl_Move_Stf_Pct + X), -1.0, 1.0);
++}
++
++final function float KeyAxis(float Base, float Stick)
++{
++	local float V;
++	if (Outer.Level.IsXBox())
++	{
++		return FClamp((Base / 24000.0), -1.0, 1.0);
++	}
++	V = FClamp(((Base / 24000.0) - Stick), -1.0, 1.0);
++	if ((Abs(V) < 0.01))
++	{
++		V = 0.0;
++	}
++	return V;
++}
++
++final function bool MouseBreaksLock(bool bAtClamp, float DeltaTime)
++{
++	if ((bAtClamp && ((MouseYaw != 0) || (MousePitch != 0))))
++	{
++		(LockMousePush += (Sqrt((Square(float(MouseYaw)) + Square(float(MousePitch)))) * 0.005493164));
++		if ((LockMousePush >= 25.0))
++		{
++			LockMousePush = 0.0;
++			return True;
++		}
++	}
++	else if ((LockMousePush > 0.0))
++	{
++		LockMousePush = FMax(0.0, (LockMousePush - ((DeltaTime * 25.0) / 0.5)));
++	}
++	return False;
++}
++
++exec function MouseLookSens(float F)
++{
++	MouseLookSensitivity = FMax(0.0, F);
++	default.MouseLookSensitivity = MouseLookSensitivity;
++	ConsoleCommand("SAVECONFIGKEYS UCGameplay.UCPlayerInput MouseLookSensitivity");
++}
++
++exec function MouseLookInvert(bool B)
++{
++	bInvertMouseLook = B;
++	default.bInvertMouseLook = B;
++	ConsoleCommand("SAVECONFIGKEYS UCGameplay.UCPlayerInput bInvertMouseLook");
+ }
+ 
+ final function float AccelMouse(float aMouse, float DeltaTime, float AccelLimit, float AccelMaxTime, Range AccelRange, out float AccelTime)
+@@ -391,6 +574,10 @@
+ 	AdhesionPct = (1.0 - Division);
+ 	Adhesion = (AdhesionScale * GetRangeValue(aTurn_AdhesionRange, AdhesionPct));
+ 	AdjustYaw = int(((float(Normalize((NewT - OldT)).Yaw) * Adhesion) * Outer.AdhesionAlpha));
++	if (bMouseOwnsLook)
++	{
++		return 0;
++	}
+ 	return AdjustYaw;
+ }
+ 
+@@ -421,6 +608,10 @@
+ 	AdhesionPct = (1.0 - ((aLookUp_AdhesionLimit.Max - Outer.AdhesionDot_Vert) / (aLookUp_AdhesionLimit.Max - aLookUp_AdhesionLimit.Min)));
+ 	Adhesion = (AdhesionScale * GetRangeValue(aLookUp_AdhesionRange, AdhesionPct));
+ 	AdjustPitch = int(((float(Normalize((NewT - OldT)).Pitch) * Adhesion) * Outer.AdhesionAlpha));
++	if (bMouseOwnsLook)
++	{
++		return 0;
++	}
+ 	return AdjustPitch;
+ }
+ 
+@@ -919,6 +1110,7 @@
+ 	aTurn_AdhesionRange=(Min=0.0,Max=0.2)
+ 	aLookUp_AdhesionLimit=(Min=0.57,Max=1.0)
+ 	aLookUp_AdhesionRange=(Min=0.0,Max=0.4)
++	MouseLookSensitivity=2.5
+ 	MouseSmoothingMode=0
+ 	MouseSensitivity=0.0
+ 	MouseAccelThreshold=0.0
+--- a/UCGameplay/Classes/UCTrainingController.uc
++++ b/UCGameplay/Classes/UCTrainingController.uc
+@@ -250,11 +250,19 @@
+ 
+ 	function PlayerMove(float DeltaTime)
+ 	{
++		local UCPlayerInput UCPI;
+ 		if ((aLookUp == float(0)))
+ 		{
+ 			return;
+ 		}
+-		else if ((aLookUp > float(0)))
++		UCPI = UCPlayerInput(PlayerInput);
++		if (((UCPI != None) && (UCPI.MousePitch != 0)))
++		{
++			UCPI.MouseLookInvert(((UCPI.MousePitch > 0) == UCPI.bInvertMouseLook));
++			GotoState('PlayerViewTest');
++			return;
++		}
++		if ((aLookUp > float(0)))
+ 		{
+ 			SetMouseInvert(False);
+ 		}
+@@ -283,10 +291,24 @@
+ 
+ 	exec function Fire(float F)
+ 	{
+-		InvertMouseToggle();
++		InvertLookToggle();
+ 	}
+ 
+ 	exec function AltFire(float F)
++	{
++		InvertLookToggle();
++	}
++}
++
++final function InvertLookToggle()
++{
++	local UCPlayerInput UCPI;
++	UCPI = UCPlayerInput(PlayerInput);
++	if (((UCPI != None) && UCPI.bMouseOwnsLook))
++	{
++		UCPI.MouseLookInvert(!(UCPI.bInvertMouseLook));
++	}
++	else
+ 	{
+ 		InvertMouseToggle();
+ 	}

@@ -657,15 +657,18 @@ class Code:
         if t == 0x44:
             return E(self.nm(), 'delegate')
         if t in (0x12, 0x19):
+            scope = self.ctx_class if self.ctx_class is not None else self.dec.cls  # whose `Outer` this may be
             ctx = self.expr()
-            self.w()
+            skip = self.w()
             self.b()
             saved = self.ctx_class
             self.ctx_class = self.class_of(ctx, t == 0x12)
+            m_at = self.i
             try:
                 m = self.expr()
             finally:
                 self.ctx_class = saved
+            m_len = self.i - m_at
             if t == 0x12:
                 if m.k not in ('call', 'var') and not m.t.startswith('default.'):
                     return E('%s.const.%s' % (ctx.t, self.const_named(ctx, m)), 'expr', None, m.en)
@@ -673,9 +676,12 @@ class Code:
                     return E('%s.%s' % (ctx.t, m.t), 'expr', None, m.en)
                 return E('%s.static.%s' % (ctx.t, m.t), 'call' if m.k == 'call' else 'expr', None, m.en)
             if ctx.k == 'var' and ctx.a is not None and not isinstance(ctx.a, tuple) and ctx.a.key == 'Core.Object.Outer' \
-                    and self.dec.cls.f['within'] not in ('None', 'Core.Object') and m.k in ('var', 'call'):
+                    and scope.f.get('within', 'None') not in ('None', 'Core.Object') and m.k in ('var', 'call') \
+                    and skip != m_len:
                 # a member of the `within` class used without context: the compiler adds Context(Outer, ...)
-                # itself (with a skip that differs from an explicit `Outer.x`)
+                # itself, with a skip that does not count all of the member's bytes (a bool variable's
+                # BoolVariable token is left out); an explicit `Outer.x` skips exactly the member's bytes and is
+                # printed as such (PlayerInput's `Outer.bDemoOwner`, CheatManager's `Outer.GotoState(...)`)
                 return m
             if m.k not in ('call', 'var', 'delegate') and not m.t.startswith('default.'):
                 # `obj.const.NAME`: the compiler emits Context(obj, <the constant's value>)
@@ -1080,7 +1086,29 @@ class Decompiler:
         kids = cls.children()
         rep = self.replication(cls, kids)
         kids = self.decl_order(kids)
+        declared = set()
         for o in kids:
+            if o.cls in PROPS and not (o.cls == 'DelegateProperty' and o.name.startswith('__')):
+                # a variable named like a struct or enum type hides it for the declarations after it
+                # (`var Matrix Matrix, GradientMatrix;` in ProjectorMaterial): such a declaration joins the
+                # previous one when that declares the same type the same way
+                try:
+                    decl = self.vardecl(o, False)
+                except (DecompileError, sd.ParseError, IndexError, KeyError, struct.error):
+                    decl = None
+                if decl is not None:
+                    head, name = decl.rsplit(' ', 1)
+                    typ = head.split(' ')[-1]
+                    if typ.lower() in declared and (o.cls == 'StructProperty' or prop_enum(o) is not None):
+                        prev = lines[-1] if lines and isinstance(lines[-1], str) else ''
+                        if prev.startswith(head + ' ') and prev.endswith(';'):
+                            lines[-1] = prev[:-1] + ', ' + name + ';'
+                        else:
+                            self.errors.append('%s: type %s hidden by a variable of the same name' % (o.key, typ))
+                            lines.append('// DECOMPILE ERROR %s: the type %s is hidden by a variable' % (o.name, typ))
+                        declared.add(o.name.lower())
+                        continue
+                    declared.add(o.name.lower())
             try:
                 fl = self.field(o, 0)
             except (DecompileError, sd.ParseError, IndexError, KeyError, struct.error) as e:
@@ -1404,7 +1432,11 @@ class Decompiler:
         if o.cls == 'Function':
             s.ret_enum = prop_enum(params_of(o)[1])
         try:
-            return s.block(0, len(st), {}, ind)
+            out = s.block(0, len(st), {}, ind)
+            # labels at the end of the state code (after its last statement, or a state with only `Begin:`)
+            end = st[-1][1] if st else 0
+            out += ['%s:' % n for n, loff in reversed(labels) if loff == end and loff not in {x[0] for x in st}]
+            return out
         except (DecompileError, IndexError, KeyError, struct.error, ValueError) as e:
             self.errors.append('%s: %s' % (o.key, e))
             return ['// DECOMPILE ERROR %s' % e]
@@ -1711,12 +1743,14 @@ def main():
                 t = o.f['text']
                 if t.strip():
                     texts[o.path.split('.')[0]] = t
-    names = [o.name for o in world.objs[pkgname] if o.cls == 'Class']
+    # a conformed rebuild may hold empty export slots (name None, no data: a local the newer source dropped)
+    classes = [o for o in world.objs[pkgname] if o.cls == 'Class' and o.pkg.exports[o.idx]['size']]
+    names = [o.name for o in classes]
     for c in only:
         if c not in names:
             usage('no class %s in %s' % (c, pkgname))
-    for o in world.objs[pkgname]:
-        if o.cls != 'Class' or (only and o.name not in only):
+    for o in classes:
+        if only and o.name not in only:
             continue
         n += 1
         try:

@@ -1,0 +1,11 @@
+--- a/UnrealGame/Classes/DeathMatch.uc
++++ b/UnrealGame/Classes/DeathMatch.uc
+@@ -952,7 +952,7 @@
+ 
+ function EndGame(PlayerReplicationInfo Winner, string Reason)
+ {
+-	if ((((((Reason ~= "triggered") || (Reason ~= "LastMan")) || (Reason ~= "TimeLimit")) || (Reason ~= "FragLimit")) || (Reason ~= "TeamScoreLimit")))
++	if ((!(bGameEnded) && (((((Reason ~= "triggered") || (Reason ~= "LastMan")) || (Reason ~= "TimeLimit")) || (Reason ~= "FragLimit")) || (Reason ~= "TeamScoreLimit"))))
+ 	{
+ 		Super.EndGame(Winner, Reason);
+ 		if (bGameEnded)

@@ -1,0 +1,61 @@
+--- a/Engine/Classes/CharacterInformation.uc
++++ b/Engine/Classes/CharacterInformation.uc
+@@ -1084,6 +1084,10 @@
+ 			(i)++;
+ 		}
+ 	}
++	if ((ComboClassName ~= "UCCharacters.UCCombo_WarriorSpirit_Raiden"))
++	{
++		return FindComboIndex("UCCharacters.UCCombo_WarriorSpirit");
++	}
+ 	return -1;
+ }
+ 
+--- a/Engine/Classes/PlayerController.uc
++++ b/Engine/Classes/PlayerController.uc
+@@ -564,7 +564,7 @@
+ 	{
+ 		ForceServerLocation(Location);
+ 	}
+-	if (((int(Role) < ENetRole.ROLE_Authority) && (myHUD != None)))
++	if ((((int(Role) < ENetRole.ROLE_Authority) || IsNetSpectator()) && (myHUD != None)))
+ 	{
+ 		ClientSetHUD(myHUD.Class, ((myHUD.ScoreBoard != None) ? myHUD.ScoreBoard.Class : None));
+ 	}
+@@ -769,9 +769,12 @@
+ 			myHUD = NewHUD;
+ 		}
+ 	}
+-	if (((myHUD != None) && (newScoringType != None)))
++	if ((myHUD != None))
+ 	{
+-		myHUD.SpawnScoreBoard(newScoringType);
++		if ((newScoringType != None))
++		{
++			myHUD.SpawnScoreBoard(newScoringType);
++		}
+ 		if (bSplitScreenClient)
+ 		{
+ 			myHUD.SetSplitPosition(ViewportIndex, ViewportCount);
+@@ -4348,10 +4351,21 @@
+ 
+ 	function EndState()
+ 	{
++		local Pawn P;
+ 		bFrozen = False;
+ 		if ((myHUD != None))
+ 		{
+ 			myHUD.SetShowScores(False);
++		}
++		if ((int(Level.NetMode) == ENetMode.NM_Client))
++		{
++			foreach DynamicActors(Class'Engine.Pawn', P)
++			{
++				if (P.bTearOff)
++				{
++					P.Destroy();
++				}
++			}
+ 		}
+ 	}
+ 
