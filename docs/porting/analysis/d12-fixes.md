@@ -300,3 +300,24 @@ Peak RSS of one ASan server: about 300 MB (`/usr/bin/time -v`, `logs/d12/dtasan2
 
 Memory ceilings used: builds 6G (`-j4`, then `-j2` from the owner's load rule), ucc/game runs 2G, ASan runs 3G, census 5G
 (2 workers), ASan census 7G, net tests 6G (net-test.sh). None was hit (no exit 137 from capped).
+
+## Step 9: the suites' hung-server watchers removed; a note for engine-ut2004 (coordinator, 2026-10-10)
+
+- `tools/dev/m13-64bit.sh` `check_census` and `tools/dev/m14-scripts-check.sh` `census_of`/`check_census`: the
+  background watchers that KILLed `ucc-bin` servers of their census trees after 75 s (and their "timeout has no -k"
+  comments, the `census-hung.txt` file and its count in the PASS line) are gone: map-census.sh KILLs and fails such a
+  server itself since step 1. New `M13_CENSUS_WORKERS` / `M14_CENSUS_WORKERS` (default 4, unchanged) for the owner's load
+  rule; m13-64bit.sh accepts a D-phase tree (`M13_TREE=d<N>-...`: logs in `logs/d<N>/<tree>`, census trees
+  `<tree>-census-N`), as m14-scripts-check.sh's `M14_PREFIX` already did.
+- `M13_TREE=d12-m13 M13_REF=d12-m13-32 M13_CENSUS_WORKERS=2 tools/dev/m13-64bit.sh census` (load 20-28):
+  `PASS census: 58 maps, 58 PASS at 64-bit (each server exited cleanly after its TERM), the same per-map result as the
+  32-bit build (58 PASS); .../logs/d12/d12-m13/d12-m13-census/summary.tsv`.
+- `M14_PREFIX=d12-m14 M14_SCRIPTS=<WorkUC2>/run/d12-make/System M14_OUT=<WorkUC2>/logs/d12/m14-check M14_CENSUS_WORKERS=2
+  tools/dev/m14-scripts-check.sh census`: `PASS census: 58 maps, 58 PASS with the rebuilt packages, the same per-map result
+  as the shipped ones (58 PASS; every server exited cleanly after its TERM); .../logs/d12-m14-census-run/summary.tsv`.
+- `<WorkUC2>/logs/d12/engine-ut2004-note.md`: the same-shaped latent bugs in engine-ut2004 (read only), file:line and the
+  UC2 commit of each fix: the double-signal abort path and the logging first-signal/Ctrl-C handlers (UnUnix.cpp
+  1723/1784/1811, 1815-1819, 1845-1846: apply f748edc), no bound on the abort path (apply the alarm of f748edc), the
+  unbounded audio stream-thread wait (ALAudioStream.cpp 572-575; not on the appExit path there, lower risk), EINPROGRESS
+  already right there (UnSocket.h 42, HTTPDownload.cpp 224), HTTPDownload already IpDrv (HTTPDownload.h 30), Prefab still
+  Engine (UnPrefab.h 21) but Editor is not built there.
