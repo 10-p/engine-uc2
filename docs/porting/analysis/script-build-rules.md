@@ -230,4 +230,4 @@ committed headers), which is what the check compares against: not done. Owner qu
 4. A non-host preset takes whatever packages the host build has; it prints the host's sets but does not refuse a
    different `UC2_SCRIPT_PATCH_SETS` of its own (it has no use for one). Fine?
 5. Windows host (MSYS2, `ucc.exe`): written, not run (no Windows machine); `uc-build.sh` links content folders with
-   `ln -s` (needs `MSYS=winsymlinks:nativestrict` + Developer Mode, or it copies gigabytes).
+   `ln -s` (needs `MSYS=winsymlinks:nativestrict` + Developer Mode, else MSYS2 copies the folders: not measured).
