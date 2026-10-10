@@ -27,8 +27,8 @@ EPIC_COPIES = ('DefaultXbox.ini', 'DefUserXbox.ini', 'KeyBinds.ini')
 # (file, section, key, native value expected, web value, comment line put before it or None)
 DELTAS = [
     ('Default.ini', 'Engine.Engine', 'RenderDevice', 'UC2GLDrv.UC2GLRenderDevice', 'UC2GL4ESDrv.UC2GL4ESRenderDevice', None),
-    # game pads through the browser's Gamepad API are untested
-    ('Default.ini', 'SDL2Drv.SDL2Client', 'UseJoystick', 'True', 'False', None),
+    # (G-5: the web keeps the native UseJoystick=True; the browser's Gamepad API reaches SDL2Drv through Emscripten's
+    # SDL2 port, docs/porting/analysis/web-gamepad.md. The launcher's "Game pad" switch sets it per player.)
     # E-2: a browser has no sockets; the WebRTC driver over the frontend's data channels (webrtc.md)
     ('Default.ini', 'Engine.Engine', 'NetworkDevice', 'IpDrv.TcpNetDriver', 'WebRTCDrv.WebRTCNetDriver', None),
 ]
