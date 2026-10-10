@@ -198,5 +198,5 @@ m13-64bit.sh ceilings); no ceiling was hit (no exit 137).
   or CI is open.
 - When T3 moves the script sources to a build-generated tree, the CMake cache variable `UC2_HEADERS_CLASSES_ROOT`
   (or a dependency on the generating target) has to point the check there.
-- UnrealEd's `WBrowserLIPSincPtr`/`WBrowserAnimationPtr`/`OldArrayCount`-style pointer ints have no placeholder rows;
+- UnrealEd's pointer ints (`WBrowserLIPSincPtr`, `WBrowserAnimationPtr`) have no placeholder rows;
   they matter only if a 64-bit editor is ever built.
