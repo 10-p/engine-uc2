@@ -128,3 +128,19 @@ streams (the thread may still use them). This covers appExit() running on the fi
 
 engine-ut2004 has the same `HandleSignal`, the same `HandleInterrupt`, and an unbounded wait: the same latent bugs; it
 does not show them because nothing there signals a server twice in its tests (not checked by running).
+
+## Step 4: first proofs at 64-bit (2026-10-10, load 30-40 from seven other agents' builds)
+
+- Baseline census (main's code + the new census, `CENSUS_NAME=d12-c64-base CENSUS_PORT=7960 capped 5G 2400 --
+  map-census.sh build-native64 15 2`): `maps: 58  PASS: 56  FAIL: 2` (DM-Ascension, DM-ColdFusion: `crash handler`, a
+  second SIGTERM each). Shutdown times of the 56: 1.0-1.6 s (the 1-second poll).
+- `ucc-bin verifyclasses` (fixed 64-bit, `capped 2G 600`): exit 0, `All native class layouts match`.
+- Deterministic test `logs/d12/doubleterm.sh` (a server on DM-Deadbolt, `kill -TERM`, 0.02 s, `kill -TERM`; or one TERM;
+  or a SIGSEGV), `capped 2G 200` each:
+  - main's binary (run tree d12-c64-base-0), 3 runs: 3/3 `Aborting.` + `Developer Backtrace` (main thread interrupted in
+    `appSprintf` <- `GetFullName` <- `RemoveObjects`, i.e. inside StaticExit), shutdown 1.1-1.2 s.
+  - fixed binary, 3 runs: 3/3 `Signal: exit already requested; this one is ignored (SIGKILL ends the process now).`, no
+    backtrace, log closed, shutdown 0.3 s (0.02 s gap + exit).
+  - fixed, one TERM: exit 1, 0.3 s, log closed. Fixed, SIGSEGV: crash report + `appExit`, log closed, ends in 0.1 s.
+- Build note: the owner's load rule (coordinator, 02:17): `-j2` while load > 24; my two `-j4` builds were stopped (their
+  scopes, by name) and restarted at `-j2`, one after the other.

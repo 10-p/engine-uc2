@@ -71,7 +71,7 @@ run_worker() {
         awk -v d="$down" 'BEGIN { exit !(d >= 0) }' || { exitok=0; note="ended before the TERM $note"; }
         [ "$rc" -eq 137 ] && { exitok=0; note="hang: KILLed ${grace}s after the TERM $note"; }
         if grep -a -q '^Aborting\.' "$out/$map.stdout.log" 2>/dev/null || grep -a -q 'Developer Backtrace' "$out/$map.log" 2>/dev/null; then
-          exitok=0; note="crash handler: $(grep -a -m1 '^Signal:' "$out/$map.stdout.log" | grep -a -v SIGTERM) $note"
+          exitok=0; note="crash handler after $(grep -a -c '^Signal:' "$out/$map.stdout.log") signal(s), last $(grep -a '^Signal:' "$out/$map.stdout.log" | tail -1) $note"
         fi
         grep -a -q 'Log file closed' "$out/$map.log" 2>/dev/null || { exitok=0; note="log not closed $note"; }
       fi
