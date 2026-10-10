@@ -1,0 +1,13 @@
+# The floor pits seen from the owner's spot, time frozen: which pixels the water draws (GLPIXTRACE) and a picture
+# (twin against desktop, and the GL4ES patch A/B: is the water's 2D stage on unit 1 affected too?).
+chan exec TELEPORT -337.1 2.3 -418.4 32950 1193
+sleep 3
+chan exec TELEPORT -337.1 2.3 -418.4 32950 -3000
+sleep 2
+chan exec set LevelInfo TimeDilation 0.0001
+sleep 1
+chan exec GLPIXTRACE 340 690
+sleep 0.5
+chan exec GLPIXTRACE 1100 650
+sleep 0.5
+shot frozen

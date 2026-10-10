@@ -9,6 +9,7 @@
 #   DF_AA=4              the device's AntiAliasing (default 0)
 #   DF_URL='?NumBots=0'  map URL options (default ?NumBots=0)
 #   DF_SECS=170          time limit
+#   DF_MAP=DM-Fury       another map (default DM-Decay)
 #   DF_BIN=uc2-x.bin     another executable of the tree's System folder (A/B builds)
 #   UC2_GPU=1            this machine's GPU through SDL's offscreen video driver (as tools/dev/fx-owner.sh); default
 #                        Xvfb + Mesa llvmpipe
@@ -25,6 +26,7 @@ out=$work/logs/$tree
 res=${DF_RES:-1280x720}; W=${res%x*}; H=${res#*x}
 aa=${DF_AA:-0}
 url=${DF_URL:-?NumBots=0}
+map=${DF_MAP:-DM-Decay}
 secs=${DF_SECS:-170}
 bin=${DF_BIN:-uc2.bin}
 video=""; [ -n "${UC2_GPU:-}" ] && video="SDL_VIDEODRIVER=offscreen"
@@ -34,7 +36,7 @@ mkdir -p "$out"
 tag=df-$name
 scen=$(mktemp)
 {
-  echo "wait Bringing Level DM-Decay.MyLevel up for play 150"
+  echo "wait Bringing Level $map.MyLevel up for play 150"
   echo "sleep 6"
   if [ -n "${UC2_GPU:-}" ]; then
     printf 'pad attach\nsleep 1\npadtrigger righttrigger\nsleep 1\npadtrigger righttrigger\nsleep 1\npadtrigger righttrigger\nsleep 3\n'
@@ -53,7 +55,7 @@ glargs=$("$repo/tools/dev/glini" AntiAliasing=$aa CheckGLErrors=True | tr '\n' '
 inner=$(mktemp)
 cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy $video ./$bin "DM-Decay$url" -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[SDL2Drv.SDL2Client]:KeyboardIsPlayer=False -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" $glargs "\$@" > "$out/$tag.out" 2>&1 &
+SDL_AUDIODRIVER=dummy $video ./$bin "$map$url" -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[SDL2Drv.SDL2Client]:KeyboardIsPlayer=False -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" $glargs "\$@" > "$out/$tag.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$tag.out" "$chan" "$out/$tag.result" > "$out/$tag.inject" 2>&1
 kill -TERM \$pid 2>/dev/null

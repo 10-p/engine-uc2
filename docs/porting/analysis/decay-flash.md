@@ -143,3 +143,40 @@ and desktop vs twin with it on: 0.33: the glow and bloom contribute the same on 
   main's binary exactly). FAIL pp-blur: the concussion blur's sigma 3.25 / 2.10 / 3.85 at the three sizes (tolerance
   0.30); BlurMe's blur decays over time, so a shot's sigma depends on when it lands after the command, and the
   machine was at load 22. Main's binary in the same check: below.
+- pp-blur with main's binary under the same load (`UC2_BIN=uc2-base.bin tools/dev/pp-scale.sh b2 blur`,
+  `logs/b2/pp-blur-base.txt`): FAIL too (3.50 / 3.55 / 7.00, and blur-setting FAILs there): the check is timing
+  dependent under load, not a change of this branch.
+- `tools/dev/fps-bench.sh` DM-Praxis 20 s 1920x1080 on the Quadro (load 10-12; tree `run/b2base` = main's driver):
+  main 74.0 / 71.7 fps, this branch 72.3 / 72.2 fps (alternating runs): unchanged within run-to-run noise.
+
+### Step 4 (16:20-16:50): the owner's second spot, DM-Fury (803.2 79.3 1973.7 51049 -1153), and the owner's clue
+
+The owner (via the coordinator): on the web preview the overlay at DM-Fury switches between shapes while the player
+stands still (video `<WorkUC2>/temp/blown out switch.mp4`; frames at 4 per second in `logs/b2/fury-video/`, sheet
+`logs/b2/fury-video-sheet.png`: normal frames, a puffy cloud, a horizontal white streak, in no fixed cadence; middle
+luma 57-61 normal, 97-110 cloud, 195-197 streak), the lamps lose their bloom while it is there, and it looks like a
+particle sprite (drip, splash, green smoke, DM-Decay's snow) blown up to the whole screen.
+
+That is exactly the mechanism of step 1: the full-screen thing is a **particle's texture**, not a particle drawn
+large. The main framebuffer is right (pixtrace: the traced pixel is unchanged until the bloom adds to it); the
+reference copy that feeds the emissive select, the bloom select, the depth of field's first pass and the luminance
+is, in those frames, the particle texture GL4ES last made real on unit 0, drawn as the full-screen copy quad.
+The emissive select (texture RGB x alpha) and the bloom select then work on that texture instead of the picture, so
+the real glow of the lamps is not computed that frame ("the subtle bloom disappears") and the bloom adds the
+blurred particle texture over everything. It switches shape with whatever particle was drawn just before the
+cube-mapped surface in that frame (sorting of translucent actors by distance changes with the particles' own
+motion); "only in some areas" = where a cube-mapped water/puddle surface is the last thing drawn before the
+post-processing.
+
+- DM-Decay (`df-twin-dump.out`): pass #89 = a particle, stage 0 GL texture 99 (128x128), then #90 the water
+  (`T_Liquid_Decay_Water_C_SD`, stage 0 cube map), then the post-processing; the dumped reference copy is a white
+  texture with a cloud-shaped alpha (`twin-dump/PixTrace-131-ref391{,-a}.png`): the snow/smoke sprite.
+- DM-Fury, GPU twin (`df-fury-gpu-twin-dump.out`, main's driver): pass #109 = a particle, GL texture 118 (256x256),
+  then #110 `T_Liquid.Water.Liquid_Water_Puddle01_Sd` (stage 0 cube map, stage 1 2D), then the emissive select.
+- Reproduction `tools/dev/decay-flash/fury.scen` (owner's position and view, standing still, a picture every 0.25 s
+  for 5 s), GPU twin: main's driver 150.9 / 124.3 in all 20 pictures (`df-fury-gpu-twin-before-s*.png`: the scene
+  veiled white, as in the video); this branch 28.8-28.9 / 39.1-39.6 in all 20 (`df-fury-gpu-twin-fix-s*.png`). (In
+  this headless run, without bots, the same particle stays last, so the shape does not switch here.)
+- The coordinator's alternatives (a particle with a NaN/huge size, a projection at the near plane, a large frame
+  time, a stale vertex buffer) are excluded by the pass trace: no draw into the main framebuffer brightens the
+  traced pixel before the bloom's final quad, and the reference copy differs from the main colour it is made from.

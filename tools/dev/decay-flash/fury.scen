@@ -1,0 +1,49 @@
+# DM-Fury, the owner's second spot (WHEREAMI 803.2 79.3 1973.7 51049 -1153), third person, standing still: a picture
+# every 0.25 s for 5 s (the owner's video shows the overlay switching shapes and the lamps' bloom vanishing with it).
+chan exec TELEPORT 803.2 79.3 1973.7 51049 -1153
+sleep 3
+chan exec TELEPORT 803.2 79.3 1973.7 51049 -4000
+sleep 2
+chan exec TELEPORT 803.2 79.3 1973.7 51049 -1153
+sleep 2
+chan exec WHEREAMI
+shot s00
+sleep 0.25
+shot s01
+sleep 0.25
+shot s02
+sleep 0.25
+shot s03
+sleep 0.25
+shot s04
+sleep 0.25
+shot s05
+sleep 0.25
+shot s06
+sleep 0.25
+shot s07
+sleep 0.25
+shot s08
+sleep 0.25
+shot s09
+sleep 0.25
+shot s10
+sleep 0.25
+shot s11
+sleep 0.25
+shot s12
+sleep 0.25
+shot s13
+sleep 0.25
+shot s14
+sleep 0.25
+shot s15
+sleep 0.25
+shot s16
+sleep 0.25
+shot s17
+sleep 0.25
+shot s18
+sleep 0.25
+shot s19
+sleep 0.25
