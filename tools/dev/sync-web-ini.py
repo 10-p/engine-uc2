@@ -31,6 +31,10 @@ DELTAS = [
     # SDL2 port, docs/porting/analysis/web-gamepad.md. The launcher's "Game pad" switch sets it per player.)
     # E-2: a browser has no sockets; the WebRTC driver over the frontend's data channels (webrtc.md)
     ('Default.ini', 'Engine.Engine', 'NetworkDevice', 'IpDrv.TcpNetDriver', 'WebRTCDrv.WebRTCNetDriver', None),
+    # G-10 (owner, 2026-10-10: "disable antialiasing by default on the web, it is very heavy on a laptop, people can
+    # go into the ini and enable it"): no multisampled main framebuffer in the browser unless the player sets it.
+    ('Default.ini', 'UC2GLDrv.UC2GLRenderDevice', 'AntiAliasing', '4', '0', None),
+    ('Default.ini', 'UC2GL4ESDrv.UC2GL4ESRenderDevice', 'AntiAliasing', '4', '0', None),
 ]
 
 # Owned by the web build, not derived from the native file: whatever the CURRENT web file says for these is

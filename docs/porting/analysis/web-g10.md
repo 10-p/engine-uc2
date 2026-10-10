@@ -200,3 +200,50 @@ level is loaded and precached (`UNetConnection::Tick`, UnConn.cpp:1045-1047: `bS
 ever runs against a guest that is in the level and silent, i.e. gone; with the standby pause out of the way it costs
 the host nothing but the guest's pawn standing for a minute (300 would leave it five), and the glue's own reaper
 (90 s grace) comes later anyway. Kept at 60.
+
+### The control: the same closed-tab test on main's artifact (no G-10)
+
+`yarn build --engine-artifact <engine-uc2>/build-wasm-perf/Source/SDLLaunch` (main's, meta.json `gitSha 486f17e` = this
+branch's base; wasm sha256 e2e644ec5554..., `logs/g10/wasm-sha-main-control.txt`), then `run-e2e.sh net-main-control
+1500 uc2-wasm-net.spec.js -g "tab is closed"`: **1 failed**, as it must: at +8.4, +12.5, +16.5 s the host's pawn moved
+0.0 units with W held, the level clock stood at 59.8; the host's console (`logs/g10/net-main-control-consoles/
+gone-host-console.txt:764-765`): `Standby hack detected!  ValidClients:1/1   Time:59.882248  LastReceiveTime:
+58.846836  DeltaTime:0.049545` / `Standby hack status change detected!  Status now True.` serve-web was rebuilt
+with this branch's artifact (ecdb59aa...) right after (`fe-build-2.txt`).
+
+### Native: TcpNetDriver keeps the check
+
+`NET_TREE=g10net tools/dev/net-test.sh listen disconnect` (fresh tree from this branch's build-native,
+`logs/g10/net-native.txt`, `logs/g10net/`): disconnect 6/6 PASS (`disconnect.timeout`: the SIGSTOPped NetB dropped
+after 31 s), and the check still fires there: `logs/g10net/disconnect-srv.log`: `DevNet: Standby hack detected!
+ValidClients:1/1   Time:23.793465  LastReceiveTime:22.784115  DeltaTime:0.016740`, `Standby hack status change
+detected!  Status now True.` then `... Now False.` (the dedicated server has no viewport, so no pause; a native
+listen server pauses as Epic wrote it). listen: `listen.hit`/`listen.kill` FAILED in that run (load 21), the known
+intermittent (it failed identically on main's binary in G-6, `g6base`); rerun quietly (load 14, `--keep-tree listen`,
+`net-native-listen2.txt`): **listen 8/8 PASS** + leftovers PASS.
+
+## Step 5 - item 3, anti-aliasing off on the web: done; the cost is not measurable on this machine (2026-10-10)
+
+`tools/dev/sync-web-ini.py` DELTAS: `AntiAliasing` 4 -> 0 in `[UC2GLDrv.UC2GLRenderDevice]` and
+`[UC2GL4ESDrv.UC2GL4ESRenderDevice]` of `Engine/Config/web/Default.ini` (lines 418, 452); `--check`: "web/Default.ini is
+up to date", "web/DefUser.ini is up to date"; README row added. The preloaded `/System/Default.ini` of the wasm-perf
+build carries `AntiAliasing=0` twice (`grep -a` of SDLLaunch.data). No frontend spec asserts multisampling (none
+mentions "multisampled"), so the boot spec needs no change for it; the patch only adds `UC2_E2E_EXTRA_OPTIONS` to measure.
+
+Frame time: boot spec test "loads DM-Deadbolt by URL" (`-g "loads DM-Deadbolt"`), its `[PERF]` line (the device's
+`Stats=True` ms/frame over the last 300 frames of the map), Chromium on ANGLE/Vulkan, NVIDIA Quadro P620, 1024x768; AA 4x
+with `UC2_E2E_EXTRA_OPTIONS='-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=4'` (log: `main framebuffer
+1024x768 (...; drawn 4x multisampled, resolved into them)`; without: no "drawn" part). All 6 runs passed.
+
+| run | load (1 min) | AA off (web default) | AA 4x |
+|---|---|---|---|
+| pair 1 (`perf-aa0-1`, `perf-aa4-1`) | 13.6-16.1 | 42.95 ms | 62.78 ms |
+| pair 2 (`perf-aa4-2`, `perf-aa0-2`, reversed order) | 24-25 | 49.55 ms | 50.87 ms |
+| pair 3 (`perf-aa0-3`, `perf-aa4-3`) | 13-14 | 56.49 ms | 43.58 ms |
+| mean | | 49.7 ms | 52.4 ms |
+
+The first pair alone said 43 vs 63 ms; the two repeats say the spread from run to run (+-7 ms, the machine shared with
+other agents' builds and tests) is as big as any difference: on this desktop GPU at 1024x768 the frame is bound by the
+engine's CPU work, not by the multisampled fill and resolve, so the 4x cost is not measurable here. It is on a laptop's
+integrated GPU, which is the owner's reason; not measured here (no such machine). Label: setting checked (file,
+preloaded data, the device's log line); cost "not measurable on this machine".
