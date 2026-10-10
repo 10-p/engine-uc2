@@ -193,3 +193,20 @@ The one FAIL is `m11-movies` (`menu-movie-shots`, `menu-movie-clean`), and its r
 Fix (tools/dev/m9-movies.py): the menu scenario sets `[SDL2Drv.SDL2Client] WindowedViewportX/Y=640/480` with `-ini:`,
 shoots at the portrait's movie time 10 s and 12 s, ends itself with `Exec=100:exit` (limit 150 s) and `gl_errors`
 also reads the device's last line ("N GL errors in N frames").
+
+## Step 13: the menu-movie shot taken half-drawn, fixed (twin, quiet)
+
+Run 2 of the twin (`logs/d34/m11-twin-2.txt`, effects + movies, 04:38-05:33): **16 PASS, 1 FAIL**; effects 14/14,
+liandri **2.033**, blur 4.619; the menu-movie title and list now steady (40.8 / 38.3 dB) but the portrait "did not
+change" (28.4 dB) and NO portrait and NO "no profile" dialog were in the pictures. A probe with shots at movie time
+4-18 s (`logs/d34/menu-probe`) showed the same at every time. Cause: Epic's `SHOT` (`UnCamera.cpp:504`) reads the
+pixels at once, and `appUpdateMovieMaterial` runs in the MIDDLE of drawing a frame (when the portrait is set), so
+the picture was a half-drawn frame (the dialog, the button glyphs and the portrait itself come later in the frame).
+The GL device's ShotTimes avoid that by shooting in `Present`. Fix: `UnMovie.cpp` only sets
+`GMovieMaterialShotPending` (`UnMovie.h`), and `UUC2GLRenderDevice::Present` takes the SHOT once the frame is complete
+(next to the ShotTimes code). Test-only path, read only with the test key.
+Twin tree set to 1280x720 first (what the effects step leaves), `m9-movies.py --only menu-movie` with the defaults
+(640x480 forced, movie time 10/12 s, exit at 100 s), three runs (`logs/d34/menu-probe2*`, 05:40-05:48, load < 16):
+shots PASS 3/3 (portrait 6.8 / 4.0 / 4.0 dB; title and list steady), log PASS 3/3, clean PASS 2/3 (the first saw
+"1 processes left": a process of the twin run 3 I had just stopped, by its timing; nothing was left afterwards),
+`0 GL errors in 952 / 1363 frames` from the device's last line, the game ended itself (`appRequestExit(0)`).

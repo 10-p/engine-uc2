@@ -289,6 +289,7 @@ static void UnwrapPlayer( UMovieMaterial* M )
 // whatever the machine's load (tools/dev/m9-movies.py menu-movie; times after the first frame were not).
 static TArray<FLOAT> GMovieShotTimes;
 static TArray<FLOAT> GMaterialShotTimes;
+ENGINE_API UBOOL GMovieMaterialShotPending = 0;
 static void ParseTimeList( const TCHAR* Key, TArray<FLOAT>& Times )
 {
 	FString List;
@@ -580,13 +581,12 @@ FPortableMoviePlayer* appUpdateMovieMaterial( UMovieMaterial* M, UBOOL& bOutFall
 	if( GMaterialShotTimes.Num() && !GFullscreenMovie && (ShotMaterial == INDEX_NONE || ShotMaterial == M->GetIndex()) )
 	{
 		ShotMaterial = M->GetIndex();
-		UEngine* Engine = UEngine::GEngine;
-		if( Player->GetTime() >= GMaterialShotTimes(0) && Engine && Engine->Client && Engine->Client->Viewports.Num() )
+		if( Player->GetTime() >= GMaterialShotTimes(0) && !GMovieMaterialShotPending )
 		{
-			debugf( NAME_Log, TEXT("UC2Movie: shot of MovieMaterial %s at movie time %.3f s (asked %.3f s): frame %i"),
+			debugf( NAME_Log, TEXT("UC2Movie: shot of MovieMaterial %s at movie time %.3f s (asked %.3f s): frame %i, taken when this frame is complete"),
 				M->GetPathName(), Player->GetTime(), GMaterialShotTimes(0), Player->GetFrame() );
 			GMaterialShotTimes.Remove(0);
-			Engine->Client->Viewports(0)->Exec( TEXT("SHOT"), *GLog );
+			GMovieMaterialShotPending = 1;
 		}
 	}
 	return Player;

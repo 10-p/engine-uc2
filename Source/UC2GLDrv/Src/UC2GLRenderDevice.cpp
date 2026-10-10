@@ -11,6 +11,7 @@
 =============================================================================*/
 
 #include "UC2GLDrv.h"
+#include "UnMovie.h"
 #include "SDL.h"
 
 /*-----------------------------------------------------------------------------
@@ -2290,6 +2291,12 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 		GExecTimes.Remove(0);
 		GExecCommands.Remove(0);
 		Viewport->Exec( *Command, *GLog );
+	}
+	// [UC2Movie] MaterialShotTimes (UnMovie.h): the frame a MovieMaterial asked for, now that it is complete.
+	if( GMovieMaterialShotPending )
+	{
+		GMovieMaterialShotPending = 0;
+		Viewport->Exec( TEXT("SHOT"), *GLog );
 	}
 	if( GShotTimes.Num() )
 	{
