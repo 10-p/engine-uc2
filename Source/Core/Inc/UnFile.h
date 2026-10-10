@@ -494,6 +494,9 @@ CORE_API TCHAR* appI64toa( const SQWORD Num );
 typedef int QSORT_RETURN;
 typedef QSORT_RETURN(CDECL* QSORT_COMPARE)( const void* A, const void* B );
 CORE_API void appQsort( void* Base, INT Num, INT Width, QSORT_COMPARE Compare );
+// uc2 port: file names in the order NTFS lists them (FindFiles' order on Epic's machines; readdir() order is
+// the file system's). M14 (Editor, .uc files), S2 (Core, localization files). Core/Src/UnObj.cpp.
+CORE_API void UC2SortLikeNTFS( TArray<FString>& Files );
 
 //
 // Case insensitive string hash function.

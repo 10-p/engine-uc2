@@ -426,10 +426,11 @@ if(EMSCRIPTEN)
 endif()
 # --- end M4w ---------------------------------------------------------------------------------------------
 
-# --- M14: the script compiler (Editor package, `ucc-bin make`) is built for 32-bit Linux only: its hand-written
-# UEditorEngine (Editor.h) mirrors script's `int Pad[8]` with four pointers, a layout that only holds at 32 bits,
-# and the MinGW build of it has not been tried. ucc-bin links it when the target exists. ------------------------
-if(UC2_PTR_BYTES EQUAL 8 OR MINGW)
+# --- M14: the script compiler (Editor package, `ucc-bin make`) is built at 32-bit pointers only: its hand-written
+# UEditorEngine (Editor.h) mirrors script's `int Pad[8]` with four pointers, a layout that only holds at 32 bits.
+# 32-bit Linux (M14) and, since S2, MinGW i686 (`ucc.exe make`, proved under wine: analysis/ucc-windows.md).
+# ucc-bin / ucc.exe link it when the target exists. ---------------------------------------------------------------
+if(UC2_PTR_BYTES EQUAL 8)
   list(REMOVE_ITEM UC2_PACKAGES Editor)
 endif()
 # --- end M14 ---------------------------------------------------------------------------------------------------

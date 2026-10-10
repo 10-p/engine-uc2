@@ -8,35 +8,9 @@ Revision history:
 
 #include "EditorPrivate.h"
 
-/*-----------------------------------------------------------------------------
-	uc2 port (M14): file order.
-
-	FindFiles returned Epic's .uc files in NTFS directory order: names compared code unit by code unit after
-	upper-casing (NTFS's upcase table; for these ASCII names, so '_' sorts after the letters). Classes are
-	created in import order and keep that object-table order, which the compiler's class walk follows (see
-	UC2SortClassesLikeEpic in UnScrCom.cpp), so the order has to be the same here. readdir() order on Linux is
-	arbitrary.
------------------------------------------------------------------------------*/
-
-static INT UC2CompareNTFS( const FString& A, const FString& B )
-{
-	const TCHAR* a = *A;
-	const TCHAR* b = *B;
-	for( ; ; a++, b++ )
-	{
-		BYTE ca = (BYTE)appToUpper(*a), cb = (BYTE)appToUpper(*b);
-		if( ca!=cb )
-			return ca<cb ? -1 : 1;
-		if( !ca )
-			return 0;
-	}
-}
-void UC2SortLikeNTFS( TArray<FString>& Files ) // also used by UStripSourceCommandlet.cpp
-{
-	for( INT i=1; i<Files.Num(); i++ )
-		for( INT j=i; j>0 && UC2CompareNTFS(Files(j-1),Files(j))>0; j-- )
-			Exchange( Files(j-1), Files(j) );
-}
+// uc2 port (M14): the .uc files are imported in NTFS order (UC2SortLikeNTFS, Core/Src/UnObj.cpp since S2): classes
+// are created in import order and keep that object-table order, which the compiler's class walk follows (see
+// UC2SortClassesLikeEpic in UnScrCom.cpp), so the order has to be Epic's here. readdir() order on Linux is arbitrary.
 
 /*-----------------------------------------------------------------------------
 	UMakeCommandlet.

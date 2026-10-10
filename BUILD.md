@@ -84,7 +84,8 @@ by a plain `cmake --build`.
 
 ```
 bin/capped 4G 600 -- cmake --preset windows                      # i686-w64-mingw32-g++-posix (GCC 13)
-bin/capped 6G 1800 -- cmake --build build-windows -j8             # -> Source/UCC/ucc.exe, Source/SDLLaunch/uc2.exe,
+bin/capped 6G 1800 -- cmake --build build-windows -j8             # -> Source/UCC/ucc.exe (with the script compiler
+                                                                  #    since S2), Source/SDLLaunch/uc2.exe,
                                                                   #    _deps/openalsoft-build/OpenAL32.dll
 tools/dev/mkrun-uc2.sh build-windows m12                          # run tree <WorkUC2>/run/m12 (exe + dll in System/)
 tools/dev/m12-wine-smoke.sh                                       # every check under wine, PASS/FAIL lines
@@ -148,8 +149,10 @@ patches of `Source/Engine/Inc/ScriptPatches.h`). The native 32-bit Linux build a
 compiler (the `Editor` package linked into `ucc-bin`), which rebuilds all 17 from `Source/<Pkg>/Classes`:
 
 ```
-bin/capped 6G 3600 -- cmake --build build-native -j4      # ucc-bin with Editor (32-bit Linux only)
+bin/capped 6G 3600 -- cmake --build build-native -j4      # ucc-bin with Editor (32-bit pointers only)
 tools/dev/script-build.sh                                 # assemble, make, strip, compare
+UC2_WINEPREFIX=<WorkUC2>/.cache/wine-scripts tools/dev/script-build.sh --build build-windows --tree s2-make
+                                                          # the same with ucc.exe (Windows build) under wine (S2)
 tools/dev/script-build.sh --tree m14-hdr --headers assemble make   # also export the C++ headers, diff them
 ```
 

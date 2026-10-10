@@ -36,8 +36,7 @@ class UStripSourceCommandlet : public UCommandlet
 
 		// Get a list of the script packages to convert
 		TArray<FString> ScriptFiles = GFileManager->FindFiles(TEXT("*.u"),1,0);
-		// uc2 port (M14): in the order NTFS listed them on Epic's machine (UMakeCommandlet.cpp).
-		extern void UC2SortLikeNTFS( TArray<FString>& Files );
+		// uc2 port (M14): in the order NTFS listed them on Epic's machine (UC2SortLikeNTFS, Core/Src/UnObj.cpp).
 		UC2SortLikeNTFS( ScriptFiles );
 		// Loop through each script package, load it, strip the source from the
 		// class data, and save it back out
