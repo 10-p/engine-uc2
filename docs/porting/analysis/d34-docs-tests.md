@@ -96,3 +96,13 @@ one spot with the bob removed (nobob judder), as natively. The browser frame-tim
   for comparison only.
 - The spec's fix (frontend; patch only): `logs/d34/frontend-jitter-spec.patch` (parse `bob`, fit pawn + bob). To be
   run twice from a scratch copy of the frontend with this worktree's wasm-perf (no write in the frontend checkout).
+
+## Machine-load rule (coordinator, 2026-10-10 02:18; load 42)
+
+Builds at `-j2` while the 1-minute load is above 24; timing-sensitive game, twin and browser runs only below 16. The
+first d6 three-times run (started at load 32) was stopped (killed by PID, my processes only: the loop, d6-mouse.sh,
+m10-controls.sh, the uc2.bin in `run/d34-ship`); its run 1 (`logs/d34/d6-1`) is kept as evidence only (it showed the
+lock spot problem of step 3). The wasm-perf build (started -j4) was stopped and resumed at `-j2`
+(`logs/d34/build-wasm-perf-2.log`). Every timing run now goes through `logs/d34/quiet-runs.sh`, which waits for a
+1-minute load below 16 and 10 GB available before EACH game/twin run and logs the load at its start
+(`logs/d34/quiet-runs.txt`).
