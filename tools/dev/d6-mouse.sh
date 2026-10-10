@@ -769,15 +769,23 @@ ours, ship = load(sys.argv[1]), load(sys.argv[2])
 keys = [k for k in ship if k.startswith('pad-') and isinstance(ship[k], dict)]
 if not keys:
     print('FAIL\tpad-curves-match-shipped\tno shipped measurements'); sys.exit()
+# The walk is a distance after the stick is held for 1.0 s of wall clock: 30 or 31 frames at 30 fps, so the measure's
+# resolution is one frame of running, 430/30 = 14.3 units (12.2 backwards), 3.5% of the 341-unit half-stick segment
+# (D-4: 353.0 vs 340.9 on two runs of the same build). A walk passes within 3% or one frame, whichever is larger.
+FRAME_MOVE = 430.0 / 30
 for k in sorted(keys):
     a, b = ours.get(k, {}), ship[k]
-    worst = 0.0
+    worst = 0.0; ok = True
     for m, vb in b.items():
         va = a.get(m)
         if va is None:
-            worst = 1.0; continue
-        worst = max(worst, abs(va - vb) / max(abs(vb), 300.0))
-    print(f"{'PASS' if worst < 0.03 else 'FAIL'}\tpad-matches-shipped-{k[4:]}\tworst {worst*100:.2f}% of the shipped value (limit 3%); ours {a} shipped {b}")
+            worst = 1.0; ok = False; continue
+        d = abs(va - vb)
+        worst = max(worst, d / max(abs(vb), 300.0))
+        lim = max(0.03 * max(abs(vb), 300.0), FRAME_MOVE + 0.5) if k == 'pad-left-stick-walk' else 0.03 * max(abs(vb), 300.0)
+        ok = ok and d < lim
+    note = 'limit 3% or one frame of running' if k == 'pad-left-stick-walk' else 'limit 3%'
+    print(f"{'PASS' if ok else 'FAIL'}\tpad-matches-shipped-{k[4:]}\tworst {worst*100:.2f}% of the shipped value ({note}); ours {a} shipped {b}")
 PY
       count "$out/pad-compare.result";;
     ini)
