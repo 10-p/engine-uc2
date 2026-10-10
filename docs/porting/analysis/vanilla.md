@@ -499,3 +499,56 @@ Design decisions:
    defaults; Space + direction in the air uses it today. So a double tap in the air against a wall wall-dodges, as in
    UT2004 (and as in UT2004 not right after a ground dodge: `DoubleClickDir` stays Active until landing).
 3. The timed input sequences (`ProcessInputMatching`) read the stick and keys as before; nothing changes for them.
+
+### Step 2: build, compare, run trees (2026-10-10 04:05-04:20)
+
+- Native: `cmake --preset native && cmake --build build-native` under `bin/capped 6G 3600` (started -j4 at load 17,
+  stopped and resumed -j2 when the load passed 24; `logs/g8/build-native*.log`, exit 0).
+- Scripts: `tools/dev/script-build.sh --tree g8-make` (make under 3G): **Success - 0 error(s), 85 warning(s)** (the
+  same 85 and the same `ucc-bin make` exit 1 as main's d12-make). Compare against the shipped packages: every package
+  as on main (Core identical ... UCMenu different, problems 5, unchanged); UCGameplay problems **20** (main's d12
+  build: 19). The per-function listing differs from d12-make's in exactly two lines: `UCPlayerController.PlayerWalking.
+  ModifyDoubleClickMove` 457 -> 538 bytes (now a PROBLEM: changed against the shipped one) and `UCPlayerInput.
+  PlayerInput` 2444 -> 2759; the appended exports add `KeyAxis` (+ params, local V), `PlayerInput.KeyX/KeyY`,
+  `bDoubleTapDodge`. So the compare shows only these hunks. (A direct compare against the asset tree's rebuilt
+  UCGameplay.u, `UC2_SHIPPED_SYSTEM=assets/uc2/System`, crashes script-diff.py on a function that exists on one side
+  only, `explain` `funcflags` None; not pursued: the d12 listing diff above answers the question.)
+- **New `UCGameplay.u` sha256 45dd2558ac16c48f82a2c4ccb49ad09f0aa4cf6a070968ab0c6f07caa8e7881f** (2856360 bytes before
+  strip as built; the stripped file in `run/g8-make/System`). The asset tree's (main) is 4ed72f0b..., shipped c675a442....
+- Run trees: `run/g8-run` = the asset tree with only this UCGameplay.u (`UC2_SCRIPTS=logs/g8/ucg`); `run/g8-ship` = the
+  shipped GUI/UCGameplay/UCMenu (`assets/uc2-shipped/System`); `run/g8-base` = the asset tree as is (main's package).
+
+### Step 3: the tests (`tools/dev/d6-mouse.sh dodge`, new; runs started at load below 16)
+
+Exploration first (`logs/g8/explore`): from the open spot (1977.8 583.7 -34.1, yaw 33000) D held 6 s runs 1764 units
+without a wall, A stops after 542 units at **1938.2 1125.8 -34.3** (a wall on the left; WHEREAMI), W runs on, S drops
+to a lower floor. The wall part therefore jumps there and double-taps D (away from the wall).
+
+Run 1 (`logs/g8/d6-1`): 12 PASS, 5 FAIL: the wall part had no wall (D held 3 s, fixed as above) and the lock checks
+were tied to the probe order of the bots (one bot could not be placed at 400 units; the lock took the other one
+first). The behaviour itself was right in that run (switch, switch back without a rise, locked-on dodge kept the
+target); the checks became relative (`la` any target, `le` another one, `lf` back to `la`'s, `lg` = `lf`).
+
+Run 2 (`logs/g8/d6-2`, load 15.9): **17 PASS, 0 FAIL**. Measurements (hop(): rise = highest Z above the start,
+side = displacement to the right of the start's view at the end, peak = top horizontal speed over 3 ticks):
+
+| part (0.6 s of key time unless said) | rise | side | peak u/s |
+|---|---|---|---|
+| A held | 0.0 | -240.4 | 430.7 |
+| A double tap (0.06 down, 0.06 up, 0.48 down), key on | **52.2** | **-432.8** | **624.5** |
+| Space + A, key on | 52.2 | -435.9 | 624.4 |
+| at the wall: jump, then D held 0.4 s | 67.2 | 115.2 | 289.7 |
+| at the wall: jump, then D double tap | **131.1** | **582.6** | **624.4** (wall dodge) |
+| Lock held, A double tap (switches back) | 0.0 | -30.7 | 193.9 |
+| locked on, button released, D double tap | 52.2 | 406.8 | 624.4 (still locked, same target) |
+| key off (the default): A held / A double tap / Space + A | 0.0 / 0.0 / 52.2 | -231.4 / -201.3 / -434.4 | 430.5 / 430.5 / 624.4 |
+
+The dodge's 624 u/s and 52-unit rise are the same from Space + A (Epic's path) and from the double tap: the same
+`UCPawn.Dodge`. Log: "UCPlayerInput: double-tap dodge on (bDoubleTapDodge), DoubleClickTime=0.25" with the key on,
+no such line with it off (`dodge-key-on-logged`, `dodge-off-key-off-by-default`). Labels: double-tap dodge, Space
+dodge, wall dodge, the Lock rules and the key off: **measured** (native, null renderer, 60 fps); network play: **not
+exercised** (the dodge goes through Epic's ServerMove like Space + direction; both peers need this package); the pad
+stick's double flick: **not exercised** (the same edges; the pad scenario only pushes and releases).
+
+Pad (`logs/g8/d6-pad`, load 15.1): `d6-mouse.sh pad` **10 PASS, 0 FAIL**: right-stick curves against the shipped
+scripts worst 0.27% (yaw 0.35), 0.08% (0.5), 0.12% (0.75), 0.17% (1.0), pitch 0.07%; left-stick walk 2.36% (limit 3%).
