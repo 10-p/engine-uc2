@@ -198,3 +198,13 @@ Checks:
   `ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0:halt_on_error=0`.
 - `map-census.sh`: ASan reports are counted per map from their `#0` frame; `CENSUS_ASAN_KNOWN` (regex) names known
   reports, counted apart (`asan_known=`) and not failing the map; any other report fails it (`asan=`).
+
+## Step 7: D-2 against `ucc make` (2026-10-10)
+
+`tools/dev/script-build.sh --build build-native --tree d12-make --headers` (all 17 packages rebuilt by this branch's
+32-bit ucc-bin, headers exported into the tree, compared with the shipped packages): the per-package result lines are
+identical to F-1's last run (`diff` of the 17 lines of `logs/f1/f1-make3-compare.txt` and
+`logs/d12/d12-make-compare.txt`: no difference; UCGameplay/UCMenu "different" as before, the known source-vs-shipped
+items). The header-export diff (`logs/d12/d12-make-headers.diff`, 107 lines) no longer contains the 8 lines about
+`UHTTPDownload`/`UPrefab` registrants listed under Engine that M14's had (`logs/m14/m14-hdr-headers.diff`, 119 lines;
+scripts.md step 2c's table row): the exporter now lists them under IpDrv and Editor, as the checked-in headers do.
