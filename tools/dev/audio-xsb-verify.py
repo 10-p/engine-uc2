@@ -8,12 +8,21 @@ layer, headroom boost, 3D flag and parameters, I3DL2 flag, and the tracks (one p
 wave bank, wave entry; no variation, no other event). Also every plain cue's sound index.
 
   tools/dev/audio-xsb-verify.py [--epic <epic-sources>]
+  tools/dev/audio-xsb-verify.py --full [--cooked <cooked Sounds dir>]
+
+--full (M16) checks uc2xsb.read_xsb_full, the whole format, against the cooked cue tables (the oracle: what the cook
+wrote from the project) in every field UC2ALAudio plays: every cue (name, queue, sounds), every sound (priority,
+volume + group, pitch, category, headroom boost, I3DL2, 3D flag, min/max distance, rolloff, RPC curves, the length
+from the shipped .xwb), every track and event (play: time, delay, loops, new variation, playlist type, pitch and
+volume ranges, waves and weights; set volume/pitch: time, mode, relative, steps, duration, low, high; the other
+events by kind). Prints the differences by field with every instance.
 """
 
 import argparse
 import collections
 import importlib.util
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -71,11 +80,158 @@ def compare(x, s, groups):
     return bad
 
 
+def parse_cooked(path):
+    """The cooked cue table, in read_xsb_full's shape (group volume added; ignored events by kind only)."""
+    groups, sounds, cues, snd, trk = {}, [], [], None, None
+    unesc = lambda v: re.sub('%([0-9A-Fa-f]{2})', lambda m: chr(int(m.group(1), 16)), v)
+    for line in open(path, encoding='latin-1'):
+        p = line.split()
+        if not p:
+            continue
+        kw, kv = p[0], dict((x.split('=', 1)[0], unesc(x.split('=', 1)[1])) for x in p[1:] if '=' in x)
+        pair = lambda k: tuple(int(x) for x in kv[k].split(','))
+        if kw == 'group':
+            groups[kv['name']] = int(kv['volume'])
+        elif kw == 'sound':
+            snd = dict(name=kv['name'], priority=int(kv['priority']), volume=int(kv['volume']) + groups.get(
+                kv['group'], 0), pitch=int(kv['pitch']), category=kv['category'], headroomboost=int(kv['headroomboost']),
+                i3dl2=int(kv['i3dl2']), is3d=int(kv['3d']), length=int(kv['length']), loops=int(kv['loops']), d3=None,
+                tracks=[], rpcs=[])
+            sounds.append(snd)
+        elif kw == '3d':
+            snd['d3'] = dict(min=float(kv['min']), max=float(kv['max']), rolloff=float(kv['rolloff']))
+        elif kw == 'rpc':
+            snd['rpcs'].append(dict(name=kv['name'], track=int(kv['track']), points=[
+                tuple(int(y) for y in x.split(':')) for x in kv['points'].split(',')]))
+        elif kw == 'track':
+            trk = []
+            snd['tracks'].append(trk)
+        elif kw == 'play':
+            trk.append(dict(kind='play', time=int(kv['time']), delay=int(kv['delay']), loops=int(kv['loops']),
+                            newvar=int(kv['newvar']), playlist=int(kv['playlist']), pitch=pair('pitch'),
+                            vol=pair('volume'), waves=[]))
+        elif kw == 'wave':
+            trk[-1]['waves'].append(dict(bank=kv['bank'], entry=int(kv['entry']), weight=int(kv['weight'])))
+        elif kw in ('setvol', 'setpitch'):
+            trk.append(dict(kind=kw, time=int(kv['time']), mode=kv['mode'], relative=int(kv['relative']),
+                            steps=int(kv['steps']), dur=int(kv['dur']), lo=int(kv['lo']), hi=int(kv['hi'])))
+        elif kw in ('lpf', 'lfo', 'pitchlfo', 'eg', 'mixbins', 'loopstart'):
+            trk.append(dict(kind=kw, time=int(kv['time'])))
+            if kw == 'loopstart':
+                trk[-1]['count'] = int(kv['count'])
+        elif kw == 'cue':
+            cues.append(dict(name=kv['name'], queue=int(kv['queue']), sounds=[] if kv['sounds'] == '-' else [
+                tuple(int(y) for y in x.split(':')) for x in kv['sounds'].split(',')]))
+    return dict(sounds=sounds, cues=cues)
+
+
+def length_ms(sound, frames):
+    """cook-audio.py's sound_length_ms with the wave lengths of the shipped .xwb (frames(bank, entry) -> (n, rate))."""
+    longest = 0
+    for t in sound['tracks']:
+        tlen = 0
+        for e in t:
+            if e['kind'] != 'play':
+                tlen = max(tlen, e['time'] + e.get('dur', 0))
+                continue
+            if e['loops'] == 65535:
+                return -1
+            wl = 0
+            for w in e['waves']:
+                fr = frames(w['bank'], w['entry'])
+                if fr and fr[0] and fr[1]:
+                    wl = max(wl, 1000.0 * fr[0] / fr[1])
+            tlen = max(tlen, e['time'] + e['delay'] + wl * (e['loops'] + 1))
+        if any(e['kind'] == 'loopstart' and e['count'] == 65535 for e in t):
+            return -1
+        longest = max(longest, tlen)
+    return int(round(longest))
+
+
+def full(args):
+    import glob
+    import uc2xwb
+    xwbs = {}
+
+    def frames(bank, entry):
+        if bank not in xwbs:
+            p = os.path.join(args.epic, 'Sounds', bank + '.xwb')
+            xwbs[bank] = uc2xwb.read_xwb(p) if os.path.exists(p) else None
+        b = xwbs[bank]
+        if not b or entry >= len(b['entries']):
+            return None
+        return b['entries'][entry]['frames'], b['entries'][entry]['rate']
+
+    diffs, ex = collections.Counter(), collections.defaultdict(list)
+
+    def note(k, msg):
+        diffs[k] += 1
+        ex[k].append(msg)
+    nb = ns = nc = 0
+    for cf in sorted(glob.glob(os.path.join(args.cooked, '*.uc2cues'))):
+        bn = os.path.basename(cf)[:-len('.uc2cues')]
+        c, x = parse_cooked(cf), uc2xsb.read_xsb_full(os.path.join(args.epic, 'Sounds', bn + '.xsb'))
+        nb += 1
+        if len(c['sounds']) != len(x['sounds']) or len(c['cues']) != len(x['cues']):
+            note('bank.counts', bn)
+            continue
+        for a, b in zip(c['cues'], x['cues']):
+            nc += 1
+            for k in ('name', 'queue', 'sounds'):
+                if a[k] != b[k]:
+                    note('cue.' + k, '%s: %s / %s' % (a['name'], a[k], b[k]))
+        for a, b in zip(c['sounds'], x['sounds']):
+            ns += 1
+            tag = '%s %s' % (bn, a['name'])
+            for k in ('name', 'priority', 'volume', 'pitch', 'category', 'headroomboost', 'i3dl2', 'is3d', 'rpcs'):
+                if a[k] != b[k]:
+                    note('sound.' + k, '%s: %s / %s' % (tag, a[k], b[k]))
+            if (a['d3'] is None) != (b['d3'] is None):
+                note('sound.3d-block', tag)
+            elif a['d3']:
+                for k in ('min', 'max', 'rolloff'):
+                    if abs(a['d3'][k] - b['d3'][k]) > 1e-4 * max(1.0, abs(a['d3'][k])):
+                        note('sound.3d.' + k, '%s: %s / %s' % (tag, a['d3'][k], b['d3'][k]))
+            ln = length_ms(b, frames)
+            if ln != a['length']:
+                note('sound.length (ms, xsb - cooked = %+d)' % (ln - a['length']) if 0 < ln - a['length'] <= 5
+                     else 'sound.length', '%s: %s / %s' % (tag, a['length'], ln))
+            if len(a['tracks']) != len(b['tracks']):
+                note('sound.tracks', tag)
+                continue
+            for ta, tb in zip(a['tracks'], b['tracks']):
+                if [e['kind'] for e in ta] != [e['kind'] for e in tb]:
+                    note('track.events', '%s: %s / %s' % (tag, [e['kind'] for e in ta], [e['kind'] for e in tb]))
+                    continue
+                for ea, eb in zip(ta, tb):
+                    for k in ea:
+                        if k == 'waves':
+                            ra = [(w['bank'], w['entry']) for w in ea['waves']]
+                            if ra != [(w['bank'], w['entry']) for w in eb['waves']]:
+                                note('play.waves', '%s: %s / %s' % (tag, ea['waves'], eb['waves']))
+                            elif [w['weight'] for w in ea['waves']] != [w['weight'] for w in eb['waves']]:
+                                note('play.weights', '%s: %s / %s' % (tag, [w['weight'] for w in ea['waves']],
+                                                                     [w['weight'] for w in eb['waves']]))
+                        elif ea[k] != eb.get(k):
+                            note('%s.%s' % (ea['kind'], k), '%s: %s / %s' % (tag, ea[k], eb.get(k)))
+    print('banks %d, sounds %d, cues %d compared (cooked / read from the .xsb)' % (nb, ns, nc))
+    for k, v in sorted(diffs.items()):
+        print('DIFF %s: %d' % (k, v))
+        for m in ex[k]:
+            print('    ' + m)
+    print('fields that differ: %d kinds, %d instances' % (len(diffs), sum(diffs.values())))
+    return 0
+
+
 def main():
     work = os.path.abspath(os.path.join(HERE, '..', '..', '..'))
     ap = argparse.ArgumentParser()
     ap.add_argument('--epic', default=os.path.join(work, 'epic-sources'))
+    ap.add_argument('--full', action='store_true')
+    ap.add_argument('--cooked', default=os.path.join(work, 'assets', 'uc2-cooked', 'Sounds'))
     args = ap.parse_args()
+    if args.full:
+        return full(args)
     root = cook.parse_xap(os.path.join(args.epic, 'Sounds', 'Avaris.xap'))
     groups = {g.get('Name'): cook.num(g.get('Volume')) for g in root.kids('Sound Group')}
     cats = tuple(c.get('Name') for c in root.kids('Sound Category'))
