@@ -84,3 +84,77 @@ Editor package is 32-bit only (root CMakeLists, M14 block); a 64-bit editor woul
 So every header can be the exporter's output byte for byte (LF line endings: the exporter writes CRLF, the repo
 keeps LF; the copy strips CR, as `script-build.sh`'s diff always did).
 
+## Step 4 (2026-10-10): every header regenerated, the committed ones replaced
+
+```
+tools/dev/regen-headers.sh        # export (script-build.sh assemble + make -ForceHeads in run/hdr-engine-uc2-t2-headers),
+                                  # then each exported <Pkg>/Inc/<Pkg>Classes.h, CRs dropped, over Source/
+```
+
+`git diff --stat -- 'Source/*/Inc/*Classes.h'`: 3 files, 13 insertions, 13 deletions. Every changed line:
+
+| File | Lines | Change | Step-1 row |
+|---|---|---|---|
+| EditorClasses.h | 219-220 (+), 300-301 (-) | `UmakeCommandlet::StaticClass(); \` / `VERIFY_CLASS_SIZE(UmakeCommandlet);\` -> `UMakeCommandlet`, at its sorted place | FName case (step 3) |
+| EngineClasses.h | 7681-7683 | the 3 `// UC2 port (M7): ...` comment lines in `UPSDistortionBaseMaterial`'s cpptext -> 3 lines holding a tab | cpptext comments (step 3) |
+| UnrealEdClasses.h | 34, 47, 56, 71, 127, 165, 179, 197 | `INT WBrowserLIPSincPtr;` (x3), `INT WBrowserAnimationPtr;` (x4), `INT OldArrayCount;` -> `... GCC_PACK(4);` (first member of each class) | GCC_PACK (step 3) |
+
+Unchanged (already byte-identical to the export once the exporter writes `PTRINT`, step 2): GUIClasses.h,
+IpDrvClasses.h, UCElementsClasses.h, UCGameplayClasses.h, UnrealGameClasses.h; EngineClasses.h's 13 `PTRINT`
+members. So the list is exactly the step-1 table, resolved; nothing else moved. IpDrv's `GameSpyClasses.h` is
+hand-written (Epic's GameSpy validation code, included by InternetLink.cpp) and not generated: the old
+`script-build.sh --headers` diff called it "identical" only because the assemble stage had copied it into the tree.
+
+Builds and the layout proof (logs in `<WorkUC2>/logs/t2/`):
+
+| Build / check | Command | Result |
+|---|---|---|
+| native (32-bit, with Editor) | `bin/capped 6G 3600 -- cmake --build build-native -j4` | rc 0, 0 `error:` lines, `[100%] Built target UCC` (`build-native-2.log`) |
+| native64 | `cmake --preset native64`; `bin/capped 6G 3600 -- cmake --build build-native64 -j4` | rc 0, 0 `error:` (`build-native64.log`) |
+| MinGW i686 (with Editor) | `cmake --preset windows`; `bin/capped 6G 5400 -- cmake --build build-windows -j2` (load above 10) | rc 0, 0 `error:`, `[100%] Built target UCC` (`build-windows.log`) |
+| wasm-perf (wasm32 layout) | `source env.sh`; `cmake --preset wasm-perf`; `bin/capped 6G 5400 -- cmake --build build-wasm-perf -j2` | rc 0, 0 `error:`, `[100%] Built target SDLLaunch` (`build-wasm-perf.log`) |
+| verifyclasses 64 and 32 | `M13_TREE=t2-m13 M13_REF=t2-m13-32 tools/dev/m13-64bit.sh verify` | `PASS verify: exit 0, 'VERIFY: all native class layouts match'; 64-bit native size check: 401 classes, 0 mismatches while linking; 50 placeholders linked at their C++ size; bytecode scan: 6589 scripts read, 0 placeholder references; DWARF layout-check: 2 mismatches at 64-bit, layout-check: 3 mismatches at 32-bit, none new` (`logs/t2/t2-m13/`) |
+
+The 32-bit run (`verify32.log`): `VERIFY: Editor class layouts match`, `VERIFY: all native class layouts match`,
+`All native class layouts match`. No `exported as PTRINT ... but linked at` line at 64 bits (the new spelling/size
+check of step 2). The DWARF mismatches are the known ones: `UTexture` `__LastUpdateTime`/`MemUsage` at both widths
+and, at 32 bits, `Editor.EditorEngine.Pad` (Editor.h mirrors script's `int Pad[8]` with four pointers; the same 3
+lines in `logs/m13/m13-f4b/verify32.check.txt` of 2026-10-09). 401 classes / 6589 scripts against 400 / 6578 in
+64bit.md: main has grown since (e0bce15's IpDrv.HTTPDownload registration and the D-phase scripts).
+Compiled code is unaffected by the regeneration anyway: EditorClasses.h's registrant macro is not compiled,
+EngineClasses.h changes only comment text, UnrealEd is not built.
+
+## Step 5 (2026-10-10): the staleness check
+
+- `tools/dev/check-headers.sh [--build <dir>] [--classes-root <dir>] [--tree hdr...] [--logs <dir>]`: assembles a
+  scratch run tree with `script-build.sh` (default `<WorkUC2>/run/hdr-<checkout dir name>`, so worktrees do not
+  share one), deletes the tree's copies of the generated headers (a package that stopped exporting must not leave a
+  current-looking copy), runs `ucc-bin make -ForceHeads` (inside `bin/capped 3G`), requires `Success - 0 error(s)`,
+  then compares every exported `<Pkg>/Inc/<Pkg>Classes.h` (CRs dropped) with `Source/<Pkg>/Inc/<Pkg>Classes.h`
+  with `cmp`, and every committed `<Pkg>Classes.h` must have been exported. Exit 0 current, 1 stale (a unified
+  diff, also `<WorkUC2>/logs/hdr/<tree>-check.diff`, and the regenerate command), 2 could not run (no ucc-bin with
+  Editor, no sources, make failed). About 30 s.
+- `tools/dev/regen-headers.sh` = `check-headers.sh --write`: the same export, then the copy over `Source/`.
+- `--classes-root <dir>` (both, and `script-build.sh`): the script sources are `<dir>/<Pkg>/Classes`, default
+  `Source/`. For T1/T3: point it at the build-generated script tree (CMake: `-DUC2_HEADERS_CLASSES_ROOT=<dir>`).
+  The headers are always compared with / written to this checkout's `Source/<Pkg>/Inc`.
+- CMake target `check-headers` (root CMakeLists.txt, T2 block at the end): defined when the `Editor` and `UCC`
+  targets exist on a non-Windows, non-Emscripten, non-cross build, i.e. the native 32-bit preset; depends on `UCC`;
+  not in ALL (it compiles every package and needs the asset tree). `cmake --build build-native --target
+  check-headers`.
+- `script-build.sh`: `t<N>` and `hdr` tree prefixes (logs in `<WorkUC2>/logs/t<N>`, `<WorkUC2>/logs/hdr`);
+  `m13-64bit.sh` accepts `t<N>` trees.
+- Documented in BUILD.md ("Scripts (M14)") and scripts.md ("How to change a script", item 4; step 2c marked
+  superseded).
+
+Observed:
+- On the regenerated headers: `bin/capped 6G 1200 -- cmake --build build-native --target check-headers` -> rc 0,
+  8 lines `<Pkg>/Inc/<Pkg>Classes.h: current`, `check-headers: all 8 generated headers are current (scripts:
+  .../Source)`, `[100%] Built target check-headers` (`logs/t2/check-headers-current.out`).
+- Before the regeneration (the old committed headers, the fixed exporter): rc 1, Editor/Engine/UnrealEd `STALE`
+  (`logs/t2/check-before-regen.out`; it also caught `GameSpyClasses.h` as "committed but not exported", which is
+  how it was found to be hand-written; the check now considers only `<Pkg>/Inc/<Pkg>Classes.h`).
+- A script change the headers do not follow: a scratch copy of the sources (`--classes-root <scratchpad>/stale-root
+  --tree hdr-t2-stale`) with `var int T2StaleCheck;` added after `PrivateResolveInfo` in IpDrv's InternetLink.uc:
+  rc 1, `IpDrv/Inc/IpDrvClasses.h: STALE`, diff `+    INT T2StaleCheck;` after `PTRINT PrivateResolveInfo;`
+  (`logs/t2/check-headers-stale-script.out`).

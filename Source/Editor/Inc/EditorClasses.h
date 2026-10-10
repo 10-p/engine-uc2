@@ -216,6 +216,8 @@ VERIFY_CLASS_SIZE(UListBrokenDistortionCommandlet);\
 VERIFY_CLASS_SIZE(UListDuplicateEmittersCommandlet);\
 	UListUsedMaterialTypesCommandlet::StaticClass(); \
 VERIFY_CLASS_SIZE(UListUsedMaterialTypesCommandlet);\
+	UMakeCommandlet::StaticClass(); \
+VERIFY_CLASS_SIZE(UMakeCommandlet);\
 	UMapConvertCommandlet::StaticClass(); \
 VERIFY_CLASS_SIZE(UMapConvertCommandlet);\
 	UMasterCommandlet::StaticClass(); \
@@ -297,8 +299,6 @@ VERIFY_CLASS_SIZE(UTransactor);\
 VERIFY_CLASS_SIZE(UTrueTypeFontFactory);\
 	UUpdateUModCommandlet::StaticClass(); \
 VERIFY_CLASS_SIZE(UUpdateUModCommandlet);\
-	UmakeCommandlet::StaticClass(); \
-VERIFY_CLASS_SIZE(UmakeCommandlet);\
 
 #endif // Editor_NATIVE_DEFS
 

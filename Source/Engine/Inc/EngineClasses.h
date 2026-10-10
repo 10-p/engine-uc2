@@ -7678,9 +7678,9 @@ public:
 		return RequiresSorting() ? POSTPROCESS_BLEND : POSTPROCESS_NOBLEND; 
 	}
 #else
-	// UC2 port (M7): PC's answers were "POSTPROCESS_NONE" and "1". With a render device that
-	// has the post-process capability (FRenderCaps::XboxPostProcess) these give the Xbox
-	// answers above instead; without it PC's (UnPixelShaderMaterial.cpp).
+	
+	
+	
 	virtual EPostProcessMaterialType IsPostProcess();
 	virtual UBOOL RequiresSorting();
 #endif

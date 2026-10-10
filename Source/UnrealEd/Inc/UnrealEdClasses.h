@@ -31,7 +31,7 @@ public:
 class UNREALED_API ULIPSincAnimProps : public UObject
 {
 public:
-    INT WBrowserLIPSincPtr;
+    INT WBrowserLIPSincPtr GCC_PACK(4);
     FName Sound;
     BITFIELD bInterruptible:1 GCC_PACK(4);
     FLOAT BlendInTime GCC_PACK(4);
@@ -44,7 +44,7 @@ public:
 class UNREALED_API ULIPSincControllerProps : public UObject
 {
 public:
-    INT WBrowserLIPSincPtr;
+    INT WBrowserLIPSincPtr GCC_PACK(4);
     DECLARE_CLASS(ULIPSincControllerProps,UObject,0,UnrealEd)
 	void PostEditChange();
 };
@@ -53,7 +53,7 @@ public:
 class UNREALED_API ULIPSincPrefsProps : public UObject
 {
 public:
-    INT WBrowserLIPSincPtr;
+    INT WBrowserLIPSincPtr GCC_PACK(4);
     DECLARE_CLASS(ULIPSincPrefsProps,UObject,0,UnrealEd)
 	void PostEditChange();
 };
@@ -68,7 +68,7 @@ struct UNREALED_API FAnimSequenceRefBone
 class UNREALED_API UAnimEditProps : public UMeshObject
 {
 public:
-    INT WBrowserAnimationPtr;
+    INT WBrowserAnimationPtr GCC_PACK(4);
     FLOAT GlobalCompression;
     BYTE CompressionMethod;
     TArrayNoInit<FAnimSequenceRefBone> AnimRefBones GCC_PACK(4);
@@ -124,7 +124,7 @@ struct UNREALED_API FMEPBonePrimBox
 class UNREALED_API UMeshEditProps : public UMeshObject
 {
 public:
-    INT WBrowserAnimationPtr;
+    INT WBrowserAnimationPtr GCC_PACK(4);
     FVector Scale;
     FVector Translation;
     FRotator Rotation;
@@ -162,7 +162,7 @@ public:
 class UNREALED_API USequEditProps : public UMeshObject
 {
 public:
-    INT WBrowserAnimationPtr;
+    INT WBrowserAnimationPtr GCC_PACK(4);
     FLOAT Rate;
     FLOAT Compression;
     BYTE ReCompressionMethod;
@@ -176,7 +176,7 @@ public:
 class UNREALED_API USkelPrefsEditProps : public UMeshObject
 {
 public:
-    INT WBrowserAnimationPtr;
+    INT WBrowserAnimationPtr GCC_PACK(4);
     INT RootZero;
     FLOAT AnimSlomo;
     DECLARE_CLASS(USkelPrefsEditProps,UMeshObject,0,UnrealEd)
@@ -194,7 +194,7 @@ struct UNREALED_API FNotifyInfo
 class UNREALED_API UNotifyProperties : public UObject
 {
 public:
-    INT OldArrayCount;
+    INT OldArrayCount GCC_PACK(4);
     INT WBrowserAnimationPtr;
     TArrayNoInit<FNotifyInfo> Notifys;
     DECLARE_CLASS(UNotifyProperties,UObject,0,UnrealEd)
