@@ -385,3 +385,31 @@ on Praxis, 94/96 vs 103/100 on Deadbolt: the fire rate follows the frame rate of
 run on BOTH binaries by about as much as between them, and the branch is not lower. No change in single-player audio:
 nothing to fix. (Single player never takes the split path: one viewport, Blit on it as before, `Audio->Update()` from
 the one viewport with bShowMenu+bShowScene as before; UC2ALAudio was not changed.)
+
+## G-6, step 10 - the keyboard walk that failed (coordinator's request, 2026-10-10)
+
+Five runs of `g6-splitscreen.sh g6 input` started at load < 16 (logs/g6/kb5.txt, kb5-1..5): the old check
+`keyboard-ws-moves-player1-only` failed 4 of 5, W moved player one 0.0 in all five and S 0.0 in four. The key press
+reached viewport 0 every time (`key W press (viewport 0)`), nothing released it early.
+
+Diagnosis:
+- A per-tick watch of player one (test channel, temporary) showed the input working: W held -> the pawn's
+  acceleration (1417,1479) along its yaw, no hijack, PlayerWalking, GUI inactive; where the pawn did not move its
+  velocity stayed 0 (a wall in front after the right stick's turn test), and S then walked 392 units.
+- At the same spot and facing, placed with NETPLACE, the keyboard walked 400-600 units both ways, alone and with four
+  players (logs/g6/diag/kbspot1-g6dbg, kbspot4-g6dbg).
+- The harness's Xvfb parts render with the default 4x MSAA in llvmpipe, four scenes a frame: the FPS log during the
+  old keyboard sequence (`[Engine.GameEngine] FpsLogSeconds=2`, logs/g6/diag/kbold.out) reads 0.7-1.0 fps, frame
+  1010-1404 ms. A 1.2 s key hold is one frame: an X key press and its release can be pumped in the same frame, before
+  any UInput::ReadInput, and the hold never walks. (The pads were never affected: the test channel stops after every
+  virtual-pad change so each change is polled at least once, m10's rule; m10-controls also turns MSAA off for its
+  Xvfb runs for this reason.) Not a defect of the keyboard path; a timing artifact of the test at < 1 fps.
+
+Fix (the test): the keyboard part now probes every viewport DURING each hold (`vprobe kh<key>`, which waits for the
+engine's answer, i.e. at least one tick with the key down) and checks the pawn's acceleration: player one's only, for W
+S A D (`only_accel`), then that player one moved and nobody else over the four (`only_moved4`). The viewport probe
+gained `acc=(x,y)` (SDL2InputTest.cpp ProbeViewports; m10-inject.py parses it).
+
+Five runs at load < 16 at start (logs/g6/kb5b.txt, kb5b-1..5): **5/5 PASS** (39 checks each). Acceleration during the
+holds: player one (+-1033,+-1769)/(+-1769,+-1033) by key, the other three (0,0) every time. Walks W/S/A/D: 186.0 / 158.1
+/ 186.0 / 185.9 (runs 1-4), 357.9 / 304.3 / 185.9 / 357.9 (run 5); the others 0.0.

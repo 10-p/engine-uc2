@@ -98,3 +98,18 @@ def fire_all(npads):
     for k in range(npads):
         chan(f'pad {k} axis righttrigger 0')
     time.sleep(1.0)
+
+
+def only_accel(tag, k):
+    """During a key's hold: split player k's pawn accelerates, nobody else's does."""
+    acc = [abs(r['acc'][0]) + abs(r['acc'][1]) for r in vsplit(tag)]
+    return acc[k] > 100 and all(a == 0 for i, a in enumerate(acc) if i != k)
+
+
+def only_moved4(tags, k, far=50.0, still=2.0):
+    """Over several walks (W S A D): split player k moved, nobody else did."""
+    tot = [0.0] * len(vsplit(tags[0]))
+    for a, b in zip(tags, tags[1:]):
+        for i, d in enumerate(moved(a, b)):
+            tot[i] += d
+    return tot[k] > far and all(t < still for i, t in enumerate(tot) if i != k)

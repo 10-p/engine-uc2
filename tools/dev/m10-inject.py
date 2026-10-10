@@ -46,7 +46,7 @@ G-6 additions:
                                   in the split-screen manager, -1 none), overlay, window, actor, pawn, loc, rot,
                                   hud, fov; VS[tag] = (viewport count, split views, screen (w,h)). Helpers for
                                   'check': vdist(a,b,i) (pawn i's move), vyaw(a,b,i), vsplit(tag) (the split views
-                                  in order), vrects(tag)
+                                  in order), vrects(tag); rows also have 'acc' (the pawn's acceleration, i.e. the input's walk, x/y)
 D-9 additions:
     probe <tag>                   also keeps P[tag].caption (the "probe4" line: the focused control's caption, or the
                                   nearest one above it in the focus chain)
@@ -325,6 +325,8 @@ def vprobe(tag):
                 rows[-1]['player'] = (re.search(r' player=(\S+)', line) or re.search(r'()$', line)).group(1)
                 rows[-1]['gui'] = int((re.search(r' gui=(-?\d+)', line) or re.search(r'(-1)', '-1')).group(1))
                 rows[-1]['shots'] = int((re.search(r' shots=(-?\d+)', line) or re.search(r'(-1)', '-1')).group(1))
+                acc = re.search(r' acc=\(([-\d.]+),([-\d.]+)\)', line)
+                rows[-1]['acc'] = (float(acc.group(1)), float(acc.group(2))) if acc else (0.0, 0.0)
         if len(rows) < n:
             time.sleep(0.1)
     V[tag] = rows

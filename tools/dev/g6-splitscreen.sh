@@ -187,19 +187,29 @@ check pad$k-right-stick-turns-player$((k+1))-only only_turned('t${k}a','t${k}b',
 SCEN
   done
   cat <<SCEN
-vprobe ka
-keydown w
-sleep 1.2
-keyup w
+SCEN
+  # The keyboard: W S A D in turn. During each hold the input's walk (the pawn's acceleration, whatever stands in
+  # the way) must be player one's only; over the four, player one must move and nobody else. (Measured walk
+  # distances alone depended on where the earlier steps left player one: facing a wall after the right stick's
+  # turn, W moved 0 with the acceleration on, 4 runs in 5; G-6 step 10.)
+  local k
+  echo "vprobe k0"
+  for k in w s a d; do
+    cat <<SCEN
+keydown $k
+sleep 0.8
+vprobe kh$k
+sleep 0.4
+keyup $k
 sleep 0.7
-vprobe kb
-keydown s
-sleep 1.2
-keyup s
-sleep 0.7
-vprobe kc
-pyexec print('  moved', moved('ka','kb'), moved('kb','kc'))
-check keyboard-ws-moves-player1-only only_moved2('ka','kb','kc',0)
+vprobe k$k
+pyexec print('  key $k: acceleration', [r['acc'] for r in vsplit('kh$k')])
+check keyboard-$k-walks-player1-only only_accel('kh$k',0)
+SCEN
+  done
+  cat <<SCEN
+pyexec print('  keyboard moved', moved('k0','kw'), moved('kw','ks'), moved('ks','ka'), moved('ka','kd'))
+check keyboard-wsad-moves-player1-only only_moved4(['k0','kw','ks','ka','kd'],0)
 vprobe ma
 rmove 200 0 20
 sleep 0.7
