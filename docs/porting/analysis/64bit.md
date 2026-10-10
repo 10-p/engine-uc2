@@ -119,7 +119,10 @@ declaration. Checked three ways:
 **Native placeholders** (`GNativePlaceholders`, UnClass.cpp; ut99 `NativePlaceholderSize`, by string): a
 script `int` standing in for C++ data advances the layout by the C++ size (`PH_Member`), or gives an
 `array<int>` the pointer stride (`PH_ArrayElement`); the property itself stays a 4-byte int. Identical sizes
-at 32-bit (the code is `#if PLATFORM_64BITS` anyway). 48 entries at step 3, 50 since step 6 (see the site table):
+at 32-bit (the code is `#if PLATFORM_64BITS` anyway). 48 entries at step 3, 50 since step 6 (see the site table).
+Since T2 (`analysis/headers.md`) each row also has the C++ spelling the header exporter writes in place of `INT`
+(`PTRINT`, or none for the object header, vtables and maps, whose classes are hand-written), and the table is
+compiled at every width: the generated `<Pkg>Classes.h` get their `PTRINT`s from it, not from hand edits:
 
 | Script (package.struct.property) | C++ | kind |
 |---|---|---|

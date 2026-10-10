@@ -13,17 +13,20 @@
 #                       the inis, compare) is the same. S2, docs/porting/analysis/ucc-windows.md.
 #     --tree <name>     output tree <WorkUC2>/run/<name>; must start with m14, d<N> (a D-phase task's prefix,
 #                       e.g. d3-make), f<N> (an F-task's, e.g. f1-make), g<N> (a G-task's, e.g. g8-make), s<N>
-#                       (a spike's, e.g. s2-make), t<N> (a T-task's, e.g. t2-hdr) or jit (default m14-make)
+#                       (a spike's, e.g. s2-make), t<N> (a T-task's, e.g. t2-hdr), hdr (tools/dev/check-headers.sh's,
+#                       logs in <WorkUC2>/logs/hdr) or jit (default m14-make)
 #     --logs <dir>      where the logs go (default <WorkUC2>/logs/m14; a d<N>/f<N>/g<N>/s<N>/t<N> tree: <WorkUC2>/logs/<that
 #                       prefix>; jit: logs/jit)
 #     --mem <size>      memory ceiling of the `ucc-bin make` run (default 3G; also under wine)
 #     --headers         also export the C++ headers (into <tree>/<Pkg>/Inc, a scratch copy, never Source/)
+#     --classes-root <dir>  where the script sources are: <dir>/<Pkg>/Classes (default <repo>/Source). T2: so a
+#                       build-generated script tree can be compiled (and its headers checked) instead of Source/
 #     --extra "<args>"  more `ucc-bin make` arguments
 #
 # The tree: content folders hard-linked from the asset tree (never written), System/ a real copy of the asset
 # tree's with the 17 EditPackages .u removed (they are what gets built), GUIRes/ the shipped .u (UMakeCommandlet
 # conforms each new package against ../GUIRes/<Pkg>.u, as Epic's tree had it), and for each package
-# <Pkg>/Classes -> Source/<Pkg>/Classes and <Pkg>/<resource dir> -> epic-sources/<Pkg>/<resource dir> (the
+# <Pkg>/Classes -> Source/<Pkg>/Classes (or --classes-root) and <Pkg>/<resource dir> -> epic-sources/<Pkg>/<resource dir> (the
 # #exec imports read textures and models from there; the repo holds text files only). The compile inis are
 # Epic's: Avaris.ini = DefaultXbox.ini, User.ini = DefUserXbox.ini (sync_avaris.pl copies them so).
 # Nothing is written outside the tree and the logs directory.
@@ -44,6 +47,7 @@ mem=3G
 headers=0
 extra=""
 logs=""
+classes_root=$repo/Source
 stages=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -53,16 +57,17 @@ while [ $# -gt 0 ]; do
     --headers) headers=1; shift;;
     --extra) extra=$2; shift 2;;
     --logs) logs=$2; shift 2;;
+    --classes-root) classes_root=$(cd "$2" && pwd); shift 2;;
     assemble|make|strip|compare) stages+=("$1"); shift;;
     *) echo "unknown argument: $1" >&2; exit 2;;
   esac
 done
 [ ${#stages[@]} -eq 0 ] && stages=(assemble make strip compare)
-case "$tree" in m14*|d[0-9]*|f[0-9]*|g[0-9]*|s[0-9]*|t[0-9]*|jit*) ;; *) echo "tree name must start with m14, d<N>, f<N>, g<N>, s<N>, t<N> or jit: $tree" >&2; exit 2;; esac
+case "$tree" in m14*|d[0-9]*|f[0-9]*|g[0-9]*|s[0-9]*|t[0-9]*|hdr*|jit*) ;; *) echo "tree name must start with m14, d<N>, f<N>, g<N>, s<N>, t<N>, hdr or jit: $tree" >&2; exit 2;; esac
 case "$tree" in */*|*..*) echo "bad tree name: $tree" >&2; exit 2;; esac
 case "$build" in /*) ;; *) build=$repo/$build;; esac
 run=$work/run/$tree
-case "$tree" in d[0-9]*|f[0-9]*|g[0-9]*|s[0-9]*|t[0-9]*) logs=${logs:-$work/logs/${tree%%-*}};; jit*) logs=${logs:-$work/logs/jit};; esac
+case "$tree" in d[0-9]*|f[0-9]*|g[0-9]*|s[0-9]*|t[0-9]*) logs=${logs:-$work/logs/${tree%%-*}};; jit*) logs=${logs:-$work/logs/jit};; hdr*) logs=${logs:-$work/logs/hdr};; esac
 logs=${logs:-$work/logs/m14}
 mkdir -p "$logs"
 
@@ -107,7 +112,7 @@ assemble() {
   for p in "${packages[@]}"; do
     s=$(srcdir "$p")
     mkdir -p "$run/$s"
-    ln -s "$repo/Source/$s/Classes" "$run/$s/Classes"
+    ln -s "$classes_root/$s/Classes" "$run/$s/Classes"
     if [ -d "$repo/Source/$s/Inc" ]; then
       mkdir -p "$run/$s/Inc"
       # every header: the exporter writes `#include "<Class>.h"` into a class body when that file exists here

@@ -154,13 +154,24 @@ tools/dev/script-build.sh                                 # assemble, make, stri
 UC2_WINEPREFIX=<WorkUC2>/.cache/wine-scripts tools/dev/script-build.sh --build build-windows --tree s2-make
                                                           # the same with ucc.exe (Windows build) under wine (S2)
 tools/dev/script-build.sh --tree m14-hdr --headers assemble make   # also export the C++ headers, diff them
+bin/capped 6G 600 -- cmake --build build-native --target check-headers   # generated headers current? (T2)
+tools/dev/regen-headers.sh                                # regenerate them into Source/*/Inc (T2)
 ```
 
 - Output: `<WorkUC2>/run/m14-make/System/*.u` (what ships: 15 stripped like Epic's, UCMenu and Editor with their
   text), `<WorkUC2>/run/m14-make/Unstripped/*.u` (all with script text, for debugging). Logs and the comparison in
   `<WorkUC2>/logs/m14/` (`m14-make-compare.txt`, `m14-make-patches.txt`). Nothing outside the tree is written;
   the asset tree, `Source/` and the run trees are never written by it. Exported headers go to the tree's own
-  `<Pkg>/Inc`, never over `Source/*/Inc` (our headers carry deliberate changes: compare, do not regenerate).
+  `<Pkg>/Inc`, never over `Source/*/Inc`.
+- The generated C++ headers `Source/<Pkg>/Inc/<Pkg>Classes.h` (Editor, Engine, GUI, IpDrv, UCElements, UCGameplay,
+  UnrealEd, UnrealGame) are pure exporter output since T2, 64-bit-correct as generated: a script `int` that holds a
+  C++ pointer is written `PTRINT` from Core's placeholder table (`GNativePlaceholders`, UnClass.cpp), on any host.
+  Never edit them by hand: change the `.uc` (or the table), then `tools/dev/regen-headers.sh` (export in a scratch
+  tree `<WorkUC2>/run/hdr-<checkout>`, copy over `Source/`, CRs dropped) and commit them with the change.
+  `tools/dev/check-headers.sh` (CMake target `check-headers` of the native preset, not in ALL) exports and compares
+  byte for byte: exit 0 current, 1 stale (unified diff printed, also in `<WorkUC2>/logs/hdr/`), 2 could not run.
+  Both take `--classes-root <dir>` (script sources `<dir>/<Pkg>/Classes`, default `Source/`; CMake:
+  `-DUC2_HEADERS_CLASSES_ROOT=<dir>`) and `--build <dir>`. `docs/porting/analysis/headers.md`.
 - It reproduces Epic's pipeline (`Source/BuildProcess/sync_avaris.pl`): `ucc make -nobind -noh` with the Xbox
   inis, then `ucc editor.stripsource` with the PC inis, conforming each package to the shipped one so they line
   up; `tools/dev/script-diff.py` then compares object by object. Every difference is explained

@@ -443,3 +443,19 @@ foreach(pkg IN LISTS UC2_PACKAGES)
     add_subdirectory(Source/${pkg})
   endif()
 endforeach()
+
+# --- T2: `cmake --build build-native --target check-headers`: the generated Source/<Pkg>/Inc/<Pkg>Classes.h must be
+# what the header exporter of this build's ucc-bin writes from the script sources (tools/dev/check-headers.sh; fails
+# with the diff when stale; regenerate with tools/dev/regen-headers.sh). Only where ucc-bin carries the script
+# compiler and runs on the build host: native Linux, 32-bit (the Editor target). Not part of ALL: it compiles every
+# script package in a scratch run tree and needs the asset tree. UC2_HEADERS_CLASSES_ROOT: where the script sources
+# are (default Source/). docs/porting/analysis/headers.md. ---------------------------------------------------------
+set(UC2_HEADERS_CLASSES_ROOT "${CMAKE_SOURCE_DIR}/Source" CACHE PATH "Script sources (<dir>/<Pkg>/Classes) the check-headers target exports from")
+if(TARGET Editor AND TARGET UCC AND NOT WIN32 AND NOT EMSCRIPTEN AND NOT CMAKE_CROSSCOMPILING)
+  add_custom_target(check-headers
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/dev/check-headers.sh --build ${CMAKE_BINARY_DIR} --classes-root ${UC2_HEADERS_CLASSES_ROOT}
+    DEPENDS UCC
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    USES_TERMINAL VERBATIM)
+endif()
+# --- end T2 ------------------------------------------------------------------------------------------------------

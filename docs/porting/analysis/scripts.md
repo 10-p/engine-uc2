@@ -239,6 +239,10 @@ warnings, recorded for later.
 
 ## Step 2c (2026-10-07): the C++ header export, compared (never written over Source/)
 
+> **Superseded by T2 (2026-10-10, `analysis/headers.md`)**: the exporter writes `PTRINT` from the placeholder
+> table, the other differences below were resolved, and the committed headers are now regenerated
+> (`tools/dev/regen-headers.sh`) and checked (`tools/dev/check-headers.sh`). The table is kept as the M14 record.
+
 ```
 tools/dev/script-build.sh --tree m14-hdr --headers assemble make
     # make with -ForceHeads instead of -noh; the exporter writes <WorkUC2>/run/m14-hdr/<Pkg>/Inc/<Pkg>Classes.h,
@@ -312,11 +316,14 @@ property of the 78 `#exec`-imported textures (Engine 68, Editor 6, GamePlay 4): 
    `m14-make-compare.txt`. A change to a class adds it to the "changed classes" list at the top, and other
    classes' dependency records follow (neutral). Packages compiled after it change only if they use what you
    changed (a constant, a default, a function signature).
-4. Native classes: adding or moving a `var` in a class declared `native` changes its C++ layout. Run
-   `tools/dev/script-build.sh --tree m14-hdr --headers assemble make` and port the relevant hunk of
-   `<WorkUC2>/logs/m14/m14-hdr-headers.diff` into `Source/<Pkg>/Inc/<Pkg>Classes.h` by hand (keep our
-   `PTRINT`, `GCC_PACK` and comment deviations; never copy the exported file over ours), rebuild the C++, and
-   `ucc-bin verifyclasses` must pass (32- and 64-bit: `tools/dev/m13-64bit.sh verify`).
+4. Native classes: adding or moving a `var` in a class declared `native` changes its C++ layout. Regenerate the
+   headers with `tools/dev/regen-headers.sh` (since T2 they are pure exporter output, `PTRINT` included: never
+   edit `Source/<Pkg>/Inc/<Pkg>Classes.h` by hand; a new script `int` that holds a C++ pointer gets a row in
+   `GNativePlaceholders`, `Source/Core/Src/UnClass.cpp`, which makes it `PTRINT` in the header and pointer-sized
+   at 64 bits), commit them with the script change, rebuild the C++, and `ucc-bin verifyclasses` must pass (32- and
+   64-bit: `tools/dev/m13-64bit.sh verify`). `cmake --build build-native --target check-headers`
+   (`tools/dev/check-headers.sh`) fails with the diff while they are stale. Both take `--classes-root <dir>`
+   when the script sources are not `Source/<Pkg>/Classes`. `analysis/headers.md`.
 5. Run: `UC2_SCRIPTS=<WorkUC2>/run/m14-make/System tools/dev/mkrun-uc2.sh build-native <tree>`, then the
    suites with that tree (`tools/dev/m14-scripts-check.sh` runs them all). The rebuilt packages no longer get the
    load-time patches (they do not need them: step 2b). A tree mixing rebuilt and shipped packages is fine: each
