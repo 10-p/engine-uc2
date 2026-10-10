@@ -284,15 +284,15 @@ static void UnwrapPlayer( UMovieMaterial* M )
 // Test key [UC2Movie] ShotTimes=<seconds>[,<seconds>...] (-ini:; was -movieshot=): the engine's SHOT exec when the
 // first full-screen movie's clock passes those times (verification: the picture is then a known frame of the cooked
 // file, which the log names).
+// Test key [UC2Movie] MaterialShotTimes=<seconds>[,<seconds>...] (D-4): the same for the first MovieMaterial that
+// shows a picture (a menu page's portrait): the screenshots are then taken a known time after the page opened,
+// whatever the machine's load (tools/dev/m9-movies.py menu-movie; times after the first frame were not).
 static TArray<FLOAT> GMovieShotTimes;
-static void ParseMovieShots()
+static TArray<FLOAT> GMaterialShotTimes;
+static void ParseTimeList( const TCHAR* Key, TArray<FLOAT>& Times )
 {
-	static UBOOL Parsed = 0;
-	if( Parsed )
-		return;
-	Parsed = 1;
 	FString List;
-	if( !appReadTestKey( TEXT("ShotTimes"), List, TEXT("UC2Movie") ) )
+	if( !appReadTestKey( Key, List, TEXT("UC2Movie") ) )
 		return;
 	while( List.Len() )
 	{
@@ -300,8 +300,17 @@ static void ParseMovieShots()
 		FString Item = Comma >= 0 ? List.Left(Comma) : List;
 		List = Comma >= 0 ? List.Mid(Comma+1) : FString();
 		if( Item.Len() )
-			GMovieShotTimes.AddItem( appAtof(*Item) );
+			Times.AddItem( appAtof(*Item) );
 	}
+}
+static void ParseMovieShots()
+{
+	static UBOOL Parsed = 0;
+	if( Parsed )
+		return;
+	Parsed = 1;
+	ParseTimeList( TEXT("ShotTimes"), GMovieShotTimes );
+	ParseTimeList( TEXT("MaterialShotTimes"), GMaterialShotTimes );
 }
 
 // One frame of XboxMovieThread::Render: clear, the movie on a quad keeping its aspect, the subtitle bands,
@@ -564,6 +573,21 @@ FPortableMoviePlayer* appUpdateMovieMaterial( UMovieMaterial* M, UBOOL& bOutFall
 		LastLogged.Set( M->GetIndex(), Now );
 		debugf( NAME_Log, TEXT("UC2Movie: MovieMaterial %s frame %i of %i (pass %s, revision %i)"), M->GetPathName(),
 			Player->GetFrame(), Player->GetFrameCount(), Player->HasEnded() ? TEXT("ended") : TEXT("playing"), Player->GetRevision() );
+	}
+	// Test key MaterialShotTimes (above): the first material with a picture is the one whose clock counts.
+	ParseMovieShots();
+	static INT ShotMaterial = INDEX_NONE;
+	if( GMaterialShotTimes.Num() && !GFullscreenMovie && (ShotMaterial == INDEX_NONE || ShotMaterial == M->GetIndex()) )
+	{
+		ShotMaterial = M->GetIndex();
+		UEngine* Engine = UEngine::GEngine;
+		if( Player->GetTime() >= GMaterialShotTimes(0) && Engine && Engine->Client && Engine->Client->Viewports.Num() )
+		{
+			debugf( NAME_Log, TEXT("UC2Movie: shot of MovieMaterial %s at movie time %.3f s (asked %.3f s): frame %i"),
+				M->GetPathName(), Player->GetTime(), GMaterialShotTimes(0), Player->GetFrame() );
+			GMaterialShotTimes.Remove(0);
+			Engine->Client->Viewports(0)->Exec( TEXT("SHOT"), *GLog );
+		}
 	}
 	return Player;
 	unguard;

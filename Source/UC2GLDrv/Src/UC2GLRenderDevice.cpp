@@ -65,6 +65,7 @@ static DOUBLE			GFirstFrameTime = 0.0;
 UBOOL					GTestMatCensus = 0;		// MatCensus=True (UC2GLPixelTrace.cpp)
 INT						GTestDualDiffuse = -1;	// DualDiffuse=<n> (UC2GLMaterialState.cpp); -1 = not set
 FString					GTestCapMask;			// MaskCaps=..., upper case between commas
+FLOAT					GTestMaterialTime = -1.f;	// MaterialTime=<s> (UC2GLRenderInterface.h); -1 = not set
 
 /*-----------------------------------------------------------------------------
 	UUC2GLRenderDevice.
@@ -575,6 +576,8 @@ UBOOL UUC2GLRenderDevice::Init()
 	//   MaskCaps=<cap>,...              behave as if a capability were missing: combine3, combine4, depthtexture,
 	//                                   fragdepth, uintindex, maxlevel, s3tc
 	//   DualDiffuse=<n>                 the dual-diffuse test material state (M6, UC2GLMaterialState.cpp)
+	//   MaterialTime=<s>                materials see this time, not the level's (D-4: moving materials such as
+	//                                   the Liandri overlay's panned noise picture the same in every run)
 	FString OwnSection = GetClass()->GetPathName();
 	const TCHAR* BaseSection = TEXT("UC2GLDrv.UC2GLRenderDevice");
 	const TCHAR* TwinSection = TEXT("UC2GL4ESDrv.UC2GL4ESRenderDevice");
@@ -607,6 +610,10 @@ UBOOL UUC2GLRenderDevice::Init()
 	TestValue = TEXT("");
 	if( UC2GL_TESTKEY( "DualDiffuse", TestValue ) )
 		GTestDualDiffuse = appAtoi( *TestValue );
+	GTestMaterialTime = -1.f;
+	TestValue = TEXT("");
+	if( UC2GL_TESTKEY( "MaterialTime", TestValue ) )
+		GTestMaterialTime = Max( 0.f, (FLOAT)appAtof( *TestValue ) );
 	LogStats = UC2GL_TESTFLAG( "Stats" );
 	StatDraws = StatPrimitives = StatMaterials = StatBufferUploads = StatBufferBytes = StatTextureUploads = StatPostQuads = 0;
 	StatSnapshots = StatDepthColors = StatDepthCopies = StatFrame0 = 0;

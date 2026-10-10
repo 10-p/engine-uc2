@@ -76,6 +76,27 @@ run() {
   sed -n 's/^\(PASS\|FAIL\)\t\([^\t]*\)\t\(.*\)$/\1 \2: \3/p' "$out/$name.result" | cut -c1-240
 }
 
+# The open spot of tools/dev/jit-trace.sh (DM-Deadbolt; room for every move the scenarios make: forward 560 units,
+# back, right down a ramp, left back; the camera arm never shortened by a wall). The spawn is random and a pawn next
+# to a wall slides along it or stops (look-right-arrow-strafes-and-never-turns failed 1 of 2 runs on 2026-10-09), so
+# every scenario that measures the pawn's or the camera's movement starts from here: TELEPORT (the guarded cheat,
+# allowed in the standalone game these runs are; native, so the shipped scripts have it too), twice as jit-trace.sh
+# places, then checked. D6_SPOT overrides it ("x y z yaw pitch").
+SPOT=${D6_SPOT:-1977.8 583.7 -34.1 33000 -1400}
+# place <probe> <check>: put the pawn at $SPOT and check that it is there
+place() {
+  local x y
+  read -r x y _ <<<"$SPOT"
+  cat <<SCEN
+chan exec TELEPORT $SPOT
+sleep 1
+chan exec TELEPORT $SPOT
+sleep 1.5
+probe $1
+check $2 abs(P['$1'].loc[0] - ($x)) < 2 and abs(P['$1'].loc[1] - ($y)) < 2
+SCEN
+}
+
 # The start of every scenario: the level, a spawn (Fire), God, the helpers.
 start() {
   cat <<SCEN
@@ -267,8 +288,9 @@ probe Ae
 pyexec save('look-auto-centre-under-the-pad', [P['Ad'].rot[0], P['Ae'].rot[0]])
 check look-auto-centre-under-the-pad P['Ad'].mouselook == 'False' and abs(((P['Ae'].rot[0]+1400+32768)&65535)-32768) < abs(((P['Ad'].rot[0]+1400+32768)&65535)-32768) - 100
 SCEN
-  # 7. the keys: the Right arrow strafes and never turns (F-1), PageUp looks up; then the mouse right after the stick
-  # (no adhesion/friction/curve on the mouse)
+  # 7. the keys, from the open spot: the Right arrow strafes and never turns (F-1), PageUp looks up; then the mouse
+  # right after the stick (no adhesion/friction/curve on the mouse)
+  place Kp $p-placed-for-the-keys
   cat <<SCEN
 probe Ka
 keydown Right
@@ -373,6 +395,7 @@ SCEN
 # lock: two bots, frozen, placed 400 units in front (0 and +30 degrees)
 scen_lock() {
   start lock
+  place Lp lock-placed
   cat <<SCEN
 chan exec PlayersOnly
 wait test: exec PlayersOnly 10
@@ -446,7 +469,9 @@ probe lj
 check lock-stick-break-away-unchanged not P['lj'].locked
 SCEN
   # aim adhesion: one target in front (the other one put behind us), our pawn strafes; the view follows it under the
-  # pad only (Epic's adhesion: 20% of the target's angular motion when it is near the crosshair)
+  # pad only (Epic's adhesion: 20% of the target's angular motion when it is near the crosshair). From the open spot
+  # again (the lock checks above turned the view).
+  place Ap lock-placed-for-adhesion
   cat <<SCEN
 chan place 0 500 0
 chan place 1 600 180
@@ -545,6 +570,7 @@ SCEN
 # rebuilt script says which camera it uses
 scen_lazy() {
   start lazy
+  place Zp lazy-placed
   cat <<SCEN
 check lazy-camera-announced any('UCPlayerInput: PC mouse look (rebuilt UCGameplay.u)' in l and 'lazy camera under the mouse' in l for l in __import__('__main__').log_lines)
 probe Na
@@ -687,6 +713,9 @@ pyexec save('vanilla-pitch-20-counts-up-1-per-tick', pitchdiff('Ha','Hb'))
 check vanilla-mouse-right-turns-right yawdiff('Sa','Sb') > 500 and yawdiff('Fa','Fb') > 0
 check vanilla-mouse-up-looks-up pitchdiff('Ha','Hb') > 500
 check vanilla-mouse-is-epics-capped-path abs(yawdiff('Ga','Gb')) < 3 * abs(yawdiff('Fa','Fb'))
+SCEN
+  place Kp vanilla-placed-for-the-keys
+  cat <<SCEN
 probe Ka
 keydown Right
 sleep 1.0

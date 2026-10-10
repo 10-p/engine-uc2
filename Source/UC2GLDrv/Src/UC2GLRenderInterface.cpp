@@ -996,7 +996,7 @@ INT FOpenGLRenderInterface::SetMaterial(UMaterial* InMaterial, FString* ErrorStr
 		for(;;)
 		{
 			// Notify material it's being set.
-			InMaterial->PreSetMaterial( Viewport->Actor->Level->TimeSeconds );
+			InMaterial->PreSetMaterial( UC2GLMaterialTime(Viewport->Actor->Level) );
 
 			UBOOL Result = 0;
 			if( (NonModifier=PixelShaderMaterial=CheckMaterial<UPixelShaderMaterial,MRH_PixelShaderMaterial>(this, InMaterial, &ModifierInfo))!=NULL)

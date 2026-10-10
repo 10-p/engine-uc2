@@ -15,6 +15,16 @@
 
 class UUC2GLRenderDevice;
 
+// Test key MaterialTime=<seconds> (D-4; read in UUC2GLRenderDevice::Init): the time the driver hands to
+// materials (texture panners, rotators and oscillators, constant colours, PreSetMaterial) instead of the
+// level's TimeSeconds, so that a picture of a moving material is the same in every run (the Liandri
+// overlay's panned noise in tools/dev/m11-twin.sh). Below 0 (the default): the level's time.
+extern FLOAT GTestMaterialTime;
+inline FLOAT UC2GLMaterialTime( const ALevelInfo* Level )
+{
+	return GTestMaterialTime >= 0.f ? GTestMaterialTime : Level->TimeSeconds;
+}
+
 //
 //	FOpenGLModifierInfo: UC2's FD3DModifierInfo.
 //
@@ -596,7 +606,7 @@ template<class C,DWORD RenderHint> C* CheckMaterial(FOpenGLRenderInterface* RI, 
 			UTexModifier* TexModifier = MaterialCast<UTexModifier,MRH_TexModifier>(Modifier);
 			if( TexModifier )
 			{
-				FMatrix* TexMatrix = TexModifier->GetMatrix(RI->Viewport->Actor->Level->TimeSeconds);
+				FMatrix* TexMatrix = TexModifier->GetMatrix(UC2GLMaterialTime(RI->Viewport->Actor->Level));
 				if( TexMatrix )
 				{
 					ModifierInfo->ModifyTextureTransforms = 1;

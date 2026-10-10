@@ -264,6 +264,9 @@ def scen_menu(a, tmp):
         # Regions of the 640x480 arena page (UCMenu.UC2Arena_Main, behind the "no profile" dialog): the game
         # type portrait (a MovieMaterial) and two parts that do not move (the page title, the list).
         # The page's background animates everywhere else.
+        # The shots are taken at the portrait's own movie time 3 s and 5 s ([UC2Movie] MaterialShotTimes, D-4): the
+        # page has then been open 3 s on any machine. At fixed times after the first frame (26 s, 28 s) a loaded
+        # machine caught the page still changing (a19: title and list PSNR 28.7 / 26.6 dB).
         regions = {'portrait': (412, 96, 565, 176), 'title': (495, 40, 600, 68), 'list': (60, 82, 360, 110)}
         p = {k: psnr(crop(x, size, v), crop(y, size, v)) for k, v in regions.items()}
         result('menu-movie-shots', size == (640, 480) and p['portrait'] < 20.0 and p['title'] > 30.0 and p['list'] > 30.0,
@@ -376,7 +379,7 @@ def main():
     ap.add_argument('--no-mkrun', action='store_true')
     # the menu page with a MovieMaterial and how to reach it (see the notebook, V5)
     ap.add_argument('--menu-inject', default='Startup time|10.0|Down,Return')
-    ap.add_argument('--menu-args', default='-ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=26,28')
+    ap.add_argument('--menu-args', default='-ini:System:[UC2Movie]:MaterialShotTimes=3,5')
     # expected level of the movie's sound in the capture: 0 dB at the source (no category, no headroom: the
     # Xbox played XMV sound outside XACT) plus OpenAL Soft's gain for a centred 2D stereo source (measured, see
     # the notebook)
