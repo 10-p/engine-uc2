@@ -12,7 +12,7 @@ is kept pristine and is never edited. The first commit of this repo was produced
 | `Source/Avaris.sln`, `defmacros.dsm`, `fixit`, `sync_LS.bat`, `BuildFileList.txt`, `ScriptFileList.txt` | tree root | byte for byte |
 | `Thirdparty/nvTriStrip`, `nvDXT`, `DirectX8` | same names | sources and headers only (no `.lib`, `.tlb`) |
 | `Thirdparty/zlib` | engine-ut2004's `Thirdparty/zlib` (1.1.4, has a CMakeLists) | replaces Epic's 1.1.3 |
-| `Engine/Config/*.ini` | `System/Default.ini`, `DefUser.ini`, `DefaultXbox.ini`, `DefUserXbox.ini`, `KeyBinds.ini` | byte for byte at the import; the baseline our config changes diff against. LF since F-4d (2026-10-09; `Engine/Config/README.md`): compare with `git diff --ignore-cr-at-eol` |
+| `Engine/Config/*.ini` | `System/Default.ini`, `DefUser.ini`, `DefaultXbox.ini`, `DefUserXbox.ini`, `KeyBinds.ini` | byte for byte at the import; the baseline our config changes diff against. `Default.ini` and `DefUser.ini` are LF since F-4d (2026-10-09; `Engine/Config/README.md`): compare them with `git diff --ignore-cr-at-eol`; Epic's three reference copies `DefaultXbox.ini`, `DefUserXbox.ini`, `KeyBinds.ini` are Epic's bytes again (CRLF) since the F-4 follow-up (9d5683a) |
 | `docs/epic/` | `Help/ReadMe.txt`, `MacroLanguage.txt`, `XMV_Compression.txt`, `AVI2XMV.bat`, `Bundler/readme.txt` | the build notes worth reading |
 | `vendor/glue/`, `cmake/TargetArch.cmake`, `cmake/toolchain-mingw-w64.cmake` | engine-ut2004 | byte for byte (`webrtc-shim.js` must stay identical across engine repos) |
 
