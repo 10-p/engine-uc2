@@ -51,6 +51,7 @@ void USDL2Client::StaticConstructor()
 	new(GetClass(),TEXT("JoyDeadZone"),       RF_Public)UFloatProperty(CPP_PROPERTY(JoyDeadZone),       TEXT("Input"),    CPF_Config );
 	new(GetClass(),TEXT("LogInput"),          RF_Public)UBoolProperty (CPP_PROPERTY(LogInput),          TEXT("Input"),    CPF_Config );
 	new(GetClass(),TEXT("SplitScreenJoinInMatch"),RF_Public)UBoolProperty(CPP_PROPERTY(SplitScreenJoinInMatch),TEXT("Input"),CPF_Config );
+	new(GetClass(),TEXT("SplitScreenFullDetail"),RF_Public)UBoolProperty(CPP_PROPERTY(SplitScreenFullDetail),TEXT("Display"),CPF_Config );
 
 	// Compiled defaults for the inherited UClient settings, equal to Default.ini's [SDL2Drv.SDL2Client]
 	// (a copy of [WinDrv.WindowsClient]). UClient::StaticConstructor registers them without values, so
@@ -90,6 +91,7 @@ void USDL2Client::StaticConstructor()
 	JoyDeadZone			= 0.35f;	// [XboxDrv.XboxClient] JoyDeadZone in Epic's inis
 	LogInput			= 0;
 	SplitScreenJoinInMatch	= 1;	// G-6: players 3 and 4 (UC2's menus stop at two; splitscreen.md)
+	SplitScreenFullDetail	= 1;	// G-9: the owner keeps full detail in split screen on PC (splitscreen.md)
 	UIScaleMode			= UISCALE_Fit43;	// D-2: the UI in a centred 4:3 box (Native640 = as before)
 	UIMenuBackground	= UIMENUBG_Fill;	// D-2: menu backgrounds fill the window (ui-scale.md)
 	UISharpText			= 1;				// D-2: glyphs from bigger sizes of the font when the UI is scaled up

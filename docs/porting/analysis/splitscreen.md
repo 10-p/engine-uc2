@@ -466,3 +466,73 @@ the edges stretched); Epic's maths keeps 90 across and crops the strips to 31 de
 45 x 13, a letterbox through a telescope: ReduceFOV 0.5 was made for quarters and never tried on that strip); the
 proposal keeps the single player's 106 across and crops the strips to 41 up. Quarters: AutoFOV and the proposal are
 the single player's view exactly; Epic's are zoomed (79 across). No decision taken here: the owner chooses.
+
+### G-9 step 2 - full detail in split screen (`[SDL2Drv.SDL2Client] SplitScreenFullDetail=True`)
+
+What Epic's code does (`USplitScreenMgr::UpdateDetailLevels`, `UnSplitScreenMgr.cpp`, after every join/leave/map load):
+with N split views it applies `SSDetailLevels(N-1)` (`SplitScreenMgr.uc` defaultproperties) to the client (coronas,
+dynamic lights, decals, deco layers, projectors), the level (`DetailChange(DetailMode)`, `PARTICLEATTEN`) and every
+split viewport (blob shadows, camera effects, `ScaleFOVX/Y = ReduceFOV`); with no split view `SSDetailLevels(0)`. So a
+single player is ALWAYS at entry 0 (DetailMode 2, coronas, decals, projectors, real shadows, particles x1), whatever
+the ini says. `bUseDynamicDrawScale` (pawns drawn bigger with distance from THE player: `AUCPawn::ScalePawn`, only
+with one viewport) is switched off while split: a gameplay aid made for one viewer, not a detail setting; kept.
+
+Change:
+- `UClient::SplitScreenKeepsFullDetail()` (`Source/Engine/Inc/UnCamera.h`, virtual, 0 = Epic's), overridden by
+  `USDL2Client` (`SDL2Drv.h`) with the new config key `SplitScreenFullDetail` (`SDL2Client.cpp`: registered, compiled
+  default 1; `Default.ini` and the web copy `True`).
+- `UpdateDetailLevels`: when the client keeps full detail, every split view gets entry 0 (the single player's settings)
+  except `ReduceFOV`, which stays the layout's (0.5 for three and four players): it is the FOV maths of Epic's view
+  (AutoFOV=0), replaced per frame by AutoFOV anyway, and the FOV is the owner's separate choice (step 1). `False` =
+  the Xbox's reductions, untouched. One log line per update: `Split screen: N views, detail of one player
+  (SplitScreenFullDetail) (DetailMode 2, coronas 1, decals 1, projectors 1, deco layers 1, blob shadows 0, particles
+  x1.0, ReduceFOV 0.50)` / `detail level 3 (Xbox) (DetailMode 0, coronas 0, decals 0, projectors 0, ...)`.
+
+Measured (GPU, `logs/g9/render-full` = default, `logs/g9/render-xbox` = `G6_ARGS=-ini:...SplitScreenFullDetail=False`;
+`tools/dev/g6-splitscreen.sh g9 render`, load < 16 at start):
+- The log lines say what each run set: full = entry 0 for 2, 3, 4 views; xbox = levels 1, 2, 3 (coronas 0 from two
+  players, decals/projectors/deco layers 0 from three, particles x0.6/0.4/0.2, DetailMode 1/0/0, blob shadows).
+- render-full: g6-measure 0 failed (the same-view checks |diff| without post-processing 3.35 / 3.38 / 3.60 / 3.61 for
+  n2a / n3 / n4 / n4d, G-6 had 3.2-3.6 with Epic's reductions in force). render-xbox: g6-measure 8 FAILED, all
+  same-view: that run's single-player picture n1 was NOT at spot A (the pawn was placed there, NETPLACE "ok", but the
+  frozen frame shows a first-person view elsewhere: the third-person camera did not follow before time was frozen;
+  G-6 saw the same for a freshly joined player, n2b, 1 run in 3). Not a detail effect (single player is entry 0 in
+  both runs). `tools/dev/g6/g9-detail.py` therefore compares both runs' spot-A views with the full run's single
+  picture: |diff| without / with post-processing, full vs Xbox: n2a 3.35/5.43 vs 3.36/5.34, n3 3.38/5.11 vs 3.36/5.26,
+  n4 3.60/5.93 vs 3.57/5.58, n4d 3.61/6.08 vs 3.63/6.22: `PASS g9-detail` (full not further from the single player).
+  The difference does not grow; at spot A it does not shrink either: DM-Deadbolt has NO corona light (`ucc-bin
+  batchexport` of the map: 0 of 176 lights with bCorona), no projector actor, and the frozen views show no decals, so
+  what Epic's reductions remove is nearly absent from that picture (`logs/g9/detail-full-vs-xbox.png`: the |full -
+  Xbox| x4 column is dark except the pawns' poses).
+- 4-player frame rate (`g6-splitscreen.sh g9 bench4`, GPU Quadro P620, 1280x720, four players at spots A C D E, FPS
+  log over 20 s, alternating, load 15-18.7 at the starts: NOT a quiet machine):
+
+| run | fps | frame ms avg / p99 / max | 1% low |
+|---|---|---|---|
+| Xbox detail 1 | 19.2 | 52.0 / 64.7 / 72.3 | 14.5 |
+| full detail 1 | 16.2 | 61.8 / 245.7 / 255.9 | 3.9 |
+| Xbox detail 2 | 21.9 | 45.7 / 118.5 / 188.6 | 5.8 |
+| full detail 2 | 16.6 | 60.2 / 226.7 / 264.4 | 3.9 |
+
+  Full detail costs about 10-15 ms a frame with four players here (16.4 against 20.6 fps, -20%), and both full runs
+  had frames of 230-260 ms (1% low 3.9 fps) that the Xbox runs had less of: to look at on a quiet machine (particles
+  x1 against x0.2 and four views of the same emitters is the first suspect). Single-player is not affected (one view:
+  entry 0 before and after; the fps-bench single-player comparison is in the regressions).
+
+Where single player shows coronas, shadows and decals (`tools/dev/g6-splitscreen.sh g9 corona` / `detail`, DM-Praxis:
+nine bCorona lights, a ring over the round room; GPU):
+- `corona` part: six candidate views, each shot with the client's coronas on and off (`set SDL2Client Coronas
+  False`): the ring shows from the round room (2,189 to 22,775 pixels lit by coronas; `logs/g9/corona/`).
+- `detail` part: P1 looks up at the ring, P2 at the ceiling slab the ring is behind (single player: 44 px, i.e. no
+  corona: Epic's line check from the view hides them), P3/P4 elsewhere; four players at P1..P4.
+- **A real bug found** with full detail, before any fix (`logs/g9/detail0-full`, `logs/g9/corona-leak-before-fix.png`):
+  player TWO's quadrant (P2) showed 3,329 corona pixels against the single player's 44 at the same spot: the ring that
+  player ONE sees, drawn through the ceiling. Cause, in Epic's shared code: one global `FCoronaRender GCoronaRender`
+  (`UnRenderVisibility.cpp`) holds the lights seen last, which fade out over a few frames and are drawn with
+  `ZTest=0` (`UnRender.cpp` `RenderCoronas`), and the time of the last draw; every split view drew every light any
+  view had just seen, with its own camera, through walls, and the fade ran on the milliseconds between two views. The
+  Xbox never met it: its split screen had coronas off (`SSDetailLevels` from two players). Fix (`UnRender.h`
+  `UC2CoronaRenderFor` / `UC2ResetCoronas`, `UnRenderVisibility.cpp`, `UnLevel.cpp`): each split view other than the
+  first gets a corona state of its own (four at most; more falls back to the shared one); `Viewports(0)` (the single
+  player, the first split view) keeps `GCoronaRender`, so one viewport is exactly as before; the three places where
+  Epic reset the global reset them all.

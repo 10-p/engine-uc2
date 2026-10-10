@@ -95,6 +95,7 @@ class USDL2Client : public UClient, public FNotifyHook
 	FLOAT				JoyDeadZone;			// stored by SETDEADZONE, as UXboxClient (nothing reads it there either)
 	BITFIELD			LogInput;				// SDL2Input log lines for every pad event
 	BITFIELD			SplitScreenJoinInMatch;	// G-6: Start on an unbound pad during a match adds a split-screen player
+	BITFIELD			SplitScreenFullDetail;	// G-9: split-screen players keep the single player's detail (else the Xbox's)
 
 	// Variables.
 	UBOOL				InMenuLoop;
@@ -126,6 +127,7 @@ class USDL2Client : public UClient, public FNotifyHook
 	class UViewport* NewViewport( const FName Name );
 	void GetInitScreenSize( INT& SizeX, INT& SizeY );
 	UBOOL SplitScreenViewports() { return 1; }	// G-6: split-screen viewports are rectangles of the one window
+	UBOOL SplitScreenKeepsFullDetail() { return SplitScreenFullDetail; }	// G-9
 
 	// USDL2Client interface.
 	void PumpEvents();

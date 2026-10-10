@@ -584,6 +584,11 @@ class ENGINE_API UClient : public UObject
 	// paths (SPLIT ADD/REMOVE make and remove real players); WinDrv's one-window-per-viewport client keeps
 	// Epic's PC stand-ins.
 	virtual UBOOL SplitScreenViewports() { return 0; }
+	// uc2 port (G-9): whether split-screen players keep the single player's detail (USplitScreenMgr::
+	// UpdateDetailLevels: Scion's SSDetailLevels lower it per player count for the Xbox: no coronas, blob shadows,
+	// lower DetailMode, fewer particles, no decals/projectors/deco layers for 3-4). SDL2Drv's [SDL2Drv.SDL2Client]
+	// SplitScreenFullDetail (True on PC); every other client keeps the Xbox's reductions.
+	virtual UBOOL SplitScreenKeepsFullDetail() { return 0; }
 
     INT GetTextureLODBias (ELODSet LODSet);
 

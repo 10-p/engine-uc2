@@ -1003,6 +1003,16 @@ struct FCoronaRender
     void Reset();
 };
 
+// uc2 port (G-9): the corona state of a viewport. Epic's one global FCoronaRender keeps the lights seen last (fading
+// out, drawn without a depth test) and the time of the last draw: with several split-screen views a frame, every
+// view also drew the coronas the others had just seen, through walls, and the fade ran on the time between two views.
+// The Xbox never met it (coronas off while split, SSDetailLevels); SplitScreenFullDetail turns them on, so each split
+// view other than the first gets a state of its own. Viewports(0) (the single player, the first split view) keeps
+// the global, as before.
+ENGINE_API FCoronaRender& UC2CoronaRenderFor( UViewport* Viewport );
+// Every state reset (where Epic reset the global: a level's detail change, destruction, editor reconcile).
+ENGINE_API void UC2ResetCoronas();
+
 // scion sz -
 class FPostProcessRender
 {

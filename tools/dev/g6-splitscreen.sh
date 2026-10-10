@@ -16,6 +16,7 @@
 #          fov     (G-9) GPU as render: the same frozen frame with AutoFOV on and with Epic's maths, 1-4 players, and a
 #                  second run with the proposal [ufront.AutoFOV] SplitClampToFullScreen=True; one sheet per layout
 #                  (<out>/fov-<n>players.png) with every viewport's FOV from the engine's "[AutoFOV] shown" lines
+#          detail  (G-9) GPU, DM-Praxis: coronas, shadows, decals single player and in a 4-player quadrant
 #          bench4  (G-9) GPU: four players at fixed spots, the engine's FPS log (G6_BENCH_SECS=20, G6_BENCH_NAME)
 #          kbplayer (G-9) Xvfb, KeyboardIsPlayer=True (the default): keyboard+mouse player one alone, a pad that joins as
 #                  player two, every device moving/turning/firing its own player only, unplug/replug, leave, rejoin;
@@ -400,6 +401,147 @@ sleep 0.5
 SCEN
 }
 
+# G-9: split-screen detail where the single player shows coronas, shadows and decals: DM-Praxis (DM-Deadbolt has no
+# corona light at all: the t3d export has none of its 176 lights with bCorona). The spots (found with the corona part):
+# P1 looks up at the ring of corona lights over the round room, P2 looks at the ceiling slab the ring is behind (no
+# corona in a single player's view: the corona's line check is occluded), P3/P4 elsewhere; PD looks down at the floor
+# in front (shots leave decals there, the pawn's shadow falls there). Single player: every spot shot with the client's
+# coronas on and off (s<k>, s<k>nc), then PD after three shots (sd). Four players at P1..P4: the picture with coronas
+# on and off (q, qnc), then player one at PD after three shots (qd). tools/dev/g6/g9-detail.py --praxis counts, per
+# quadrant, the pixels a corona lights and compares them with the single player at the same spot: player one's
+# quadrant must show its coronas (full detail), and no quadrant may show more than its single player (a corona seen by
+# another player drawn through a wall). Run with each SplitScreenFullDetail (G6_ARGS).
+G9_P1="632 503 380 26372 9000"
+G9_P2="-1220 288 690 3929 7000"
+G9_P3="154 -486 552 0 0"
+G9_P4="-937 -867 360 0 0"
+G9_PD="632 503 380 26372 -2500"
+# coronas: single player on DM-Praxis, each of G9_SPOTS ("x y z yaw pitch;...") shot with the client's coronas on and
+# off (g9-corona-c<i>.png / -c<i>nc.png): where a view shows coronas (finding the spot for the detail part).
+scen_corona() {
+  cat <<SCEN
+pyfile $checks
+wait Bringing Level DM-Praxis.MyLevel up for play 150
+sleep 6
+pad 0 attach
+sleep 1
+seek 20 P['_'].pawn == 1 ;; padtrigger righttrigger
+sleep 2
+chan exec God
+chan exec SetAutoCenterPitch 0
+sleep 1
+vprobe _p
+SCEN
+  local i=0 spot
+  IFS=';' read -ra spots <<< "${G9_SPOTS:-0 770 700 0 10000}"
+  for spot in "${spots[@]}"; do
+    i=$((i+1))
+    cat <<SCEN
+chan exec set LevelInfo TimeDilation 1
+pyexec chan('exec NETPLACE ' + V['_p'][0]['player'] + ' $spot')
+sleep 2
+pyexec chan('exec NETPLACE ' + V['_p'][0]['player'] + ' $spot')
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+sleep 1.5
+shot c$i
+chan exec set SDL2Client Coronas False
+sleep 1.5
+shot c${i}nc
+chan exec set SDL2Client Coronas True
+sleep 1
+SCEN
+  done
+}
+scen_detail() {
+  local k spot i
+  cat <<SCEN
+pyfile $checks
+wait Bringing Level DM-Praxis.MyLevel up for play 150
+sleep 6
+pad 0 attach
+sleep 1
+pad 1 attach
+sleep 1
+pad 2 attach
+sleep 1
+pad 3 attach
+sleep 1
+seek 20 P['_'].pawn == 1 ;; padtrigger righttrigger
+sleep 2
+chan exec God
+chan exec SetAutoCenterPitch 0
+sleep 1
+vprobe _p
+SCEN
+  k=0
+  for spot in "$G9_P1" "$G9_P2" "$G9_P3" "$G9_P4"; do
+    k=$((k+1))
+    cat <<SCEN
+pyexec chan('exec NETPLACE ' + V['_p'][0]['player'] + ' $spot')
+sleep 2
+pyexec chan('exec NETPLACE ' + V['_p'][0]['player'] + ' $spot')
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+sleep 1.5
+shot s$k
+chan exec set SDL2Client Coronas False
+sleep 1.5
+shot s${k}nc
+chan exec set SDL2Client Coronas True
+sleep 1
+chan exec set LevelInfo TimeDilation 1
+SCEN
+  done
+  cat <<SCEN
+pyexec chan('exec NETPLACE ' + V['_p'][0]['player'] + ' $G9_PD')
+sleep 2
+pyexec chan('exec NETPLACE ' + V['_p'][0]['player'] + ' $G9_PD')
+sleep 2
+SCEN
+  for i in 1 2 3; do printf 'pad 0 axis righttrigger 32767\nsleep 0.4\npad 0 axis righttrigger 0\nsleep 1.0\n'; done
+  cat <<SCEN
+pyexec chan('exec NETPLACE ' + V['_p'][0]['player'] + ' $G9_PD')
+sleep 2
+chan exec set LevelInfo TimeDilation 0.0001
+sleep 1.5
+shot sd
+chan exec set LevelInfo TimeDilation 1
+SCEN
+  join 1; join 2; join 3
+  cat <<SCEN
+vprobe _q
+pyexec [chan('exec NETPLACE ' + vsplit('_q')[k]['player'] + ' ' + s) for k, s in ((1, '$G9_P2'), (2, '$G9_P3'), (3, '$G9_P4'))]
+sleep 2
+pyexec [chan('exec NETPLACE ' + vsplit('_q')[k]['player'] + ' ' + s) for k, s in ((0, '$G9_P1'), (1, '$G9_P2'), (2, '$G9_P3'), (3, '$G9_P4'))]
+sleep 3
+pyexec [chan('exec NETPLACE ' + vsplit('_q')[k]['player'] + ' ' + s) for k, s in ((0, '$G9_P1'), (1, '$G9_P2'), (2, '$G9_P3'), (3, '$G9_P4'))]
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+sleep 1.5
+shot q
+chan exec set SDL2Client Coronas False
+sleep 1.5
+shot qnc
+chan exec set SDL2Client Coronas True
+sleep 1
+vprobe q
+pyexec dump('$out/g9-detail-q.json')
+check detail-four-players layout_ok('q') and VS['q'][1] == 4
+chan exec set LevelInfo TimeDilation 1
+pyexec chan('exec NETPLACE ' + vsplit('_q')[0]['player'] + ' $G9_PD')
+sleep 2
+SCEN
+  for i in 1 2 3; do printf 'pad 0 axis righttrigger 32767\nsleep 0.4\npad 0 axis righttrigger 0\nsleep 1.0\n'; done
+  cat <<SCEN
+pyexec chan('exec NETPLACE ' + vsplit('_q')[0]['player'] + ' $G9_PD')
+sleep 2
+chan exec set LevelInfo TimeDilation 0.0001
+sleep 1.5
+shot qd
+SCEN
+}
+
 # G-9: keyboard+mouse as a player of their own ([SDL2Drv.SDL2Client] KeyboardIsPlayer=True, the default). The
 # keyboard's click starts the match alone; a virtual pad attached then is unbound (port 1: port 0 is the keyboard's)
 # and moves nobody until its Start joins it as player two; then every device drives its own player only; the pad
@@ -521,6 +663,7 @@ vprobe fpb
 pyexec print('  pad fire', fired('fpa','fpb'))
 check kb-pad-fire-fires-pad-player-only only_fired('fpa','fpb',1)
 pad 0 detach
+expect kb-pad-unplugged-opens-epics-controller-removed-menu OpenMenu \\[UCMenu.ControllerRemovedMenu\\] 15
 expect kb-pad-unplugged SDL2 pads: pad 1 disconnected 15
 sleep 2
 vprobe u1
@@ -528,6 +671,9 @@ check kb-pad-unplugged-its-player-stays VS['u1'][1] == 2 and ports('u1') == [0, 
 pad 0 attach
 expect kb-pad-plugged-again-port-1 SDL2 pads: pad 1 connected 15
 sleep 2
+seek 6 P['_'].menu == 'None' ;; padpress start
+check kb-replugged-pad-start-closes-the-menu P['_'].menu == 'None'
+sleep 1
 SCEN
   pad_walk p1r 0 1
   cat <<SCEN
@@ -699,6 +845,22 @@ for part in $parts; do
     render) scen_render > "$scen"; run_game g6-render 1 480 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True $KBOLD
             python3 "$repo/tools/dev/g6/g6-measure.py" "$out" > "$out/g6-measure.txt" 2>&1; tail -n 30 "$out/g6-measure.txt";;
     menu)   scen_menu   > "$scen"; run_game g6-menu   0 420 "" "$scen" $KBOLD;;
+    corona) scen_corona > "$scen"; run_game g9-corona 1 480 "DM-Praxis?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True $KBOLD
+            python3 - "$out" <<'PY'
+import glob, os, sys
+from PIL import Image, ImageChops
+out = sys.argv[1]
+for on in sorted(glob.glob(os.path.join(out, 'g9-corona-c*.png'))):
+    if on.endswith('nc.png'):
+        continue
+    off = on[:-4] + 'nc.png'
+    if os.path.exists(off):
+        d = ImageChops.subtract(Image.open(on).convert('L'), Image.open(off).convert('L')).point(lambda v: 255 if v > 25 else 0)
+        print(f"{os.path.basename(on)}: {d.histogram()[255]} pixels brighter with coronas on, box {d.getbbox()}")
+PY
+            ;;
+    detail) # G-9: coronas, shadows, decals in a quadrant (GPU, DM-Praxis); G6_ARGS chooses SplitScreenFullDetail
+            scen_detail > "$scen"; run_game g9-detail 1 480 "DM-Praxis?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True $KBOLD;;
     bench4) # G-9: four players' frame rate on the GPU (G6_BENCH_NAME names the output, default g9-bench4)
             bn=${G6_BENCH_NAME:-g9-bench4}
             scen_bench4 > "$scen"; run_game "$bn" 1 $(( ${G6_BENCH_SECS:-20} + 400 )) "DM-Deadbolt?NumBots=0" "$scen" $KBOLD
