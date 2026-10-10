@@ -32,3 +32,13 @@ SDL2 port, Emscripten's proxying, the browser's rules, the sibling engines) are 
    enabled by the launcher's first-boot seed of `UseJoystick=True`.
 2. If clean: drop the `UseJoystick` delta from `sync-web-ini.py` (the web file then has the native `True`),
    `Engine/Config/README.md`, rebuild `wasm-perf` here (only the preloaded ini changes), re-run the spec on it.
+
+## G-11 (2026-10-10): the pads' player slots, the same on the web
+
+The owner's final rule (splitscreen.md G-11): `[SDL2Drv.SDL2Client] PadsStartAtPlayerTwo` (G-9's `KeyboardIsPlayer`
+renamed) is False natively and on the web; `tools/dev/sync-web-ini.py` has no delta for it any more, and the launcher's
+Advanced "Force gamepads to start with second player" (frontend target data `gamepadPorts`) sets it per player under
+THE RULE. Player one's pad pulled out opens no "controller removed" page on the web either (the same `PadRemoved`). The
+launcher's "press any button" hint and its connect/disconnect notices were removed (frontend notebook, G-11): SDL's
+Emscripten driver gets `gamepadconnected` on the engine thread by itself. Chrome lists a pad only after a button press
+on it; UC2's own "press Start" for player two makes that happen naturally.
