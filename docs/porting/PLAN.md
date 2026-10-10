@@ -317,3 +317,10 @@ M16's video decoder), then silence; web guests excluded from the Xbox standby ch
 rumble through the browser's vibration API; the language option stays per game; anti-aliasing OFF by default on
 the web (people enable it in the ini): G-10. Still open: `UseTerrain3Layer` on by default (measured never slower,
 up to 20% faster; waiting for a yes).
+
+Owner, 2026-10-10 (evening): split-screen FOV = option 3 (one player's FOV for every viewport, `SplitClampToFullScreen`
+on) and Epic's split-screen detail reductions kept; `UseTerrain3Layer` on; the GL4ES cube-map/2D fix is pushed to the
+fork with a full explanation and a heads-up note for the sibling engines; the DM-Fury xemu check is closed (the root
+cause was found); shadow strength CLOSED: the tree-canopy projector on CTF-Aqueduct has the same strength as the Xbox
+(the dark band in the sheet is the cliff's lightmap, not the projector); the pad-only rule for native split screen is
+an open discussion (the first pad can never be player one while `KeyboardIsPlayer=True`).
