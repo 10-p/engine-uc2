@@ -17,6 +17,11 @@
 	distortion (alpha > 0) and their mean and largest red/green (the accumulated offsets,
 	DistortionAccum.psh), and writes it as PixTraceAccum-<frame>-<n>.ppm in the working folder.
 
+	GLPIXTRACE <x> <y> all dump (B-2, docs/porting/analysis/decay-flash.md): also every render target after
+	each pass that draws into it, as PixTrace-<frame>-<n>.ppm (colour) and -a.pgm (alpha), and at each refresh
+	of the reference copy (pp-scale) that copy and the main colour it was made from (PixTrace-<frame>-ref<k>,
+	-main<k>), top row first, in the working folder. About 100 files for a frame of DM-Decay.
+
 	Quiet unless armed: two calls from DrawPrimitive, which return at once.
 =============================================================================*/
 
@@ -26,10 +31,50 @@ static INT	GPixTraceFrame	= -1;	// the device frame being traced (-1: off)
 static INT	GPixTraceX		= 0,
 			GPixTraceY		= 0;
 static UBOOL GPixTraceAll	= 0;
+static UBOOL GPixTraceDump	= 0;	// B-2: "dump": every render target after each pass, and the device's copies
 static INT	GPixTraceDraw	= 0;
 
-void UC2GL_PixelTraceArm( UUC2GLRenderDevice* RenDev, INT X, INT Y, UBOOL All )
+//
+// B-2: the framebuffer bound now (W x H) as <Name>.ppm (colour) and <Name>-a.pgm (alpha), top row first.
+//
+void UC2GL_PixelTraceDumpBound( UUC2GLRenderDevice* RenDev, INT W, INT H, UBOOL BottomFirst, const TCHAR* Name )
 {
+	if( W <= 0 || H <= 0 )
+		return;
+	TArray<BYTE> Pixels( W * H * 4 );
+	RenDev->glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+	RenDev->glReadPixels( 0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, &Pixels(0) );
+	for( INT Alpha=0; Alpha<2; Alpha++ )
+	{
+		FString File = FString::Printf( TEXT("%s%s"), Name, Alpha ? TEXT("-a.pgm") : TEXT(".ppm") );
+		FArchive* Ar = GFileManager->CreateFileWriter( *File );
+		if( !Ar )
+			continue;
+		FString Header = FString::Printf( TEXT("%s\n%i %i\n255\n"), Alpha ? TEXT("P5") : TEXT("P6"), W, H );
+		Ar->Serialize( (void*)TCHAR_TO_ANSI(*Header), Header.Len() );
+		for( INT y=0; y<H; y++ )
+			for( INT x=0; x<W; x++ )
+			{
+				BYTE* P = &Pixels(((BottomFirst ? H-1-y : y)*W + x)*4);
+				Ar->Serialize( Alpha ? P+3 : P, Alpha ? 1 : 3 );
+			}
+		delete Ar;
+	}
+}
+
+UBOOL UC2GL_PixelTraceDumping( UUC2GLRenderDevice* RenDev )
+{
+	return GPixTraceDump && GPixTraceFrame >= 0 && RenDev->FrameCounter == GPixTraceFrame;
+}
+
+INT UC2GL_PixelTraceFrame()
+{
+	return GPixTraceFrame;
+}
+
+void UC2GL_PixelTraceArm( UUC2GLRenderDevice* RenDev, INT X, INT Y, UBOOL All, UBOOL Dump )
+{
+	GPixTraceDump	= Dump;
 	GPixTraceFrame	= RenDev->FrameCounter + 1;
 	GPixTraceX		= X;
 	GPixTraceY		= Y;
@@ -150,6 +195,8 @@ void UC2GL_PixelTraceLog( FOpenGLRenderInterface* RI, INT Pass, const FColor& Be
 			delete Ar;
 		}
 	}
+	if( GPixTraceDump && !Main && RT->Width > 0 && RT->Height > 0 )
+		UC2GL_PixelTraceDumpBound( RI->RenDev, RT->Width, RT->Height, 0, *FString::Printf( TEXT("PixTrace-%i-%03i"), GPixTraceFrame, GPixTraceDraw ) );
 	for( INT s=0; s<MS->StagesUsed && s<MAX_STAGES; s++ )
 	{
 		FOpenGLMaterialStateStage& St = MS->Stages[s];

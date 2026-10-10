@@ -1,0 +1,37 @@
+# A/B at the owner's spot once the cloud is there: every candidate stage switched off and on again, one at a time.
+chan exec TELEPORT -337.1 2.3 -418.4 32950 1193
+sleep 3
+chan exec TELEPORT -337.1 2.3 -418.4 32950 -3000
+sleep 2
+chan exec TELEPORT -337.1 2.3 -418.4 32950 1193
+sleep 2
+chan exec WHEREAMI
+shot on
+chan exec GLPIXTRACE 640 300 all
+sleep 1
+chan exec set UCScreenEmissive Enabled 0
+sleep 1.5
+shot noemissive
+chan exec set UCScreenEmissive Enabled 1
+sleep 1.5
+shot on2
+chan exec set UCScreenBloom Enabled 0
+sleep 1.5
+shot nobloom
+chan exec set UCScreenBloom Enabled 1
+chan exec set UCScreenDOF Enabled 0
+sleep 1.5
+shot nodof
+chan exec set UCScreenDOF Enabled 1
+chan exec DYNAMICGAMMA 0
+sleep 1.5
+shot nodyngamma
+chan exec DYNAMICGAMMA 1
+sleep 1.5
+shot on3
+chan exec POSTPROCESS 0
+sleep 1.5
+shot nopp
+chan exec POSTPROCESS 1
+sleep 2
+shot on4

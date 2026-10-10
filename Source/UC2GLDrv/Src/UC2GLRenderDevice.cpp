@@ -2050,10 +2050,11 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	else if( ParseCommand(&Cmd,TEXT("GLPIXTRACE")) )
 	{
 		// GLPIXTRACE <x> <y> [all]: log what the next frame draws over that pixel (UC2GLPixelTrace.cpp; fx-fixes).
-		extern void UC2GL_PixelTraceArm( UUC2GLRenderDevice*, INT, INT, UBOOL );
+		extern void UC2GL_PixelTraceArm( UUC2GLRenderDevice*, INT, INT, UBOOL, UBOOL );
 		INT X = appAtoi( *ParseToken(Cmd,0) );
 		INT Y = appAtoi( *ParseToken(Cmd,0) );
-		UC2GL_PixelTraceArm( this, X, Y, ParseCommand(&Cmd,TEXT("ALL")) );
+		UBOOL All = ParseCommand(&Cmd,TEXT("ALL"));
+		UC2GL_PixelTraceArm( this, X, Y, All, ParseCommand(&Cmd,TEXT("DUMP")) );
 		return 1;
 	}
 	else if( ParseCommand(&Cmd,TEXT("FFPROGRAMS")) )

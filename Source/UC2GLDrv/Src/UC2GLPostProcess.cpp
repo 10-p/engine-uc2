@@ -431,6 +431,18 @@ static void UC2GL_UpdateReferenceCopy( UUC2GLRenderDevice* RenDev )
 	RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
 	RenDev->ReferenceVersion = RenDev->MainColorVersion;
 	RenDev->ReferenceCopies++;
+	extern UBOOL UC2GL_PixelTraceDumping( UUC2GLRenderDevice* );
+	if( UC2GL_PixelTraceDumping( RenDev ) )
+	{
+		// B-2 (GLPIXTRACE ... dump): the reference copy as the downsampling passes read it, and the main colour.
+		extern void UC2GL_PixelTraceDumpBound( UUC2GLRenderDevice*, INT, INT, UBOOL, const TCHAR* );
+		extern INT UC2GL_PixelTraceFrame();
+		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, RenDev->ReferenceFramebuffer );
+		UC2GL_PixelTraceDumpBound( RenDev, W, H, 0, *FString::Printf( TEXT("PixTrace-%i-ref%i"), UC2GL_PixelTraceFrame(), RenDev->ReferenceCopies ) );
+		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, RenDev->MainTextureFramebuffer() );
+		UC2GL_PixelTraceDumpBound( RenDev, RenDev->MainWidth, RenDev->MainHeight, 1, *FString::Printf( TEXT("PixTrace-%i-main%i"), UC2GL_PixelTraceFrame(), RenDev->ReferenceCopies ) );
+		RenDev->RenderInterface.RestoreAfterDeviceDraw();
+	}
 }
 
 //
