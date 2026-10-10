@@ -141,3 +141,22 @@ just made (a bug found with a 1 MB test build, step 4). `UC2AudioCheck` checks t
   `ucc.exe UC2ALAudio.UC2AudioCheck`: the same lines, 0 failures.
 - Not run: the browser (frontend parked; its manifest serves the cooked files only, so the web build keeps the
   cooked source), a game under wine with the disc banks.
+
+## Step 5 - the regression on the final binary (commit c6b444d's build), both trees, 2026-10-10
+
+`tools/dev/audio-regression.sh m16-xbox` (04:20, load 15.6 at start, 24 at the end) then `m16-cooked` (04:29, load
+16.0 -> 19.6); summaries in `logs/m16/audio-summary-{xbox,cooked}-final.txt`. Measured:
+
+| item | disc banks (`m16-xbox`) | cooked (`m16-cooked`) |
+|---|---|---|
+| check | 7,191 waves + 20 streams, 1 WMA; 2,464 full / 5 silent; 0 failures | 7,191 + 21; 2,465 / 4; 0 failures (unchanged) |
+| self-test | 45 checks, 0 failed; Pan3D -1.09, Pan2D -1.51 dB | 45, 0 failed; -1.10, -1.52 (unchanged) |
+| menu music | -18.98 dB (expected -19.00), corr. 0.842, PASS | -19.02 dB, 0.872, PASS |
+| Deadbolt | 0 silent s, 0 failed, 0 Critical, RSS 238 MB | 0, 0, 0, RSS 250 MB |
+| Praxis EFX / dry | 0 failed, RSS 241 / 236 MB | 0 failed, RSS 246 / 243 MB |
+| sound data in memory (Deadbolt, end) | decoded 5.7 MB, packs 0 | decoded 5.1 MB, packs 6.8 MB |
+
+Cue counts and levels vary run to run with the bots on either tree (the standing behaviour). The music line:
+`music NuBattle: playing ../Sounds/M_NuBattle.xwb (44100 Hz, 2 ch, looping, volume -1500 mB, ...)`. Not exercised in a
+game: a music bank's rewind at its end (the songs are 2-4 min, the captures 85 s; the check commandlet streams every
+bank to its end, not past it), a localised game run (the check resolves all four languages), split screen.
