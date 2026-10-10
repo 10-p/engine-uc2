@@ -279,3 +279,30 @@ post-process layers) must be ported; shaders no material can use may stay.
 **F-6 Audio**: decode the 19 missing waves from the shipped `.xwb`; cook `A_Vehicle`; spike "cue tables inside the
 Ogg packs" (Vorbis comment header) and report cost/benefit; HRTF ini key in UC2ALAudio as UT2004's.
 
+## Owner review of 2026-10-10: the parked items start now; task audit
+
+Owner, 2026-10-10: the items parked "for the frontend merge" (gamepad, split-screen, "among other things") are to be
+done now, in this order: G-1 HRTF launcher switch for uc2 (target data), G-2 the UC2 precache list (start empty,
+everything in `System/`, plus what a harness test sees loaded up to the menu; also fixes the 1.3 s cue-table
+start-up and the manifest vs cache budget), G-3 asset compression ignore list (ogg/oga/mp4 and other media stay
+uncompressed, the upload marks them so, a compress-everything flag for simple servers), G-4 language option in the
+Advanced section for every engine (data per target: ini key + language map; the old step-0 notebook is on branch
+`e4-language`), G-5 gamepad support in the frontend for every engine (the browser Gamepad API through to each
+engine's SDL pads; a per-target enable; engine-side patches for the siblings as files), G-6 split-screen on PC
+(engine; the step-0 map is on branch `e1-splitscreen`). Still with the owner: the web profile layout (with the
+profiles revisit), the menu-click wonkiness, Windows CI / GitHub (after the merge).
+
+Task audit (owner: "make sure that all of them are needed or close them"):
+- CLOSED (done or decided): BLOCKERS entries for the 12 projector shaders and the GL4ES/M6 shaders (M7b, M11),
+  per-bank OGG (M8), zone reverb and taunt slots (owner), the 19 waves (F-6), cooked media for the web, the
+  Core.dll patch, the reddit thread, opengl.gpuinfo access, the script SaveConfig base-class rule, Epic's double
+  assignment; O-6, O-14; the FXAA / WebGL 1 depth-texture items of REPORT.md (F-3).
+- TO DO (small, ours; D-1..D-4): D-1 settle the M13 exit-time dedicated-server crash/hang (one census with a hang
+  watcher); D-2 `HTTPDownload`/`Prefab` registered in the wrong package; D-3 stale text (BLOCKERS projectors/arm64,
+  `UnRenDev.h` comment, `WebRTCDrv.h` "unordered", audio.md; an O-3 line in LOG.md; a "changes since" addendum to
+  REPORT.md); D-4 test hygiene (pin the spawn in the arrow-strafe scenario, the browser strafe slope 0.22 vs 0.2 on
+  WebGL 2, the m7-effects self-test window, the twin's two known timing FAILs).
+- NEEDS THE OWNER (N-1..N-5): N-1 which shipped test console commands stay (recommended: keep the guarded cheats
+  and the diagnostics the tests need, delete the pure A/B toggles); N-2 arm64 client multiarch packages (sudo);
+  N-3 PipeWire i386 package (sudo) or stay on the PulseAudio fallback; N-4 the character class without a profile
+  (profiles revisit); N-5 the M8 XACT inferences (no Xbox check possible: keep as a note).
