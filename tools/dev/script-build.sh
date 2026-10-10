@@ -5,12 +5,18 @@
 #
 #   tools/dev/script-build.sh [options] [stage...]
 #     stages: assemble make strip compare (default: all four, in that order)
-#     --build <dir>     build directory with Source/UCC/ucc-bin (default build-native)
+#     --build <dir>     build directory with Source/UCC/ucc-bin (default build-native). A Windows build directory
+#                       (Source/UCC/ucc.exe and no ucc-bin, e.g. build-windows) switches to the Windows compiler:
+#                       ucc.exe is copied into the tree and every ucc run (make, strip) goes through wine via
+#                       tools/dev/m12-wine.sh, in the prefix $UC2_WINEPREFIX (default <WorkUC2>/.cache/wine-scripts;
+#                       created on first use, its wineserver is killed after each run). Everything else (assemble,
+#                       the inis, compare) is the same. S2, docs/porting/analysis/ucc-windows.md.
 #     --tree <name>     output tree <WorkUC2>/run/<name>; must start with m14, d<N> (a D-phase task's prefix,
-#                       e.g. d3-make), f<N> (an F-task's, e.g. f1-make), g<N> (a G-task's, e.g. g8-make) or jit
-#                       (default m14-make)
-#     --logs <dir>      where the logs go (default <WorkUC2>/logs/m14; a d<N> tree: <WorkUC2>/logs/d<N>; jit: logs/jit)
-#     --mem <size>      memory ceiling of the `ucc-bin make` run (default 3G)
+#                       e.g. d3-make), f<N> (an F-task's, e.g. f1-make), g<N> (a G-task's, e.g. g8-make), s<N>
+#                       (a spike's, e.g. s2-make) or jit (default m14-make)
+#     --logs <dir>      where the logs go (default <WorkUC2>/logs/m14; a d<N>/f<N>/g<N>/s<N> tree: <WorkUC2>/logs/<that
+#                       prefix>; jit: logs/jit)
+#     --mem <size>      memory ceiling of the `ucc-bin make` run (default 3G; also under wine)
 #     --headers         also export the C++ headers (into <tree>/<Pkg>/Inc, a scratch copy, never Source/)
 #     --extra "<args>"  more `ucc-bin make` arguments
 #
@@ -52,13 +58,24 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ ${#stages[@]} -eq 0 ] && stages=(assemble make strip compare)
-case "$tree" in m14*|d[0-9]*|f[0-9]*|g[0-9]*|jit*) ;; *) echo "tree name must start with m14, d<N>, f<N>, g<N> or jit: $tree" >&2; exit 2;; esac
+case "$tree" in m14*|d[0-9]*|f[0-9]*|g[0-9]*|s[0-9]*|jit*) ;; *) echo "tree name must start with m14, d<N>, f<N>, g<N>, s<N> or jit: $tree" >&2; exit 2;; esac
 case "$tree" in */*|*..*) echo "bad tree name: $tree" >&2; exit 2;; esac
 case "$build" in /*) ;; *) build=$repo/$build;; esac
 run=$work/run/$tree
-case "$tree" in d[0-9]*|f[0-9]*|g[0-9]*) logs=${logs:-$work/logs/${tree%%-*}};; jit*) logs=${logs:-$work/logs/jit};; esac
+case "$tree" in d[0-9]*|f[0-9]*|g[0-9]*|s[0-9]*) logs=${logs:-$work/logs/${tree%%-*}};; jit*) logs=${logs:-$work/logs/jit};; esac
 logs=${logs:-$work/logs/m14}
 mkdir -p "$logs"
+
+# The compiler: Linux ucc-bin, or (a Windows build directory) ucc.exe run through wine in its own prefix.
+if [ -x "$build/Source/UCC/ucc-bin" ]; then
+  ucc_src=$build/Source/UCC/ucc-bin; ucc_name=ucc-bin; ucc_run=(./ucc-bin)
+elif [ -f "$build/Source/UCC/ucc.exe" ]; then
+  ucc_src=$build/Source/UCC/ucc.exe; ucc_name=ucc.exe
+  export UC2_WINEPREFIX=${UC2_WINEPREFIX:-$work/.cache/wine-scripts}
+  ucc_run=("$repo/tools/dev/m12-wine.sh" "$run/System" ucc.exe)
+else
+  ucc_src=""; ucc_name=ucc-bin; ucc_run=(./ucc-bin)
+fi
 
 # EditPackages, in order ([Editor.EditorEngine] of DefaultXbox.ini), and the source folder of each.
 packages=(Core Engine UCAnnouncements Editor UnrealEd IpDrv UWeb GamePlay UnrealGame UCElements UCGameplay
@@ -66,7 +83,7 @@ packages=(Core Engine UCAnnouncements Editor UnrealEd IpDrv UWeb GamePlay Unreal
 srcdir() { case "$1" in GamePlay) echo Gameplay;; *) echo "$1";; esac; }
 
 assemble() {
-  [ -x "$build/Source/UCC/ucc-bin" ] || { echo "no $build/Source/UCC/ucc-bin" >&2; exit 1; }
+  [ -n "$ucc_src" ] || { echo "no $build/Source/UCC/ucc-bin (or ucc.exe)" >&2; exit 1; }
   rm -rf "$run"
   mkdir -p "$run"
   for d in "$assets"/*/; do
@@ -86,7 +103,7 @@ assemble() {
   # properties are read from them during the build.
   cp -f "$assets/System/DefaultXbox.ini" "$run/System/Avaris.ini"
   cp -f "$assets/System/DefUserXbox.ini" "$run/System/User.ini"
-  cp -f "$build/Source/UCC/ucc-bin" "$run/System/"
+  cp -f "$ucc_src" "$run/System/"
   for p in "${packages[@]}"; do
     s=$(srcdir "$p")
     mkdir -p "$run/$s"
@@ -112,12 +129,14 @@ make_scripts() {
   [ $headers -eq 1 ] && args="$args -ForceHeads" || args="$args -noh"
   rm -f "$run/System/ucc.log"
   set +e
-  (cd "$run/System" && "$capped" "$mem" 3600 -- ./ucc-bin make $args $extra -log=ucc.log) > "$log.out" 2>&1
+  local t0=$SECONDS
+  (cd "$run/System" && "$capped" "$mem" 3600 -- "${ucc_run[@]}" make $args $extra -log=ucc.log) > "$log.out" 2>&1
   local rc=$?
+  local dt=$((SECONDS - t0))
   set -e
   cp -f "$run/System/ucc.log" "$log" 2>/dev/null || true
   # Epic's ucc exits 1 when there was any warning (UCC.cpp "scion jg"); the verdict is the last log line.
-  echo "ucc-bin make $args $extra: exit $rc, $(grep -a -o '\(Success\|Failure\) - [0-9]* error(s), [0-9]* warning(s)' "$log" | tail -1) (output $log.out, log $log)"
+  echo "$ucc_name make $args $extra: exit $rc in ${dt} s, $(grep -a -o '\(Success\|Failure\) - [0-9]* error(s), [0-9]* warning(s)' "$log" | tail -1) (output $log.out, log $log)"
   for p in "${packages[@]}"; do
     if [ -f "$run/System/$p.u" ]; then echo "  built $p.u $(stat -c %s "$run/System/$p.u") bytes"; else echo "  MISSING $p.u"; fi
   done
@@ -165,14 +184,16 @@ strip_scripts() {
     echo "note: no $retail: the strip uses the leak's per-class inis (a few config defaults will differ)" >&2
   fi
   set +e
-  (cd "$run/System" && "$capped" "$mem" 3600 -- ./ucc-bin editor.stripsource -CONFORM -log=ucc.log) > "$log.out" 2>&1
+  local t0=$SECONDS
+  (cd "$run/System" && "$capped" "$mem" 3600 -- "${ucc_run[@]}" editor.stripsource -CONFORM -log=ucc.log) > "$log.out" 2>&1
   local rc=$?
+  local dt=$((SECONDS - t0))
   set -e
   cp -f "$run/System/ucc.log" "$log" 2>/dev/null || true
   # The shipped UCMenu.u was not stripped (all 171 text buffers hold the full text, 111 classes lack the flag a
   # load sets), unlike the other 15: it ships as `make` wrote it. Editor.u is skipped by the commandlet itself.
   cp -f "$run/Unstripped/UCMenu.u" "$run/System/UCMenu.u"
-  echo "ucc-bin editor.stripsource -CONFORM: exit $rc (output $log.out, log $log); UCMenu.u kept unstripped"
+  echo "$ucc_name editor.stripsource -CONFORM: exit $rc in ${dt} s (output $log.out, log $log); UCMenu.u kept unstripped"
   return $rc
 }
 

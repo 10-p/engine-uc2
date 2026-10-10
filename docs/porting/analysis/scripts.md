@@ -251,8 +251,11 @@ word, MSVC and the script linker start a new DWORD, so `GameCommandLine` and `Ed
 and `ExitProperties` destroyed a garbage array. `GCC_PACK(4)` added (the M3 rule), the 3 untagged first members
 of the generated `EditorClasses.h` tagged with `tools/dev/fix-bitfield-pack.py`, and `ucc-bin verifyclasses`
 now also checks the Editor classes (generated sizes plus every UEditorEngine member by script and C++ name;
-`Editor/Src/UC2EditorRegistrants.cpp`). Editor is built for 32-bit Linux only (root CMakeLists, M14 block):
-its UEditorEngine mirrors script's `int Pad[8]` with four pointers.
+`Editor/Src/UC2EditorRegistrants.cpp`). Editor is built at 32-bit pointers only (root CMakeLists, M14 block):
+its UEditorEngine mirrors script's `int Pad[8]` with four pointers. Since S2 that includes MinGW i686: `ucc.exe make`
+under wine builds the same packages as `ucc-bin make` (14 of 17 byte-identical, 3 differing only in texture import
+time stamps), after two Core fixes found by comparing them (stable package-save sorts, localization files read in
+NTFS order): `analysis/ucc-windows.md`.
 
 Result: UCElements, UCGameplay, UnrealGame, GameSpy (IpDrv): identical. The differences, all explained:
 

@@ -4270,6 +4270,43 @@ INT CDECL LinkerExportSort( const void* A, const void* B )
 	return GTempSave->MapObject(((FObjectExport*)B)->_Object) - GTempSave->MapObject(((FObjectExport*)A)->_Object);
 }
 
+// uc2 port (S2): SavePackage's three sorts by usage count must not depend on the C library. appQsort is the
+// C library's qsort, which leaves the order of equal keys to the library: glibc's (a merge sort) keeps them in
+// table order, msvcrt's (ucc.exe; seen under wine 10) does not, so the same scripts compiled by ucc-bin and by
+// ucc.exe appended the new names, imports and exports of a conformed save in different orders (same GUID and
+// generation, different tables). A stable merge sort gives every platform the order glibc gives.
+// docs/porting/analysis/ucc-windows.md, step 3.
+static void UC2StableSort( void* Base, INT Num, INT Width, QSORT_COMPARE Compare )
+{
+	if( Num < 2 )
+		return;
+	TArray<BYTE> Temp;
+	Temp.Add( Num * Width );
+	BYTE* Src = (BYTE*)Base;
+	BYTE* Dst = &Temp(0);
+	for( INT Run=1; Run<Num; Run*=2 )
+	{
+		for( INT Lo=0; Lo<Num; Lo+=2*Run )
+		{
+			INT Mid = Min( Lo+Run, Num ), Hi = Min( Lo+2*Run, Num );
+			INT i = Lo, j = Mid, k = Lo;
+			while( i<Mid && j<Hi )
+				// Equal keys: the left (earlier) one first.
+				if( Compare( Src+j*Width, Src+i*Width ) < 0 )
+					appMemcpy( Dst+(k++)*Width, Src+(j++)*Width, Width );
+				else
+					appMemcpy( Dst+(k++)*Width, Src+(i++)*Width, Width );
+			if( i<Mid )
+				appMemcpy( Dst+k*Width, Src+i*Width, (Mid-i)*Width );
+			if( j<Hi )
+				appMemcpy( Dst+k*Width, Src+j*Width, (Hi-j)*Width );
+		}
+		Exchange( Src, Dst );
+	}
+	if( Src != (BYTE*)Base )
+		appMemcpy( Base, Src, Num*Width );
+}
+
 //
 // Archive for tagging objects and names that must be listed in the
 // file's imports table.
@@ -4497,7 +4534,7 @@ UBOOL UObject::SavePackage( UObject* InOuter, UObject* Base, DWORD TopLevelFlags
 	#endif
 				SortStartPosition = Conform->NameMap.Num();
 			}
-			appQsort( &Linker->NameMap(SortStartPosition), Linker->NameMap.Num()-SortStartPosition, sizeof(Linker->NameMap(0)), LinkerNameSort );
+			UC2StableSort( &Linker->NameMap(SortStartPosition), Linker->NameMap.Num()-SortStartPosition, sizeof(Linker->NameMap(0)), LinkerNameSort );
 			unguard;
 
 			// Save names.
@@ -4576,7 +4613,7 @@ UBOOL UObject::SavePackage( UObject* InOuter, UObject* Base, DWORD TopLevelFlags
 			// of the previous generation's (UCMenu.u with the keys page: imports 17 and 19 swapped, and the operand bytes
 			// of every function that names them changed). It ran only in a conformed save that adds imports.
 			GTempSave = Linker;
-			appQsort( &Imports(SortStartPosition), Imports.Num() - SortStartPosition, sizeof(Imports(0)), LinkerImportSort );
+			UC2StableSort( &Imports(SortStartPosition), Imports.Num() - SortStartPosition, sizeof(Imports(0)), LinkerImportSort );
 			Linker->Summary.ImportCount = Linker->ImportMap.Num();
 		}
 
@@ -4646,7 +4683,7 @@ UBOOL UObject::SavePackage( UObject* InOuter, UObject* Base, DWORD TopLevelFlags
 				}
 	#endif
 			}
-			appQsort( &Exports(SortStartPosition), Exports.Num()-SortStartPosition, sizeof(Exports(0)), LinkerExportSort );
+			UC2StableSort( &Exports(SortStartPosition), Exports.Num()-SortStartPosition, sizeof(Exports(0)), LinkerExportSort );
 			Linker->Summary.ExportCount = Exports.Num();
 		}
 		unguard;
@@ -5665,6 +5702,38 @@ void UObject::ParseParms( const TCHAR* Parms )
 	Driver support.
 -----------------------------------------------------------------------------*/
 
+/*-----------------------------------------------------------------------------
+	uc2 port: file order (M14, moved here from Editor's UMakeCommandlet.cpp in S2).
+
+	FindFiles returned Epic's files in NTFS directory order: names compared code unit by code unit after
+	upper-casing (NTFS's upcase table; for these ASCII names, so '_' sorts after the letters). readdir() order
+	on Linux is the file system's (ext4: hash order, a different one on another file system), and the order can
+	matter: UMakeCommandlet creates classes in .uc file order (M14); CacheDrivers below reads the localization
+	files in this order, and reading a file creates the FNames of its sections and keys, so the order fixes
+	their FName indices, which decide the order of equal-usage names that a conformed save appends (S2:
+	UCGameplay.u and UCMenu.u came out with their new names in different orders from ucc-bin and ucc.exe).
+-----------------------------------------------------------------------------*/
+
+static INT UC2CompareNTFS( const FString& A, const FString& B )
+{
+	const TCHAR* a = *A;
+	const TCHAR* b = *B;
+	for( ; ; a++, b++ )
+	{
+		BYTE ca = (BYTE)appToUpper(*a), cb = (BYTE)appToUpper(*b);
+		if( ca!=cb )
+			return ca<cb ? -1 : 1;
+		if( !ca )
+			return 0;
+	}
+}
+CORE_API void UC2SortLikeNTFS( TArray<FString>& Files )
+{
+	for( INT i=1; i<Files.Num(); i++ )
+		for( INT j=i; j>0 && UC2CompareNTFS(Files(j-1),Files(j))>0; j-- )
+			Exchange( Files(j-1), Files(j) );
+}
+
 //scion ===========================================================
 //	SCION Function: CacheDrivers
 //	Author: superville
@@ -5711,6 +5780,7 @@ void UObject::CacheDrivers( UBOOL ForceRefresh )
 		// Gather list of all files in the default localization folder
 		// with the default language extension
 		TArray<FString> Files = GFileManager->FindFiles( Filename, 1, 0 );
+		UC2SortLikeNTFS( Files ); // uc2 port (S2): Windows' order, on every file system
 
 		// For each file in the list
 		for( INT j = 0; j < Files.Num(); j++ )
@@ -5788,6 +5858,7 @@ void UObject::CacheDrivers( UBOOL ForceRefresh )
 
 		// Get a list of all localization directories
 		TArray<FString> CoreLangs = GFileManager->FindFiles( TEXT("Localization\\*"), 0, 1 );
+		UC2SortLikeNTFS( CoreLangs ); // uc2 port (S2)
 
 		// For each directory
 		for( INT i = 0; i < CoreLangs.Num(); i++ ) {
