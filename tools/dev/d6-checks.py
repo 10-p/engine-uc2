@@ -152,3 +152,21 @@ def steady_speed(tag, start=0.6, end=1.3):
     if a is None or b is None or b['t'] <= a['t']:
         return 0.0
     return round(hd(a, b) / (b['t'] - a['t']), 1)
+
+
+def hop(tag):
+    """G-8: a dodge's signature in a watch trace: the pawn's rise (highest Z above the first sample; a dodge adds
+    DodgeSpeedZ, running on flat ground adds nothing), its displacement to the right of the first sample's view yaw at
+    the last sample (left is negative), and its top horizontal speed over 3-tick spans (units/s)."""
+    rows = W[tag]
+    if len(rows) < 4:
+        return {'rise': 0.0, 'side': 0.0, 'peak': 0.0, 'n': len(rows)}
+    yaw = rows[0]['yaw'] * math.pi / 32768.0
+    x0, y0, z0 = rows[0]['loc']
+    side = -(rows[-1]['loc'][0] - x0) * math.sin(yaw) + (rows[-1]['loc'][1] - y0) * math.cos(yaw)
+    peak = 0.0
+    for a, b in zip(rows, rows[3:]):
+        if b['t'] > a['t']:
+            peak = max(peak, math.hypot(b['loc'][0] - a['loc'][0], b['loc'][1] - a['loc'][1]) / (b['t'] - a['t']))
+    return {'rise': round(max(r['loc'][2] for r in rows) - z0, 1), 'side': round(side, 1), 'peak': round(peak, 1),
+            'n': len(rows)}

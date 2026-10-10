@@ -25,6 +25,10 @@
 #           turned up; the same turn per count (and the SDL warp-mode control run, evidence)
 #   walk    (on request; F-1) steady ground speeds: W, Shift+W, the pad's left stick at 1.0/0.5/0.35 (both trees)
 #   cheat   (on request; F-1) WHEREAMI/TELEPORT allowed and logged standalone and for a listen host
+#   dodge   (on request; G-8) bDoubleTapDodge=True: a double tap of A dodges (more sideways than A held as long,
+#           the pawn rises), Space + A still does, a double tap in the air against a wall wall-dodges; Lock + D still
+#           switches target, with Lock held a double tap switches and does not dodge, locked on it dodges and keeps the
+#           target; then the key off (the default): a double tap does not dodge, Space + A still does
 #   vanilla (on request; F-1) the D6_SHIP_TREE (Epic's shipped scripts) with OUR DefUser.ini: the mouse turns the view
 #           through Epic's PC path (the stick's curve: capped, not linear), up looks up, the Right arrow strafes,
 #           PageUp looks up
@@ -704,6 +708,123 @@ check vanilla-pageup-looks-up pitchdiff('Kc','Kd') > 500
 SCEN
 }
 
+# dodge (G-8): [UCGameplay.UCPlayerInput] bDoubleTapDodge=True (rebuilt UCGameplay.u). PlayersOnly first (the bots
+# stand still: no hits push the pawn). From the open spot (TELEPORT, jit-trace.sh's), a double tap of A against A held
+# for the same 0.6 s: the double tap dodges (the pawn rises, goes further to the left, faster); Space + A still dodges;
+# then against a wall on the left (the place where A held from the open spot stops: WHEREAMI 1938.2 1125.8 -34.3), a
+# jump, and in the air a double tap of D, away from it: a wall dodge (against the same jump with D held); then two
+# bots placed in front: Lock + one press of D still switches target; with the Lock button held a double tap of A
+# switches back and does not dodge; locked on (button released) a double tap of D dodges and keeps the target. `dodge off`: the same taps with the key off (the default): no dodge, Space + A
+# still dodges. Measurements: hop() in d6-checks.py (rise, sideways displacement, top speed from a watch trace).
+scen_dodge() {
+  local p=dodge spot="1977.8 583.7 -34.1 33000 0" wall="1938.2 1125.8 -34.3 33000 0"
+  [ "${1:-}" = off ] && p=dodge-off
+  start $p
+  cat <<SCEN
+chan exec PlayersOnly
+wait test: exec PlayersOnly 10
+SCEN
+  local part
+  for part in held tap space; do
+    printf 'chan exec TELEPORT %s\nsleep 1\nchan exec TELEPORT %s\nsleep 1\n' "$spot" "$spot"
+    echo "chan watch 20000 $part"
+    case $part in
+      held) printf 'keydown a\nsleep 0.6\nkeyup a\n';;
+      tap) printf 'keydown a\nsleep 0.06\nkeyup a\nsleep 0.06\nkeydown a\nsleep 0.48\nkeyup a\n';;
+      space) printf 'keydown a\nsleep 0.1\nkey space 0.1\nsleep 0.4\nkeyup a\n';;
+    esac
+    printf 'sleep 0.8\nchan log DODGE-%s-END\nwatch %s test: log DODGE-%s-END 30\n' "$part" "$part" "$part"
+    echo "pyexec M['$part']=save('$p-$part', hop('$part'))"
+  done
+  echo "check $p-held-a-runs-flat M['held']['rise'] < 3 and M['held']['side'] < -50"
+  if [ $p = dodge ]; then
+    cat <<SCEN
+check dodge-double-tap-a-dodges M['tap']['rise'] > 15 and M['tap']['side'] < M['held']['side'] - 30 and M['tap']['peak'] > 1.2 * M['held']['peak']
+check dodge-space-a-still-dodges M['space']['rise'] > 15 and M['space']['side'] < M['held']['side'] - 30
+SCEN
+    # the wall: on the left of the place (TELEPORT); a jump (Space, no direction), and in the air D held (the
+    # control) or a double tap of D (away from the wall: UCPawn.CanWallDodge traces behind the dodge direction)
+    for part in walljump walldodge; do
+      printf 'chan exec TELEPORT %s\nsleep 1\nchan exec TELEPORT %s\nsleep 1\n' "$wall" "$wall"
+      echo "probe $part-at"
+      echo "chan watch 20000 $part"
+      echo "key space 0.1"
+      echo "sleep 0.1"
+      case $part in
+        walljump) printf 'keydown d\nsleep 0.4\nkeyup d\n';;
+        walldodge) printf 'keydown d\nsleep 0.05\nkeyup d\nsleep 0.05\nkeydown d\nsleep 0.3\nkeyup d\n';;
+      esac
+      printf 'sleep 1.0\nchan log DODGE-%s-END\nwatch %s test: log DODGE-%s-END 30\n' "$part" "$part" "$part"
+      echo "pyexec M['$part']=save('dodge-$part', hop('$part'))"
+    done
+    cat <<SCEN
+check dodge-at-the-wall abs(P['walldodge-at'].loc[1]-1125.8) < 3 and abs(P['walljump-at'].loc[1]-1125.8) < 3
+check dodge-double-tap-in-the-air-wall-dodges M['walldodge']['peak'] > 1.3 * M['walljump']['peak'] and M['walldodge']['rise'] > M['walljump']['rise'] + 15
+chan exec TELEPORT $spot
+sleep 1
+pyexec chan('place 0 400 0'); chan('place 1 400 30')
+sleep 0.5
+tryseek 4 len(P['_'].others) >= 2 and P['_'].others[0]['los'] == 1 and P['_'].others[1]['los'] == 1 ;; pyexec chan('mouse 1636 0'); chan('place 0 400 0'); chan('place 1 400 30')
+probe pa
+check dodge-lock-two-targets-in-sight len(P['pa'].others) >= 2 and P['pa'].others[0]['los'] == 1 and P['pa'].others[1]['los'] == 1
+chan aim 0
+sleep 0.3
+chan exec Lock 1
+sleep 0.3
+chan exec Lock 0
+sleep 0.5
+probe la
+check dodge-lock-acquired P['la'].locked and P['la'].enemy in [o['name'] for o in P['pa'].others]
+chan exec Lock 1
+sleep 0.2
+keydown d
+sleep 0.6
+keyup d
+chan exec Lock 0
+sleep 0.5
+probe le
+check dodge-lock-and-one-press-of-d-switches-target P['le'].locked and P['le'].enemy != P['la'].enemy
+chan exec Lock 1
+sleep 0.2
+chan watch 20000 lockheld
+keydown a
+sleep 0.06
+keyup a
+sleep 0.06
+keydown a
+sleep 0.08
+keyup a
+sleep 0.4
+chan exec Lock 0
+sleep 0.5
+chan log DODGE-lockheld-END
+watch lockheld test: log DODGE-lockheld-END 30
+probe lf
+pyexec M['lockheld']=save('dodge-lock-held-double-tap-a', hop('lockheld'))
+check dodge-lock-held-double-tap-switches-and-does-not-dodge P['lf'].locked and P['lf'].enemy == P['la'].enemy and M['lockheld']['rise'] < 3
+chan watch 20000 lockedon
+keydown d
+sleep 0.06
+keyup d
+sleep 0.06
+keydown d
+sleep 0.3
+keyup d
+sleep 0.8
+chan log DODGE-lockedon-END
+watch lockedon test: log DODGE-lockedon-END 30
+probe lg
+pyexec M['lockedon']=save('dodge-locked-on-double-tap-d', hop('lockedon'))
+check dodge-locked-on-double-tap-dodges-and-keeps-the-target P['lg'].locked and P['lg'].enemy == P['lf'].enemy and M['lockedon']['rise'] > 15
+SCEN
+  else
+    cat <<SCEN
+check dodge-off-double-tap-a-does-not-dodge M['tap']['rise'] < 3 and abs(M['tap']['side'] - M['held']['side']) < 40
+check dodge-off-space-a-still-dodges M['space']['rise'] > 15 and M['space']['side'] < M['held']['side'] - 30
+SCEN
+  fi
+}
+
 fails=0
 passes=0
 count() {
@@ -784,7 +905,19 @@ PY
     vanilla)
       echo "== vanilla ($ship, Epic's shipped scripts, OUR DefUser.ini: Epic's PC mouse path)"
       scen_vanilla > "$out/vanilla.scen"; prep "$ship"; run vanilla "$ship" 0 300 "-ini:System:[Engine.Engine]:FrameRateCap=60"; count "$out/vanilla.result";;
-    *) echo "unknown scenario $s (look ini lazy pad lock before epic vanilla accel walk cheat)" >&2;;
+    dodge)
+      echo "== dodge ($tree, -ini:User:[UCGameplay.UCPlayerInput]:bDoubleTapDodge=True; then dodge-off, the key's default)"
+      scen_dodge > "$out/dodge.scen"; prep "$tree"
+      run dodge "$tree" 2 400 "-ini:System:[Engine.Engine]:FrameRateCap=60" "-ini:User:[UCGameplay.UCPlayerInput]:bDoubleTapDodge=True"
+      if grep -aq 'UCPlayerInput: double-tap dodge on (bDoubleTapDodge), DoubleClickTime=0.25' "$out/dodge.out"; then r=PASS; else r=FAIL; fi
+      printf '%s\tdodge-key-on-logged\tUCPlayerInput: double-tap dodge on\n' $r | tee -a "$out/dodge.result" | sed 's/\t/ /; s/\t/: /'
+      count "$out/dodge.result"
+      scen_dodge off > "$out/dodge-off.scen"; prep "$tree"
+      run dodge-off "$tree" 0 300 "-ini:System:[Engine.Engine]:FrameRateCap=60"
+      if grep -aq 'UCPlayerInput: double-tap dodge on' "$out/dodge-off.out"; then r=FAIL; else r=PASS; fi
+      printf '%s\tdodge-off-key-off-by-default\tno "double-tap dodge on" line\n' $r | tee -a "$out/dodge-off.result" | sed 's/\t/ /; s/\t/: /'
+      count "$out/dodge-off.result";;
+    *) echo "unknown scenario $s (look ini lazy pad lock before epic vanilla accel walk cheat dodge)" >&2;;
   esac
 done
 echo "d6-mouse: $passes PASS, $fails FAIL (scenarios: ${*:-look ini lazy pad lock before}; 'before' and 'epic' are evidence and not counted)"
