@@ -41,6 +41,7 @@ for c in $cases; do
 wait OpenMenu \[UCMenu.UC2MainMenu\] 120
 sleep 4
 probe main
+chan exec GET GameInfo DefaultPlayerName
 shot main-menu
 sleep 2.5
 shot main-menu-later
@@ -61,12 +62,9 @@ SCEN
       echo 'wait UC2Movie: \S+04a_AscPre5.xmv ended 60'
       echo 'sleep 4'
       echo 'chan exec GET UCDeathmatch GameDescription'
-      if [ -n "${UC2_GPU:-}" ]; then
-        printf 'pad attach\nsleep 1\npadtrigger righttrigger\nsleep 1\npadtrigger righttrigger\nsleep 1\npadtrigger righttrigger\n'
-      else
-        printf 'focus\nmove 640 360\nclick 1\nsleep 1\nclick 1\nsleep 1\nclick 1\n'
-      fi
-      echo 'wait read wave pack A_Ann_Female 30'
+      # Fire through the virtual pad (the input test channel): no window focus needed, software GL or GPU alike.
+      printf 'pad attach\nsleep 1\npadtrigger righttrigger\nsleep 1\npadtrigger righttrigger\nsleep 1\npadtrigger righttrigger\n'
+      echo 'wait read wave pack A_Ann_Female 60'
       echo 'sleep 2'
       echo 'shot match'
       echo 'sleep 1'

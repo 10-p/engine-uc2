@@ -115,3 +115,35 @@ exists, so no movie or loading screen can show there - m9-movies.py travels from
   (Core.deu `[Progress] Loading="LÄDT %s"`).
 - cinematic: `... Vorbis 44100 Hz 2 ch from ../Movies/04a_AscPre5_deu.oga ...; language deu: audio track 1 from
   ../Movies/04a_AscPre5_deu.oga`.
+- the localised class default `GET UCDeathmatch GameDescription` (exec through the channel) answers
+  `Frei-für-alle, töte oder werde getötet.`; at the menu `GET GameInfo DefaultPlayerName` answers `Joueur` in French
+  (the browser spec's probe).
+- Fire through the virtual pad (the X clicks of the first try did not reach the window under a load of 30), then the
+  match's announcer: `UC2Audio: [  33.96] read wave pack A_Ann_Female_deu.ogp (1389817 bytes) in 3 ms`.
+  Summary line (measured): `g4 match-deu: [Init: Language: deu] [bEnableStatLogging Falsch] movie=[language deu:
+  audio track 1 from ../Movies/04a_AscPre5_deu.oga] loading=["LÄDT..."] get=[Frei-für-alle, töte oder werde
+  getötet.] announcer=[A_Ann_Female_deu.ogp] shots=[match] capped_exit=0`.
+
+GPU (`UC2_GPU=1`, SDL offscreen, `GL_RENDERER : Quadro P620/PCIe/SSE2`): `menu-deu-gpu-main-menu-later.png`, the main
+menu in German, same captions as the software picture.
+
+What the cooked assets carry, and what is NOT localised (and why):
+- Voice: 21 of the 98 wave banks have a copy per language (`_deu/_fra/_ita/_spa`): the announcers (A_Announcer,
+  A_Ann_Female), the 13 character taunt banks (A_Taunt*), the story/tutorial speech (A_Tutorial1/2, A_AnubisCheats,
+  A_BarrensAmbush, A_HallAmbush, A_L1Robots). Not localised: A_Announcer_MK (the Mortal Kombat guest's announcer:
+  the Xbox disc has English only), the per-map ambience, weapons, pickups, gameplay effects and the 21 music banks
+  (no speech). The audio device picks `<Bank>_<lang>.uc2wb` first, then `<Bank>.uc2wb` (UC2ALAudioSubsystem.cpp
+  GetWaveBank, as XACT did).
+- Movies (`Movies/movie-manifest.json`, `track_languages` int/deu/fra/ita/spa): the 19 story cinematics have 5 sound
+  tracks each, all different from English (`same_as_int` false) -> `<Movie>_<lang>.oga`. Not localised: UC2_Logos,
+  UC2_Attract, 21_UC2_Credits, A51 (one track on the disc: music and effects), and the 87 texture movies (no sound).
+  Subtitles of the cinematics are off by default (the profile's captions setting) and are drawn from the movie's own
+  bands.
+- Text: 66-67 packages per language; the 11 without a copy (D3DDrv, Editor, IpDrv, Setup, Startup, UWeb, UnrealEd,
+  UnrealUtil, WinDrv, Window, avaris) are editor, PC-setup and driver packages the Xbox never localised; their few
+  player-visible strings (IpDrv's network errors) stay English through the per-key fallback.
+- No other language exists in the files (no Japanese, although the movie player's self-test knows `jpn`).
+
+No engine gap was found beyond the missing log line: menu text, voice banks, the cinematic track and the loading
+screen all follow `[Engine.Engine] Language` already (M8/M9 built them that way); Italian's lower-case file names are
+handled by the case-insensitive lookup.
