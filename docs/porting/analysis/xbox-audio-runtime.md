@@ -83,3 +83,46 @@ The differences, all explained:
   steps, the reader's round-number guess gives -1060 for -1066 (0.06 dB).
 Nothing else differs: every cue, track, event, wave reference, loop count, delay, playlist type, 3D distance,
 rolloff, priority, pitch, category, headroom boost, RPC curve.
+
+## Step 2 - the C++ readers and the second source in the device (2026-10-10)
+
+`Source/UC2ALAudio/Src/UC2XboxBanks.cpp` (new): `UC2LoadXwbWaveBank` (header + entry table only, compact and full
+entries, loop regions to frames, WMA entries marked missing), `UC2DecodeXboxAdpcm` (tools/uc2xwb.py's arithmetic),
+`UC2DecodeWave` (either source: Vorbis from the pack in memory, an Xbox entry read from the `.xwb`),
+`FUC2XwbStream` (music, read from the file 64 blocks at a time), `UC2LoadXsbSoundBank` (step 1's layout, bounds-checked
+reads, lengths/loops as the cook computes them from the base-language `.xwb` entry tables). All reads are
+little-endian byte by byte; no Xbox SDK, no structure casts.
+
+Device (`UC2ALAudioSubsystem.cpp`): `GetSoundBank` takes `<Bank>.uc2cues`, else `<Bank>.xsb`; `LoadWaveBankFile`
+(new, called by `GetWaveBank` for `<Bank>_<lang>` then `<Bank>`, the only change to that lookup) takes `.uc2wb`, else
+`.xwb`; both log the source in their load line. `EnsureBuffer` decodes through `UC2DecodeWave`; `PlayMusic` streams an
+`.xwb` music bank (`FUC2MusicSlot::Xwb`) and says when the bank is WMA. The decoded-wave cache (OpenAL buffers, both
+sources) is bounded: `UC2_DECODED_BUDGET` 192 MB, LRU, never a buffer a voice plays or will re-queue, never the one
+just made (a bug found with a 1 MB test build, step 4). `UC2AudioCheck` checks the Xbox files too and dumps tables
+(`DUMP=`) and PCM (`PCM=`, `PCMBANKS=a+b+c`: UE2's `Parse` stops an unquoted value at a comma).
+
+## Step 3 - proof (2026-10-10; native build, run trees `m16-xbox` = `UC2_XBOX_SOUNDS=1`, `m16-cooked`, `m16-both` = `add`)
+
+- **PCM byte compare** (`tools/dev/audio-xwb-pcm-compare.sh m16-xbox A_Weapon,A_L1Robots,A_Announcer_spa`, measured;
+  A_Weapon = ADPCM + 3 PCM16 + full entries, A_L1Robots = all PCM16, A_Announcer_spa = stereo ADPCM):
+  `PCM RESULT: 371 waves in 3 banks, 35244700 bytes, 0 waves differ` (`logs/m16/pcm-compare-2.out`; the first run
+  wrote only A_Weapon: the comma in PCMBANKS, fixed).
+- **Tables** (`tools/dev/audio-xsb-compare.sh m16-both`, measured, `logs/m16/xsb-compare-detail.out`): 79 banks, 2,459
+  sounds, 2,469 cues; 1,241 differences, 0 NEW: i3dl2 1, length 1,202 (+1..+5 ms), name 9, volume 25 (6 mB), weights 4
+  = exactly the Python reader's list of step 1. The C++ and the Python reader agree with each other.
+- **UC2AudioCheck on the disc tree** (measured): `Xbox wave banks: 183 .xwb files; waves: 7191 decoded to their
+  entry's length of 7191 (1 WMA entries not decoded); music streams: 20 of 20`; `Xbox sound banks: 79 .xsb files, 79
+  load`; `cues [int]: 2469 in 79 cue tables: 2464 resolve fully, 0 partly, 5 to no decodable wave` (the 4 the project
+  has no wave for + Adoratrice, WMA); every language the same, 1,107 cues through a localised bank; `0 failures`.
+- **UC2AudioSelfTest on the disc tree**: 45 checks, 0 failed, Pan3D -1.09 dB / Pan2D -1.51 dB (cooked: -1.10/-1.52;
+  the waves are the Xbox's ADPCM, not the Vorbis encode). A second suite on the same tree failed 3 reverb checks: the
+  previous suite's last capture had left `Avaris.ini` with `UseEFX=False` and `WaveFile=` (a harness artifact,
+  `audio-regression.sh` now removes it first; rerun on a clean ini: 45/0).
+- **Captures** (`tools/dev/audio-regression.sh`, load < 16 at each start, rising to ~20 during):
+  menu music NuBattle -18.98 dB on the disc tree (expected -19.00, PASS, correlation 0.845-0.880) against -19.02 dB
+  cooked (0.830); Deadbolt/Praxis: 0 silent seconds, 0 failed cues, 0 Critical on both trees (numbers in the report).
+- **Memory** (peak RSS of uc2.bin, VmHWM, and the cue log's memory line at the end; gameplay differs run to run):
+  menu 166 MB disc / 170 MB cooked; Deadbolt 243 / 256; Praxis EFX 234 / 247; Praxis dry 243 / 248. Decoded-wave cache
+  6.0 MB / 5.6 MB (Deadbolt), wave packs held 0 KB / 9.3 MB. The disc source holds no compressed data.
+- **Eviction** (a test build with a 1 MB budget, tree `m16-evict`, not committed): first run 38 failed cues (the bug
+  above), after the fix `failed 0`, 93 buffers evicted, cache at most 3.0 MB (buffers in use cannot go).
