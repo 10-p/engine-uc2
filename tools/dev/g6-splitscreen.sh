@@ -24,7 +24,9 @@
 #          hud     (B-3) GPU as render: where each viewport's HUD sits, 1-4 players joined in the match, player one
 #                  at spot A, frozen frame: the picture and the HUD alone (TOGGLERENDERLEVEL); measured per viewport
 #                  by tools/dev/g6/b3-hud-measure.py (health bar, weapon list, score box, reticle in design pixels).
-#                  G6_RES and G6_ARGS (-ini:System:[Engine.Client]... UIScaleMode) choose the shape
+#                  G6_RES and G6_ARGS (-ini:System:[SDL2Drv.SDL2Client]:UIScaleMode=...) choose the shape
+#          hudmenu (B-3) Xvfb: G-6's menu flow (two players joined on the character page, Epic's own path), the
+#                  match's HUDs alone, measured as hud's n2 (<out>/hudmenu/)
 #          (default: input render menu audio; G-6's parts run with KeyboardIsPlayer=False, the pad as player one)
 #   G6_RES=1280x720   window size;   G6_OUT=<dir>  output (default <WorkUC2>/logs/g6)
 #   G6_ARGS="-ini:..."  more settings for every game run (G-9: -ini:System:[SDL2Drv.SDL2Client]:SplitScreenFullDetail=False)
@@ -822,6 +824,23 @@ sleep 2
 vprobe m2
 check menu-match-has-two-split-players layout_ok('m2') and VS['m2'][1] == 2 and pads_in_join_order('m2') and all_split_huds('m2')
 shot match-two-players
+SCEN
+  # B-3 (hudmenu): the HUD of two players who joined in the menus (Epic's own path: the split HUDs made at the map's
+  # start), alone, for b3-hud-measure.py.
+  [ "${menu_hud:-0}" = 1 ] && cat <<SCEN
+sleep 8
+chan exec set LevelInfo TimeDilation 0.0001
+sleep 1.5
+shot n2
+chan exec TOGGLERENDERLEVEL
+sleep 1.5
+shot n2-hud
+chan exec TOGGLERENDERLEVEL
+vprobe n2
+pyexec dump('$out/hudmenu/b3-hud-n2.json')
+chan exec set LevelInfo TimeDilation 1
+SCEN
+  cat <<SCEN
 key Escape
 expect menu-pause-menu-opens OpenMenu \[UCMenu.InGame_MainMenu\] 15
 sleep 2
@@ -887,6 +906,12 @@ for part in $parts; do
             scen_hud > "$scen"; run_game b3-hud 1 480 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True $KBOLD
             uimode=Fit43; case "${G6_ARGS:-}" in *UIScaleMode=Native640*) uimode=Native640;; esac
             python3 "$repo/tools/dev/g6/b3-hud-measure.py" "$out" $uimode > "$out/b3-hud-measure.txt" 2>&1; tail -n 40 "$out/b3-hud-measure.txt";;
+    hudmenu) # B-3: two players joined in UC2's menus (Xvfb, G-6's menu flow), their HUDs measured as the hud part's n2
+            mkdir -p "$out/hudmenu"
+            menu_hud=1 scen_menu > "$scen"; run_game b3-hudmenu 0 480 "" "$scen" $KBOLD
+            for k in n2 n2-hud; do cp -f "$out/b3-hudmenu-$k.png" "$out/hudmenu/b3-hud-$k.png" 2>/dev/null; done
+            uimode=Fit43; case "${G6_ARGS:-}" in *UIScaleMode=Native640*) uimode=Native640;; esac
+            python3 "$repo/tools/dev/g6/b3-hud-measure.py" "$out/hudmenu" $uimode > "$out/hudmenu/b3-hud-measure.txt" 2>&1; cat "$out/hudmenu/b3-hud-measure.txt";;
     corona) scen_corona > "$scen"; run_game g9-corona 1 480 "DM-Praxis?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True $KBOLD
             python3 - "$out" <<'PY'
 import glob, os, sys

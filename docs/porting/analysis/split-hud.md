@@ -54,3 +54,91 @@ Plan: (1) a `hud` part in `tools/dev/g6-splitscreen.sh` (GPU, frozen frame, the 
 players) and `tools/dev/g6/b3-hud-measure.py` (per viewport: health bar, weapon list, score box, reticle, in design
 pixels through the viewport's UI box); (2) Epic's reference: shipped packages, 640x480, `UIScaleMode=Native640`;
 (3) ours: rebuilt packages at 640x480, 1280x720, 1920x1080 with Fit43; (4) conclude, fix if ours; (5) regressions.
+
+## Steps 1-3 - measured: Epic's 4:3 split against ours (2026-10-10)
+
+Build: this worktree unchanged (= main 81fd44e), `bin/capped 6G 5400 -- cmake --build build-native -j4` rc 0
+(`logs/b3/build-native-0.log`); trees `run/b3` (rebuilt packages, UCGameplay.u sha256 45dd2558...) and `run/b3ship`
+(Epic's shipped GUI.u/UCGameplay.u/UCMenu.u, UCGameplay.u sha256 c675a442..., = `assets/uc2-shipped/System`).
+
+The test (new parts of `tools/dev/g6-splitscreen.sh`, G-6's `KeyboardIsPlayer=False` model as on the web):
+- `hud` (GPU, SDL offscreen, ShotRamp): DM-Deadbolt, pads join in the match one by one (1, 2, 3, 4 players), every
+  player placed at G-6's fixed spots, 8 s for the join/spawn messages to go, time frozen, the picture and the HUD alone
+  (TOGGLERENDERLEVEL), the viewports probed. `tools/dev/g6/b3-hud-measure.py` maps every viewport's pixels back into
+  the design space its canvas gives the HUD (as `UCanvas::ApplyUIBox`) and takes per element the bounding box of a
+  colour in a design region: health = the green fill, weapons = the lit list at the lower left, score = the rank box,
+  reticle = the crosshair's bright pixels around the design centre; the reticle's centre against the viewport's centre.
+  `b3-hud-compare.py` tabulates the runs against the reference; `b3-hud-sheet.py` makes one sheet per layout.
+- `hudmenu` (Xvfb): G-6's menu flow (player two's Start on the character page, Epic's own way to two players: the split
+  HUDs are made at the map's start), the match's HUD alone, measured the same way.
+
+Runs (all `PASS b3-hud` 7 checks / `PASS b3-hudmenu` 9 checks, 0 Critical, load 13-31: frozen-frame pictures):
+`logs/b3/epic640` (b3ship, 640x480, `UIScaleMode=Native640`: the Xbox's own screen and Epic's script untouched by any
+UI box: THE REFERENCE), `ours640` (b3, 640x480, Fit43), `ours720` (b3, 1280x720), `ours1080` (b3, 1920x1080),
+`ship1080` (b3ship, 1920x1080, Fit43), `epic640menu` (b3ship 640x480 Native640, menu flow), `ours720menu` (b3,
+1280x720, menu flow). Table: `logs/b3/compare-before.txt`.
+
+Two players, top-left corner of each element in design pixels of the 640x240 half (x, y), and the reticle's centre
+minus the viewport's centre:
+
+| viewport | element | Epic's intent (script) | Epic 640x480 shipped | ours 640x480 | ours 1280x720 | ours 1920x1080 | shipped .u 1920x1080 |
+|---|---|---|---|---|---|---|---|
+| top (player 1, index 0) | health fill | (39, 33) | (40.0, 33.0) | (40.0, 33.0) | (40.0, 32.7) | (40.0, 32.9) | (40.0, 32.9) |
+| | weapon list | (38, 155) | (38.0, 155.0) | (38.0, 155.0) | (38.0, 155.3) | (37.8, 155.6) | (37.8, 155.6) |
+| | score box | | (290.0, 32.0) | (290.0, 32.0) | (290.0, 32.0) | (290.2, 32.0) | (290.2, 32.0) |
+| | reticle - centre | (0, 0) (anchor 320,120) | -1.00, 0 | -0.50, 0 | -0.33, 0 | -0.67, 0 | -0.89, 0 |
+| bottom (player 2, index 1) | health fill | (39, 4) = 33 - 29 | (40.0, 4.0) | (40.0, 4.0) | (40.0, 4.0) | (40.0, 4.0) | (40.0, 4.0) |
+| | weapon list | (38, 126) | (38.0, 126.0) | (38.0, 126.0) | (38.0, 126.7) | (37.8, 126.7) | (37.8, 126.7) |
+| | score box | | (283.0, 3.0) | (283.0, 3.0) | (283.3, 3.3) | (283.1, 3.1) | (283.1, 3.1) |
+| | reticle - centre | (0, 0) | -1.00, 0 | -1.00, 0 | -0.67, 0 | -0.67, 0 | -0.67, 0 |
+
+(weapon list's script position: `Element_WeaponSelector_*_Split` DrawY 300 x ScaleY 0.53 = 159, the list's frame
+starts 4 px above; the reticle's -0.3..-1 design px is the crosshair art's own off-centre, D-2 step 4, the same in
+Epic's picture.) Largest difference from Epic's picture, every element, every size: **0.7 design px** (1 screen pixel
+of rounding at 1.5x/2.25x). `PASS b3-hud-{ours640,ours720,ours1080,ship1080}-as-epic640`. The menu flow gives the same:
+Epic 640x480 health (40,33) / (40,4), ours 1280x720 (40,33.3) / (40.7,4.7), reticle -0.5 / -0.67 design px.
+
+What this says about the owner's three observations (picture `logs/b3/sheet-n2.png`: Epic at 640x480 | ours at
+1920x1080 | ours with Epic's shipped scripts at 1920x1080):
+- "player 1's health lower than player 2's": **Epic's script** (cause b): `UCHUD.SetSplitPosition` gives the
+  bottom half (viewport index 1) `SafeZoneOffsetY=-29`; Epic's own 4:3 picture shows player one's health at y 33 and
+  player two's at y 4 of their halves, exactly as ours.
+- "a lot of space on the top where the bottom is squished": the same design. Epic laid the two halves out as one TV
+  screen with the safe zone (`SAFE_ZONE_Y=34`) at the screen's outer edges only: the top half keeps 32 px above its
+  health bar and its weapon list ends at y 238 of 240, on the split line; the bottom half starts at the split line
+  and ends 31 px above the screen's bottom. Same numbers in Epic's picture.
+- "is the reticle aligned to the split screen centre": yes, in both: the crosshair's anchor is the half's centre
+  (320, 120: `CreateScriptedCrosshair` ScaleY 0.5) and the measured centre is 0.3-1 design px left of it (the art).
+- Our UI box (cause a) adds nothing for two players: a half of a 16:9 window gets the 640x240 box at the half's full
+  height, pillar-boxed, which is precisely the half of the single player's 4:3 box: Epic's 4:3 screen scaled. The HUD's
+  own scaling (cause c) is not involved (`SplitScaleY` only sizes the debug safe-zone box).
+
+**Conclusion for the owner: two-player split screen is identical to the original game's 4:3 split screen (every HUD
+element within 0.7 design pixels, at 640x480, 1280x720 and 1920x1080, with our packages and with Epic's): it can be
+let be.** Nothing changed in the engine or the scripts.
+
+Seen on the way (not placement):
+- The reticle's SIZE differs between runs (player one's 37-38 x 14 in the rebuilt-package runs, 51-52 x 20 with the
+  shipped ones; 29 x 10 in both menu-flow runs; player two 48-58 wide): the crosshair's animation state at the frozen
+  moment (`CanvasElement` ScaleX/ScaleY move positions only, sizes come from the element's scale actions). Its centre
+  is the same in all. Seen only; why the rebuilt package's player one sits in the small state more often was not
+  investigated.
+
+## Three and four players: not Epic's, ours to decide (owner question)
+
+Epic's scripts lay out halves only ("if we are going to support more than 2 split-screen, this function needs to be
+adjusted"), and UC2's menus stop at two players. The 640x480 shipped run shows what Epic's code does with Scion's
+quarters on its own screen (`logs/b3/sheet-n3.png`, `sheet-n4.png`, left column): the 640-wide half layout drawn into a
+320-wide quarter, the right half of the HUD (score box, the reticle at 137 px right of the quarter's centre) cut off.
+Ours (G-6) fits the 640x240 layout into each quarter, centred (at 1920x1080 a 960x540 quarter gets a 960x360 box, 90 px
+empty above and below; at 1280x720 640x240 in 640x360, 60 px), reticle at the quarter's centre (-0.3..-1 design px).
+What is not consistent: `SetSplitPosition`'s -29 goes to whatever has CLIENT index 1 (`Client->Viewports`, which
+Scion's `ZSortViewports` orders with an unstable sort among equal `OffsetZ`): four players -> the top-RIGHT quarter's
+HUD is 29 design px higher than the other three (health y 4 against 33); three players -> the bottom-RIGHT quarter's
+is, not the bottom-left's. Options (not built, the owner chooses):
+1. leave it (G-6 as merged);
+2. Epic's rule by row: every view whose top edge is the split line gets the bottom half's offset (3 players: both bottom
+   quarters -29; 4 players: both bottom quarters -29, top ones 0); two players unchanged. Natively, without touching
+   the scripts, by giving `ClientSetHUD`'s `GetSplitscreenLayout` call the view's row (0 top, 1 below) as the index
+   when more than two views are up (the other callers keep the client index, which they use as "first player");
+3. no offset for quarters (all four like the top-left one).
