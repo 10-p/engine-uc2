@@ -460,3 +460,42 @@ Results:
   (`logs/f1b/web2/e2e-net.txt`).
 - Noticed, not mine: `ufrontend` has an uncommitted change to `targets/uc2/file-manifest.json` dated 11:28:28, when I
   ran no frontend command (my frontend builds ran at 11:15 and 11:48). Left untouched.
+
+## G-8 double-tap dodge (2026-10-10, worktree engine-uc2-g8-dodge, branch g8-dodge from main 352dd5a)
+
+Owner's decision (PLAN.md, review of 2026-10-10 task list via the coordinator): UT2004-style double-tap dodging in the
+REBUILT `UCGameplay.u` only, behind `[UCGameplay.UCPlayerInput] bDoubleTapDodge` (default False), key taps counted as
+well as the stick. Epic's shipped package keeps Space + direction only (it does not know the key).
+
+### Step 1: the code (script only, no native change)
+
+- `Source/UCGameplay/Classes/UCPlayerInput.uc`: `var globalconfig bool bDoubleTapDodge` (non-native class: no C++
+  layout); in `PlayerInput`, before Epic's edge lines, when the key is on, `KeyX/KeyY = KeyAxis(aBaseX/aBaseY, the
+  stick's -1..1)`; Epic's eight edge/was lines OR them in (`aForward > 0 || KeyY > 0`): off, KeyX/KeyY stay 0, the
+  edges are the stick's alone, as Epic wrote them. `KeyAxis` is KeysAsStick's arithmetic (the keys' 24000 without
+  the stick's walk that UnIn.cpp adds on PC; the Xbox branch without it) moved into a function; KeysAsStick calls it
+  (same values). The first-tick log adds "UCPlayerInput: double-tap dodge on (bDoubleTapDodge), DoubleClickTime=..."
+  when the key is on (a general diagnostic like the mouse line next to it). Default `bDoubleTapDodge=false`.
+- `Source/UCGameplay/Classes/UCPlayerController.uc` `PlayerWalking.ModifyDoubleClickMove`: after Epic's two cases
+  (the dodge key's direction, the delayed dodge), a double-tap result (`DCLICK_Forward..Right`) is returned instead of
+  dropped when the key is on and the Lock button is not held (`!bWantsToLock`). Then Epic's `UnrealPlayer.
+  PlayerWalking.ProcessMove` calls `UCPawn.Dodge` exactly as for Space + direction (direction from Ctrl_Move_*,
+  which KeysAsStick fills; replicated through ServerMove as before). `CheckForDoubleClickMove` is untouched
+  (UT2004's code, `DoubleClickTime` 0.25 from `[Engine.PlayerInput]`).
+- `Engine/Config/DefUser.ini` (+ `web/DefUser.ini` by `tools/dev/sync-web-ini.py`): `bDoubleTapDodge=False` with a
+  comment. `tools/dev/script-build.sh`: tree names may start with `g<N>` (logs to `logs/g<N>`).
+
+Design decisions:
+1. **Lock + tapped A/D.** Target switching happens only while the Lock button is held (`SearchForLockTarget`
+   runs while `bWantsToLock`; the first press of a direction switches at once when the 0.3 s search timer has run
+   out). The first tap of a double tap cannot be told from a single tap when it happens, so "a double tap dodges and
+   does not switch" with the button held would need every keyboard switch delayed by DoubleClickTime (0.25 s) or a
+   switch undone afterwards. Decided instead: **while the Lock button is held, taps only pick targets (no
+   double-tap dodge; a double tap switches once, as before); locked on with the button released (the usual
+   circle-strafe), a double tap dodges and keeps the target** (a dodge never touches Enemy). Space + direction dodges
+   in both. The pad stick follows the same rule.
+2. **Wall dodge.** `UCPawn.Dodge` already does it: in `PHYS_Falling` it calls `CanWallDodge` (a wall behind the dodge
+   direction, `NextWallDodgeTime`, `MaxWallDodgeCount`, the air-dodge variant), `bCanWallDodge=true` in UCPawn's
+   defaults; Space + direction in the air uses it today. So a double tap in the air against a wall wall-dodges, as in
+   UT2004 (and as in UT2004 not right after a ground dodge: `DoubleClickDir` stays Active until landing).
+3. The timed input sequences (`ProcessInputMatching`) read the stick and keys as before; nothing changes for them.
