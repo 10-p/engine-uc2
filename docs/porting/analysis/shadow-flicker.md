@@ -210,3 +210,12 @@ desktop/twin show whole triangles, after only the small motion).
   |difference| x 4) show only animated content (the aquarium's water and fish, the pool's surface, the pawn's idle
   pose, the waterfall); static geometry, decals and HUD are unchanged. Seen, not a numeric pass/fail (no two-run
   control of the same binary was taken).
+- `M11_SERIAL=1 M11_DESKTOP_TREE=b1m11 M11_TWIN_TREE=b1m11t tools/dev/m11-twin.sh` (all checks; `logs/b1/m11-twin.txt`,
+  summary `logs/b1m11t/m11-twin-summary.txt`; load 14-22 from other agents): **34 PASS, 0 FAIL**: shaders, gputest,
+  boot (97 fragment + 405 vertex shaders on GL4ES), self-test 15/15 on both bindings, progtest 485 programs per side
+  largest difference 0, pinned DM-Deadbolt (off: mean 0.384), 14 effects (liandri passed this time), m6 4 views,
+  fallbacks 4 + the known INFO for depth textures on WebGL 1, es2, movies 9/9, leftovers.
+- `tools/dev/fps-bench.sh <tree> DM-Praxis 20` on the Quadro, 1280x720, alternating main's driver (tree b1) and the
+  fix (tree b1m7b), load 5-9 (`logs/b1/fps/`): before 82.3, 77.3, 77.4 fps (1% low 48.4, 45.6, 47.4); after 76.4,
+  77.2, 79.3 fps (1% low 42.9, 43.8, 47.9). The same within the run-to-run spread (about 3 fps here): a slope-scaled
+  offset costs nothing measurable.
