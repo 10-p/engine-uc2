@@ -621,6 +621,8 @@ def mips(rest):
 
 def relocated(a, off_a, b, off_b):
     """True if a and b differ only in 4-byte words that are absolute file offsets of the same place."""
+    if a is None or b is None:      # one side is not a plain object (S1: a decompiled package lacks #exec imports)
+        return False
     if len(a) != len(b):
         return False
     i = 0
@@ -977,7 +979,7 @@ class Comparison:
             if cls == 'Texture':
                 try:
                     ma, mb = mips(va), mips(vb)
-                except (ParseError, struct.error, IndexError):
+                except (ParseError, struct.error, IndexError, TypeError):
                     return None
                 if ma == mb:
                     return 'lazy-offsets'
@@ -987,7 +989,7 @@ class Comparison:
                 return None
             if relocated(va, old.exports[i]['offset'], vb, new.exports[i]['offset']):
                 return 'lazy-offsets'
-            if cls == 'StaticMesh' and self.name == 'Editor' and len(va) == len(vb):
+            if cls == 'StaticMesh' and self.name == 'Editor' and va is not None and vb is not None and len(va) == len(vb):
                 n = sum(1 for x, y in zip(va, vb) if x != y)
                 return ('FINDING: %d of %d bytes differ (low bits of floats computed when `#exec NEW StaticMesh` imports '
                         'the .ase); an editor-only mesh (texture browser preview), never loaded by the game' % (n, len(va)))

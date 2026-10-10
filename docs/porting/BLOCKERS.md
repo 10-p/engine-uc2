@@ -4,6 +4,11 @@ Audited 2026-10-10 with the owner ("make sure that all of them are needed or clo
 listed at the end with the reason; PLAN.md "Owner review of 2026-10-10" has the task list (D-1..D-4 ours, N-1..N-5 the owner's).
 
 ## Open
+- **S1 (decompile spike, 2026-10-10), not accessible / not installed**: no .NET runtime (`dotnet`/`mono` absent), so
+  UE Explorer/UELib (the only decompiler whose README names UC2, as "151/002, third-party") could only be read, not
+  run; the BeyondUnreal thread it links ("unreal-championship-2-script-decompiler-release") answers 403 to a fetch.
+  Not needed for the spike's measurements (`analysis/decompile-spike.md`); needed only if the owner wants that tool
+  compared with ours.
 - Xbox-look visual oracle: **provided 2026-10-06** (`<WorkUC2>/xbox-emulation/run-uc2-iso.sh`, xemu; slow on this
   machine: last resort). The owner's xemu captures are in `<WorkUC2>/temp/`.
 - arm64 (M13, F-4c): the cross compiler (`g++-aarch64-linux-gnu`, GCC 15.2) and `qemu-user` + `qemu-user-binfmt` are
