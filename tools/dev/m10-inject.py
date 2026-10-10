@@ -40,6 +40,13 @@ D-6 additions (an engine without them prints none of their lines; older scenario
                                   W[tag] (list of dicts: i, t, pitch, yaw, cam, camrot, loc, locked, mouselook)
     pyfile <path>                 run a Python file in the namespace 'check' and 'pyexec' see (helper functions)
     pyexec <python statement>     run one statement in that namespace (e.g. save a measurement)
+G-6 additions:
+    vprobe <tag>                  every viewport ("viewports <tag>" on the channel) into V[tag]: a list of dicts
+                                  i, name, pad, rect (x,y,w,h), scale, fovscale, menu, scene, disabled, split (index
+                                  in the split-screen manager, -1 none), overlay, window, actor, pawn, loc, rot,
+                                  hud, fov; VS[tag] = (viewport count, split views, screen (w,h)). Helpers for
+                                  'check': vdist(a,b,i) (pawn i's move), vyaw(a,b,i), vsplit(tag) (the split views
+                                  in order), vrects(tag)
 D-9 additions:
     probe <tag>                   also keeps P[tag].caption (the "probe4" line: the focused control's caption, or the
                                   nearest one above it in the focus chain)
@@ -283,6 +290,67 @@ K = {}
 WATCH_RX = re.compile(r'watch (\S+) (\d+) t=([-\d.]+) rot=\((-?\d+),(-?\d+)\) cam=\(([-\d.]+),([-\d.]+),([-\d.]+)\) '
                       r'camrot=\((-?\d+),(-?\d+)\) loc=\(([-\d.]+),([-\d.]+),([-\d.]+)\) locked=(\S*) mouselook=(\S*)')
 W = {}
+# G-6: the per-viewport probe.
+V = {}
+VS = {}
+VPS_RX = re.compile(r'vps (\S+) n=(\d+) split=(\d+) screen=(\d+)x(\d+)')
+VP_RX = re.compile(r'vp (\S+) (\d+) name=(\S+) pad=(\d+) rect=\((-?\d+),(-?\d+),(-?\d+),(-?\d+)\) scale=\(([-\d.]+),([-\d.]+)\) '
+                   r'fovscale=\(([-\d.]+),([-\d.]+)\) menu=(\d) scene=(\d) disabled=(\d) split=(-?\d+) overlay=(\d) window=(\d) '
+                   r'actor=(\S+) pawn=(\d) loc=\(([-\d.]+),([-\d.]+),([-\d.]+)\) rot=\((-?\d+),(-?\d+),(-?\d+)\) hud=(\S+) fov=([-\d.]+)')
+
+
+def vprobe(tag):
+    chan('viewports ' + tag)
+    i = wait_for(r'vps ' + re.escape(tag) + ' n=', 20)
+    if i is None:
+        raise RuntimeError('no viewports line for ' + tag)
+    m = VPS_RX.search(log_lines[i])
+    n = int(m.group(2))
+    VS[tag] = (n, int(m.group(3)), (int(m.group(4)), int(m.group(5))))
+    rows = []
+    end = time.time() + 5
+    while len(rows) < n and time.time() < end:
+        pump_log()
+        rows = []
+        for line in log_lines[i + 1:i + 1 + 4 * n + 10]:
+            g = VP_RX.search(line)
+            if g and g.group(1) == tag:
+                g = g.groups()
+                rows.append({'i': int(g[1]), 'name': g[2], 'pad': int(g[3]), 'rect': tuple(int(v) for v in g[4:8]),
+                             'scale': (float(g[8]), float(g[9])), 'fovscale': (float(g[10]), float(g[11])),
+                             'menu': int(g[12]), 'scene': int(g[13]), 'disabled': int(g[14]), 'split': int(g[15]),
+                             'overlay': int(g[16]), 'window': int(g[17]), 'actor': g[18], 'pawn': int(g[19]),
+                             'loc': (float(g[20]), float(g[21]), float(g[22])), 'rot': (int(g[23]), int(g[24]), int(g[25])),
+                             'hud': g[26], 'fov': float(g[27])})
+        if len(rows) < n:
+            time.sleep(0.1)
+    V[tag] = rows
+    print(f"  vprobe {tag}: {VS[tag]}", flush=True)
+    for r in rows:
+        print(f"    {r}", flush=True)
+
+
+def vsplit(tag):
+    """The split-screen views of a vprobe, in the manager's order."""
+    return sorted([r for r in V[tag] if r['split'] >= 0], key=lambda r: r['split'])
+
+
+def vrects(tag):
+    return [r['rect'] for r in vsplit(tag)]
+
+
+def _vrow(tag, i):
+    return [r for r in V[tag] if r['split'] == i][0]
+
+
+def vdist(a, b, i):
+    """How far split player i's pawn moved between vprobes a and b."""
+    return math.dist(_vrow(a, i)['loc'], _vrow(b, i)['loc'])
+
+
+def vyaw(a, b, i):
+    v = (_vrow(b, i)['rot'][1] - _vrow(a, i)['rot'][1]) & 65535
+    return v - 65536 if v >= 32768 else v
 
 
 def probe(tag):
@@ -389,7 +457,8 @@ def run():
         execute(line)
 
 
-NS = {'P': P, 'W': W, 'K': K, 'yawdiff': yawdiff, 'pitchdiff': pitchdiff, 'dist': dist, 'fwd': fwd, 'side': side,
+NS = {'P': P, 'W': W, 'K': K, 'V': V, 'VS': VS, 'vsplit': vsplit, 'vrects': vrects, 'vdist': vdist, 'vyaw': vyaw,
+      'yawdiff': yawdiff, 'pitchdiff': pitchdiff, 'dist': dist, 'fwd': fwd, 'side': side,
       'abs': abs, 'min': min, 'max': max, 'math': math, 'os': os, 'chan': chan, 'record': record}
 
 
@@ -468,6 +537,8 @@ def execute(line):
             chan(rest)
         elif cmd == 'probe':
             probe(rest)
+        elif cmd == 'vprobe':
+            vprobe(rest)
         elif cmd == 'keys':
             tag, _, names = rest.partition(' ')
             chan('keys ' + rest)
