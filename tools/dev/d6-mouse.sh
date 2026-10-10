@@ -853,7 +853,7 @@ check dodge-locked-on-double-tap-dodges-and-keeps-the-target P['lg'].locked and 
 SCEN
   else
     cat <<SCEN
-check dodge-off-double-tap-a-does-not-dodge M['tap']['rise'] < 3 and abs(M['tap']['side'] - M['held']['side']) < 40
+check dodge-off-double-tap-a-does-not-dodge M['tap']['rise'] < 3 and M['tap']['peak'] < 1.1 * M['held']['peak'] and abs(M['tap']['side'] - M['held']['side']) < 80
 check dodge-off-space-a-still-dodges M['space']['rise'] > 15 and M['space']['side'] < M['held']['side'] - 30
 SCEN
   fi
