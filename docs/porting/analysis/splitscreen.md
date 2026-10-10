@@ -635,3 +635,60 @@ dead in the frozen frame (a frag at spawn; "You are dead" scoreboard in its quad
 baselines. Single-player shot of `render`/`fov` (n1): in 2 of 5 runs the frozen frame showed a first-person view with
 no pawn or the old place (render-xbox, final2: every same-view check then fails at ~16-17); the frame was frozen 2 s
 after the second placement, soon after the spawn's teleport-in; the scenario now waits 5 s.
+
+### G-9 step 4 - regressions and builds on the final binary (uc2.bin sha256 00fd3b320fb2016b..., commit f39fbdb)
+
+Builds (`bin/capped 6G`, `-j2`/`-j4` by load): native, native64, windows (MinGW uc2.exe), wasm-perf: 0 errors
+(`logs/g9/build-*.log`; the first windows link failed on `GProjectorRenderInfoGeneration` because its objects mixed the
+sources before and after step 2b's edit mid-build; the incremental rebuild linked, `build-windows-2.log`). No script
+changed: no package to switch.
+
+| test | run | result |
+|---|---|---|
+| `g6-splitscreen.sh g9 kbplayer` (KeyboardIsPlayer=True) | `logs/g9/final2` | PASS 34 + kbmenu PASS 11 |
+| `g6-splitscreen.sh g9 input` (G-6's model, KeyboardIsPlayer=False) | `logs/g9/final2` | PASS 39 |
+| `g6-splitscreen.sh g9 menu` | `logs/g9/final2` | PASS 9 |
+| `g6-splitscreen.sh g9 audio` | `logs/g9/final2` | PASS 6; fire cue 1.0 per shot alone, with four (player one), player three; all 2D |
+| `g6-splitscreen.sh g9 render` (full detail) | `logs/g9/final3` | g6-measure 0 failed (same view as single |diff| 3.51/3.21/3.83/3.87, every split rectangle its own ramp); render 6/7: `render-every-player-alive-at-the-end` FAIL, see below |
+| `g6-splitscreen.sh g9 detail` + `g9-detail.py --praxis` | `logs/g9/detail2-*` | PASS (coronas, step 2b section) |
+| `m10-controls.sh` (M10_TREE=g9) | `logs/g9/m10` | keyboard 16, mouse 18, text 7, pad 33, both 14: PASS |
+| `d6-mouse.sh look pad` (D6_TREE=g9, D6_SHIP_TREE=g9ship) | `logs/g9/d6` | 48 PASS 0 FAIL (pad curves vs shipped worst 3.55% walk "one frame of running" rule, 0.13% yaw) |
+| `ucc-bin verifyclasses` (g9, g9ship) | | "All native class layouts match", rc 0 both |
+| `fps-bench.sh DM-Deadbolt 20` single player, alternating, base = main's build (run/g9base, sha256 64be3015...) | `logs/g9/fps` | base 103.4 / 91.5 / 100.5 / 94.6 / 91.6 / 98.9 (mean 96.8) fps; new 90.7 / 89.6 / 97.6 / 91.6 / 97.8 / 99.2 (mean 94.4); load 4.8-11 |
+
+- fps single player: -2.4% on the means, inside the run-to-run spread (89.6-103.4 for the same binary). The first two
+  pairs were both lower for the new binary, so I checked step 2b's cache change, the only per-frame work added for one
+  viewport: a build with the generation test disabled ran 92.9 / 98.0 against the final 97.8 / 99.2 and base 91.6 /
+  98.9 in the same rounds: no cost from it. Unchanged at this machine's noise; a quiet-machine measurement would settle
+  the last percent.
+- `render-every-player-alive-at-the-end` (final3, also render-full): player two was telefragged right after joining.
+  Cause in the log: it spawned on the PlayerStart under SPOT_B and player one was NETPLACEd onto SPOT_B ("FirstBlood",
+  `Gib_Explosion on UCPawn_Nakhti_Anubis1` at distance 106 right after `place Player-1 ok`). All five of G-6's render
+  spots (A-E) are PlayerStarts (the map's t3d: within 22 units), so a joining player can spawn on the next target:
+  a race in G-6's scenario, not caused by G-9 (it passed in final2 and render-xbox). Left open (moving the spots off
+  the starts changes G-6's pictures).
+- G-6's earlier numbers for comparison: input 35-39, render 7 + g6-measure 59/0, menu 9, audio 6, m10 five PASS, d6 47
+  PASS; fps base/new 84.6-89.6.
+
+### G-9 - what is open for the owner
+
+1. **FOV**: choose from `logs/g9/fov-{2,3,4}players.png` (table in step 1): AutoFOV on (139 across on strips, the
+   default today), Epic's maths (90 x 31 strips, 45 x 13 three-player top), or the proposal
+   `[ufront.AutoFOV] SplitClampToFullScreen=True` (106 x 41 strips). Nothing is decided here.
+2. **Pad-only players with KeyboardIsPlayer=True**: a person with only a pad never gets player one; its Start makes it
+   player two beside an idle keyboard player (in the menus too: the title page allows a join). Options: keep (set
+   False for pad-only play, the launcher could offer it), or a rule such as "the first pad takes player one until the
+   keyboard or the mouse is used" (not built: a design change to ask about first).
+3. Keyboard player cannot drop out alone: Epic's `RemoveSplitViewport` never removes the first view's player ("don't
+   delete default player"), and `SPLIT REMOVE` removes the last view. "Leaving in either order" was tested as: the pad
+   player leaves (SPLIT REMOVE) and the keyboard stays player one; the keyboard player ends the session (pause menu,
+   FORFEIT) and everyone leaves, after which the pad's Start on the main menu takes no player.
+4. Four-player cost of full detail: 16-23 fps against 18-26 with the Xbox's detail on the Quadro P620 (two sets of
+   alternating runs, load 11-19: the spread is as large as the difference); frames of 200-260 ms appeared in some full
+   runs. To measure on a quiet machine before telling players what four players cost.
+5. Decals and projectors in split screen: on (log lines), not shown apart in a picture (step 2b section).
+6. G-6's render scenario race (spots on PlayerStarts), above.
+
+SDL2Drv edits of G-9 (for G-5's merge): `SDL2Drv.h` (USDL2Client: SplitScreenFullDetail, KeyboardIsPlayer,
+SplitScreenKeepsFullDetail); `SDL2Client.cpp` (StaticConstructor keys and defaults, the comment above Tick, PadJoin's
+loop start); `SDL2Pads.cpp` (header comment, GetPadViewport comment, PadAdded's first port and log lines).
