@@ -106,6 +106,16 @@ class Obj:
 class World:
     def __init__(self, sysdir):
         self.pkgs, self.objs, self.index = {}, {}, {}
+        # content packages next to System/ (textures, meshes, sounds...), for `#exec OBJ LOAD`
+        self.content = {}
+        root = os.path.dirname(os.path.abspath(sysdir.rstrip('/')))
+        for d in sorted(os.listdir(root)):
+            if d == 'System' or not os.path.isdir(os.path.join(root, d)):
+                continue
+            for fn in sorted(os.listdir(os.path.join(root, d))):
+                base, ext = os.path.splitext(fn)
+                if ext.lower() in ('.utx', '.usx', '.ukx', '.uax', '.u', '.umx', '.upx', '.ugx'):
+                    self.content.setdefault(base.lower(), '../%s/%s' % (d, fn))
         for p in sd.PACKAGES:
             pk = Package(os.path.join(sysdir, p + '.u'))
             self.pkgs[p] = pk
@@ -512,6 +522,8 @@ class Code:
             name = fn.f['friendlyname'] if fn.f['friendlyname'] != 'None' else fn.name
             if how == 'final' and not ff & FUNC_Final:
                 outer = fn.outer()
+                if self.dec.plain_super(self.owner, name) is fn:
+                    return E('Super.%s(%s)' % (name, ', '.join(x.t for x in args)), 'call')
                 return E('Super(%s).%s(%s)' % (outer.name, name, ', '.join(x.t for x in args)), 'call')
         return E('%s(%s)' % (name, ', '.join(x.t for x in args)), 'call')
 
@@ -571,10 +583,15 @@ class Code:
                 if m.t.startswith('default.'):
                     return E('%s.%s' % (ctx.t, m.t), 'expr', None, m.en)
                 return E('%s.static.%s' % (ctx.t, m.t), 'call' if m.k == 'call' else 'expr', None, m.en)
+            if ctx.k == 'var' and ctx.a is not None and not isinstance(ctx.a, tuple) and ctx.a.key == 'Core.Object.Outer' \
+                    and self.dec.cls.f['within'] not in ('None', 'Core.Object') and m.k in ('var', 'call'):
+                # a member of the `within` class used without context: the compiler adds Context(Outer, ...)
+                # itself (with a skip that differs from an explicit `Outer.x`)
+                return m
             if m.k not in ('call', 'var') and not m.t.startswith('default.'):
                 # `obj.const.NAME`: the compiler emits Context(obj, <the constant's value>)
                 return E('%s.const.%s' % (ctx.t, self.const_named(ctx, m)), 'expr', None, m.en)
-            return E('%s.%s' % (ctx.t, m.t), m.k if m.k in ('call', 'var') else 'expr', None, m.en)
+            return E('%s.%s' % (ctx.t, m.t), m.k if m.k in ('call', 'var') else 'expr', m.a if m.k == 'var' else None, m.en)
         if t in (0x1A, 0x10):
             idx = self.expr()
             arr = self.expr()
@@ -664,7 +681,7 @@ class Code:
         if t == 0x2E:
             o = self.obj()
             e = self.expr()
-            return E('%s(%s)' % (self.objname(o), e.t))
+            return E('%s(%s)' % (self.objname(o), e.t), 'dyncast', o)
         if t == 0x13:
             o = self.obj()
             e = self.expr()
@@ -693,7 +710,7 @@ class Code:
         raise DecompileError('token 0x%02x at %d in expression' % (t, at))
 
     def const_named(self, ctx, m):
-        p = ctx.a if ctx.k in ('var', 'objconst') else None
+        p = ctx.a if ctx.k in ('var', 'objconst', 'dyncast') else None
         if p is None or isinstance(p, tuple):
             raise DecompileError('const access through %s' % ctx.t)
         if p.cls == 'Class':
@@ -709,10 +726,16 @@ class Code:
             for k in c.children():
                 if k.cls == 'Const':
                     v = k.f['value'].strip()
+                    same = v == want
                     try:
-                        same = str(int(v, 0)) == want
+                        iv = int(v, 0) & 0xFFFFFFFF      # appAtoi wraps like MSVC (UnAnsi.cpp)
+                        same = same or str(iv - (1 << 32) if iv >= 1 << 31 else iv) == want
                     except ValueError:
-                        same = v == want
+                        pass
+                    try:    # an int constant used where a float is wanted compiles to a FloatConst
+                        same = same or struct.pack('<f', float(v)) == struct.pack('<f', float(want))
+                    except ValueError:
+                        pass
                     if same:
                         return k.name
             c = c.ref('super')
@@ -722,6 +745,7 @@ class Code:
         if o is None:
             return 'None'
         if isinstance(o, tuple):
+            self.dec.need_package(o[1])
             return "%s'%s'" % (o[2], o[1])
         cls = o.cls
         return "%s'%s'" % (cls, o.key)
@@ -750,7 +774,7 @@ class Structurer:
         k = lo
         while k < hi:
             at, end, kind, pl = self.st[k]
-            for name, loff in self.labels:
+            for name, loff in reversed(self.labels):     # the label list is built by prepending
                 if loff == at:
                     out.append('%s:' % name)
             # loops: the farthest backward jump to this statement
@@ -802,10 +826,20 @@ class Structurer:
                 out += self.block(k + 1, t - 1 if els is not None else t, ctx, ind + 1)
                 out.append('%s}' % pad)
                 if els is not None:
-                    out.append('%selse' % pad)
-                    out.append('%s{' % pad)
-                    out += self.block(t, els, ctx, ind + 1)
-                    out.append('%s}' % pad)
+                    flat = self.block(t, els, ctx, ind)
+                    tops = [l for l in flat if l.startswith(pad) and not l.startswith(pad + '\t')
+                            and not l.startswith('\x01')]
+                    if flat and flat[0].startswith(pad + 'if (') and all(
+                            l in (pad + '{', pad + '}', pad + 'else') or l.startswith(pad + 'else if (') or l == flat[0]
+                            for l in tops):
+                        # `else if`: one nesting level for the whole chain (the compiler allows 16)
+                        out.append('%selse %s' % (pad, flat[0][len(pad):]))
+                        out += flat[1:]
+                    else:
+                        out.append('%selse' % pad)
+                        out.append('%s{' % pad)
+                        out += self.block(t, els, ctx, ind + 1)
+                        out.append('%s}' % pad)
                     k = els
                 else:
                     k = t
@@ -922,6 +956,7 @@ class Decompiler:
         self.cls = cls
         self.typer = Typer(self.world, cls)
         self.errors = []
+        self.loads = []
         lines = []
         kids = cls.children()
         rep = self.replication(cls, kids)
@@ -944,7 +979,8 @@ class Decompiler:
         except (DecompileError, sd.ParseError, IndexError, KeyError, struct.error) as e:
             self.errors.append('%s defaultproperties: %s' % (cls.key, e))
             lines += ['defaultproperties', '{', '// DECOMPILE ERROR %s' % e, '}']
-        return '\n'.join(self.pad_lines([self.header(cls), ''] + lines)) + '\n'
+        execs = ['#exec OBJ LOAD FILE=%s' % self.world.content[p.lower()] for p in self.loads]
+        return '\n'.join(self.pad_lines([self.header(cls)] + execs + [''] + lines)) + '\n'
 
     def pad_lines(self, lines):
         """Resolve '\\x01<line>\\x01' marks: blank lines are inserted so the marked line lands on <line>."""
@@ -1064,7 +1100,8 @@ class Decompiler:
         for o in kids:
             if o.cls in PROPS and o.f['flags'] & 0x20:
                 groups.setdefault(o.f['repoffset'], []).append((o.name, None))
-            elif o.cls == 'Function' and o.f['funcflags'] & FUNC_Net:
+            elif o.cls == 'Function' and o.f['funcflags'] & FUNC_Net and o.f['repoffset'] != 0xFFFF:
+                # (0xFFFF: an override of a replicated function inherits the net flags, UnScrCom.cpp)
                 groups.setdefault(o.f['repoffset'], []).append((o.name, o.f['funcflags']))
         out = ['', 'replication', '{']
         for off in sorted(groups):
@@ -1217,10 +1254,10 @@ class Decompiler:
         f = o.f
         sf = f['stateflags']
         words = []
-        if sf & STATE_Simulated:
-            words.append('simulated')
         if sf & STATE_Auto:
             words.append('auto')
+        if sf & STATE_Simulated:
+            words.append('simulated')       # must directly precede `state` (UnScrCom.cpp CompileDeclaration)
         words.append('state()' if sf & STATE_Editable else 'state')
         words.append(o.name)
         sup = o.ref('super')
@@ -1276,6 +1313,40 @@ class Decompiler:
             return o.pkg.import_path(-c - 1)
         return o.pkgname + '.' + o.pkg.export_path(c - 1)
 
+    def plain_super(self, code_owner, name):
+        """The function `Super.name` resolves to from code in code_owner (a function or state), as the compiler
+        does: the nearest enclosing struct with an inheritance super, then its super's field search."""
+        scope = code_owner.outer() if code_owner.cls == 'Function' else code_owner
+        while scope is not None and scope.ref('super') is None:
+            scope = scope.outer()
+        if scope is None:
+            return None
+        scope = scope.ref('super')
+        lname = name.lower()
+        s0 = scope
+        while s0 is not None:
+            for k in s0.children():
+                if k.cls == 'Function' and k.name.lower() == lname:
+                    return k
+            s0 = s0.ref('super')
+        if scope.cls == 'State':
+            c = scope.outer()
+            while c is not None:
+                for k in c.children():
+                    if k.cls == 'Function' and k.name.lower() == lname:
+                        return k
+                c = c.ref('super')
+        return None
+
+    def need_package(self, path):
+        """A reference into a content package: the class must load it (`#exec OBJ LOAD`; the original may have
+        relied on another class loading it first, which a decompiler cannot see)."""
+        top = path.split('.')[0]
+        if top in sd.PACKAGES or top.lower() not in self.world.content:
+            return
+        if top not in self.loads:
+            self.loads.append(top)
+
     def find_function(self, name):
         """A function called by name (virtual call) from the class being decompiled, for its parameter types."""
         c = self.cls
@@ -1313,7 +1384,10 @@ class Decompiler:
         if key.startswith('__') and key.endswith('__Delegate'):
             key = key[2:-10]
         if p.cls == 'ArrayProperty':
-            return '\n'.join('\t%s(%d)=%s' % (key, n, v) for n, v in enumerate(val)).lstrip('\t') if val else '%s=()' % key
+            # the whole array at once: indexed lines would keep a longer inherited array's tail
+            # emptied first (indexed lines alone would keep a longer inherited array's tail; one long line hits the
+            # importer's line length limit)
+            return '\n\t'.join(['%s=()' % key] + ['%s(%d)=%s' % (key, n, v) for n, v in enumerate(val)])
         if p.f['arraydim'] > 1 or idx:
             return '%s(%d)=%s' % (key, idx, val)
         return '%s=%s' % (key, val)
@@ -1347,6 +1421,7 @@ class Decompiler:
             if o is None:
                 return 'None'
             if isinstance(o, tuple):
+                self.need_package(o[1])
                 return "%s'%s'" % (o[2], o[1])
             if o.outer() is not None and o.outer().cls == 'Class' and o.cls != 'Class' and o.pkgname == pkgname:
                 return "%s'%s'" % (o.cls, o.name)
@@ -1407,7 +1482,12 @@ def main():
         if o.cls != 'Class' or (only and o.name not in only):
             continue
         n += 1
-        text = dec.run(o)
+        try:
+            text = dec.run(o)
+        except Exception as e:      # a prototype: record and go on with the next class
+            import traceback
+            dec.errors = ['CRASH %s: %s' % (type(e).__name__, traceback.format_exc().strip().splitlines()[-3:])]
+            text = '// DECOMPILER CRASH\n'
         with open(os.path.join(outdir, o.name + '.uc'), 'wb') as fh:
             fh.write(text.encode('latin-1'))
         if dec.errors:

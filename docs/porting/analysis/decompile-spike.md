@@ -98,3 +98,18 @@ Finding: decompiling the shipped `.u` gives the RETAIL scripts. Epic's `ScriptPa
 bytecode, 9 new objects) is not in them; our rebuilt packages would then lack Epic's title-update fixes unless the
 decompiler also decompiles the patched view (shipped + `ScriptPatches.h`, which `script-diff.py`'s `PatchedView`
 already builds) or the patch sets carry those changes. With the leak's sources the fixes are already in the text.
+
+UCGameplay (2026-10-10): 232 classes, 232 decompiled without error, `make` 0 errors, compare **= shipped**: 10842
+exports, 8149 byte-identical, 5175 neutral (positions 4941, dependency lists 231, 1 dependency CRC, 1 name case, 1
+patch-config name), 0 findings; the 8 "problems" are again only Epic's ScriptPatches.h (7 patched functions/states
+whose recompiled bytecode equals the shipped retail one, and the import the OverflowBall patch appends). Needed on the
+way: inherited net flags (an override of a replicated function has FUNC_Net with RepOffset 0xFFFF: not listed in
+`replication`), `auto simulated state` (simulated must directly precede `state`), `else if` chains printed flat
+(the compiler's nesting limit is 16: a 20-way if/else chain in UCPlayerController failed nested), `Super.X` vs
+`Super(Name).X` resolved like the compiler (in a state, `Super(Active)` names the state itself), members of the
+`within` class printed without `Outer.` (the compiler's implicit Context has a different skip size than an explicit
+`Outer.x`), `#exec OBJ LOAD` for every content package a class references (the original classes rely on an
+earlier class having loaded it: invisible in the bytecode), labels at the same offset in reverse table order,
+dynamic arrays in defaults emptied first (`X=()`, then `X(i)=`: a subclass array shorter than the inherited one).
+In this run GUI and UCMenu were not built: our main-branch UCMenu (UC2Settings_Keys.uc) uses
+`UCPlayerInput.MouseLookSensitivity`, which only our patched UCGameplay has (the decompiled one is retail).
