@@ -13,8 +13,8 @@
 #                       the inis, compare) is the same. S2, docs/porting/analysis/ucc-windows.md.
 #     --tree <name>     output tree <WorkUC2>/run/<name>; must start with m14, d<N> (a D-phase task's prefix,
 #                       e.g. d3-make), f<N> (an F-task's, e.g. f1-make), g<N> (a G-task's, e.g. g8-make), s<N>
-#                       (a spike's, e.g. s2-make) or jit (default m14-make)
-#     --logs <dir>      where the logs go (default <WorkUC2>/logs/m14; a d<N>/f<N>/g<N>/s<N> tree: <WorkUC2>/logs/<that
+#                       (a spike's, e.g. s2-make), t<N> (a T-task's, e.g. t2-hdr) or jit (default m14-make)
+#     --logs <dir>      where the logs go (default <WorkUC2>/logs/m14; a d<N>/f<N>/g<N>/s<N>/t<N> tree: <WorkUC2>/logs/<that
 #                       prefix>; jit: logs/jit)
 #     --mem <size>      memory ceiling of the `ucc-bin make` run (default 3G; also under wine)
 #     --headers         also export the C++ headers (into <tree>/<Pkg>/Inc, a scratch copy, never Source/)
@@ -58,11 +58,11 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ ${#stages[@]} -eq 0 ] && stages=(assemble make strip compare)
-case "$tree" in m14*|d[0-9]*|f[0-9]*|g[0-9]*|s[0-9]*|jit*) ;; *) echo "tree name must start with m14, d<N>, f<N>, g<N>, s<N> or jit: $tree" >&2; exit 2;; esac
+case "$tree" in m14*|d[0-9]*|f[0-9]*|g[0-9]*|s[0-9]*|t[0-9]*|jit*) ;; *) echo "tree name must start with m14, d<N>, f<N>, g<N>, s<N>, t<N> or jit: $tree" >&2; exit 2;; esac
 case "$tree" in */*|*..*) echo "bad tree name: $tree" >&2; exit 2;; esac
 case "$build" in /*) ;; *) build=$repo/$build;; esac
 run=$work/run/$tree
-case "$tree" in d[0-9]*|f[0-9]*|g[0-9]*|s[0-9]*) logs=${logs:-$work/logs/${tree%%-*}};; jit*) logs=${logs:-$work/logs/jit};; esac
+case "$tree" in d[0-9]*|f[0-9]*|g[0-9]*|s[0-9]*|t[0-9]*) logs=${logs:-$work/logs/${tree%%-*}};; jit*) logs=${logs:-$work/logs/jit};; esac
 logs=${logs:-$work/logs/m14}
 mkdir -p "$logs"
 

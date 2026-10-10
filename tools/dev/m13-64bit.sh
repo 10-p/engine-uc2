@@ -55,7 +55,7 @@ build=${M13_BUILD:-build-native64}
 ref=${M13_REF:-m13-32}
 refbuild=${M13_REFBUILD:-build-native}
 soak=${M13_SOAK:-1200}
-case "$tree" in m13*|d[0-9]*) ;; *) echo "M13_TREE must start with m13 (or a D-phase task's prefix d<N>)" >&2; exit 2;; esac
+case "$tree" in m13*|d[0-9]*|t[0-9]*) ;; *) echo "M13_TREE must start with m13 (or a D-phase or T-task's prefix d<N>, t<N>)" >&2; exit 2;; esac
 case "$tree" in m13) out=$work/logs/m13;; m13*) out=$work/logs/m13/$tree;; *) out=$work/logs/${tree%%-*}/$tree;; esac
 mkdir -p "$out"
 # The suites write to <WorkUC2>/logs/<tree>: for other trees that is a link into logs/m13.
