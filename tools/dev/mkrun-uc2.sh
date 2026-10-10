@@ -51,6 +51,32 @@ for d in Sounds Music; do
   fi
 done
 
+# M16: UC2_XBOX_SOUNDS plays the shipped Xbox banks instead (UC2ALAudio reads Sounds/<Bank>.xsb + .xwb itself where
+# no cooked file is there; docs/porting/analysis/xbox-audio-runtime.md):
+#   UC2_XBOX_SOUNDS=1    Sounds/ = the shipped banks only (hard links of <WorkUC2>/epic-sources/Sounds, which is the
+#                        retail disc's Sounds/ by name and size), and no Music/ (the disc has none: its music is
+#                        Sounds/M_<Song>.xwb). A retail-disc tree.
+#   UC2_XBOX_SOUNDS=add  the cooked Sounds/ and Music/ as above, plus the shipped .xsb/.xwb beside them (the device
+#                        takes the cooked file where both exist: tools/dev/audio-xsb-compare.sh needs both).
+# UC2_XBOX_DIR=<dir> takes the banks from another Sounds/ folder (e.g. one extracted from an ISO).
+xbox_sounds=${UC2_XBOX_DIR:-$work/epic-sources/Sounds}
+case "${UC2_XBOX_SOUNDS:-}" in
+  "") ;;
+  1)
+    rm -rf "${run:?}/Sounds" "${run:?}/Music"
+    mkdir -p "$run/Sounds"
+    cp -al "$xbox_sounds"/. "$run/Sounds/"
+    echo "UC2_XBOX_SOUNDS=1: Sounds/ = $(ls "$run/Sounds" | wc -l) shipped files from $xbox_sounds, no Music/" >&2
+    ;;
+  add)
+    # (Sounds/ is this tree's own directory of hard links: adding links to it touches nothing shared.)
+    mkdir -p "$run/Sounds"
+    for f in "$xbox_sounds"/*.xsb "$xbox_sounds"/*.xwb; do ln -f "$f" "$run/Sounds/"; done
+    echo "UC2_XBOX_SOUNDS=add: the cooked Sounds/ plus $(ls "$xbox_sounds"/*.xsb "$xbox_sounds"/*.xwb | wc -l) shipped banks" >&2
+    ;;
+  *) echo "UC2_XBOX_SOUNDS must be 1 or add" >&2; exit 1;;
+esac
+
 # M9: the cooked movies (tools/cook-movies.py: Movies/ and Textures/Movies/), hard-linked the same way. The
 # player reads ../Movies and ../Textures/Movies from System/, as the Xbox read D:\Movies and D:\Textures\Movies.
 if [ -d "$run/Movies" ]; then

@@ -47,6 +47,8 @@ cd "$sys" || exit 1
 # M9: -ini:System:[UC2Movie]:StartupMovies=False keeps the captures as they were (the logos would add 20 s of their own sound first)
 env ${UC2_AUDIO_ENV:-} ./uc2.bin "$url" -log -ini:System:[UC2Movie]:StartupMovies=False "-ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=$out/$name.wav" "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
+# M16: the game's peak resident memory (VmHWM), sampled every second (the run is killed at the end, not shut down).
+( while kill -0 \$pid 2>/dev/null; do grep VmHWM /proc/\$pid/status > "$out/$name.hwm.tmp" 2>/dev/null && mv -f "$out/$name.hwm.tmp" "$out/$name.hwm"; sleep 1; done ) &
 if [ "$fire" != 0 ]; then
   sleep \$(( $fire - 4 ))
   python3 - $(( secs - fire - 6 )) $precmd $postcmd <<'PY'
@@ -108,7 +110,8 @@ peak=$(grep -a "Peak level dB" "$out/$name.report.txt" | awk '{printf "%.1f", $N
 rms=$(grep -a "RMS level dB" "$out/$name.report.txt" | awk '{printf "%.1f", $NF}')
 silent=$(grep -a -o "silent (< -70 dBFS): [0-9]*" "$out/$name.report.txt" | awk '{print $NF}')
 req=$(awk '{n+=$1} END{print n+0}' "$out/$name.cues.txt")
-echo "SUMMARY $name: ${dur:-?} s, peak ${peak:-?} dBFS, RMS ${rms:-?} dBFS, silent seconds ${silent:-?}; cue requests $req: played $(sum played), culled $(sum culled), failed $(sum failed); Critical $(grep -a -c Critical "$out/$name.out")" | tee "$out/$name.summary.txt"
+hwm=$(awk '{printf "%d", $2/1024}' "$out/$name.hwm" 2>/dev/null)
+echo "SUMMARY $name: ${dur:-?} s, peak ${peak:-?} dBFS, RMS ${rms:-?} dBFS, silent seconds ${silent:-?}; cue requests $req: played $(sum played), culled $(sum culled), failed $(sum failed); Critical $(grep -a -c Critical "$out/$name.out"); peak RSS ${hwm:-?} MB" | tee "$out/$name.summary.txt"
 for p in $(pgrep -x uc2.bin) $(pgrep -x Xvfb); do
   case "$(readlink /proc/$p/cwd 2>/dev/null)" in "$sys"*) echo "WARNING: process $p of this run tree still running";; esac
 done
