@@ -21,6 +21,10 @@
 #          kbplayer (G-9) Xvfb, KeyboardIsPlayer=True (the default): keyboard+mouse player one alone, a pad that joins as
 #                  player two, every device moving/turning/firing its own player only, unplug/replug, leave, rejoin;
 #                  then the menus' flow with one pad (menu_kb=1)
+#          hud     (B-3) GPU as render: where each viewport's HUD sits, 1-4 players joined in the match, player one
+#                  at spot A, frozen frame: the picture and the HUD alone (TOGGLERENDERLEVEL); measured per viewport
+#                  by tools/dev/g6/b3-hud-measure.py (health bar, weapon list, score box, reticle in design pixels).
+#                  G6_RES and G6_ARGS (-ini:System:[Engine.Client]... UIScaleMode) choose the shape
 #          (default: input render menu audio; G-6's parts run with KeyboardIsPlayer=False, the pad as player one)
 #   G6_RES=1280x720   window size;   G6_OUT=<dir>  output (default <WorkUC2>/logs/g6)
 #   G6_ARGS="-ini:..."  more settings for every game run (G-9: -ini:System:[SDL2Drv.SDL2Client]:SplitScreenFullDetail=False)
@@ -382,6 +386,39 @@ SCEN
   echo "chan exec set LevelInfo TimeDilation 1"
   join 3
   place_all "$SPOT_A" "$SPOT_C" "$SPOT_D" "$SPOT_E"; echo "chan exec set LevelInfo TimeDilation 0.0001"; fovshots n4
+}
+
+# B-3: the HUD of every viewport, 1-4 players. The frame is frozen long after the last placement, so the join and
+# spawn messages are gone; the picture, then the HUD alone (the level not drawn: black around the HUD).
+hudshots() {  # hudshots <tag>
+  cat <<SCEN
+sleep 8
+chan exec set LevelInfo TimeDilation 0.0001
+sleep 1.5
+shot $1
+chan exec TOGGLERENDERLEVEL
+sleep 1.5
+shot $1-hud
+chan exec TOGGLERENDERLEVEL
+vprobe $1
+pyexec dump('$out/b3-hud-$1.json')
+chan exec set LevelInfo TimeDilation 1
+SCEN
+}
+
+scen_hud() {
+  match_start
+  cat <<SCEN
+vprobe _p
+pyexec chan('exec NETPLACE ' + V['_p'][0]['player'] + ' $SPOT_A')
+sleep 2
+pyexec chan('exec NETPLACE ' + V['_p'][0]['player'] + ' $SPOT_A')
+SCEN
+  hudshots n1
+  join 1; place_all "$SPOT_A" "$SPOT_C"; hudshots n2
+  join 2; place_all "$SPOT_A" "$SPOT_C" "$SPOT_D"; hudshots n3
+  join 3; place_all "$SPOT_A" "$SPOT_C" "$SPOT_D" "$SPOT_E"; hudshots n4
+  echo "check hud-every-player-alive-at-the-end all(r['pawn'] == 1 for r in vsplit('n4'))"
 }
 
 # G-9: the frame rate with four players (GPU): the four placed at spots A C D E (fixed views, time running), then the
@@ -846,6 +883,10 @@ for part in $parts; do
     render) scen_render > "$scen"; run_game g6-render 1 480 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True $KBOLD
             python3 "$repo/tools/dev/g6/g6-measure.py" "$out" > "$out/g6-measure.txt" 2>&1; tail -n 30 "$out/g6-measure.txt";;
     menu)   scen_menu   > "$scen"; run_game g6-menu   0 420 "" "$scen" $KBOLD;;
+    hud)    # B-3: the split HUD's placement per viewport (GPU, frozen frame, the HUD alone)
+            scen_hud > "$scen"; run_game b3-hud 1 480 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True $KBOLD
+            uimode=Fit43; case "${G6_ARGS:-}" in *UIScaleMode=Native640*) uimode=Native640;; esac
+            python3 "$repo/tools/dev/g6/b3-hud-measure.py" "$out" $uimode > "$out/b3-hud-measure.txt" 2>&1; tail -n 40 "$out/b3-hud-measure.txt";;
     corona) scen_corona > "$scen"; run_game g9-corona 1 480 "DM-Praxis?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True $KBOLD
             python3 - "$out" <<'PY'
 import glob, os, sys
