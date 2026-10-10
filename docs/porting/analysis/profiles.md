@@ -389,3 +389,67 @@ passed, `uc2-wasm-audio.spec.js` 3 passed (engine proven); `tools/dev/m14-script
 Memory: every run in `bin/capped`: builds 6G, script make/strip 3G, game and ucc runs 2G, unit tests 3-4G, browser
 6G (the mem-guard's machine-wide peak 10.7-13.2 GB, other agents included); census 8G and net 6G inside the M14
 suite. No ceiling was hit (no exit 137).
+
+## G-7 (2026-10-10): the profiles revisit — Epic's layout on the web again; the character on a direct launch
+
+Branch `g7-profiles` (worktree `../engine-uc2-g7-profiles`, from main `2ed330f`); frontend half on ufrontend branch
+`uc2-profiles` (worktree `ufrontend-profiles`, notebook `docs/migration/notes/profiles-layout.md`). Brief: PLAN.md
+"Owner review of 2026-10-09" (parked: the web profile layout; owner "do it", "all of the other engines will need to
+adapt") and "Owner review of 2026-10-10" (N-4: the character class without a profile). Logs: `<WorkUC2>/logs/g7/`.
+
+### Step G7-0: what the code says (read before changing anything)
+
+Part A. `22e9dbf` changed only `ULoadSaveManager.cpp` among Epic's files (five functions under
+`UC2_FLAT_PROFILE_FILES`, default 1 under `__EMSCRIPTEN__`); nothing touched the file after it, so the revert is
+that file's state before `22e9dbf`. The same commit's `ucc profiletest list|exists|delete` (UCC.cpp) and
+`tools/dev/c1-web-saves.sh` stay (tools), updated to Epic's layout.
+
+Part B. Where the class of a launch comes from:
+- `UGameEngine::Init` builds `DefaultURL` from User.ini `[DefaultPlayer]` (UnGame.cpp:223), every URL of the
+  command-line map starts from it (`FURL(&DefaultURL, Parm, TRAVEL_Partial)`), so its `Class=` is the ini's.
+- The login is `GameInfo.Login` -> `GetPlayerClassName(Options)` = `ParseOption(Options,"Class")` (GameInfo.uc:2964;
+  `UCDeathMatch` lets a ladder rung's class win, UCDeathMatch.uc:1343) -> `SetPawnClass`.
+- Epic's own way to carry the profile's character: `PlayerProfile.SetCharacterClassName` ->
+  `PC.UpdateURL("Class", <class>)` (PlayerProfile.uc:717-741) -> `APlayerController::UpdatePlayerURL` writes it into
+  the VIEWPORT's `PlayerURL` (UnController.cpp:991), which `Browse` adds to every NON-absolute travel
+  (`UViewport::InitializeURL`, UnGame.cpp:1473/1492; skipped for `TRAVEL_Absolute` on purpose: "start menu?game=").
+  So a console `open` after a profile switch at the menus already takes the profile's class (partial travel).
+- The gap: the FIRST map of a run (command line, the web launcher's Play form) is an absolute travel, and the
+  profile D-3 loads at start (`UC2StartWithLastProfile`, before any PlayerController) never ran
+  `SetCharacterClassName` with a controller, so `PlayerURL` is empty: the login takes `[DefaultPlayer] Class`.
+- `UGameEngine::LoadMap` writes every loaded URL's `Class` back to `[DefaultPlayer]` (Epic's PC code, UnGame.cpp:3038),
+  so that value is "the class of the last map played": after switching profile at the menus without playing, the
+  OTHER profile's character (the BLOCKERS entry).
+- GUI.u `SetProfilePlayerName` (D-4) is about the name only; `UC2Profiles.cpp` `UC2ProfileNameInURL` (D-4) already
+  put the profile's NAME into the primary viewport's login URL in `MatchViewportsToActors` for the same reason.
+
+### Step G7-1: the changes (engine commit `51f7258`)
+
+- `Source/Engine/Src/ULoadSaveManager.cpp`: back to its state before `22e9dbf` (41 lines out): one layout everywhere,
+  `Profiles/<name>/AVARIS_PROFILE.PRO`.
+- `Source/Engine/Src/UC2Profiles.cpp` `UC2MoveFlatProfiles` (called first in `UC2StartWithLastProfile`): a flat
+  `Profiles/<name>.PRO` left by the web preview is MOVED into `Profiles/<name>/AVARIS_PROFILE.PRO` when that folder
+  does not exist, else deleted (the folder is the newer copy); one log line each (`Profiles: flat profile file ...`).
+  A failed move leaves the file alone (no data is deleted unless Epic's folder exists). The root is
+  `GetProfileRoot()`'s expression (protected in Epic's header, which stays untouched). Unconditional (not web-only):
+  a native tree never has such files, and the native test can then prove it.
+  Decision on the preview's flat files: this one-time move (15 lines) rather than a second reader in
+  ULoadSaveManager (two layouts alive) or "the preview's profiles are lost". The frontend keeps the flat glob in uc2's
+  `userFiles` for the transition so the daemon sees the flat copy go and drops it from IndexedDB (otherwise every
+  reload would restore it, and a deleted profile would come back). Both go together once no preview player is left.
+- `UC2Profiles.cpp` `UC2ProfileInURL` (was `UC2ProfileNameInURL`): besides the name, the profile's character as
+  Epic's script puts it in a URL: `PlayerProfile.GetURL()` (called through `ProcessEvent`, parms laid out as the
+  generated `_Parms` structs with `#pragma pack(4)`), its `Class=` option only; logs `Profiles: profile "<p>" logs in
+  with Class=<c> (URL had Class=<old>)`. No script change: works with the shipped Engine.u.
+- `UnGame.cpp` `MatchViewportsToActors`: calls `UC2ProfileInURL` (primary viewport only, as D-4).
+- `UnGame.cpp` `LoadMap` (`#ifndef _XBOX` block): `SaveURLConfig("Class")` is skipped while a saved profile is active
+  (as D-4 does for `Name`): `[DefaultPlayer] Class` stays the profile-less player's own character instead of
+  becoming "the last profile's". Owner may veto (one line): without it the no-profile launch after a profile
+  session plays that profile's character.
+- Not changed: a direct NETWORK join from the command line (`<host>` or the web's `<room>?connect`, also an absolute
+  travel) still logs in with `[DefaultPlayer]` Name and Class: `UNetPendingLevel` sends the URL, `MatchViewportsToActors`
+  is not on that path. Open question for the owner.
+- `tools/dev/d3-character.sh` (new): the two-profile test (c0 no profile + ini class Z, c1/c1m Alpha = X, c2/c2m Bravo
+  = Y, c3/c3m switch to Alpha at the menus without playing then a direct launch = X, c4m no profile = Z, c5m the flat
+  files moved/deleted). `tools/dev/c1-web-saves.sh`: Epic's layout, and the frontend's folder glob
+  (`C1_UFRONT_GLUE=<ufrontend-profiles>/packages/glue/src/target/user-files.js`).
