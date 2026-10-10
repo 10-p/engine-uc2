@@ -709,6 +709,20 @@ void APlayerController::execGetSplitscreenLayout( FFrame& Stack, RESULT_DECL )
 		{
 			ViewportIndex = Client->Viewports.FindItemIndex(Viewport);
 			*(UBOOL*)Result = 1;
+
+			// uc2 port (B-3, docs/porting/analysis/split-hud.md): for ClientSetHUD, which only hands the index to
+			// the split HUD's SetSplitPosition (index 1 = "bottom half": its safe-zone offset), the row of the view
+			// in the split-screen layout when more than two views are up, so every view below the split line gets
+			// Epic's bottom-half offset and every view at the screen's top none. Two views: Epic's index, untouched.
+			// Every other caller (GameInfo, PlayerProfile, HUD: "index 0 = the first player") keeps the client index.
+			static FName NAME_ClientSetHUDCaller( TEXT("ClientSetHUD") );
+			USplitScreenMgr* SplitScreenMgr = Client->GetSplitScreenMgr();
+			if( SplitScreenMgr && Stack.Node && Stack.Node->GetFName() == NAME_ClientSetHUDCaller )
+			{
+				INT Row = SplitScreenMgr->HUDLayoutRow( Viewport );
+				if( Row >= 0 )
+					ViewportIndex = Row;
+			}
 		}
 	}
 	unguardexec;

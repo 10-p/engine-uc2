@@ -1017,6 +1017,38 @@ void USplitScreenMgr::UpdateSizes()
 	unguard;
 }
 
+/* uc2 port (B-3) ===========================================================
+* USplitScreenMgr::HUDLayoutRow
+* ============================================================================
+* UC2's split HUD knows the Xbox's two halves only: UCHUD.SetSplitPosition(ViewportIndex, ...) gives index 1 "the
+* bottom half" (no upper safe zone: SafeZoneOffsetY -29) and index 0 none; PlayerController.ClientSetHUD passes the
+* view's index in Client->Viewports (GetSplitscreenLayout). With two views that index IS the row of UpdateSizes'
+* layout (top half 0, bottom half 1). With three or four (Scion's layouts, which UC2's menus never reach) it is not:
+* the client's order of equal-OffsetZ viewports is ZSortViewports' unstable sort, so the offset landed on one quarter
+* (the top-right one with four players). This returns the row in the layout UpdateSizes builds, by the view's place in
+* ActiveSplitViews (not by its rectangle, which may not be laid out yet when a joining player's HUD is made): 0 = at
+* the screen's top edge, 1 = its top edge is the split line; -1 with two views or fewer (Epic's index is kept
+* untouched) or for a viewport that is not a split view. APlayerController::execGetSplitscreenLayout hands it to
+* ClientSetHUD, so Epic's shipped script applies its own bottom-half offset to every view below the split line.
+* ============================================================================
+*/
+INT USplitScreenMgr::HUDLayoutRow( UViewport* Viewport )
+{
+	guard(USplitScreenMgr::HUDLayoutRow);
+
+	INT Idx = Viewport ? ActiveSplitViews.FindItemIndex( Viewport ) : INDEX_NONE;
+	if( Idx == INDEX_NONE || ActiveSplitViews.Num() <= 2 )
+		return -1;
+	switch( ActiveSplitViews.Num() )
+	{
+	case 3:		return Idx == 0 ? 0 : 1;	// top half; two bottom quarters
+	case 4:		return Idx <= 1 ? 0 : 1;	// two top quarters; two bottom quarters
+	default:	return -1;
+	}
+
+	unguard;
+}
+
 /* uc2 port (G-6) ===========================================================
 * USplitScreenMgr::RefreshPlayerHUDs
 * ============================================================================

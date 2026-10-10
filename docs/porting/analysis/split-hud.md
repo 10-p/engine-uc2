@@ -142,3 +142,62 @@ is, not the bottom-left's. Options (not built, the owner chooses):
    the scripts, by giving `ClientSetHUD`'s `GetSplitscreenLayout` call the view's row (0 top, 1 below) as the index
    when more than two views are up (the other callers keep the client index, which they use as "first player");
 3. no offset for quarters (all four like the top-left one).
+
+## B-3b - the owner's choice: Epic's bottom-half rule by row for three and four players (2026-10-10)
+
+Worktree `/home/ion/WorkUC2/engine-uc2-b3b`, branch `b3b-split-rows` (from main 65a73d9, B-3 merged). Logs
+`/home/ion/WorkUC2/logs/b3b/`, run trees `run/b3b`, `run/b3bship`. The owner chose option 2: every view whose top edge
+is the split line (the bottom half, the bottom-row quarters) gets Epic's bottom-half safe-zone offset (-29), a view at
+the screen's top edge none; two players byte-identical to today.
+
+Path taken, and why: the shipped `UCHUD.SetSplitPosition(ViewportIndex, TotalViewports)` knows nothing but the index
+(0 -> offset 0, 1 -> -29, anything else -> left as the freshly spawned HUD has it, 0), and `ClientSetHUD` takes that
+index from the native `GetSplitscreenLayout` (the view's place in `Client->Viewports`). The scripts must stay as
+shipped, so the engine hands `ClientSetHUD` the index whose offset Epic's script applies: the view's ROW in the layout.
+- `USplitScreenMgr::HUDLayoutRow` (`UnSplitScreenMgr.cpp`, declared in `USplitScreenMgr.h`): with three views 0 for the
+  top half and 1 for both bottom quarters, with four 0 for the two top quarters and 1 for the two bottom ones (the
+  same cases as `UpdateSizes`, by the view's place in `ActiveSplitViews`, not by its rectangle, which is not laid out
+  yet when a joining player's HUD may be made); -1 with two views or fewer.
+- `APlayerController::execGetSplitscreenLayout` (`UnController.cpp`): when its caller is `ClientSetHUD`
+  (`Stack.Node`'s name) and the row is >= 0, the row replaces the client index. Every other caller keeps the client
+  index: `GameInfo.uc:2461`, `PlayerProfile.uc:762`, `PlayerController.uc:5423/6091` and `HUD.uc:986` use it as "the
+  first player" / player order, which must not change. Every way a HUD is made goes through `ClientSetHUD` (login,
+  `Possess` re-sending it, G-6's `RefreshPlayerHUDs` after a join/leave, `UCHUD`'s toggle), so all get the row, with
+  Epic's packages and ours alike. With one or two views nothing differs from before (the row is -1 and the code path
+  is the old one), so two players stay exactly as measured in B-3.
+- `tools/dev/g6/b3-hud-compare.py`: the rows check (n3/n4: health top y 33 at the top edge, 4 below the split line,
+  reticle within 1.5 design px of the view's centre; `--rows` counts it). On B-3's "before" runs it fails as it should:
+  ours720/ours1080 n3 split 1 at 33 (want 4), n4 split 1 at 4 (want 33), n4 splits 2 and 3 at 33 (want 4).
+
+Measured (binary uc2.bin sha256 2d2f3ebb53e8c3f7..., `tools/dev/g6-splitscreen.sh <tree> hud`, GPU, load 19-22, frozen
+frames; `logs/b3b/{ours640,ours720,ours1080,ship1080}`, table `logs/b3b/compare-after.txt`): all four `PASS b3-hud`
+(7 checks, 0 Critical); `PASS b3-hud-{ours640,ours720,ours1080,ship1080}-as-epic640` (two players unchanged, worst 0.7
+design px, the same numbers as B-3) and `PASS b3-hud-{...}-rows` (0 outside). Health fill top y in design px at
+1920x1080, before (main 65a73d9, B-3's `logs/b3/ours1080`) -> after; reticle centre from the view's centre after:
+
+| players | view (split order) | row | before | after (rebuilt .u) | after (shipped .u) | reticle after |
+|---|---|---|---|---|---|---|
+| 3 | top half | 0 | 32.9 | 32.9 | 32.9 | -0.67, 0 |
+| 3 | bottom-left quarter | 1 | **32.7** | 4.0 | 4.0 | -0.67, 0 |
+| 3 | bottom-right quarter | 1 | 4.0 | 4.0 | 4.0 | -1.00, 0 |
+| 4 | top-left quarter | 0 | 32.7 | 32.7 | 32.7 | -0.33, 0 |
+| 4 | top-right quarter | 0 | **4.0** | 32.7 | 32.7 | -0.67, 0 |
+| 4 | bottom-left quarter | 1 | **32.7** | 4.0 | 4.0 | -1.00, 0 |
+| 4 | bottom-right quarter | 1 | **32.7** | 4.0 | 4.0 | -0.67, 0 |
+
+(1280x720 and 640x480 the same within 1 px: 640x480 quarters 32.0/4.0, i.e. half-scale rounding.) The weapon lists and
+score boxes move with the offset (bottom row 127/3, top row 155/32). Two players' HUD-alone pictures before/after at
+the same size: identical outside the crosshair's animation and the adrenaline meter's blinking segment (0-16 pixels
+of 0.9-2.1 million with our packages; up to 5,448 with the shipped ones, all inside those two elements' boxes). The
+engine log still names each HUD by client index ("gets its HUD again ... viewport 2 of 5"): unchanged on purpose.
+Sheets (Epic 4:3 | before | after | after with shipped .u, picture and HUD alone measured): `logs/b3b/sheet-n3.png`,
+`logs/b3b/sheet-n4.png` (n1/n2 for completeness).
+
+Regressions and builds (commit a0c0448's source):
+- `g6-splitscreen.sh b3b render menu` (`logs/b3b/g6`, load 21-28): `PASS g6-render` 7 checks, g6-measure 0 failed (the
+  HUD-inside checks now read top-row quarters t91 b62 and bottom-row t62 b91 px in 640x360: the row rule; G-6 only
+  requires the HUD inside, no expectation changed), `PASS g6-menu` 9 checks.
+- Two players: the `-as-epic640` checks above (unchanged to the design pixel); single player never reaches the new
+  code (one view: the row is -1).
+- Builds (`bin/capped 6G`, `-j4` native, `-j2` windows and wasm-perf at load 21-28): native, windows (MinGW, uc2.exe),
+  wasm-perf: rc 0, 0 errors each (`logs/b3b/build-{native-0,windows,wasm-perf}.log`). No script changed.
