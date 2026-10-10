@@ -88,3 +88,13 @@ def spawn(k, tries=10):
         chan(f'pad {k} axis righttrigger 32767'); time.sleep(0.3)
         chan(f'pad {k} axis righttrigger 0'); time.sleep(1.5)
     return False
+
+
+def fire_all(npads):
+    """Every pad's fire once (a match with several local players starts when all of them are ready)."""
+    for k in range(npads):
+        chan(f'pad {k} axis righttrigger 32767')
+    time.sleep(0.3)
+    for k in range(npads):
+        chan(f'pad {k} axis righttrigger 0')
+    time.sleep(1.0)

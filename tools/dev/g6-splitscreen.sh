@@ -380,19 +380,27 @@ SCEN
   cat <<SCEN
 expect menu-travel-to-deathmatch Bringing Level DM-Deadbolt.MyLevel up for play 120
 sleep 6
-padtrigger righttrigger
-sleep 1
-pad 1 axis righttrigger 32767
-sleep 0.3
-pad 1 axis righttrigger 0
-sleep 4
+seek 20 P['_'].pawn == 1 ;; pyexec fire_all(2)
+check menu-player2-spawns spawn(1)
+sleep 2
 vprobe m2
 check menu-match-has-two-split-players layout_ok('m2') and VS['m2'][1] == 2 and pads_in_join_order('m2') and all_split_huds('m2')
 shot match-two-players
 key Escape
-expect menu-pause-menu-opens OpenMenu 15
+expect menu-pause-menu-opens OpenMenu \[UCMenu.InGame_MainMenu\] 15
 sleep 2
 shot pause-two-players
+seek 8 P['_'].caption == 'FORFEIT GAME' ;; key Down
+key Return
+wait OpenMenu \[GUI.GUIMessageBox\] 20
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
+tryseek 4 P['_'].caption.upper() in ('YES', 'OK', 'ACCEPT', 'FORFEIT') ;; key Up
+key Return
+expect menu-forfeit-back-to-main-menu OpenMenu \[UCMenu.UC2MainMenu\] 90
+sleep 3
+vprobe back
+check menu-players-leave-back-to-one-viewport layout_ok('back') and VS['back'][0] == 1 and VS['back'][1] == 0
 SCEN
 }
 
