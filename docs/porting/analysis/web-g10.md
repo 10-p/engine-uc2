@@ -308,3 +308,13 @@ TcpNetDriver too (its base returns false while the connection has no Actor), so 
   ("21.0 GB in use, over the 21 GB budget"): the machine was at 17.6 GB before the run started (the owner's
   missioncenter alone holds 9.7 GB RSS), so two browser pages cross 21. Not a test result; rerun once the machine is
   below ~16.3 GB in use.
+- Browser run 2 (`run-e2e-g10b.sh net-hostgone-1 1500 uc2-wasm-net.spec.js -g "host's tab is closed"`, only the new
+  test): stopped by the guard the same way ("17.3 GB in use at start", "21.1 GB in use, over the 21 GB budget"). Cause
+  (diagnosed, not the test): the machine's baseline is 17.3-18.7 GB, of which the owner's `missioncenter` (pid 4000,
+  up 6 days 12 h) holds 9.8 GB RSS, plus other agents' capped runs (g9-split2 ~1.7 GB); two Chromium pages add ~3.5 GB
+  (G-10's runs started at 16.9 GB and peaked 20.8-21.3). Not retried unchanged: waited for the machine to fall below
+  16.6 GB in use (it stayed at 17.3-17.7 for 50 min).
+  At 10:49 it was 18.2 GB. Stopped here: the browser proof of G-10b (net spec 4/4) is still to be run, on a machine with
+  room under the 21 GB guard (or with a guard the coordinator sets higher; 24 GB is the owner's hard line). serve-web
+  holds this branch's artifact (12a71c15...); the patch is `logs/g10/frontend-g10b.patch`, runner
+  `logs/g10/run-e2e-g10b.sh net-2 3600 uc2-wasm-net.spec.js`.
