@@ -18,7 +18,8 @@
 	  every stage result saturated to [0,1].
 
 	Also: eight stages in one pass, the colour sum (secondary colour), linear fog, a
-	projected 2D lookup (s/q, t/q), cube-map face selection and the per-stage LOD bias
+	projected 2D lookup (s/q, t/q), cube-map face selection, a cube map followed by a 2D
+	stage in one pass (GL4ES' per-unit textures, B-2) and the per-stage LOD bias
 	(on stage 0 and stage 5). A case that needs more stages than the device reports is
 	SKIPPED, with that said on its line.
 
@@ -564,6 +565,63 @@ struct FUC2GLCombinerTest
 		Report( TEXT("cube-faces"), Compared, MaxError, 0.f, *Worst );
 	}
 
+	// B-2 (decay-flash.md, "GL4ES push preparation"): a cube map on stage 0 and a 2D texture on stage 1 of one
+	// pass, as DM-Decay's water. The interface leaves unit 0 (cube map enabled, 2D disabled) active at the draw.
+	// GL4ES before the fork's per-unit fix chose every unit's 2D texture from the ACTIVE unit's enables and,
+	// those saying cube map, bound none: stage 1 read the 2D texture GL4ES last bound on unit 1 (the earlier
+	// cases' Tex[1]) instead of this one. Run right after RunCube, with a texture no earlier case put on unit 1.
+	void RunCube2D()
+	{
+		if( RenDev->NumTextureUnits < 2 )
+		{
+			Skip( TEXT("cube-then-2d"), TEXT("needs 2 stages") );
+			return;
+		}
+		static const FLOAT Dir[3] = { -.2f, .1f, 1.f };	// face 4 (+Z)
+		static const BYTE Texel[4] = { 40 * 4 + 10, 250 - 37 * 4, 60, 255 - 20 * 4 };
+		static const FLOAT UV[4][2] = { { 0.f, 0.f }, { 1.f, 0.f }, { 0.f, 1.f }, { 1.f, 1.f } };
+		const INT T2 = MAX_STAGES - 1;
+		FOpenGLMaterialState MS;
+		InitPass( MS, 2, Factor[0] );
+		MS.Stages[0].Texture = Cube;
+		MS.Stages[0].ColorOp = D3DTOP_SELECTARG1; MS.Stages[0].ColorArg1 = D3DTA_TEXTURE;
+		MS.Stages[0].AlphaOp = D3DTOP_SELECTARG1; MS.Stages[0].AlphaArg1 = D3DTA_TEXTURE;
+		MS.Stages[1].Texture = Tex[T2];
+		MS.Stages[1].ColorOp = D3DTOP_MODULATE; MS.Stages[1].ColorArg1 = D3DTA_TEXTURE; MS.Stages[1].ColorArg2 = D3DTA_CURRENT;
+		MS.Stages[1].AlphaOp = D3DTOP_MODULATE; MS.Stages[1].AlphaArg1 = D3DTA_TEXTURE; MS.Stages[1].AlphaArg2 = D3DTA_CURRENT;
+		FLOAT Coords[4][MAX_STAGES][4];
+		appMemzero( Coords, sizeof(Coords) );
+		for( INT v=0; v<4; v++ )
+		{
+			Coords[v][0][0] = Dir[0]; Coords[v][0][1] = Dir[1]; Coords[v][0][2] = Dir[2]; Coords[v][0][3] = 1.f;
+			Coords[v][1][0] = UV[v][0]; Coords[v][1][1] = UV[v][1]; Coords[v][1][2] = 0.f; Coords[v][1][3] = 1.f;
+		}
+		// Without the anisotropy parameter: GL4ES binds a 2D texture at once when that one is set (it is not one
+		// of the sampler parameters it defers: realize_bound), which hides the deferred bind this case is about.
+		// Contexts without EXT_texture_filter_anisotropic (some WebGL ones) draw like this.
+		UBOOL SavedAniso = RenDev->SUPPORTS_GL_EXT_texture_filter_anisotropic;
+		RenDev->SUPPORTS_GL_EXT_texture_filter_anisotropic = 0;
+		BYTE Out[16*4];
+		Draw( MS, Diffuse[0], Specular[0], 0, 0, Coords, Out );
+		RenDev->SUPPORTS_GL_EXT_texture_filter_anisotropic = SavedAniso;
+		FLOAT	MaxError = 0.f;
+		INT		Compared = 0;
+		FString	Worst;
+		for( INT p=0; p<16; p++ )
+			for( INT c=0; c<4; c++ )
+			{
+				FLOAT Expected = Texel[c] * (TexData[T2][p*4+c] / 255.f);
+				FLOAT Err = Abs( (FLOAT)Out[p*4+c] - Expected );
+				Compared++;
+				if( Err > MaxError )
+				{
+					MaxError = Err;
+					Worst = FString::Printf( TEXT("worst: pixel %i, channel %i: %i, expected %.1f"), p, c, Out[p*4+c], Expected );
+				}
+			}
+		Report( TEXT("cube-then-2d"), Compared, MaxError, 2.f, *Worst );
+	}
+
 	void RunLODBias( INT Stage )
 	{
 		FString Name = FString::Printf( TEXT("lod-bias-stage%i"), Stage );
@@ -624,6 +682,7 @@ struct FUC2GLCombinerTest
 		for( INT i=0; i<ARRAY_COUNT(GCTCases); i++ )
 			RunCase( GCTCases[i] );
 		RunCube();
+		RunCube2D();
 		RunLODBias( 0 );
 		RunLODBias( 5 );
 		Teardown();
