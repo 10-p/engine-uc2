@@ -1,0 +1,36 @@
+# The owner's spot (WHEREAMI -337.1 2.3 -418.4 32950 1193), third person; frames over time, then the view turned
+# (TELEPORT keeps the place, changes yaw/pitch), then the pawn moved away and back.
+chan exec TELEPORT -337.1 2.3 -418.4 32950 1193
+sleep 3
+chan exec TELEPORT -337.1 2.3 -418.4 32950 1193
+sleep 2
+chan exec WHEREAMI
+shot t0
+sleep 1
+shot t1
+sleep 2
+shot t3
+chan exec TELEPORT -337.1 2.3 -418.4 38411 1193
+sleep 1.5
+shot yaw+30
+chan exec TELEPORT -337.1 2.3 -418.4 43872 1193
+sleep 1.5
+shot yaw+60
+chan exec TELEPORT -337.1 2.3 -418.4 27489 1193
+sleep 1.5
+shot yaw-30
+chan exec TELEPORT -337.1 2.3 -418.4 32950 -3000
+sleep 1.5
+shot pitchdown
+chan exec TELEPORT -337.1 2.3 -418.4 32950 1193
+sleep 1.5
+shot back
+chan exec TELEPORT -537.1 2.3 -418.4 32950 1193
+sleep 1.5
+shot away200
+chan exec TELEPORT -137.1 2.3 -418.4 32950 1193
+sleep 1.5
+shot fwd200
+chan exec TELEPORT -337.1 2.3 -418.4 32950 1193
+sleep 1.5
+shot back2

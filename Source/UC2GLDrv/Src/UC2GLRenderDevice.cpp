@@ -1630,8 +1630,10 @@ void UUC2GLRenderDevice::DrawPresentPass( UViewport* Viewport )
 	glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
 	glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
 
-	glActiveTexture( GL_TEXTURE0 );
-	glBindTexture( GL_TEXTURE_2D, MainColorTexture );
+	// B-2: the 2D enables too (GL4ES; UC2GLPostProcess.cpp, BindProgramTexture2D).
+	if( GammaRampActive && GammaRampTexture && ApplyGamma && PostProcessActive() )
+		BindProgramTexture2D( 1, GammaRampTexture );
+	BindProgramTexture2D( 0, MainColorTexture );
 
 	glUseProgram( PresentProgram );
 	glUniform1i( PresentTextureLoc, 0 );
@@ -1640,12 +1642,6 @@ void UUC2GLRenderDevice::DrawPresentPass( UViewport* Viewport )
 	UBOOL UseRamp = GammaRampActive && GammaRampTexture && ApplyGamma && PostProcessActive();
 	glUniform1f( PresentUseRampLoc, UseRamp ? 1.f : 0.f );
 	glUniform1i( PresentRampLoc, 1 );
-	if( UseRamp )
-	{
-		glActiveTexture( GL_TEXTURE1 );
-		glBindTexture( GL_TEXTURE_2D, GammaRampTexture );
-		glActiveTexture( GL_TEXTURE0 );
-	}
 
 	BindQuadBuffer();
 	glVertexAttribPointer( 0, 2, GL_FLOAT, GL_FALSE, 0, NULL );
@@ -2050,10 +2046,11 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	else if( ParseCommand(&Cmd,TEXT("GLPIXTRACE")) )
 	{
 		// GLPIXTRACE <x> <y> [all]: log what the next frame draws over that pixel (UC2GLPixelTrace.cpp; fx-fixes).
-		extern void UC2GL_PixelTraceArm( UUC2GLRenderDevice*, INT, INT, UBOOL );
+		extern void UC2GL_PixelTraceArm( UUC2GLRenderDevice*, INT, INT, UBOOL, UBOOL );
 		INT X = appAtoi( *ParseToken(Cmd,0) );
 		INT Y = appAtoi( *ParseToken(Cmd,0) );
-		UC2GL_PixelTraceArm( this, X, Y, ParseCommand(&Cmd,TEXT("ALL")) );
+		UBOOL All = ParseCommand(&Cmd,TEXT("ALL"));
+		UC2GL_PixelTraceArm( this, X, Y, All, ParseCommand(&Cmd,TEXT("DUMP")) );
 		return 1;
 	}
 	else if( ParseCommand(&Cmd,TEXT("FFPROGRAMS")) )

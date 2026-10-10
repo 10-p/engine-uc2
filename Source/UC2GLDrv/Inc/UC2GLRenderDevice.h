@@ -417,6 +417,7 @@ public:
 	void DestroyPostProcessTargets();
 	void SetPostProcess( UBOOL Enable );
 	void DrawPostQuad( GLuint Program, GLint RectLoc, GLuint SourceTexture, GLuint DestFramebuffer, INT DestWidth, INT DestHeight, const FLOAT* Rect, UBOOL DepthOnly );
+	void BindProgramTexture2D( INT Unit, GLuint Texture );	// B-2: a 2D texture for the device's own GLSL draws
 	GLuint GetSampledTexture( FOpenGLTexture* Texture );
 	void UpdateSampledTexture( FOpenGLTexture* Texture );
 	void SetGammaRamp( const BYTE* Ramp );

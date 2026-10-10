@@ -1,0 +1,10 @@
+# The cloud's frame with every render target dumped (GLPIXTRACE ... all dump; PixTrace-* in the run tree's System).
+chan exec TELEPORT -337.1 2.3 -418.4 32950 1193
+sleep 3
+chan exec TELEPORT -337.1 2.3 -418.4 32950 -3000
+sleep 2
+chan exec TELEPORT -337.1 2.3 -418.4 32950 1193
+sleep 2
+shot on
+chan exec GLPIXTRACE 640 300 all dump
+sleep 2
