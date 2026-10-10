@@ -144,3 +144,40 @@ does not show them because nothing there signals a server twice in its tests (no
   - fixed, one TERM: exit 1, 0.3 s, log closed. Fixed, SIGSEGV: crash report + `appExit`, log closed, ends in 0.1 s.
 - Build note: the owner's load rule (coordinator, 02:17): `-j2` while load > 24; my two `-j4` builds were stopped (their
   scopes, by name) and restarted at `-j2`, one after the other.
+
+## Step 5: D-2, the two class packages, and the first package download (2026-10-10)
+
+Changes:
+- `Source/IpDrv/Inc/HTTPDownload.h`: `DECLARE_CLASS(UHTTPDownload,UDownload,CLASS_Transient|CLASS_Config,IpDrv)` (was
+  Engine), as engine-ut2004. `Source/Editor/Inc/UnPrefab.h`: `DECLARE_CLASS(UPrefab,UObject,CLASS_SafeReplace,Editor)`
+  (was Engine): the package Epic's Editor DLL registered it under (IMPLEMENT_CLASS's `_MSC_VER` branch uses the DLL's
+  `GPackage`). engine-ut2004 kept Prefab under Engine (it never builds the editor); Epic's DLL build is the reference
+  here because a prefab saved by Epic's UnrealEd would import `Editor.Prefab`. Nothing shipped names either class.
+- `Source/Editor/Src/UC2EpicClassOrder.h` regenerated (`python3 tools/dev/epic-class-order.py`: 481 classes): the two
+  rows now say IpDrv / Editor (epochs unchanged: 5, -1). Neither class has script, so `make`'s visiting order of
+  script classes is unchanged.
+- Found by exercising the download: `UHTTPDownload::Tick` treated a non-blocking `connect()` under way as a failure
+  unless the error was `WSAEWOULDBLOCK`; BSD sockets say `EINPROGRESS`. Every HTTP download failed at once ("HTTPDownload:
+  connect() failed", python's http.server saw the reset) and fell back to ChannelDownload. Fix as engine-ut2004:
+  `Source/IpDrv/Inc/UnSocket.h` defines `WSAEINPROGRESS` = `EINPROGRESS` for BSD sockets, `HTTPDownload.cpp` accepts
+  both.
+
+Checks:
+- `ucc-bin verifyclasses`: 64-bit and 32-bit both exit 0, `All native class layouts match` (`logs/d12/verify{64,32}.out`;
+  the 32-bit log also `VERIFY: Editor class layouts match`).
+- `tools/dev/net-test.py`: `Proc(ini_add=...)` writes the process's own ini from Default.ini plus lines (repeated keys
+  cannot be added with `-ini:`); new opt-in checks `download` and `download-http` (net-test.sh header). The package:
+  `Textures/RL_Hud_Movies.utx` (547 bytes) copied to `<tree>/NetDownload/NetDownloadTest.utx` and resaved by
+  `ucc-bin resavepackage ../NetDownload NetDownloadTest.utx` (a new GUID, 549 bytes, PKG_AllowDownload). Only the
+  server's ini has `Paths=../NetDownload/*.utx` and `ServerPackages=NetDownloadTest`; the client gets its own empty
+  `CachePath`. `download-http` adds `RedirectToURL=http://127.0.0.1:<NET_PORT+1>/` and `UseCompression=False` and runs
+  `python3 -m http.server` inside the same capped scope.
+- `NET_TREE=d12-net NET_PORT=7866 tools/dev/net-test.sh download download-http` (32-bit build, capped 6G): 12/12 PASS
+  (`logs/d12-net/net-summary.txt`): the client logs `Receiving package 'NetDownloadTest'`, its cache holds
+  `<GUID>.uxx` byte-identical to the server's file and cache.ini maps the GUID to `NetDownloadTest.utx`, the client
+  joins DM-Deadbolt; over HTTP the server sends `DLMGR CLASS=IpDrv.HTTPDownload PARAMS=http://127.0.0.1:7867/
+  COMPRESSION=0` and the HTTP server logs `"GET /NetDownloadTest%2eutx HTTP/1.1" 200` (UHTTPDownload escapes the dot),
+  no fallback. Before D-2, main's server logs had `Warning: Failed to load 'Class IpDrv.IpDrv.HTTPDownload'` once per
+  client (`logs/net/dedicated2-srv.log:202`) and never sent that DLMGR; now 0 such lines.
+- Regression `net-test.sh --keep-tree dedicated1`: 8/8 PASS + leftovers PASS (`logs/d12/net-summary-dedicated1.txt`).
+- Not exercised: compressed HTTP download (`.uz`, `UseCompression=True`), a proxy, a map download.

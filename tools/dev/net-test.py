@@ -57,9 +57,12 @@ def dist(a, b):
 class Proc:
     """One engine process: kind 'server' (ucc-bin server), 'listen' (uc2.bin <map>?Listen) or 'client'."""
 
-    def __init__(self, check, name, kind, url, render="null", extra=(), sysdir=None, wine=False, cheatkey=True):
+    def __init__(self, check, name, kind, url, render="null", extra=(), sysdir=None, wine=False, cheatkey=True, ini_add=None):
         self.check, self.name, self.kind, self.url = check, name, kind, url
         self.cheatkey = cheatkey
+        # ini_add: {section: [line, ...]} appended to a copy of Default.ini that becomes this process's own ini (for
+        # keys that repeat, ServerPackages= or Paths=, which an -ini: override cannot add: it sets the first one).
+        self.ini_add = ini_add
         self.render, self.extra = render, list(extra)
         self.wine = wine
         self.sys = sysdir or SYS
@@ -75,6 +78,17 @@ class Proc:
             p = os.path.join(self.sys, f)
             if os.path.exists(p):
                 os.remove(p)
+        if self.ini_add:
+            with open(os.path.join(self.sys, "Default.ini"), "rb") as f:
+                lines = f.read().decode("latin-1").split("\n")
+            for section, add in self.ini_add.items():
+                head = lines.index("[%s]" % section)
+                end = next((k for k in range(head + 1, len(lines)) if lines[k].startswith("[")), len(lines))
+                while end > head + 1 and not lines[end - 1].strip():
+                    end -= 1
+                lines[end:end] = add
+            with open(os.path.join(self.sys, "Net%s.ini" % self.name), "wb") as f:
+                f.write("\n".join(lines).encode("latin-1"))
         open(self.netcmd, "w").close()
         open(self.inputcmd, "w").close()
         # NETPROBE/NETPLACE/NETPLACENEAR are cheats (F-1, Source/Engine/Src/UC2Cheats.cpp): a client and a
@@ -1020,7 +1034,113 @@ def check_cheats():
         finish(ck, procs)
 
 
+DLPKG = "NetDownloadTest"
+
+
+def make_download_package():
+    """A small package that only the server can see: the smallest shipped texture package (RL_Hud_Movies.utx,
+    547 bytes, PKG_AllowDownload) copied under a new name into <tree>/NetDownload/ and resaved by ucc-bin's own
+    ResavePackage commandlet, so it is a package of its own (SavePackage gives it a new GUID). Only the server's ini
+    lists that folder in Paths. Returns (path, guid hex) or (None, reason)."""
+    import shutil, struct
+    tree = os.path.dirname(SYS)
+    d = os.path.join(tree, "NetDownload")
+    shutil.rmtree(d, ignore_errors=True)
+    os.makedirs(d)
+    src = os.path.join(tree, "Textures", "RL_Hud_Movies.utx")
+    dst = os.path.join(d, DLPKG + ".utx")
+    shutil.copyfile(src, dst)
+    log = os.path.join(OUT, "download-make.out")
+    with open(log, "w") as f:
+        rc = subprocess.call(["./ucc-bin", "resavepackage", "../NetDownload", DLPKG + ".utx", "LOG=NetDownloadMake.log",
+                              "INI=NetDownloadMake.ini", "USERINI=NetDownloadMakeUser.ini"], cwd=SYS, stdout=f,
+                             stderr=subprocess.STDOUT, timeout=120)
+
+    def header(p):
+        with open(p, "rb") as f:
+            h = f.read(64)
+        flags = struct.unpack_from("<I", h, 8)[0]
+        return flags, h[36:52].hex()   # v151 summary: tag, ver, flags, 3 x (count, offset), then the GUID
+    sflags, sguid = header(src)
+    dflags, dguid = header(dst)
+    ok = rc == 0 and dguid != sguid and dflags & 1
+    return (dst if ok else None), "ucc-bin resavepackage exit %d; %s.utx %d bytes, flags 0x%x, GUID %s (source GUID %s)" % (
+        rc, DLPKG, os.path.getsize(dst), dflags, dguid, sguid)
+
+
+def check_download(http=False):
+    """Package download: the server lists a package (ServerPackages) that the client's tree does not have. The client
+    must fetch it (ChannelDownload through the game connection; with http=True the server's RedirectToURL points at a
+    local HTTP server, so the client receives `DLMGR CLASS=IpDrv.HTTPDownload` and fetches it over HTTP), store it in
+    its cache under the package GUID, load it, and join."""
+    ck = "download-http" if http else "download"
+    pkg, how = make_download_package()
+    result(bool(pkg), ck + ".package", how)
+    if not pkg:
+        return
+    guid = re.search(r"GUID (\w+)", how).group(1)
+    cachedir = os.path.join(os.path.dirname(SYS), "NetDownloadCache-" + ck)
+    import shutil
+    shutil.rmtree(cachedir, ignore_errors=True)
+    ini = {"Core.System": ["Paths=../NetDownload/*.utx"], "Engine.GameEngine": ["ServerPackages=" + DLPKG]}
+    httpd = None
+    hport = PORT + 1   # TCP; the game uses UDP
+    if http:
+        # UseCompression=False: the file as it is (with True the client asks for <file>.uz, made by `ucc compress`).
+        ini["IpDrv.HTTPDownload"] = ["RedirectToURL=http://127.0.0.1:%d/" % hport]
+        httpd_out = open(os.path.join(OUT, ck + "-httpd.out"), "w")
+        httpd = subprocess.Popen([sys.executable, "-m", "http.server", str(hport), "--bind", "127.0.0.1", "--directory",
+                                  os.path.dirname(pkg)], stdout=httpd_out, stderr=subprocess.STDOUT)
+    s = Proc(ck, "srv", "server", "DM-Deadbolt", ini_add=ini,
+             extra=["-ini:System:[IpDrv.HTTPDownload]:UseCompression=False"] if http else []).start()
+    s.wait(r"TcpNetDriver on port", 60)
+    a = Proc(ck, "NetD", "client", "127.0.0.1:%d?Name=NetD" % PORT,
+             extra=["-ini:System:[Core.System]:CachePath=../" + os.path.basename(cachedir)]).start()
+    procs = [s, a]
+    try:
+        sp = s.wait(r"Server Package: %s" % DLPKG, 5, from_start=True)
+        result(bool(sp), ck + ".serverpackage", sp.group(0) if sp else "no 'Server Package: %s' in the server log" % DLPKG)
+        dlwarn = s.count(r"Failed to load .*HTTPDownload")   # main before D-2: "Failed to load 'Class IpDrv.IpDrv.HTTPDownload'"
+        rcv = a.wait(r"Receiving package '%s'" % DLPKG, 60)
+        j = s.wait(r"Join succeeded: NetD", 120)
+        # FGuid::String() prints the four DWORDs as %08X each; the file's GUID bytes are those DWORDs little-endian.
+        g = bytes.fromhex(guid)
+        gstr = "".join("%08X" % int.from_bytes(g[k:k + 4], "little") for k in range(0, 16, 4))
+        cached = os.path.join(cachedir, gstr + ".uxx")
+        same = os.path.exists(cached) and open(cached, "rb").read() == open(pkg, "rb").read()
+        ini_txt = open(os.path.join(cachedir, "cache.ini"), "rb").read().decode("latin-1") if os.path.exists(
+            os.path.join(cachedir, "cache.ini")) else ""
+        result(bool(rcv) and same and (gstr + "=" + DLPKG) in ini_txt, ck + ".received",
+               "client: %s; cache file %s %s; cache.ini %s" % (rcv.group(0) if rcv else "no 'Receiving package' line",
+               os.path.basename(cached), "byte-identical to the server's" if same else "MISSING or different",
+               ini_txt.strip().replace("\n", " | ") or "missing"))
+        if http:
+            httpd_out.flush()
+            got = open(os.path.join(OUT, ck + "-httpd.out")).read()
+            # UHTTPDownload escapes every character but [A-Za-z0-9] (FormatFilename): the dot arrives as %2e.
+            m = re.search(r'"GET /%s(\.|%%2e)utx HTTP/1\.\d" 200' % DLPKG, got)
+            fallback = a.count(r"HTTPDownload: .* failed")
+            result(bool(m) and dlwarn == 0 and fallback == 0, ck + ".http",
+                   "HTTP server: %s; client 'HTTPDownload: ... failed' lines: %d; server 'Failed to load ...HTTPDownload': %d"
+                   % (m.group(0) if m else "no GET of the package", fallback, dlwarn))
+        else:
+            snd = s.count(r"^DevNet: .*%s" % DLPKG)
+            result(dlwarn == 0, ck + ".dlmgr", "server 'Failed to load ...HTTPDownload' lines (main before D-2 had one per client): %d; "
+                   "server DevNet lines naming the package: %d" % (dlwarn, snd))
+        lv = a.probe("D0") if j else None
+        result(bool(j) and bool(lv) and lv["summary"].get("level") == "DM-Deadbolt", ck + ".join",
+               "server: %s; client probe level=%s" % (j.group(0) if j else "no 'Join succeeded: NetD' in 120 s",
+               lv["summary"].get("level") if lv else None))
+    finally:
+        finish(ck, procs)
+        if httpd:
+            httpd.terminate()
+            httpd.wait(5)
+            httpd_out.close()
+
+
 ALL = {"cheats": check_cheats, "dedicated1": check_dedicated1, "dedicated2": check_dedicated2, "listen": check_listen,
+       "download": check_download, "download-http": lambda: check_download(True),
        "travel": check_travel, "disconnect": check_disconnect, "soak": check_soak, "lag": check_lag,
        "glshot": check_glshot, "wine": check_wine,
        "handshake-loss": check_handshake_loss, "handshake-compat": lambda: check_handshake_loss(True)}

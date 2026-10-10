@@ -141,7 +141,10 @@ void UHTTPDownload::Tick(void)
 			}
 			SetNonBlocking( ServerSocket );
 			INT err = connect( ServerSocket, (SOCKADDR*) &ServerAddr, sizeof(ServerAddr) );
-			if ( err == SOCKET_ERROR && WSAGetLastError() != WSAEWOULDBLOCK )
+			// uc2 port (D-2): a non-blocking connect() under way is WSAEWOULDBLOCK on Winsock but EINPROGRESS on BSD
+			// sockets (Linux, the web); only Winsock's was accepted, so every HTTP download "failed" at once and fell
+			// back to the next download manager. engine-ut2004 accepts both, the same way.
+			if ( err == SOCKET_ERROR && WSAGetLastError() != WSAEWOULDBLOCK && WSAGetLastError() != WSAEINPROGRESS )
 			{
 				debugf( NAME_DevNet, TEXT("HTTPDownload: connect() failed") );
 				DownloadError( LocalizeError( TEXT("ConnectionFailed"), TEXT("Engine") ) );
