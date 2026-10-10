@@ -169,3 +169,43 @@ Plan (each a commit + a notebook entry):
 4. test channel: `PAD <n> ...` (four virtual pads) and a `VIEWPORTS` probe; `tools/dev/g6-splitscreen.sh`;
 5. measure 2/3/4 players; fix what the numbers show (post-processing per viewport, HUD, audio);
 6. dynamic gamma per viewport; 7. regressions.
+
+## G-6, steps 2-4 - sub-viewports, joins, the test channel (commits 1c99a9a, c577479, 3b74423, e4ce997)
+
+What was built (file:line at e4ce997):
+- SDL2Drv (`SDL2Viewport.cpp`): `OpenWindow` with a parent = a split-screen viewport (`SubViewport`): no window,
+  `RenDev` = viewport 0's, size from the window (Xbox `UXboxViewport::OpenWindow`). `GetWindow()` of a sub-viewport
+  is viewport 0's window (the GL binding swaps and sizes from it). `WindowSizeX/Y` (set in `ResizeViewport`) is the
+  frame; `IsFullscreen` = window fullscreen and the viewport covers it (Xbox rule). `UpdateInput`: Xbox GamepadID
+  sync (`XboxViewport.cpp:404-418`), the bound pad for every viewport, keyboard/mouse only for the window's
+  viewport. Window commands (SETRES, TOGGLEFULLSCREEN, ...) and `SHOT` from a sub-viewport go to the window /
+  the overlay (whole picture). `Destroy`: a sub-viewport leaves the shared device (no `Flush` of the level's
+  resources) and console alone.
+- SDL2Drv (`SDL2Client.cpp`): `Tick` = `UXboxClient::Tick` (Blit for the first drawn viewport only, `bDisableDraw`
+  skipped, ActiveControllerId restored); `GetInitScreenSize` = window; `PadJoin` (Start on an unbound pad,
+  `XboxClient.cpp:878-917`, plus `SplitScreenJoinInMatch`); `UpdateSplitLayout` after a resize; `CursorWanted`
+  (the overlay's menu cursor is the window's); `Destroy` destroys viewports last first (the old forward loop skipped
+  every second one; with shared consoles that crashed at exit: SIGSEGV seen in the first run).
+- SDL2Drv (`SDL2Pads.cpp` `SendButtonEdges`): Start (button 12) of an unbound pad -> `PadJoin`.
+- Engine: `UClient::SplitScreenViewports()` (UnCamera.h) lifts SPLIT ADD/REMOVE's Xbox branches (`UnCamMgr.cpp`);
+  `SpawnPlayActor` fake only for padless viewports (`UnLevAct.cpp:914`); `USplitScreenMgr::RefreshPlayerHUDs`
+  (`UnSplitScreenMgr.cpp`, after a join/leave in a match: without it player one kept the full-screen `UCHUD`, its
+  reticle on the bottom edge of its strip); `UCanvas::ApplyUIBox` design space of a split view = 640 x 480*ScaleY
+  (with 640*ScaleX the split HUD's 640-wide layout put the reticle on the right edge of a quarter).
+- UC2GLDrv: `GetFrameSize` (window size) for the main framebuffer in `SetRes`/`Lock`; `ReadPixels` reads the
+  viewport's rectangle.
+- Default.ini (+ web copy by `sync-web-ini.py`): `[Engine.Engine] OverlayCameraClass=UCGameplay.UCOverlayCamera`
+  (Epic's Xbox value; without it the overlay is a plain Camera: "Accessed None [PlayerReplicationInfo]" and no
+  pause effect on the menus while split), `[SDL2Drv.SDL2Client] SplitScreenJoinInMatch=True`.
+- Test channel: `pad <n> ...` (four virtual pads), `viewports <tag>`; m10-inject.py `vprobe` + `vdist/vyaw/vsplit`.
+
+First runs (Xvfb, llvmpipe, 1280x720, DM-Deadbolt, logs/g6/try/): pads 1..3 Start in the match -> 2, 3, 4 split
+views with Scion's rectangles: 2 = (0,0,1280,360)+(0,360,1280,360); 3 = top half + (0,360,640,360) +
+(640,360,640,360); 4 = quadrants; overlay (0,0,1280,720) menu=1 scene=0. Pad 2's left stick moved player 3 by
+>100 units, the other three by <5 (check `pad2-moves-player3-only` PASS). Pictures: try2-two/three/four.png: four
+distinct views, each with the split HUD fitted in its quarter, reticle centred.
+
+Seen, to follow up: the HUD of the viewport at index 1 of `Client->Viewports` gets `SafeZoneOffsetY=-29` (script:
+"index 1 = bottom half"), so the top-right quarter's HUD sits 29 design pixels higher than the others' (inside its
+quarter). 3-4 players get Epic's `SSDetailLevels` (no coronas/decals/projectors, ReduceFOV 0.5). FovAngle 139 was
+probed once right after a join (the spawn's teleport FOV effect?): to measure.
