@@ -444,17 +444,37 @@ foreach(pkg IN LISTS UC2_PACKAGES)
   endif()
 endforeach()
 
+# --- T3: the patched script packages (target `scripts`, part of ALL): decompile the shipped .u, apply patches/, compile
+# with this build's ucc on the host preset; copy the host build's on the others. Options UC2_SCRIPT_PATCHES (ON),
+# UC2_SCRIPT_PATCH_SETS, UC2_ASSETS_DIR, UC2_SCRIPT_PACKAGES_DIR, UC2_SCRIPT_RETAIL_INIS_DIR, UC2_SCRIPTS_DIR: see
+# cmake/UC2Scripts.cmake, BUILD.md "Script patches", docs/porting/analysis/script-build-rules.md. -----------------
+include(UC2Scripts)
+# --- end T3 ------------------------------------------------------------------------------------------------------
+
 # --- T2: `cmake --build build-native --target check-headers`: the generated Source/<Pkg>/Inc/<Pkg>Classes.h must be
 # what the header exporter of this build's ucc-bin writes from the script sources (tools/dev/check-headers.sh; fails
 # with the diff when stale; regenerate with tools/dev/regen-headers.sh). Only where ucc-bin carries the script
-# compiler and runs on the build host: native Linux, 32-bit (the Editor target). Not part of ALL: it compiles every
-# script package in a scratch run tree and needs the asset tree. UC2_HEADERS_CLASSES_ROOT: where the script sources
-# are (default Source/). docs/porting/analysis/headers.md. ---------------------------------------------------------
-set(UC2_HEADERS_CLASSES_ROOT "${CMAKE_SOURCE_DIR}/Source" CACHE PATH "Script sources (<dir>/<Pkg>/Classes) the check-headers target exports from")
+# compiler and runs on the build host: native Linux, 32-bit (the Editor target). Not part of ALL: it compiles
+# script packages in a scratch run tree and needs the asset tree. UC2_HEADERS_CLASSES_ROOT: where the script sources
+# are. T3: by default the build's patched tree (Scripts/tree, made by the `scripts` target; check-headers.sh then
+# compiles the packages the patches rebuild against the shipped ones and checks their headers); with
+# UC2_SCRIPT_PATCHES OFF, Source/ while it still holds the .uc. docs/porting/analysis/headers.md. ------------------
+set(UC2_HEADERS_CLASSES_ROOT "" CACHE PATH "Script sources (<dir>/<Pkg>/Classes) the check-headers target exports from (default: <build>/Scripts/tree)")
 if(TARGET Editor AND TARGET UCC AND NOT WIN32 AND NOT EMSCRIPTEN AND NOT CMAKE_CROSSCOMPILING)
+  set(_hdr_root "${UC2_HEADERS_CLASSES_ROOT}")
+  set(_hdr_deps UCC)
+  # (T2's configure wrote Source/ into the cache as the default: it counts as unset.)
+  if(NOT _hdr_root OR _hdr_root STREQUAL "${CMAKE_SOURCE_DIR}/Source")
+    if(UC2_SCRIPTS_TREE)
+      set(_hdr_root "${UC2_SCRIPTS_TREE}")
+      list(APPEND _hdr_deps scripts)
+    else()
+      set(_hdr_root "${CMAKE_SOURCE_DIR}/Source")
+    endif()
+  endif()
   add_custom_target(check-headers
-    COMMAND ${CMAKE_SOURCE_DIR}/tools/dev/check-headers.sh --build ${CMAKE_BINARY_DIR} --classes-root ${UC2_HEADERS_CLASSES_ROOT}
-    DEPENDS UCC
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/dev/check-headers.sh --build ${CMAKE_BINARY_DIR} --classes-root ${_hdr_root}
+    DEPENDS ${_hdr_deps}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     USES_TERMINAL VERBATIM)
 endif()

@@ -89,9 +89,16 @@ if(DEFINED OPENALSOFT_GIT_REPOSITORY)
   ufront_artifact_dep(META_DEPS openal-soft OpenALSoft "${OPENALSOFT_GIT_REPOSITORY}" "${OPENALSOFT_GIT_TAG}")
 endif()
 find_program(NODE_EXECUTABLE node REQUIRED)
+# T3: the patched script packages travel with the artifact: <artifact>/scripts/<Pkg>.u, a mirror of the build's
+# Scripts/System (the `scripts` target; empty with UC2_SCRIPT_PATCHES OFF), listed in meta.json `scripts` with the
+# asset path each one replaces (the frontend overlays them on the asset tree). The relink that runs this when only
+# the scripts changed: cmake/UC2Scripts.cmake (LINK_DEPENDS on its stamp).
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -DUC2_CHECK=copy -DSRC=${CMAKE_BINARY_DIR}/Scripts/System
+    -DDST=$<TARGET_FILE_DIR:${PROJECT_NAME}>/scripts -P ${CMAKE_SOURCE_DIR}/cmake/UC2ScriptsCheck.cmake
   COMMAND ${NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/emit-artifact-meta.mjs
     --out=$<TARGET_FILE_DIR:${PROJECT_NAME}> --target=uc2 --abi=${UE_ABI_VERSION} --emcc=${META_EMCC}
+    --scripts=scripts --scripts-under=System
     ${META_DEPS}
   COMMENT "Emitting artifact meta.json"
   VERBATIM)

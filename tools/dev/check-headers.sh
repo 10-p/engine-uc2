@@ -13,7 +13,13 @@
 #     --build <dir>          build directory with Source/UCC/ucc-bin linked with the Editor package (the native
 #                            32-bit preset; default build-native)
 #     --classes-root <dir>   the script sources: <dir>/<Pkg>/Classes (default <repo>/Source); the sources the build
-#                            uses, wherever they are generated
+#                            uses, wherever they are generated. T3: a PATCHED tree (the build's Scripts/tree: only the
+#                            packages the patch sets rebuild, decompiled from the shipped .u + patches/; no Engine/)
+#                            is checked package by package: tools/scripts/uc-build.sh --headers compiles those packages
+#                            against the shipped ones and exports their headers; only those packages' generated headers
+#                            are compared (the others come from shipped packages nothing here changes), and a class's
+#                            cpptext is not compared (the shipped packages do not carry it: the decompiled class has
+#                            `// stripped from the shipped package` there; the committed header keeps the real one)
 #     --tree <name>          scratch run tree under <WorkUC2>/run (default hdr-<this checkout's directory name>)
 #     --logs <dir>           logs (default <WorkUC2>/logs/hdr)
 #     --write                copy the exported headers into Source/ (what regen-headers.sh does)
@@ -45,8 +51,61 @@ if [ ! -x "$build/Source/UCC/ucc-bin" ] || [ ! -d "$build/Source/Editor" ]; then
   echo "check-headers: no $build/Source/UCC/ucc-bin with the Editor package (build the native preset first)" >&2
   exit 2
 fi
-[ -d "$classes_root/Engine/Classes" ] || { echo "check-headers: no script sources under $classes_root" >&2; exit 2; }
+[ -d "$classes_root" ] || { echo "check-headers: no script sources at $classes_root" >&2; exit 2; }
+classes_root=$(cd "$classes_root" && pwd)
 mkdir -p "$logs"
+
+# Generated headers are <Pkg>/Inc/<Pkg>Classes.h; IpDrv's GameSpyClasses.h is hand-written and not one of them.
+generated() { local d=${1%/Inc/*}; d=${d##*/}; [ "${1##*/}" = "${d}Classes.h" ]; }
+
+if [ ! -d "$classes_root/Engine/Classes" ]; then
+  # T3: a patched tree (the packages the patch sets rebuild). Inputs as the build had them: <build>/Scripts/build-info.txt.
+  info=$build/Scripts/build-info.txt
+  shipped=${UC2_SHIPPED_SYSTEM:-$(sed -n 's/^shipped=//p' "$info" 2>/dev/null)}
+  assets=${UC2_ASSETS_DIR:-$(sed -n 's/^assets=//p' "$info" 2>/dev/null)}
+  [ -n "$shipped" ] && [ -n "$assets" ] || { echo "check-headers: $classes_root is a patched tree, and no $info names the shipped packages and the game folder (configure the build with the script patches, or set UC2_SHIPPED_SYSTEM and UC2_ASSETS_DIR)" >&2; exit 2; }
+  pk=""
+  for d in "$classes_root"/*/Classes; do [ -d "$d" ] && pk="$pk,$(basename "$(dirname "$d")")"; done
+  pk=${pk#,}
+  [ -n "$pk" ] || { echo "check-headers: no <Pkg>/Classes under $classes_root" >&2; exit 2; }
+  out=$build/Scripts/headers
+  capped=none; [ -x "$work/bin/capped" ] && capped=$work/bin/capped
+  if ! "$repo/tools/scripts/uc-build.sh" --headers --classes "$classes_root" --out "$out" --packages "$pk" \
+       --shipped "$shipped" --assets "$assets" --ucc "$build/Source/UCC/ucc-bin" --capped "$capped" > "$logs/$tree-make.out" 2>&1; then
+    echo "check-headers: compiling the patched tree failed ($logs/$tree-make.out)" >&2
+    tail -5 "$logs/$tree-make.out" >&2
+    exit 2
+  fi
+  report=$logs/$tree-check.diff
+  : > "$report"
+  stale=0 n=0
+  IFS=, read -r -a pks <<< "$pk"
+  for p in "${pks[@]}"; do
+    src=$repo/Source/$p/Inc/${p}Classes.h
+    f=$out/$p/Inc/${p}Classes.h
+    if [ ! -f "$f" ]; then
+      [ -f "$src" ] && { echo "  $p/Inc/${p}Classes.h: STALE (committed, but the exporter writes no such header)"; stale=1; }
+      continue
+    fi
+    n=$((n+1))
+    [ -f "$src" ] || { echo "  $p/Inc/${p}Classes.h: STALE (exported, but there is no Source/$p/Inc/${p}Classes.h)"; stale=1; continue; }
+    # (cpptext: the shipped packages do not have it; the comparison takes the committed header's there)
+    if python3 "$repo/tools/dev/check-headers-cpptext.py" "$src" "$f" "$p/Inc/${p}Classes.h" >> "$report"; then
+      echo "  $p/Inc/${p}Classes.h: current (taken from the committed header, not in the shipped packages: $(python3 "$repo/tools/dev/check-headers-cpptext.py" --count "$src" "$f"))"
+    else
+      echo "  $p/Inc/${p}Classes.h: STALE"; stale=1
+    fi
+  done
+  if [ $stale -ne 0 ]; then
+    [ -s "$report" ] && cat "$report"
+    echo "check-headers: STALE generated headers (diff above, also $report)."
+    echo "  The headers follow the patched scripts: regenerate the changed declarations into Source/<Pkg>/Inc and commit them with the patch."
+    exit 1
+  fi
+  [ $n -gt 0 ] || { echo "check-headers: the patched packages ($pk) export no generated header"; exit 0; }
+  echo "check-headers: all $n generated headers of the patched packages ($pk) are current (scripts: $classes_root)"
+  exit 0
+fi
 run=$work/run/$tree
 sb=("$repo/tools/dev/script-build.sh" --build "$build" --tree "$tree" --logs "$logs" --classes-root "$classes_root")
 
@@ -65,8 +124,6 @@ case "$verdict" in
      exit 2;;
 esac
 
-# Generated headers are <Pkg>/Inc/<Pkg>Classes.h; IpDrv's GameSpyClasses.h is hand-written and not one of them.
-generated() { local d=${1%/Inc/*}; d=${d##*/}; [ "${1##*/}" = "${d}Classes.h" ]; }
 stale=0 n=0
 report=$logs/$tree-check.diff
 : > "$report"

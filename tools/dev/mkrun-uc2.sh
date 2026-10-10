@@ -95,16 +95,29 @@ fi
 # Our tracked configuration wins over the asset tree's (identical until we start changing defaults).
 cp -f "$repo"/Engine/Config/*.ini "$run/System/"
 
-# M14: UC2_SCRIPTS=<dir> installs script packages built from source (tools/dev/script-build.sh writes them to
-# <WorkUC2>/run/m14-make/System) over the shipped ones. Unset: the shipped .u, as before.
-if [ -n "${UC2_SCRIPTS:-}" ]; then
-  n=0
-  for u in "$UC2_SCRIPTS"/*.u; do
+# Script packages built from source over the asset tree's:
+# - T3: the build's own, <build-dir>/Scripts/System/*.u (the `scripts` target: the shipped .u decompiled, patches/
+#   applied, compiled; only the packages the patch sets rebuild are there). Present unless the build was configured
+#   with -DUC2_SCRIPT_PATCHES=OFF.
+# - M14: UC2_SCRIPTS=<dir> takes them from <dir> instead (e.g. tools/dev/script-build.sh's <WorkUC2>/run/m14-make/System,
+#   or <WorkUC2>/assets/uc2-shipped/System); UC2_SCRIPTS=none: none at all (the asset tree's .u, a "shipped" tree).
+scripts_dir=${UC2_SCRIPTS:-}
+scripts_from="UC2_SCRIPTS"
+if [ -z "$scripts_dir" ] && [ -d "$build/Scripts/System" ]; then
+  scripts_dir=$build/Scripts/System
+  scripts_from="the build"
+fi
+if [ -n "$scripts_dir" ] && [ "$scripts_dir" != none ]; then
+  n=0 names=""
+  for u in "$scripts_dir"/*.u; do
+    [ -f "$u" ] || continue
     [ -f "$run/System/$(basename "$u")" ] || continue   # only packages the asset tree ships
     cp -f "$u" "$run/System/"
-    n=$((n+1))
+    n=$((n+1)); names="$names $(basename "$u")"
   done
-  echo "UC2_SCRIPTS: $n script packages from $UC2_SCRIPTS" >&2
+  echo "script packages from $scripts_from ($scripts_dir): $n:$names" >&2
+else
+  echo "script packages: the asset tree's ($assets/System)" >&2
 fi
 
 copy_bins() {

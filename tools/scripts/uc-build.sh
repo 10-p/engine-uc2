@@ -16,10 +16,17 @@
 #   --assets <dir>     the game tree: its content folders (Textures, StaticMeshes, ...) are linked into the work tree
 #                      and its System/ provides the .int files and Epic's inis (default <WorkUC2>/assets/uc2)
 #   --retail-inis <d>  the retail disc's System/ for Characters.ini, Gametypes.ini, Maplists.ini, which the shipped
-#                      defaults carry (default <WorkUC2>/reference/iso-extract/System)
-#   --ucc <file>       ucc-bin (default <repo>/build-native/Source/UCC/ucc-bin)
-#   --mem <size>       memory ceiling of each ucc run (default 3G); --capped <file> the bin/capped wrapper
+#                      defaults carry (default <WorkUC2>/reference/iso-extract/System; `none`: the asset tree's)
+#   --ucc <file>       the script compiler: ucc-bin (Linux) or ucc.exe (a Windows host; MSYS2 bash); default
+#                      <repo>/build-native/Source/UCC/ucc-bin. Copied into the work tree under its own name.
+#   --mem <size>       memory ceiling of each ucc run (default 3G) when it runs under the capped wrapper
+#   --capped <file>    the wrapper every ucc run goes through (<WorkUC2>/bin/capped: memory ceiling and time limit);
+#                      default <repo>/../bin/capped when it exists, else none; `none`: run ucc directly (a machine
+#                      without that wrapper; T3: the CMake build passes it explicitly)
 #   --keep-text        do not strip (all packages keep their script text; for debugging)
+#   --headers          also export the C++ headers (`make -ForceHeads` instead of `-noh`) into <out>/<Pkg>/Inc, which
+#                      starts as a copy of <repo>/Source/<Pkg>/Inc (the exporter includes a per-class header when it
+#                      finds one there); implies --keep-text. tools/dev/check-headers.sh uses it (T3)
 #   --link <rel>=<dir> also link <dir> as <work tree>/<rel> (e.g. Engine/Textures for `#exec TEXTURE IMPORT` files;
 #                      none of GUI, UCGameplay, UCMenu needs one)
 #
@@ -33,17 +40,19 @@
 #   strip        all 17 back in System/, PC inis (Default.ini/DefUser.ini) and the retail per-class inis, `ucc-bin
 #                editor.stripsource -CONFORM` (every .u but Editor.u re-saved with " " text); the built packages
 #                are taken from it, UCMenu.u from before the strip (it shipped with its text).
-# Bash only (coreutils, cp, ln); no Python. Nothing is written outside --out.
+# Bash only (coreutils, cp, ln); no Python. Nothing is written outside --out. Linux, or MSYS2 bash on a Windows host
+# (there `ln -s` needs MSYS=winsymlinks:nativestrict and Windows symlink rights, or it copies; not run yet: T3).
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
-classes="" out="" packages="" keep="" mem=3G keep_text=0 links=()
+classes="" out="" packages="" keep="" mem=3G keep_text=0 headers=0 links=()
 shipped=$work/epic-sources/System
 assets=$work/assets/uc2
 retail=$work/reference/iso-extract/System
 ucc=$repo/build-native/Source/UCC/ucc-bin
 capped=$work/bin/capped
+[ -x "$capped" ] || capped=none
 while [ $# -gt 0 ]; do
   case "$1" in
     --classes) classes=$2; shift 2;;
@@ -57,13 +66,20 @@ while [ $# -gt 0 ]; do
     --mem) mem=$2; shift 2;;
     --capped) capped=$2; shift 2;;
     --keep-text) keep_text=1; shift;;
+    --headers) headers=1; keep_text=1; shift;;
     --link) links+=("$2"); shift 2;;
     *) echo "uc-build: unknown argument $1" >&2; exit 2;;
   esac
 done
 [ -n "$classes" ] && [ -n "$out" ] && [ -n "$packages" ] || { echo "uc-build: --classes, --out and --packages are required" >&2; exit 2; }
-[ -x "$ucc" ] || { echo "uc-build: no ucc-bin at $ucc" >&2; exit 2; }
-[ -x "$capped" ] || { echo "uc-build: no $capped" >&2; exit 2; }
+[ -f "$ucc" ] || { echo "uc-build: no script compiler at $ucc" >&2; exit 2; }
+ucc_name=$(basename "$ucc")
+if [ "$capped" = none ]; then
+  run_ucc() { "./$ucc_name" "$@"; }
+else
+  [ -x "$capped" ] || { echo "uc-build: no $capped (--capped none runs ucc directly)" >&2; exit 2; }
+  run_ucc() { "$capped" "$mem" 1800 -- "./$ucc_name" "$@"; }
+fi
 classes=$(cd "$classes" && pwd)
 
 all=(Core Engine UCAnnouncements Editor UnrealEd IpDrv UWeb GamePlay UnrealGame UCElements UCGameplay
@@ -103,11 +119,16 @@ cp -a "$assets/System/." "$out/System/"
 rm -f "$out/System/"*.u
 for p in "${all[@]}"; do cp -f "$shipped/$p.u" "$out/GUIRes/$p.u"; cp -f "$shipped/$p.u" "$out/System/$p.u"; done
 chmod u+w "$out/System"/* "$out/GUIRes"/*
-cp -f "$ucc" "$out/System/ucc-bin"
+cp -f "$ucc" "$out/System/$ucc_name"
 for p in "${all[@]}"; do
   s=$p; [ "$p" = GamePlay ] && s=Gameplay
   rm -rf "${out:?}/$s"
-  if [ -n "${want[$p]:-}" ]; then mkdir -p "$out/$s"; ln -s "$classes/$p/Classes" "$out/$s/Classes"; fi
+  if [ -n "${want[$p]:-}" ]; then
+    mkdir -p "$out/$s"; ln -s "$classes/$p/Classes" "$out/$s/Classes"
+    if [ $headers = 1 ] && [ -d "$repo/Source/$s/Inc" ]; then
+      mkdir -p "$out/$s/Inc"; cp -f "$repo/Source/$s/Inc/"*.h "$out/$s/Inc/" 2>/dev/null || true
+    fi
+  fi
 done
 
 for l in "${links[@]}"; do
@@ -131,7 +152,8 @@ for p in "${all[@]}"; do
   rm -f "$out/System/ucc.log"
   t0=$SECONDS
   set +e
-  (cd "$out/System" && "$capped" "$mem" 1800 -- ./ucc-bin make -nobind -noh -CONFORMNOCONFIG "endpkg=$p" -log=ucc.log) > "$out/make-$p.out" 2>&1
+  hflag=-noh; [ $headers = 1 ] && hflag=-ForceHeads
+  (cd "$out/System" && run_ucc make -nobind $hflag -CONFORMNOCONFIG "endpkg=$p" -log=ucc.log) > "$out/make-$p.out" 2>&1
   rc=$?
   set -e
   cp -f "$out/System/ucc.log" "$out/make-$p.log" 2>/dev/null || true
@@ -152,7 +174,7 @@ if [ $keep_text = 0 ]; then
   mkdir -p "$out/Strip"
   cp -f "$out/System/Default.ini" "$out/System/Avaris.ini"
   cp -f "$out/System/DefUser.ini" "$out/System/User.ini"
-  if [ -d "$retail" ]; then
+  if [ "$retail" != none ] && [ -d "$retail" ]; then
     for f in Characters.ini Gametypes.ini Maplists.ini; do cp -f "$retail/$f" "$out/System/$f"; done
   else
     echo "uc-build: note: no $retail: the strip uses the asset tree's per-class inis" | tee -a "$log" >&2
@@ -160,7 +182,7 @@ if [ $keep_text = 0 ]; then
   rm -f "$out/System/ucc.log"
   t0=$SECONDS
   set +e
-  (cd "$out/System" && "$capped" "$mem" 1800 -- ./ucc-bin editor.stripsource -CONFORM -log=ucc.log) > "$out/strip.out" 2>&1
+  (cd "$out/System" && run_ucc editor.stripsource -CONFORM -log=ucc.log) > "$out/strip.out" 2>&1
   rc=$?
   set -e
   cp -f "$out/System/ucc.log" "$out/strip.log" 2>/dev/null || true
@@ -172,5 +194,5 @@ for p in "${all[@]}"; do
   # the re-saved shipped ones and the packages compiled only to build the others are not delivered
   [ -n "${keepset[$p]:-}" ] || cp -f "$shipped/$p.u" "$out/System/$p.u"
 done
-rm -f "$out/System/ucc-bin" "$out/System/ucc.log"
+rm -f "$out/System/$ucc_name" "$out/System/ucc.log"
 echo "built ${kreq[*]} in $((SECONDS - t_all)) s: $(for p in "${all[@]}"; do [ -n "${keepset[$p]:-}" ] && printf '%s ' "$out/System/$p.u"; done)" | tee -a "$log"
