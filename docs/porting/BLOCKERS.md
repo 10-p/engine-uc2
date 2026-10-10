@@ -4,15 +4,6 @@ Audited 2026-10-10 with the owner ("make sure that all of them are needed or clo
 listed at the end with the reason; PLAN.md "Owner review of 2026-10-10" has the task list (D-1..D-4 ours, N-1..N-5 the owner's).
 
 ## Open
-- Exit-time crash on a dedicated server after SIGTERM, both widths (found by M13's censuses, which only notice it
-  as a server that does not end): `UObject::StaticExit` -> `PurgeGarbage` -> `ConditionalDestroy` crashes in
-  `ULinkerLoad::DetachExport` (64-bit OD-Overflow; 32-bit ACT-HallwayAmbush, `UObject::IsValid` on a destroyed
-  export) or in `realloc` from `UClass::Destroy` (32-bit DM-Nexus: heap already corrupt); about 2 maps in 58 per
-  census. The crash handler then calls `appExit`, whose `FFileStream::Destroy` waits for the file-stream thread
-  forever, so the process hangs (two seen, killed by PID). `map-census.sh` reports PASS anyway (its `timeout`
-  has no `-k`). Linker teardown is the net-join branch's area; not changed by M13. Logs:
-  `logs/m13-census/OD-Overflow.log`, `logs/m13-census32/{ACT-HallwayAmbush,DM-Nexus}.log`.
-
 - Xbox-look visual oracle: **provided 2026-10-06** (`<WorkUC2>/xbox-emulation/run-uc2-iso.sh`, xemu; slow on this
   machine: last resort). The owner's xemu captures are in `<WorkUC2>/temp/`.
 - arm64 (M13, F-4c): the cross compiler (`g++-aarch64-linux-gnu`, GCC 15.2) and `qemu-user` + `qemu-user-binfmt` are
@@ -45,12 +36,6 @@ listed at the end with the reason; PLAN.md "Owner review of 2026-10-10" has the 
   Sound works either way. To get the native PipeWire backend in the 32-bit game:
   `sudo apt install libpipewire-0.3-modules:i386` (the 64-bit game, preset `native64`, has the amd64 modules
   already). A player's machine needs the same package for the same reason; nothing else changes.
-- **Static link registers two classes in the wrong package (pre-existing, not M14's)**: `UHTTPDownload` and
-  `UPrefab` say `DECLARE_CLASS(...,Engine)` but live in the IpDrv/Editor DLLs, which registered them under
-  their own package; our static build registers them as `Engine.HTTPDownload`/`Engine.Prefab`. Default.ini's
-  `DownloadManagers=IpDrv.HTTPDownload` therefore names a class that does not exist here (package download has
-  never been exercised). Found by the header-export comparison.
-
 - **Not closed (needs a profile-aware change and a two-profile test)**: the character. A menu-driven launch takes it from
   the active profile; a launch that names no class (the web launcher's Play form, a console `open`) takes
   `[DefaultPlayer] Class`, the previous launch's character, which after switching profile without launching is the OTHER
@@ -82,3 +67,5 @@ listed at the end with the reason; PLAN.md "Owner review of 2026-10-10" has the 
 - (was line 185) **Epic's `UCPlayerInput.UpdateSensitivityX` assigns the instance twice** (`MouseSensitivity_X = F; MouseSensitivity_X = F;`), where `UpdateSensitivi… — **closed:** cosmetic, Epic's code, unchanged
 - 19 wave entries have no source WAV, but the shipped `.xwb` has them (ffmpeg decodes the Xbox ADPCM when it is wrapped as WAVE format 0x69). Decode t… — **closed:** done by F-6 (decoded from the shipped .xwb)
 - `Default.ini` suppresses the `DevUI`/`DevGUI` log names (Epic's setting, kept), so menu activity is not in the log by default. Tests that need it re… — **closed:** informational, Epic's setting kept
+- (was line 7) Exit-time crash on a dedicated server after SIGTERM, both widths (M13 censuses): `StaticExit` -> `PurgeGarbage` "crashes" in `DetachExport`/`realloc`, then a hang in `appExit`… — **closed (D-1, branch d12-fixes, `analysis/d12-fixes.md`):** not a crash: `timeout` signals the server and its process group, and at the second SIGTERM Epic's `HandleSignal` ran its abort path (`appExit` inside the signal handler) over the main thread's own exit, or deadlocked on a lock the interrupted thread held. Repeated exit signals are now ignored, the handlers only write and set `GIsRequestingExit`, the crash path arms `alarm(10)`, the file-stream wait is bounded; `map-census.sh` uses `timeout -k` and fails hangs/crash handlers. Censuses 58/58 at both widths, ASan census 58/58 with no report beyond Epic's two known script over-reads
+- (was line 47) Static link registers `UHTTPDownload`/`UPrefab` as `Engine.HTTPDownload`/`Engine.Prefab`; `DownloadManagers=IpDrv.HTTPDownload` names a class that does not exist… — **closed (D-2, branch d12-fixes):** `DECLARE_CLASS(...,IpDrv)` / `(...,Editor)` as Epic's DLL build registered them; HTTPDownload's non-blocking connect also accepts `EINPROGRESS` (as engine-ut2004); package download exercised: `net-test.sh download download-http` 12/12 PASS (ChannelDownload, and HTTP through `IpDrv.HTTPDownload`)

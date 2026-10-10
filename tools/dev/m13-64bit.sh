@@ -10,9 +10,12 @@
 #   M13_BUILD     its build directory [build-native64]
 #   M13_REF       the 32-bit reference tree [m13-32], rebuilt from M13_REFBUILD [build-native] if missing
 #   M13_SOAK      soak length in seconds [1200]
+#   M13_CENSUS_WORKERS  servers at once in the census [4]; 2 while the machine is loaded (owner's rule, 2026-10-10)
 #   M13_FX        the m7-effects.sh effects to run [all]
 # Output: <WorkUC2>/logs/m13 (the m13 tree) or <WorkUC2>/logs/m13/<tree> (others; <WorkUC2>/logs/<tree> is then
 # a link there, because the suites write to logs/<tree>), stable names, PASS/FAIL lines also in m13-summary.txt.
+# A D-phase task's tree (M13_TREE=d<N>-..., M13_REF likewise) writes to <WorkUC2>/logs/d<N>/<tree> instead, and its
+# census trees are <tree>-census-N / <ref>-census-N.
 #
 # Every program runs inside <WorkUC2>/bin/capped (CLAUDE.md "Running anything"): the suites keep their own
 # ceilings (2G per game run: a 64-bit game measured below that, docs/porting/analysis/64bit.md), ucc-bin
@@ -52,8 +55,8 @@ build=${M13_BUILD:-build-native64}
 ref=${M13_REF:-m13-32}
 refbuild=${M13_REFBUILD:-build-native}
 soak=${M13_SOAK:-1200}
-case "$tree" in m13*) ;; *) echo "M13_TREE must start with m13" >&2; exit 2;; esac
-if [ "$tree" = m13 ]; then out=$work/logs/m13; else out=$work/logs/m13/$tree; fi
+case "$tree" in m13*|d[0-9]*) ;; *) echo "M13_TREE must start with m13 (or a D-phase task's prefix d<N>)" >&2; exit 2;; esac
+case "$tree" in m13) out=$work/logs/m13;; m13*) out=$work/logs/m13/$tree;; *) out=$work/logs/${tree%%-*}/$tree;; esac
 mkdir -p "$out"
 # The suites write to <WorkUC2>/logs/<tree>: for other trees that is a link into logs/m13.
 if [ "$tree" != m13 ]; then
@@ -107,27 +110,20 @@ check_verify() {
 
 check_census() {
   local c64=m13-census-$tree c32=m13-census-$ref s64 s32 n64 p64 diffs
-  # A server that crashes while exiting after its TERM hangs (BLOCKERS.md: exit-time crash) and map-census.sh's
-  # timeout has no -k: kill such a server of these trees 60 s after its TERM and count it.
-  : > "$out/census-hung.txt"
-  ( while :; do
-      for p in $(pgrep -x ucc-bin); do
-        case "$(readlink /proc/$p/cwd 2>/dev/null)" in "$work"/run/m13-census-*) ;; *) continue;; esac
-        local age; age=$(ps -o etimes= -p $p 2>/dev/null | tr -d ' ')
-        [ -n "$age" ] && [ "$age" -gt 75 ] && { echo "$(tr '\0' ' ' < /proc/$p/cmdline) in $(readlink /proc/$p/cwd)" >> "$out/census-hung.txt"; kill -KILL $p; }
-      done; sleep 10; done ) &
-  local watcher=$!
+  # A D-phase tree (d<N>-...) names its census trees after itself, so they keep the task's prefix.
+  case "$tree" in m13*) ;; *) c64=$tree-census c32=$ref-census;; esac
+  # map-census.sh itself KILLs a server that has not ended 30 s after its TERM and fails that map (D-1), so no
+  # watcher is needed here any more.
   for c in "$c64:$build:7880" "$c32:$refbuild:7890"; do
     local name=${c%%:*} rest=${c#*:}; local b=${rest%%:*} port=${rest#*:}
     mkdir -p "$out/$name"; [ -L "$work/logs/$name" ] || { rm -rf "$work/logs/$name"; ln -sfn "$out/$name" "$work/logs/$name"; }
-    CENSUS_NAME=$name CENSUS_PORT=$port "$capped" 8G 1800 -- "$repo/tools/dev/map-census.sh" "$repo/$b" 15 4 > "$out/$name.out" 2>&1
+    CENSUS_NAME=$name CENSUS_PORT=$port "$capped" 8G 1800 -- "$repo/tools/dev/map-census.sh" "$repo/$b" 15 "${M13_CENSUS_WORKERS:-4}" > "$out/$name.out" 2>&1
   done
-  kill $watcher 2>/dev/null; wait $watcher 2>/dev/null
   s64=$out/$c64/summary.tsv; s32=$out/$c32/summary.tsv
   n64=$(wc -l < "$s64" 2>/dev/null || echo 0); p64=$(grep -c '^PASS' "$s64" 2>/dev/null || echo 0)
   diffs=$(diff <(cut -f1,2 "$s64" 2>/dev/null) <(cut -f1,2 "$s32" 2>/dev/null) | grep '^[<>]' | tr '\n' ' ')
   if [ "$n64" = 58 ] && [ "$p64" = 58 ] && [ -z "$diffs" ]; then
-    result PASS census "58 maps, 58 PASS at 64-bit, the same per-map result as the 32-bit build ($(grep -c '^PASS' "$s32") PASS); servers hung on exit and killed: $(grep -E -c "m13-census-$tree-[0-9]+/" "$out/census-hung.txt") at 64-bit, $(grep -E -c "m13-census-$ref-[0-9]+/" "$out/census-hung.txt") at 32-bit (BLOCKERS.md); $s64"
+    result PASS census "58 maps, 58 PASS at 64-bit (each server exited cleanly after its TERM), the same per-map result as the 32-bit build ($(grep -c '^PASS' "$s32") PASS); $s64"
   else
     result FAIL census "maps $n64, PASS $p64; differences to 32-bit: ${diffs:-none}; $s64"
   fi
@@ -358,7 +354,7 @@ check_asan() {	# not in the default list: the sanitizer build (preset native64-a
 check_leftovers() {
   local left="" p
   for p in $(pgrep -x uc2.bin) $(pgrep -x ucc-bin) $(pgrep -x Xvfb); do
-    case "$(readlink /proc/$p/cwd 2>/dev/null)" in "$work"/run/m13*) left="$left $p";; esac
+    case "$(readlink /proc/$p/cwd 2>/dev/null)" in "$work"/run/m13*|"$work/run/$tree"*|"$work/run/$ref"*) left="$left $p";; esac
   done
   if [ -z "$left" ]; then result PASS leftovers "no uc2.bin/ucc-bin/Xvfb of the m13 trees running"; else result FAIL leftovers "still running:$left"; fi
 }

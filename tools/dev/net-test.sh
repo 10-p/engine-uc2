@@ -6,6 +6,10 @@
 #   checks: cheats dedicated1 dedicated2 handshake-loss handshake-compat listen travel disconnect lag glshot soak   (default: all of them)
 #           wine   (opt-in) the Linux client against this branch's ucc.exe server under wine; needs
 #                  <WorkUC2>/run/netwin (tools/dev/mkrun-uc2.sh build-windows netwin); prefix .cache/wine-net
+#           download, download-http   (opt-in) package download: the server lists a package (made by ucc-bin
+#                  resavepackage into <tree>/NetDownload/) that the client's tree lacks; the client fetches it through the
+#                  game connection (ChannelDownload) or, with download-http, from a local HTTP server named by the server's
+#                  RedirectToURL (IpDrv.HTTPDownload); HTTP on TCP port NET_PORT+1
 #
 # Builds a fresh run tree <WorkUC2>/run/net from build-native (tools/dev/mkrun-uc2.sh) unless --keep-tree,
 # then runs tools/dev/net-test.py. Results: one PASS/FAIL line per item, also in
