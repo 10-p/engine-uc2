@@ -98,7 +98,7 @@ run_one() {
   inner=$(mktemp)
   cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy UC2_WINE_DISPLAY=\$DISPLAY $launch ${M10_URL:+"$M10_URL"} -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[SDL2Drv.SDL2Client]:KeyboardIsPlayer=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0 -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" "\$@" > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy UC2_WINE_DISPLAY=\$DISPLAY $launch ${M10_URL:+"$M10_URL"} -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0 -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$name.out" "$chan" "$out/$name.result" > "$out/$name.inject" 2>&1
 kill -$stopsig \$pid 2>/dev/null
@@ -509,22 +509,29 @@ sleep 2
 tryseek 20 P['_'].menu == 'None' ;; sleep 0.5
 probe p2
 check pd-b-closes-pause-menu P['p2'].menu == 'None'
+# G-11 (the owner's rule): the pad is player one's together with the keyboard and the mouse, so pulling it opens no
+# "controller removed" page and pauses nothing (until G-11 it sent JoySlider2: Epic's ControllerRemovedMenu and the
+# pause, closed by Start after the re-plug); plugged back it is player one's again at once.
+mark
 pad detach
-expect pd-unplug-sends-joyslider2 pad 0 JoySlider2 press 5
-expect pd-unplug-disconnects SDL2 pads: pad 0 disconnected 5
+expect pd-unplug-disconnects-player-one-keeps-the-keyboard SDL2 pads: pad 0 disconnected: .*no controller-removed page 5
 sleep 3
 probe u1
-check pd-unplug-pauses-with-controller-removed-menu P['u1'].menu == 'ControllerRemovedMenu' and P['u1'].paused == 1
+absent pd-unplug-sends-no-joyslider2 pad 0 JoySlider2
+absent pd-unplug-opens-no-controller-removed-menu OpenMenu \[UCMenu.ControllerRemovedMenu\]
+check pd-unplug-no-menu-no-pause P['u1'].menu == 'None' and P['u1'].paused == 0
 shot unplugged
 pad attach
-expect pd-replug-connects SDL2 pads: pad 0 connected 5
+expect pd-replug-connects-player-one SDL2 pads: pad 0 connected: .*\(player one, with the keyboard and mouse\) 5
 sleep 3
 probe u2
 check pd-alive-after-replug P['u2'].level == 'DM-Deadbolt'
-padpress start
-sleep 2
+pad axis lefty -32767
+sleep 1.2
+pad axis lefty 0
+sleep 0.7
 probe u3
-check pd-start-after-replug-resumes P['u3'].menu == 'None' and P['u3'].paused == 0
+check pd-replugged-stick-walks-player-one dist('u2','u3') > 50 and P['u3'].menu == 'None' and P['u3'].paused == 0
 shot replugged
 SCEN
 }

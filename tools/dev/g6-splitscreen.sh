@@ -18,16 +18,20 @@
 #                  (<out>/fov-<n>players.png) with every viewport's FOV from the engine's "[AutoFOV] shown" lines
 #          detail  (G-9) GPU, DM-Praxis: coronas, shadows, decals single player and in a 4-player quadrant
 #          bench4  (G-9) GPU: four players at fixed spots, the engine's FPS log (G6_BENCH_SECS=20, G6_BENCH_NAME)
-#          kbplayer (G-9) Xvfb, KeyboardIsPlayer=True (the default): keyboard+mouse player one alone, a pad that joins as
-#                  player two, every device moving/turning/firing its own player only, unplug/replug, leave, rejoin;
-#                  then the menus' flow with one pad (menu_kb=1)
+#          kbplayer (G-9) Xvfb, PadsStartAtPlayerTwo=True (G-9's KeyboardIsPlayer; not the default since G-11):
+#                  keyboard+mouse player one alone, a pad that joins as player two, every device moving/turning/firing
+#                  its own player only, unplug (Epic's page for the pad-only player)/replug, leave, rejoin; then the
+#                  menus' flow with one pad (menu_kb=1)
+#          unplug  (G-11) Xvfb, the default PadsStartAtPlayerTwo=False: player one's pad (with the keyboard and mouse)
+#                  pulled out opens no menu and pauses nothing, plugged back it is player one's again; a pad-only
+#                  player two pulled out gets Epic's ControllerRemovedMenu, its Start closes it after the re-plug
 #          hud     (B-3) GPU as render: where each viewport's HUD sits, 1-4 players joined in the match, player one
 #                  at spot A, frozen frame: the picture and the HUD alone (TOGGLERENDERLEVEL); measured per viewport
 #                  by tools/dev/g6/b3-hud-measure.py (health bar, weapon list, score box, reticle in design pixels).
 #                  G6_RES and G6_ARGS (-ini:System:[SDL2Drv.SDL2Client]:UIScaleMode=...) choose the shape
 #          hudmenu (B-3) Xvfb: G-6's menu flow (two players joined on the character page, Epic's own path), the
 #                  match's HUDs alone, measured as hud's n2 (<out>/hudmenu/)
-#          (default: input render menu audio; G-6's parts run with KeyboardIsPlayer=False, the pad as player one)
+#          (default: input render menu audio; G-6's parts use the default PadsStartAtPlayerTwo=False, the pad as player one)
 #   G6_RES=1280x720   window size;   G6_OUT=<dir>  output (default <WorkUC2>/logs/g6)
 #   G6_ARGS="-ini:..."  more settings for every game run (G-9: -ini:System:[SDL2Drv.SDL2Client]:SplitScreenFullDetail=False)
 #
@@ -47,9 +51,9 @@ inject=$repo/tools/dev/m10-inject.py
 checks=$repo/tools/dev/g6/g6-checks.py
 [ -x "$sys/uc2.bin" ] || { echo "no run tree at $sys (tools/dev/mkrun-uc2.sh build-native $tree)" >&2; exit 2; }
 mkdir -p "$out"
-# G-6's parts test the model where the first pad drives player one with the keyboard (KeyboardIsPlayer=False);
-# G-9's kbplayer part the default, keyboard+mouse a player of their own.
-KBOLD=-ini:System:[SDL2Drv.SDL2Client]:KeyboardIsPlayer=False
+# G-6's parts test the default model (G-11: [SDL2Drv.SDL2Client] PadsStartAtPlayerTwo=False), where the first pad
+# drives player one with the keyboard; G-9's kbplayer part sets PadsStartAtPlayerTwo=True, keyboard+mouse alone.
+KBPLAYER=-ini:System:[SDL2Drv.SDL2Client]:PadsStartAtPlayerTwo=True
 
 # run_game <name> <gpu:0|1> <seconds> <url> <scenario-file> [more uc2.bin arguments]
 run_game() {
@@ -582,7 +586,7 @@ shot qd
 SCEN
 }
 
-# G-9: keyboard+mouse as a player of their own ([SDL2Drv.SDL2Client] KeyboardIsPlayer=True, the default). The
+# G-9: keyboard+mouse as a player of their own ([SDL2Drv.SDL2Client] PadsStartAtPlayerTwo=True, G-11's name). The
 # keyboard's click starts the match alone; a virtual pad attached then is unbound (port 1: port 0 is the keyboard's)
 # and moves nobody until its Start joins it as player two; then every device drives its own player only; the pad
 # unplugged and plugged again comes back to its own player; the pad player leaves (SPLIT REMOVE) and the keyboard is
@@ -752,10 +756,132 @@ SCEN
   kb_walks j 0
 }
 
+# G-11, the owner's rule: "The 'gamepad disconnected' message should never trigger for player 1 because we always have
+# the keyboard and mouse available. If it really disconnects then we just reconnect it and we're back." With the
+# default PadsStartAtPlayerTwo=False virtual pad 0 takes port 0 and is player one together with the keyboard and the
+# mouse (either drives it). Pulled out: SDL2Drv sends no JoySlider2 (no ControllerRemoved: no HUD flag, no
+# ControllerRemovedMenu, no pause), the keyboard goes on walking player one; plugged back: port 0 again, player one's
+# at once, its stick walks player one. Then virtual pad 1 joins as player two (a pad-only player): pulled out, Epic's
+# ControllerRemovedMenu opens for it as on the Xbox; plugged back, its Start closes the page.
+kb_walk1() {  # kb_walk1 <tag>: W then S on the keyboard, player one (the one viewport or split view 0)
+  cat <<SCEN
+vprobe $1a
+keydown w
+sleep 1.2
+keyup w
+sleep 0.7
+vprobe $1b
+keydown s
+sleep 1.2
+keyup s
+sleep 0.7
+vprobe $1c
+pyexec print('  keyboard: player one moved', round(dist_v0('$1a','$1b'), 1), round(dist_v0('$1b','$1c'), 1))
+check $1-keyboard-walks-player-one dist_v0('$1a','$1b') + dist_v0('$1b','$1c') > 50
+SCEN
+}
+
+pad_walk1() {  # pad_walk1 <tag> <virtual pad>: the left stick forward then back, player one (viewport 0)
+  cat <<SCEN
+vprobe $1a
+pad $2 axis lefty -32767
+sleep 1.2
+pad $2 axis lefty 0
+sleep 0.7
+vprobe $1b
+pad $2 axis lefty 32767
+sleep 1.2
+pad $2 axis lefty 0
+sleep 0.7
+vprobe $1c
+pyexec print('  pad $2: player one moved', round(dist_v0('$1a','$1b'), 1), round(dist_v0('$1b','$1c'), 1))
+check $1-pad-$2-walks-player-one dist_v0('$1a','$1b') + dist_v0('$1b','$1c') > 50
+SCEN
+}
+
+scen_unplug() {
+  cat <<SCEN
+pyfile $checks
+wait Bringing Level DM-Deadbolt.MyLevel up for play 150
+sleep 6
+focus
+pad 0 attach
+expect u-pad0-port-0-is-player-one SDL2 pads: pad 0 connected: .*\\(player one, with the keyboard and mouse\\) 15
+sleep 1
+seek 20 P['_'].pawn == 1 ;; padtrigger righttrigger
+sleep 2
+chan exec God
+chan exec SetAutoCenterPitch 0
+sleep 1
+vprobe u0
+check u-one-player-on-port-0 layout_ok('u0') and VS['u0'][1] == 0 and V['u0'][0]['pad'] == 0 and V['u0'][0]['pawn'] == 1
+SCEN
+  pad_walk1 u1 0
+  kb_walk1 u2
+  cat <<SCEN
+mark
+pad 0 detach
+expect u-pad0-pulled-player-one-keeps-the-keyboard SDL2 pads: pad 0 disconnected: .*no controller-removed page 15
+sleep 3
+probe ud
+pyexec print('  after the pull: menu', P['ud'].menu, 'paused', P['ud'].paused)
+absent u-pad0-pulled-no-controller-removed-menu OpenMenu \\[UCMenu.ControllerRemovedMenu\\]
+absent u-pad0-pulled-no-JoySlider2-to-player-one pad 0 JoySlider2
+check u-pad0-pulled-no-menu-no-pause P['ud'].menu == 'None' and P['ud'].paused == 0 and P['ud'].pawn == 1
+vprobe ud
+check u-pad0-pulled-player-one-keeps-port-0 V['ud'][0]['pad'] == 0
+SCEN
+  kb_walk1 u3
+  cat <<SCEN
+pad 0 attach
+expect u-pad0-plugged-back-port-0-player-one SDL2 pads: pad 0 connected: .*\\(player one, with the keyboard and mouse\\) 15
+sleep 2
+probe ur
+absent u-pad0-back-no-controller-removed-menu OpenMenu \\[UCMenu.ControllerRemovedMenu\\]
+check u-pad0-back-no-menu-no-pause P['ur'].menu == 'None' and P['ur'].paused == 0
+SCEN
+  pad_walk1 u4 0
+  kb_walk1 u5
+  cat <<SCEN
+pad 1 attach
+expect u-pad1-connects-on-port-1 SDL2 pads: pad 1 connected 15
+sleep 1
+pad 1 button start 1
+sleep 0.3
+pad 1 button start 0
+expect u-pad1-start-joins-player-two Split screen: pad 1 Start in the match: joined 20
+sleep 3
+check u-pad1-player-two-spawned spawn(1)
+chan exec set PlayerController bGodMode True
+chan exec set UCPlayerController bAutoCenterPitch False
+sleep 1
+vprobe u6
+pyexec print('  ports', ports('u6'))
+check u-two-players-ports-0-1 layout_ok('u6') and VS['u6'][1] == 2 and ports('u6') == [0, 1]
+mark
+pad 1 detach
+expect u-pad1-pulled-epics-controller-removed-menu OpenMenu \\[UCMenu.ControllerRemovedMenu\\] 15
+expect u-pad1-pulled SDL2 pads: pad 1 disconnected 15
+absent u-pad1-pulled-not-player-ones disconnected: .*no controller-removed page
+sleep 2
+probe up
+pyexec print('  player two pulled: menu', P['up'].menu, 'paused', P['up'].paused)
+check u-pad1-pulled-the-page-is-up P['up'].menu.startswith('ControllerRemovedMenu')
+pad 1 attach
+expect u-pad1-plugged-back-port-1 SDL2 pads: pad 1 connected 15
+sleep 2
+seek 6 P['_'].menu == 'None' ;; pyexec (chan('pad 1 button start 1'), time.sleep(0.2), chan('pad 1 button start 0'))
+check u-pad1-start-closes-epics-page P['_'].menu == 'None'
+sleep 1
+vprobe u7
+check u-two-players-again-ports-0-1 VS['u7'][1] == 2 and ports('u7') == [0, 1]
+SCEN
+}
+
 # The menus' own flow (UC2's two-player split screen): main menu -> Instant Action -> DeathMatch -> DM-Deadbolt ->
 # character page, where pad 1's Start joins player two (UC2Arena_Character allows it); both choose and launch.
 scen_menu() {
-  # G-9: menu_kb=1 is the same flow with KeyboardIsPlayer=True: one pad (virtual pad 0 on port 1) joins on the
+  # G-9: menu_kb=1 is the same flow with PadsStartAtPlayerTwo=True: one pad (virtual pad 0 on port 1) joins on the
   # character page, the keyboard is player one throughout (and starts the match with its click).
   local jp=1 jport=1 attach="pad 0 attach
 sleep 1
@@ -898,21 +1024,21 @@ scen_audio() {
 for part in $parts; do
   scen=$(mktemp)
   case $part in
-    input)  scen_input  > "$scen"; run_game g6-input  0 420 "DM-Deadbolt?NumBots=0" "$scen" $KBOLD;;
-    render) scen_render > "$scen"; run_game g6-render 1 480 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True $KBOLD
+    input)  scen_input  > "$scen"; run_game g6-input  0 420 "DM-Deadbolt?NumBots=0" "$scen";;
+    render) scen_render > "$scen"; run_game g6-render 1 480 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True
             python3 "$repo/tools/dev/g6/g6-measure.py" "$out" > "$out/g6-measure.txt" 2>&1; tail -n 30 "$out/g6-measure.txt";;
-    menu)   scen_menu   > "$scen"; run_game g6-menu   0 420 "" "$scen" $KBOLD;;
+    menu)   scen_menu   > "$scen"; run_game g6-menu   0 420 "" "$scen";;
     hud)    # B-3: the split HUD's placement per viewport (GPU, frozen frame, the HUD alone)
-            scen_hud > "$scen"; run_game b3-hud 1 480 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True $KBOLD
+            scen_hud > "$scen"; run_game b3-hud 1 480 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True
             uimode=Fit43; case "${G6_ARGS:-}" in *UIScaleMode=Native640*) uimode=Native640;; esac
             python3 "$repo/tools/dev/g6/b3-hud-measure.py" "$out" $uimode > "$out/b3-hud-measure.txt" 2>&1; tail -n 40 "$out/b3-hud-measure.txt";;
     hudmenu) # B-3: two players joined in UC2's menus (Xvfb, G-6's menu flow), their HUDs measured as the hud part's n2
             mkdir -p "$out/hudmenu"
-            menu_hud=1 scen_menu > "$scen"; run_game b3-hudmenu 0 480 "" "$scen" $KBOLD
+            menu_hud=1 scen_menu > "$scen"; run_game b3-hudmenu 0 480 "" "$scen"
             for k in n2 n2-hud; do cp -f "$out/b3-hudmenu-$k.png" "$out/hudmenu/b3-hud-$k.png" 2>/dev/null; done
             uimode=Fit43; case "${G6_ARGS:-}" in *UIScaleMode=Native640*) uimode=Native640;; esac
             python3 "$repo/tools/dev/g6/b3-hud-measure.py" "$out/hudmenu" $uimode > "$out/hudmenu/b3-hud-measure.txt" 2>&1; cat "$out/hudmenu/b3-hud-measure.txt";;
-    corona) scen_corona > "$scen"; run_game g9-corona 1 480 "DM-Praxis?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True $KBOLD
+    corona) scen_corona > "$scen"; run_game g9-corona 1 480 "DM-Praxis?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True
             python3 - "$out" <<'PY'
 import glob, os, sys
 from PIL import Image, ImageChops
@@ -927,26 +1053,30 @@ for on in sorted(glob.glob(os.path.join(out, 'g9-corona-c*.png'))):
 PY
             ;;
     detail) # G-9: coronas, shadows, decals in a quadrant (GPU, DM-Praxis); G6_ARGS chooses SplitScreenFullDetail
-            scen_detail > "$scen"; run_game g9-detail 1 480 "DM-Praxis?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True $KBOLD;;
+            scen_detail > "$scen"; run_game g9-detail 1 480 "DM-Praxis?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True;;
     bench4) # G-9: four players' frame rate on the GPU (G6_BENCH_NAME names the output, default g9-bench4)
             bn=${G6_BENCH_NAME:-g9-bench4}
-            scen_bench4 > "$scen"; run_game "$bn" 1 $(( ${G6_BENCH_SECS:-20} + 400 )) "DM-Deadbolt?NumBots=0" "$scen" $KBOLD
+            scen_bench4 > "$scen"; run_game "$bn" 1 $(( ${G6_BENCH_SECS:-20} + 400 )) "DM-Deadbolt?NumBots=0" "$scen"
             grep -a -E "[0-9.]+ s [0-9]+ frames [0-9.]+ fps; frame ms" "$out/$bn.out" | head -1 | sed 's/^FPS: //' > "$out/$bn.fps"
             echo "  $bn: $(cat "$out/$bn.fps"); load $(cut -d' ' -f1-3 /proc/loadavg)";;
-    kbplayer)  # G-9: KeyboardIsPlayer=True (the default): in a match, then UC2's menu flow with one pad
-            scen_kbplayer > "$scen"; run_game g9-kbplayer 0 480 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[SDL2Drv.SDL2Client]:KeyboardIsPlayer=True
+    kbplayer)  # G-9: PadsStartAtPlayerTwo=True: in a match, then UC2's menu flow with one pad
+            scen_kbplayer > "$scen"; run_game g9-kbplayer 0 480 "DM-Deadbolt?NumBots=0" "$scen" $KBPLAYER
             cp "$scen" "$out/g9-kbplayer.scen"
-            menu_kb=1 scen_menu > "$scen"; run_game g9-kbmenu 0 420 "" "$scen" -ini:System:[SDL2Drv.SDL2Client]:KeyboardIsPlayer=True;;
+            menu_kb=1 scen_menu > "$scen"; run_game g9-kbmenu 0 420 "" "$scen" $KBPLAYER;;
+    unplug) # G-11: player one's pad pulled out and back (no page), a pad-only player's (Epic's page); the default ini
+            # (No MSAA: llvmpipe then draws a few frames a second, so a 1.2 s key or stick hold is read; m10-controls.sh does the same.)
+            scen_unplug > "$scen"; run_game g11-unplug 0 420 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0
+            cp "$scen" "$out/g11-unplug.scen";;
     fov)    # G-9: two GPU runs, the default ini (AutoFOV on / Epic's maths) and the proposal
             # [ufront.AutoFOV] SplitClampToFullScreen=True; then one sheet per layout
             fovrun=g9-fov; scen_fov > "$scen"
-            run_game g9-fov      1 420 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True $KBOLD
+            run_game g9-fov      1 420 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True
             fovrun=g9-fovclamp; scen_fov > "$scen"
             run_game g9-fovclamp 1 420 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True \
-              -ini:System:[ufront.AutoFOV]:SplitClampToFullScreen=True $KBOLD
+              -ini:System:[ufront.AutoFOV]:SplitClampToFullScreen=True
             python3 "$repo/tools/dev/g6/g9-fov-sheet.py" "$out" > "$out/g9-fov-sheet.txt" 2>&1; cat "$out/g9-fov-sheet.txt";;
     audio)  rm -f "$out/g6-audio-shots.txt" "$out/g6-audio.wav"
-            scen_audio  > "$scen"; run_game g6-audio  0 420 "DM-Deadbolt?NumBots=0" "$scen" "-ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=$out/g6-audio.wav" $KBOLD
+            scen_audio  > "$scen"; run_game g6-audio  0 420 "DM-Deadbolt?NumBots=0" "$scen" "-ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=$out/g6-audio.wav"
             python3 - "$out" <<'PY'
 import re, sys, os
 out = sys.argv[1]

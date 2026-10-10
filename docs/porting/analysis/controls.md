@@ -459,3 +459,11 @@ Two shared-code changes, stated for the coordinator:
   This is inferred from those pass rates, not traced in the input code. Not reachable at playable frame
   rates, but a hitch in a browser could do it: worth a look when the web build renders (where in
   `UInput`/`UCPlayerController` a same-tick press+release is dropped; `LeftMouse=Fire` is Epic's binding).
+
+## G-11 note (2026-10-10): which player a pad drives
+
+Since G-6/G-9 a pad port is a player slot (splitscreen.md). The owner's final rule, G-11: `[SDL2Drv.SDL2Client]
+PadsStartAtPlayerTwo=False` (the default, native and web) keeps M10's model: the first pad (port 0) and the keyboard and
+mouse drive player one together; `True` keeps port 0 for the keyboard and mouse and starts the pads at port 1 (player
+two by Start). Pulling player one's pad never opens Epic's "controller removed" page (`SDL2Pads.cpp` `PadRemoved`): the
+M10 scenarios (`tools/dev/m10-controls.sh`, the virtual pad as player one) run with the default and no ini switch.

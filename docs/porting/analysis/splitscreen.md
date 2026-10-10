@@ -692,3 +692,113 @@ changed: no package to switch.
 SDL2Drv edits of G-9 (for G-5's merge): `SDL2Drv.h` (USDL2Client: SplitScreenFullDetail, KeyboardIsPlayer,
 SplitScreenKeepsFullDetail); `SDL2Client.cpp` (StaticConstructor keys and defaults, the comment above Tick, PadJoin's
 loop start); `SDL2Pads.cpp` (header comment, GetPadViewport comment, PadAdded's first port and log lines).
+
+## G-11 - the owner's final rule for pads, keyboard+mouse and player slots (2026-10-10)
+
+Worktree `/home/ion/WorkUC2/engine-uc2-g11`, branch `g11-pads` (from main 245d414); frontend worktree
+`/home/ion/WorkUC2/ufrontend-pads`, branch `uc2-pads` (its notebook `docs/migration/notes/gamepad.md`, G-11 section).
+Run trees `run/g11*`, logs `/home/ion/WorkUC2/logs/g11/`. Everything through `bin/capped` (game 2G, builds 6G).
+
+The owner's rule (verbatim where it matters):
+- One setting, a launcher checkbox and the same ini key natively: `[SDL2Drv.SDL2Client] KeyboardIsPlayer` renamed
+  `PadsStartAtPlayerTwo`, default False natively AND on the web (the web delta dropped). Launcher label "Force gamepads
+  to start with second player", blurb "forces gamepads to plug into port 2 and on, with the keyboard and mouse in port 1
+  exclusively".
+- Unchecked/False: "both KB&M and gamepad [1] are player 1 and can be exchanged dynamically; to play a second player we
+  need to plug another controller [and press Start]" (= G-6's model, `KeyboardIsPlayer=False`).
+- Checked/True: "the game would see KB&M/Gamepad 1 (but this gamepad is dummied out) + Gamepad 2 (which is now gamepad
+  1). We push all of the other gamepads" (= G-9's model, `KeyboardIsPlayer=True`).
+- "The 'gamepad disconnected' message should never trigger for player 1 because we always have the keyboard and mouse
+  available. If it really disconnects then we just reconnect it and we're back." Pad-only players keep Epic's page.
+
+### G-11 step 1 - the rename, the default, and no "controller removed" page for player one
+
+How Epic's page opens (read): `PadRemoved` (`SDL2Pads.cpp`, `UXboxClient::DetectDevices`) sends `IK_JoySlider2` to the
+pad's viewport; `DefUser.ini:205` binds `JoySlider2=ControllerRemoved`; `PlayerController.ControllerRemoved`
+(`PlayerController.uc:1498`) clears the triggers, sets the HUD's `bControllerUnplugged` (`UCHUD.SetGamepadStatus`),
+calls `GUIController.SetGamepadStatus(false, Player)` (`GUIController.uc:2837`), which opens `UCMenu.ControllerRemovedMenu`
+for that port (not on `StartMenu`), and pauses a standalone game. `JoySlider1` (insert) is bound to `ControllerAdded`, an
+empty exec; the page closes on the owner's Start (`ConfirmControllerAdded`). `GUIController.NativeKeyEvent` only resets
+its input on either key (`UnGUICore.cpp:1080`).
+
+Change (file:line at this step):
+- `Source/SDL2Drv/Inc/SDL2Drv.h:106` member `PadsStartAtPlayerTwo` (was `KeyboardIsPlayer`); `:161` `ViewportHasKeyboard`.
+- `Source/SDL2Drv/Src/SDL2Client.cpp:55` config key `PadsStartAtPlayerTwo` (Input); `:96` compiled default 0 (was 1);
+  `:304-308` the comment above `Tick`; `:483-485` `PadJoin` (unchanged logic, renamed).
+- `Source/SDL2Drv/Src/SDL2Pads.cpp:17-26` header; `:262-266` `GetPadViewport` comment; `:275-282` new
+  `USDL2Client::ViewportHasKeyboard` (the window's own viewport: G-6 sends the keyboard and the mouse to it only);
+  `:305-345` `PadAdded` (renamed; the connect line now says `(player one, with the keyboard and mouse)` when the port's
+  viewport is the keyboard's, `(keyboard and mouse are player one on port 0: Start joins)` with the key on);
+  `:398-415` `PadRemoved`: the held buttons are released as before, then `JoySlider2` goes to a pad-only player's
+  viewport or to the interaction master (pad bound to nobody) as on the Xbox, and to NO viewport that has the keyboard
+  and the mouse; the line reads `SDL2 pads: pad 0 disconnected: <name> (player one keeps the keyboard and mouse: no
+  controller-removed page; a pad plugged in takes this port again)`. The viewport keeps its `GamepadID` (Epic's PC fake 0),
+  so the next pad plugged in takes the first free port, this one, and `GetPadViewport` binds it to player one at once;
+  its `JoySlider1` reaches the empty `ControllerAdded`: silent.
+- `Source/Engine/Src/UnLevAct.cpp:919` comment only.
+- `Engine/Config/Default.ini` `[SDL2Drv.SDL2Client] PadsStartAtPlayerTwo=False` with its comment;
+  `tools/dev/sync-web-ini.py` DELTAS entry removed (a comment says why); `Engine/Config/web/Default.ini` regenerated
+  (`--check` clean): the web file now equals the native one there. `Engine/Config/README.md` row rewritten.
+- With True, `ViewportHasKeyboard` changes nothing: no pad ever has port 0 (`PadAdded` starts at 1, `PadJoin` never gives
+  a pad the window's viewport), so every pad is a pad-only player's and keeps Epic's page (G-9's kbplayer test checks it).
+- Tools: the `-ini:System:[SDL2Drv.SDL2Client]:KeyboardIsPlayer=False` G-9 added is the default now and was removed from
+  `m10-controls.sh`, `fx-owner.sh`, `fps-bench.sh`, `g4-language.sh`, `m12-wine-smoke.sh`, `jit-strip.sh`,
+  `f5-flicker.sh`, `decay-flash.sh`, `net-test.py`; `g6-splitscreen.sh`'s `$KBOLD` is gone (G-6's parts use the default)
+  and `kbplayer` sets `PadsStartAtPlayerTwo=True` (`$KBPLAYER`). A run against an OLDER binary (G-9's, default True)
+  would now need the key by hand: those scripts no longer pin G-6's model.
+- New test part `tools/dev/g6-splitscreen.sh <tree> unplug` (`scen_unplug`, Xvfb, default ini, MSAA off as m10): pad 0
+  on port 0 is player one (connect line), stick and keyboard both walk player one; pad 0 pulled: the disconnect line,
+  NO `OpenMenu [UCMenu.ControllerRemovedMenu]`, no `pad 0 JoySlider2`, probe menu None and paused 0, port 0 kept, the
+  keyboard still walks; pad 0 back: port 0, player one's line, no page, its stick walks player one; pad 1 joins as player
+  two (Start in the match); pad 1 pulled: Epic's page opens (probe menu `ControllerRemovedMenu*`); back on port 1, its
+  Start closes the page; ports [0, 1].
+
+Native build at this source: `build-native` 0 errors (`logs/g11/build-native-0.log`; the strings are in `uc2.bin`).
+
+### G-11 step 2 - native results (binary build-native at 2e17abe; run trees g11, g11ship = Epic's shipped GUI/UCGameplay/UCMenu)
+
+| test | logs | result |
+|---|---|---|
+| `g6-splitscreen.sh g11 unplug` (new, default ini) | `logs/g11/unplug1` | PASS 26/26 (load 15.9 at start, 18.9 at the end) |
+| `g6-splitscreen.sh g11 input menu kbplayer` | `logs/g11/g6` | input PASS 39, menu PASS 9, kbplayer (`PadsStartAtPlayerTwo=True`) PASS 34, kbmenu PASS 11 (load 15.8 at start, 22-24 during) |
+| `m10-controls.sh` all five (M10_TREE=g11, default ini: the virtual pad is player one) | `logs/g11/m10`, `logs/g11/m10b` | first run: mouse 18, text 7, both 14 PASS; keyboard 15/16, pad 30/33; rerun (load < 16): keyboard PASS 16, pad PASS 34 |
+| `d6-mouse.sh look pad` (D6_TREE=g11, D6_SHIP_TREE=g11ship) | `logs/g11/d6`, `logs/g11/d6.txt` | 48 PASS 0 FAIL (pad curves vs shipped worst 0.11%) |
+
+Numbers from the unplug run (`logs/g11/unplug1/g11-unplug.inject`): pad 0's stick walked player one 442.2/329.6 units
+(forward/back), the keyboard 450.5/364.9; after the pull: probe menu None, paused 0, viewport 0 still port 0, the keyboard
+walked 543.8/365.9; pad 0 back: `SDL2 pads: pad 0 connected: UC2 M10 virtual pad (rumble) (player one, with the keyboard
+and mouse)`, its stick 505.6/420.3, the keyboard 508.5/453.0; pad 1 joined (ports [0, 1]); pad 1 pulled:
+`GUI.GUIController OpenMenu [UCMenu.ControllerRemovedMenu]`, probe menu `ControllerRemovedMenu*`; back on port 1, its
+Start closed the page, ports [0, 1].
+
+m10's first-run failures: the `pad` scenario's three unplug checks were written for Epic's page on player one's pad
+(`pd-unplug-sends-joyslider2`, `pd-unplug-pauses-with-controller-removed-menu`, `pd-start-after-replug-resumes`): exactly
+what the owner's rule removes. The scenario now checks the rule (`tools/dev/m10-controls.sh` `scen_pad`): the disconnect
+line, no `JoySlider2`, no `ControllerRemovedMenu`, menu None and not paused, the re-plug line "player one, with the
+keyboard and mouse" and the re-plugged stick walking player one (442 units). `keyboard`'s `kb-e-switches-to-melee` (w1
+held a SniperRifle, a bot 62 units away and locked on) passed in the rerun with the same binary: not pad-related; the
+keyboard scenario never touches a pad.
+
+### G-11 step 3 - builds and the browser (both pad modes)
+
+Builds (`bin/capped 6G`): native `-j4` (`logs/g11/build-native-0.log`), wasm-perf `-j2` (`build-wasm-perf.log`; the
+preloaded data has `PadsStartAtPlayerTwo=False` and no `KeyboardIsPlayer`), windows MinGW `-j2` (`build-windows.log`,
+`uc2.exe` has the new line): 0 errors each. No script changed: no package to switch.
+
+Browser (frontend worktree `ufrontend-pads` at d51dfe1, serve-web assembled with this worktree's `build-wasm-perf`,
+sha256 `af499b50d5ef18225652ef8426430f9bbd0e89419fb95632db0180192f761257` before and after each run; harness
+`e2e-mem-guard --max-gb=23` inside `bin/capped 7G`, one run machine-wide, null sink by module index;
+`logs/g11/run-gamepad-e2e.sh`):
+- box unticked (default): 1 passed, 37/37 steps, peak 9.2 GB (`logs/g11/unticked-1.out`): the pad on port 0 "player one,
+  with the keyboard and mouse", stick 409.1 and keyboard 502.1 units on the same player, pulled: no
+  ControllerRemovedMenu, no JoySlider2, the keyboard walked 635.7 (not paused), back on port 0, stick 540.4.
+- box ticked: 1 passed, 23/23 steps, peak 9.5 GB (`logs/g11/ticked-1.out`): the pad on port 1 ("Start joins"), moved
+  nobody unjoined, Start joined player two (2 split views), its stick moved player two 829.5 / player one 0.0, the
+  keyboard player one 631.6 / player two 0.0; pulled: Epic's ControllerRemovedMenu; back, Start closed it, stick 552.7.
+  The first two-player split screen in a browser (G-6: "untested in a browser"); it used Epic's split detail (level 1).
+
+Open: (1) with the box unticked, when player one's pad AND player two's are out and player two's is plugged back first,
+it takes port 0 (the first free port) and becomes player one's, leaving player two's page waiting for port 1: SDL has no
+fixed ports; a pad does not remember its port. Not built (a "port per device" rule would be a design change). (2) Not
+measured: the old binary failing the new unplug test (a control run); the rule's code path is one `if` and the
+removal line names it.

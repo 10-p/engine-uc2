@@ -17,9 +17,13 @@
 
 	Split screen (G-6): Start on an unbound pad joins a player as UXboxClient::
 	UpdateGamepadUnboundInput does (USDL2Client::PadJoin, SDL2Client.cpp); each bound pad is
-	read by its own viewport only. G-9 ([SDL2Drv.SDL2Client] KeyboardIsPlayer, default True):
-	the keyboard and the mouse are player one on port 0 and the pads take ports 1-3, so the
-	first pad's Start joins player two instead of driving player one.
+	read by its own viewport only. G-11, the owner's rule of 2026-10-10 ([SDL2Drv.SDL2Client]
+	PadsStartAtPlayerTwo, G-9's KeyboardIsPlayer renamed): by default (False) the first pad takes
+	port 0 and drives player one together with the keyboard and the mouse, exchangeable at any
+	moment, and a second pad's Start joins player two; True keeps port 0 for the keyboard and the
+	mouse alone and the pads take ports 1-3, so the first pad's Start joins player two. Either way
+	player one has the keyboard and the mouse, so a pad of player one that is pulled out does not
+	open Epic's "controller removed" page (PadRemoved); a pad-only player's does.
 =============================================================================*/
 
 #include "SDL2Drv.h"
@@ -257,8 +261,8 @@ INT USDL2Client::FindPadSlot( INT InstanceID )
 //
 // The viewport a pad port belongs to (UXboxClient::GetGamepadViewport): the one whose
 // GamepadID is the port. On PC, ULevel::SpawnPlayActor gives the first viewport GamepadID 0,
-// so with KeyboardIsPlayer=False the first pad and the keyboard both drive player one; with
-// KeyboardIsPlayer (G-9, the default) no pad gets port 0 and the keyboard's player is its own.
+// so by default the first pad and the keyboard both drive player one; with PadsStartAtPlayerTwo
+// (G-11, G-9's KeyboardIsPlayer) no pad gets port 0 and the keyboard's player is its own.
 //
 UViewport* USDL2Client::GetPadViewport( INT Slot )
 {
@@ -266,6 +270,15 @@ UViewport* USDL2Client::GetPadViewport( INT Slot )
 		if( Viewports(i)->GetGamepadID()==Slot && Viewports(i)->Actor )
 			return Viewports(i);
 	return NULL;
+}
+
+//
+// G-11: whether a viewport has the keyboard and the mouse: the window's own viewport (player one; G-6 sends the
+// keyboard and the mouse to it only, a split-screen viewport is a rectangle of the window with its pad alone).
+//
+UBOOL USDL2Client::ViewportHasKeyboard( UViewport* Viewport )
+{
+	return Viewport && ((USDL2Viewport*)Viewport)->Window!=NULL;
 }
 
 //
@@ -289,8 +302,10 @@ void USDL2Client::SendPadKey( INT Slot, UViewport* Viewport, EInputKey Key, EInp
 }
 
 //
-// A pad was connected: first free port, as the Xbox's four fixed ports. G-9: with KeyboardIsPlayer port 0
+// A pad was connected: first free port, as the Xbox's four fixed ports. G-11: with PadsStartAtPlayerTwo port 0
 // belongs to the keyboard and the mouse (player one), so the pads take ports 1-3: a fourth pad finds none.
+// By default a pad plugged in while port 0 is free takes it and is player one's again at once (the port's
+// viewport kept its GamepadID when the pad went: PadRemoved).
 //
 void USDL2Client::PadAdded( INT DeviceIndex )
 {
@@ -301,13 +316,13 @@ void USDL2Client::PadAdded( INT DeviceIndex )
 	if( FindPadSlot(ID)!=INDEX_NONE )
 		return;
 	INT Slot = INDEX_NONE;
-	for( INT i=KeyboardIsPlayer ? 1 : 0; i<SDL2DRV_MAX_PADS && Slot==INDEX_NONE; i++ )
+	for( INT i=PadsStartAtPlayerTwo ? 1 : 0; i<SDL2DRV_MAX_PADS && Slot==INDEX_NONE; i++ )
 		if( !Pads[i].Controller )
 			Slot = i;
 	if( Slot==INDEX_NONE )
 	{
-		debugf( NAME_Log, TEXT("SDL2 pads: all %i ports in use%s, pad ignored"), (INT)SDL2DRV_MAX_PADS - (KeyboardIsPlayer ? 1 : 0),
-			KeyboardIsPlayer ? TEXT(" (port 0 is the keyboard's: KeyboardIsPlayer)") : TEXT("") );
+		debugf( NAME_Log, TEXT("SDL2 pads: all %i ports in use%s, pad ignored"), (INT)SDL2DRV_MAX_PADS - (PadsStartAtPlayerTwo ? 1 : 0),
+			PadsStartAtPlayerTwo ? TEXT(" (port 0 is the keyboard's: PadsStartAtPlayerTwo)") : TEXT("") );
 		return;
 	}
 	SDL_GameController* GC = SDL_GameControllerOpen( DeviceIndex );
@@ -323,9 +338,11 @@ void USDL2Client::PadAdded( INT DeviceIndex )
 	Pad.RepeatKey  = IK_None;
 	const char* Name = SDL_GameControllerName( GC );
 	appStrncpy( Pad.Name, Name ? appFromAnsi(Name) : TEXT("pad"), ARRAY_COUNT(Pad.Name) );
+	UViewport* BoundTo = GetPadViewport( Slot );
 	debugf( NAME_Log, TEXT("SDL2 pads: pad %i connected: %s%s%s"), Slot, Pad.Name,
 		SDL_GameControllerHasRumble(GC) ? TEXT(" (rumble)") : TEXT(""),
-		KeyboardIsPlayer ? TEXT(" (keyboard and mouse are player one on port 0: Start joins)") : TEXT("") );
+		PadsStartAtPlayerTwo ? TEXT(" (keyboard and mouse are player one on port 0: Start joins)")
+		: ViewportHasKeyboard(BoundTo) ? TEXT(" (player one, with the keyboard and mouse)") : TEXT("") );
 #ifdef __EMSCRIPTEN__
 	// G-10: SDL has no rumble here; look for the browser's haptics on this pad (once, at connect).
 	Pad.WebIndex = -1;
@@ -379,11 +396,23 @@ void USDL2Client::PadRemoved( INT InstanceID )
 		if( Pad.Position[b] > PadButtonThreshold )
 			SendPadKey( Slot, Viewport, (EInputKey)(IK_Joy1+b), IST_Release );
 
-	SendPadKey( Slot, Viewport, IK_JoySlider2, IST_Press );
-	SendPadKey( Slot, Viewport, IK_JoySlider2, IST_Release );
+	// G-11 (owner, 2026-10-10): "The 'gamepad disconnected' message should never trigger for player 1 because we
+	// always have the keyboard and mouse available. If it really disconnects then we just reconnect it and we're
+	// back." The removal (IK_JoySlider2: the binding's ControllerRemoved, i.e. the HUD's "controller unplugged",
+	// GUIController.SetGamepadStatus opening UCMenu.ControllerRemovedMenu, the pause) goes to a pad-only player
+	// as on the Xbox (UXboxClient::DetectDevices), and to the interaction master for a pad bound to nobody; the
+	// viewport with the keyboard and the mouse gets none. It keeps its GamepadID, so the pad plugged back (the first
+	// free port: this one) is bound to it again by PadAdded, silently (the insertion's ControllerAdded does nothing).
+	UBOOL KeyboardKeeps = ViewportHasKeyboard( Viewport );
+	if( !KeyboardKeeps )
+	{
+		SendPadKey( Slot, Viewport, IK_JoySlider2, IST_Press );
+		SendPadKey( Slot, Viewport, IK_JoySlider2, IST_Release );
+	}
 	Engine->ActiveControllerId = OldId;
 
-	debugf( NAME_Log, TEXT("SDL2 pads: pad %i disconnected: %s"), Slot, Pad.Name );
+	debugf( NAME_Log, TEXT("SDL2 pads: pad %i disconnected: %s%s"), Slot, Pad.Name,
+		KeyboardKeeps ? TEXT(" (player one keeps the keyboard and mouse: no controller-removed page; a pad plugged in takes this port again)") : TEXT("") );
 	SDL_GameControllerClose( (SDL_GameController*)Pad.Controller );
 	appMemzero( &Pad, sizeof(Pad) );
 	Pad.InstanceID = -1;

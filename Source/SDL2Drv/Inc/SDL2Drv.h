@@ -103,7 +103,7 @@ class USDL2Client : public UClient, public FNotifyHook
 	BITFIELD			LogInput;				// SDL2Input log lines for every pad event
 	BITFIELD			SplitScreenJoinInMatch;	// G-6: Start on an unbound pad during a match adds a split-screen player
 	BITFIELD			SplitScreenFullDetail;	// G-9: split-screen players keep the single player's detail (else the Xbox's)
-	BITFIELD			KeyboardIsPlayer;		// G-9: keyboard+mouse are a player of their own (pad port 0); pads use ports 1-3
+	BITFIELD			PadsStartAtPlayerTwo;	// G-11 (was G-9's KeyboardIsPlayer): port 0 (player one) is keyboard+mouse only, pads use ports 1-3
 
 	// Variables.
 	UBOOL				InMenuLoop;
@@ -158,6 +158,7 @@ class USDL2Client : public UClient, public FNotifyHook
 	BYTE GetPadAnalogButton( INT Slot, INT ButtonIndex );
 	UBOOL LoggingInput();
 	UBOOL PadExec( const TCHAR* Cmd, FOutputDevice& Ar );
+	UBOOL ViewportHasKeyboard( UViewport* Viewport );
 
 	// Split screen (G-6, SDL2Client.cpp).
 	UBOOL PadJoin( INT Slot );

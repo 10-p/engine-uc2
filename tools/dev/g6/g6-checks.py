@@ -115,7 +115,7 @@ def only_moved4(tags, k, far=50.0, still=2.0):
     return tot[k] > far and all(t < still for i, t in enumerate(tot) if i != k)
 
 
-# G-9 (KeyboardIsPlayer): the keyboard and the mouse are player one on port 0, a pad joins on port 1..3, so the
+# G-9/G-11 (PadsStartAtPlayerTwo=True): the keyboard and the mouse are player one on port 0, a pad joins on port 1..3, so the
 # virtual pad v of the test channel is port v+1. The helpers below take both.
 def spawn_port(port, vpad, tries=10):
     """Press virtual pad vpad's fire until the split player on port `port` has a pawn."""
