@@ -4,6 +4,10 @@ Branch `e2-webrtc`, worktree `<WorkUC2>/engine-uc2-e2` (from main 1519163). Fron
 branch `uc2` (local commits). Logs `<WorkUC2>/logs/e2/`, run trees `<WorkUC2>/run/e2*`. Notebook appended after
 every step (newest at the bottom of "Steps").
 
+> Correction (D-3, 2026-10-10): the data channel the glue opens is **reliable and ordered** (measured in the steps
+> below: `[PIPE] ... rtc=ordered=true/maxRetx=null`), not the unordered, no-retransmit channel that `network.md`'s
+> M11 notes planned for and that `WebRTCDrv.h` described until D-3. A packet is lost only while a pipe is down.
+
 ## Starting point (2026-10-08)
 
 - Natively network play works over `IpDrv.TcpNetDriver` (`analysis/network.md`, `tools/dev/net-test.sh`). In the

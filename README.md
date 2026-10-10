@@ -21,7 +21,8 @@ repository: source only. Game content lives out of tree in `<WorkUC2>/assets/uc2
 * An SDL2 client and launcher (`SDL2Drv`, `SDLLaunch`: `uc2.bin`, `uc2.exe`, `SDLLaunch.js`), game pads through
   SDL's GameController API, keyboard and mouse for the PC.
 * An OpenGL render device (`UC2GLDrv`) with the Xbox pixel shaders translated to GLSL and the Xbox
-  post-processing (distortion, glow, bloom, depth of field); on the web the same driver through GL4ES on WebGL.
+  post-processing (distortion, glow, bloom, depth of field); on the web the same driver through GL4ES on WebGL 2
+  (WebGL 1 as the fallback).
 * Audio from the cooked XACT data through OpenAL Soft (`UC2ALAudio`); the XMV movies transcoded to Ogg Theora
   (`UC2Movie`).
 * GCC/MinGW and Emscripten builds; 32-bit by default (the shipped scripts' layout), x86_64 Linux and Windows too.
@@ -30,7 +31,8 @@ repository: source only. Game content lives out of tree in `<WorkUC2>/assets/uc2
 ## Status
 
 Plays natively on Linux (x86 32-bit and x86_64): every map loads, the menus, matches with bots, effects,
-sound, movies, controls and network play (M0-M14, D-1..D-9, C-1/C-2, O-1..O-11 in `LOG.md`). Windows:
+sound, movies, controls and network play (M0-M14, D-1..D-9, C-1/C-2, O-1..O-11, F-1..F-6 in `LOG.md`); Epic's
+shipped script packages play as shipped, the rebuilt ones add the PC mouse (F-1). Windows:
 built with MinGW and run under wine only (never on real Windows). Web: boots to the menu and plays in the
 frontend's browser specs (boot, audio, saves, keys, net, jitter); the owner's preview is the frontend's `uc2`
 target. arm64: the cross build configures and builds (F-4c, `docs/porting/analysis/platform-f4.md`); it has

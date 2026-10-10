@@ -307,6 +307,7 @@ What the Xbox build did differently (from the source, not observed): FINAL_RELEA
   as UTcpNetDriver/UTcpipConnection do (IpDrv/Src/TcpNetDriver.cpp). Packets are unreliable datagrams up to
   `MaxPacket` (WINSOCK_MAX_PACKET) with the engine's own reliability on top: an unordered, unreliable WebRTC
   data channel (`ordered:false, maxRetransmits:0`) is the matching transport.
+  (D-3, 2026-10-10: the frontend's glue opens a reliable, ordered channel instead, measured in E-2: `webrtc.md`.)
 - Address assumptions in the join path: `UNetPendingLevel` compares `LastURL.Host == URL.Host` to decide on
   preloading (UnPenLev.cpp:63); TcpNetDriver identifies connections by `sockaddr_in` and rate-limits logins by IP
   (`MaxConnPerIPPerMinute`, default 5 -- all test clients come from 127.0.0.1, and every peer of a WebRTC

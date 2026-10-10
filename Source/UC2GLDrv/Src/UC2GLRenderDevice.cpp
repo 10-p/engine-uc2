@@ -221,7 +221,9 @@ void UUC2GLRenderDevice::StaticConstructor()
 	// M7b: terrain drawn three layers at a time as the Xbox build does: no visible difference
 	// (analysis/projectors.md), so off unless asked for.
 	UseTerrain3Layer		= 0;
-	// M7b: the Xbox projector material (projectors on skeletal meshes were drawn with nothing).
+	// M7b: the Xbox's static projector batch and its projector material: level-static projectors
+	// drawn as the Xbox draws them, which differs from PC's path on six maps (analysis/projectors.md
+	// step 3). Dynamic projectors, including those on skeletal meshes, keep PC's path either way.
 	UseXboxProjectors		= 1;
 	// pp-scale: the blurs cover the share of the picture they cover on the Xbox's 640x480, also
 	// for an ini that predates the key.

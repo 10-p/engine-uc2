@@ -3,8 +3,10 @@
 
 	Ported from engine-ut2004's Source/WebRTCDrv (ufront's WebRTC net driver) and adapted to UC2's
 	UNetDriver (Engine/Inc/UnNetDrv.h: FLOAT time, the "standby cheat" receive clock, PreServerTravel).
-	Packets travel over the frontend's WebRTC data channels (unordered, no retransmits: the datagram
-	model the engine's own reliability expects, docs/porting/analysis/network.md). The transport lives in
+	Packets travel over the frontend's WebRTC data channel, which the glue opens reliable and ordered
+	(measured: "rtc=ordered=true/maxRetx=null", docs/porting/analysis/webrtc.md): a packet is lost only
+	while a pipe is down and the glue reconnects, and the engine's own acks and resends (written for lossy
+	datagrams, network.md) run on top of it. The transport lives in
 	the frontend (@ufront/glue, packages/glue/src/webrtc); the engine reaches it through the webrtc_*
 	imports that vendor/glue/webrtc-shim.js forwards to Module.UE.net.
 

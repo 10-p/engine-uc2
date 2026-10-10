@@ -40,7 +40,9 @@ package is M11.
 - Music `PlayMusic` (:1777-1872): one streamed wave bank `..\Sounds\M_<Song>.xwb` per track plus the cue
   `<Song>` of sound bank `A_Music`; fade times ignored ("change the actual song cue"); one song at a time.
 - Categories (:2686-2718): Music/FX/Voice master volumes, `CalcVolume` = `1000*log10(clamp(v,0.1,1))`
-  hundredths of dB (so 0.1 -> -10 dB, below 0.1 = -100 dB silence) (:864-873). VoiceChat goes to the voice
+  hundredths of dB (so 0.1 -> -10 dB, and anything between ~0 and 0.1 is clamped to -10 dB too; only a volume
+  below `KINDA_SMALL_NUMBER` is `DSBVOLUME_MIN` = -100 dB silence) (:864-873; corrected by D-3, 2026-10-10: an
+  earlier line said "below 0.1 = silence"; UC2ALAudio's `CategoryMB` does the same). VoiceChat goes to the voice
   subsystem.
 - `NotifyPauseChange` (:338-351) pauses every live cue instance (music is not in that list, so it plays on).
 - `NotifyLevelChange` (:265-326): stop everything, music too, drop sources, unload non-persistent banks.
