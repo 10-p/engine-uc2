@@ -208,3 +208,95 @@ identical to F-1's last run (`diff` of the 17 lines of `logs/f1/f1-make3-compare
 items). The header-export diff (`logs/d12/d12-make-headers.diff`, 107 lines) no longer contains the 8 lines about
 `UHTTPDownload`/`UPrefab` registrants listed under Engine that M14's had (`logs/m14/m14-hdr-headers.diff`, 119 lines;
 scripts.md step 2c's table row): the exporter now lists them under IpDrv and Editor, as the checked-in headers do.
+
+## Step 8: the gate at HEAD (e0bce15's Source; 2026-10-10)
+
+Both censuses rerun on binaries built from the branch with every change (`build-native64`, `build-native`), 2 workers,
+load 10-20 (`CENSUS_NAME=d12-c64h CENSUS_PORT=7960 capped 5G 2400 -- map-census.sh build-native64 15 2`, then
+`d12-c32h`/7964 with `build-native`): **64-bit 58/58 PASS, 32-bit 58/58 PASS**; every server still running at its TERM,
+exited within the 30 s grace (none KILLed), no crash handler, log closed. Main's code under the same census: 56/58
+(step 4). Per map (`logs/d12-c64h/summary.tsv`, `logs/d12-c32h/summary.tsv`; table also `logs/d12/census-table.md`):
+
+| map | 64-bit | exit | shutdown s | 32-bit | exit | shutdown s |
+|---|---|---|---|---|---|---|
+| ACT-AnubisCheats | PASS | 1 | 0.2 | PASS | 1 | 0.2 |
+| ACT-BarrensAmbush | PASS | 1 | 0.2 | PASS | 1 | 0.2 |
+| ACT-HallwayAmbush | PASS | 1 | 0.2 | PASS (2nd TERM ignored) | 1 | 0.3 |
+| ACT-SelketCheats | PASS | 1 | 0.2 | PASS | 1 | 0.2 |
+| CTF-Aqueduct | PASS | 1 | 0.2 | PASS | 1 | 0.3 |
+| CTF-ChemicalDawn | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| CTF-Downfall | PASS | 1 | 0.2 | PASS (2nd TERM ignored) | 0 | 0.2 |
+| CTF-Emperor | PASS | 1 | 0.2 | PASS | 1 | 0.2 |
+| CTF-Gauntlet][ | PASS | 1 | 0.3 | PASS | 0 | 0.2 |
+| CTF-Judgment | PASS | 1 | 0.3 | PASS | 0 | 0.2 |
+| CTF-Monoxide | PASS | 1 | 0.3 | PASS | 0 | 0.2 |
+| CTF-Octane | PASS | 1 | 0.3 | PASS | 0 | 0.2 |
+| CTF-Recoil | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| CTF-SkyReach | PASS | 1 | 0.3 | PASS | 1 | 0.2 |
+| CTF-TotalControl | PASS | 1 | 0.2 | PASS | 1 | 0.2 |
+| CTF-Transistor | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| CTF-Turmoil | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| CTF-ViperPit | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| DM-AcidRain | PASS | 1 | 0.3 | PASS | 0 | 0.2 |
+| DM-Apex | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| DM-Ascension | PASS | 1 | 0.3 | PASS | 0 | 0.2 |
+| DM-AxonCompressor | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| DM-Azure | PASS | 1 | 0.5 | PASS | 0 | 0.2 |
+| DM-ColdFusion | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| DM-Deadbolt | PASS | 1 | 0.2 | PASS | 1 | 0.2 |
+| DM-Decay | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| DM-DeepCore | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| DM-Eternal | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| DM-Evilhands | PASS | 1 | 0.2 | PASS | 1 | 0.2 |
+| DM-Fury | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| DM-Horizon | PASS (2nd TERM ignored) | 1 | 0.2 | PASS | 0 | 0.2 |
+| DM-Legacy | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| DM-Meridian | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| DM-Morbias3 | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| DM-Nexus | PASS | 1 | 0.3 | PASS | 0 | 0.2 |
+| DM-Phoenix | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| DM-Praxis | PASS | 1 | 0.2 | PASS (2nd TERM ignored) | 0 | 0.2 |
+| DM-Remnant | PASS | 1 | 0.3 | PASS | 0 | 0.2 |
+| DM-Sever | PASS | 1 | 0.3 | PASS | 0 | 0.3 |
+| DM-SolarFlare | PASS | 1 | 0.3 | PASS | 0 | 0.3 |
+| DM-Sovereign | PASS | 1 | 0.3 | PASS | 0 | 0.2 |
+| DM-Tempest | PASS | 1 | 0.3 | PASS | 0 | 0.2 |
+| DM-Undertow | PASS | 0 | 0.2 | PASS | 0 | 0.2 |
+| DM-Whisper | PASS | 1 | 0.2 | PASS | 0 | 0.1 |
+| Entry | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| Menu | PASS | 0 | 0.2 | PASS | 0 | 0.3 |
+| OD-Ascension | PASS | 1 | 0.3 | PASS | 1 | 0.2 |
+| OD-Azure | PASS | 1 | 0.2 | PASS | 1 | 0.2 |
+| OD-Cancer | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| OD-Echo | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| OD-Falls | PASS | 1 | 0.2 | PASS (2nd TERM ignored) | 0 | 0.2 |
+| OD-Obelisk | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| OD-Overflow | PASS | 1 | 0.3 | PASS | 0 | 0.2 |
+| OD-Prism | PASS | 1 | 0.2 | PASS | 0 | 0.2 |
+| OD-Sovereign | PASS | 1 | 0.2 | PASS | 1 | 0.2 |
+| OD-Zenith | PASS | 1 | 0.2 | PASS | 1 | 0.2 |
+| TUT-AdvMovement | PASS | 1 | 0.2 | PASS | 1 | 0.2 |
+| TUT-Combat | PASS | 1 | 0.2 | PASS | 1 | 0.2 |
+
+64-bit: 58 PASS of 58; 32-bit: 58 PASS of 58; second SIGTERM ignored: 64-bit ['DM-Horizon'], 32-bit ['ACT-HallwayAmbush', 'CTF-Downfall', 'DM-Praxis', 'OD-Falls']
+shutdown after TERM: 64-bit 0.2-0.5 s (mean 0.23), 32-bit 0.1-0.3 s (mean 0.21)
+
+Exit status 1 vs 0 is UCC's ErrorLevel (1 when the run logged a warning or the commandlet left it at 1), the same
+before and after the fix; the 64-bit runs log the known `Missing Class Class Editor.TransBuffer` warning.
+
+ASan + UBSan census (`build-native64-asan` reconfigured with `-fsanitize-recover=address`, run tree `d12-asan-*`;
+`ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0:halt_on_error=0 UBSAN_OPTIONS=print_stacktrace=0
+CENSUS_ASAN_KNOWN='UnCorSc\.cpp:(5481|2314|2370)' CENSUS_GRACE=60 CENSUS_NAME=d12-asan CENSUS_PORT=7968 capped 7G 3600 --
+map-census.sh build-native64-asan 25 2`): **`maps: 58  PASS: 58  FAIL: 0`**, shutdown 0.3-0.6 s, OD-Overflow got
+the duplicate SIGTERM and ignored it. 108 ASan reports in all, every one of the two kinds network.md step 9 recorded as
+Epic's benign 1-byte script over-reads: 58 x `UObject::ProcessInternal` (UnCorSc.cpp:5481, the `EX_DebugInfo` peek,
+once per map at `eventPrecacheMap`) and 50 x `UObject::execEqualEqual_IntInt` (UnCorSc.cpp:2370, `P_FINISH` past a
+class's Script from `AActor::ProcessRemoteFunction`, UnScript.cpp:3582). **No other report: no use-after-free,
+double free or SEGV anywhere, start-up, play or exit.** UBSan: 23 distinct runtime-error sites
+(`logs/d12/asan-ubsan-unique.txt`), all pre-existing Epic idioms outside the exit path (FBspNode/FPoly one-element
+arrays indexed past [0] in UnModel.cpp/UnTrace.cpp, `appRand`'s LCG signed overflow in UnAnsi.cpp, references to
+element 0 of empty TArrays, a NULL `memcpy` source of size 0); not changed.
+Peak RSS of one ASan server: about 300 MB (`/usr/bin/time -v`, `logs/d12/dtasan2-time.txt`).
+
+Memory ceilings used: builds 6G (`-j4`, then `-j2` from the owner's load rule), ucc/game runs 2G, ASan runs 3G, census 5G
+(2 workers), ASan census 7G, net tests 6G (net-test.sh). None was hit (no exit 137 from capped).
