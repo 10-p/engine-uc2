@@ -1,27 +1,58 @@
 #!/usr/bin/env python3
-"""PROTOTYPE UnrealScript decompiler for Unreal Championship 2 packages (v151), spike S1.
+"""uc-decompile: UnrealScript decompiler for Unreal Championship 2 script packages (v151).
 
-    tools/dev/uc-decompile.py <shipped System dir> <Package> <out dir> [--class Name ...]
+    uc-decompile.py <System>/<Pkg>.u --out <dir> [--shipped-text] [--patches ScriptPatches.h]
+                    [--content <root>] [--class Name ...]
 
-Writes <out dir>/<Class>.uc for every class of <Package> (or the named ones), decompiled from the bytecode and
-the declarations of the shipped .u, in a form meant to be accepted by `ucc-bin make` and to compile back to the
-same bytecode (docs/porting/analysis/decompile-spike.md). Not pretty output: full parentheses, no comments.
+Writes <dir>/<Class>.uc for every class of <Pkg>.u (or the named ones), decompiled from the bytecode and the
+declarations of the package, in a form `ucc make` accepts and compiles back to the same bytecode
+(docs/porting/analysis/decompile-spike.md, script-patches.md). The other 16 script packages must sit next to
+<Pkg>.u (types, functions and constants are looked up across all 17); content packages (textures, meshes, ...)
+are looked up under --content (default: the folder above <Pkg>.u's), for the `#exec OBJ LOAD` lines.
 
-Reuses tools/dev/script-diff.py (package reader, export parsers, token table) by import; it is not forked.
-Latin-1 in, Latin-1 out (0x02 glyph bytes inside strings pass through).
+  --shipped-text  write the package's own script text (ScriptText) instead of decompiling, when it has one: the
+                  shipped UCMenu.u was never stripped and carries Epic's retail text for all 171 classes. That
+                  text is what Epic's preprocessor left (comments blanked, `#linenumber` marks) and holds no
+                  defaultproperties (the class factory cuts them off): the decompiled defaultproperties block is
+                  appended. CR LF becomes LF. A class without text (" ") is decompiled.
+  --patches       decompile the package as Epic's load-time patcher leaves it in memory: the shipped .u plus the
+                  ScriptPatches.h entries for it (replaced bytecode, appended locals and functions linked at the
+                  head of their parent's Children, as FLinkerPatchData::Apply does).
+
+Exit status: 0 when every class was written without a decompile error; 1 when any class has one (the files are
+still written, each error as a `// DECOMPILE ERROR` line and on stderr); 2 for bad arguments or unreadable input.
+
+Canonical form (this is the context of the patch sets in patches/: changing any of it changes the base text, see
+`uc-patches.py rebase`):
+  - Bytes: Latin-1, LF line ends, a final LF; 0x02 glyph bytes in strings are written as they are.
+  - Line 1 of every file: `// decompiled by uc-decompile <VERSION> from <Pkg>.u <sha256 of the .u, 12 hex>`, plus
+    ` + ScriptPatches.h <sha256, 12 hex>` with --patches, or `// shipped text of <Class> from <Pkg>.u <sha>` with
+    --shipped-text (replacing the text's first line, which is blank in every shipped text, so line numbers keep).
+  - Decompiled class: the class line; `#exec OBJ LOAD FILE=../<Dir>/<File>` lines, one per content package the class
+    references, in order of first use; a blank line; the declarations in the order that rebuilds the shipped
+    field chain (Decompiler.decl_order: consts, enums, structs, vars, functions, states as the compiler prepends
+    them); `replication`; a one-line `cpptext` block when the class has one; `defaultproperties`.
+  - One declaration per line; one statement per line; tabs for indentation (one per level); braces on their own
+    line; every binary operator parenthesised `(a + b)`; `else if` chains flat; no comments other than line 1.
+  - Blank lines only: one after the #exec block, one before each function/state, and the padding that puts an
+    `assert` on the source line its bytecode records.
+  - defaultproperties: subobjects (`Begin Object`) first in export order, then the class's own values in the
+    order the package stores them; arrays as `X=()` then `X(i)=v`; static arrays `X(i)=v`, inside a struct
+    value `X[i]=v`; floats as the shortest decimal that reads back to the same float32.
+  Same input, same bytes: nothing depends on the clock, the locale, hash order or the file system's order.
 """
-import importlib.util
+import hashlib
 import os
 import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-_spec = importlib.util.spec_from_file_location('script_diff', os.path.join(HERE, 'script-diff.py'))
-sd = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(sd)
-Package = sd.Package
-parse_export = sd.parse_export
+import ucpkg  # noqa: E402
+from ucpkg import Package, parse_export  # noqa: E402
+
+VERSION = '1.0'
+sd = ucpkg      # the shared reader (constants, Reader, tagged, ParseError, PACKAGES)
 
 # --- flags (Source/Core/Inc/UnObjBas.h, UnStack.h) ------------------------------------------------------------
 RF_Public, RF_Final, RF_Protected, RF_Native = 0x4, 0x80, 0x800, 0x04000000
@@ -44,23 +75,25 @@ CLASS_NativeSkipAutoLoad, CLASS_FullDefaultsBase = 0x2000000, 0x40000000
 STATE_Editable, STATE_Auto, STATE_Simulated = 1, 2, 4
 PROPS = sd.PROPERTY_CLASSES
 
-# Probe names (Core/Inc/UnNames.h, 300..363): an `ignores` of a probe clears a bit of the state's IgnoreMask.
-def _probe_names():
-    import re
-    path = os.path.join(HERE, '..', '..', 'Source', 'Core', 'Inc', 'UnNames.h')
-    names = {}
-    for m in re.finditer(r'REGISTER_NAME\(\s*(\d+)\s*,\s*(\w+)\s*\)', open(path, 'rb').read().decode('latin-1')):
-        n = int(m.group(1))
-        if 300 <= n < 364:
-            names[n - 300] = m.group(2)
-    return names
-
-
-PROBES = _probe_names()
+# Probe names (Core/Inc/UnNames.h, REGISTER_NAME 300..363): an `ignores` of a probe clears a bit of the state's
+# IgnoreMask.
+PROBES = dict(enumerate((
+    'Spawned Destroyed GainedChild LostChild Probe4 Probe5 Trigger UnTrigger Timer HitWall Falling Landed '
+    'PhysicsVolumeChange Touch UnTouch Bump BeginState EndState BaseChange Attach Detach ActorEntered ActorLeaving '
+    'ZoneChange AnimEnd EndedRotation InterpolateEnd EncroachingOn EncroachedBy NotifyTurningInPlace '
+    'HeadVolumeChange PostTouch PawnEnteredVolume MayFall CheckDirectionChange PawnLeavingVolume Tick PlayerTick '
+    'ModifyVelocity CheckMovementTransition SeePlayer EnemyNotVisible HearNoise UpdateEyeHeight SeeMonster '
+    'SeeFriend SpecialHandling BotDesireability NotifyBump NotifyPhysicsVolumeChange AIHearSound '
+    'NotifyHeadVolumeChange NotifyLanded NotifyHitWall PostNetReceive PreBeginPlay BeginPlay PostBeginPlay Probe58 '
+    'PhysicsChangedFor ActorEnteredVolume ActorLeavingVolume PrepareForMove All').split()))
+assert len(PROBES) == 64
 
 
 class DecompileError(Exception):
     pass
+
+
+SOFT = object()     # an optional blank line (Decompiler.pad_lines)
 
 
 # --- the world: all 17 packages, objects by full path ----------------------------------------------------------
@@ -104,26 +137,38 @@ class Obj:
 
 
 class World:
-    def __init__(self, sysdir):
+    """The 17 script packages of one System folder (optionally as Epic's load-time patcher leaves them), objects by
+    full path, and the content packages under `content` (for `#exec OBJ LOAD`)."""
+    def __init__(self, sysdir, content=None, patches=None):
         self.pkgs, self.objs, self.index = {}, {}, {}
-        # content packages next to System/ (textures, meshes, sounds...), for `#exec OBJ LOAD`
         self.content = {}
-        root = os.path.dirname(os.path.abspath(sysdir.rstrip('/')))
+        root = content or os.path.dirname(os.path.abspath(sysdir.rstrip('/')))
+        sysname = os.path.basename(os.path.abspath(sysdir.rstrip('/')))
         for d in sorted(os.listdir(root)):
-            if d == 'System' or not os.path.isdir(os.path.join(root, d)):
+            if d == sysname or not os.path.isdir(os.path.join(root, d)):
                 continue
             for fn in sorted(os.listdir(os.path.join(root, d))):
                 base, ext = os.path.splitext(fn)
                 if ext.lower() in ('.utx', '.usx', '.ukx', '.uax', '.u', '.umx', '.upx', '.ugx'):
                     self.content.setdefault(base.lower(), '../%s/%s' % (d, fn))
+        self.sha = {}
         for p in sd.PACKAGES:
-            pk = Package(os.path.join(sysdir, p + '.u'))
+            path = os.path.join(sysdir, p + '.u')
+            if not os.path.isfile(path):
+                raise DecompileError('%s: missing (all 17 script packages must be in %s)' % (path, sysdir))
+            pk = Package(path)
+            self.sha[p] = hashlib.sha256(pk.data).hexdigest()[:12]
+            if patches and p in patches:
+                pk = sd.PatchedView(pk, patches[p], full=True)
             self.pkgs[p] = pk
             self.objs[p] = [Obj(self, p, i) for i in range(len(pk.exports))]
             pk.exp_paths = {}
             for o in self.objs[p]:
                 pk.exp_paths[o.path] = o
                 self.index.setdefault(o.key.lower(), o)
+        for p in sd.PACKAGES:
+            if isinstance(self.pkgs[p], sd.PatchedView):
+                self.link_appended(p)
         # Any enum yields a ByteConst for its n-th tag: the fallback when the context's enum is unknown (an enum
         # tag assigned to an int, e.g. `m_CTIState = ECrossTitleInvite.CTI_None`). The largest of Core/Engine.
         self.fallback_enum = max((o for p in ('Core', 'Engine') for o in self.objs[p] if o.cls == 'Enum'),
@@ -138,6 +183,28 @@ class World:
                         continue
                     if n:
                         self.natives[n] = o
+
+    def link_appended(self, p):
+        """FLinkerPatchData::Apply: each appended UField whose outer is a UStruct goes to the head of the outer's
+        Children (Field->Next = Parent->Children; Parent->Children = Field), in the patch's export order."""
+        pk = self.pkgs[p]
+        for i in range(len(pk.old.exports), len(pk.exports)):
+            o = self.objs[p][i]
+            parent = o.outer()
+            if parent is None or parent.cls not in ('Class', 'State', 'Function', 'Struct'):
+                continue
+            if o.cls not in sd.PROPERTY_CLASSES and o.cls not in ('Function', 'State', 'Const', 'Enum', 'Struct'):
+                continue
+            # "if this object already exists in the struct's Children list ... we don't need to do anything": an
+            # appended function's own appended locals are already in its serialized Children
+            c, seen = parent.f['children'], set()
+            while c != 'None' and c not in seen and c != o.path:
+                seen.add(c)
+                c = pk.exp_paths[c].f['next'] if c in pk.exp_paths else 'None'
+            if c == o.path:
+                continue
+            o.f['next'] = parent.f['children']
+            parent.f['children'] = o.path
 
     def resolve(self, pkgname, ref):
         if ref is None or ref == 'None':
@@ -1003,7 +1070,8 @@ class Decompiler:
     def __init__(self, world):
         self.world = world
 
-    def run(self, cls):
+    def run(self, cls, first_line):
+        """The decompiled text of class Obj cls, `first_line` as line 1."""
         self.cls = cls
         self.typer = Typer(self.world, cls)
         self.errors = []
@@ -1014,10 +1082,13 @@ class Decompiler:
         kids = self.decl_order(kids)
         for o in kids:
             try:
-                lines += self.field(o, 0)
+                fl = self.field(o, 0)
             except (DecompileError, sd.ParseError, IndexError, KeyError, struct.error) as e:
                 self.errors.append('%s: %s' % (o.key, e))
-                lines.append('// DECOMPILE ERROR %s: %s' % (o.name, e))
+                fl = ['// DECOMPILE ERROR %s: %s' % (o.name, e)]
+            if o.cls in ('Function', 'State') and fl and not fl[0].startswith('//'):
+                lines.append(SOFT)
+            lines += fl
         if rep:
             lines += rep
         if cls.f['cpptext'] != 'None':
@@ -1025,23 +1096,60 @@ class Decompiler:
             # one creates none: UnEdFact.cpp)
             lines += ['', 'cpptext', '{', '// stripped from the shipped package', '}']
         lines.append('')
+        lines += self.defaults_block(cls)
+        execs = ['#exec OBJ LOAD FILE=%s' % self.world.content[p.lower()] for p in self.loads]
+        return '\n'.join(self.pad_lines([first_line, self.header(cls)] + execs + [''] + lines)) + '\n'
+
+    def defaults_block(self, cls):
         try:
-            lines += self.defaults(cls)
+            return self.defaults(cls)
         except (DecompileError, sd.ParseError, IndexError, KeyError, struct.error) as e:
             self.errors.append('%s defaultproperties: %s' % (cls.key, e))
-            lines += ['defaultproperties', '{', '// DECOMPILE ERROR %s' % e, '}']
-        execs = ['#exec OBJ LOAD FILE=%s' % self.world.content[p.lower()] for p in self.loads]
-        return '\n'.join(self.pad_lines([self.header(cls)] + execs + [''] + lines)) + '\n'
+            return ['defaultproperties', '{', '// DECOMPILE ERROR %s' % e, '}']
+
+    def shipped_text(self, cls, text, first_line):
+        """The class's own script text (CR LF -> LF; line 1, blank in every shipped text, becomes first_line) and
+        the decompiled defaultproperties block (the class factory cuts it off the stored text)."""
+        self.cls = cls
+        self.typer = Typer(self.world, cls)
+        self.errors = []
+        self.loads = []
+        body = text.replace('\r\n', '\n')
+        head, sep, rest = body.partition('\n')
+        if '\n' in first_line or '\r' in body:
+            raise DecompileError('%s: stray CR in the shipped text' % cls.key)
+        # line 1 carries the identity comment: it replaces a blank line 1, or follows a non-blank one (8 UCMenu
+        # texts start with their class line), so no line moves
+        head = first_line if not head.strip() else head.rstrip() + ' ' + first_line
+        if not rest.endswith('\n'):
+            rest += '\n'
+        return head + '\n' + rest + '\n'.join(self.defaults_block(cls)) + '\n'
 
     def pad_lines(self, lines):
-        """Resolve '\\x01<line>\\x01' marks: blank lines are inserted so the marked line lands on <line>."""
+        """Resolve '\x01<line>\x01' marks: blank lines are inserted so the marked line lands on <line>. SOFT lines
+        (the blank line before a function or state) are kept only when every assert still fits; otherwise the file
+        is written without any of them."""
+        out = self._pad(lines, True)
+        if out is None:
+            out = self._pad(lines, False)
+        if out is None:
+            out = self._pad(lines, False, report=True)
+        return out
+
+    def _pad(self, lines, keep_soft, report=False):
         out = []
         for l in lines:
+            if l is SOFT:
+                if keep_soft:
+                    out.append('')
+                continue
             for part in l.split('\n'):
                 if part.startswith('\x01'):
                     _, n, rest = part.split('\x01', 2)
                     n = int(n)
                     if len(out) + 1 > n:
+                        if not report:
+                            return None
                         self.errors.append('%s: line %d wanted for an assert, already at %d' % (self.cls.key, n, len(out) + 1))
                     while len(out) + 1 < n:
                         out.append('')
@@ -1339,6 +1447,8 @@ class Decompiler:
         if ign:
             lines.append('\tignores %s;' % ', '.join(ign))
         for k in fns:
+            if k.cls == 'Function':
+                lines.append(SOFT)
             lines += self.field(k, 1)
         b = self.body(o, 0, True)
         if b:
@@ -1402,8 +1512,11 @@ class Decompiler:
         """A reference into a content package: the class must load it (`#exec OBJ LOAD`; the original may have
         relied on another class loading it first, which a decompiler cannot see)."""
         top = path.split('.')[0]
-        if top in sd.PACKAGES or top.lower() not in self.world.content:
+        if top.lower() in {p.lower() for p in sd.PACKAGES}:
             return
+        if top.lower() not in self.world.content:
+            raise DecompileError('%s references %s: no content package %s under the content folder' % (
+                self.cls.key, path, top))
         if top not in self.loads:
             self.loads.append(top)
 
@@ -1505,7 +1618,9 @@ class Decompiler:
                 if m.cls == 'ArrayProperty':
                     parts.append('%s=(%s)' % (m.name, ','.join(v)))
                 elif m.f['arraydim'] > 1 or t[3]:
-                    parts.append('%s(%d)=%s' % (m.name, t[3], v))
+                    # a static array inside a struct value is written with brackets (`LabelPosn[0]=(...)`); the
+                    # parenthesised form is the top-level one only (UC2ControllerLayoutMenu.Labels)
+                    parts.append('%s[%d]=%s' % (m.name, t[3], v))
                 else:
                     parts.append('%s=%s' % (m.name, v))
             return '(%s)' % ','.join(parts)
@@ -1525,38 +1640,104 @@ class Decompiler:
         raise DecompileError('default of %s' % c)
 
 
+def usage(msg=None):
+    if msg:
+        sys.stderr.write('uc-decompile: %s\n' % msg)
+    sys.stderr.write('usage: uc-decompile.py <System>/<Pkg>.u --out <dir> [--shipped-text] [--patches ScriptPatches.h] '
+                     '[--content <root>] [--class Name ...]\n')
+    sys.exit(2)
+
+
 def main():
     a = sys.argv[1:]
-    if len(a) < 3:
+    if not a or a[0] in ('-h', '--help'):
         print(__doc__)
+        sys.exit(0 if a else 2)
+    upath, outdir, content, patches_path, shipped_text, only = None, None, None, None, False, []
+    i = 0
+    while i < len(a):
+        if a[i] == '--out' and i + 1 < len(a):
+            outdir = a[i + 1]
+            i += 2
+        elif a[i] == '--content' and i + 1 < len(a):
+            content = a[i + 1]
+            i += 2
+        elif a[i] == '--patches' and i + 1 < len(a):
+            patches_path = a[i + 1]
+            i += 2
+        elif a[i] == '--shipped-text':
+            shipped_text = True
+            i += 1
+        elif a[i] == '--class':
+            i += 1
+            while i < len(a) and not a[i].startswith('--'):
+                only.append(a[i])
+                i += 1
+        elif upath is None and not a[i].startswith('--'):
+            upath = a[i]
+            i += 1
+        else:
+            usage('unexpected argument %s' % a[i])
+    if upath is None or outdir is None:
+        usage('a package and --out are required')
+    if not os.path.isfile(upath) or not upath.endswith('.u'):
+        usage('%s: not a .u file' % upath)
+    sysdir = os.path.dirname(os.path.abspath(upath))
+    pkgname = os.path.basename(upath)[:-2]
+    canon = {p.lower(): p for p in sd.PACKAGES}
+    if pkgname.lower() not in canon:
+        usage('%s is not one of the 17 script packages (%s)' % (pkgname, ', '.join(sd.PACKAGES)))
+    pkgname = canon[pkgname.lower()]
+    patches = None
+    try:
+        if patches_path:
+            patches = sd.parse_patches(patches_path)
+            psha = hashlib.sha256(open(patches_path, 'rb').read()).hexdigest()[:12]
+        world = World(sysdir, content, patches)
+    except (OSError, ValueError, DecompileError, sd.ParseError) as e:
+        sys.stderr.write('uc-decompile: %s\n' % e)
         sys.exit(2)
-    sysdir, pkgname, outdir = a[0], a[1], a[2]
-    only = set()
-    if '--class' in a:
-        only = set(a[a.index('--class') + 1:])
-    world = World(sysdir)
+    first = '// decompiled by uc-decompile %s from %s.u %s' % (VERSION, pkgname, world.sha[pkgname])
+    if patches_path:
+        first += ' + ScriptPatches.h %s' % psha
     os.makedirs(outdir, exist_ok=True)
     dec = Decompiler(world)
     n = bad = 0
-    report = []
+    texts = {}
+    if shipped_text:
+        pk = world.pkgs[pkgname]
+        for o in world.objs[pkgname]:
+            if o.cls == 'TextBuffer' and o.path.endswith('.ScriptText') and o.path.count('.') == 1:
+                t = o.f['text']
+                if t.strip():
+                    texts[o.path.split('.')[0]] = t
+    names = [o.name for o in world.objs[pkgname] if o.cls == 'Class']
+    for c in only:
+        if c not in names:
+            usage('no class %s in %s' % (c, pkgname))
     for o in world.objs[pkgname]:
         if o.cls != 'Class' or (only and o.name not in only):
             continue
         n += 1
         try:
-            text = dec.run(o)
-        except Exception as e:      # a prototype: record and go on with the next class
+            if o.name in texts:
+                text = dec.shipped_text(o, texts[o.name], '// shipped text of %s from %s.u %s, defaultproperties by '
+                                        'uc-decompile %s' % (o.name, pkgname, world.sha[pkgname], VERSION))
+            else:
+                text = dec.run(o, first)
+        except Exception as e:      # noqa: BLE001 - record, write a marker file, go on with the next class
             import traceback
-            dec.errors = ['CRASH %s: %s' % (type(e).__name__, traceback.format_exc().strip().splitlines()[-3:])]
-            text = '// DECOMPILER CRASH\n'
+            dec.errors = ['CRASH %s: %s' % (type(e).__name__, ' | '.join(traceback.format_exc().strip().splitlines()[-3:]))]
+            text = first + '\n// DECOMPILER CRASH\n'
         with open(os.path.join(outdir, o.name + '.uc'), 'wb') as fh:
             fh.write(text.encode('latin-1'))
         if dec.errors:
             bad += 1
-            report += ['%s: %s' % (o.name, e) for e in dec.errors]
-    for r in report:
-        print('ERROR', r)
-    print('%s: %d classes decompiled, %d with decompile errors' % (pkgname, n, bad))
+            for e in dec.errors:
+                sys.stderr.write('uc-decompile: ERROR %s: %s\n' % (o.name, e))
+    print('%s: %d classes written (%d shipped text, %d decompiled), %d with decompile errors' % (
+        pkgname, n, len([c for c in texts if not only or c in only]), n - len([c for c in texts if not only or c in only]), bad))
+    sys.exit(1 if bad else 0)
 
 
 if __name__ == '__main__':
