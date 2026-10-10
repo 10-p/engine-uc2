@@ -132,3 +132,21 @@ lock spot problem of step 3). The wasm-perf build (started -j4) was stopped and 
   in full and its effects + movies again; each start waits for load < 16 and 10 GB available.
 - D-4 (5) `map-census.sh` `timeout -k`: left to the D-1 agent as told; it is done on their branch
   (`engine-uc2-d12` `3fdbbf6`: `timeout --preserve-status -k "$grace"`), not touched here.
+
+## Step 9: the native reproduction (D-4 2), quiet machine (1-minute load 15.7 / 13.4 at the starts)
+
+`JIT_OUT=logs/d34/jit tools/dev/jit-trace.sh` on `run/d34-run` (this branch's build, the asset tree's rebuilt
+UCGameplay.u 4ed72f0b), keyboard + mouse, 1920x1080:
+
+| run | frame times (steady frames) | judder RMS fwd/back/right/left px | b (pawn + bob) | b without the bob |
+|---|---|---|---|---|
+| `uneven` (16.7:33.3:16.7:16.7:25:33.3) | 16.8-35.0 ms | 0.53 / 0.38 / 0.53 / 0.54: PASS | -0.000 / -0.000 / -0.000 / 0.000 | -0.000 / -0.000 / **-0.035 / -0.023** |
+| browser-like `FramePattern=25:23:24:50:26:24:29:23:21:30` | 21.1-51.0 ms | 0.71 / 0.50 / 0.71 / 0.80: PASS | 0.000 / 0.000 / -0.000 / -0.000 | 0.000 / 0.000 / **0.048 / 0.023** |
+| browser, a19b trace (WebGL 2) | 19.4-55.0 ms | 0.66 / 0.31 / 0.45 / 0.50 | -0.000 / 0.001 / -0.000 / -0.000 | -0.000 / 0.001 / **0.217 / -0.039** |
+
+Read: natively too, the fit without the bob is non-zero on the strafes only, with any sign, and exactly zero forward
+and back; with the bob (what the camera follows) it is 0.000 everywhere, residual 0.00-0.01, on the web as natively.
+The size of the chance correlation depends on how a segment's frame times fall on the bob's phase (a periodic
+native pattern averages out more than the browser's irregular times). Decision: measurement, not a web-only
+dependency; nothing to fix in the engine or UCGameplay.u; the spec fits pawn + bob as jit-analyze.py always did
+(patch), the limit stays 0.2. The browser runs of the patched spec follow (step 10).
