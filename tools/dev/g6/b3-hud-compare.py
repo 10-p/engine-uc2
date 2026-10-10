@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """B-3: the split HUD's placement of several runs against a reference run (docs/porting/analysis/split-hud.md).
 
-    b3-hud-compare.py <ref-label>=<dir>[:<mode>] <label>=<dir>[:<mode>] ...
+    b3-hud-compare.py [--rows] <ref-label>=<dir>[:<mode>] <label>=<dir>[:<mode>] ...
 
 Each <dir> holds a run of `tools/dev/g6-splitscreen.sh <tree> hud` (b3-hud-measure.py's b3-hud-measure.json, or the
 pictures, measured here with <mode>, default Fit43). The first is the reference (Epic's shipped scripts at 640x480,
@@ -13,6 +13,11 @@ TOL design pixels of the reference (3 and 4 players are reported, not counted: E
 Epic's intent, from the scripts (UCHUD_Split.uc, UCHUD.SetSplitPosition): the health fill pos_HealthFill X 39..165,
 Y 33..50 in the 640x240 half, moved by SafeZoneOffsetY = 0 (client viewport index 0) or -29 (index 1); the reticle's
 anchor at (320, 240*0.5 = 120), the centre of the half.
+
+Rows (B-3b, the owner's rule for three and four players: Epic's bottom-half offset for every view below the split
+line): for every run but the reference, n3 and n4: each view's health fill top at y 33 (a view at the screen's top
+edge) or 4 (below the split line) within TOL, and its reticle within TOL of the view's centre. Printed as
+PASS/FAIL b3-hud-<label>-rows; counted in the exit code with --rows.
 """
 import json, os, subprocess, sys
 
@@ -37,8 +42,26 @@ def intent(tag, v):
     return {'health': (39 + 0, 33 + off), 'reticle_anchor': (320, 120)}
 
 
+def row_of(tag, split):
+    return 0 if (tag == 'n3' and split == 0) or (tag == 'n4' and split <= 1) else 1
+
+
+def rows_check(label, run):
+    bad, lines = 0, []
+    for tag in ['n3', 'n4']:
+        for v in run.get(tag, {}).get('views', []):
+            want = 33 - 29 * row_of(tag, v['split'])
+            h, o = v.get('health'), v.get('reticle_off_design')
+            ok = bool(h) and abs(h[1] - want) <= TOL and bool(o) and max(abs(o[0]), abs(o[1])) <= TOL
+            bad += 0 if ok else 1
+            lines.append(f"{tag} split {v['split']} row {row_of(tag, v['split'])}: health y {h[1] if h else None} "
+                         f"(want {want}), reticle {tuple(o) if o else None} design from the centre{'' if ok else '  <-- FAIL'}")
+    return bad, lines
+
+
 def main():
-    runs = [load(s) for s in sys.argv[1:]]
+    count_rows = '--rows' in sys.argv
+    runs = [load(s) for s in sys.argv[1:] if s != '--rows']
     ref_label, ref = runs[0]
     fails = {label: 0 for label, _ in runs[1:]}
     worst = {label: 0.0 for label, _ in runs[1:]}
@@ -90,7 +113,15 @@ def main():
         print(f"{'PASS' if fails[label] == 0 else 'FAIL'} b3-hud-{label}-as-{ref_label}: two players' health, weapons, "
               f"score within {TOL} design px of the reference (worst {worst[label]:.1f}), reticle within {TOL} of the "
               f"viewport centre; {fails[label]} outside")
-    return 1 if any(fails.values()) else 0
+    rows_bad = 0
+    for label, run in runs[1:]:
+        bad, lines = rows_check(label, run)
+        for l in lines:
+            print(f"  rows {label}: {l}")
+        print(f"{'PASS' if bad == 0 else 'FAIL'} b3-hud-{label}-rows: three and four players, health y 33 at the "
+              f"screen's top edge and 4 below the split line, reticle centred (within {TOL}); {bad} outside")
+        rows_bad += bad
+    return 1 if any(fails.values()) or (count_rows and rows_bad) else 0
 
 
 if __name__ == '__main__':
