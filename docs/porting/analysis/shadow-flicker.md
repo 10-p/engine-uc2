@@ -152,3 +152,43 @@ pixel in the next frame), MSAA (AA 0 here).
 **Face-on check** (DM-DeepCore, wire-mesh light on the metal floor, first person looking straight down at about 100
 units, `move` phase, runs `dc-cur`/`dc-mix`): the port's offset 0.005% toggle, with the slope 0.0005%: a face-on
 surface had no visible problem (its depth slope is small), so the constant needs no change.
+
+## Step 3. The fix and its proof (2026-10-10)
+
+**Fix**: `FOpenGLRenderInterface::ApplyZBias` (`Source/UC2GLDrv/Src/UC2GLRenderInterface.cpp`, used by `SetZBias` and
+by `PopState`): `glPolygonOffset(-0.25 x ZBias, -5 x ZBias)`: the Xbox's slope scale (exactly), the port's constant (5
+units per ZBias since R1; the Xbox's is 1: kept because the driver's two transform orders are not invariant, and 5
+units cost 0.7 world units at 5000 units from the camera). One driver function for both bindings (UC2GL4ESDrv shares
+the render interface; GL4ES passes the call to OpenGL ES; WebGL has `polygonOffset(factor, units)`). `ZBias` in the
+saved state is now the engine's value (0/1), not x5. Nothing removed: every projector and shadow draws as before.
+
+**Proof** (`logs/b1/proof/`, `logs/b1/proof.txt`; binaries in run/b1/System: `uc2-before.bin` = main 81fd44e's driver,
+`uc2-fix.bin` = commit 5107cf9, sha256 87fbc0a27e1787cf...; owner's spot, 1280x960, 12 frames a phase, ramp box
+(720,360)-(1180,620); `mousefz` time stopped, `mouse` time running, 3 mouse counts a frame; toggle = mean share of
+pixels toggling by more than 24 levels between frames, max in brackets; stipple = 1-pixel spikes):
+
+| binding | AA | RMODE | before: stipple frozen / toggle mousefz / toggle mouse | after: stipple frozen / toggle mousefz / toggle mouse |
+|---|---|---|---|---|
+| desktop | 0 | 7 | 1.79% / 9.85% (46.0) / 3.62% (16.3) | 0.011% / 0.020% (0.026) / 0.020% (0.026) |
+| desktop | 4 | 7 | 0.17% / 9.82% (45.8) / 3.54% (16.3) | 0.012% / 0.014% (0.017) / 0.014% (0.015) |
+| twin (GL4ES, ES 3.2 NVIDIA) | 0 | 7 | 0.011% / 6.36% (29.0) / 1.55% (6.60) | 0.011% / 0.020% (0.026) / 0.020% (0.026) |
+| twin | 4 | 7 | 0.017% / 6.34% (28.8) / 1.35% (6.46) | 0.017% / 0.016% (0.020) / 0.015% (0.020) |
+| desktop | 0 | 6 | (texture) / 2.12% (6.30) / 1.37% (2.22) | (texture) / 0.89% (0.93) / 0.84% (0.87) |
+| desktop | 4 | 6 | / 2.08% (6.25) / 1.34% (2.19) | / 0.87% (0.92) / 0.83% (0.85) |
+| twin | 0 | 6 | / 1.79% (4.90) / 1.33% (2.01) | / 0.85% (0.90) / 0.82% (0.85) |
+| twin | 4 | 6 | / 1.76% (4.93) / 1.29% (1.97) | / 0.83% (0.88) / 0.80% (0.83) |
+| control: projectors off, desktop | 0 | 7 | | 0.011% / 0.009% (0.014) / 0.009% (0.013) |
+| control: projectors off, desktop | 0 | 6 | | (texture) / 1.49% (1.54) / 1.46% (1.49) |
+
+At RMODE 7 the stipple and the toggling fall to the floor of the projectors-off control (0.01-0.02%: the remaining
+toggles are a few pixels of the ramp's edge). At RMODE 6 (normal) the 1-pixel measure is dominated by the terrain
+texture (3-4% with or without projectors), but the toggling shows the flicker there too before the fix (mean 2.1%,
+frames up to 6.3%, above the 1.5% of the moving texture alone) and none after (0.8-0.9% every frame, below the
+projectors-off control because the shadow lowers the texture's contrast). AA 4 hides part of the stipple (multisample
+resolve averages the alternate pixels) but not the flicker; the twin on the GPU reproduces it as strongly.
+
+Pictures: `logs/b1/b1-frame-r7-before-after.png` (frozen frame, desktop above, twin below, before left: the white part
+near the pawn and the crosshatched band are gone, the canopy shadow lies over the whole ramp as one grey pattern),
+`logs/b1/b1-strip-r7-before-after.png` (12 frames each: before desktop, after desktop, before twin, after twin),
+`logs/b1/b1-strip-r6-before-after.png`, `logs/b1/b1-diff-r7-before-after.png` (|frame 1 - frame 0| x 4: before
+desktop/twin show whole triangles, after only the small motion).
