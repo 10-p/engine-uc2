@@ -122,9 +122,9 @@ def main():
         table = []
         panels = [
             panel('g9-fov', 'n1-on', '1 player (reference), AutoFOV on', 0.5, 1, 'on', snaps['g9-fov'], table, font, small),
-            panel('g9-fov', f'n{n}-on', f'{n} players: AutoFOV on (default, Hor+)', 0.5, n, 'on', snaps['g9-fov'], table, font, small),
+            panel('g9-fov', f'n{n}-on', f'{n} players: AutoFOV on, unclamped (Hor+)', 0.5, n, 'on', snaps['g9-fov'], table, font, small),
             panel('g9-fov', f'n{n}-epic', f'{n} players: Epic\'s maths (AutoFOV=0)', 0.5, n, 'epic', snaps['g9-fov'], table, font, small),
-            panel('g9-fovclamp', f'n{n}-on', f'{n} players: PROPOSAL, clamped to 1 player', 0.5, n, 'clamp', snaps['g9-fovclamp'], table, font, small),
+            panel('g9-fovclamp', f'n{n}-on', f'{n} players: DEFAULT, clamped to 1 player', 0.5, n, 'clamp', snaps['g9-fovclamp'], table, font, small),
         ]
         pw, ph = panels[0][0].size
         gap = 8

@@ -13,8 +13,9 @@
 #                  ramps applied as the present pass applies them (test key ShotRamp); measured by g6-measure.py
 #          audio   Xvfb, audio to a .wav through OpenAL Soft's wave writer, the cue log (DevSound): player one's
 #                  weapon single-player and with four players, player three's with four: cue lines per shot
-#          fov     (G-9) GPU as render: the same frozen frame with AutoFOV on and with Epic's maths, 1-4 players, and a
-#                  second run with the proposal [ufront.AutoFOV] SplitClampToFullScreen=True; one sheet per layout
+#          fov     (G-9) GPU as render: the same frozen frame with AutoFOV on unclamped (Hor+) and with Epic's maths,
+#                  1-4 players, and a second run with the default [ufront.AutoFOV] SplitClampToFullScreen=True (one
+#                  player's FOV for every viewport, the owner's choice of 2026-10-10); one sheet per layout
 #                  (<out>/fov-<n>players.png) with every viewport's FOV from the engine's "[AutoFOV] shown" lines
 #          detail  (G-9) GPU, DM-Praxis: coronas, shadows, decals single player and in a 4-player quadrant
 #          bench4  (G-9) GPU: four players at fixed spots, the engine's FPS log (G6_BENCH_SECS=20, G6_BENCH_NAME)
@@ -1067,13 +1068,14 @@ PY
             # (No MSAA: llvmpipe then draws a few frames a second, so a 1.2 s key or stick hold is read; m10-controls.sh does the same.)
             scen_unplug > "$scen"; run_game g11-unplug 0 420 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0
             cp "$scen" "$out/g11-unplug.scen";;
-    fov)    # G-9: two GPU runs, the default ini (AutoFOV on / Epic's maths) and the proposal
-            # [ufront.AutoFOV] SplitClampToFullScreen=True; then one sheet per layout
+    fov)    # G-9: two GPU runs: the unclamped Hor+ maths (SplitClampToFullScreen=False, G-9's original default, kept
+            # as the A/B) with AutoFOV on and Epic's maths, and the DEFAULT since the owner's 2026-10-10 choice
+            # (SplitClampToFullScreen=True: one player's FOV for every viewport); then one sheet per layout
             fovrun=g9-fov; scen_fov > "$scen"
-            run_game g9-fov      1 420 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True
+            run_game g9-fov      1 420 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True \
+              -ini:System:[ufront.AutoFOV]:SplitClampToFullScreen=False
             fovrun=g9-fovclamp; scen_fov > "$scen"
-            run_game g9-fovclamp 1 420 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True \
-              -ini:System:[ufront.AutoFOV]:SplitClampToFullScreen=True
+            run_game g9-fovclamp 1 420 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True
             python3 "$repo/tools/dev/g6/g9-fov-sheet.py" "$out" > "$out/g9-fov-sheet.txt" 2>&1; cat "$out/g9-fov-sheet.txt";;
     audio)  rm -f "$out/g6-audio-shots.txt" "$out/g6-audio.wav"
             scen_audio  > "$scen"; run_game g6-audio  0 420 "DM-Deadbolt?NumBots=0" "$scen" "-ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=$out/g6-audio.wav"
