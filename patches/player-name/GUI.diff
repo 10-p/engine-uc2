@@ -1,0 +1,37 @@
+--- a/GUI/Classes/GUIController.uc
++++ b/GUI/Classes/GUIController.uc
+@@ -2237,12 +2237,19 @@
+ 	}
+ 	if (Profile.IsTransient())
+ 	{
+-		CharIndex = Class'Engine.CharacterInformation'.static.GetCharacterIndex(Profile.GetCharacterClass());
+-		if (((CharIndex < 0) || (CharIndex >= 15)))
++		if (((PC.Player == ViewportOwner) && (PC.Level != None)))
+ 		{
+-			CharIndex = 9;
++			PlayerName = PC.Level.GetDefaultURL("Name");
+ 		}
+-		PlayerName = Class'Engine.CharacterInformation'.static.GetCharacterName(CharIndex, Profile.UsingVariant());
++		if ((PlayerName == ""))
++		{
++			CharIndex = Class'Engine.CharacterInformation'.static.GetCharacterIndex(Profile.GetCharacterClass());
++			if (((CharIndex < 0) || (CharIndex >= 15)))
++			{
++				CharIndex = 9;
++			}
++			PlayerName = Class'Engine.CharacterInformation'.static.GetCharacterName(CharIndex, Profile.UsingVariant());
++		}
+ 	}
+ 	else
+ 	{
+@@ -2256,6 +2263,10 @@
+ 		while ((i < GetViewportCount(True)))
+ 		{
+ 			IndexPC = GetPlayerController(string(i));
++
++
++
++
+ 
+ 
+ 

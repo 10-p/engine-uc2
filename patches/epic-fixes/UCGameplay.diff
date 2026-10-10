@@ -1,0 +1,98 @@
+--- a/UCGameplay/Classes/CTFFlag.uc
++++ b/UCGameplay/Classes/CTFFlag.uc
+@@ -485,9 +485,12 @@
+ 		SetTimer(0.0, False);
+ 	}
+ 
+-Begin:
+-Sleep(0.05);
+-CheckTouching();
++WeaponAbility:
++if (!(Level.Game.bGameEnded))
++{
++	Sleep(0.1);
++	CheckTouching();
++}
+ }
+ 
+ state Held
+--- a/UCGameplay/Classes/OverflowBall.uc
++++ b/UCGameplay/Classes/OverflowBall.uc
+@@ -34,6 +34,7 @@
+ 	{
+ 		Goals[Goals.Length] = Goal;
+ 	}
++	bUpdateSimulatedPosition = True;
+ }
+ 
+ simulated function PostNetBeginPlay()
+--- a/UCGameplay/Classes/UCPawn.uc
++++ b/UCGameplay/Classes/UCPawn.uc
+@@ -1434,7 +1434,7 @@
+ 	}
+ 	else if ((((NewRate != Rate) || !(IsAnimating(0))) || ((Controller != None) && Controller.bPreparingMove)))
+ 	{
+-		AnimChannelAlpha(NewAnim, NewRate, 0, 1.0, BlendIn, True);
++		LoopAnim(NewAnim, NewRate, 0.0, 0);
+ 	}
+ 	else
+ 	{
+@@ -1477,6 +1477,9 @@
+ 			{
+ 				WpnStr = "Race";
+ 			}
++			break;
++		default:
++			WpnStr = "Race";
+ 			break;
+ 	}
+ 	WpnStr = ("Idle_Ready_" $ WpnStr);
+--- a/UCGameplay/Classes/UCPlayerController.uc
++++ b/UCGameplay/Classes/UCPlayerController.uc
+@@ -3891,14 +3891,14 @@
+ 		}
+ 	}
+ 	bMustBeThird = MustBeThirdCam();
+-	if (bFirstPersonOnly)
++	if (bMustBeThird)
++	{
++		bWantsThirdPerson = True;
++		bForce = True;
++	}
++	else if (bFirstPersonOnly)
+ 	{
+ 		bWantsThirdPerson = False;
+-		bForce = True;
+-	}
+-	else if (bMustBeThird)
+-	{
+-		bWantsThirdPerson = True;
+ 		bForce = True;
+ 	}
+ 	if (((bForce || bWantsThirdPerson) || !(bMustBeThird)))
+--- a/UCGameplay/Classes/UCWeap_Melee.uc
++++ b/UCGameplay/Classes/UCWeap_Melee.uc
+@@ -1990,12 +1990,6 @@
+ 	{
+ 		local UCPawn P;
+ 		local float DotP;
+-		P = UCPawn(Instigator);
+-		DotP = (-(HitNormal) Dot vector(P.Rotation));
+-		if ((DotP > ReflectProjFOV))
+-		{
+-			PushPawn(P, P, (HitNormal * 2.0));
+-		}
+ 	}
+ 
+ 	final simulated function PushPawn(UCPawn Pushed, UCPawn Pusher, Vector Dir)
+@@ -2174,10 +2168,6 @@
+ 			{
+ 				ShieldEnergy = 0.0;
+ 			}
+-		}
+-		if (((Instigator != None) && Instigator.IsHumanControlled()))
+-		{
+-			SetFuncTimer('CheckInsideGeometry', 1.0);
+ 		}
+ 	}
+ }

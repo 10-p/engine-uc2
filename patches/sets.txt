@@ -1,0 +1,11 @@
+# The script patch sets, in the order they are applied (tools/scripts/uc-patches.py; patches/README.md).
+#
+# name         depends-on    default  kind
+#   default: on = in the default build; off = only when asked for; auto = on whenever all it depends on is on
+#   kind:    base-fixes = Epic's own changes: a package only they touch is rebuilt only when asked for (the
+#            shipped .u gets the same fixes from the load-time patcher); ours = a package it touches is rebuilt
+epic-fixes     -             on       base-fixes
+epic-source    epic-fixes    on       base-fixes
+mouse-look     epic-fixes    on       ours
+player-name    epic-fixes    on       ours
+keys-menu      mouse-look    on       ours

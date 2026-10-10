@@ -1,0 +1,60 @@
+--- a/UCMenu/Classes/UC2Settings_Main.uc
++++ b/UCMenu/Classes/UC2Settings_Main.uc
+@@ -81,6 +81,7 @@
+ 
+ 
+ var() GUILabelButton btn_Rename, btn_Audio, btn_Controller, btn_Game, btn_Advanced;
++var() GUILabelButton btn_Keys;	
+ 
+ final function RenameProfileClosed(GUIPage Menu, bool bCancelled)
+ {
+@@ -127,6 +128,8 @@
+ 
+ 	pnl_Options.AddItem( btn_Audio );
+ 	pnl_Options.AddItem( btn_Controller );
++	if ( !PlayerOwner().Level.IsXBox() )
++		pnl_Options.AddItem( btn_Keys );
+ 	pnl_Options.AddItem( btn_Game );
+ 	pnl_Options.AddItem( btn_Advanced );
+ 
+@@ -166,6 +169,10 @@
+ 		OpenMenu("UCMenu.UC2Settings_Controller");
+ 		break;
+ 
++	case btn_Keys:
++		OpenMenu("UCMenu.UC2Settings_Keys");
++		break;
++
+ 	case btn_Game:
+ 		OpenMenu("UCMenu.UC2Settings_Gameplay");
+ 		break;
+@@ -186,6 +193,7 @@
+ 	btn_Rename = None;
+ 	btn_Audio = None;
+ 	btn_Controller = None;
++	btn_Keys = None;
+ 	btn_Game = None;
+ 	btn_Advanced = None;
+ 
+@@ -250,10 +258,21 @@
+ 		WinWidth=0.542188
+ 		WinHeight=0.364583
+ 	End Object
++	Begin Object Class=GUILabelButton Name=KeysSettingsButton
++		Caption="KEYBOARD / MOUSE"
++		TabOrder=6
++		Hint="CHANGE THE KEYS AND THE MOUSE SENSITIVITY"
++		WinTop=256.0
++		WinLeft=0.076563
++		WinWidth=0.429688
++		WinHeight=0.034375
++		OnClick=ButtonClick
++	End Object
+ 	btn_Rename=GUILabelButton'RenameButton'
+ 	btn_Audio=GUILabelButton'AudioButton'
+ 	btn_Controller=GUILabelButton'ControllerSettingsButton'
+ 	btn_Game=GUILabelButton'GameButton'
+ 	btn_Advanced=GUILabelButton'AdvancedButton'
++	btn_Keys=GUILabelButton'KeysSettingsButton'
+ 	pnl_Options=ItemSelectionPanel'MainOptionPanel'
+ }

@@ -1,0 +1,31 @@
+--- a/UCGameplay/Classes/CTFFlag.uc
++++ b/UCGameplay/Classes/CTFFlag.uc
+@@ -485,7 +485,7 @@
+ 		SetTimer(0.0, False);
+ 	}
+ 
+-WeaponAbility:
++Begin:
+ if (!(Level.Game.bGameEnded))
+ {
+ 	Sleep(0.1);
+--- a/UCGameplay/Classes/OverflowBall.uc
++++ b/UCGameplay/Classes/OverflowBall.uc
+@@ -528,5 +528,6 @@
+ 	MaxDistanceScaling=1.75
+ 	spinRate=110000
+ 	bAlwaysRelevant=True
++	bUpdateSimulatedPosition=True
+ 	RemoteRole=ROLE_SimulatedProxy
+ }
+--- a/UCGameplay/Classes/UCWeap_Melee.uc
++++ b/UCGameplay/Classes/UCWeap_Melee.uc
+@@ -1988,8 +1988,6 @@
+ 
+ 	simulated function HitWall(Vector HitNormal, Actor HitWall)
+ 	{
+-		local UCPawn P;
+-		local float DotP;
+ 	}
+ 
+ 	final simulated function PushPawn(UCPawn Pushed, UCPawn Pusher, Vector Dir)

@@ -22,6 +22,8 @@
 #     --classes-root <dir>  where the script sources are: <dir>/<Pkg>/Classes (default <repo>/Source). T2: so a
 #                       build-generated script tree can be compiled (and its headers checked) instead of Source/
 #     --extra "<args>"  more `ucc-bin make` arguments
+#     --classes <Pkg>=<dir>  take <Pkg>'s classes from <dir> instead of Source/<Pkg>/Classes (repeatable; spike S1
+#                       uses it for decompiled text: docs/porting/analysis/decompile-spike.md)
 #
 # The tree: content folders hard-linked from the asset tree (never written), System/ a real copy of the asset
 # tree's with the 17 EditPackages .u removed (they are what gets built), GUIRes/ the shipped .u (UMakeCommandlet
@@ -49,6 +51,7 @@ extra=""
 logs=""
 classes_root=$repo/Source
 stages=()
+declare -A classes_override=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --build) build=$2; shift 2;;
@@ -58,6 +61,7 @@ while [ $# -gt 0 ]; do
     --extra) extra=$2; shift 2;;
     --logs) logs=$2; shift 2;;
     --classes-root) classes_root=$(cd "$2" && pwd); shift 2;;
+    --classes) classes_override[${2%%=*}]=${2#*=}; shift 2;;
     assemble|make|strip|compare) stages+=("$1"); shift;;
     *) echo "unknown argument: $1" >&2; exit 2;;
   esac
@@ -112,7 +116,12 @@ assemble() {
   for p in "${packages[@]}"; do
     s=$(srcdir "$p")
     mkdir -p "$run/$s"
-    ln -s "$classes_root/$s/Classes" "$run/$s/Classes"
+    if [ -n "${classes_override[$p]:-}" ]; then
+      ln -s "$(cd "${classes_override[$p]}" && pwd)" "$run/$s/Classes"
+      echo "  $p: classes from ${classes_override[$p]}"
+    else
+      ln -s "$classes_root/$s/Classes" "$run/$s/Classes"
+    fi
     if [ -d "$repo/Source/$s/Inc" ]; then
       mkdir -p "$run/$s/Inc"
       # every header: the exporter writes `#include "<Class>.h"` into a class body when that file exists here

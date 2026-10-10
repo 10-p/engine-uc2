@@ -1,0 +1,19 @@
+--- a/GUI/Classes/GUIController.uc
++++ b/GUI/Classes/GUIController.uc
+@@ -1562,6 +1562,8 @@
+ {
+ 	local int i;
+ 	local class<GUIStyles> NewStyleClass;
++	bUnlockCharacters = False;
++	bUnlockRaiden = False;
+ 	i = 0;
+ 	while ((i < StyleNames.Length))
+ 	{
+@@ -2254,6 +2256,7 @@
+ 		while ((i < GetViewportCount(True)))
+ 		{
+ 			IndexPC = GetPlayerController(string(i));
++
+ 
+ 
+ 

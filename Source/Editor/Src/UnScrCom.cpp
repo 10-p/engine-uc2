@@ -4802,7 +4802,13 @@ void FScriptCompiler::CompileAffector( EPropertyReferenceType LeftRefType, EProp
 		
 		//epic moelfke: if the affector returns something, that value will be unused
 		//so if it requires destruction it must be explicitly destroyed
-		if (AffectorReturnProperty && (AffectorReturnProperty->PropertyFlags & CPF_NeedCtorLink))
+		// uc2 port (T1): not for an object property. Its CPF_NeedCtorLink means "instance the edit-inline object"
+		// (UObjectProperty::Link sets it on load for properties saved with CPF_EditInline|CPF_ExportObject) and
+		// its DestroyValue does nothing, so the token only changed the bytecode with how the callee's package got
+		// into memory: compiled in the same run (Epic's build from scratch: none) or loaded from a file
+		// (tools/scripts/uc-build.sh compiles UCMenu against a GUI.u on disk: `OpenMenu(...)` gained one).
+		if (AffectorReturnProperty && (AffectorReturnProperty->PropertyFlags & CPF_NeedCtorLink)
+		&&	!AffectorReturnProperty->IsA(UObjectProperty::StaticClass()))
 		{
 			FRetryPoint HighRetry; InitRetry(HighRetry);
 			Writer << EX_DestroyReturnValue;
@@ -7104,6 +7110,22 @@ static UBOOL ParseScripts( TArray<UClass*>& AllClasses, FScriptCompiler& Compile
 	if( !Class->ScriptText )
 		return 1;
 
+	// uc2 port (T1): a class already being walked further up this recursion is left to that frame. The walk below
+	// enters the classes a subclass `dependson` and their whole subclass trees with no such check, so a cycle
+	// (A's subclass depends on B, B's subtree has a class that depends on A) recursed until the stack overflowed:
+	// the decompiled Engine (tools/scripts/uc-decompile.py infers dependson from the types a class uses) has
+	// Actor -> BlockingVolume dependson(Material) -> ProjectorMultiMaterial dependson(Actor). Without a cycle the
+	// check never fires, so Epic's sources compile exactly as before (docs/porting/analysis/script-patches.md).
+	static TArray<UClass*> UC2Walking;
+	if( UC2Walking.FindItemIndex(Class)!=INDEX_NONE )
+		return 1;
+	struct FUC2WalkScope
+	{
+		UClass* C;
+		FUC2WalkScope( UClass* InC ) : C(InC) { UC2Walking.AddItem(C); }
+		~FUC2WalkScope() { UC2Walking.RemoveItem(C); }
+	} UC2WalkScope( Class );
+
 	// First-pass compile this class if needed.
 	if( MakeAll )
 		Class->ClassFlags &= ~CLASS_Parsed;
@@ -7432,6 +7454,19 @@ UBOOL UEditorEngine::MakeScripts( UClass* BaseClass, FFeedbackContext* Warn, UBO
 			AllClasses.AddItem( *ObjIt );
 	}
 	UC2SortClassesLikeEpic( AllClasses, EditPackages ); // uc2 port (M14): see above
+
+	// uc2 port (T1): a class loaded from a stripped package (`ucc editor.stripsource`: text " ", every shipped .u
+	// but UCMenu.u and Editor.u) keeps the CRC of the text it was compiled from, which its own dependency record
+	// holds. Without this its " " never matches that CRC, so compiling a package against the shipped packages
+	// (tools/scripts/uc-build.sh, which builds only the patched ones) re-parsed every class of them from " " and
+	// failed ("Missing 'Class' definition"); and the new package's dependency records would carry the CRC of " ".
+	// Packages compiled from text are untouched (docs/porting/analysis/script-patches.md).
+	for( TArray<UClass*>::TIterator It(AllClasses); It; ++It )
+	{
+		UClass* C = *It;
+		if( C->ScriptText && C->ScriptText->Text==TEXT(" ") && C->Dependencies.Num() && C->Dependencies(0).Class==C )
+			C->ScriptTextCRC = C->Dependencies(0).ScriptTextCRC;
+	}
 
 	// Find any classes whose scripts have changed and mark them uncompiled and unlinked.
 	guard(DowngradeClasses);

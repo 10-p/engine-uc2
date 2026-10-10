@@ -1,0 +1,14 @@
+--- a/UCInventory/Classes/UCWeap_SniperRifle.uc
++++ b/UCInventory/Classes/UCWeap_SniperRifle.uc
+@@ -422,7 +422,10 @@
+ 
+ final function ServerSetZoomLevel(byte ZL)
+ {
+-	SetZoomLevel(ZL);
++	if ((int(Level.NetMode) != ENetMode.NM_Client))
++	{
++		SetZoomLevel(ZL);
++	}
+ }
+ 
+ simulated function UnZoom()
