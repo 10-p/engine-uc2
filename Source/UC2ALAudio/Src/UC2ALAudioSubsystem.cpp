@@ -432,7 +432,10 @@ static ALuint EnsureBuffer( FUC2AudioState* S, FUC2WaveBank* Bank, FUC2Wave* W, 
 		S->DecodedPeak = Max( S->DecodedPeak, S->DecodedBytes );
 		S->DecodedWaves++;
 		if( S->DecodedBytes > UC2_DECODED_BUDGET )
+		{
+			W->LastUsed = -1.0;		// not the buffer about to play (TrimDecodedCache stamps it again)
 			TrimDecodedCache( S );
+		}
 	}
 	return Target;
 	unguard;
@@ -1998,6 +2001,18 @@ void UUC2ALAudioSubsystem::Update()
 	DOUBLE Now = NowOf( S );
 	FLOAT DeltaTime = LastTime>0.0 ? Clamp( (FLOAT)(Now-LastTime), 0.f, 1.f ) : 0.f;
 	LastTime = Now;
+	// M16: what the sound data holds in memory, in the cue log every 30 s (either source; a capture is killed, not
+	// shut down, so the summary at Destroy never comes).
+	static DOUBLE LastMemoryLine = 0.0;
+	if( CueLog && Now - LastMemoryLine >= 30.0 )
+	{
+		LastMemoryLine = Now;
+		INT Packs = 0;
+		for( INT i=0; i<S->WaveBanks.Num(); i++ )
+			Packs += S->WaveBanks(i)->Data.Num();
+		CueLogf( 1, S, TEXT("memory: decoded-wave cache %d KB (at most %d KB, budget %d MB), %d waves decoded, %d evicted; wave packs %d KB; %d sound banks, %d wave banks"),
+			S->DecodedBytes>>10, S->DecodedPeak>>10, UC2_DECODED_BUDGET>>20, S->DecodedWaves, S->Evicted, Packs>>10, S->SoundBanks.Num(), S->WaveBanks.Num() );
+	}
 
 	// Music streams whatever the viewport is doing.
 	UpdateMusic( this, S, DeltaTime );

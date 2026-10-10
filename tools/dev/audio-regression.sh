@@ -24,6 +24,9 @@ mkdir -p "$out"
 summary=$out/audio-summary.txt
 : > "$summary"
 
+# M16: a previous suite's last capture leaves an Avaris.ini derived with its -ini: settings (UseEFX=False, WaveFile=):
+# the self-test would then run dry and fail its reverb checks. Start from the tree's Default.ini like each capture.
+rm -f "$sys/Avaris.ini"
 ( cd "$sys" && "$work/bin/capped" 2G 600 -- ./ucc-bin UC2ALAudio.UC2AudioCheck > "$out/audio-check.out" 2>&1 )
 # (M16: on a tree with the shipped Xbox banks, the .xwb/.xsb lines of the check too.)
 echo "SUMMARY audio-check: $(grep -a -E '^(Xbox )?wave banks:' "$out/audio-check.out" | sed 's/^wave banks: //' | tr '\n' ';' | sed 's/;$//'); $(grep -a '^Xbox sound banks:' "$out/audio-check.out" | sed 's/$/; /')$(grep -a '^cues \[int\]' "$out/audio-check.out"); $(grep -a '^UC2AudioCheck:' "$out/audio-check.out")" | tee -a "$summary"

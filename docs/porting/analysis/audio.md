@@ -616,3 +616,37 @@ Doubts (also in BLOCKERS.md where the owner decides):
   Xbox reported a different radius for them, some sounds of other players (e.g. their combo activations) that
   are silent here were audible there.
 - `Recurring = 1` read as "fade" rests on the data pattern, not on documentation.
+
+## M16 (2026-10-10): which source plays, the shipped Xbox banks, and the limits
+
+Notebook: `xbox-audio-runtime.md`. UC2ALAudio has two sources for the same tables:
+
+| Bank | Cooked (default where present) | Xbox (M16; a retail disc's `Sounds/`) |
+|---|---|---|
+| sound bank `<Bank>` | `Sounds/<Bank>.uc2cues` | `Sounds/<Bank>.xsb` (read by `UC2LoadXsbSoundBank`, `Src/UC2XboxBanks.cpp`) |
+| wave bank `<Bank>`, language `<lang>` | `<Bank>_<lang>.uc2wb`, else `<Bank>.uc2wb` (+ the `.ogp`) | `<Bank>_<lang>.xwb`, else `<Bank>.xwb`; per file stem the cooked `.uc2wb` first, then the `.xwb` (`LoadWaveBankFile`) |
+| a wave | Vorbis, the whole pack read on first use, decoded on first play | the entry's bytes read from the `.xwb` on first play, Xbox ADPCM / PCM decoded (nothing else of the bank stays in memory) |
+| music `<Song>` | `Music/<Song>.ogg` (cue `<Song>` of `A_Music`) | `Sounds/M_<Song>.xwb`, streamed from the file a block at a time; `M_Adoratrice.xwb` is WMA: no music for that song (logged) |
+
+The choice is per bank, so a tree may mix them (`tools/dev/mkrun-uc2.sh` `UC2_XBOX_SOUNDS=add`: cooked first, the disc
+fills what the cook lacks). Logged once per bank: `loaded sound bank X (...; cooked cue table | Xbox sound bank .xsb,
+no cooked cue table)`, `loaded wave bank X.uc2wb|X.xwb (...; cooked | Xbox wave bank, ...)`, and at start
+`UC2ALAudio: sound data: ...`. Decoded waves of either source live in OpenAL buffers, the decoded-wave cache: at most
+192 MB (`UC2_DECODED_BUDGET`), least recently used buffers freed first (never one a voice plays or will re-queue); the
+cue log reports it every 30 s (`memory: decoded-wave cache ...`).
+
+What the `.xsb` carries that the device does not interpret (the same list as for the cooked tables, which carry
+them too): low-pass filter, pitch LFO, multi-function LFO, pitch/filter envelope, mix-bin and loop-start events
+(counted as ignored), parametric EQ (sound flag 4; its parameters at +16 are not even read), the LFE level (read,
+not played), cones (no effect in the data), the 3D mode, layers, cue "queue". Not in the `.xsb` at all: the I3DL2
+send level (only "sends" is stored; -300 mB is taken, the project's value on 733 of 734 sounds), sound names (named
+after their first cue), exact explicit weights (only the normalised ranges), volumes finer than 16 mB. No DSP
+image (`xbox.bin`) or DSP effect preset is read by either source; the zone reverb is EFX as before. UC2's banks use
+no complex-sound features the reader does not know (an unknown event type, a cue variation table or a bank version
+other than 11 stops the bank's load with a log line; the device then has no such bank). Cue lengths from the `.xwb`
+are 1-5 ms longer than the cook's (ADPCM pads to 64 frames).
+
+The web build compiles the same code; its manifest serves the cooked files, so it keeps using them. For the web to
+play the disc's banks it would need the 262 `.xsb`/`.xwb` (376 MB against 182 MB cooked) in the frontend's manifest,
+and since the web file layer fetches a file whole at its first open, each bank costs its whole size at the first
+play of any of its waves (A_Announcer.xwb 8.6 MB, a music bank 6-10 MB), and memory to hold it.
