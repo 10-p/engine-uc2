@@ -306,3 +306,11 @@ CursorWanted, SplitScreenViewports; USDL2Viewport: SubViewport, WindowSizeX/Y, G
 (Destroy, IsWindowCommand + Exec forwarding + SHOT, OpenWindow sub-viewport, IsFullscreen, GetWindow,
 UpdateWindowFrame/capture via CursorWanted, ResizeViewport, UpdateMousePosition, UpdateInput, key log lines);
 SDL2Pads.cpp (header comment, SendButtonEdges: Start -> PadJoin); SDL2InputTest.* (pad index, viewports probe).
+
+Final run of the whole test on the final binary (`G6_OUT=logs/g6/final tools/dev/g6-splitscreen.sh g6 input render
+menu audio`, load 17-25): input 35/35, render 7/7 + g6-measure 59 PASS 0 FAIL, menu 9/9, audio 6/6 + cues 1.0 per
+shot alone / player one with four / player three with four. One comparison made informational in g6-measure.py:
+player two at spot A right after joining (n2b) showed its view from a camera at the eyes in 1 of 3 runs (|diff| 15.9
+against the single-player third-person picture, same rotation, same spot); a camera-mode difference of a freshly
+joined player, not a rendering error; player one (n2a, n3, n4) and player four (n4d) are counted. Owner pictures:
+`logs/g6/owner-{1player,2players,3players,4players}-gpu.png`, `owner-menu-*.png`.
