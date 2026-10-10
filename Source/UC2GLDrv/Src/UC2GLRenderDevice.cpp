@@ -222,7 +222,7 @@ void UUC2GLRenderDevice::StaticConstructor()
 	UseXboxShadows			= 1;
 	// M7b: terrain drawn three layers at a time as the Xbox build does: no visible difference
 	// (analysis/projectors.md), so off unless asked for.
-	UseTerrain3Layer		= 0;
+	UseTerrain3Layer		= 1;	// owner 2026-10-10: the Xbox single pass is never slower (A/B up to 20% faster) and draws the same picture (M7b pinned)
 	// M7b: the Xbox's static projector batch and its projector material: level-static projectors
 	// drawn as the Xbox draws them, which differs from PC's path on six maps (analysis/projectors.md
 	// step 3). Dynamic projectors, including those on skeletal meshes, keep PC's path either way.
