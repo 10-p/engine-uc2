@@ -9,7 +9,9 @@
 	M16: the shipped Xbox banks are checked the same way when ../Sounds has them
 	(every .xwb entry decodes to its length, every M_<Song>.xwb streams to its end,
 	every .xsb loads); cues resolve through the device's own choice per bank (the
-	cooked file where there is one, else the .xsb/.xwb). Parameters (all optional):
+	cooked file where there is one, else the .xsb/.xwb). G-10: a WMA music bank
+	(M_Adoratrice.xwb) streams from the cooked ../Music/<Song>.ogg when that file is
+	there, as the device plays it. Parameters (all optional):
 	  DUMP=<dir>        write every sound bank's tables as the device holds them, from
 	                    each source present: <dir>/<Bank>.cooked.txt, <dir>/<Bank>.xsb.txt
 	                    (tools/dev/audio-xsb-compare.sh compares them)
@@ -202,7 +204,7 @@ INT UUC2AudioCheckCommandlet::Main( const TCHAR* Parms )
 	// M16: every shipped wave bank (.xwb): the index, then every entry decoded as the device decodes it (read from
 	// the file; ADPCM/PCM to 16-bit PCM) and its length checked; music banks streamed to their end.
 	TArray<FString> XwbFiles = GFileManager->FindFiles( *(Dir + TEXT("*.xwb")), 1, 0 );
-	INT XWaves = 0, XWavesOk = 0, XWma = 0, XStreams = 0, XStreamsOk = 0, PcmWritten = 0;
+	INT XWaves = 0, XWavesOk = 0, XWma = 0, XStreams = 0, XStreamsOk = 0, XStreamsCooked = 0, PcmWritten = 0;
 	TArray<FString> PcmList;
 	PcmBanks.ParseIntoArray( TEXT("+"), &PcmList );	// (Parse stops an unquoted value at a comma)
 	for( INT i=0; i<XwbFiles.Num(); i++ )
@@ -229,6 +231,38 @@ INT UUC2AudioCheckCommandlet::Main( const TCHAR* Parms )
 			{
 				XWma++;
 				B->Decoded(w) = -1;
+				// G-10 (owner: "first cooked, then wma, then silence"; no WMA decoder yet): the device plays a WMA
+				// music bank from the cooked song beside the Xbox banks when there is one (PlayMusic).
+				FString Cooked = Dir + TEXT("../Music/") + Stem.Mid(2) + TEXT(".ogg");
+				if( bMusic && GFileManager->FileSize( *Cooked )>0 )
+				{
+					XStreams++;
+					TArray<BYTE> Data;
+					FUC2VorbisStream Stream;
+					INT Frames = 0;
+					if( appLoadFileToArray( Data, *Cooked ) && Stream.Open( Data, Error ) )
+					{
+						TArray<SWORD> Tmp;
+						Tmp.Add( 32768*Stream.Channels );
+						INT Got;
+						while( (Got = Stream.Read( &Tmp(0), 32768 ))>0 )
+							Frames += Got;
+					}
+					if( Frames>0 )
+					{
+						XStreamsOk++;
+						XStreamsCooked++;
+						B->Decoded(w) = 1;
+						new(Messages) FString( FString::Printf( TEXT("WMA     %s entry %d: %d bytes of WMA (ASF), not decoded: the song streams from the cooked %s instead (%d frames, %d Hz, %d ch)"),
+							*XwbFiles(i), w, W.Size, *Cooked, Frames, Stream.Rate, Stream.Channels ) );
+					}
+					else
+					{
+						GWarn->Logf( TEXT("FAIL %s: entry %d is WMA and the cooked %s does not stream %s"), *XwbFiles(i), w, *Cooked, *Error );
+						Failures++;
+					}
+					continue;
+				}
 				new(Messages) FString( FString::Printf( TEXT("WMA     %s entry %d: %d bytes of WMA (ASF), not decoded: this wave cannot play"), *XwbFiles(i), w, W.Size ) );
 				continue;
 			}
@@ -291,8 +325,9 @@ INT UUC2AudioCheckCommandlet::Main( const TCHAR* Parms )
 		}
 	}
 	if( XwbFiles.Num() )
-		GWarn->Logf( TEXT("Xbox wave banks: %d .xwb files; waves: %d decoded to their entry's length of %d (%d WMA entries not decoded); music streams: %d of %d"),
-			XwbFiles.Num(), XWavesOk, XWaves, XWma, XStreamsOk, XStreams );
+		GWarn->Logf( TEXT("Xbox wave banks: %d .xwb files; waves: %d decoded to their entry's length of %d (%d WMA entries not decoded); music streams: %d of %d%s"),
+			XwbFiles.Num(), XWavesOk, XWaves, XWma, XStreamsOk, XStreams,
+			XStreamsCooked ? *FString::Printf( TEXT(" (%d of a WMA bank from the cooked ../Music)"), XStreamsCooked ) : TEXT("") );
 	if( PcmDir.Len() )
 		GWarn->Logf( TEXT("PCM: %d waves of %s written to %s"), PcmWritten, *PcmBanks, *PcmDir );
 

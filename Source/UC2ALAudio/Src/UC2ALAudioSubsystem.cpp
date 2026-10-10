@@ -1744,23 +1744,40 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 	FUC2Wave* W = NULL;
 	if( Snd.Tracks.Num() && Snd.Tracks(0).Variations.Num() )
 		W = ResolveVariation( S, Snd.Tracks(0).Variations(0), &WB );
+	FString CookedForWMA, WMABank;
 	if( !W )
 	{
 		// (Logged always, once per song: a retail disc's M_Adoratrice.xwb is WMA, which this build cannot decode.)
 		INT B = Snd.Tracks.Num() && Snd.Tracks(0).Variations.Num() ? Snd.Tracks(0).Variations(0).Bank : -1;
 		UBOOL bWMA = B>=0 && B<S->WaveBanks.Num() && S->WaveBanks(B)->Waves.Num() && S->WaveBanks(B)->Waves(0).Format==WF_WMA;
+		// G-10 (owner: "first cooked, then wma, then silence"; the WMA decoder waits for M16's video work): a WMA
+		// music bank plays from the cooked song beside the Xbox banks when there is one, ../Music/<Song>.ogg
+		// (M_<Song>.xwb -> <Song>.ogg, the cook's own naming: tools/cook-audio.py, the .uc2wb's data=).
 		if( bWMA )
-			LogOnce( S, FString(TEXT("wma:")) + Song, FString::Printf( TEXT("music %s: %s holds WMA, which this build cannot decode: no music"), *Song, *S->WaveBanks(B)->File ) );
-		CueLogf( CueLog, S, TEXT("music %s: %s"), *Song, bWMA ? TEXT("WMA, not decoded") : TEXT("its wave bank is not cooked") );
-		return 0;
+		{
+			WMABank = S->WaveBanks(B)->File;
+			FString Stem = WMABank.Right(4)==TEXT(".xwb") ? WMABank.Left( WMABank.Len()-4 ) : WMABank;
+			if( Stem.Left(2)==TEXT("M_") )
+				Stem = Stem.Mid(2);
+			FString Cooked = S->SoundsDir + TEXT("../Music/") + Stem + TEXT(".ogg");
+			if( GFileManager->FileSize( *Cooked )>0 )
+				CookedForWMA = Cooked;
+		}
+		if( !CookedForWMA.Len() )
+		{
+			if( bWMA )
+				LogOnce( S, FString(TEXT("wma:")) + Song, FString::Printf( TEXT("music %s: %s holds WMA, which this build cannot decode, and there is no cooked ../Music/ file for it: no music"), *Song, *WMABank ) );
+			CueLogf( CueLog, S, TEXT("music %s: %s"), *Song, bWMA ? TEXT("WMA, not decoded") : TEXT("its wave bank is not cooked") );
+			return 0;
+		}
 	}
 	TArray<BYTE> Data;
-	FString File = S->SoundsDir + WB->DataFile, Error;
+	FString File = CookedForWMA.Len() ? CookedForWMA : S->SoundsDir + WB->DataFile, Error;
 	FUC2MusicSlot& M = S->Music[0];
-	M.Stream.Frames = W->Frames;
+	M.Stream.Frames = W ? W->Frames : 0;	// the cooked file for a WMA bank: to its end
 	DOUBLE ReadStart = appSeconds();
 	UBOOL bRead;
-	M.bXwb = WB->bXbox;
+	M.bXwb = W && WB->bXbox;
 	if( M.bXwb )
 	{
 		// M16: the shipped M_<Song>.xwb, decoded from the file a block at a time (nothing read ahead).
@@ -1798,9 +1815,10 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 	GAL.alSourcef( M.Source, AL_GAIN, MBToGain( Clamp( MB, -10000.f, 0.f ) ) * M.Fade );
 	GAL.alSourcePlay( M.Source );
 	// (Not only in the cue log: one line per song, and what a web run checks that the music started.)
-	debugf( NAME_Log, TEXT("UC2Audio: [%7.2f] music %s: playing %s (%d Hz, %d ch, %s, volume %d mB, fade in %.1f s; file %s in %.0f ms)"),
+	debugf( NAME_Log, TEXT("UC2Audio: [%7.2f] music %s: playing %s (%d Hz, %d ch, %s, volume %d mB, fade in %.1f s; file %s in %.0f ms)%s"),
 		(FLOAT)(NowOf(S) - S->T0), *Song, *File, M.bXwb ? M.Xwb.Rate : M.Stream.Rate, M.bXwb ? M.Xwb.Channels : M.Stream.Channels, M.bLoop ? TEXT("looping") : TEXT("once"), M.Volume,
-		bFade ? FadeInTime : 0.f, M.bXwb ? TEXT("opened (Xbox wave bank, streamed from it)") : TEXT("read"), 1000.0 * ReadSeconds );
+		bFade ? FadeInTime : 0.f, M.bXwb ? TEXT("opened (Xbox wave bank, streamed from it)") : TEXT("read"), 1000.0 * ReadSeconds,
+		CookedForWMA.Len() ? *FString::Printf( TEXT("; the cooked song, because %s holds WMA, which this build cannot decode"), *WMABank ) : TEXT("") );
 	return M.Handle;
 	unguard;
 }
