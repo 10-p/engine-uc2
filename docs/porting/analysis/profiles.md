@@ -389,3 +389,183 @@ passed, `uc2-wasm-audio.spec.js` 3 passed (engine proven); `tools/dev/m14-script
 Memory: every run in `bin/capped`: builds 6G, script make/strip 3G, game and ucc runs 2G, unit tests 3-4G, browser
 6G (the mem-guard's machine-wide peak 10.7-13.2 GB, other agents included); census 8G and net 6G inside the M14
 suite. No ceiling was hit (no exit 137).
+
+## G-7 (2026-10-10): the profiles revisit — Epic's layout on the web again; the character on a direct launch
+
+Branch `g7-profiles` (worktree `../engine-uc2-g7-profiles`, from main `2ed330f`); frontend half on ufrontend branch
+`uc2-profiles` (worktree `ufrontend-profiles`, notebook `docs/migration/notes/profiles-layout.md`). Brief: PLAN.md
+"Owner review of 2026-10-09" (parked: the web profile layout; owner "do it", "all of the other engines will need to
+adapt") and "Owner review of 2026-10-10" (N-4: the character class without a profile). Logs: `<WorkUC2>/logs/g7/`.
+
+### Step G7-0: what the code says (read before changing anything)
+
+Part A. `22e9dbf` changed only `ULoadSaveManager.cpp` among Epic's files (five functions under
+`UC2_FLAT_PROFILE_FILES`, default 1 under `__EMSCRIPTEN__`); nothing touched the file after it, so the revert is
+that file's state before `22e9dbf`. The same commit's `ucc profiletest list|exists|delete` (UCC.cpp) and
+`tools/dev/c1-web-saves.sh` stay (tools), updated to Epic's layout.
+
+Part B. Where the class of a launch comes from:
+- `UGameEngine::Init` builds `DefaultURL` from User.ini `[DefaultPlayer]` (UnGame.cpp:223), every URL of the
+  command-line map starts from it (`FURL(&DefaultURL, Parm, TRAVEL_Partial)`), so its `Class=` is the ini's.
+- The login is `GameInfo.Login` -> `GetPlayerClassName(Options)` = `ParseOption(Options,"Class")` (GameInfo.uc:2964;
+  `UCDeathMatch` lets a ladder rung's class win, UCDeathMatch.uc:1343) -> `SetPawnClass`.
+- Epic's own way to carry the profile's character: `PlayerProfile.SetCharacterClassName` ->
+  `PC.UpdateURL("Class", <class>)` (PlayerProfile.uc:717-741) -> `APlayerController::UpdatePlayerURL` writes it into
+  the VIEWPORT's `PlayerURL` (UnController.cpp:991), which `Browse` adds to every NON-absolute travel
+  (`UViewport::InitializeURL`, UnGame.cpp:1473/1492; skipped for `TRAVEL_Absolute` on purpose: "start menu?game=").
+  So a console `open` after a profile switch at the menus already takes the profile's class (partial travel).
+- The gap: the FIRST map of a run (command line, the web launcher's Play form) is an absolute travel, and the
+  profile D-3 loads at start (`UC2StartWithLastProfile`, before any PlayerController) never ran
+  `SetCharacterClassName` with a controller, so `PlayerURL` is empty: the login takes `[DefaultPlayer] Class`.
+- `UGameEngine::LoadMap` writes every loaded URL's `Class` back to `[DefaultPlayer]` (Epic's PC code, UnGame.cpp:3038),
+  so that value is "the class of the last map played": after switching profile at the menus without playing, the
+  OTHER profile's character (the BLOCKERS entry).
+- GUI.u `SetProfilePlayerName` (D-4) is about the name only; `UC2Profiles.cpp` `UC2ProfileNameInURL` (D-4) already
+  put the profile's NAME into the primary viewport's login URL in `MatchViewportsToActors` for the same reason.
+
+### Step G7-1: the changes (engine commit `51f7258`)
+
+- `Source/Engine/Src/ULoadSaveManager.cpp`: back to its state before `22e9dbf` (41 lines out): one layout everywhere,
+  `Profiles/<name>/AVARIS_PROFILE.PRO`.
+- `Source/Engine/Src/UC2Profiles.cpp` `UC2MoveFlatProfiles` (called first in `UC2StartWithLastProfile`): a flat
+  `Profiles/<name>.PRO` left by the web preview is MOVED into `Profiles/<name>/AVARIS_PROFILE.PRO` when that folder
+  does not exist, else deleted (the folder is the newer copy); one log line each (`Profiles: flat profile file ...`).
+  A failed move leaves the file alone (no data is deleted unless Epic's folder exists). The root is
+  `GetProfileRoot()`'s expression (protected in Epic's header, which stays untouched). Unconditional (not web-only):
+  a native tree never has such files, and the native test can then prove it.
+  Decision on the preview's flat files: this one-time move (15 lines) rather than a second reader in
+  ULoadSaveManager (two layouts alive) or "the preview's profiles are lost". The frontend keeps the flat glob in uc2's
+  `userFiles` for the transition so the daemon sees the flat copy go and drops it from IndexedDB (otherwise every
+  reload would restore it, and a deleted profile would come back). Both go together once no preview player is left.
+- `UC2Profiles.cpp` `UC2ProfileInURL` (was `UC2ProfileNameInURL`): besides the name, the profile's character as
+  Epic's script puts it in a URL: `PlayerProfile.GetURL()` (called through `ProcessEvent`, parms laid out as the
+  generated `_Parms` structs with `#pragma pack(4)`), its `Class=` option only; logs `Profiles: profile "<p>" logs in
+  with Class=<c> (URL had Class=<old>)`. No script change: works with the shipped Engine.u.
+- `UnGame.cpp` `MatchViewportsToActors`: calls `UC2ProfileInURL` (primary viewport only, as D-4).
+- `UnGame.cpp` `LoadMap` (`#ifndef _XBOX` block): `SaveURLConfig("Class")` is skipped while a saved profile is active
+  (as D-4 does for `Name`): `[DefaultPlayer] Class` stays the profile-less player's own character instead of
+  becoming "the last profile's". Owner may veto (one line): without it the no-profile launch after a profile
+  session plays that profile's character.
+- Not changed: a direct NETWORK join from the command line (`<host>` or the web's `<room>?connect`, also an absolute
+  travel) still logs in with `[DefaultPlayer]` Name and Class: `UNetPendingLevel` sends the URL, `MatchViewportsToActors`
+  is not on that path. Open question for the owner.
+- `tools/dev/d3-character.sh` (new): the two-profile test (c0 no profile + ini class Z, c1/c1m Alpha = X, c2/c2m Bravo
+  = Y, c3/c3m switch to Alpha at the menus without playing then a direct launch = X, c4m no profile = Z, c5m the flat
+  files moved/deleted). `tools/dev/c1-web-saves.sh`: Epic's layout, and the frontend's folder glob
+  (`C1_UFRONT_GLUE=<ufrontend-profiles>/packages/glue/src/target/user-files.js`).
+
+### Step G7-2: builds; d3-character run 1 (under load); c1-web-saves under Node
+
+- Builds: native `bin/capped 6G 5400 -- cmake --preset native && cmake --build build-native -j4` rc 0, 0 `error:`
+  (`logs/g7/build-native-1.log`); wasm-perf started at -j4, stopped and resumed at -j2 when the coordinator set the
+  load rule (`build-wasm-perf-1.log` rc 143 = my stop, `build-wasm-perf-2.log` rc 0, 0 errors). SDLLaunch.wasm sha256
+  `7c2440eb...f6b1` (`logs/g7/wasm-sha256.txt`).
+- `tools/dev/c1-web-saves.sh` (tree g7w = native + wasm-perf, `C1_UFRONT_GLUE=<ufrontend-profiles>`): **ALL PASS**
+  (16): the wasm build writes `Profiles/WebProf/AVARIS_PROFILE.PRO` (no flat file), native writes the same path with
+  the same 845 bytes, each loads the other's, delete removes the folder, the frontend's compiler accepts
+  `System/Profiles/*/AVARIS_PROFILE.PRO` and it matches the nested path and not the flat one (`logs/g7/c1-web-saves-run1.txt`).
+- `tools/dev/d3-character.sh` run 1 (load 16-30; `logs/g7/d3-character-run1.txt`): 9 FAIL, all from the test, not
+  the engine: (a) the direct scenarios had no check of their own (`grep -c PASS` = 0 counted as a failure): each now
+  checks the match started; (b) one Right on the character page left Alpha on the default (Anubis: the first key
+  went to the page's focus), so X = Anubis; (c) in c2 the launch confirmation's Return was lost (no DM-Deadbolt), so
+  Bravo's character change was never saved (the profile is saved with the match): c2m then logged `profile "Bravo"
+  logs in with Class=UCCharacters.UCPawn_Nakhti_Anubis` = Bravo's SAVED character, correct, but not Y. Fixed: two
+  Rights for Alpha, three for Bravo, 3 s before the confirmation's Return.
+  What run 1 already shows (measured, to be repeated on a quiet machine): c0 no profile + ini Malcolm plays Malcolm;
+  c1m Alpha plays Alpha's Anubis with `URL had Class=...Malcolm` (the fix at work); c3 (Bravo -> Alpha at the menus,
+  no match) then c3m plays Alpha's Anubis; c4m (Profiles removed) plays the ini's Malcolm; `[DefaultPlayer] Class`
+  stayed Malcolm through every profile session; c5m: `Alpha.PRO moved into Epic's folder`, `Bravo.PRO deleted (Epic's
+  folder exists)`, started in Alpha, both folder files byte-identical to the saved copies, no flat file left.
+
+### Step G7-3: the native gate
+
+- `tools/dev/d3-character.sh` run 2 (load 14-19, `logs/g7/d3-character-run2.txt`): 1 FAIL from the test: with three
+  Rights Bravo also ended on Sapphire. The log shows why (`c2.out` 229-237): every Right is handled, but a fresh
+  profile has two characters unlocked (Anubis, Sapphire) and Right stops at the last one. So Bravo keeps a new
+  profile's default (Anubis) and Alpha takes Sapphire; X, Y and Z stay three different classes. Everything else passed.
+- **Run 3** (load 14.9 -> 17.6, `logs/g7/d3-character-run3.txt`, out `logs/g7/character3/`): **d3-character: ALL PASS**
+  (36 PASS lines; X = Sapphire, Y = Anubis, Z = Malcolm): c0 no profile plays the ini's Malcolm; c1 menu launch
+  Alpha = Sapphire; c1m direct Alpha plays Sapphire, `Profiles: profile "Alpha" logs in with
+  Class=UCCharacters.UCPawn_Human_Sapphire (URL had Class=UCCharacters.UCPawn_Human_Malcolm)`; c2/c2m Bravo plays
+  Anubis; c3 switch to Alpha without playing, c3m direct plays Sapphire (not Bravo's Anubis); c4m no profile plays
+  Malcolm; `[DefaultPlayer] Class` = Malcolm after every run; c5m flat Alpha.PRO moved, Bravo.PRO deleted, started in
+  Alpha, plays Sapphire, folder files byte-identical.
+- **Negative control** (same script, tree g7old = main's `build-native` uc2.bin of 2026-10-09 17:01, which has D-3/D-4
+  but not G-7; `logs/g7/d3-character-control-main.txt`): 10 FAILED exactly where G-7 acts: c3m played
+  `UCPawn_Nakhti_Anubis` with Alpha (Sapphire) active (the BLOCKERS case: `[DefaultPlayer] Class=...Anubis`, Bravo's,
+  written by c2m's map load), c4m without a profile played Anubis instead of the ini's Malcolm, `[DefaultPlayer] Class`
+  overwritten by every profile launch, no flat-file move. c1m and c2m passed there too (the leak happened to carry
+  the right class): the test needs c3m and c4m to tell the two engines apart, and it does.
+- `tools/dev/d3-profiles.sh` on tree g7 (`logs/g7/d3-profiles-run1.txt`, load 10-20): **ALL PASS** (27 PASS lines).
+
+### Step G7-4: the browser spec — NOT run to completion (machine load and the mem-guard budget)
+
+serve-web in `ufrontend-profiles` is assembled with this branch's wasm (sha256 `7c2440eb...f6b1`, the same before and
+after both attempts: `logs/g7/e2e-engine-proof.txt`). Attempt 1 (`e2e-saves-1.txt`): Chromium not found at
+`~/.cache/ms-playwright` (the browsers are in `<WorkUC2>/.cache/ms-playwright`: `PLAYWRIGHT_BROWSERS_PATH`). Attempt 2
+(`e2e-saves-2.txt`, load 11.8): session 1's first three steps passed (the launcher, no profile yet, no
+`/System/Profiles/WebSaWdX/AVARIS_PROFILE.PRO`), then the mem-guard stopped the run: "17.2 GB in use, over the 17 GB
+budget" — the machine had 15.3 GB in use before it started (the owner's missioncenter alone 8 GB, other agents'
+builds), so the brief's `--max-gb=17` leaves no room for one browser. Then 03:05-05:33 the 1-minute load never stayed
+below 16 (17-28; the coordinator's rule: no timing-sensitive browser run above 16), so no third attempt. Null sink
+(module 536870917) removed by index. To run it (one harness machine-wide, load < 16, a budget the baseline allows):
+  cd <WorkUC2>/ufrontend-profiles && PATH=<a corepack yarn shim>:$PATH PLAYWRIGHT_BROWSERS_PATH=<WorkUC2>/.cache/ms-playwright \
+  PULSE_SINK=<null sink> <WorkUC2>/bin/capped 6G 1800 -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=<N> -- \
+  --target uc2 uc2-wasm-saves.spec.js
+(check `sha256sum serve-web/SDLLaunch.wasm` = 7c2440eb... before and after).
+
+### Step G7-5 (coordinator, 2026-10-10): a network join logs in as the profile too
+
+Accepted by the coordinator: the flat-file decision (removed at the close-out milestone), `[DefaultPlayer] Class` not
+overwritten while a profile is active, the profile over a `?Class=` on the command line; mem-guard budget 21 GB.
+
+- The join path: `UGameEngine::Browse`, network branch -> `new UNetPendingLevel( this, URL )`; on the server's
+  challenge the client sends `LOGIN RESPONSE=.. URL=<PartialURL>` (UnPenLev.cpp:288), `PartialURL` = that URL without
+  the host; the server's `Login` parses Name/Class out of it. A command-line join (`<host>[:<port>]`, the web's
+  `<room>?connect` after its conversion at the top of Browse) is TRAVEL_Absolute, so `InitializeURL` (the viewport's
+  PlayerURL) is not added: only `[DefaultPlayer]` reached the server.
+- Change: `UnGame.cpp` Browse network branch, right before `new UNetPendingLevel`: `UC2ProfileInURL( PrimaryViewport,
+  URL )` (the same function as MatchViewportsToActors, same `Profiles: profile ".." logs in with ..` line). No-op
+  without a saved profile.
+- `UCC.cpp` `profiletest make <profile> <out> [Character=<class>]`: a profile with the class DEFAULTS (a playable new
+  profile, unlike `save`'s test pattern) and that character. Test tool only.
+- `tools/dev/net-test.py` check `profile-login` (also in net-test.sh's default list): `ucc-bin profiletest make NetProf
+  Character=UCCharacters.UCPawn_Human_Sapphire`, a listen host NetL without a profile, a client joining from the
+  command line `127.0.0.1:<port>?Name=NetB` with `-ini:User:[Profiles]:LastProfile=NetProf` and
+  `-ini:User:[DefaultPlayer]:Class=...Malcolm`; checks: the client starts in NetProf, its `logs in with
+  Class=...Sapphire (URL had Class=...Malcolm)` line, the server's `Join succeeded: NetProf`, the server's PRI named
+  NetProf with pawnclass Sapphire, the server's pawn of class Sapphire, no PRI named NetB, clean logs.
+- Builds: native `cmake --build build-native -j4` rc 0 (`build-native-2.log`); wasm-perf -j4 rc 0, 0 errors
+  (`build-wasm-perf-3.log`), SDLLaunch.wasm sha256 `4c6d7aac72ee7271ef87d19e14c740c179b52eb9e58ab759e0a84067510a5de8`.
+- `NET_TREE=g7net NET_PORT=7871 tools/dev/net-test.sh profile-login listen` (load 14-19): profile-login **8/8 PASS**
+  in runs 2 and 4 (`logs/g7/net-test-run2.txt`, `-run4.txt`; run 1 failed only the PRI check's own comparison:
+  the probe prints the short class name, fixed). In those runs `listen.hit`/`listen.kill` FAILED (the shooter's 40
+  shots miss), while every other listen item passed. Diagnosis: a harness order effect, not G-7: `listen` alone on
+  the same binary PASSES (`run3-listen-fresh.txt`: hit at shot 6, kill after 14), `listen listen` passes the first and
+  fails the second (`run5-listen-twice.txt`), main's binary passes listen after profile-login (whose profile could
+  not be made there: `net-test-control-main-2.txt`) and alone (`net-test-control-main-listen.txt`), and the g6 agent's
+  runs at dba0ca7 (no G-7 code) failed listen.hit the same way. No G-7 code runs in a profile-less listen game (no
+  `Profiles:` line in those logs).
+
+### Step G7-6: the browser runs (budget 21 GB), and a correction to step 4
+
+Correction to step 4: the "load never below 16 from 03:05 to 05:33" was WRONG. My waiting loop tested
+`pgrep -f e2e-mem-guard`, which matched its own shell's command line (the loop's text contains that word), so it
+could never end; the load was below 16 at times then (10.5 at 02:48, 13.6 at 05:37). Fixed with
+`pgrep -a node | grep -q e2e-mem-guard`.
+
+serve-web reassembled with the step-5 wasm (`yarn build --target uc2 --engine-artifact ...`, `logs/g7/fe-build-2.txt`);
+`serve-web/SDLLaunch.wasm` sha256 `4c6d7aac...5de8` = the build's, identical before and after both runs. Null sink by
+index (536870917), removed after each run. `capped 6G -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=21 --
+--target uc2 <spec>`, PLAYWRIGHT_BROWSERS_PATH from env.sh:
+- `uc2-wasm-net.spec.js` (load 12.1 -> 16.9, `logs/g7/e2e-net-1.txt`): **2 passed (3.7m)** (listen server + guest
+  from the invite link; the launcher form hosts, the guest joins from the copied link). Harness exit 1 only from
+  the global teardown: "1 browser profile(s) outlived their test: profile-bcNyi1" — the profile directory left by my
+  step-4 attempt 2, which the mem-guard killed mid-test; the teardown removed it. Mem-guard machine peak 19.7 GB.
+  (No profile is active in that spec: it is a regression run for the join path, the profile login itself is proven
+  natively by profile-login.)
+- `uc2-wasm-saves.spec.js` (load 15.5 -> 13.1, `logs/g7/e2e-saves-3.txt`): **1 passed (2.8m)**, every step ok: the
+  engine writes `/System/Profiles/WebSaWdX/AVARIS_PROFILE.PRO` (56,951 bytes), no flat file, the daemon stores it,
+  the reopened tab has it byte-identical and starts in it; session 3: the preview's flat row restored as
+  `/System/Profiles/WebSaWdX.PRO`, `Profiles: flat profile file /System/Profiles/WebSaWdX.PRO moved into Epic's
+  folder`, started in the profile, same bytes, flat file gone, IndexedDB holds the folder copy only. Peak 18.1 GB.

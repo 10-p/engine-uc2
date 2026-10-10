@@ -333,7 +333,7 @@ static UBOOL VerifyNativeClasses()
 
 #if __STATIC_LINK && !defined(_MSC_VER)
 // M13: "ucc profiletest save|load <profile> <export.txt>": the save game format across pointer widths.
-// (C-2 adds list|exists|delete, see below.)
+// (C-2 adds list|exists|delete, see below; G-7 adds make <profile> <export.txt> [Character=<class>].)
 // save: a profile of the configured class with a deterministic non-default value in every plain property
 // (ints, floats, bytes, bools, names, strings), written through ULoadSaveManager as the game does
 // (System/Profiles/<profile>/AVARIS_PROFILE.PRO); load: read it back. Either way every property is exported as
@@ -348,7 +348,7 @@ static UBOOL ProfileTest( const TCHAR* Parms )
 	ULoadSaveManager* Manager = ConstructObject<ULoadSaveManager>( ULoadSaveManager::StaticClass() );
 	Manager->Init( NULL );
 	// C-2: "list" writes the names ListGameObjects finds (one per line) to <export.txt>; "exists" and "delete" return
-	// whether the profile <profile> exists / was deleted (the web build keeps profiles as Profiles/<name>.PRO).
+	// whether the profile <profile> exists / was deleted (Profiles/<name>/AVARIS_PROFILE.PRO on every build since G-7).
 	if( Mode==TEXT("LIST") )
 	{
 		TArray<FString> Names;
@@ -366,7 +366,19 @@ static UBOOL ProfileTest( const TCHAR* Parms )
 	UClass* Cls = Manager->getGameProfileClass() ? Manager->getGameProfileClass() : UPlayerProfile::StaticClass();
 	UPlayerProfile* Profile = ConstructObject<UPlayerProfile>( Cls );
 	UBOOL Ok;
-	if( Mode==TEXT("SAVE") )
+	// G-7: "make" saves a profile with the class's DEFAULT values (a new player's profile, playable, unlike "save"'s
+	// test pattern) and, given Character=<class>, that character (tools/dev/net-test.py profile-login).
+	if( Mode==TEXT("MAKE") )
+	{
+		FString Character;
+		if( Parse( Parms, TEXT("CHARACTER="), Character ) )
+			Profile->CharacterClassName = Character;
+		Profile->ProfileName = Name;
+		Profile->SetDirty();
+		Profile->SetTransient( false );
+		Ok = Profile->SaveProfile();
+	}
+	else if( Mode==TEXT("SAVE") )
 	{
 		INT n = 0;
 		for( TFieldIterator<UProperty,CLASS_IsAUProperty> It(Cls); It; ++It, n++ )
