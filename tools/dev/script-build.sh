@@ -7,12 +7,14 @@
 #     stages: assemble make strip compare (default: all four, in that order)
 #     --build <dir>     build directory with Source/UCC/ucc-bin (default build-native)
 #     --tree <name>     output tree <WorkUC2>/run/<name>; must start with m14, d<N> (a D-phase task's prefix,
-#                       e.g. d3-make), f<N> (an F-task's, e.g. f1-make), g<N> (a G-task's, e.g. g8-make) or jit
-#                       (default m14-make)
+#                       e.g. d3-make), f<N> (an F-task's, e.g. f1-make), g<N> (a G-task's, e.g. g8-make), s<N> (a
+#                       spike's, e.g. s1-make) or jit (default m14-make)
 #     --logs <dir>      where the logs go (default <WorkUC2>/logs/m14; a d<N> tree: <WorkUC2>/logs/d<N>; jit: logs/jit)
 #     --mem <size>      memory ceiling of the `ucc-bin make` run (default 3G)
 #     --headers         also export the C++ headers (into <tree>/<Pkg>/Inc, a scratch copy, never Source/)
 #     --extra "<args>"  more `ucc-bin make` arguments
+#     --classes <Pkg>=<dir>  take <Pkg>'s classes from <dir> instead of Source/<Pkg>/Classes (repeatable; spike S1
+#                       uses it for decompiled text: docs/porting/analysis/decompile-spike.md)
 #
 # The tree: content folders hard-linked from the asset tree (never written), System/ a real copy of the asset
 # tree's with the 17 EditPackages .u removed (they are what gets built), GUIRes/ the shipped .u (UMakeCommandlet
@@ -39,6 +41,7 @@ headers=0
 extra=""
 logs=""
 stages=()
+declare -A classes_override=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --build) build=$2; shift 2;;
@@ -47,16 +50,17 @@ while [ $# -gt 0 ]; do
     --headers) headers=1; shift;;
     --extra) extra=$2; shift 2;;
     --logs) logs=$2; shift 2;;
+    --classes) classes_override[${2%%=*}]=${2#*=}; shift 2;;
     assemble|make|strip|compare) stages+=("$1"); shift;;
     *) echo "unknown argument: $1" >&2; exit 2;;
   esac
 done
 [ ${#stages[@]} -eq 0 ] && stages=(assemble make strip compare)
-case "$tree" in m14*|d[0-9]*|f[0-9]*|g[0-9]*|jit*) ;; *) echo "tree name must start with m14, d<N>, f<N>, g<N> or jit: $tree" >&2; exit 2;; esac
+case "$tree" in m14*|d[0-9]*|f[0-9]*|g[0-9]*|s[0-9]*|jit*) ;; *) echo "tree name must start with m14, d<N>, f<N>, g<N>, s<N> or jit: $tree" >&2; exit 2;; esac
 case "$tree" in */*|*..*) echo "bad tree name: $tree" >&2; exit 2;; esac
 case "$build" in /*) ;; *) build=$repo/$build;; esac
 run=$work/run/$tree
-case "$tree" in d[0-9]*|f[0-9]*|g[0-9]*) logs=${logs:-$work/logs/${tree%%-*}};; jit*) logs=${logs:-$work/logs/jit};; esac
+case "$tree" in d[0-9]*|f[0-9]*|g[0-9]*|s[0-9]*) logs=${logs:-$work/logs/${tree%%-*}};; jit*) logs=${logs:-$work/logs/jit};; esac
 logs=${logs:-$work/logs/m14}
 mkdir -p "$logs"
 
@@ -90,7 +94,12 @@ assemble() {
   for p in "${packages[@]}"; do
     s=$(srcdir "$p")
     mkdir -p "$run/$s"
-    ln -s "$repo/Source/$s/Classes" "$run/$s/Classes"
+    if [ -n "${classes_override[$p]:-}" ]; then
+      ln -s "$(cd "${classes_override[$p]}" && pwd)" "$run/$s/Classes"
+      echo "  $p: classes from ${classes_override[$p]}"
+    else
+      ln -s "$repo/Source/$s/Classes" "$run/$s/Classes"
+    fi
     if [ -d "$repo/Source/$s/Inc" ]; then
       mkdir -p "$run/$s/Inc"
       # every header: the exporter writes `#include "<Class>.h"` into a class body when that file exists here
