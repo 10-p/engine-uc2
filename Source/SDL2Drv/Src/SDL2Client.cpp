@@ -92,7 +92,7 @@ void USDL2Client::StaticConstructor()
 	JoyDeadZone			= 0.35f;	// [XboxDrv.XboxClient] JoyDeadZone in Epic's inis
 	LogInput			= 0;
 	SplitScreenJoinInMatch	= 1;	// G-6: players 3 and 4 (UC2's menus stop at two; splitscreen.md)
-	SplitScreenFullDetail	= 1;	// G-9: the owner keeps full detail in split screen on PC (splitscreen.md)
+	SplitScreenFullDetail	= 0;	// G-9/2026-10-10: the owner keeps Epic's split-screen detail reductions (the key gives full detail; splitscreen.md)
 	KeyboardIsPlayer		= 1;	// G-9: keyboard+mouse are a player of their own; the first pad joins as player two
 	UIScaleMode			= UISCALE_Fit43;	// D-2: the UI in a centred 4:3 box (Native640 = as before)
 	UIMenuBackground	= UIMENUBG_Fill;	// D-2: menu backgrounds fill the window (ui-scale.md)
