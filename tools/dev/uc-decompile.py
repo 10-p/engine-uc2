@@ -345,6 +345,10 @@ def prop_enum(o):
 def bc(e, en):
     """A byte constant (or its implicit int conversion) printed as the enum tag when the context's enum is known:
     the compiler emits ByteConst only for enum tags; a bare number would compile to an int constant."""
+    if en is not None and e.k == 'cond' and e.en is None:
+        c, x, y = e.a
+        x, y = bc(x, en), bc(y, en)
+        return E('(%s ? %s : %s)' % (c.t, x.t, y.t), 'cond', (c, x, y), en)
     if en is not None and e.k in ('byteconst', 'castbyteconst'):
         names = en.f['names']
         tag = names[e.a] if e.a < len(names) else 'EnumCount'
@@ -355,7 +359,7 @@ def bc(e, en):
 def to_enum(e, en):
     """Assigning a plain byte to an enum byte needs `EnumName(x)` (no code: same type)."""
     e = bc(e, en)
-    if en is not None and e.en is not en and e.k not in ('enumconst', 'nothing') and e.k != 'byteconst':
+    if en is not None and e.en is not en and e.k not in ('enumconst', 'nothing', 'byteconst', 'cond'):
         return E('%s(%s)' % (en.name, e.t), e.k if e.k == 'call' else 'expr', e.a, en)
     return e
 
@@ -374,6 +378,7 @@ class Code:
         self.dec, self.world, self.owner, self.s, self.i = dec, dec.world, owner, script, 0
         self.pkgname = owner.pkgname
         self.pkg = owner.pkg
+        self.ctx_class = None
 
     # raw readers
     def b(self):
@@ -405,9 +410,10 @@ class Code:
     def objname(self, o):
         if o is None:
             return 'None'
-        if isinstance(o, tuple):
-            return o[1].split('.')[-1]
-        return o.name
+        n = o[1].split('.')[-1] if isinstance(o, tuple) else o.name
+        if n.startswith('__') and n.endswith('__Delegate'):
+            n = n[2:-10]        # a delegate's hidden property is written as the delegate's name
+        return n
 
     # statements: a flat list (offset, end, kind, payload)
     def statements(self):
@@ -494,7 +500,7 @@ class Code:
     def call(self, fn, args, how, name=None):
         """Text of a call to function Obj fn (how: final/virtual/global/native/delegate)."""
         if fn is None and name is not None:
-            fn = self.dec.find_function(name)
+            fn = self.dec.find_function(name, self.ctx_class)
         ps, rp = params_of(fn)
         ren = prop_enum(rp)
         if fn is not None and not isinstance(fn, tuple) and fn.f['funcflags'] & FUNC_Operator and len(args) == 2:
@@ -505,6 +511,8 @@ class Code:
         e = self.call0(fn, args, how, name)
         if e.en is None:
             e.en = ren
+        if e.a is None and e.k == 'call':
+            e.a = rp
         return e
 
     def call0(self, fn, args, how, name=None):
@@ -552,7 +560,10 @@ class Code:
             return E('%s = %s' % (l.t, r.t), 'let')
         if t == 0x1B:
             name = self.nm()
-            return self.call(None, self.args(), 'virtual', name)
+            cc, self.ctx_class = self.ctx_class, None
+            args = self.args()
+            self.ctx_class = cc
+            return self.call(None, args, 'virtual', name)
         if t == 0x38:
             name = self.nm()
             return E('Global.%s(%s)' % (name, ', '.join(x.t for x in self.args())), 'call')
@@ -571,12 +582,17 @@ class Code:
             fn = self.obj()
             return E('Super(%s).%s(%s)' % (fn.outer().name, name, ', '.join(x.t for x in self.args())), 'call')
         if t == 0x44:
-            return E(self.nm())
+            return E(self.nm(), 'delegate')
         if t in (0x12, 0x19):
             ctx = self.expr()
             self.w()
             self.b()
-            m = self.expr()
+            saved = self.ctx_class
+            self.ctx_class = self.class_of(ctx, t == 0x12)
+            try:
+                m = self.expr()
+            finally:
+                self.ctx_class = saved
             if t == 0x12:
                 if m.k not in ('call', 'var') and not m.t.startswith('default.'):
                     return E('%s.const.%s' % (ctx.t, self.const_named(ctx, m)), 'expr', None, m.en)
@@ -588,7 +604,7 @@ class Code:
                 # a member of the `within` class used without context: the compiler adds Context(Outer, ...)
                 # itself (with a skip that differs from an explicit `Outer.x`)
                 return m
-            if m.k not in ('call', 'var') and not m.t.startswith('default.'):
+            if m.k not in ('call', 'var', 'delegate') and not m.t.startswith('default.'):
                 # `obj.const.NAME`: the compiler emits Context(obj, <the constant's value>)
                 return E('%s.const.%s' % (ctx.t, self.const_named(ctx, m)), 'expr', None, m.en)
             return E('%s.%s' % (ctx.t, m.t), m.k if m.k in ('call', 'var') else 'expr', m.a if m.k == 'var' else None, m.en)
@@ -624,7 +640,7 @@ class Code:
             y = self.expr()
             en = x.en or y.en
             x, y = bc(x, en), bc(y, en)
-            return E('(%s ? %s : %s)' % (c.t, x.t, y.t), 'expr', None, en)
+            return E('(%s ? %s : %s)' % (c.t, x.t, y.t), 'cond', (c, x, y), en)
         if t == 0x11:
             outer, name, flags, cls = self.expr(), self.expr(), self.expr(), self.expr()
             parts = [outer.t, name.t, flags.t]
@@ -708,6 +724,19 @@ class Code:
             self.w()
             return self.expr()
         raise DecompileError('token 0x%02x at %d in expression' % (t, at))
+
+    def class_of(self, e, meta):
+        """The class an object expression refers to (or, for a class context, the class it names), if known."""
+        p = e.a if e.k in ('var', 'objconst', 'dyncast', 'call') else None
+        if p is None or isinstance(p, tuple):
+            return None
+        if p.cls == 'Class':
+            return p
+        if p.cls == 'ObjectProperty':
+            return self.world.resolve(p.pkgname, p.f['propertyclass'])
+        if p.cls == 'ClassProperty':
+            return self.world.resolve(p.pkgname, p.f['metaclass'])
+        return None
 
     def const_named(self, ctx, m):
         p = ctx.a if ctx.k in ('var', 'objconst', 'dyncast') else None
@@ -1272,7 +1301,13 @@ class Decompiler:
                 ign.append(PROBES[bit])
         fns = []
         for k in kids:
-            if k.cls == 'Function' and not k.f['funcflags'] & (FUNC_Defined | FUNC_Native) and not k.f['script']:
+            sup = k.ref('super') if k.cls == 'Function' else None
+            if k.cls == 'Function' and not k.f['funcflags'] & (FUNC_Defined | FUNC_Native) \
+                    and k.f['script'] in (b'', b'\x04\x0b') and sup is not None and sup.outer().cls == 'Class' \
+                    and k.f["funcflags"] == sup.f["funcflags"] & 0xA221D \
+                    and not [c for c in k.children() if c.cls in PROPS and not c.f['flags'] & CPF_Parm]:
+                # `ignores X`: an empty function whose super is the class-level X (UnScrCom.cpp); an empty
+                # `function X() {}` in a state would take the parent state's X as its super
                 ign.append(k.name)
             else:
                 fns.append(k)
@@ -1347,9 +1382,10 @@ class Decompiler:
         if top not in self.loads:
             self.loads.append(top)
 
-    def find_function(self, name):
-        """A function called by name (virtual call) from the class being decompiled, for its parameter types."""
-        c = self.cls
+    def find_function(self, name, start=None):
+        """A function called by name (virtual call) from the class being decompiled (or through a context of
+        class `start`), for its parameter types."""
+        c = start or self.cls
         lname = name.lower()
         while c is not None:
             for k in c.children():

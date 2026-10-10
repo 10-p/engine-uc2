@@ -621,6 +621,8 @@ def mips(rest):
 
 def relocated(a, off_a, b, off_b):
     """True if a and b differ only in 4-byte words that are absolute file offsets of the same place."""
+    if a is None or b is None:      # one side is not a plain object (S1: a decompiled package lacks #exec imports)
+        return False
     if len(a) != len(b):
         return False
     i = 0
@@ -977,7 +979,7 @@ class Comparison:
             if cls == 'Texture':
                 try:
                     ma, mb = mips(va), mips(vb)
-                except (ParseError, struct.error, IndexError):
+                except (ParseError, struct.error, IndexError, TypeError):
                     return None
                 if ma == mb:
                     return 'lazy-offsets'
