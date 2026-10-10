@@ -778,3 +778,27 @@ line, no `JoySlider2`, no `ControllerRemovedMenu`, menu None and not paused, the
 keyboard and mouse" and the re-plugged stick walking player one (442 units). `keyboard`'s `kb-e-switches-to-melee` (w1
 held a SniperRifle, a bot 62 units away and locked on) passed in the rerun with the same binary: not pad-related; the
 keyboard scenario never touches a pad.
+
+### G-11 step 3 - builds and the browser (both pad modes)
+
+Builds (`bin/capped 6G`): native `-j4` (`logs/g11/build-native-0.log`), wasm-perf `-j2` (`build-wasm-perf.log`; the
+preloaded data has `PadsStartAtPlayerTwo=False` and no `KeyboardIsPlayer`), windows MinGW `-j2` (`build-windows.log`,
+`uc2.exe` has the new line): 0 errors each. No script changed: no package to switch.
+
+Browser (frontend worktree `ufrontend-pads` at d51dfe1, serve-web assembled with this worktree's `build-wasm-perf`,
+sha256 `af499b50d5ef18225652ef8426430f9bbd0e89419fb95632db0180192f761257` before and after each run; harness
+`e2e-mem-guard --max-gb=23` inside `bin/capped 7G`, one run machine-wide, null sink by module index;
+`logs/g11/run-gamepad-e2e.sh`):
+- box unticked (default): 1 passed, 37/37 steps, peak 9.2 GB (`logs/g11/unticked-1.out`): the pad on port 0 "player one,
+  with the keyboard and mouse", stick 409.1 and keyboard 502.1 units on the same player, pulled: no
+  ControllerRemovedMenu, no JoySlider2, the keyboard walked 635.7 (not paused), back on port 0, stick 540.4.
+- box ticked: 1 passed, 23/23 steps, peak 9.5 GB (`logs/g11/ticked-1.out`): the pad on port 1 ("Start joins"), moved
+  nobody unjoined, Start joined player two (2 split views), its stick moved player two 829.5 / player one 0.0, the
+  keyboard player one 631.6 / player two 0.0; pulled: Epic's ControllerRemovedMenu; back, Start closed it, stick 552.7.
+  The first two-player split screen in a browser (G-6: "untested in a browser"); it used Epic's split detail (level 1).
+
+Open: (1) with the box unticked, when player one's pad AND player two's are out and player two's is plugged back first,
+it takes port 0 (the first free port) and becomes player one's, leaving player two's page waiting for port 1: SDL has no
+fixed ports; a pad does not remember its port. Not built (a "port per device" rule would be a design change). (2) Not
+measured: the old binary failing the new unplug test (a control run); the rule's code path is one `if` and the
+removal line names it.
