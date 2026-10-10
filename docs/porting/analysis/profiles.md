@@ -497,3 +497,19 @@ Part B. Where the class of a launch comes from:
   overwritten by every profile launch, no flat-file move. c1m and c2m passed there too (the leak happened to carry
   the right class): the test needs c3m and c4m to tell the two engines apart, and it does.
 - `tools/dev/d3-profiles.sh` on tree g7 (`logs/g7/d3-profiles-run1.txt`, load 10-20): **ALL PASS** (27 PASS lines).
+
+### Step G7-4: the browser spec — NOT run to completion (machine load and the mem-guard budget)
+
+serve-web in `ufrontend-profiles` is assembled with this branch's wasm (sha256 `7c2440eb...f6b1`, the same before and
+after both attempts: `logs/g7/e2e-engine-proof.txt`). Attempt 1 (`e2e-saves-1.txt`): Chromium not found at
+`~/.cache/ms-playwright` (the browsers are in `<WorkUC2>/.cache/ms-playwright`: `PLAYWRIGHT_BROWSERS_PATH`). Attempt 2
+(`e2e-saves-2.txt`, load 11.8): session 1's first three steps passed (the launcher, no profile yet, no
+`/System/Profiles/WebSaWdX/AVARIS_PROFILE.PRO`), then the mem-guard stopped the run: "17.2 GB in use, over the 17 GB
+budget" — the machine had 15.3 GB in use before it started (the owner's missioncenter alone 8 GB, other agents'
+builds), so the brief's `--max-gb=17` leaves no room for one browser. Then 03:05-05:33 the 1-minute load never stayed
+below 16 (17-28; the coordinator's rule: no timing-sensitive browser run above 16), so no third attempt. Null sink
+(module 536870917) removed by index. To run it (one harness machine-wide, load < 16, a budget the baseline allows):
+  cd <WorkUC2>/ufrontend-profiles && PATH=<a corepack yarn shim>:$PATH PLAYWRIGHT_BROWSERS_PATH=<WorkUC2>/.cache/ms-playwright \
+  PULSE_SINK=<null sink> <WorkUC2>/bin/capped 6G 1800 -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=<N> -- \
+  --target uc2 uc2-wasm-saves.spec.js
+(check `sha256sum serve-web/SDLLaunch.wasm` = 7c2440eb... before and after).
