@@ -10,6 +10,7 @@
 	    bound to no viewport going to the InteractionMaster only, the active controller
 	    id restored after the pads were read;
 	  - XboxViewport.cpp:330-392  rumble from the player's WaveformManager, zeroed on travel.
+	    In the browser SDL has no rumble; G-10 drives the Gamepad API's haptics instead (below).
 	What is mapping or tuning is ini data: [SDL2Drv.PadMap] (SDL control -> Xbox control) and
 	the Pad* settings of [SDL2Drv.SDL2Client]. docs/porting/analysis/controls.md has the
 	table with the evidence for every row.
@@ -21,8 +22,71 @@
 
 #include "SDL2Drv.h"
 #include "SDL2InputTest.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten/em_asm.h>
+#endif
 
 FName NAME_SDL2Input;
+
+#ifdef __EMSCRIPTEN__
+/*-----------------------------------------------------------------------------
+	G-10: rumble in the browser (owner, 2026-10-10: "Web rumble now").
+
+	SDL's Emscripten joystick driver has no rumble (EMSCRIPTEN_JoystickRumble returns SDL_Unsupported(),
+	SDL_GameControllerHasRumble is false; G-5 measured every request refused). The browser's Gamepad API has
+	haptics on Chrome and Edge: navigator.getGamepads()[i].vibrationActuator.playEffect('dual-rumble',
+	{startDelay, duration, weakMagnitude, strongMagnitude}). Both calls below run on the page's MAIN thread (the
+	engine runs on a worker under PROXY_TO_PTHREAD, where there is no navigator.getGamepads): the probe at
+	connect is a synchronous proxied call, the effects are asynchronous ones (the engine never waits for the
+	page). No actuator (Firefox, Safari, a pad without motors): logged once when the pad connects, then nothing.
+	Notebook: docs/porting/analysis/web-g10.md.
+-----------------------------------------------------------------------------*/
+
+//
+// The browser's index of a pad SDL opened. SDL's Emscripten driver keeps the Gamepad API index to itself; it
+// names the joystick by the browser's Gamepad.id, so this takes the Ordinal-th listed pad with that id (two pads
+// of one make: SDL opens them in the order the browser connected them). Returns (index << 1) | has-actuator, or
+// -1 when no listed pad has that id.
+// (In the EM_ASM blocks: no top-level commas, the macro would split its arguments there, and no // comments,
+// the block becomes one line of JavaScript.)
+//
+static INT WebPadProbe( const char* Id, INT Ordinal )
+{
+	return MAIN_THREAD_EM_ASM_INT({
+		if (typeof navigator === 'undefined' || !navigator.getGamepads) return -1;
+		var id = UTF8ToString($0);
+		var k = $1;
+		var pads = navigator.getGamepads();
+		for (var i = 0; i < pads.length; i++) {
+			var g = pads[i];
+			if (!g || g.id !== id || k-- > 0) continue;
+			var a = g.vibrationActuator;
+			var dual = !!a && typeof a.playEffect === 'function' &&
+				(!a.effects || a.effects.indexOf('dual-rumble') >= 0) && (!a.type || a.type === 'dual-rumble');
+			return (g.index << 1) | (dual ? 1 : 0);
+		}
+		return -1;
+	}, Id, Ordinal );
+}
+
+//
+// One effect on pad Index: the Xbox's left (low-frequency, large) motor is the strong one, the right (high-
+// frequency, small) motor the weak one; magnitudes 0..1. DurationMs 0 = stop (reset()).
+//
+static void WebPadEffect( INT Index, DOUBLE Strong, DOUBLE Weak, INT DurationMs )
+{
+	MAIN_THREAD_ASYNC_EM_ASM({
+		var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+		var g = pads[$0];
+		var a = g && g.vibrationActuator;
+		if (!a || typeof a.playEffect !== 'function') return;
+		var p = $3 > 0 || typeof a.reset !== 'function'
+			? a.playEffect('dual-rumble', { startDelay: 0, duration: $3, weakMagnitude: $2, strongMagnitude: $1 })
+			: a.reset();
+		if (p && typeof p.catch === 'function') p.catch(function () {});
+	}, Index, Strong, Weak, DurationMs );
+}
+#endif
 
 /*-----------------------------------------------------------------------------
 	The SDL control names used by [SDL2Drv.PadMap].
@@ -256,6 +320,30 @@ void USDL2Client::PadAdded( INT DeviceIndex )
 	appStrncpy( Pad.Name, Name ? appFromAnsi(Name) : TEXT("pad"), ARRAY_COUNT(Pad.Name) );
 	debugf( NAME_Log, TEXT("SDL2 pads: pad %i connected: %s%s"), Slot, Pad.Name,
 		SDL_GameControllerHasRumble(GC) ? TEXT(" (rumble)") : TEXT("") );
+#ifdef __EMSCRIPTEN__
+	// G-10: SDL has no rumble here; look for the browser's haptics on this pad (once, at connect).
+	Pad.WebIndex = -1;
+	if( !SDL_GameControllerHasRumble(GC) )
+	{
+		const char* JoyName = SDL_JoystickName( SDL_GameControllerGetJoystick(GC) );
+		INT Ordinal = 0;
+		for( INT i=0; i<SDL2DRV_MAX_PADS; i++ )
+			if( i!=Slot && Pads[i].Controller && Pads[i].InstanceID<ID && JoyName )
+			{
+				const char* Other = SDL_JoystickName( SDL_GameControllerGetJoystick((SDL_GameController*)Pads[i].Controller) );
+				if( Other && !SDL_strcmp(Other, JoyName) )
+					Ordinal++;
+			}
+		INT Probe = JoyName ? WebPadProbe( JoyName, Ordinal ) : -1;
+		Pad.WebIndex   = Probe>=0 ? (Probe>>1) : -1;
+		Pad.WebHaptics = Probe>=0 && (Probe&1);
+		if( Pad.WebHaptics )
+			debugf( NAME_Log, TEXT("SDL2 pads: pad %i rumble through the browser: Gamepad %i vibrationActuator, dual-rumble"), Slot, Pad.WebIndex );
+		else
+			debugf( NAME_Log, TEXT("SDL2 pads: pad %i has no rumble: SDL has none in the browser and %s"), Slot,
+				Probe<0 ? TEXT("the browser lists no pad with its id") : TEXT("this browser gives the pad no vibrationActuator (dual-rumble: Chrome, Edge)") );
+	}
+#endif
 
 	// UXboxClient::DetectDevices: insertion is IK_JoySlider1 to the pad's viewport, or to the
 	// interaction master when no viewport has this pad.
@@ -441,10 +529,18 @@ void USDL2Client::UpdateBoundPad( USDL2Viewport* Viewport, FLOAT DeltaSeconds )
 
 	// Rumble (UXboxViewport::UpdateGamepadRumble).
 	_WORD Left = 0, Right = 0;
+	FLOAT Hold = 0.f;
 	UWaveformManager* Manager = Viewport->Actor ? Viewport->Actor->WaveformManager : NULL;
 	if( Manager )
+	{
 		Manager->GetRumbleState( DeltaSeconds, Left, Right );
-	SetPadRumble( Slot, Left, Right );
+		// How long these levels hold: the rest of the waveform's current sample (G-10, the browser's effects
+		// need a duration; the Xbox motors and SDL's refreshed request do not use it).
+		UForceFeedbackWaveform* W = Manager->FFWaveform;
+		if( W && !Manager->bIsPaused && Manager->CurrentSample>=0 && Manager->CurrentSample<W->Samples.Num() )
+			Hold = Max( W->Samples(Manager->CurrentSample).Duration - Manager->ElapsedTime, 0.f );
+	}
+	SetPadRumble( Slot, Left, Right, Hold );
 
 	Engine->ActiveControllerId = OldId;
 	unguard;
@@ -479,8 +575,11 @@ void USDL2Client::UpdateUnboundPads()
 //
 // Motor speeds to SDL. Sent when they change, and refreshed while they run (SDL needs a
 // duration; the Xbox motors run until told otherwise).
+// G-10, in the browser: to the Gamepad API's haptics instead (SDL has no rumble there): an effect
+// per change of level, lasting HoldSeconds (the rest of the waveform sample, from UpdateBoundPad)
+// and 50 ms more, sent again if the level still holds when it runs out; a stop when it drops to 0.
 //
-void USDL2Client::SetPadRumble( INT Slot, _WORD Left, _WORD Right )
+void USDL2Client::SetPadRumble( INT Slot, _WORD Left, _WORD Right, FLOAT HoldSeconds )
 {
 	FSDL2Pad& Pad = Pads[Slot];
 	if( !Pad.Controller )
@@ -494,6 +593,25 @@ void USDL2Client::SetPadRumble( INT Slot, _WORD Left, _WORD Right )
 	}
 	DOUBLE Now = appSeconds();
 	UBOOL Changed = Left!=Pad.RumbleLeft || Right!=Pad.RumbleRight;
+#ifdef __EMSCRIPTEN__
+	if( Pad.WebHaptics )
+	{
+		if( !Changed && (!(Left|Right) || Now < Pad.WebHoldUntil) )
+			return;
+		// A level with no known hold (a caller other than UpdateBoundPad) is refreshed every 0.5 s, as for SDL.
+		FLOAT Hold = (Left|Right) ? (HoldSeconds>0.f ? HoldSeconds : 0.5f) : 0.f;
+		INT DurationMs = (Left|Right) ? Clamp( appRound(1000.f*Hold) + 50, 50, 5000 ) : 0;
+		WebPadEffect( Pad.WebIndex, Left/65535.0, Right/65535.0, DurationMs );
+		if( Changed && LoggingInput() )
+			debugf( SDL2INPUT, TEXT("pad %i rumble %u %u -> browser dual-rumble strong %.3f weak %.3f, %i ms"), Slot,
+				(DWORD)Left, (DWORD)Right, Left/65535.0, Right/65535.0, DurationMs );
+		Pad.RumbleLeft     = Left;
+		Pad.RumbleRight    = Right;
+		Pad.RumbleSentTime = Now;
+		Pad.WebHoldUntil   = Now + Hold;
+		return;
+	}
+#endif
 	if( !Changed && (!(Left|Right) || Now - Pad.RumbleSentTime < 0.5) )
 		return;
 	// The Xbox's left motor is the low-frequency (large) one, as SDL's first argument.

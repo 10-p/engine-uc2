@@ -628,7 +628,7 @@ Notebook: `xbox-audio-runtime.md`. UC2ALAudio has two sources for the same table
 | sound bank `<Bank>` | `Sounds/<Bank>.uc2cues` | `Sounds/<Bank>.xsb` (read by `UC2LoadXsbSoundBank`, `Src/UC2XboxBanks.cpp`) |
 | wave bank `<Bank>`, language `<lang>` | `<Bank>_<lang>.uc2wb`, else `<Bank>.uc2wb` (+ the `.ogp`) | `<Bank>_<lang>.xwb`, else `<Bank>.xwb`; per file stem the cooked `.uc2wb` first, then the `.xwb` (`LoadWaveBankFile`) |
 | a wave | Vorbis, the whole pack read on first use, decoded on first play | the entry's bytes read from the `.xwb` on first play, Xbox ADPCM / PCM decoded (nothing else of the bank stays in memory) |
-| music `<Song>` | `Music/<Song>.ogg` (cue `<Song>` of `A_Music`) | `Sounds/M_<Song>.xwb`, streamed from the file a block at a time; `M_Adoratrice.xwb` is WMA: no music for that song (logged) |
+| music `<Song>` | `Music/<Song>.ogg` (cue `<Song>` of `A_Music`) | `Sounds/M_<Song>.xwb`, streamed from the file a block at a time; `M_Adoratrice.xwb` is WMA: G-10 plays the cooked `Music/Adoratrice.ogg` instead when it is there (logged on the `playing` line), else no music for that song (logged; `web-g10.md`) |
 
 The choice is per bank, so a tree may mix them (`tools/dev/mkrun-uc2.sh` `UC2_XBOX_SOUNDS=add`: cooked first, the disc
 fills what the cook lacks). Logged once per bank: `loaded sound bank X (...; cooked cue table | Xbox sound bank .xsb,

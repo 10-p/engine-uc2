@@ -69,6 +69,13 @@ struct FSDL2Pad
 	DOUBLE	NextRepeatTime;
 	_WORD	RumbleLeft, RumbleRight;			// last motor speeds sent
 	DOUBLE	RumbleSentTime;
+#ifdef __EMSCRIPTEN__
+	// G-10: SDL's Emscripten joystick driver has no rumble; the browser's Gamepad haptics stand in
+	// (SDL2Pads.cpp, SetPadRumble). -1 = no actuator for this pad (or not found).
+	INT		WebIndex;							// navigator.getGamepads() index of this pad
+	UBOOL	WebHaptics;							// it has a vibrationActuator with playEffect
+	DOUBLE	WebHoldUntil;						// the last effect's level holds until then
+#endif
 	TCHAR	Name[64];
 };
 
@@ -144,7 +151,7 @@ class USDL2Client : public UClient, public FNotifyHook
 	void UpdateBoundPad( USDL2Viewport* Viewport, FLOAT DeltaSeconds );
 	void UpdateUnboundPads();
 	void SendPadKey( INT Slot, UViewport* Viewport, EInputKey Key, EInputAction Action );
-	void SetPadRumble( INT Slot, _WORD Left, _WORD Right );
+	void SetPadRumble( INT Slot, _WORD Left, _WORD Right, FLOAT HoldSeconds=0.f );
 	BYTE GetPadAnalogButton( INT Slot, INT ButtonIndex );
 	UBOOL LoggingInput();
 	UBOOL PadExec( const TCHAR* Cmd, FOutputDevice& Ar );

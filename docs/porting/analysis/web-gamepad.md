@@ -24,6 +24,7 @@ SDL2 port, Emscripten's proxying, the browser's rules, the sibling engines) are 
 - Rumble through the browser would need engine code of our own (the Gamepad API's `vibrationActuator.playEffect(
   "dual-rumble", ...)` called on the page, e.g. a `MAIN_THREAD_EM_ASM` from `SetPadRumble` under `__EMSCRIPTEN__`):
   not done, an owner question (Chrome and Edge have it, Firefox and Safari did not at the time of writing).
+  G-10 (owner, 2026-10-10: "Web rumble now") did it: `SDL2Pads.cpp` under `__EMSCRIPTEN__`, `web-g10.md` step 3.
 
 ## Plan
 
