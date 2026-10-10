@@ -413,3 +413,56 @@ gained `acc=(x,y)` (SDL2InputTest.cpp ProbeViewports; m10-inject.py parses it).
 Five runs at load < 16 at start (logs/g6/kb5b.txt, kb5b-1..5): **5/5 PASS** (39 checks each). Acceleration during the
 holds: player one (+-1033,+-1769)/(+-1769,+-1033) by key, the other three (0,0) every time. Walks W/S/A/D: 186.0 / 158.1
 / 186.0 / 185.9 (runs 1-4), 357.9 / 304.3 / 185.9 / 357.9 (run 5); the others 0.0.
+
+## G-9 - the owner's follow-up: FOV pictures, full detail, keyboard+mouse a player of its own (2026-10-10)
+
+Worktree `/home/ion/WorkUC2/engine-uc2-g9-split2`, branch `g9-split2` (from main 486f17e, G-6 merged). Run trees
+`run/g9` (the asset tree's rebuilt packages) and `run/g9ship` (`UC2_SCRIPTS=assets/uc2-shipped/System`: Epic's GUI.u,
+UCGameplay.u, UCMenu.u); logs and pictures `/home/ion/WorkUC2/logs/g9/`. Everything through `bin/capped` (game 2G,
+builds 6G `-j2`/`-j4` by load). The owner's decisions (verbatim): "For split screen fov, can you do a/b screenshot with
+the options? I'll say keep full detail, and keyboard its own player, and yes even AutoFOV for here as well, but let's
+see how aggressive it is."
+
+### G-9 step 1 - the FOV A/B pictures
+
+No change of behaviour, two additions so the pictures can be read and the third variant can be shown:
+- `Source/Engine/Src/UnRender.cpp` `ufrontLogShownFov` (declared in `UnRender.h`), called from `FScopedAutoFov`
+  (`UnGame.cpp`) for every viewport that draws the scene: one line per viewport whenever it changes,
+  `[AutoFOV] shown viewport=<i> rect=X,Y WxH mode=M base=B effective=E scaleFOV=S horizontal=H vertical=V`: the FOV
+  the picture shows after AutoFOV AND the split-screen scale, also with AutoFOV off (the D-8 line is for viewport 0
+  only, and silent when off). Maths from `FCameraSceneNode::UpdateMatrices` (camera x ScaleX/ScaleY, half-angle h x
+  ScaleFOVX/Y, aspect of the viewport's own render target `(W*ScaleX)/(H*ScaleY)`): across `2*atan(tan(h*ScaleFOVX)/
+  ScaleX)`, up `2*atan(tan(h*ScaleFOVY)*H/(W*ScaleX))`.
+- The proposal, NOT the default: `[ufront.AutoFOV] SplitClampToFullScreen` (compiled default and `Default.ini` False).
+  `ufrontAutoFovSize` then corrects a split viewport that is wider than the window (the two-player strips, the
+  three-player top strip) for the WINDOW's aspect instead of its own, so it shows the single player's horizontal FOV
+  (106.26 at 16:9) and less vertically; quarters (the window's aspect) are unchanged. Every consumer of the AutoFOV
+  size (the frame, the weapon, WorldToScreen) agrees because they all ask `ufrontAutoFovSize`.
+- Test: `tools/dev/g6-splitscreen.sh g9 fov` (GPU, SDL offscreen, ShotRamp: G-6's render set-up, the pad as player one
+  with `KeyboardIsPlayer=False`). The frame is frozen (`TimeDilation 0.0001`) at G-6's spot A (player one) for 1, 2,
+  3, 4 players, and shot with `AUTOFOV 2` and `AUTOFOV 0` (the same frozen frame); a second run with
+  `-ini:System:[ufront.AutoFOV]:SplitClampToFullScreen=True` gives the proposal. A `g9fov <tag>` log marker precedes
+  each shot; `tools/dev/g6/g9-fov-sheet.py` takes the `[AutoFOV] shown` lines in force at the marker, writes them into
+  each viewport of the picture, and compares every logged value with the value computed from the rectangle alone.
+
+Result (`logs/g9/fov-run.txt`; load at start < 16, 25 at the end because of my own build: pictures, not timings):
+`PASS g9-fov` 6 checks, `PASS g9-fovclamp` 6 checks, 0 Critical; 12/12 `logged-equals-computed` PASS, worst |logged -
+computed| 0.0000 degrees. The sheets, four panels each (1 player reference with AutoFOV on | AutoFOV on, today's
+default | Epic's maths, AutoFOV=0 | the PROPOSAL, clamped to the single player's FOV), with every viewport's
+"across x up" written in it: **`logs/g9/fov-2players.png`, `logs/g9/fov-3players.png`, `logs/g9/fov-4players.png`**
+(1288x808). 1280x720 window, base FOV 90:
+
+| players | viewport (x,y w x h) | AutoFOV on (default) | Epic's maths (AutoFOV=0) | proposal: clamped |
+|---|---|---|---|---|
+| 1 | 0,0 1280x720 | 106.3 x 73.7 | 90.0 x 58.7 | 106.3 x 73.7 |
+| 2 | each strip 1280x360 | **138.9** x 73.7 | 90.0 x **31.4** | 106.3 x 41.1 |
+| 3 | top strip 1280x360 | **138.9** x 73.7 | **45.0 x 13.3** | 106.3 x 41.1 |
+| 3 | bottom quarters 640x360 | 106.3 x 73.7 | 79.3 x 50.0 | 106.3 x 73.7 |
+| 4 | quarters 640x360 | 106.3 x 73.7 | 79.3 x 50.0 | 106.3 x 73.7 |
+
+(across x up, degrees; the single player's Epic value from the same run's n1-epic line, not in a sheet.) What the pictures say: AutoFOV
+keeps every player's vertical view at the single player's 73.7 and pays for the strips' shape with width (139 across,
+the edges stretched); Epic's maths keeps 90 across and crops the strips to 31 degrees up (three players' top strip:
+45 x 13, a letterbox through a telescope: ReduceFOV 0.5 was made for quarters and never tried on that strip); the
+proposal keeps the single player's 106 across and crops the strips to 41 up. Quarters: AutoFOV and the proposal are
+the single player's view exactly; Epic's are zoomed (79 across). No decision taken here: the owner chooses.
