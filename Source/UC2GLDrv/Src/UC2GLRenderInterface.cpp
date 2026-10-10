@@ -228,7 +228,7 @@ void FOpenGLRenderInterface::PopState()
 	// driver re-sets them in its deferred state).
 	MatricesDirty = 1;
 	if( OldState.ZBias != NewState.ZBias )
-		RenDev->glPolygonOffset( 0.0f, -(FLOAT)NewState.ZBias );
+		ApplyZBias( NewState.ZBias );
 	ApplyCullMode( NewState.CullMode );
 	if( NewState.DistanceFogEnabled )
 	{
@@ -784,12 +784,30 @@ void FOpenGLRenderInterface::SetTransform(ETransformType Type,const FMatrix& Mat
 	MatricesDirty = 1;
 }
 
+//
+// D3DRS_ZBIAS as a GL polygon offset. B-1 (docs/porting/analysis/shadow-flicker.md): the Xbox's
+// D3DDevice_SetRenderState_ZBias (XDK d3d8.lib, state.obj) sets D3DRS_POLYGONOFFSETZSLOPESCALE to
+// -0.25 x ZBias and D3DRS_POLYGONOFFSETZOFFSET to -ZBias, the NV2A's form of glPolygonOffset(factor,
+// units); engine-ut2004's OpenGLDrv uses (-ZBias, -ZBias). The slope term is what keeps a second pass
+// over the same surface (the projectors, ZBias 1) in front of it where the surface is seen at a grazing
+// angle: there the two passes' depths differ by many depth units, in proportion to the depth slope
+// (rasterisation, and the two transform paths of this driver: the fixed-function stage loads modelview
+// and projection, the vertex shaders get their product, UC2GLShaders.cpp), and a constant offset alone
+// let whole triangles of CTF-Aqueduct's terrain lose their tree shadows as the view turned. The slope
+// scale is the Xbox's; the constant stays 5 units per ZBias (the Xbox's is 1), the margin this driver
+// had since R1 for the non-invariant transforms on surfaces seen face on (5 units at 5000 world units
+// from the camera are 0.7 world units).
+//
+void FOpenGLRenderInterface::ApplyZBias( INT ZBias )
+{
+	RenDev->glPolygonOffset( -0.25f * (FLOAT)ZBias, -5.0f * (FLOAT)ZBias );
+}
+
 void FOpenGLRenderInterface::SetZBias(INT ZBias)
 {
 	guard(FOpenGLRenderInterface::SetZBias);
-	ZBias *= 5;
 	if( CurrentState->ZBias != ZBias )
-		RenDev->glPolygonOffset( 0.0f, -(FLOAT)ZBias );
+		ApplyZBias( ZBias );
 	CurrentState->ZBias = ZBias;
 	unguard;
 }

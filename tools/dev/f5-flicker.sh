@@ -17,6 +17,13 @@
 #                                  repeats exactly, so two runs can be compared frame by frame)
 #   F5_PRE="cmd;cmd"               console commands run before the pawn is placed (';' separates), e.g. "Fly"
 #                                  (the pawn then stays where it is put, also with time running)
+#   F5_TELEPORT="x y z yaw pitch"  B-1: place the pawn with the TELEPORT cheat instead (WHEREAMI's output: the owner's
+#                                  coordinates), twice like NETPLACE; F5_PLACE is then only the base of 'move'
+#   F5_RMODE=7                     B-1: the viewport's render mode (RMODE <n>; 7 = lighting only), set after placing
+#   F5_MOUSE="dx dy"               B-1: phase 'mouse' (time running, pawn standing still): one relative mouse motion
+#                                  of dx dy counts (the test channel's 'mouse', as a real mouse) before every frame;
+#                                  phase 'mousefz' the same with time stopped
+#   F5_PIXTRACE="x y"              B-1: GLPIXTRACE x y all before every frame (log only: what each frame draws there)
 #   F5_ARGS="..."                  more uc2.bin arguments; F5_GL4ES=1 runs the GLES twin instead of the desktop device;
 #                                  F5_SOFT=1 renders with Mesa llvmpipe on the Xvfb display instead of the GPU
 #   F5_BIN=uc2.bin                 another executable of the tree's System folder (before/after pictures)
@@ -63,17 +70,25 @@ SCEN
   [ "$view" = 1p ] && printf 'chan exec ToggleThirdCam\nsleep 1\n'
   IFS=';' read -ra pre <<<"${F5_PRE:-}"
   for c in "${pre[@]}"; do [ -n "$c" ] && printf 'chan exec %s\nsleep 0.5\n' "$c"; done
-  printf 'chan exec NETPLACE LocalPlayer %s\nsleep 3\nchan exec NETPLACE LocalPlayer %s\nsleep 2\n' "$place" "$place"
+  if [ -n "${F5_TELEPORT:-}" ]; then
+    printf 'chan exec TELEPORT %s\nsleep 3\nchan exec TELEPORT %s\nsleep 2\n' "$F5_TELEPORT" "$F5_TELEPORT"
+  else
+    printf 'chan exec NETPLACE LocalPlayer %s\nsleep 3\nchan exec NETPLACE LocalPlayer %s\nsleep 2\n' "$place" "$place"
+  fi
+  [ -n "${F5_RMODE:-}" ] && printf 'chan exec RMODE %s\nsleep 1\n' "$F5_RMODE"
   for ph in $phases; do
     echo "chan exec NETPROBE phase-$ph"
     case $ph in
       run) echo 'chan exec set LevelInfo TimeDilation 1.0'; echo 'sleep 1.5' ;;
-      frozen|move) echo 'chan exec set LevelInfo TimeDilation 0.0001'; echo 'sleep 1.5' ;;
+      frozen|move|mousefz) echo 'chan exec set LevelInfo TimeDilation 0.0001'; echo 'sleep 1.5' ;;
+      mouse) echo 'chan exec set LevelInfo TimeDilation 1.0'; echo 'sleep 1.5' ;;
       walk) echo 'chan exec set LevelInfo TimeDilation 1.0'; echo 'pad axis lefty -32767'; echo 'sleep 0.6' ;;
     esac
     echo "chan exec NETPROBE shots-$ph"
     for i in $(seq "$frames"); do
       if [ "$ph" = move ]; then echo "chan exec NETPLACE LocalPlayer $((px + i*dx)) $((py + i*dy)) $pz $((pyaw + i*step)) $ppitch"; fi
+      case $ph in mouse|mousefz) echo "chan mouse ${F5_MOUSE:-4 0}";; esac
+      [ -n "${F5_PIXTRACE:-}" ] && echo "chan exec GLPIXTRACE $F5_PIXTRACE all"
       echo "chan exec shot"
     done
     # the channel runs one line per tick: wait until the engine has reached the end of the phase
