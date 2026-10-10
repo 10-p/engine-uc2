@@ -210,3 +210,11 @@ Twin tree set to 1280x720 first (what the effects step leaves), `m9-movies.py --
 shots PASS 3/3 (portrait 6.8 / 4.0 / 4.0 dB; title and list steady), log PASS 3/3, clean PASS 2/3 (the first saw
 "1 processes left": a process of the twin run 3 I had just stopped, by its timing; nothing was left afterwards),
 `0 GL errors in 952 / 1363 frames` from the device's last line, the game ended itself (`appRequestExit(0)`).
+
+## Step 14: the twin, full run 3 (`logs/d34/m11-twin-3.txt`, 05:48-07:24, load 11.7 at the start)
+
+**m11-twin: 34 PASS, 0 FAIL.** liandri 1.378 (runs 1-3: 1.658, 2.033, 1.378; threshold 6); movies 9/9 (menu-movie
+shots, log, clean). One picture stays time-dependent and close to its threshold: `effect-blur` (5.485, 4.619,
+5.718 against 6; the concussion blur fades with the level time since BlurMe: `UUCScreenBlur::PostRender` BlurTime,
+which MaterialTime does not pin). Not one of the task's two FAILs; noted for the coordinator (a fix would pin the
+blur's remaining time, e.g. a longer BlurTime or a shot keyed to it).
