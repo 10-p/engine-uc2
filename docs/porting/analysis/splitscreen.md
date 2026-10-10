@@ -209,3 +209,48 @@ Seen, to follow up: the HUD of the viewport at index 1 of `Client->Viewports` ge
 "index 1 = bottom half"), so the top-right quarter's HUD sits 29 design pixels higher than the others' (inside its
 quarter). 3-4 players get Epic's `SSDetailLevels` (no coronas/decals/projectors, ReduceFOV 0.5). FovAngle 139 was
 probed once right after a join (the spawn's teleport FOV effect?): to measure.
+
+## G-6, steps 5-7 - measured, then fixed what the numbers showed (2026-10-10)
+
+The test: `tools/dev/g6-splitscreen.sh [<tree>] [input|render|menu|audio]` (helpers `tools/dev/g6/g6-checks.py`,
+pictures measured by `tools/dev/g6/g6-measure.py`); output in `<WorkUC2>/logs/g6/`.
+
+Found by the numbers and fixed:
+- Keyboard "not moving" player one in split screen after a pad had walked it: a wall (the pad walked it there). The
+  movement checks now walk forward then back (`only_moved2`). Not a bug.
+- Match start: a match with several local players starts once every one of them pressed Fire (UC2's rule); the
+  harness presses all pads (`fire_all`), a joining player presses until it has a pawn (`spawn`), no stray shots.
+- Telefrags in the render run (a pawn placed onto another dies, god mode or not): placement order fixed.
+- Crosshair of player one on the bottom edge of its strip after a join in a match: UCWeapon.CreateScriptedCrosshair
+  gives the cached crosshair ScaleY 0.5 only when it is made under a split HUD; `RefreshPlayerHUDs` now re-shapes
+  the cached `ScriptedCrosshairs` (0.5 split, class default otherwise) (`UnSplitScreenMgr.cpp`).
+- Dynamic gamma: Epic switches it off for split screen (`UpdateDetailLevels`, `DYNAMICGAMMA 0`: the Xbox ramp was
+  the display's). The owner keeps it on, so it is per viewport now: `FRenderCaps::ViewportDynamicGamma` (UnRenDev.h)
+  lifts the switch-off; UC2GLDrv keeps one `FOpenGLDynamicGamma` per split viewport (histogram of the viewport's
+  rectangle of the back buffer, own adaptation), `SetViewportGammaRamp` stores its ramp, the present pass draws each
+  split rectangle again through its own ramp (`DrawViewportRamps`, scissored), `ReadPixels` with ShotRamp applies
+  the ramp of the rectangle a pixel is in. Single viewport: the old path, byte for byte (no entries).
+- AutoFOV per viewport aspect: `ufrontAutoFovSize` is the viewport's own size now; a split viewport's ScaleFOVX/Y are
+  set for the frame (and for WorldToScreen/ScreenToWorld and canvas-drawn actors) to atan(ScaleX*tan h)/h, which
+  makes `FCameraSceneNode::UpdateMatrices` (camera space x ScaleX, half-angle x ScaleFOV) show exactly the Hor+ FOV
+  of the viewport's shape with square pixels. Epic's SSDetailLevels ReduceFOV=0.5 for 3-4 players gave a 79 degree
+  quarter (90 on 4:3) and, untested by Scion, a 45 degree top strip with three players; with AutoFOV off (`AUTOFOV
+  0`) Epic's maths is untouched. Result at 1280x720: strips 1280x360 show 138.9 degrees horizontally and the same
+  vertical extent as the single view; quarters 640x360 show the single view exactly (106.3).
+
+Results at commit after these fixes (load 15-25 while measured; nothing here is timing-sensitive):
+- input (Xvfb, llvmpipe): 31/31 PASS - layouts for 1..4 (rects equal Scion's, overlay full window menu-only), pads
+  in join order, every pad's left stick moves only its player (186/158 units forward/back, others 0.0), every
+  pad's fire fires only its player (3 shots, others 0), right sticks turn only their player (10483 units, others 0),
+  keyboard W/S moves only player one, the mouse turns only player one (2002 units), SPLIT REMOVE x3 back to 3, 2, 1
+  (full window, `UCHUD`), keyboard still player one, a pad joins again.
+- render (GPU Quadro P620 through SDL offscreen, ShotRamp): every view rendered (mean luminance 21-33, 60-82% lit),
+  views distinct (mean |diff| 15-42 between views), every HUD inside its rectangle (margins >= 3 px), the view at
+  spot A against the single-player view scaled: |diff| 3.2-3.6 without post-processing, 5.0-6.4 with it;
+  post-processing strength in the viewport 6.3-10.2 vs 8.5 single (ratio 0.75-1.2): bloom/glow/DOF and the
+  per-viewport ramp land where they belong. Every split rectangle had a dynamic gamma ramp of its own.
+- menu (Xvfb): UC2's own flow - pad 2's Start on the character page joins (two views, disabled while the overlay
+  draws the menu), the match with two split players (pads 0 and 1 kept across the travel, split HUDs), pause menu
+  over both, FORFEIT GAME back to the main menu with one viewport: 9/9 PASS.
+- audio (Xvfb, wave writer, cue log): player one's fire cue 1.0 per shot alone and with four players, player three's
+  1.0 per shot, all 2D (each shooter is its own viewer): not multiplied per viewport.
