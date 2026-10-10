@@ -181,3 +181,20 @@ Checks:
   client (`logs/net/dedicated2-srv.log:202`) and never sent that DLMGR; now 0 such lines.
 - Regression `net-test.sh --keep-tree dedicated1`: 8/8 PASS + leftovers PASS (`logs/d12/net-summary-dedicated1.txt`).
 - Not exercised: compressed HTTP download (`.uz`, `UseCompression=True`), a proxy, a map download.
+
+## Step 6: censuses at both widths with the fix; the ASan run (2026-10-10)
+
+- 64-bit (`CENSUS_NAME=d12-c64 CENSUS_PORT=7960 capped 5G 2400 -- map-census.sh build-native64 15 2`, binary at f748edc +
+  the D-2 class packages, load 30-40): `maps: 58  PASS: 58  FAIL: 0`; exit 1 x56 / 0 x2 (UCC's ErrorLevel; the 64-bit
+  logs carry the known `Missing Class Class Editor.TransBuffer` warning), shutdown 0.2-0.5 s. Two maps (ACT-SelketCheats,
+  OD-Obelisk) received the second SIGTERM and logged `Signal: exit already requested; this one is ignored`.
+- 32-bit (`CENSUS_NAME=d12-c32 CENSUS_PORT=7964 capped 5G 2400 -- map-census.sh build-native 15 2`, same code, load
+  ~16-20): `maps: 58  PASS: 58  FAIL: 0`; exit 0 x42 / 1 x16, shutdown 0.1-0.3 s; the duplicate TERM ignored on
+  ACT-AnubisCheats and DM-Sever.
+- ASan, first try (preset `native64-asan` as it is: no `-fsanitize-recover`): the server stops at map load on Epic's
+  known 1-byte over-read in `UObject::ProcessInternal` (`UnCorSc.cpp:5481`, the `EX_DebugInfo` peek past a function's
+  Script, network.md step 7: benign, left alone), from `ALevelInfo::eventPrecacheMap`. So the build dir was
+  reconfigured with `-DCMAKE_CXX_FLAGS=-fsanitize-recover=address` (C too) and the census runs with
+  `ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0:halt_on_error=0`.
+- `map-census.sh`: ASan reports are counted per map from their `#0` frame; `CENSUS_ASAN_KNOWN` (regex) names known
+  reports, counted apart (`asan_known=`) and not failing the map; any other report fails it (`asan=`).

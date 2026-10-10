@@ -36,7 +36,7 @@ run_worker() {
   local w=$1
   "$repo/tools/dev/mkrun-uc2.sh" "$build" "$name-$w" >/dev/null
   cd "$work/run/$name-$w/System" || exit 1
-  local i=0 map status rc warn crit t0 t1 down exitok note asan
+  local i=0 map status rc warn crit t0 t1 down exitok note asan asank asanfirst
   for map in "${maps[@]}"; do
     if [ $(( i % workers )) -eq "$w" ]; then
       rm -f ucc.log
@@ -59,9 +59,16 @@ run_worker() {
       crit=$(grep -a -c '^Critical:' "$out/$map.log" 2>/dev/null); crit=${crit:-0}
       abort=$(grep -a -c 'Aborted(\|RuntimeError\|TypeError\|exception catching is not enabled' "$out/$map.stdout.log" 2>/dev/null); abort=${abort:-0}
       note=$(grep -a -m1 '^Critical:' "$out/$map.log" 2>/dev/null | grep -a -v 'appError called' | cut -c1-120)
-      # A sanitizer build (preset native64-asan) reports on stderr: an AddressSanitizer report fails the map.
-      asan=$(grep -a -c 'ERROR: AddressSanitizer' "$out/$map.stdout.log" 2>/dev/null); asan=${asan:-0}
-      [ "$asan" -gt 0 ] && note="ASan: $(grep -a -m1 'ERROR: AddressSanitizer' "$out/$map.stdout.log" | sed 's/^.*AddressSanitizer: //' | cut -c1-80) $note"
+      # A sanitizer build (preset native64-asan; built with -fsanitize-recover=address and run with halt_on_error=0 it
+      # reports every error and goes on) reports on stderr: an AddressSanitizer report fails the map, unless its first
+      # frame matches CENSUS_ASAN_KNOWN (an extended regex of known, recorded reports, e.g. 'UnCorSc\.cpp:5481'); the
+      # known ones are counted in asan_known=. Each report: "ERROR: AddressSanitizer: <what>" ... "#0 <pc> in <frame>".
+      read -r asan asank asanfirst < <(awk -v known="${CENSUS_ASAN_KNOWN:-}" '
+        /ERROR: AddressSanitizer/ { want = 1; what = $0; sub(/^.*AddressSanitizer: /, "", what); sub(/ on address.*/, "", what); next }
+        want && /^ *#0 / { want = 0; if (known != "" && $0 ~ known) k++; else { n++; if (first == "") { f = $0; sub(/^.* in /, "", f); first = what "@" f } } }
+        END { printf "%d %d %s\n", n, k, (first == "" ? "-" : first) }' "$out/$map.stdout.log" 2>/dev/null)
+      asan=${asan:-0}; asank=${asank:-0}
+      [ "$asan" -gt 0 ] && note="ASan: $(echo "$asanfirst" | cut -c1-160) $note"
       if [ -n "${CENSUS_NODE:-}" ]; then
         down=-; exitok=0; [ "$rc" -eq 124 ] && exitok=1
       else
@@ -80,6 +87,7 @@ run_worker() {
       else
         status=FAIL
       fi
+      [ "$asan$asank" != 00 ] && note="asan=$asan asan_known=$asank $note"
       printf '%s\t%s\texit=%s\tshutdown=%s\twarnings=%s\tcritical=%s\taborts=%s\t%s\n' "$status" "$map" "$rc" "$down" "$warn" "$crit" "$abort" \
         "$note" >>"$out/part-$w.tsv"
     fi
