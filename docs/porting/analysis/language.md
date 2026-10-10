@@ -46,3 +46,38 @@ UC2's own `targets/uc2/target.json` declares NEITHER `frameRateCap` NOR `audioHr
 the first UC2 target block of this kind; the rule's code path is exercised by the other four targets today.
 
 Next: the UC2 engine's language read and the localisation files in the tree.
+
+## G-4 (2026-10-10): the task restarts as G-4 on branch `g4-language`
+
+Owner review of 2026-10-10 (PLAN.md) restarts E-4 as G-4. Worktrees: engine `../engine-uc2-g4-language` (branch
+`g4-language` from main `4a72bfb`, the E-4 step-1 commit cherry-picked), frontend `../ufrontend-language` (branch
+`uc2-language`, notebook `docs/migration/notes/language-option.md` there). Logs: `<WorkUC2>/logs/g4`.
+
+## Step 2 - where each engine reads its language, and which languages the shipped files carry (2026-10-10)
+
+Every engine reads `[Engine.Engine] Language` of its main ini (the `System` token of `-ini:`) once, in `appInit`,
+AFTER `appApplyIniOverrides()`, so a launcher seed `-ini:System:[Engine.Engine]:Language=<ext>` is in effect before
+the read. No engine needs a patch for the read itself (no `logs/g4/<engine>.patch`).
+
+| target | read (file:line) | ini (`iniPath`) | shipped default |
+|---|---|---|---|
+| uc2 | `Source/Core/Src/UnMisc.cpp:2208-2210` (non-Xbox branch; overrides at :2193) | `System/Avaris.ini` | `Language=int` (`Engine/Config/Default.ini:29`, web copy the same) |
+| ut2004 | `engine-ut2004/Source/Core/Src/UnMisc.cpp:2340-2342` (overrides :2337) | `System/UT2004.ini` | `Language=int` (`Default.ini:32`; `:437 Language=ute` is UnrealEd's own section) |
+| ut99 | `engine-ut99/Source/Core/Src/UnMisc.cpp:1839-1842` (overrides :1836) | `System/UnrealTournament.ini` | `Language=int` (`Default.ini:26`) |
+| ut99-436-compat | `engine-ut99-436-compat/Source/Core/Src/UnMisc.cpp:1938-1940` (overrides :1935) | `System/UnrealTournament.ini` | `Language=int` (`Default.ini:26`) |
+| unreal1 | `engine-unreal1/Source/Core/Src/UnPlat.cpp:426-428` (overrides :424) | `System/Unreal.ini` | `Language=int` (`Unreal.ini:45`) |
+
+Fallback when a string is missing in the chosen language: all five fall back to `.int` per key (UC2
+`LocalizePropertyValue`, `Core/Src/UnMisc.cpp:1230-1245`, folder `Localization\<lang>\` then
+`Localization\int\`; UT2004 `Localize`, `UnMisc.cpp:1474-1520`), so a partial language shows English for the rest.
+
+Languages each target's shipped files carry (counted in the frontend's `targets/<id>/file-manifest.json`, `System/`
+files by extension; "core" = the engine/game packages the menus come from):
+
+| target | `.int` | other languages (files) | offered |
+|---|---|---|---|
+| uc2 | 77 (`System/Localization/int/`) | deu 66, fra 66, ita 66, spa 67 (`System/Localization/<lang>/`); the 11 without a copy are editor/tool packages (Window, IpDrv, Setup, ...); plus 21 voice banks `Sounds/<Bank>_<lang>.{uc2wb,ogp}` and 19 movie tracks `Movies/<Movie>_<lang>.oga` per language | English int, German deu, French fra, Italian ita, Spanish spa |
+| ut2004 | 85 | det 36, frt 36, itt 35, est 37 (core present, except `Core.det`, `IpDrv.*`); kot 20 (partial: no Engine, XInterface, UnrealGame, XWeapons, XPickups, XPlayers `.kot`) | English int, German det, French frt, Italian itt, Spanish est. Not Korean: its menus would be mostly English and the fonts are not Korean |
+| ut99 | 29 | none | English only |
+| ut99-436-compat | 140 | det 13, est 13: only the MonsterHunt mod's files (no Core/Engine/Botpack/UnrealShare/UnrealI copy) | English only |
+| unreal1 | 18 | none | English only |
