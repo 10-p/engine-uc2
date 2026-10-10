@@ -35,10 +35,8 @@ DELTAS = [
     # go into the ini and enable it"): no multisampled main framebuffer in the browser unless the player sets it.
     ('Default.ini', 'UC2GLDrv.UC2GLRenderDevice', 'AntiAliasing', '4', '0', None),
     ('Default.ini', 'UC2GL4ESDrv.UC2GL4ESRenderDevice', 'AntiAliasing', '4', '0', None),
-    # G-9 (native split screen): the keyboard+mouse are a player of their own and a pad's Start joins as player two.
-    # In a browser a player with a pad is one player who wants the pad to drive player one, and web split screen is
-    # not on yet: the web keeps the pad as player one.
-    ('Default.ini', 'SDL2Drv.SDL2Client', 'KeyboardIsPlayer', 'True', 'False', None),
+    # (G-11: no delta for [SDL2Drv.SDL2Client] PadsStartAtPlayerTwo, G-9's KeyboardIsPlayer: False natively and on the
+    # web, the owner's rule; the launcher's "Force gamepads to start with second player" sets it per player.)
 ]
 
 # Owned by the web build, not derived from the native file: whatever the CURRENT web file says for these is

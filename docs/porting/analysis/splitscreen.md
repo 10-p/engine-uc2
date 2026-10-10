@@ -692,3 +692,65 @@ changed: no package to switch.
 SDL2Drv edits of G-9 (for G-5's merge): `SDL2Drv.h` (USDL2Client: SplitScreenFullDetail, KeyboardIsPlayer,
 SplitScreenKeepsFullDetail); `SDL2Client.cpp` (StaticConstructor keys and defaults, the comment above Tick, PadJoin's
 loop start); `SDL2Pads.cpp` (header comment, GetPadViewport comment, PadAdded's first port and log lines).
+
+## G-11 - the owner's final rule for pads, keyboard+mouse and player slots (2026-10-10)
+
+Worktree `/home/ion/WorkUC2/engine-uc2-g11`, branch `g11-pads` (from main 245d414); frontend worktree
+`/home/ion/WorkUC2/ufrontend-pads`, branch `uc2-pads` (its notebook `docs/migration/notes/gamepad.md`, G-11 section).
+Run trees `run/g11*`, logs `/home/ion/WorkUC2/logs/g11/`. Everything through `bin/capped` (game 2G, builds 6G).
+
+The owner's rule (verbatim where it matters):
+- One setting, a launcher checkbox and the same ini key natively: `[SDL2Drv.SDL2Client] KeyboardIsPlayer` renamed
+  `PadsStartAtPlayerTwo`, default False natively AND on the web (the web delta dropped). Launcher label "Force gamepads
+  to start with second player", blurb "forces gamepads to plug into port 2 and on, with the keyboard and mouse in port 1
+  exclusively".
+- Unchecked/False: "both KB&M and gamepad [1] are player 1 and can be exchanged dynamically; to play a second player we
+  need to plug another controller [and press Start]" (= G-6's model, `KeyboardIsPlayer=False`).
+- Checked/True: "the game would see KB&M/Gamepad 1 (but this gamepad is dummied out) + Gamepad 2 (which is now gamepad
+  1). We push all of the other gamepads" (= G-9's model, `KeyboardIsPlayer=True`).
+- "The 'gamepad disconnected' message should never trigger for player 1 because we always have the keyboard and mouse
+  available. If it really disconnects then we just reconnect it and we're back." Pad-only players keep Epic's page.
+
+### G-11 step 1 - the rename, the default, and no "controller removed" page for player one
+
+How Epic's page opens (read): `PadRemoved` (`SDL2Pads.cpp`, `UXboxClient::DetectDevices`) sends `IK_JoySlider2` to the
+pad's viewport; `DefUser.ini:205` binds `JoySlider2=ControllerRemoved`; `PlayerController.ControllerRemoved`
+(`PlayerController.uc:1498`) clears the triggers, sets the HUD's `bControllerUnplugged` (`UCHUD.SetGamepadStatus`),
+calls `GUIController.SetGamepadStatus(false, Player)` (`GUIController.uc:2837`), which opens `UCMenu.ControllerRemovedMenu`
+for that port (not on `StartMenu`), and pauses a standalone game. `JoySlider1` (insert) is bound to `ControllerAdded`, an
+empty exec; the page closes on the owner's Start (`ConfirmControllerAdded`). `GUIController.NativeKeyEvent` only resets
+its input on either key (`UnGUICore.cpp:1080`).
+
+Change (file:line at this step):
+- `Source/SDL2Drv/Inc/SDL2Drv.h:106` member `PadsStartAtPlayerTwo` (was `KeyboardIsPlayer`); `:161` `ViewportHasKeyboard`.
+- `Source/SDL2Drv/Src/SDL2Client.cpp:55` config key `PadsStartAtPlayerTwo` (Input); `:96` compiled default 0 (was 1);
+  `:304-308` the comment above `Tick`; `:483-485` `PadJoin` (unchanged logic, renamed).
+- `Source/SDL2Drv/Src/SDL2Pads.cpp:17-26` header; `:262-266` `GetPadViewport` comment; `:275-282` new
+  `USDL2Client::ViewportHasKeyboard` (the window's own viewport: G-6 sends the keyboard and the mouse to it only);
+  `:305-345` `PadAdded` (renamed; the connect line now says `(player one, with the keyboard and mouse)` when the port's
+  viewport is the keyboard's, `(keyboard and mouse are player one on port 0: Start joins)` with the key on);
+  `:398-415` `PadRemoved`: the held buttons are released as before, then `JoySlider2` goes to a pad-only player's
+  viewport or to the interaction master (pad bound to nobody) as on the Xbox, and to NO viewport that has the keyboard
+  and the mouse; the line reads `SDL2 pads: pad 0 disconnected: <name> (player one keeps the keyboard and mouse: no
+  controller-removed page; a pad plugged in takes this port again)`. The viewport keeps its `GamepadID` (Epic's PC fake 0),
+  so the next pad plugged in takes the first free port, this one, and `GetPadViewport` binds it to player one at once;
+  its `JoySlider1` reaches the empty `ControllerAdded`: silent.
+- `Source/Engine/Src/UnLevAct.cpp:919` comment only.
+- `Engine/Config/Default.ini` `[SDL2Drv.SDL2Client] PadsStartAtPlayerTwo=False` with its comment;
+  `tools/dev/sync-web-ini.py` DELTAS entry removed (a comment says why); `Engine/Config/web/Default.ini` regenerated
+  (`--check` clean): the web file now equals the native one there. `Engine/Config/README.md` row rewritten.
+- With True, `ViewportHasKeyboard` changes nothing: no pad ever has port 0 (`PadAdded` starts at 1, `PadJoin` never gives
+  a pad the window's viewport), so every pad is a pad-only player's and keeps Epic's page (G-9's kbplayer test checks it).
+- Tools: the `-ini:System:[SDL2Drv.SDL2Client]:KeyboardIsPlayer=False` G-9 added is the default now and was removed from
+  `m10-controls.sh`, `fx-owner.sh`, `fps-bench.sh`, `g4-language.sh`, `m12-wine-smoke.sh`, `jit-strip.sh`,
+  `f5-flicker.sh`, `decay-flash.sh`, `net-test.py`; `g6-splitscreen.sh`'s `$KBOLD` is gone (G-6's parts use the default)
+  and `kbplayer` sets `PadsStartAtPlayerTwo=True` (`$KBPLAYER`). A run against an OLDER binary (G-9's, default True)
+  would now need the key by hand: those scripts no longer pin G-6's model.
+- New test part `tools/dev/g6-splitscreen.sh <tree> unplug` (`scen_unplug`, Xvfb, default ini, MSAA off as m10): pad 0
+  on port 0 is player one (connect line), stick and keyboard both walk player one; pad 0 pulled: the disconnect line,
+  NO `OpenMenu [UCMenu.ControllerRemovedMenu]`, no `pad 0 JoySlider2`, probe menu None and paused 0, port 0 kept, the
+  keyboard still walks; pad 0 back: port 0, player one's line, no page, its stick walks player one; pad 1 joins as player
+  two (Start in the match); pad 1 pulled: Epic's page opens (probe menu `ControllerRemovedMenu*`); back on port 1, its
+  Start closes the page; ports [0, 1].
+
+Native build at this source: `build-native` 0 errors (`logs/g11/build-native-0.log`; the strings are in `uc2.bin`).

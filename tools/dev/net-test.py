@@ -107,9 +107,8 @@ class Proc:
         else:
             argv = ["xvfb-run", "-a", "-s", "-screen 0 1024x768x24", "./uc2.bin"] + ([self.url] if self.url else []) + ["-log"] + common
             # StartupMovies=False: with the GL device the logos would play first and own the input (M9).
-            argv += ["-ini:System:[SDL2Drv.SDL2Client]:InputTestFile=" + os.path.basename(self.inputcmd), "-ini:System:[UC2Movie]:StartupMovies=False",
-                     # G-9: the virtual pad is player one here (KeyboardIsPlayer=False, G-6's model)
-                     "-ini:System:[SDL2Drv.SDL2Client]:KeyboardIsPlayer=False"]
+            # (The virtual pad is player one here: the default, [SDL2Drv.SDL2Client] PadsStartAtPlayerTwo=False, G-11.)
+            argv += ["-ini:System:[SDL2Drv.SDL2Client]:InputTestFile=" + os.path.basename(self.inputcmd), "-ini:System:[UC2Movie]:StartupMovies=False"]
             if self.kind == "listen":
                 argv += ["PORT=%d" % PORT]
             if self.render == "null":
