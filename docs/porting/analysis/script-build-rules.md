@@ -157,3 +157,46 @@ committed headers), which is what the check compares against: not done. Owner qu
 - Negative: a scratch copy of the tree with `var int T3StaleCheck;` added to UCPawn (`check-headers.sh --classes-root
   <scratch> --tree hdr-t3-stale`, `logs/t3/check-headers-stale.out`): rc 1, `UCGameplay/Inc/UCGameplayClasses.h:
   STALE`, `+    INT T3StaleCheck GCC_PACK(4);`.
+
+### Cross presets, the web artifact, the proofs target
+
+- `bin/capped 4G 900 -- cmake --preset windows` (cross from Linux; `logs/t3/configure-windows.log`): `-- Script
+  patches: ON, 3 packages from the host build .../build-native/Scripts/System
+  (sets=epic-fixes,epic-source,mouse-look,player-name,keys-menu)`; build rc 0 (`build-windows.log`): `[  2%] Script
+  packages from the host build`, `-- scripts: 3 script packages in .../build-windows/Scripts/System (updated from
+  .../build-native/Scripts/System)`; the three files' sha256 equal to build-native's (c796d108 GUI, 7b8ade86
+  UCGameplay, 1166328f UCMenu).
+- `cmake --preset wasm-perf` (same STATUS line), build rc 0 (`build-wasm-perf.log`): `[meta] wrote
+  .../build-wasm-perf/Source/SDLLaunch/meta.json (abi 1, wasm-integrated, global-module; 3 script packages:
+  System/GUI.u System/UCGameplay.u System/UCMenu.u)`; `Source/SDLLaunch/scripts/{GUI,UCGameplay,UCMenu}.u`, meta.json:
+  ```
+  {"path": "scripts/GUI.u", "assetPath": "System/GUI.u", "size": 370666, "sha256": "sha256-c796d1085a7e989b5855ce29bcc6f04b04ffa8ce7cd5e373084bd54954c04dd9"}
+  {"path": "scripts/UCGameplay.u", "assetPath": "System/UCGameplay.u", "size": 1589219, "sha256": "sha256-7b8ade8629e7ece0ece35044d88fed413c1a786c746763e85771378501791cda"}
+  {"path": "scripts/UCMenu.u", "assetPath": "System/UCMenu.u", "size": 2409720, "sha256": "sha256-1166328fbdb4758089c4ec07d70d84ce969df81cecd10c8dbb57583e88b92e2d"}
+  ```
+  (`sha256sum scripts/*.u`: the same). A second `cmake --build build-wasm-perf`: 0.9 s, `scripts: ... (unchanged)`, no
+  relink (`build-wasm-perf-noop.log`).
+- `cmake --build build-native --target scripts-proof` (2 min 5 s, `logs/t3/scripts-proof.log`): `PASS P1: problems 0
+  in 7 packages`, `PASS P2: 3 packages equal to the reference build`, `PASS P3: decompile, apply and build are
+  deterministic`.
+- ucc saves its packages 0600: the delivered ones are now 0644 (`uc-build.sh`; the mirror copy chmods too), so a
+  web server running as another user can serve them. Rebuilt after the change: same bytes, the whole chain re-ran
+  from the shipped check (its script changed), `logs/t3/build-native-3.log`. (The wasm-perf artifact's `scripts/` of
+  this session keeps 0600 until its next relink: the mirror moves the stamp only on content changes.)
+
+### The game on the built packages (native)
+
+- `tools/dev/mkrun-uc2.sh build-native t3-run`: `script packages from the build
+  (.../build-native/Scripts/System): 3: GUI.u UCGameplay.u UCMenu.u`; `UC2_SCRIPTS=<WorkUC2>/assets/uc2-shipped/System
+  ... t3-ship` (Epic's three; the asset tree's are rebuilt ones today). `cmp`: t3-run's three = the build's,
+  t3-ship's = epic-sources'.
+- `ucc-bin verifyclasses` in t3-run (2G): rc 0, `VERIFY: Editor class layouts match`, `VERIFY: all native class
+  layouts match` (`logs/t3/verify-t3-run.log`).
+- `D6_TREE=t3-run D6_SHIP_TREE=t3-ship tools/dev/d6-mouse.sh look dodge` (each game inside bin/capped 2G, Xvfb;
+  `logs/t3/d6-look-dodge.txt`): `look` 38/38 PASS (linear 10.012 units per count, same turn at every speed and in both
+  axes, sensitivity/invert saved to User.ini, the right arrow strafes, ...); `dodge` 9 of 11 with
+  `dodge-lock-and-one-press-of-d-switches-target` and `dodge-lock-held-double-tap-switches-and-does-not-dodge` FAIL;
+  `dodge-off` 4/4. That run overlapped a `yarn build` (load 7-10). Control on the reference build's 17 packages
+  (`run/t1-ref/System`, tree t3-ref): `dodge` 17/17 PASS (`logs/t3/d6-ref-dodge.txt`, load 4.5). Rerun on t3-run
+  at load 3.8: **17 PASS, 0 FAIL** (`logs/t3/d6-dodge-2.txt`). So the two lock-switch checks failed under load
+  once and passed on a quieter machine (the owner's rule: a failure under load is rerun before it counts).

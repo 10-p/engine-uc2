@@ -193,6 +193,8 @@ fi
 for p in "${all[@]}"; do
   # the re-saved shipped ones and the packages compiled only to build the others are not delivered
   [ -n "${keepset[$p]:-}" ] || cp -f "$shipped/$p.u" "$out/System/$p.u"
+  # ucc saves 0600; a delivered package is served and installed like any game file
+  if [ -n "${keepset[$p]:-}" ]; then chmod 644 "$out/System/$p.u"; fi
 done
 rm -f "$out/System/$ucc_name" "$out/System/ucc.log"
 echo "built ${kreq[*]} in $((SECONDS - t_all)) s: $(for p in "${all[@]}"; do [ -n "${keepset[$p]:-}" ] && printf '%s ' "$out/System/$p.u"; done)" | tee -a "$log"
