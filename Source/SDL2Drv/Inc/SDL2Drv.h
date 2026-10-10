@@ -94,6 +94,7 @@ class USDL2Client : public UClient, public FNotifyHook
 	FLOAT				PadRumbleScale;
 	FLOAT				JoyDeadZone;			// stored by SETDEADZONE, as UXboxClient (nothing reads it there either)
 	BITFIELD			LogInput;				// SDL2Input log lines for every pad event
+	BITFIELD			SplitScreenJoinInMatch;	// G-6: Start on an unbound pad during a match adds a split-screen player
 
 	// Variables.
 	UBOOL				InMenuLoop;
@@ -124,6 +125,7 @@ class USDL2Client : public UClient, public FNotifyHook
 	UViewport* GetLastCurrent();
 	class UViewport* NewViewport( const FName Name );
 	void GetInitScreenSize( INT& SizeX, INT& SizeY );
+	UBOOL SplitScreenViewports() { return 1; }	// G-6: split-screen viewports are rectangles of the one window
 
 	// USDL2Client interface.
 	void PumpEvents();
@@ -146,6 +148,11 @@ class USDL2Client : public UClient, public FNotifyHook
 	BYTE GetPadAnalogButton( INT Slot, INT ButtonIndex );
 	UBOOL LoggingInput();
 	UBOOL PadExec( const TCHAR* Cmd, FOutputDevice& Ar );
+
+	// Split screen (G-6, SDL2Client.cpp).
+	UBOOL PadJoin( INT Slot );
+	void UpdateSplitLayout();
+	UBOOL CursorWanted();
 };
 
 /*-----------------------------------------------------------------------------
@@ -168,6 +175,11 @@ class USDL2Viewport : public UViewport
 	DWORD				ViewportButtonFlags;
 	UBOOL				Captured;
 	UBOOL				HasFocus;
+	// G-6: a split-screen viewport is a rectangle of viewport 0's window, as on the Xbox (one screen, the
+	// viewports' OffsetX/OffsetY/SizeX/SizeY): it has no window of its own and borrows the render device.
+	UBOOL				SubViewport;
+	INT					WindowSizeX,	// the window's size, the frame the split-screen layouts divide
+						WindowSizeY;	// (viewport 0's SizeX/SizeY shrink to its own rectangle when split)
 
 	// SDL2 scancode -> EInputKey (shared by all viewports).
 	static BYTE			KeyMap[SDL2DRV_MAX_SCANCODES];
@@ -208,6 +220,7 @@ class USDL2Viewport : public UViewport
 	void FocusChanged( UBOOL Gained );
 	UBOOL EnsureGLContext();
 	void DestroyGLContext();
+	USDL2Viewport* GetWindowViewport();
 
 	// UPlayer/UViewport pad hooks (M10).
 	BYTE GetAnalogButtonAmount( INT ButtonIndex );

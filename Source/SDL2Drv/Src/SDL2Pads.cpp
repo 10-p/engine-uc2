@@ -14,10 +14,9 @@
 	the Pad* settings of [SDL2Drv.SDL2Client]. docs/porting/analysis/controls.md has the
 	table with the evidence for every row.
 
-	Not done (needs the owner's split-screen decision): Start on an unbound pad does not
-	join a split-screen player (UXboxClient::UpdateGamepadUnboundInput calls
-	UClient::BeginSplitScreen there); it is passed to the interaction master like every
-	other unbound button.
+	Split screen (G-6): Start on an unbound pad joins a player as UXboxClient::
+	UpdateGamepadUnboundInput does (USDL2Client::PadJoin, SDL2Client.cpp); each bound pad is
+	read by its own viewport only.
 =============================================================================*/
 
 #include "SDL2Drv.h"
@@ -388,6 +387,10 @@ static void SendButtonEdges( USDL2Client* Client, INT Slot, UViewport* Viewport,
 		{
 			if( Client->LoggingInput() )
 				debugf( SDL2INPUT, TEXT("pad %i button %i value %i > %i"), Slot, b, New, T );
+			// G-6: Start on a pad bound to no viewport may join a player (XboxClient.cpp:881); a press
+			// that made a player is used up there.
+			if( !Viewport && b==12 && Client->PadJoin( Slot ) )
+				continue;
 			Client->SendPadKey( Slot, Viewport, Key, IST_Press );
 			Pad.RepeatKey      = Key;
 			Pad.NextRepeatTime = appSeconds() + Client->PadRepeatDelay;

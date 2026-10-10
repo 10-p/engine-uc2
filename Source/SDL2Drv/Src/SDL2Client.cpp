@@ -50,6 +50,7 @@ void USDL2Client::StaticConstructor()
 	new(GetClass(),TEXT("PadRumbleScale"),    RF_Public)UFloatProperty(CPP_PROPERTY(PadRumbleScale),    TEXT("Input"),    CPF_Config );
 	new(GetClass(),TEXT("JoyDeadZone"),       RF_Public)UFloatProperty(CPP_PROPERTY(JoyDeadZone),       TEXT("Input"),    CPF_Config );
 	new(GetClass(),TEXT("LogInput"),          RF_Public)UBoolProperty (CPP_PROPERTY(LogInput),          TEXT("Input"),    CPF_Config );
+	new(GetClass(),TEXT("SplitScreenJoinInMatch"),RF_Public)UBoolProperty(CPP_PROPERTY(SplitScreenJoinInMatch),TEXT("Input"),CPF_Config );
 
 	// Compiled defaults for the inherited UClient settings, equal to Default.ini's [SDL2Drv.SDL2Client]
 	// (a copy of [WinDrv.WindowsClient]). UClient::StaticConstructor registers them without values, so
@@ -88,6 +89,7 @@ void USDL2Client::StaticConstructor()
 	PadRumbleScale		= 1.0f;
 	JoyDeadZone			= 0.35f;	// [XboxDrv.XboxClient] JoyDeadZone in Epic's inis
 	LogInput			= 0;
+	SplitScreenJoinInMatch	= 1;	// G-6: players 3 and 4 (UC2's menus stop at two; splitscreen.md)
 	UIScaleMode			= UISCALE_Fit43;	// D-2: the UI in a centred 4:3 box (Native640 = as before)
 	UIMenuBackground	= UIMENUBG_Fill;	// D-2: menu backgrounds fill the window (ui-scale.md)
 	UISharpText			= 1;				// D-2: glyphs from bigger sizes of the font when the UI is scaled up
@@ -162,9 +164,12 @@ void USDL2Client::Destroy()
 {
 	guard(USDL2Client::Destroy);
 
-	// Make sure to shut down Viewports first.
-	for( INT i=0; i<Viewports.Num(); i++ )
-		Viewports(i)->ConditionalDestroy();
+	// Make sure to shut down Viewports first. G-6: last first, so the split-screen viewports go before
+	// viewport 0, whose window, device and console they borrow (a viewport's Destroy also takes it out of
+	// the list, which made the old forward loop skip every second one).
+	for( INT i=Viewports.Num()-1; i>=0; i-- )
+		if( i < Viewports.Num() )
+			Viewports(i)->ConditionalDestroy();
 
 	// Shut down GRenDev.
 	if( Engine && Engine->GRenDev )
@@ -304,14 +309,30 @@ void USDL2Client::Tick( FLOAT DeltaSeconds )
 {
 	guard(USDL2Client::Tick);
 
+	// The active controller id, restored after the unbound pads were read (UXboxClient::Tick).
+	BYTE PreviousControllerId = Engine->ActiveControllerId;
 	PollGamepads( DeltaSeconds );
+	Engine->ActiveControllerId = PreviousControllerId;
 
-	// Blit any viewports that need blitting.
+	// Blit any viewports that need blitting. G-6: split-screen viewports are rectangles of one window, so
+	// one frame is presented, as UXboxClient::Tick does: only the first viewport drawn is given Blit (it
+	// presents the whole frame at the start of its next draw, UGameEngine::Draw), and a viewport the
+	// split-screen manager disabled (bDisableDraw: the split views while the menus are up) is not drawn.
+	// With one viewport this is what it always was.
+	UBOOL BlitViewport = 1;
+	DOUBLE CurrentTime = appSeconds();
 	for( INT i=0; i<Viewports.Num(); i++ )
 	{
 		USDL2Viewport* Viewport = CastChecked<USDL2Viewport>(Viewports(i));
-		if( (Viewport->IsRealtime() || (Viewport->DirtyViewport != 0)) && Viewport->SizeX && Viewport->SizeY )
-			Viewport->Repaint( (Viewport->DirtyViewport == -1) ? 0 : 1, DeltaSeconds );
+		if( !(Viewport->IsRealtime() || (Viewport->DirtyViewport != 0)) || !Viewport->SizeX || !Viewport->SizeY )
+			continue;
+		if( Viewport->bDisableDraw )
+		{
+			Viewport->CurrentTime = CurrentTime;
+			continue;
+		}
+		Viewport->Repaint( (BlitViewport && Viewport->DirtyViewport != -1) ? 1 : 0, DeltaSeconds );
+		BlitViewport = 0;
 	}
 
 	unguard;
@@ -410,7 +431,16 @@ void USDL2Client::GetInitScreenSize( INT& SizeX, INT& SizeY )
 {
 	guard(USDL2Client::GetInitScreenSize);
 
-	if( Viewports.Num() && Viewports(0)->IsFullscreen() )
+	// G-6: the window's size once it has one: the screen the split-screen layouts divide
+	// (UXboxClient::GetInitScreenSize: the back buffer's size). Viewport 0's SizeX/SizeY are its own
+	// rectangle while split.
+	USDL2Viewport* Main = Viewports.Num() ? (USDL2Viewport*)Viewports(0) : NULL;
+	if( Main && Main->WindowSizeX>0 && Main->WindowSizeY>0 )
+	{
+		SizeX = Main->WindowSizeX;
+		SizeY = Main->WindowSizeY;
+	}
+	else if( Main && (Main->BlitFlags & BLIT_Fullscreen) )
 	{
 		SizeX = FullscreenViewportX;
 		SizeY = FullscreenViewportY;
@@ -422,6 +452,83 @@ void USDL2Client::GetInitScreenSize( INT& SizeX, INT& SizeY )
 	}
 
 	unguard;
+}
+
+/*-----------------------------------------------------------------------------
+	Split screen (G-6, docs/porting/analysis/splitscreen.md).
+-----------------------------------------------------------------------------*/
+
+//
+// Start on a pad that drives no viewport (UXboxClient::UpdateGamepadUnboundInput, XboxClient.cpp:878-917):
+// when the menus allow a player to join, the pad takes a viewport that has no pad, or a new split-screen
+// player is made for it (UClient::BeginSplitScreen). Returns whether the press was used up (it then does
+// not reach the menus). PC addition (SplitScreenJoinInMatch): in a running match, where UC2's menus never
+// allow a join and stop at two players anyway (GUIController.AllowControllerJoin, MAX_VIEWPORTS=2), the
+// press adds a split-screen player directly, up to the manager's MaxSplitScreens (4).
+//
+UBOOL USDL2Client::PadJoin( INT Slot )
+{
+	guard(USDL2Client::PadJoin);
+	if( !Viewports.Num() )
+		return 0;
+	if( AllowControllerJoin() )
+	{
+		for( INT i=0; i<Viewports.Num(); i++ )
+			if( Viewports(i)->GetGamepadID()==UViewport::INVALID_GAMEPAD_ID && Viewports(i)->Actor )
+			{
+				// The first binding at start-up: the press also goes on to the menus (Xbox).
+				Viewports(i)->SetGamepadID( Slot );
+				debugf( NAME_Log, TEXT("Split screen: pad %i takes viewport %s"), Slot, Viewports(i)->GetName() );
+				return 0;
+			}
+		UBOOL Joined = BeginSplitScreen( this, Slot );
+		debugf( NAME_Log, TEXT("Split screen: pad %i Start in the menus: %s"), Slot, Joined ? TEXT("joined") : TEXT("no player made") );
+		return Joined;
+	}
+	USplitScreenMgr* Mgr = GetSplitScreenMgr();
+	UGameEngine* GameEngine = Cast<UGameEngine>( Engine );
+	ULevel* Level = GameEngine ? GameEngine->GLevel : NULL;
+	ALevelInfo* Info = Level ? Level->GetLevelInfo() : NULL;
+	UBaseGUIController* GUI = Viewports(0)->GUIController;
+	if( SplitScreenJoinInMatch && Mgr && Info && Level!=GameEngine->GEntry
+	&&	appStricmp( Level->GetOuter()->GetName(), TEXT("MENU") )!=0
+	&&	(Info->NetMode==NM_Standalone || Info->NetMode==NM_ListenServer)
+	&&	!(GUI && GUI->bActive)
+	&&	Mgr->NumActiveSplitViews() < Mgr->MaxSplitScreens )
+	{
+		UBOOL Joined = Mgr->CreateSplitPlayer( NULL, Slot ) != NULL;
+		debugf( NAME_Log, TEXT("Split screen: pad %i Start in the match: %s (%i split views)"), Slot, Joined ? TEXT("joined") : TEXT("no player made"), Mgr->NumActiveSplitViews() );
+		if( Joined )
+			Mgr->RefreshPlayerHUDs();
+		return Joined;
+	}
+	return 0;
+	unguard;
+}
+
+//
+// The window changed size: the split-screen rectangles follow (USplitScreenMgr::UpdateSizes, Scion's layouts).
+//
+void USDL2Client::UpdateSplitLayout()
+{
+	guard(USDL2Client::UpdateSplitLayout);
+	USplitScreenMgr* Mgr = GetSplitScreenMgr();
+	UGameEngine* GameEngine = Cast<UGameEngine>( Engine );
+	if( Mgr && (Mgr->NumActiveSplitViews() || Mgr->OverlayView) && GameEngine && GameEngine->GLevel )
+		Mgr->UpdateSizes();
+	unguard;
+}
+
+//
+// Whether the window shows the cursor: a menu's cursor of the window's viewport, or, while split, of the
+// overlay viewport that draws the menus (it has no window of its own).
+//
+UBOOL USDL2Client::CursorWanted()
+{
+	for( INT i=0; i<Viewports.Num(); i++ )
+		if( Viewports(i)->bShowWindowsMouse && (i==0 || Viewports(i)->bShowMenu) )
+			return 1;
+	return 0;
 }
 
 /*-----------------------------------------------------------------------------
