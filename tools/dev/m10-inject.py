@@ -322,6 +322,9 @@ def vprobe(tag):
                              'overlay': int(g[16]), 'window': int(g[17]), 'actor': g[18], 'pawn': int(g[19]),
                              'loc': (float(g[20]), float(g[21]), float(g[22])), 'rot': (int(g[23]), int(g[24]), int(g[25])),
                              'hud': g[26], 'fov': float(g[27])})
+                rows[-1]['player'] = (re.search(r' player=(\S+)', line) or re.search(r'()$', line)).group(1)
+                rows[-1]['gui'] = int((re.search(r' gui=(-?\d+)', line) or re.search(r'(-1)', '-1')).group(1))
+                rows[-1]['shots'] = int((re.search(r' shots=(-?\d+)', line) or re.search(r'(-1)', '-1')).group(1))
         if len(rows) < n:
             time.sleep(0.1)
     V[tag] = rows

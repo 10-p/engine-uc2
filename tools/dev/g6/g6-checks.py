@@ -1,0 +1,77 @@
+# G-6 helpers for tools/dev/m10-inject.py scenarios (loaded with `pyfile`; tools/dev/g6-splitscreen.sh).
+# They read V/VS (the `vprobe` results) and compute what Scion's USplitScreenMgr::UpdateSizes
+# (Source/Engine/Src/UnSplitScreenMgr.cpp) gives each split view, so a check compares the engine with the
+# layout written down independently here.
+import json
+
+
+def layout(n, w, h):
+    """Rectangles (x, y, w, h) of split views 0..n-1 on a w x h screen, BorderThickness 0."""
+    hw, hh = w // 2, h // 2
+    if n <= 1:
+        return [(0, 0, w, h)]
+    if n == 2:
+        return [(0, 0, w, hh), (0, hh, w, hh)]
+    if n == 3:
+        return [(0, 0, w, hh), (0, hh, hw, hh), (hw, hh, hw, hh)]
+    return [(0, 0, hw, hh), (hw, 0, hw, hh), (0, hh, hw, hh), (hw, hh, hw, hh)]
+
+
+def layout_ok(tag):
+    n, nsplit, (w, h) = VS[tag]
+    rects = vrects(tag)
+    if nsplit == 0:
+        return n == 1 and V[tag][0]['rect'] == (0, 0, w, h) and V[tag][0]['menu'] == 1 and V[tag][0]['scene'] == 1
+    over = [r for r in V[tag] if r['overlay']]
+    return (rects == layout(nsplit, w, h) and n == nsplit + 1 and len(over) == 1
+            and over[0]['rect'] == (0, 0, w, h) and over[0]['menu'] == 1 and over[0]['scene'] == 0
+            and all(r['menu'] == 0 and r['scene'] == 1 and r['disabled'] == 0 for r in vsplit(tag)))
+
+
+def pads_in_join_order(tag):
+    return [r['pad'] for r in vsplit(tag)] == list(range(len(vsplit(tag))))
+
+
+def all_split_huds(tag):
+    return all(r['hud'].endswith('_Split') for r in vsplit(tag)) and all(r['pawn'] == 1 for r in vsplit(tag))
+
+
+def moved(a, b):
+    """Distance each split player's pawn moved between vprobes a and b (split index order)."""
+    return [round(vdist(a, b, i), 1) for i in range(len(vsplit(a)))]
+
+
+def only_moved(a, b, k, far=50.0, still=2.0):
+    m = moved(a, b)
+    return m[k] > far and all(d < still for i, d in enumerate(m) if i != k)
+
+
+def only_moved2(a, b, c, k, far=50.0, still=2.0):
+    """Forward then back (a wall in front of one of them does not decide the check)."""
+    m1, m2 = moved(a, b), moved(b, c)
+    return m1[k] + m2[k] > far and all(m1[i] + m2[i] < still for i in range(len(m1)) if i != k)
+
+
+def fired(a, b):
+    """Shots (weapon FlashCount changes) of each split player between vprobes a and b."""
+    return [(vsplit(b)[i]['shots'] - vsplit(a)[i]['shots']) & 255 for i in range(len(vsplit(a)))]
+
+
+def only_fired(a, b, k):
+    f = fired(a, b)
+    return f[k] > 0 and all(d == 0 for i, d in enumerate(f) if i != k)
+
+
+def turned(a, b):
+    return [vyaw(a, b, i) for i in range(len(vsplit(a)))]
+
+
+def only_turned(a, b, k, far=500, still=30):
+    t = turned(a, b)
+    return abs(t[k]) > far and all(abs(d) < still for i, d in enumerate(t) if i != k)
+
+
+def dump(path):
+    with open(path, 'w') as f:
+        json.dump({'V': V, 'VS': VS}, f, indent=1)
+    return True

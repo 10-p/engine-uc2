@@ -571,14 +571,17 @@ void FSDL2InputTest::ProbeViewports( USDL2Client* Client, const TCHAR* Tag )
 				if( Mgr->GetSplitView(s)==V )
 					SplitIndex = s;
 		debugf( SDL2INPUT,
-			TEXT("vp %s %i name=%s pad=%i rect=(%i,%i,%i,%i) scale=(%.3f,%.3f) fovscale=(%.3f,%.3f) menu=%i scene=%i disabled=%i split=%i overlay=%i window=%i actor=%s pawn=%i loc=(%.1f,%.1f,%.1f) rot=(%i,%i,%i) hud=%s fov=%.3f"),
+			TEXT("vp %s %i name=%s pad=%i rect=(%i,%i,%i,%i) scale=(%.3f,%.3f) fovscale=(%.3f,%.3f) menu=%i scene=%i disabled=%i split=%i overlay=%i window=%i actor=%s pawn=%i loc=(%.1f,%.1f,%.1f) rot=(%i,%i,%i) hud=%s fov=%.3f player=%s gui=%i shots=%i"),
 			Tag, i, V->GetName(), (INT)V->GamepadID, V->OffsetX, V->OffsetY, V->SizeX, V->SizeY, V->ScaleX, V->ScaleY,
 			V->ScaleFOVX, V->ScaleFOVY, (INT)V->bShowMenu, (INT)V->bShowScene, (INT)V->bDisableDraw, SplitIndex,
 			Mgr && Mgr->IsOverlayViewport(V) ? 1 : 0, V->Window ? 1 : 0,
 			PC ? PC->GetClass()->GetName() : TEXT("None"), Pawn ? 1 : 0,
 			Pawn ? Pawn->Location.X : 0.f, Pawn ? Pawn->Location.Y : 0.f, Pawn ? Pawn->Location.Z : 0.f,
 			PC ? PC->Rotation.Pitch : 0, PC ? PC->Rotation.Yaw : 0, PC ? PC->Rotation.Roll : 0,
-			PC && PC->myHUD ? PC->myHUD->GetClass()->GetName() : TEXT("None"), PC ? PC->FovAngle : 0.f );
+			PC && PC->myHUD ? PC->myHUD->GetClass()->GetName() : TEXT("None"), PC ? PC->FovAngle : 0.f,
+			PC && PC->PlayerReplicationInfo ? *PC->PlayerReplicationInfo->PlayerName.Replace(TEXT(" "),TEXT("_")) : TEXT("None"),
+			V->GUIController ? (INT)V->GUIController->bActive : -1,
+			Pawn && Pawn->Weapon ? (INT)Pawn->Weapon->FlashCount : -1 );
 	}
 	unguard;
 }

@@ -949,6 +949,8 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 				ToggleFullscreen();
 				break;
 			}
+			if( Client->LoggingInput() && !Ev.key.repeat )
+				debugf( SDL2INPUT, TEXT("key %s press (viewport %i)"), Input ? Input->GetKeyName(Key) : TEXT("?"), Client->Viewports.FindItemIndex(this) );
 			CauseInputEvent( Key, IST_Press );
 
 			// The control characters WM_CHAR delivers for these keys (never Enter).
@@ -1191,6 +1193,8 @@ void USDL2Viewport::UpdateInput( UBOOL Reset, FLOAT DeltaSeconds )
 		}
 		else if( !Down[Key] )
 		{
+			if( Client->LoggingInput() )
+				debugf( SDL2INPUT, TEXT("key %s released by UpdateInput (focus %i)"), Input->GetKeyName((EInputKey)Key), Focused );
 			CauseInputEvent( Key, IST_Release );
 		}
 	}
