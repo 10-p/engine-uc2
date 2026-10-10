@@ -200,3 +200,34 @@ committed headers), which is what the check compares against: not done. Owner qu
   (`run/t1-ref/System`, tree t3-ref): `dodge` 17/17 PASS (`logs/t3/d6-ref-dodge.txt`, load 4.5). Rerun on t3-run
   at load 3.8: **17 PASS, 0 FAIL** (`logs/t3/d6-dodge-2.txt`). So the two lock-switch checks failed under load
   once and passed on a quieter machine (the owner's rule: a failure under load is rerun before it counts).
+
+## What changed for other presets and tools
+
+- Every preset configures as before when the game folder is found (this workspace: `<repo>/../assets/uc2`) and its
+  17 `.u` are the shipped ones. **Today the asset tree's GUI/UCGameplay/UCMenu are rebuilt ones**, so a plain
+  `cmake --preset native` stops with the refusal above until the coordinator restores them (or a build passes
+  `-DUC2_SCRIPT_PACKAGES_DIR=<WorkUC2>/epic-sources/System`, or `-DUC2_SCRIPT_PATCHES=OFF`).
+- Non-host presets need `build-native/Scripts/System` (or `UC2_SCRIPTS_DIR`, or OFF): a fresh `cmake --preset
+  wasm-perf` before the native build stops with that message.
+- Run trees: `mkrun-uc2.sh` without `UC2_SCRIPTS` now installs the build's patched packages (it used to leave the
+  asset tree's). A tree meant to hold the shipped files needs `UC2_SCRIPTS=none` (the asset tree's) or
+  `UC2_SCRIPTS=<dir of shipped files>`; `m14-scripts-check.sh` was changed accordingly; `d6-mouse.sh`'s
+  D6_SHIP_TREE and similar trees are made by the caller and need the same.
+- The web artifact relinks when the script packages change (LINK_DEPENDS), and carries `scripts/`.
+
+## Open questions (coordinator / owner)
+
+1. The game-folder fallback `<repo>/../assets/uc2` (and `<repo>/../reference/iso-extract/System` for the retail
+   inis) is taken only when it exists and is announced, so the presets keep working in this workspace with no new
+   argument; a stranger passes `-DUC2_ASSETS_DIR`. Keep it, or require the variable (e.g. `export
+   UC2_ASSETS_DIR=...` in `<WorkUC2>/env.sh`, which the tools already read)?
+2. `check-headers` on the patched tree checks everything the shipped packages carry, but not cpptext nor `struct
+   native` blocks (not stored in a `.u`; taken from the committed header). A patch changing either is only caught by
+   a check on full sources, which step 4 removes. Acceptable, or should those two live somewhere checkable (e.g.
+   a C++-side list the decompiler reads)?
+3. After the asset tree is restored to the shipped files, `targets/uc2/file-manifest.json` in the frontend names
+   the rebuilt sizes; it should be regenerated (the overlay then replaces the shipped entries).
+4. A non-host preset takes whatever packages the host build has; it prints the host's sets but does not refuse a
+   different `UC2_SCRIPT_PATCH_SETS` of its own (it has no use for one). Fine?
+5. Windows host (MSYS2, `ucc.exe`): written, not run (no Windows machine); `uc-build.sh` links content folders with
+   `ln -s` (needs `MSYS=winsymlinks:nativestrict` + Developer Mode, or it copies gigabytes).
