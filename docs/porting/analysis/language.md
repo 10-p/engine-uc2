@@ -61,11 +61,11 @@ the read. No engine needs a patch for the read itself (no `logs/g4/<engine>.patc
 
 | target | read (file:line) | ini (`iniPath`) | shipped default |
 |---|---|---|---|
-| uc2 | `Source/Core/Src/UnMisc.cpp:2208-2210` (non-Xbox branch; overrides at :2193) | `System/Avaris.ini` | `Language=int` (`Engine/Config/Default.ini:29`, web copy the same) |
+| uc2 | `Source/Core/Src/UnMisc.cpp:2209-2210` (non-Xbox branch; overrides at :2194) | `System/Avaris.ini` | `Language=int` (`Engine/Config/Default.ini:29`, web copy the same) |
 | ut2004 | `engine-ut2004/Source/Core/Src/UnMisc.cpp:2340-2342` (overrides :2337) | `System/UT2004.ini` | `Language=int` (`Default.ini:32`; `:437 Language=ute` is UnrealEd's own section) |
-| ut99 | `engine-ut99/Source/Core/Src/UnMisc.cpp:1839-1842` (overrides :1836) | `System/UnrealTournament.ini` | `Language=int` (`Default.ini:26`) |
-| ut99-436-compat | `engine-ut99-436-compat/Source/Core/Src/UnMisc.cpp:1938-1940` (overrides :1935) | `System/UnrealTournament.ini` | `Language=int` (`Default.ini:26`) |
-| unreal1 | `engine-unreal1/Source/Core/Src/UnPlat.cpp:426-428` (overrides :424) | `System/Unreal.ini` | `Language=int` (`Unreal.ini:45`) |
+| ut99 | `engine-ut99/Source/Core/Src/UnMisc.cpp:1841-1842` (overrides :1837) | `System/UnrealTournament.ini` | `Language=int` (`Default.ini:26`) |
+| ut99-436-compat | `engine-ut99-436-compat/Source/Core/Src/UnMisc.cpp:1939-1940` (overrides :1935) | `System/UnrealTournament.ini` | `Language=int` (`Default.ini:26`) |
+| unreal1 | `engine-unreal1/Source/Core/Src/UnPlat.cpp:427-428` (overrides :424) | `System/Unreal.ini` | `Language=int` (`Engine/Config/Default.ini:46`) |
 
 Fallback when a string is missing in the chosen language: all five fall back to `.int` per key (UC2
 `LocalizePropertyValue`, `Core/Src/UnMisc.cpp:1230-1245`, folder `Localization\<lang>\` then
