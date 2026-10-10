@@ -247,3 +247,18 @@ other agents' builds and tests) is as big as any difference: on this desktop GPU
 engine's CPU work, not by the multisampled fill and resolve, so the 4x cost is not measurable here. It is on a laptop's
 integrated GPU, which is the owner's reason; not measured here (no such machine). Label: setting checked (file,
 preloaded data, the device's log line); cost "not measurable on this machine".
+
+## State at the hand-back (2026-10-10)
+
+All four items have their evidence above. Frontend: `logs/g10/frontend.patch` only (applied for each harness run and
+taken out again; `ufrontend` shows only its pre-existing `targets/uc2/file-manifest.json` change, which `yarn build`
+regenerates). serve-web holds this branch's artifact (ecdb59aa...). Open questions for the owner:
+
+1. The CLIENT half of the standby check is untouched: a web guest whose host vanishes runs the 3 s client check against
+   its server connection (`ShouldIncludeInStandbyCheck` is not consulted there) and toggles standby on its own game
+   until the connection times out. Exclude that too ("exclude webrtc" read fully)? It would need an override of the
+   client branch, i.e. touching UNetDriver::TickDispatch or the driver's receive clock.
+2. Rumble felt on a real pad in Chrome/Edge (only the fake actuator here).
+3. AA: the cost was not measurable on this desktop; a laptop measurement would confirm the owner's reason.
+4. The new closed-tab net test adds ~2.7 min to `uc2-wasm-net.spec.js` and took that run's cgroup to 6,065 MiB of 6 GiB:
+   run the net spec under 7G, or make the test opt-in.
