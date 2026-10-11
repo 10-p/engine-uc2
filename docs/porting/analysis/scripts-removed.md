@@ -189,3 +189,54 @@ sections 30 and 50):
   and regenerated from the patched tree (a class's cpptext and native structs, which the shipped packages lack, stay as
   committed). `tools/dev/script-build.sh` (M14) remains a dev-machine tool over Epic's text in `epic-sources`, never a
   build input. Truth: `scripts-removed.md`, `patches/README.md`, BUILD.md "Scripts".
+
+## Step 6 (2026-10-11): proof
+
+- **Clean native build**: `rm -rf build-native`, `bin/capped 4G 900 -- cmake --preset native` (rc 0, `-- Script
+  patches: ON, sets epic-fixes,epic-source,mouse-look,player-name,keys-menu; rebuilds UCGameplay;GUI;UCMenu ...;
+  shipped .u from /home/ion/WorkUC2/assets/uc2/System` = the restored asset tree, no extra argument),
+  `bin/capped 6G 5400 -- cmake --build build-native -j2` rc 0 (`logs/t4/{configure,build}-native-clean.log`): decompile
+  UCAnnouncements, UCGameplay, GUI, UCMenu; apply 5 sets; compile; in `build-native/Scripts/System`, `sha256sum -c
+  ../../../patches/reference.sha256`: `UCGameplay.u: OK`, `GUI.u: OK`, `UCMenu.u: OK` (`logs/t4/clean-sha256-check.txt`).
+  No `.huc`, `.upkg` or script source anywhere in the inputs.
+- `cmake --build build-native --target check-headers` rc 0 (`logs/t4/check-headers-cmake.log`): GUIClasses.h,
+  UCGameplayClasses.h current, "(scripts: .../build-native/Scripts/tree)".
+- `cmake --build build-native --target scripts-proof` rc 0, 2 min 6 s (`logs/t4/scripts-proof.log`): `PASS P1: problems 0
+  in 7 packages` (patch table 30 identical; Engine with the dev aid from epic-sources), `PASS P2: 3 packages equal to the
+  reference (reference.sha256)` (each "as the reference"), `PASS P3: decompile, apply and build are deterministic`.
+- `cmake --preset wasm-perf` (`-- Script patches: ON, 3 packages from the host build .../build-native/Scripts/System`) and
+  build rc 0 (`logs/t4/{configure,build}-wasm-perf.log`): `[meta] wrote .../meta.json (...; 3 script packages:
+  System/GUI.u System/UCGameplay.u System/UCMenu.u)`; `build-wasm-perf/Source/SDLLaunch/scripts/` holds the three,
+  `sha256sum -c` of the reference there: 3 OK; meta.json `scripts` = the same sizes and sha256
+  (`logs/t4/wasm-meta-scripts.txt`).
+- Game checks on a run tree of the build (`M14_PREFIX=t4-m14 tools/dev/m14-scripts-check.sh verify menu patcher deadbolt
+  leftovers`, `logs/t4/m14/m14-summary.txt`; trees `run/t4-m14-run` = the build's 3 packages, `run/t4-m14-ship` = the
+  asset tree's shipped ones; load 15 with the wasm build running): `PASS verify` (exit 0, all native class layouts
+  match, Editor layouts match), `PASS menu` (both trees: menu up, 0 Critical, 0 GL errors), `PASS patcher` ("rebuilt
+  tree: not applied to GUI UCGameplay UCMenu (rebuilt), patched Editor Engine UCInventory UnrealGame (shipped there);
+  shipped tree: patched Editor Engine GUI UCGameplay UCInventory UCMenu UnrealGame"), `PASS deadbolt` (both trees),
+  `PASS leftovers`. Then, at load 3-6, `D6_TREE=t4-m14-run D6_SHIP_TREE=t4-m14-ship tools/dev/d6-mouse.sh look dodge`
+  (`logs/t4/d6-look-dodge.txt`): 55 PASS, 0 FAIL (look 38, dodge with dodge-off 17).
+- `git grep -a -c -E 'Source/[A-Za-z0-9]+/Classes'` (`logs/t4/final-grep.txt`): only REPORT.md/REPORT.html (the
+  coordinator's, 10 each) and historical notebooks (controls 6, decompile-spike 2, headers 1, jitter 1, mouse 2,
+  platform-f4 1, pp-scale 1, script-patches 1, vanilla 4) and this notebook (2). No tool, build rule or current doc.
+- `git ls-files | grep -a -c '\.uc$'` = 2 = `git ls-files patches | grep -a -c '\.uc$'`.
+- Memory: configure 4G, builds 6G (-j2: load 11-17 during this task), Python 2G, ucc 3G (inside uc-build.sh), games 2G
+  (one at a time); no ceiling hit (no exit 137).
+
+## Open questions (coordinator / owner)
+
+1. P2 is now a regression reference, not a proof of meaning: a deliberate set change is accepted by regenerating
+   `reference.sha256`. What the sets mean is checked by P1 (Epic's fixes, function by function) and by the game checks;
+   our own sets (mouse-look, player-name, keys-menu) have no independent semantic reference any more. Acceptable?
+2. The reference depends on the inputs the default build documents (shipped `.u`, the retail per-class inis, this
+   repo's decompiler/compiler). A build without the retail inis (`UC2_SCRIPT_RETAIL_INIS_DIR` none and a game folder
+   with the leak's inis) was not measured here; the T3 notes say a few config defaults then differ, so its sha256
+   would not match. Should `scripts` warn when the default build's output differs from the reference?
+3. `--ref` (the old bytecode comparison) has no default: T1's `run/t1-ref` matches the sets as of 4cbe12f only.
+4. The 18 Epic `.vcproj` still list `..\Classes\*.uc` items (kept byte for byte as Epic's). Leave, or strip?
+5. `run/t4-sources/source-classes-4cbe12f.tar.gz` keeps the removed files (Epic's text + our edits) on the dev
+   machine; delete it after the history rewrite if the owner prefers no copy outside epic-sources.
+6. `patches/README.md`'s workflow edits a scratch tree inside `build-native/Scripts/edit-<set>`: a re-configure that
+   cleans `Scripts/` would remove an unfinished edit (T3's configure deletes `Scripts/` only when the patches are
+   turned OFF; not otherwise).
