@@ -360,7 +360,10 @@ rules + web overlay (running), then the asset tree back to shipped packages, `.u
   with white stripes instead of the black leather jacket with two tails); at `322.0 815.6 -99.3 19415 -3255` it is
   fine. Window-size dependent: 2248x1212 fine, 3149x1212 corrupt; 2882 wide is the widest that is fine, one more pixel
   corrupts. Pausing fixes it (teal fade in), unpausing corrupts again. Wireframe looks fine (`temp/char corruption
-  wire.png`): a shader/buffer-size issue in the browser path. Pictures: `temp/char corruption.png`, `temp/char
+  wire.png`). Owner (2026-10-11): it is VERTEX corruption, not texture: some vertices link the elbows, the hair is
+  linked to the feet, and some movements make the character look like it gained wings: positions land on the wrong
+  vertices (bone indices/weights or the vertex stream shifted), with a frame-size-dependent threshold in the browser
+  path. Pictures: `temp/char corruption.png`, `temp/char
   corruption 2.png` (above 2882), `temp/char corruption 2 lower res fine.png`.
 - **H-5 Key glyphs for keyboard players.** Menus show Xbox buttons; with keyboard and mouse the player has to guess.
   Standard behaviour: for player 1 only, touching the keyboard turns the icons into THE CURRENTLY BOUND KEY (accept,
