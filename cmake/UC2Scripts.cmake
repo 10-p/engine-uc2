@@ -278,7 +278,7 @@ endforeach()
 # 3. The patched tree.
 set(_set_files ${CMAKE_SOURCE_DIR}/patches/sets.txt)
 foreach(_s IN LISTS _setlist)
-  file(GLOB_RECURSE _sf CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/patches/${_s}/*.diff ${CMAKE_SOURCE_DIR}/patches/${_s}/new/*.uc)
+  file(GLOB_RECURSE _sf CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/patches/${_s}/*.diff ${CMAKE_SOURCE_DIR}/patches/${_s}/new/*)
   list(APPEND _set_files ${_sf})
 endforeach()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS

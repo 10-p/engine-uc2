@@ -55,7 +55,11 @@ change: every other package stays the shipped one.
 
 Each set's folder has a `README.md` (what it changes, its ini keys, what it depends on), one `<Pkg>.diff` per
 package it changes (paths `<Pkg>/Classes/<Class>.uc`; `patch -p1` reads them too) and whole new classes under
-`new/<Pkg>/Classes/`.
+`new/<Pkg>/Classes/`. A set's resources, files its new classes import with `#exec` (key-glyphs' `Textures/
+KeyGlyphSheet.tga`), sit beside them in `new/<Pkg>/<folder>/`: `uc-patches.py apply` copies them into the tree as
+`<Pkg>/<folder>/`, `uc-build.sh` links them beside the package's `Classes` (where the compiler looks: `FILE=Textures\...`
+is relative to the package's folder), and `uc-patches.py make` leaves them alone (it re-makes only diffs and classes). A
+resource that is generated says so, with its generator, in the set's README.
 
 **`epic-fixes` must be on whenever a package is rebuilt.** The in-memory patcher only patches the packages it was
 made for (the shipped files); a rebuilt package is skipped, so it must carry Epic's fixes itself. Every other set

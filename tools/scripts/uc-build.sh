@@ -125,6 +125,10 @@ for p in "${all[@]}"; do
   rm -rf "${out:?}/$s"
   if [ -n "${want[$p]:-}" ]; then
     mkdir -p "$out/$s"; ln -s "$classes/$p/Classes" "$out/$s/Classes"
+    # a set's resources beside Classes (Textures/ ...: what its #exec lines import; uc-patches.py apply puts them there)
+    for r in "$classes/$p"/*/; do
+      r=$(basename "$r"); [ "$r" = Classes ] || [ ! -d "$classes/$p/$r" ] || ln -sfn "$classes/$p/$r" "$out/$s/$r"
+    done
     if [ $headers = 1 ] && [ -d "$repo/Source/$s/Inc" ]; then
       mkdir -p "$out/$s/Inc"; cp -f "$repo/Source/$s/Inc/"*.h "$out/$s/Inc/" 2>/dev/null || true
     fi

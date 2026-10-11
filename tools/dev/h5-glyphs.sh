@@ -15,6 +15,8 @@
 #            SmartJump 0, Fire); the pad's combo menu shows the Xbox glyphs; the pause menu's keys; then the KEYBOARD /
 #            MOUSE page from the pause menu: JUMP / DODGE := J, and the combo menu's A shows J. Pictures combo-keys,
 #            combo-pad, pause-keys, combo-rebound; pixel check on the combo menu's green A.
+#   look     pictures only (no checks of their own but the scenario's): the character page and the combo menu at
+#            1920x1080 (the D-2 box, the key caps at 2.25x), keys and pad: look-char-keys, look-char-pad, look-combo-*.
 #   vanilla  the menu path on a tree with the shipped GUI.u and UCMenu.u (H5_VANILLA_TREE, default h5v:
 #            UC2_SCRIPTS=none tools/dev/mkrun-uc2.sh build-native h5v): no key glyph line at all, the Xbox A gem with the
 #            keyboard, no error or critical line.
@@ -92,6 +94,23 @@ gem() {
   else
     result FAIL "$n" "$g green pixels in the A glyph's box ($want gem expected)"
   fi
+}
+
+# caps <name> <png> <ge|le> <count> <box...>: the key cap's light rim (grey, every channel 150+, within 25 of each other) in the
+# box, a strip over the top edge of the cap: phase 2 (GUI.KeyGlyphSheet); the phase 1 name and the Xbox gem have none there
+caps() {
+  local n=$1 png=$out/$2.png op=$3 lim=$4; shift 4
+  [ -f "$png" ] || { result FAIL "$n" "no picture $png"; return; }
+  local c; c=$(python3 - "$png" "$@" <<'PY'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert('RGB').crop(tuple(int(v) for v in sys.argv[2:6]))
+px = im.get_flattened_data() if hasattr(im, 'get_flattened_data') else im.getdata()
+print(sum(1 for r, g, b in px if 150 <= min(r, g, b) and max(r, g, b) - min(r, g, b) <= 25))
+PY
+)
+  if [ "$c" "-$op" "$lim" ]; then result PASS "$n" "$c key cap rim pixels at the glyph's top edge (want -$op $lim)"
+  else result FAIL "$n" "$c key cap rim pixels at the glyph's top edge (want -$op $lim)"; fi
 }
 
 # main menu -> INSTANT ACTION -> "no profile" box declined -> three accepts -> the character page
@@ -221,12 +240,48 @@ key Escape
 sleep 2
 key Escape
 sleep 2
-tryseek 20 P['_'].menu == 'None' ;; sleep 0.5
+tryseek 8 P['_'].menu == 'None' ;; key Escape 0.3
 sleep 2
 key x
 expect $P-combo-a-follows-the-rebind \[KeyGlyphs\] game A -> J 10
 sleep 0.4
 shot combo-rebound
+SCEN
+}
+
+scen_look() {
+  to_character
+  cat <<'SCEN'
+shot char-keys
+pad attach
+expect $P-pad-plugged-in-is-pad \[KeyGlyphs\] player one: pad \(pad connected\) 10
+sleep 3
+shot char-pad
+SCEN
+}
+
+scen_lookgame() {
+  cat <<'SCEN'
+wait Bringing Level DM-Deadbolt.MyLevel up for play 120
+sleep 8
+focus
+key Alt_L 0.5
+sleep 4
+chan exec God
+chan exec InfiniteAdrenaline
+sleep 2
+keydown x
+sleep 0.3
+shot combo-keys
+keyup x
+sleep 4
+pad attach
+expect $P-pad-plugged-in-is-pad \[KeyGlyphs\] player one: pad \(pad connected\) 10
+sleep 2
+pad button x 1
+sleep 0.3
+shot combo-pad
+pad button x 0
 SCEN
 }
 
@@ -260,6 +315,9 @@ for s in "${scenarios[@]}"; do
       gem menu-pad-has-a-gem menu-char-pad yes 50 428 78 448
       gem menu-mouse-no-a-gem menu-char-mouse no 50 428 78 448
       gem menu-key-again-no-a-gem menu-char-keys2 no 50 428 78 448
+      logline menu-key-caps-loaded menu "key caps from GUI.KeyGlyphSheet"
+      caps menu-keys-a-is-a-key-cap menu-char-keys ge 10 50 426 80 429
+      caps menu-pad-a-is-no-key-cap menu-char-pad le 2 50 426 80 429
       nolog menu-no-critical menu 'Critical error|appError|Assertion failed|General protection fault|Unhandled signal'
       ;;
     info)
@@ -283,7 +341,18 @@ for s in "${scenarios[@]}"; do
       gem game-combo-keys-no-a-gem game-combo-keys no 305 118 340 145
       gem game-combo-pad-has-a-gem game-combo-pad yes 305 118 340 145
       gem game-combo-rebound-no-a-gem game-combo-rebound no 305 118 340 145
+      caps game-combo-keys-a-is-a-key-cap game-combo-keys ge 10 305 118 340 121
+      caps game-combo-pad-a-is-no-key-cap game-combo-pad le 2 305 118 340 121
       nolog game-no-critical game 'Critical error|appError|Assertion failed|General protection fault|Unhandled signal'
+      ;;
+    look)
+      prep "$tree"
+      scen_look | sed 's/\$P/look/g' > "$out/look.scen"
+      run "$tree" look 420 M10_RES=1920x1080 M10_KEYHOLD=0.6 M10_SLOW=2
+      prep "$tree"
+      scen_lookgame | sed 's/\$P/look-game/g' > "$out/look-game.scen"
+      run "$tree" look-game 420 M10_RES=1920x1080 M10_KEYHOLD=0.6 M10_URL="DM-Deadbolt?NumBots=0"
+      for f in "$out"/look-game-*.png; do [ -f "$f" ] && mv -f "$f" "$out/look-${f##*/look-game-}"; done
       ;;
     vanilla)
       prep "$vtree"
@@ -291,6 +360,7 @@ for s in "${scenarios[@]}"; do
       run "$vtree" vanilla 240
       nolog vanilla-no-key-glyph-lines vanilla 'KeyGlyphs|Key glyphs'
       gem vanilla-keys-keep-the-a-gem vanilla-char-keys yes 50 428 78 448
+      caps vanilla-keys-no-key-cap vanilla-char-keys le 2 50 426 80 429
       nolog vanilla-no-critical vanilla 'Critical error|appError|Assertion failed|General protection fault|Unhandled signal'
       nolog vanilla-no-load-failure vanilla "Failed to load 'GUI.KeyGlyphs'|Can't find .*KeyGlyphs"
       ;;

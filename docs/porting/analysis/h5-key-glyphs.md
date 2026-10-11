@@ -180,3 +180,42 @@ game): **34 passed, 0 failed** (`logs/h5/run1-gl4es.txt`, `logs/h5/glyphs-gl4es/
 - The menus' "back" is the table's B = Escape; the keys page (D-9) edits the game's bindings, not that table, so a
   menu glyph cannot follow a keys-page rebinding; the game's glyphs do (the proof rebinds JUMP / DODGE). The pad's Back
   in the game (ShowScores, Tab) is drawn by no HUD text.
+
+## Step 2 (2026-10-11): phase 1 regression checks
+
+`M14_PREFIX=h5-m14 tools/dev/m14-scripts-check.sh verify patcher menu deadbolt controls` on the phase 1 build: all five
+PASS (`logs/h5/m14-run1.txt`, summary `logs/h5/m14/`): verifyclasses layouts match; the patcher leaves GUI/UCGameplay/
+UCMenu alone; menu and DM-Deadbolt 0 Critical 0 GL errors on both trees; m10-controls keyboard 16, mouse 18, text 7,
+pad 34, both 14 checks.
+
+## Step 3 (2026-10-11): phase 2, key caps in GUI.u
+
+- `tools/dev/make-key-glyphs.py` (Pillow, DejaVu Sans Bold) writes `patches/key-glyphs/new/GUI/Textures/
+  KeyGlyphSheet.tga` (512x512 RGBA, RLE, 487 KB: 105 cells of an 11x11 grid, 46-pixel stride, 44x44 glyphs: A-Z, 0-9,
+  F1-F12, Enter/Esc/Space/Tab/Shift/Ctrl/Alt/Backspace/Del/Ins/Home/End/PgUp/PgDn, the arrows, the mouse buttons, M4,
+  M5, the wheel up/down, the punctuation, the number pad, Caps, Pause, ARROWS, MOUSE, NUMPAD, a blank cap) and
+  `Source/Engine/Src/UnKeyGlyphsSheet.h` (key -> cell). Preview `logs/h5/font/keyglyphs-preview.png`.
+- The set's class imports it: `#exec TEXTURE IMPORT NAME=KeyGlyphSheet FILE=Textures\KeyGlyphSheet.tga MIPS=ON
+  ALPHATEXTURE=1` (clamped), referenced by `var Texture Sheet` so it is kept. GUI.u 371435 -> 1770178 bytes
+  (RGBA8 with mips). ucc on Linux imports it ("Imported Texture GUI.KeyGlyphSheet", `make-GUI.log`).
+- The pipeline carries a set's resources: `uc-patches.py apply` copies `new/<Pkg>/<folder>/` (not Classes) into the tree,
+  `make` re-makes only `new/<Pkg>/Classes`, `uc-build.sh` links `<tree>/<Pkg>/<folder>` beside the package's Classes
+  (the compiler's FILE= is relative to `../<Pkg>`), `UC2Scripts.cmake` depends on every file under `new/`.
+- Engine: `Available()` also loads `GUI.KeyGlyphSheet` (quiet; a sheet of another size is refused with an Init line);
+  `DrawKey` draws the key's cell as a square as big as fits the glyph's cell, centred; a key without a cell gets the
+  blank cap with its phase 1 name inside. First try drew every cap at the canvas origin: `DrawString`'s X/Y are relative
+  to `OrgX/OrgY` and `DrawTile` wants them added (fixed). Without the sheet (an older set) the phase 1 names are drawn.
+- `patches/reference.sha256` re-made (`--work run/h5-proof`): GUI.u bdd57497... 1770178 bytes, UCMenu.u 139c566f...
+  (it records GUI's CRC), UCGameplay.u unchanged. check-headers: current.
+
+### Proof
+`tools/dev/h5-glyphs.sh` (now also `look`: 1920x1080 pictures, and pixel checks for the cap: its light rim along the
+top edge of the A cell, at least 10 pixels with keys, at most 2 with the pad, the phase 1 name or the vanilla gem):
+native `menu info game look vanilla` **54 passed, 1 failed** (`logs/h5/run2.txt`): the failure was the scenario's way
+back from the pause menu under load (one Escape lost, the combo key pressed with the pause menu still up); the way back
+now presses Escape until the probe says no menu, and `game` re-run alone: **17 passed, 0 failed**
+(`logs/h5/run2-game.txt`). GL4ES twin `menu info game`: **48 passed, 0 failed** (`logs/h5/run2-gl4es.txt`).
+Pictures (`logs/h5/glyphs/`): `p2-char.png` (character page keys / pad), `p2-bar-zoom.png`, `p2-info.png` (combo
+instructions: X, the mouse with the right button lit, Space...), `p2-combo.png` (adrenaline menu: keys, pad, after
+JUMP / DODGE := J), `p2-look-bar.png`, `p2-look-combo.png` (1080p); the 1080p pad combo picture missed the menu (it had
+closed: software GL at 1080p is slow); the 640x480 one shows it.

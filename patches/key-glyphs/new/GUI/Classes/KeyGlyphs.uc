@@ -12,6 +12,13 @@
 class KeyGlyphs extends Object
 	abstract;
 
+// Phase 2: the key caps and mouse icons the engine draws (GUI.KeyGlyphSheet: an 11x11 grid of 46-pixel cells, the
+// glyph at +1,+1, 44x44; which key is in which cell: Source/Engine/Src/UnKeyGlyphsSheet.h). Both are made by
+// tools/dev/make-key-glyphs.py. Without it the engine writes the key's name instead.
+#exec TEXTURE IMPORT NAME=KeyGlyphSheet FILE=Textures\KeyGlyphSheet.tga MIPS=ON ALPHATEXTURE=1 UCLAMPMODE=CLAMP VCLAMPMODE=CLAMP
+
+var Texture Sheet;		// keeps the sheet in the package (and loaded with the class)
+
 // Marks every button glyph of S (the 0x02 code and its character) as a game button: the character gets the high bit.
 static final function string InGame( string S )
 {
@@ -32,4 +39,9 @@ static final function string InGame( string S )
 		}
 	}
 	return Out;
+}
+
+defaultproperties
+{
+	Sheet=Texture'GUI.KeyGlyphSheet'
 }

@@ -201,7 +201,9 @@ def cmd_make(name, base, changed, packages, pdir):
             os.remove(os.path.join(sdir, f))
     for pk in (os.listdir(os.path.join(sdir, 'new')) if os.path.isdir(os.path.join(sdir, 'new')) else []):
         if not packages or pk in packages:
-            shutil.rmtree(os.path.join(sdir, 'new', pk))
+            # only the classes: a set's resources (new/<Pkg>/<folder>/, files an #exec imports) are not made from trees
+            if os.path.isdir(os.path.join(sdir, 'new', pk, 'Classes')):
+                shutil.rmtree(os.path.join(sdir, 'new', pk, 'Classes'))
     per_pkg = {}
     stats = []
     for rel in sorted(cf):
@@ -346,6 +348,15 @@ def cmd_apply(base, out, sets, pdir, quiet=False):
             dst = os.path.join(out, rel)
             write_lines(dst, read_lines(src))
             files[rel] = dst
+        # H-5: a set's resources, new/<Pkg>/<folder>/ beside Classes (files its classes import with #exec, e.g.
+        # Textures/), go into the tree as <Pkg>/<folder>/; uc-build.sh links them beside the package's Classes
+        ndir = os.path.join(pdir, name, 'new')
+        for pk in (sorted(os.listdir(ndir)) if os.path.isdir(ndir) else []):
+            for sub in sorted(os.listdir(os.path.join(ndir, pk))):
+                src = os.path.join(ndir, pk, sub)
+                if sub == 'Classes' or not os.path.isdir(src) or not os.path.isdir(os.path.join(out, pk)):
+                    continue
+                shutil.copytree(src, os.path.join(out, pk, sub), dirs_exist_ok=True)
         summary.append('set %-22s %3d hunks, %d new classes%s%s' % (
             name, nh, len(new) - len([r for r in new if r.split('/')[0] in skipped]),
             '' if not report else ', %d moved' % len(report),

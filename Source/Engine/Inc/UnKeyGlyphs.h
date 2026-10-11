@@ -70,6 +70,7 @@ private:
 	INT		Gate;					// 0 unknown, 1 the script set is there, 2 it is not (or ShowKeys=False)
 	BYTE	CharPad[256];			// glyph character -> KGP_* + 1 (0: not a button)
 	UFont*	LabelFont;
+	UTexture* Sheet;				// GUI.KeyGlyphSheet (phase 2), or NULL
 	DWORD	CacheFrame;
 	DWORD	CachedFrame[2][KGP_MAX];
 	INT		Cached[2][KGP_MAX];
