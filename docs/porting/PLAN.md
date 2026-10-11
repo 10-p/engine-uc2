@@ -373,3 +373,18 @@ work without them; P2 is the regression reference `patches/reference.sha256`; `d
   back; the in-game adrenaline prompt shows the three options' buttons). Repro: Instant action > ignore the profile
   nag > accept three times > character page. Two phases: (1) substitute a letter from the game's character set;
   (2) generate key bitmaps (mouse buttons, Esc, Enter...) embedded in the `.u` (ideally) or a `.utx` (if no other way).
+
+**Owner's answers (2026-10-11, after H-1..H-5 were published, a18c3cf):** H-1: `PostProcessTargetScale` defaults to 2
+("a nice middle ground. This game won't run at 640x480 again, so it will always benefit"; a missing ini entry gets
+the compiled default). H-3: works; the left stick hands player one's look to the pad (auto-centring back when the
+mouse rests: "less code to change"). H-5: the glyphs "look really good"; small at 640x480 is fine (a pad player);
+switching on key press is normal; menu back stays Escape/Enter (less error-prone than mouse buttons).
+
+- **X-1 Players 3 and 4 join from the character page** (examine first, "ask questions or issues you find"): a blurb
+  "Player 3 and 4 press start" under the hexagon list; on Start, two extra hexagon tags 3P (bottom-left: the 1P art
+  flipped horizontally, hue changed, label area cleaned, "3P") and 4P (bottom-right, flipped both ways); a new patch
+  set embedding the artwork in the `.u`.
+- **X-2 Sound banks load lazily on the web** (a hitch per bank at first use: "at least 12 significant hitches in the
+  first map"): options (a) queue the sound until the bank is cached (owner steers clear), (b) skip the sound but fetch
+  the bank (only if a safe one-line change), (c) precache the sound folder (121 MB) or, if the distinction is easy,
+  the character/weapon banks always and the level banks per map (the owner leans to c).
