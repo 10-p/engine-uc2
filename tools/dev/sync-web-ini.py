@@ -124,9 +124,14 @@ def main():
         for f in sorted(os.listdir(os.path.join(cfg, d))):
             path = os.path.join(cfg, d, f)
             if d == '' and f in EPIC_COPIES:
-                epic = os.path.join(cfg, '..', '..', '..', 'epic-sources', 'System', f)
-                if os.path.exists(epic) and open(epic, 'rb').read() != open(path, 'rb').read():
-                    print('%s is not byte for byte epic-sources/System/%s' % (f, f)); bad = 1
+                # Epic's file: the UC2 workspace's epic-sources/System, else WorkUnreal's cooked tree (the home since
+                # 2026-10-11), whose System/ keeps Epic's inis byte for byte.
+                for epic in (os.path.join(cfg, '..', '..', '..', 'epic-sources', 'System', f),
+                             os.path.join(cfg, '..', '..', '..', 'assets', 'uc2-assets', 'System', f)):
+                    if os.path.exists(epic):
+                        if open(epic, 'rb').read() != open(path, 'rb').read():
+                            print('%s is not byte for byte %s' % (f, os.path.normpath(epic))); bad = 1
+                        break
                 continue
             if f.lower().endswith('.ini') and b'\r' in open(path, 'rb').read():
                 print('%s has CR line endings: Engine/Config is LF (F-4d, as engine-ut2004)' % os.path.join(d, f)); bad = 1

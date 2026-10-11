@@ -46,6 +46,9 @@ reference=$repo/patches/reference.sha256
 write_ref=0
 shipped=$work/epic-sources/System
 content=$work/assets/uc2
+# WorkUnreal (the home since 2026-10-11): the retail disc's System/ holds the 17 shipped .u; the cooked tree the content.
+[ -d "$work/assets/uc2-retail-assets/System" ] && shipped=$work/assets/uc2-retail-assets/System
+[ -d "$work/assets/uc2-assets/System" ] && content=$work/assets/uc2-assets
 capped=$work/bin/capped
 [ -x "$capped" ] || capped=none
 SP=$repo/Source/Engine/Inc/ScriptPatches.h

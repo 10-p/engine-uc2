@@ -6,17 +6,21 @@ Epic's Xbox/Win32 tree to Linux, Windows (MinGW) and the Web (Emscripten). Priva
 Read in this order: `docs/porting/PLAN.md` (milestones and gates), `docs/porting/LOG.md` (where we are),
 `docs/porting/BLOCKERS.md`, then the `docs/porting/analysis/` note for the area you touch.
 
-## The workspace (everything is inside `/home/ion/WorkUC2`, machine `ion-kubuai`)
+## The workspace: `/home/ion/WorkUnreal` (the canonical home since 2026-10-11)
+
+This repo lives beside every sibling engine and the frontend; the workspace's own `README.md` and `SETUP-GAPS.md`
+describe it (`bin/setup.sh` on a new machine). `$W` below is `/home/ion/WorkUnreal`, i.e. `<repo>/..`.
 
 | Path | What | Rule |
 |---|---|---|
-| `epic-sources/` | the pristine Epic tree, with the leaked script sources (`<Pkg>/Classes`) | never edit; `reference/epic-sources.sha256` proves it; dev-only tools may read it, never a build input |
-| `engine-uc2/` | this repo | GitHub `10-p/engine-uc2` (private, `origin`); the coordinator pushes `main` after each verified merge; history rewritten 2026-10-11 (no UnrealScript sources) |
-| `ufrontend/` | frontend clone, branch `uc2` | no push without the owner's go-ahead |
+| `engine-uc2/` | this repo | GitHub `10-p/engine-uc2` (private, `origin`); history rewritten 2026-10-11 (no UnrealScript sources) |
+| `unreal-frontend-arch-private/` | the frontend (`main`), target `uc2` | no push without the owner's go-ahead |
 | `emsdk/` | Emscripten 5.0.7 | `source ../env.sh` |
-| `assets/uc2/` | canonical asset tree | never committed anywhere |
-| `reference/` | ISOs, community packs, Xbox SDKs, the owner's brief | read-only originals; delete nothing |
-| `/home/ion/WorkUnreal` | the sibling ports (engine-ut2004 is the template) | read-only, never modify |
+| `assets/uc2-assets/` | the cooked asset tree: the game folder (`UC2_ASSETS_DIR`) and what the frontend target serves | an overlay mount of the workspace's read-only image (`assets/mount-assets.sh`); never committed anywhere |
+| `assets/uc2-retail-assets/` | the retail disc's files (its `System/` holds the 17 shipped `.u`, `Characters/Gametypes/Maplists.ini`; `Sounds/` the Xbox banks) | read-only; the script build reads only its three inis (`UC2_SCRIPT_RETAIL_INIS_DIR`) |
+| `bin/capped`, `bin/mem-watchdog` | the memory ceiling and its watchdog (below) | every heavy run |
+| `run/`, `logs/` | run trees (`tools/dev/mkrun-uc2.sh`, or the workspace's `bin/mkruntree.sh <name> uc2 <build>`) and tool logs | scratch |
+| `/home/ion/WorkUC2` | the port's original workspace: `epic-sources/` (Epic's pristine leaked tree, `reference/epic-sources.sha256`) and `reference/` (ISOs, Xbox SDKs, community packs, the owner's brief) | read-only, never copied; a separate home may host long-term specialised work. Only the tools built on Epic's leaked text need it (`tools/dev/script-build.sh`, the Engine part of `uc-patches-proof.sh` P1, `mkassets-uc2.sh`, `import-epic-sources.py`, the report tools): point them at it explicitly; no build, test or publish reads it |
 
 ## Rules
 
@@ -60,7 +64,7 @@ was retried in a loop, was also opened in the Claude desktop app's own browser p
 out-of-memory killer took down the owner's desktop session. These rules exist because of that.
 
 - Every run of the game, a browser, a wasm build under Node, a test harness or wine goes through
-  `<WorkUC2>/bin/capped <memory> <seconds> -- <command>`. It puts the whole process tree in one cgroup with a
+  `$W/bin/capped <memory> <seconds> -- <command>`. It puts the whole process tree in one cgroup with a
   hard memory ceiling and time limit, turns core dumps off, and kills whatever is left when it returns.
 - The owner's memory policy for this 32 GB machine (2026-10-04): one piece of work (a compile, a test, a
   browser run) may use **up to 16 GB as long as that memory is doing something useful**; parallel work (several
@@ -70,7 +74,7 @@ out-of-memory killer took down the owner's desktop session. These rules exist be
 - In practice: give each run the ceiling it plausibly needs, not the maximum (measured so far: native game or
   `ucc-bin` well under 2G; wasm under Node under 3G; one headless-browser boot 3.2G; a full parallel build
   under 6G). A ceiling above 16G for a single run needs a written reason in the notebook. The sum of
-  everything running at once stays under 24G. `<WorkUC2>/bin/mem-watchdog` (warn at 16 GB machine-wide,
+  everything running at once stays under 24G. `$W/bin/mem-watchdog` (warn at 16 GB machine-wide,
   kill all capped runs at 24 GB) should be running; start it if `pgrep -f mem-watchdog` finds nothing.
 - The game has sound since M8. `capped` sets `ALSOFT_DRIVERS=null` unless the caller sets it, so test runs never
   play through the owner's desktop; audio tests choose the wave writer (`tools/dev/run-uc2-audio.sh`).

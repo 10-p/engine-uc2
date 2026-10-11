@@ -47,9 +47,15 @@ set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 classes="" out="" packages="" keep="" mem=3G keep_text=0 headers=0 links=()
-shipped=$work/epic-sources/System
-assets=$work/assets/uc2
-retail=$work/reference/iso-extract/System
+# Defaults: WorkUnreal's trees (the home since 2026-10-11: the retail disc's System/ holds the 17 shipped .u and its
+# inis), else the UC2 workspace's layout.
+if [ -d "$work/assets/uc2-retail-assets/System" ]; then
+  shipped=$work/assets/uc2-retail-assets/System retail=$work/assets/uc2-retail-assets/System
+else
+  shipped=$work/epic-sources/System retail=$work/reference/iso-extract/System
+fi
+assets=$work/assets/uc2-assets
+[ -d "$assets/System" ] || assets=$work/assets/uc2
 ucc=$repo/build-native/Source/UCC/ucc-bin
 capped=$work/bin/capped
 [ -x "$capped" ] || capped=none

@@ -15,6 +15,11 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 build=$(cd "${1:?usage: mkrun-uc2.sh <build-dir> [<tree-name>]}" && pwd)
 name=${2:-$(basename "$build" | sed 's/^build-//')}
+# The tree is HARD-LINKED, and a hard link cannot leave a mount: WorkUnreal's assets/uc2-assets is an overlay mount, so
+# there the default is its real copy native-runtrees/_assets/uc2 (`cp -a assets/uc2-assets/. native-runtrees/_assets/uc2`).
+if [ -z "${UC2_ASSETS_DIR:-}" ] && [ -d "$work/native-runtrees/_assets/uc2/System" ]; then
+  UC2_ASSETS_DIR=$work/native-runtrees/_assets/uc2
+fi
 assets=${UC2_ASSETS_DIR:-$work/assets/uc2}
 run=$work/run/$name
 

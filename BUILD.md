@@ -1,7 +1,7 @@
 # Building engine-uc2 (native, Windows, WebAssembly)
 
 This is the private engine repo for the Unreal Championship 2 port: engine source only. Game content (maps,
-textures, sounds, movies, the compiled `.u` packages) lives out of tree in the game folder (`<WorkUC2>/assets/uc2`
+textures, sounds, movies, the compiled `.u` packages) lives out of tree in the game folder (`<workspace>/assets/uc2-assets`
 here) and is never tracked. One build step reads it: the script patches (below, "Script patches"), which turn the
 game's shipped `.u` into our patched packages; `-DUC2_SCRIPT_PATCHES=OFF` builds without them and reads nothing.
 Run trees are assembled from a build and the asset tree by `tools/dev/mkrun-uc2.sh`.
@@ -20,7 +20,7 @@ cmake --preset native -DUC2_SCRIPT_PATCHES=OFF
 cmake --build build-native -j8
 
 # the web build after it (it takes build-native/Scripts; Emscripten 5.0.7 in the environment, here
-# `source /home/ion/WorkUC2/env.sh`):
+# `source /home/ion/WorkUnreal/env.sh`):
 cmake --preset wasm-perf && cmake --build build-wasm-perf -j4
 ```
 
@@ -33,7 +33,11 @@ cmake --preset wasm-perf && cmake --build build-wasm-perf -j4
 
 The same system packages as engine-ut2004 (32-bit multilib GCC, MinGW-w64 posix, the X11/GL/audio `-dev`
 packages in both architectures, cmake, ninja or make, Node, wine, xvfb, ffmpeg). On this machine they are
-already installed. Emscripten 5.0.7 is private to the workspace: `source /home/ion/WorkUC2/env.sh`.
+already installed. Emscripten 5.0.7 is private to the workspace: `source /home/ion/WorkUnreal/env.sh`.
+
+The workspace (`<workspace>` = `<repo>/..` = `/home/ion/WorkUnreal`, the home since 2026-10-11) holds the game folder
+`assets/uc2-assets` (the cooked tree) and the retail disc `assets/uc2-retail-assets`; the build finds both without
+options (`cmake/UC2Scripts.cmake`), and `<workspace>/bin/build-all-engines.sh engine-uc2` builds every preset in order.
 
 ## Presets
 
@@ -59,7 +63,7 @@ cmake --build build-native -j12
 ## Web (Emscripten; M4w, M11)
 
 ```
-source /home/ion/WorkUC2/env.sh                 # Emscripten 5.0.7, private to the workspace ($EMSDK)
+source /home/ion/WorkUnreal/env.sh              # Emscripten 5.0.7, private to the workspace ($EMSDK)
 cmake --preset wasm-perf
 cmake --build build-wasm-perf -j4               # inside bin/capped 6G (CLAUDE.md)
 #   -> build-wasm-perf/Source/SDLLaunch/SDLLaunch.{js,wasm,data} + meta.json   (the browser artifact)
@@ -110,12 +114,12 @@ bin/capped 4G 600 -- cmake --preset windows                      # i686-w64-ming
 bin/capped 6G 1800 -- cmake --build build-windows -j8             # -> Source/UCC/ucc.exe (with the script compiler
                                                                   #    since S2), Source/SDLLaunch/uc2.exe,
                                                                   #    _deps/openalsoft-build/OpenAL32.dll
-tools/dev/mkrun-uc2.sh build-windows m12                          # run tree <WorkUC2>/run/m12 (exe + dll in System/)
+tools/dev/mkrun-uc2.sh build-windows m12                          # run tree <workspace>/run/m12 (exe + dll in System/)
 tools/dev/m12-wine-smoke.sh                                       # every check under wine, PASS/FAIL lines
-tools/dev/package-windows.sh build-windows                        # <WorkUC2>/run/m12-package: a folder to copy to Windows
+tools/dev/package-windows.sh build-windows                        # <workspace>/run/m12-package: a folder to copy to Windows
 ```
 
-(`bin/capped` is `<WorkUC2>/bin/capped`; every run goes through it, CLAUDE.md.)
+(`bin/capped` is `<workspace>/bin/capped`; every run goes through it, CLAUDE.md.)
 
 - Needs the Debian/Ubuntu packages `g++-mingw-w64-i686-posix` (or any MinGW-w64 13+ with the posix thread model)
   and, to run it here, `wine` (10, WoW64) and `xvfb`. No Visual Studio, no MSYS2. The same CMake works from an
@@ -128,7 +132,7 @@ tools/dev/package-windows.sh build-windows                        # <WorkUC2>/ru
   POSIX threads through winpthreads), not Epic's MSVC `UnVcWin32.*`. Why, and every Windows-specific change:
   `docs/porting/analysis/windows.md`.
 - Under wine: `tools/dev/m12-wine.sh <dir> <prog.exe> [args]` (inside `capped`) runs one program in the private
-  prefix `<WorkUC2>/.cache/wine-m12` and kills its wineserver afterwards.
+  prefix `<workspace>/.cache/wine-m12` and kills its wineserver afterwards.
 - `windows64` (x86_64): see "64-bit" below.
 
 ## arm64 (aarch64 Linux, cross-compiled; F-4c)
@@ -151,7 +155,7 @@ hazards engine-ut2004 met on Android and how each one stands here: `docs/porting
 bin/capped 4G 900 -- cmake --preset native64
 bin/capped 6G 3600 -- cmake --build build-native64 -j6
 file build-native64/Source/UCC/ucc-bin                  # must say ELF 64-bit ... x86-64
-tools/dev/mkrun-uc2.sh build-native64 m13                # run tree <WorkUC2>/run/m13
+tools/dev/mkrun-uc2.sh build-native64 m13                # run tree <workspace>/run/m13
 (cd ../run/m13/System && ../../../bin/capped 3G 300 -- ./ucc-bin verifyclasses)   # 64-bit layout proof
 tools/dev/m13-64bit.sh                                   # every check, PASS/FAIL lines (needs run/m13-32 too)
 ```
@@ -187,7 +191,7 @@ tools/dev/m14-scripts-check.sh                            # the game checks on t
   Never edit them by hand (except a class's `cpptext` and `struct native` blocks, below): change the script (its
   patch set), then `tools/dev/regen-headers.sh` (export in a scratch tree, write into `Source/<Pkg>/Inc`, CRs dropped)
   and commit them with the change. `tools/dev/check-headers.sh` (CMake target `check-headers` of the native preset,
-  not in ALL) exports and compares: exit 0 current, 1 stale (unified diff printed, also in `<WorkUC2>/logs/hdr/`), 2
+  not in ALL) exports and compares: exit 0 current, 1 stale (unified diff printed, also in `<workspace>/logs/hdr/`), 2
   could not run. Both read the build's patched tree `build-*/Scripts/tree` by default (`--classes-root <dir>` for
   another `<dir>/<Pkg>/Classes`; CMake: `-DUC2_HEADERS_CLASSES_ROOT=<dir>`) and take `--build <dir>`.
   `docs/porting/analysis/headers.md`. A patched tree has only the packages the patches rebuild: the check compiles
@@ -205,12 +209,12 @@ tools/dev/m14-scripts-check.sh                            # the game checks on t
 - `make` exits 1 when there was any warning (Epic's `ucc`); the verdict is the log's last line,
   `Success - 0 error(s), N warning(s)`. Memory: well under 3G.
 - **Dev machine only: `tools/dev/script-build.sh`**, the M14 proof tool. It rebuilds all 17 packages from Epic's leaked
-  script text (`<WorkUC2>/epic-sources/<Pkg>/Classes`, read-only; `$UC2_EPIC_SOURCES`, or `--classes-root <dir>`) the
+  script text (`/home/ion/WorkUC2/epic-sources/<Pkg>/Classes`, read-only, outside the workspace: `$UC2_EPIC_SOURCES`, or `--classes-root <dir>`) the
   way Epic's build machine did (`Source/BuildProcess/sync_avaris.pl`: `ucc make -nobind -noh` with the Xbox inis, then
   `ucc editor.stripsource` with the PC inis, conforming each package to the shipped one) and compares the result with
   the shipped packages object by object (`tools/dev/script-diff.py`; every difference is explained in
-  `docs/porting/analysis/scripts.md`). Output `<WorkUC2>/run/m14-make/System/*.u` (`--tree`), logs in
-  `<WorkUC2>/logs/m14/`; `--build build-windows` does the same with `ucc.exe` under wine (S2); `--headers` exports the
+  `docs/porting/analysis/scripts.md`). Output `<workspace>/run/m14-make/System/*.u` (`--tree`), logs in
+  `<workspace>/logs/m14/`; `--build build-windows` does the same with `ucc.exe` under wine (S2); `--headers` exports the
   headers into the tree's own `<Pkg>/Inc` and diffs them with `Source/*/Inc` (which carry our patches: expect those
   differences). It is never a build input, and it needs no file of this repository's but the tools.
 
