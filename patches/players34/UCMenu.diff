@@ -1,0 +1,883 @@
+--- a/UCMenu/Classes/UC2Arena_Character.uc
++++ b/UCMenu/Classes/UC2Arena_Character.uc
+@@ -7,6 +7,11 @@
+ 
+ 
+ class UC2Arena_Character extends UC2Arena_DualBase;
++
++// X-1 (patch set players34): the cursors of players three and four, made by tools/dev/make-player-tags.py from the 1P
++// cursor (patches/players34/README.md); RGBA8 (the importer cannot make DXT3 from an image, 16 KB each)
++#exec TEXTURE IMPORT NAME=UI_Char_3PSelector FILE=Textures\UI_Char_3PSelector.tga MIPS=OFF ALPHATEXTURE=1 UCLAMPMODE=CLAMP VCLAMPMODE=CLAMP
++#exec TEXTURE IMPORT NAME=UI_Char_4PSelector FILE=Textures\UI_Char_4PSelector.tga MIPS=OFF ALPHATEXTURE=1 UCLAMPMODE=CLAMP VCLAMPMODE=CLAMP
+ 
+ 
+ 
+@@ -134,6 +139,12 @@
+ var() transient	MaterialSequence	RandomMovie;
+ var() transient	bool				bIgnoreActivation,
+ 									bFriendJoin;		
++
++// X-1 (players34): players three and four (child viewports 2 and 3): a cursor each and two lines of text
++var()			int							CharIndex34[2];		// their selected character index
++var	automated	GUIImage					img_Cursor34[2];	// 3P, 4P
++var automated	GUILabel					lbl_Players34[2];	// under the honeycomb
++var() transient	int							PendingLeave34;		// pads (a bit per port) whose player leaves at the next Timer
+ 
+ 
+ final function SetRandomMovie()
+@@ -379,6 +390,11 @@
+ 
+ 	if( Id >= LAST_VIEWPORT )
+ 		return false;
++
++	// X-1 (players34): player three's or four's pad: theirs alone, never player two's focus slot
++	playerIdx = Controller.FindControllerPortIndex(Id);
++	if ( playerIdx >= MAX_VIEWPORTS )
++		return Players34Input(playerIdx, Key, State, Axis);
+ 
+ 	if ( bBlockingAnimation )
+ 		return true;
+@@ -976,6 +992,13 @@
+ 		UpdateCharacterData(PlayerIndex);
+ 
+ 	bDirty = bDirty || Controller.bCurMenuInitialized;
++
++	// X-1 (players34): the icons players one and two left or reached changed size
++	if ( PlayerCount34() > MAX_VIEWPORTS )
++	{
++		PlaceCursors34();
++		LogCursors34("player" @ PlayerIndex + 1 @ "port" @ Controller.ControllerId @ "moved");
++	}
+ }
+ 
+ final function UpdateCharacterData( int PlayerIndex )
+@@ -1171,6 +1194,8 @@
+ 		lbl_PlayerText[1].Caption = Caps(class'Localizer'.default.sPlayerTitle) @ "2";
+ 		lbl_JoinText[1].Caption = Caps(class'Localizer'.default.sPressStart);
+ 	}
++
++	UpdatePlayers34Text();	// X-1 (players34)
+ }
+ 
+ final function UpdatePlayerLabel( int PlayerIndex )
+@@ -1289,6 +1314,8 @@
+ 				lbl_JoinText[1].Hide();
+ 			}
+ 		}
++
++		UpdateControlVisibility34();	// X-1 (players34)
+ 	}
+ }
+ 
+@@ -1362,6 +1389,9 @@
+ 
+ final function bool IsDisplayingHandicap( int PlayerIndex )
+ {
++	if ( PlayerIndex >= MAX_VIEWPORTS )		// X-1 (players34): players three and four have no handicap panel
++		return false;
++
+ 	return pnl_Handicap[PlayerIndex].bAcceptsInput;
+ }
+ 
+@@ -1511,6 +1541,14 @@
+ {
+ 	local int PlayerIndex;
+ 
++	// X-1 (players34): player three's or four's choice (SetCharacterIndex from Select34) is not player one's or
++	// two's: no focus moves (GetPlayerIndex would name player two's slot)
++	if ( GetPlayerIndex() >= MAX_VIEWPORTS )
++	{
++		SetProfileCaption();
++		return;
++	}
++
+ 	
+ 	
+ 	
+@@ -1556,7 +1594,8 @@
+ 	local PlayerProfile Profile;
+ 	local string CharacterName;
+ 
+-	for ( PlayerIndex = 0; PlayerIndex < Controller.GetViewportCount(true); PlayerIndex++ )
++	// X-1 (players34): players one and two as Epic's; three and four are "Player 3", "Player 4" (no name slot)
++	for ( PlayerIndex = 0; PlayerIndex < Min(Controller.GetViewportCount(true), MAX_VIEWPORTS); PlayerIndex++ )
+ 	{
+ 		Profile = GetProfile(PlayerIndex);
+ 		if ( !GameStart.HasURLKeyValue(PlayerIndex, "Name") )
+@@ -1564,6 +1603,11 @@
+ 			CharacterName = Profile.GetCharacterName();
+ 			GameStart.SetURLKeyValue(PlayerIndex, "Name", CharacterName);
+ 		}
++	}
++	for ( PlayerIndex = MAX_VIEWPORTS; PlayerIndex < Controller.GetViewportCount(true); PlayerIndex++ )
++	{
++		if ( GameStart != None )
++			GameStart.SetExtraPlayerName(PlayerIndex);
+ 	}
+ 
+ 	Super.SaveSettings(bNoWrite);
+@@ -1703,7 +1747,9 @@
+ 		{
+ 			JoyInput[PlayerIndex].bReady = false;
+ 
+-			if ( !ShouldDisplayHandicap() )
++			if ( PlayerIndex >= MAX_VIEWPORTS )		// X-1 (players34)
++				FadeCursor34(PlayerIndex, false);
++			else if ( !ShouldDisplayHandicap() )
+ 			{
+ 				ToggleHandicapInput(PlayerIndex, false, true);
+ 			}
+@@ -1730,7 +1776,9 @@
+ 		PlayerIndex = ClosingMenu.Tag;
+ 		JoyInput[PlayerIndex].bReady = false;
+ 
+-		if ( !ShouldDisplayHandicap() )
++		if ( PlayerIndex >= MAX_VIEWPORTS )		// X-1 (players34)
++			FadeCursor34(PlayerIndex, false);
++		else if ( !ShouldDisplayHandicap() )
+ 		{
+ 			ToggleHandicapInput(PlayerIndex, false);
+ 		}
+@@ -1854,6 +1902,13 @@
+ 
+ 	log(Name$"::"$GetFuncName()@"InViewport:"$InViewport.Name@"GamepadID:"$InViewport.GetGamepadID()@"ControllerId:"$Controller.ControllerId@"PlayerIndex:'"$PlayerIndex$"'",'DevUI');
+ 
++	// X-1 (players34): player three or four: no profile prompt, no preview
++	if ( PlayerIndex >= MAX_VIEWPORTS )
++	{
++		Join34(PlayerIndex);
++		return;
++	}
++
+ 	ForceProfileLoad(PlayerIndex);
+ 
+ 	if ( CharIndex[PlayerIndex] == -1 )
+@@ -1888,7 +1943,8 @@
+ 
+ event NotifyRemoveViewport( Viewport InViewport )
+ {
+-	local int i;
++	local int i, j;
++	local bool bMoveUp;
+ 
+ 	if( InViewport == None )
+ 		return;
+@@ -1898,9 +1954,28 @@
+ 
+ 	i = Controller.FindViewportIndex(InViewport,true);
+ 
+-	
++	// X-1 (players34): with three or four players, the players after the one leaving move up a place (so player four
++	// becomes player three: their viewports do too)
++	bMoveUp = i > 0 && Controller.GetViewportCount(true) > MAX_VIEWPORTS;
+ 	if ( i > 0 )
+ 		JoyInput.Remove(i,1);
++
++	if ( bMoveUp )
++	{
++		for ( j = i; j < LAST_VIEWPORT - 1; j++ )
++			SetCharIdx34(j, CharIdx34(j + 1));
++		SetCharIdx34(LAST_VIEWPORT - 1, -1);
++		for ( j = MAX_VIEWPORTS; j < PlayerCount34(); j++ )
++		{
++			img_Cursor34[j - MAX_VIEWPORTS].ComponentColor = img_Cursor34[j - MAX_VIEWPORTS].GetComponentColor(true);
++			img_Cursor34[j - MAX_VIEWPORTS].ComponentColor.A = 255;
++			if ( JoyInput[j].bReady )
++				img_Cursor34[j - MAX_VIEWPORTS].ComponentColor.A = 110;
++			img_Cursor34[j - MAX_VIEWPORTS].bOverrideStyle = true;
++		}
++		PlaceCursors34();
++		LogCursors34("player" @ i + 1 @ "left");
++	}
+ 
+ 	UpdateControlVisibility();
+ 	UpdateJoinText();
+@@ -1957,7 +2032,7 @@
+ 
+ 	if ( bShow )
+ 	{
+-		VerifyInputs( SecondPlayerActive() ? 2 : 1 );
++		VerifyInputs( Controller.GetViewportCount(true) );	// X-1 (players34): Epic's SecondPlayerActive() ? 2 : 1
+ 
+ 		UpdateControlVisibility();
+ 		UpdateJoinText();
+@@ -2081,7 +2156,8 @@
+ {
+ 	Super.InitComponent(InController, InOwner);
+ 
+-	VerifyInputs( SecondPlayerActive() ? 2 : 1 );
++	VerifyInputs( Controller.GetViewportCount(true) );	// X-1 (players34): Epic's SecondPlayerActive() ? 2 : 1
++	OnRawXController = PageRawXController;				// X-1 (players34)
+ 
+ 	pnl_Preview[0].img_Static.Image = Material(DynamicLoadObjectFast("T_Portrait", "Portrait_Char_Null_LG", class'Material'));
+ 	pnl_Preview[1].img_Static.Image = Material(DynamicLoadObjectFast("T_Portrait", "Portrait_Char_Null_LG", class'Material'));
+@@ -2166,6 +2242,8 @@
+ 		FadeOut(lbl_CharacterName[i]);
+ 		FadeOut(pnl_Handicap[i]);
+ 		FadeOut(btn_AltChar[i]);
++		FadeOut(img_Cursor34[i]);	// X-1 (players34)
++		FadeOut(lbl_Players34[i]);
+ 	}
+ 
+ 	FadeOut(pnl_Stats);
+@@ -2199,6 +2277,8 @@
+ 		FadeIn(lbl_CharacterName[i]);
+ 		FadeIn(pnl_Handicap[i]);
+ 		FadeIn(btn_AltChar[i]);
++		FadeIn(img_Cursor34[i]);	// X-1 (players34)
++		FadeIn(lbl_Players34[i]);
+ 	}
+ 
+ 	FadeIn(pnl_Stats);
+@@ -2267,6 +2347,8 @@
+ 		Prepare(lbl_CharacterName[i]);
+ 		Prepare(lbl_PlayerText[i]);
+ 		Prepare(lbl_JoinText[i]);
++		Prepare(img_Cursor34[i]);	// X-1 (players34)
++		Prepare(lbl_Players34[i]);
+ 	}
+ 
+ 	Prepare(pnl_Stats);
+@@ -2359,6 +2441,12 @@
+ 	if (bDebugAnimation) log("("$PlayerOwner().Level.TimeSeconds$")"@Name$"::"$GetFuncName()@"Sender:"$Sender.Name,'UIAnimation');
+ 	Sender.OnEndAnimation = None;
+ 	SlideInBegin();
++	// X-1 (players34): their cursors drop in now (players one and two: ReticleAppearBegin)
++	if ( PlayerCount34() > MAX_VIEWPORTS )
++	{
++		PlaceCursors34(true);
++		LogCursors34("page opened");
++	}
+ }
+ 
+ 
+@@ -2455,6 +2543,9 @@
+ 	lbl_CharacterName[0].Pulse(PulseColor, AnimTime);
+ 	lbl_CharacterName[1].Pulse(PulseColor, AnimTime);
+ 
++	lbl_Players34[0].Pulse(PulseColor, AnimTime);	// X-1 (players34)
++	lbl_Players34[1].Pulse(PulseColor, AnimTime);
++
+ 	PulseColor = btn_AltChar[0].GetComponentColor(true);
+ 	PulseColor.A = 255;
+ 	btn_AltChar[0].Pulse(PulseColor, AnimTime);
+@@ -2546,6 +2637,523 @@
+ 	AnimationList[ListIndex].Row[0] = btn;
+ }
+ 
++// =====================================================================================================================
++// X-1 (patch set players34): players three and four (child viewports 2 and 3) on this page
++//
++// A cursor each (3P green, 4P magenta: UI_Char_3PSelector / UI_Char_4PSelector, made by tools/dev/make-player-tags.py
++// from the 1P cursor) and two lines of text under the honeycomb; no preview, handicap, alternative skin or profile
++// (their names are "Player 3", "Player 4": GameStartInfo.SetExtraPlayerName). Their pads are handled here alone and
++// every key of theirs is used up: the GUI keeps two focus slots (native classes), and players three and four would
++// otherwise drive player two's. Stick and d-pad move the cursor (Epic's hexagon moves), A or Start chooses (ready), B
++// takes it back (or leaves when not ready), Back leaves (its viewport is removed at the next GUI tick: Timer), and so
++// does pulling the pad out (GUIPage.PlayerUnplugged). The match spawns them with their own character and name
++// (USplitScreenMgr::CreateSplitPlayer passes each split player's own index since X-1).
++// =====================================================================================================================
++
++// The selected character of player PlayerIndex (0-3).
++final function int CharIdx34( int PlayerIndex )
++{
++	if ( PlayerIndex < MAX_VIEWPORTS )
++		return CharIndex[Max(PlayerIndex, 0)];
++	return CharIndex34[Min(PlayerIndex - MAX_VIEWPORTS, 1)];
++}
++
++final function SetCharIdx34( int PlayerIndex, int NewIndex )
++{
++	if ( PlayerIndex < MAX_VIEWPORTS )
++		CharIndex[Max(PlayerIndex, 0)] = NewIndex;
++	else CharIndex34[Min(PlayerIndex - MAX_VIEWPORTS, 1)] = NewIndex;
++}
++
++// How many players are on the page (a leaving player is already out of JoyInput while its viewport is still listed).
++final function int PlayerCount34()
++{
++	return Min(JoyInput.Length, Controller.GetViewportCount(true));
++}
++
++final function LogCursors34( string Why )
++{
++	local int i;
++	local string S;
++
++	for ( i = 0; i < LAST_VIEWPORT; i++ )
++	{
++		S @= (i + 1) $ "P" @ CharIdx34(i);
++		if ( i < JoyInput.Length && JoyInput[i].bReady )
++			S @= "ready";
++		S $= ";";
++	}
++	log("X-1 players34 cursors (" $ Why $ "):" $ S @ "players" @ PlayerCount34(), 'DevUI');
++}
++
++// The raw keys of the page itself (its OnRawXController): reached when the GUI's focused control for a player three or
++// four (player two's focus slot) is not a character icon, e.g. player two's handicap panel.
++final function bool PageRawXController( GUIComponent Sender, byte Id, out byte Key, out byte State, out float Axis )
++{
++	local int PlayerIndex;
++
++	if ( Id >= LAST_VIEWPORT )
++		return false;
++
++	PlayerIndex = Controller.FindControllerPortIndex(Id);
++	if ( PlayerIndex >= MAX_VIEWPORTS )
++		return Players34Input(PlayerIndex, Key, State, Axis);
++
++	return false;
++}
++
++// Every raw key of player three's or four's pad (the pad's port is Controller.ControllerId): used up here.
++final function bool Players34Input( int PlayerIndex, byte Key, byte State, float Axis )
++{
++	if ( PlayerIndex < MAX_VIEWPORTS || PlayerIndex >= PlayerCount34() || PlayerIndex >= LAST_VIEWPORT )
++		return true;
++
++	if ( bBlockingAnimation || Controller.ActivePage != Self )
++		return true;
++
++	if ( Key == 240 || Key == 241 )		// IK_JoyX, IK_JoyY: the left stick
++		Stick34(PlayerIndex, Key, Axis);
++
++	else if ( State == 1 )				// IST_Press
++	{
++		switch ( Key )
++		{
++		case 208: Players34XControl(PlayerIndex, XC_PadUp);		break;	// the d-pad (IK_Joy9..12)
++		case 209: Players34XControl(PlayerIndex, XC_PadDown);	break;
++		case 210: Players34XControl(PlayerIndex, XC_PadLeft);	break;
++		case 211: Players34XControl(PlayerIndex, XC_PadRight);	break;
++		case 200: Players34XControl(PlayerIndex, XC_A);			break;	// IK_Joy1
++		case 201: Players34XControl(PlayerIndex, XC_B);			break;
++		case 212: Players34XControl(PlayerIndex, XC_Start);		break;	// IK_Joy13
++		case 213: Players34XControl(PlayerIndex, XC_Back);		break;
++		}
++	}
++
++	return true;
++}
++
++// A button of player three or four (UC2Arena_DualBase.InternalOnXControllerEvent when the raw key did not reach the
++// page; Players34Input otherwise). Always used up.
++function bool Players34XControl( int PlayerIndex, eXControllerCodes Code )
++{
++	if ( PlayerIndex < MAX_VIEWPORTS || PlayerIndex >= PlayerCount34() || PlayerIndex >= LAST_VIEWPORT )
++		return true;
++
++	if ( bBlockingAnimation || Controller.ActivePage != Self )
++		return true;
++
++	switch ( Code )
++	{
++	case XC_PadUp:		Move34(PlayerIndex, NDIR_Up);		break;
++	case XC_PadDown:	Move34(PlayerIndex, NDIR_Down);		break;
++	case XC_PadLeft:	Move34(PlayerIndex, NDIR_Left);		break;
++	case XC_PadRight:	Move34(PlayerIndex, NDIR_Right);	break;
++	case XC_A:
++	case XC_Start:		Select34(PlayerIndex);				break;
++	case XC_B:
++		if ( JoyInput[PlayerIndex].bReady )
++			Unready34(PlayerIndex);
++		else Leave34(PlayerIndex);
++		break;
++	case XC_Back:		Leave34(PlayerIndex);				break;
++	}
++
++	return true;
++}
++
++// The left stick: Epic's hexagon moves (InternalRawXController), on player three's or four's cursor.
++final function Stick34( int PlayerIndex, byte Key, float Axis )
++{
++	local float currTime, dAxisTime, dRepeatTime, slope, ManhattanDistance;
++	local int hexSegment, column, row, CharIdx;
++	local GUIButton NextPortrait;
++
++	currTime = PlayerOwner().Level.TimeSeconds;
++	if ( Key == 240 )
++	{
++		JoyInput[PlayerIndex].lastXTime = currTime;
++		JoyInput[PlayerIndex].lastXAxis = Axis;
++		dAxisTime = JoyInput[PlayerIndex].lastXTime - JoyInput[PlayerIndex].lastYTime;
++	}
++	else
++	{
++		JoyInput[PlayerIndex].lastYTime = currTime;
++		JoyInput[PlayerIndex].lastYAxis = Axis;
++		dAxisTime = JoyInput[PlayerIndex].lastYTime - JoyInput[PlayerIndex].lastXTime;
++	}
++
++	if ( JoyInput[PlayerIndex].bReady )
++		return;
++
++	dRepeatTime = currTime - JoyInput[PlayerIndex].lastResponseTime;
++	ManhattanDistance = Sqrt(Square(JoyInput[PlayerIndex].lastXAxis) + Square(JoyInput[PlayerIndex].lastYAxis));
++	if ( ManhattanDistance <= Controller.JoyDeadZone || dAxisTime >= Controller.ButtonRepeatDelay ||
++		dRepeatTime <= 1.5 * Controller.ButtonRepeatDelay )
++		return;
++
++	CharIdx = CharIdx34(PlayerIndex);
++	if ( CharIdx < 0 || CharIdx >= btn_CharIcon.Length )
++		return;
++
++	JoyInput[PlayerIndex].lastResponseTime = currTime;
++	slope = (JoyInput[PlayerIndex].lastXAxis != 0) ? JoyInput[PlayerIndex].lastYAxis / JoyInput[PlayerIndex].lastXAxis : JoyInput[PlayerIndex].lastYAxis * 10000;
++
++	hexSegment = (JoyInput[PlayerIndex].lastYAxis > 0) ? 0 : 3;
++	if ( (slope < -kSqrtThree) || (kSqrtThree < slope) )
++		hexSegment += 1;
++	else if ( slope < 0 )
++		hexSegment += 2;
++
++	row = CharIdx;
++	while ( row >= ColumnCount[column] )
++	{
++		row -= ColumnCount[column];
++		column++;
++	}
++
++	if ( (hexSegment == 0) || (hexSegment == 5) )
++	{
++		NextPortrait = GUIButton(btn_CharIcon[CharIdx].links[NDIR_Right]);
++		if ( (column == 1) && (hexSegment == 0) && (NextPortrait != None) )
++			NextPortrait = GUIButton(NextPortrait.links[NDIR_Up]);
++		else if ( (column != 1) && (hexSegment == 5) && (NextPortrait != None) )
++			NextPortrait = GUIButton(NextPortrait.links[NDIR_Down]);
++	}
++	else if ( (hexSegment == 2) || (hexSegment == 3) )
++	{
++		NextPortrait = GUIButton(btn_CharIcon[CharIdx].links[NDIR_Left]);
++		if ( (column == 1) && (hexSegment == 2) && (NextPortrait != None) )
++			NextPortrait = GUIButton(NextPortrait.links[NDIR_Up]);
++		else if ( (column != 1) && (hexSegment == 3) && (NextPortrait != None) )
++			NextPortrait = GUIButton(NextPortrait.links[NDIR_Down]);
++	}
++	else if ( hexSegment == 1 )
++		NextPortrait = GUIButton(btn_CharIcon[CharIdx].links[NDIR_Up]);
++	else
++		NextPortrait = GUIButton(btn_CharIcon[CharIdx].links[NDIR_Down]);
++
++	if ( NextPortrait != None )
++		MoveTo34(PlayerIndex, NextPortrait.Tag);
++}
++
++final function Move34( int PlayerIndex, int Dir )
++{
++	local int CharIdx;
++	local GUIButton Next;
++
++	CharIdx = CharIdx34(PlayerIndex);
++	if ( JoyInput[PlayerIndex].bReady || CharIdx < 0 || CharIdx >= btn_CharIcon.Length )
++		return;
++
++	Next = GUIButton(btn_CharIcon[CharIdx].Links[Dir]);
++	if ( Next != None )
++		MoveTo34(PlayerIndex, Next.Tag);
++}
++
++final function MoveTo34( int PlayerIndex, int NewIndex )
++{
++	if ( NewIndex == CharIdx34(PlayerIndex) )
++		return;
++
++	SetCharIdx34(PlayerIndex, NewIndex);
++	JoyInput[PlayerIndex].bChoseRandom = false;
++	PlayAction(CS_Modify);
++	PlaceCursor34(PlayerIndex);
++	UpdatePlayers34Text();
++	LogCursors34("player" @ PlayerIndex + 1 @ "port" @ Controller.ControllerId @ "moved");
++}
++
++// A or Start: the character under the cursor (the random icon picks one), then ready.
++final function Select34( int PlayerIndex )
++{
++	local int CharIdx;
++	local name AnnouncerCue;
++	local PlayerController PC;
++
++	if ( JoyInput[PlayerIndex].bReady )
++		return;
++
++	CharIdx = CharIdx34(PlayerIndex);
++	if ( CharIdx == RANDOM_IDX )
++	{
++		JoyInput[PlayerIndex].bChoseRandom = true;
++		CharIdx = GetRandomCharacterIndex();
++		if ( CharIdx >= CHARACTER_COUNT )
++			CharIdx -= CHARACTER_COUNT;		// no alternative skins for players three and four
++		SetCharIdx34(PlayerIndex, CharIdx);
++		PlaceCursor34(PlayerIndex);
++		JoyInput[PlayerIndex].LastAnnouncerCue = '';
++	}
++
++	if ( CharIdx < 0 || CharIdx >= btn_CharIcon.Length || CharIdx == RANDOM_IDX || !bool(ValidCharMask & (1 << CharIdx)) )
++	{
++		PlayAction(CS_Error);
++		return;
++	}
++
++	// the profile (a transient one) carries the character into the player's URL (PlayerProfile.SetCharacterClassName)
++	SetCharacterIndex(PlayerIndex, CharIdx, false);
++
++	AnnouncerCue = CharInfo.GetCharacterAnnouncer(CharIdx, false);
++	if ( AnnouncerCue != 'None' && AnnouncerCue != '' && AnnouncerCue != JoyInput[PlayerIndex].LastAnnouncerCue )
++	{
++		JoyInput[PlayerIndex].LastAnnouncerCue = AnnouncerCue;
++		PC = PlayerOwner(PlayerIndex);
++		if ( PC != None && PC.AlternateAnnouncer != None )
++			PC.AlternateAnnouncer.static.GetReplacement(AnnouncerCue);
++		PlaySound(AnnouncerCue);
++	}
++
++	JoyInput[PlayerIndex].bReady = true;
++	FadeCursor34(PlayerIndex, true);
++	bDirty = IsFinished();
++	UpdateJoinText();
++	LogCursors34("player" @ PlayerIndex + 1 @ "port" @ Controller.ControllerId @ "chose" @ CharInfo.GetCharacterClass(CharIdx, false));
++	ShowNextMenu();
++}
++
++final function Unready34( int PlayerIndex )
++{
++	JoyInput[PlayerIndex].bReady = false;
++	FadeCursor34(PlayerIndex, false);
++	UpdateJoinText();
++	LogCursors34("player" @ PlayerIndex + 1 @ "port" @ Controller.ControllerId @ "not ready");
++}
++
++// The player leaves: its split viewport is removed at the next GUI tick (Timer), outside the input of that viewport.
++final function Leave34( int PlayerIndex )
++{
++	local PlayerController PC;
++
++	PC = PlayerOwner(PlayerIndex);
++	if ( PC == None || PC.GamepadID < 0 || PC.GamepadID >= LAST_VIEWPORT )
++		return;
++
++	log("X-1 players34: player" @ PlayerIndex + 1 @ "(pad" @ PC.GamepadID $ ") leaves the character page", 'DevUI');
++	PendingLeave34 = PendingLeave34 | (1 << PC.GamepadID);
++	PlayAction(CS_Cancel);
++	SetTimer(0.01, false);
++}
++
++event Timer()
++{
++	local int Port, Mask;
++
++	Mask = PendingLeave34;
++	PendingLeave34 = 0;
++	for ( Port = LAST_VIEWPORT - 1; Port >= 0; Port-- )
++		if ( bool(Mask & (1 << Port)) && Controller.ViewportOwner != None && Controller.ViewportOwner.Actor != None )
++			Controller.ViewportOwner.Actor.ConsoleCommand("SPLIT REMOVE ID=" $ Port);
++}
++
++// GUIPage: a pad pulled out; players three and four leave (no ControllerRemovedMenu), as with Back.
++function bool PlayerUnplugged( Player V )
++{
++	local int PlayerIndex;
++
++	PlayerIndex = Controller.FindViewportIndex(V, true);
++	if ( PlayerIndex < MAX_VIEWPORTS || PlayerIndex >= LAST_VIEWPORT )
++		return false;
++
++	Leave34(PlayerIndex);
++	return true;
++}
++
++// GUIPage: four players may join while this page is up (Epic's other pages: two).
++function int MaxControllerJoins()
++{
++	return LAST_VIEWPORT;
++}
++
++// The cursor of player three or four over its character's icon (as PlaceReticle / PlaceInitialReticle; bDrop: the
++// drop from above of the page's opening).
++final function PlaceCursor34( int PlayerIndex, optional bool bDrop )
++{
++	local GUIImage Cur;
++	local GUIButton b;
++	local int CharIdx;
++	local float Time, X, Y, XL, YL;
++	local color PulseColor;
++
++	if ( PlayerIndex < MAX_VIEWPORTS || PlayerIndex >= LAST_VIEWPORT )
++		return;
++
++	Cur = img_Cursor34[PlayerIndex - MAX_VIEWPORTS];
++	CharIdx = CharIdx34(PlayerIndex);
++	if ( CharIdx < 0 || CharIdx >= btn_CharIcon.Length )
++		return;
++
++	b = btn_CharIcon[CharIdx];
++	X = b.ActualLeft();
++	Y = b.ActualTop();
++	XL = b.ActualWidth();
++	YL = b.ActualHeight();
++
++	// the icon is drawn larger while player one's or two's cursor is on it (HighlightIcon)
++	if ( b.WinWidth > IconSize )
++	{
++		X -= 4;
++		Y -= 4;
++		XL += 7;
++		YL += 7;
++	}
++	else
++	{
++		X -= 6;
++		Y -= 6;
++		XL += 10;
++		YL += 10;
++	}
++
++	if ( bDrop )
++	{
++		Cur.KillAnimation();
++		Cur.WinLeft = X;
++		Cur.WinTop = -Cur.ActualHeight();
++		Time = SecondsPerFrame * 5;
++		PulseColor = Cur.GetComponentColor(true);
++		PulseColor.A = 255;
++		if ( PlayerIndex < JoyInput.Length && JoyInput[PlayerIndex].bReady )
++			PulseColor.A = 110;
++		Cur.ComponentColor.A = 0;
++		Cur.bOverrideStyle = true;
++		Cur.AAnimate( X, Y, XL, YL, PulseColor, Time, Time, Time );
++		Cur.Animate( X, Y + 4, SecondsPerFrame * 2 );
++		Cur.Animate( X, Y, SecondsPerFrame * 3 );
++	}
++	else
++	{
++		Cur.KillAnimation((1 << kMotion) | (1 << kSize));
++		Cur.DAnimate( X, Y, XL, YL, 0.075, 0.075 );
++	}
++}
++
++final function PlaceCursors34( optional bool bDrop )
++{
++	local int i;
++
++	for ( i = MAX_VIEWPORTS; i < PlayerCount34() && i < LAST_VIEWPORT; i++ )
++		PlaceCursor34(i, bDrop);
++}
++
++// A ready player's cursor is dimmed (players one and two: theirs gives way to the handicap panel).
++final function FadeCursor34( int PlayerIndex, bool bReady )
++{
++	local GUIImage Cur;
++	local color NewColor;
++
++	Cur = img_Cursor34[PlayerIndex - MAX_VIEWPORTS];
++	Cur.KillAnimation(1 << kColor);
++	NewColor = Cur.GetComponentColor(true);
++	NewColor.A = 255;
++	if ( bReady )
++		NewColor.A = 110;
++	Cur.ComponentColor = Cur.GetComponentColor(true);
++	Cur.bOverrideStyle = true;
++	Cur.Pulse(NewColor, HandicapAnimationSeconds * 2);
++}
++
++// The cursor of player three or four starts on their profile's character (a transient profile's: Epic's default).
++final function InitChar34( int PlayerIndex )
++{
++	local PlayerProfile Profile;
++	local int CharIdx;
++
++	CharIdx = -1;
++	Profile = GetProfile(PlayerIndex);
++	if ( Profile != None )
++		CharIdx = CharInfo.GetCharacterIndex(Profile.GetCharacterClass());
++	if ( CharIdx < 0 || CharIdx >= btn_CharIcon.Length )
++		CharIdx = RANDOM_IDX;
++	SetCharIdx34(PlayerIndex, CharIdx);
++}
++
++// Player three or four joined (NotifyAddViewport): no profile prompt, the cursor on the profile's character.
++final function Join34( int PlayerIndex )
++{
++
++	JoyInput[PlayerIndex].bReady = false;
++	JoyInput[PlayerIndex].bChoseRandom = false;
++	JoyInput[PlayerIndex].LastAnnouncerCue = '';
++
++	InitChar34(PlayerIndex);
++
++	img_Cursor34[PlayerIndex - MAX_VIEWPORTS].ComponentColor = img_Cursor34[PlayerIndex - MAX_VIEWPORTS].GetComponentColor(true);
++	img_Cursor34[PlayerIndex - MAX_VIEWPORTS].ComponentColor.A = 255;
++	UpdateControlVisibility();
++	UpdateJoinText();
++	PlaceCursor34(PlayerIndex, Controller.bCurMenuInitialized);
++	PlayAction(CS_Click);
++	LogCursors34("player" @ PlayerIndex + 1 @ "port" @ Controller.ControllerId @ "joined");
++}
++
++final function UpdateControlVisibility34()
++{
++	local int i;
++
++	for ( i = 0; i < 2; i++ )
++	{
++		// players three and four already there when the page opens (back from the armory or the map list)
++		if ( MAX_VIEWPORTS + i < PlayerCount34() && CharIndex34[i] == -1 )
++			InitChar34(MAX_VIEWPORTS + i);
++
++		if ( bVisible && MAX_VIEWPORTS + i < PlayerCount34() )
++			img_Cursor34[i].Show();
++		else img_Cursor34[i].Hide();
++
++		// as Epic's "PRESS START" for player two: not in the Xbox Live area
++		if ( bVisible && !InXboxLiveArea() )
++			lbl_Players34[i].Show();
++		else lbl_Players34[i].Hide();
++	}
++}
++
++// The two lines under the honeycomb, in the game's language (Engine's Localizer): "PLAYER 3 / 4", "PRESS START" while
++// nobody is there; then a line each, named as their cursors' tags: "3P <CHARACTER> [READY]", "4P PRESS START" (with
++// "PLAYER 3: <CHARACTER> [READY]" the line does not fit in the free strip, not even in English).
++final function UpdatePlayers34Text()
++{
++	local int i, Count, CharIdx;
++	local string S, Line[2];
++
++	Count = PlayerCount34();
++	if ( Count <= MAX_VIEWPORTS )
++	{
++		Line[0] = Caps(class'Localizer'.default.sPlayerTitle) @ "3 / 4";
++		Line[1] = Caps(class'Localizer'.default.sPressStart);
++	}
++	else
++	{
++		for ( i = 0; i < 2; i++ )
++		{
++			S = string(MAX_VIEWPORTS + i + 1) $ "P";
++			if ( MAX_VIEWPORTS + i < Count )
++			{
++				CharIdx = CharIdx34(MAX_VIEWPORTS + i);
++				if ( CharIdx == RANDOM_IDX )
++					S @= Caps(class'Localizer'.default.sRandom);
++				else if ( CharIdx < 0 || CharIdx >= btn_CharIcon.Length || !bool(ValidCharMask & (1 << CharIdx)) )
++					S @= Caps(class'Localizer'.default.sUnknown);
++				else
++					S @= Caps(CharInfo.GetCharacterName(CharIdx, false));
++
++				if ( JoyInput[MAX_VIEWPORTS + i].bReady )
++					S @= "[" $ Caps(class'Localizer'.default.sReady) $ "]";
++			}
++			else S @= Caps(class'Localizer'.default.sPressStart);
++
++			Line[i] = S;
++		}
++	}
++
++	if ( Line[0] != lbl_Players34[0].Caption || Line[1] != lbl_Players34[1].Caption )
++		log("X-1 players34 text:" @ Line[0] @ "|" @ Line[1], 'DevUI');
++
++	lbl_Players34[0].Caption = Line[0];
++	lbl_Players34[1].Caption = Line[1];
++}
++
++
+ defaultproperties
+ {
+ 	Begin Object Class=PreviewScreen Name=CharacterOnePreview
+@@ -2606,6 +3214,54 @@
+ 		WinLeft=272.25
+ 		WinWidth=82.0
+ 		WinHeight=82.0
++	End Object
++	Begin Object Class=GUIImage Name=PlayerThreeCursor
++		Image=Texture'UCMenu.UI_Char_3PSelector'
++		ImageStyle=ISTY_Scaled
++		bVisible=False
++		bConvertBoundY=False
++		RenderWeight=2.0
++		BoundingType=SCALE_All
++		ScalingType=SCALE_All
++		WinTop=51.25
++		WinLeft=272.25
++		WinWidth=82.0
++		WinHeight=82.0
++	End Object
++	Begin Object Class=GUIImage Name=PlayerFourCursor
++		Image=Texture'UCMenu.UI_Char_4PSelector'
++		ImageStyle=ISTY_Scaled
++		bVisible=False
++		bConvertBoundY=False
++		RenderWeight=2.0
++		BoundingType=SCALE_All
++		ScalingType=SCALE_All
++		WinTop=51.25
++		WinLeft=272.25
++		WinWidth=82.0
++		WinHeight=82.0
++	End Object
++	Begin Object Class=GUILabel Name=PlayersThreeFourLineOne
++		TextAlign=TXTA_Center
++		bAutoSizeHorz=False
++		StyleName="Sui12pt_C8C8C8FF"
++		ScaleX=0.9
++		ScaleY=0.9
++		WinTop=0.8236
++		WinLeft=0.3375
++		WinWidth=0.303125
++		WinHeight=0.025
++	End Object
++	Begin Object Class=GUILabel Name=PlayersThreeFourLineTwo
++		TextAlign=TXTA_Center
++		bAutoSizeHorz=False
++		StyleName="Sui12pt_C8C8C8FF"
++		ScaleX=0.9
++		ScaleY=0.9
++		WinTop=0.8458
++		WinLeft=0.3375
++		WinWidth=0.303125
++		WinHeight=0.025
+ 	End Object
+ 	Begin Object Class=GUILabel Name=PlayerOneTitleLabel
+ 		TextAlign=TXTA_Center
+@@ -2718,6 +3374,12 @@
+ 	lbl_CharacterName(1)=GUILabel'CharacterNameTwo'
+ 	pnl_Handicap(0)=CharacterHandicapPanel'CharacterOneHandicap'
+ 	pnl_Handicap(1)=CharacterHandicapPanel'CharacterTwoHandicap'
++	CharIndex34(0)=-1
++	CharIndex34(1)=-1
++	img_Cursor34(0)=GUIImage'PlayerThreeCursor'
++	img_Cursor34(1)=GUIImage'PlayerFourCursor'
++	lbl_Players34(0)=GUILabel'PlayersThreeFourLineOne'
++	lbl_Players34(1)=GUILabel'PlayersThreeFourLineTwo'
+ 	RandomPortraitDelay=0.05
+ 	HandicapAnimationSeconds=0.08
+ 	ZipDelay=0.2
+--- a/UCMenu/Classes/UC2Arena_DualBase.uc
++++ b/UCMenu/Classes/UC2Arena_DualBase.uc
+@@ -34,6 +34,25 @@
+ 	return MIM_Simultaneous;
+ }
+ 
++// X-1 (patch set players34): players three and four (child viewports 2 and 3) have no place on a page made for two
++// (the armory): their buttons are used up here, before the page or player two's controls act on them (GetPlayerIndex
++// would name player two's panel; a B nobody takes closes a page). UC2Arena_Character gives them their own.
++function bool InternalOnXControllerEvent( GUIComponent Sender, byte Id, eXControllerCodes Code )
++{
++	local int PlayerIndex;
++
++	PlayerIndex = Controller.FindControllerPortIndex(Id);
++	if ( PlayerIndex >= MAX_VIEWPORTS )
++		return Players34XControl(PlayerIndex, Code);
++
++	return Super.InternalOnXControllerEvent(Sender, Id, Code);
++}
++
++function bool Players34XControl( int PlayerIndex, eXControllerCodes Code )
++{
++	return true;
++}
++
+ defaultproperties
+ {
+ }

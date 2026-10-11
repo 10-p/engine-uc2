@@ -1,0 +1,176 @@
+--- a/GUI/Classes/GUIController.uc
++++ b/GUI/Classes/GUIController.uc
+@@ -209,6 +209,11 @@
+ 			RealId = int(ControllerId);
+ 			ControllerId = NewChild.GetGamepadID();
+ 			ChildViewports[vpIdx] = Viewport(NewChild);
++			// X-1 (players34): player three or four is named "Player 3" / "Player 4" (no profile, no name slot)
++			if ((vpIdx >= 2) && (GameStartInfo(getGameStart()) != None))
++			{
++				GameStartInfo(getGameStart()).SetExtraPlayerName(vpIdx);
++			}
+ 			i = (MenuStack.Length - 1);
+ 			while ((i >= 0))
+ 			{
+@@ -302,7 +307,9 @@
+ 	{
+ 		return False;
+ 	}
+-	if ((ChildViewports.Length >= 2))
++	// X-1 (players34): the active page says how many players may join while it is up (GUIPage.MaxControllerJoins:
++	// Epic's two; UCMenu's character page four, the most the split-screen code makes)
++	if ((ChildViewports.Length >= 2) && ((ActivePage == None) || (ChildViewports.Length >= Min(ActivePage.MaxControllerJoins(), 4))))
+ 	{
+ 		return False;
+ 	}
+@@ -1878,7 +1885,8 @@
+ 
+ final function SetFocusedControlAt(GUIComponent C, int Index)
+ {
+-	FocusedControl[Clamp(Index, 0, (GetViewportCount(True) - 1))] = C;
++	// X-1 (players34): FocusedControl has two slots (a native class's layout); players three and four share the second
++	FocusedControl[Clamp(Index, 0, (Min(GetViewportCount(True), 2) - 1))] = C;
+ }
+ 
+ final event GUIComponent GetFocusedControl()
+@@ -1888,7 +1896,8 @@
+ 
+ final function GUIComponent GetFocusedControlAt(int Index)
+ {
+-	return FocusedControl[Clamp(Index, 0, (GetViewportCount(True) - 1))];
++	// X-1 (players34): as SetFocusedControlAt
++	return FocusedControl[Clamp(Index, 0, (Min(GetViewportCount(True), 2) - 1))];
+ }
+ 
+ final event bool HasFocusedControl()
+@@ -2791,13 +2800,29 @@
+ 			assert((IndexPC != None));
+ 			if ((PC == IndexPC))
+ 			{
+-				GSI.SetURLKeyValue(i, "Name", PlayerName);
++				// X-1 (players34): players three and four have no name slot of their own (GameStartInfoBase.PlayerName[2]);
++				// theirs is "Player 3" / "Player 4" (GameStartInfo.SetExtraPlayerName)
++				if ((i >= 2) && (GameStartInfo(GSI) != None))
++				{
++					GameStartInfo(GSI).SetExtraPlayerName(i);
++				}
++				else
++				{
++					GSI.SetURLKeyValue(i, "Name", PlayerName);
++				}
+ 				break;
+ 			}
+ 			(i)++;
+ 		}
+ 	}
+-	NewPlayerName = GSI.GetName(i, Profile);
++	if ((i >= 2) && (i < GetViewportCount(True)) && (GameStartInfo(GSI) != None))
++	{
++		NewPlayerName = GameStartInfo(GSI).ExtraPlayerName(i);
++	}
++	else
++	{
++		NewPlayerName = GSI.GetName(i, Profile);
++	}
+ 	bUpdatePlayerNameInGame = (IsMenuLevel() || !(Profile.IsTransient()));
+ 	if ((NewPlayerName != PlayerName))
+ 	{
+@@ -2862,6 +2887,12 @@
+ 				}
+ 				(i)--;
+ 			}
++		}
++		else if ((ActivePage != None) && ActivePage.PlayerUnplugged(Viewport))
++		{
++			// X-1 (players34): the page let that player go (a player three or four on the character page): no
++			// ControllerRemovedMenu
++			bResult = False;
+ 		}
+ 		else
+ 		{
+--- a/GUI/Classes/GUIMultiComponent.uc
++++ b/GUI/Classes/GUIMultiComponent.uc
+@@ -461,7 +461,8 @@
+ 	}
+ 	else
+ 	{
+-		PlayerIndex = GetPlayerIndex();
++		// X-1 (players34): two focus slots (a native class's layout); players three and four share the second
++		PlayerIndex = Clamp(GetPlayerIndex(), 0, (2 - 1));
+ 	}
+ 	FocusedControl[PlayerIndex] = comp;
+ }
+--- a/GUI/Classes/GUIPage.uc
++++ b/GUI/Classes/GUIPage.uc
+@@ -242,6 +242,20 @@
+ 	return False;
+ }
+ 
++// X-1 (players34): how many players may be joined while this page is up (GUIController.AllowControllerJoin). Epic's
++// limit, two; UCMenu's character page says four.
++function int MaxControllerJoins()
++{
++	return 2;
++}
++
++// X-1 (players34): the pad of the player of viewport V was pulled out while this page is up; true when the page lets
++// that player go (then no ControllerRemovedMenu opens).
++function bool PlayerUnplugged(Player V)
++{
++	return False;
++}
++
+ delegate NotifyAddViewport(Viewport InViewport)
+ {
+ }
+--- a/GUI/Classes/GameStartInfo.uc
++++ b/GUI/Classes/GameStartInfo.uc
+@@ -53,10 +53,47 @@
+ 	}
+ }
+ 
++// X-1 (players34): the name of player three or four (PlayerIndex 2 or 3), who have no profile: "Player 3", "Player 4"
++// in the game's language (Engine's Localizer), in the URL's form (spaces as underscores, as GetName gives them).
++final function string ExtraPlayerName(int PlayerIndex)
++{
++	return ReplaceSubstr((Class'Engine.Localizer'.default.sPlayerTitle @ string((PlayerIndex + 1))), " ", "_");
++}
++
++// X-1 (players34): GameStartInfoBase.PlayerName has a slot for two players (a native class's layout), so the name of
++// player three or four is a "Name" entry of their own in URLInformation: GetSpawnURL appends it after the one it takes
++// from PlayerName (clamped to player two's), and a URL keeps the last value of an option (FURL::AddOption).
++final function SetExtraPlayerName(int PlayerIndex)
++{
++	local int i;
++	if ((PlayerIndex < 2))
++	{
++		return;
++	}
++	i = 0;
++	while ((i < URLInformation.Length))
++	{
++		if (((URLInformation[i].PlayerIndex == PlayerIndex) && (URLInformation[i].Key ~= "Name")))
++		{
++			break;
++		}
++		(i)++;
++	}
++	if ((i == URLInformation.Length))
++	{
++		URLInformation.Length = (URLInformation.Length + 1);
++	}
++	URLInformation[i].Key = "Name";
++	URLInformation[i].Value = ExtraPlayerName(PlayerIndex);
++	URLInformation[i].PlayerIndex = PlayerIndex;
++}
++
+ function VerifyPlayerIndex(out int PlayerIndex, PlayerProfile PP)
+ {
+ 	local PlayerController PC;
+-	if (((PlayerIndex >= 0) && (PlayerIndex < 2)))
++	// X-1 (players34): players three and four keep their own index (their URL options are per index; their name is
++	// SetExtraPlayerName's: GameStartInfoBase.PlayerName has two slots)
++	if (((PlayerIndex >= 0) && (PlayerIndex < 4)))
+ 	{
+ 		return;
+ 	}

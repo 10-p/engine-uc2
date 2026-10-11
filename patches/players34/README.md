@@ -1,0 +1,52 @@
+# players34
+
+GUI + UCMenu (X-1 part A, `docs/porting/analysis/x1-players34.md`): players three and four join from the character page
+(`UC2Arena_Character`): their pad's Start there makes a player (Epic's GUI stops at two), each gets a cursor on the
+honeycomb (3P green, bottom-left tag; 4P magenta, bottom-right) and a line of text under it, and the match spawns them
+with the character they chose and the names "Player 3" / "Player 4". No preview, handicap panel, alternative skin or
+profile for them (the owner's decisions, `docs/porting/PLAN.md` "X-1 decisions"). One and two players: as Epic's.
+
+- `GUI.diff`
+  - `GUIPage.MaxControllerJoins()` (new, script only): how many players may be joined while a page is up; 2 (Epic's
+    limit) unless a page says otherwise. `GUIController.AllowControllerJoin` asks the active page instead of
+    `MAX_VIEWPORTS` (at most 4, the split-screen code's limit). The title page keeps two.
+  - `GUIPage.PlayerUnplugged(Player)` (new, script only): a pad pulled out while the page is up; true when the page
+    lets that player go. `GUIController.SetGamepadStatus` then opens no `ControllerRemovedMenu`.
+  - The focus clamps Epic forgot: `GUIController.Get/SetFocusedControlAt` and `GUIMultiComponent.SetFocusedControl`
+    keep the index inside the two focus slots (native arrays `[MAX_VIEWPORTS]`: their layout cannot change), so three or
+    four players in a match share player two's slot without the script VM's "Accessed array 'FocusedControl' out of
+    bounds" lines (167 of them in the vanilla run of `g6-splitscreen.sh x1menu4`, 0 with this set).
+  - `GameStartInfo.VerifyPlayerIndex` keeps indices 2 and 3 (their URL options are per index); `ExtraPlayerName` /
+    `SetExtraPlayerName` (new): players three and four have no slot in `GameStartInfoBase.PlayerName[2]` (an Engine
+    class), so their name is a `Name` entry of their own in `URLInformation`, which `GetSpawnURL` appends after the
+    clamped one (a URL keeps the last value of an option, `FURL::AddOption`). `GUIController.AddChildViewport` and
+    `SetProfilePlayerName` use it for child viewports 2 and 3 (Epic's code wrote player two's or one's name slot).
+- `UCMenu.diff`
+  - `UC2Arena_Character`: slots 3-4 (`CharIndex34`, `img_Cursor34`, `lbl_Players34`); every raw key of player three's
+    or four's pad is handled by the page (`Players34Input` from the icons' `InternalRawXController` and the page's own
+    `OnRawXController`) and used up: stick and d-pad move their cursor (Epic's hexagon moves), A or Start chooses
+    (ready: the cursor dims), B takes it back (or leaves when not ready), Back leaves; the viewport is removed at the
+    next GUI tick (`Timer`: `SPLIT REMOVE ID=<pad>`, engine since X-1); pulling the pad out leaves too.
+    `NotifyAdd/RemoveViewport` (no profile prompt; the players after one leaving move up a place), `IsDisplayingHandicap`
+    (none for them), `UpdateJoinText`/`UpdateControlVisibility`, `UpdateSelectedCharacter` (their choice moves no focus
+    of player two), `SaveSettings` (names), `InternalOnReopened`/`ConfirmLaunchGame`, the opening and closing animations,
+    `VerifyInputs` for every player. The line under the honeycomb: "PLAYER 3 / 4", "PRESS START" (Epic's localised
+    `sPlayerTitle`, `sPressStart`: five languages without an `.int` of ours) until one joins, then "3P <CHARACTER>
+    [READY]" / "4P PRESS START" (the tags' own labels; `sReady`, `sRandom`, `sUnknown`, the character's name).
+  - `UC2Arena_DualBase.InternalOnXControllerEvent`: on the armory (two panels) players three and four's buttons are
+    used up (Epic's code would act on player two's panel, and a B nobody takes closes the page); the character page
+    gives them its own (`Players34XControl`). They take the default loadout.
+- `new/UCMenu/Textures/UI_Char_3PSelector.tga`, `UI_Char_4PSelector.tga` (GENERATED from YOUR `T_UI_2.utx` by
+  `tools/dev/make-player-tags.py`: never edit them; 64x64 RGBA, run-length coded): imported by
+  `UC2Arena_Character`'s `#exec TEXTURE IMPORT` as `UCMenu.UI_Char_3PSelector` / `_4PSelector`, RGBA8 (16 KB each: the
+  importer converts an image only to L8/A8, `UTexture::ConvertFormat`; a DXT3 would need a DDS of ours). Regenerate:
+
+      cd <run tree>/System && ./ucc-bin batchexport T_UI_2.utx Texture dds <dds dir>
+      tools/dev/make-player-tags.py --src <dds dir> --out <scratch dir> --final patches/players34/new/UCMenu/Textures
+
+- **Engine** (shared code, no switch, `Source/Engine/Src/UnSplitScreenMgr.cpp` `CreateSplitPlayer`, `UnCamMgr.cpp`
+  `SPLIT REMOVE ID=`): see the notebook. Without this set the engine's changes do nothing for one or two players.
+- **Ini keys**: none. **Depends on**: epic-fixes (it rebuilds GUI and UCMenu). Comes before key-glyphs in `sets.txt`
+  (`uc-patches.py make` cannot make a set for a package to which an earlier set added classes).
+- Not in this set (X-1 part B): a 2x2 armory for four players, a client with split players.
+- Generated by `tools/dev/uc-patches-regen.sh`. Notebook: `docs/porting/analysis/x1-players34.md`, "Part A".

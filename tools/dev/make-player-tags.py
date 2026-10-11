@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""X-1 (examination): candidate 3P / 4P cursor tags for the character page, made from the game's own 1P tag.
+"""X-1: the 3P / 4P cursor tags of the character page, made from the game's own 1P tag.
 
-    tools/dev/make-player-tags.py --src <dir> --out <dir> [--page <png> --rect X,Y,SIZE]
+    tools/dev/make-player-tags.py --src <dir> --out <dir> [--page <png> --rect X,Y,SIZE] [--final <dir>]
 
 <dir> holds the shipped cursors as the game's tool exports them (from YOUR T_UI_2.utx, nothing of Epic's art is in the
 repository):
@@ -23,6 +23,9 @@ Writes <out>/UI_Char_{3P,4P}Selector-<colour>.tga (64x64 RGBA, run-length coded,
 UCMenu.u), <out>/player-tags-sheet.png (the owner's sheet) and <out>/player-tags-report.txt (the numeric checks).
 With --page (a 1280x720 shot of the character page) and --rect (the cursor's rectangle in that shot) the sheet also
 shows all four cursors on a portrait of the real page: a mock-up composited here, NOT the engine's rendering.
+With --final <dir> it also writes the owner's pair (2026-10-11: 3P green, 4P magenta) as <dir>/UI_Char_3PSelector.tga
+and <dir>/UI_Char_4PSelector.tga: the patch set players34 imports them into UCMenu.u (patches/players34/README.md):
+    tools/dev/make-player-tags.py --src <dds dir> --out <scratch dir> --final patches/players34/new/UCMenu/Textures
 """
 import argparse
 import colorsys
@@ -75,6 +78,7 @@ CANDIDATES = [                # name, hue in degrees (1P is about 52, 2P about 1
     ('green', 120.0), ('red', 0.0), ('magenta', 300.0), ('orange', 28.0), ('violet', 270.0),
 ]
 PAIRS = [('green', 'magenta'), ('red', 'green'), ('magenta', 'orange')]
+FINAL = ('green', 'magenta')   # the owner's choice for players three and four (PLAN.md "X-1 decisions")
 
 
 def lum(p):
@@ -281,6 +285,8 @@ def main():
     ap.add_argument('--out', required=True)
     ap.add_argument('--page', help='a 1280x720 shot of the character page (one player)')
     ap.add_argument('--rect', help='X,Y,SIZE of the 1P cursor in that shot (screen pixels)')
+    ap.add_argument('--final', help='write the chosen pair (3P %s, 4P %s) here as UI_Char_3PSelector.tga / '
+                                    'UI_Char_4PSelector.tga' % FINAL)
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     log = []
@@ -323,6 +329,12 @@ def main():
         for k in ('3P', '4P'):
             tags[(k, name)].save(os.path.join(a.out, f'UI_Char_{k}Selector-{name}.tga'), compression='tga_rle')
     one.save(os.path.join(a.out, 'check-1P-rewritten.png'))
+    if a.final:
+        os.makedirs(a.final, exist_ok=True)
+        for k, name in zip(('3P', '4P'), FINAL):
+            path = os.path.join(a.final, f'UI_Char_{k}Selector.tga')
+            tags[(k, name)].save(path, compression='tga_rle')
+            log.append(f'final: {path} ({k} {name}, 64x64 RGBA, run-length coded)')
 
     # the sheet
     S = 4

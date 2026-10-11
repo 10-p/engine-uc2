@@ -7,7 +7,7 @@
 #   tools/scripts/uc-patches-proof.sh p2 --write-reference      (patches/README.md, "Changing a script")
 # UCGameplay.u 1589538 bytes
 1e795f9302687d8c8821de8cc8adf0857ed541b3b2e5e271134d5a2d5d2270dc  UCGameplay.u
-# GUI.u 1770136 bytes
-807af9a4bc91c262f8fdbdf4c21888f67c2cf167c42e2ca41a8abff3e3375294  GUI.u
-# UCMenu.u 2409852 bytes
-f35e1ae57d6f6bc6129dd813f85b7987ffdac5a7bf8c3aca5f1a6abf8955031c  UCMenu.u
+# GUI.u 1771600 bytes
+2a32a0078235d131d7e49749dbbf5c84fd376c912d51e71ca1b7195799a8e5f2  GUI.u
+# UCMenu.u 2476635 bytes
+1b2955acf02c34638ebc14dd705976a6f7d4896b20f1908e6846e9d9cec4f5fc  UCMenu.u
