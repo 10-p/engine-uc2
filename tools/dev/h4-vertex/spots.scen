@@ -1,0 +1,15 @@
+# H-4 (owner report 2026-10-11): Lauren's polygons cross at the owner's spot when the window is wider than 2882.
+# The spot (corrupt in the report), a step back (fine), the spot again; third person, standing still.
+chan exec TELEPORT 317.1 832.0 -99.3 19415 -3255
+sleep 3
+chan exec WHEREAMI
+shot spot
+sleep 1
+shot spot2
+chan exec TELEPORT 322.0 815.6 -99.3 19415 -3255
+sleep 3
+chan exec WHEREAMI
+shot back
+chan exec TELEPORT 317.1 832.0 -99.3 19415 -3255
+sleep 3
+shot spot3
