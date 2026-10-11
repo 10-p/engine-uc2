@@ -231,8 +231,10 @@ void UUC2GLRenderDevice::StaticConstructor()
 	// pp-scale: the blurs cover the share of the picture they cover on the Xbox's 640x480, also
 	// for an ini that predates the key.
 	PostProcessReferenceHeight = 480;
-	// H-1: the Xbox's texel count for the blur targets unless the ini asks for 2 or 4.
-	PostProcessTargetScale = 1;
+	// H-1: the blur targets at twice the Xbox's texel count (owner, 2026-10-11: "2x is a nice middle ground. This
+	// game won't run at 640x480 again, so it will always benefit"); 1 = the Xbox's count, 4 accepted. A missing ini
+	// entry gets this default.
+	PostProcessTargetScale = 2;
 	// O-8 (owner, 2026-10-06): 16x anisotropic filtering and 4x anti-aliasing by default, also
 	// for an ini that predates the keys.
 	LevelOfAnisotropy		= 16;
