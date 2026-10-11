@@ -76,6 +76,25 @@ static INT WebPadProbe( const char* Id, INT Ordinal )
 }
 
 //
+// H-3: the buttons pressed on the browser's pad Index right now (bit i = Gamepad.buttons[i].pressed), 0 if it is not
+// listed. A browser lists a pad only at its first press, and that press is already down in the snapshot SDL's
+// Emscripten driver keeps as the pad's starting state (SDL_sysjoystick.c Emscripten_JoyStickConnected copies the
+// event's buttons; EMSCRIPTEN_JoystickUpdate reports CHANGES only), so SDL never reports it: read it here once.
+//
+static DWORD WebPadPressed( INT Index )
+{
+	return (DWORD)MAIN_THREAD_EM_ASM_INT({
+		var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+		var g = pads[$0];
+		if (!g || !g.buttons) return 0;
+		var m = 0;
+		for (var i = 0; i < g.buttons.length && i < 31; i++)
+			if (g.buttons[i] && g.buttons[i].pressed) m = m | (1 << i);
+		return m;
+	}, Index );
+}
+
+//
 // One effect on pad Index: the Xbox's left (low-frequency, large) motor is the strong one, the right (high-
 // frequency, small) motor the weak one; magnitudes 0..1. DurationMs 0 = stop (reset()).
 //
@@ -366,6 +385,26 @@ void USDL2Client::PadAdded( INT DeviceIndex )
 			debugf( NAME_Log, TEXT("SDL2 pads: pad %i has no rumble: SDL has none in the browser and %s"), Slot,
 				Probe<0 ? TEXT("the browser lists no pad with its id") : TEXT("this browser gives the pad no vibrationActuator (dual-rumble: Chrome, Edge)") );
 	}
+	// H-3: the press that made the browser list this pad (the owner's Start on the character page) is the pad's starting
+	// state for SDL, never an event: take it from the browser and give it to the first read as a press (a tap).
+	Pad.HeldAtConnectButtons = Pad.HeldAtConnectAxes = 0;
+	DWORD Pressed = Pad.WebIndex>=0 ? WebPadPressed( Pad.WebIndex ) : 0;
+	if( Pressed )
+	{
+		for( INT b=0; b<SDL_CONTROLLER_BUTTON_MAX && b<32; b++ )
+		{
+			SDL_GameControllerButtonBind Bind = SDL_GameControllerGetBindForButton( GC, (SDL_GameControllerButton)b );
+			if( Bind.bindType==SDL_CONTROLLER_BINDTYPE_BUTTON && Bind.value.button>=0 && Bind.value.button<31 && (Pressed & (1u<<Bind.value.button)) )
+				Pad.HeldAtConnectButtons |= 1u<<b;
+		}
+		for( INT a=0; a<SDL_CONTROLLER_AXIS_MAX && a<32; a++ )
+		{
+			SDL_GameControllerButtonBind Bind = SDL_GameControllerGetBindForAxis( GC, (SDL_GameControllerAxis)a );
+			if( Bind.bindType==SDL_CONTROLLER_BINDTYPE_BUTTON && Bind.value.button>=0 && Bind.value.button<31 && (Pressed & (1u<<Bind.value.button)) )
+				Pad.HeldAtConnectAxes |= 1u<<a;
+		}
+		debugf( NAME_Log, TEXT("SDL2 pads: pad %i appeared with a press (browser buttons 0x%x): read as a press of it"), Slot, Pressed );
+	}
 #endif
 
 	// UXboxClient::DetectDevices: insertion is IK_JoySlider1 to the pad's viewport, or to the
@@ -446,6 +485,9 @@ void USDL2Client::ReadPad( INT Slot, BYTE* NewPosition )
 			if( Source >= SDL_CONTROLLER_BUTTON_MAX )
 				continue;
 			UBOOL Down = SDL_GameControllerGetButton( GC, (SDL_GameControllerButton)Source ) != 0;
+#ifdef __EMSCRIPTEN__
+			Down = Down || (Pad.HeldAtConnectButtons & (1u<<Source))!=0;	// H-3: the press that listed the pad
+#endif
 			if( Entry.Target < SDL2DRV_PAD_BUTTONS )
 				NewPosition[Entry.Target] = Max<BYTE>( NewPosition[Entry.Target], Down ? 255 : 0 );
 			else
@@ -457,6 +499,10 @@ void USDL2Client::ReadPad( INT Slot, BYTE* NewPosition )
 			if( Axis >= SDL_CONTROLLER_AXIS_MAX )
 				continue;
 			INT Raw = SDL_GameControllerGetAxis( GC, (SDL_GameControllerAxis)Axis );
+#ifdef __EMSCRIPTEN__
+			if( Pad.HeldAtConnectAxes & (1u<<Axis) )
+				Raw = 32767;	// H-3: a trigger (a button in the browser's standard mapping) that listed the pad
+#endif
 			if( Entry.Target < SDL2DRV_PAD_BUTTONS )
 			{
 				// An axis as an analog button (the triggers): 0..32767 -> 0..255.
@@ -468,6 +514,12 @@ void USDL2Client::ReadPad( INT Slot, BYTE* NewPosition )
 				Axes[Entry.Target-PAD_TARGET_STICK] += (Raw / 32768.f) * (Entry.Invert ? -1.f : 1.f);
 		}
 	}
+
+#ifdef __EMSCRIPTEN__
+	// H-3: the press that listed the pad is read once: down in this read, up in the next (a tap, as SDL then reports the
+	// button as it is, and the browser's release of it changes nothing SDL had).
+	Pad.HeldAtConnectButtons = Pad.HeldAtConnectAxes = 0;
+#endif
 
 	// Optional radial dead zone per stick (the Xbox driver has none: the bindings' DeadZone= does it).
 	for( INT Stick=0; Stick<2; Stick++ )

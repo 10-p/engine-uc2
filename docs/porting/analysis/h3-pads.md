@@ -86,3 +86,41 @@ Camera (patch set `mouse-look`, `UCPlayerInput.PlayerInput`; `patches/reference.
 Native result (logs/h3/n5, load 16-21): `PASS h3-ticked (11 checks)`, `PASS h3-unticked (13 checks)`: in the match
 `captured=1 cursor=0`; mouselook [player one, player two] after mouse motion = [True, False]; unticked: after pad 0's
 left stick alone [False, False], after the mouse again [True, False].
+
+## Step 3 - the browser (frontend worktree `ufrontend-h3`, `uc2-wasm-gamepad.spec.js`, logs/h3/web)
+
+serve-web assembled in the frontend worktree from this worktree's `build-wasm-perf` (sha256 recorded before/after each
+run by `logs/h3/run-gamepad-e2e.sh`); harness `e2e-mem-guard --max-gb=23` inside `capped 7G`; null sink by module index.
+New tests in the spec: "the owner's flow" in three variants (box ticked with the pad's FIRST press being Start on the
+character page; box ticked with the pad pressed at the main menu first; box unticked with player one's pad listed at the
+main menu and a second pad's Start joining), and "box ticked, then a second launch". The fake pad now arrives as a real
+one does (`lib/fake-gamepad.js` `held`: the press that makes the browser list a pad is down in its first snapshot) and
+there can be several (`use(index)`). Every run saves the whole engine log as `engine.log` in the test's output folder.
+
+Measured on the build with step 2 (wasm 69849688..., owner-ticked-2):
+- **The cause on the web**: the pad that appears through its Start on the character page gets port 1 (`SDL2 pads: pad 1
+  connected: Standard Gamepad (keyboard and mouse are player one on port 0: Start joins)`), but its Start is NEVER seen:
+  no `pad 1 button 12` line, no join, the page stays. SDL's Emscripten joystick driver
+  (`emsdk/.../ports/sdl2/SDL-release-2.32.10/src/joystick/emscripten/SDL_sysjoystick.c:76-85`) copies the connect
+  event's buttons as the pad's previous state and `EMSCRIPTEN_JoystickUpdate` (`:343-353`) reports changes only, so
+  the press that made Chrome list the pad is the starting state, never a press; its release is a release of a button SDL
+  has up. The port assignment itself honours `PadsStartAtPlayerTwo` (pad 1 in every ticked run).
+- Pad pressed at the main menu first (variant 2): the listing press likewise never reached the engine (`the press that
+  listed the pad reached the engine: false`); the unjoined pad's D-pad on the main menu was NOT handled by the menus
+  (ticked: an unbound pad on port 1); its later Start on the character page joined (`Split screen: pad 1 Start in the
+  menus: joined`), and the rest passed: Arclite / Anubis spawned, `Split screen: 2 views`, `PADS` pad 1 bound to a
+  viewport, `mouse capture on (cursor wanted 0)` as the last capture line (step 2's fix), mouselook [false, true].
+- Second launch (second-launch-1, 1 passed): the box reads ticked back from the engine's ini on the next page load and a
+  pad pressed in the game takes port 1 without a seed: the launcher's `-ini:` seed and THE RULE are not at fault.
+- Not reproduced: "it still controls the first player" with the box ticked. In every ticked run the pad was on port 1
+  and unbound, and its D-pad did not move the menus. A pad that drives player one's menus and whose Start starts the game
+  is what the UNTICKED mode does (port 0 = player one). Owner question (the engine log's `SDL2 pads: pad N connected`
+  line of such a session says which).
+
+Fix (web only, `Source/SDL2Drv/Src/SDL2Pads.cpp` under `__EMSCRIPTEN__`, fields in `SDL2Drv.h` `FSDL2Pad`):
+`PadAdded` reads the browser pad's pressed buttons once (`WebPadPressed`, a synchronous main-thread call as G-10's
+probe), maps them through SDL's own binding of the "standard" mapping (`SDL_GameControllerGetBindForButton/Axis`) to
+controller buttons and trigger axes (`HeldAtConnectButtons/Axes`), logs `SDL2 pads: pad N appeared with a press (browser
+buttons 0x...)`, and `ReadPad` reads them as down in its first read only (a tap: pressed, released on the next read).
+So the Start that lists the pad is a press of Start: `SendButtonEdges` -> `PadJoin`. Native SDL drivers report a held
+button's state at open (evdev), so native needs nothing.

@@ -75,6 +75,11 @@ struct FSDL2Pad
 	INT		WebIndex;							// navigator.getGamepads() index of this pad
 	UBOOL	WebHaptics;							// it has a vibrationActuator with playEffect
 	DOUBLE	WebHoldUntil;						// the last effect's level holds until then
+	// H-3: what the browser had pressed when the pad appeared (the press that made it list the pad), which SDL's
+	// Emscripten driver takes as the pad's resting state and never reports: SDL_GameControllerButton and
+	// SDL_GameControllerAxis bits, read as pressed by the first ReadPad (SDL2Pads.cpp).
+	DWORD	HeldAtConnectButtons;
+	DWORD	HeldAtConnectAxes;
 #endif
 	TCHAR	Name[64];
 };
