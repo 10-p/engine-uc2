@@ -1182,11 +1182,122 @@ def check_download(http=False):
             httpd_out.close()
 
 
+def check_splitclient():
+    """X-1 part B, the bounded client test (the owner: "if something really breaks, it breaks"): a listen host and ONE
+    client process with two local players who join through the client's menus. On a client a split player can only be
+    made in the menus (UClient::BeginSplitScreen asks the GUI's AllowControllerJoin: the character page; G-6's in-match
+    join is for a standalone game or a listen host), so the client walks player one's pad (port 0) from the main menu to
+    the character page (VERSUS -> DeathMatch -> DM-Deadbolt, as g6-splitscreen.sh's x1menu4), pad 1's Start joins player
+    two there, and then the client connects to the host (console OPEN): after the travel its two viewports are matched
+    to players (MatchSplitViewportsToActors -> CreateSplitPlayer -> "JOINSPLIT GAMEPAD=1 URL=..." -> ULevel's JOINSPLIT:
+    a child connection, SpawnPlayActor). Checked: the join on the page, the host's JOINSPLIT line, the client's two split
+    views, the split player spawns (the host's NETPROBE: three human players) and moves, no Critical."""
+    ck = "splitclient"
+    l = Proc(ck, "L", "listen", "DM-Deadbolt?Listen?Name=NetL").start()
+    procs = [l]
+
+    def press(c, pad, button, after=1.5):
+        c.input("pad %s button %s 1" % (pad, button))
+        time.sleep(0.15)
+        c.input("pad %s button %s 0" % (pad, button))
+        time.sleep(after)
+
+    def item(c, tag):
+        c.input("probe " + tag)
+        m = c.wait(r"probe %s level=\S+ menu=(\S+) .*? item=\"([^\"]*)\"" % re.escape(tag), 15)
+        return (m.group(1), m.group(2)) if m else (None, None)
+
+    def seek(c, cond, tries=12):
+        for i in range(tries):
+            mi = item(c, "s%d" % i)
+            if mi[1] is not None and cond(mi[1]):
+                return True
+            press(c, 0, "dpdown", 0.6)
+        return False
+
+    try:
+        l.wait(r"TcpNetDriver on port|Listen", 90)
+        l.send("exec UNSUPPRESS EVENT=DevSplitScreen")
+        l.input("pad attach")
+        b = Proc(ck, "NetB", "client", "", render="gl").start()
+        procs.append(b)
+        up = b.wait(r"OpenMenu \[UCMenu.UC2MainMenu\]", 240)
+        for ev in ("DevSplitScreen", "DevUI", "DevGUI"):
+            b.send("exec UNSUPPRESS EVENT=" + ev)
+        time.sleep(4)
+        b.input("pad 0 attach")
+        time.sleep(1)
+        b.input("pad 1 attach")
+        time.sleep(1)
+        press(b, 0, "dpdown", 0.6)
+        press(b, 0, "a", 1)
+        ok = bool(up) and bool(b.wait(r"OpenMenu \[UCMenu.UC2Arena_Main\]", 20))
+        if b.wait(r"OpenMenu \[GUI.GUIMessageBox\]", 20):
+            b.wait(r"GUIMessageBox Unblocking animation", 30)
+            time.sleep(0.5)
+            press(b, 0, "b", 1.5)
+        ok = ok and seek(b, lambda s: s.startswith("DeathMatch|"))
+        press(b, 0, "a", 2)
+        press(b, 0, "a", 2)
+        ok = ok and seek(b, lambda s: "DM-Deadbolt" in s, 40)
+        press(b, 0, "a", 1)
+        cp = b.wait(r"OpenMenu \[UCMenu.UC2Arena_Character\]", 20)
+        result(bool(cp), ck + ".client-menus-to-the-character-page", (cp.group(0) if cp else "did not reach the character page") +
+               ("" if ok else " (a menu step was not confirmed on the way)"))
+        time.sleep(4)
+        press(b, 1, "start", 3)
+        cj = b.wait(r"Split screen: pad 1 Start in the menus: .*", 15, from_start=True)
+        result(bool(cj) and "joined" in cj.group(0), ck + ".client-player-two-joins-on-the-page", cj.group(0) if cj else "no 'Split screen: pad 1' line on the client")
+        if b.wait(r"OpenMenu \[GUI.GUIMessageBox\]", 8):
+            time.sleep(2)
+            press(b, 1, "b", 2)
+        b.send("exec open 127.0.0.1:%d?Name=NetB" % PORT)
+        j = l.wait(r"Join succeeded: .*", 90)
+        result(bool(j), ck + ".join", "listen server: %s" % (j.group(0) if j else "no join in 90 s"))
+        js = l.wait(r"JOINSPLIT: (Succeeded|Join failure|Already have).*", 60, from_start=True)
+        result(bool(js) and js.group(1) == "Succeeded", ck + ".joinsplit", "listen server: %s" % (js.group(0) if js else "no JOINSPLIT line in 60 s"))
+        humans, pawned = [], []
+        for i in range(12):
+            for c, pads in ((l, ("",)), (b, ("", "1 "))):
+                for pd in pads:
+                    c.input("pad %saxis righttrigger 32767" % pd)
+            time.sleep(0.3)
+            for c, pads in ((l, ("",)), (b, ("", "1 "))):
+                for pd in pads:
+                    c.input("pad %saxis righttrigger 0" % pd)
+            time.sleep(1.5)
+            probe = l.probe("S%d" % i)
+            humans = [n for n, r in (probe["pris"] if probe else {}).items() if r.get("bot") == "0" and r.get("spectator") == "0"]
+            pawned = [n for n in humans if n in (probe["pawns"] if probe else {})]
+            if len(pawned) >= 3:
+                break
+        views = re.findall(r"Split screen: \d+ views[^\n]*", b.text())
+        after = b.text()[b.text().find("Welcomed by server"):]
+        result(len(pawned) >= 3, ck + ".split-player-spawns",
+               "listen server's human players %s, with a pawn %s; client's last '%s'; after the welcome the client logged %d "
+               "'Split player spawn URL' lines" % (humans, pawned, views[-1][:40] if views else "no 'Split screen: N views' line",
+                                                  after.count("Split player spawn URL")))
+        first = j.group(0).split(": ", 1)[1].strip() if j else "NetB"
+        new = [n for n in pawned if n not in ("NetL", first)]
+        if len(pawned) >= 3 and new:
+            a = l.probe("M0")
+            b.input("pad 1 axis lefty -32767")
+            time.sleep(1.5)
+            b.input("pad 1 axis lefty 0")
+            time.sleep(1.0)
+            c = l.probe("M1")
+            pa, pc = pawn_of(a, new[0]), pawn_of(c, new[0])
+            d = dist(pa["loc"], pc["loc"]) if pa and pc else 0
+            result(d > 100, ck + ".split-player-moves", "%s moved %.1f units on the listen server (the client's pad 1 stick)" % (new[0], d))
+    finally:
+        finish(ck, procs, allow_invalid_class=2)
+
+
 ALL = {"cheats": check_cheats, "dedicated1": check_dedicated1, "dedicated2": check_dedicated2, "listen": check_listen,
        "download": check_download, "download-http": lambda: check_download(True),
        "profile-login": check_profile_login,
        "travel": check_travel, "disconnect": check_disconnect, "soak": check_soak, "lag": check_lag,
-       "glshot": check_glshot, "wine": check_wine,
+       "glshot": check_glshot, "wine": check_wine, "splitclient": check_splitclient,
        "handshake-loss": check_handshake_loss, "handshake-compat": lambda: check_handshake_loss(True)}
 
 if __name__ == "__main__":

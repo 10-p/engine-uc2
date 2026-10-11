@@ -389,3 +389,164 @@ Memory: builds `capped 6G 3600` (-j4), set regeneration `capped 3G`, P2 and chec
 3. A ready cursor of player three or four dims (alpha 110), the others' cursors give way to the handicap panel as
    Epic's. Fine?
 4. Players three and four get no handicap (100) and no alternative skins (random never picks one for them).
+
+## Part B (2026-10-11): the 2x2 armory, the client test, the browser run
+
+Worktree `/home/ion/WorkUC2/engine-uc2-x1b-armory`, branch `x1b-armory` (from main 47145a2); logs `/home/ion/WorkUC2/logs/x1b/`,
+run trees `run/x1b` (this build's packages), `run/x1bship` (the same binary, Epic's shipped GUI.u/UCMenu.u), `run/x1bnet`
+(the client test). Frontend worktree `/home/ion/WorkUC2/ufrontend-x1`, branch `uc2-x1-players34` (from `uc2` b1a1051).
+
+### What Epic's armory pages are (read)
+
+- `UC2Arena_Armory` (one player): `Armory_PanelSingle` (portrait, the two lists, the long loadout, the weapon preview).
+  `UC2Arena_DualArmory` (two): two `Armory_PanelDual` side by side (x 59 / 343, 244 x 334 design px), each the two
+  lists stacked and a `ShortLoadoutPanel`, each masked to its pad (`SetControllerMask(1 << GamepadID)`), the page's
+  `SetFocus`/`FocusFirst` give each panel the GUI focus of its own player by setting `Controller.ControllerId` around the
+  call. `IsFinished` = every panel `IsReady` (an explosive and an energy weapon chosen); a panel's last choice calls
+  `ShowNextMenu` -> `LaunchGame` (the ConfirmLaunchMenu) when all are ready. B undoes the player's last choice; with
+  nothing chosen on any panel it goes back to the character page. `Save` writes the choice into the player's profile,
+  and the profile's `GetURL` (`GetWeaponsURL`: `?EnergyWeapon= ?ExplosiveWeapon=`) is what `GameStartInfo.GetSpawnURL`
+  parses into the player's spawn URL.
+- Sizes are a trap: the list panels (`ArenaListPanel`, `ScalingType=SCALE_X`, `bConvertBoundX/Y=false`) take their
+  height as a fraction of the SCREEN and their left/top in design pixels of the panel (Dual: `WinTop=105.31`), the
+  loadout takes its top as a fraction of the panel and its height of the screen (seen: the first 2x2 try, everything
+  overlapping, `logs/x1b/r1/x1-armory4-armory-4.png`).
+- The panels' own focus code (`Load`'s `pnl_Explosive.SetFocus`, the lists' `Up`/`Down` at their ends, `ExplosiveOnClick`'s
+  `pnl_Energy.SetFocus`, `EnergyOnClick`'s `LoseFocus`) goes through the GUI's focus slots, and with
+  `Controller.ControllerId` = port 2 or 3 those are player two's (part A's clamp). Players three and four's panels must
+  never call them.
+
+### What was built (patch set players34; file:line at the commit)
+
+- New `patches/players34/new/UCMenu/Classes/UC2Arena_QuadArmory.uc` (extends `UC2Arena_DualArmory`): `CreateArmoryPanel`
+  (:16) makes one `Armory_PanelQuad` per joined player (`GetViewportCount(true)`, at most 4) at `PanelLeft[i % 2]`,
+  `PanelTop[i / 2]` (44 / 324, 68 / 245), players one and two in Epic's `pnl_PlayerArmory`, three and four in
+  `pnl_Players34`; the mask per quarter as Epic's. `IsFinished` (:54) adds three and four; `Players34XControl` (:66, the
+  part A hook of `UC2Arena_DualBase`) hands their buttons to their quarter's `PadInput` and logs; `BClicked` (:84) keeps
+  Epic's rule and adds "not while three or four have chosen"; `ConfirmLaunchGame`, `UpdateSelectedCharacter`,
+  `GetInfoText`, `ValidXControl` never index `pnl_PlayerArmory` with 2 or 3 (`Super(UC2Arena_Armory)` for them);
+  `Load/Save/Refresh` and the open/cancel animations for the extra quarters; `ArmoryStatus` (:249) the log line
+  `X-1 players34 armory (<why>): 1P <quarter>; 2P ...; 3P ...; 4P ...; players <n>` (DevUI) on every list move or choice
+  of any player (the panels' `UpdateStatus` delegate, `PanelStatus`, why = `port <ControllerId>`) and on every button of
+  three and four (why = `player 3 port 2 XC_PadDown`).
+- New `patches/players34/new/UCMenu/Classes/Armory_PanelQuad.uc` (extends `Armory_PanelDual`): `InitComponent` (:17) the
+  quarter's layout (lists side by side 0.49 of the quarter wide, the energy list at 138.7 px, both Dual's 0.216736 screen
+  high; the loadout at 0.6 of the quarter, 0.145 screen high; the weapon names condensed `TextScaleX=0.55 TextScaleY=0.85`
+  and the loadout captions 0.65 with part A's `GUILabel.ScaleX/ScaleY`: at scale 1 "Grenade Launcher" is 155 design px,
+  a list is 133); `MapControls` (:77) left/right between the lists for players one and two too; for players three and
+  four (`bOwnInput`): `SetFocus`/`FocusFirst` (:62, :68) do nothing, `Load` (:86) is Epic's without the focus call,
+  `ShowList` (:111) draws the list in use as focused (its `MenuState`, which `ExplosiveDrawItem`/`EnergyDrawItem` read),
+  `PadInput` (:138): up/down in the list (`SetIndex`, past an end to the other list), left/right, A/Start
+  (`ChooseExplosive`/`ChooseEnergy`: Epic's click code without the focus calls; energy before explosive takes the checked
+  explosive as Epic's `EnergyOnClick`), B/Back `TakeBack` (:228); `StatusText` (:253) for the log.
+- `UC2Arena_Character.CloseComplete`: more than two players -> `UCMenu.UC2Arena_QuadArmory`; one or two as Epic's.
+- The owner's change (2026-10-11, during part B): the line under the honeycomb shows no character names. Nobody there:
+  "PLAYER 3 / 4" + "PRESS START" (as part A); joined, choosing: "3P"; chosen: "3P READY" (Epic's own `Localizer.sReady`,
+  localised in all five `Engine.<lang>`: int "Ready", deu "Bereit", fra "Prêt", ...: no English word of ours); not
+  there: "4P PRESS START". `UC2Arena_Character.UpdatePlayers34Text`; x1menu4's text checks follow (`'3P | 4P'`,
+  `'3P READY | 4P READY'`). Picture `logs/x1/page-4-ready.png` (re-taken).
+- Layout measured on the pictures (1280x720, Fit43): four quarters between the header and the button bar, every weapon
+  name readable (condensed), the loadout icons light up as Epic's when chosen; the loadout captions overlap their icons
+  a little ("usable, not pretty"). No "1P..4P" label per quarter: the corners are the cursors' tag corners.
+- Behaviour decided here (owner to confirm): B of player three or four with nothing chosen does nothing (they cannot
+  send everybody back to the character page); players one and two cannot go back while three or four have chosen
+  something (Epic's rule for the other panel); the mouse is not handled on quarters three and four.
+
+### Tests (tools; file:line at the commit)
+
+- `tools/dev/g6-splitscreen.sh x1armory` (`scen_x1armory`; X1A_PLAYERS="4 3" by default): the menus to the character page,
+  pads 1-3 (or 1-2) join, everybody chooses, the 2x2 armory: n quarters (`page opened` line), player three on its
+  explosive list; player three's B with nothing chosen keeps the page (no character page opens); pad 2's down moves only
+  quarter three (the line says `player 3 port 2 XC_PadDown`), its A chooses the explosive (on to the energy list), down,
+  A: ready; B takes the energy back, A: ready again with the same weapons; pad 3 the same for quarter four; no launch box
+  while players one and two choose; pad 1's down moves only quarter two (Epic's focus path), the keyboard's only quarter
+  one; then players one and two choose (A/Return), the launch box, the match: n split views (G-6 layout, split HUDs), the
+  split players' spawn URLs carry `?ExplosiveWeapon=`/`?EnergyWeapon=` of what three and four chose (and two), NETPROBE's
+  PlayerReplicationInfo of `Player_3`/`Player_4` has those weapons, which are not the default (the joining player's
+  profile weapons from the first spawn URL on the character page: RocketLauncher/SniperRifle), three and four differ;
+  0 out-of-bounds lines. Presses are `x1tap` (0.12 s): x1press's 0.3 s held a d-pad over the GUI's repeat (1.5 x
+  ButtonRepeatDelay 0.19 = 0.285 s) on a loaded machine and stepped twice (measured, run r1: quarter four took the
+  defaults). Helpers `tools/dev/g6/x1-checks.py` (`x1a_*`, `x1_match_urls`, `x1_pris` (NETPROBE goes to the engine's
+  `Avaris.log`, not the console), `x1_default_loadout`).
+- `x1menu4` (part A): the armory step is now the 2x2 armory, players three and four choose (A twice each, ready) before
+  the loop of players one and two (rebuilt tree; host variant too: the system-link host gets the 2x2 armory as well).
+- `menu` (G-6): two players get Epic's `UC2Arena_DualArmory` (a check, the log read directly: a probe moves the
+  scenario's expect position past the OpenMenu line) and its picture `g6-menu-armory-2.png`.
+- `tools/dev/net-test.py splitclient` (`tools/dev/net-test.sh` opt-in; below).
+
+### Results (labelled)
+
+| what | where | result |
+|---|---|---|
+| `g6-splitscreen.sh x1b x1armory`, four players | `logs/x1b/a2` | **measured** PASS 37/37 (0 Critical, 0 out-of-bounds) |
+| the same, three players | `logs/x1b/a2` | **measured** PASS 28/28 |
+| the loadout proof (four players, run a2) | `x1-armory4.inject` | **measured**: spawn URLs `Player_3 ... ExplosiveWeapon=UCWeap_CanisterGun_Gren EnergyWeapon=UCWeap_ShockRifle_New`, player four RazorJack (Ripjack)/CanisterGun_Bio; NETPROBE pri lines the same; default RocketLauncher/SniperRifle |
+| `x1menu4` on x1b (rebuilt: standalone + host) | `logs/x1b/a2` | **measured** PASS 58/58, PASS 43/43, out-of-bounds `{}` |
+| `x1menu4` on x1bship (Epic's GUI.u/UCMenu.u, this binary) | `logs/x1b/v1` | **measured** PASS 19/19 (two players in the menus; 167 FocusedControl lines as part A's "before") |
+| `menu`, `h3menu` (ticked, unticked), `input`, `kbplayer`+`kbmenu`, `unplug` on the final scripts | `logs/x1b/reg4` | **measured** PASS 10, 11, 13, 39, 34, 12, 26 (the menu part: the dual armory for two) |
+| `m14-scripts-check.sh verify menu patcher deadbolt` (M14_PREFIX=x1b-m14) | `logs/x1b/m14b.txt` | **measured** PASS all four (verifyclasses: all layouts match) |
+| P2 | `logs/x1b/p2-write.log` | reference regenerated: UCMenu.u 2500765 B `a125b78b...`, GUI.u and UCGameplay.u unchanged; PASS |
+| `check-headers` | `logs/x1b/check-headers.log` | **measured** current (no header change) |
+| pictures | `logs/x1/armory-{2,3,4}.png` | **seen**: Epic's two panels; three quarters (the fourth empty); four quarters, chosen weapons lit |
+
+### The bounded client test (time box 1 h; used about 20 min): BROKEN
+
+`NET_TREE=x1bnet NET_PORT=7871 tools/dev/net-test.sh splitclient` (logs `logs/x1b/client/`, one 6G scope, two
+processes): a listen host (uc2.bin DM-Deadbolt?Listen, null renderer) and one GL client under Xvfb that walks its menus
+with player one's pad (VERSUS -> DeathMatch -> DM-Deadbolt -> the character page), pad 1's Start joins player two
+there, then the client connects (console `open 127.0.0.1:7871`).
+- **measured** PASS: the client's menus reach the character page; `Split screen: pad 1 Start in the menus: joined`
+  (two split views on the client); the client joins the host (`Join succeeded`; its LOGIN URL carries Epic's
+  `NumClients=2`, the host's GameInfo logs `NumClients 2`); 0 Critical/assert/overflow; nothing left listening.
+- **measured** FAIL: no `JOINSPLIT` reaches the host; the host has two human players (itself and the client's player
+  one); after the welcome the client logs no `Split player spawn URL` line, i.e. `USplitScreenMgr::CreateSplitPlayer`
+  never ran for the client's second viewport, so the JOINSPLIT it would send (`UnSplitScreenMgr.cpp` client branch,
+  after `NotifyReceivedClientPlayer`, `UnConn.cpp HandleClientPlayer`) never goes out. The client's split view is gone
+  by then (no "Split screen: N views" line after the travel).
+- Not a one-liner, not fixed. Where to look (read only): what empties `ActiveSplitViews` on the client between the
+  `open` and `HandleClientPlayer` (candidates: `MatchSplitViewportsToActors` running while `GLevel` is still the menu
+  level -> `IsMenuGameActive` -> `ResetState`, which logs nothing; the GUI's `NotifyLevelChange` removing child
+  viewports). A `DevSplitScreen` line in `ResetState` would settle it.
+- Also measured on the way: on a client a pad's Start in the match makes nobody (`USDL2Client::PadJoin`: G-6's in-match
+  join is for a standalone game or a listen host, by design), and the engine's `SPLIT ADD ID=1` makes nobody in a match
+  either (`UClient::BeginSplitScreen` asks the GUI's `AllowControllerJoin`: the character page only). So on a client
+  split players can only come from the menus, and that path is the broken one.
+- Never exercised: a client with three or four local players, a dedicated server.
+
+### The browser run with three pads
+
+Frontend worktree `/home/ion/WorkUC2/ufrontend-x1` (branch `uc2-x1-players34`, commit 1431940): a new test in
+`packages/e2e/uc2-wasm-gamepad.spec.js`, "the owner's flow with three pads" (`-g "three pads"`), documented in
+`packages/e2e/README.md`. Engine artifact: this worktree's `build-wasm-perf` (scripts from `build-native/Scripts/System`,
+the final players34), `yarn build --target uc2 --assets <WorkUC2>/assets/uc2 --engine-artifact ...`. Run under
+`bin/capped 7G 3600 -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=23` with `PULSE_SINK` at a null sink of its
+own (loaded, then unloaded by its module index).
+- **measured** (engine log, `logs/x1b/e2e/engine.log`): player one's pad on port 0 at the main menu; the host flow;
+  pad 2 (port 1) and pad 3 (port 2) listed at their Start join as players two and three on the character page
+  (`Split screen: pad 1|2 Start in the menus: joined`, the line `3P | 4P PRESS START`); player three chose Arclite with its
+  own pad (`3P 4 ready`); `OpenMenu [UCMenu.UC2Arena_QuadArmory]`; player three's quarter from port 2
+  (`3P - 1/1 sel 1/1 ready UCWeap_FlakCannon/UCWeap_ShockRifle_New; 4P none`); the match (CTF-Aqueduct, the host page's
+  map) with `Split screen: 3 views`, three human players (Arclite, Anubis, Player_3 as Arclite), PADS ports 0-2 each a
+  viewport. **seen**: `logs/x1b/e2e/three-pads-match.png` (three views, three split HUDs).
+- The whole spec: **measured** 7 passed (17.1 min; the 6 earlier tests and this one); mem-guard reported "peak 9.4 GB" (its own measure,
+  not the scope's: under its 23 GB budget; the capped 7G scope was not hit, exit 0).
+
+### Memory, attempts
+
+Builds `capped 6G` (native -j4, wasm-perf -j4), set regeneration 2G (the script's own), P2 and check-headers 6G, every
+game run 2G (the harness), m14 its own, the client test one 6G scope (two processes), the frontend build 4G, the browser
+harness 7G. No exit 137. Failures on the way, each with its cause: the first 2x2 layout (list sizes are screen
+fractions, picture r1), quarter four stepping twice (a 0.3 s press over the GUI's repeat, now `x1tap`), the menu part's
+dual-armory check (the armory opens later in that flow; a probe moves the expect position), the browser test's join
+count (my counting), the client test (above).
+
+### Open questions (part B, for the owner)
+
+1. The 2x2 armory is usable, not pretty: weapon names condensed (0.55 x 0.85), the loadout's captions overlap its icons
+   a little, no "1P..4P" label per quarter (the corners match the cursors' tags). Good enough?
+2. Players three and four's B with nothing chosen does nothing (only players one and two can go back to the character
+   page, and not while three or four have chosen something). Keep?
+3. Players one and two now also move between the two lists with left/right (the lists are side by side in a quarter).
+4. The mouse is not handled on quarters three and four (a click there does nothing useful). Fine for pad players?
+5. The client with split players is BROKEN (above): a separate task to find what drops the client's split view at the
+   travel, if wanted.
