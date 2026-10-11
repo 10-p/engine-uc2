@@ -230,3 +230,14 @@ freed it and the sheet with it. Fix: `AddToRoot()` on the three once the gate op
 After it: `travel` **9 passed, 0 failed** (combo menu drawn with the caps after the travel, no critical line). The
 scenario's crash pattern missed the engine's own "Signal: SIGSEGV" line: it now matches `Signal: SIG(SEGV|ABRT|BUS|FPE|ILL)`
 and `Developer Backtrace` (not SIGTERM, the harness's normal end).
+
+## Step 5 (2026-10-11): GUI.u was not the same from build to build (fixed)
+
+The web artifact's GUI.u (copied from a build-native build) had another sha256 than `reference.sha256`, and a third build
+a third one: 5-7 bytes differ, all in `GUI.KeyGlyphSheet`'s property `InternalTime` (Texture.uc: `const int
+InternalTime[2]`, the C++ `UTexture::LastUpdateTime`, a double): the constructor (`UnTex.cpp:184`) and `PostLoad`
+(`:369`, the `__LastUpdateTime` twin) store `appSeconds()`, and the import and stripsource save it (about 2.0, the
+seconds since ucc started). Epic's packages carry such values too; no package the script build made had a texture until
+now. Fix: both are 0 when `GIsUCC` (ucc); the game sets the clock from its first frame as before. After it: build-native,
+`run/h5-proof` and `run/h5-proof2` give the same GUI.u (807af9a4..., 1770178 bytes; the reference re-made), and
+`uc-patches-proof.sh p3` (decompile, apply, build twice): PASS, GUI.u identical (`logs/h5/p3.log`).
