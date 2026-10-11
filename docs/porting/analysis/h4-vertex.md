@@ -144,3 +144,23 @@ Browser after the fix (wasm-perf of the fix, same spec, `logs/h4/web2/`): 2 pass
 2882: 786 traced draws, 0 STALE (182 frames with two LODs of the head); 2883: 2108, 0 STALE (267). Pictures
 `logs/h4/compare-browser.png`: before at the spot (corrupt), before a step back, after at 2882, after at 2883.
 The spec's STALE/shadow assertion (UC2_H4_EXPECT=fixed) was added after this run; the run's numbers satisfy it.
+
+### Step 4: m11-twin and the M7 effects with the fix
+
+`M11_SERIAL=1 M11_DESKTOP_TREE=h4m11 M11_TWIN_TREE=h4m11t tools/dev/m11-twin.sh boot selftest pinned effects`
+(load 15-29 during the run; `logs/h4/m11-twin.txt`): PASS boot (97 fragment + 405 vertex shaders, 0 GL errors),
+PASS selftest (15/15 on both), PASS pinned (mean 0.384), effects 13 of 14 PASS; **FAIL effect-blur 6.175 > 6**, the
+check known to be time-dependent (BlurMe decays; earlier measurements 3.17 to 7.39 in decay-flash.md,
+render-f5.md, web-renderer.md, d34-docs-tests.md). A/B of that one pair (`logs/h4/blurab/`, both bindings, one run
+at a time): fixed 6.156 then **3.939**; unfixed (`uc2-before.bin`) 4.442 then 4.777. Noise, not a regression.
+PASS leftovers.
+
+Memory ceilings: builds 6G (never hit), game runs 2G through decay-flash.sh / run-uc2-shot.sh (never hit), the
+frontend build 4G, the harness 7G with the guard at 23 GB (peaks 10.9 and 10.4 GB machine-wide); no exit 137.
+
+Open questions: (1) the shadow pass computing its LOD with the 252-pixel width (UT2004 does the same; on the Xbox
+both passes agree because 640 < 820) is left as Epic wrote it; giving the shadow the scene's LOD would save the
+second skinning but changes Epic's code beyond UT2004's fix. (2) Native Mesa llvmpipe never drew the pawn's shadow
+in these runs (no `shadow` lines), so the regression runs on the GPU (`UC2_GPU=1`); why llvmpipe skips it was not
+investigated. (3) The LODTrace test key stays in the engine (read once through -ini:, nothing in the ini); remove it
+if the owner prefers.
