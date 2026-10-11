@@ -229,7 +229,20 @@
  	}
  
  	FadeIn(pnl_Stats);
-@@ -2267,6 +2347,8 @@
+@@ -2242,7 +2322,11 @@
+ {
+ 	Super.CloseComplete(Sender, Type);
+ 
+-	Controller.OpenMenu(SecondPlayerActive() ? "UCMenu.UC2Arena_DualArmory" : "UCMenu.UC2Arena_Armory");
++	// X-1 (players34): three or four players choose their weapons on the 2x2 armory
++	if ( Controller.GetViewportCount() > MAX_VIEWPORTS )
++		Controller.OpenMenu("UCMenu.UC2Arena_QuadArmory");
++	else
++		Controller.OpenMenu(SecondPlayerActive() ? "UCMenu.UC2Arena_DualArmory" : "UCMenu.UC2Arena_Armory");
+ }
+ 
+ 
+@@ -2267,6 +2351,8 @@
  		Prepare(lbl_CharacterName[i]);
  		Prepare(lbl_PlayerText[i]);
  		Prepare(lbl_JoinText[i]);
@@ -238,7 +251,7 @@
  	}
  
  	Prepare(pnl_Stats);
-@@ -2359,6 +2441,12 @@
+@@ -2359,6 +2445,12 @@
  	if (bDebugAnimation) log("("$PlayerOwner().Level.TimeSeconds$")"@Name$"::"$GetFuncName()@"Sender:"$Sender.Name,'UIAnimation');
  	Sender.OnEndAnimation = None;
  	SlideInBegin();
@@ -251,7 +264,7 @@
  }
  
  
-@@ -2455,6 +2543,9 @@
+@@ -2455,6 +2547,9 @@
  	lbl_CharacterName[0].Pulse(PulseColor, AnimTime);
  	lbl_CharacterName[1].Pulse(PulseColor, AnimTime);
  
@@ -261,7 +274,7 @@
  	PulseColor = btn_AltChar[0].GetComponentColor(true);
  	PulseColor.A = 255;
  	btn_AltChar[0].Pulse(PulseColor, AnimTime);
-@@ -2546,6 +2637,523 @@
+@@ -2546,6 +2641,523 @@
  	AnimationList[ListIndex].Row[0] = btn;
  }
  
@@ -785,7 +798,7 @@
  defaultproperties
  {
  	Begin Object Class=PreviewScreen Name=CharacterOnePreview
-@@ -2606,6 +3214,54 @@
+@@ -2606,6 +3218,54 @@
  		WinLeft=272.25
  		WinWidth=82.0
  		WinHeight=82.0
@@ -840,7 +853,7 @@
  	End Object
  	Begin Object Class=GUILabel Name=PlayerOneTitleLabel
  		TextAlign=TXTA_Center
-@@ -2718,6 +3374,12 @@
+@@ -2718,6 +3378,12 @@
  	lbl_CharacterName(1)=GUILabel'CharacterNameTwo'
  	pnl_Handicap(0)=CharacterHandicapPanel'CharacterOneHandicap'
  	pnl_Handicap(1)=CharacterHandicapPanel'CharacterTwoHandicap'

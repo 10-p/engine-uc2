@@ -389,3 +389,60 @@ Memory: builds `capped 6G 3600` (-j4), set regeneration `capped 3G`, P2 and chec
 3. A ready cursor of player three or four dims (alpha 110), the others' cursors give way to the handicap panel as
    Epic's. Fine?
 4. Players three and four get no handicap (100) and no alternative skins (random never picks one for them).
+
+## Part B (2026-10-11): the 2x2 armory, the client test, the browser run
+
+Worktree `/home/ion/WorkUC2/engine-uc2-x1b-armory`, branch `x1b-armory` (from main 47145a2); logs `/home/ion/WorkUC2/logs/x1b/`,
+run trees `run/x1b` (this build's packages), `run/x1bship` (the same binary, Epic's shipped GUI.u/UCMenu.u), `run/x1bnet`
+(the client test). Frontend worktree `/home/ion/WorkUC2/ufrontend-x1`, branch `uc2-x1-players34` (from `uc2` b1a1051).
+
+### What Epic's armory pages are (read)
+
+- `UC2Arena_Armory` (one player): `Armory_PanelSingle` (portrait, the two lists, the long loadout, the weapon preview).
+  `UC2Arena_DualArmory` (two): two `Armory_PanelDual` side by side (x 59 / 343, 244 x 334 design px), each the two
+  lists stacked and a `ShortLoadoutPanel`, each masked to its pad (`SetControllerMask(1 << GamepadID)`), the page's
+  `SetFocus`/`FocusFirst` give each panel the GUI focus of its own player by setting `Controller.ControllerId` around the
+  call. `IsFinished` = every panel `IsReady` (an explosive and an energy weapon chosen); a panel's last choice calls
+  `ShowNextMenu` -> `LaunchGame` (the ConfirmLaunchMenu) when all are ready. B undoes the player's last choice; with
+  nothing chosen on any panel it goes back to the character page. `Save` writes the choice into the player's profile,
+  and the profile's `GetURL` (`GetWeaponsURL`: `?EnergyWeapon= ?ExplosiveWeapon=`) is what `GameStartInfo.GetSpawnURL`
+  parses into the player's spawn URL.
+- Sizes are a trap: the list panels (`ArenaListPanel`, `ScalingType=SCALE_X`, `bConvertBoundX/Y=false`) take their
+  height as a fraction of the SCREEN and their left/top in design pixels of the panel (Dual: `WinTop=105.31`), the
+  loadout takes its top as a fraction of the panel and its height of the screen (seen: the first 2x2 try, everything
+  overlapping, `logs/x1b/r1/x1-armory4-armory-4.png`).
+- The panels' own focus code (`Load`'s `pnl_Explosive.SetFocus`, the lists' `Up`/`Down` at their ends, `ExplosiveOnClick`'s
+  `pnl_Energy.SetFocus`, `EnergyOnClick`'s `LoseFocus`) goes through the GUI's focus slots, and with
+  `Controller.ControllerId` = port 2 or 3 those are player two's (part A's clamp). Players three and four's panels must
+  never call them.
+
+### What was built (patch set players34; file:line at the commit)
+
+- New `patches/players34/new/UCMenu/Classes/UC2Arena_QuadArmory.uc` (extends `UC2Arena_DualArmory`): `CreateArmoryPanel`
+  (:16) makes one `Armory_PanelQuad` per joined player (`GetViewportCount(true)`, at most 4) at `PanelLeft[i % 2]`,
+  `PanelTop[i / 2]` (44 / 324, 68 / 245), players one and two in Epic's `pnl_PlayerArmory`, three and four in
+  `pnl_Players34`; the mask per quarter as Epic's. `IsFinished` (:54) adds three and four; `Players34XControl` (:66, the
+  part A hook of `UC2Arena_DualBase`) hands their buttons to their quarter's `PadInput` and logs; `BClicked` (:84) keeps
+  Epic's rule and adds "not while three or four have chosen"; `ConfirmLaunchGame`, `UpdateSelectedCharacter`,
+  `GetInfoText`, `ValidXControl` never index `pnl_PlayerArmory` with 2 or 3 (`Super(UC2Arena_Armory)` for them);
+  `Load/Save/Refresh` and the open/cancel animations for the extra quarters; `ArmoryStatus` (:249) the log line
+  `X-1 players34 armory (<why>): 1P <quarter>; 2P ...; 3P ...; 4P ...; players <n>` (DevUI) on every list move or choice
+  of any player (the panels' `UpdateStatus` delegate, `PanelStatus`, why = `port <ControllerId>`) and on every button of
+  three and four (why = `player 3 port 2 XC_PadDown`).
+- New `patches/players34/new/UCMenu/Classes/Armory_PanelQuad.uc` (extends `Armory_PanelDual`): `InitComponent` (:17) the
+  quarter's layout (lists side by side 0.49 of the quarter wide, the energy list at 138.7 px, both Dual's 0.216736 screen
+  high; the loadout at 0.6 of the quarter, 0.145 screen high; the weapon names condensed `TextScaleX=0.55 TextScaleY=0.85`
+  and the loadout captions 0.65 with part A's `GUILabel.ScaleX/ScaleY`: at scale 1 "Grenade Launcher" is 155 design px,
+  a list is 133); `MapControls` (:77) left/right between the lists for players one and two too; for players three and
+  four (`bOwnInput`): `SetFocus`/`FocusFirst` (:62, :68) do nothing, `Load` (:86) is Epic's without the focus call,
+  `ShowList` (:111) draws the list in use as focused (its `MenuState`, which `ExplosiveDrawItem`/`EnergyDrawItem` read),
+  `PadInput` (:138): up/down in the list (`SetIndex`, past an end to the other list), left/right, A/Start
+  (`ChooseExplosive`/`ChooseEnergy`: Epic's click code without the focus calls; energy before explosive takes the checked
+  explosive as Epic's `EnergyOnClick`), B/Back `TakeBack` (:228); `StatusText` (:253) for the log.
+- `UC2Arena_Character.CloseComplete`: more than two players -> `UCMenu.UC2Arena_QuadArmory`; one or two as Epic's.
+- Layout measured on the pictures (1280x720, Fit43): four quarters between the header and the button bar, every weapon
+  name readable (condensed), the loadout icons light up as Epic's when chosen; the loadout captions overlap their icons
+  a little ("usable, not pretty"). No "1P..4P" label per quarter: the corners are the cursors' tag corners.
+- Behaviour decided here (owner to confirm): B of player three or four with nothing chosen does nothing (they cannot
+  send everybody back to the character page); players one and two cannot go back while three or four have chosen
+  something (Epic's rule for the other panel); the mouse is not handled on quarters three and four.
