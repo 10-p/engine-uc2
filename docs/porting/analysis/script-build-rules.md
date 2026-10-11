@@ -201,6 +201,18 @@ committed headers), which is what the check compares against: not done. Owner qu
   at load 3.8: **17 PASS, 0 FAIL** (`logs/t3/d6-dodge-2.txt`). So the two lock-switch checks failed under load
   once and passed on a quieter machine (the owner's rule: a failure under load is rerun before it counts).
 
+### OFF in the artifact, and the frontend
+
+- The emitter with an empty mirror (`UC2ScriptsCheck.cmake` copy mode from a missing folder, then
+  `emit-artifact-meta.mjs --scripts=scripts`, scratch folder): `0 script packages`, `"scripts": []`. A wasm build
+  configured OFF was not built.
+- Frontend (`ufrontend-scripts`, branch `uc2-scripts`, its notebook `docs/migration/notes/uc2-script-overlay.md`): the
+  artifact's `scripts` become an asset overlay (`engine-overlay/<assetPath>`, named in the manifest). `yarn build
+  --target uc2 --engine-artifact build-wasm-perf/Source/SDLLaunch` assembles it; the uc2 boot spec passed 5/5 with
+  the engine logging `ScriptPatcher: UCGameplay|GUI|UCMenu is not the package the patch was made for (generations 2,
+  ...): rebuilt from source, patch not applied` and `[SHELL] Pre-cached: engine-overlay/System/UCGameplay.u (1589219
+  bytes)`.
+
 ## What changed for other presets and tools
 
 - Every preset configures as before when the game folder is found (this workspace: `<repo>/../assets/uc2`) and its
