@@ -401,6 +401,9 @@ the other sign. Sheets `logs/h1/h1-final-2248-{blue,lamp}.png`.
   this branch (decay-flash.md, render-f5.md: 6.137, 6.416 at load ~20). Self-test 15/15 on both bindings (the twin's
   TapScale-2 lines: blur-h 0.92 / +0.049, blur-v 0.83 / +0.050, blur-box 0.50 / +0.020: the fill variant compiles
   and is exact through GL4ES' ES 3 back end too), progtest 485/485 identical, es2 and fallbacks PASS.
+- `m11-twin.sh effects leftovers` again on a quieter machine (load 7-10): 16 PASS, 0 FAIL (effect-blur 4.771).
+- The GL4ES binding (ES 3 twin, llvmpipe) with `-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:PostProcessTargetScale=2`:
+  "post-process target scale 2", pp-sizes PASS with the scale-2 targets, self-test 15/15 (`logs/h1/fx-st2-gl4es.out`).
 - `sync-web-ini.py --check`: up to date.
 
 ## P2-5. What changed (final)
