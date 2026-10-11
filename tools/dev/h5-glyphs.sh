@@ -2,7 +2,7 @@
 # H-5 check (native): player one's keys in place of the pad's button glyphs (Source/Engine/Src/UnKeyGlyphs.cpp, script
 # set key-glyphs). One PASS/FAIL line per check on stdout, then a summary.
 #
-#   tools/dev/h5-glyphs.sh [scenario...]        (default: menu info game vanilla)
+#   tools/dev/h5-glyphs.sh [scenario...]        (default: menu info game travel vanilla; look on request)
 #
 #   menu     fresh inis, no profile, software GL 640x480: main menu, INSTANT ACTION, the "no profile" box declined,
 #            three accepts -> the character page. Keyboard from the start: the menus' keys (A Enter, B Escape, Y Y,
@@ -17,6 +17,8 @@
 #            combo-pad, pause-keys, combo-rebound; pixel check on the combo menu's green A.
 #   look     pictures only (no checks of their own but the scenario's): the character page and the combo menu at
 #            1920x1080 (the D-2 box, the key caps at 2.25x), keys and pad: look-char-keys, look-char-pad, look-combo-*.
+#   travel   the menu path on into a match (the character page, the armory, the launch): after the level change the
+#            adrenaline menu still draws the key caps (the gate's class, font and sheet are kept from the collector).
 #   vanilla  the menu path on a tree with the shipped GUI.u and UCMenu.u (H5_VANILLA_TREE, default h5v:
 #            UC2_SCRIPTS=none tools/dev/mkrun-uc2.sh build-native h5v): no key glyph line at all, the Xbox A gem with the
 #            keyboard, no error or critical line.
@@ -285,6 +287,36 @@ pad button x 0
 SCEN
 }
 
+# the owner's path on into a match: the character page (the key caps loaded there), the armory, the launch; after the
+# level change (which collects what nothing references) the adrenaline menu still draws the caps
+scen_travel() {
+  to_character
+  cat <<'SCEN'
+key Return
+expect $P-armory-opens OpenMenu \[UCMenu.UC2Arena_Armory\] 15
+sleep 2
+key Return
+sleep 2
+key Return
+expect $P-launch-confirm-opens OpenMenu \[UCMenu.ConfirmLaunchMenu\] 15
+sleep 3
+key Return
+expect $P-match-up Bringing Level (?!Entry)\S+ up for play 180
+sleep 8
+key Alt_L 0.3
+sleep 4
+chan exec God
+chan exec InfiniteAdrenaline
+sleep 5
+keydown x
+expect $P-combo-menu-drawn \[KeyGlyphs\] game LeftTrigger -> RMB 6
+sleep 0.3
+shot combo-keys
+keyup x
+sleep 2
+SCEN
+}
+
 scen_vanilla() {
   to_character
   cat <<'SCEN'
@@ -296,7 +328,7 @@ SCEN
 
 # ---------------------------------------------------------------------------------------------------------------
 scenarios=("$@")
-[ ${#scenarios[@]} -eq 0 ] && scenarios=(menu info game vanilla)
+[ ${#scenarios[@]} -eq 0 ] && scenarios=(menu info game travel vanilla)
 for s in "${scenarios[@]}"; do
   echo "== $s"
   case $s in
@@ -318,7 +350,7 @@ for s in "${scenarios[@]}"; do
       logline menu-key-caps-loaded menu "key caps from GUI.KeyGlyphSheet"
       caps menu-keys-a-is-a-key-cap menu-char-keys ge 10 50 426 80 429
       caps menu-pad-a-is-no-key-cap menu-char-pad le 2 50 426 80 429
-      nolog menu-no-critical menu 'Critical error|appError|Assertion failed|General protection fault|Unhandled signal'
+      nolog menu-no-critical menu 'Critical error|appError|Assertion failed|General protection fault|Unhandled signal|Signal: SIG(SEGV|ABRT|BUS|FPE|ILL)|Developer Backtrace'
       ;;
     info)
       prep "$tree"
@@ -328,7 +360,7 @@ for s in "${scenarios[@]}"; do
       logline info-combo-lt-is-rmb info "[KeyGlyphs] game LeftTrigger -> RMB"
       logline info-combo-a-is-space info "[KeyGlyphs] game A -> SPACE"
       logline info-combo-rt-is-lmb info "[KeyGlyphs] game RightTrigger -> LMB"
-      nolog info-no-critical info 'Critical error|appError|Assertion failed|General protection fault|Unhandled signal'
+      nolog info-no-critical info 'Critical error|appError|Assertion failed|General protection fault|Unhandled signal|Signal: SIG(SEGV|ABRT|BUS|FPE|ILL)|Developer Backtrace'
       ;;
     game)
       prep "$tree"
@@ -343,7 +375,7 @@ for s in "${scenarios[@]}"; do
       gem game-combo-rebound-no-a-gem game-combo-rebound no 305 118 340 145
       caps game-combo-keys-a-is-a-key-cap game-combo-keys ge 10 305 118 340 121
       caps game-combo-pad-a-is-no-key-cap game-combo-pad le 2 305 118 340 121
-      nolog game-no-critical game 'Critical error|appError|Assertion failed|General protection fault|Unhandled signal'
+      nolog game-no-critical game 'Critical error|appError|Assertion failed|General protection fault|Unhandled signal|Signal: SIG(SEGV|ABRT|BUS|FPE|ILL)|Developer Backtrace'
       ;;
     look)
       prep "$tree"
@@ -354,6 +386,14 @@ for s in "${scenarios[@]}"; do
       run "$tree" look-game 420 M10_RES=1920x1080 M10_KEYHOLD=0.6 M10_URL="DM-Deadbolt?NumBots=0"
       for f in "$out"/look-game-*.png; do [ -f "$f" ] && mv -f "$f" "$out/look-${f##*/look-game-}"; done
       ;;
+    travel)
+      prep "$tree"
+      scen_travel | sed 's/\$P/travel/g' > "$out/travel.scen"
+      run "$tree" travel 420
+      logline travel-caps-loaded travel "key caps from GUI.KeyGlyphSheet"
+      caps travel-combo-a-is-a-key-cap travel-combo-keys ge 10 305 118 340 121
+      nolog travel-no-critical travel 'Critical error|appError|Assertion failed|General protection fault|Unhandled signal|Signal: SIG(SEGV|ABRT|BUS|FPE|ILL)|Developer Backtrace'
+      ;;
     vanilla)
       prep "$vtree"
       scen_vanilla | sed 's/\$P/vanilla/g' > "$out/vanilla.scen"
@@ -361,7 +401,7 @@ for s in "${scenarios[@]}"; do
       nolog vanilla-no-key-glyph-lines vanilla 'KeyGlyphs|Key glyphs'
       gem vanilla-keys-keep-the-a-gem vanilla-char-keys yes 50 428 78 448
       caps vanilla-keys-no-key-cap vanilla-char-keys le 2 50 426 80 429
-      nolog vanilla-no-critical vanilla 'Critical error|appError|Assertion failed|General protection fault|Unhandled signal'
+      nolog vanilla-no-critical vanilla 'Critical error|appError|Assertion failed|General protection fault|Unhandled signal|Signal: SIG(SEGV|ABRT|BUS|FPE|ILL)|Developer Backtrace'
       nolog vanilla-no-load-failure vanilla "Failed to load 'GUI.KeyGlyphs'|Can't find .*KeyGlyphs"
       ;;
     *) echo "unknown scenario $s" >&2; exit 2;;

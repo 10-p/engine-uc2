@@ -219,3 +219,14 @@ Pictures (`logs/h5/glyphs/`): `p2-char.png` (character page keys / pad), `p2-bar
 instructions: X, the mouse with the right button lit, Space...), `p2-combo.png` (adrenaline menu: keys, pad, after
 JUMP / DODGE := J), `p2-look-bar.png`, `p2-look-combo.png` (1080p); the 1080p pad combo picture missed the menu (it had
 closed: software GL at 1080p is slow); the 640x480 one shows it.
+
+## Step 4 (2026-10-11): a crash after a level change, found by the new `travel` scenario (fixed)
+
+`travel` = the owner's path on into a match (character page -> armory -> launch -> CTF-Aqueduct), then the adrenaline
+menu. On the phase 2 binary it crashed: `Signal: SIGSEGV` in `FCanvasUtil::DrawTile` <- `FKeyGlyphs::DrawKey` <-
+`AUCHUD::DrawComboMenu` (`logs/h5/glyphs-preroot/travel.out`). The gate's class, the label font and the sheet were
+held in `GKeyGlyphs` only; nothing in the object graph referenced the class, so the level change's garbage collection
+freed it and the sheet with it. Fix: `AddToRoot()` on the three once the gate opens (`UnKeyGlyphs.cpp`, `Available`).
+After it: `travel` **9 passed, 0 failed** (combo menu drawn with the caps after the travel, no critical line). The
+scenario's crash pattern missed the engine's own "Signal: SIGSEGV" line: it now matches `Signal: SIG(SEGV|ABRT|BUS|FPE|ILL)`
+and `Developer Backtrace` (not SIGTERM, the harness's normal end).

@@ -225,6 +225,12 @@ UBOOL FKeyGlyphs::Available()
 		Gate = (Set && LabelFont) ? 1 : 2;
 		if( Gate == 1 )
 		{
+			// held here for the whole run: kept from the garbage collector (a level change collects what nothing
+			// references; nothing else references the class, and the font and the sheet only through it)
+			Set->AddToRoot();
+			LabelFont->AddToRoot();
+			if( Sheet )
+				Sheet->AddToRoot();
 			debugf( NAME_Init, TEXT("Key glyphs: player one's keys replace the pad's buttons while they use the keyboard or the mouse (GUI.KeyGlyphs, %s)"),
 				Sheet ? TEXT("key caps from GUI.KeyGlyphSheet") : TEXT("the keys' names") );
 			debugf( KeyGlyphsLog(), TEXT("[KeyGlyphs] player one: %s (start)"), bKeys ? TEXT("keyboard and mouse") : TEXT("pad") );
