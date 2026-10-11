@@ -483,8 +483,7 @@ run trees `run/x1b` (this build's packages), `run/x1bship` (the same binary, Epi
 | the loadout proof (four players, run a2) | `x1-armory4.inject` | **measured**: spawn URLs `Player_3 ... ExplosiveWeapon=UCWeap_CanisterGun_Gren EnergyWeapon=UCWeap_ShockRifle_New`, player four RazorJack (Ripjack)/CanisterGun_Bio; NETPROBE pri lines the same; default RocketLauncher/SniperRifle |
 | `x1menu4` on x1b (rebuilt: standalone + host) | `logs/x1b/a2` | **measured** PASS 58/58, PASS 43/43, out-of-bounds `{}` |
 | `x1menu4` on x1bship (Epic's GUI.u/UCMenu.u, this binary) | `logs/x1b/v1` | **measured** PASS 19/19 (two players in the menus; 167 FocusedControl lines as part A's "before") |
-| `menu`, `kbplayer`+`kbmenu` | `logs/x1b/reg3` | **measured** PASS 10, 34, 12 (the dual armory for two) |
-| `h3menu` (ticked, unticked), `input`, `unplug` | `logs/x1b/reg` | **measured** PASS 11, 13, 39, 26 (scripts before the owner's text change; the change touches only the line under the honeycomb, which they do not read) |
+| `menu`, `h3menu` (ticked, unticked), `input`, `kbplayer`+`kbmenu`, `unplug` on the final scripts | `logs/x1b/reg4` | **measured** PASS 10, 11, 13, 39, 34, 12, 26 (the menu part: the dual armory for two) |
 | `m14-scripts-check.sh verify menu patcher deadbolt` (M14_PREFIX=x1b-m14) | `logs/x1b/m14b.txt` | **measured** PASS all four (verifyclasses: all layouts match) |
 | P2 | `logs/x1b/p2-write.log` | reference regenerated: UCMenu.u 2500765 B `a125b78b...`, GUI.u and UCGameplay.u unchanged; PASS |
 | `check-headers` | `logs/x1b/check-headers.log` | **measured** current (no header change) |
@@ -513,3 +512,41 @@ there, then the client connects (console `open 127.0.0.1:7871`).
   either (`UClient::BeginSplitScreen` asks the GUI's `AllowControllerJoin`: the character page only). So on a client
   split players can only come from the menus, and that path is the broken one.
 - Never exercised: a client with three or four local players, a dedicated server.
+
+### The browser run with three pads
+
+Frontend worktree `/home/ion/WorkUC2/ufrontend-x1` (branch `uc2-x1-players34`, commit 1431940): a new test in
+`packages/e2e/uc2-wasm-gamepad.spec.js`, "the owner's flow with three pads" (`-g "three pads"`), documented in
+`packages/e2e/README.md`. Engine artifact: this worktree's `build-wasm-perf` (scripts from `build-native/Scripts/System`,
+the final players34), `yarn build --target uc2 --assets <WorkUC2>/assets/uc2 --engine-artifact ...`. Run under
+`bin/capped 7G 3600 -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=23` with `PULSE_SINK` at a null sink of its
+own (loaded, then unloaded by its module index).
+- **measured** (engine log, `logs/x1b/e2e/engine.log`): player one's pad on port 0 at the main menu; the host flow;
+  pad 2 (port 1) and pad 3 (port 2) listed at their Start join as players two and three on the character page
+  (`Split screen: pad 1|2 Start in the menus: joined`, the line `3P | 4P PRESS START`); player three chose Arclite with its
+  own pad (`3P 4 ready`); `OpenMenu [UCMenu.UC2Arena_QuadArmory]`; player three's quarter from port 2
+  (`3P - 1/1 sel 1/1 ready UCWeap_FlakCannon/UCWeap_ShockRifle_New; 4P none`); the match (CTF-Aqueduct, the host page's
+  map) with `Split screen: 3 views`, three human players (Arclite, Anubis, Player_3 as Arclite), PADS ports 0-2 each a
+  viewport. **seen**: `logs/x1b/e2e/three-pads-match.png` (three views, three split HUDs).
+- The whole spec: **measured** 7 passed (17.1 min; the 6 earlier tests and this one); mem-guard reported "peak 9.4 GB" (its own measure,
+  not the scope's: under its 23 GB budget; the capped 7G scope was not hit, exit 0).
+
+### Memory, attempts
+
+Builds `capped 6G` (native -j4, wasm-perf -j4), set regeneration 2G (the script's own), P2 and check-headers 6G, every
+game run 2G (the harness), m14 its own, the client test one 6G scope (two processes), the frontend build 4G, the browser
+harness 7G. No exit 137. Failures on the way, each with its cause: the first 2x2 layout (list sizes are screen
+fractions, picture r1), quarter four stepping twice (a 0.3 s press over the GUI's repeat, now `x1tap`), the menu part's
+dual-armory check (the armory opens later in that flow; a probe moves the expect position), the browser test's join
+count (my counting), the client test (above).
+
+### Open questions (part B, for the owner)
+
+1. The 2x2 armory is usable, not pretty: weapon names condensed (0.55 x 0.85), the loadout's captions overlap its icons
+   a little, no "1P..4P" label per quarter (the corners match the cursors' tags). Good enough?
+2. Players three and four's B with nothing chosen does nothing (only players one and two can go back to the character
+   page, and not while three or four have chosen something). Keep?
+3. Players one and two now also move between the two lists with left/right (the lists are side by side in a quarter).
+4. The mouse is not handled on quarters three and four (a click there does nothing useful). Fine for pad players?
+5. The client with split players is BROKEN (above): a separate task to find what drops the client's split view at the
+   travel, if wanted.
