@@ -5629,6 +5629,14 @@ void USkeletalMeshInstance::Render( FDynamicActor* Owner, FLevelSceneNode* Scene
 			}
 		}
 		CurrentLODLevel = NewLODLevel;
+
+		// uc2 port (H-4): UT2004's fix (engine-ut2004 UnSkeletalMesh.cpp), missing from build 2226. The software-skinned
+		// vertices reach the driver through a vertex pool whose revision changes once per frame (FVertexPool::SetClient);
+		// a mesh drawn twice in one frame at two LOD levels (the pawn's shadow pass computes its LOD with the 252-pixel
+		// shadow viewport's width, the scene with the window's) drew the second LOD's index buffer over the first
+		// LOD's vertices: Lauren's hair polygons across her body in the browser (docs/porting/analysis/h4-vertex.md).
+		if( OldLODLevel != NewLODLevel ) // Fixes corruption when meshes are rendered multiple times in a single frame  (from Bob Berry.)
+			SkinStream.Revision++;
 	}
 	UC2LodTraceChoose( this, Owner, SceneNode, LodSceneNode->RenderTarget->GetWidth(), MeshVertLODFactor );
 
