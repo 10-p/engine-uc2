@@ -9,6 +9,20 @@ here; everything comes from your files.
 Without any of this the game runs the shipped scripts unchanged (with Epic's title-update fixes, applied in memory
 when a package loads); the patch sets are optional extras.
 
+## Building them
+
+The engine build does all of this for you (`BUILD.md`, "Script patches"):
+
+```
+cmake --preset native -DUC2_ASSETS_DIR=/path/to/your/game/folder      # System/ with the 17 shipped .u
+cmake --build build-native                                           # -> build-native/Scripts/System/*.u
+```
+
+`-DUC2_SCRIPT_PATCH_SETS=epic-fixes;mouse-look` picks sets (default: those marked `on` in `sets.txt`);
+`-DUC2_SCRIPT_PATCHES=OFF` builds the engine without any. The build first checks that your `.u` are the shipped ones
+(`shipped.sha256`, the retail disc's files: `sha256sum -c shipped.sha256` inside your `System` folder checks them by
+hand); a package rebuilt from source cannot be the base and is refused.
+
 ## How a build goes
 
 1. **Base.** `tools/scripts/uc-decompile.py <System>/<Pkg>.u --out <base>/<Pkg>/Classes` writes one `.uc` per

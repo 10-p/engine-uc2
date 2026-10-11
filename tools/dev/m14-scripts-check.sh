@@ -58,7 +58,7 @@ crit() { local n; n=$(grep -a -c "^Critical:" "$1" 2>/dev/null); echo "${n:-0}";
 [ -f "$scripts/UCMenu.u" ] || { echo "no rebuilt packages in $scripts (tools/dev/script-build.sh)" >&2; exit 2; }
 if [ "${M14_NO_MKRUN:-0}" != 1 ]; then
   UC2_SCRIPTS=$scripts "$repo/tools/dev/mkrun-uc2.sh" "$repo/$build" "$tree" > /dev/null 2>&1 || exit 2
-  "$repo/tools/dev/mkrun-uc2.sh" "$repo/$build" "$ship" > /dev/null 2>&1 || exit 2
+  UC2_SCRIPTS=none "$repo/tools/dev/mkrun-uc2.sh" "$repo/$build" "$ship" > /dev/null 2>&1 || exit 2
 fi
 cmp -s "$sys/UCMenu.u" "$scripts/UCMenu.u" || { echo "$sys does not hold the rebuilt packages" >&2; exit 2; }
 
@@ -158,7 +158,7 @@ print('mean %.2f' % (sum(ImageStat.Stat(ImageChops.difference(a,b)).mean)/3))" "
   [ -z "$bad" ] && result PASS effects "$msg" || result FAIL effects "$bad;$msg see $out/effects-*.txt"
 }
 
-census_of() {	# census_of <name> <port> <scripts dir or ''>
+census_of() {	# census_of <name> <port> <scripts dir, or none: the shipped .u>
   local name=$1 port=$2 scr=$3
   # map-census.sh itself KILLs a server that has not ended 30 s after its TERM and fails that map (D-1).
   ( cd "$repo" && UC2_SCRIPTS=$scr CENSUS_NAME=$name CENSUS_PORT=$port "$capped" 8G 1800 -- tools/dev/map-census.sh "$repo/$build" 15 "${M14_CENSUS_WORKERS:-4}" ) > "$out/$name.out" 2>&1
@@ -167,7 +167,7 @@ census_of() {	# census_of <name> <port> <scripts dir or ''>
 check_census() {
   local a=$prefix-census-run b=$prefix-census-ship sa sb n p diffs
   census_of $a 7790 "$scripts"
-  census_of $b 7795 ""
+  census_of $b 7795 none
   sa=$work/logs/$a/summary.tsv; sb=$work/logs/$b/summary.tsv
   n=$(wc -l < "$sa" 2>/dev/null); p=$(grep -c '^PASS' "$sa" 2>/dev/null)
   diffs=$(diff <(cut -f1,2 "$sa" 2>/dev/null) <(cut -f1,2 "$sb" 2>/dev/null) | grep '^[<>]' | tr '\n' ' ')

@@ -36,6 +36,7 @@ ref=$work/run/t1-ref/System
 shipped=$work/epic-sources/System
 content=$work/assets/uc2
 capped=$work/bin/capped
+[ -x "$capped" ] || capped=none
 SP=$repo/Source/Engine/Inc/ScriptPatches.h
 engine_tex=$work/epic-sources/Engine
 proofs=() build_args=()
@@ -51,14 +52,15 @@ while [ $# -gt 0 ]; do
     --engine-textures) engine_tex=$2; shift 2;;
     --shipped) shipped=$2; build_args+=(--shipped "$2"); shift 2;;
     --assets) content=$2; build_args+=(--assets "$2"); shift 2;;
-    --ucc|--retail-inis|--mem|--capped) build_args+=("$1" "$2"); shift 2;;
+    --capped) capped=$2; build_args+=("$1" "$2"); shift 2;;
+    --ucc|--retail-inis|--mem) build_args+=("$1" "$2"); shift 2;;
     *) echo "unknown argument $1" >&2; exit 2;;
   esac
 done
 [ ${#proofs[@]} -eq 0 ] && proofs=(p1 p2 p3)
 mkdir -p "$W"
 fails=0
-py() { PYTHONHASHSEED=${SEED:-0} "$capped" 2G 1800 -- python3 "$@"; }
+py() { if [ "$capped" = none ]; then PYTHONHASHSEED=${SEED:-0} python3 "$@"; else PYTHONHASHSEED=${SEED:-0} "$capped" 2G 1800 -- python3 "$@"; fi; }
 DEC=$repo/tools/scripts/uc-decompile.py
 dec() { py "$DEC" "$@" --content "$content"; }
 up() { py "$repo/tools/scripts/uc-patches.py" "$@"; }

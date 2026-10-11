@@ -9,7 +9,7 @@
 // VALIDATES this against the glue ABI_VERSION + the host loader contract before assembling serve-web.
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -55,6 +55,24 @@ const deps = Object.fromEntries(
   Object.entries(args).filter(([k]) => k.startsWith('dep-')).map(([k, v]) => [k.slice(4), depSpec(v)])
 );
 
+// T3: the script packages the build compiled from the patch sets (Web.cmake mirrors the build's Scripts/System into
+// <out>/<--scripts>/). Each entry REPLACES the asset tree's file at `assetPath` (<--scripts-under>/<name>): the
+// frontend overlays them on the manifest, the precache and the published tree. An empty list (UC2_SCRIPT_PATCHES OFF,
+// or no --scripts) means the shipped packages. `sha256` is in the `checksums` form.
+const scripts = [];
+if (args.scripts && existsSync(join(dir, args.scripts))) {
+  for (const name of readdirSync(join(dir, args.scripts)).sort()) {
+    const rel = `${args.scripts}/${name}`;
+    if (!statSync(join(dir, rel)).isFile()) continue;
+    scripts.push({
+      path: rel,
+      assetPath: args['scripts-under'] ? `${args['scripts-under']}/${name}` : name,
+      size: statSync(join(dir, rel)).size,
+      sha256: sha(rel),
+    });
+  }
+}
+
 const meta = {
   targetId: args.target || 'uc2',
   engineFamily: 'UE2',
@@ -74,8 +92,10 @@ const meta = {
     '-sOFFSCREEN_FRAMEBUFFER', '-sNO_DISABLE_EXCEPTION_CATCHING',
   ],
   exports: { symbolContract: 1 },
-  checksums
+  checksums,
+  scripts,
 };
 
 writeFileSync(join(dir, 'meta.json'), JSON.stringify(meta, null, 2) + '\n');
-console.log(`[meta] wrote ${join(dir, 'meta.json')} (abi ${meta.abiVersion}, ${meta.buildConfig}, ${meta.loaderStyle})`);
+console.log(`[meta] wrote ${join(dir, 'meta.json')} (abi ${meta.abiVersion}, ${meta.buildConfig}, ${meta.loaderStyle}; ` +
+  `${scripts.length} script packages${scripts.length ? ': ' + scripts.map((s) => s.assetPath).join(' ') : ''})`);
