@@ -451,3 +451,8 @@ changes and ini changes: steps 1, 5, 6 and `Engine/Config/README.md`.
 Memory: builds 6G (-j6 / -j2), configures 4G, script make/strip 3G, script-diff 3G, game and ucc runs 2G, census 8G
 and net 6G inside the M14 suite, frontend build 4G, browser 6G (mem-guard peaks 11.5-12.4 GB machine-wide); no
 ceiling was hit (no exit 137).
+
+## H-3 (2026-10-11): who owns the look, per player
+
+`bMouseOwnsLook` no longer starts as the mouse for a split-screen player on a viewport other than the window's (the mouse
+never reaches it), and the left stick hands the look to the pad as the right stick does. `h3-pads.md` step 2.

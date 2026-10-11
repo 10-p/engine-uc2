@@ -42,3 +42,9 @@ THE RULE. Player one's pad pulled out opens no "controller removed" page on the 
 launcher's "press any button" hint and its connect/disconnect notices were removed (frontend notebook, G-11): SDL's
 Emscripten driver gets `gamepadconnected` on the engine thread by itself. Chrome lists a pad only after a button press
 on it; UC2's own "press Start" for player two makes that happen naturally.
+
+## H-3 (2026-10-11): the first press of a pad
+
+The press that makes the browser list a pad is the pad's starting state for SDL's Emscripten driver (never an event):
+`SDL2Pads.cpp` `PadAdded` reads the browser's pressed buttons once and the first `ReadPad` takes them as a press. Without
+it the owner's Start on the character page was lost. `h3-pads.md`.
