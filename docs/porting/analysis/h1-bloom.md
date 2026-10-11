@@ -128,7 +128,7 @@ first person (`ToggleThirdCam`) at PlayerStart7 (`NETPLACE FxCam 1229.6 -672.9 -
 panel (bloom) and a blue light box (emissive glow) in view; game time frozen (`TimeDilation 0.0001`); the depth of
 field switched off for the bloom measurements. Resolution through `-ini:` (`WindowedViewportX/Y`), AutoFOV off, so
 the view is the same picture at 1280x720 and 2560x1440 (2248x1212 shows the same horizontal field, cropped
-vertically). Scenarios are in the notebook's commit message log; pictures in `<WorkUC2>/logs/h1`.
+vertically). Scenarios: `tools/dev/h1/{base,proto,fps}.scen` (`UC2_GPU=1 FX_MAP=DM-Deadbolt FX_NAME=<name> FX_SCENARIO=tools/dev/h1/proto.scen FX_ARGS="-ini:System:[SDL2Drv.SDL2Client]:WindowedViewportX=2560 ...Y=1440" tools/dev/fx-owner.sh h1 custom`); pictures in `<WorkUC2>/logs/h1`.
 Measure: `tools/dev/h1-measure.py profile` (glow = with - without, mean RGB, along a row, positions in the 1280x720
 frame).
 
