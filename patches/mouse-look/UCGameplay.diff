@@ -148,7 +148,7 @@
  
  final function ProcessInputMatching(float DeltaTime)
  {
-@@ -191,15 +207,75 @@
+@@ -191,15 +207,79 @@
  	local float AccelX;
  	local float AccelY;
  	local float FallOff;
@@ -158,6 +158,9 @@
 +	local int CountY;
 +	local float KeyX;
 +	local float KeyY;
++	local int ViewportIndex;
++	local int ViewportCount;
++	local bool bPadOnly;
 +	CountX = ((int(Outer.bXAxis) - int(XAxisCountSeen)) & 255);
 +	CountY = ((int(Outer.bYAxis) - int(YAxisCountSeen)) & 255);
 +	XAxisCountSeen = Outer.bXAxis;
@@ -182,10 +185,11 @@
 +		(LinearLookUp += (Outer.aMouseY / 6.0));
 +		Outer.aMouseY = 0.0;
 +	}
++	bPadOnly = (Outer.GetSplitscreenLayout(ViewportIndex, ViewportCount) && (ViewportIndex > 0));
 +	if (!(bLookOwnerKnown))
 +	{
 +		bLookOwnerKnown = True;
-+		bMouseOwnsLook = !(Outer.Level.IsXBox());
++		bMouseOwnsLook = (!(Outer.Level.IsXBox()) && !(bPadOnly));
 +		if (bLazyMouseCamera)
 +		{
 +			Log((("UCPlayerInput: PC mouse look (rebuilt UCGameplay.u), MouseLookSensitivity=" $ string(MouseLookSensitivity)) $ ", lazy camera under the mouse"));
@@ -199,11 +203,11 @@
 +			Log(("UCPlayerInput: double-tap dodge on (bDoubleTapDodge), DoubleClickTime=" $ string(DoubleClickTime)));
 +		}
 +	}
-+	if (((Outer.aMouseX != float(0)) || (Outer.aMouseY != float(0))))
++	if (((((Outer.aMouseX != float(0)) || (Outer.aMouseY != float(0))) || (Outer.aForward != float(0))) || (Outer.aStrafe != float(0))))
 +	{
 +		bMouseOwnsLook = False;
 +	}
-+	if (((LinearTurn != float(0)) || (LinearLookUp != float(0))))
++	if ((((LinearTurn != float(0)) || (LinearLookUp != float(0))) && !(bPadOnly)))
 +	{
 +		bMouseOwnsLook = True;
 +	}
@@ -232,7 +236,7 @@
  	FOVScale = (Outer.DesiredFOV * 0.01111);
  	MouseScale_X = (MouseSensitivity_X * FOVScale);
  	MouseScale_Y = (MouseSensitivity_Y * FOVScale);
-@@ -253,10 +329,15 @@
+@@ -253,10 +333,15 @@
  	{
  		(Outer.aLookUp *= -1.0);
  	}
@@ -248,7 +252,7 @@
  	(Outer.aForward += Outer.aBaseY);
  	(Outer.aStrafe += Outer.aBaseX);
  	if ((int(Outer.bSnapLevel) != 0))
-@@ -293,6 +374,108 @@
+@@ -293,6 +378,108 @@
  {
  	aMouseX_AccelTime = 0.0;
  	aMouseY_AccelTime = 0.0;
@@ -357,7 +361,7 @@
  }
  
  final function float AccelMouse(float aMouse, float DeltaTime, float AccelLimit, float AccelMaxTime, Range AccelRange, out float AccelTime)
-@@ -391,6 +574,10 @@
+@@ -391,6 +578,10 @@
  	AdhesionPct = (1.0 - Division);
  	Adhesion = (AdhesionScale * GetRangeValue(aTurn_AdhesionRange, AdhesionPct));
  	AdjustYaw = int(((float(Normalize((NewT - OldT)).Yaw) * Adhesion) * Outer.AdhesionAlpha));
@@ -368,7 +372,7 @@
  	return AdjustYaw;
  }
  
-@@ -421,6 +608,10 @@
+@@ -421,6 +612,10 @@
  	AdhesionPct = (1.0 - ((aLookUp_AdhesionLimit.Max - Outer.AdhesionDot_Vert) / (aLookUp_AdhesionLimit.Max - aLookUp_AdhesionLimit.Min)));
  	Adhesion = (AdhesionScale * GetRangeValue(aLookUp_AdhesionRange, AdhesionPct));
  	AdjustPitch = int(((float(Normalize((NewT - OldT)).Pitch) * Adhesion) * Outer.AdhesionAlpha));
@@ -379,7 +383,7 @@
  	return AdjustPitch;
  }
  
-@@ -919,6 +1110,7 @@
+@@ -919,6 +1114,7 @@
  	aTurn_AdhesionRange=(Min=0.0,Max=0.2)
  	aLookUp_AdhesionLimit=(Min=0.57,Max=1.0)
  	aLookUp_AdhesionRange=(Min=0.0,Max=0.4)

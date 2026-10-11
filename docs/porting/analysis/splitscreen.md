@@ -806,3 +806,11 @@ it takes port 0 (the first free port) and becomes player one's, leaving player t
 fixed ports; a pad does not remember its port. Not built (a "port per device" rule would be a design change). (2) Not
 measured: the old binary failing the new unplug test (a control run); the rule's code path is one `if` and the
 removal line names it.
+
+## H-3 (2026-10-11): the owner's system-link flow, the mouse after a join, the pad camera
+
+`h3-pads.md`. In short: a player who joins in the menus left viewport 0's `bShowWindowsMouse` set (the GUI moved to the
+overlay), so the mouse was never captured again in the split-screen match (fixed in SDL2Drv `CursorWanted`/`Tick` and
+`UnSplitScreenMgr`); pad-only players got the mouse's camera rules until they touched the right stick (fixed in the
+`mouse-look` patch set); in the browser the Start press that makes Chrome list the pad was lost in SDL's Emscripten
+driver (fixed in `SDL2Pads.cpp`). New part `g6-splitscreen.sh <tree> h3menu`.

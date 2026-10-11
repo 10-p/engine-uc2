@@ -199,6 +199,10 @@ UViewport* USplitScreenMgr::SetupOverlayViewport()
 		// use default GUIController
 		OverlayView->GUIController = Client->Viewports(0)->GUIController;
 		OverlayView->GUIController->ViewportOwner = OverlayView;
+		// uc2 port (H-3, docs/porting/analysis/h3-pads.md): the GUI sets bShowWindowsMouse on its ViewportOwner each menu
+		// frame and clears it on its owner when the last menu closes; the viewport it leaves would keep the menus' 1 for
+		// good (a PC driver then never captures the mouse again). The flag goes with the GUI.
+		Client->Viewports(0)->bShowWindowsMouse = 0;
 		// use default global console
 		OverlayView->Console = Client->Viewports(0)->Console;
 		// make sure its z offset always draws on the front
@@ -266,6 +270,10 @@ UBOOL USplitScreenMgr::RemoveOverlayViewport()
 
 	// reset ViewportOwner
 	Client->Viewports(0)->GUIController->ViewportOwner = Client->Viewports(0);
+	// uc2 port (H-3): the windows-mouse flag comes back with the GUI (as GUIController.SetControllerStatus sets it).
+	Client->Viewports(0)->bShowWindowsMouse = Client->Viewports(0)->GUIController->bActive && Client->Viewports(0)->bWindowsMouseAvailable;
+	if( OverlayView && OverlayView != Client->Viewports(0) )
+		OverlayView->bShowWindowsMouse = 0;
 	// give console back to default
 	Client->Viewports(0)->Console = Client->Viewports(0)->Console;
 
