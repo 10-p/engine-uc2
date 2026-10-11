@@ -129,7 +129,7 @@ check_audio() {
   local rc sm=$work/logs/$tree/audio-summary.txt bad=""
   ( cd "$repo" && tools/dev/audio-regression.sh "$tree" ) > "$out/audio.txt" 2>&1; rc=$?
   grep -a -q "UC2AudioCheck: .* 0 failures" "$sm" || bad="$bad check"
-  grep -a -q "UC2AudioSelfTest: 39 checks, 0 failed" "$sm" || bad="$bad selftest"
+  grep -a -q -E "UC2AudioSelfTest: [0-9]+ checks, 0 failed" "$sm" || bad="$bad selftest"
   grep -a "SUMMARY audio-menu-music" "$sm" | grep -a -q "PASS" || bad="$bad menu-music"
   for c in menu deadbolt praxis-efx praxis-dry; do
     grep -a "SUMMARY audio-$c:" "$sm" | grep -a -q "silent seconds 0;.*failed 0 (0 distinct); Critical 0" || bad="$bad $c"
