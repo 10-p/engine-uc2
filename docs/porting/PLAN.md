@@ -388,3 +388,8 @@ switching on key press is normal; menu back stays Escape/Enter (less error-prone
   first map"): options (a) queue the sound until the bank is cached (owner steers clear), (b) skip the sound but fetch
   the bank (only if a safe one-line change), (c) precache the sound folder (121 MB) or, if the distinction is easy,
   the character/weapon banks always and the level banks per map (the owner leans to c).
+- **X-1 decisions (owner, 2026-10-11):** 3P lower-left, 4P lower-right (the flip axis as the examination read it);
+  colours: coordinator's pick, distinct (3P green, 4P magenta); no previews or art beyond the hexagon cursor: a simple
+  text under the hexagon list says what each player selected; a 2x2 ARMORY page ("this is gameplay related");
+  no profiles for players 3-4; standalone and hosting first, one bounded client test ("if something really breaks,
+  it breaks"); derived art is fine (committed TGAs generated from Epic's 1P by `tools/dev/make-player-tags.py`).
