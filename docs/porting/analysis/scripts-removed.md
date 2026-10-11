@@ -52,3 +52,12 @@ plus `git grep -a 'Classes\|script-build'` over cmake/, CMakeLists.txt, tools/, 
 | `docs/porting/analysis/{audio-f6,controls,decompile-spike,engine-port,exploration-findings,headers,jitter,mouse,platform-f4,postprocess,pp-scale,profiles,rebind,saveconfig,script-patches,splitscreen,ucc-windows,ui-scale,vanilla,video,web-ini-saves,webrtc}.md` | historical notebooks | left as written, with one line at the top |
 | `docs/porting/REPORT.md` / `REPORT.html` (48 / 46 lines) | the coordinator's | not edited; the paragraph for section 60 is below |
 | `.gitignore`, `.gitattributes` | | nothing referred to the scripts (`* -text` stays); `.gitignore` gains `/Source/*/Classes/` and `/Source/*/*.ucproject` so they cannot come back by accident (`patches/` is not matched) |
+
+## Step 2 (2026-10-11): deleted
+
+`git rm -r` of the 18 `Source/<Pkg>/Classes` folders and the 7 `.ucproject`: 2240 paths. Left: `git ls-files | grep
+-a -c '\.uc$'` = 2 (the two new classes of `patches/keys-menu`); no `.huc`, `.upkg`, `.ucproject` tracked.
+`.gitattributes` (`* -text`) referred to nothing script-specific and stays. `.gitignore` gains `/Source/*/Classes/` and
+`/Source/*/*.ucproject` (`git check-ignore` matches `Source/UCMenu/Classes/X.uc`, not
+`patches/keys-menu/new/UCMenu/Classes/KeyBindingPanel.uc`). Packages that held only scripts keep their Epic `.vcproj`
+(`Source/UCMenu/UCMenu.vcproj` etc.).
