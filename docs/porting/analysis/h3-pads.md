@@ -142,3 +142,24 @@ The first shipped-scripts run (reg-ship) failed only the look-owner checks (Epic
 flow at the map list (the third accept went to the page while it was still animating, the Left meant for the
 character page went to the map list): the scenario now confirms each accept (`wait handled XC_A`) and waits for the
 character page by probe.
+
+## Step 5 - the browser gate on the final engine (wasm-perf sha256 317e8b74d4cbb0f7..., frontend uc2-h3-pads 44ded11)
+
+serve-web assembled from this worktree's `build-wasm-perf` (the served wasm's sha256 equal to the artifact's before and
+after every run, `logs/h3/web/*-sha-*.txt`); `e2e-mem-guard --max-gb=23` in `capped 7G`; load 15-20.
+- `uc2-wasm-gamepad.spec.js`, every test (`logs/h3/web/full-1.out`): **6 passed** (15.4 min, peak 11.3 GB): box unticked
+  (G-5/G-11), box ticked (G-11), box ticked then a second launch, the owner's flow ticked (Start as the pad's first
+  press), ticked with the pad pressed in the menus first, unticked with two pads. Pictures and engine logs:
+  `logs/h3/web/full-1-results/*/owner-flow-match.png` (two split views, player one Arclite red team, player two Anubis)
+  and `engine.log`.
+- Before the engine's first-press fix (wasm 69849688...), the owner's flow ticked failed exactly at "player two's Start
+  joins" (`logs/h3/web/owner-ticked-2.out`).
+- `uc2-wasm-boot.spec.js` (`logs/h3/web/boot-1.out`): 5 passed (boot, DM-Deadbolt by URL, keyboard and mouse, mouse
+  look, the launcher's ini settings) - the single-player mouse path is unchanged.
+
+Labels: the port per mode, the join through the first press, the two split views, Arclite, the capture state (engine
+side), the look owner per player: **numerically checked** (log lines, natively and in the browser). The browser's own
+pointer lock: **never exercised** (headless Chromium refuses pointer lock, `WrongDocumentError`); what is checked is the
+engine's capture, which is what asks SDL for it. The pad camera's feel (lazy camera, auto-centre pitch, adhesion for
+players 2-4): **seen only as the switch** (`bMouseOwnsLook=False` routes them to Epic's unchanged code; d6's pad curves vs
+shipped 48 PASS), not measured as camera motion of player two. A real pad in a real browser: **never exercised** here.
