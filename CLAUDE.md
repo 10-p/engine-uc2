@@ -11,7 +11,7 @@ Read in this order: `docs/porting/PLAN.md` (milestones and gates), `docs/porting
 | Path | What | Rule |
 |---|---|---|
 | `epic-sources/` | the pristine Epic tree, with the leaked script sources (`<Pkg>/Classes`) | never edit; `reference/epic-sources.sha256` proves it; dev-only tools may read it, never a build input |
-| `engine-uc2/` | this repo | local git only; no remote, no push without the owner's go-ahead |
+| `engine-uc2/` | this repo | GitHub `10-p/engine-uc2` (private, `origin`); the coordinator pushes `main` after each verified merge; history rewritten 2026-10-11 (no UnrealScript sources) |
 | `ufrontend/` | frontend clone, branch `uc2` | no push without the owner's go-ahead |
 | `emsdk/` | Emscripten 5.0.7 | `source ../env.sh` |
 | `assets/uc2/` | canonical asset tree | never committed anywhere |
