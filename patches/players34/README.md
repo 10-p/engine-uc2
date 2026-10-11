@@ -32,8 +32,9 @@ profile for them (the owner's decisions, `docs/porting/PLAN.md` "X-1 decisions")
     (none for them), `UpdateJoinText`/`UpdateControlVisibility`, `UpdateSelectedCharacter` (their choice moves no focus
     of player two), `SaveSettings` (names), `InternalOnReopened`/`ConfirmLaunchGame`, the opening and closing animations,
     `VerifyInputs` for every player. The line under the honeycomb: "PLAYER 3 / 4", "PRESS START" (Epic's localised
-    `sPlayerTitle`, `sPressStart`: five languages without an `.int` of ours) until one joins, then "3P <CHARACTER>
-    [READY]" / "4P PRESS START" (the tags' own labels; `sReady`, `sRandom`, `sUnknown`, the character's name).
+    `sPlayerTitle`, `sPressStart`: five languages without an `.int` of ours) until one joins, then a line each with the
+    tags' own labels: "3P" while choosing (the cursor shows the choice), "3P READY" once chosen (Epic's localised
+    `sReady`), "4P PRESS START" for one not there; no character names (the owner, 2026-10-11).
   - `UC2Arena_DualBase.InternalOnXControllerEvent`: players three and four's buttons go to the page's
     `Players34XControl` and are used up there (Epic's code would act on player two's panel, and a B nobody takes closes
     the page): the character page and the 2x2 armory give them their own, Epic's two-panel armory nothing.
