@@ -4,11 +4,16 @@ The Epic tree (`<WorkUC2>/epic-sources`, 16,451 files, sha256 manifest in `<Work
 is kept pristine and is never edited. The first commit of this repo was produced from it by
 `tools/dev/import-epic-sources.py`. Nothing was edited in the import except line endings.
 
+**Since 2026-10-11 (T4) the script sources are not in the repo**: the packages' `Classes/` folders (`.uc`, `.huc`,
+`.upkg`, `STY_*.txt`) and Epic's `.ucproject` files were removed, and the history was rewritten without them
+(UnrealScript is game content; `docs/porting/analysis/scripts-removed.md`). The importer skips them now. Epic's text
+stays in `<WorkUC2>/epic-sources/<Pkg>/Classes`; our script changes are the sets of `patches/`.
+
 ## What was imported
 
 | Here | From | Rule |
 |---|---|---|
-| `Source/<Package>/` | the 42 code and build folders of the same name | text files only |
+| `Source/<Package>/` | the 42 code and build folders of the same name | text files only; no `Classes/` and no `.ucproject` since T4 |
 | `Source/Avaris.sln`, `defmacros.dsm`, `fixit`, `sync_LS.bat`, `BuildFileList.txt`, `ScriptFileList.txt` | tree root | byte for byte |
 | `Thirdparty/nvTriStrip`, `nvDXT`, `DirectX8` | same names | sources and headers only (no `.lib`, `.tlb`) |
 | `Thirdparty/zlib` | engine-ut2004's `Thirdparty/zlib` (1.1.4, has a CMakeLists) | replaces Epic's 1.1.3 |
@@ -44,4 +49,5 @@ are compiled, and only once their own `CMakeLists.txt` lands. Reference-only for
 `Launch`, `UnrealEd`, `UIX`, `SDLDrv`/`SDLLaunch` (SDL 1.2, replaced by SDL2 drivers), `Setup`, `Bundler`,
 `XboxAssetConversion`, `GUIDesigner`, `DebuggerLaunch`, `FNameDebug*`, `UccDepend`, `BuildProcess`, `!Build*`.
 Script-only packages (`Gameplay`, `UCInventory`, `UCEffects`, `UCCharacters`, `UCMutators`, `UCAnnouncements`,
-`UCMenu`) are compiled by `ucc make` from M14 on; until then the shipped `.u` files are loaded.
+`UCMenu`) keep only Epic's `.vcproj` here; the game loads the shipped `.u` files, and the build compiles the packages the
+patch sets change from the shipped ones decompiled (`patches/README.md`).

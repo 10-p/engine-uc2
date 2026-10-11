@@ -1,5 +1,9 @@
 # F-2 and F-4: FPS in the log, platform like UT2004 (exceptions, frame yield, arm64, files, docs, switches)
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 Running notebook, appended after every step so a successor can continue. Worktree
 `/home/ion/WorkUC2/engine-uc2-f4-platform`, branch `f4-platform` (base main `1372dec`). Run trees `run/f4*`,
 logs `/home/ion/WorkUC2/logs/f4`. Brief: PLAN.md "Owner review of 2026-10-09" tasks F-2 and F-4.

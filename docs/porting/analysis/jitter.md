@@ -1,5 +1,9 @@
 # Jitter notebook: the player's own pawn lags and snaps in front of the third-person camera
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 Worktree `/home/ion/WorkUC2/engine-uc2-jit`, branch `jitter` (from main 1519163). Run trees `<WorkUC2>/run/jit*`,
 logs `<WorkUC2>/logs/jit/`. Every run goes through `<WorkUC2>/bin/capped` (CLAUDE.md). Appended after every step.
 

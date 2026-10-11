@@ -1,5 +1,9 @@
 # D-6 notebook: mouse and game pad separated (mouse look like a PC shooter, the pad as on the Xbox)
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 Worktree `/home/ion/WorkUC2/engine-uc2-d6`, branch `d6-mouse` (from main 47b1b18). Run trees `<WorkUC2>/run/d6*`,
 logs `<WorkUC2>/logs/d6/`. Every run goes through `<WorkUC2>/bin/capped` (CLAUDE.md). Appended after every step.
 

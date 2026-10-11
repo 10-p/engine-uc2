@@ -1,5 +1,12 @@
 # M14 notebook: script compiler (`ucc make`) and the proof against the shipped `.u`
 
+> **2026-10-11 (T4): historical.** The repository no longer holds the script sources this notebook compiles
+> (`Source/<Pkg>/Classes`, `.ucproject`): UnrealScript is game content (owner). `tools/dev/script-build.sh` survives as
+> a dev-only proof tool and reads Epic's leaked text from `<WorkUC2>/epic-sources/<Pkg>/Classes` (or `--classes-root`);
+> the build makes the patched packages from the shipped `.u` decompiled (`build-*/Scripts/base`) and `patches/`
+> (`script-patches.md`, `script-build-rules.md`); a script change is a change to a patch set (`patches/README.md`);
+> `scripts-removed.md` says what moved where.
+
 Milestone D-1 of the owner review (PLAN.md, "Phase D"). Goal: a working UnrealScript compiler on Linux that rebuilds
 the 17 EditPackages from `Source/<Pkg>/Classes`, a tool that proves the result equal to the shipped `.u` + the 30
 `ScriptPatches.h` patches, and a run of the game on the recompiled packages. No gameplay or UI change.

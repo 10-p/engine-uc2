@@ -1,5 +1,9 @@
 # Engine package port notebook (M2)
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 Baseline measurements are in `engine-baseline.md`. This file records what was changed to make
 `Source/Engine` compile with GCC 15 (`-m32`) and emcc 5.0.7, and why.
 

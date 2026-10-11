@@ -1,5 +1,9 @@
 # S2 notebook: the script compiler on Windows (`ucc.exe make`, MinGW i686), proved under wine
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 Spike S2 (2026-10-10). Question from the owner: "is it that bad to build ucc in Windows? We may expect to build
 this in Windows at some point". Goal: the Editor package (the UnrealScript compiler, M14,
 `analysis/scripts.md`) built into the MinGW `ucc.exe` of M12 (`analysis/windows.md`), and the M14 proof

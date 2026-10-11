@@ -135,3 +135,57 @@ plus `git grep -a 'Classes\|script-build'` over cmake/, CMakeLists.txt, tools/, 
   with `git checkout -- patches/mouse-look` (not `patches/`: that would have dropped this task's README and
   reference), rebuilt: `sha256sum -c` of the reference 3 OK. README step 6 now gives the comparison with the
   `--system-*` options (found by this run).
+
+## Step 4 (2026-10-11): the C++ side and the macro files
+
+- No C++ file includes a file that left (`git grep -a -n -E '#\s*include\s*[<"][^>"]*(\.(uc|huc|upkg)|Classes[/\\])'
+  -- Source Thirdparty`: nothing). The C++ that names `Classes/` reads script text at run time of `ucc make` or the
+  editor, relative to a run tree (`FTextFilter.cpp:294`, `UMakeCommandlet.cpp:76` reading an optional
+  `<Pkg>/Classes/<Pkg>.upkg`, `UnrealEd/Src/Main.cpp:4090`, `ParticleEditor.cpp:830`, the last two not built): code,
+  unchanged. No `Source/*/CMakeLists.txt` names a script file.
+- `.huc`: the build's trees have none and need none: `find build-native/Scripts/{base,tree} -name '*.huc' -o -name
+  '*.upkg'` nothing; no `` `include ``/`` `define `` in `Scripts/tree` (`grep -a -r -l`: nothing; the decompiled base has
+  the macros expanded, UCMenu's shipped text too, and T1 removed the one `` `include(GUI.huc) `` from our new classes);
+  the `make-*.log` of the build mention no `.huc`. The scripts target built in a fresh build directory of the tree
+  without `Source/*/Classes` (step 3) and again from scratch in step 6.
+
+## Step 5 (2026-10-11): documents
+
+- `BUILD.md` "Scripts (M14)": the repo holds no script sources; the commands are the build, check-headers,
+  regen-headers, m14-scripts-check; headers default to `Scripts/tree` and `regen-headers` keeps cpptext/native structs;
+  `script-build.sh` is a dev-machine-only proof tool reading `epic-sources`. "Script patches": `scripts-proof`'s P2 is
+  `reference.sha256` (with how to regenerate it, and `sha256sum -c` by hand); changing a script = changing its set.
+- `CLAUDE.md`: `epic-sources/` row (the leaked script sources, dev-only tools, never a build input); the rules: no
+  UnrealScript in the repo, how to change a script, `grep -a` and the 0x02 bytes of `patches/`, `Scripts/{base,tree}`,
+  `epic-sources/<Pkg>/Classes`; Latin-1/LF applies to `patches/`.
+- `README.md` "What?": the script is content, the repo holds the patch sets. `patches/README.md`: "Changing a script:
+  change its set" (the 5 steps with exact commands, what the helper runs, compare, headers, reference, commit) and
+  "The proofs". `docs/SOURCE-LAYOUT.md`: a paragraph on the removal and the importer; the table row; the script-only
+  packages keep their `.vcproj`. `docs/porting/PLAN.md`: one line under "Owner review of 2026-10-11".
+- `docs/porting/analysis/scripts.md`: a banner (historical; where everything is now). One quoted line at the top of
+  the 23 other notebooks that name the sources (audio-f6, controls, decompile-spike, engine-port, exploration-findings,
+  headers, jitter, mouse, platform-f4, postprocess, pp-scale, profiles, rebind, saveconfig, script-patches,
+  script-build-rules, splitscreen, ucc-windows, ui-scale, vanilla, video, web-ini-saves, webrtc); their text is left
+  as written.
+
+### Paragraph for REPORT.md section 60 (for the coordinator; REPORT.md not edited)
+
+Under "30. Input, UI, scripts, profiles and saves" (30.17 and every "Script, `Source/<Pkg>/Classes/...`" line of
+sections 30 and 50):
+
+- **The script sources left the repository (T4, 2026-10-11).** Your rule: UnrealScript is game content. The 2233
+  files of `Source/<Pkg>/Classes` (Epic's leaked `.uc`, `.huc`, `.upkg` with our edits on top) and Epic's 7
+  `.ucproject` are deleted, and the history is rewritten without them; `.gitignore` keeps them out. A path
+  `Source/<Pkg>/Classes/<Class>.uc` in this report now means that class as the build decompiles it
+  (`build-*/Scripts/base`, then `Scripts/tree` with the sets applied); our changes to it are in `patches/<set>/`
+  (UCPlayerInput, UCPlayerController, UCTrainingController: `mouse-look`; GUIController: `player-name`;
+  UC2Settings_Main and the two new classes: `keys-menu`; PSDistortionBaseMaterial, GUIComponent and Epic's other 28
+  fixes: `epic-fixes`). Changing a script is changing its set (`patches/README.md`, "Changing a script":
+  `uc-patches-regen.sh edit <set>`, edit, `make <set>`, rebuild). The proof that the sets give our packages (T1's P2,
+  against a build of the sources) cannot be rebuilt any more: it passed one last time at the removal (UCGameplay 2474,
+  GUI 720, UCMenu 2360 functions bytecode-identical, 0 differences) and is now a regression reference,
+  `patches/reference.sha256` (GUI.u 370666 bytes c796d108..., UCGameplay.u 1589219 7b8ade86..., UCMenu.u 2409720
+  1166328f...), checked by `scripts-proof` and regenerated with a deliberate set change. Generated headers are checked
+  and regenerated from the patched tree (a class's cpptext and native structs, which the shipped packages lack, stay as
+  committed). `tools/dev/script-build.sh` (M14) remains a dev-machine tool over Epic's text in `epic-sources`, never a
+  build input. Truth: `scripts-removed.md`, `patches/README.md`, BUILD.md "Scripts".

@@ -1,5 +1,9 @@
 # Controls (M10): keyboard, mouse and SDL game controllers
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 Running notebook of milestone M10, appended after every step so a successor can continue. Worktree
 `/home/ion/WorkUC2/engine-uc2-m10`, branch `m10-controls`. Run tree `/home/ion/WorkUC2/run/m10`, logs and
 screenshots `/home/ion/WorkUC2/logs/m10/`. Every run goes through `/home/ion/WorkUC2/bin/capped`.

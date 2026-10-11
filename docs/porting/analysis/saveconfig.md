@@ -1,5 +1,9 @@
 # Script `SaveConfig()` / `StaticSaveConfig()` on PC (task "saveconfig")
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 Running notebook of the `saveconfig` branch (worktree `../engine-uc2-sc`), started 2026-10-07 from main's tip
 `8161ead`. Brief (owner: "this is a PC game now"): enable UnrealScript's `SaveConfig()` / `StaticSaveConfig()`, which
 Epic compiled out on PC *and* Xbox (`Source/Core/Src/UnCorSc.cpp` `execSaveConfig` / `execStaticSaveConfig`, each body

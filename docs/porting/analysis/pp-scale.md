@@ -1,5 +1,9 @@
 # Post-process blur scale (480-line reference): notebook
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 Branch `pp-scale`, worktree `../engine-uc2-pp` (from main `e4ce0a5`), run trees `<WorkUC2>/run/pp*`, pictures and
 logs `<WorkUC2>/logs/pp`. Everything that runs goes through `<WorkUC2>/bin/capped` (game 2G, 3G at 4K; builds 6G
 `-j6`). Every step is committed and appended here.

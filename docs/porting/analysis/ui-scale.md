@@ -1,5 +1,9 @@
 # D-2 notebook: UI scaling (menus and HUD in a centred 4:3 box)
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 Task (PLAN.md Phase D, D-2; the owner's addendum of 2026-10-06): "Most urgent is the UI scaling, it is a disaster
 beyond 480p, where the menu is very distorted, but worse, the in game ui stays in the corner, including the
 reticle! We need to make the UI to scale to the 4:3 of fullscreen and be centered." Menus and the in-game HUD,

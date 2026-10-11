@@ -1,5 +1,9 @@
 # Spike S1: can the shipped script packages be decompiled into a source base that recompiles to the same bytecode?
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 Feasibility study with measurements (not the implementation; nothing here ships). Worktree
 `engine-uc2-s1-decompile`, branch `s1-decompile`. Logs `<WorkUC2>/logs/s1/`, run trees `<WorkUC2>/run/s1-*`.
 Every run through `<WorkUC2>/bin/capped` (build 6G, ucc 3G, Python 2G). Time box about 6 hours.

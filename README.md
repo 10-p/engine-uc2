@@ -5,7 +5,9 @@
 Unreal Championship 2: The Liandri Conflict (Unreal Engine 2 build 2226, package version 151), ported from
 Epic's Xbox/Win32 source tree to Linux, Windows (MinGW-w64) and the Web (Emscripten). Private engine
 repository: source only. Game content lives out of tree in `<WorkUC2>/assets/uc2`
-(`tools/dev/mkassets-uc2.sh` builds it from the Epic tree; `tools/dev/mkrun-uc2.sh` assembles a run tree).
+(`tools/dev/mkassets-uc2.sh` builds it from the Epic tree; `tools/dev/mkrun-uc2.sh` assembles a run tree). The game's
+UnrealScript is content too: the repo holds none, only our changes to it as patch sets ([`patches/`](./patches/README.md)),
+which the build applies to scripts decompiled from your own game files.
 
 - Agent guide: [`CLAUDE.md`](./CLAUDE.md)
 - Building: [`BUILD.md`](./BUILD.md)

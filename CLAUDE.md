@@ -10,7 +10,7 @@ Read in this order: `docs/porting/PLAN.md` (milestones and gates), `docs/porting
 
 | Path | What | Rule |
 |---|---|---|
-| `epic-sources/` | the pristine Epic tree | never edit; `reference/epic-sources.sha256` proves it |
+| `epic-sources/` | the pristine Epic tree, with the leaked script sources (`<Pkg>/Classes`) | never edit; `reference/epic-sources.sha256` proves it; dev-only tools may read it, never a build input |
 | `engine-uc2/` | this repo | local git only; no remote, no push without the owner's go-ahead |
 | `ufrontend/` | frontend clone, branch `uc2` | no push without the owner's go-ahead |
 | `emsdk/` | Emscripten 5.0.7 | `source ../env.sh` |
@@ -29,8 +29,16 @@ Read in this order: `docs/porting/PLAN.md` (milestones and gates), `docs/porting
   through a named capability, do not delete the other branch. Real bugs in shared code get real fixes.
 - Removing a broken effect is not a fix. The community "fixed maps" are reference only.
 - TCHAR is ANSI on every target. Never add `-fshort-wchar` or `UNICODE`.
-- `grep` here is ugrep and skips Latin-1 files silently: always `grep -a`. `find` is bfs.
-- Sources (`.cpp .h .uc` ...) are Latin-1 with LF endings; do not re-encode. Windows project files keep CRLF.
+- `grep` here is ugrep and skips Latin-1 files silently: always `grep -a`. `find` is bfs. Script text has 0x02 bytes
+  (button glyphs) too: `patches/`, the build's `build-*/Scripts/{base,tree}`, `epic-sources/<Pkg>/Classes`.
+- **No UnrealScript in this repo** (owner, 2026-10-11: script is game content). There is no `Source/<Pkg>/Classes`;
+  the build decompiles the player's shipped `.u` into `build-*/Scripts/base`, applies `patches/` into `Scripts/tree`
+  and compiles `Scripts/System` (BUILD.md "Script patches"). To change a script, change its patch set:
+  `patches/README.md`, "Changing a script" (`tools/dev/uc-patches-regen.sh edit|make <set>`, rebuild,
+  `uc-patches-proof.sh p2 --write-reference`, headers with `regen-headers.sh`). Never commit a `.uc` outside
+  `patches/`, nor copy Epic's leaked text into the repo beyond the context lines a diff needs.
+- Sources (`.cpp .h` ..., the `.diff`/`.uc` of `patches/`) are Latin-1 with LF endings; do not re-encode. Windows
+  project files keep CRLF.
   `Engine/Config/{Default,DefUser}.ini` and `Engine/Config/web/*.ini` are LF too (`tools/dev/sync-web-ini.py` refuses a
   CR); Epic's reference copies `DefaultXbox.ini`, `DefUserXbox.ini`, `KeyBinds.ini` stay Epic's bytes (CRLF).
   Checked against the siblings (F-4d, 2026-10-09): engine-ut2004 keeps Latin-1 (35 ISO-8859 files) and LF inis,

@@ -1,5 +1,9 @@
 # T2 notebook: the generated C++ headers regenerate from scratch
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 Task T2 (2026-10-10). The owner: "Why can't they be generated from scratch? Can't we patch the generator so that
 it generates 64-bit headers by default?" Goal: `Source/<Pkg>/Inc/<Pkg>Classes.h` are pure output of the
 script compiler's header exporter (`ucc-bin make -ForceHeads`, Editor's `UClassExporterH`), 64-bit-correct

@@ -1,5 +1,9 @@
 # Render targets and post-processing (M7, renderer R3): notebook
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 Branch `m7-postprocess`, worktree `../engine-uc2-m7`, run tree `run/m7`, pictures and logs `<WorkUC2>/logs/m7`.
 Scope: PLAN.md row M7. Steps P1 (driver), P2 (engine gates behind a capability), P3 (the 25 waiting shaders
 and the camera effects; projector shaders; `PS_Terrain3Layer`), P4 (ini switch), P5 (verification on content).

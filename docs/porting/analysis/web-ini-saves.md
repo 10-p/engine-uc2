@@ -1,5 +1,9 @@
 # Web: `-ini:` overrides (C-1) and what must persist (C-2)
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 Running notebook of the `web-ini-saves` branch (worktree `../engine-uc2-c1`), started 2026-10-06 from main's tip
 `8cbea58`. Brief: PLAN.md "Owner review of 2026-10-06", tasks C-1 and C-2 (D-3/D-4 build on them later and are
 NOT done here). Other agents work in `engine-uc2-m11` (web renderer) and `engine-uc2-fx` (effects) and in the

@@ -1,5 +1,9 @@
 # D-9 notebook: rebinding the keyboard and mouse in game, and the mouse slider
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 Worktree `/home/ion/WorkUC2/engine-uc2-d9`, branch `d9-rebind` (from main 9ec4326). Run trees `<WorkUC2>/run/d9*`,
 logs `<WorkUC2>/logs/d9/`. Every run goes through `<WorkUC2>/bin/capped` (CLAUDE.md). Appended after every step.
 
