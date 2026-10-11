@@ -324,3 +324,47 @@ fork with a full explanation and a heads-up note for the sibling engines; the DM
 cause was found); shadow strength CLOSED: the tree-canopy projector on CTF-Aqueduct has the same strength as the Xbox
 (the dark band in the sheet is the cliff's lightmap, not the projector); the pad-only rule for native split screen is
 an open discussion (the first pad can never be player one while `KeyboardIsPlayer=True`).
+
+## Owner review of 2026-10-11: the script restructuring, then five items
+
+**Decisions on the UnrealScript restructuring (2026-10-10 night):** (a) the base is the DECOMPILED form of the shipped
+`.u` (retail disc or leak: both give the same 17 files), so an ISO-only user can build the patched scripts; Epic's 30
+load-time ScriptPatches are also expressed as a text set (`patches/epic-fixes`) and the load-time patcher STAYS (a
+vanilla `.u` must still play with Epic's fixes: "this way we support the iso format and the cooked asset format");
+patches are plain unified diffs against the deterministic decompiler output (a whole-function rewrite is a large
+hunk, a one-line change a one-line hunk), new classes whole files; UCMenu, which ships with its text, uses the retail
+text as base; history is REWRITTEN once the `.uc` leave the repo (force push of the private repo). Order: S1/S2
+spikes (done), T1 pipeline + proofs (done, a9743b4), T2 generated headers from the exporter (done, baa11b2), T3 CMake
+rules + web overlay (running), then the asset tree back to shipped packages, `.uc` removal, history rewrite.
+
+**After that, in this order (owner: "make sure you finish it before you begin with the rest"):**
+
+- **H-1 Bloom resolution.** The bloom is accurate to the Xbox but blocky at high resolutions. Explore first: which
+  post-process buffers are low resolution (bloom, DOF, emissive, motion/radial blur, heat shimmer, the reference copy)
+  and which would gain from a bump; report before the work. If a resolution increase alone removes the blockiness
+  (same blur AREA, finer samples), add an ini key in the GL driver, e.g. `[UC2GLDrv.UC2GLRenderDevice]
+  FramebufferResolutionMultiplier=2` (name open: "feel free to change to something better sounding"); otherwise change
+  the way the blur samples so it covers the same area without blocks.
+- **H-2 Game pad switch.** Is there any disadvantage to pads on by default? If none, remove the launcher checkbox
+  ("Lets the game read game pads ... Applies on the next launch.") and keep pads on.
+- **H-3 "Force gamepads to start with second player" does not work** (web): with a pad plugged in it still drives
+  player one; pressing Start as player two starts the game as player one. Repro: Network combat > Host System link
+  game > ignore the profile nag > accept three times to the map > the player page reads "Player 1 No Profile" and
+  "Player 2 Press start"; verification = pressing Start as player two, then player 1 selects Arclite (one to the left)
+  and player 2 selects a character and the game starts with two players. Once it worked but broken: mouse lock gone and
+  not re-lockable, a PHYSICAL pointer on screen (`temp/POINTERWAT.png`), yet player two could select and start. Also:
+  the KB&M camera rules (camera leading the character etc.) are disabled when a pad is set; players 2+ always have a
+  pad as on the console: check that they get the traditional pad camera back.
+- **H-4 Character polygon corruption** (web, Lauren on DM-Decay, third person): after moving around, at
+  `TELEPORT 317.1 832.0 -99.3 19415 -3255` some of the character's polygons connect to others (brown vertical polygons
+  with white stripes instead of the black leather jacket with two tails); at `322.0 815.6 -99.3 19415 -3255` it is
+  fine. Window-size dependent: 2248x1212 fine, 3149x1212 corrupt; 2882 wide is the widest that is fine, one more pixel
+  corrupts. Pausing fixes it (teal fade in), unpausing corrupts again. Wireframe looks fine (`temp/char corruption
+  wire.png`): a shader/buffer-size issue in the browser path. Pictures: `temp/char corruption.png`, `temp/char
+  corruption 2.png` (above 2882), `temp/char corruption 2 lower res fine.png`.
+- **H-5 Key glyphs for keyboard players.** Menus show Xbox buttons; with keyboard and mouse the player has to guess.
+  Standard behaviour: for player 1 only, touching the keyboard turns the icons into THE CURRENTLY BOUND KEY (accept,
+  back, and every button a page shows: the character page has A select, Y profiles, White more info, Black help, B
+  back; the in-game adrenaline prompt shows the three options' buttons). Repro: Instant action > ignore the profile
+  nag > accept three times > character page. Two phases: (1) substitute a letter from the game's character set;
+  (2) generate key bitmaps (mouse buttons, Esc, Enter...) embedded in the `.u` (ideally) or a `.utx` (if no other way).
