@@ -124,3 +124,21 @@ controller buttons and trigger axes (`HeldAtConnectButtons/Axes`), logs `SDL2 pa
 buttons 0x...)`, and `ReadPad` reads them as down in its first read only (a tap: pressed, released on the next read).
 So the Start that lists the pad is a press of Start: `SendButtonEdges` -> `PadJoin`. Native SDL drivers report a held
 button's state at open (evdev), so native needs nothing.
+
+## Step 4 - regressions (native, binary at 9d3fcc1; run trees h3 = rebuilt packages, h3ship = Epic's shipped GUI/UCGameplay/UCMenu)
+
+Load 15-29 throughout (other agents' builds and harness runs; nothing quieter was available for hours).
+
+| test | logs | result |
+|---|---|---|
+| `g6-splitscreen.sh h3 input menu kbplayer unplug` | logs/h3/reg | input PASS 39, menu PASS 9, kbplayer PASS 34, kbmenu PASS 11, unplug PASS 26 |
+| `m10-controls.sh` (M10_TREE=h3) | logs/h3/m10 | keyboard 16, mouse 18, text 7, pad 34, both 14: PASS |
+| `d6-mouse.sh look pad` (D6_TREE=h3, D6_SHIP_TREE=h3ship) | logs/h3/d6, logs/h3/d6.txt | 48 PASS 0 FAIL (pad yaw vs shipped worst 0.43%) |
+| `g6-splitscreen.sh h3 h3menu` | logs/h3/n5, n6, n7 | ticked PASS 11, unticked PASS 13 (three runs) |
+| `g6-splitscreen.sh h3ship h3menu` (Epic's shipped scripts: vanilla) | logs/h3/reg-ship3 | ticked PASS 11, unticked PASS 13 (join, Arclite, two views, mouse captured; look owner `-`) |
+
+The first shipped-scripts run (reg-ship) failed only the look-owner checks (Epic's UCGameplay has no `bMouseOwnsLook`:
+`-`; the checks now accept that, Epic's pad camera for everybody); a second (reg-ship2, load 29) failed the unticked
+flow at the map list (the third accept went to the page while it was still animating, the Left meant for the
+character page went to the map list): the scenario now confirms each accept (`wait handled XC_A`) and waits for the
+character page by probe.

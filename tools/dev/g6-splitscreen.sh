@@ -886,7 +886,8 @@ SCEN
 # browser lists a pad only at its first press). h3_ticked=1: PadsStartAtPlayerTwo=True, one pad (virtual pad 0, port 1)
 # whose Start joins player two; h3_ticked=0 (default ini): pad 0 attached at the main menu is player one's (port 0),
 # pad 1 attached on the character page joins. Player one picks the character to the left (Arclite) with the keyboard,
-# player two accepts its own with A; the match must start with two split views, the mouse captured, no cursor.
+# player two accepts its own with A; the match must start with two split views, the mouse captured, no cursor. The look
+# owner (mouse-look's bMouseOwnsLook) is '-' with Epic's shipped UCGameplay.u (no mouse look: Epic's pad camera for all).
 scen_h3menu() {
   local jp=0 jport=1 early="" start="pyexec (click(1), fire_all(1))"
   if [ "${h3_ticked:-1}" = 0 ]; then jp=1; early="pad 0 attach"; start="pyexec (click(1), fire_all(2))"; fi
@@ -910,12 +911,18 @@ sleep 0.5
 key Escape
 sleep 2
 key Return
+wait handled XC_A 15
 sleep 2
 key Return
+wait handled XC_A 15
 sleep 2
 key Return
-expect h3-character-page OpenMenu \\[UCMenu.UC2Arena_Character\\] 20
+tryseek 10 P['_'].menu == 'UC2Arena_Character' ;; sleep 1
+tryseek 0 P['_'].menu == 'UC2Arena_Character' ;; key Return
+tryseek 10 P['_'].menu == 'UC2Arena_Character' ;; sleep 1
 sleep 3
+probe cp
+check h3-character-page P['cp'].menu == 'UC2Arena_Character'
 vprobe c0
 pyexec print('  capture on the character page before the join', VC['c0'])
 pad $jp attach
@@ -969,12 +976,13 @@ check h3-match-has-two-split-players layout_ok('m2') and VS['m2'][1] == 2 and pa
 pyexec print('  pawns', [(r['i'], r['pad'], r['pawnclass']) for r in V['m2']])
 check h3-player-one-is-arclite 'Arclite' in vsplit('m2')[0]['pawnclass']
 check h3-mouse-captured-in-the-match VC['m2'] == (1, 0)
-check h3-pad-player-two-has-the-pad-camera [r['mouselook'] for r in vsplit('m2')][1] in ('False', '-')
+pyexec vml = lambda tag: [r['mouselook'] for r in vsplit(tag)]
+check h3-pad-player-two-has-the-pad-camera vml('m2')[1] in ('False', '-')
 shot h3-match-two-players
 rmove 60 0 6
 sleep 0.5
 vprobe x1
-check h3-mouse-gives-player-one-the-mouse-camera-not-player-two [r['mouselook'] for r in vsplit('x1')] == ['True', 'False']
+check h3-mouse-gives-player-one-the-mouse-camera-not-player-two vml('x1') in (['True', 'False'], ['-', '-'])
 SCEN
   # The default mode: player one's own pad (port 0) takes its look back with the left stick alone, the mouse again after.
   [ "${h3_ticked:-1}" = 0 ] && cat <<SCEN
@@ -983,11 +991,11 @@ sleep 1.2
 pad 0 axis lefty 0
 sleep 0.5
 vprobe x2
-check h3-player-one-left-stick-gives-the-pad-camera-back [r['mouselook'] for r in vsplit('x2')] == ['False', 'False']
+check h3-player-one-left-stick-gives-the-pad-camera-back vml('x2') in (['False', 'False'], ['-', '-'])
 rmove 60 0 6
 sleep 0.5
 vprobe x3
-check h3-player-one-mouse-again [r['mouselook'] for r in vsplit('x3')] == ['True', 'False']
+check h3-player-one-mouse-again vml('x3') in (['True', 'False'], ['-', '-'])
 SCEN
   return 0
 }
