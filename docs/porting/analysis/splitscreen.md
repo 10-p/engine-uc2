@@ -822,3 +822,8 @@ driver (fixed in `SDL2Pads.cpp`). New part `g6-splitscreen.sh <tree> h3menu`.
 errors in the pause menu. With the GUI limit lifted the engine makes four views in the menus, but the shipped page mixes
 players 2-4 and, after the travel, `CreateSplitPlayer` refuses all split players ("Too many splitscreens.", a real bug
 reached only with four views). New parts `g6-splitscreen.sh <tree> x1probe | x1proto`.
+
+X-1 part A (2026-10-11, built): patch set `players34` + two engine fixes (`CreateSplitPlayer`: the limit only for a new
+viewport, each split player's own spawn index; `SPLIT REMOVE ID=<pad>`): pads 3 and 4 join on the character page, the
+match spawns four players with their own characters and names. New part `g6-splitscreen.sh <tree> x1menu4` (also the
+host flow `x1-host4`; on Epic's shipped scripts the vanilla variant). `x1-players34.md`, "Part A".

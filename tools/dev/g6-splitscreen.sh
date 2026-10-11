@@ -35,6 +35,13 @@
 #          x1probe (X-1) Xvfb: UC2's menu flow with pads 0 and 1, then pads 2 and 3 press Start on the character page
 #                  (no player: GUIController.AllowControllerJoin's MAX_VIEWPORTS=2) and in the match (players 3 and 4),
 #                  player three's pause menu, back to the main menu
+#          x1menu4 (X-1 part A) Xvfb: four players from the character page (patch set players34): pads 1, 2, 3 press
+#                  Start there, each pad moves its own cursor only, the line under the honeycomb, players three and four
+#                  leave (Back, the pad pulled out) and come back, choose, the armory (players 1-2) with three and four
+#                  pressing buttons, the match with four players (own classes and names, G-6's layout), player three's
+#                  pause menu, back to the main menu; no script out-of-bounds line. On a tree with Epic's shipped
+#                  GUI.u/UCMenu.u (no UI_Char_3PSelector in UCMenu.u) the vanilla variant: two players on the page, three
+#                  and four join in the match (G-6), no crash. Pictures <out>/x1-menu4-page-{1..4}.png, -match-four.png
 #          hudmenu (B-3) Xvfb: G-6's menu flow (two players joined on the character page, Epic's own path), the
 #                  match's HUDs alone, measured as hud's n2 (<out>/hudmenu/)
 #          (default: input render menu audio; G-6's parts use the default PadsStartAtPlayerTwo=False, the pad as player one)
@@ -1371,6 +1378,373 @@ SCEN
   return 0
 }
 
+# X-1 part A (docs/porting/analysis/x1-players34.md "Part A"): four players from the character page. x1_vanilla=1 (a tree
+# with Epic's shipped GUI.u/UCMenu.u): the page keeps two players, players three and four join in the match (G-6).
+# x1press <pad> <button>: a pad's button pressed and released.
+x1press() {
+  printf 'pad %s button %s 1\nsleep 0.3\npad %s button %s 0\nsleep 1.5\n' "$1" "$2" "$1" "$2"
+}
+scen_x1menu4() {
+  local v=${x1_vanilla:-0}
+  cat <<SCEN
+pyfile $checks
+pyfile $repo/tools/dev/g6/x1-checks.py
+pyexec X1_LOG = '$out/x1-menu4.out'
+wait OpenMenu \\[UCMenu.UC2MainMenu\\] 90
+sleep 3
+mark
+focus
+pad 0 attach
+sleep 1
+pad 1 attach
+sleep 1
+pad 2 attach
+sleep 1
+pad 3 attach
+sleep 1
+SCEN
+  if [ "${x1_host:-0}" = 1 ]; then
+    # H-3's flow: NETWORKED COMBAT -> HOST SYSTEM LINK GAME -> the character page (a listen server)
+    cat <<SCEN
+seek 8 P['_'].caption == 'NETWORKED COMBAT' ;; key Down
+key Return
+wait OpenMenu \\[UCMenu.UC2NetworkMain\\] 15
+sleep 2
+seek 8 P['_'].caption == 'HOST SYSTEM LINK GAME' ;; key Down
+key Return
+wait OpenMenu \\[UCMenu.UC2Arena_ServerMain\\] 15
+wait OpenMenu \\[GUI.GUIMessageBox\\] 20
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
+key Escape
+sleep 2
+key Return
+wait handled XC_A 15
+sleep 2
+key Return
+wait handled XC_A 15
+sleep 2
+key Return
+tryseek 10 P['_'].menu == 'UC2Arena_Character' ;; sleep 1
+tryseek 0 P['_'].menu == 'UC2Arena_Character' ;; key Return
+tryseek 10 P['_'].menu == 'UC2Arena_Character' ;; sleep 1
+probe hc
+check x1h-character-page-of-the-host P['hc'].menu == 'UC2Arena_Character'
+sleep 3
+vprobe c1
+SCEN
+  else
+    cat <<SCEN
+key Down
+sleep 0.5
+key Return
+wait OpenMenu \\[UCMenu.UC2Arena_Main\\] 15
+wait OpenMenu \\[GUI.GUIMessageBox\\] 20
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
+key Escape
+sleep 1.5
+seek 10 P['_'].item.startswith('DeathMatch|') ;; key Down
+key Return
+sleep 2
+key Return
+sleep 2
+seek 40 'DM-Deadbolt' in P['_'].item ;; key Down
+key Return
+expect x1m-character-page OpenMenu \\[UCMenu.UC2Arena_Character\\] 15
+sleep 4
+vprobe c1
+SCEN
+  fi
+  [ "$v" = 0 ] && cat <<SCEN
+check x1m-text-one-player x1_text() == 'PLAYER 3 / 4 | PRESS START'
+shot page-1
+SCEN
+  cat <<SCEN
+pad 1 button start 1
+sleep 0.3
+pad 1 button start 0
+expect x1m-pad1-start-joins-player-two Split screen: pad 1 Start in the menus: joined 15
+sleep 3
+tryseek 3 'MessageBox' not in P['_'].menu ;; pyexec (chan('pad 1 button b 1'), time.sleep(0.3), chan('pad 1 button b 0'), time.sleep(2))
+sleep 1
+vprobe c2
+check x1m-two-split-views VS['c2'][1] == 2 and vrects('c2') == layout(2, *VS['c2'][2]) and [r['disabled'] for r in vsplit('c2')] == [1, 1]
+SCEN
+  x1press 1 dpright
+  [ "$v" = 0 ] && echo "shot page-2"
+  if [ "$v" = 1 ]; then
+    # Epic's GUI: a third and a fourth pad's Start on the page make no player (as x1probe measured)
+    cat <<SCEN
+pad 2 button start 1
+sleep 0.3
+pad 2 button start 0
+expect x1v-pad2-start-reaches-the-engine pad 2 button 12 value 255 15
+sleep 2
+pad 3 button start 1
+sleep 0.3
+pad 3 button start 0
+sleep 3
+absent x1v-pad2-no-join-on-the-page Split screen: pad 2 Start
+absent x1v-pad3-no-join-on-the-page Split screen: pad 3 Start
+vprobe c3
+check x1v-still-two-split-views VS['c3'][1] == 2
+shot vanilla-page-two-and-pads-2-3-pressed
+SCEN
+  else
+    cat <<SCEN
+mark
+pad 2 button start 1
+sleep 0.3
+pad 2 button start 0
+expect x1m-player-three-on-the-page X-1 players34 cursors \\(player 3 port 2 joined\\) 15
+expect x1m-pad2-start-joins-player-three Split screen: pad 2 Start in the menus: joined 15
+sleep 3
+absent x1m-no-profile-box-for-player-three OpenMenu \\[GUI.GUIMessageBox\\]
+vprobe c3
+check x1m-three-split-views-g6-layout VS['c3'][1] == 3 and vrects('c3') == layout(3, *VS['c3'][2]) and sorted(r['pad'] for r in vsplit('c3')) == [0, 1, 2]
+check x1m-text-player-three-joined x1_text().startswith('3P ') and x1_text().endswith('| 4P PRESS START')
+pyexec x1_snap('j3')
+pad 2 axis lefty 4000
+pad 2 axis leftx 32767
+sleep 1.4
+pad 2 axis leftx 0
+pad 2 axis lefty 0
+sleep 2
+pyexec x1_snap('s3')
+check x1m-pad2-stick-moves-only-the-3p-cursor x1_only('j3', 's3', 2)
+SCEN
+    # 3P to Arclite (index 4: the left column's top), 4P to Szalor (3), 1P to Sapphire (14), 2P to Lauren (13)
+    local k
+    for k in dpleft dpleft dpup dpup dpup dpup; do x1press 2 $k; done
+    cat <<SCEN
+pyexec x1_snap('m3')
+check x1m-pad2-dpad-moves-only-the-3p-cursor x1_only('s3', 'm3', 2) and X1['m3']['idx'][2] == 4
+shot page-3
+pad 3 button start 1
+sleep 0.3
+pad 3 button start 0
+expect x1m-player-four-on-the-page X-1 players34 cursors \\(player 4 port 3 joined\\) 15
+expect x1m-pad3-start-joins-player-four Split screen: pad 3 Start in the menus: joined 15
+sleep 3
+vprobe c4
+check x1m-four-split-views-g6-layout VS['c4'][1] == 4 and vrects('c4') == layout(4, *VS['c4'][2]) and sorted(r['pad'] for r in vsplit('c4')) == [0, 1, 2, 3] and all(r['disabled'] == 1 for r in vsplit('c4'))
+pyexec print('  menu views', [(r['i'], r['pad'], r['rect'], r['disabled'], r['player']) for r in V['c4']])
+pyexec x1_snap('j4')
+pad 3 axis lefty 4000
+pad 3 axis leftx 32767
+sleep 1.4
+pad 3 axis leftx 0
+pad 3 axis lefty 0
+sleep 2
+pyexec x1_snap('s4')
+check x1m-pad3-stick-moves-only-the-4p-cursor x1_only('j4', 's4', 3)
+SCEN
+    for k in dpleft dpleft dpup dpup dpup dpup dpdown; do x1press 3 $k; done
+    cat <<SCEN
+pyexec x1_snap('m4')
+check x1m-pad3-dpad-moves-only-the-4p-cursor x1_only('s4', 'm4', 3) and X1['m4']['idx'][3] == 3
+SCEN
+    x1press 1 dpdown
+    cat <<SCEN
+pyexec x1_snap('m2')
+check x1m-pad1-moves-only-player-two x1_only('m4', 'm2', 1) and X1['m2']['idx'][1] == 13
+key Right
+sleep 2
+pyexec x1_snap('m1')
+check x1m-keyboard-moves-only-player-one x1_only('m2', 'm1', 0) and X1['m1']['idx'][0] == 14
+check x1m-text-players-three-and-four x1_text() == '3P ARCLITE | 4P SZALOR'
+shot page-4
+probe pg4
+check x1m-still-the-character-page P['pg4'].menu == 'UC2Arena_Character'
+mark
+SCEN
+    # leaving: player four's Back; back with Start; then pulled out; back again (standalone only: the host run
+    # checks the joins, the choices and the listen server's match)
+    if [ "${x1_host:-0}" = 0 ]; then
+    x1press 3 back
+    cat <<SCEN
+expect x1m-back-removes-player-four Split screen: removing the player of pad 3: 15
+sleep 3
+vprobe l1
+check x1m-three-views-after-the-back VS['l1'][1] == 3 and vrects('l1') == layout(3, *VS['l1'][2]) and sorted(r['pad'] for r in vsplit('l1')) == [0, 1, 2]
+check x1m-text-player-four-gone x1_text().endswith('| 4P PRESS START')
+absent x1m-no-page-after-the-back OpenMenu
+pad 3 button start 1
+sleep 0.3
+pad 3 button start 0
+expect x1m-player-four-joins-again Split screen: pad 3 Start in the menus: joined 15
+sleep 3
+mark
+pad 3 detach
+expect x1m-unplug-removes-player-four Split screen: removing the player of pad 3: 20
+sleep 3
+absent x1m-no-controller-removed-page OpenMenu \\[UCMenu.ControllerRemovedMenu\\]
+vprobe l2
+check x1m-three-views-after-the-unplug VS['l2'][1] == 3 and sorted(r['pad'] for r in vsplit('l2')) == [0, 1, 2]
+pad 3 attach
+sleep 2
+pad 3 button start 1
+sleep 0.3
+pad 3 button start 0
+expect x1m-player-four-plugged-back-joins Split screen: pad 3 Start in the menus: joined 15
+sleep 3
+vprobe l3
+check x1m-four-views-again VS['l3'][1] == 4 and [r['pad'] for r in vsplit('l3')] == [0, 1, 2, 3]
+SCEN
+    for k in dpleft dpleft dpup dpup dpup dpup dpdown; do x1press 3 $k; done
+    cat <<SCEN
+pyexec x1_snap('m4c')
+check x1m-the-cursors-before-choosing X1['m4c']['idx'] == [14, 13, 4, 3]
+key Escape
+wait CloseMenu \\[UC2Arena_Character\\] 15
+sleep 3
+key Return
+expect x1m-page-again-with-four-players X-1 players34 cursors \\(page opened\\): .* players 4 20
+sleep 3
+pyexec x1_snap('re')
+check x1m-cursors-three-four-on-the-reopened-page all(0 <= i < 15 for i in X1['re']['idx'][2:])
+vprobe l4
+check x1m-four-views-on-the-reopened-page VS['l4'][1] == 4
+shot page-4-reopened
+SCEN
+    for k in dpleft dpleft dpup dpup dpup dpup; do x1press 2 $k; done
+    for k in dpleft dpleft dpup dpup dpup dpup dpdown; do x1press 3 $k; done
+    x1press 1 dpright
+    x1press 1 dpdown
+    cat <<SCEN
+key Right
+sleep 2
+pyexec x1_snap('m4d')
+check x1m-the-cursors-again X1['m4d']['idx'] == [14, 13, 4, 3]
+SCEN
+    fi
+    # players three and four choose; three takes it back and chooses again
+    x1press 2 a
+    cat <<SCEN
+check x1m-player-three-ready x1_cursors()['ready'][2] and x1_text().startswith('3P ARCLITE [READY] |')
+SCEN
+    x1press 2 b
+    cat <<SCEN
+vprobe rb
+check x1m-player-three-b-takes-it-back not x1_cursors()['ready'][2] and VS['rb'][1] == 4
+SCEN
+    x1press 2 a
+    x1press 3 a
+    cat <<SCEN
+check x1m-players-three-and-four-ready x1_cursors()['ready'][2:] == [True, True] and x1_text().count('[READY]') == 2
+pyexec print('  chosen by players three and four', x1_chosen(), 'text', x1_text())
+shot page-4-ready
+probe pg5
+check x1m-page-waits-for-players-one-and-two P['pg5'].menu == 'UC2Arena_Character'
+SCEN
+  fi
+  # players one and two choose (pad 1: player two; the keyboard: player one), through the handicap panels
+  x1press 1 a
+  cat <<SCEN
+key Return
+sleep 2
+SCEN
+  x1press 1 a
+  cat <<SCEN
+key Return
+sleep 3
+SCEN
+  [ "$v" = 0 ] && [ "${x1_host:-0}" = 0 ] && cat <<SCEN
+expect x1m-armory-two-panels OpenMenu \\[UCMenu.UC2Arena_DualArmory\\] 30
+sleep 4
+mark
+SCEN
+  [ "$v" = 0 ] && [ "${x1_host:-0}" = 0 ] && { x1press 2 b; x1press 3 a; x1press 2 dpdown; x1press 3 b; } && cat <<SCEN
+sleep 1
+probe ar
+check x1m-players-three-four-buttons-do-nothing-on-the-armory P['ar'].menu.startswith('UC2Arena_DualArmory') or P['ar'].menu.startswith('Armory')
+absent x1m-armory-not-closed-by-players-three-four OpenMenu \\[UCMenu.UC2Arena_Character\\]
+SCEN
+  local i
+  for i in 1 2 3 4 5 6 7; do
+    cat <<SCEN
+pad 1 button a 1
+sleep 0.3
+pad 1 button a 0
+sleep 1.5
+key Return
+sleep 2.5
+SCEN
+  done
+  cat <<SCEN
+expect x1m-travel-to-the-match Bringing Level \\S+.MyLevel up for play 150
+sleep 6
+SCEN
+  if [ "$v" = 1 ]; then
+    cat <<SCEN
+seek 20 P['_'].pawn == 1 ;; pyexec fire_all(2)
+check x1v-player2-spawns spawn(1)
+sleep 2
+SCEN
+    join 2; join 3
+    cat <<SCEN
+vprobe m4
+check x1v-four-split-players-in-the-match layout_ok('m4') and VS['m4'][1] == 4 and pads_in_join_order('m4') and all_split_huds('m4')
+SCEN
+  else
+    cat <<SCEN
+seek 20 P['_'].pawn == 1 ;; pyexec (click(1), fire_all(4))
+pyexec fire_all(4)
+sleep 2
+pyexec fire_all(4)
+check x1m-player-three-spawns spawn(2)
+check x1m-player-four-spawns spawn(3)
+sleep 2
+vprobe m4
+pyexec print('  match views', [(r['i'], r['pad'], r['rect'], r['pawnclass'], r['player']) for r in vsplit('m4')])
+check x1m-four-split-players-g6-layout-huds layout_ok('m4') and VS['m4'][1] == 4 and pads_in_join_order('m4') and all_split_huds('m4')
+absent x1m-no-too-many-splitscreens Too many splitscreens
+check x1m-players-three-four-own-classes all(x1_chosen()[k].split('.')[-1].lower() in vsplit('m4')[k - 1]['pawnclass'].lower() for k in (3, 4))
+check x1m-four-different-classes len(set(r['pawnclass'] for r in vsplit('m4'))) == 4
+check x1m-players-one-two-classes 'Sapphire' in vsplit('m4')[0]['pawnclass'] and 'Lauren' in vsplit('m4')[1]['pawnclass']
+check x1m-players-three-four-named-player-3-4 [vsplit('m4')[k]['player'].replace('_', ' ') for k in (2, 3)] == ['Player 3', 'Player 4']
+check x1m-players-one-two-not-named-player-3-4 all(not vsplit('m4')[k]['player'].replace('_', ' ').startswith('Player 3') and not vsplit('m4')[k]['player'].replace('_', ' ').startswith('Player 4') for k in (0, 1))
+SCEN
+  fi
+  local p=x1m; [ "$v" = 1 ] && p=x1v
+  cat <<SCEN
+shot match-four
+pad 2 button start 1
+sleep 0.3
+pad 2 button start 0
+expect $p-player3-start-opens-the-pause-menu OpenMenu \\[UCMenu.InGame_MainMenu\\] 15
+sleep 3
+SCEN
+  x1press 2 dpdown
+  x1press 2 b
+  cat <<SCEN
+sleep 3
+probe pm
+check $p-player-three-closes-its-pause-menu P['pm'].menu == 'None'
+key Escape
+expect $p-pause-menu-opens-for-player-one OpenMenu \\[UCMenu.InGame_MainMenu\\] 15
+sleep 2
+seek 8 P['_'].caption == 'FORFEIT GAME' ;; key Down
+key Return
+wait OpenMenu \\[GUI.GUIMessageBox\\] 20
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
+tryseek 4 P['_'].caption.upper() in ('YES', 'OK', 'ACCEPT', 'FORFEIT') ;; key Up
+key Return
+expect $p-forfeit-back-to-main-menu OpenMenu \\[UCMenu.UC2MainMenu\\] 90
+sleep 3
+vprobe back
+check $p-back-to-one-viewport layout_ok('back') and VS['back'][0] == 1 and VS['back'][1] == 0
+pyexec print('  out-of-bounds lines in the run, by array:', x1_oob())
+pyexec open('$out/x1-menu4-oob.txt', 'w').write(repr(x1_oob()) + '\n')
+SCEN
+  [ "$v" = 0 ] && cat <<SCEN
+check x1m-no-out-of-bounds-line x1_oob() == {}
+SCEN
+  return 0
+}
+
 # fire_seg <tag> <pad>: a log-marked segment in which only that pad fires, three times.
 fire_seg() {
   cat <<SCEN
@@ -1406,6 +1780,17 @@ for part in $parts; do
     menu)   scen_menu   > "$scen"; run_game g6-menu   0 420 "" "$scen";;
     x1proto) # X-1 prototype: needs a run tree with the prototype GUI.u (x1-players34.md)
             scen_x1proto > "$scen"; run_game x1-proto 0 720 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0;;
+    x1menu4) # X-1 part A: four players from the character page; Epic's shipped scripts: the vanilla variant
+            x1_vanilla=1; grep -a -q UI_Char_3PSelector "$sys/UCMenu.u" && x1_vanilla=0
+            x1_vanilla=$x1_vanilla scen_x1menu4 > "$scen"; cp "$scen" "$out/x1-menu4.scen"
+            run_game x1-menu4 0 900 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0
+            # hosting (H-3's system-link flow, a listen server): players three and four join and play there too
+            if [ $x1_vanilla = 0 ] && [ "${X1_HOST:-1}" = 1 ]; then
+              x1_vanilla=0 x1_host=1 scen_x1menu4 | sed "s#x1-menu4.out#x1-host4.out#; s#x1-menu4-oob#x1-host4-oob#" > "$scen"
+              cp "$scen" "$out/x1-host4.scen"
+              run_game x1-host4 0 900 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0
+            fi
+            echo "  x1menu4: $([ $x1_vanilla = 1 ] && echo "vanilla (Epic's GUI.u/UCMenu.u)" || echo "patch set players34"); out-of-bounds lines $(cat "$out/x1-menu4-oob.txt" 2>/dev/null)";;
     x1probe) # X-1: a third and fourth pad's Start on the character page and in the match (MSAA off as m10)
             scen_x1probe > "$scen"; run_game x1-probe 0 600 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0;;
     h3menu) # H-3: the owner's system-link flow, the pad arriving on the character page; both pad modes

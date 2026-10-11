@@ -268,3 +268,124 @@ Core path (1-4 with armory option a): **about 5.5-6.5 agent-days**; with the fou
 - Web pads 3-4, network with split players: **never exercised**.
 - Memory ceilings: build 6G (`capped 6G 3600`), ucc batchexport 2G, prototype script compile 6G (ucc runs 3G each
   inside), game runs 2G (`g6-splitscreen.sh`); no ceiling hit.
+
+## Part A (2026-10-11): players 3 and 4 join from the character page (built)
+
+Same worktree and branch (from main 092db72), logs `/home/ion/WorkUC2/logs/x1/` (`a6/` the final rebuilt run, `v1/` the
+vanilla one, `reg/` the regressions), run trees `run/x1a` (this build's packages) and `run/x1ship` (the same binary,
+Epic's shipped GUI.u/UCMenu.u: `UC2_SCRIPTS=none tools/dev/mkrun-uc2.sh build-native x1ship`). The owner's decisions:
+PLAN.md "X-1 decisions (owner, 2026-10-11)". The armory 2x2 page and the client test are part B.
+
+### What was built (file:line at the commit)
+
+Engine (shared code, real fixes, no switch; one or two players: the same path, the same values):
+- `Source/Engine/Src/UnSplitScreenMgr.cpp:537-543` `CreateSplitPlayer`: `eventGetSpawnURL` gets the split player's own
+  index (`ActiveSplitViews.FindItemIndex`; a viewport not in the list keeps Epic's `Num() ? 1 : 0`). Player two: 1 as
+  before; players three and four: 2 and 3 (they took player two's name and URL options).
+- `UnSplitScreenMgr.cpp:553-556`: the `MaxSplitScreens` check only when a viewport is to be created (`!Viewport`): with
+  four views after a travel Epic's check refused every split player (`Too many splitscreens.`). One or two players: the
+  check was never true for a passed viewport (2 < 4), so nothing changes.
+- `Source/Engine/Src/UnCamMgr.cpp:310-336` `SPLIT REMOVE ID=<pad>`: removes the split view of that pad (never player
+  one's view); without `ID=` Epic's (the last one), unchanged. The character page uses it when player three or four
+  leaves; it runs from the page's `Timer` (the GUI tick, `UInteractionMaster::MasterProcessTick`), never inside the
+  leaving viewport's own input. A first version called `ClearQueriesForViewport` first (as `ResetState`): SIGSEGV in
+  the menus (a never-drawn split view, another viewport's queries; `logs/x1/a1` first run). Removed: Epic's REMOVE
+  never cleared either.
+
+Patch set `players34` (`patches/players34/`, README there; `sets.txt` after player-name, before key-glyphs: no hunk
+shared with the later sets, and `make` refuses a set for a package to which an earlier set added classes):
+- GUI: `GUIPage.MaxControllerJoins()` (2) and `PlayerUnplugged(Player)` (false), script only;
+  `GUIController.AllowControllerJoin` asks the active page (at most 4); focus clamps in
+  `GUIController.Get/SetFocusedControlAt` and `GUIMultiComponent.SetFocusedControl`; `GameStartInfo.VerifyPlayerIndex`
+  keeps 2-3, `ExtraPlayerName`/`SetExtraPlayerName` (a `Name` entry in `URLInformation`: `GameStartInfoBase` is an
+  Engine class with `PlayerName[2]`, and its `GetName` clamps; `GetSpawnURL` appends the entries of the index after the
+  clamped name, and `FURL::AddOption` keeps the last value), used by `GUIController.AddChildViewport` and
+  `SetProfilePlayerName` (Epic's code wrote the name of a third player into player ONE's slot through
+  `VerifyPlayerIndex(2, None) -> 0`); `SetGamepadStatus` asks `ActivePage.PlayerUnplugged` before opening
+  `ControllerRemovedMenu`. No native layout changed: `check-headers` current, verifyclasses PASS (m14 `verify`).
+- UCMenu `UC2Arena_Character` (about 650 lines, the page's own functions `*34`): see the set's README. Input: every raw key
+  of ports whose child index is 2-3 goes to `Players34Input` (from the icons' `InternalRawXController`, its first
+  lines, and from the page's own `OnRawXController` when player two's focus slot is not an icon) and is used up;
+  `UC2Arena_DualBase.InternalOnXControllerEvent` uses up their buttons on the armory (and hands the character page the
+  ones the raw path missed, `Players34XControl`).
+- Art: `patches/players34/new/UCMenu/Textures/UI_Char_{3P,4P}Selector.tga` written by `tools/dev/make-player-tags.py
+  --final` (new option; 3P green, 4P magenta, byte-identical to the examination's candidates), imported RGBA8
+  (`UTexture::ConvertFormat` only makes L8/A8 from an image; DXT3 would need a DDS of ours), CLAMP, no mips.
+- The text: "PLAYER 3 / 4" + "PRESS START" (Epic's `sPlayerTitle`, `sPressStart`) until one joins; then a line each,
+  "3P <CHARACTER> [READY]" / "4P PRESS START". The examination's plan said `sPlayerTitle` per line too: measured on the
+  page (`a5/x1-menu4-page-4-ready.png`), "PLAYER 3: ARCLITE [READY]" does not fit the strip under the honeycomb
+  (between NOT SIGNED IN and MORE INFO, Sui12pt, the label clips with "..."), so the joined lines use the cursors' own
+  tags, at 0.9 scale. Longest measured case fits; other languages: "4P SAPPHIRE [PRONTO]", "4P APPUYER SUR START" are
+  20 characters, at the edge (never exercised: the run is English).
+- Behaviour decided here (owner to confirm): B of player three or four takes the choice back, or leaves when not ready;
+  Back leaves; a pad pulled out on the page leaves (no ControllerRemovedMenu); a ready player's cursor dims (alpha 110);
+  when player three leaves with four there, player four becomes player three (its viewport is child 2 now: name, tag,
+  index all follow). The cursor of a joining player starts on its profile's character (Anubis for a transient one);
+  random picks a real character (no alternative skins for 3-4).
+
+### Tests
+
+`tools/dev/g6-splitscreen.sh <tree> x1menu4` (`scen_x1menu4`, helpers `tools/dev/g6/x1-checks.py`; Xvfb, llvmpipe,
+MSAA off, 1280x720, default `PadsStartAtPlayerTwo=False`). The page logs `X-1 players34 cursors (<why>): 1P i; 2P i;
+3P i; 4P i; players n` on every move/join/choice of any player while three or more are there, and `X-1 players34 text:
+<line one> | <line two>` when the text changes (DevUI). On a tree whose UCMenu.u has no `UI_Char_3PSelector` the
+vanilla variant runs; on the rebuilt tree a second run, `x1-host4`, takes H-3's system-link host flow (a listen server).
+
+What x1menu4 checks (rebuilt tree, 58 checks): the line "PLAYER 3 / 4 | PRESS START" alone; pad 1's Start joins
+player two (Epic's path); pad 2's and pad 3's Start join players three and four (no profile box), G-6's 3 and 4-view
+layouts (rects equal `layout()`, all split views disabled under the menu overlay); each pad moves only its own cursor
+(pad 2's stick and d-pad: 3P only; pad 3's: 4P only; pad 1's d-pad: 2P only; the keyboard: 1P only; from the logged
+indices); the text in each state; player four's Back removes its view (3 views, "4P PRESS START", no page opens), its
+Start joins it again, its pad pulled out removes it (no ControllerRemovedMenu), plugged back and Start: four again,
+ports [0,1,2,3]; player one's B leaves the page and Return opens it again with four players, the 3P/4P cursors placed;
+players three and four ready, B takes it back, ready again, the page waits for players one and two; the armory (two
+panels): players three and four's B, A, d-pad do nothing (it stays open); the match: four split players, G-6's
+quadrants, split HUDs, no "Too many splitscreens", 3P/4P pawns of the classes they chose, all four classes different,
+players one and two the ones they chose, players three and four named `Player_3` / `Player_4`; player three's Start
+opens its pause menu, d-pad, B closes it; FORFEIT back to the main menu, one viewport; **0 out-of-bounds lines**.
+x1-host4 (40 checks): the same through NETWORKED COMBAT -> HOST SYSTEM LINK GAME (listen server), without the
+leave/reopen/armory parts. Vanilla (19 checks): two players on the page, pads 2/3's Start make nobody there, the match
+with two, pads 2 and 3 join in the match (G-6), four split HUDs, player three's pause menu, FORFEIT, no crash.
+
+### Results (labelled)
+
+| what | where | result |
+|---|---|---|
+| `g6-splitscreen.sh x1a x1menu4` (players34) | `logs/x1/a8` | **measured** PASS x1-menu4 58/58, PASS x1-host4 40/40, out-of-bounds lines `{}` |
+| `g6-splitscreen.sh x1ship x1menu4` (Epic's GUI.u/UCMenu.u, this binary) | `logs/x1/v2` | **measured** PASS 19/19; `FocusedControl` out of bounds 172 lines (v1: 167): the "before" number |
+| G-6 `menu`, `input`; H-3 `h3menu` (ticked, unticked); G-9 `kbplayer`+`kbmenu`; G-11 `unplug` on x1a | `logs/x1/reg` | **measured** PASS 9, 39, 11, 13, 34, 11, 26 |
+| `m14-scripts-check.sh verify menu patcher deadbolt` (M14_PREFIX=x1-m14) | `logs/x1/m14` | **measured** PASS all four (verifyclasses: all layouts match) |
+| P2 | `logs/x1/p2-write.log` | reference regenerated (GUI.u 1771600 B `2a32a007...`, UCMenu.u 2476635 B `1b2955ac...`, UCGameplay.u unchanged); PASS |
+| `check-headers` | `logs/x1/check-headers.log` | **measured** current (no header change) |
+| pictures | `logs/x1/page-{1..4}.png`, `page-4-ready.png`, `page-4-reopened.png`, `match-four.png`, `match-four-host.png` | **seen** |
+
+Note: the `reg` run's last line is a bash syntax error at `g6-splitscreen.sh:1861`: the script was edited (the host
+variant) while that run was reading it; every part had finished and passed before.
+
+Memory: builds `capped 6G 3600` (-j4), set regeneration `capped 3G`, P2 and check-headers `capped 6G`, every game run
+2G (the harness), m14 its own ceilings. No ceiling hit (no exit 137). One SIGSEGV of my own making (above), fixed.
+
+### For part B (the 2x2 armory, the client test)
+
+- The flow today: with three or four players the page opens `UC2Arena_DualArmory` (`CloseComplete`:
+  `SecondPlayerActive()`); it shows players one and two only; `UC2Arena_DualBase.InternalOnXControllerEvent` uses up
+  players three and four's buttons there (and on every DualBase page), so they cannot touch player two's panel. They
+  take their profile's loadout (a transient profile's defaults). `IsFinished` of the armory counts two panels.
+- Hooks: `GUIPage.MaxControllerJoins` (the armory page may stay at 2: joins happen on the character page only);
+  `UC2Arena_DualBase.Players34XControl(PlayerIndex, Code)` (override it on a 2x2 page to give players three and four
+  their panels; or drop the DualBase guard there); the character page's `CloseComplete` chooses the armory page;
+  `GetPlayerIndex()` is 2/3 for their input (the GUI's FOCUS slots stay two: a four-panel page must route their input
+  itself, as `Players34Input` does, `Armory_PanelDual.SetControllerMask(1 << GamepadID)` per panel is Epic's way);
+  `GameStartInfo` keeps their URL options per index (2, 3) now, so `PlayerProfile` weapon options of a panel reach
+  their spawn URL (`GetSpawnURL(2|3)`).
+- The client test: `CreateSplitPlayer`'s spawn index is the split view's own on a client too (`JOINSPLIT`); never
+  exercised with split players on a client (network.md).
+
+### Open questions (for the owner)
+
+1. Leaving: B (not ready) leaves too, besides Back and pulling the pad out. Keep, or Back only?
+2. The joined lines read "3P ARCLITE [READY]" (the tags' labels) because "PLAYER 3: ARCLITE [READY]" does not fit; the
+   blurb keeps "PLAYER 3 / 4 PRESS START". Other languages: the longest lines are at the strip's edge (not seen).
+3. A ready cursor of player three or four dims (alpha 110), the others' cursors give way to the handicap panel as
+   Epic's. Fine?
+4. Players three and four get no handicap (100) and no alternative skins (random never picks one for them).
