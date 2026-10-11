@@ -99,6 +99,18 @@ ENGINE_API INT RenDevPostProcessReferenceHeight()
 	return Caps ? Max( Caps->PostProcessReferenceHeight, 0 ) : 0;
 }
 
+//
+// UC2 port (H-1, prototype): FRenderCaps::PostProcessScale of the engine's render device (1 without one).
+//
+ENGINE_API INT RenDevPostProcessScale()
+{
+	UClient* Client = UTexture::__Client;
+	if( !Client || !Client->Engine || !Client->Engine->GRenDev )
+		return 1;
+	FRenderCaps* Caps = Client->Engine->GRenDev->GetRenderCaps();
+	return Caps ? Clamp( Caps->PostProcessScale, 1, 4 ) : 1;
+}
+
 /* scion ======================================================================
 * FRenderTarget::RemovePoolRef
 * Author: sz

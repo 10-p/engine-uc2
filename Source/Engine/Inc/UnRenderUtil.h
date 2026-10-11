@@ -700,4 +700,5 @@ void ENGINE_API FilterCopyRenderTarget( FRenderTarget* DestTarget,
 										FRenderInterface* RI,
 										FColor* CopyColor=NULL,
 										class UFinalBlend* FinalBlend=NULL,
-										DWORD BlurBlendMode=0 );
+										DWORD BlurBlendMode=0,
+										INT TapScale=1 );

@@ -799,6 +799,11 @@ struct FRenderCaps
 	// distances in pixels of the real back buffer. Set by the device (UC2GLDrv:
 	// PostProcessReferenceHeight); docs/porting/analysis/pp-scale.md.
 	INT		PostProcessReferenceHeight;
+	// UC2 port (H-1, prototype): the camera effects' blur targets get this many times the texels per axis
+	// (1 = the Xbox's count for the reference picture), their target-to-target taps the same factor, with a
+	// fill so that every tap still covers what it did: the same blur on the screen, sampled more finely.
+	// docs/porting/analysis/h1-bloom.md.
+	INT		PostProcessScale;
 	// UC2 port (G-6): the device applies dynamic gamma per viewport (a luminance histogram of each viewport's
 	// rectangle, its ramp applied to that rectangle), so it is not a full-screen effect there and split screen
 	// keeps it (USplitScreenMgr::UpdateDetailLevels switches it off otherwise, as on the Xbox, whose ramp was
@@ -815,6 +820,7 @@ struct FRenderCaps
 		XboxShadows(0),
 		XboxProjectors(0),
 		PostProcessReferenceHeight(0),
+		PostProcessScale(1),
 		ViewportDynamicGamma(0)
 	{}
 };
@@ -915,6 +921,8 @@ ENGINE_API UBOOL RenDevHasXboxProjectors();
 // 0 without a client, a device or a reference (sizes and distances in back-buffer pixels).
 //
 ENGINE_API INT RenDevPostProcessReferenceHeight();
+// UC2 port (H-1, prototype): FRenderCaps::PostProcessScale of the engine's render device (1 without one).
+ENGINE_API INT RenDevPostProcessScale();
 
 #endif
 /*------------------------------------------------------------------------------------

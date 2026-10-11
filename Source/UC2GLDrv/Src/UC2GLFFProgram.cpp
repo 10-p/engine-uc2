@@ -59,7 +59,8 @@ struct FUC2GLFFProgram
 	DWORD		Hash;
 	GLuint		Program;
 	GLint		TFactorLoc,
-				BiasLoc;
+				BiasLoc,
+				TexSizeLoc[MAX_STAGES];	// H-1 prototype: the smooth lookup's texture size
 	UBOOL		Reported;
 };
 
@@ -110,6 +111,12 @@ static void FFMakeKey( UUC2GLRenderDevice* RenDev, FOpenGLMaterialState* MS, INT
 		if( FFStageSamples( Stage ) )
 		{
 			Target = (Stage.Texture && Stage.Texture->TextureID && Stage.Texture->IsCubemap) ? 2 : 1;
+			// H-1 prototype (PostProcessSmooth): a small render target magnified into the main framebuffer
+			// (the bloom's composite: 1/8 of the reference picture) is read bicubic.
+			if( RenDev->PostProcessSmooth && Target == 1 && Stage.Texture && Stage.Texture->IsRenderTarget && !Stage.Texture->IsDefaultTarget
+			&&	Stage.MagFilter != D3DTEXF_POINT && Stage.Texture->CachedHeight * 2 < RenDev->MainHeight
+			&&	RenDev->RenderInterface.SavedRenderTargetState.GetCurrentState()->Framebuffer == RenDev->MainFramebuffer )
+				Target |= 4;
 			if( s >= RenDev->GLFixedFunctionUnits )
 				BiasMask |= 1 << s;
 		}
@@ -204,6 +211,7 @@ static FString FFBuildSource( const FUC2GLFFKey& Key )
 		D3DTEXTUREOP	ColorOp	= (D3DTEXTUREOP)(Key.Words[s*3] & 0xff),
 						AlphaOp	= (D3DTEXTUREOP)((Key.Words[s*3] >> 8) & 0xff);
 		DWORD			Target	= (Key.Words[s*3] >> 16) & 3;
+		UBOOL			Smooth	= (Key.Words[s*3] >> 18) & 1;
 		if( ColorOp == D3DTOP_DISABLE )
 			break;
 		if( Target )
@@ -212,6 +220,20 @@ static FString FFBuildSource( const FUC2GLFFKey& Key )
 			FString Bias = (BiasMask & (1 << s)) ? FString::Printf( TEXT(", u_bias[%i]"), s ) : FString();
 			if( Target == 2 )
 				Body += FString::Printf( TEXT("\tvec4 t%i = textureCube( u_tex%i, gl_TexCoord[%i].xyz%s );\n"), s, s, s, *Bias );
+			else if( Smooth )
+			{
+				if( Decl.InStr( TEXT("uc2_smooth") ) < 0 )
+					Decl += TEXT("// H-1 prototype: bicubic lookup, Mitchell-Netravali family B=0.5 C=0.25 (second moment = bilinear's)\n")
+							TEXT("float uc2_bc( float x ) { x = abs( x ); if( x < 1.0 ) return (6.0*x*x*x - 10.5*x*x + 5.0) / 6.0; if( x < 2.0 ) return (-2.0*x*x*x + 10.5*x*x - 18.0*x + 10.0) / 6.0; return 0.0; }\n")
+							TEXT("vec4 uc2_smooth( sampler2D t, vec2 uv, vec4 sz ) {\n")
+							TEXT("\tvec2 p = uv * sz.xy - 0.5; vec2 i0 = floor( p ); vec2 f = p - i0; vec4 sum = vec4( 0.0 );\n")
+							TEXT("\tfor( int j = -1; j <= 2; j++ ) { float wy = uc2_bc( f.y - float(j) );\n")
+							TEXT("\t\tfor( int i = -1; i <= 2; i++ ) { vec2 c = clamp( (i0 + vec2( float(i), float(j) ) + 0.5) * sz.zw, 0.5 * sz.zw, 1.0 - 0.5 * sz.zw );\n")
+							TEXT("\t\t\tsum += uc2_bc( f.x - float(i) ) * wy * texture2D( t, c ); } }\n")
+							TEXT("\treturn sum; }\n");
+				Decl += FString::Printf( TEXT("uniform vec4 u_texsize%i;\n"), s );
+				Body += FString::Printf( TEXT("\tvec4 t%i = uc2_smooth( u_tex%i, gl_TexCoord[%i].xy / gl_TexCoord[%i].w, u_texsize%i );\n"), s, s, s, s, s );
+			}
 			else
 				Body += FString::Printf( TEXT("\tvec4 t%i = texture2DProj( u_tex%i, gl_TexCoord[%i]%s );\n"), s, s, s, *Bias );
 		}
@@ -299,6 +321,8 @@ static FUC2GLFFProgram* FFGetProgram( UUC2GLRenderDevice* RenDev, const FUC2GLFF
 			GLint Loc = RenDev->glGetUniformLocation( P.Program, Name );
 			if( Loc >= 0 )
 				RenDev->glUniform1i( Loc, s );
+			appSprintf( Name, "u_texsize%i", s );
+			P.TexSizeLoc[s] = RenDev->glGetUniformLocation( P.Program, Name );
 		}
 		RenDev->glUseProgram( 0 );
 		if( RenDev->LogFFPrograms )
@@ -335,6 +359,12 @@ UBOOL FOpenGLRenderInterface::BeginFixedFunctionProgram( FOpenGLMaterialState* M
 			Bias[s] = (s < StagesUsed && !RenDev->NoLODBias) ? MaterialState->Stages[s].TextureMipLODBias : 0.f;
 		RenDev->glUniform1fv( P->BiasLoc, MAX_STAGES, Bias );
 	}
+	for( INT s=0; s<StagesUsed; s++ )
+		if( P->TexSizeLoc[s] >= 0 && MaterialState->Stages[s].Texture )
+		{
+			FLOAT W = Max( MaterialState->Stages[s].Texture->CachedWidth, 1 ), H = Max( MaterialState->Stages[s].Texture->CachedHeight, 1 );
+			RenDev->glUniform4f( P->TexSizeLoc[s], W, H, 1.f / W, 1.f / H );
+		}
 	RenDev->FFProgramDraws++;
 	return 1;
 }

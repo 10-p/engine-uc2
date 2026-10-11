@@ -91,3 +91,153 @@ behaviour too, at 4 px instead of 12.)
 Texture objects: every render target is one GL texture, single level (no mipmaps), `GL_LINEAR` both ways
 (`UC2GL_CreateColorTarget`, the pool's `FOpenGLTexture`); the stage state that samples it is Epic's (`D3DTEXF_LINEAR`
 default; `PS_MotionBlur` reads its stage 0 point-sampled).
+
+## Step 2. A model of the chain (`tools/dev/h1-bloom-model.py`, 2026-10-11)
+
+Pure-Python model of the bloom + emissive chain exactly as `FilterCopyRenderTarget` samples it (bilinear taps,
+texel-boundary convention), in float (no 8-bit rounding), for a 2x2 reference-pixel light at 3x3 positions across one
+coarse cell, at 2560x1440 (`H1_LIGHT=2 h1-bloom-model.py table 1440`). Halo of the row through the light, screen px:
+
+| Variant | peak | sigma | r10 | r50 | kink (corners) | jitter (peak spread over positions) |
+|---|---|---|---|---|---|---|
+| today: scale 1, bilinear composite | 0.00570 | 40.4 | 84.5 | 43.0 | 12.65 | 1.19 |
+| scale 1, bicubic B=0.5 C=0.25 composite | 0.00573 | 40.3 | 83.5 | 43.0 | **1.41** | 1.23 |
+| scale 1, cubic B-spline composite | 0.00537 | 41.6 | 86.5 | 44.0 | 1.14 | 1.20 |
+| scale 1, Catmull-Rom composite | 0.00610 | 39.0 | 79.0 | 41.0 | 1.64 | 1.26 |
+| scale 1, cascade of 2x box upsamples (engine-only alternative) | 0.00487 | 43.5 | 90.5 | 46.5 | 1.44-3.84 | 1.15 |
+| scale 2, taps left in texels (= a higher PostProcessReferenceHeight) | 0.02225 | 20.6 | 43.0 | 21.5 | 6.85 | 0.02 |
+| scale 2, taps x2, no fill | 0.00510 | 41.4 | 86.0 | 42.5 | **69.0** (comb: holes) | 0.99 |
+| scale 2, taps x2 + fill (the prototype) | 0.00566 | 40.2 | 84.0 | 44.5 | 19.7 | **0.007** |
+| scale 4, taps x4 + fill | 0.00565 | 40.2 | 84.5 | 46.5 | 30.4 | 0.000 |
+
+What it says:
+- The bicubic composite with B=0.5, C=0.25 (same second moment as bilinear) keeps size and peak exactly and removes
+  the corners (kink 12.7 -> 1.4). B-spline widens by 3% and dims the peak 6%; Catmull-Rom narrows; the engine-only
+  cascade of box upsamples widens 8% and dims 15% (rejected).
+- Raising the texel count with the taps scaled **and filled** reproduces the Xbox's kernel (same peak, sigma, r10)
+  sampled more finely: the shimmer of small lights (peak varying +-60% as they move across the 4-px select grid)
+  disappears, but the kernel itself is a staircase (Epic's 1221 taps on 2-texel boxes): finer sampling shows its
+  terraces instead of hiding them under the 24-px bilinear ramps (profile at scale 4: 100 99 98 97 90 79 68 64 62
+  61 60 57 50 38 28 22 21 19 ...). Scaling the taps without the fill leaves holes (a comb) and must not be done;
+  leaving the taps in texels halves the blur (the pre-pp-scale behaviour).
+
+## Step 3. Pictures and the radius measurement (GPU, 2026-10-11)
+
+Runner: `tools/dev/fx-owner.sh h1 custom` with `UC2_GPU=1` (Quadro P620, SDL offscreen, `bin/capped 2G`), DM-Deadbolt,
+first person (`ToggleThirdCam`) at PlayerStart7 (`NETPLACE FxCam 1229.6 -672.9 -108 40448 0`): a white wall lamp
+panel (bloom) and a blue light box (emissive glow) in view; game time frozen (`TimeDilation 0.0001`); the depth of
+field switched off for the bloom measurements. Resolution through `-ini:` (`WindowedViewportX/Y`), AutoFOV off, so
+the view is the same picture at 1280x720 and 2560x1440 (2248x1212 shows the same horizontal field, cropped
+vertically). Scenarios are in the notebook's commit message log; pictures in `<WorkUC2>/logs/h1`.
+Measure: `tools/dev/h1-measure.py profile` (glow = with - without, mean RGB, along a row, positions in the 1280x720
+frame).
+
+Baseline (main's behaviour; `fx-base-<res>-gpu-*.png`, glow without DOF): **measured**
+
+| Profile (720-frame px) | 1280x720 | 2560x1440 |
+|---|---|---|
+| lamp, leftwards: peak / r50 / r25 / r10 | 88.9 / 40 / 52 / 64 | 90.0 / 40.5 / 52 / 64 |
+| lamp, rightwards | 121.0 / 36 / 48 / 61 | 121.0 / 36.5 / 48.5 / 60.5 |
+| blue light box, leftwards | 17.0 / 33 / 44 / 57 | 17.6 / 33.5 / 45.5 / 58 |
+
+**The area is constant in screen space today** (radii equal within 1 px of the 720 frame, peaks equal): confirmed.
+Repeat noise in one frozen run (two shots of the same settings, `s1` and `s1again`): up to 3 px in the blue box's r10
+and 1.9 levels in its peak (the emissive accumulation is not perfectly still), 1 px / 1 level for the lamp.
+
+Pictures: `h1-base-overview.png`; `h1-base-blue-glow-zoom4.png` and `h1-base-lamp-glow-zoom4.png` (4x / 2x zoom of the
+glow alone at both resolutions); `h1-base-<res>-glow-x6.png` (whole frame). What is seen: at 2560x1440 the outer,
+dim part of every glow is a set of 8-bit bands whose outlines are polygons on a 24-px grid (the bilinear patches of
+the 106x60 target); at 1280x720 the same polygons are 12 px. That is the blockiness: dim (1-5 levels), and it is the
+shape of the quantisation bands that gives it away, not the bright core.
+
+My numeric "roughness" measures (`rough`: second differences; `resid`: departure from a Gaussian-smoothed copy) do
+**not** separate the variants: the glow difference is modulated by the scene texture under it (`FB_Brighten` is a
+screen blend: src x (1 - dst)), and in the dim ring the glow is 1-2 levels, i.e. rounding. They are in
+`h1-proto-measure.txt`, `h1-proto-resid.txt` and are not evidence either way. The blockiness verdicts below are
+**seen only**, from the gain sheets.
+
+## Step 4. The prototype (test keys and console; NOT settings)
+
+Code (all marked `H-1 prototype`):
+- `UnRenDev.h`: `FRenderCaps::PostProcessScale` (default 1), `RenDevPostProcessScale()` (`UnRenderResource.cpp`).
+- `UnRenderUtil.h/.cpp`: `FilterCopyRenderTarget(..., INT TapScale=1)`. For a target-to-target pass with TapScale
+  > 1 the source is first filled along each axis the filter reaches (TapScale point taps 2 texels apart, equal
+  weights; a private scratch target per size and axis, `H1ScratchTarget`), then the taps move TapScale times as many
+  texels. PS_Blur adds its taps in doubled, clamped pairs, so the fill puts its taps in slots 0 and 2 (scale 2) or
+  0..3 (scale 4); scale 3 can clamp above a mean of 3/4 (measuring only). Back-buffer passes (with a viewport) are
+  unchanged: their taps are reference pixels read from the 480-line reference copy, which still decides what the
+  bloom threshold sees (so thin bright things do not start to bloom).
+- `UCCameraEffects.cpp`: DOF, emissive and bloom targets x PostProcessScale; their seven target-to-target passes pass
+  TapScale.
+- `UC2GLDrv`: `PostProcessScale`, `PostProcessSmooth` test keys (`-ini:System:[UC2GLDrv.UC2GLRenderDevice]:...`),
+  console `PPSCALE [1..4]`, `PPSMOOTH [0|1]`; `GetRenderCaps` passes the scale. `PostProcessSmooth`: the desktop
+  fixed-function program reads a render target that is magnified more than 2x into the main framebuffer (only the
+  bloom's composite qualifies) with a 16-tap bicubic (B=0.5, C=0.25). **Desktop only** (GL4ES draws fixed function
+  with its own generated shaders); a shippable version would draw the composite through a driver program.
+- Known limits: at scale 4 the DOF's first pass and the emissive select read the reference copy 1:1, so their taps
+  land on texel centres and cover one texel instead of two (a narrower first pass); the self-test `pp-sizes` expects
+  scale 1.
+
+Runs `fx-proto-<res>-gpu-<shot>.png` (one run per resolution, frozen; shots `s1` today, `s1smooth`, `s2`, `s4`,
+`s2smooth`, `s3`, `s1again`, `off` = no glow, `dof1`/`dof2` = DOF only at scale 1/2). Builds: native `-j4`, capped
+6G, exit 0 (`logs/h1/build-1.log`). Every run: 0 Critical, 0 GL errors, 0 failed programs, nothing left behind.
+
+Radii, 720-frame px (`h1-proto-measure.txt`): **measured**
+
+| | lamp left peak / r50 / r10 | blue box peak / r50 / r10 |
+|---|---|---|
+| 1280x720 scale 1 (s1 / s1again) | 89.0 / 40 / 64 ; 88.1 / 40 / 63 | 18.2 / 35 / 67 ; 16.3 / 33 / 59 |
+| 1280x720 bicubic | 88.9 / 40 / 63 | 18.4 / 35 / 67 |
+| 1280x720 scale 2 / 4 | 89.1 / 40 / 62 ; 89.5 / 40 / 63 | 15.9 / 29 / 51 ; 17.5 / 29 / 52 |
+| 2560x1440 scale 1 (s1 / s1again) | 89.2 / 40.5 / 63 ; 89.0 / 40.5 / 63 | 17.6 / 33.5 / 56 ; 16.7 / 33.5 / 59 |
+| 2560x1440 bicubic | 89.1 / 40.5 / 63 | 17.7 / 33.5 / 57 |
+| 2560x1440 scale 2 / 3 / 4 | 89.5 / 40.5 / 62 ; 91.3 / 40.5 / 64.5 ; 90.0 / 40.5 / 63.5 | 16.3 / 28 / 51.5 ; 18.1 / 30 / 57 ; 17.8 / 29.5 / 52 |
+| 2248x1212 scale 1 / bicubic | 96.0 / 40.4 / 65.5 ; 95.8 / 41.0 / 64.9 | 20.4 / 30.7 / 56.9 ; 20.4 / 30.7 / 56.4 |
+| 2248x1212 scale 2 / 4 | 90.1 / 39.9 / 60.4 ; 92.1 / 39.9 / 62.1 | 16.9 / 27.9 / 47.3 ; 18.6 / 29.0 / 52.4 |
+
+- **Bicubic composite**: radius and peak unchanged (within 1 px / 1 level, below the repeat noise). Seen: the band
+  outlines are a little rounder; the change is small (largest pixel difference to scale 1: 11 levels, mean 0.04).
+- **Scale 2 / 4**: the white lamp's halo keeps its size (r50 equal, r10 within 1-2 px) and peak. Seen
+  (`h1-proto-2560-blue-glow8.png`, `h1-proto-2248-blue-glow8.png`, `h1-proto-2560-lamp-glow4.png`): the band
+  outlines become round, the 24-px polygons are gone. **But the dim outer tail of the emissive glow is lost**: the
+  blue box's r50 drops from 33.5 to 28-29.5 and its r10 from 56-59 to 51.5-52 (beyond the repeat noise); in the gain
+  sheets the wide faint outer halo of scale 1 is absent at scale 2 and 4. Cause **not established**; suspect: 8-bit
+  rounding of a tail of 1-2 levels through the extra fill passes inside the emissive feedback loop (two feedback
+  rounds, each V, H, box-up, now each with fill passes), which the float model cannot show. Scale 3 keeps more of it
+  (r10 57) but clamps in its fill.
+
+Frame cost, 2560x1440, Quadro P620, one run, time frozen, same view, two rounds of 8-s windows, load 12-15 (shared
+machine: **measured, noisy**; `fx-fpsab-2560-gpu.out`): post-processing off 8.2 / 9.1 ms; on, scale 1: 12.8, 12.0,
+11.7, 12.7 ms; scale 2: 14.1, 12.7; scale 4: 14.3, 12.9; bicubic: 14.2, 12.7. So about **+0.5 to +1.3 ms** for
+scale 2, +0.6 to +1.5 for scale 4 and +0.5 to +1.4 for the bicubic composite, against ~3.5-4 ms for the whole
+post-processing. (Separate fps-bench runs per setting were useless: 52 / 75 / 47 / 48 / 66 fps with no order.)
+
+## Step 5. Other buffers
+
+- **DOF blur targets** (Rw/4 x 120 final, 12 px texels at 1440p): the same chain shape; scale 2 changes the picture
+  (mean 2.5 levels at 2560x1440, `dof1` vs `dof2`), seen at 3x (`h1-dof-2560-zoom.png`): no clear visible
+  improvement; its blend is masked per pixel by the full-resolution depth, so its edges are already sharp. Would
+  follow the bloom if a scale ships; not a priority.
+- **Emissive targets**: part of the bloom (its result is added into the bloom's select); they scale together.
+- **Back-buffer copy / distortion accumulation**: half of the real back buffer already: no.
+- **Reference copy**: no: it is what the bloom threshold and every first pass see; finer would let thinner bright
+  things bloom (a change of look, not of smoothness).
+- **Motion blur accumulation, radial blur, heat shimmer, concussion blur**: full resolution or no target: nothing to
+  raise. **Luminance 16x16**: a statistic. **Shadow textures**: not screen space.
+- Seen in passing (not this task): the DOF on/off difference (`h1-dof-diff-x10.png`) is large along the edges of the
+  first-person weapon, i.e. the always-on DOF blends over the weapon; to look at separately.
+
+## Recommendation (for the owner's decision)
+
+1. Do not ship either prototype as a default yet.
+2. The resolution increase does what the owner hoped for the shape (round, no 24-px polygons, and no shimmer of
+   small lights) at about 1 ms per frame on the P620 at 1440p, and keeps the bloom's size and brightness; but as
+   prototyped it shrinks the faint outer part of emissive glows by 10-15% of their radius. Next step if wanted:
+   diagnose that tail (8-bit rounding in the feedback loop is my suspicion; test by skipping the fill inside the
+   emissive feedback, or by moving the feedback to scale 1), then offer it as an ini setting, default 1 (Xbox).
+3. The bicubic composite keeps size and brightness exactly and costs about 1 ms, but changes little on screen
+   because the visible blocks are mostly 8-bit bands in a 1-5 level glow; and it needs a driver program to work on
+   GL4ES. Not worth shipping alone.
+4. Name: the setting scales the post-process blur targets, not the framebuffer:
+   `[UC2GLDrv.UC2GLRenderDevice] PostProcessTargetScale=2` (also read from the GL4ES section), 1 = the Xbox's texel
+   count. "FramebufferResolutionMultiplier" would suggest supersampling the whole picture.

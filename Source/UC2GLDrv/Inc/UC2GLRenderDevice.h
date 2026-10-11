@@ -197,6 +197,14 @@ public:
 	// buffer brought down to that many lines by an area-averaging pass, so that the chains run
 	// texel for texel as on the Xbox. Made only when the back buffer is taller than the reference.
 	INT								PostProcessReferenceHeight;
+	// H-1 prototype (docs/porting/analysis/h1-bloom.md; test keys and console only, not settings yet):
+	// PostProcessScale = texels per axis of the camera effects' blur targets, times the Xbox's count
+	// (FRenderCaps::PostProcessScale; test key PostProcessScale, console PPSCALE); PostProcessSmooth = the
+	// fixed-function lookup of a render target magnified more than 2x into the main framebuffer (the bloom's
+	// composite) is a bicubic (B=0.5, C=0.25: the same spread as bilinear, continuous slope) instead of
+	// bilinear (test key PostProcessSmooth, console PPSMOOTH; desktop programs only).
+	INT								PostProcessScale;
+	INT								PostProcessSmooth;
 	GLuint							PostReferenceProgram;	// built for PostReferenceTaps x PostReferenceTaps samples
 	INT								PostReferenceTaps;
 	GLint							PostReferenceRectLoc,

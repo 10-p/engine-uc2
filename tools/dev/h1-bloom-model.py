@@ -194,6 +194,18 @@ def sample_row(T, x, y, up):
     return s
 
 
+def cascade(T, n, k, up):
+    """up = 'cascadeN': before the bilinear composite, 2x upsampling passes (FilterCopyRenderTarget with the box
+    filter at half a source texel, (+-.5, +-.5)) until the composite magnifies at most N times."""
+    if not up.startswith('cascade'):
+        return T, up
+    limit = float(up[len('cascade'):] or 4)
+    half = [(-.5, -.5, .25), (.5, -.5, .25), (-.5, .5, .25), (.5, .5, .25)]
+    while (n / len(T)) * k > limit:
+        T = gpass(T, 2 * len(T[0]), 2 * len(T), half)
+    return T, 'bilinear'
+
+
 def light(n, x0, y0, size):
     """Reference copy of a square light of brightness 1, side `size` ref px, top-left corner at (x0, y0) ref px:
     each ref px holds the share of it the light covers (the reference copy is an area average)."""
@@ -220,13 +232,14 @@ def run(H, M, mode, up, size=2.0, phases=3, n=144):
             R = light(n, x0, y0, size)
             B1, Fe1 = chain(R, M, mode)
             T = [[a + b for a, b in zip(r1, r2)] for r1, r2 in zip(B1, Fe1)]
+            T, up2 = cascade(T, n, k, up)
             tsx = n / len(T[0]); tsy = n / len(T)
             yref = y0 + size / 2
             cx = (x0 + size / 2) * k
             prof = []
             for sx in range(int(cx - 60 * k), int(cx + 60 * k) + 1):
                 xref = (sx + .5) / k
-                prof.append(sample_row(T, xref / tsx, yref / tsy, up) * 128 / 255)
+                prof.append(sample_row(T, xref / tsx, yref / tsy, up2) * 128 / 255)
             profiles.append(prof)
             pk = max(prof)
             peaks.append(pk)
@@ -256,6 +269,7 @@ def cmd_table(args):
     H = int(args[0]) if args else 1440
     rows = [(1, 'texel', 'bilinear'), (1, 'texel', 'bspline'), (1, 'texel', 'bc'), (1, 'texel', 'catrom'),
             (2, 'texel', 'bilinear'), (2, 'scaled', 'bilinear'), (2, 'filled', 'bilinear'), (2, 'filled', 'bc'),
+            (1, 'texel', 'cascade4'), (1, 'texel', 'cascade2'), (2, 'filled', 'cascade4'),
             (3, 'filled', 'bilinear'), (4, 'filled', 'bilinear')]
     if len(args) > 1:
         rows = [r for r in rows if r[0] <= int(args[1])]

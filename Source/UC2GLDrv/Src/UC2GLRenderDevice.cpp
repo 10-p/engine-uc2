@@ -230,6 +230,8 @@ void UUC2GLRenderDevice::StaticConstructor()
 	// pp-scale: the blurs cover the share of the picture they cover on the Xbox's 640x480, also
 	// for an ini that predates the key.
 	PostProcessReferenceHeight = 480;
+	PostProcessScale = 1;
+	PostProcessSmooth = 0;
 	// O-8 (owner, 2026-10-06): 16x anisotropic filtering and 4x anti-aliasing by default, also
 	// for an ini that predates the keys.
 	LevelOfAnisotropy		= 16;
@@ -616,6 +618,11 @@ UBOOL UUC2GLRenderDevice::Init()
 	if( UC2GL_TESTKEY( "MaterialTime", TestValue ) )
 		GTestMaterialTime = Max( 0.f, (FLOAT)appAtof( *TestValue ) );
 	LogStats = UC2GL_TESTFLAG( "Stats" );
+	// H-1 prototype (docs/porting/analysis/h1-bloom.md): PostProcessScale=<1..4>, PostProcessSmooth=<0|1>.
+	TestValue = TEXT("");
+	PostProcessScale = UC2GL_TESTKEY( "PostProcessScale", TestValue ) ? Clamp( appAtoi( *TestValue ), 1, 4 ) : 1;
+	TestValue = TEXT("");
+	PostProcessSmooth = UC2GL_TESTKEY( "PostProcessSmooth", TestValue ) ? Clamp( appAtoi( *TestValue ), 0, 1 ) : 0;
 	StatDraws = StatPrimitives = StatMaterials = StatBufferUploads = StatBufferBytes = StatTextureUploads = StatPostQuads = 0;
 	StatSnapshots = StatDepthColors = StatDepthCopies = StatFrame0 = 0;
 	StatTime0 = 0.0;
@@ -2161,6 +2168,22 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 			MainWidth, MainHeight, FrameCounter );
 		return 1;
 	}
+	else if( ParseCommand(&Cmd,TEXT("PPSCALE")) )
+	{
+		// H-1 prototype: PPSCALE [1..4]: the blur targets' texels per axis, times the Xbox's count.
+		if( appStrlen(Cmd) )
+			PostProcessScale = Clamp( appAtoi(Cmd), 1, 4 );
+		Ar.Logf( TEXT("UC2GLDrv: post-process scale %i (frame %i)"), PostProcessScale, FrameCounter );
+		return 1;
+	}
+	else if( ParseCommand(&Cmd,TEXT("PPSMOOTH")) )
+	{
+		// H-1 prototype: PPSMOOTH [0|1]: bicubic instead of bilinear for the bloom's composite.
+		if( appStrlen(Cmd) )
+			PostProcessSmooth = Clamp( appAtoi(Cmd), 0, 1 );
+		Ar.Logf( TEXT("UC2GLDrv: post-process smooth composite %i (frame %i)"), PostProcessSmooth, FrameCounter );
+		return 1;
+	}
 	else if( ParseCommand(&Cmd,TEXT("SUPPORTEDRESOLUTION")) )
 	{
 		Ar.Logf( TEXT("1") );
@@ -2431,6 +2454,8 @@ FRenderCaps* UUC2GLRenderDevice::GetRenderCaps()
 	// pp-scale: the picture height the camera effects size their blurs for (UnRenderUtil.h,
 	// GetPostProcessReference).
 	RenderCaps.PostProcessReferenceHeight	= Max( PostProcessReferenceHeight, 0 );
+	// H-1 prototype.
+	RenderCaps.PostProcessScale				= PostProcessActive() ? Clamp( PostProcessScale, 1, 4 ) : 1;
 	// G-6: dynamic gamma per viewport (UC2GLPostProcess.cpp, SetViewportGammaRamp), with the post-processing.
 	RenderCaps.ViewportDynamicGamma			= PostProcessActive() ? 1 : 0;
 	return &RenderCaps;
