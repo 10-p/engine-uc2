@@ -372,6 +372,8 @@ void USDL2Viewport::OpenWindow( DWORD InParentWindow, UBOOL IsTemporary, INT New
 	if( InParentWindow && !IsTemporary && Main && Main!=this && Main->Window )
 	{
 		SubViewport	= 1;
+		// H-3: the overlay's menus get the window's cursor as viewport 0's do (UpdateMousePosition reads it).
+		bWindowsMouseAvailable = Main->bWindowsMouseAvailable;
 		RenDev		= Main->RenDev;
 		BlitFlags	= Main->BlitFlags & ~BLIT_Temporary;
 		ColorBytes	= Main->ColorBytes;
@@ -710,6 +712,7 @@ UBOOL USDL2Viewport::ResizeViewport( DWORD NewBlitFlags, INT InNewX, INT InNewY,
 	{
 		SizeX = NewX;
 		SizeY = NewY;
+		bWindowsMouseAvailable = GetWindowViewport()->bWindowsMouseAvailable;	// H-3: the window's (fullscreen or not)
 		return 1;
 	}
 
@@ -1097,6 +1100,20 @@ void USDL2Viewport::SetMouseCapture( UBOOL Capture, UBOOL Clip, UBOOL OnlyFocus 
 
 	if( Capture != Captured )
 	{
+		// H-3: who wanted the cursor when the capture changes (LogInput only; the browser's pointer lock follows this).
+		USDL2Client* Client = GetOuterUSDL2Client();
+		if( Client->LoggingInput() )
+		{
+			FString Why;
+			for( INT i=0; i<Client->Viewports.Num(); i++ )
+			{
+				UViewport* V = Client->Viewports(i);
+				Why += FString::Printf( TEXT(" %i:%s winmouse=%i/%i menu=%i gui=%s"), i, V->GetName(), (INT)V->bShowWindowsMouse,
+					(INT)V->bWindowsMouseAvailable, (INT)V->bShowMenu,
+					!V->GUIController ? TEXT("none") : V->GUIController->ViewportOwner!=V ? TEXT("other") : V->GUIController->bActive ? TEXT("active") : TEXT("idle") );
+			}
+			debugf( SDL2INPUT, TEXT("mouse capture %s (cursor wanted %i):%s"), Capture ? TEXT("on") : TEXT("off"), Client->CursorWanted(), *Why );
+		}
 		if( Capture )
 		{
 			OrigCursor = FVector( WindowsMouseX, WindowsMouseY, 0 );

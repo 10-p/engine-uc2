@@ -293,6 +293,7 @@ W = {}
 # G-6: the per-viewport probe.
 V = {}
 VS = {}
+VC = {}  # H-3: (window captured, cursor wanted) per vprobe tag
 VPS_RX = re.compile(r'vps (\S+) n=(\d+) split=(\d+) screen=(\d+)x(\d+)')
 VP_RX = re.compile(r'vp (\S+) (\d+) name=(\S+) pad=(\d+) rect=\((-?\d+),(-?\d+),(-?\d+),(-?\d+)\) scale=\(([-\d.]+),([-\d.]+)\) '
                    r'fovscale=\(([-\d.]+),([-\d.]+)\) menu=(\d) scene=(\d) disabled=(\d) split=(-?\d+) overlay=(\d) window=(\d) '
@@ -307,6 +308,8 @@ def vprobe(tag):
     m = VPS_RX.search(log_lines[i])
     n = int(m.group(2))
     VS[tag] = (n, int(m.group(3)), (int(m.group(4)), int(m.group(5))))
+    cap = re.search(r' captured=(\d) cursor=(\d)', log_lines[i])
+    VC[tag] = (int(cap.group(1)), int(cap.group(2))) if cap else (-1, -1)
     rows = []
     end = time.time() + 5
     while len(rows) < n and time.time() < end:
@@ -327,6 +330,10 @@ def vprobe(tag):
                 rows[-1]['shots'] = int((re.search(r' shots=(-?\d+)', line) or re.search(r'(-1)', '-1')).group(1))
                 acc = re.search(r' acc=\(([-\d.]+),([-\d.]+)\)', line)
                 rows[-1]['acc'] = (float(acc.group(1)), float(acc.group(2))) if acc else (0.0, 0.0)
+                ml = re.search(r' mouselook=(\S+)', line)
+                rows[-1]['mouselook'] = ml.group(1) if ml else '-'
+                pc = re.search(r' pawnclass=(\S+)', line)
+                rows[-1]['pawnclass'] = pc.group(1) if pc else '-'
         if len(rows) < n:
             time.sleep(0.1)
     V[tag] = rows
@@ -462,7 +469,7 @@ def run():
         execute(line)
 
 
-NS = {'P': P, 'W': W, 'K': K, 'V': V, 'VS': VS, 'vsplit': vsplit, 'vrects': vrects, 'vdist': vdist, 'vyaw': vyaw,
+NS = {'P': P, 'W': W, 'K': K, 'V': V, 'VS': VS, 'VC': VC, 'vsplit': vsplit, 'vrects': vrects, 'vdist': vdist, 'vyaw': vyaw,
       'vprobe': vprobe, 'time': time,
       'yawdiff': yawdiff, 'pitchdiff': pitchdiff, 'dist': dist, 'fwd': fwd, 'side': side,
       'abs': abs, 'min': min, 'max': max, 'math': math, 'os': os, 'chan': chan, 'record': record,

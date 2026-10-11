@@ -321,6 +321,17 @@ void USDL2Client::Tick( FLOAT DeltaSeconds )
 	PollGamepads( DeltaSeconds );
 	Engine->ActiveControllerId = PreviousControllerId;
 
+	// H-3: UGameEngine::Tick takes the mouse back when the menus close ("If game is paused, release the cursor") only
+	// while there is ONE viewport; in split screen nothing did until the next key or button release. The window's
+	// capture follows the menus' cursor here instead, the same rule (captured again only with CaptureMouse).
+	if( Viewports.Num()>1 && !GIsEditor )
+	{
+		USDL2Viewport* Main = (USDL2Viewport*)Viewports(0);
+		UBOOL Want = CursorWanted();
+		if( Main->Window && Main->Captured==Want && (Want || CaptureMouse) )
+			Main->SetMouseCapture( !Want, 0, 1 );
+	}
+
 	// Blit any viewports that need blitting. G-6: split-screen viewports are rectangles of one window, so
 	// one frame is presented, as UXboxClient::Tick does: only the first viewport drawn is given Blit (it
 	// presents the whole frame at the start of its next draw, UGameEngine::Draw), and a viewport the
@@ -532,11 +543,23 @@ void USDL2Client::UpdateSplitLayout()
 // Whether the window shows the cursor: a menu's cursor of the window's viewport, or, while split, of the
 // overlay viewport that draws the menus (it has no window of its own).
 //
+// H-3: only the viewport that OWNS the GUIController counts, and only while the GUI is up. bShowWindowsMouse is set
+// on the GUI's ViewportOwner every menu frame (GUIController::NativePreRender) and cleared on it when the last menu
+// closes (GUIController.SetControllerStatus); when a player joins in the menus, USplitScreenMgr hands the GUI to the
+// overlay viewport (ViewportOwner = OverlayView), so viewport 0 kept the 1 its menus had left and nobody cleared it:
+// the cursor stayed wanted through the split-screen match and the mouse was never captured again (on the web: no
+// pointer lock and the browser's pointer over the game; h3-pads.md). With one viewport the GUI is always viewport 0's
+// and bShowWindowsMouse is only ever set while it is active, so this is what it was.
+//
 UBOOL USDL2Client::CursorWanted()
 {
 	for( INT i=0; i<Viewports.Num(); i++ )
-		if( Viewports(i)->bShowWindowsMouse && (i==0 || Viewports(i)->bShowMenu) )
+	{
+		UViewport* V = Viewports(i);
+		if( V->bShowWindowsMouse && (i==0 || V->bShowMenu)
+		&&	V->GUIController && V->GUIController->ViewportOwner==V && V->GUIController->bActive )
 			return 1;
+	}
 	return 0;
 }
 

@@ -559,7 +559,10 @@ void FSDL2InputTest::ProbeViewports( USDL2Client* Client, const TCHAR* Tag )
 	USplitScreenMgr* Mgr = Client->GetSplitScreenMgr();
 	INT ScreenX = 0, ScreenY = 0;
 	Client->GetInitScreenSize( ScreenX, ScreenY );
-	debugf( SDL2INPUT, TEXT("vps %s n=%i split=%i screen=%ix%i"), Tag, Client->Viewports.Num(), Mgr ? Mgr->NumActiveSplitViews() : 0, ScreenX, ScreenY );
+	// H-3: the window's mouse capture (the browser's pointer lock) and whether a menu wants the cursor, at the end.
+	USDL2Viewport* Win = Client->Viewports.Num() ? (USDL2Viewport*)Client->Viewports(0) : NULL;
+	debugf( SDL2INPUT, TEXT("vps %s n=%i split=%i screen=%ix%i captured=%i cursor=%i"), Tag, Client->Viewports.Num(), Mgr ? Mgr->NumActiveSplitViews() : 0, ScreenX, ScreenY,
+		Win ? (INT)Win->Captured : 0, (INT)Client->CursorWanted() );
 	for( INT i=0; i<Client->Viewports.Num(); i++ )
 	{
 		USDL2Viewport* V = (USDL2Viewport*)Client->Viewports(i);
@@ -571,7 +574,7 @@ void FSDL2InputTest::ProbeViewports( USDL2Client* Client, const TCHAR* Tag )
 				if( Mgr->GetSplitView(s)==V )
 					SplitIndex = s;
 		debugf( SDL2INPUT,
-			TEXT("vp %s %i name=%s pad=%i rect=(%i,%i,%i,%i) scale=(%.3f,%.3f) fovscale=(%.3f,%.3f) menu=%i scene=%i disabled=%i split=%i overlay=%i window=%i actor=%s pawn=%i loc=(%.1f,%.1f,%.1f) rot=(%i,%i,%i) hud=%s fov=%.3f player=%s gui=%i shots=%i acc=(%.0f,%.0f)"),
+			TEXT("vp %s %i name=%s pad=%i rect=(%i,%i,%i,%i) scale=(%.3f,%.3f) fovscale=(%.3f,%.3f) menu=%i scene=%i disabled=%i split=%i overlay=%i window=%i actor=%s pawn=%i loc=(%.1f,%.1f,%.1f) rot=(%i,%i,%i) hud=%s fov=%.3f player=%s gui=%i shots=%i acc=(%.0f,%.0f) mouselook=%s pawnclass=%s winmouse=%i/%i guiowner=%s"),
 			Tag, i, V->GetName(), (INT)V->GamepadID, V->OffsetX, V->OffsetY, V->SizeX, V->SizeY, V->ScaleX, V->ScaleY,
 			V->ScaleFOVX, V->ScaleFOVY, (INT)V->bShowMenu, (INT)V->bShowScene, (INT)V->bDisableDraw, SplitIndex,
 			Mgr && Mgr->IsOverlayViewport(V) ? 1 : 0, V->Window ? 1 : 0,
@@ -582,7 +585,13 @@ void FSDL2InputTest::ProbeViewports( USDL2Client* Client, const TCHAR* Tag )
 			PC && PC->PlayerReplicationInfo ? *PC->PlayerReplicationInfo->PlayerName.Replace(TEXT(" "),TEXT("_")) : TEXT("None"),
 			V->GUIController ? (INT)V->GUIController->bActive : -1,
 			Pawn && Pawn->Weapon ? (INT)Pawn->Weapon->FlashCount : -1,
-			Pawn ? Pawn->Acceleration.X : 0.f, Pawn ? Pawn->Acceleration.Y : 0.f );
+			Pawn ? Pawn->Acceleration.X : 0.f, Pawn ? Pawn->Acceleration.Y : 0.f,
+			// H-3: which device owns this player's look (UCPlayerInput.bMouseOwnsLook of the rebuilt package; "-" without).
+			PC && PC->PlayerInput && FindField<UBoolProperty>( PC->PlayerInput->GetClass(), TEXT("bMouseOwnsLook") )
+				? *GetPropText( PC->PlayerInput, TEXT("bMouseOwnsLook") ) : TEXT("-"),
+			Pawn ? Pawn->GetClass()->GetName() : TEXT("None"),
+			(INT)V->bShowWindowsMouse, (INT)V->bWindowsMouseAvailable,
+			!V->GUIController ? TEXT("none") : V->GUIController->ViewportOwner==V ? TEXT("self") : TEXT("other") );
 	}
 	unguard;
 }

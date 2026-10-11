@@ -23,6 +23,8 @@
 #                  keyboard+mouse player one alone, a pad that joins as player two, every device moving/turning/firing
 #                  its own player only, unplug (Epic's page for the pad-only player)/replug, leave, rejoin; then the
 #                  menus' flow with one pad (menu_kb=1)
+#          h3menu  (H-3) Xvfb: the owner's flow NETWORKED COMBAT -> HOST SYSTEM LINK GAME -> character page, the pad
+#                  plugged in there; ticked (PadsStartAtPlayerTwo=True) and unticked; Arclite + a pad player, two views
 #          unplug  (G-11) Xvfb, the default PadsStartAtPlayerTwo=False: player one's pad (with the keyboard and mouse)
 #                  pulled out opens no menu and pauses nothing, plugged back it is player one's again; a pad-only
 #                  player two pulled out gets Epic's ControllerRemovedMenu, its Start closes it after the re-plug
@@ -879,6 +881,117 @@ check u-two-players-again-ports-0-1 VS['u7'][1] == 2 and ports('u7') == [0, 1]
 SCEN
 }
 
+# H-3: the owner's flow of 2026-10-11, NETWORKED COMBAT -> HOST SYSTEM LINK GAME -> (the profile box) -> accept three
+# times -> the character page ("Player 1 No Profile", "Player 2 Press start"), the pad arriving there by hot-plug (as a
+# browser lists a pad only at its first press). h3_ticked=1: PadsStartAtPlayerTwo=True, one pad (virtual pad 0, port 1)
+# whose Start joins player two; h3_ticked=0 (default ini): pad 0 attached at the main menu is player one's (port 0),
+# pad 1 attached on the character page joins. Player one picks the character to the left (Arclite) with the keyboard,
+# player two accepts its own with A; the match must start with two split views, the mouse captured, no cursor.
+scen_h3menu() {
+  local jp=0 jport=1 early="" start="pyexec (click(1), fire_all(1))"
+  if [ "${h3_ticked:-1}" = 0 ]; then jp=1; early="pad 0 attach"; start="pyexec (click(1), fire_all(2))"; fi
+  cat <<SCEN
+pyfile $checks
+wait OpenMenu \\[UCMenu.UC2MainMenu\\] 90
+sleep 3
+focus
+$early
+sleep 1
+seek 8 P['_'].caption == 'NETWORKED COMBAT' ;; key Down
+key Return
+wait OpenMenu \\[UCMenu.UC2NetworkMain\\] 15
+sleep 2
+seek 8 P['_'].caption == 'HOST SYSTEM LINK GAME' ;; key Down
+key Return
+wait OpenMenu \\[UCMenu.UC2Arena_ServerMain\\] 15
+wait OpenMenu \\[GUI.GUIMessageBox\\] 20
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
+key Escape
+sleep 2
+key Return
+sleep 2
+key Return
+sleep 2
+key Return
+expect h3-character-page OpenMenu \\[UCMenu.UC2Arena_Character\\] 20
+sleep 3
+vprobe c0
+pyexec print('  capture on the character page before the join', VC['c0'])
+pad $jp attach
+sleep 0.5
+pad $jp button start 1
+sleep 0.3
+pad $jp button start 0
+expect h3-pad-on-port-$jport SDL2 pads: pad $jport connected 15
+expect h3-pad$jport-start-joins-player-two Split screen: pad $jport Start in the menus: joined 15
+sleep 3
+vprobe c1
+pyexec print('  capture after the join', VC['c1'])
+check h3-two-players-on-the-character-page VS['c1'][1] == 2 and sorted(r['pad'] for r in vsplit('c1')) == [0, $jport]
+shot h3-character-two-players
+sleep 1
+pad $jp button b 1
+sleep 0.3
+pad $jp button b 0
+sleep 2
+shot h3-character-box-answered
+key Left
+sleep 1
+key Return
+sleep 2
+pad $jp button a 1
+sleep 0.3
+pad $jp button a 0
+sleep 2
+shot h3-after-choice
+SCEN
+  local i
+  for i in 1 2 3 4 5 6; do
+    cat <<SCEN
+pad $jp button a 1
+sleep 0.3
+pad $jp button a 0
+sleep 1.5
+key Return
+sleep 2.5
+SCEN
+  done
+  cat <<SCEN
+expect h3-travel-to-the-match Bringing Level \\S+.MyLevel up for play 150
+sleep 6
+seek 20 P['_'].pawn == 1 ;; $start
+check h3-player2-spawns spawn_port($jport, $jp)
+sleep 2
+vprobe m2
+pyexec print('  capture in the match', VC['m2'])
+check h3-match-has-two-split-players layout_ok('m2') and VS['m2'][1] == 2 and pads_in_join_order('m2')
+pyexec print('  pawns', [(r['i'], r['pad'], r['pawnclass']) for r in V['m2']])
+check h3-player-one-is-arclite 'Arclite' in vsplit('m2')[0]['pawnclass']
+check h3-mouse-captured-in-the-match VC['m2'] == (1, 0)
+check h3-pad-player-two-has-the-pad-camera [r['mouselook'] for r in vsplit('m2')][1] in ('False', '-')
+shot h3-match-two-players
+rmove 60 0 6
+sleep 0.5
+vprobe x1
+check h3-mouse-gives-player-one-the-mouse-camera-not-player-two [r['mouselook'] for r in vsplit('x1')] == ['True', 'False']
+SCEN
+  # The default mode: player one's own pad (port 0) takes its look back with the left stick alone, the mouse again after.
+  [ "${h3_ticked:-1}" = 0 ] && cat <<SCEN
+pad 0 axis lefty -32767
+sleep 1.2
+pad 0 axis lefty 0
+sleep 0.5
+vprobe x2
+check h3-player-one-left-stick-gives-the-pad-camera-back [r['mouselook'] for r in vsplit('x2')] == ['False', 'False']
+rmove 60 0 6
+sleep 0.5
+vprobe x3
+check h3-player-one-mouse-again [r['mouselook'] for r in vsplit('x3')] == ['True', 'False']
+SCEN
+  return 0
+}
+
 # The menus' own flow (UC2's two-player split screen): main menu -> Instant Action -> DeathMatch -> DM-Deadbolt ->
 # character page, where pad 1's Start joins player two (UC2Arena_Character allows it); both choose and launch.
 scen_menu() {
@@ -1029,6 +1142,12 @@ for part in $parts; do
     render) scen_render > "$scen"; run_game g6-render 1 480 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True
             python3 "$repo/tools/dev/g6/g6-measure.py" "$out" > "$out/g6-measure.txt" 2>&1; tail -n 30 "$out/g6-measure.txt";;
     menu)   scen_menu   > "$scen"; run_game g6-menu   0 420 "" "$scen";;
+    h3menu) # H-3: the owner's system-link flow, the pad arriving on the character page; both pad modes
+            # (H3_MODES="ticked unticked" by default; one of them alone for a quicker look)
+            for m in ${H3_MODES:-ticked unticked}; do
+              t=1; ka=$KBPLAYER; [ "$m" = unticked ] && t=0 ka=""
+              h3_ticked=$t scen_h3menu > "$scen"; cp "$scen" "$out/h3-$m.scen"; run_game h3-$m 0 480 "" "$scen" $ka
+            done;;
     hud)    # B-3: the split HUD's placement per viewport (GPU, frozen frame, the HUD alone)
             scen_hud > "$scen"; run_game b3-hud 1 480 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True
             uimode=Fit43; case "${G6_ARGS:-}" in *UIScaleMode=Native640*) uimode=Native640;; esac

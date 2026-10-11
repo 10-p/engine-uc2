@@ -7,6 +7,10 @@ a mouse; the keyboard moves and strafes; UT2004-style double-tap dodge (G-8); co
 and `MouseLookInvert` for the session.
 
 - **Classes**: UCPlayerInput (7 hunks), UCPlayerController (9 hunks), UCTrainingController (2 hunks).
+- **Who owns the look** (`UCPlayerInput.bMouseOwnsLook`): the mouse (or the look keys) while it moves, the pad as soon
+  as one of its sticks moves (H-3, 2026-10-11: the left stick too, so a pad player who only walks gets Epic's pad camera
+  back: the lazy camera, auto-centred pitch, aim adhesion); on PC a player starts with the mouse, except a split-screen
+  player on a viewport other than the window's (players 2-4), which the mouse never reaches: always the pad's.
 - **Ini keys** (User.ini / DefUser.ini `[UCGameplay.UCPlayerInput]`, globalconfig): `MouseLookSensitivity`
   (2.5), `bInvertMouseLook` (False), `bLazyMouseCamera` (False), `bDoubleTapDodge` (False). The shipped package
   ignores them.
