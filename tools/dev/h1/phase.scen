@@ -1,0 +1,295 @@
+# H-1 part 2: the view moved by about one reference pixel (3 screen px at 1440 lines) at a time over the 4 x 4
+# positions of the scale-1 bloom select grid (yaw +19, pitch +22 per step); at each: scale 1, scale 2 (both freshly made
+# targets), effect off. tools/dev/h1-phase.sh measures it.
+chan exec ToggleThirdCam
+sleep 1
+chan exec set UC2GLRenderDevice PostProcessTargetScale 2
+sleep 1
+chan exec set LevelInfo TimeDilation 1
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40448 0
+sleep 2.5
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40448 0
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+chan exec set UCScreenDOF Enabled 0
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+sleep 2.5
+shot q0s1
+chan exec set UC2GLRenderDevice PostProcessTargetScale 2
+sleep 2.5
+shot q0s2
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+chan exec set UCScreenEmissiveWithBloom Enabled 0
+sleep 1.5
+shot q0off
+chan exec set UCScreenEmissiveWithBloom Enabled 1
+chan exec set LevelInfo TimeDilation 1
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40467 0
+sleep 2.5
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40467 0
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+chan exec set UCScreenDOF Enabled 0
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+sleep 2.5
+shot q1s1
+chan exec set UC2GLRenderDevice PostProcessTargetScale 2
+sleep 2.5
+shot q1s2
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+chan exec set UCScreenEmissiveWithBloom Enabled 0
+sleep 1.5
+shot q1off
+chan exec set UCScreenEmissiveWithBloom Enabled 1
+chan exec set LevelInfo TimeDilation 1
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40486 0
+sleep 2.5
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40486 0
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+chan exec set UCScreenDOF Enabled 0
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+sleep 2.5
+shot q2s1
+chan exec set UC2GLRenderDevice PostProcessTargetScale 2
+sleep 2.5
+shot q2s2
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+chan exec set UCScreenEmissiveWithBloom Enabled 0
+sleep 1.5
+shot q2off
+chan exec set UCScreenEmissiveWithBloom Enabled 1
+chan exec set LevelInfo TimeDilation 1
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40505 0
+sleep 2.5
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40505 0
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+chan exec set UCScreenDOF Enabled 0
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+sleep 2.5
+shot q3s1
+chan exec set UC2GLRenderDevice PostProcessTargetScale 2
+sleep 2.5
+shot q3s2
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+chan exec set UCScreenEmissiveWithBloom Enabled 0
+sleep 1.5
+shot q3off
+chan exec set UCScreenEmissiveWithBloom Enabled 1
+chan exec set LevelInfo TimeDilation 1
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40448 22
+sleep 2.5
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40448 22
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+chan exec set UCScreenDOF Enabled 0
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+sleep 2.5
+shot q4s1
+chan exec set UC2GLRenderDevice PostProcessTargetScale 2
+sleep 2.5
+shot q4s2
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+chan exec set UCScreenEmissiveWithBloom Enabled 0
+sleep 1.5
+shot q4off
+chan exec set UCScreenEmissiveWithBloom Enabled 1
+chan exec set LevelInfo TimeDilation 1
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40467 22
+sleep 2.5
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40467 22
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+chan exec set UCScreenDOF Enabled 0
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+sleep 2.5
+shot q5s1
+chan exec set UC2GLRenderDevice PostProcessTargetScale 2
+sleep 2.5
+shot q5s2
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+chan exec set UCScreenEmissiveWithBloom Enabled 0
+sleep 1.5
+shot q5off
+chan exec set UCScreenEmissiveWithBloom Enabled 1
+chan exec set LevelInfo TimeDilation 1
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40486 22
+sleep 2.5
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40486 22
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+chan exec set UCScreenDOF Enabled 0
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+sleep 2.5
+shot q6s1
+chan exec set UC2GLRenderDevice PostProcessTargetScale 2
+sleep 2.5
+shot q6s2
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+chan exec set UCScreenEmissiveWithBloom Enabled 0
+sleep 1.5
+shot q6off
+chan exec set UCScreenEmissiveWithBloom Enabled 1
+chan exec set LevelInfo TimeDilation 1
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40505 22
+sleep 2.5
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40505 22
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+chan exec set UCScreenDOF Enabled 0
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+sleep 2.5
+shot q7s1
+chan exec set UC2GLRenderDevice PostProcessTargetScale 2
+sleep 2.5
+shot q7s2
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+chan exec set UCScreenEmissiveWithBloom Enabled 0
+sleep 1.5
+shot q7off
+chan exec set UCScreenEmissiveWithBloom Enabled 1
+chan exec set LevelInfo TimeDilation 1
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40448 44
+sleep 2.5
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40448 44
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+chan exec set UCScreenDOF Enabled 0
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+sleep 2.5
+shot q8s1
+chan exec set UC2GLRenderDevice PostProcessTargetScale 2
+sleep 2.5
+shot q8s2
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+chan exec set UCScreenEmissiveWithBloom Enabled 0
+sleep 1.5
+shot q8off
+chan exec set UCScreenEmissiveWithBloom Enabled 1
+chan exec set LevelInfo TimeDilation 1
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40467 44
+sleep 2.5
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40467 44
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+chan exec set UCScreenDOF Enabled 0
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+sleep 2.5
+shot q9s1
+chan exec set UC2GLRenderDevice PostProcessTargetScale 2
+sleep 2.5
+shot q9s2
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+chan exec set UCScreenEmissiveWithBloom Enabled 0
+sleep 1.5
+shot q9off
+chan exec set UCScreenEmissiveWithBloom Enabled 1
+chan exec set LevelInfo TimeDilation 1
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40486 44
+sleep 2.5
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40486 44
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+chan exec set UCScreenDOF Enabled 0
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+sleep 2.5
+shot q10s1
+chan exec set UC2GLRenderDevice PostProcessTargetScale 2
+sleep 2.5
+shot q10s2
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+chan exec set UCScreenEmissiveWithBloom Enabled 0
+sleep 1.5
+shot q10off
+chan exec set UCScreenEmissiveWithBloom Enabled 1
+chan exec set LevelInfo TimeDilation 1
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40505 44
+sleep 2.5
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40505 44
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+chan exec set UCScreenDOF Enabled 0
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+sleep 2.5
+shot q11s1
+chan exec set UC2GLRenderDevice PostProcessTargetScale 2
+sleep 2.5
+shot q11s2
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+chan exec set UCScreenEmissiveWithBloom Enabled 0
+sleep 1.5
+shot q11off
+chan exec set UCScreenEmissiveWithBloom Enabled 1
+chan exec set LevelInfo TimeDilation 1
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40448 66
+sleep 2.5
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40448 66
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+chan exec set UCScreenDOF Enabled 0
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+sleep 2.5
+shot q12s1
+chan exec set UC2GLRenderDevice PostProcessTargetScale 2
+sleep 2.5
+shot q12s2
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+chan exec set UCScreenEmissiveWithBloom Enabled 0
+sleep 1.5
+shot q12off
+chan exec set UCScreenEmissiveWithBloom Enabled 1
+chan exec set LevelInfo TimeDilation 1
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40467 66
+sleep 2.5
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40467 66
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+chan exec set UCScreenDOF Enabled 0
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+sleep 2.5
+shot q13s1
+chan exec set UC2GLRenderDevice PostProcessTargetScale 2
+sleep 2.5
+shot q13s2
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+chan exec set UCScreenEmissiveWithBloom Enabled 0
+sleep 1.5
+shot q13off
+chan exec set UCScreenEmissiveWithBloom Enabled 1
+chan exec set LevelInfo TimeDilation 1
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40486 66
+sleep 2.5
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40486 66
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+chan exec set UCScreenDOF Enabled 0
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+sleep 2.5
+shot q14s1
+chan exec set UC2GLRenderDevice PostProcessTargetScale 2
+sleep 2.5
+shot q14s2
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+chan exec set UCScreenEmissiveWithBloom Enabled 0
+sleep 1.5
+shot q14off
+chan exec set UCScreenEmissiveWithBloom Enabled 1
+chan exec set LevelInfo TimeDilation 1
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40505 66
+sleep 2.5
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40505 66
+sleep 3
+chan exec set LevelInfo TimeDilation 0.0001
+chan exec set UCScreenDOF Enabled 0
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+sleep 2.5
+shot q15s1
+chan exec set UC2GLRenderDevice PostProcessTargetScale 2
+sleep 2.5
+shot q15s2
+chan exec set UC2GLRenderDevice PostProcessTargetScale 1
+chan exec set UCScreenEmissiveWithBloom Enabled 0
+sleep 1.5
+shot q15off
+chan exec set UCScreenEmissiveWithBloom Enabled 1

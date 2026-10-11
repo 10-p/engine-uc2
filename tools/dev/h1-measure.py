@@ -27,7 +27,9 @@ Python + PIL.
     h1-measure.py check <tol_r> <tol_peak> <with.png> <off.png> [...] -- <with.png> <off.png> [...]
         Part 2 (PostProcessTargetScale): the radii of the DM-Deadbolt view of tools/dev/h1/*.scen, set A (pictures
         before the --, e.g. scale 1) against set B (e.g. scale 2): the white lamp (943,280 leftwards) and the blue
-        emissive box (545,180 leftwards), peak, r50 and r10 in px of the 720 frame, per picture, then the mean and
+        emissive box (545,180 leftwards), peak, r50 and r10 in px of the 720 frame (the last pixel at or above
+        50% / 10% of the peak before the profile first falls below half of that: robust against a dip inside a
+        lamp and against another light further out), per picture, then the mean and
         spread of each set and one PASS/FAIL line per quantity: |mean B - mean A| <= tol_r (radii) or tol_peak
         (peaks). A last line "check: PASS|FAIL n of 6".
 
@@ -105,8 +107,13 @@ def measure(wpath, opath, x, y, d, band=2.0):
     ipk = prof.index(pk)
     out = {'peak': pk}
     for f in (.5, .1):
+        # the glow's own radius: the last pixel at or above f x peak before the profile first falls below half of
+        # that (cmd_profile takes the last one anywhere out to 150 px, which another light further out can catch;
+        # stopping at the first fall below f x peak catches a dip between the bright parts of a lamp)
         last = ipk
         for i in range(ipk, len(prof)):
+            if prof[i] < f * pk / 2:
+                break
             if prof[i] >= f * pk:
                 last = i
         out['r%d' % int(f * 100)] = last / s

@@ -319,3 +319,67 @@ reads 2 texels apart along each axis the filter reaches, in floating point, and 
   GPU (Quadro P620), AntiAliasing=0: **numerically checked**: blur-h x1 0.50, x2 0.54, mean -0.033; blur-v 0.50 /
   0.54 / -0.026; blur-box 0.50 / 0.50 / -0.024; 15 passed, 0 failed; programs: 97 x 5, 0 could not be built. (With
   attempt 1's 8-bit fill the same test failed blur-h and blur-box: mean -0.108 and -0.199.)
+
+## P2-3. Measurements with attempt 2 (GPU, DM-Deadbolt, time frozen, DOF off; 2026-10-11)
+
+Tools (committed): `tools/dev/h1-radii.sh` (per resolution and scale, 3 runs with the scale from the start, so both
+scales have the same frame history; plus an in-run switch to compare freshly made targets), `tools/dev/h1-phase.sh`
+(one run, the view stepped by about one reference pixel over the 16 positions of the scale-1 grid; scale 1 and 2
+at each), both ending in `tools/dev/h1-measure.py check` (PASS/FAIL per quantity, tolerances 3 px of the 720 frame
+and 1 level). Radii in `check` are the last pixel at or above 50% / 10% of the peak before the profile first falls
+below half of that (the old "last pixel above, anywhere to 150 px" caught another light further out: one 1280 run
+read r10 = 130).
+
+**Why a single view is not enough.** At scale 1 the bloom select reads one 2x2 average per 4x4 reference pixels,
+so a light's contribution depends on where it falls on that grid. Over the 16 positions at 2560x1440 the scale-1
+lamp peak ranges over 6.2 levels and the blue box's over 2.9 (r50 and r10 over 5-7 px); at scale 2 the spreads are
+3.3 and 0.9. One view compares one draw of that lottery (at the standard view scale 1 happens to sit 2.4 levels
+below its own mean on the lamp). The 16-position comparison is the fair one; it is also what moving players see.
+
+16 positions (`logs/h1/h1-phase-<res>.txt`; **measured**; mean of 16, B-A = scale 2 minus scale 1, paired):
+
+| 720-frame px / levels | 2560x1440 scale 1 | scale 2 | B-A (s.e.) | 1280x720 scale 1 | scale 2 | B-A |
+|---|---|---|---|---|---|---|
+| lamp peak | 90.6 | 91.7 | +1.03 (0.42) | 88.1 | 89.3 | +1.2 |
+| lamp r50 | 42.8 | 42.8 | -0.06 (0.04) | 42.9 | 42.8 | -0.1 |
+| lamp r10 | 66.1 | 66.2 | +0.16 (0.19) | 65.9 | 66.2 | +0.2 |
+| blue peak | 18.0 | 18.2 | +0.23 (0.22) | 17.7 | 18.1 | +0.4 |
+| blue r50 | 33.1 | 31.4 | -1.66 (0.38) | 32.8 | 31.2 | -1.6 |
+| blue r10 | 59.4 | 58.1 | -1.34 (0.45) | 59.3 | 57.6 | -1.7 |
+
+Scale 4, 2560x1440, 16 positions: lamp peak +1.5, r50 -0.1, r10 -0.1; blue peak +1.2, r50 -1.8, r10 -1.2.
+Prototype (8-bit fill) for comparison, one view: blue r50 -5.5, r10 -6 to -15.
+
+Standard view, 3 runs each (`logs/h1/h1-radii-<res>.txt`): 2560x1440 lamp 89.7 / 40.5 / 63.7 -> 92.1 / 40.7 / 64.8,
+blue 17.5 / 33.7 / 57.5 -> 19.2 / 31.0 / 61.7 (one scale-2 run's r10 70: the tail reached the next light);
+1280x720 lamp 89.1 / 40.0 / 64.0 -> 92.3 / 41.0 / 65.7, blue 17.5 / 31.7 / 57.3 -> 18.2 / 30.7 / 58.0.
+
+Glow mass and faint area (mean glow and share of pixels at least 1 / 3 levels above the effect-off picture, blue box
+box 440..650 x 90..270 of the 720 frame, 3 runs each, 2560x1440): scale 1 2.37 / 2.13 / 2.04, >=1 level 68.5 / 59.5 /
+55.7%; scale 2 2.14 / 2.21 / 2.79, 60.7 / 57.0 / 74.7%: the same within the run-to-run spread (which is the
+history-dependent emissive accumulation). Lamp 18.2 / 18.1 / 17.9 against 18.6 / 18.1 / 18.9.
+
+Scale 1 against today's main build (`run/h1main` from `engine-uc2/build-native`, same 16 positions): every
+quantity within 0.1 (lamp 90.7 / 42.8 / 66.1 vs 90.6 / 42.8 / 66.1; blue 18.0 / 33.2 / 59.3 vs 18.0 / 33.1 / 59.4).
+Pictures of two runs of the same binary are not byte-identical (the pawn, HUD and frame history: mean 1-2 levels,
+6-8% of pixels differ), so "unchanged at scale 1" rests on this and on the code: at TapScale 1 FilterCopyRenderTarget
+adds no flag, the program variant and every GL call are those of before.
+
+What is left: the lamp peak at scale 2 is 1.0-1.2 levels (about 1%) brighter on average, at the edge of the
+1-level tolerance; the blue box's r50 1.6 px smaller (its peak slightly higher). Both are inside the scale-1
+position spread; likely the finer sampling itself (a 24-px bilinear magnification flattens a peak), not a loss or
+gain of energy (glow mass equal). **Measured**; the cause of the residual is **not established**.
+
+Frame cost, 2560x1440, Quadro P620, one run, frozen frame, 8-s windows, two rounds (`logs/h1/fx-fps-2560x1440-gpu.out`,
+load 10-12; **measured**): scale 1 13.25, 12.74, 13.33, 12.64 ms; scale 2 13.08, 13.23; scale 4 13.74, 13.80;
+post-processing off 9.04, 9.13. So scale 2 costs about +0.2 ms (inside the noise of 0.7 ms between scale-1
+windows), scale 4 about +0.8 ms (the prototype's fill passes cost +0.5 to +1.3 ms at scale 2).
+
+Self-test on the GPU (AntiAliasing=0): scale 1, 2 and 4: 15 passed, 0 failed; pp-sizes at 2: live pooled targets
+853x240 426x240 426x120 213x120 426x240+depth 213x240 640x360+depth, none unexpected or missing; at 4: 1706x480
+853x480 853x240 426x240 853x480+depth 426x480 640x360+depth. llvmpipe (`m7-effects.sh h1 selftest`): 15/15; blur-h
+x1 1.00, x2 0.92, mean +0.049; blur-v 1.00 / 0.83 / +0.050; blur-box 0.50 / 0.50 / +0.020.
+
+Pictures for the owner (`logs/h1/h1-final-2560-blue.png`, `h1-final-2560-lamp.png`: today, scale 2, and each glow
+times 8 / 4; the run of each scale whose faint area is the median of its three). **Seen**: the same size; the band
+outlines round instead of 24-px polygons.
