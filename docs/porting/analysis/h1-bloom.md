@@ -241,3 +241,56 @@ post-processing. (Separate fps-bench runs per setting were useless: 52 / 75 / 47
 4. Name: the setting scales the post-process blur targets, not the framebuffer:
    `[UC2GLDrv.UC2GLRenderDevice] PostProcessTargetScale=2` (also read from the GL4ES section), 1 = the Xbox's texel
    count. "FramebufferResolutionMultiplier" would suggest supersampling the whole picture.
+
+# Part 2 (2026-10-11): why the emissive tail shrank at scale 2, the fix, the final key
+
+Brief: find why the emissive glow's outer part shrinks 10-15% at x2/x4 (blue box r50 33.5 -> 28, r10 56-59 -> 51.5),
+fix it so that every radius of the lamp and the blue box at x2 matches scale 1 within the repeat noise, then make
+the key final (`PostProcessTargetScale`), remove the test-only artefacts.
+
+Measurement points (recovered by search, the prototype did not write them down): `h1-measure.py profile <with> <off>
+943 280 -1` (lamp, leftwards) and `... 545 180 -1` (blue box, leftwards from the gap between its slabs); these
+reproduce every number of the step-4 table.
+
+## P2-1. Diagnosis (temporary diagnostics, not committed: `logs/h1/h1-part2-diag.patch`)
+
+A console switch to run the emissive chain and the bloom chain at different scales in one frozen run, a dump of the
+render targets of every stage (glReadPixels to PPM), and CPU re-computations of each pass from the dumped input
+(scripts in `logs/h1/dump/`: `dumpan.py`, `roundtest.py`, `chainsim*.py`, `mass.py`). DM-Deadbolt, 2560x1440, GPU,
+time frozen, DOF off.
+
+1. **Not the feedback loop as such.** Emissive chain at x1 with the bloom at x2: the blue box still loses (r50 29.5,
+   r10 53); emissive at x2 with the bloom at x1: radii back (33.5 / 55) but the peak drops (14.6 vs 17.7): the
+   radius alone hides a loss of the whole glow. The bloom passes at x2 are right: GL's B0 and B1 equal the CPU
+   model (fill + scaled taps) of the dumped select within 1.3 levels. The bloom threshold is the same at both
+   scales (0.3176 / 0.3195). So the loss is in the values the emissive chain carries, not in the kernel.
+2. **Mass per stage** (sum of the target over a box around the light, per texel of the picture; green): x1 (fresh
+   accumulation) acc 0.044 -> V 0.043 -> H 0.042 -> box-up 0.040 -> V 0.039 -> H 0.037; x2: acc 0.040 -> 0.039 ->
+   0.036 -> 0.029 -> 0.025 -> 0.021. Linear passes conserve mass; x2 loses 48% of it by the last stage, x1 16%.
+   The accumulation itself is equal at both scales (whole picture 0.741 vs 0.735).
+3. **The GPU rounds exact halves down.** Re-computing the dumped V pass from its dumped input with 8-bit rounding
+   of every write: "nearest, ties down" reproduces GL bit for bit (0 texels of 51,120 differ at x2, 1 of 12,780 at
+   x1); "nearest, ties up" misses 847, truncation 984. Quadro P620 (NVIDIA); the GL spec leaves the choice open.
+4. **Cause.** The prototype's fill pass writes the average of two 8-bit texels: half of its texels are exact ties
+   (k + 1/2), each rounded down, -0.25 level per texel on average, and a 1-level texel next to a 0 becomes 0. x2
+   adds ten such writes per frame (four per emissive feedback round, two in the bloom), most of them on the dim
+   emissive glow, which is re-blurred twice: the glow loses a quarter to a half of its mass and its tail goes first.
+   Epic's own passes (1221, box) put their taps on texel boundaries with weights 1/6, 2/6, 1/4: their outputs are
+   sums over 12 or 16, ties are rare. The lamp is barely touched (bright, wide, already above the tail).
+   Not a cause: the 8-bit accumulation (`x = round(0.4 s + 0.6 x)`) is the same at both scales; it is
+   history-dependent (the fixed point lies anywhere in s-1..s+1 depending on whether it was approached from above or
+   below), which is why two scale-1 shots of the same frame differ (whole-picture mass 0.968 for the target created
+   at the level start vs 0.735 for one created fresh; r10 56 vs 59): that is the repeat noise of step 3.
+5. **Prediction** (CPU chain from GL's own x2 accumulation, rounding as the GPU, validated: the 8-bit-fill variant
+   lands within 0.5% of GL's emissive result): emissive result mass G / B: x1 1.332 / 1.437 (GL 1.302 / 1.405);
+   x2 as prototyped 1.168 / 1.250 (GL 1.163 / 1.245); x2 with the fill kept exactly (float, half float or 10-bit
+   unorm) 1.338 / 1.437; x2 with 8-bit fills whose ties go up on x and down on y 1.333 / 1.428; every fill
+   rounding ties up 1.559 / 1.660 (too much).
+
+The fix chosen: keep 8 bits (one path for desktop GL and GL4ES / WebGL, no format fallback), but decide the fill's
+ties explicitly and in balance: the fill weights are 1/N x (1 + 1/2048) for a fill along x (its ties round up) and
+1/N x (1 - 1/2048) along y (ties round down, as the GPU does anyway). A fill's output is k or k + 1/2 (k + 1/4,
+1/2, 3/4 at x4), so the factor (at most 0.125 level at 255) moves nothing but the exact ties, on any GPU that rounds
+to nearest. The chains alternate the axes (emissive per round: y, x, x, y; bloom: x, y), so the ups and downs
+cancel. (Higher-precision scratch targets were the alternative: GL4ES maps RGB10_A2 to RGBA8 with a warning and
+RGBA16F only with half-float extensions, so the web build would have kept the loss.)
