@@ -814,3 +814,11 @@ overlay), so the mouse was never captured again in the split-screen match (fixed
 `UnSplitScreenMgr`); pad-only players got the mouse's camera rules until they touched the right stick (fixed in the
 `mouse-look` patch set); in the browser the Start press that makes Chrome list the pad was lost in SDL's Emscripten
 driver (fixed in `SDL2Pads.cpp`). New part `g6-splitscreen.sh <tree> h3menu`.
+
+## X-1 (2026-10-11): players 3 and 4 from the character page (examination)
+
+`x1-players34.md`. In short: a third/fourth pad's Start on the character page does nothing today (Epic's
+`GUIController.AllowControllerJoin` stops at `MAX_VIEWPORTS=2`); in a match they join (G-6) with focus-array script
+errors in the pause menu. With the GUI limit lifted the engine makes four views in the menus, but the shipped page mixes
+players 2-4 and, after the travel, `CreateSplitPlayer` refuses all split players ("Too many splitscreens.", a real bug
+reached only with four views). New parts `g6-splitscreen.sh <tree> x1probe | x1proto`.

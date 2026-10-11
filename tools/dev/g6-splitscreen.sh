@@ -32,6 +32,9 @@
 #                  at spot A, frozen frame: the picture and the HUD alone (TOGGLERENDERLEVEL); measured per viewport
 #                  by tools/dev/g6/b3-hud-measure.py (health bar, weapon list, score box, reticle in design pixels).
 #                  G6_RES and G6_ARGS (-ini:System:[SDL2Drv.SDL2Client]:UIScaleMode=...) choose the shape
+#          x1probe (X-1) Xvfb: UC2's menu flow with pads 0 and 1, then pads 2 and 3 press Start on the character page
+#                  (no player: GUIController.AllowControllerJoin's MAX_VIEWPORTS=2) and in the match (players 3 and 4),
+#                  player three's pause menu, back to the main menu
 #          hudmenu (B-3) Xvfb: G-6's menu flow (two players joined on the character page, Epic's own path), the
 #                  match's HUDs alone, measured as hud's n2 (<out>/hudmenu/)
 #          (default: input render menu audio; G-6's parts use the default PadsStartAtPlayerTwo=False, the pad as player one)
@@ -1117,6 +1120,257 @@ SCEN
   return 0
 }
 
+# X-1 (examination, docs/porting/analysis/x1-players34.md): what a THIRD and a FOURTH pad's Start do today. UC2's menu
+# flow as scen_menu (pad 0 = player one, pad 1 joins on the character page), then pads 2 and 3 press Start on the
+# character page (and A, and their stick), then the match with two players, where pads 2 and 3 press Start again
+# (G-6's SplitScreenJoinInMatch), then player three's Start (the pause menu) and the way back to the main menu.
+scen_x1probe() {
+  cat <<SCEN
+pyfile $checks
+wait OpenMenu \\[UCMenu.UC2MainMenu\\] 90
+sleep 3
+focus
+pad 0 attach
+sleep 1
+pad 1 attach
+sleep 1
+pad 2 attach
+sleep 1
+pad 3 attach
+sleep 1
+key Down
+sleep 0.5
+key Return
+wait OpenMenu \\[UCMenu.UC2Arena_Main\\] 15
+wait OpenMenu \\[GUI.GUIMessageBox\\] 20
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
+key Escape
+sleep 1.5
+seek 10 P['_'].item.startswith('DeathMatch|') ;; key Down
+key Return
+sleep 2
+key Return
+sleep 2
+seek 40 'DM-Deadbolt' in P['_'].item ;; key Down
+key Return
+expect x1-character-page OpenMenu \\[UCMenu.UC2Arena_Character\\] 15
+sleep 3
+vprobe c1
+shot x1-character-one-player
+pad 1 button start 1
+sleep 0.3
+pad 1 button start 0
+expect x1-pad1-start-joins-player-two Split screen: pad 1 Start in the menus: joined 15
+sleep 3
+vprobe c2
+check x1-two-split-views VS['c2'][1] == 2
+shot x1-character-two-players
+mark
+pad 2 button start 1
+sleep 0.3
+pad 2 button start 0
+expect x1-pad2-start-reaches-the-engine pad 2 button 12 value 255 15
+sleep 2
+pad 3 button start 1
+sleep 0.3
+pad 3 button start 0
+expect x1-pad3-start-reaches-the-engine pad 3 button 12 value 255 15
+sleep 2
+pad 2 button a 1
+sleep 0.3
+pad 2 button a 0
+sleep 1
+pad 2 axis leftx 32767
+sleep 1
+pad 2 axis leftx 0
+sleep 2
+absent x1-pad2-no-join-on-the-character-page Split screen: pad 2
+absent x1-pad3-no-join-on-the-character-page Split screen: pad 3
+absent x1-no-third-viewport-on-the-page NotifyAddViewport .*GamepadID:2
+vprobe c3
+probe cp3
+pyexec print('  menu after pads 2 and 3 pressed Start:', P['cp3'].menu)
+check x1-still-two-split-views-and-the-character-page VS['c3'][1] == 2 and P['cp3'].menu in ('UC2Arena_Character', 'GUIMessageBox')
+shot x1-character-third-and-fourth-pad-pressed-start
+pad 1 button a 1
+sleep 0.3
+pad 1 button a 0
+sleep 2
+key Return
+sleep 3
+SCEN
+  local i
+  for i in 1 2 3 4 5 6; do
+    cat <<SCEN
+pad 1 button a 1
+sleep 0.3
+pad 1 button a 0
+sleep 1.5
+key Return
+sleep 2.5
+SCEN
+  done
+  cat <<SCEN
+expect x1-travel-to-deathmatch Bringing Level DM-Deadbolt.MyLevel up for play 120
+sleep 6
+seek 20 P['_'].pawn == 1 ;; pyexec fire_all(2)
+check x1-player2-spawns spawn_port(1, 1)
+sleep 2
+vprobe m2
+check x1-match-has-two-split-players VS['m2'][1] == 2 and pads_in_join_order('m2')
+SCEN
+  join 2; join 3
+  cat <<SCEN
+vprobe m4
+check x1-four-split-players-in-the-match layout_ok('m4') and VS['m4'][1] == 4 and pads_in_join_order('m4') and all_split_huds('m4')
+pyexec print('  match views', [(r['i'], r['pad'], r['rect'], r['pawnclass']) for r in vsplit('m4')])
+shot x1-match-four-players
+mark
+pad 2 button start 1
+sleep 0.3
+pad 2 button start 0
+expect x1-player3-start-opens-the-pause-menu OpenMenu \\[UCMenu.InGame_MainMenu\\] 15
+sleep 2
+probe pm
+pyexec print('  pause menu of player three:', P['pm'].menu, P['pm'].caption)
+shot x1-pause-menu-player-three
+pad 2 button dpdown 1
+sleep 0.3
+pad 2 button dpdown 0
+sleep 1
+probe pm2
+pyexec print('  after player three pressed down:', P['pm2'].menu, P['pm2'].caption)
+shot x1-pause-menu-player-three-down
+pad 2 button b 1
+sleep 0.3
+pad 2 button b 0
+sleep 2
+probe pm3
+pyexec print('  after player three pressed B:', P['pm3'].menu, P['pm3'].caption)
+check x1-player-three-closes-its-pause-menu P['pm3'].menu == 'None'
+mark
+key Escape
+expect x1-pause-menu-opens-for-player-one OpenMenu \\[UCMenu.InGame_MainMenu\\] 15
+sleep 2
+seek 8 P['_'].caption == 'FORFEIT GAME' ;; key Down
+key Return
+wait OpenMenu \\[GUI.GUIMessageBox\\] 20
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
+tryseek 4 P['_'].caption.upper() in ('YES', 'OK', 'ACCEPT', 'FORFEIT') ;; key Up
+key Return
+expect x1-forfeit-back-to-main-menu OpenMenu \\[UCMenu.UC2MainMenu\\] 90
+sleep 3
+vprobe back
+check x1-back-to-one-viewport layout_ok('back') and VS['back'][0] == 1 and VS['back'][1] == 0
+SCEN
+  return 0
+}
+
+# X-1 prototype (x1proto part, run tree with a GUI.u whose GUIController.AllowControllerJoin allows four child viewports,
+# x1-players34.md "prototype"): pads 2 and 3 join on the vanilla character page; what the page and the match do.
+scen_x1proto() {
+  cat <<SCEN
+pyfile $checks
+wait OpenMenu \\[UCMenu.UC2MainMenu\\] 90
+sleep 3
+focus
+pad 0 attach
+sleep 1
+pad 1 attach
+sleep 1
+pad 2 attach
+sleep 1
+pad 3 attach
+sleep 1
+key Down
+sleep 0.5
+key Return
+wait OpenMenu \\[UCMenu.UC2Arena_Main\\] 15
+wait OpenMenu \\[GUI.GUIMessageBox\\] 20
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
+key Escape
+sleep 1.5
+seek 10 P['_'].item.startswith('DeathMatch|') ;; key Down
+key Return
+sleep 2
+key Return
+sleep 2
+seek 40 'DM-Deadbolt' in P['_'].item ;; key Down
+key Return
+expect x1p-character-page OpenMenu \\[UCMenu.UC2Arena_Character\\] 15
+sleep 3
+SCEN
+  local k
+  for k in 1 2 3; do
+    cat <<SCEN
+pad $k button start 1
+sleep 0.3
+pad $k button start 0
+expect x1p-pad$k-start-joins-in-the-menus Split screen: pad $k Start in the menus: joined 15
+sleep 3
+vprobe j$k
+probe pj$k
+pyexec print('  after pad $k joined: menu', P['pj$k'].menu, 'views', VS['j$k'])
+shot x1p-joined-$k
+pad $k button b 1
+sleep 0.3
+pad $k button b 0
+sleep 2
+SCEN
+  done
+  cat <<SCEN
+vprobe c4
+check x1p-four-split-views-on-the-character-page VS['c4'][1] == 4 and sorted(r['pad'] for r in vsplit('c4')) == [0, 1, 2, 3]
+pyexec print('  menu views', [(r['i'], r['pad'], r['rect'], r['disabled']) for r in V['c4']])
+shot x1p-character-four-players
+mark
+pad 2 axis leftx 32767
+sleep 1.2
+pad 2 axis leftx 0
+sleep 2
+shot x1p-player3-stick-right
+pad 3 axis leftx -32767
+sleep 1.2
+pad 3 axis leftx 0
+sleep 2
+shot x1p-player4-stick-left
+SCEN
+  local i
+  for i in 1 2 3 4 5 6 7; do
+    cat <<SCEN
+pad 1 button a 1
+pad 2 button a 1
+pad 3 button a 1
+sleep 0.3
+pad 1 button a 0
+pad 2 button a 0
+pad 3 button a 0
+sleep 1.5
+key Return
+sleep 2.5
+probe l$i
+pyexec print('  loop $i menu', P['l$i'].menu)
+SCEN
+  done
+  cat <<SCEN
+shot x1p-after-the-loop
+expect x1p-travel-to-deathmatch Bringing Level DM-Deadbolt.MyLevel up for play 120
+sleep 6
+seek 20 P['_'].pawn == 1 ;; pyexec fire_all(4)
+sleep 3
+pyexec fire_all(4)
+sleep 3
+vprobe m4
+pyexec print('  match views', [(r['i'], r['pad'], r['rect'], r['pawnclass'], r['player']) for r in vsplit('m4')])
+check x1p-four-split-players-in-the-match VS['m4'][1] == 4
+shot x1p-match-four-players
+SCEN
+  return 0
+}
+
 # fire_seg <tag> <pad>: a log-marked segment in which only that pad fires, three times.
 fire_seg() {
   cat <<SCEN
@@ -1150,6 +1404,10 @@ for part in $parts; do
     render) scen_render > "$scen"; run_game g6-render 1 480 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True
             python3 "$repo/tools/dev/g6/g6-measure.py" "$out" > "$out/g6-measure.txt" 2>&1; tail -n 30 "$out/g6-measure.txt";;
     menu)   scen_menu   > "$scen"; run_game g6-menu   0 420 "" "$scen";;
+    x1proto) # X-1 prototype: needs a run tree with the prototype GUI.u (x1-players34.md)
+            scen_x1proto > "$scen"; run_game x1-proto 0 720 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0;;
+    x1probe) # X-1: a third and fourth pad's Start on the character page and in the match (MSAA off as m10)
+            scen_x1probe > "$scen"; run_game x1-probe 0 600 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0;;
     h3menu) # H-3: the owner's system-link flow, the pad arriving on the character page; both pad modes
             # (H3_MODES="ticked unticked" by default; one of them alone for a quicker look)
             for m in ${H3_MODES:-ticked unticked}; do
