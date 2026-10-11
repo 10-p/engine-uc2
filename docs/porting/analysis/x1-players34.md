@@ -440,9 +440,76 @@ run trees `run/x1b` (this build's packages), `run/x1bship` (the same binary, Epi
   (`ChooseExplosive`/`ChooseEnergy`: Epic's click code without the focus calls; energy before explosive takes the checked
   explosive as Epic's `EnergyOnClick`), B/Back `TakeBack` (:228); `StatusText` (:253) for the log.
 - `UC2Arena_Character.CloseComplete`: more than two players -> `UCMenu.UC2Arena_QuadArmory`; one or two as Epic's.
+- The owner's change (2026-10-11, during part B): the line under the honeycomb shows no character names. Nobody there:
+  "PLAYER 3 / 4" + "PRESS START" (as part A); joined, choosing: "3P"; chosen: "3P READY" (Epic's own `Localizer.sReady`,
+  localised in all five `Engine.<lang>`: int "Ready", deu "Bereit", fra "Prêt", ...: no English word of ours); not
+  there: "4P PRESS START". `UC2Arena_Character.UpdatePlayers34Text`; x1menu4's text checks follow (`'3P | 4P'`,
+  `'3P READY | 4P READY'`). Picture `logs/x1/page-4-ready.png` (re-taken).
 - Layout measured on the pictures (1280x720, Fit43): four quarters between the header and the button bar, every weapon
   name readable (condensed), the loadout icons light up as Epic's when chosen; the loadout captions overlap their icons
   a little ("usable, not pretty"). No "1P..4P" label per quarter: the corners are the cursors' tag corners.
 - Behaviour decided here (owner to confirm): B of player three or four with nothing chosen does nothing (they cannot
   send everybody back to the character page); players one and two cannot go back while three or four have chosen
   something (Epic's rule for the other panel); the mouse is not handled on quarters three and four.
+
+### Tests (tools; file:line at the commit)
+
+- `tools/dev/g6-splitscreen.sh x1armory` (`scen_x1armory`; X1A_PLAYERS="4 3" by default): the menus to the character page,
+  pads 1-3 (or 1-2) join, everybody chooses, the 2x2 armory: n quarters (`page opened` line), player three on its
+  explosive list; player three's B with nothing chosen keeps the page (no character page opens); pad 2's down moves only
+  quarter three (the line says `player 3 port 2 XC_PadDown`), its A chooses the explosive (on to the energy list), down,
+  A: ready; B takes the energy back, A: ready again with the same weapons; pad 3 the same for quarter four; no launch box
+  while players one and two choose; pad 1's down moves only quarter two (Epic's focus path), the keyboard's only quarter
+  one; then players one and two choose (A/Return), the launch box, the match: n split views (G-6 layout, split HUDs), the
+  split players' spawn URLs carry `?ExplosiveWeapon=`/`?EnergyWeapon=` of what three and four chose (and two), NETPROBE's
+  PlayerReplicationInfo of `Player_3`/`Player_4` has those weapons, which are not the default (the joining player's
+  profile weapons from the first spawn URL on the character page: RocketLauncher/SniperRifle), three and four differ;
+  0 out-of-bounds lines. Presses are `x1tap` (0.12 s): x1press's 0.3 s held a d-pad over the GUI's repeat (1.5 x
+  ButtonRepeatDelay 0.19 = 0.285 s) on a loaded machine and stepped twice (measured, run r1: quarter four took the
+  defaults). Helpers `tools/dev/g6/x1-checks.py` (`x1a_*`, `x1_match_urls`, `x1_pris` (NETPROBE goes to the engine's
+  `Avaris.log`, not the console), `x1_default_loadout`).
+- `x1menu4` (part A): the armory step is now the 2x2 armory, players three and four choose (A twice each, ready) before
+  the loop of players one and two (rebuilt tree; host variant too: the system-link host gets the 2x2 armory as well).
+- `menu` (G-6): two players get Epic's `UC2Arena_DualArmory` (a check, the log read directly: a probe moves the
+  scenario's expect position past the OpenMenu line) and its picture `g6-menu-armory-2.png`.
+- `tools/dev/net-test.py splitclient` (`tools/dev/net-test.sh` opt-in; below).
+
+### Results (labelled)
+
+| what | where | result |
+|---|---|---|
+| `g6-splitscreen.sh x1b x1armory`, four players | `logs/x1b/a2` | **measured** PASS 37/37 (0 Critical, 0 out-of-bounds) |
+| the same, three players | `logs/x1b/a2` | **measured** PASS 28/28 |
+| the loadout proof (four players, run a2) | `x1-armory4.inject` | **measured**: spawn URLs `Player_3 ... ExplosiveWeapon=UCWeap_CanisterGun_Gren EnergyWeapon=UCWeap_ShockRifle_New`, player four RazorJack (Ripjack)/CanisterGun_Bio; NETPROBE pri lines the same; default RocketLauncher/SniperRifle |
+| `x1menu4` on x1b (rebuilt: standalone + host) | `logs/x1b/a2` | **measured** PASS 58/58, PASS 43/43, out-of-bounds `{}` |
+| `x1menu4` on x1bship (Epic's GUI.u/UCMenu.u, this binary) | `logs/x1b/v1` | **measured** PASS 19/19 (two players in the menus; 167 FocusedControl lines as part A's "before") |
+| `menu`, `kbplayer`+`kbmenu` | `logs/x1b/reg3` | **measured** PASS 10, 34, 12 (the dual armory for two) |
+| `h3menu` (ticked, unticked), `input`, `unplug` | `logs/x1b/reg` | **measured** PASS 11, 13, 39, 26 (scripts before the owner's text change; the change touches only the line under the honeycomb, which they do not read) |
+| `m14-scripts-check.sh verify menu patcher deadbolt` (M14_PREFIX=x1b-m14) | `logs/x1b/m14b.txt` | **measured** PASS all four (verifyclasses: all layouts match) |
+| P2 | `logs/x1b/p2-write.log` | reference regenerated: UCMenu.u 2500765 B `a125b78b...`, GUI.u and UCGameplay.u unchanged; PASS |
+| `check-headers` | `logs/x1b/check-headers.log` | **measured** current (no header change) |
+| pictures | `logs/x1/armory-{2,3,4}.png` | **seen**: Epic's two panels; three quarters (the fourth empty); four quarters, chosen weapons lit |
+
+### The bounded client test (time box 1 h; used about 20 min): BROKEN
+
+`NET_TREE=x1bnet NET_PORT=7871 tools/dev/net-test.sh splitclient` (logs `logs/x1b/client/`, one 6G scope, two
+processes): a listen host (uc2.bin DM-Deadbolt?Listen, null renderer) and one GL client under Xvfb that walks its menus
+with player one's pad (VERSUS -> DeathMatch -> DM-Deadbolt -> the character page), pad 1's Start joins player two
+there, then the client connects (console `open 127.0.0.1:7871`).
+- **measured** PASS: the client's menus reach the character page; `Split screen: pad 1 Start in the menus: joined`
+  (two split views on the client); the client joins the host (`Join succeeded`; its LOGIN URL carries Epic's
+  `NumClients=2`, the host's GameInfo logs `NumClients 2`); 0 Critical/assert/overflow; nothing left listening.
+- **measured** FAIL: no `JOINSPLIT` reaches the host; the host has two human players (itself and the client's player
+  one); after the welcome the client logs no `Split player spawn URL` line, i.e. `USplitScreenMgr::CreateSplitPlayer`
+  never ran for the client's second viewport, so the JOINSPLIT it would send (`UnSplitScreenMgr.cpp` client branch,
+  after `NotifyReceivedClientPlayer`, `UnConn.cpp HandleClientPlayer`) never goes out. The client's split view is gone
+  by then (no "Split screen: N views" line after the travel).
+- Not a one-liner, not fixed. Where to look (read only): what empties `ActiveSplitViews` on the client between the
+  `open` and `HandleClientPlayer` (candidates: `MatchSplitViewportsToActors` running while `GLevel` is still the menu
+  level -> `IsMenuGameActive` -> `ResetState`, which logs nothing; the GUI's `NotifyLevelChange` removing child
+  viewports). A `DevSplitScreen` line in `ResetState` would settle it.
+- Also measured on the way: on a client a pad's Start in the match makes nobody (`USDL2Client::PadJoin`: G-6's in-match
+  join is for a standalone game or a listen host, by design), and the engine's `SPLIT ADD ID=1` makes nobody in a match
+  either (`UClient::BeginSplitScreen` asks the GUI's `AllowControllerJoin`: the character page only). So on a client
+  split players can only come from the menus, and that path is the broken one.
+- Never exercised: a client with three or four local players, a dedicated server.

@@ -37,11 +37,16 @@
 #                  player three's pause menu, back to the main menu
 #          x1menu4 (X-1 part A) Xvfb: four players from the character page (patch set players34): pads 1, 2, 3 press
 #                  Start there, each pad moves its own cursor only, the line under the honeycomb, players three and four
-#                  leave (Back, the pad pulled out) and come back, choose, the armory (players 1-2) with three and four
-#                  pressing buttons, the match with four players (own classes and names, G-6's layout), player three's
+#                  leave (Back, the pad pulled out) and come back, choose, the 2x2 armory (part B: all four choose;
+#                  x1armory checks it), the match with four players (own classes and names, G-6's layout), player three's
 #                  pause menu, back to the main menu; no script out-of-bounds line. On a tree with Epic's shipped
 #                  GUI.u/UCMenu.u (no UI_Char_3PSelector in UCMenu.u) the vanilla variant: two players on the page, three
 #                  and four join in the match (G-6), no crash. Pictures <out>/x1-menu4-page-{1..4}.png, -match-four.png
+#          x1armory (X-1 part B) Xvfb: the 2x2 armory (patch set players34, UC2Arena_QuadArmory): four players, then three
+#                  (X1A_PLAYERS="4 3"), join on the character page, choose, the armory: each pad moves its own quarter only
+#                  (the page's "X-1 players34 armory" lines name the port), B takes a choice back, the match waits for
+#                  everybody; then the match: the split players' spawn URLs and NETPROBE's PlayerReplicationInfo carry the
+#                  weapons each chose. Pictures <out>/x1-armory<n>-armory-<n>.png, -armory-<n>-chosen.png, -armory-<n>-match.png
 #          hudmenu (B-3) Xvfb: G-6's menu flow (two players joined on the character page, Epic's own path), the
 #                  match's HUDs alone, measured as hud's n2 (<out>/hudmenu/)
 #          (default: input render menu audio; G-6's parts use the default PadsStartAtPlayerTwo=False, the pad as player one)
@@ -1061,7 +1066,15 @@ key Return
 sleep 3
 shot after-choice
 SCEN
-  # Both players accept through armory and launch (the keyboard drives player one, pad 1 player two).
+  # Both players accept through armory and launch (the keyboard drives player one, pad 1 player two). X-1 part B: two
+  # players still get Epic's two-panel armory (UC2Arena_Character.CloseComplete opens the 2x2 one for three or four).
+  # The page's log is read directly (a probe would move the scenario's expect position past the OpenMenu line); the
+  # picture is taken the first time the armory is up after a step.
+  local nm=g6-menu; [ "${menu_kb:-0}" = 1 ] && nm=g9-kbmenu; [ "${menu_hud:-0}" = 1 ] && nm=b3-hudmenu
+  cat <<SCEN
+pyexec ARM2 = lambda: 'OpenMenu [UCMenu.UC2Arena_DualArmory]' in open('$out/$nm.out', encoding='latin-1').read()
+pyexec SHOT2 = [0]
+SCEN
   local i
   for i in 1 2 3 4 5 6; do
     cat <<SCEN
@@ -1071,8 +1084,12 @@ pad $jp button a 0
 sleep 1.5
 key Return
 sleep 2.5
+pyexec (time.sleep(3), chan('exec shot'), open('$out/$nm.result.shots', 'a').write('armory-2\\n'), SHOT2.append(1)) if ARM2() and len(SHOT2) == 1 and 'Bringing Level DM-' not in open('$out/$nm.out', encoding='latin-1').read() else None
 SCEN
   done
+  cat <<SCEN
+check menu-two-players-get-the-dual-armory ARM2() and 'OpenMenu [UCMenu.UC2Arena_QuadArmory]' not in open('$out/$nm.out', encoding='latin-1').read()
+SCEN
   cat <<SCEN
 expect menu-travel-to-deathmatch Bringing Level DM-Deadbolt.MyLevel up for play 120
 sleep 6
@@ -1384,6 +1401,11 @@ SCEN
 x1press() {
   printf 'pad %s button %s 1\nsleep 0.3\npad %s button %s 0\nsleep 1.5\n' "$1" "$2" "$1" "$2"
 }
+# x1tap: a shorter press (the GUI repeats a button held 1.5 x ButtonRepeatDelay = 0.285 s; a loaded machine stretched
+# x1press's 0.3 s into a second step on the armory, measured)
+x1tap() {
+  printf 'pad %s button %s 1\nsleep 0.12\npad %s button %s 0\nsleep 1.5\n' "$1" "$2" "$1" "$2"
+}
 scen_x1menu4() {
   local v=${x1_vanilla:-0}
   cat <<SCEN
@@ -1503,7 +1525,7 @@ sleep 3
 absent x1m-no-profile-box-for-player-three OpenMenu \\[GUI.GUIMessageBox\\]
 vprobe c3
 check x1m-three-split-views-g6-layout VS['c3'][1] == 3 and vrects('c3') == layout(3, *VS['c3'][2]) and sorted(r['pad'] for r in vsplit('c3')) == [0, 1, 2]
-check x1m-text-player-three-joined x1_text().startswith('3P ') and x1_text().endswith('| 4P PRESS START')
+check x1m-text-player-three-joined x1_text() == '3P | 4P PRESS START'
 pyexec x1_snap('j3')
 pad 2 axis lefty 4000
 pad 2 axis leftx 32767
@@ -1553,7 +1575,7 @@ key Right
 sleep 2
 pyexec x1_snap('m1')
 check x1m-keyboard-moves-only-player-one x1_only('m2', 'm1', 0) and X1['m1']['idx'][0] == 14
-check x1m-text-players-three-and-four x1_text() == '3P ARCLITE | 4P SZALOR'
+check x1m-text-players-three-and-four x1_text() == '3P | 4P'
 shot page-4
 probe pg4
 check x1m-still-the-character-page P['pg4'].menu == 'UC2Arena_Character'
@@ -1622,7 +1644,7 @@ SCEN
     # players three and four choose; three takes it back and chooses again
     x1press 2 a
     cat <<SCEN
-check x1m-player-three-ready x1_cursors()['ready'][2] and x1_text().startswith('3P ARCLITE [READY] |')
+check x1m-player-three-ready x1_cursors()['ready'][2] and x1_text() == '3P READY | 4P'
 SCEN
     x1press 2 b
     cat <<SCEN
@@ -1632,7 +1654,7 @@ SCEN
     x1press 2 a
     x1press 3 a
     cat <<SCEN
-check x1m-players-three-and-four-ready x1_cursors()['ready'][2:] == [True, True] and x1_text().count('[READY]') == 2
+check x1m-players-three-and-four-ready x1_cursors()['ready'][2:] == [True, True] and x1_text() == '3P READY | 4P READY'
 pyexec print('  chosen by players three and four', x1_chosen(), 'text', x1_text())
 shot page-4-ready
 probe pg5
@@ -1650,15 +1672,18 @@ SCEN
 key Return
 sleep 3
 SCEN
-  [ "$v" = 0 ] && [ "${x1_host:-0}" = 0 ] && cat <<SCEN
-expect x1m-armory-two-panels OpenMenu \\[UCMenu.UC2Arena_DualArmory\\] 30
+  # part B: four players choose their weapons on the 2x2 armory (the x1armory part tests it in detail); players three and
+  # four take the first explosive and energy weapon (A twice), players one and two in the loop below
+  [ "$v" = 0 ] && cat <<SCEN
+pyexec X1_NETLOG = '$sys/Avaris.log'
+expect x1m-armory-four-quarters OpenMenu \\[UCMenu.UC2Arena_QuadArmory\\] 30
 sleep 4
 mark
 SCEN
-  [ "$v" = 0 ] && [ "${x1_host:-0}" = 0 ] && { x1press 2 b; x1press 3 a; x1press 2 dpdown; x1press 3 b; } && cat <<SCEN
+  [ "$v" = 0 ] && { x1tap 2 a; x1tap 2 a; x1tap 3 a; x1tap 3 a; } && cat <<SCEN
 sleep 1
 probe ar
-check x1m-players-three-four-buttons-do-nothing-on-the-armory P['ar'].menu.startswith('UC2Arena_DualArmory') or P['ar'].menu.startswith('Armory')
+check x1m-armory-players-three-four-ready P['ar'].menu == 'UC2Arena_QuadArmory' and x1a_snap('ar') and [q['ready'] for q in X1A['ar']['p']] == [False, False, True, True]
 absent x1m-armory-not-closed-by-players-three-four OpenMenu \\[UCMenu.UC2Arena_Character\\]
 SCEN
   local i
@@ -1745,6 +1770,218 @@ SCEN
   return 0
 }
 
+# X-1 part B: the 2x2 armory (UC2Arena_QuadArmory) with x1a_n=4 or 3 players from the character page: each pad drives its
+# own quarter, B takes a choice back, the match waits for everybody, and the loadouts reach the spawn URLs and the match.
+scen_x1armory() {
+  local n=${x1a_n:-4} k
+  cat <<SCEN
+pyfile $checks
+pyfile $repo/tools/dev/g6/x1-checks.py
+pyexec X1_LOG = '$out/x1-armory$n.out'
+pyexec X1_NETLOG = '$sys/Avaris.log'
+wait OpenMenu \\[UCMenu.UC2MainMenu\\] 90
+sleep 3
+mark
+focus
+pad 0 attach
+sleep 1
+pad 1 attach
+sleep 1
+pad 2 attach
+sleep 1
+pad 3 attach
+sleep 1
+key Down
+sleep 0.5
+key Return
+wait OpenMenu \\[UCMenu.UC2Arena_Main\\] 15
+wait OpenMenu \\[GUI.GUIMessageBox\\] 20
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
+key Escape
+sleep 1.5
+seek 10 P['_'].item.startswith('DeathMatch|') ;; key Down
+key Return
+sleep 2
+key Return
+sleep 2
+seek 40 'DM-Deadbolt' in P['_'].item ;; key Down
+key Return
+expect x1a-character-page OpenMenu \\[UCMenu.UC2Arena_Character\\] 15
+sleep 4
+pad 1 button start 1
+sleep 0.3
+pad 1 button start 0
+expect x1a-pad1-joins-player-two Split screen: pad 1 Start in the menus: joined 15
+sleep 3
+tryseek 3 'MessageBox' not in P['_'].menu ;; pyexec (chan('pad 1 button b 1'), time.sleep(0.3), chan('pad 1 button b 0'), time.sleep(2))
+sleep 1
+pad 2 button start 1
+sleep 0.3
+pad 2 button start 0
+expect x1a-pad2-joins-player-three Split screen: pad 2 Start in the menus: joined 15
+sleep 3
+SCEN
+  if [ "$n" = 4 ]; then
+    cat <<SCEN
+pad 3 button start 1
+sleep 0.3
+pad 3 button start 0
+expect x1a-pad3-joins-player-four Split screen: pad 3 Start in the menus: joined 15
+sleep 3
+SCEN
+  fi
+  # players three (and four) choose the character under their cursor; one and two theirs (A, then the handicap panel)
+  x1press 2 a
+  [ "$n" = 4 ] && x1press 3 a
+  x1press 1 a
+  cat <<SCEN
+key Return
+sleep 2
+SCEN
+  x1press 1 a
+  cat <<SCEN
+key Return
+sleep 3
+expect x1a-the-2x2-armory OpenMenu \\[UCMenu.UC2Arena_QuadArmory\\] 30
+sleep 4
+vprobe av
+check x1a-$n-split-views-under-the-armory VS['av'][1] == $n
+check x1a-$n-quarters x1a_snap('o') and X1A['o']['n'] == $n and [q is not None for q in X1A['o']['p']] == [True] * $n + [False] * (4 - $n)
+check x1a-player-three-on-its-explosive-list X1A['o']['p'][2]['on'] == 'x' and not X1A['o']['p'][2]['ready']
+shot armory-$n
+SCEN
+  # player three's B with nothing chosen: nothing (the page stays)
+  echo mark
+  x1tap 2 b
+  cat <<SCEN
+probe a0
+check x1a-player-three-b-with-nothing-chosen-keeps-the-page P['a0'].menu == 'UC2Arena_QuadArmory'
+absent x1a-no-character-page-from-player-three OpenMenu \\[UCMenu.UC2Arena_Character\\]
+pyexec x1a_snap('t0')
+SCEN
+  # player three: explosive row 2, energy row 1; each step moves its own quarter only
+  x1tap 2 dpdown
+  cat <<SCEN
+pyexec x1a_snap('t1')
+check x1a-pad2-down-moves-only-quarter-three x1a_only('t0', 't1', 2) and X1A['t1']['p'][2]['x'] == X1A['t0']['p'][2]['x'] + 1
+check x1a-the-line-names-pad-2 X1A['t1']['why'].startswith('player 3 port 2 XC_PadDown')
+SCEN
+  x1tap 2 dpdown
+  x1tap 2 a
+  cat <<SCEN
+pyexec x1a_snap('t2')
+check x1a-player-three-chose-its-explosive X1A['t2']['p'][2]['sx'] >= 0 and X1A['t2']['p'][2]['on'] == 'e' and x1a_only('t1', 't2', 2)
+SCEN
+  x1tap 2 dpdown
+  cat <<SCEN
+pyexec x1a_snap('t3')
+check x1a-pad2-down-on-the-energy-list x1a_only('t2', 't3', 2) and X1A['t3']['p'][2]['e'] == X1A['t2']['p'][2]['e'] + 1
+SCEN
+  x1tap 2 a
+  cat <<SCEN
+pyexec x1a_snap('t4')
+check x1a-player-three-ready X1A['t4']['p'][2]['ready'] and x1a_only('t3', 't4', 2)
+SCEN
+  x1tap 2 b
+  cat <<SCEN
+pyexec x1a_snap('t5')
+check x1a-player-three-b-takes-the-energy-back not X1A['t5']['p'][2]['ready'] and X1A['t5']['p'][2]['sx'] == X1A['t4']['p'][2]['sx'] and X1A['t5']['p'][2]['se'] == -1
+SCEN
+  x1tap 2 a
+  cat <<SCEN
+pyexec x1a_snap('t6')
+check x1a-player-three-ready-again X1A['t6']['p'][2]['ready'] and X1A['t6']['p'][2]['exp'] == X1A['t4']['p'][2]['exp'] and X1A['t6']['p'][2]['en'] == X1A['t4']['p'][2]['en']
+SCEN
+  local last=t6
+  if [ "$n" = 4 ]; then
+    # player four: explosive row 3, energy row 2
+    x1tap 3 dpdown
+    cat <<SCEN
+pyexec x1a_snap('f1')
+check x1a-pad3-down-moves-only-quarter-four x1a_only('t6', 'f1', 3)
+SCEN
+    for k in dpdown dpdown a dpdown dpdown; do x1tap 3 $k; done
+    cat <<SCEN
+pyexec x1a_snap('f2')
+check x1a-pad3-on-its-energy-list x1a_only('f1', 'f2', 3) and X1A['f2']['p'][3]['on'] == 'e' and X1A['f2']['p'][3]['sx'] >= 0
+SCEN
+    x1tap 3 a
+    cat <<SCEN
+pyexec x1a_snap('f3')
+check x1a-player-four-ready X1A['f3']['p'][3]['ready'] and x1a_only('f2', 'f3', 3)
+SCEN
+    last=f3
+  fi
+  cat <<SCEN
+sleep 2
+absent x1a-no-launch-while-players-one-two-choose OpenMenu \\[UCMenu.ConfirmLaunchMenu\\]
+probe a1
+check x1a-the-page-waits-for-players-one-and-two P['a1'].menu == 'UC2Arena_QuadArmory'
+SCEN
+  # player two (pad 1, Epic's focus path): its own quarter only; player one (the keyboard): its own
+  x1tap 1 dpdown
+  cat <<SCEN
+pyexec x1a_snap('p2')
+check x1a-pad1-down-moves-only-quarter-two x1a_only('$last', 'p2', 1)
+key Down
+sleep 1.5
+pyexec x1a_snap('p1')
+check x1a-keyboard-down-moves-only-quarter-one x1a_only('p2', 'p1', 0)
+shot armory-$n-chosen
+SCEN
+  # players one and two choose (A / Return: explosive, energy), then the launch box (Return)
+  local i
+  for i in 1 2 3 4 5 6; do
+    cat <<SCEN
+pad 1 button a 1
+sleep 0.3
+pad 1 button a 0
+sleep 1.5
+key Return
+sleep 2.5
+SCEN
+  done
+  cat <<SCEN
+expect x1a-travel-to-the-match Bringing Level \\S+.MyLevel up for play 150
+sleep 6
+pyexec x1a_snap('fin')
+pyexec print('  armory, last line:', X1A['fin'])
+seek 20 P['_'].pawn == 1 ;; pyexec (click(1), fire_all($n))
+pyexec fire_all($n)
+sleep 2
+pyexec fire_all($n)
+check x1a-player-three-spawns spawn(2)
+SCEN
+  [ "$n" = 4 ] && echo "check x1a-player-four-spawns spawn(3)"
+  cat <<SCEN
+sleep 2
+vprobe m
+pyexec print('  match views', [(r['i'], r['pad'], r['rect'], r['pawnclass'], r['player']) for r in vsplit('m')])
+check x1a-$n-split-players-in-the-match layout_ok('m') and VS['m'][1] == $n and pads_in_join_order('m') and all_split_huds('m')
+chan exec NETPROBE M
+sleep 2
+pyexec print('  spawn URLs', x1_match_urls()); print('  NETPROBE pris', x1_pris('M'))
+check x1a-spawn-url-of-player-three-carries-its-loadout len(x1_match_urls()) >= $((n - 1)) and x1_url_has(x1_match_urls()[1], X1A['t6']['p'][2]['exp'], X1A['t6']['p'][2]['en'])
+check x1a-player-three-plays-with-its-loadout x1_pris('M').get('Player_3', {}).get('explosive') == X1A['t6']['p'][2]['exp'] and x1_pris('M').get('Player_3', {}).get('energy') == X1A['t6']['p'][2]['en']
+pyexec print('  the default loadout (a joining player profile', x1_default_loadout(), ')')
+check x1a-player-three-not-the-default-loadout x1_default_loadout() is not None and X1A['t6']['p'][2]['exp'] != x1_default_loadout()[0] and X1A['t6']['p'][2]['en'] != x1_default_loadout()[1]
+SCEN
+  [ "$n" = 4 ] && cat <<SCEN
+check x1a-spawn-url-of-player-four-carries-its-loadout x1_url_has(x1_match_urls()[2], X1A['f3']['p'][3]['exp'], X1A['f3']['p'][3]['en'])
+check x1a-player-four-plays-with-its-loadout x1_pris('M').get('Player_4', {}).get('explosive') == X1A['f3']['p'][3]['exp'] and x1_pris('M').get('Player_4', {}).get('energy') == X1A['f3']['p'][3]['en']
+check x1a-player-four-not-the-default-loadout X1A['f3']['p'][3]['exp'] != x1_default_loadout()[0] and X1A['f3']['p'][3]['en'] != x1_default_loadout()[1]
+check x1a-players-three-four-different-loadouts (X1A['t6']['p'][2]['exp'], X1A['t6']['p'][2]['en']) != (X1A['f3']['p'][3]['exp'], X1A['f3']['p'][3]['en'])
+SCEN
+  cat <<SCEN
+check x1a-player-two-spawn-url-its-loadout x1_url_has(x1_match_urls()[0], X1A['fin']['p'][1]['exp'], X1A['fin']['p'][1]['en'])
+shot armory-$n-match
+pyexec print('  out-of-bounds lines in the run, by array:', x1_oob())
+check x1a-no-out-of-bounds-line x1_oob() == {}
+SCEN
+  return 0
+}
+
 # fire_seg <tag> <pad>: a log-marked segment in which only that pad fires, three times.
 fire_seg() {
   cat <<SCEN
@@ -1791,6 +2028,12 @@ for part in $parts; do
               run_game x1-host4 0 900 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0
             fi
             echo "  x1menu4: $([ $x1_vanilla = 1 ] && echo "vanilla (Epic's GUI.u/UCMenu.u)" || echo "patch set players34"); out-of-bounds lines $(cat "$out/x1-menu4-oob.txt" 2>/dev/null)";;
+    x1armory) # X-1 part B: the 2x2 armory with four, then three players (patch set players34)
+            for n in ${X1A_PLAYERS:-4 3}; do
+              x1a_n=$n scen_x1armory > "$scen"; cp "$scen" "$out/x1-armory$n.scen"
+              run_game x1-armory$n 0 900 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0
+            done
+            ;;
     x1probe) # X-1: a third and fourth pad's Start on the character page and in the match (MSAA off as m10)
             scen_x1probe > "$scen"; run_game x1-probe 0 600 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0;;
     h3menu) # H-3: the owner's system-link flow, the pad arriving on the character page; both pad modes

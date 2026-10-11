@@ -7,6 +7,8 @@
 #           (default: all of them; profile-login (G-7): a command-line join logs in as the client's saved profile)
 #           wine   (opt-in) the Linux client against this branch's ucc.exe server under wine; needs
 #                  <WorkUC2>/run/netwin (tools/dev/mkrun-uc2.sh build-windows netwin); prefix .cache/wine-net
+#           splitclient (opt-in, X-1 part B) a listen host and one client with two local players: they join on the client's
+#                  character page (player one's pad walks the menus), then it connects (JOINSPLIT on the host); spawn, move
 #           download, download-http   (opt-in) package download: the server lists a package (made by ucc-bin
 #                  resavepackage into <tree>/NetDownload/) that the client's tree lacks; the client fetches it through the
 #                  game connection (ChannelDownload) or, with download-http, from a local HTTP server named by the server's
