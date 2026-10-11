@@ -287,10 +287,35 @@ time frozen, DOF off.
    unorm) 1.338 / 1.437; x2 with 8-bit fills whose ties go up on x and down on y 1.333 / 1.428; every fill
    rounding ties up 1.559 / 1.660 (too much).
 
-The fix chosen: keep 8 bits (one path for desktop GL and GL4ES / WebGL, no format fallback), but decide the fill's
-ties explicitly and in balance: the fill weights are 1/N x (1 + 1/2048) for a fill along x (its ties round up) and
+First fix tried (failed, kept here as evidence): keep the 8-bit fill but decide its ties explicitly and in balance: the fill weights are 1/N x (1 + 1/2048) for a fill along x (its ties round up) and
 1/N x (1 - 1/2048) along y (ties round down, as the GPU does anyway). A fill's output is k or k + 1/2 (k + 1/4,
 1/2, 3/4 at x4), so the factor (at most 0.125 level at 255) moves nothing but the exact ties, on any GPU that rounds
 to nearest. The chains alternate the axes (emissive per round: y, x, x, y; bloom: x, y), so the ups and downs
 cancel. (Higher-precision scratch targets were the alternative: GL4ES maps RGB10_A2 to RGBA8 with a warning and
 RGBA16F only with half-float extensions, so the web build would have kept the loss.)
+
+## P2-2. Fix attempt 1 failed; attempt 2: the fill in the shader
+
+Attempt 1 (the weights above, `1/N (1 +- 1/2048)`) changed nothing: in-run on the GPU the blue box at x2 measured
+r50 28.0, r10 48.0 against 33.5 / 59-64.5 at x1. The self-test (below, run on the GPU) said why: the TapScale-2 path's
+mean error stayed at -0.108 (horizontal: its ties were meant to go up) and -0.199 (box). A push of 2.4e-4 of a step
+on an exact half does not survive the GPU's float-to-8-bit conversion, which is not exact near the half (Direct3D
+10+ allows 0.6 of a unit in the last place for that conversion; the NVIDIA part evidently uses it). Any push large
+enough to survive would also move values that are not ties (it is multiplicative). New diagnosis, so a new approach.
+
+Attempt 2 (the brief's "single-pass kernel with 2x the taps"): no fill pass at all. A bilinear read of the fill at
+position p equals the mean of bilinear reads of the source at p - 1 and p + 1 texels (the fill is linear and a shift
+commutes with the interpolation), so the pass itself can take, for every one of its four taps, the mean of 2 (x4: 4)
+reads 2 texels apart along each axis the filter reaches, in floating point, and round once, as at scale 1.
+- Engine (`FilterCopyRenderTarget`): for TapScale 2/4 the taps move TapScale texels per offset as before and
+  `UPSBlurMaterial::BlurBlendMode` gets flags `UC2_BLUR_FILL_X/Y/4` (`UnRenderUtil.h`; Epic's modes use the low
+  bits 0..3). No scratch targets, no extra passes.
+- Driver: `SetMatState_PS_Blur` splits the flags off into `FOpenGLMaterialState::BlurFill`; the program draw adds
+  fragment variants `PSV_FillX/Y/4`, whose source is the generated PS_Blur with each `texture2DProj(u_texN, tc)`
+  replaced by `uc2_fill(u_texN, tc)` (`UC2GL_WithFill`, UC2GLShaders.cpp), and sets `u_fillStep` = one texel of the
+  stage-0 texture. GLSL 1.20 / ES 1.00 alike: the same code on desktop GL and GL4ES.
+- Self-test: blur-h, blur-v, blur-box each also run the pass with TapScale 2 against the CPU (taps x2, each the mean
+  of 2 reads per axis) and report the largest and the mean signed error (|mean| > 0.1 fails). Still 15 tests.
+  GPU (Quadro P620), AntiAliasing=0: **numerically checked**: blur-h x1 0.50, x2 0.54, mean -0.033; blur-v 0.50 /
+  0.54 / -0.026; blur-box 0.50 / 0.50 / -0.024; 15 passed, 0 failed; programs: 97 x 5, 0 could not be built. (With
+  attempt 1's 8-bit fill the same test failed blur-h and blur-box: mean -0.108 and -0.199.)

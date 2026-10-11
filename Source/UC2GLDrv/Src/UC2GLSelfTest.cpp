@@ -708,10 +708,48 @@ struct FSelfTest
 		ReadTarget( Dest, Got );
 		FFourSampleFilter& F = Sampler.FilterList(0);
 		FLOAT MaxError = CompareFilter( Pattern, Got, 0.f, 0.f, 1.f, 1.f, F );
-		Report( Name, DW*DH*3, MaxError, 2.f, *FString::Printf( TEXT("%ix%i -> %ix%i, taps (%g,%g) (%g,%g) (%g,%g) (%g,%g) texels, weights %.3f %.3f %.3f %.3f, bilinear, D3D sample positions"),
+
+		// H-1 (PostProcessTargetScale 2; docs/porting/analysis/h1-bloom.md): the same pass with TapScale 2: the
+		// taps at twice the offsets, each the mean of two bilinear reads 1 texel either side along each axis the
+		// filter reaches (PS_Blur's fill variant). The mean signed error shows a pass that loses or gains (a
+		// rounding bias: an 8-bit fill pass whose exact halves round down was -0.1 to -0.2 here).
+		FilterCopyRenderTarget( Dest, Source, NULL, Sampler, RI, NULL, NULL, 0, 2 );
+		ReadTarget( Dest, Got );
+		UBOOL Reach[2] = { 0, 0 };
+		for( INT t=0; t<4; t++ )
+		{
+			Reach[0] |= F.SamplePoints[t].OffsetU != 0.f;
+			Reach[1] |= F.SamplePoints[t].OffsetV != 0.f;
+		}
+		FLOAT MaxError2 = 0.f, MeanError2 = 0.f;
+		for( INT y=0; y<DH; y++ )
+			for( INT x=0; x<DW; x++ )
+				for( INT c=0; c<3; c++ )
+				{
+					FLOAT Sum = 0.f;
+					for( INT t=0; t<4; t++ )
+						for( INT fy=-1; fy<=1; fy+=2 )
+							for( INT fx=-1; fx<=1; fx+=2 )
+							{
+								if( (fx > 0 && !Reach[0]) || (fy > 0 && !Reach[1]) )
+									continue;
+								FLOAT Share = (Reach[0] ? 0.5f : 1.f) * (Reach[1] ? 0.5f : 1.f);
+								Sum += Share * F.SamplePoints[t].Weight * Pattern.Bilinear(
+									(x + 0.5f) / DW + (2.f * F.SamplePoints[t].OffsetU + (Reach[0] ? fx : 0)) / SW,
+									(y + 0.5f) / DH + (2.f * F.SamplePoints[t].OffsetV + (Reach[1] ? fy : 0)) / SH, c );
+							}
+					MaxError2 = Max( MaxError2, Abs( Sum - (FLOAT)Got.At(x,y,c) ) );
+					MeanError2 += (Got.At(x,y,c) - Sum) / (DW * DH * 3);
+				}
+		// One line per kernel: the worse of the two errors against the tolerance, and the mean of the scaled
+		// pass must stay within 0.1 of a step.
+		FLOAT Worst = Max( MaxError, MaxError2 );
+		if( Abs( MeanError2 ) > 0.1f )
+			Worst = Max( Worst, 255.f );
+		Report( Name, DW*DH*3*2, Worst, 2.f, *FString::Printf( TEXT("%ix%i -> %ix%i, taps (%g,%g) (%g,%g) (%g,%g) (%g,%g) texels, weights %.3f %.3f %.3f %.3f, bilinear, D3D sample positions: largest error %.2f; with TapScale 2 (taps x2, each the mean of 2 reads per axis): largest error %.2f, mean %+.3f"),
 			SW, SH, DW, DH, F.SamplePoints[0].OffsetU, F.SamplePoints[0].OffsetV, F.SamplePoints[1].OffsetU, F.SamplePoints[1].OffsetV,
 			F.SamplePoints[2].OffsetU, F.SamplePoints[2].OffsetV, F.SamplePoints[3].OffsetU, F.SamplePoints[3].OffsetV,
-			F.SamplePoints[0].Weight, F.SamplePoints[1].Weight, F.SamplePoints[2].Weight, F.SamplePoints[3].Weight ) );
+			F.SamplePoints[0].Weight, F.SamplePoints[1].Weight, F.SamplePoints[2].Weight, F.SamplePoints[3].Weight, MaxError, MaxError2, MeanError2 ) );
 		delete Source;
 		delete Dest;
 	}
@@ -757,19 +795,22 @@ struct FSelfTest
 	void TestTargetSizes()
 	{
 		FPostProcessReference Ref = GetPostProcessReference( RenDev->MainWidth, RenDev->MainHeight );
+		// H-1: PostProcessTargetScale multiplies every blur target's sides before Epic's truncation (the
+		// back-buffer copy is not a blur target and keeps its size).
+		INT S = RenDev->GetRenderCaps()->PostProcessTargetScale;
 		struct FSize { INT W, H, Flags; };
 		TArray<FSize> Expected;
-		#define UCPP_EXPECT(w,h,f) { FSize S; S.W = Max((INT)(w),1); S.H = Max((INT)(h),1); S.Flags = (f); Expected.AddItem( S ); }
+		#define UCPP_EXPECT(w,h,f) { FSize Sz; Sz.W = Max((INT)(w),1); Sz.H = Max((INT)(h),1); Sz.Flags = (f); Expected.AddItem( Sz ); }
 		const INT C = FRenderTarget::RT_CREATE_COLOR, CD = FRenderTarget::RT_CREATE_COLOR | FRenderTarget::RT_CREATE_DEPTH;
 		// UUCScreenDOF: (W/2, H/4), (W/4, H/4).
-		UCPP_EXPECT( Ref.Width * 0.5f, Ref.Height * 0.25f, C );
-		UCPP_EXPECT( Ref.Width * 0.25f, Ref.Height * 0.25f, C );
+		UCPP_EXPECT( Ref.Width * 0.5f * S, Ref.Height * 0.25f * S, C );
+		UCPP_EXPECT( Ref.Width * 0.25f * S, Ref.Height * 0.25f * S, C );
 		// UUCScreenBloom: select (W/4, H/4) with depth, (W/8, H/4), (W/8, H/8).
-		UCPP_EXPECT( Ref.Width * 0.25f, Ref.Height * 0.25f, CD );
-		UCPP_EXPECT( Ref.Width * 0.125f, Ref.Height * 0.25f, C );
-		UCPP_EXPECT( Ref.Width * 0.125f, Ref.Height * 0.125f, C );
+		UCPP_EXPECT( Ref.Width * 0.25f * S, Ref.Height * 0.25f * S, CD );
+		UCPP_EXPECT( Ref.Width * 0.125f * S, Ref.Height * 0.25f * S, C );
+		UCPP_EXPECT( Ref.Width * 0.125f * S, Ref.Height * 0.125f * S, C );
 		// UUCScreenEmissive (its select target is not pooled): (W/4, H/4), (W/4, H/8), (W/8, H/8).
-		INT EW = Max( (INT)(Ref.Width * 0.25f), 1 ), EH = Max( (INT)(Ref.Height * 0.25f), 1 );
+		INT EW = Max( (INT)(Ref.Width * 0.25f * S), 1 ), EH = Max( (INT)(Ref.Height * 0.25f * S), 1 );
 		UCPP_EXPECT( EW, EH, C );
 		UCPP_EXPECT( EW, EH * 0.5f, C );
 		UCPP_EXPECT( EW * 0.5f, EH * 0.5f, C );
@@ -808,8 +849,8 @@ struct FSelfTest
 				Missing += FString::Printf( TEXT(" %ix%i"), Expected(e).W, Expected(e).H );
 			}
 		}
-		Report( TEXT("pp-sizes"), Compared, Wrong ? 255.f : 0.f, 0.f, *FString::Printf( TEXT("back buffer %ix%i, reference height %i: reference picture %.1fx%.1f (%.3f back-buffer pixels each); live pooled targets:%s; not expected:%s; expected but missing:%s"),
-			RenDev->MainWidth, RenDev->MainHeight, RenDev->PostProcessReferenceHeight, Ref.Width, Ref.Height, Ref.PixelScale, *Live, Unexpected.Len() ? *Unexpected : TEXT(" none"), Missing.Len() ? *Missing : TEXT(" none") ) );
+		Report( TEXT("pp-sizes"), Compared, Wrong ? 255.f : 0.f, 0.f, *FString::Printf( TEXT("back buffer %ix%i, reference height %i, target scale %i: reference picture %.1fx%.1f (%.3f back-buffer pixels each); live pooled targets:%s; not expected:%s; expected but missing:%s"),
+			RenDev->MainWidth, RenDev->MainHeight, RenDev->PostProcessReferenceHeight, S, Ref.Width, Ref.Height, Ref.PixelScale, *Live, Unexpected.Len() ? *Unexpected : TEXT(" none"), Missing.Len() ? *Missing : TEXT(" none") ) );
 	}
 
 	// The reference copy as the device computes it, on the CPU: N x N bilinear samples evenly over

@@ -149,6 +149,7 @@ FOpenGLMaterialState::FOpenGLMaterialState()
 
 	// scion sz -
 	SpecularEnable		= 0;
+	BlurFill			= 0;
 
 	// scion sz/jg - per material vertex shader fragment
 	MaterialVertexShaderEnum = 0;

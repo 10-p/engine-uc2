@@ -100,15 +100,17 @@ ENGINE_API INT RenDevPostProcessReferenceHeight()
 }
 
 //
-// UC2 port (H-1, prototype): FRenderCaps::PostProcessScale of the engine's render device (1 without one).
+// UC2 port (H-1): FRenderCaps::PostProcessTargetScale of the engine's render device: 1, 2 or 4 (1 without one;
+// 3 counts as 2, above 4 as 4: the fill of FilterCopyRenderTarget is made for those three).
 //
-ENGINE_API INT RenDevPostProcessScale()
+ENGINE_API INT RenDevPostProcessTargetScale()
 {
 	UClient* Client = UTexture::__Client;
 	if( !Client || !Client->Engine || !Client->Engine->GRenDev )
 		return 1;
 	FRenderCaps* Caps = Client->Engine->GRenDev->GetRenderCaps();
-	return Caps ? Clamp( Caps->PostProcessScale, 1, 4 ) : 1;
+	INT Scale = Caps ? Caps->PostProcessTargetScale : 1;
+	return Scale >= 4 ? 4 : Scale >= 2 ? 2 : 1;
 }
 
 /* scion ======================================================================

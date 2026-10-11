@@ -59,7 +59,8 @@ struct FOpenGLProgram
 					DistortionScreenLoc,	// M7: clip space to back-buffer texture coordinates
 					ColorRemapLoc,			// M7: VSC_COLOR_REMAP
 					ProjectorLoc,			// M7b: VSC_PROJ_* (u_proj[13])
-					SceneDepthRectLoc;		// M11: the scene depth test in the shader (PSV_SceneDepthTest)
+					SceneDepthRectLoc,		// M11: the scene depth test in the shader (PSV_SceneDepthTest)
+					FillStepLoc;			// H-1: one texel of the source of PS_Blur's fill variant (u_fillStep)
 };
 
 //
@@ -197,14 +198,12 @@ public:
 	// buffer brought down to that many lines by an area-averaging pass, so that the chains run
 	// texel for texel as on the Xbox. Made only when the back buffer is taller than the reference.
 	INT								PostProcessReferenceHeight;
-	// H-1 prototype (docs/porting/analysis/h1-bloom.md; test keys and console only, not settings yet):
-	// PostProcessScale = texels per axis of the camera effects' blur targets, times the Xbox's count
-	// (FRenderCaps::PostProcessScale; test key PostProcessScale, console PPSCALE); PostProcessSmooth = the
-	// fixed-function lookup of a render target magnified more than 2x into the main framebuffer (the bloom's
-	// composite) is a bicubic (B=0.5, C=0.25: the same spread as bilinear, continuous slope) instead of
-	// bilinear (test key PostProcessSmooth, console PPSMOOTH; desktop programs only).
-	INT								PostProcessScale;
-	INT								PostProcessSmooth;
+	// H-1 (docs/porting/analysis/h1-bloom.md): the camera effects' blur targets get this many times
+	// the Xbox's texels per axis (ini PostProcessTargetScale: 1 = the Xbox's count, the default; 2 or
+	// 4), their taps the same factor with a fill (UnRenderUtil.cpp, FilterCopyRenderTarget): the same
+	// blur over the same area of the screen, sampled more finely, so the bloom's last target is not
+	// magnified into 24-pixel facets at 1440 lines. FRenderCaps::PostProcessTargetScale.
+	INT								PostProcessTargetScale;
 	GLuint							PostReferenceProgram;	// built for PostReferenceTaps x PostReferenceTaps samples
 	INT								PostReferenceTaps;
 	GLint							PostReferenceRectLoc,

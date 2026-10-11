@@ -140,14 +140,19 @@ void FOpenGLPSMaterialStateHandlers::SetMatState_PS_Blur( UPixelShaderMaterial* 
 	// set filter weights
 	RI->SetPixelShaderConstant( 0, BlurShader->Weights, 4 );
 
+	// H-1: FilterCopyRenderTarget's TapScale (UnRenderUtil.h, UC2_BLUR_FILL_*): the taps widened in the shader;
+	// the low bits are Epic's mode.
+	BYTE BlurBlendMode = BlurShader->BlurBlendMode & UC2_BLUR_MODE_MASK;
+	InMaterialState->BlurFill = BlurShader->BlurBlendMode & ~UC2_BLUR_MODE_MASK;
+
 	// set alpha blending mode
-	if( BlurShader->BlurBlendMode == BLUR_ADD )
+	if( BlurBlendMode == BLUR_ADD )
 	{
 		InMaterialState->AlphaBlending	= 1;
 		InMaterialState->SrcBlend = D3DBLEND_SRCCOLOR;
 		InMaterialState->DestBlend = D3DBLEND_ONE;
 	}
-	else if( BlurShader->BlurBlendMode == BLUR_EMISSIVE )
+	else if( BlurBlendMode == BLUR_EMISSIVE )
 	{
 		// blurred emissive select
 		InMaterialState->PixelShader = PS_EmissiveSelectBlur;
@@ -159,7 +164,7 @@ void FOpenGLPSMaterialStateHandlers::SetMatState_PS_Blur( UPixelShaderMaterial* 
 		InMaterialState->DestBlend = D3DBLEND_INVSRCALPHA;			
 	}
 	//scion jg -- Darken and blur at the same time
-	else if (BlurShader->BlurBlendMode == BLUR_SHADOW)
+	else if (BlurBlendMode == BLUR_SHADOW)
 	{
 		InMaterialState->PixelShader = PS_ShadowBlur;
 	}

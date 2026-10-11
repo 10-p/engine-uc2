@@ -2391,25 +2391,6 @@ ENGINE_API FPostProcessReference GetPostProcessReference( INT BackBufferWidth, I
  *
  * ============================================================================
  */
-//
-// UC2 port (H-1, prototype): scratch targets for the fill passes of FilterCopyRenderTarget's TapScale, one per
-// size and axis. Kept for the life of the process (not pooled: the pool shares targets of equal size between
-// effects, and a pooled target is deleted when its last reference goes).
-//
-static FRenderTarget* H1ScratchTarget( INT Width, INT Height, INT Slot )
-{
-	static TArray<FAuxRenderTarget*> Targets;
-	static TArray<INT> Slots;
-	for( INT i=0; i<Targets.Num(); i++ )
-		if( Slots(i) == Slot && Targets(i)->GetWidth() == Width && Targets(i)->GetHeight() == Height )
-			return Targets(i);
-	FAuxRenderTarget* Target = NEW FAuxRenderTarget( Width, Height, TEXF_RGBA8, FRenderTarget::RT_CREATE_COLOR );
-	Targets.AddItem( Target );
-	Slots.AddItem( Slot );
-	debugf( NAME_Init, TEXT("UC2 H-1: fill scratch target %ix%i (axis %i)"), Width, Height, Slot );
-	return Target;
-}
-
 void ENGINE_API FilterCopyRenderTarget( FRenderTarget* DestTarget, FRenderTarget* SrcTarget, UViewport* SrcViewport, FMultiSampleFilter& Sampler,
 									   FRenderInterface* RI, FColor* CopyColor, UFinalBlend* FinalBlend, DWORD BlurBlendMode, INT TapScale )
 {
@@ -2417,44 +2398,34 @@ void ENGINE_API FilterCopyRenderTarget( FRenderTarget* DestTarget, FRenderTarget
 
 	check( DestTarget && SrcTarget && RI );
 
-	// UC2 port (H-1, prototype; docs/porting/analysis/h1-bloom.md): a target-to-target pass of a chain whose
-	// targets have TapScale times the texels per axis. Its taps move TapScale times as many texels (the same
-	// distance on the screen), and the source is first filled along each axis the filter reaches: TapScale point
-	// taps 2 texels apart (offsets 2j - TapScale + 1), equal weights. A bilinear tap on a texel boundary averages
-	// 2 texels; after the fill it averages 2 x TapScale, i.e. the same 2 coarse texels it averaged at scale 1.
-	// Without the fill the scaled taps leave gaps between them (a comb: the texels under a pixel get no weight).
-	INT Scale = SrcViewport ? 1 : Clamp( TapScale, 1, 4 );
-	if( Scale > 1 && Sampler.FilterList.Num() )
+	// UC2 port (H-1; docs/porting/analysis/h1-bloom.md): a target-to-target pass of a chain whose targets have
+	// TapScale (2 or 4) times the Xbox's texels per axis (RenDevPostProcessTargetScale). Its taps move TapScale
+	// times as many texels (the same distance on the screen), and each tap becomes the mean of TapScale bilinear
+	// reads 2 texels apart (offsets 2j - TapScale + 1) along each axis the filter reaches. A bilinear tap on a
+	// texel boundary averages 2 texels; so widened it averages 2 x TapScale, i.e. the same 2 coarse texels it
+	// averaged at scale 1: the Xbox's kernel, sampled TapScale times as finely. Without the widening the scaled
+	// taps leave gaps (a comb: the texels under a pixel get no weight).
+	//
+	// The widening is done in the shader (the device's fill variant of PS_Blur, asked for by UC2_BLUR_FILL_* in
+	// BlurBlendMode), in floating point, so the pass writes its 8-bit result once, as at scale 1. (Not as a
+	// separate "fill" pass into an 8-bit target: that pass's outputs are exact halves of a step half of the
+	// time, which the GPU rounds down, and over the ten such writes of a frame of the bloom and the self-feeding
+	// emissive glow a dim glow lost a quarter to a half of itself and 10-15% of its radius; deciding those ties
+	// with weights of 1/2 (1 +- 1/2048) did not survive the GPU's float-to-8-bit conversion.)
+	INT Scale = SrcViewport ? 1 : (TapScale >= 4 ? 4 : TapScale >= 2 ? 2 : 1);
+	BYTE FillFlags = 0;
+	if( Scale > 1 )
 	{
-		UBOOL Reach[2] = { 0, 0 };
 		for( INT Pass=0; Pass<Sampler.FilterList.Num(); Pass++ )
 			for( INT i=0; i<4; i++ )
 			{
-				Reach[0] |= Sampler.FilterList(Pass).SamplePoints[i].OffsetU != 0.f;
-				Reach[1] |= Sampler.FilterList(Pass).SamplePoints[i].OffsetV != 0.f;
+				if( Sampler.FilterList(Pass).SamplePoints[i].OffsetU != 0.f )
+					FillFlags |= UC2_BLUR_FILL_X;
+				if( Sampler.FilterList(Pass).SamplePoints[i].OffsetV != 0.f )
+					FillFlags |= UC2_BLUR_FILL_Y;
 			}
-		for( INT Axis=0; Axis<2; Axis++ )
-		{
-			if( !Reach[Axis] )
-				continue;
-			// PS_Blur sums its taps in pairs (0,1) and (2,3), each pair doubled and clamped to 1 before the
-			// two are averaged: a pair's weights may not add up to more than 1/2. Two taps go in slots 0
-			// and 2; three put 2/3 in the first pair (clamps above a mean of 3/4: scale 3 is for measuring).
-			static const INT SlotOf[4][4] = { {0}, {0,2}, {0,2,1}, {0,1,2,3} };
-			FMultiSampleFilter Fill;
-			Fill.FilterList.AddZeroed( 1 );
-			for( INT j=0; j<Scale; j++ )
-			{
-				FLOAT Offset = 2.f * j - Scale + 1.f;
-				FFourSampleFilter::FSamplePoint& Point = Fill.FilterList(0).SamplePoints[SlotOf[Scale-1][j]];
-				Point.OffsetU = Axis == 0 ? Offset : 0.f;
-				Point.OffsetV = Axis == 1 ? Offset : 0.f;
-				Point.Weight = 1.f / Scale;
-			}
-			FRenderTarget* Scratch = H1ScratchTarget( SrcTarget->GetWidth(), SrcTarget->GetHeight(), Axis );
-			FilterCopyRenderTarget( Scratch, SrcTarget, NULL, Fill, RI );
-			SrcTarget = Scratch;
-		}
+		if( FillFlags && Scale == 4 )
+			FillFlags |= UC2_BLUR_FILL_4;
 	}
 
 	// create a proxy material for the source render target so that we can use it to render with
@@ -2541,7 +2512,7 @@ void ENGINE_API FilterCopyRenderTarget( FRenderTarget* DestTarget, FRenderTarget
 		OneTexelV *= PixelScale;
 	}
 
-	// UC2 port (H-1, prototype): see the fill above.
+	// UC2 port (H-1): see above.
 	OneTexelU *= Scale;
 	OneTexelV *= Scale;
 
@@ -2586,6 +2557,7 @@ void ENGINE_API FilterCopyRenderTarget( FRenderTarget* DestTarget, FRenderTarget
 			BlurPixelShader->BlurBlendMode = BlurBlendMode;
 		else
 			BlurPixelShader->BlurBlendMode = BLUR_ADD;
+		BlurPixelShader->BlurBlendMode |= FillFlags;	// UC2 port (H-1)
 
 		TextureCanvas.DrawTile(
 			0, 0, DestTarget->GetWidth(), DestTarget->GetHeight(),

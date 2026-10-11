@@ -24,6 +24,16 @@ Python + PIL.
         coarse bilinear magnification leave a residual at their own scale; a smooth glow leaves only the 8-bit
         rounding.
 
+    h1-measure.py check <tol_r> <tol_peak> <with.png> <off.png> [...] -- <with.png> <off.png> [...]
+        Part 2 (PostProcessTargetScale): the radii of the DM-Deadbolt view of tools/dev/h1/*.scen, set A (pictures
+        before the --, e.g. scale 1) against set B (e.g. scale 2): the white lamp (943,280 leftwards) and the blue
+        emissive box (545,180 leftwards), peak, r50 and r10 in px of the 720 frame, per picture, then the mean and
+        spread of each set and one PASS/FAIL line per quantity: |mean B - mean A| <= tol_r (radii) or tol_peak
+        (peaks). A last line "check: PASS|FAIL n of 6".
+
+    h1-measure.py sheet <out.png> x0 y0 x1 y1 scale gain <label> <with.png> <off.png|-> [...]
+        Part 2: as zoom, one tile per triple: the picture itself (off "-") or its glow (with - off) times gain.
+
     h1-measure.py zoom <out.png> x0 y0 x1 y1 scale <label> <a.png> [<label> <b.png> ...] [--gain g --base <off.png>]
         The same box (720 frame) of each picture at its own resolution, magnified (nearest) so that the 720 frame's
         box is shown `scale` times; with --base, the glow (picture - base) times g is shown instead.
@@ -76,6 +86,64 @@ def cmd_profile(a):
                 last = i
         out.append('r%d=%d px (%.1f @720)' % (int(f * 100), last, last / s))
     print(' '.join(out))
+
+
+def measure(wpath, opath, x, y, d, band=2.0):
+    """peak (mean RGB levels) and r50, r10 in px of the 720 frame, as cmd_profile."""
+    wi, wp, (W, H) = load(wpath)
+    oi, op, _ = load(opath)
+    s, oy = frame(W, H)
+    cx, cy = int(round(x * s)), int(round(y * s + oy))
+    nb = max(1, int(round(band * s)))
+    prof = []
+    for i in range(int(150 * s)):
+        xx = cx + d * i
+        if xx < 0 or xx >= W:
+            break
+        prof.append(sum(lum(wp, xx, yy) - lum(op, xx, yy) for yy in range(cy - nb, cy + nb + 1)) / (2 * nb + 1))
+    pk = max(prof)
+    ipk = prof.index(pk)
+    out = {'peak': pk}
+    for f in (.5, .1):
+        last = ipk
+        for i in range(ipk, len(prof)):
+            if prof[i] >= f * pk:
+                last = i
+        out['r%d' % int(f * 100)] = last / s
+    return out
+
+
+POINTS = (('lamp', 943, 280, -1), ('blue', 545, 180, -1))
+
+
+def cmd_check(a):
+    tol_r, tol_p = float(a[0]), float(a[1])
+    rest = a[2:]
+    i = rest.index('--')
+    sets = (rest[:i], rest[i + 1:])
+    means = []
+    for name, files in zip('AB', sets):
+        vals = {}
+        for j in range(0, len(files), 2):
+            row = []
+            for (pname, x, y, d) in POINTS:
+                m = measure(files[j], files[j + 1], x, y, d)
+                for q in ('peak', 'r50', 'r10'):
+                    vals.setdefault((pname, q), []).append(m[q])
+                row.append('%s %.1f/%.1f/%.1f' % (pname, m['peak'], m['r50'], m['r10']))
+            print('%s %s: %s (peak/r50/r10)' % (name, files[j].split('/')[-1], ' | '.join(row)))
+        means.append(vals)
+    ok = 0
+    for (pname, x, y, d) in POINTS:
+        for q in ('peak', 'r50', 'r10'):
+            A, B = means[0][(pname, q)], means[1][(pname, q)]
+            ma, mb = sum(A) / len(A), sum(B) / len(B)
+            tol = tol_p if q == 'peak' else tol_r
+            good = abs(mb - ma) <= tol
+            ok += good
+            print('%s %s %s: A %.1f (spread %.1f, n %d)  B %.1f (spread %.1f, n %d)  B-A %+.1f  tolerance %.1f' % (
+                'PASS' if good else 'FAIL', pname, q, ma, max(A) - min(A), len(A), mb, max(B) - min(B), len(B), mb - ma, tol))
+    print('check: %s %d of 6' % ('PASS' if ok == 6 else 'FAIL', ok))
 
 
 def cmd_rough(a):
@@ -162,5 +230,35 @@ def cmd_zoom(a):
     print('wrote %s (%d tiles of %dx%d)' % (out, len(tiles), bw, bh))
 
 
+def cmd_sheet(a):
+    out = a[0]
+    x0, y0, x1, y1 = (float(v) for v in a[1:5])
+    scale, gain = float(a[5]), float(a[6])
+    rest = a[7:]
+    bw, bh = int((x1 - x0) * scale), int((y1 - y0) * scale)
+    tiles = []
+    for i in range(0, len(rest), 3):
+        label, path, off = rest[i:i + 3]
+        im = Image.open(path).convert('RGB')
+        s, oy = frame(*im.size)
+        box = (int(round(x0 * s)), int(round(y0 * s + oy)), int(round(x1 * s)), int(round(y1 * s + oy)))
+        c = im.crop(box)
+        if off != '-':
+            b = Image.open(off).convert('RGB').crop(box)
+            cp = c.load(); bp = b.load()
+            for yy in range(c.size[1]):
+                for xx in range(c.size[0]):
+                    cp[xx, yy] = tuple(max(0, min(255, int((cp[xx, yy][k] - bp[xx, yy][k]) * gain))) for k in range(3))
+        tiles.append((label, c.resize((bw, bh), Image.NEAREST)))
+    sheet = Image.new('RGB', (len(tiles) * (bw + 6), bh + 18), (255, 0, 255))
+    d = ImageDraw.Draw(sheet)
+    for i, (label, t) in enumerate(tiles):
+        sheet.paste(t, (i * (bw + 6), 18))
+        d.rectangle((i * (bw + 6), 0, i * (bw + 6) + bw, 17), fill=(0, 0, 0))
+        d.text((i * (bw + 6) + 3, 3), label, fill=(255, 255, 255))
+    sheet.save(out)
+    print('wrote %s (%d tiles of %dx%d)' % (out, len(tiles), bw, bh))
+
+
 if __name__ == '__main__':
-    {'profile': cmd_profile, 'rough': cmd_rough, 'resid': cmd_resid, 'zoom': cmd_zoom}[sys.argv[1]](sys.argv[2:])
+    {'profile': cmd_profile, 'check': cmd_check, 'sheet': cmd_sheet, 'rough': cmd_rough, 'resid': cmd_resid, 'zoom': cmd_zoom}[sys.argv[1]](sys.argv[2:])
