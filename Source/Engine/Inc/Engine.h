@@ -532,6 +532,7 @@ struct ENGINE_API FPlayerNameInfo
 #include "UnEngine.h"			// Unreal engine.
 #include "UnGame.h"				// Unreal game engine.
 #include "UnCanvas.h"			// Canvas interface.
+#include "UnKeyGlyphs.h"		// H-5: player one's keys in place of the pad's button glyphs.
 #include "UnCamera.h"			// Viewport subsystem.
 #include "UnCameraEffects.h"	// Camera effects.
 #include "UnRender.h"			// High-level rendering definitions.

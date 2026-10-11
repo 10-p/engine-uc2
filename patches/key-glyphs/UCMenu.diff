@@ -1,0 +1,11 @@
+--- a/UCMenu/Classes/PlayerComboPanel.uc
++++ b/UCMenu/Classes/PlayerComboPanel.uc
+@@ -27,7 +27,7 @@
+ 		SetValue(img_CostA, Cost);
+ 		SetValue(img_CostB, Cost - 50);
+ 		lbl_Desc.Caption = CharInfo.ComboInfo[ComboIndex];
+-		lbl_Instruct.Caption = CharInfo.GetComboInstruction(ComboPosition);
++		lbl_Instruct.Caption = class'KeyGlyphs'.static.InGame(CharInfo.GetComboInstruction(ComboPosition));
+ 	}
+ }
+ 

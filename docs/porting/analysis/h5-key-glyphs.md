@@ -121,3 +121,62 @@ GUI.u (patched) rather than a new `UC2Glyphs.u`:
   white legend; icons for Enter, Backspace, Tab, Shift, the arrows and the mouse buttons/wheel), committed as the
   generated image + the generator; imported into GUI.u; the engine draws the key's cell of the sheet in the glyph's
   cell instead of the text. Keys without a cell keep the phase 1 text.
+
+## Step 1 (2026-10-11): phase 1, the key's name in the UI font
+
+### What was built (file:line at the commit)
+- `Source/Engine/Inc/UnKeyGlyphs.h`, `Source/Engine/Src/UnKeyGlyphs.cpp` (new, included by `Engine.h`): `FKeyGlyphs
+  GKeyGlyphs`: the last device (`NoteDevice`), the gate (`Available`: `GUI.KeyGlyphs` loaded with LOAD_Quiet|LOAD_NoWarn,
+  `[GUI.KeyGlyphs] ShowKeys`), the glyph character table (English defaults, the GUI's localised ones on top), the game
+  side (`GameKey`: the pad key's binding split into commands, lower case, single spaces; every keyboard/mouse key scored:
+  1000 all commands equal, 500+n same first command; ties by `KeyGlyphRank`), the left stick's movement keys
+  (`MoveKeys`: "WASD" when each is one character), the labels (`Label`), the drawing (`DrawKey`: the label scaled to fit
+  0.78 of the glyph cell's height and 0.96 of its width, centred, over a black copy offset by 1/24 of the height).
+  Results are cached per frame (`NewFrame` from `UCanvas::Update`) and every change is logged.
+- `Source/Engine/Src/UnCanvas.cpp`: `DrawString` asks `GKeyGlyphs.DrawKey` for each character of the button font
+  (`Font == Canvas->XBoxButtonFont`; the HUD's `ButtonFont` is the same object) and keeps the advance width;
+  `KeyGlyphDrawString` (the labels); `UCanvas::Init` -> `PrepareButtonFont` (the font's `CharRemap` gets `c|0x80` ->
+  the same glyph as `c`, the in-game mark); `UCanvas::Update` -> `NewFrame`.
+- `Source/SDL2Drv/Src/SDL2Viewport.cpp` (`HandleEvent`: a key press that is not an auto-repeat, a mouse button, the
+  wheel, a mouse move of 3+ pixels -> keys) and `SDL2Pads.cpp` (`SendButtonEdges`: a press on the pad of the keyboard's
+  viewport; `UpdateBoundPad`: a stick axis past 0.5 on it; `PadAdded`: port 0 without PadsStartAtPlayerTwo -> pad).
+- `Source/GUI/Src/UnGUICore.cpp`: `GEmulatedPadOrder` (the section's order, recorded by `LoadEmulatedPad`),
+  `KeyGlyphMenuKey` (the first key of the section, in that order, whose code - or text code when the page has a text
+  field - is the button; the sticks -> ARROWS / NUMPAD; nothing when the controller does not emulate the pad),
+  `KeyGlyphRegister` (from `NativePostRender`, once: the provider and `XBoxButtonChars` of the loaded language).
+- Script set `key-glyphs` (sets.txt after player-name, before keys-menu: `uc-patches.py make` refuses a set for a package
+  where an earlier set added classes without an identity line, keys-menu's UCMenu classes): `new/GUI/Classes/KeyGlyphs.uc`
+  (the gate; `InGame(S)` sets the high bit of each glyph character) and `UCMenu.diff` (`PlayerComboPanel.Update`,
+  one line). `patches/reference.sha256` re-made (GUI.u 371435 bytes, UCMenu.u 2409852, UCGameplay.u unchanged).
+  check-headers: current (KeyGlyphs is not native).
+- `Engine/Config/Default.ini` (+ `web/Default.ini` by `sync-web-ini.py`): `Suppress=KeyGlyphs`, `[GUI.KeyGlyphs]
+  ShowKeys=True`.
+- The log lines start with `[KeyGlyphs]` (this log prints no event names): `[KeyGlyphs] player one: pad (pad connected)`,
+  `[KeyGlyphs] menu A -> ENTER`, `[KeyGlyphs] game A -> J`.
+
+### Proof (numerically checked: log lines and pixel counts; seen: the pictures)
+`tools/dev/h5-glyphs.sh` (menu, info, game, vanilla), trees `run/h5` (default build) and `run/h5v` (UC2_SCRIPTS=none:
+the shipped GUI.u/UCMenu.u, `cmp` with the asset tree's GUI.u). Native software GL 640x480 under Xvfb:
+**49 passed, 0 failed** (`logs/h5/run1.txt`, pictures `logs/h5/glyphs/*.png`). GL4ES twin (`H5_GL4ES=1`, menu and
+game): **34 passed, 0 failed** (`logs/h5/run1-gl4es.txt`, `logs/h5/glyphs-gl4es/`).
+- menu: keyboard from the start; menu A ENTER, B ESC, Y Y, X X, White Q, Black E; pad plugged in -> pad; a pad button
+  keeps pad; a mouse move -> keys; a stick -> pad; a key -> keys. Pixel check: the green A gem of the button bar
+  (box 50,428-78,448) 0 green pixels with keys, 131 with the pad.
+- info: MORE INFO's combo instructions are game buttons: X X, LeftTrigger RMB, A SPACE, RightTrigger LMB.
+- game: the adrenaline menu RMB / SPACE / LMB (0 green pixels at the A cell), the pad's (162); the pause menu's keys;
+  the KEYBOARD / MOUSE page from the pause menu: JUMP / DODGE := J (the page saved `Space=, J=SmartJump 0`), then the
+  combo menu's A is J (`[KeyGlyphs] game A -> J`, picture `game-combo-rebound.png`).
+- vanilla: no `KeyGlyphs` / `Key glyphs` line at all, the A gem with the keyboard (131 green pixels), no critical line,
+  no load failure.
+
+### Seen in the pictures, not yet good
+- Long names in a small cell are tiny: ENTER and SPACE in the A gem's cell (about 20x23 design pixels in the button bar)
+  are about 7 pixels high at 640x480; ESC, Q, E, X, Y, RMB, LMB (the trigger cells are wider) read well. Phase 2's key
+  caps are drawn for the cell (icons for Enter, Space, the mouse).
+- The on-screen keyboard page (UC2ProfileKeyboard) has a text field, so the table's text codes apply: no key gives A
+  or Black there (Enter is Start, Space and E type): those two keep the pad glyph.
+- The menus' right stick (the information page's SCROLL) is the number pad's 8/2 (`[GUI.EmulatedJoypad]` AltUp/AltDown):
+  NUMPAD, correct but obscure (the wheel scrolls lists, not that page).
+- The menus' "back" is the table's B = Escape; the keys page (D-9) edits the game's bindings, not that table, so a
+  menu glyph cannot follow a keys-page rebinding; the game's glyphs do (the proof rebinds JUMP / DODGE). The pad's Back
+  in the game (ShowScores, Tab) is drawn by no HUD text.

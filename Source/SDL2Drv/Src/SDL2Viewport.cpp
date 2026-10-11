@@ -951,6 +951,9 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 			}
 			if( Client->LoggingInput() && !Ev.key.repeat )
 				debugf( SDL2INPUT, TEXT("key %s press (viewport %i)"), Input ? Input->GetKeyName(Key) : TEXT("?"), Client->Viewports.FindItemIndex(this) );
+			// H-5: player one is on the keyboard (the key glyphs follow; only the window's viewport gets keys, G-11)
+			if( !Ev.key.repeat )
+				GKeyGlyphs.NoteDevice( 1, Input ? Input->GetKeyName(Key) : TEXT("key") );
 			CauseInputEvent( Key, IST_Press );
 
 			// The control characters WM_CHAR delivers for these keys (never Enter).
@@ -993,6 +996,9 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 				WindowsMouseX = Ev.motion.x;
 				WindowsMouseY = Ev.motion.y;
 			}
+			// H-5: a mouse move of a few pixels is a touch of the mouse (not a jitter of the desk)
+			if( Abs(Ev.motion.xrel) + Abs(Ev.motion.yrel) >= 3 )
+				GKeyGlyphs.NoteDevice( 1, TEXT("mouse move") );
 			if( Ev.motion.xrel )
 				CauseInputEvent( IK_MouseX, IST_Axis, +MX * Ev.motion.xrel );
 			if( Ev.motion.yrel )
@@ -1008,6 +1014,7 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 			DWORD Flag = Key==IK_LeftMouse ? MOUSE_Left : Key==IK_RightMouse ? MOUSE_Right : Key==IK_MiddleMouse ? MOUSE_Middle : 0;
 			if( Ev.type==SDL_MOUSEBUTTONDOWN )
 			{
+				GKeyGlyphs.NoteDevice( 1, Input ? Input->GetKeyName(Key) : TEXT("mouse button") );
 				ViewportButtonFlags |= Flag;
 				CauseInputEvent( Key, IST_Press );
 			}
@@ -1033,6 +1040,7 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 				Notches = -Notches;
 			if( Notches )
 			{
+				GKeyGlyphs.NoteDevice( 1, TEXT("mouse wheel") );
 				// DirectInput reports WHEEL_DELTA (120) per notch.
 				CauseInputEvent( IK_MouseW, IST_Axis, Notches * 120 );
 				EInputKey Key = Notches<0 ? IK_MouseWheelDown : IK_MouseWheelUp;

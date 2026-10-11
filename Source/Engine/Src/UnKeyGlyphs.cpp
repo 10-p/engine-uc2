@@ -1,0 +1,398 @@
+/*=============================================================================
+	UnKeyGlyphs.cpp: H-5, player one's keys in place of the pad's button glyphs.
+
+	See UnKeyGlyphs.h and docs/porting/analysis/h5-key-glyphs.md.
+=============================================================================*/
+
+#include "Engine.h"
+#include "EnginePrivate.h"
+
+ENGINE_API FKeyGlyphs GKeyGlyphs;
+
+// A log name of its own, suppressed in Default.ini like DevUI (the tests un-suppress it). The lines also start with
+// "[KeyGlyphs]" (the log file does not print the names).
+static EName KeyGlyphsLog()
+{
+	static FName Name;
+	if( Name == NAME_None )
+		Name = FName( TEXT("KeyGlyphs") );
+	return (EName)Name.GetIndex();
+}
+
+/*-----------------------------------------------------------------------------
+	Keys.
+-----------------------------------------------------------------------------*/
+
+ENGINE_API UBOOL KeyGlyphIsKey( INT Key )
+{
+	if( Key <= IK_None || Key >= IK_MAX )
+		return 0;
+	if( Key >= IK_Joy1 && Key <= IK_Joy16 )
+		return 0;
+	if( Key >= IK_MouseX && Key <= IK_JoySlider2 )		// the mouse axes, JoyU/V, the sliders
+		return 0;
+	if( Key >= IK_JoyX && Key <= IK_JoyR )
+		return 0;
+	if( Key == IK_Unicode )
+		return 0;
+	return 1;
+}
+
+ENGINE_API INT KeyGlyphRank( INT Key )
+{
+	static const TCHAR LeftHand[] = TEXT("QWERTASDFGZXCVB");
+	if( Key == IK_LeftMouse )	return 0;
+	if( Key == IK_RightMouse )	return 1;
+	if( Key == IK_MiddleMouse )	return 2;
+	if( Key >= IK_Mouse4 && Key <= IK_Mouse8 )	return 3 + Key - IK_Mouse4;
+	if( Key == IK_Space )		return 20;
+	if( Key >= IK_A && Key <= IK_Z )
+	{
+		for( INT i=0; LeftHand[i]; i++ )
+			if( LeftHand[i] == Key )
+				return 30 + i;
+		return 50 + Key - IK_A;
+	}
+	if( Key >= IK_0 && Key <= IK_9 )	return 80 + Key - IK_0;
+	if( Key >= IK_F1 && Key <= IK_F24 )	return 400 + Key - IK_F1;
+	if( Key == IK_MouseWheelUp || Key == IK_MouseWheelDown )	return 500 + Key;
+	return 100 + Key;
+}
+
+// "A | B  c" -> ["a", "b c"]: the commands of a binding, trimmed, lower case, single spaces.
+static void SplitCommands( const FString& Binding, TArray<FString>& Out )
+{
+	Out.Empty();
+	FString Cur;
+	UBOOL Space = 0;
+	for( const TCHAR* P = *Binding; ; P++ )
+	{
+		if( *P == 0 || *P == '|' )
+		{
+			if( Cur.Len() )
+				new(Out) FString( Cur );
+			Cur = TEXT("");
+			Space = 0;
+			if( *P == 0 )
+				break;
+			continue;
+		}
+		if( *P == ' ' || *P == '\t' )
+		{
+			Space = Cur.Len() > 0;
+			continue;
+		}
+		if( Space )
+			Cur += TEXT(" ");
+		Space = 0;
+		TCHAR C[2] = { (TCHAR)appToLower(*P), 0 };
+		Cur += C;
+	}
+}
+
+// How well a key's commands do what the pad button's do: all of them (in order) 1000; the same first command 500
+// plus one per other shared command; 0 none.
+static INT MatchScore( const TArray<FString>& Pad, const TArray<FString>& Key )
+{
+	if( !Pad.Num() || !Key.Num() || Pad(0) != Key(0) )
+		return 0;
+	if( Pad.Num() == Key.Num() )
+	{
+		UBOOL Same = 1;
+		for( INT i=1; i<Pad.Num() && Same; i++ )
+			Same = Pad(i) == Key(i);
+		if( Same )
+			return 1000;
+	}
+	INT Score = 500;
+	for( INT i=1; i<Pad.Num(); i++ )
+		for( INT j=1; j<Key.Num(); j++ )
+			if( Pad(i) == Key(j) )
+				Score++;
+	return Score;
+}
+
+// The best key bound to a binding whose first command is Command (lower case), or KGS_None.
+static INT KeyForFirstCommand( UInput* Input, const TCHAR* Command )
+{
+	INT Best = KGS_None;
+	TArray<FString> K;
+	for( INT k=1; k<IK_MAX; k++ )
+	{
+		if( !KeyGlyphIsKey(k) || !Input->Bindings[k].Len() )
+			continue;
+		SplitCommands( Input->Bindings[k], K );
+		if( K.Num() && K(0) == Command && (Best == KGS_None || KeyGlyphRank(k) < KeyGlyphRank(Best)) )
+			Best = k;
+	}
+	return Best;
+}
+
+/*-----------------------------------------------------------------------------
+	FKeyGlyphs.
+-----------------------------------------------------------------------------*/
+
+FKeyGlyphs::FKeyGlyphs()
+:	MenuKey( NULL )
+,	bKeys( 1 )		// a PC starts on the keyboard; a pad plugged in at the start says "pad" (SDL2Drv)
+,	Gate( 0 )
+,	LabelFont( NULL )
+,	CacheFrame( 1 )
+{
+	appMemzero( CharPad, sizeof(CharPad) );
+	appMemzero( CachedFrame, sizeof(CachedFrame) );
+	for( INT c=0; c<2; c++ )
+		for( INT p=0; p<KGP_MAX; p++ )
+			Cached[c][p] = Logged[c][p] = KGS_None;
+	// GUI.int's characters (English); the GUI module puts the localised ones on top. The font maps a x y to A X Y.
+	static const struct { TCHAR Ch; BYTE Pad; } Defaults[] =
+	{
+		{ 'A', KGP_A }, { 'a', KGP_A }, { 'B', KGP_B }, { 'X', KGP_X }, { 'x', KGP_X }, { 'Y', KGP_Y }, { 'y', KGP_Y },
+		{ 'b', KGP_Black }, { 'c', KGP_White }, { 'l', KGP_LeftTrigger }, { 'r', KGP_RightTrigger },
+		{ '>', KGP_Start }, { '<', KGP_Back }, { 'L', KGP_LeftStick }, { 'R', KGP_RightStick },
+	};
+	for( INT i=0; i<ARRAY_COUNT(Defaults); i++ )
+		CharPad[(BYTE)Defaults[i].Ch] = Defaults[i].Pad + 1;
+}
+
+void FKeyGlyphs::SetGlyphChar( TCHAR Ch, INT Pad )
+{
+	BYTE C = (BYTE)Ch;
+	if( C == 0 || (C & 0x80) || Pad < 0 || Pad >= KGP_MAX )
+		return;
+	CharPad[C] = Pad + 1;
+}
+
+void FKeyGlyphs::NoteDevice( UBOOL bNewKeys, const TCHAR* What )
+{
+	bNewKeys = bNewKeys != 0;
+	if( bNewKeys == bKeys )
+		return;
+	bKeys = bNewKeys;
+	if( Gate != 2 )
+		debugf( KeyGlyphsLog(), TEXT("[KeyGlyphs] player one: %s (%s)"), bKeys ? TEXT("keyboard and mouse") : TEXT("pad"), What );
+}
+
+void FKeyGlyphs::PrepareButtonFont( UFont* Font )
+{
+	guard(FKeyGlyphs::PrepareButtonFont);
+	if( !Font )
+		return;
+	if( Font->IsRemapped )
+	{
+		TArray<_WORD> From, To;
+		for( TMap<_WORD,_WORD>::TIterator It(Font->CharRemap); It; ++It )
+			if( It.Key() < 0x80 )
+			{
+				From.AddItem( It.Key() | 0x80 );
+				To.AddItem( It.Value() );
+			}
+		for( INT i=0; i<From.Num(); i++ )
+			if( !Font->CharRemap.Find(From(i)) )
+				Font->CharRemap.Set( From(i), To(i) );
+	}
+	else
+	{
+		for( INT c=0; c<0x80 && c+0x80<Font->Characters.Num(); c++ )
+			if( Font->Characters(c+0x80).VSize == 0 )
+				Font->Characters(c+0x80) = Font->Characters(c);
+	}
+	unguard;
+}
+
+// The script set is there (GUI.KeyGlyphs) and [GUI.KeyGlyphs] ShowKeys is not False. Decided once.
+UBOOL FKeyGlyphs::Available()
+{
+	if( Gate == 0 )
+	{
+		UBOOL Show = 1;
+		GConfig->GetBool( TEXT("GUI.KeyGlyphs"), TEXT("ShowKeys"), Show, GIni );
+		UClass* Set = Show ? Cast<UClass>( UObject::StaticLoadObject( UClass::StaticClass(), NULL, TEXT("GUI.KeyGlyphs"), NULL, LOAD_NoWarn|LOAD_Quiet, NULL ) ) : NULL;
+		if( Set )
+			LabelFont = Cast<UFont>( UObject::StaticLoadObject( UFont::StaticClass(), NULL, TEXT("T_Fonts2.SuiGeneris_12pt"), NULL, LOAD_NoWarn|LOAD_Quiet, NULL ) );
+		Gate = (Set && LabelFont) ? 1 : 2;
+		if( Gate == 1 )
+		{
+			debugf( NAME_Init, TEXT("Key glyphs: player one's keys replace the pad's buttons while they use the keyboard or the mouse (GUI.KeyGlyphs)") );
+			debugf( KeyGlyphsLog(), TEXT("[KeyGlyphs] player one: %s (start)"), bKeys ? TEXT("keyboard and mouse") : TEXT("pad") );
+		}
+		else if( !Show )
+			debugf( NAME_Init, TEXT("Key glyphs: off ([GUI.KeyGlyphs] ShowKeys=False)") );
+	}
+	return Gate == 1;
+}
+
+// The game's key for a pad button: the key bound to the command the pad button is bound to.
+INT FKeyGlyphs::GameKey( UViewport* Viewport, INT Pad )
+{
+	UInput* Input = Viewport->Input;
+	if( !Input )
+		return KGS_None;
+	if( Pad == KGP_LeftStick )
+		return MoveKeys( Viewport );
+	if( Pad == KGP_RightStick )
+		return KGS_Mouse;
+	if( Pad < 0 || Pad > KGP_RightThumb )
+		return KGS_None;
+	TArray<FString> P, K;
+	SplitCommands( Input->Bindings[IK_Joy1 + Pad], P );
+	if( !P.Num() )
+		return KGS_None;
+	INT Best = KGS_None, BestScore = 0;
+	for( INT k=1; k<IK_MAX; k++ )
+	{
+		if( !KeyGlyphIsKey(k) || !Input->Bindings[k].Len() )
+			continue;
+		SplitCommands( Input->Bindings[k], K );
+		INT Score = MatchScore( P, K );
+		if( Score > BestScore || (Score && Score == BestScore && KeyGlyphRank(k) < KeyGlyphRank(Best)) )
+		{
+			Best = k;
+			BestScore = Score;
+		}
+	}
+	return Best;
+}
+
+// The game's left stick: the movement keys ("WASD" when each is one character).
+INT FKeyGlyphs::MoveKeys( UViewport* Viewport )
+{
+	static const TCHAR* Commands[4] = { TEXT("moveforward"), TEXT("strafeleft"), TEXT("movebackward"), TEXT("straferight") };
+	FString Text;
+	UBOOL Short = 1, Any = 0;
+	for( INT i=0; i<4; i++ )
+	{
+		INT Key = KeyForFirstCommand( Viewport->Input, Commands[i] );
+		FString L = Key == KGS_None ? FString(TEXT("")) : Label( Key, Viewport );
+		Any = Any || L.Len();
+		Short = Short && L.Len() == 1;
+		Text += L;
+	}
+	if( !Any )
+		return KGS_None;
+	MoveText = Short ? Text : FString(TEXT("MOVE"));
+	return KGS_Move;
+}
+
+INT FKeyGlyphs::Resolve( UCanvas* Canvas, TCHAR Ch, FString* MoveLabel )
+{
+	guard(FKeyGlyphs::Resolve);
+	if( !bKeys || !Canvas || !Canvas->Viewport || !Canvas->pCanvasUtil )
+		return KGS_None;
+	UViewport* Viewport = Canvas->Viewport;
+	UClient* Client = Viewport->GetOuterUClient();
+	// Player one only: the first viewport (the window's; split-screen viewports are pads).
+	if( !Client || !Client->Viewports.Num() || Client->Viewports(0) != Viewport )
+		return KGS_None;
+	if( !Available() )
+		return KGS_None;
+	BYTE C = (BYTE)Ch;
+	INT Game = (C & 0x80) || Canvas->pCanvasUtil->UIContext != UICONTEXT_Menu;
+	INT Pad = (INT)CharPad[C & 0x7f] - 1;
+	if( Pad < 0 )
+		return KGS_None;
+	if( CachedFrame[Game][Pad] != CacheFrame )
+	{
+		INT Key = Game ? GameKey( Viewport, Pad ) : (MenuKey ? MenuKey( Viewport, Pad ) : KGS_None);
+		CachedFrame[Game][Pad] = CacheFrame;
+		Cached[Game][Pad] = Key;
+		if( Logged[Game][Pad] != Key )
+		{
+			static const TCHAR* PadNames[KGP_MAX] =
+			{
+				TEXT("A"), TEXT("B"), TEXT("X"), TEXT("Y"), TEXT("Black"), TEXT("White"), TEXT("LeftTrigger"), TEXT("RightTrigger"),
+				TEXT("PadUp"), TEXT("PadDown"), TEXT("PadLeft"), TEXT("PadRight"), TEXT("Start"), TEXT("Back"), TEXT("LeftThumb"),
+				TEXT("RightThumb"), TEXT("LeftStick"), TEXT("RightStick"),
+			};
+			Logged[Game][Pad] = Key;
+			debugf( KeyGlyphsLog(), TEXT("[KeyGlyphs] %s %s -> %s"), Game ? TEXT("game") : TEXT("menu"), PadNames[Pad],
+				Key == KGS_None ? TEXT("(no key: the pad glyph)") : *Label( Key, Viewport ) );
+		}
+	}
+	if( MoveLabel && Cached[Game][Pad] == KGS_Move )
+		*MoveLabel = MoveText;
+	return Cached[Game][Pad];
+	unguard;
+}
+
+FString FKeyGlyphs::Label( INT Key, UViewport* Viewport ) const
+{
+	switch( Key )
+	{
+		case KGS_Arrows:	return TEXT("ARROWS");
+		case KGS_Move:		return MoveText;
+		case KGS_Mouse:		return TEXT("MOUSE");
+		case KGS_NumPad:	return TEXT("NUMPAD");
+	}
+	if( (Key >= IK_A && Key <= IK_Z) || (Key >= IK_0 && Key <= IK_9) )
+	{
+		TCHAR S[2] = { (TCHAR)Key, 0 };
+		return S;
+	}
+	if( Key >= IK_F1 && Key <= IK_F24 )
+		return FString::Printf( TEXT("F%i"), Key - IK_F1 + 1 );
+	if( Key >= IK_NumPad0 && Key <= IK_NumPad9 )
+		return FString::Printf( TEXT("NUM%i"), Key - IK_NumPad0 );
+	if( Key >= IK_Mouse4 && Key <= IK_Mouse8 )
+		return FString::Printf( TEXT("M%i"), Key - IK_Mouse4 + 4 );
+	static const struct { INT Key; const TCHAR* Text; } Names[] =
+	{
+		{ IK_LeftMouse, TEXT("LMB") }, { IK_RightMouse, TEXT("RMB") }, { IK_MiddleMouse, TEXT("MMB") },
+		{ IK_MouseWheelUp, TEXT("WHL+") }, { IK_MouseWheelDown, TEXT("WHL-") },
+		{ IK_Enter, TEXT("ENTER") }, { IK_Escape, TEXT("ESC") }, { IK_Space, TEXT("SPACE") }, { IK_Tab, TEXT("TAB") },
+		{ IK_Shift, TEXT("SHIFT") }, { IK_LShift, TEXT("SHIFT") }, { IK_RShift, TEXT("SHIFT") },
+		{ IK_Ctrl, TEXT("CTRL") }, { IK_LControl, TEXT("CTRL") }, { IK_RControl, TEXT("CTRL") }, { IK_Alt, TEXT("ALT") },
+		{ IK_Backspace, TEXT("BKSP") }, { IK_Delete, TEXT("DEL") }, { IK_Insert, TEXT("INS") },
+		{ IK_Home, TEXT("HOME") }, { IK_End, TEXT("END") }, { IK_PageUp, TEXT("PGUP") }, { IK_PageDown, TEXT("PGDN") },
+		{ IK_Up, TEXT("UP") }, { IK_Down, TEXT("DOWN") }, { IK_Left, TEXT("LEFT") }, { IK_Right, TEXT("RIGHT") },
+		{ IK_Pause, TEXT("PAUSE") }, { IK_CapsLock, TEXT("CAPS") }, { IK_NumLock, TEXT("NUMLK") },
+		{ IK_ScrollLock, TEXT("SCRLK") }, { IK_PrintScrn, TEXT("PRTSC") },
+		{ IK_GreyStar, TEXT("NUM*") }, { IK_GreyPlus, TEXT("NUM+") }, { IK_GreyMinus, TEXT("NUM-") },
+		{ IK_GreySlash, TEXT("NUM/") }, { IK_NumPadPeriod, TEXT("NUM.") },
+		{ IK_Semicolon, TEXT(";") }, { IK_Equals, TEXT("=") }, { IK_Comma, TEXT(",") }, { IK_Minus, TEXT("-") },
+		{ IK_Period, TEXT(".") }, { IK_Slash, TEXT("/") }, { IK_Tilde, TEXT("`") }, { IK_LeftBracket, TEXT("[") },
+		{ IK_Backslash, TEXT("\\") }, { IK_RightBracket, TEXT("]") }, { IK_SingleQuote, TEXT("'") },
+	};
+	for( INT i=0; i<ARRAY_COUNT(Names); i++ )
+		if( Names[i].Key == Key )
+			return Names[i].Text;
+	if( Viewport && Viewport->Input && Key > 0 && Key < IK_MAX )
+		return FString( Viewport->Input->GetKeyName( (EInputKey)Key ) ).Caps();
+	return TEXT("?");
+}
+
+UBOOL FKeyGlyphs::DrawKey( UCanvas* Canvas, TCHAR Ch, FLOAT X, FLOAT Y, FLOAT W, FLOAT H, FPlane Color )
+{
+	guard(FKeyGlyphs::DrawKey);
+	FString Move;
+	INT Key = Resolve( Canvas, Ch, &Move );
+	if( Key == KGS_None || W <= 0.f || H <= 0.f )
+		return 0;
+	FString Text = Key == KGS_Move ? Move : Label( Key, Canvas->Viewport );
+	if( !Text.Len() || !LabelFont )
+		return 0;
+
+	// Phase 1: the key's name in the UI font, as big as fits the glyph's cell, centred, over a dark shadow.
+	FLOAT TW = 0.f, TH = 0.f;
+	for( INT i=0; i<Text.Len(); i++ )
+	{
+		FLOAT CW, CH;
+		LabelFont->GetCharSize( (*Text)[i], CW, CH );
+		TW += CW + (i+1 < Text.Len() ? Canvas->SpaceX + LabelFont->Kerning : 0.f);
+		TH = Max( TH, CH );
+	}
+	if( TW <= 0.f || TH <= 0.f )
+		return 0;
+	FLOAT Scale = Min( H * 0.78f / TH, W * 0.96f / TW );
+	FLOAT LX = X + (W - TW * Scale) * 0.5f, LY = Y + (H - TH * Scale) * 0.5f;
+	FLOAT Off = Max( 0.5f, H / 24.f );
+	FPlane Shadow( 0.f, 0.f, 0.f, Color.W );
+	KeyGlyphDrawString( Canvas, LabelFont, Scale, Scale, LX + Off, LY + Off, *Text, Shadow );
+	KeyGlyphDrawString( Canvas, LabelFont, Scale, Scale, LX, LY, *Text, Color );
+	return 1;
+	unguard;
+}
+
+/*-----------------------------------------------------------------------------
+	The End.
+-----------------------------------------------------------------------------*/

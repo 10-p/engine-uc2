@@ -50,6 +50,7 @@ change: every other package stays the shipped one.
 | `epic-source` | three changes in Epic's later source that the load-time patcher could not carry | UCGameplay | on |
 | `mouse-look` | the PC mouse: mouse look apart from the pad, the rigid/lazy third-person camera, double-tap dodge | UCGameplay | on |
 | `player-name` | the launcher's player name when there is no profile | GUI | on |
+| `key-glyphs` | player one's keys in place of the pad's button glyphs while they use the keyboard or the mouse (the engine draws them; the set switches it on) | GUI, UCMenu | on |
 | `keys-menu` | the KEYBOARD / MOUSE settings page | UCMenu | on |
 
 Each set's folder has a `README.md` (what it changes, its ini keys, what it depends on), one `<Pkg>.diff` per

@@ -339,6 +339,10 @@ void USDL2Client::PadAdded( INT DeviceIndex )
 	const char* Name = SDL_GameControllerName( GC );
 	appStrncpy( Pad.Name, Name ? appFromAnsi(Name) : TEXT("pad"), ARRAY_COUNT(Pad.Name) );
 	UViewport* BoundTo = GetPadViewport( Slot );
+	// H-5: a pad that is player one's (port 0 unless PadsStartAtPlayerTwo, G-11), plugged in now or at the start, says
+	// the player uses it: the pad's glyphs until the keyboard or the mouse is touched
+	if( Slot==0 && !PadsStartAtPlayerTwo )
+		GKeyGlyphs.NoteDevice( 0, TEXT("pad connected") );
 	debugf( NAME_Log, TEXT("SDL2 pads: pad %i connected: %s%s%s"), Slot, Pad.Name,
 		SDL_GameControllerHasRumble(GC) ? TEXT(" (rumble)") : TEXT(""),
 		PadsStartAtPlayerTwo ? TEXT(" (keyboard and mouse are player one on port 0: Start joins)")
@@ -514,6 +518,9 @@ static void SendButtonEdges( USDL2Client* Client, INT Slot, UViewport* Viewport,
 			// that made a player is used up there.
 			if( !Viewport && b==12 && Client->PadJoin( Slot ) )
 				continue;
+			// H-5: player one's pad was used: the pad's glyphs again
+			if( Viewport && Client->ViewportHasKeyboard( Viewport ) )
+				GKeyGlyphs.NoteDevice( 0, TEXT("pad button") );
 			Client->SendPadKey( Slot, Viewport, Key, IST_Press );
 			Pad.RepeatKey      = Key;
 			Pad.NextRepeatTime = appSeconds() + Client->PadRepeatDelay;
@@ -548,6 +555,15 @@ void USDL2Client::UpdateBoundPad( USDL2Viewport* Viewport, FLOAT DeltaSeconds )
 	BYTE NewPosition[SDL2DRV_PAD_BUTTONS];
 	ReadPad( Slot, NewPosition );
 	SendButtonEdges( this, Slot, Viewport, NewPosition );
+
+	// H-5: a stick pushed past half way on player one's pad is a touch of the pad (not its drift)
+	if( ViewportHasKeyboard( Viewport ) )
+		for( INT a=0; a<SDL2DRV_PAD_STICKAXES; a++ )
+			if( Abs(Pad.Axes[a]) > 0.5f )
+			{
+				GKeyGlyphs.NoteDevice( 0, TEXT("pad stick") );
+				break;
+			}
 
 	for( INT a=0; a<SDL2DRV_PAD_STICKAXES && Viewport->Input; a++ )
 	{

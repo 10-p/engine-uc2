@@ -890,6 +890,7 @@ struct FEmulatedPadKey
 
 static FEmulatedPadKey	GEmulatedPad[IK_MAX];
 static UBOOL			GEmulatedPadLoaded = 0;
+static TArray<BYTE>		GEmulatedPadOrder;	// H-5: the keys in the order of the section (the first one names a button)
 
 static BYTE ParseEmulatedPadCode( const TCHAR* Name )
 {
@@ -933,6 +934,7 @@ static void LoadEmulatedPad()
 	guard(LoadEmulatedPad);
 	GEmulatedPadLoaded = 1;
 	appMemzero( GEmulatedPad, sizeof(GEmulatedPad) );
+	GEmulatedPadOrder.Empty();
 
 	TMultiMap<FName,FString>* Section = GConfig->GetSectionPrivate( TEXT("GUI.EmulatedJoypad"), 0, 1 );
 	if( Section )
@@ -953,7 +955,10 @@ static void LoadEmulatedPad()
 			{ IK_NumPad8, EJP_AltUp }, { IK_NumPad2, EJP_AltDown }, { IK_NumPad4, EJP_AltLeft }, { IK_NumPad6, EJP_AltRight },
 		};
 		for( INT i=0; i<ARRAY_COUNT(Epic); i++ )
+		{
 			GEmulatedPad[Epic[i][0]].Code = GEmulatedPad[Epic[i][0]].TextCode = Epic[i][1];
+			GEmulatedPadOrder.AddItem( Epic[i][0] );
+		}
 		debugf( NAME_Init, TEXT("GUI: no [GUI.EmulatedJoypad] section, using Epic's key table") );
 		return;
 	}
@@ -973,6 +978,7 @@ static void LoadEmulatedPad()
 		}
 		GEmulatedPad[Key].Code     = Code;
 		GEmulatedPad[Key].TextCode = TextCode;
+		GEmulatedPadOrder.AddItem( Key );
 		Count++;
 	}
 	debugf( NAME_Init, TEXT("GUI: %i keys from [GUI.EmulatedJoypad]"), Count );
@@ -1033,6 +1039,60 @@ static BYTE EmulatedPadCode( BYTE iKey, UBOOL TextEntry )
 	if( !GEmulatedPadLoaded )
 		LoadEmulatedPad();
 	return TextEntry ? GEmulatedPad[iKey].TextCode : GEmulatedPad[iKey].Code;
+}
+
+/*-----------------------------------------------------------------------------
+	H-5: the menus' key for a pad button (UnKeyGlyphs.h, FKeyGlyphs::MenuKey).
+
+	The first key of [GUI.EmulatedJoypad] (in the section's order) that the menus turn into that button:
+	Enter for A, Escape for B... With a text field on the page the table's text codes apply (Space for A).
+	The left stick is the arrow keys, the right stick the number pad (the table's AltUp..AltRight).
+-----------------------------------------------------------------------------*/
+
+static INT KeyGlyphMenuKey( UViewport* Viewport, INT Pad )
+{
+	guard(KeyGlyphMenuKey);
+	if( Pad == KGP_LeftStick )
+		return KGS_Arrows;
+	if( Pad == KGP_RightStick )
+		return KGS_NumPad;
+	if( Pad < KGP_A || Pad > KGP_RightThumb )
+		return KGS_None;
+	UGUIController* C = Viewport ? Cast<UGUIController>( Viewport->GUIController ) : NULL;
+	if( C && !C->bEmulatedJoypad )
+		return KGS_None;
+	if( !GEmulatedPadLoaded )
+		LoadEmulatedPad();
+	UBOOL Text = C && TextEntryTarget(C) != NULL;
+	BYTE Want = (BYTE)(XBC_A + Pad);
+	for( INT i=0; i<GEmulatedPadOrder.Num(); i++ )
+	{
+		BYTE Key = GEmulatedPadOrder(i);
+		if( (Text ? GEmulatedPad[Key].TextCode : GEmulatedPad[Key].Code) == Want )
+			return Key;
+	}
+	return KGS_None;
+	unguard;
+}
+
+// The glyph characters of this language (GUI.int's XBoxButtonChars) and the menus' keys, once.
+static void KeyGlyphRegister( UGUIController* C )
+{
+	static UBOOL Done = 0;
+	if( Done || !C )
+		return;
+	Done = 1;
+	GKeyGlyphs.MenuKey = KeyGlyphMenuKey;
+	UGUIController* D = (UGUIController*)C->GetClass()->GetDefaultObject();
+	static const struct { INT Code; INT Pad; } Map[] =
+	{
+		{ 4, KGP_A }, { 5, KGP_B }, { 6, KGP_X }, { 7, KGP_Y }, { 8, KGP_Black }, { 9, KGP_White },
+		{ 10, KGP_LeftTrigger }, { 11, KGP_RightTrigger }, { 16, KGP_Start }, { 17, KGP_Back },
+		{ 18, KGP_LeftStick }, { 19, KGP_RightStick },
+	};
+	for( INT i=0; i<ARRAY_COUNT(Map); i++ )
+		if( Map[i].Code < D->XBoxButtonChars.Num() && D->XBoxButtonChars(Map[i].Code).Len() == 1 )
+			GKeyGlyphs.SetGlyphChar( D->XBoxButtonChars(Map[i].Code)[0], Map[i].Pad );
 }
 
 /*
@@ -1656,6 +1716,8 @@ void  UGUIController::NativePostRender(UCanvas* Canvas)
 
 	if ( !Canvas || !ViewportOwner /*|| bControllerUnplugged*/ )
 		return;
+
+	KeyGlyphRegister( this );	// H-5
 
 	Canvas->CurX = 0;
 	Canvas->Style=1;

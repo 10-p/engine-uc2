@@ -460,6 +460,18 @@ static FLOAT DrawString
 		{
 			UTexture* Tex;
 			FFontCharacter& Char = Font->Characters(Ch);
+			// H-5: a pad button of player one, who uses the keyboard: their key in the glyph's cell, the advance kept
+			// (UnKeyGlyphs.cpp). A cell outside the clip region is not drawn either way.
+			if( Font == Canvas->XBoxButtonFont && !bHandleApersand && Ch != NULLCHARACTER && Char.USize > 0 && Char.VSize > 0 )
+			{
+				FLOAT KX = LineX + DrawX, KW = Char.USize * ScaleX, KH = Char.VSize * ScaleY;
+				if( (!bClip || (KX + KW > 0 && KX <= Canvas->ClipX && DrawY + KH > 0 && DrawY <= Canvas->ClipY))
+				&&	GKeyGlyphs.DrawKey( Canvas, SourceChar, KX, DrawY, KW, KH, Color ) )
+				{
+					LineX += (Char.USize + Canvas->SpaceX + Font->Kerning) * ScaleX;
+					continue;
+				}
+			}
 			if( Char.TextureIndex < Font->Textures.Num() && (Tex=Font->Textures(Char.TextureIndex))!=NULL )
 			{
 				// Compute character width.
@@ -586,6 +598,12 @@ static FLOAT DrawString
 	return LineX;
 
 	unguardSlow;
+}
+
+// H-5: DrawString for the key labels (UnKeyGlyphs.cpp).
+ENGINE_API FLOAT KeyGlyphDrawString( UCanvas* Canvas, UFont* Font, FLOAT ScaleX, FLOAT ScaleY, FLOAT X, FLOAT Y, const TCHAR* Text, FPlane Color )
+{
+	return DrawString( Canvas, Font, ScaleX, ScaleY, X, Y, Text, Color, 0, 0 );
 }
 
 //scion superville
@@ -969,6 +987,8 @@ void UCanvas::Init( UViewport* InViewport )
 
 		XBoxButtonFont = Cast<UFont>(StaticLoadObject(UFont::StaticClass(),NULL,*XBoxButtonFontName,NULL,LOAD_NoWarn,NULL));
 		checkSlow(XBoxButtonFont);
+		// H-5: the button font's in-game mark (c|0x80 draws c), UnKeyGlyphs.h
+		GKeyGlyphs.PrepareButtonFont( XBoxButtonFont );
 	}
 	unguard;
 }
@@ -978,6 +998,9 @@ void UCanvas::Update()
 
 	// Call UnrealScript to reset.
 	eventReset();
+
+	// H-5: the key glyphs look at the bindings again (they may have changed since the last frame)
+	GKeyGlyphs.NewFrame();
 
 	if ( !pCanvasUtil )
 		pCanvasUtil = NEW FCanvasUtil(&Viewport->RenderTarget,Viewport->RI);
