@@ -5416,7 +5416,71 @@ void DrawSkelImpostor( FDynamicActor* Owner, FVector* Origin, FLevelSceneNode* S
 	unguard;
 }
 
+//
+// uc2 port (H-4): LODTrace test key, [Engine.SkeletalMeshInstance] LODTrace=True through -ini: (read once, never kept
+// in the ini; appReadTestKey). For the skeletal meshes of the pawn the player views, one line per draw of the
+// software-skinned stream: the pass (main scene or the pawn's shadow), the width the LOD was computed with, the LOD
+// factor and level, whether the driver uploaded the vertex pool, the LOD the pool's vertices were skinned for, and
+// "stale" when that is not the LOD being drawn (one LOD's index buffer over another LOD's vertices).
+// Notebook: docs/porting/analysis/h4-vertex.md.
+//
+static INT						GUC2LodTrace = -1;
+static USkeletalMeshInstance*	GUC2LodTraceInst = NULL;
+static INT						GUC2LodTracePass = 0, GUC2LodTraceWidth = 0, GUC2LodTraceStale = 0, GUC2LodTraceDraws = 0;
+static FLOAT					GUC2LodTraceFactor = 0.f;
+static TArray<FVertexPool*>		GUC2LodTracePools;
+static TArray<INT>				GUC2LodTracePoolLOD;
+static TArray<USkeletalMesh*>	GUC2LodTraceMeshes;
 
+static void UC2LodTraceChoose( USkeletalMeshInstance* Inst, FDynamicActor* Owner, FLevelSceneNode* SceneNode, INT Width, FLOAT Factor )
+{
+	if( GUC2LodTrace < 0 )
+		GUC2LodTrace = appReadTestFlag( TEXT("LODTrace"), TEXT("Engine.SkeletalMeshInstance") ) ? 1 : 0;
+	GUC2LodTraceInst = NULL;
+	if( !GUC2LodTrace )
+		return;
+	AActor*	Actor = Owner->Actor;
+	AActor*	View = SceneNode->Viewport->Actor ? SceneNode->Viewport->Actor->ViewTarget : NULL;
+	if( !View || (Actor != View && Actor->Owner != View) )
+		return;
+	USkeletalMesh* Mesh = (USkeletalMesh*)Inst->GetMesh();
+	if( GUC2LodTraceMeshes.FindItemIndex(Mesh) == INDEX_NONE )
+	{
+		GUC2LodTraceMeshes.AddItem( Mesh );
+		for( INT i=0; i<Mesh->LODModels.Num(); i++ )
+			debugf( TEXT("LODTrace: mesh %s LOD %i DisplayFactor %f Hysteresis %f SmoothStreamWedges %i Faces %i"), Mesh->GetPathName(), i,
+				Mesh->LODModels(i).DisplayFactor, Mesh->LODModels(i).LODHysteresis, Mesh->LODModels(i).SmoothStreamWedges,
+				Mesh->LODModels(i).SmoothIndexBuffer.Indices.Num()/3 );
+	}
+	GUC2LodTraceInst	= Inst;
+	GUC2LodTracePass	= SceneNode->GetCameraSceneNode() && SceneNode->GetCameraSceneNode()->IsShadowSceneNode() ? 1 : 0;
+	GUC2LodTraceWidth	= Width;
+	GUC2LodTraceFactor	= Factor;
+}
+
+static void UC2LodTraceDraw( USkeletalMeshInstance* Inst, FVertexPool* Pool, INT UploadedSize )
+{
+	if( Inst != GUC2LodTraceInst )
+		return;
+	INT Slot = GUC2LodTracePools.FindItemIndex( Pool );
+	if( Slot == INDEX_NONE )
+	{
+		Slot = GUC2LodTracePools.AddItem( Pool );
+		GUC2LodTracePoolLOD.AddItem( -1 );
+	}
+	if( UploadedSize )
+		GUC2LodTracePoolLOD(Slot) = Inst->CurrentLODLevel;
+	UBOOL Stale = GUC2LodTracePoolLOD(Slot) != Inst->CurrentLODLevel;
+	GUC2LodTraceDraws++;
+	GUC2LodTraceStale += Stale;
+	FRawIndexBuffer& Indices = ((USkeletalMesh*)Inst->GetMesh())->LODModels(Inst->CurrentLODLevel).SmoothIndexBuffer;
+	debugf( TEXT("LODTrace: tick %u %s %s width %i factor %f lod %i pool %i id %i rev %i size %i client %i upload %i held %i ib %i/%i%s (draws %i stale %i)"),
+		(DWORD)GTicks, GUC2LodTracePass ? TEXT("shadow") : TEXT("main"), Inst->GetMesh()->GetName(), GUC2LodTraceWidth, GUC2LodTraceFactor,
+		Inst->CurrentLODLevel, Slot, (INT)Pool->GetCacheId(), Pool->GetRevision(), Pool->GetSize(), Inst->SkinStream.GetSize(), UploadedSize, GUC2LodTracePoolLOD(Slot),
+		(INT)Indices.GetCacheId(), Indices.GetRevision(),
+		Stale ? TEXT(" STALE") : TEXT(""), GUC2LodTraceDraws, GUC2LodTraceStale );
+	GUC2LodTraceInst = NULL;
+}
 
 //
 //	USkeletalMeshInstance::Render
@@ -5565,7 +5629,16 @@ void USkeletalMeshInstance::Render( FDynamicActor* Owner, FLevelSceneNode* Scene
 			}
 		}
 		CurrentLODLevel = NewLODLevel;
+
+		// uc2 port (H-4): UT2004's fix (engine-ut2004 UnSkeletalMesh.cpp), missing from build 2226. The software-skinned
+		// vertices reach the driver through a vertex pool whose revision changes once per frame (FVertexPool::SetClient);
+		// a mesh drawn twice in one frame at two LOD levels (the pawn's shadow pass computes its LOD with the 252-pixel
+		// shadow viewport's width, the scene with the window's) drew the second LOD's index buffer over the first
+		// LOD's vertices: Lauren's hair polygons across her body in the browser (docs/porting/analysis/h4-vertex.md).
+		if( OldLODLevel != NewLODLevel ) // Fixes corruption when meshes are rendered multiple times in a single frame  (from Bob Berry.)
+			SkinStream.Revision++;
 	}
+	UC2LodTraceChoose( this, Owner, SceneNode, LodSceneNode->RenderTarget->GetWidth(), MeshVertLODFactor );
 
 	// Check whether we're pushing beyond last LOD and a sprite impostor is allowed.
 	if( (ForcedLodModel == 0) &&
@@ -6176,6 +6249,7 @@ void USkeletalMeshInstance::Render( FDynamicActor* Owner, FLevelSceneNode* Scene
 
 			//DWORD ShaderType = RI->GetMaterialVertexShaderType( GetMaterial(0, Actor) );			
 			INT UploadedSize = RI->SetVertexStreams( 0, VertexStreams, 1 );
+			UC2LodTraceDraw( this, VertexPool, UploadedSize );
 //			if( SkelMesh->SkinTesselationFactor > 1.0f )
 //				RI->SetNPatchTesselation( SkelMesh->SkinTesselationFactor);
 			//INT	BaseVertexIndex = RI->SetDynamicStream( VS_FixedFunction, &SkinStream );
