@@ -241,3 +241,17 @@ seconds since ucc started). Epic's packages carry such values too; no package th
 now. Fix: both are 0 when `GIsUCC` (ucc); the game sets the clock from its first frame as before. After it: build-native,
 `run/h5-proof` and `run/h5-proof2` give the same GUI.u (807af9a4..., 1770178 bytes; the reference re-made), and
 `uc-patches-proof.sh p3` (decompile, apply, build twice): PASS, GUI.u identical (`logs/h5/p3.log`).
+
+## Step 6 (2026-10-11): final checks on the final build (8f5c38e)
+
+- `tools/dev/h5-glyphs.sh menu info game travel vanilla look` (native, software GL): **68 passed, 0 failed**
+  (`logs/h5/final-native.txt`); `H5_GL4ES=1 ... menu info game travel`: **57 passed, 0 failed** (`logs/h5/final-gl4es.txt`).
+- `M14_PREFIX=h5-m14 m14-scripts-check.sh verify patcher menu deadbolt controls` (`logs/h5/m14-run2.txt`): verify, patcher,
+  menu, deadbolt PASS; controls 3 PASS 2 FAIL at load 20-24 (mouse: two turn/pitch checks; both: a pad stick distance);
+  `m10-controls.sh mouse both` again on the same tree: **PASS mouse (18), PASS both (14)** (`logs/h5/m10-rerun/`, load
+  still 18-22): load, not a regression (the same checks were green on the phase 1 build, `logs/h5/m14-run1.txt`, and
+  phase 2 does not touch input).
+- Web: `cmake --preset wasm-perf && cmake --build build-wasm-perf` builds (`logs/h5/wasm-build*.log`); the artifact's
+  `scripts/GUI.u` is the reference's (807af9a4..., 1770178 bytes) and `meta.json` lists it with that size and sha256.
+  Not run in a browser (the frontend is parked; no headless browser run was made here).
+- Memory ceilings: builds 6G, ucc/proofs 6G (capped), game runs 2G (m10-controls' default); none hit (no exit 137).
