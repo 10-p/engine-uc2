@@ -1,5 +1,9 @@
 # Exploration findings (2026-10-04)
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 The log of the three read-only exploration passes that preceded the plan. Paths under `assorted/`, `assets/*.iso`
 and `xbox-sdks/` are as they were then; M0 moved them to `reference/community`, `reference/iso` and `reference/xdk`.
 

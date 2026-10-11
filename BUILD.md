@@ -169,50 +169,50 @@ counts pointer-to-int narrowing (0). Details, every site, and what no test reach
 
 The game runs on the shipped compiled scripts (the 17 `.u` of the asset tree's `System/`, plus the 30 load-time
 patches of `Source/Engine/Inc/ScriptPatches.h`). The native 32-bit Linux build also contains Epic's script
-compiler (the `Editor` package linked into `ucc-bin`), which rebuilds all 17 from `Source/<Pkg>/Classes`:
+compiler (the `Editor` package linked into `ucc-bin`). **This repository holds no script sources** (since 2026-10-11:
+UnrealScript is game content, `docs/porting/analysis/scripts-removed.md`): the build compiles the patched packages from
+your shipped `.u` and `patches/` (next section), and a script is changed by changing its set (`patches/README.md`,
+"Changing a script").
 
 ```
-bin/capped 6G 3600 -- cmake --build build-native -j4      # ucc-bin with Editor (32-bit pointers only)
-tools/dev/script-build.sh                                 # assemble, make, strip, compare
-UC2_WINEPREFIX=<WorkUC2>/.cache/wine-scripts tools/dev/script-build.sh --build build-windows --tree s2-make
-                                                          # the same with ucc.exe (Windows build) under wine (S2)
-tools/dev/script-build.sh --tree m14-hdr --headers assemble make   # also export the C++ headers, diff them
+bin/capped 6G 3600 -- cmake --build build-native -j4      # ucc-bin with Editor (32-bit pointers only) + Scripts/System
 bin/capped 6G 600 -- cmake --build build-native --target check-headers   # generated headers current? (T2)
 tools/dev/regen-headers.sh                                # regenerate them into Source/*/Inc (T2)
+tools/dev/m14-scripts-check.sh                            # the game checks on the build's packages
 ```
 
-- Output: `<WorkUC2>/run/m14-make/System/*.u` (what ships: 15 stripped like Epic's, UCMenu and Editor with their
-  text), `<WorkUC2>/run/m14-make/Unstripped/*.u` (all with script text, for debugging). Logs and the comparison in
-  `<WorkUC2>/logs/m14/` (`m14-make-compare.txt`, `m14-make-patches.txt`). Nothing outside the tree is written;
-  the asset tree, `Source/` and the run trees are never written by it. Exported headers go to the tree's own
-  `<Pkg>/Inc`, never over `Source/*/Inc`.
 - The generated C++ headers `Source/<Pkg>/Inc/<Pkg>Classes.h` (Editor, Engine, GUI, IpDrv, UCElements, UCGameplay,
   UnrealEd, UnrealGame) are pure exporter output since T2, 64-bit-correct as generated: a script `int` that holds a
   C++ pointer is written `PTRINT` from Core's placeholder table (`GNativePlaceholders`, UnClass.cpp), on any host.
-  Never edit them by hand: change the `.uc` (or the table), then `tools/dev/regen-headers.sh` (export in a scratch
-  tree `<WorkUC2>/run/hdr-<checkout>`, copy over `Source/`, CRs dropped) and commit them with the change.
-  `tools/dev/check-headers.sh` (CMake target `check-headers` of the native preset, not in ALL) exports and compares
-  byte for byte: exit 0 current, 1 stale (unified diff printed, also in `<WorkUC2>/logs/hdr/`), 2 could not run.
-  Both take `--classes-root <dir>` (script sources `<dir>/<Pkg>/Classes`, default `Source/`; CMake:
-  `-DUC2_HEADERS_CLASSES_ROOT=<dir>`, default the build's patched tree `Scripts/tree`) and `--build <dir>`.
-  `docs/porting/analysis/headers.md`. On a patched tree (no `Engine/Classes`: only the packages the patches rebuild)
-  the check compiles those packages against the shipped ones (`uc-build.sh --headers`, into `build-*/Scripts/headers`)
-  and compares their generated headers, except what the shipped packages do not carry (each class's cpptext, and
-  `struct native` blocks: `UStruct::StructFlags` is not saved), which is taken from the committed header
-  (`tools/dev/check-headers-cpptext.py`); a changed or added member, function, event, enum or constant is caught.
-- It reproduces Epic's pipeline (`Source/BuildProcess/sync_avaris.pl`): `ucc make -nobind -noh` with the Xbox
-  inis, then `ucc editor.stripsource` with the PC inis, conforming each package to the shipped one so they line
-  up; `tools/dev/script-diff.py` then compares object by object. Every difference is explained
-  (`docs/porting/analysis/scripts.md`); the rebuilt packages contain what the 30 patches carry.
-- A run tree with the rebuilt packages: `UC2_SCRIPTS=<WorkUC2>/run/m14-make/System tools/dev/mkrun-uc2.sh
-  build-native <tree>`. The script patcher leaves rebuilt packages alone (it patches only the first-generation
-  shipped files it was made for) and logs `ScriptPatcher: <Pkg> ... patch not applied`.
-- `tools/dev/m14-scripts-check.sh`: the game checks (verifyclasses, menu, a match, controls, audio, effects,
-  the 58-map census, movies, network) on the rebuilt packages, PASS/FAIL lines.
-- Since T3 the build makes the patched packages itself (above, "Script patches"); `script-build.sh` stays the tool that
-  compiles a whole `Source/` tree (while it still holds the `.uc`) for comparisons.
+  Never edit them by hand (except a class's `cpptext` and `struct native` blocks, below): change the script (its
+  patch set), then `tools/dev/regen-headers.sh` (export in a scratch tree, write into `Source/<Pkg>/Inc`, CRs dropped)
+  and commit them with the change. `tools/dev/check-headers.sh` (CMake target `check-headers` of the native preset,
+  not in ALL) exports and compares: exit 0 current, 1 stale (unified diff printed, also in `<WorkUC2>/logs/hdr/`), 2
+  could not run. Both read the build's patched tree `build-*/Scripts/tree` by default (`--classes-root <dir>` for
+  another `<dir>/<Pkg>/Classes`; CMake: `-DUC2_HEADERS_CLASSES_ROOT=<dir>`) and take `--build <dir>`.
+  `docs/porting/analysis/headers.md`. A patched tree has only the packages the patches rebuild: the check compiles
+  those against the shipped ones (`uc-build.sh --headers`, into `build-*/Scripts/headers`) and compares their
+  generated headers, except what the shipped packages do not carry (each class's cpptext, and `struct native` blocks:
+  `UStruct::StructFlags` is not saved), which is taken from the committed header (`tools/dev/check-headers-cpptext.py`;
+  `regen-headers.sh` keeps them as committed); a changed or added member, function, event, enum or constant is caught.
+  With `-DUC2_SCRIPT_PATCHES=OFF` there is no patched tree: the target says so and fails unless a root is given.
+- A run tree takes the build's packages (`tools/dev/mkrun-uc2.sh build-native <tree>`). The script patcher leaves
+  rebuilt packages alone (it patches only the first-generation shipped files it was made for) and logs
+  `ScriptPatcher: <Pkg> ... patch not applied`; the packages that were not rebuilt are the shipped ones and are patched.
+- `tools/dev/m14-scripts-check.sh`: the game checks (verifyclasses, the patcher, menu, a match, controls, audio,
+  effects, the 58-map census, movies, network) on the build's packages (`build-native/Scripts/System`; `M14_SCRIPTS=<dir>`
+  for another folder), PASS/FAIL lines.
 - `make` exits 1 when there was any warning (Epic's `ucc`); the verdict is the log's last line,
-  `Success - 0 error(s), N warning(s)`. Memory: well under 3G; 10 s per full build.
+  `Success - 0 error(s), N warning(s)`. Memory: well under 3G.
+- **Dev machine only: `tools/dev/script-build.sh`**, the M14 proof tool. It rebuilds all 17 packages from Epic's leaked
+  script text (`<WorkUC2>/epic-sources/<Pkg>/Classes`, read-only; `$UC2_EPIC_SOURCES`, or `--classes-root <dir>`) the
+  way Epic's build machine did (`Source/BuildProcess/sync_avaris.pl`: `ucc make -nobind -noh` with the Xbox inis, then
+  `ucc editor.stripsource` with the PC inis, conforming each package to the shipped one) and compares the result with
+  the shipped packages object by object (`tools/dev/script-diff.py`; every difference is explained in
+  `docs/porting/analysis/scripts.md`). Output `<WorkUC2>/run/m14-make/System/*.u` (`--tree`), logs in
+  `<WorkUC2>/logs/m14/`; `--build build-windows` does the same with `ucc.exe` under wine (S2); `--headers` exports the
+  headers into the tree's own `<Pkg>/Inc` and diffs them with `Source/*/Inc` (which carry our patches: expect those
+  differences). It is never a build input, and it needs no file of this repository's but the tools.
 
 ## Script patches (T3): the patched script packages, built by default
 
@@ -254,8 +254,13 @@ which (`UC2_SCRIPTS=<dir>` takes them from another folder, `UC2_SCRIPTS=none` ke
 - Every error stops the **configure** with what to do: no game folder, a rebuilt package in it (named, with its
   sha256 and the shipped one), an unknown set or a missing dependency, no Python/bash, no host packages.
 - `cmake --build build-native --target scripts-proof`: the bytecode proofs of the pipeline
-  (`tools/scripts/uc-patches-proof.sh`: P1 base + `epic-fixes` = shipped + load-time patcher, P2 = the reference build,
-  P3 determinism; minutes; P2 needs `<WorkUC2>/run/t1-ref`, P1's Engine part Epic's texture sources). Not in ALL.
+  (`tools/scripts/uc-patches-proof.sh`: P1 base + `epic-fixes` = shipped + load-time patcher, P2 the packages of
+  `patches/reference.sha256` (sha256 and size of what the default build makes; regenerate with `uc-patches-proof.sh p2
+  --write-reference` when a set changes on purpose), P3 determinism; minutes; P1's Engine part needs Epic's texture
+  sources, dev machine only, else it leaves Engine out). Not in ALL. `sha256sum -c ../../../patches/reference.sha256` in
+  `build-native/Scripts/System` checks a default build by hand.
+- Changing a script = changing its patch set: `patches/README.md`, "Changing a script" (`tools/dev/uc-patches-regen.sh
+  edit|make <set>`).
 - `check-headers` (below) defaults to the build's patched tree.
 - Windows host (MSYS2 `mingw32` shell, not run yet): the same commands with `cmake --preset windows
   -DUC2_ASSETS_DIR=C:/path/to/UC2`; `uc-build.sh` runs `ucc.exe` under MSYS2's bash, and links the content folders into

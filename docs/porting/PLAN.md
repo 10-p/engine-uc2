@@ -336,6 +336,8 @@ hunk, a one-line change a one-line hunk), new classes whole files; UCMenu, which
 text as base; history is REWRITTEN once the `.uc` leave the repo (force push of the private repo). Order: S1/S2
 spikes (done), T1 pipeline + proofs (done, a9743b4), T2 generated headers from the exporter (done, baa11b2), T3 CMake
 rules + web overlay (running), then the asset tree back to shipped packages, `.uc` removal, history rewrite.
+T4 `.uc` removal (2026-10-11): done on branch `t4-remove` (no `Source/*/Classes`, no `.ucproject`; tools, proofs and docs
+work without them; P2 is the regression reference `patches/reference.sha256`; `docs/porting/analysis/scripts-removed.md`).
 
 **After that, in this order (owner: "make sure you finish it before you begin with the rest"):**
 

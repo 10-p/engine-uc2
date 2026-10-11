@@ -8,6 +8,9 @@ Rules (see docs/SOURCE-LAYOUT.md):
   * only text files are imported; binaries (import textures, icons, prebuilt libs, tools) stay in epic-sources
   * code files get CRLF -> LF, bytes otherwise untouched (the sources are Latin-1, some .uc carry 0x02 bytes)
   * Windows-native project files (.vcproj/.sln/.bat/.rc/...) are copied byte for byte
+  * no UnrealScript: the packages' Classes/ folders (.uc, .huc, .upkg) and Epic's .ucproject files are game
+    content and stay in epic-sources (owner, 2026-10-11; T4, docs/porting/analysis/scripts-removed.md). The first
+    import carried them; the history rewrite of T4 removed them from every commit, this script now skips them
 The script refuses to overwrite: it is the record of how the first commit was made, not a sync tool.
 """
 import os
@@ -37,7 +40,7 @@ RAW_EXT = {".vcproj", ".sln", ".ucproject", ".upkg", ".rc", ".rc2", ".def", ".id
            ".dsm", ".dsp", ".dsw", ".inx", ".inf", ".rdf", ".xap", ".ini", ".int"}
 LF_NAMES = {"makefile", "fixit"}
 
-stats = {"lf": 0, "raw": 0, "skipped": 0}
+stats = {"lf": 0, "raw": 0, "skipped": 0, "scripts": 0}
 skipped_ext = {}
 
 
@@ -64,11 +67,17 @@ def copy(src, dst, mode):
     stats[mode] += 1
 
 
-def import_tree(src_root, dst_root):
+def import_tree(src_root, dst_root, scripts=True):
     for cur, dirs, files in os.walk(src_root):
         dirs.sort()
+        if not scripts and cur == src_root and "Classes" in dirs:
+            dirs.remove("Classes")
+            stats["scripts"] += 1
         for name in sorted(files):
             src = os.path.join(cur, name)
+            if not scripts and name.lower().endswith(".ucproject"):
+                stats["scripts"] += 1
+                continue
             mode = classify(name)
             if mode is None:
                 stats["skipped"] += 1
@@ -79,7 +88,7 @@ def import_tree(src_root, dst_root):
 
 
 for d in SOURCE_DIRS:
-    import_tree(os.path.join(EPIC, d), os.path.join(REPO, "Source", d))
+    import_tree(os.path.join(EPIC, d), os.path.join(REPO, "Source", d), scripts=False)
 for f in SOURCE_ROOT_FILES:
     copy(os.path.join(EPIC, f), os.path.join(REPO, "Source", f), classify(f) or "raw")
 for src, dst in THIRDPARTY_DIRS.items():
@@ -89,5 +98,6 @@ for f in CONFIG_FILES:
 for f in EPIC_DOCS:
     copy(os.path.join(EPIC, f), os.path.join(REPO, "docs", "epic", f.replace("/", "-")), "lf")
 
-print(f"imported: {stats['lf']} LF-normalised, {stats['raw']} byte-for-byte; skipped {stats['skipped']} binary files")
+print(f"imported: {stats['lf']} LF-normalised, {stats['raw']} byte-for-byte; skipped {stats['skipped']} binary files"
+      f" and {stats['scripts']} script folders/.ucproject files")
 print("skipped by extension:", ", ".join(f"{k}:{v}" for k, v in sorted(skipped_ext.items(), key=lambda kv: -kv[1])))

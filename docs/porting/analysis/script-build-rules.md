@@ -1,5 +1,9 @@
 # T3 notebook: the build rules of the script patch pipeline
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 Task T3 of the UC2 port: "build the engine" also builds the patched script packages (T1's pipeline,
 `script-patches.md`) on the host preset, the other presets consume them, the web artifact carries them. Worktree
 `engine-uc2-t3-cmake`, branch `t3-cmake` (main a9743b4 = T1 + T2). Frontend half: `ufrontend-scripts`, branch

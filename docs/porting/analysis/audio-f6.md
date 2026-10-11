@@ -1,5 +1,9 @@
 # Audio F-6 (2026-10-09): the 19 waves from the `.xwb`, `A_Vehicle`, cue tables inside the Ogg (spike), HRTF
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 Branch `f6-audio` (worktree `engine-uc2-f6-audio`, base `1372dec`). Run trees `run/f6*`, logs `logs/f6/`, cook
 output `logs/f6/cooked` (the coordinator installs it into `assets/uc2-cooked` after review). Brief: PLAN.md "Owner
 review of 2026-10-09", F-6. Owner's words: "19 wave entries have no source WAV. We can convert them from the xwb

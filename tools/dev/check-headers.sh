@@ -4,7 +4,9 @@
 # This checks that they are up to date with the script sources: it compiles the scripts in a scratch run tree,
 # exports the headers there and compares each with the committed one, byte for byte (the exporter writes CRLF, the
 # repo keeps LF: CRs are dropped first). Generated = <Pkg>/Inc/<Pkg>Classes.h (IpDrv's GameSpyClasses.h is
-# hand-written). T2, docs/porting/analysis/headers.md.
+# hand-written). T2, docs/porting/analysis/headers.md. The repository holds no script sources (T4,
+# docs/porting/analysis/scripts-removed.md): the scripts are the build's patched tree; Source/ is only where the
+# headers are committed.
 #
 #   tools/dev/check-headers.sh [options]      exit 0 when every header is current, 1 when stale (diff printed),
 #                                             2 when the check could not run (no ucc-bin with Editor, make failed)
@@ -12,26 +14,31 @@
 #                                             Source/<Pkg>/Inc/<Pkg>Classes.h (= check-headers.sh --write)
 #     --build <dir>          build directory with Source/UCC/ucc-bin linked with the Editor package (the native
 #                            32-bit preset; default build-native)
-#     --classes-root <dir>   the script sources: <dir>/<Pkg>/Classes (default <repo>/Source); the sources the build
-#                            uses, wherever they are generated. T3: a PATCHED tree (the build's Scripts/tree: only the
-#                            packages the patch sets rebuild, decompiled from the shipped .u + patches/; no Engine/)
-#                            is checked package by package: tools/scripts/uc-build.sh --headers compiles those packages
-#                            against the shipped ones and exports their headers; only those packages' generated headers
-#                            are compared (the others come from shipped packages nothing here changes), and a class's
-#                            cpptext is not compared (the shipped packages do not carry it: the decompiled class has
-#                            `// stripped from the shipped package` there; the committed header keeps the real one)
+#     --classes-root <dir>   the script sources: <dir>/<Pkg>/Classes (default <build>/Scripts/tree, the build's
+#                            patched tree, made by its `scripts` target). T3: a PATCHED tree (only the packages the
+#                            patch sets rebuild, decompiled from the shipped .u + patches/; no Engine/) is checked
+#                            package by package: tools/scripts/uc-build.sh --headers compiles those packages against
+#                            the shipped ones and exports their headers; only those packages' generated headers are
+#                            compared (the others come from shipped packages nothing here changes), and a class's
+#                            cpptext and `struct native` blocks are not compared (the shipped packages do not carry
+#                            them; tools/dev/check-headers-cpptext.py takes the committed header's). A FULL tree (all
+#                            17 packages, e.g. Epic's leaked text on the dev machine, <WorkUC2>/epic-sources) is
+#                            compiled whole with tools/dev/script-build.sh (dev only; its headers lack our patches)
 #     --tree <name>          scratch run tree under <WorkUC2>/run (default hdr-<this checkout's directory name>)
 #     --logs <dir>           logs (default <WorkUC2>/logs/hdr)
-#     --write                copy the exported headers into Source/ (what regen-headers.sh does)
+#     --write                write the exported headers into Source/<Pkg>/Inc (what regen-headers.sh does). On a
+#                            patched tree: the committed header with the export's changes (check-headers-cpptext.py
+#                            --merge: its cpptext and native structs stay as committed)
 #
-# Runs through tools/dev/script-build.sh (assemble + make; `ucc-bin make` inside bin/capped, 3G). About 30 s.
-# Needs the asset tree (UC2_ASSETS_DIR) and the shipped packages (UC2_SHIPPED_SYSTEM), like script-build.sh.
+# `ucc-bin make` runs inside bin/capped (3G): uc-build.sh on a patched tree (about 15 s), script-build.sh on a full one
+# (about 30 s). A patched tree takes the shipped packages and the game folder from <build>/Scripts/build-info.txt
+# (UC2_SHIPPED_SYSTEM / UC2_ASSETS_DIR override); a full tree needs them like script-build.sh.
 set -uo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 build=build-native
-classes_root=$repo/Source
+classes_root=""
 tree=hdr-$(basename "$repo")
 logs=$work/logs/hdr
 write=0
@@ -50,6 +57,10 @@ case "$tree" in hdr*) ;; *) echo "tree name must start with hdr: $tree" >&2; exi
 if [ ! -x "$build/Source/UCC/ucc-bin" ] || [ ! -d "$build/Source/Editor" ]; then
   echo "check-headers: no $build/Source/UCC/ucc-bin with the Editor package (build the native preset first)" >&2
   exit 2
+fi
+if [ -z "$classes_root" ]; then
+  classes_root=$build/Scripts/tree
+  [ -d "$classes_root" ] || { echo "check-headers: no patched script tree at $classes_root: build the scripts first (cmake --build $build --target scripts; configured with UC2_SCRIPT_PATCHES ON), or pass --classes-root <dir> (<dir>/<Pkg>/Classes)" >&2; exit 2; }
 fi
 [ -d "$classes_root" ] || { echo "check-headers: no script sources at $classes_root" >&2; exit 2; }
 classes_root=$(cd "$classes_root" && pwd)
@@ -84,10 +95,23 @@ if [ ! -d "$classes_root/Engine/Classes" ]; then
     src=$repo/Source/$p/Inc/${p}Classes.h
     f=$out/$p/Inc/${p}Classes.h
     if [ ! -f "$f" ]; then
-      [ -f "$src" ] && { echo "  $p/Inc/${p}Classes.h: STALE (committed, but the exporter writes no such header)"; stale=1; }
+      if [ -f "$src" ]; then
+        if [ $write -eq 1 ]; then echo "  $p/Inc/${p}Classes.h: not exported any more (left in place: delete it by hand if the package has no exported class)"
+        else echo "  $p/Inc/${p}Classes.h: STALE (committed, but the exporter writes no such header)"; stale=1; fi
+      fi
       continue
     fi
     n=$((n+1))
+    if [ $write -eq 1 ]; then
+      if [ ! -f "$src" ]; then
+        mkdir -p "$(dirname "$src")"; tr -d '\r' < "$f" > "$src"; echo "  $p/Inc/${p}Classes.h: written (new)"
+      elif python3 "$repo/tools/dev/check-headers-cpptext.py" --merge "$src" "$f" "$src.tmp" && ! cmp -s "$src.tmp" "$src"; then
+        mv -f "$src.tmp" "$src"; echo "  $p/Inc/${p}Classes.h: written (cpptext and native structs kept from the committed header)"
+      else
+        [ -f "$src.tmp" ] && { rm -f "$src.tmp"; echo "  $p/Inc/${p}Classes.h: unchanged"; } || { echo "  $p/Inc/${p}Classes.h: merge FAILED" >&2; stale=1; }
+      fi
+      continue
+    fi
     [ -f "$src" ] || { echo "  $p/Inc/${p}Classes.h: STALE (exported, but there is no Source/$p/Inc/${p}Classes.h)"; stale=1; continue; }
     # (cpptext: the shipped packages do not have it; the comparison takes the committed header's there)
     if python3 "$repo/tools/dev/check-headers-cpptext.py" "$src" "$f" "$p/Inc/${p}Classes.h" >> "$report"; then
@@ -96,10 +120,16 @@ if [ ! -d "$classes_root/Engine/Classes" ]; then
       echo "  $p/Inc/${p}Classes.h: STALE"; stale=1
     fi
   done
+  if [ $write -eq 1 ]; then
+    [ $stale -eq 0 ] || exit 1
+    echo "regen-headers: $n headers exported from $classes_root (patched packages $pk); review with git diff -- 'Source/*/Inc/*Classes.h'"
+    exit 0
+  fi
   if [ $stale -ne 0 ]; then
     [ -s "$report" ] && cat "$report"
     echo "check-headers: STALE generated headers (diff above, also $report)."
-    echo "  The headers follow the patched scripts: regenerate the changed declarations into Source/<Pkg>/Inc and commit them with the patch."
+    echo "  The headers follow the patched scripts: tools/dev/regen-headers.sh --build $build --classes-root $classes_root"
+    echo "  writes them into Source/<Pkg>/Inc; commit them with the patch."
     exit 1
   fi
   [ $n -gt 0 ] || { echo "check-headers: the patched packages ($pk) export no generated header"; exit 0; }
@@ -175,8 +205,7 @@ fi
 if [ $stale -ne 0 ]; then
   [ -s "$report" ] && cat "$report"
   echo "check-headers: STALE generated headers (diff above, also $report)."
-  hint=""; [ "$classes_root" != "$repo/Source" ] && hint=" --classes-root $classes_root"
-  echo "  Regenerate with tools/dev/regen-headers.sh$hint and commit the result with the script change."
+  echo "  Regenerate with tools/dev/regen-headers.sh --classes-root $classes_root and commit the result with the script change."
   exit 1
 fi
 echo "check-headers: all $n generated headers are current (scripts: $classes_root)"

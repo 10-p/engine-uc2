@@ -1,5 +1,9 @@
 # D-3 / D-4 / D-5 notebook: profiles that come back, the player name, text entry
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 Running notebook of the `d3-profiles` branch (worktree `../engine-uc2-d3`), started 2026-10-07 from main's tip
 `421cb95`. Brief: PLAN.md "Owner review of 2026-10-06", Phase D, tasks D-3 (saving), D-4 (player name vs profile
 name), D-5 (text entry). Builds on C-1/C-2 (`analysis/web-ini-saves.md`) and M10 (`analysis/controls.md`).

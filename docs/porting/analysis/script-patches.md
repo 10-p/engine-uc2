@@ -1,5 +1,9 @@
 # T1 notebook: the script patch pipeline (decompiled base, patch sets, build, proofs)
 
+> 2026-10-11 (T4): the script sources this notebook refers to (`Source/<Pkg>/Classes`, `.ucproject`) left the
+> repository; Epic's text is `<WorkUC2>/epic-sources/<Pkg>/Classes` (dev machine only), the build's base is the
+> decompiled `build-*/Scripts/base`, our changes are `patches/` (`scripts-removed.md`).
+
 Task T1 of the UC2 port. Owner's decision (2026-10-10): every `.uc` leaves the repo (UnrealScript is content); our
 script changes become unified-diff patch sets against the DECOMPILED form of the shipped `.u`, so a user with only
 the retail disc can build them; Epic's 30 load-time ScriptPatches are also a patch set (`epic-fixes`) and the
