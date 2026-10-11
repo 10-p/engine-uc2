@@ -383,3 +383,38 @@ x1 1.00, x2 0.92, mean +0.049; blur-v 1.00 / 0.83 / +0.050; blur-box 0.50 / 0.50
 Pictures for the owner (`logs/h1/h1-final-2560-blue.png`, `h1-final-2560-lamp.png`: today, scale 2, and each glow
 times 8 / 4; the run of each scale whose faint area is the median of its three). **Seen**: the same size; the band
 outlines round instead of 24-px polygons.
+
+2248x1212 (one run per scale, standard view, `logs/h1/h1-radii-2248x1212.txt`): lamp 95.3 / 40.4 / 63.8 -> 92.9 / 39.9 /
+63.2, blue 20.4 / 29.6 / 53.5 -> 19.0 / 30.2 / 56.4: radii within 3 px, the peaks now 1.4-2.4 levels LOWER at scale 2
+(the 890x480 reference picture puts the lights elsewhere on the grid): the same position lottery as above, with
+the other sign. Sheets `logs/h1/h1-final-2248-{blue,lamp}.png`.
+
+## P2-4. Regression (2026-10-11)
+
+- Scale 1 against main's build, m7-effects pairs (`m7-effects.sh h1main ...`, its B pictures installed as the refs
+  of `m7-effects.sh h1 ...`, llvmpipe): B vs accepted mean bloom 0.526, dof-alpha 0.128, azure 0.275, octane 0.144
+  (two runs of one binary differ by up to about 2: m11-twin.sh's note); critical 0, GL errors 0, programs failed 0.
+- Scale 1 against main's build on the GPU, 16 grid positions: within 0.1 (P2-3).
+- `m11-twin.sh` (own trees `run/h1m11`, `run/h1m11t`, serial, load 12-22): 32 PASS, 2 FAIL: `effect-blur` (B desktop
+  vs twin mean 6.467 > 6) and the `effects` line that counts it. That is the concussion blur (UUCScreenBlur: offset
+  reads of the snapshot, no FilterCopyRenderTarget), the time-dependent picture that failed the same way before
+  this branch (decay-flash.md, render-f5.md: 6.137, 6.416 at load ~20). Self-test 15/15 on both bindings (the twin's
+  TapScale-2 lines: blur-h 0.92 / +0.049, blur-v 0.83 / +0.050, blur-box 0.50 / +0.020: the fill variant compiles
+  and is exact through GL4ES' ES 3 back end too), progtest 485/485 identical, es2 and fallbacks PASS.
+- `sync-web-ini.py --check`: up to date.
+
+## P2-5. What changed (final)
+
+- The key: `[UC2GLDrv.UC2GLRenderDevice] PostProcessTargetScale` (and `[UC2GL4ESDrv.UC2GL4ESRenderDevice]`, which
+  reads its own section with the same property: the class inherits the config property), a normal config property
+  (`UIntProperty`, CPF_Config), compiled default 1, written as 1 in `Engine/Config/Default.ini` and the web ini;
+  1, 2, 4 (3 counts as 2, above 4 as 4); logged at start ("post-process target scale ..."); changeable while running
+  with `set UC2GLRenderDevice PostProcessTargetScale <n>` (the scenarios do that). Documented in
+  `Engine/Config/README.md`.
+- Removed: the test keys `PostProcessScale` / `PostProcessSmooth`, the console commands `PPSCALE` / `PPSMOOTH`, the
+  bicubic composite (`UC2GLFFProgram.cpp` back to main's), the fill scratch targets, `tools/dev/h1/proto.scen`.
+- Kept from the prototype: target sizes x scale in the three effects, TapScale through FilterCopyRenderTarget.
+- New: the shader-side fill (UC2_BLUR_FILL_* flags, PS_Blur's fill variant), the self-test's TapScale-2 lines,
+  pp-sizes with the scale, `tools/dev/h1-radii.sh`, `tools/dev/h1-phase.sh`, `h1-measure.py check|sheet`.
+- Known limit, unchanged: at scale 4 the emissive select and the DOF's first pass (back-buffer passes, taps in
+  reference pixels) read the reference copy 1:1, so each of their taps covers one reference pixel instead of 2x2.
