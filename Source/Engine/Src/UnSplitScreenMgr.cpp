@@ -534,7 +534,13 @@ APlayerController* USplitScreenMgr::CreateSplitPlayer( UViewport* Viewport, INT 
 		UGameStartInfoBase* GSI = UGameStartInfoBase::GetGameStart();
 		check(GSI);
 
-		FString PlayerStr = GSI->eventGetSpawnURL(ActiveSplitViews.Num() ? 1 : 0, Viewport->Profile);
+		// uc2 port (X-1): the split player's own index (its place in ActiveSplitViews, the GUI's child viewport
+		// order). Epic passed 1 to every split player, so a third and a fourth player took the second one's name and
+		// URL options; for one or two players this is 1, as before.
+		INT PlayerIndex = ActiveSplitViews.FindItemIndex( Viewport );
+		if( PlayerIndex == INDEX_NONE )
+			PlayerIndex = ActiveSplitViews.Num() ? 1 : 0;
+		FString PlayerStr = GSI->eventGetSpawnURL(PlayerIndex, Viewport->Profile);
 		URL = FURL( &Viewport->PlayerURL, *PlayerStr, TRAVEL_Partial );		
 	}
 
@@ -544,7 +550,10 @@ APlayerController* USplitScreenMgr::CreateSplitPlayer( UViewport* Viewport, INT 
 	if( LevelInfo && 
 		(LevelInfo->NetMode == NM_Standalone || LevelInfo->NetMode == NM_ListenServer ) )
 	{
-		if( NumActiveSplitViews() >= MaxSplitScreens )
+		// uc2 port (X-1): the limit is for a viewport to be created. A viewport passed in already is one of the split
+		// views (MatchSplitViewportsToActors after a travel); with four of them (= MaxSplitScreens) Epic's check
+		// refused every one and players two to four never spawned. Never reached on the Xbox (two players).
+		if( !Viewport && NumActiveSplitViews() >= MaxSplitScreens )
 		{
 			debugf( NAME_DevSplitScreen, TEXT("Too many splitscreens.") );
 		}

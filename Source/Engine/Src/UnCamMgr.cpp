@@ -307,11 +307,32 @@ UBOOL UClient::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 			{
 				USplitScreenMgr* SplitScreenMgr = GetSplitScreenMgr();
 				check(SplitScreenMgr);
+				// X-1: SPLIT REMOVE ID=<pad> removes the split player of that pad (a player three or four leaving
+				// the character page, patch set players34; never player one's view); without ID the last one, as Epic's.
+				INT RemoveID = -1;
+				if( Parse( Cmd, TEXT("ID="), RemoveID ) )
+				{
+					UViewport* RemoveView = NULL;
+					for( INT i=1; i<SplitScreenMgr->NumActiveSplitViews() && !RemoveView; i++ )
+						if( SplitScreenMgr->GetSplitView(i) && SplitScreenMgr->GetSplitView(i)->GamepadID == RemoveID )
+							RemoveView = SplitScreenMgr->GetSplitView(i);
+					debugf( NAME_DevSplitScreen, TEXT("Split screen: removing the player of pad %i: %s"), RemoveID, RemoveView ? RemoveView->GetName() : TEXT("no such split view") );
+					// removed as Epic's REMOVE removes the last one (no ClearQueriesForViewport: on a split view of
+					// the menus, never drawn, it found another viewport's queries and crashed, measured in X-1)
+					if( RemoveView )
+					{
+						SplitScreenMgr->RemoveSplitViewport( RemoveView );
+						SplitScreenMgr->RefreshPlayerHUDs();
+					}
+				}
+				else
+				{
 				debugf( NAME_DevSplitScreen, TEXT("TEST: Removing splitscreen") );
 				if( SplitScreenMgr->NumActiveSplitViews() )
 				{
 					SplitScreenMgr->RemoveSplitViewport( SplitScreenMgr->GetSplitView( SplitScreenMgr->NumActiveSplitViews()-1 ) );
 					SplitScreenMgr->RefreshPlayerHUDs();
+				}
 				}
 			}
 			else
