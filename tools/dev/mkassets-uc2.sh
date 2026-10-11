@@ -60,24 +60,18 @@ link_cooked Sounds
 link_cooked Music
 link_cooked Movies
 link_cooked Textures/Movies
-# v2 (2026-10-07): script packages rebuilt from source (M14, tools/dev/script-build.sh) replace the shipped ones
-# where a change needs them; today only GUI.u (D-4: without a profile the player keeps the launcher's name;
-# bUnlockCharacters/bShowAllMuts config again). The rebuilt files are kept in assets/uc2-scripts/System (copied
-# there from a script-build tree by the coordinator; D-6 adds UCGameplay.u, a SERVER package: every peer must run it), the shipped ones are put aside in assets/uc2-shipped/System
-# (never deleted), and SCRIPTS.txt in the tree says which packages are rebuilt. GUI is not a server package, so
-# shipped and rebuilt peers still play together; Core.u (the frontend's fingerprint) stays the shipped file.
+# v3 (2026-10-11, T3/T4): the canonical tree holds the 17 SHIPPED script packages and nothing else; the patched
+# packages are built by the engine (build-<preset>/Scripts/System, patches/README.md) and reach a run tree through
+# tools/dev/mkrun-uc2.sh and the web through the artifact's scripts/ overlay. The v2 overlay (rebuilt copies in
+# assets/uc2-scripts/System + SCRIPTS.txt) is retired: it stays reachable only with an explicit
+# UC2_REBUILT_PACKAGES="GUI ..." for an experiment, and never by default.
 rebuilt_dir=${UC2_REBUILT_SCRIPTS:-$here/../assets/uc2-scripts/System}
-# D-9 adds UCMenu.u (the KEYBOARD / MOUSE settings page; not a server package). A package missing from rebuilt_dir
-# keeps the shipped file (the note below), so the list may run ahead of the copies.
-rebuilt_pkgs=${UC2_REBUILT_PACKAGES-GUI UCGameplay UCMenu}
-shipped_dir=$here/../assets/uc2-shipped/System
-: > "$dst/System/SCRIPTS.txt"
+rebuilt_pkgs=${UC2_REBUILT_PACKAGES-}
+rm -f "$dst/System/SCRIPTS.txt"
 for pkg in $rebuilt_pkgs; do
   if [ -f "$rebuilt_dir/$pkg.u" ]; then
-    mkdir -p "$shipped_dir"
-    cp --update=none --preserve=timestamps "$src/System/$pkg.u" "$shipped_dir/$pkg.u"
     cp -f --preserve=timestamps "$rebuilt_dir/$pkg.u" "$dst/System/$pkg.u"
-    echo "$pkg.u rebuilt from source ($(sha256sum "$rebuilt_dir/$pkg.u" | cut -c1-16)); shipped copy in assets/uc2-shipped/System" >> "$dst/System/SCRIPTS.txt"
+    echo "$pkg.u rebuilt from source ($(sha256sum "$rebuilt_dir/$pkg.u" | cut -c1-16)): an EXPERIMENT (UC2_REBUILT_PACKAGES); the shipped file is in epic-sources/System" >> "$dst/System/SCRIPTS.txt"
   else
     echo "note: no rebuilt $pkg.u in $rebuilt_dir: the shipped one stays"
   fi
