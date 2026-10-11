@@ -4,6 +4,12 @@
   check-headers-cpptext.py <committed.h> <exported.h> <label>     exit 0 equal, 1 different (unified diff on stdout)
   check-headers-cpptext.py --count <committed.h> <exported.h>     what was taken over: "<cpptext> cpptext, <structs>
                                                                   native structs"
+  check-headers-cpptext.py --merge <committed.h> <exported.h> <out.h>
+                                                                  the committed header with the export's changes
+                                                                  (regen-headers on a patched tree, T4): every line
+                                                                  the comparison sees comes from the export, the
+                                                                  cpptext bodies and native struct blocks the export
+                                                                  cannot have stay the committed ones
 
 The patched tree is decompiled from the shipped packages, and two things the header exporter writes are not in them:
 - a class's cpptext (the C++ declarations it adds to its header; stripped before Epic shipped). The decompiler writes
@@ -14,7 +20,8 @@ The patched tree is decompiled from the shipped packages, and two things the hea
   exported header does not have at all is left out of the comparison.
 Everything else (class members, offsets, events, natives, enums, constants, the other structs, the registration
 tables) must be byte-identical. CRs are dropped (the exporter writes CRLF, the repo LF). A patch that changes a
-native struct or a cpptext is therefore NOT checked by this; tools/dev/check-headers.sh on full sources is.
+native struct or a cpptext is therefore NOT checked by this (nor written by --merge): such a change is made in the
+committed header by hand, with the patch (a full-source check needs Epic's leaked text: dev machine only).
 """
 import difflib
 import re
@@ -68,6 +75,33 @@ def struct_blocks(ls):
     return out
 
 
+def merge(a, b):
+    """The committed header a with the changes of the export b: a's lines where the comparison finds them equal,
+    b's where it does not; a's native struct blocks that b lacks stay in place. Returns the new lines."""
+    import difflib as _d
+    a2, b2, _, _ = take_over(a, b)
+    have = set(struct_blocks(b))
+    drop = [(s, e) for name, (s, e) in struct_blocks(a).items() if name not in have]
+    idx = [i for i in range(len(a)) if not any(s <= i < e for s, e in drop)]
+    assert len(idx) == len(a2)
+    out, pa = [], 0
+    for tag, i1, i2, j1, j2 in _d.SequenceMatcher(None, a2, b2, autojunk=False).get_opcodes():
+        if tag == 'equal':
+            out += a[pa:idx[i2 - 1] + 1]
+            pa = idx[i2 - 1] + 1
+            continue
+        if i2 > i1:     # replace / delete: a's dropped lines inside the range stay, before the new text
+            out += [a[k] for k in range(pa, idx[i2 - 1] + 1) if k not in idx[i1:i2]]
+            pa = idx[i2 - 1] + 1
+        else:           # insert before a2[i1]: a's dropped lines before it first
+            stop = idx[i1] if i1 < len(idx) else len(a)
+            out += a[pa:stop]
+            pa = stop
+        out += b2[j1:j2]
+    out += a[pa:]
+    return out
+
+
 def take_over(a, b):
     """(a without the native struct blocks b lacks, b with every stripped cpptext body replaced by a's body of the same
     class, how many cpptext bodies, how many struct blocks)."""
@@ -91,6 +125,19 @@ def take_over(a, b):
 
 def main():
     args = sys.argv[1:]
+    if args[:1] == ['--merge']:
+        if len(args) != 4:
+            sys.stderr.write(__doc__)
+            return 2
+        a, b = lines(args[1]), lines(args[2])
+        m = merge(a, b)
+        a2, b2, _, _ = take_over(m, b)
+        if a2 != b2:
+            sys.stderr.write('check-headers-cpptext: --merge of %s did not converge\n' % args[1])
+            return 1
+        with open(args[3], 'wb') as f:
+            f.write('\n'.join(m).encode('latin-1'))
+        return 0
     count = args[:1] == ['--count']
     if count:
         args = args[1:]

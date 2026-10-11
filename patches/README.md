@@ -66,14 +66,68 @@ UCMutators): the shipped files get the same fixes in memory. To rebuild them any
 Engine cannot be rebuilt completely from the disc: it contains editor icons imported from image files the disc
 does not have (see `docs/porting/analysis/script-patches.md`).
 
-## Changing a set (developers)
+## Changing a script: change its set (developers)
 
-Sets are generated, never edited by hand: `uc-patches.py make <set> --base <tree> --changed <tree>` writes the
-set's diffs from two trees. `tools/dev/uc-patches-regen.sh` regenerates all of them from a build of our sources,
-and `tools/scripts/uc-patches-proof.sh` proves that the sets compile to what they should (P1: base + `epic-fixes`
-equals the shipped packages plus Epic's in-memory patches; P2: base + all sets equals our reference build; P3:
-everything is deterministic). When `uc-decompile.py` changes, the base text changes: `uc-patches.py rebase`
-re-makes every set against the new base and the proof shows that the compiled result did not move.
+This repository holds no UnrealScript, not even ours: there is no source tree to edit (the sources left on
+2026-10-11, `docs/porting/analysis/scripts-removed.md`). **A change to the game's scripts is a change to a patch set**,
+made on the text the build decompiles from your own `.u` files. Sets are generated, never edited by hand: you edit
+classes in a scratch tree and `uc-patches.py make` writes the set's diffs. A set is a diff against the base **plus every
+set before it** in `sets.txt`, so you edit a tree of exactly that (not `Scripts/tree`, which has the later sets in it
+too). Example: one change to `UCPlayerInput` in the `mouse-look` set.
 
-Files are Latin-1 with LF line ends; some strings contain 0x02 bytes (button glyphs). The tools read and write
-bytes and the diffs carry those bytes unchanged.
+```
+cmake --preset native && cmake --build build-native -j4         # 1. build: Scripts/base (decompiled), Scripts/tree (patched)
+tools/dev/uc-patches-regen.sh edit mouse-look                   # 2. build-native/Scripts/edit-mouse-look/{before,edit}
+$EDITOR build-native/Scripts/edit-mouse-look/edit/UCGameplay/Classes/UCPlayerInput.uc
+                                                                # 3. edit (Latin-1, LF; a new file = a new class)
+tools/dev/uc-patches-regen.sh make mouse-look                   # 4. patches/mouse-look/ re-made; the default sets checked
+cmake --build build-native                                      # 5. compile -> build-native/Scripts/System/UCGameplay.u
+```
+
+Steps 2 and 4 are these commands (the script prints them as it runs them; `W` = `build-native/Scripts/edit-mouse-look`,
+the sets before `mouse-look` are `epic-fixes,epic-source`, `--packages` names the packages the base has so that a set's
+diffs of other packages, e.g. `epic-fixes`' `Engine.diff`, are kept):
+
+```
+tools/scripts/uc-patches.py apply --base build-native/Scripts/base --sets epic-fixes,epic-source --out $W/before
+tools/scripts/uc-patches.py apply --base build-native/Scripts/base --sets epic-fixes,epic-source,mouse-look --out $W/edit
+tools/scripts/uc-patches.py make mouse-look --base $W/before --changed $W/edit --packages GUI,UCAnnouncements,UCGameplay,UCMenu
+tools/scripts/uc-patches.py check --base build-native/Scripts/base --default
+```
+
+Then:
+
+6. **See it.** Before step 5, keep the previous build: `cp -a build-native/Scripts/work /tmp/prev` (its `System/` has
+   all 17 packages, beside links to the content folders, which the comparison loads). After step 5:
+   `tools/scripts/uc-patches.py compare build-native/Scripts/System/UCGameplay.u /tmp/prev/System/UCGameplay.u
+   --system-a build-native/Scripts/work/System --system-b /tmp/prev/System` lists every function, state and default
+   that differs (`differences 0` when nothing moved). A package that only depends on the changed one can get new bytes
+   with `differences 0` (its classes record the CRC of the script text they depend on).
+7. **Headers.** A change to a native class's declarations (variables, functions, events of a class with a C++ side)
+   changes its generated header: `cmake --build build-native --target check-headers` says STALE with the diff, and
+   `tools/dev/regen-headers.sh` writes `Source/<Pkg>/Inc/<Pkg>Classes.h` (a class's `cpptext` and `struct native`
+   blocks are not in the shipped packages: they stay as committed; change them by hand when the patch needs it).
+8. **Reference.** `patches/reference.sha256` holds the sha256 and size of each package the default build makes; the
+   proofs (`cmake --build build-native --target scripts-proof`, P2) fail until it is regenerated:
+   `tools/scripts/uc-patches-proof.sh p2 --write-reference`.
+9. **Commit** the set, the reference and any header together, and say in the set's `README.md` what changed.
+
+If a later set has a hunk on the lines you changed, step 4's check names it: re-make that set the same way
+(`uc-patches-regen.sh edit <later set>`: its trees are built on the set you just changed). Epic's leaked script text
+(`<WorkUC2>/epic-sources/<Pkg>/Classes`, on the development machine only, never a build input) is a reading aid: its
+comments and names are what the decompiler cannot recover.
+
+## The proofs
+
+`tools/scripts/uc-patches-proof.sh` (CMake target `scripts-proof`, not in ALL) proves that the sets compile to what
+they should. **P1**: base + `epic-fixes` equals the shipped packages plus Epic's in-memory patches, function by
+function. **P2**: base + the default sets gives exactly the packages of `reference.sha256` (a regression reference;
+until 2026-10-11 P2 compared with a build of the repo's own script sources, which are gone; on the development machine
+`--ref <WorkUC2>/run/t1-ref/System` still runs that bytecode comparison against T1's build of them). **P3**: decompile,
+apply and build are deterministic. When `uc-decompile.py` changes, the base text changes: `uc-patches-proof.sh rebase
+--old-decompiler <old uc-decompile.py>` re-makes every set against the new base and shows that the compiled result did
+not move.
+
+Files are Latin-1 with LF line ends; some strings contain 0x02 bytes (button glyphs), in the decompiled trees
+(`Scripts/base`, `Scripts/tree`) and possibly in a set: search them with `grep -a`. The tools read and write bytes and
+the diffs carry those bytes unchanged.

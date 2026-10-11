@@ -4,8 +4,13 @@
 #
 #   tools/scripts/uc-patches-proof.sh [p1] [p2] [p3] [options]     (no proof named: all three)
 #     --work <dir>   scratch tree (default <WorkUC2>/run/t1-proof); everything is written below it
-#     --ref <dir>    P2's reference: the System folder of a build of the leak's sources with our changes
-#                    (`tools/dev/script-build.sh --tree t1-ref`, default <WorkUC2>/run/t1-ref/System)
+#     --reference <file>  P2's regression reference (default patches/reference.sha256)
+#     --write-reference   P2 writes the reference from its build instead of checking it (after a set changed on
+#                    purpose: commit the new file with the patch)
+#     --ref <dir>    dev machine only: P2 also compares its build, bytecode by bytecode, with the System folder of
+#                    another build (T1's reference, <WorkUC2>/run/t1-ref/System: `tools/dev/script-build.sh --tree
+#                    t1-ref` of the leak's sources with our changes, before the sources left the repo; it matches
+#                    the sets as they were at 4cbe12f)
 #     --shipped <dir> the shipped .u (default <WorkUC2>/epic-sources/System); other options go to uc-build.sh
 #     --engine-textures <dir>  P1 only, dev only: Epic's Engine source folder (default <WorkUC2>/epic-sources/
 #                    Engine). Engine.u holds 68 textures that `#exec TEXTURE IMPORT` made from image files the disc
@@ -17,9 +22,13 @@
 #       every package the patch table touches: tools/dev/script-diff.py against the shipped files with the patch
 #       table, `problems 0` on each package line, and its patch table (every patched function's bytecode against
 #       the patcher's).
-#   P2  base + the default sets, compiled and stripped, == the reference build for the packages the default build
-#       rebuilds: uc-patches.py compare (bytecode of every function and state, every default, every declaration;
-#       names, imports and exports as sets).
+#   P2  regression: base + the default sets, compiled and stripped, gives exactly the packages of
+#       patches/reference.sha256 (sha256 and size of each package the default build rebuilds; the build is
+#       deterministic, P3). Until T4 (2026-10-11) P2 compared with a build of the repo's script sources (Epic's leaked
+#       text with our changes); those sources are gone, the patches are the only form of our changes, so the
+#       reference is the packages they produced when P2 last passed that comparison. With --ref <dir> the old
+#       comparison runs too: uc-patches.py compare (bytecode of every function and state, every default, every
+#       declaration; names, imports and exports as sets).
 #   P3  determinism: decompile twice (two Python hash seeds), apply twice, build twice: identical bytes.
 #
 #   tools/scripts/uc-patches-proof.sh rebase --old-decompiler <file> [--new-decompiler <file>] [--patches-out <dir>]
@@ -32,7 +41,9 @@ set -uo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 W=$work/run/t1-proof
-ref=$work/run/t1-ref/System
+ref=""
+reference=$repo/patches/reference.sha256
+write_ref=0
 shipped=$work/epic-sources/System
 content=$work/assets/uc2
 capped=$work/bin/capped
@@ -49,6 +60,8 @@ while [ $# -gt 0 ]; do
     --patches-out) pout=$2; shift 2;;
     --work) W=$2; shift 2;;
     --ref) ref=$2; shift 2;;
+    --reference) reference=$2; shift 2;;
+    --write-reference) write_ref=1; shift;;
     --engine-textures) engine_tex=$2; shift 2;;
     --shipped) shipped=$2; build_args+=(--shipped "$2"); shift 2;;
     --assets) content=$2; build_args+=(--assets "$2"); shift 2;;
@@ -134,15 +147,58 @@ EOP
     mapfile -t pk < <(up packages --default)
     mapfile -t dpk < <(up packages --default --compile-list "$shipped" | awk '{print $1}')
     list=$(IFS=,; echo "${pk[*]}")
-    echo "P2: packages ${list} (reference $ref)"
+    echo "P2: packages ${list} (reference $reference${ref:+; and the build $ref})"
     t base "$W/p2-base" "${dpk[@]}" > "$W/p2-decompile.txt" 2>&1 || { echo "FAIL P2: decompile"; fails=$((fails+1)); continue; }
     t up apply --base "$W/p2-base" --default --out "$W/p2-tree" || { echo "FAIL P2: apply"; fails=$((fails+1)); continue; }
     t build "$W/p2-tree" "$W/p2" "$list" > "$W/p2-build.txt" 2>&1 || { echo "FAIL P2: build (see $W/p2-build.txt)"; tail -5 "$W/p2-build.txt"; fails=$((fails+1)); continue; }
+    if [ $write_ref = 1 ]; then
+      {
+        echo "# patches/reference.sha256: the script packages the DEFAULT build makes (the sets marked on in sets.txt), from"
+        echo "# the shipped .u (shipped.sha256) and the retail disc's per-class inis (UC2_SCRIPT_RETAIL_INIS_DIR), with this"
+        echo "# repo's decompiler, patches and ucc. A regression reference (the build is deterministic): scripts-proof P2"
+        echo "# (tools/scripts/uc-patches-proof.sh p2) builds base + default sets and checks every package against it;"
+        echo "# \`sha256sum -c\` in build-native/Scripts/System checks a build by hand. When a set (or the decompiler, or"
+        echo "# the compiler) changes on purpose, regenerate it and commit it with the change:"
+        echo "#   tools/scripts/uc-patches-proof.sh p2 --write-reference      (patches/README.md, \"Changing a script\")"
+        for p in "${pk[@]}"; do
+          echo "# $p.u $(stat -c %s "$W/p2/System/$p.u") bytes"
+          (cd "$W/p2/System" && sha256sum "$p.u")
+        done
+      } > "$reference.tmp" && mv -f "$reference.tmp" "$reference"
+      echo "P2: wrote $reference ($(grep -c '^[0-9a-f]\{64\}  ' "$reference") packages)"
+    fi
     bad=0
+    declare -A rsha=() rsize=()
+    if [ -f "$reference" ]; then
+      while read -r a b c d; do
+        case "$a" in
+          '#') [ "$d" = bytes ] && rsize[$b]=$c;;
+          [0-9a-f]*) [ ${#a} = 64 ] && rsha[$b]=$a;;
+        esac
+      done < "$reference"
+    else
+      echo "  no $reference"; bad=1
+    fi
     for p in "${pk[@]}"; do
-      t up compare "$W/p2/System/$p.u" "$ref/$p.u" --report "$W/p2-compare-$p.txt" | head -12 || bad=1
+      f=$W/p2/System/$p.u
+      sha=$(sha256sum "$f" | awk '{print $1}'); size=$(stat -c %s "$f")
+      if [ "${rsha[$p.u]:-}" = "$sha" ] && [ "${rsize[$p.u]:-}" = "$size" ]; then
+        echo "  $p.u: $size bytes, sha256 $sha: as the reference"
+      else
+        echo "  $p.u: $size bytes, sha256 $sha: DIFFERENT (reference: ${rsize[$p.u]:-no} bytes, ${rsha[$p.u]:-no sha256})"; bad=1
+      fi
     done
-    if [ $bad = 0 ]; then echo "PASS P2: ${#pk[@]} packages equal to the reference build"; else echo "FAIL P2"; fails=$((fails+1)); fi
+    for k in "${!rsha[@]}"; do
+      case ",$list," in *",${k%.u},"*) ;; *) echo "  $k: in the reference, not built by the default sets"; bad=1;; esac
+    done
+    unset rsha rsize
+    if [ -n "$ref" ]; then
+      for p in "${pk[@]}"; do
+        t up compare "$W/p2/System/$p.u" "$ref/$p.u" --report "$W/p2-compare-$p.txt" | head -12 || bad=1
+      done
+    fi
+    if [ $bad = 0 ]; then echo "PASS P2: ${#pk[@]} packages equal to the reference ($(basename "$reference")${ref:+ and the build $ref})"
+    else echo "FAIL P2 (a set changed on purpose? regenerate: $0 p2 --write-reference)"; fails=$((fails+1)); fi
     ;;
   p3)
     CUR_SETS=$(up sets --default); WITH_EPIC=

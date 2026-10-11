@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# M14 S3: the game on script packages rebuilt from source (tools/dev/script-build.sh), headless and repeatable.
+# M14 S3: the game on rebuilt script packages, headless and repeatable. Since T4 (the repo holds no script sources)
+# the packages are by default the build's own (<build>/Scripts/System: the shipped .u decompiled, patches/ applied,
+# compiled); a full rebuild of Epic's leaked text (tools/dev/script-build.sh, dev only) still works through M14_SCRIPTS.
 # One PASS/FAIL line per check; the existing suites are reused, nothing is re-implemented here.
 #
 #   tools/dev/m14-scripts-check.sh                    every check
 #   tools/dev/m14-scripts-check.sh verify census      only these checks (names below)
 #
 # Environment (defaults in brackets):
-#   M14_SCRIPTS   directory with the rebuilt .u [<WorkUC2>/run/m14-make/System]
+#   M14_SCRIPTS   directory with the rebuilt .u [<repo>/<M14_BUILD>/Scripts/System]
 #   M14_TREE      run tree with them [m14-run]; M14_SHIP the same build with the shipped .u [m14-ship]
 #   M14_BUILD     build directory [build-native]
 #   M14_NO_MKRUN  1: use the trees as they are
@@ -19,7 +21,8 @@
 # Checks:
 #   verify    ucc-bin verifyclasses on the rebuilt packages: exit 0, all layouts match (Editor's included)
 #   patcher   the script patcher leaves every rebuilt package alone (one "patch not applied" line per package
-#             it loads) and still patches the shipped ones in the reference tree
+#             it loads), patches the tree's packages that were not rebuilt, and patches the shipped ones in the
+#             reference tree
 #   menu      the client boots to the menu (Menu level up for play, 0 Critical, 0 GL errors); screenshots of both
 #             trees in logs/<tree>/menu-*.png
 #   deadbolt  a DM-Deadbolt match: level up for play, Fire starts it, 0 Critical, 0 GL errors, both trees
@@ -40,10 +43,10 @@ work=$(cd "$repo/.." && pwd)
 capped=$work/bin/capped
 prefix=${M14_PREFIX:-m14}
 case "$prefix" in ""|*/*|*..*) echo "bad M14_PREFIX: $prefix" >&2; exit 2;; esac
-scripts=${M14_SCRIPTS:-$work/run/m14-make/System}
+build=${M14_BUILD:-build-native}
+scripts=${M14_SCRIPTS:-$repo/$build/Scripts/System}
 tree=${M14_TREE:-$prefix-run}
 ship=${M14_SHIP:-$prefix-ship}
-build=${M14_BUILD:-build-native}
 case "$tree" in "$prefix"*) ;; *) echo "M14_TREE must start with $prefix" >&2; exit 2;; esac
 case "$ship" in "$prefix"*) ;; *) echo "M14_SHIP must start with $prefix" >&2; exit 2;; esac
 out=${M14_OUT:-$work/logs/m14/check}
@@ -55,12 +58,15 @@ ssys=$work/run/$ship/System
 result() { echo "$1 $2: $3" | tee -a "$summary"; }
 crit() { local n; n=$(grep -a -c "^Critical:" "$1" 2>/dev/null); echo "${n:-0}"; }
 
-[ -f "$scripts/UCMenu.u" ] || { echo "no rebuilt packages in $scripts (tools/dev/script-build.sh)" >&2; exit 2; }
+# One rebuilt package names the others in the checks below (UCMenu.u in a default build or a full rebuild).
+probe=UCMenu.u
+[ -f "$scripts/$probe" ] || probe=$(cd "$scripts" 2>/dev/null && ls *.u 2>/dev/null | head -1)
+[ -n "$probe" ] && [ -f "$scripts/$probe" ] || { echo "no rebuilt packages in $scripts (build the scripts target, or M14_SCRIPTS=<dir>)" >&2; exit 2; }
 if [ "${M14_NO_MKRUN:-0}" != 1 ]; then
   UC2_SCRIPTS=$scripts "$repo/tools/dev/mkrun-uc2.sh" "$repo/$build" "$tree" > /dev/null 2>&1 || exit 2
   UC2_SCRIPTS=none "$repo/tools/dev/mkrun-uc2.sh" "$repo/$build" "$ship" > /dev/null 2>&1 || exit 2
 fi
-cmp -s "$sys/UCMenu.u" "$scripts/UCMenu.u" || { echo "$sys does not hold the rebuilt packages" >&2; exit 2; }
+cmp -s "$sys/$probe" "$scripts/$probe" || { echo "$sys does not hold the rebuilt packages" >&2; exit 2; }
 
 check_verify() {
   local rc
@@ -93,15 +99,21 @@ check_menu() {
 }
 
 check_patcher() {
-  local f=$work/logs/$tree/menu.out g=$work/logs/$ship/menu.out d=$work/logs/$tree/deadbolt.out na ap
+  local f=$work/logs/$tree/menu.out g=$work/logs/$ship/menu.out d=$work/logs/$tree/deadbolt.out na ap rp rebuilt bad=""
   [ -f "$f" ] || shot "$tree" menu 45 0 ''
   [ -f "$g" ] || shot "$ship" menu 45 0 ''
+  # The rebuilt packages (all 17 for a full rebuild, the patched ones for the build's): the patcher must leave
+  # those alone; a package of the tree that was not rebuilt is the shipped one and is patched as usual.
+  rebuilt=$(cd "$scripts" && ls *.u | sed 's/\.u$//' | tr '\n' ' ')
   na=$(cat "$f" "$d" 2>/dev/null | grep -a "^ScriptPatcher: .* patch not applied" | sed 's/^ScriptPatcher: \([A-Za-z]*\).*/\1/' | sort -u | tr '\n' ' ')
+  rp=$(cat "$f" "$d" 2>/dev/null | grep -a "^ScriptPatcher: [A-Za-z]* patched" | sed 's/^ScriptPatcher: \([A-Za-z]*\).*/\1/' | sort -u | tr '\n' ' ')
   ap=$(cat "$g" "$work/logs/$ship/deadbolt.out" 2>/dev/null | grep -a "^ScriptPatcher: [A-Za-z]* patched" | sed 's/^ScriptPatcher: \([A-Za-z]*\).*/\1/' | sort -u | tr '\n' ' ')
-  if [ -n "$na" ] && ! cat "$f" "$d" 2>/dev/null | grep -a -q "^ScriptPatcher: [A-Za-z]* patched" && [ -n "$ap" ]; then
-    result PASS patcher "rebuilt tree: not applied to $na(none patched); shipped tree: patched $ap"
+  for p in $na; do case " $rebuilt " in *" $p "*) ;; *) bad="$bad $p:not-applied-but-shipped";; esac; done
+  for p in $rp; do case " $rebuilt " in *" $p "*) bad="$bad $p:rebuilt-but-patched";; esac; done
+  if [ -n "$na" ] && [ -z "$bad" ] && [ -n "$ap" ]; then
+    result PASS patcher "rebuilt tree: not applied to $na(rebuilt), patched ${rp:-none }(shipped there); shipped tree: patched $ap"
   else
-    result FAIL patcher "rebuilt: not applied '$na'; shipped: patched '$ap'"
+    result FAIL patcher "rebuilt: not applied '$na', patched '$rp'${bad:+, wrong:$bad}; shipped: patched '$ap'"
   fi
 }
 
@@ -182,7 +194,7 @@ check_movies() {
   local rc
   ( cd "$repo" && UC2_SCRIPTS=$scripts python3 tools/dev/m9-movies.py --tree $prefix-movies ) > "$out/movies.txt" 2>&1; rc=$?
   local f p; f=$(grep -a -c "^FAIL" "$out/movies.txt"); p=$(grep -a -c "^PASS" "$out/movies.txt")
-  cmp -s "$work/run/$prefix-movies/System/UCMenu.u" "$scripts/UCMenu.u" || { result FAIL movies "the $prefix-movies tree does not hold the rebuilt packages"; return; }
+  cmp -s "$work/run/$prefix-movies/System/$probe" "$scripts/$probe" || { result FAIL movies "the $prefix-movies tree does not hold the rebuilt packages"; return; }
   [ $rc = 0 ] && [ "$f" = 0 ] && [ "$p" -gt 0 ] && result PASS movies "$p PASS, 0 FAIL (rebuilt packages); $out/movies.txt" \
     || result FAIL movies "exit $rc, $p PASS, $f FAIL; see $out/movies.txt"
 }
@@ -191,7 +203,7 @@ check_net() {
   local rc
   ( cd "$repo" && UC2_SCRIPTS=$scripts NET_TREE=$prefix-net NET_SOAK_MIN=2 NET_PORT=7860 tools/dev/net-test.sh dedicated2 travel ) > "$out/net.txt" 2>&1; rc=$?
   local f p; f=$(grep -a -c "^FAIL" "$out/net.txt"); p=$(grep -a -c "^PASS" "$out/net.txt")
-  cmp -s "$work/run/$prefix-net/System/UCMenu.u" "$scripts/UCMenu.u" || { result FAIL net "the $prefix-net tree does not hold the rebuilt packages"; return; }
+  cmp -s "$work/run/$prefix-net/System/$probe" "$scripts/$probe" || { result FAIL net "the $prefix-net tree does not hold the rebuilt packages"; return; }
   [ $rc = 0 ] && [ "$f" = 0 ] && result PASS net "$p PASS, 0 FAIL (dedicated2 travel, rebuilt packages); $work/logs/$prefix-net/net-summary.txt" \
     || result FAIL net "exit $rc, $p PASS, $f FAIL; see $out/net.txt"
 }

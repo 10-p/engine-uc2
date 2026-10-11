@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# Build every UnrealScript package from source with our ucc-bin (`ucc-bin make`), the way Epic's build machine
-# did (Source/BuildProcess/sync_avaris.pl), into a tree of its own; then (stage `compare`) compare the result
-# with the shipped packages. M14; docs/porting/analysis/scripts.md.
+# DEV-ONLY PROOF TOOL. Build every UnrealScript package from Epic's leaked script sources with our ucc-bin (`ucc-bin
+# make`), the way Epic's build machine did (Source/BuildProcess/sync_avaris.pl), into a tree of its own; then (stage
+# `compare`) compare the result with the shipped packages. M14; docs/porting/analysis/scripts.md.
+#
+# The repository holds no UnrealScript since 2026-10-11 (docs/porting/analysis/scripts-removed.md): the build makes the
+# patched packages from the player's shipped .u and patches/ (cmake/UC2Scripts.cmake, tools/scripts/). This tool is
+# what proved our compiler against Epic's leaked text (M14, S2) and it needs that text, which only the dev machine
+# has (<WorkUC2>/epic-sources/<Pkg>/Classes, read-only). It is never a build input.
 #
 #   tools/dev/script-build.sh [options] [stage...]
 #     stages: assemble make strip compare (default: all four, in that order)
@@ -19,18 +24,21 @@
 #                       prefix>; jit: logs/jit)
 #     --mem <size>      memory ceiling of the `ucc-bin make` run (default 3G; also under wine)
 #     --headers         also export the C++ headers (into <tree>/<Pkg>/Inc, a scratch copy, never Source/)
-#     --classes-root <dir>  where the script sources are: <dir>/<Pkg>/Classes (default <repo>/Source). T2: so a
-#                       build-generated script tree can be compiled (and its headers checked) instead of Source/
+#     --classes-root <dir>  where the script sources are: <dir>/<Pkg>/Classes for all 17 packages (source folder
+#                       names: Gameplay for GamePlay). Default: $UC2_EPIC_SOURCES (<WorkUC2>/epic-sources) when it
+#                       has Core/Classes, Epic's leaked text; otherwise this option is required. Any full tree
+#                       works (e.g. epic-sources with --classes overrides, or the T4 snapshot of the old Source/)
 #     --extra "<args>"  more `ucc-bin make` arguments
-#     --classes <Pkg>=<dir>  take <Pkg>'s classes from <dir> instead of Source/<Pkg>/Classes (repeatable; spike S1
-#                       uses it for decompiled text: docs/porting/analysis/decompile-spike.md)
+#     --classes <Pkg>=<dir>  take <Pkg>'s classes from <dir> instead of <classes root>/<Pkg>/Classes (repeatable;
+#                       spike S1 uses it for decompiled text: docs/porting/analysis/decompile-spike.md; e.g. the
+#                       build's patched Scripts/tree/UCGameplay/Classes on top of Epic's others)
 #
 # The tree: content folders hard-linked from the asset tree (never written), System/ a real copy of the asset
 # tree's with the 17 EditPackages .u removed (they are what gets built), GUIRes/ the shipped .u (UMakeCommandlet
 # conforms each new package against ../GUIRes/<Pkg>.u, as Epic's tree had it), and for each package
-# <Pkg>/Classes -> Source/<Pkg>/Classes (or --classes-root) and <Pkg>/<resource dir> -> epic-sources/<Pkg>/<resource dir> (the
-# #exec imports read textures and models from there; the repo holds text files only). The compile inis are
-# Epic's: Avaris.ini = DefaultXbox.ini, User.ini = DefUserXbox.ini (sync_avaris.pl copies them so).
+# <Pkg>/Classes -> <classes root>/<Pkg>/Classes and <Pkg>/<resource dir> -> epic-sources/<Pkg>/<resource dir> (the
+# #exec imports read textures and models from there), <Pkg>/Inc a copy of Source/<Pkg>/Inc (the exporter looks there).
+# The compile inis are Epic's: Avaris.ini = DefaultXbox.ini, User.ini = DefUserXbox.ini (sync_avaris.pl copies them so).
 # Nothing is written outside the tree and the logs directory.
 set -euo pipefail
 
@@ -49,7 +57,7 @@ mem=3G
 headers=0
 extra=""
 logs=""
-classes_root=$repo/Source
+classes_root=""
 stages=()
 declare -A classes_override=()
 while [ $# -gt 0 ]; do
@@ -67,6 +75,15 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ ${#stages[@]} -eq 0 ] && stages=(assemble make strip compare)
+if [ -z "$classes_root" ]; then
+  if [ -d "$epic/Core/Classes" ]; then
+    classes_root=$(cd "$epic" && pwd)
+  else
+    echo "script-build: no script sources: the repository holds none (docs/porting/analysis/scripts-removed.md) and" >&2
+    echo "  there is no $epic/Core/Classes (UC2_EPIC_SOURCES). Pass --classes-root <dir> (<dir>/<Pkg>/Classes)." >&2
+    exit 2
+  fi
+fi
 case "$tree" in m14*|d[0-9]*|f[0-9]*|g[0-9]*|s[0-9]*|t[0-9]*|hdr*|jit*) ;; *) echo "tree name must start with m14, d<N>, f<N>, g<N>, s<N>, t<N>, hdr or jit: $tree" >&2; exit 2;; esac
 case "$tree" in */*|*..*) echo "bad tree name: $tree" >&2; exit 2;; esac
 case "$build" in /*) ;; *) build=$repo/$build;; esac

@@ -1,92 +1,72 @@
 #!/usr/bin/env bash
-# uc-patches-regen.sh: re-make every set of patches/ from the leak's sources (dev only: it needs a build of Source/,
-# i.e. Epic's leaked text with our changes on top, which users do not have). T1; docs/porting/analysis/
-# script-patches.md, step 2.
+# uc-patches-regen.sh: change a script patch set (patches/<set>/). The repository holds no UnrealScript (T4,
+# docs/porting/analysis/scripts-removed.md), so a set is changed the way it is applied: on the build's decompiled base.
+# This is the shorthand of the steps in patches/README.md, "Changing a set" (it runs exactly those commands and prints
+# them).
 #
-#   tools/dev/uc-patches-regen.sh [--ref <dir>] [--work <dir>]
-#     --ref   the System folder of `tools/dev/script-build.sh --tree t1-ref assemble make strip` (default
-#             <WorkUC2>/run/t1-ref/System; its Unstripped/ sibling must hold the unstripped UCMenu.u)
-#     --work  scratch folder for the trees (default <WorkUC2>/run/t1-regen)
+#   tools/dev/uc-patches-regen.sh edit <set> [--build <dir>] [--work <dir>]
+#       makes two trees from the build's base (<build>/Scripts/base, the shipped .u decompiled by the `scripts`
+#       target): <work>/before = base + every set that comes before <set> in patches/sets.txt, and <work>/edit =
+#       the same + <set>. Edit the classes under <work>/edit/<Pkg>/Classes (a new file there is a new class).
+#   tools/dev/uc-patches-regen.sh make <set> [--build <dir>] [--work <dir>]
+#       re-makes patches/<set>/ from before -> edit (uc-patches.py make; only the packages the base has: a set's
+#       .diff of a package the build does not decompile, e.g. epic-fixes' Engine.diff, is kept as it is), then
+#       checks that the default sets still apply (uc-patches.py check). Rebuild (cmake --build <build>) to compile.
+#     --build  the host build directory (default build-native)
+#     --work   scratch folder (default <build>/Scripts/edit-<set>; the build directory is scratch, never committed)
 #
-# The chain (each tree is the previous one with some classes replaced; `uc-patches.py make <set>` diffs them):
-#   base         uc-decompile of the shipped .u (UCMenu: --shipped-text) for the 7 packages the patch table touches
-#   epic-fixes   uc-decompile --patches (the package as the load-time patcher leaves it) for the 6 decompiled ones;
-#                UCMenu: the classes the patch table names, as the leak's text compiles (shipped-text of the
-#                reference UCMenu.u: our ucc's preprocessing of the leak gives the retail text byte for byte)
-#   epic-source  the classes where the leak differs from shipped + patcher in what the patcher could not carry
-#                (UCGameplay: CTFFlag's Begin label, OverflowBall's default, UCWeap_Melee.BusyShieldOn.HitWall's
-#                locals), from the reference build
-#   mouse-look   every UCGameplay class from the reference build
-#   player-name  every GUI class from the reference build
-#   keys-menu    every UCMenu class from the reference build (shipped-text form); new classes: Source/UCMenu/Classes
-# and checks at the end that base + all sets == the reference build's text (identity lines aside).
+# Until T4 this script re-made every set from a build of the repo's script sources (Epic's leaked text with our
+# changes, `run/t1-ref`); those sources are gone and the sets are the only form of our changes.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
-ref=$work/run/t1-ref/System
-W=$work/run/t1-regen
+mode=${1:-}; set_name=${2:-}
+[ "$mode" = edit ] || [ "$mode" = make ] || { sed -n '2,17p' "$0" >&2; exit 2; }
+[ -n "$set_name" ] || { echo "uc-patches-regen: which set? (patches/sets.txt)" >&2; exit 2; }
+shift 2
+build=build-native W=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --ref) ref=$2; shift 2;;
+    --build) build=$2; shift 2;;
     --work) W=$2; shift 2;;
     *) echo "unknown argument $1" >&2; exit 2;;
   esac
 done
+case "$build" in /*) ;; *) build=$repo/$build;; esac
+base=$build/Scripts/base
+W=${W:-$build/Scripts/edit-$set_name}
+[ -d "$base" ] || { echo "uc-patches-regen: no $base: configure and build $build with the script patches first" >&2; exit 2; }
 capped=$work/bin/capped
-shipped=$work/epic-sources/System
-content=$work/assets/uc2
-SP=$repo/Source/Engine/Inc/ScriptPatches.h
-dec() { "$capped" 2G 900 -- python3 "$repo/tools/scripts/uc-decompile.py" "$@" --content "$content"; }
-up() { "$capped" 2G 900 -- python3 "$repo/tools/scripts/uc-patches.py" "$@"; }
-DECOMPILED=(Engine UnrealGame UCGameplay UCInventory UCMutators GUI)
-case "$W" in "$work"/run/t1*) ;; *) echo "--work must be under $work/run/t1*" >&2; exit 2;; esac
-rm -rf "$W"; mkdir -p "$W"
+py() { if [ -x "$capped" ]; then "$capped" 2G 900 -- python3 "$@"; else python3 "$@"; fi; }
+run() { echo "+ $*" | sed "s#$repo/##g"; "$@"; }
+UP=$repo/tools/scripts/uc-patches.py
 
-# base and the reference build's text
-for p in "${DECOMPILED[@]}"; do dec "$shipped/$p.u" --out "$W/base/$p/Classes"; done
-dec "$shipped/UCMenu.u" --out "$W/base/UCMenu/Classes" --shipped-text
-for p in GUI UCGameplay; do dec "$ref/$p.u" --out "$W/ref/$p/Classes"; done
-dec "$ref/../Unstripped/UCMenu.u" --out "$W/ref/UCMenu/Classes" --shipped-text
-
-# take(<from tree> <to tree> <Pkg/Class> ...): copy classes
-take() { local from=$1 to=$2; shift 2; for c in "$@"; do mkdir -p "$to/${c%%/*}/Classes"; cp -f "$from/${c%%/*}/Classes/${c#*/}.uc" "$to/${c%%/*}/Classes/"; done; }
-
-# epic-fixes
-cp -a "$W/base" "$W/c-epic-fixes"
-for p in "${DECOMPILED[@]}"; do rm -rf "$W/c-epic-fixes/$p"; dec "$shipped/$p.u" --out "$W/c-epic-fixes/$p/Classes" --patches "$SP"; done
-mapfile -t menu < <(python3 -c "
-import sys; sys.path.insert(0, '$repo/tools/scripts'); import ucpkg
-p = ucpkg.parse_patches('$SP')['UCMenu']
-print('\n'.join(sorted({'UCMenu/' + d.split('.')[1] for d, b in p['scripts']})))")
-echo "UCMenu classes in the patch table: ${menu[*]}"
-take "$W/ref" "$W/c-epic-fixes" "${menu[@]}"
-up make epic-fixes --base "$W/base" --changed "$W/c-epic-fixes"
-
-# epic-source
-cp -a "$W/c-epic-fixes" "$W/c-epic-source"
-take "$W/ref" "$W/c-epic-source" UCGameplay/CTFFlag UCGameplay/OverflowBall UCGameplay/UCWeap_Melee
-up make epic-source --base "$W/c-epic-fixes" --changed "$W/c-epic-source"
-
-# ours
-cp -a "$W/c-epic-source" "$W/c-mouse-look"; cp -f "$W/ref/UCGameplay/Classes/"*.uc "$W/c-mouse-look/UCGameplay/Classes/"
-up make mouse-look --base "$W/c-epic-source" --changed "$W/c-mouse-look"
-cp -a "$W/c-mouse-look" "$W/c-player-name"; cp -f "$W/ref/GUI/Classes/"*.uc "$W/c-player-name/GUI/Classes/"
-up make player-name --base "$W/c-mouse-look" --changed "$W/c-player-name"
-cp -a "$W/c-player-name" "$W/c-keys-menu"
-for f in "$W/ref/UCMenu/Classes/"*.uc; do
-  c=$(basename "$f")
-  if [ -f "$W/base/UCMenu/Classes/$c" ]; then cp -f "$f" "$W/c-keys-menu/UCMenu/Classes/$c"
-  else cp -f "$repo/Source/UCMenu/Classes/$c" "$W/c-keys-menu/UCMenu/Classes/$c"; echo "new class (our text): UCMenu/$c"; fi
+# The sets in apply order (sets.txt), the ones before <set>.
+mapfile -t order < <(sed 's/#.*//' "$repo/patches/sets.txt" | awk 'NF==4 {print $1}')
+before=() found=0
+for s in "${order[@]}"; do
+  [ "$s" = "$set_name" ] && { found=1; break; }
+  before+=("$s")
 done
-up make keys-menu --base "$W/c-player-name" --changed "$W/c-keys-menu"
+[ $found = 1 ] || { echo "uc-patches-regen: no set $set_name in patches/sets.txt (${order[*]})" >&2; exit 2; }
+blist=$(IFS=,; echo "${before[*]}")
+alist=${blist:+$blist,}$set_name
+pk=$(cd "$base" && ls -d */Classes 2>/dev/null | cut -d/ -f1 | paste -sd,)
 
-# check: base + all sets == the reference text
-up apply --base "$W/base" --default --out "$W/final"
-bad=0
-for p in GUI UCGameplay UCMenu; do
-  for f in "$W/c-keys-menu/$p/Classes/"*.uc; do
-    c=$(basename "$f")
-    cmp -s <(tail -n +2 "$f") <(tail -n +2 "$W/final/$p/Classes/$c") || { echo "MISMATCH $p/$c"; bad=1; }
-  done
-done
-[ $bad = 0 ] && echo "regen: apply(base, default sets) == the chained trees, byte for byte below line 1 (GUI, UCGameplay, UCMenu)" || exit 1
+case $mode in
+  edit)
+    rm -rf "$W"; mkdir -p "$W"
+    if [ -n "$blist" ]; then run py "$UP" apply --base "$base" --sets "$blist" --out "$W/before"
+    else echo "+ cp -a $base $W/before"; cp -a "$base" "$W/before"; fi
+    run py "$UP" apply --base "$base" --sets "$alist" --out "$W/edit"
+    echo "base packages: $pk (the set's files of other packages are kept as they are)"
+    echo "now edit the classes under $W/edit/<Pkg>/Classes, then: $0 make $set_name${W:+ --work $W}"
+    ;;
+  make)
+    [ -d "$W/before" ] && [ -d "$W/edit" ] || { echo "uc-patches-regen: no $W/before and $W/edit: run '$0 edit $set_name' first" >&2; exit 2; }
+    run py "$UP" make "$set_name" --base "$W/before" --changed "$W/edit" --packages "$pk"
+    run py "$UP" check --base "$base" --default
+    echo "patches/$set_name re-made; review with git diff -- patches/$set_name, rebuild (cmake --build $build), and"
+    echo "if the default sets' packages changed on purpose: tools/scripts/uc-patches-proof.sh p2 --write-reference"
+    ;;
+esac

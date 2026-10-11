@@ -452,30 +452,37 @@ include(UC2Scripts)
 # --- end T3 ------------------------------------------------------------------------------------------------------
 
 # --- T2: `cmake --build build-native --target check-headers`: the generated Source/<Pkg>/Inc/<Pkg>Classes.h must be
-# what the header exporter of this build's ucc-bin writes from the script sources (tools/dev/check-headers.sh; fails
-# with the diff when stale; regenerate with tools/dev/regen-headers.sh). Only where ucc-bin carries the script
-# compiler and runs on the build host: native Linux, 32-bit (the Editor target). Not part of ALL: it compiles
-# script packages in a scratch run tree and needs the asset tree. UC2_HEADERS_CLASSES_ROOT: where the script sources
-# are. T3: by default the build's patched tree (Scripts/tree, made by the `scripts` target; check-headers.sh then
-# compiles the packages the patches rebuild against the shipped ones and checks their headers); with
-# UC2_SCRIPT_PATCHES OFF, Source/ while it still holds the .uc. docs/porting/analysis/headers.md. ------------------
-set(UC2_HEADERS_CLASSES_ROOT "" CACHE PATH "Script sources (<dir>/<Pkg>/Classes) the check-headers target exports from (default: <build>/Scripts/tree)")
+# what the header exporter of this build's ucc-bin writes from the scripts (tools/dev/check-headers.sh; fails with the
+# diff when stale; regenerate with tools/dev/regen-headers.sh). Only where ucc-bin carries the script compiler and
+# runs on the build host: native Linux, 32-bit (the Editor target). Not part of ALL: it compiles script packages in a
+# scratch tree and needs the game folder. The scripts are the build's patched tree (Scripts/tree, made by the
+# `scripts` target; check-headers.sh compiles the packages the patches rebuild against the shipped ones and checks
+# their headers): the repository holds no script sources (T4, docs/porting/analysis/scripts-removed.md), Source/ is
+# only where the headers are committed. UC2_HEADERS_CLASSES_ROOT=<dir> checks another tree (<dir>/<Pkg>/Classes);
+# with UC2_SCRIPT_PATCHES OFF there is no patched tree and the target needs it. docs/porting/analysis/headers.md. ----
+set(UC2_HEADERS_CLASSES_ROOT "" CACHE PATH "Script tree (<dir>/<Pkg>/Classes) the check-headers target exports from (default: <build>/Scripts/tree)")
 if(TARGET Editor AND TARGET UCC AND NOT WIN32 AND NOT EMSCRIPTEN AND NOT CMAKE_CROSSCOMPILING)
   set(_hdr_root "${UC2_HEADERS_CLASSES_ROOT}")
   set(_hdr_deps UCC)
-  # (T2's configure wrote Source/ into the cache as the default: it counts as unset.)
-  if(NOT _hdr_root OR _hdr_root STREQUAL "${CMAKE_SOURCE_DIR}/Source")
-    if(UC2_SCRIPTS_TREE)
-      set(_hdr_root "${UC2_SCRIPTS_TREE}")
-      list(APPEND _hdr_deps scripts)
-    else()
-      set(_hdr_root "${CMAKE_SOURCE_DIR}/Source")
-    endif()
+  # (T2's configure wrote <repo>/Source into the cache as the default; it holds no scripts any more: unset.)
+  if(_hdr_root STREQUAL "${CMAKE_SOURCE_DIR}/Source")
+    set(_hdr_root "")
   endif()
-  add_custom_target(check-headers
-    COMMAND ${CMAKE_SOURCE_DIR}/tools/dev/check-headers.sh --build ${CMAKE_BINARY_DIR} --classes-root ${_hdr_root}
-    DEPENDS ${_hdr_deps}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    USES_TERMINAL VERBATIM)
+  if(NOT _hdr_root AND UC2_SCRIPTS_TREE)
+    set(_hdr_root "${UC2_SCRIPTS_TREE}")
+    list(APPEND _hdr_deps scripts)
+  endif()
+  if(_hdr_root)
+    add_custom_target(check-headers
+      COMMAND ${CMAKE_SOURCE_DIR}/tools/dev/check-headers.sh --build ${CMAKE_BINARY_DIR} --classes-root ${_hdr_root}
+      DEPENDS ${_hdr_deps}
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+      USES_TERMINAL VERBATIM)
+  else()
+    add_custom_target(check-headers
+      COMMAND ${CMAKE_COMMAND} -E echo "check-headers: no script tree: UC2_SCRIPT_PATCHES is OFF (no Scripts/tree) and UC2_HEADERS_CLASSES_ROOT is not set"
+      COMMAND ${CMAKE_COMMAND} -E false
+      VERBATIM)
+  endif()
 endif()
 # --- end T2 ------------------------------------------------------------------------------------------------------
