@@ -1,0 +1,20 @@
+chan exec ToggleThirdCam
+sleep 1
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40448 0
+sleep 3
+chan exec NETPLACE FxCam 1229.6 -672.9 -108 40448 0
+sleep 4
+chan exec set LevelInfo TimeDilation 0.0001
+sleep 3
+shot on
+sleep 1
+shot on2
+chan exec set UCScreenEmissiveWithBloom Enabled 0
+sleep 2
+shot nobloom
+chan exec set UCScreenDOF Enabled 0
+sleep 2
+shot noboth
+chan exec set UCScreenEmissiveWithBloom Enabled 1
+sleep 3
+shot bloomnodof

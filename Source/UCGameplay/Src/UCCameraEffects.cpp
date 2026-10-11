@@ -261,8 +261,8 @@ void UUCScreenDOF::PreRender(UViewport* Viewport,FRenderInterface* RI)
 	// as on the Xbox at any resolution; Epic's: RI->GetRenderTarget()->GetWidth() * BlurTargetScaleX
 	// (GetPostProcessReference gives exactly that without a reference height).
 	FPostProcessReference Reference = GetPostProcessReference( RI->GetRenderTarget()->GetWidth(), RI->GetRenderTarget()->GetHeight() );
-	FLOAT BlurSizeX = Reference.Width * BlurTargetScaleX * Viewport->ScaleX;
-	FLOAT BlurSizeY = Reference.Height * BlurTargetScaleY * Viewport->ScaleY;
+	FLOAT BlurSizeX = Reference.Width * BlurTargetScaleX * Viewport->ScaleX * RenDevPostProcessTargetScale();	// UC2 port (H-1): x PostProcessTargetScale
+	FLOAT BlurSizeY = Reference.Height * BlurTargetScaleY * Viewport->ScaleY * RenDevPostProcessTargetScale();
 
 	if( BlurTargets.Num() < 2 )
 	{
@@ -374,7 +374,7 @@ void UUCScreenDOF::PostRender(UViewport* Viewport,FRenderInterface* RI)
 		else
 		{
 			// down sample in the horizontal direction and use a horizontal blur filter
-			FilterCopyRenderTarget( BlurTargets(i), SrcTarget, NULL, SamplerHorizBlur, RI );
+			FilterCopyRenderTarget( BlurTargets(i), SrcTarget, NULL, SamplerHorizBlur, RI, NULL, NULL, 0, RenDevPostProcessTargetScale() );	// UC2 port (H-1): TapScale
 		}
 
 		SrcTarget = BlurTargets(i);
@@ -949,8 +949,8 @@ void UUCScreenBloom::PreRender(UViewport* Viewport,FRenderInterface* RI)
 	// UC2 port (pp-scale): fractions of the reference picture, compared as whole numbers (see
 	// UCPP_TargetSize and UUCScreenDOF::PreRender).
 	FPostProcessReference Reference = GetPostProcessReference( RI->GetRenderTarget()->GetWidth(), RI->GetRenderTarget()->GetHeight() );
-	FLOAT BlurSizeX = Reference.Width * BlurTargetScaleX * Viewport->ScaleX;
-	FLOAT BlurSizeY = Reference.Height * BlurTargetScaleY * Viewport->ScaleY;
+	FLOAT BlurSizeX = Reference.Width * BlurTargetScaleX * Viewport->ScaleX * RenDevPostProcessTargetScale();	// UC2 port (H-1): x PostProcessTargetScale
+	FLOAT BlurSizeY = Reference.Height * BlurTargetScaleY * Viewport->ScaleY * RenDevPostProcessTargetScale();
 
 	// create a render target for selecting hot pixels
 	// this render target is always 1/2 the size of the back buffer
@@ -1090,11 +1090,11 @@ void UUCScreenBloom::PostRender(UViewport* Viewport,FRenderInterface* RI)
 
 	// 1st pass (horizontal blur)
 	static FMultiSampleFilter SamplerHorizBlur( FMultiSampleFilter::MULTI_SAMPLE_HORIZ_1221 );
-	FilterCopyRenderTarget( BlurTargets(0), SelectTarget, NULL, SamplerHorizBlur, RI );
+	FilterCopyRenderTarget( BlurTargets(0), SelectTarget, NULL, SamplerHorizBlur, RI, NULL, NULL, 0, RenDevPostProcessTargetScale() );	// UC2 port (H-1): TapScale
 
 	// 1st pass (vertical blur)
 	static FMultiSampleFilter SamplerVertBlur( FMultiSampleFilter::MULTI_SAMPLE_VERT_1221 );
-	FilterCopyRenderTarget( BlurTargets(1), BlurTargets(0), NULL, SamplerVertBlur, RI );
+	FilterCopyRenderTarget( BlurTargets(1), BlurTargets(0), NULL, SamplerVertBlur, RI, NULL, NULL, 0, RenDevPostProcessTargetScale() );	// UC2 port (H-1): TapScale
 
 	//
 	// add results from blur to frame buffer
@@ -1226,8 +1226,8 @@ void UUCScreenEmissive::PreRender(UViewport* Viewport,FRenderInterface* RI)
 	// UC2 port (pp-scale): fractions of the reference picture, compared as whole numbers (see
 	// UCPP_TargetSize and UUCScreenDOF::PreRender).
 	FPostProcessReference Reference = GetPostProcessReference( BackBufferTarget->GetWidth(), BackBufferTarget->GetHeight() );
-	FLOAT BlurSizeX = Reference.Width * BlurTargetScaleX * Viewport->ScaleX;
-	FLOAT BlurSizeY = Reference.Height * BlurTargetScaleY * Viewport->ScaleY;
+	FLOAT BlurSizeX = Reference.Width * BlurTargetScaleX * Viewport->ScaleX * RenDevPostProcessTargetScale();	// UC2 port (H-1): x PostProcessTargetScale
+	FLOAT BlurSizeY = Reference.Height * BlurTargetScaleY * Viewport->ScaleY * RenDevPostProcessTargetScale();
 
 	// Accumulation target (check for sizeX/sizeY changes)
 	if( !SelectTarget ||
@@ -1440,13 +1440,13 @@ void UUCScreenEmissive::PostRender(UViewport* Viewport,FRenderInterface* RI)
 			if( i%2 == 1 )
 			{
 				// down sample in the vertical direction and use a vertical blur filter
-				FilterCopyRenderTarget( BlurTargets(i), SrcTarget, NULL, SamplerVertBlur, RI );
+				FilterCopyRenderTarget( BlurTargets(i), SrcTarget, NULL, SamplerVertBlur, RI, NULL, NULL, 0, RenDevPostProcessTargetScale() );	// UC2 port (H-1): TapScale
 			}
 			// even targets used for horizontal blur
 			else
 			{
 				// down sample in the horizontal direction and use a horizontal blur filter
-				FilterCopyRenderTarget( BlurTargets(i), SrcTarget, NULL, SamplerHorizBlur, RI );
+				FilterCopyRenderTarget( BlurTargets(i), SrcTarget, NULL, SamplerHorizBlur, RI, NULL, NULL, 0, RenDevPostProcessTargetScale() );	// UC2 port (H-1): TapScale
 			}
 
 			SrcTarget = BlurTargets(i);
@@ -1466,11 +1466,11 @@ void UUCScreenEmissive::PostRender(UViewport* Viewport,FRenderInterface* RI)
 		// up sample and use a box blur filter to blend the result from this blur
 		// pass back into the FeedbackBlurTarget
 		if( pass == 0 )
-			FilterCopyRenderTarget( FeedbackBlurTarget, SrcTarget, NULL, SamplerBoxBlur, RI );
+			FilterCopyRenderTarget( FeedbackBlurTarget, SrcTarget, NULL, SamplerBoxBlur, RI, NULL, NULL, 0, RenDevPostProcessTargetScale() );	// UC2 port (H-1): TapScale
 		else
 		{
 			static FColor FeedBackAlpha(255,255,255,255/*127 for FB_AlphaBlend*/);
-			FilterCopyRenderTarget( FeedbackBlurTarget, SrcTarget, NULL, SamplerBoxBlur, RI, &FeedBackAlpha, FeedbackBlend );
+			FilterCopyRenderTarget( FeedbackBlurTarget, SrcTarget, NULL, SamplerBoxBlur, RI, &FeedBackAlpha, FeedbackBlend, 0, RenDevPostProcessTargetScale() );	// UC2 port (H-1): TapScale
 		}
 
 	}

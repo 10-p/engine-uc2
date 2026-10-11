@@ -192,6 +192,7 @@ void UUC2GLRenderDevice::StaticConstructor()
 	new(GetClass(),TEXT("UseTerrain3Layer"),	RF_Public)UBoolProperty	( CPP_PROPERTY(UseTerrain3Layer		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("UseXboxProjectors"),	RF_Public)UBoolProperty	( CPP_PROPERTY(UseXboxProjectors	), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("PostProcessReferenceHeight"),RF_Public)UIntProperty( CPP_PROPERTY(PostProcessReferenceHeight), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("PostProcessTargetScale"),RF_Public)UIntProperty( CPP_PROPERTY(PostProcessTargetScale), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("LevelOfAnisotropy"),	RF_Public)UIntProperty	( CPP_PROPERTY(LevelOfAnisotropy	), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("AntiAliasing"),		RF_Public)UIntProperty	( CPP_PROPERTY(AntiAliasing			), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("MaxTextureUnits"),		RF_Public)UIntProperty	( CPP_PROPERTY(MaxTextureUnits		), TEXT("Options"), CPF_Config );
@@ -230,6 +231,8 @@ void UUC2GLRenderDevice::StaticConstructor()
 	// pp-scale: the blurs cover the share of the picture they cover on the Xbox's 640x480, also
 	// for an ini that predates the key.
 	PostProcessReferenceHeight = 480;
+	// H-1: the Xbox's texel count for the blur targets unless the ini asks for 2 or 4.
+	PostProcessTargetScale = 1;
 	// O-8 (owner, 2026-10-06): 16x anisotropic filtering and 4x anti-aliasing by default, also
 	// for an ini that predates the keys.
 	LevelOfAnisotropy		= 16;
@@ -2431,6 +2434,8 @@ FRenderCaps* UUC2GLRenderDevice::GetRenderCaps()
 	// pp-scale: the picture height the camera effects size their blurs for (UnRenderUtil.h,
 	// GetPostProcessReference).
 	RenderCaps.PostProcessReferenceHeight	= Max( PostProcessReferenceHeight, 0 );
+	// H-1: the blur targets' texels per axis, times the Xbox's: 1, 2 or 4 (3 counts as 2, above 4 as 4).
+	RenderCaps.PostProcessTargetScale		= !PostProcessActive() || PostProcessTargetScale < 2 ? 1 : PostProcessTargetScale < 4 ? 2 : 4;
 	// G-6: dynamic gamma per viewport (UC2GLPostProcess.cpp, SetViewportGammaRamp), with the post-processing.
 	RenderCaps.ViewportDynamicGamma			= PostProcessActive() ? 1 : 0;
 	return &RenderCaps;

@@ -2392,11 +2392,41 @@ ENGINE_API FPostProcessReference GetPostProcessReference( INT BackBufferWidth, I
  * ============================================================================
  */
 void ENGINE_API FilterCopyRenderTarget( FRenderTarget* DestTarget, FRenderTarget* SrcTarget, UViewport* SrcViewport, FMultiSampleFilter& Sampler,
-									   FRenderInterface* RI, FColor* CopyColor, UFinalBlend* FinalBlend, DWORD BlurBlendMode )
+									   FRenderInterface* RI, FColor* CopyColor, UFinalBlend* FinalBlend, DWORD BlurBlendMode, INT TapScale )
 {
 	guard(FilterCopyRenderTarget);
 
 	check( DestTarget && SrcTarget && RI );
+
+	// UC2 port (H-1; docs/porting/analysis/h1-bloom.md): a target-to-target pass of a chain whose targets have
+	// TapScale (2 or 4) times the Xbox's texels per axis (RenDevPostProcessTargetScale). Its taps move TapScale
+	// times as many texels (the same distance on the screen), and each tap becomes the mean of TapScale bilinear
+	// reads 2 texels apart (offsets 2j - TapScale + 1) along each axis the filter reaches. A bilinear tap on a
+	// texel boundary averages 2 texels; so widened it averages 2 x TapScale, i.e. the same 2 coarse texels it
+	// averaged at scale 1: the Xbox's kernel, sampled TapScale times as finely. Without the widening the scaled
+	// taps leave gaps (a comb: the texels under a pixel get no weight).
+	//
+	// The widening is done in the shader (the device's fill variant of PS_Blur, asked for by UC2_BLUR_FILL_* in
+	// BlurBlendMode), in floating point, so the pass writes its 8-bit result once, as at scale 1. (Not as a
+	// separate "fill" pass into an 8-bit target: that pass's outputs are exact halves of a step half of the
+	// time, which the GPU rounds down, and over the ten such writes of a frame of the bloom and the self-feeding
+	// emissive glow a dim glow lost a quarter to a half of itself and 10-15% of its radius; deciding those ties
+	// with weights of 1/2 (1 +- 1/2048) did not survive the GPU's float-to-8-bit conversion.)
+	INT Scale = SrcViewport ? 1 : (TapScale >= 4 ? 4 : TapScale >= 2 ? 2 : 1);
+	BYTE FillFlags = 0;
+	if( Scale > 1 )
+	{
+		for( INT Pass=0; Pass<Sampler.FilterList.Num(); Pass++ )
+			for( INT i=0; i<4; i++ )
+			{
+				if( Sampler.FilterList(Pass).SamplePoints[i].OffsetU != 0.f )
+					FillFlags |= UC2_BLUR_FILL_X;
+				if( Sampler.FilterList(Pass).SamplePoints[i].OffsetV != 0.f )
+					FillFlags |= UC2_BLUR_FILL_Y;
+			}
+		if( FillFlags && Scale == 4 )
+			FillFlags |= UC2_BLUR_FILL_4;
+	}
 
 	// create a proxy material for the source render target so that we can use it to render with
 	DECLARE_STATIC_UOBJECT( UProxyBitmapMaterial, SrcMaterial, {});
@@ -2482,6 +2512,10 @@ void ENGINE_API FilterCopyRenderTarget( FRenderTarget* DestTarget, FRenderTarget
 		OneTexelV *= PixelScale;
 	}
 
+	// UC2 port (H-1): see above.
+	OneTexelU *= Scale;
+	OneTexelV *= Scale;
+
 	FScreenPrimUtil TextureCanvas( DestTarget, RI );
 	RI->SetRenderTarget( DestTarget );
 
@@ -2523,6 +2557,7 @@ void ENGINE_API FilterCopyRenderTarget( FRenderTarget* DestTarget, FRenderTarget
 			BlurPixelShader->BlurBlendMode = BlurBlendMode;
 		else
 			BlurPixelShader->BlurBlendMode = BLUR_ADD;
+		BlurPixelShader->BlurBlendMode |= FillFlags;	// UC2 port (H-1)
 
 		TextureCanvas.DrawTile(
 			0, 0, DestTarget->GetWidth(), DestTarget->GetHeight(),

@@ -113,6 +113,9 @@ public:
 	BYTE				TwoSided;
 	BYTE				OverrideFogColor;
 	BYTE				SpecularEnable;
+	// H-1: PS_Blur's taps widened in the shader (UC2_BLUR_FILL_* of UPSBlurMaterial::BlurBlendMode, set by
+	// SetMatState_PS_Blur; 0 otherwise): the fill variant of the program (UC2GLShaders.cpp).
+	BYTE				BlurFill;
 
 	BYTE				AlphaRef;
 	EFillMode			FillMode;

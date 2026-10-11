@@ -41,7 +41,44 @@ enum
 	PSV_CubeMask		= 0x0f,	// stage n samples a cube map (PS_GLOBALFLAGS_TEXMODE_ADJUST)
 	PSV_SpecularEnable	= 0x10,	// D3DRS_SPECULARENABLE for shaders without xfc
 	PSV_SceneDepthTest	= 0x20,	// M11: no gl_FragDepth; the scene's depth is tested in the shader (UC2GL_SceneDepthTestMain)
+	PSV_FillX			= 0x40,	// H-1: every texture read is the mean of reads 2 texels apart along x (UC2GL_WithFill)
+	PSV_FillY			= 0x80,	//      ... along y
+	PSV_Fill4			= 0x100,//      four reads per axis (else two)
 };
+
+//
+// H-1 (docs/porting/analysis/h1-bloom.md): the fill variant of a pixel shader, for FilterCopyRenderTarget's
+// TapScale (PS_Blur's passes in chains whose targets have 2 or 4 times the Xbox's texels per axis). Each of the
+// generated body's texture reads, texture2DProj(u_texN, tc), becomes the mean of 2 (4) bilinear reads at offsets
+// 2j - N + 1 texels of the source (u_fillStep: one texel) along the axes asked for: a tap that covered 2 coarse
+// texels covers the same 2 x N fine ones. In floating point, so the pass rounds to 8 bits once.
+//
+static FString UC2GL_WithFill( const FString& Body, DWORD Variant )
+{
+	INT N = (Variant & PSV_Fill4) ? 4 : 2;
+	TArray<FLOAT> XS, YS;
+	for( INT j=0; j<N; j++ )
+	{
+		if( Variant & PSV_FillX ) XS.AddItem( 2.f * j - N + 1.f );
+		if( Variant & PSV_FillY ) YS.AddItem( 2.f * j - N + 1.f );
+	}
+	if( !XS.Num() ) XS.AddItem( 0.f );
+	if( !YS.Num() ) YS.AddItem( 0.f );
+	FString Fill = TEXT("// H-1: PS_Blur's taps widened for FilterCopyRenderTarget's TapScale (UC2GLShaders.cpp, UC2GL_WithFill)\n")
+		TEXT("uniform vec4 u_fillStep;\n")
+		TEXT("vec4 uc2_fill( sampler2D t, vec4 tc )\n{\n\tvec2 uv = tc.xy / tc.w;\n\treturn (");
+	for( INT y=0; y<YS.Num(); y++ )
+		for( INT x=0; x<XS.Num(); x++ )
+			Fill += FString::Printf( TEXT("%s\n\t\ttexture2D( t, uv + vec2( %.1f, %.1f ) * u_fillStep.xy )"), (x || y) ? TEXT(" +") : TEXT(""), XS(x), YS(y) );
+	Fill += FString::Printf( TEXT(" ) * %.6f;\n}\n\n"), 1.f / (XS.Num() * YS.Num()) );
+	FString Out = Body;
+	for( INT s=0; s<4; s++ )
+		Out = Out.Replace( *FString::Printf( TEXT("texture2DProj(u_tex%i, (tc))"), s ), *FString::Printf( TEXT("uc2_fill(u_tex%i, (tc))"), s ) );
+	INT Main = Out.InStr( TEXT("void main()") );
+	if( Main < 0 )
+		return Out;
+	return Out.Left( Main ) + Fill + Out.Mid( Main );
+}
 
 // The texture unit of the scene's depth for PSV_SceneDepthTest (the pixel shaders use units 0..3).
 #define UC2GL_SCENEDEPTH_UNIT 7
@@ -509,6 +546,8 @@ GLuint UUC2GLRenderDevice::GetFragmentShaderObject( INT PixelShader, DWORD Varia
 		if( Variant & PSV_SpecularEnable )
 			appStrcat( Header, "#define UC2_SPECULARENABLE 1\n" );
 		FString Body = (Variant & PSV_SceneDepthTest) ? UC2GL_WithSceneDepthTest( Source.Source ) : FString( appFromAnsi( Source.Source ) );
+		if( Variant & (PSV_FillX | PSV_FillY) )
+			Body = UC2GL_WithFill( Body, Variant );
 		Shader = UC2GL_CompileShader( this, GL_FRAGMENT_SHADER, Header, TCHAR_TO_ANSI(*Body), *FString::Printf(TEXT("pixel shader %i (%s.psh, variant %i)"),PixelShader,Source.Name,Variant) );
 		if( Shader )
 			FragmentShadersCompiled++;
@@ -581,6 +620,7 @@ FOpenGLProgram* UUC2GLRenderDevice::GetProgram( INT PixelShader, DWORD Variant, 
 			P->ColorRemapLoc		= glGetUniformLocation( Program, "u_colorRemap" );
 			P->ProjectorLoc			= glGetUniformLocation( Program, "u_proj" );
 			P->SceneDepthRectLoc	= glGetUniformLocation( Program, "u_sceneDepthRect" );
+			P->FillStepLoc			= glGetUniformLocation( Program, "u_fillStep" );
 			// Samplers never change: stage n is texture unit n.
 			glUseProgram( Program );
 			for( INT i=0; i<4; i++ )
@@ -930,6 +970,10 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 		&& MaterialState->ZTest && DepthEnabled && RenDev->MainDepthStencil;
 	if( SceneDepthTest )
 		Variant |= PSV_SceneDepthTest;
+	// H-1: PS_Blur with FilterCopyRenderTarget's TapScale (SetMatState_PS_Blur).
+	if( MaterialState->BlurFill & UC2_BLUR_FILL_X )	Variant |= PSV_FillX;
+	if( MaterialState->BlurFill & UC2_BLUR_FILL_Y )	Variant |= PSV_FillY;
+	if( MaterialState->BlurFill & UC2_BLUR_FILL_4 )	Variant |= PSV_Fill4;
 
 	FOpenGLProgram* Program = RenDev->GetProgram( PixelShader, Variant, Enum );
 	if( !Program->Program )
@@ -1098,6 +1142,13 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 		RenDev->glBindTexture( GL_TEXTURE_2D, RenDev->MainDepthStencil );
 		RenDev->glActiveTexture( GL_TEXTURE0 );
 		RenDev->glUniform4fv( Program->SceneDepthRectLoc, 1, SceneDepthTestRect );
+	}
+	if( Program->FillStepLoc >= 0 )
+	{
+		// H-1: the fill variant reads its source (every stage of PS_Blur binds the same texture) one texel apart.
+		FOpenGLTexture* Source = MaterialState->Stages[0].Texture;
+		FLOAT W = Source ? Max( Source->CachedWidth, 1 ) : 1.f, H = Source ? Max( Source->CachedHeight, 1 ) : 1.f;
+		RenDev->glUniform4f( Program->FillStepLoc, 1.f / W, 1.f / H, 0.f, 0.f );
 	}
 
 	// Pixel shader constants (D3D's SetPixelShaderConstant; the shader clamps them to [0,1]).

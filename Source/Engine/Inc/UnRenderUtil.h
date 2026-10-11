@@ -691,8 +691,19 @@ struct FPostProcessReference
 };
 ENGINE_API FPostProcessReference GetPostProcessReference( INT BackBufferWidth, INT BackBufferHeight );
 
+// UC2 port (H-1): what FilterCopyRenderTarget adds to UPSBlurMaterial::BlurBlendMode (EBlurBlendMode, 0..3) for a
+// pass with TapScale 2 or 4: every tap of the pass is to be the mean of TapScale reads 2 source texels apart along X
+// and/or Y (UC2_BLUR_FILL_4: four reads, else two), computed in the shader (UC2GLDrv: the fill variant of PS_Blur).
+#define UC2_BLUR_MODE_MASK	0x1f
+#define UC2_BLUR_FILL_4		0x20
+#define UC2_BLUR_FILL_X		0x40
+#define UC2_BLUR_FILL_Y		0x80
+
 // scion sz
 // Used for different blurring and sampling routines
+// UC2 port (H-1): TapScale (1, 2 or 4; RenDevPostProcessTargetScale) for a target-to-target pass of a chain whose
+// targets have that many times the Xbox's texels per axis: the same blur on the screen, sampled more finely
+// (UnRenderUtil.cpp, docs/porting/analysis/h1-bloom.md). Ignored for a pass from the back buffer (SrcViewport).
 void ENGINE_API FilterCopyRenderTarget( FRenderTarget* DestTarget,
 										FRenderTarget* SrcTarget,
 										UViewport* SrcViewport, 
@@ -700,4 +711,5 @@ void ENGINE_API FilterCopyRenderTarget( FRenderTarget* DestTarget,
 										FRenderInterface* RI,
 										FColor* CopyColor=NULL,
 										class UFinalBlend* FinalBlend=NULL,
-										DWORD BlurBlendMode=0 );
+										DWORD BlurBlendMode=0,
+										INT TapScale=1 );

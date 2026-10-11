@@ -219,6 +219,11 @@ UBOOL UUC2GLRenderDevice::InitPostProcess()
 		!PostProcessReferenceHeight ? TEXT("blurs in back-buffer pixels, as before") :
 		PostReferenceProgram ? TEXT("blurs sized for a picture of that many lines, read from a copy of the back buffer that size") :
 		TEXT("blurs sized for a picture of that many lines; the reference copy program failed, the full-size snapshot is read instead") );
+	// H-1: what GetRenderCaps hands the effects (only 1, 2 and 4 are made).
+	INT TargetScale = PostProcessTargetScale < 2 ? 1 : PostProcessTargetScale < 4 ? 2 : 4;
+	debugf( NAME_Init, TEXT("UC2GLDrv: post-process target scale %i%s (%s)"), TargetScale,
+		TargetScale != PostProcessTargetScale ? *FString::Printf( TEXT(" (ini %i)"), PostProcessTargetScale ) : TEXT(""),
+		TargetScale == 1 ? TEXT("the Xbox's texel count for the blur targets") : TEXT("blur targets with that many times the Xbox's texels per axis, the same blur on the screen") );
 	return 1;
 
 	unguard;
