@@ -111,7 +111,9 @@ UBOOL UUC2GL4ESRenderDevice::BindingCreateContext( UViewport* Viewport, UBOOL Fu
 		if( emscripten_get_element_css_size( "#canvas", &CssW, &CssH ) == EMSCRIPTEN_RESULT_SUCCESS )
 		{
 			double	Ratio	= emscripten_get_device_pixel_ratio();
-			INT		W		= (INT)(CssW * Ratio + 0.5) & ~1,	// the viewport keeps the width even
+			// Y-5: odd widths too (the viewport no longer rounds the width to even on the web, as
+			// engine-ut2004 ufront 2.71): a 1023-CSS-pixel box at 125 % is 1279 device pixels, not 1278.
+			INT		W		= (INT)(CssW * Ratio + 0.5),
 					H		= (INT)(CssH * Ratio + 0.5);
 			if( W >= 320 && H >= 200 && (W != NewX || H != NewY) )
 			{

@@ -344,12 +344,24 @@ static void MainLoop( UEngine* Engine )
 // -*RENDERER switches (engine-ut2004's SelectRenderDevice, cut down): the first switch present whose
 // device is in this build sets [Engine.Engine] RenderDevice for this run. The GL devices join at M5.
 //
-struct FRenderSwitch { const TCHAR* Param; const TCHAR* Device; };
+// Y-5: engine-ut2004 asks "is the class in this binary", which there also means "can it run here": its
+// web build does not link OpenGLDrv, so a typed -OPENGLRENDERER is logged and ignored and the game boots
+// on its default device. Here the web build links UC2GLDrv.UC2GLRenderDevice as the GL4ES device's parent
+// class, but its desktop binding cannot make a context in a browser (UC2GL_HAS_DESKTOP_BINDING is 0): taken,
+// the viewport asserted RenDev. So a switch also says whether its device runs on this platform; one that
+// does not is logged and ignored as engine-ut2004 does, and the ini's device (GL4ES on the web) boots.
+//
+#if UC2_WITH_UC2GLDRV && !UC2GL_HAS_DESKTOP_BINDING
+	#define UC2_DESKTOP_GL_RUNS 0
+#else
+	#define UC2_DESKTOP_GL_RUNS 1
+#endif
+struct FRenderSwitch { const TCHAR* Param; const TCHAR* Device; UBOOL RunsHere; };
 static const FRenderSwitch GRenderSwitches[] =
 {
-	{ TEXT("NULLRENDERER"), TEXT("Engine.NullRenderDevice") },
-	{ TEXT("OPENGL"),       TEXT("UC2GLDrv.UC2GLRenderDevice") },	// M5
-	{ TEXT("GL4ES"),        TEXT("UC2GL4ESDrv.UC2GL4ESRenderDevice") },	// M11: the same driver on GLES2 through GL4ES
+	{ TEXT("NULLRENDERER"), TEXT("Engine.NullRenderDevice"),			1 },
+	{ TEXT("OPENGL"),       TEXT("UC2GLDrv.UC2GLRenderDevice"),			UC2_DESKTOP_GL_RUNS },	// M5
+	{ TEXT("GL4ES"),        TEXT("UC2GL4ESDrv.UC2GL4ESRenderDevice"),	1 },	// M11: the same driver on GLES2 through GL4ES
 };
 
 static void SelectRenderDevice()
@@ -359,13 +371,15 @@ static void SelectRenderDevice()
 		const FRenderSwitch& Sw = GRenderSwitches[i];
 		if( ParseParam( appCmdLine(), Sw.Param ) )
 		{
-			if( IsClassAvailable( Sw.Device ) )
+			if( !IsClassAvailable( Sw.Device ) )
+				debugf( NAME_Warning, TEXT("-%s: render device %s is not in this build, ignored"), Sw.Param, Sw.Device );
+			else if( !Sw.RunsHere )
+				debugf( NAME_Warning, TEXT("-%s: render device %s cannot run on this platform, ignored: keeping RenderDevice=%s"), Sw.Param, Sw.Device, GConfig->GetStr( TEXT("Engine.Engine"), TEXT("RenderDevice") ) );
+			else
 			{
 				debugf( NAME_Init, TEXT("-%s selects render device %s"), Sw.Param, Sw.Device );
 				GConfig->SetString( TEXT("Engine.Engine"), TEXT("RenderDevice"), Sw.Device );
 			}
-			else
-				debugf( NAME_Warning, TEXT("-%s: render device %s is not in this build, ignored"), Sw.Param, Sw.Device );
 			return;
 		}
 	}

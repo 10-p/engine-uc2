@@ -387,8 +387,13 @@ void USDL2Viewport::OpenWindow( DWORD InParentWindow, UBOOL IsTemporary, INT New
 	}
 	check(Actor);
 
+#if !defined(__EMSCRIPTEN__)
+	// Y-5: not on the web, as engine-ut2004 (ufront 2.71, its SDL2Viewport's OpenWindow): Align rounds up, and
+	// a backing store 1 px wider than the canvas box is a fractional rescale in the browser (blur). The web
+	// binding (UC2GL4ESDrv.cpp) draws at the canvas's own device-pixel size, odd or even.
 	if( NewX!=INDEX_NONE )
 		NewX = Align( NewX, 2 );
+#endif
 
 	if( IsTemporary )
 	{
@@ -702,7 +707,9 @@ UBOOL USDL2Viewport::ResizeViewport( DWORD NewBlitFlags, INT InNewX, INT InNewY,
 	INT NewY = InNewX!=INDEX_NONE ? InNewY : (NewBlitFlags&BLIT_Fullscreen) ? Client->FullscreenViewportY : Client->WindowedViewportY;
 	check(NewX>=0);
 	check(NewY>=0);
-	NewX = Align(NewX,2);
+#if !defined(__EMSCRIPTEN__)
+	NewX = Align(NewX,2);	// Y-5: not on the web, as engine-ut2004 (ufront 2.71): see OpenWindow.
+#endif
 
 	if( !(NewBlitFlags & BLIT_Temporary) )
 		ScreenPointer = NULL;
