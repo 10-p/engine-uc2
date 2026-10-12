@@ -140,3 +140,21 @@ The web (step 1's packages, artifact sha256 5884f482..., the profile-less path i
 **1 passed (7.2 min)**: host beacon `CTF|E2E Netplay Host|CTF-Aqueduct|CTF_Custom|1|4|0||NetHost|0`, host match URL
 `...Name=NetHost...`, the guest's System Link row "E2E Netplay Host", both scoreboards NetHost and NetGuest
 (`logs/y1/e2e-y1-full-1-results/*/15-host-scoreboard.png`). Memory: guard peak 9.8 GB machine-wide, 7G ceiling not hit.
+
+## Step 3 (2026-10-12): final proofs on 999b6fc's packages
+
+- Native vanilla (`y1van`, Epic's shipped GUI.u/UCMenu.u), the final script: **ALL PASS**, 42 checks
+  (`logs/y1/native-vanilla-run2/`): h1 `CTF|Liandri Corporation|...|Anubis|0`, h2/h3 `...|Liandri Corporation|...|Proffy|0`,
+  h4 `...|Liandri Corporation|...|Anubis|0`; no Critical/signal/Accessed None but the Entry one.
+- `tools/dev/d4-names.sh` (D4_TREE=y1): ALL PASS (`logs/y1/d4-final`); `m14-scripts-check.sh verify menu patcher`
+  (M14_PREFIX=y1-m14): PASS x3 (`logs/y1/m14-check-1.txt`).
+- Web (ufrontend-y1 aec5944, serve-web from this build: wasm 5884f482..., overlays GUI.u 39538dde..., UCMenu.u
+  ce8775ff..., proved before/after by the runner `logs/y1/run-e2e*.sh`):
+  - `uc2-wasm-netplay.spec.js` `y1-full-2`: **1 passed (7.0 min)**; host beacon `CTF|E2E Netplay Host|CTF-Aqueduct|
+    CTF_Custom|1|4|0||NetHost|0`, URL `Name=NetHost`, the guest's row "E2E Netplay Host", both scoreboards NetHost and
+    NetGuest. Guard peak 9.5 GB machine-wide; `capped 7G` not hit.
+  - `uc2-wasm-saves.spec.js` (UC2_E2E_REBUILT_GUI=1) `y1-saves-1`: **1 passed (2.5 min)**: without a profile the player
+    is the launcher's name; with the profile made in session 1 the host page's SESSION NAME is `Liandri Corporation`
+    (the profile's), the step 1 design would have failed here. Guard peak 7.9 GB.
+- Not run: the web with Epic's shipped packages (an artifact without overlays): the engine C++ is untouched by Y-1, the
+  vanilla behaviour is proven natively.
