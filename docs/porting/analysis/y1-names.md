@@ -110,3 +110,33 @@ Rebuilt run 1 (`logs/y1/native-rebuilt-run1/`): every name check PASS in h1-h4; 
 counted the Entry level's known Accessed None as a fault (recounted from the same logs without it: 0 in each).
 Vanilla run 1 (`logs/y1/native-vanilla-run1/`): **ALL PASS** (42 PASS lines, 0 Critical/signal/Accessed None but the
 Entry one): Epic's behaviour unchanged with the shipped packages (the engine is not touched by Y-1).
+
+## Step 2 (2026-10-12): new profiles start with the profile default again (the hook moves to the host page)
+
+Why: in step 1 a profile created while profile-less inherited the launcher's server name (Epic's `NewProfile` ->
+`ClearProfile` -> `InitializeProfileValues` -> the `SetPlayerName` delegate while the profile is still transient,
+indistinguishable at the hook from a profile cleared to "no profile"). That changes a PROFILE's behaviour, which Y-1
+must not: ufrontend's `uc2-wasm-saves.spec.js` (D-5 step, a profile created in session 1, then Host -> SESSION NAME)
+expects `OpenMenu [UCMenu.UC2Keyboard] (Liandri Corporation)` and would have failed on it.
+
+Change (still `patches/player-name`): `SetProfileServerName` is no longer called from `SetProfilePlayerName` (that
+function is bytecode-identical to main's again; the padding blank lines adjusted so its `assert` stays on line 2791); it
+is called from `ControllerActivated` (start-up) and from UCMenu `Arena_PanelServerMain.RestoreProfileValues` (the host
+page, right before it reads `CurrentProfile.GetServerName()` for SESSION NAME), which covers a profile deleted or
+cleared in the menus. `NewProfile` then resets the profile to the default as Epic's does.
+
+- Compare against main's packages: GUI.u: `ControllerActivated` differs, `SetProfileServerName` new, 724 of 725
+  identical; UCMenu.u: `UC2Arena_Character.SaveSettings` and `Arena_PanelServerMain.RestoreProfileValues` differ, 2413 of
+  2415 identical. Warnings unchanged (GUI 5, UCMenu 81).
+- P2: `--write-reference` then PASS (GUI.u 39538dde..., UCMenu.u ce8775ff..., UCGameplay.u unchanged 1e795f93...);
+  check-headers current (`logs/y1/p2-*-2.log`, `check-headers-2.log`).
+- `tools/dev/y1-names.sh y1 rebuilt` (expectations: h2/h3 the profile default in both variants): **ALL PASS**
+  (`logs/y1/native-rebuilt-run2/`): h1 `CTF|MyBox|...|Coordinator|0`; h2 `CTF|Liandri Corporation|...|Proffy|0`; h3
+  (launcher says OtherBox) `CTF|Liandri Corporation|...|Proffy|0`; h4 (profile deleted) `CTF|OtherBox|...|Coordinator|0`
+  with the host page's `SetProfileServerName: no profile: the session is named OtherBox` line.
+
+The web (step 1's packages, artifact sha256 5884f482..., the profile-less path identical to step 2's): ufrontend-y1's
+`uc2-wasm-netplay.spec.js` extended (see the frontend notes `docs/migration/notes/uc2-y1-names.md`), `y1-full-1`:
+**1 passed (7.2 min)**: host beacon `CTF|E2E Netplay Host|CTF-Aqueduct|CTF_Custom|1|4|0||NetHost|0`, host match URL
+`...Name=NetHost...`, the guest's System Link row "E2E Netplay Host", both scoreboards NetHost and NetGuest
+(`logs/y1/e2e-y1-full-1-results/*/15-host-scoreboard.png`). Memory: guard peak 9.8 GB machine-wide, 7G ceiling not hit.

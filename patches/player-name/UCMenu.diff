@@ -1,3 +1,14 @@
+--- a/UCMenu/Classes/Arena_PanelServerMain.uc
++++ b/UCMenu/Classes/Arena_PanelServerMain.uc
+@@ -391,6 +391,8 @@
+ 			Index = bAllowHandicap ? 1 : 0;
+ 			mo.SetItem(Index,true,true,true);
+ 		}
++		// Y-1 (player-name): without a profile, the session is named by the launcher's server name (the ini's)
++		Controller.SetProfileServerName(PlayerOwner(), CurrentProfile);
+ 		ServerName = CurrentProfile.GetServerName();
+ 		mo = GetRule(ServerNameIndex);
+ 		if ( mo != None )
 --- a/UCMenu/Classes/UC2Arena_Character.uc
 +++ b/UCMenu/Classes/UC2Arena_Character.uc
 @@ -1561,6 +1561,12 @@

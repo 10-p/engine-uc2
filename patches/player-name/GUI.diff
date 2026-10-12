@@ -8,13 +8,12 @@
  			}
  			PC.bFire = 0;
  			PC.bAltFire = 0;
-@@ -2237,12 +2238,20 @@
+@@ -2237,12 +2238,19 @@
  	}
  	if (Profile.IsTransient())
  	{
 -		CharIndex = Class'Engine.CharacterInformation'.static.GetCharacterIndex(Profile.GetCharacterClass());
 -		if (((CharIndex < 0) || (CharIndex >= 15)))
-+		SetProfileServerName(PC, Profile);
 +		if (((PC.Player == ViewportOwner) && (PC.Level != None)))
  		{
 -			CharIndex = 9;
@@ -33,16 +32,17 @@
  	}
  	else
  	{
-@@ -2256,6 +2265,8 @@
+@@ -2256,6 +2264,9 @@
  		while ((i < GetViewportCount(True)))
  		{
  			IndexPC = GetPlayerController(string(i));
 +
 +
++
  
  
  
-@@ -3554,6 +3565,29 @@
+@@ -3554,6 +3565,31 @@
  	UIX.DebugIconFade(bGameIcon, NewDisplaySeconds, NewIconFade, NewIconRepeat, NewFadeMultiplier);
  }
  
@@ -50,7 +50,9 @@
 +// [Engine.GameReplicationInfo] ServerName (the launcher's server name) instead of the profile default
 +// ("Liandri Corporation", which PlayerProfile.SetServerName copies over GameReplicationInfo's default at start-up).
 +// Only while the profile-less profile still has that default: a SESSION NAME typed on the host page stays.
-+// A loaded profile keeps its own server name.
++// A loaded profile keeps its own server name. Called where the menus bind the profile's delegates (the first menu of a
++// run) and by the host page (UCMenu Arena_PanelServerMain); not from the SetPlayerName delegate, which Epic's
++// NewProfile also runs while it resets a profile-less profile into a new one (that one starts with the default).
 +final function SetProfileServerName(PlayerController PC, PlayerProfile Profile)
 +{
 +	local string IniServerName;

@@ -13,10 +13,10 @@
 #       PlayerReplicationInfo and the beacon's player list say Coordinator, the beacon's server field MyBox.
 #       vanilla (Epic's rule): Anubis (the default character) and Liandri Corporation (the profile default).
 #   h2  fresh tree, the same launch, but a profile "Proffy" is created on the Profiles page first: the profile names
-#       the player (Proffy); its server name is the one it was created with (rebuilt: the session's, MyBox, since the
-#       profile-less profile carried it; vanilla: the profile default, Liandri Corporation).
+#       the player (Proffy) and the session (its server name, the profile default Liandri Corporation), in both
+#       variants.
 #   h3  restart after h2 with another launcher server name (OtherBox): the game starts in profile Proffy, whose own
-#       names win (Proffy and MyBox / Liandri Corporation), not the launcher's.
+#       names win (Proffy, Liandri Corporation), not the launcher's.
 #   h4  restart after h3: the profile is deleted on the Profiles page, then a host without a profile: rebuilt
 #       Coordinator / OtherBox (the launcher's again); vanilla Anubis / Liandri Corporation.
 #
@@ -27,8 +27,8 @@
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
-tree=${1:?usage: y1-names.sh <tree> rebuilt|vanilla [h1] [h2]}
-variant=${2:?usage: y1-names.sh <tree> rebuilt|vanilla [h1] [h2]}
+tree=${1:?usage: y1-names.sh <tree> rebuilt|vanilla [h1..h4]}
+variant=${2:?usage: y1-names.sh <tree> rebuilt|vanilla [h1..h4]}
 shift 2
 parts=${*:-h1 h2 h3 h4}
 sys=$work/run/$tree/System
@@ -155,8 +155,7 @@ for part in $parts; do
     { main_menu; host_flow 1 | sed 's/\$MOVE/Down/'; host_checks "$(nopro_player)" "$(nopro_server "$SRV")"; } > "$out/$tree-h1.scen"
     run_part h1 "$(nopro_player)" "$(nopro_server "$SRV")" "$out/$tree-h1.scen"
     ;;
-  h2)  # fresh tree, a profile is created first: it names the player; its server name is the one it was created with
-       # (rebuilt: the profile-less session's, the launcher's; vanilla: the profile default)
+  h2)  # fresh tree, a profile is created first: its names win (its name; its server name, the profile default)
     SRV=$server; KEEP=
     { main_menu; profiles_page; cat <<'SCEN'
 wait OpenMenu \[GUI.GUIMessageBox\] 20
@@ -173,13 +172,13 @@ key Escape
 expect profile-page-closes CloseMenu \[UC2Profile\] 10
 sleep 2
 SCEN
-      host_flow 0 | sed 's/\$MOVE/Up/'; host_checks Proffy "$(nopro_server "$SRV")"; } > "$out/$tree-h2.scen"
-    run_part h2 Proffy "$(nopro_server "$SRV")" "$out/$tree-h2.scen"
+      host_flow 0 | sed 's/\$MOVE/Up/'; host_checks Proffy "Liandri Corporation"; } > "$out/$tree-h2.scen"
+    run_part h2 Proffy "Liandri Corporation" "$out/$tree-h2.scen"
     ;;
   h3)  # restart after h2 with ANOTHER launcher server name: the game starts in profile Proffy, whose names win
     SRV=OtherBox; KEEP=1
-    { main_menu; host_flow 0 | sed 's/\$MOVE/Down/'; host_checks Proffy "$(nopro_server "$server")"; } > "$out/$tree-h3.scen"
-    run_part h3 Proffy "$(nopro_server "$server")" "$out/$tree-h3.scen"
+    { main_menu; host_flow 0 | sed 's/\$MOVE/Down/'; host_checks Proffy "Liandri Corporation"; } > "$out/$tree-h3.scen"
+    run_part h3 Proffy "Liandri Corporation" "$out/$tree-h3.scen"
     ;;
   h4)  # restart after h3: the profile is deleted on the Profiles page, then a host without a profile again
     SRV=OtherBox; KEEP=1
