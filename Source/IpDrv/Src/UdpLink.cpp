@@ -10,6 +10,12 @@ Revision history:
 #include "UnIpDrv.h"
 #include "UnTcpNetDriver.h"
 #include "UnTcpNetDriverXbox.h"
+#ifdef __EMSCRIPTEN__
+#include "UdpLinkWeb.h"
+
+// netplay: the web's synthetic LAN (UdpLinkWeb.h). Filled in by WebRTCDrv when it is linked in.
+FUdpLinkWebHooks* GUdpLinkWebHooks = NULL;
+#endif
 
 /*-----------------------------------------------------------------------------
 	AUdpLink implementation.
@@ -34,6 +40,10 @@ AUdpLink::AUdpLink()
 void AUdpLink::PostScriptDestroyed()
 {
 	guard(AUdpLink::PostScriptDestroyed);
+#ifdef __EMSCRIPTEN__
+	if( GUdpLinkWebHooks )
+		GUdpLinkWebHooks->Unbind( this );
+#endif
 	if( GetSocket() != INVALID_SOCKET )
 		closesocket(GetSocket());
 	Super::PostScriptDestroyed();
@@ -49,6 +59,21 @@ void AUdpLink::execBindPort( FFrame& Stack, RESULT_DECL )
 	P_GET_INT_OPTX(InPort,0);
 	P_GET_UBOOL_OPTX(bUseNextAvailable,0);
 	P_FINISH;
+#ifdef __EMSCRIPTEN__
+	// netplay: a browser has no UDP socket (socket() fails here, and Epic's callers treat a 0 as fatal:
+	// ClientBeaconReceiver never starts, UdpBeacon logs "failed to bind a port"). With the synthetic LAN
+	// present the bind is answered by it: the port is the one asked for (or a made-up free one), and SendText
+	// and Tick are served from the LAN. UdpLinkWeb.h.
+	if( GUdpLinkWebHooks )
+	{
+		static INT GNextWebPort = 40000;
+		INT Bound = InPort ? InPort : GNextWebPort++;
+		Port = Bound;
+		GUdpLinkWebHooks->Bind( this, Bound );
+		*(INT*)Result = Bound;
+		return;
+	}
+#endif
 	if( GIpDrvInitialized )
 	{
 		if( GetSocket()==INVALID_SOCKET )
@@ -111,6 +136,15 @@ void AUdpLink::execSendText( FFrame& Stack, RESULT_DECL )
 	P_GET_STRUCT(FIpAddr,IpAddr);
 	P_GET_STR(Str);
 	P_FINISH;
+#ifdef __EMSCRIPTEN__
+	// netplay: the datagram goes to the synthetic LAN (it answers the System Link REPORT broadcast).
+	if( GUdpLinkWebHooks )
+	{
+		GUdpLinkWebHooks->Send( this, IpAddr.Addr, IpAddr.Port, *Str );
+		*(DWORD*)Result = 1;
+		return;
+	}
+#endif
 	if( GetSocket() != INVALID_SOCKET )
 	{
 		sockaddr_in Addr;
@@ -168,6 +202,31 @@ UBOOL AUdpLink::Tick( FLOAT DeltaTime, enum ELevelTick TickType )
 {
 	guard(AUdpLink::Tick);
 	UBOOL Result = Super::Tick( DeltaTime, TickType );
+#ifdef __EMSCRIPTEN__
+	// netplay: the synthetic LAN's datagrams reach the script through Epic's own receive events, as a
+	// received packet would (RMODE_Event; nothing in UC2's System Link uses RMODE_Manual).
+	if( GUdpLinkWebHooks )
+	{
+		DWORD FromAddr = 0;
+		INT FromPort = 0;
+		FString Text;
+		while( GUdpLinkWebHooks->NextReply( this, &FromAddr, &FromPort, Text ) )
+		{
+			if( ReceiveMode != RMODE_Event )
+				continue;
+			FIpAddr Addr;
+			Addr.Addr = FromAddr;
+			Addr.Port = FromPort;
+			if( LinkMode == MODE_Line )
+				eventReceivedLine( Addr, Text );
+			else if( LinkMode == MODE_Binary )
+				eventReceivedBinary( Addr, Text.Len(), (BYTE*)appToAnsi(*Text) );
+			else
+				eventReceivedText( Addr, Text );
+		}
+		return Result;
+	}
+#endif
 	if( GetSocket() != INVALID_SOCKET )
 	{
 //scion bcl -- stolen (and modified) from Championship for Xbox encrypted commo

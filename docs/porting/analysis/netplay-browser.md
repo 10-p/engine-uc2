@@ -40,3 +40,53 @@ address part in `WebRTCDiscovery.cpp`):
 4. `UWebRTCNetDriver::InitConnect` translates a synthetic address back to the room key (the join from the page is a
    travel to `10.199.0.N:7777?...`).
 5. Native: unchanged (all of it `__EMSCRIPTEN__`); proved by the native build and `tools/dev/net-test.py`.
+
+## Step 1 (2026-10-12): the synthetic LAN (code), builds
+
+- `Source/IpDrv/Inc/UdpLinkWeb.h` (new): `FUdpLinkWebHooks` {Bind, Unbind, Send, NextReply} and `GUdpLinkWebHooks`,
+  owned by IpDrv, NULL unless WebRTCDrv installs it. A table rather than direct calls because the web `ucc-bin.js`
+  links IpDrv without WebRTCDrv (Source/UCC/CMakeLists.txt): with direct calls its link would fail; with the table it
+  keeps Epic's socket code.
+- `Source/IpDrv/Src/UdpLink.cpp`, `__EMSCRIPTEN__` only and only when the table is set: `execBindPort` registers the
+  link and returns the port asked for (or 40000+), `execSendText` hands the text to the LAN, `Tick` delivers the LAN's
+  datagrams through Epic's `eventReceivedText/Line/Binary`, `PostScriptDestroyed` unbinds. Native: no change (the
+  native build of this branch compiles none of it; `build-native` rc 0, 0 errors, `logs/netplay/build-native-0.log`).
+- `Source/WebRTCDrv/Src/WebRTCLan.cpp` (new): the LAN. `Send` only RECORDS a `REPORT?<nonce>` (it runs inside the
+  receiver's script Timer); the link's next `NextReply` (tick context) starts the glue's discovery (at most every 4 s:
+  a broker request plus a WebRTC status ping per host), polls it (at most every 0.25 s) and queues one answer per
+  discovered server: `<BeaconProduct> 7777 ?BeaconText=<beacon>?Nonce=<nonce>` from `10.199.0.<room index>`.
+  `BeaconProduct` from the ini (`[IpDrv.UdpBeacon]`), else `Unreal(Avaris)` (UdpBeacon's default; the receiver
+  compares case-insensitively). Beacon text = the row's game-type field when it holds a `|` (a UC2 host of this
+  build), else built from the row's plain fields. Lines (DevNet): `[WebRTC-LAN] link bound on port N ...`,
+  `[WebRTC-LAN] discovery started`, `[WebRTC-LAN] server '<name>' room=<key> map=<map> p/m <ping>ms -> 10.199.0.N
+  beacon '<text>'` and `discovery done: N server(s)` (when the list changes), `[WebRTC-LAN] REPORT from the System
+  Link page answered with N beacon(s): ...` (when N changes).
+- `WebRTCNetDriver.cpp`: `PushListenStatus` sends `Game->eventGetBeaconText()` (once the GRI exists) as the row's
+  game type and logs `[WebRTC] listen status: System Link beacon '<text>'` when it changes (so the host's log says
+  when a guest's PRI arrives: the player count and names are in the text); `InitConnect` turns a `10.199.0.N` host
+  back into the room key (`[WebRTC] InitConnect: System Link address 10.199.0.N -> room key '<key>'`).
+- `WebRTCDrv.h`: `WebRTCLan_Install()` (called by `AUTO_INITIALIZE_REGISTRANTS_WEBRTCDRV`), `WebRTCLan_RoomForHost`;
+  member `LastBeacon`. CMake: `Src/WebRTCLan.cpp`, include dir `Source/IpDrv/Inc` (header only).
+- Builds: `build-native` (configure + `-j4`, `bin/capped 6G`) rc 0, 0 errors; `build-wasm-perf` (configure + `-j4`,
+  `bin/capped 6G`) rc 0, 0 errors (`logs/netplay/build-wasm-perf-0.log`), SDLLaunch.wasm sha256
+  30fb6d8644e0fc4ce430271510ad31bf2485c0bdf21a40be154d282cd4f23848; the module imports `webrtc_discover_servers`.
+
+## Step 2 (2026-10-12): the browser runs (frontend spec `uc2-wasm-netplay.spec.js`)
+
+- `host-0` (main's artifact 870c5115..., host phase only): every host step green except the beacon line (not in
+  that build): Networked Combat > Host System Link Game > nag (Escape) > Enter x3 > Enter x3 > Enter (the last one
+  answers "Begin Match? (A) yes") brought `CTF-Aqueduct` up (a fresh install's host page defaults to Capture the Flag);
+  `[WebRTC] InitListen: room 'default' server name 'E2E Netplay Host'`, the glue registered
+  `uc2-default-public-room_e2enetplayhost-srv`, the broker's `/peerjs/peers` listed exactly that id.
+- `full-1` (this branch's artifact 30fb6d86...): host as above plus
+  `[WebRTC] listen status: System Link beacon 'CTF|Liandri Corporation|CTF-Aqueduct|CTF_Custom|1|4|0||Anubis|0'`;
+  guest: `[WebRTC-LAN] link bound on port 9777`, `discovery started`, first REPORT answered with 0, then
+  `[WebRTC-LAN] server 'E2E Netplay Host' room=default-public-room_e2enetplayhost map=CTF-Aqueduct 1/4 32ms ->
+  10.199.0.0 beacon '...'`, `discovery done: 1 server(s)`, `REPORT from the System Link page answered with 1
+  beacon(s): '...' from 10.199.0.0:7777`. The page (screenshot `11-guest-system-link-listed.png`): JOIN SYSTEM LINK,
+  one row "Liandri Corporation | pure | CTF | Aqueduct | 1 / 4", "1 MATCH FOUND", JOIN enabled. Stopped at the spec's
+  own "1 Match Found" OCR check (the label is drawn dim; the row is now checked instead).
+- Learned: without a profile a player is named after his CHARACTER (the beacon's names field: `Anubis`), not the
+  launcher's name; the session name is the profile default `Liandri Corporation` (GRI ServerName set by
+  PlayerProfile), while the launcher's server name only addresses the peer. "discovery started" is logged every 4 s
+  while the page is open (noise; quietened at the next rebuild).

@@ -40,6 +40,8 @@ extern "C"
 	int  webrtc_get_connection_state( int ConnId );
 	void webrtc_set_listen_status( const char* Name, const char* Map, int Players, int MaxPlayers, const char* GameType );
 }
+// netplay: the System Link page's discovery calls (webrtc_discover_servers, webrtc_get_server_*) are declared
+// where they are used, Src/WebRTCLan.cpp.
 
 // webrtc_get_connection_state() values (the glue's session states).
 #define WEBRTC_STATE_INVALID	0
@@ -85,6 +87,7 @@ class UWebRTCNetDriver : public UNetDriver
 	TArray<INT>	ParkedAccepts;		// incoming pipes the level told us to IGNORE (not refuse)
 	DOUBLE		LastStatusPush;
 	DOUBLE		LastStatsLog;		// the per-connection traffic line, every 10 s (LogStats)
+	FString		LastBeacon;			// listen server: the beacon text last pushed (logged when it changes)
 
 	// Constructor.
 	UWebRTCNetDriver()
@@ -109,9 +112,19 @@ class UWebRTCNetDriver : public UNetDriver
 	void LogStats();
 };
 
+/*-----------------------------------------------------------------------------
+	The System Link page's synthetic LAN (netplay, Src/WebRTCLan.cpp).
+-----------------------------------------------------------------------------*/
+
+// Fill in IpDrv's AUdpLink hooks (IpDrv/Inc/UdpLinkWeb.h); done with the class registration below.
+void WebRTCLan_Install();
+// The room key a synthetic System Link address (10.199.0.N) stands for, or "" if it is not one.
+FString WebRTCLan_RoomForHost( const TCHAR* Host );
+
 #define AUTO_INITIALIZE_REGISTRANTS_WEBRTCDRV \
 	UWebRTCNetDriver::StaticClass(); \
-	UWebRTCConnection::StaticClass();
+	UWebRTCConnection::StaticClass(); \
+	WebRTCLan_Install();
 
 #endif // _INC_WEBRTCDRV
 

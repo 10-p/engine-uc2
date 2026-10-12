@@ -15,8 +15,10 @@
 	  (the launcher's seed), not GameReplicationInfo's class default: UC2's profile code overwrites that
 	  default with the profile's own server name at start-up (Engine/Classes/PlayerProfile.uc:764), the
 	  same "Liandri Corporation" on every install, and never writes the ini;
-	- no in-game server-browser hook and no deferred-connect export (UC2 has no UT2004 MasterServerClient
-	  browser; the frontend joins by putting "<room>_<serverSlug>?connect" on the command line).
+	- no deferred-connect export (the frontend's invite joins by putting "<room>_<serverSlug>?connect" on the
+	  command line); netplay: UC2's own System Link page (UCMenu.UC2Browser, UDP beacons) is fed by the
+	  synthetic LAN in WebRTCLan.cpp: the listen status carries the host's beacon text, and a join from that
+	  page dials a synthetic address that InitConnect turns back into the room key.
 	Notebook: docs/porting/analysis/webrtc.md.
 =============================================================================*/
 
@@ -91,6 +93,14 @@ UBOOL UWebRTCNetDriver::InitConnect( FNetworkNotify* InNotify, FURL& ConnectURL,
 	// "<key>?connect" into a network URL with that host).
 	RoomName = ConnectURL.Host;
 	bIsListenServer = 0;
+	// netplay: a join from the System Link page travels to the synthetic address its row carried (10.199.0.N,
+	// WebRTCLan.cpp): FURL only sees a host in a dotted token, so the row cannot carry the key itself.
+	FString FromLan = WebRTCLan_RoomForHost( *RoomName );
+	if( FromLan.Len() )
+	{
+		debugf( NAME_DevNet, TEXT("[WebRTC] InitConnect: System Link address %s -> room key '%s'"), *RoomName, *FromLan );
+		RoomName = FromLan;
+	}
 	if( !RoomName.Len() )
 	{
 		Error = TEXT("WebRTC: no room to connect to");
@@ -282,7 +292,7 @@ void UWebRTCNetDriver::PushListenStatus()
 		return;
 	LastStatusPush = Now;
 
-	FString Name = ServerName, MapName = TEXT("?"), GameType;
+	FString Name = ServerName, MapName = TEXT("?"), GameType, Beacon;
 	INT Players = 0, MaxPlayers = 0;
 	ULevel* Level = Notify ? Notify->NotifyGetLevel() : NULL;
 	if( Level )
@@ -298,10 +308,25 @@ void UWebRTCNetDriver::PushListenStatus()
 			GameType = Game->GameName;
 			if( !Name.Len() && Game->GameReplicationInfo )
 				Name = Game->GameReplicationInfo->ServerName;
+			// netplay: what UC2's System Link page shows and joins with is the game's beacon text, the one
+			// IpDrv.UdpBeacon broadcasts natively (GameInfo.GetBeaconText(): game type, server name, map,
+			// maplist, players, max players, purity, mutators, player names, handicap). It travels in the
+			// row's game-type field: UC2's own guests are the only readers of a uc2 row (WebRTCLan.cpp).
+			if( Game->GameReplicationInfo )
+				Beacon = Game->eventGetBeaconText();
 		}
 	}
 	if( !Name.Len() )
 		Name = TEXT("UC2 Server");
+	if( Beacon.Len() )
+	{
+		GameType = Beacon;
+		if( Beacon != LastBeacon )
+		{
+			LastBeacon = Beacon;
+			debugf( NAME_DevNet, TEXT("[WebRTC] listen status: System Link beacon '%s'"), *Beacon );
+		}
+	}
 	webrtc_set_listen_status( TCHAR_TO_ANSI(*Name), TCHAR_TO_ANSI(*MapName), Players, MaxPlayers, TCHAR_TO_ANSI(*GameType) );
 	unguard;
 }
