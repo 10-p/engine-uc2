@@ -1,6 +1,14 @@
 --- a/GUI/Classes/GUIController.uc
 +++ b/GUI/Classes/GUIController.uc
-@@ -2237,12 +2237,19 @@
+@@ -1488,6 +1488,7 @@
+ 			{
+ 				Profile.SetPlayerName = SetProfilePlayerName;
+ 				Profile.UpdateOnlineState = UpdateOnlineState;
++				SetProfileServerName(PC, Profile);
+ 			}
+ 			PC.bFire = 0;
+ 			PC.bAltFire = 0;
+@@ -2237,12 +2238,19 @@
  	}
  	if (Profile.IsTransient())
  	{
@@ -24,14 +32,45 @@
  	}
  	else
  	{
-@@ -2256,6 +2263,10 @@
+@@ -2256,6 +2264,9 @@
  		while ((i < GetViewportCount(True)))
  		{
  			IndexPC = GetPlayerController(string(i));
 +
 +
 +
+ 
+ 
+ 
+@@ -3554,6 +3565,31 @@
+ 	UIX.DebugIconFade(bGameIcon, NewDisplaySeconds, NewIconFade, NewIconRepeat, NewFadeMultiplier);
+ }
+ 
++// Y-1 (player-name): without a profile, the first player's session is named by the system ini's
++// [Engine.GameReplicationInfo] ServerName (the launcher's server name) instead of the profile default
++// ("Liandri Corporation", which PlayerProfile.SetServerName copies over GameReplicationInfo's default at start-up).
++// Only while the profile-less profile still has that default: a SESSION NAME typed on the host page stays.
++// A loaded profile keeps its own server name. Called where the menus bind the profile's delegates (the first menu of a
++// run) and by the host page (UCMenu Arena_PanelServerMain); not from the SetPlayerName delegate, which Epic's
++// NewProfile also runs while it resets a profile-less profile into a new one (that one starts with the default).
++final function SetProfileServerName(PlayerController PC, PlayerProfile Profile)
++{
++	local string IniServerName;
++	if (((PC == None) || (Profile == None)) || !Profile.IsTransient() || (PC.Player != ViewportOwner))
++	{
++		return;
++	}
++	if ((Profile.GetServerName() != Profile.GetServerName(True)))
++	{
++		return;
++	}
++	if ((GetConfigValue("System", "Engine.GameReplicationInfo", "ServerName", IniServerName) && (IniServerName != "")) && (IniServerName != Profile.GetServerName()))
++	{
++		Log("SetProfileServerName: no profile: the session is named" @ IniServerName @ "([Engine.GameReplicationInfo] ServerName)");
++		Profile.SetServerName(IniServerName);
++	}
++}
 +
- 
- 
- 
+ cpptext
+ {
+ // stripped from the shipped package

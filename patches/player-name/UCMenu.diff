@@ -1,0 +1,26 @@
+--- a/UCMenu/Classes/Arena_PanelServerMain.uc
++++ b/UCMenu/Classes/Arena_PanelServerMain.uc
+@@ -391,6 +391,8 @@
+ 			Index = bAllowHandicap ? 1 : 0;
+ 			mo.SetItem(Index,true,true,true);
+ 		}
++		// Y-1 (player-name): without a profile, the session is named by the launcher's server name (the ini's)
++		Controller.SetProfileServerName(PlayerOwner(), CurrentProfile);
+ 		ServerName = CurrentProfile.GetServerName();
+ 		mo = GetRule(ServerNameIndex);
+ 		if ( mo != None )
+--- a/UCMenu/Classes/UC2Arena_Character.uc
++++ b/UCMenu/Classes/UC2Arena_Character.uc
+@@ -1561,6 +1561,12 @@
+ 		Profile = GetProfile(PlayerIndex);
+ 		if ( !GameStart.HasURLKeyValue(PlayerIndex, "Name") )
+ 		{
++			// Y-1 (player-name): a player without a profile is named by GUIController.SetProfilePlayerName, as when he
++			// changes character on this page (the first player: the launcher's name); Epic named him after his character
++			if ( Profile != None && Profile.IsTransient() )
++				Controller.SetProfilePlayerName(PlayerOwner(PlayerIndex), Profile);
++			if ( GameStart.HasURLKeyValue(PlayerIndex, "Name") )
++				continue;
+ 			CharacterName = Profile.GetCharacterName();
+ 			GameStart.SetURLKeyValue(PlayerIndex, "Name", CharacterName);
+ 		}
