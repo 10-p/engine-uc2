@@ -103,3 +103,34 @@ without the 4-byte row padding the BMP format asks for, so a screenshot at an od
 "image file is truncated"; `run-uc2-shot.sh` then converts nothing). engine-ut2004's copy (`Core/Src/UnMisc.cpp:1789`)
 is the same. The pictures above were converted by reading the rows unpadded. Not changed here (Epic's code, as
 engine-ut2004 keeps it); listed as an open question.
+
+### 4. Web: the launcher E2E (numerically checked: DOM sizes and log lines; the menu by OCR)
+
+Frontend worktree `ufrontend-y5` (branch `uc2-y5-web`, `173c14e`): the two `test.fail` marks removed;
+renderer-absent expects the new line, resolution-dsf-exact also checks the GL device's `main framebuffer`.
+`corepack yarn build --target uc2 --engine-artifact <this worktree>/build-wasm-perf/Source/SDLLaunch` (capped 6G);
+runner `logs/y5/run-e2e.sh` (Y-4's, pointed here: refuses with another e2e-mem-guard, ports 8080/8081/9000 taken or
+load 14+; sha256 of `serve-web/SDLLaunch.wasm` against this artifact before and after; null sink loaded and unloaded
+by module index; `bin/capped 7G 3600 -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=23`). One harness
+machine-wide (another agent's boot run was waited out).
+
+- `launcher-1`, `uc2-wasm-launcher.spec.js`: **15 passed (10.2 min)**, ceiling not hit, guard peak 14.2 GB
+  machine-wide (5.7 at start). `[ABSENT] ok ... -OPENGL: render device UC2GLDrv.UC2GLRenderDevice cannot run on this
+  platform, ignored: keeping RenderDevice=UC2GL4ESDrv.UC2GL4ESRenderDevice`, the GL4ES device made, the main menu by
+  OCR, no fault. `[DSF]`/`[DSFX] canvas {"w":1279,"h":959,"css":"1023x767","dpr":1.25}; UC2GLDrv: main framebuffer
+  1279x959`.
+- `boot-1`, `uc2-wasm-boot.spec.js`: **14 passed (5.1 min)**, guard peak 13.6 GB machine-wide.
+- wasm sha256 `2b59806168dca21ce59105b0de3613d4bc2ae08b0c8cf637ef510e2f66eafcd5` before and after both; no `y5sink`
+  left.
+
+### Open questions
+
+- The ini path of defect 1: an `Avaris.ini` on the web naming `RenderDevice=UC2GLDrv.UC2GLRenderDevice` (only by hand,
+  e.g. the launcher's ini editor) would still assert: `ReplaceMissingDrivers` asks "is the class linked", and it is.
+  engine-ut2004 there picks the best GL device present (its DevicePreference); ours replaces a missing render device
+  with `Engine.NullRenderDevice` (natively too, e.g. a retail ini's D3DDrv). Not changed (outside the switch fix;
+  natively unchanged was the brief).
+- The post-process self-test (`depth-copy`, `bb-copy`, `bb-copy-ref`) expects an exact half-size copy and fails at any
+  odd back-buffer dimension, on main as well (1280x959). A model that follows Epic's full-range mapping
+  (W/floor(W/2)) would make it a check at every size; worth a follow-up, since browser canvases are often odd now.
+- Epic's `appCreateBitmap` writes unpadded BMP rows (malformed at odd widths), as engine-ut2004's copy does.
