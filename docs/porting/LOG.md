@@ -689,3 +689,10 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
     wonkiness (P8, held), WMA with M16's video decoder, M15/M16 video/M17. Next: the UnrealScript-out-of-the-repo
     restructuring (patches per feature, CMake script rules, decompiled base, history rewrite), after everything above is
     published.
+- 2026-10-12 — **ufront "Unlock all content" (owner): `[GUI.GUIController] bUnlockAll`; the Xbox Live extras always
+  available off the Xbox.** `UBaseGUIController::InitializeController` sets Epic's menu flags (`bUnlockCharacters`,
+  `bUnlockRaiden`, `bShowAllMuts`, `bLaddersLocked=False`) after the title update's reset when the key is true, in
+  memory, the profile untouched; `HasContent` treats everything installed as available off the Xbox (the 10 skins, the
+  4 maps). No script changes. Gate: ufrontend E2E `uc2 config › unlock-all` (the `Unlock all:` line, `GETALL
+  GUIController bLaddersLocked` = False on the live controller, the key read back after a reload).
+  `docs/porting/analysis/unlock-all.md`.

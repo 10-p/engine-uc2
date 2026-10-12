@@ -105,6 +105,37 @@ void UBaseGUIController::InitializeController()
 #endif
 
 	eventInitializeController();
+
+	// ufront "Unlock all content" (owner, 2026-10-12): [GUI.GUIController] bUnlockAll=True in the System ini (Avaris.ini;
+	// the launcher's button writes it) opens what the menus keep locked. The script above has just cleared
+	// bUnlockCharacters and bUnlockRaiden (Epic's title-update fix in InitializeController, so the PC community's
+	// bUnlockCharacters=True never works); Epic's own menu flags are set after it, in memory only: nothing saves this
+	// object's config. bUnlockCharacters: every character, bot and alternate skin; bUnlockRaiden; bShowAllMuts: every
+	// mutator; bLaddersLocked=False: every ladder, rung and challenge and the Extras cinematics. The profile is never
+	// touched: what the player wins is recorded as always. docs/porting/analysis/unlock-all.md.
+	UBOOL UnlockAll = 0;
+	if( GConfig->GetBool( GetClass()->GetPathName(), TEXT("bUnlockAll"), UnlockAll, GIni ) && UnlockAll )
+	{
+		static const struct { const TCHAR* Name; UBOOL Value; } Flags[] =
+		{
+			{ TEXT("bUnlockCharacters"), 1 },
+			{ TEXT("bUnlockRaiden"),     1 },
+			{ TEXT("bShowAllMuts"),      1 },
+			{ TEXT("bLaddersLocked"),    0 },
+		};
+		INT Set = 0;
+		for( INT i=0; i<(INT)ARRAY_COUNT(Flags); i++ )
+		{
+			UBoolProperty* Prop = FindField<UBoolProperty>( GetClass(), Flags[i].Name );
+			if( !Prop )
+				continue;
+			BITFIELD* Bits = (BITFIELD*)((BYTE*)this + Prop->Offset);
+			*Bits = Flags[i].Value ? (*Bits | Prop->BitMask) : (*Bits & ~Prop->BitMask);
+			Set++;
+		}
+		debugf( TEXT("Unlock all: every character, bot, mutator, ladder and cinematic is open (%s bUnlockAll=True, %i of %i menu flags set)"),
+			GetClass()->GetPathName(), Set, (INT)ARRAY_COUNT(Flags) );
+	}
 }
 
 void UBaseGUIController::execHasContent( FFrame& Stack, RESULT_DECL )
@@ -135,6 +166,13 @@ UBOOL UBaseGUIController::HasContent( INT ContentType, const FString& ContentId 
 	}
 	else
 	{
+#ifndef _XBOX
+		// ufront (owner, 2026-10-12): there is no Xbox Live off the Xbox, so nothing ever activates its downloadable
+		// content (FContentManager::Initialize and the activation files are Xbox-only: IsActivated is always false here).
+		// The ten alternate skins and the four maps (DM-EvilHands, CTF-Monoxide, DM-Sever, OD-Ascension) are in the game
+		// folder like everything else: what is installed is available, as on an Xbox that had downloaded it.
+		bResult = 1;
+#else
 		FContentManager* ContentManager = FContentManager::GetInstance();
 		switch ( ContentType )
 		{
@@ -179,6 +217,7 @@ UBOOL UBaseGUIController::HasContent( INT ContentType, const FString& ContentId 
 			}
 			break;
 		}
+#endif
 	}
 
 	return bResult;
