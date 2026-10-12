@@ -1,0 +1,15 @@
+--- a/UCMenu/Classes/UC2Arena_Character.uc
++++ b/UCMenu/Classes/UC2Arena_Character.uc
+@@ -1561,6 +1561,12 @@
+ 		Profile = GetProfile(PlayerIndex);
+ 		if ( !GameStart.HasURLKeyValue(PlayerIndex, "Name") )
+ 		{
++			// Y-1 (player-name): a player without a profile is named by GUIController.SetProfilePlayerName, as when he
++			// changes character on this page (the first player: the launcher's name); Epic named him after his character
++			if ( Profile != None && Profile.IsTransient() )
++				Controller.SetProfilePlayerName(PlayerOwner(PlayerIndex), Profile);
++			if ( GameStart.HasURLKeyValue(PlayerIndex, "Name") )
++				continue;
+ 			CharacterName = Profile.GetCharacterName();
+ 			GameStart.SetURLKeyValue(PlayerIndex, "Name", CharacterName);
+ 		}
