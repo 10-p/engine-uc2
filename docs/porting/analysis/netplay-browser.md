@@ -90,3 +90,28 @@ address part in `WebRTCDiscovery.cpp`):
   launcher's name; the session name is the profile default `Liandri Corporation` (GRI ServerName set by
   PlayerProfile), while the launcher's server name only addresses the peer. "discovery started" is logged every 4 s
   while the page is open (noise; quietened at the next rebuild).
+
+## Step 3 (2026-10-12): the whole player flow green; native regressions
+
+- `discovery started` is now said once (it repeats every 4 s while the page asks; the list's changes are what is
+  logged). wasm-perf rebuilt: rc 0, 0 errors (`logs/netplay/build-wasm-perf-1.log`), SDLLaunch.wasm sha256
+  54ea768a9c16bc47a5499588704c507fc7fbb561603d65ab70d10feb3aaee60d.
+- Browser runs (frontend `uc2-wasm-netplay.spec.js`; notebook `ufrontend-netplay/docs/migration/notes/uc2-player-net-e2e.md`):
+  `full-2` (30fb6d86...) joined: guest `[WebRTC] InitConnect: System Link address 10.199.0.0 -> room key
+  'default-public-room_e2enetplayhost'`, `Welcomed by server: LEVEL=CTF-Aqueduct GAME=UCGameplay.CTFGame LONE=0`; host
+  `Join request: menu.unr?...?Class=UCCharacters.UCPawn_Jugg_Arclite?Melee=0?Name=NetGuest?...`, `Join succeeded:
+  NetGuest`, beacon `CTF|Liandri Corporation|CTF-Aqueduct|CTF_Custom|2|4|0||Anubis;NetGuest|0` (red only on the spec's
+  name expectation). `full-3` 1 passed (both scoreboards show Anubis and NetGuest; the guest's tab closed, the host
+  dropped it by `Connection timed out after 60.000000 seconds`). `full-5` (54ea768a...) **1 passed (7.1 min)**: the
+  same, and both players leave through the in-game menu (FORFEIT GAME): the host's beacon is back to `|1|4|...|Anubis|`
+  at once, both pages back in the menus, no Critical/assertion/trap. Machine memory in use peaked at 9.6 GB (5.6 GB
+  before the run); the run's cgroup ceiling 7G was not hit.
+- Native: the `build-native` object of `UdpLink.cpp` (compiled after the edit) has no hook symbol; incremental native
+  build rc 0. `NET_TREE=netplay-native tools/dev/net-test.sh dedicated1 listen travel`: 21 PASS, 2 FAIL
+  (`listen.hit`, `listen.kill`) + leftovers PASS; main's own build (engine-uc2 aa0f54e, `NET_TREE=netplay-native-base
+  ... listen`) fails the same two items the same way (`NetB health on the listen server: None`), the known flake noted
+  in splitscreen.md/web-g10.md/profiles.md: not this branch. The web `ucc-bin.js` (IpDrv without WebRTCDrv) still links.
+- Not done: a native proof of Epic's System Link listing (two native processes on loopback, the page listing the host
+  through the real UdpBeacon). The page logs nothing about its rows (its debug lines are `DevBrian`, suppressed), so a
+  native check needs the GUI driven by the virtual pad and a screenshot read per process: not cheap; Epic's native
+  path is untouched (none of this compiles natively).

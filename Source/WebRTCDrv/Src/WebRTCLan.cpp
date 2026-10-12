@@ -160,7 +160,14 @@ static void KickDiscovery()
 	GLastDiscoveryAt = Now;
 	GDiscoveryPending = 1;
 	webrtc_discover_servers( "" );	// "" = the room this page is on (the glue resolves it)
-	debugf( NAME_DevNet, TEXT("[WebRTC-LAN] discovery started") );
+	// Said once: while the page is open this repeats every LAN_DISCOVERY_MIN_INTERVAL, and the list's CHANGES are
+	// what PumpDiscovery logs.
+	static UBOOL GSaidStarted = 0;
+	if( !GSaidStarted )
+	{
+		GSaidStarted = 1;
+		debugf( NAME_DevNet, TEXT("[WebRTC-LAN] discovery started (repeated every %.0f s while the System Link page asks; changes are logged)"), LAN_DISCOVERY_MIN_INTERVAL );
+	}
 }
 
 static void PumpDiscovery()
