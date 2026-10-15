@@ -483,7 +483,14 @@ UBitmapMaterial* UShadowBitmapMaterial::Get(FTime Time,UViewport* Viewport)
 
 #ifndef _XBOX
 	//scion jg -- Must be powers of 2 on PC no linear support and no L8
-	USize = VSize = UClamp = VClamp = 256;
+	// ufront: only a size the PC cannot do falls back to 256. A power of two from 32 to 1024 is kept, as the Xbox
+	// kept every size: the game's own shadows ask for 256 (every player shadow is SD_Normal; an ambient creature
+	// can ask for SD_Low..SD_SuperHigh, 128..1024), and a mod's shadow material asks for its own (jcbShadows'
+	// resolution setting).
+	if( !(USize==VSize && USize>=32 && USize<=1024 && (USize & (USize-1))==0) )
+		USize = VSize = 256;
+	UClamp = USize;
+	VClamp = VSize;
 #endif
 
 	if( bBlobShadow || Invalid || Viewport->bForceBlobShadows )
