@@ -8,6 +8,7 @@ epic-fixes     -             on       base-fixes
 epic-source    epic-fixes    on       base-fixes
 mouse-look     epic-fixes    on       ours
 player-name    epic-fixes    on       ours
+extra-maps     epic-fixes    on       ours
 players34      epic-fixes    on       ours
 key-glyphs     epic-fixes    on       ours
 keys-menu      mouse-look    on       ours

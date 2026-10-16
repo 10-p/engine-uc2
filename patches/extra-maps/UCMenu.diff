@@ -1,0 +1,182 @@
+--- a/UCMenu/Classes/Arena_PanelBase.uc
++++ b/UCMenu/Classes/Arena_PanelBase.uc
+@@ -87,7 +87,8 @@
+ const MAPLIST_Classic	=6;
+ const MAPLIST_Arena		=7;
+ const MAPLIST_Random	=8;
+-const MAPLIST_MAX		=9;
++const MAPLIST_Extra		=9;		// ufront: the maps the player added (<Prefix>_Extra, made by the engine at boot)
++const MAPLIST_MAX		=10;
+ 
+ delegate Toggle( Arena_PanelBase Sender );
+ 
+@@ -136,6 +137,7 @@
+ 	case MAPLIST_Melee:		return CharInfo.GameTypePrefix[Controller.LastSelectedGameIdx] $ "_" $ "MeleeFocused";
+ 	case MAPLIST_Classic:	return CharInfo.GameTypePrefix[Controller.LastSelectedGameIdx] $ "_" $ "Classics";
+ 	case MAPLIST_Arena:		return CharInfo.GameTypePrefix[Controller.LastSelectedGameIdx] $ "_" $ "ArenaCombat";
++	case MAPLIST_Extra:		return CharInfo.GameTypePrefix[Controller.LastSelectedGameIdx] $ "_" $ "Extra";
+ 	case MAPLIST_Custom:	return GameClass != None ? GameClass.default.Acronym $ "_Custom" : "";
+ 	case MAPLIST_Random:	return GameClass != None ? GameClass.default.Acronym $ "_RANDOM" : "";
+ 	}
+@@ -151,6 +153,17 @@
+ 
+ 
+ 
++
++// ufront: the order of the map list tabs: Custom, then Extra (the added maps), then the game's own lists. The
++// constants keep their values; only the order they are shown in changes.
++final function int MaplistAtPosition( int Position )
++{
++	if ( Position == 0 )
++		return MAPLIST_Custom;
++	if ( Position == 1 )
++		return MAPLIST_Extra;
++	return Position - 1;
++}
+ 
+ final function int GetMaplistIndex( string MaplistName )
+ {
+@@ -175,6 +188,7 @@
+ 	case "ARENACOMBAT":		Result = FindMaplistIndexStackPosition(MAPLIST_Arena);		break;
+ 	case "CUSTOM":			Result = FindMaplistIndexStackPosition(MAPLIST_Custom);		break;
+ 	case "RANDOM":			Result = FindMaplistIndexStackPosition(MAPLIST_Random);		break;
++	case "EXTRA":			Result = FindMaplistIndexStackPosition(MAPLIST_Extra);		break;
+ 	}
+ 
+ 	
+@@ -267,9 +281,9 @@
+ 
+ 
+ 
+-final function bool GetAllMaps( out array<string> Maps )
++final function bool GetAllMaps( out array<string> Maps, optional bool bWithExtra )
+ {
+-	local Maplist FullList;
++	local Maplist FullList, ExtraList;
+ 	local int i;
+ 	local string GamePrefix;
+ 
+@@ -291,6 +305,21 @@
+ 	}
+ 
+ 	Delete(FullList);
++
++	// ufront: the custom list editor also offers the maps the player added (the engine's <Prefix>_Extra).
++	if ( bWithExtra )
++	{
++		ExtraList = PlayerOwner().Level.Game.GetMapList( GamePrefix $ "_Extra" );
++		if ( ExtraList != None )
++		{
++			for ( i = 0; i < ExtraList.Maps.Length; i++ )
++			{
++				StripExtension(ExtraList.Maps[i]);
++				Maps[Maps.Length] = ExtraList.Maps[i];
++			}
++			Delete(ExtraList);
++		}
++	}
+ 	return true;
+ }
+ 
+--- a/UCMenu/Classes/Arena_PanelMain.uc
++++ b/UCMenu/Classes/Arena_PanelMain.uc
+@@ -128,6 +128,8 @@
+ var()	color					DisabledTextColor;
+ 
+ var()	Material				RandomMapPreviewMaterial;
++var()	Material				ExtraMapPreviewMaterial;	// ufront: an added map has no movie: a still
++var		transient	array<string>	ExtraMaps;				// ufront: the maps of the Extra tab
+ 
+ 
+ var()	localized	string		sAuto, NoMutatorsDescription, sMutatorGroupConflictText,
+@@ -344,7 +346,7 @@
+ 
+ final function RefreshAvailableMaplists()
+ {
+-	local int OldMaplistIndex;
++	local int OldMaplistIndex, Position, i;
+ 	local Maplist m;
+ 	local string str;
+ 	local PlayerController PC;
+@@ -364,12 +366,14 @@
+ 		OldMaplistIndex = MaplistIndexStack[MaplistIndex];
+ 
+ 	MaplistIndexStack.Remove(0, MaplistIndexStack.Length);
++	ExtraMaps.Remove(0, ExtraMaps.Length);
+ 
+ 	
+ 	
+ 	PC = PlayerOwner();
+-	for ( MaplistIndex = 0; MaplistIndex < MAPLIST_Max; MaplistIndex++ )
++	for ( Position = 0; Position < MAPLIST_Max; Position++ )
+ 	{
++		MaplistIndex = MaplistAtPosition(Position);
+ 		str = GetCurrentMaplistName(true);
+ 
+ 		
+@@ -380,6 +384,9 @@
+ 			if ( (m.Label != "" && m.Maps.Length > 0) || MaplistIndex == MAPLIST_Random )
+ 			{
+ 				MaplistIndexStack[MaplistIndexStack.Length] = MaplistIndex;
++				if ( MaplistIndex == MAPLIST_Extra )
++					for ( i = 0; i < m.Maps.Length; i++ )
++						ExtraMaps[ExtraMaps.Length] = m.Maps[i];
+ 				if ( MaplistIndex == MAPLIST_Random )
+ 					li_Maplists.Add(Caps(class'Localizer'.default.sRandom), m);
+ 				else li_Maplists.Add( m.Label, m );
+@@ -1926,12 +1933,26 @@
+ 
+ 
+ 
++// ufront: one of the maps the player added (the Extra tab's)? Those have no movie, and a retail movie found by the
++// name after the prefix would be another map's.
++final function bool IsExtraMap( string MapName )
++{
++	local int i;
++
++	for ( i = 0; i < ExtraMaps.Length; i++ )
++		if ( ExtraMaps[i] ~= MapName )
++			return true;
++	return false;
++}
++
+ final function Material GetMapPreview()
+ {
+ 	local Material MapPreview;
+ 
+ 	if ( MaplistIndexStack[MaplistIndex] == MAPLIST_Random )
+ 		MapPreview = RandomMapPreviewMaterial;
++	else if ( IsExtraMap(li_Maps.GetExtra()) )
++		MapPreview = ExtraMapPreviewMaterial;
+ 	else
+ 	{
+ 		MapPreview = CharInfo.GetMapMovie(li_Maps.GetExtra());
+@@ -3106,6 +3127,7 @@
+ 	LockYL=10.0
+ 	DisabledTextColor=(B=0,G=0,R=0,A=220)
+ 	RandomMapPreviewMaterial=MovieMaterial'T_Portrait.Arena.UI_Arena_Random'
++	ExtraMapPreviewMaterial=Texture'T_Portrait.Arena.UI_Arena_Null_Portrait'
+ 	sAuto="AUTO"
+ 	NoMutatorsDescription="Disables all mutators"
+ 	sMutatorGroupConflictText="This mutator cannot be used in conjunction with the following mutators:  %s."
+--- a/UCMenu/Classes/Arena_PanelMaplist.uc
++++ b/UCMenu/Classes/Arena_PanelMaplist.uc
+@@ -348,6 +348,9 @@
+ 			
+ 			FullName = List.GetExtra();
+ 			Description = Localize( "LevelInfo", "Description", FullName );
++			// ufront: an added map may have no description (its .int is missing): show none, not "<?...?>"
++			if ( Left(Description, 2) == "<?" )
++				Description = "";
+ 
+ 			
+ 
+@@ -464,7 +467,7 @@
+ 
+ 	
+ 	CurrentList = PlayerOwner().Level.Game.GetMapList(MaplistName);
+-	if ( CurrentList != None && GetAllMaps(AllMaps) )
++	if ( CurrentList != None && GetAllMaps(AllMaps, true) )
+ 	{
+ 
+ 

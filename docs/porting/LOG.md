@@ -696,3 +696,13 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   4 maps). No script changes. Gate: ufrontend E2E `uc2 config › unlock-all` (the `Unlock all:` line, `GETALL
   GUIController bLaddersLocked` = False on the live controller, the key read back after a reload).
   `docs/porting/analysis/unlock-all.md`.
+- 2026-10-16 — **ufront added content (owner): maps and mutators a player drops in.** Maps: `UnExtraMaps.cpp` makes
+  `[<Acr>_Extra]` maplists and LevelData for the maps no maplist names (in memory, at the top of `UGameEngine::Init`;
+  LevelData set again on the game classes loaded already), patch set `extra-maps` shows them in an Extra tab after
+  Custom with a still for a preview. Music: a song A_Music does not name plays from `M_<Song>.uc2wb` (the XACT naming).
+  Mutators: listed from `Localization/int/*.int` already; their packages now join the server's package map. Shadow
+  textures keep a power-of-two size off the Xbox. Native checks: the lists, 3 bots and music on a dropped-in
+  DM-Deck17 with the stock A_Music, a dropped-in mutator's shadow on DM-Azure. The additions are put back whenever the
+  config cache reads the files again (`GConfigFileLoaded`: CollectGarbage empties the cache); a map's own
+  `System/<Map>.ini` (Epic's [MapLimitsData]/[MapListsData]) gives its player counts and lists. Gate: ufrontend E2E
+  `uc2 mods` (the Extra tab and the mutator page read on screen). `docs/porting/analysis/extra-content.md`.

@@ -7,6 +7,8 @@
 =============================================================================*/
 
 #include "EnginePrivate.h"
+
+void RegisterExtraMaps();	// UnExtraMaps.cpp
 #include "UnNet.h"
 #include "UnLinker.h"
 #include "FContentManager.h"
@@ -151,6 +153,14 @@ void UGameEngine::BuildServerMasterMap( UNetDriver* NetDriver, ULevel* InLevel )
 		check(InLevel->GetLevelInfo()->Game->GetClass()->GetLinker());
 		NetDriver->MasterMap->AddLinker( InLevel->GetLevelInfo()->Game->GetClass()->GetLinker() );
 
+		// ufront: and each mutator's package, as the GameInfo's: a mutator from a package of its own (dropped into
+		// System/) replicates actors to the clients, which then load it by name and GUID (UT2004's mutators asked for
+		// this themselves: Mutator.AddToPackageMap, which UC2 does not have).
+		for( AMutator* M=InLevel->GetLevelInfo()->Game->BaseMutator; M; M=M->NextMutator )
+			if( M->GetClass()!=AMutator::StaticClass() && M->GetClass()->GetLinker()
+			&&	NetDriver->MasterMap->AddLinker( M->GetClass()->GetLinker() )!=INDEX_NONE )
+				debugf( TEXT("Mutator Package: %s"), M->GetClass()->GetOuter()->GetName() );
+
 		// Precompute linker info.
 		NetDriver->MasterMap->Compute();
 	}
@@ -184,6 +194,10 @@ void UGameEngine::Init()
 
 	// Delete temporary files in cache.
 	appCleanFileCache();
+
+	// ufront: the maps the player added get the menus' Extra lists and player counts (UnExtraMaps.cpp), before
+	// anything loads a game class (the Entry level does: a class reads its LevelData when it loads).
+	RegisterExtraMaps();
 
 	// If not a dedicated server.
 	if( GIsClient )

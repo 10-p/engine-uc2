@@ -27,6 +27,8 @@
 // Music is refilled from the game thread once a frame: 4 x 32768 frames (3 s at 44.1 kHz) ride out the long frames
 // of a first-time load (8192-frame buffers left audible gaps under software GL: logs/m8/deadbolt-2).
 enum { UC2_MUSIC_SLOTS = 2, UC2_MUSIC_BUFFERS = 4, UC2_MUSIC_BUFFER_FRAMES = 32768 };
+// A drop-in song (no A_Music cue, PlayMusic) plays at the level of 19 of the 21 stock songs (volume=-900, no headroom boost).
+enum { UC2_DROPIN_MUSIC_VOLUME = -900 };
 
 // M16: the decoded-wave cache (OpenAL buffers of decoded PCM, both sources) keeps at most this much; least recently
 // used buffers go first. The whole game decoded would be about 1.3 GB (375 MB of Xbox ADPCM); a match uses tens of MB.
@@ -1733,22 +1735,51 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 			StopMusicSlot( S->Music[i] );
 	INT BankIndex = GetSoundBank( S, TEXT("A_Music"), 1 );
 	const INT* CueIndex = BankIndex>=0 ? S->SoundBanks(BankIndex)->CueIndex.Find( Song ) : NULL;
-	if( !CueIndex || !S->SoundBanks(BankIndex)->Cues(*CueIndex).Sounds.Num() )
+	// What the cue sets: its first sound's first variation, volume, headroom and looping.
+	FUC2Variation* Var = NULL;
+	INT SoundVolume = UC2_DROPIN_MUSIC_VOLUME;
+	UBOOL bHeadroomBoost = 0, bLoopSong = 1;
+	FUC2Variation DropIn;
+	if( CueIndex && S->SoundBanks(BankIndex)->Cues(*CueIndex).Sounds.Num() )
 	{
-		CueLogf( CueLog, S, TEXT("music %s: no such cue in A_Music"), *Song );
-		return 0;
+		FUC2SoundBank* Bank = S->SoundBanks(BankIndex);
+		FUC2Sound& Snd = Bank->Sounds( Bank->Cues(*CueIndex).Sounds(0) );
+		if( Snd.Tracks.Num() && Snd.Tracks(0).Variations.Num() )
+			Var = &Snd.Tracks(0).Variations(0);
+		SoundVolume		= Snd.Volume;
+		bHeadroomBoost	= Snd.bHeadroomBoost;
+		bLoopSong		= Snd.Loops!=0;
 	}
-	FUC2SoundBank* Bank = S->SoundBanks(BankIndex);
-	FUC2Sound& Snd = Bank->Sounds( Bank->Cues(*CueIndex).Sounds(0) );
+	else
+	{
+		// ufront (extra maps): a song the A_Music table does not name plays from the wave bank M_<Song>, the XACT
+		// naming the Xbox build opened directly (XboxAudio XACTAudioSubsystem.cpp:1786, ..\Sounds\M_%s.xwb), so a
+		// map's music is dropped in beside the game's (Sounds/M_<Song>.uc2wb and the file its data= names) without
+		// editing the stock table. Entry 0, looped, at the stock songs' level. A song in the sound-effect form
+		// "A_Music\<Song>" names the same bank.
+		FString Name = Song;
+		INT Slash = Name.InStr( TEXT("\\"), 1 );
+		if( Slash>=0 )
+			Name = Name.Mid( Slash+1 );
+		if( !Name.Len() || GetWaveBank( S, FString(TEXT("M_")) + Name )<0 )
+		{
+			CueLogf( CueLog, S, TEXT("music %s: no such cue in A_Music, and no wave bank M_%s"), *Song, *Name );
+			return 0;
+		}
+		DropIn.BankName = FString(TEXT("M_")) + Name;
+		DropIn.Entry = 0;
+		Var = &DropIn;
+		debugf( NAME_DevSound, TEXT("UC2Audio: music %s: not in A_Music, played from its own wave bank %s"), *Song, *DropIn.BankName );
+	}
 	FUC2WaveBank* WB = NULL;
 	FUC2Wave* W = NULL;
-	if( Snd.Tracks.Num() && Snd.Tracks(0).Variations.Num() )
-		W = ResolveVariation( S, Snd.Tracks(0).Variations(0), &WB );
+	if( Var )
+		W = ResolveVariation( S, *Var, &WB );
 	FString CookedForWMA, WMABank;
 	if( !W )
 	{
 		// (Logged always, once per song: a retail disc's M_Adoratrice.xwb is WMA, which this build cannot decode.)
-		INT B = Snd.Tracks.Num() && Snd.Tracks(0).Variations.Num() ? Snd.Tracks(0).Variations(0).Bank : -1;
+		INT B = Var ? Var->Bank : -1;
 		UBOOL bWMA = B>=0 && B<S->WaveBanks.Num() && S->WaveBanks(B)->Waves.Num() && S->WaveBanks(B)->Waves(0).Format==WF_WMA;
 		// G-10 (owner: "first cooked, then wma, then silence"; the WMA decoder waits for M16's video work): a WMA
 		// music bank plays from the cooked song beside the Xbox banks when there is one, ../Music/<Song>.ogg
@@ -1795,10 +1826,10 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 	}
 	M.Handle		= S->NextMusicHandle++;
 	M.Song			= Song;
-	M.bLoop			= Snd.Loops!=0;
+	M.bLoop			= bLoopSong;
 	M.bEnded		= 0;
 	M.bStopAfterFade= 0;
-	M.Volume		= Snd.Volume + (Snd.bHeadroomBoost ? 0 : -600);	// a cue like any other: the 6 dB voice headroom too
+	M.Volume		= SoundVolume + (bHeadroomBoost ? 0 : -600);	// a cue like any other: the 6 dB voice headroom too
 	UBOOL bFade		= MusicFades && FadeInTime>0.f;
 	M.Fade			= bFade ? 0.f : 1.f;
 	M.FadeTarget	= 1.f;

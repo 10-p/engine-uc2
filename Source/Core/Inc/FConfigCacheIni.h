@@ -341,6 +341,8 @@ public:
 		{
 			Result = &Set( Filename, FConfigFile() );
 			Result->Read( Filename );
+			if( GConfigFileLoaded )
+				GConfigFileLoaded( Filename, *Result );	// ufront: the engine's in-memory additions (Core.h)
 		}
 		return Result;
 
