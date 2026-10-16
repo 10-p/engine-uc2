@@ -581,6 +581,9 @@ CORE_API extern FOutputDevice* GLog;
 CORE_API extern FOutputDeviceError* GError;
 CORE_API extern FFeedbackContext*		GWarn;
 CORE_API extern FConfigCache*			GConfig;
+// ufront: called when the config cache reads a file from disk (FConfigCacheIni::Find): a reload after the cache was
+// emptied (CollectGarbage unloads it all) gets the engine's in-memory additions again (Engine UnExtraMaps.cpp).
+CORE_API extern void					(*GConfigFileLoaded)( const TCHAR* Filename, class FConfigFile& File );
 CORE_API extern FTransactionBase*		GUndo;
 CORE_API extern FOutputDevice*			GLogHook;
 CORE_API extern FExec*					GExec;

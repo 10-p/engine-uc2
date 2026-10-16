@@ -30,9 +30,20 @@ UT2004 mutator jcbShadows, ported here (a deliverable outside this repo: no Unre
   game's `<Acr>_Full` list takes (DM_Full takes DM- and OD-; TDM/NS/SV DM-; CTF CTF-; OD OD-; ACT-, TUT-, Entry, Menu
   match none). In memory only: `[<Acr>_Extra] Label="EXTRA" MaplistTitle="Extra Maps" Maps=...`, and a
   `LevelData=(Name="<Map>",RecommendedPlayers=4,MaxPlayers=8)` in every `Gametypes.ini` section whose LevelData lists
-  maps of that prefix, unless the map has a record there already (one the player adds wins). Both files keep their
-  Dirty flag, so nothing is written; an `_Extra` section a later save wrote is regenerated each boot (emptied when its
-  maps are gone).
+  maps of that prefix, unless the map has a record there already (one the player adds wins). An `_Extra` section a
+  later save wrote is regenerated each boot (emptied when its maps are gone).
+  - **A map's own `System/<Map>.ini`**, Epic's format for the Xbox's downloaded maps (`FContentManager`):
+    `[MapLimitsData] <GameClass>=RecommendedPlayers=6,MaxPlayers=8` (its record for that class, in place of the
+    default; a class without LevelData in `Gametypes.ini` is skipped, as Epic did) and `[MapListsData] MapLists=DM_Small`
+    (lists to join besides Extra). Log `ExtraMaps: DM-Deck17: its DM-Deck17.ini gives 1 player count(s) and 1 list(s)`.
+  - ★ **The additions must survive the config cache being emptied.** `CollectGarbage` calls `GConfig->UnloadAll()`
+    (the cached FNames may be gone), and the next access reads the files from disk: the first version, which put the
+    keys into the cache once at boot, lost `[DM_Extra]` at the first level change (the menu had no Extra tab; the
+    player counts survived only because the classes had read them already). Now the additions are kept
+    (`GExtraMaplists`, `GExtraGametypes`) and put into the cache's copy of the file every time it is read from disk:
+    `GConfigFileLoaded` (Core.h, called by `FConfigCacheIni::Find` after `Read`). They go into the sections directly,
+    so the files' Dirty flag is never set and nothing is written. (Epic's Xbox build wrote merged copies to its cache
+    partition instead.)
   - The game classes read LevelData when they LOAD, and the native packages (UCGameplay too) load at startup, before
     `UGameEngine::Init`: so `RefreshLevelData` sets it again on every loaded GameInfo class, parents first (from its
     own section when it has the key there, as `LoadConfig` does, else its parent's: what a subclass without the key
@@ -45,7 +56,11 @@ UT2004 mutator jcbShadows, ported here (a deliverable outside this repo: no Unre
 - **Script** (patch set `extra-maps`, `patches/extra-maps/README.md`): the Extra tab, shown right after Custom; a still
   (the null portrait) as an added map's preview; the Custom editor offers the added maps too.
 - Native check (run tree `extra-maps`, the two ported maps dropped in, stock `A_Music.uc2cues`): the lists and records
-  above; `DM-Deck17?NumBots=3`: `MaxPlayers: 8`, three bots, the map drawn (`logs/extra-maps/deck17-0.png`).
+  above; `DM-Deck17?NumBots=3`: `MaxPlayers: 8`, three bots, the map drawn (`logs/extra-maps/deck17-0.png`); with a
+  `DM-Deck17.ini` giving deathmatch 5/7: `MaxPlayers: 7`.
+- Web (ufrontend E2E `uc2 mods`): a stock map uploaded under a new name is in the DM/TDM/NS/SV Extra lists, gets its
+  ini's 7 players and three bots; on screen (OCR), the map page's tab after CUSTOM is EXTRA ("EXTRA MAPS", the map,
+  RECOMMENDED PLAYERS 4, MAX PLAYERS 8, the static still), then SMALL.
 
 ## Music of an added map
 
@@ -75,6 +90,10 @@ UT2004 mutator jcbShadows, ported here (a deliverable outside this repo: no Unre
 - **Now**: `UGameEngine::BuildServerMasterMap` adds each mutator's package to the server's package map, as it adds the
   GameInfo's (UT2004's mutators did it themselves with `AddToPackageMap`, which UC2 lacks): a mutator that replicates
   actors to clients (jcbShadows' mutator runs on every client) needs it. Log: `Mutator Package: <Pkg>`.
+- Web (ufrontend E2E `uc2 mods`): jcbShadows uploaded as a mod survives a reload (its `.int` in
+  `System/Localization/int`: the glue's restore could not make that folder under the read-only `/System` before;
+  fixed in ufrontend 2.94), is listed on the mutator page ("Real Time Shadows", unlocked), runs from `?Mutator=` (two
+  pawns given shadows) and writes its settings to `User.ini`.
 
 ## Shadow texture sizes
 

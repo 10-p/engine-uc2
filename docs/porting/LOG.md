@@ -702,4 +702,7 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   Custom with a still for a preview. Music: a song A_Music does not name plays from `M_<Song>.uc2wb` (the XACT naming).
   Mutators: listed from `Localization/int/*.int` already; their packages now join the server's package map. Shadow
   textures keep a power-of-two size off the Xbox. Native checks: the lists, 3 bots and music on a dropped-in
-  DM-Deck17 with the stock A_Music, a dropped-in mutator's shadow on DM-Azure. `docs/porting/analysis/extra-content.md`.
+  DM-Deck17 with the stock A_Music, a dropped-in mutator's shadow on DM-Azure. The additions are put back whenever the
+  config cache reads the files again (`GConfigFileLoaded`: CollectGarbage empties the cache); a map's own
+  `System/<Map>.ini` (Epic's [MapLimitsData]/[MapListsData]) gives its player counts and lists. Gate: ufrontend E2E
+  `uc2 mods` (the Extra tab and the mutator page read on screen). `docs/porting/analysis/extra-content.md`.

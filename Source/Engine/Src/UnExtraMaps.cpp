@@ -11,9 +11,15 @@
 	- LevelData=(Name="<Map>",RecommendedPlayers=4,MaxPlayers=8) in every Gametypes.ini section whose LevelData
 	  lists maps of that prefix, unless the map already has a record there (a record the player adds wins).
 
-	An added map is one no section of Maplists.ini names (the _Extra sections excepted). Nothing is written: the two
-	files keep the Dirty flag they had, and an _Extra section a later save wrote is regenerated each boot. Epic's
-	Xbox build did the same for downloaded maps (FContentManager::UpdateMapLists, from <Map>.ini [MapListsData]).
+	A map may say more in its own System/<Map>.ini, Epic's format for the Xbox's downloaded maps
+	(FContentManager::UpdateMapLists/UpdateMapLimits): [MapLimitsData] <GameClass>=RecommendedPlayers=6,MaxPlayers=8
+	(its player counts, for those game classes) and [MapListsData] MapLists=DM_Small (more lists than Extra to join).
+
+	An added map is one no section of Maplists.ini names (the _Extra sections excepted). Nothing is written: the keys
+	go into the config cache's copy of the two files, and again every time the cache reads them from disk
+	(GConfigFileLoaded, Core.h): CollectGarbage empties the whole cache (GConfig->UnloadAll, the names it holds may
+	be gone), so an addition made once at boot was lost at the first level change. Epic's Xbox build did the same for
+	downloaded maps by writing merged copies to its cache partition (FContentManager::UpdateMapLists/UpdateMapLimits).
 =============================================================================*/
 
 #include "EnginePrivate.h"
@@ -71,9 +77,71 @@ struct FExtraMapsGame
 	TArray<FString>	Maps;		// the added maps it takes
 };
 
-// The game classes read LevelData when they load, and the native packages (UCGameplay too) load at startup, before
-// this. So every loaded GameInfo class gets it again, parents first: from its own section when it has LevelData there
-// (as LoadConfig reads it), else its parent's (what a subclass without the key inherited when it loaded).
+// A key the engine adds to a file: its values replace the key's (KEY_Replace), are LevelData records joined where
+// their map has none (KEY_LevelData), or join the key where it lacks them (KEY_Append: a map into a game's list).
+enum EExtraKeyMode { KEY_Replace, KEY_LevelData, KEY_Append };
+struct FExtraIniKey
+{
+	FString			Section, Key;
+	TArray<FString>	Values;
+	INT				Mode;
+	FExtraIniKey() : Mode(KEY_Replace) {}
+};
+static TArray<FExtraIniKey> GExtraMaplists, GExtraGametypes;
+
+static FExtraIniKey& AddKey( TArray<FExtraIniKey>& Keys, const FString& Section, const TCHAR* Key, INT Mode )
+{
+	FExtraIniKey* K = new(Keys) FExtraIniKey;
+	K->Section = Section;
+	K->Key = Key;
+	K->Mode = Mode;
+	return *K;
+}
+
+// The additions, into one loaded copy of the file (its sections directly: the file's Dirty flag is not touched).
+static void ApplyExtraKeys( FConfigFile& File, const TArray<FExtraIniKey>& Keys )
+{
+	for( INT i=0; i<Keys.Num(); i++ )
+	{
+		const FExtraIniKey& K = Keys(i);
+		FConfigSection* Sec = File.Find( *K.Section );
+		if( !Sec )
+			Sec = &File.Set( *K.Section, FConfigSection() );
+		FName Key( *K.Key );
+		TArray<FString> Have, HaveNames;
+		if( K.Mode==KEY_Replace )
+			Sec->Remove( Key );
+		else
+		{
+			Sec->MultiFind( Key, Have );
+			for( INT h=0; h<Have.Num(); h++ )
+				AddString( HaveNames, K.Mode==KEY_LevelData ? LevelDataName( Have(h) ) : Have(h) );
+		}
+		for( INT v=0; v<K.Values.Num(); v++ )
+			if( K.Mode==KEY_Replace || HaveNames.FindItemIndex( K.Mode==KEY_LevelData ? LevelDataName( K.Values(v) ) : K.Values(v) )==INDEX_NONE )
+				Sec->Add( Key, *K.Values(v) );
+	}
+}
+
+// "Maplists.ini", "../System/Maplists.ini" -> is it that ini?
+static UBOOL IsIni( const TCHAR* Filename, const TCHAR* Ini )
+{
+	FString F( Filename );
+	INT Slash = Max( F.InStr( TEXT("/"), 1 ), F.InStr( TEXT("\\"), 1 ) );
+	if( Slash>=0 )
+		F = F.Mid( Slash+1 );
+	return appStricmp( *F, Ini )==0;
+}
+
+// GConfigFileLoaded: the cache read one of the two files from disk again (after CollectGarbage emptied it).
+static void ExtraMapsConfigLoaded( const TCHAR* Filename, FConfigFile& File )
+{
+	if( GExtraMaplists.Num() && IsIni( Filename, MaplistsIni ) )
+		ApplyExtraKeys( File, GExtraMaplists );
+	else if( GExtraGametypes.Num() && IsIni( Filename, GametypesIni ) )
+		ApplyExtraKeys( File, GExtraGametypes );
+}
+
 static void RefreshLevelData()
 {
 	UArrayProperty* Prop = FindField<UArrayProperty>( AGameInfo::StaticClass(), TEXT("LevelData") );
@@ -132,7 +200,6 @@ void RegisterExtraMaps()
 		debugf( NAME_Init, TEXT("ExtraMaps: no %s, no Extra map lists"), MaplistsIni );
 		return;
 	}
-	UBOOL MaplistsDirty = Maplists->Dirty;
 
 	// The maps the game's lists name, and what each game's _Full list takes.
 	TArray<FString> Listed, ExtraSections;
@@ -189,15 +256,16 @@ void RegisterExtraMaps()
 	}
 
 	// [<Acr>_Extra], and an empty one where a saved section names maps that are gone.
+	GExtraMaplists.Empty();
+	GExtraGametypes.Empty();
 	for( INT g=0; g<Games.Num(); g++ )
 	{
 		FString Section = Games(g).Acronym + TEXT("_Extra");
-		UBOOL Existed = ExtraSections.FindItemIndex( Section )!=INDEX_NONE;
-		if( !Games(g).Maps.Num() && !Existed )
+		if( !Games(g).Maps.Num() && ExtraSections.FindItemIndex( Section )==INDEX_NONE )
 			continue;
-		GConfig->SetArray( *Section, TEXT("Maps"), Games(g).Maps, MaplistsIni );
-		GConfig->SetString( *Section, TEXT("Label"), TEXT("EXTRA"), MaplistsIni );
-		GConfig->SetString( *Section, TEXT("MaplistTitle"), TEXT("Extra Maps"), MaplistsIni );
+		AddKey( GExtraMaplists, Section, TEXT("Maps"), KEY_Replace ).Values = Games(g).Maps;
+		AddString( AddKey( GExtraMaplists, Section, TEXT("Label"), KEY_Replace ).Values, TEXT("EXTRA") );
+		AddString( AddKey( GExtraMaplists, Section, TEXT("MaplistTitle"), KEY_Replace ).Values, TEXT("Extra Maps") );
 		if( Games(g).Maps.Num() )
 		{
 			FString Names;
@@ -210,21 +278,40 @@ void RegisterExtraMaps()
 			debugf( NAME_Init, TEXT("ExtraMaps: %s: %s"), *Section, *Names );
 		}
 	}
-	Maplists->Dirty = MaplistsDirty;
 
-	// Player counts: each Gametypes.ini section that has LevelData of the map's prefix gets a record for it.
-	FConfigFile* Gametypes = Ini->Find( GametypesIni, 0 );
-	UBOOL Touched = 0;
-	if( Gametypes && Added.Num() )
+	// A map's own System/<Map>.ini (Epic's format): its player counts per game class, and more lists to join.
+	TArray<FString> LimitSections, LimitRecords;	// one pair per [MapLimitsData] line: the game class, its record
+	for( INT m=0; m<Added.Num(); m++ )
 	{
-		UBOOL GametypesDirty = Gametypes->Dirty;
-		TArray<FString> Sections;
+		FString MapIni = Added(m) + TEXT(".ini");
+		if( GFileManager->FileSize( *MapIni )<0 )
+			continue;
+		TMultiMap<FName,FString>* Limits = GConfig->GetSectionPrivate( TEXT("MapLimitsData"), 0, 1, *MapIni );
+		INT NumLimits = 0;
+		if( Limits )
+			for( TMultiMap<FName,FString>::TIterator It(*Limits); It; ++It, NumLimits++ )
+			{
+				AddString( LimitSections, FString( *It.Key() ) );
+				AddString( LimitRecords, FString::Printf( TEXT("(Name=\"%s\",%s)"), *Added(m), *It.Value() ) );
+			}
+		TArray<FString> Lists;
+		GConfig->GetArray( TEXT("MapListsData"), TEXT("MapLists"), Lists, *MapIni );
+		for( INT l=0; l<Lists.Num(); l++ )
+			AddString( AddKey( GExtraMaplists, Lists(l), TEXT("Maps"), KEY_Append ).Values, Added(m) );
+		debugf( NAME_Init, TEXT("ExtraMaps: %s: its %s gives %d player count(s) and %d list(s)"), *Added(m), *MapIni,
+			NumLimits, Lists.Num() );
+		GConfig->UnloadFile( *MapIni );
+	}
+
+	// Player counts: each Gametypes.ini section that has LevelData of the map's prefix gets a record for it (the map's
+	// own one when its ini gives one for that class), and so does every class its ini names.
+	FConfigFile* Gametypes = Added.Num() ? Ini->Find( GametypesIni, 0 ) : NULL;
+	if( Gametypes )
+	{
 		for( FConfigFile::TIterator It(*Gametypes); It; ++It )
-			AddString( Sections, It.Key() );
-		for( INT s=0; s<Sections.Num(); s++ )
 		{
 			TArray<FString> LevelData, Names, Prefixes;
-			if( !GConfig->GetArray( *Sections(s), TEXT("LevelData"), LevelData, GametypesIni ) )
+			if( !GConfig->GetArray( *It.Key(), TEXT("LevelData"), LevelData, GametypesIni ) )
 				continue;
 			for( INT i=0; i<LevelData.Num(); i++ )
 			{
@@ -233,20 +320,35 @@ void RegisterExtraMaps()
 				if( Prefix.Len() )
 					AddUniqueString( Prefixes, Prefix );
 			}
-			INT Before = LevelData.Num();
+			TArray<FString> Records;
 			for( INT m=0; m<Added.Num(); m++ )
-				if( Prefixes.FindItemIndex( MapPrefix( Added(m) ) )!=INDEX_NONE && Names.FindItemIndex( Added(m) )==INDEX_NONE )
-					AddString( LevelData, FString::Printf( TEXT("(Name=\"%s\",RecommendedPlayers=%d,MaxPlayers=%d)"), *Added(m),
+			{
+				if( Names.FindItemIndex( Added(m) )!=INDEX_NONE )
+					continue;	// the player's own record wins
+				INT Own = INDEX_NONE;
+				for( INT r=0; r<LimitSections.Num() && Own==INDEX_NONE; r++ )
+					if( LimitSections(r)==It.Key() && LevelDataName( LimitRecords(r) )==Added(m) )
+						Own = r;
+				if( Own!=INDEX_NONE )
+					AddString( Records, LimitRecords(Own) );
+				else if( Prefixes.FindItemIndex( MapPrefix( Added(m) ) )!=INDEX_NONE )
+					AddString( Records, FString::Printf( TEXT("(Name=\"%s\",RecommendedPlayers=%d,MaxPlayers=%d)"), *Added(m),
 						(INT)EXTRA_RECOMMENDED_PLAYERS, (INT)EXTRA_MAX_PLAYERS ) );
-			if( LevelData.Num()==Before )
+			}
+			if( !Records.Num() )
 				continue;
-			GConfig->SetArray( *Sections(s), TEXT("LevelData"), LevelData, GametypesIni );
-			debugf( NAME_Init, TEXT("ExtraMaps: [%s] %d LevelData record(s) added"), *Sections(s), LevelData.Num()-Before );
-			Touched = 1;
+			AddKey( GExtraGametypes, It.Key(), TEXT("LevelData"), KEY_LevelData ).Values = Records;
+			debugf( NAME_Init, TEXT("ExtraMaps: [%s] %d LevelData record(s) added"), *It.Key(), Records.Num() );
 		}
-		Gametypes->Dirty = GametypesDirty;
 	}
-	if( Touched )
+
+	// Into the cache's copies now, and again whenever it reads the files from disk.
+	ApplyExtraKeys( *Maplists, GExtraMaplists );
+	if( Gametypes )
+		ApplyExtraKeys( *Gametypes, GExtraGametypes );
+	if( GExtraMaplists.Num() || GExtraGametypes.Num() )
+		GConfigFileLoaded = ExtraMapsConfigLoaded;
+	if( GExtraGametypes.Num() )
 		RefreshLevelData();
 	debugf( NAME_Init, TEXT("ExtraMaps: %d added map(s)"), Added.Num() );
 	unguard;
