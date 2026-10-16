@@ -393,3 +393,24 @@ switching on key press is normal; menu back stays Escape/Enter (less error-prone
   text under the hexagon list says what each player selected; a 2x2 ARMORY page ("this is gameplay related");
   no profiles for players 3-4; standalone and hosting first, one bounded client test ("if something really breaks,
   it breaks"); derived art is fine (committed TGAs generated from Epic's 1P by `tools/dev/make-player-tags.py`).
+
+## Added content (2026-10-16): the drop-in rule for a ported map (from the WorkUnreal session's `extra-content` branch)
+
+The WorkUnreal session (engine-uc2 branch `extra-content`, notebook `docs/porting/analysis/extra-content.md`, not merged
+here yet) makes the engine list any map in `Maps/` that no stock maplist names, in an "Extra" tab. A ported map must
+then install by dropping folders in, nothing merged into a stock ini. Rules for the next UT2004→UC2 export pass:
+1. **Music.** `LevelInfo.Song` = a bare name (e.g. `Port_DM_Deck17`). Ship `Sounds/M_<Song>.uc2wb` (bank `M_<Song>`,
+   `data=../Music/<Song>.ogg`, `stream=1`) and `Music/<Song>.ogg`. The engine plays a song `A_Music` does not name from
+   that bank (entry 0, looped, the stock level -900 mB, no headroom boost). NEVER ship a copy of `Sounds/A_Music.uc2cues`
+   (it replaces the stock table and two ports overwrite each other).
+2. **Player counts / lists.** No `Gametypes-additions.ini`. Optionally `System/<Map>.ini` in Epic's downloaded-map
+   format (`FContentManager`): `[MapLimitsData] UCGameplay.UCDeathMatch=RecommendedPlayers=6,MaxPlayers=8` (one line per
+   game class with LevelData: UCDeathMatch, UCSurvivalGame, UCOverflowGame, CTFGame) and `[MapListsData] MapLists=DM_Small`
+   (stock lists to join besides Extra). Default without it: 4/8. Game types come from the map PREFIX (DM- → DM, TDM, NS,
+   SV; CTF- → CTF; OD- → OD and DM).
+3. **Title / description.** `System/Localization/int/<Map>.int` with `[LevelSummary] Title=` and `[LevelInfo]
+   Description=`; an added map shows a still, never a movie.
+4. **The player's zip.** Only the game folders (`Maps/ Textures/ StaticMeshes/ Sounds/ Music/ System/`); no `Porting/`,
+   `PORTING-VALIDATION.json`, `SHA256SUMS`, `INSTALL.md` inside (they land in the game's root on a web upload). The web
+   upload's "sort by type" routes `.uc2cues/.uc2wb/.ogp/.uax` → Sounds, `.ogg` → Music, `.int` → System/Localization/int,
+   `.ini` → System (frontend change pending there). INSTALL.md: "copy the folders; nothing to merge".
