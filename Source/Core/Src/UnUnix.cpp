@@ -33,9 +33,6 @@
 #include <signal.h>
 #include <process.h>	// _spawnv
 #include <unistd.h>
-#if defined(__ANDROID__)
-#include <sys/system_properties.h>   // __system_property_get for debug.ut2004.nofault
-#endif
 #include <dirent.h>
 #include <utime.h>
 #include <sys/time.h>
@@ -1849,7 +1846,7 @@ static void HandleSignal( int Signal )
 			printf( "Aborting.\n\n" );
 			printf( "\nCrash information will be saved to your logfile.\n" );
 
-			#if HAVE_EXECINFO_H && !defined(__ANDROID__)
+			#if HAVE_EXECINFO_H
 				void *aTrace[64];
 				char **tString;
 				int size = backtrace(aTrace, ARRAY_COUNT(aTrace));
@@ -2386,15 +2383,6 @@ CORE_API const TCHAR* appBaseDir()
 
 	if( !BaseDir[0] )
 	{
-#if defined(__ANDROID__)
-		// Android: the app shell's JNI bridge sets UT2004_ANDROID_BASEDIR to the on-storage
-		// System dir (and chdir's there) so the engine reads the game tree IN PLACE via its
-		// unchanged POSIX fopen layer (no copy). Re-chdir here defensively in case cwd moved
-		// during SDL/thread startup, then let getcwd below seed BaseDir. Falls through if unset.
-		const ANSICHAR* AndroidBaseDir = getenv("UT2004_ANDROID_BASEDIR");
-		if( AndroidBaseDir && AndroidBaseDir[0] )
-			chdir( AndroidBaseDir );
-#endif
 		// If the executable isn't launched from its own directory, then the
 		// dynamic linker won't be able to find the shared libraries.
 		getcwd( AnsiBaseDir, sizeof(AnsiBaseDir) );
@@ -3056,32 +3044,11 @@ void appPlatformInit()
 #ifndef _WIN32
 	struct sigaction SigAction;
 
-	// * UT_NO_FAULT_HANDLER -- LET THE OS SEE THE FAULT. On Android this handler is
-	// the reason a Karma crash is undiagnosable: it catches SIGSEGV, writes a line
-	// to the log and exits, so `debuggerd` never runs and there is NO TOMBSTONE and
-	// NO BACKTRACE -- just "Signal: SIGSEGV" and a shutdown. On Linux gdb gets in
-	// first and this never matters; on a phone there is nothing to get in first.
-	//
-	// With the variable set, the six HARDWARE-FAULT signals are left at their
-	// default disposition and the platform's crash reporter produces a real
-	// backtrace (`logcat -s DEBUG`, then llvm-addr2line against the unstripped
-	// .so). The job-control signals below are still installed either way -- those
-	// are how the engine shuts down cleanly, and dropping them turns a clean exit
-	// into a kill.
-	//
-	// ! IT IS A DIAGNOSTIC, NOT A DEFAULT. Unset, behaviour is exactly as before.
-	// ! ANDROID HAS NO WAY TO SET AN ENVIRONMENT VARIABLE FOR AN APP. `adb shell`
-	// runs in a different process and the launcher is Java, so the variable that
-	// works everywhere else is unreachable exactly where this is needed. The
-	// system property is the idiomatic equivalent and `debug.*` is settable on a
-	// stock user build without root: `adb shell setprop debug.ut2004.nofault 1`.
-#if defined(__ANDROID__)
-	char NoFaultProp[128] = { 0 };   /* bionic's PROP_VALUE_MAX is 92 */
-	__system_property_get( "debug.ut2004.nofault", NoFaultProp );
-	const UBOOL bNoFaultHandler = (NoFaultProp[0] != 0 && NoFaultProp[0] != '0');
-#else
+	// UT_NO_FAULT_HANDLER (a diagnostic): the six hardware-fault signals keep their default
+	// disposition, so the system's crash reporter or a debugger sees the fault itself. The
+	// job-control signals below are installed either way: they are how the engine shuts down
+	// cleanly.
 	const UBOOL bNoFaultHandler = (getenv("UT_NO_FAULT_HANDLER") != NULL);
-#endif
 	if( bNoFaultHandler )
 		debugf( NAME_Init, TEXT("UT_NO_FAULT_HANDLER set: leaving SIGSEGV/SIGILL/SIGTRAP/SIGIOT/SIGBUS/SIGFPE to the OS.") );
 

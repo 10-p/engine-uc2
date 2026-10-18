@@ -750,11 +750,6 @@ public:
     		Home = getenv("USERPROFILE");
     	if ( Home == NULL )
     		return(appBaseDir());
-#elif defined(__ANDROID__)
-    	// bionic has no getpwent/setpwent/endpwent (no passwd-db enumeration). $HOME is provided
-    	// by the Android app shell; fall back to cwd otherwise.
-    	if ( Home == NULL )
-    		Home = (char*)".";
 #else
     	if ( Home == NULL )
     	{
@@ -785,17 +780,9 @@ public:
 		appStrcat( tmp, TEXT("/Application Support") );
 		UT_MKDIR(appToAnsi(tmp));
 
-		#if DEMOVERSION
-			appStrcat( tmp, TEXT("/Unreal Tournament 2004 Demo") );
-		#else
-			appStrcat( tmp, TEXT("/Unreal Tournament 2004") );
-		#endif
+		appStrcat( tmp, TEXT("/Unreal Championship 2") );
 	#else
-		#if DEMOVERSION
-			appStrcat( tmp, TEXT("/.ut2004demo") );
-		#else
-			appStrcat( tmp, TEXT("/.ut2004") );
-		#endif
+		appStrcat( tmp, TEXT("/.uc2") );
 	#endif
 
         UT_MKDIR(appToAnsi(tmp));
