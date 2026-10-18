@@ -343,10 +343,10 @@ void UUCScreenDOF::PostRender(UViewport* Viewport,FRenderInterface* RI)
 		// Script puts ThirdPersonAlpha (100) or FirstPersonAlpha (65) into AbsoluteBlurAlpha per
 		// camera mode. Epic's header lagged behind the script, so the shipped binary read the byte at
 		// FirstPersonAlpha's place here: always 65. A device that asks for the shipped value
-		// (FRenderCaps::ShippedDOFBlurAlpha; UC2GLDrv: DOFShippedBlurAlpha, on by default, console
+		// (FRenderCaps::DOFShippedBlurAlpha; UC2GLDrv: DOFShippedBlurAlpha, on by default, console
 		// DOFSHIPPEDALPHA) gets 65 in every mode, otherwise script's value is used. Set on every frame
 		// so that the switch takes effect at once.
-		ModulateBlurColor.A = Viewport->RenDev->GetRenderCaps()->ShippedDOFBlurAlpha ? FirstPersonAlpha : AbsoluteBlurAlpha;
+		ModulateBlurColor.A = Viewport->RenDev->GetRenderCaps()->DOFShippedBlurAlpha ? FirstPersonAlpha : AbsoluteBlurAlpha;
 #endif
 		break;
 	}

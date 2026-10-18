@@ -38,7 +38,7 @@ enum EPixelShaderState
 	PSS_None		= 0,	// no Xbox shader for the enum value, or pixel shaders are off
 	PSS_Ready		= 1,	// translated, compiled, drawn with a program
 	PSS_Failed		= 2,	// did not compile: its materials take the stage-0 fallback
-	PSS_M7			= 3,	// needs post-processing (a back-buffer copy, the depth buffer or a render target), and UsePostProcess is off
+	PSS_NeedsPostProcess = 3,	// needs post-processing (a back-buffer copy, the depth buffer or a render target), and UsePostProcess is off
 	PSS_EngineGated	= 4,	// translated, but the PC engine path never asks for it
 };
 

@@ -63,7 +63,7 @@ static FString UC2GL_WithFill( const FString& Body, DWORD Variant )
 	}
 	if( !XS.Num() ) XS.AddItem( 0.f );
 	if( !YS.Num() ) YS.AddItem( 0.f );
-	FString Fill = TEXT("// H-1: PS_Blur's taps widened for FilterCopyRenderTarget's TapScale (UC2GLShaders.cpp, UC2GL_WithFill)\n")
+	FString Fill = TEXT("// PS_Blur's taps widened for FilterCopyRenderTarget's TapScale (UC2GLShaders.cpp, UC2GL_WithFill)\n")
 		TEXT("uniform vec4 u_fillStep;\n")
 		TEXT("vec4 uc2_fill( sampler2D t, vec4 tc )\n{\n\tvec2 uv = tc.xy / tc.w;\n\treturn (");
 	for( INT y=0; y<YS.Num(); y++ )
@@ -143,7 +143,7 @@ FString UC2GL_WithSceneDepthTestVertex( const FString& Source )
 // capability. With UsePostProcess they are drawn like every other shader; without it
 // they stay on the stage-0 fallback (SetPixelShaderMaterial).
 //
-static UBOOL UC2GL_IsM7PixelShader( INT Type )
+static UBOOL UC2GL_IsPostProcessPixelShader( INT Type )
 {
 	switch( Type )
 	{
@@ -661,15 +661,15 @@ void UUC2GLRenderDevice::InitPixelShaders()
 	ExitPixelShaders();
 	appMemzero( PixelShaderState, sizeof(PixelShaderState) );
 
-	INT Ready = 0, Failed = 0, M7 = 0, Gated = 0;
+	INT Ready = 0, Failed = 0, NeedPost = 0, Gated = 0;
 	for( INT Type=0; Type<PS_MAX; Type++ )
 	{
 		if( !GUC2GLPixelShaders[Type].Source )
 			PixelShaderState[Type] = PSS_None;
-		else if( UC2GL_IsM7PixelShader(Type) && !(UsePostProcess && PostCopyProgram) )
+		else if( UC2GL_IsPostProcessPixelShader(Type) && !(UsePostProcess && PostCopyProgram) )
 		{
-			PixelShaderState[Type] = PSS_M7;
-			M7++;
+			PixelShaderState[Type] = PSS_NeedsPostProcess;
+			NeedPost++;
 		}
 		else if( UC2GL_IsEngineGatedPixelShader(Type) )
 		{
@@ -693,7 +693,7 @@ void UUC2GLRenderDevice::InitPixelShaders()
 	}
 
 	if( UsePixelShaders )
-		debugf( NAME_Init, TEXT("UC2GLDrv: pixel shaders on: %i fragment shaders compiled, %i failed; %i need post-processing, which is off (UsePostProcess), %i are not reachable on PC (engine gates)"), Ready, Failed, M7, Gated );
+		debugf( NAME_Init, TEXT("UC2GLDrv: pixel shaders on: %i fragment shaders compiled, %i failed; %i need post-processing, which is off (UsePostProcess), %i are not reachable on PC (engine gates)"), Ready, Failed, NeedPost, Gated );
 	else
 		debugf( NAME_Init, TEXT("UC2GLDrv: pixel shaders off (UsePixelShaders=False): every pixel-shader material is drawn with its first texture stage, as at M5") );
 

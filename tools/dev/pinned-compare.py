@@ -5,7 +5,7 @@
 
 Prints "OK <static % within 2 levels> <whole frame % bit-identical> <PSNR dB>" (or "SIZE ..."). The player
 model, the two pickups and the aiming reticle animate with the time since the spawn and are left out of the
-static part. Used by m12-wine-smoke.sh (wine vs Linux) and m13-64bit.sh (64-bit vs 32-bit)."""
+static part. Used by m12-wine-smoke.sh (wine vs Linux) and check-64bit.sh (64-bit vs 32-bit)."""
 import sys, math
 from PIL import Image, ImageChops
 a = Image.open(sys.argv[1]).convert('RGB'); b = Image.open(sys.argv[2]).convert('RGB')

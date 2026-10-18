@@ -438,7 +438,7 @@ void UStruct::AddCppProperty( UProperty* Property )
 // PH_Member advances the layout by Size; PH_ArrayElement makes Size the element stride of an array<int> that
 // C++ fills with pointers. Lookup by string: a cached FName can be purged and its index reused.
 // Checked by `ucc-bin verifyclasses` (sizes, offsets, and that no bytecode reads a placeholder) and
-// tools/dev/m13-layout-check.py.
+// tools/dev/layout-check.py.
 // The table is also the one source the C++ header exporter reads (any pointer width: `ucc-bin make`
 // is a 32-bit program), so the generated <Pkg>Classes.h are 64-bit-correct as generated. CppType is the C++
 // spelling of one element of the stand-in, written in place of `INT` (`PTRINT Node`, `PTRINT TextureInterfaces[3]`,

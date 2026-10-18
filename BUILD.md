@@ -157,14 +157,14 @@ bin/capped 6G 3600 -- cmake --build build-native64 -j6
 file build-native64/Source/UCC/ucc-bin                  # must say ELF 64-bit ... x86-64
 tools/dev/mkrun-uc2.sh build-native64 m13                # run tree <workspace>/run/m13
 (cd ../run/m13/System && ../../../bin/capped 3G 300 -- ./ucc-bin verifyclasses)   # 64-bit layout proof
-tools/dev/m13-64bit.sh                                   # every check, PASS/FAIL lines (needs run/m13-32 too)
+tools/dev/check-64bit.sh                                   # every check, PASS/FAIL lines (needs run/m13-32 too)
 ```
 
 The shipped `.u` files were compiled for 32-bit pointers; the 64-bit build keeps their 4-byte pointer slots in
 bytecode (object indices), gives script `int`s that stand in for C++ pointers their C++ size when classes link
 (the placeholder table in `Source/Core/Src/UnClass.cpp`), packs every script mirror to 4 and stops at start-up if
 a native class's C++ size differs from its script size. `ucc-bin verifyclasses` proves it on the running ABI;
-`tools/dev/m13-layout-check.py` compares every class, script struct and event parameter struct with the
+`tools/dev/layout-check.py` compares every class, script struct and event parameter struct with the
 binary's DWARF. Integer-to-pointer casts are errors at 64-bit; `tools/dev/m13-cast-census.sh <build.log>`
 counts pointer-to-int narrowing (0). Details, every site, and what no test reaches:
 `docs/porting/analysis/64bit.md`. 32-bit is still the default and the reference (wasm32 has its layout).

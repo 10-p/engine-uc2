@@ -778,7 +778,7 @@ struct FRenderCaps
 	UBOOL	XboxPostProcess;
 	// Not a capability but a switch a device can expose: 1 = the always-on depth of field
 	// takes its blur alpha as the shipped binary does (UUCScreenDOF::PostRender; UC2GLDrv: on by default).
-	UBOOL	ShippedDOFBlurAlpha;
+	UBOOL	DOFShippedBlurAlpha;
 	// The device filters projected shadow textures as the Xbox build does
 	// (the caster drawn in ShadowDarkness grey, then one PS_ShadowBlur tile: a horizontal
 	// four-tap blur, negated) instead of PC's alpha-encoded caster and nine-tile box blur.
@@ -816,7 +816,7 @@ struct FRenderCaps
 		PixelShaderVersion(0),
 		HardwareTL(0),
 		XboxPostProcess(0),
-		ShippedDOFBlurAlpha(0),
+		DOFShippedBlurAlpha(0),
 		XboxShadows(0),
 		XboxProjectors(0),
 		PostProcessReferenceHeight(0),

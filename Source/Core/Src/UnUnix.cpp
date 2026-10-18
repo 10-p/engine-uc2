@@ -3035,7 +3035,7 @@ void appPlatformInit()
 	// calibration). The game loop runs on appSeconds() (CLOCK_MONOTONIC) and never reads GSecondsPerCycle;
 	// its consumers are `stat` displays, debugf lines and the frame log.
 	GSecondsPerCycle = 0.000001;
-	debugf( NAME_Init, TEXT("[ufront] appCycles() is a microsecond counter; GSecondsPerCycle pinned to %e"), GSecondsPerCycle );
+	debugf( NAME_Init, TEXT("appCycles() is a microsecond counter; GSecondsPerCycle pinned to %e"), GSecondsPerCycle );
 #endif
 
 	unguard;

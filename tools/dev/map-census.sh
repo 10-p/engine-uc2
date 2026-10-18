@@ -11,7 +11,7 @@
 # <repo>/../logs/census/summary.tsv (+ one log per map): `exit=` is the server's own exit status (137 = KILLed
 # after the grace), `shutdown=` the seconds from the SIGTERM to the end of the process.
 # CENSUS_NAME (default census) names the run trees (<name>-N) and the log folder; CENSUS_PORT (default 7780)
-# the first port: a second census (tools/dev/m13-64bit.sh's: CENSUS_NAME=m13-census-<tree>) does not collide with this one.
+# the first port: a second census (tools/dev/check-64bit.sh's: CENSUS_NAME=m13-census-<tree>) does not collide with this one.
 # CENSUS_NODE=1: <build-dir> is an Emscripten build and each map runs as `node ucc-bin.js` (the wasm32 objects of the
 # browser build, under Node). Node's socket emulation cannot listen, so the server logs "can't listen ... the level
 # runs without network" (a warning on the web) and keeps ticking. A map FAILS there also when the module

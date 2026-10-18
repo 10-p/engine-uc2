@@ -582,9 +582,9 @@ UBOOL UUC2GLRenderDevice::Init()
 	//                                   the Liandri overlay's panned noise picture the same in every run)
 	FString OwnSection = GetClass()->GetPathName();
 	const TCHAR* BaseSection = TEXT("UC2GLDrv.UC2GLRenderDevice");
-	const TCHAR* TwinSection = TEXT("UC2GL4ESDrv.UC2GL4ESRenderDevice");
-	#define UC2GL_TESTKEY(Key,Value) appReadTestKey( TEXT(Key), Value, *OwnSection, BaseSection, TwinSection )
-	#define UC2GL_TESTFLAG(Key) appReadTestFlag( TEXT(Key), *OwnSection, BaseSection, TwinSection )
+	const TCHAR* GL4ESSection = TEXT("UC2GL4ESDrv.UC2GL4ESRenderDevice");
+	#define UC2GL_TESTKEY(Key,Value) appReadTestKey( TEXT(Key), Value, *OwnSection, BaseSection, GL4ESSection )
+	#define UC2GL_TESTFLAG(Key) appReadTestFlag( TEXT(Key), *OwnSection, BaseSection, GL4ESSection )
 	FString TestValue;
 	UC2GL_TESTKEY( "ShotTimes", TestValue ) ? ParseTimeList( *TestValue, GShotTimes ) : GShotTimes.Empty();
 	TestValue = TEXT("");
@@ -2421,7 +2421,7 @@ FRenderCaps* UUC2GLRenderDevice::GetRenderCaps()
 	// The one capability that lifts the engine's and the game's Xbox-only post-process
 	// paths (RenDevHasXboxPostProcess, UnRenDev.h).
 	RenderCaps.XboxPostProcess				= PostProcessActive() ? 1 : 0;
-	RenderCaps.ShippedDOFBlurAlpha			= DOFShippedBlurAlpha ? 1 : 0;
+	RenderCaps.DOFShippedBlurAlpha			= DOFShippedBlurAlpha ? 1 : 0;
 	// The Xbox shadow-texture filter (UnShadowProjector.cpp).
 	RenderCaps.XboxShadows					= XboxShadowsActive() ? 1 : 0;
 	// Level-static projectors batched and drawn with the Xbox projector material.

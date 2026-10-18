@@ -4,7 +4,7 @@
     ./ucc-bin verifyclasses DUMP=layout.txt                  # (in a run tree) the linked layout of every class
                                                               # and script struct: size, offset of each property
     python3 tools/dev/dwarf-layouts.py ucc-bin > dwarf.txt   # the C++ layout of every type in the binary
-    python3 tools/dev/m13-layout-check.py layout.txt dwarf.txt
+    python3 tools/dev/layout-check.py layout.txt dwarf.txt
 
 For every script class X it looks for the C++ type AX or UX, for every script struct X for FX, for every function F
 of class X the event parameter struct AX_eventF_Parms / UX_eventF_Parms, and compares the

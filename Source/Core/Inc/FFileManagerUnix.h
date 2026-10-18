@@ -1,7 +1,7 @@
 /*=============================================================================
 	FFileManagerUnix.h: Unreal Unix based file manager.
 
-	The file manager of every non-MSVC target (FFileManagerLinux.h is a typedef of it). No
+	The file manager of every non-MSVC target (FFileManagerLinux.h keeps Epic's name as an alias). No
 	GFileManagerBytesRead/LoadingTime statistics; GetUserDir() is not a virtual of UC2's FFileManager,
 	so here it is a plain member.
 	Copyright 1997-1999 Epic Games, Inc. All Rights Reserved.

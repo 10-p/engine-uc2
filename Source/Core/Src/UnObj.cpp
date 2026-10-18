@@ -1448,7 +1448,7 @@ static const TArray<UProperty*>* GSaveConfigOnly = NULL;
 
 // Set while script's SaveConfig() / StaticSaveConfig() run (UC2SaveConfigFromScript below): a globalconfig
 // property that another class deliberately sets is not written, and its name is collected here.
-static UBOOL GSaveConfigKeepSubclasses = 0;
+static UBOOL GSaveConfigSkipSetByOther = 0;
 static FString GSaveConfigNotWritten;
 
 // A globalconfig property is read from the section of the class that declares it, for every subclass of that class,
@@ -1584,7 +1584,7 @@ void UObject::SaveConfig( DWORD Flags, const TCHAR* InFilename )
 			continue;
 		if( (It->PropertyFlags & Flags)==Flags )
 		{
-			if( GSaveConfigKeepSubclasses && !GSaveConfigChangedOnly && (It->PropertyFlags & CPF_GlobalConfig) && UC2SetByAnotherClass(this,It) )
+			if( GSaveConfigSkipSetByOther && !GSaveConfigChangedOnly && (It->PropertyFlags & CPF_GlobalConfig) && UC2SetByAnotherClass(this,It) )
 			{
 				GSaveConfigNotWritten += FString(GSaveConfigNotWritten.Len() ? TEXT(", ") : TEXT("")) + It->GetName();
 				continue;
@@ -1637,7 +1637,7 @@ void UObject::SaveConfig( DWORD Flags, const TCHAR* InFilename )
 				{
 					if( !UC2ConfigValueChanged( this, It, Index, Section, Key, Filename ) )
 						continue;
-					if( GSaveConfigKeepSubclasses && (It->PropertyFlags & CPF_GlobalConfig) && UC2SetByAnotherClass(this,It) )
+					if( GSaveConfigSkipSetByOther && (It->PropertyFlags & CPF_GlobalConfig) && UC2SetByAnotherClass(this,It) )
 					{
 						GSaveConfigNotWritten += FString(GSaveConfigNotWritten.Len() ? TEXT(", ") : TEXT("")) + It->GetName();
 						continue;
@@ -2736,11 +2736,11 @@ void UC2SaveConfigFromScript( UObject* Object, UBOOL bStatic )
 {
 	guard(UC2SaveConfigFromScript);
 	debugf( NAME_Log, TEXT("Script SaveConfig: %s on %s"), bStatic ? TEXT("StaticSaveConfig") : TEXT("SaveConfig"), Object->GetClass()->GetPathName() );
-	GSaveConfigKeepSubclasses = 1;
+	GSaveConfigSkipSetByOther = 1;
 	GSaveConfigChangedOnly = Object->GetIndex()==INDEX_NONE;	// a class default: only what changed; an instance: all
 	GSaveConfigNotWritten = TEXT("");
 	Object->SaveConfig();
-	GSaveConfigKeepSubclasses = 0;
+	GSaveConfigSkipSetByOther = 0;
 	GSaveConfigChangedOnly = 0;
 	if( GSaveConfigNotWritten.Len() )
 		debugf( NAME_Log, TEXT("Script SaveConfig: %s: not written, another class sets its own default and globalconfig is shared with it: %s"),

@@ -1549,7 +1549,7 @@ UBOOL FOpenGLRenderInterface::SetPixelShaderMaterial( UPixelShaderMaterial* InSh
 	// stage 0 through SetSimpleMaterial, then the state handler.
 	// The families that stay on the fallback are those whose input is the back buffer, the
 	// depth buffer or another render target (distortion, blur, depth of field, bloom and emissive
-	// select, motion blur, luminance, player cam, colour remap): UC2GL_IsM7PixelShader.
+	// select, motion blur, luminance, player cam, colour remap): UC2GL_IsPostProcessPixelShader.
 	if( RenDev->PixelShaderFamilyReady( InShader->PixelShaderType ) )
 #endif
 	{

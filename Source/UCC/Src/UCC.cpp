@@ -92,8 +92,8 @@ FFeedbackContextAnsi Warn;
 	#include "FMallocAnsi.h"
 	FMallocAnsi Malloc;
 #elif __LINUX_X86__ || defined(__MINGW32__)
-	#include "FFileManagerLinux.h"
-	FFileManagerLinux FileManager;
+	#include "FFileManagerUnix.h"
+	FFileManagerUnix FileManager;
 	#include "FMallocAnsi.h"
 	FMallocAnsi Malloc;
 #else
@@ -163,7 +163,7 @@ extern CORE_API UBOOL IsNativePlaceholder( UProperty* Property );
 extern CORE_API const TCHAR* GetNativePlaceholderCppTypeAt( INT i );
 #endif
 // `verifyclasses DUMP=<file>` writes the linked layout of every class, script struct and function (its
-// parameters) for tools/dev/m13-layout-check.py, which compares it with the DWARF of the same binary. Opt-in on
+// parameters) for tools/dev/layout-check.py, which compares it with the DWARF of the same binary. Opt-in on
 // every width (the 32-bit dump is the reference); nothing else changes without DUMP=.
 static void DumpScriptLayouts( const TCHAR* DumpFile )
 {
@@ -350,7 +350,7 @@ static UBOOL VerifyNativeClasses()
 // (ints, floats, bytes, bools, names, strings), written through ULoadSaveManager as the game does
 // (System/Profiles/<profile>/AVARIS_PROFILE.PRO); load: read it back. Either way every property is exported as
 // text to <export.txt>, so a profile saved by one build and loaded by another can be compared with the values
-// it was saved with (tools/dev/m13-64bit.sh `saves`). Returns success.
+// it was saved with (tools/dev/check-64bit.sh `saves`). Returns success.
 static UBOOL ProfileTest( const TCHAR* Parms )
 {
 	FString Mode, Name, OutFile;

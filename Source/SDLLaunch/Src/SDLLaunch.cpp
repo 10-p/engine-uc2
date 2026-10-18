@@ -52,8 +52,8 @@ Revision history:
 	Global variables.
 -----------------------------------------------------------------------------*/
 
-// General. Set to appPackage() (the module name, "Avaris") in main, as the PC WinMain does.
-extern "C" {TCHAR GPackage[64]=TEXT("SDLLaunch");}
+// General. The module name; main sets it again from appPackage(), as the PC WinMain does.
+extern "C" {TCHAR GPackage[64]=TEXT("Avaris");}
 
 // Memory allocator.
 #include "FMallocAnsi.h"
