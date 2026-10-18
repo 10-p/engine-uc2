@@ -10,7 +10,7 @@
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
-maps=${*:-$(cd "$work/assets/uc2/Maps" && ls DM-*.unr CTF-*.unr OD-*.unr | sed 's/\.unr$//')}
+maps=${*:-$(cd "${UC2_ASSETS_DIR:-$work/assets/uc2-assets}/Maps" && ls DM-*.unr CTF-*.unr OD-*.unr | sed 's/\.unr$//')}
 # O9_CENSUS_PREFIX (default o9c): the three run trees <prefix>0..2; O9_CENSUS_LOG (default <repo>/../logs/o9): the summary.
 pre=${O9_CENSUS_PREFIX:-o9c}; logdir=${O9_CENSUS_LOG:-$work/logs/o9}
 mkdir -p "$logdir"

@@ -81,7 +81,7 @@ def main():
     o = ap.parse_args()
     emsdk = os.environ.get('EMSDK')
     if not emsdk:
-        sys.exit('source <WorkUC2>/env.sh first (EMSDK unset)')
+        sys.exit('source <repo>/../env.sh first (EMSDK unset)')
     entries = [e for e in json.load(open(os.path.join(o.build_dir, 'compile_commands.json')))
                if re.search(o.filter, e['file']) and '/Thirdparty/' not in e['file']]
     diffs, broken, compared = {}, set(), set()

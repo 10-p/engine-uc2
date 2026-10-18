@@ -12,11 +12,11 @@
 #                      only so the targets could be, and System/ gets the shipped file back for them
 #   --out <dir>        the work tree; the result is <dir>/System/<Pkg>.u (with the shipped .u of every other
 #                      package beside it, so the folder is a complete System for checking)
-#   --shipped <dir>    the shipped script packages (default <repo>/../epic-sources/System = the retail disc's)
+#   --shipped <dir>    the shipped script packages (default <repo>/../assets/uc2-retail-assets/System, the retail disc's)
 #   --assets <dir>     the game tree: its content folders (Textures, StaticMeshes, ...) are linked into the work tree
-#                      and its System/ provides the .int files and Epic's inis (default <repo>/../assets/uc2)
+#                      and its System/ provides the .int files and Epic's inis (default <repo>/../assets/uc2-assets)
 #   --retail-inis <d>  the retail disc's System/ for Characters.ini, Gametypes.ini, Maplists.ini, which the shipped
-#                      defaults carry (default <repo>/../reference/iso-extract/System; `none`: the asset tree's)
+#                      defaults carry (default <repo>/../assets/uc2-retail-assets/System; `none`: the asset tree's)
 #   --ucc <file>       the script compiler: ucc-bin (Linux) or ucc.exe (a Windows host; MSYS2 bash); default
 #                      <repo>/build-native/Source/UCC/ucc-bin. Copied into the work tree under its own name.
 #   --mem <size>       memory ceiling of each ucc run (default 3G) when it runs under the capped wrapper
@@ -47,15 +47,9 @@ set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 classes="" out="" packages="" keep="" mem=3G keep_text=0 headers=0 links=()
-# Defaults: WorkUnreal's trees (the retail disc's System/ holds the 17 shipped .u and its
-# inis), else the UC2 workspace's layout.
-if [ -d "$work/assets/uc2-retail-assets/System" ]; then
-  shipped=$work/assets/uc2-retail-assets/System retail=$work/assets/uc2-retail-assets/System
-else
-  shipped=$work/epic-sources/System retail=$work/reference/iso-extract/System
-fi
+# Defaults: the WorkUnreal trees beside the repo (the retail disc's System/ holds the 17 shipped .u and its inis).
+shipped=$work/assets/uc2-retail-assets/System retail=$work/assets/uc2-retail-assets/System
 assets=$work/assets/uc2-assets
-[ -d "$assets/System" ] || assets=$work/assets/uc2
 ucc=$repo/build-native/Source/UCC/ucc-bin
 capped=$work/bin/capped
 [ -x "$capped" ] || capped=none

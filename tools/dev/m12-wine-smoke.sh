@@ -238,8 +238,8 @@ check_capture() {
   local o=$out/smoke-capture.out wav=$out/smoke-capture.wav m
   rm -f "$wav"
   CLIENT_DEVSOUND=1 client capture 60 -log "-ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=$wav"
-  m=$(python3 "$repo/tools/dev/audio-music-check.py" "$wav" "$work/epic-sources/Music/NuBattle.wav" -19.0 \
-      "$work/epic-sources/Music/Recoil.wav" 2>&1); local mrc=$?
+  m=$(python3 "$repo/tools/dev/audio-music-check.py" "$wav" "${UC2_EPIC_SOURCES:-$work/epic-sources/uc2-avaris-2226}/Music/NuBattle.wav" -19.0 \
+      "${UC2_EPIC_SOURCES:-$work/epic-sources/uc2-avaris-2226}/Music/Recoil.wav" 2>&1); local mrc=$?
   "$repo/tools/dev/audio-capture-report.sh" "$wav" > "$out/smoke-capture.report.txt" 2>&1
   if [ $mrc = 0 ] && grep -a -q 'UC2ALAudio: .*ALSOFT' "$o" && clean_exit "$o" && [ "$(crit "$o")" = 0 ]; then
     result PASS capture "$(grep -a -o '"OpenAL Soft on [^"]*"' "$o" | head -1) -> smoke-capture.wav; ${m#CHECK }; exit 0, Critical 0"

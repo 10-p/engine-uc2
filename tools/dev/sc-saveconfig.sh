@@ -95,7 +95,7 @@ fromresult() {
 # u / w: ucc-bin without a game
 # ---------------------------------------------------------------------------------------------------------------
 # uccprep <sys>: our tracked inis, nothing derived, no logs
-uccprep() { cp -f "$repo"/Engine/Config/*.ini "$1/"; cp -f "$work/assets/uc2/System/Gametypes.ini" "$1/"; rm -f "$1/Avaris.ini" "$1/User.ini" "$1"/*.log "$1"/*.log.*; }
+uccprep() { cp -f "$repo"/Engine/Config/*.ini "$1/"; cp -f "${UC2_ASSETS_DIR:-$work/assets/uc2-assets}/System/Gametypes.ini" "$1/"; rm -f "$1/Avaris.ini" "$1/User.ini" "$1"/*.log "$1"/*.log.*; }
 # ucc <L> <mode> <args...>: one saveconfigtest run (<mode> static|instance|keys|get ...); L u = native in $sys, w = wasm in
 # $wsys. Output $out/<L>-<mode>.out, the engine's log $out/<L>-<mode>.log
 ucc() {

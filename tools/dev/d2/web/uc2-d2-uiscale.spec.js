@@ -1,10 +1,10 @@
 // UI scaling, browser check. It lives in engine-uc2 and runs
 // with the frontend's harness (its fixtures, its served build, its memory guard) through the config beside it,
-// so nothing in the frontend repository is changed. From <repo>/../ufrontend:
+// so nothing in the frontend repository is changed. From <repo>/../unreal-frontend-arch-private:
 //   yarn build --target uc2 --engine-artifact <engine-uc2>/build-wasm-perf/Source/SDLLaunch
 //   node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=<N> -- --target uc2 \
 //     --config <engine-uc2>/tools/dev/d2/web/playwright.d2.config.js
-// (the frontend sits beside engine-uc2: <repo>/../ufrontend; UFRONTEND=<dir> says otherwise).
+// (the frontend sits beside engine-uc2: <repo>/../unreal-frontend-arch-private; UFRONTEND=<dir> says otherwise).
 //
 // With a 1920x1080 canvas the engine draws the menus (laid out on a 640x480 grid) in the centred 4:3 box
 // x 240..1680, scaled 2.25 ([SDL2Drv.SDL2Client] UIScaleMode=Fit43, the web ini's default). The test maps the
@@ -15,7 +15,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const e2e = path.join(process.env.UFRONTEND || path.join(__dirname, '..', '..', '..', '..', '..', 'ufrontend'), 'packages', 'e2e');
+const e2e = path.join(process.env.UFRONTEND || path.join(__dirname, '..', '..', '..', '..', '..', 'unreal-frontend-arch-private'), 'packages', 'e2e');
 const { test, expect } = require(path.join(e2e, 'lib', 'fixtures'));
 const { assertHardwareRenderer } = require(path.join(e2e, 'lib', 'gpu'));
 const { setupTracking } = require(path.join(e2e, 'lib', 'tracking'));

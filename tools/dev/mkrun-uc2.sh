@@ -20,7 +20,7 @@ name=${2:-$(basename "$build" | sed 's/^build-//')}
 if [ -z "${UC2_ASSETS_DIR:-}" ] && [ -d "$work/native-runtrees/_assets/uc2/System" ]; then
   UC2_ASSETS_DIR=$work/native-runtrees/_assets/uc2
 fi
-assets=${UC2_ASSETS_DIR:-$work/assets/uc2}
+assets=${UC2_ASSETS_DIR:-$work/assets/uc2-assets}
 run=$work/run/$name
 
 [ -d "$assets/System" ] || { echo "no asset tree at $assets (tools/dev/mkassets-uc2.sh builds it)" >&2; exit 1; }
@@ -39,7 +39,7 @@ chmod -R u+w "$run/System"
 # The cooked audio (tools/cook-audio.py: Sounds/ and Music/), hard-linked like the content folders. The
 # audio device reads ../Sounds and ../Music from System/, as the Xbox read ..\Sounds. A missing cooked tree
 # only means a silent game.
-cooked=${UC2_COOKED_DIR:-$work/assets/uc2-cooked}
+cooked=${UC2_COOKED_DIR:-$assets}
 # In an asset tree made by tools/dev/mkassets-uc2.sh the cooked folders are in the tree and arrive with the
 # content folders above; these links serve a tree without them. An explicit UC2_COOKED_DIR (a cook
 # that is not installed yet, e.g. <repo>/../logs/f6/cooked) replaces the asset tree's Sounds/ and Music/ links.
@@ -58,13 +58,13 @@ done
 
 # UC2_XBOX_SOUNDS plays the shipped Xbox banks instead (UC2ALAudio reads Sounds/<Bank>.xsb + .xwb itself where
 # no cooked file is there):
-#   UC2_XBOX_SOUNDS=1    Sounds/ = the shipped banks only (hard links of <repo>/../epic-sources/Sounds, which is the
+#   UC2_XBOX_SOUNDS=1    Sounds/ = the shipped banks only (hard links of the Epic drop's Sounds/, which is the
 #                        retail disc's Sounds/ by name and size), and no Music/ (the disc has none: its music is
 #                        Sounds/M_<Song>.xwb). A retail-disc tree.
 #   UC2_XBOX_SOUNDS=add  the cooked Sounds/ and Music/ as above, plus the shipped .xsb/.xwb beside them (the device
 #                        takes the cooked file where both exist: tools/dev/audio-xsb-compare.sh needs both).
 # UC2_XBOX_DIR=<dir> takes the banks from another Sounds/ folder (e.g. one extracted from an ISO).
-xbox_sounds=${UC2_XBOX_DIR:-$work/epic-sources/Sounds}
+xbox_sounds=${UC2_XBOX_DIR:-${UC2_EPIC_SOURCES:-$work/epic-sources/uc2-avaris-2226}/Sounds}
 case "${UC2_XBOX_SOUNDS:-}" in
   "") ;;
   1)
@@ -105,7 +105,7 @@ cp -f "$repo"/Engine/Config/*.ini "$run/System/"
 #   applied, compiled; only the packages the patch sets rebuild are there). Present unless the build was configured
 #   with -DUE_SCRIPT_PATCHES=OFF.
 # - UC2_SCRIPTS=<dir> takes them from <dir> instead (e.g. tools/dev/script-build.sh's <repo>/../run/m14-make/System,
-#   or <repo>/../assets/uc2-shipped/System); UC2_SCRIPTS=none: none at all (the asset tree's .u, a "shipped" tree).
+#   or any folder of .u); UC2_SCRIPTS=none: none at all (the asset tree's .u, a "shipped" tree).
 scripts_dir=${UC2_SCRIPTS:-}
 scripts_from="UC2_SCRIPTS"
 if [ -z "$scripts_dir" ] && [ -d "$build/Scripts/System" ]; then

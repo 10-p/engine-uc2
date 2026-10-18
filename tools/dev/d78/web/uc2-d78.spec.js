@@ -1,6 +1,6 @@
 // Console and AutoFOV, browser check. It lives in
 // engine-uc2 and runs with the frontend's harness through the config beside it, so nothing in the frontend
-// repository changes. From <repo>/../ufrontend:
+// repository changes. From <repo>/../unreal-frontend-arch-private:
 //   yarn build --target uc2 --engine-artifact <engine-uc2>/build-wasm-perf/Source/SDLLaunch
 //   node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=<N> -- --target uc2 \
 //     --config <engine-uc2>/tools/dev/d78/web/playwright.d78.config.js
@@ -11,7 +11,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const e2e = path.join(process.env.UFRONTEND || path.join(__dirname, '..', '..', '..', '..', '..', 'ufrontend'), 'packages', 'e2e');
+const e2e = path.join(process.env.UFRONTEND || path.join(__dirname, '..', '..', '..', '..', '..', 'unreal-frontend-arch-private'), 'packages', 'e2e');
 const { test, expect } = require(path.join(e2e, 'lib', 'fixtures'));
 const { assertHardwareRenderer } = require(path.join(e2e, 'lib', 'gpu'));
 const { setupTracking } = require(path.join(e2e, 'lib', 'tracking'));

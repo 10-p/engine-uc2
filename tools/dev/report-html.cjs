@@ -1,9 +1,10 @@
 // Build a self-contained HTML page from docs/porting/REPORT.md: a sticky table of contents (sections and features),
 // a filter box over the contents, styled tables.
 //   node tools/dev/report-html.cjs docs/porting/REPORT.md docs/porting/REPORT.html
-// Needs the frontend clone's node_modules (marked); bin/publish-preview serves the page at /report/.
+// Needs the frontend clone's node_modules (marked): <repo>/../unreal-frontend-arch-private, or UFRONTEND=<dir>.
 const fs = require('fs');
-const { marked } = require('/home/ion/WorkUC2/ufrontend/node_modules/marked');
+const path = require('path');
+const { marked } = require(path.join(process.env.UFRONTEND || path.join(__dirname, '..', '..', '..', 'unreal-frontend-arch-private'), 'node_modules', 'marked'));
 const [src, out] = process.argv.slice(2);
 const md = fs.readFileSync(src, 'utf8');
 

@@ -4,7 +4,7 @@ Ogg Theora/Vorbis files the portable movie player (Source/UC2Movie) plays.
 
 Input (read only): <epic-sources>/Movies/*.xmv and <epic-sources>/Textures/Movies/*.xmv.
 
-Output (never committed; default <repo>/../assets/uc2-cooked):
+Output (never committed; --out <dir>):
   Movies/<Name>.ogv               Theora video + the international (first, English) audio track as Vorbis
   Movies/<Name>_<lang>.oga        Vorbis only: the deu/fra/ita/spa track of a multi-language movie, written
                                   only when it differs from the international track
@@ -15,7 +15,7 @@ Output (never committed; default <repo>/../assets/uc2-cooked):
 
 The format (ours) is specified in docs/porting/analysis/video.md ("Cooked format"). Usage:
 
-  tools/cook-movies.py [--epic <epic-sources>] [--out <dir>] [--jobs 4] [--only UC2_Logos,Portrait_Char_Anubis]
+  tools/cook-movies.py [--epic <epic-sources>] --out <dir> [--jobs 4] [--only UC2_Logos,Portrait_Char_Anubis]
                       [--video-quality 7] [--keyint 150] [--audio-quality 4] [--pcm-audio-quality 5]
                       [--no-measure] [--force]
 
@@ -443,8 +443,9 @@ def report(results, outdir, args):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--epic', default=os.path.join(work, 'epic-sources'))
-    ap.add_argument('--out', default=os.path.join(work, 'assets', 'uc2-cooked'))
+    ap.add_argument('--epic', default=os.environ.get('UC2_EPIC_SOURCES') or os.path.join(work, 'epic-sources', 'uc2-avaris-2226'),
+                    help='the pristine Epic tree (read only; default $UC2_EPIC_SOURCES or <repo>/../epic-sources/uc2-avaris-2226)')
+    ap.add_argument('--out', required=True, help='the folder the cooked Movies/ and Textures/Movies/ go to')
     ap.add_argument('--jobs', type=int, default=4)
     ap.add_argument('--only', default='')
     ap.add_argument('--video-quality', type=int, default=7)

@@ -11,16 +11,16 @@
 #                           report's addresses are then resolved with the unstripped exe from the build directory
 #
 # The folder: <dest>/System (uc2.exe, ucc.exe, OpenAL32.dll, our inis over the asset tree's System/, README-Windows.txt,
-# DLLS.txt) and, unless UC2_PACKAGE_CONTENT=0, the content folders of <repo>/../assets/uc2 and the cooked
-# Sounds/Music of <repo>/../assets/uc2-cooked, hard-linked (a copy of the folder to another disk copies the data).
+# DLLS.txt) and, unless UC2_PACKAGE_CONTENT=0, the content folders of the asset tree (<repo>/../assets/uc2-assets,
+# UC2_ASSETS_DIR) with its cooked Sounds/Music (UC2_COOKED_DIR for another folder), hard-linked (a copy of the folder to another disk copies the data).
 # Nothing in the asset tree is written. Re-running replaces <dest>, which must be under <repo>/../run.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 build=$(cd "${1:-$repo/build-windows}" && pwd)
 dest=${2:-$work/run/m12-package}
-assets=${UC2_ASSETS_DIR:-$work/assets/uc2}
-cooked=${UC2_COOKED_DIR:-$work/assets/uc2-cooked}
+assets=${UC2_ASSETS_DIR:-$work/assets/uc2-assets}
+cooked=${UC2_COOKED_DIR:-$assets}
 objdump=${OBJDUMP:-i686-w64-mingw32-objdump}
 
 case "$(cd "$(dirname "$dest")" 2>/dev/null && pwd)/$(basename "$dest")" in

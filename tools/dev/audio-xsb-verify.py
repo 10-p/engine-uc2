@@ -226,9 +226,9 @@ def full(args):
 def main():
     work = os.path.abspath(os.path.join(HERE, '..', '..', '..'))
     ap = argparse.ArgumentParser()
-    ap.add_argument('--epic', default=os.path.join(work, 'epic-sources'))
+    ap.add_argument('--epic', default=os.environ.get('UC2_EPIC_SOURCES') or os.path.join(work, 'epic-sources', 'uc2-avaris-2226'))
     ap.add_argument('--full', action='store_true')
-    ap.add_argument('--cooked', default=os.path.join(work, 'assets', 'uc2-cooked', 'Sounds'))
+    ap.add_argument('--cooked', default=os.path.join(work, 'assets', 'uc2-assets', 'Sounds'))
     args = ap.parse_args()
     if args.full:
         return full(args)

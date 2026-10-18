@@ -42,8 +42,8 @@ UC2_PRECMD="set UCDeathmatch NumPlayers 0" UC2_POSTCMD="Ghost" run "$tree" audio
 UC2_PRECMD="set UCDeathmatch NumPlayers 0" UC2_POSTCMD="Ghost" run "$tree" audio-praxis-dry 85 28 'DM-Praxis?NumBots=3' "-ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:UseEFX=False"
 # The menu music is NuBattle at -900 mB (A_Music) - 600 mB (voice headroom) + 1000*log10(0.40) (the default
 # profile's MusicVolume, XACT's category formula) = -19.0 dB; another track as control.
-python3 "$repo/tools/dev/audio-music-check.py" "$out/audio-menu.wav" "$work/epic-sources/Music/NuBattle.wav" -19.0 \
-  "$work/epic-sources/Music/Recoil.wav" | sed 's/^CHECK/SUMMARY audio-menu-music:/' | tee -a "$summary"
+python3 "$repo/tools/dev/audio-music-check.py" "$out/audio-menu.wav" "${UC2_EPIC_SOURCES:-$work/epic-sources/uc2-avaris-2226}/Music/NuBattle.wav" -19.0 \
+  "${UC2_EPIC_SOURCES:-$work/epic-sources/uc2-avaris-2226}/Music/Recoil.wav" | sed 's/^CHECK/SUMMARY audio-menu-music:/' | tee -a "$summary"
 for n in audio-menu audio-deadbolt audio-praxis-efx audio-praxis-dry; do
   cat "$out/$n.summary.txt" 2>/dev/null || echo "SUMMARY $n: no result"
 done | tee -a "$summary"

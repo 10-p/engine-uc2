@@ -8,16 +8,16 @@
 #
 # What it does, in order (and refuses to start when it cannot do it safely):
 #   1. refuses if another e2e-mem-guard runs or :8080/:8081/:9000 are taken (one harness run machine-wide);
-#   2. reassembles <repo>/../ufrontend/serve-web with this worktree's build-wasm-perf artifact (yarn build, capped 4G)
+#   2. reassembles the frontend's serve-web (<repo>/../unreal-frontend-arch-private, UFRONTEND=<dir>) with this worktree's build-wasm-perf artifact (yarn build, capped 4G)
 #      and records the sha256 of serve-web/SDLLaunch.wasm against the artifact's, before and after the run;
 #   3. loads a null PulseAudio sink and removes it by its module index afterwards (not by module name: that
 #      removes every null sink on the machine);
 #   4. runs bin/capped 8G 1800 -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=16 -- --target uc2 <spec>.
 # Exit status: the run's.
 set -u
-W=/home/ion/WorkUC2
 HERE=$(cd "$(dirname "$0")/../.." && pwd)
-FE=$W/ufrontend
+W=$(cd "$HERE/.." && pwd)
+FE=${UFRONTEND:-$W/unreal-frontend-arch-private}
 ART=$HERE/build-wasm-perf/Source/SDLLaunch
 OUT=$W/logs/e2
 tag=${1:?usage: e2-web-net.sh <tag> [spec] [playwright args]}

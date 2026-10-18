@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One-shot import of the pristine Epic tree into the engine-uc2 layout.
 
-Reads   <repo>/../epic-sources (never written)
+Reads   <repo>/../epic-sources/uc2-avaris-2226, or $UC2_EPIC_SOURCES (never written)
 Writes  <repo>/Source, <repo>/Thirdparty, <repo>/Engine/Config, <repo>/docs/epic
 
 Rules (see docs/SOURCE-LAYOUT.md):
@@ -16,7 +16,7 @@ import os
 import sys
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-EPIC = os.path.abspath(os.path.join(REPO, "..", "epic-sources"))
+EPIC = os.path.abspath(os.environ.get("UC2_EPIC_SOURCES") or os.path.join(REPO, "..", "epic-sources", "uc2-avaris-2226"))
 
 # Top-level epic folders that are source packages or build bookkeeping -> Source/<same name>
 SOURCE_DIRS = """

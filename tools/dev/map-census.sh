@@ -30,7 +30,7 @@ out=$work/logs/$name
 mkdir -p "$out"
 rm -f "$out"/*.log "$out"/part-*.tsv
 
-mapfile -t maps < <(cd "${UC2_ASSETS_DIR:-$work/assets/uc2}/Maps" && ls -1 *.unr | sed 's/\.unr$//')
+mapfile -t maps < <(cd "${UC2_ASSETS_DIR:-$work/assets/uc2-assets}/Maps" && ls -1 *.unr | sed 's/\.unr$//')
 
 run_worker() {
   local w=$1

@@ -12,7 +12,7 @@ copying it by hand. Bytes are kept as they are (Latin-1), and every file in Engi
 LF line endings, as in the sibling engines: the script refuses a CR anywhere (--check fails, a rewrite stops) and
 writes the web files with LF. Except Epic's three reference copies (EPIC_COPIES below), which stay byte for byte
 Epic's (CRLF): `cmp` against
-<repo>/../epic-sources/System/<file> must be silent, and --check says so when it is not.
+<repo>/../epic-sources/uc2-avaris-2226/System/<file> must be silent, and --check says so when it is not.
 """
 import os, re, sys
 here = os.path.dirname(os.path.abspath(__file__))
@@ -123,9 +123,8 @@ def main():
         for f in sorted(os.listdir(os.path.join(cfg, d))):
             path = os.path.join(cfg, d, f)
             if d == '' and f in EPIC_COPIES:
-                # Epic's file: the UC2 workspace's epic-sources/System, else WorkUnreal's cooked tree, whose System/
-                # keeps Epic's inis byte for byte.
-                for epic in (os.path.join(cfg, '..', '..', '..', 'epic-sources', 'System', f),
+                # Epic's file: the Epic drop's System/, else the cooked tree's, which keeps Epic's inis byte for byte.
+                for epic in (os.path.join(cfg, '..', '..', '..', 'epic-sources', 'uc2-avaris-2226', 'System', f),
                              os.path.join(cfg, '..', '..', '..', 'assets', 'uc2-assets', 'System', f)):
                     if os.path.exists(epic):
                         if open(epic, 'rb').read() != open(path, 'rb').read():

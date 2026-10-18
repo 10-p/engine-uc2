@@ -29,7 +29,7 @@ spec.loader.exec_module(cook)
 def main():
     work = os.path.abspath(os.path.join(HERE, '..', '..', '..'))
     ap = argparse.ArgumentParser()
-    ap.add_argument('--epic', default=os.path.join(work, 'epic-sources'))
+    ap.add_argument('--epic', default=os.environ.get('UC2_EPIC_SOURCES') or os.path.join(work, 'epic-sources', 'uc2-avaris-2226'))
     ap.add_argument('banks', nargs='+')
     args = ap.parse_args()
     root = cook.parse_xap(os.path.join(args.epic, 'Sounds', 'Avaris.xap'))

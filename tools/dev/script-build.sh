@@ -6,7 +6,7 @@
 # The repository holds no UnrealScript: the build makes the patched packages from the player's shipped .u and patches/
 # (cmake/UC2Scripts.cmake, tools/scripts/). This tool checks the compiler against Epic's leaked text and needs that
 # text, which only the dev machine
-# has (<repo>/../epic-sources/<Pkg>/Classes, read-only). It is never a build input.
+# has (<repo>/../epic-sources/uc2-avaris-2226/<Pkg>/Classes, read-only). It is never a build input.
 #
 #   tools/dev/script-build.sh [options] [stage...]
 #     stages: assemble make strip compare (default: all four, in that order)
@@ -25,7 +25,7 @@
 #     --mem <size>      memory ceiling of the `ucc-bin make` run (default 3G; also under wine)
 #     --headers         also export the C++ headers (into <tree>/<Pkg>/Inc, a scratch copy, never Source/)
 #     --classes-root <dir>  where the script sources are: <dir>/<Pkg>/Classes for all 17 packages (source folder
-#                       names: Gameplay for GamePlay). Default: $UC2_EPIC_SOURCES (<repo>/../epic-sources) when it
+#                       names: Gameplay for GamePlay). Default: $UC2_EPIC_SOURCES (<repo>/../epic-sources/uc2-avaris-2226) when it
 #                       has Core/Classes, Epic's leaked text; otherwise this option is required. Any full tree
 #                       works (e.g. epic-sources with --classes overrides)
 #     --extra "<args>"  more `ucc-bin make` arguments
@@ -36,7 +36,7 @@
 # The tree: content folders hard-linked from the asset tree (never written), System/ a real copy of the asset
 # tree's with the 17 EditPackages .u removed (they are what gets built), GUIRes/ the shipped .u (UMakeCommandlet
 # conforms each new package against ../GUIRes/<Pkg>.u, as Epic's tree had it), and for each package
-# <Pkg>/Classes -> <classes root>/<Pkg>/Classes and <Pkg>/<resource dir> -> epic-sources/<Pkg>/<resource dir> (the
+# <Pkg>/Classes -> <classes root>/<Pkg>/Classes and <Pkg>/<resource dir> -> the Epic drop's <Pkg>/<resource dir> (the
 # #exec imports read textures and models from there), <Pkg>/Inc a copy of Source/<Pkg>/Inc (the exporter looks there).
 # The compile inis are Epic's: Avaris.ini = DefaultXbox.ini, User.ini = DefUserXbox.ini (sync_avaris.pl copies them so).
 # Nothing is written outside the tree and the logs directory.
@@ -44,8 +44,8 @@ set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
-assets=${UC2_ASSETS_DIR:-$work/assets/uc2}
-epic=${UC2_EPIC_SOURCES:-$work/epic-sources}
+assets=${UC2_ASSETS_DIR:-$work/assets/uc2-assets}
+epic=${UC2_EPIC_SOURCES:-$work/epic-sources/uc2-avaris-2226}
 # The shipped script packages, the baseline for conforming and comparing. Not the asset tree's System/: some of its
 # packages may be rebuilt ones (System/SCRIPTS.txt), and conforming against
 # those would chain generations and compare a build with itself.
@@ -207,8 +207,8 @@ strip_scripts() {
   cp -f "$assets/System/DefUser.ini" "$run/System/User.ini"
   # And with the retail disc's per-class inis where they differ from the leak's (later) ones: the shipped
   # defaults carry them (UCDeathmatch.LevelData without the Overdrive maps of the leak's Gametypes.ini; the
-  # character speeds of the retail Characters.ini). Read-only copies from <repo>/../reference/iso-extract.
-  local retail=$work/reference/iso-extract/System f
+  # character speeds of the retail Characters.ini). Read-only copies from <repo>/../assets/uc2-retail-assets.
+  local retail=$work/assets/uc2-retail-assets/System f
   if [ -d "$retail" ]; then
     for f in Characters.ini Gametypes.ini Maplists.ini; do cp -f "$retail/$f" "$run/System/$f"; done
   else

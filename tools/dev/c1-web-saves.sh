@@ -18,7 +18,7 @@ sys=$work/run/$tree/System
 out=${C1_WEB_OUT:-$work/logs/c1/web}
 capped=$work/bin/capped
 # The frontend whose userFiles compiler is asked (the profile folder glob needs a frontend that has it).
-glue=${C1_UFRONT_GLUE:-$work/ufrontend/packages/glue/src/target/user-files.js}
+glue=${C1_UFRONT_GLUE:-${UFRONTEND:-$work/unreal-frontend-arch-private}/packages/glue/src/target/user-files.js}
 mkdir -p "$out"
 [ -f "$sys/ucc-bin.js" ] && [ -x "$sys/ucc-bin" ] || { echo "no run tree with ucc-bin.js at $sys (tools/dev/mkrun-uc2.sh build-native $tree build-wasm-perf)" >&2; exit 2; }
 fails=0

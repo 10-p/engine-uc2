@@ -5,7 +5,7 @@ Input (read only): the XACT project as text (Sounds/Avaris.xap), the source WAVs
 Music/) and the shipped Xbox banks (Sounds/*.xsb, *.xwb): a cross-check, and the source of a wave whose WAV is
 not in SoundData/ (decoded from the .xwb by tools/uc2xwb.py; the report lists them as XWB-SOURCE).
 
-Output (never committed; default <repo>/../assets/uc2-cooked):
+Output (never committed; --out <dir>):
   Sounds/<WaveBankFile>.uc2wb    wave bank index (text): one line per wave entry
   Sounds/<WaveBankFile>.ogp      the wave bank's waves, each a complete Ogg Vorbis stream, concatenated
   Sounds/<SoundBank>.uc2cues     cue table (text): cues -> sounds -> tracks -> events -> variations
@@ -15,7 +15,7 @@ Output (never committed; default <repo>/../assets/uc2-cooked):
 
 The formats are specified in docs/porting/analysis/audio.md ("Cooked format"). Usage:
 
-  tools/cook-audio.py [--epic <epic-sources>] [--out <dir>] [--jobs 6] [--banks A_Music,A_Weapon]
+  tools/cook-audio.py [--epic <epic-sources>] --out <dir> [--jobs 6] [--banks A_Music,A_Weapon]
                       [--no-encode] [--quality 4] [--music-quality 5] [--no-xwb-sources]
 
 Run it under the memory ceiling: <repo>/../bin/capped 4G 3600 -- tools/cook-audio.py
@@ -876,8 +876,9 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     work = os.path.abspath(os.path.join(here, '..', '..'))
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--epic', default=os.path.join(work, 'epic-sources'), help='the pristine Epic tree (read only)')
-    ap.add_argument('--out', default=os.path.join(work, 'assets', 'uc2-cooked'))
+    ap.add_argument('--epic', default=os.environ.get('UC2_EPIC_SOURCES') or os.path.join(work, 'epic-sources', 'uc2-avaris-2226'),
+                    help='the pristine Epic tree (read only; default $UC2_EPIC_SOURCES or <repo>/../epic-sources/uc2-avaris-2226)')
+    ap.add_argument('--out', required=True, help='the folder the cooked Sounds/ and Music/ go to')
     ap.add_argument('--jobs', type=int, default=6, help='parallel ffmpeg encoders')
     ap.add_argument('--quality', default='4', help='libvorbis quality for sound effects and speech')
     ap.add_argument('--music-quality', default='5', help='libvorbis quality for music')

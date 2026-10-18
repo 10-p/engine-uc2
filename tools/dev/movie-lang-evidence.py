@@ -17,7 +17,7 @@ import argparse, atexit, math, os, shutil, struct, subprocess, sys, tempfile
 here = os.path.dirname(os.path.abspath(__file__))
 work = os.path.abspath(os.path.join(here, '..', '..', '..'))
 capped = os.path.join(work, 'bin', 'capped')
-epic = os.path.join(work, 'epic-sources')
+epic = os.environ.get('UC2_EPIC_SOURCES') or os.path.join(work, 'epic-sources', 'uc2-avaris-2226')
 
 # cinematic XMV -> production stem prefix in TestMaps (matched by duration)
 PAIRS = [
@@ -82,7 +82,7 @@ def corr(a, b, maxlag=60):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--cooked', default=os.path.join(work, 'assets', 'uc2-cooked', 'Movies'))
+    ap.add_argument('--cooked', default=os.path.join(work, 'assets', 'uc2-assets', 'Movies'))
     args = ap.parse_args()
     ok = True
     for xmv, stem in PAIRS:

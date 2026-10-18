@@ -8,9 +8,9 @@
 #                    purpose: commit the new file with the patch)
 #     --ref <dir>    dev machine only: P2 also compares its build, bytecode by bytecode, with the System folder of
 #                    another build (e.g. <repo>/../run/t1-ref/System)
-#     --shipped <dir> the shipped .u (default <repo>/../epic-sources/System); other options go to uc-build.sh
+#     --shipped <dir> the shipped .u (default <repo>/../assets/uc2-retail-assets/System); other options go to uc-build.sh
 #     --engine-textures <dir>  P1 only, dev only: Epic's Engine source folder (default <repo>/../epic-sources/
-#                    Engine). Engine.u holds 68 textures that `#exec TEXTURE IMPORT` made from image files the disc
+#                    uc2-avaris-2226/Engine). Engine.u holds 68 textures that `#exec TEXTURE IMPORT` made from image files the disc
 #                    does not have and the decompiler cannot recreate; with this folder P1 puts those lines (from
 #                    its Classes/*.uc) back before `defaultproperties` and links its Textures/, so the rest of
 #                    Engine can be proved. Without it (or `none`) P1 leaves Engine out.
@@ -39,15 +39,13 @@ W=$work/run/t1-proof
 ref=""
 reference=$repo/patches/reference.sha256
 write_ref=0
-shipped=$work/epic-sources/System
-content=$work/assets/uc2
 # The WorkUnreal layout: the retail disc's System/ holds the 17 shipped .u; the cooked tree the content.
-[ -d "$work/assets/uc2-retail-assets/System" ] && shipped=$work/assets/uc2-retail-assets/System
-[ -d "$work/assets/uc2-assets/System" ] && content=$work/assets/uc2-assets
+shipped=$work/assets/uc2-retail-assets/System
+content=$work/assets/uc2-assets
 capped=$work/bin/capped
 [ -x "$capped" ] || capped=none
 SP=$repo/Source/Engine/Inc/ScriptPatches.h
-engine_tex=$work/epic-sources/Engine
+engine_tex=${UC2_EPIC_SOURCES:-$work/epic-sources/uc2-avaris-2226}/Engine
 proofs=() build_args=()
 old_dec="" new_dec=$repo/tools/scripts/uc-decompile.py pout=$repo/patches
 while [ $# -gt 0 ]; do

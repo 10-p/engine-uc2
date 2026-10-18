@@ -21,7 +21,7 @@
 #                            compared (the others come from shipped packages nothing here changes), and a class's
 #                            cpptext and `struct native` blocks are not compared (the shipped packages do not carry
 #                            them; tools/dev/check-headers-cpptext.py takes the committed header's). A FULL tree (all
-#                            17 packages, e.g. Epic's leaked text on the dev machine, <repo>/../epic-sources) is
+#                            17 packages, e.g. Epic's leaked text in <repo>/../epic-sources/uc2-avaris-2226) is
 #                            compiled whole with tools/dev/script-build.sh (dev only; its headers lack our patches)
 #     --tree <name>          scratch run tree under <repo>/../run (default hdr-<this checkout's directory name>)
 #     --logs <dir>           logs (default <repo>/../logs/hdr)

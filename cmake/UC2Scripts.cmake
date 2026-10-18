@@ -129,8 +129,7 @@ string(APPEND _help "the content folders Textures/, StaticMeshes/, ...: tools/de
 string(APPEND _help "without the script patches: -DUE_SCRIPT_PATCHES=OFF.")
 
 # The game folder: the cache variable, else the environment variable the dev tools read (tools/dev/mkrun-uc2.sh),
-# else the workspace beside the repo: WorkUnreal's cooked tree (<repo>/../assets/uc2-assets), else the UC2
-# workspace's layout (<repo>/../assets/uc2), when one is there.
+# else the cooked tree beside the repo (<repo>/../assets/uc2-assets) when it is there.
 set(_assets "${UE_ASSETS_DIR}")
 set(_from "UE_ASSETS_DIR")
 if(NOT _assets AND DEFINED ENV{UC2_ASSETS_DIR})
@@ -139,10 +138,6 @@ if(NOT _assets AND DEFINED ENV{UC2_ASSETS_DIR})
 endif()
 if(NOT _assets AND EXISTS "${CMAKE_SOURCE_DIR}/../assets/uc2-assets/System")
   get_filename_component(_assets "${CMAKE_SOURCE_DIR}/../assets/uc2-assets" ABSOLUTE)
-  set(_from "found beside the repo")
-endif()
-if(NOT _assets AND EXISTS "${CMAKE_SOURCE_DIR}/../assets/uc2/System")
-  get_filename_component(_assets "${CMAKE_SOURCE_DIR}/../assets/uc2" ABSOLUTE)
   set(_from "found beside the repo")
 endif()
 if(NOT _assets)
@@ -158,12 +153,9 @@ if(NOT _shipped)
   set(_shipped "${_assets}/System")
 endif()
 set(_retail "${UE_SCRIPT_RETAIL_INIS_DIR}")
-# The retail disc's System/: WorkUnreal's retail tree, else the UC2 workspace's ISO extract.
+# The retail disc's System/: the retail tree beside the repo (<repo>/../assets/uc2-retail-assets) when it is there.
 if(NOT _retail AND EXISTS "${CMAKE_SOURCE_DIR}/../assets/uc2-retail-assets/System/Gametypes.ini")
   get_filename_component(_retail "${CMAKE_SOURCE_DIR}/../assets/uc2-retail-assets/System" ABSOLUTE)
-endif()
-if(NOT _retail AND EXISTS "${CMAKE_SOURCE_DIR}/../reference/iso-extract/System/Gametypes.ini")
-  get_filename_component(_retail "${CMAKE_SOURCE_DIR}/../reference/iso-extract/System" ABSOLUTE)
 endif()
 if(_retail)
   foreach(_f Characters.ini Gametypes.ini Maplists.ini)

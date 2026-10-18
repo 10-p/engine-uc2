@@ -935,12 +935,12 @@ PY
       echo "== lock ($tree, two bots frozen)"
       scen_lock > "$out/lock.scen"; prep "$tree"; run lock "$tree" 2 400 "-ini:System:[Engine.Engine]:FrameRateCap=60"; count "$out/lock.result";;
     before)
-      echo "== before ($ship, shipped scripts, main's DefUser.ini: what the owner played; expected to FAIL drift/symmetry)"
-      git -C "$repo" show 47b1b18:Engine/Config/DefUser.ini > "$out/DefUser-main.ini"
+      echo "== before ($ship, shipped scripts, the DefUser.ini before the mouse-look work; expected to FAIL drift/symmetry)"
+      git -C "$repo" show c138c39:Engine/Config/DefUser.ini > "$out/DefUser-main.ini"
       scen_look before > "$out/before.scen"; prep "$ship" "$out/DefUser-main.ini"; D6_KVAL=52.4 run before "$ship" 0 600 "-ini:System:[Engine.Engine]:FrameRateCap=60" | sed 's/^/(before) /';;
     epic)
-      echo "== epic ($ship, shipped scripts, Epic's DefUser.ini as the web build had it until 2026-10-07; evidence)"
-      git -C "$repo" show 45f7301:Engine/Config/web/DefUser.ini > "$out/DefUser-epic.ini"
+      echo "== epic ($ship, shipped scripts, Epic's DefUser.ini as the first web build had it; evidence)"
+      git -C "$repo" show a573d61:Engine/Config/web/DefUser.ini > "$out/DefUser-epic.ini"
       scen_epic > "$out/epic.scen"; prep "$ship" "$out/DefUser-epic.ini"; run epic "$ship" 0 300 "-ini:System:[Engine.Engine]:FrameRateCap=60" | sed 's/^/(epic) /';;
     vanilla)
       echo "== vanilla ($ship, Epic's shipped scripts, OUR DefUser.ini: Epic's PC mouse path)"
