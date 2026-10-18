@@ -5,8 +5,8 @@
 	receive clock, PreServerTravel). Packets travel over the frontend's WebRTC data channel, which the
 	glue opens reliable and ordered: a packet is lost only while a pipe is down and the glue reconnects,
 	and the engine's own acks and resends (written for lossy datagrams) run on top of it. The transport lives in
-	the frontend (@ufront/glue, packages/glue/src/webrtc); the engine reaches it through the webrtc_*
-	imports that vendor/glue/webrtc-shim.js forwards to Module.UE.net.
+	the frontend (@ufront/glue, packages/glue/src/webrtc); the engine reaches it through the ue_net_*
+	imports of vendor/glue/ue_abi.h, which vendor/glue/net-shim.js forwards to Module.UE.net.
 =============================================================================*/
 
 #ifndef _INC_WEBRTCDRV
@@ -20,30 +20,14 @@
 #endif
 
 /*-----------------------------------------------------------------------------
-	The frozen C ABI (frontend docs/02-abi-contract.md; vendor/glue/webrtc-shim.js, ABI version 1).
-	Only the calls this engine makes are declared; the shim defines all of them.
+	The frozen C ABI (frontend docs/02-abi-contract.md), ABI version 2: the ue_net_* imports and the
+	UE_NET_STATE_* connection states. ue_net_init_listen takes "<room>/<server name>", ue_net_connect
+	"<peerPrefix>-<room>_<serverSlug>-srv".
 -----------------------------------------------------------------------------*/
 
-extern "C"
-{
-	void webrtc_init_listen( const char* RoomAndServerName );	// "<room>/<server name>"
-	void webrtc_connect( const char* PeerId );				// "<peerPrefix>-<room>_<serverSlug>-srv"
-	int  webrtc_send( int ConnId, const void* Data, int Len );
-	int  webrtc_recv( int ConnId, void* Buffer, int MaxLen );
-	int  webrtc_accept_connection();
-	void webrtc_close( int ConnId );
-	void webrtc_destroy();
-	int  webrtc_get_connection_state( int ConnId );
-	void webrtc_set_listen_status( const char* Name, const char* Map, int Players, int MaxPlayers, const char* GameType );
-}
-// netplay: the System Link page's discovery calls (webrtc_discover_servers, webrtc_get_server_*) are declared
-// where they are used, Src/WebRTCLan.cpp.
-
-// webrtc_get_connection_state() values (the glue's session states).
-#define WEBRTC_STATE_INVALID	0
-#define WEBRTC_STATE_CONNECTING	1
-#define WEBRTC_STATE_OPEN		2
-#define WEBRTC_STATE_CLOSED		3
+#ifdef __EMSCRIPTEN__
+#include "ue_abi.h"
+#endif
 
 /*-----------------------------------------------------------------------------
 	UWebRTCConnection: one data channel (a glue connection id) as a UNetConnection.

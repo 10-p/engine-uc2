@@ -55,7 +55,7 @@ void UWebRTCConnection::LowLevelSend( void* Data, INT Count )
 	// A detached connection (connId -1, see UWebRTCNetDriver::InitConnect) no longer owns the wire.
 	FUNC_CLOCK(WebRTCSend,Driver->SendCycles);
 	if( WebRTCConnId >= 0 )
-		webrtc_send( WebRTCConnId, Data, Count );
+		ue_net_send( WebRTCConnId, Data, Count );
 
 	unguard;
 }

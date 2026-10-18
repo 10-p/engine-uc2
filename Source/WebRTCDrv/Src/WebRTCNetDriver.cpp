@@ -14,9 +14,8 @@
 	  (the launcher's seed), not GameReplicationInfo's class default: UC2's profile code overwrites that
 	  default with the profile's own server name at start-up (Engine/Classes/PlayerProfile.uc:764), the
 	  same "Liandri Corporation" on every install, and never writes the ini;
-	- no deferred-connect export (the frontend's invite joins by putting "<room>_<serverSlug>?connect" on the
-	  command line); netplay: UC2's own System Link page (UCMenu.UC2Browser, UDP beacons) is fed by the
-	  synthetic LAN in WebRTCLan.cpp: the listen status carries the host's beacon text, and a join from that
+	- the frontend's invite joins by putting "<room>_<serverSlug>?connect" on the command line; UC2's own
+	  System Link page (UCMenu.UC2Browser, UDP beacons) is fed by the synthetic LAN in WebRTCLan.cpp: the listen status carries the host's beacon text, and a join from that
 	  page dials a synthetic address that InitConnect turns back into the room key.
 =============================================================================*/
 
@@ -117,7 +116,7 @@ UBOOL UWebRTCNetDriver::InitConnect( FNetworkNotify* InNotify, FURL& ConnectURL,
 		GClientDriver->bDetached = 1;
 	}
 	GClientDriver = this;
-	webrtc_connect( TCHAR_TO_ANSI(*ServerPeerId) );
+	ue_net_connect( TCHAR_TO_ANSI(*ServerPeerId) );
 
 	// The server connection, pending until HandleClientPlayer opens it (as UTcpNetDriver), and channel 0.
 	ServerConnection = new UWebRTCConnection( 0, this, USOCK_Pending, 1, ConnectURL );
@@ -146,7 +145,7 @@ UBOOL UWebRTCNetDriver::InitListen( FNetworkNotify* InNotify, FURL& LocalURL, FS
 	// "<room>/<server name>": the glue slugs the name (a '/' because a name may contain anything).
 	FString ListenKey = ServerName.Len() ? (RoomName + TEXT("/") + ServerName) : RoomName;
 	debugf( NAME_DevNet, TEXT("[WebRTC] InitListen: room '%s' server name '%s'"), *RoomName, *ServerName );
-	webrtc_init_listen( TCHAR_TO_ANSI(*ListenKey) );
+	ue_net_init_listen( TCHAR_TO_ANSI(*ListenKey) );
 
 	// Not an address anyone dials (the peer id is); the level's own URL keeps its host empty.
 	return 1;
@@ -166,12 +165,12 @@ void UWebRTCNetDriver::TickDispatch( FLOAT DeltaTime )
 	TArray<INT> Incoming = ParkedAccepts;
 	ParkedAccepts.Empty();
 	INT NewConnId;
-	while( (NewConnId = webrtc_accept_connection()) > 0 )
+	while( (NewConnId = ue_net_accept_connection()) > 0 )
 		Incoming.AddItem( NewConnId );
 	for( INT i=0; i<Incoming.Num(); i++ )
 	{
 		INT ConnId = Incoming(i);
-		if( webrtc_get_connection_state( ConnId ) == WEBRTC_STATE_CLOSED )
+		if( ue_net_get_connection_state( ConnId ) == UE_NET_STATE_CLOSED )
 			continue;
 		EAcceptConnection AcceptResult = Notify->NotifyAcceptingConnection();
 		if( AcceptResult == ACCEPTC_Accept )
@@ -189,7 +188,7 @@ void UWebRTCNetDriver::TickDispatch( FLOAT DeltaTime )
 		else
 		{
 			debugf( NAME_DevNet, TEXT("[WebRTC] TickDispatch: REFUSED connection %i (policy %i)"), ConnId, (INT)AcceptResult );
-			webrtc_close( ConnId );
+			ue_net_close( ConnId );
 		}
 	}
 
@@ -202,12 +201,12 @@ void UWebRTCNetDriver::TickDispatch( FLOAT DeltaTime )
 		if( Conn->State!=USOCK_Open && Conn->State!=USOCK_Pending )
 			continue;
 		INT Size;
-		while( (Size = webrtc_recv( Conn->WebRTCConnId, Data, sizeof(Data) )) > 0 )
+		while( (Size = ue_net_recv( Conn->WebRTCConnId, Data, sizeof(Data) )) > 0 )
 		{
 			UpdateLastReceiveTime();
 			Conn->ReceivedRawPacket( Data, Size );
 		}
-		if( webrtc_get_connection_state( Conn->WebRTCConnId ) == WEBRTC_STATE_CLOSED && Conn->State != USOCK_Closed )
+		if( ue_net_get_connection_state( Conn->WebRTCConnId ) == UE_NET_STATE_CLOSED && Conn->State != USOCK_Closed )
 		{
 			debugf( NAME_DevNet, TEXT("[WebRTC] TickDispatch: client connId=%i connection CLOSED by remote"), Conn->WebRTCConnId );
 			Conn->State = USOCK_Closed;
@@ -221,7 +220,7 @@ void UWebRTCNetDriver::TickDispatch( FLOAT DeltaTime )
 	{
 		// The engine's State is left to the join flow (Pending until HandleClientPlayer); only a dead pipe
 		// is turned into a closed connection, which the engine reports as a lost connection.
-		if( webrtc_get_connection_state( Server->WebRTCConnId ) == WEBRTC_STATE_CLOSED && Server->State != USOCK_Closed )
+		if( ue_net_get_connection_state( Server->WebRTCConnId ) == UE_NET_STATE_CLOSED && Server->State != USOCK_Closed )
 		{
 			debugf( NAME_DevNet, TEXT("[WebRTC] TickDispatch: server connection CLOSED by remote (connId=%i)"), Server->WebRTCConnId );
 			Server->State = USOCK_Closed;
@@ -229,7 +228,7 @@ void UWebRTCNetDriver::TickDispatch( FLOAT DeltaTime )
 		if( Server->State==USOCK_Open || Server->State==USOCK_Pending )
 		{
 			INT Size;
-			while( (Size = webrtc_recv( Server->WebRTCConnId, Data, sizeof(Data) )) > 0 )
+			while( (Size = ue_net_recv( Server->WebRTCConnId, Data, sizeof(Data) )) > 0 )
 			{
 				UpdateLastReceiveTime();
 				Server->ReceivedRawPacket( Data, Size );
@@ -325,7 +324,7 @@ void UWebRTCNetDriver::PushListenStatus()
 			debugf( NAME_DevNet, TEXT("[WebRTC] listen status: System Link beacon '%s'"), *Beacon );
 		}
 	}
-	webrtc_set_listen_status( TCHAR_TO_ANSI(*Name), TCHAR_TO_ANSI(*MapName), Players, MaxPlayers, TCHAR_TO_ANSI(*GameType) );
+	ue_net_set_listen_status( TCHAR_TO_ANSI(*Name), TCHAR_TO_ANSI(*MapName), Players, MaxPlayers, TCHAR_TO_ANSI(*GameType) );
 	unguard;
 }
 
@@ -344,11 +343,11 @@ void UWebRTCNetDriver::LowLevelDestroy()
 	ParkedAccepts.Empty();
 	if( GClientDriver==this )
 		GClientDriver = NULL;
-	// webrtc_destroy() is global. On a client the old level's driver dies after the pending level's
+	// ue_net_destroy() is global. On a client the old level's driver dies after the pending level's
 	// InitConnect (inside LoadMap), so a detached driver must not tear down the newer one's transport. A
 	// listen server's old driver dies before the next InitListen.
 	if( !bDetached )
-		webrtc_destroy();
+		ue_net_destroy();
 	unguard;
 }
 

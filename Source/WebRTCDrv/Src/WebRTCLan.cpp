@@ -1,5 +1,5 @@
 /*=============================================================================
-	WebRTCLan.cpp: UC2's System Link page on the web (netplay, web build only).
+	WebRTCLan.cpp: UC2's System Link page on the web (web build only).
 
 	UC2's "Join System Link Game" page (UCMenu.UC2Browser) lists what IpDrv.ClientBeaconReceiver
 	hears: the receiver binds BeaconPort (9777), broadcasts "REPORT?<nonce>" to ServerBeaconPort (8777) once a
@@ -12,13 +12,13 @@
 	This file is a synthetic LAN at the AUdpLink
 	level, so Epic's script runs unmodified. The frontend's broker already knows the servers: the glue's
 	discovery lists the broker's peers (GET /peerjs/peers, the page's own room) and status-pings each for what
-	its host pushed (webrtc_set_listen_status, which UC2's driver fills with the host's real beacon text). Here a
+	its host pushed (ue_net_set_listen_status, which UC2's driver fills with the host's real beacon text). Here a
 	receiver's REPORT is answered once per discovered server, from a synthetic address 10.199.0.N whose N
 	indexes an append-only room table, so that the page's join (a travel to "10.199.0.N:7777?...") can be turned
 	back into the room key by UWebRTCNetDriver::InitConnect.
 
 	Two rules:
-	- every webrtc_* call is a synchronous proxy to the browser's main thread: make them only from a link's
+	- every ue_net_* call is a synchronous proxy to the browser's main thread: make them only from a link's
 	  tick (NextReply), never from inside script (Send is reached from the receiver's script Timer); a proxied
 	  call there can hang the engine;
 	- never ask the glue every frame: the proxy queue overflows under load and the module aborts. Discovery is
@@ -29,20 +29,6 @@
 
 #include "WebRTCDrv.h"
 #include "UdpLinkWeb.h"
-
-// The v1 ABI's discovery calls (vendor/glue/webrtc-shim.js; the frontend's packages/glue/src/webrtc/index.js).
-extern "C"
-{
-	void webrtc_discover_servers( const char* Room );
-	int  webrtc_get_server_count();
-	int  webrtc_is_discovery_done();
-	int  webrtc_get_server_info( int Index, char* Name, int NameMax, char* JoinKey, int JoinKeyMax );
-	int  webrtc_get_server_map( int Index, char* Buf, int MaxLen );
-	int  webrtc_get_server_gametype( int Index, char* Buf, int MaxLen );
-	int  webrtc_get_server_players( int Index );
-	int  webrtc_get_server_maxplayers( int Index );
-	int  webrtc_get_server_ping( int Index );
-}
 
 // 10.199.0.0/16: private, far from anything a real LAN hands out (the siblings use the same block).
 #define LAN_ADDR_BASE				0x0AC70000u
@@ -157,7 +143,7 @@ static void KickDiscovery()
 		return;
 	GLastDiscoveryAt = Now;
 	GDiscoveryPending = 1;
-	webrtc_discover_servers( "" );	// "" = the room this page is on (the glue resolves it)
+	ue_net_discover_servers( "" );	// "" = the room this page is on (the glue resolves it)
 	// Said once: while the page is open this repeats every LAN_DISCOVERY_MIN_INTERVAL, and the list's CHANGES are
 	// what PumpDiscovery logs.
 	static UBOOL GSaidStarted = 0;
@@ -176,7 +162,7 @@ static void PumpDiscovery()
 	if( Now - GLastPumpAt < LAN_PUMP_INTERVAL )
 		return;
 	GLastPumpAt = Now;
-	if( !webrtc_is_discovery_done() )
+	if( !ue_net_is_discovery_done() )
 		return;
 	GDiscoveryPending = 0;
 
@@ -186,7 +172,7 @@ static void PumpDiscovery()
 		Before += GServers(i).Room + TEXT("|") + GServers(i).Beacon + TEXT("\n");
 
 	GServers.Empty();
-	INT Count = webrtc_get_server_count();
+	INT Count = ue_net_get_server_count();
 	char NameBuf[256], RoomBuf[256], MapBuf[128], BeaconBuf[1024];
 	for( INT i=0; i<Count; i++ )
 	{
@@ -194,17 +180,17 @@ static void PumpDiscovery()
 		appMemzero( RoomBuf, sizeof(RoomBuf) );
 		appMemzero( MapBuf, sizeof(MapBuf) );
 		appMemzero( BeaconBuf, sizeof(BeaconBuf) );
-		if( !webrtc_get_server_info( i, NameBuf, sizeof(NameBuf), RoomBuf, sizeof(RoomBuf) ) || !RoomBuf[0] )
+		if( !ue_net_get_server_info( i, NameBuf, sizeof(NameBuf), RoomBuf, sizeof(RoomBuf) ) || !RoomBuf[0] )
 			continue;
-		webrtc_get_server_map( i, MapBuf, sizeof(MapBuf) );
-		webrtc_get_server_gametype( i, BeaconBuf, sizeof(BeaconBuf) );
+		ue_net_get_server_map( i, MapBuf, sizeof(MapBuf) );
+		ue_net_get_server_gametype( i, BeaconBuf, sizeof(BeaconBuf) );
 		FLanServer S;
 		S.Room			= ANSI_TO_TCHAR(RoomBuf);
 		S.Name			= ANSI_TO_TCHAR(NameBuf);
 		S.Map			= MapBuf[0] ? FString(ANSI_TO_TCHAR(MapBuf)) : FString(TEXT("?"));
-		S.Players		= webrtc_get_server_players( i );
-		S.MaxPlayers	= webrtc_get_server_maxplayers( i );
-		S.Ping			= webrtc_get_server_ping( i );
+		S.Players		= ue_net_get_server_players( i );
+		S.MaxPlayers	= ue_net_get_server_maxplayers( i );
+		S.Ping			= ue_net_get_server_ping( i );
 		// A UC2 host's driver sends its beacon text (GameInfo.GetBeaconText(): "type|name|map|maplist|players|
 		// max|purity|mutators|player names|handicap") in the row's game-type field. A host that sent a bare game
 		// type (an older build, or a status ping that did not answer) gets a row built from the plain fields.
