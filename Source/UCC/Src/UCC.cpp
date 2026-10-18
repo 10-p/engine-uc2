@@ -153,7 +153,6 @@ extern "C"
 // generated class headers carry for the check in UGameEngine::LoadMap. That check only runs once a map has
 // loaded, which is too late to diagnose a layout problem that breaks loading itself. Returns the mismatch count
 // as seen in the log ("VERIFY: ..." lines).
-#if PLATFORM_64BITS
 extern CORE_API UBOOL GLayoutWarnOnly;
 extern CORE_API INT GLayoutMismatches;
 extern CORE_API INT GetNativeStructSize( UStruct* Struct );
@@ -161,7 +160,6 @@ extern CORE_API INT GetNativePlaceholderCount();
 extern CORE_API void GetNativePlaceholder( INT i, const TCHAR*& Package, const TCHAR*& Struct, const TCHAR*& Property, INT& Size, INT& Kind );
 extern CORE_API UBOOL IsNativePlaceholder( UProperty* Property );
 extern CORE_API const TCHAR* GetNativePlaceholderCppTypeAt( INT i );
-#endif
 // `verifyclasses DUMP=<file>` writes the linked layout of every class, script struct and function (its
 // parameters) for tools/dev/layout-check.py, which compares it with the DWARF of the same binary. Opt-in on
 // every width (the 32-bit dump is the reference); nothing else changes without DUMP=.
@@ -176,11 +174,7 @@ static void DumpScriptLayouts( const TCHAR* DumpFile )
 			: It->GetClass()==UFunction::StaticClass() ? TEXT("function") : NULL;
 		if( !Kind )
 			continue;
-#if PLATFORM_64BITS
 		INT NativeSize = GetNativeStructSize(*It);
-#else
-		INT NativeSize = -1;
-#endif
 		FString Line = FString::Printf( TEXT("S %s %s %i %i\n"), Kind, It->GetPathName(), It->GetPropertiesSize(), NativeSize );
 		Out->Serialize( (void*)*Line, Line.Len() );
 		for( TFieldIterator<UProperty,CLASS_IsAUProperty> P(*It); P; ++P )
@@ -189,11 +183,7 @@ static void DumpScriptLayouts( const TCHAR* DumpFile )
 				continue;
 			UArrayProperty* A = Cast<UArrayProperty>(*P);
 			UBoolProperty* B = Cast<UBoolProperty>(*P);
-#if PLATFORM_64BITS
 			INT Placeholder = IsNativePlaceholder(*P) ? 1 : 0;
-#else
-			INT Placeholder = 0;
-#endif
 			FString PLine = FString::Printf( TEXT("P %s %i %i %i %s %i %i %i\n"), P->GetName(), P->Offset, P->ElementSize, P->ArrayDim,
 				P->GetClass()->GetName(), B ? (INT)B->BitMask : 0, A ? A->Inner->ElementSize : 0, Placeholder );
 			Out->Serialize( (void*)*PLine, PLine.Len() );
@@ -203,11 +193,10 @@ static void DumpScriptLayouts( const TCHAR* DumpFile )
 	debugf( TEXT("VERIFY: layout dump written to %s"), DumpFile );
 }
 
-#if PLATFORM_64BITS
-// The 64-bit layout check. The shipped packages were compiled for 32-bit
-// pointers, so at 64 bits "C++ and script agree" means: the property system, linking those packages with this
-// target's rules (object references 8 bytes aligned to 4, arrays/strings sizeof(FArray), the native
-// placeholders of UnClass.cpp), gives every native class the size and member offsets the C++ compiler gives it.
+// The layout check. The shipped packages were compiled for 32-bit pointers, so "C++ and script agree"
+// means: the property system, linking those packages with this target's rules (object references a pointer wide
+// aligned to 4, arrays/strings sizeof(FArray), the native placeholders of UnClass.cpp), gives every native class
+// the size and member offsets the C++ compiler gives it.
 
 // Collects every object a piece of bytecode refers to (SerializeExpr on a plain archive only reads).
 class FArchiveScriptRefs : public FArchive
@@ -217,7 +206,7 @@ public:
 	FArchive& operator<<( UObject*& Obj ) { if( Obj ) Refs.AddUniqueItem( Obj ); return *this; }
 };
 
-static UBOOL VerifyNativeLayouts64( const TCHAR* DumpFile )
+static UBOOL VerifyNativeLayouts( const TCHAR* DumpFile )
 {
 	UBOOL Mismatch = false;
 	// 1. Every class with a C++ declaration: C++ sizeof against the linked script size (UStruct::Link counted
@@ -231,11 +220,11 @@ static UBOOL VerifyNativeLayouts64( const TCHAR* DumpFile )
 		Checked++;
 		if( NativeSize!=It->GetPropertiesSize() )
 		{
-			debugf( TEXT("VERIFY: Class %s size problem; Script=%i C++=%i (64-bit native size check)"), It->GetPathName(), It->GetPropertiesSize(), NativeSize );
+			debugf( TEXT("VERIFY: Class %s size problem; Script=%i C++=%i (native size check)"), It->GetPathName(), It->GetPropertiesSize(), NativeSize );
 			Mismatch = true;
 		}
 	}
-	debugf( TEXT("VERIFY: 64-bit native size check: %i classes, %i mismatches while linking"), Checked, GLayoutMismatches );
+	debugf( TEXT("VERIFY: native size check: %i classes, %i mismatches while linking"), Checked, GLayoutMismatches );
 	if( GLayoutMismatches )
 		Mismatch = true;
 	// 2. Every placeholder entry names a property that exists and is linked at its C++ size.
@@ -294,15 +283,11 @@ static UBOOL VerifyNativeLayouts64( const TCHAR* DumpFile )
 		DumpScriptLayouts( DumpFile );
 	return !Mismatch;
 }
-#endif
 
 static UBOOL VerifyNativeClasses()
 {
-	static const TCHAR* Packages[] = { TEXT("Engine"), TEXT("IpDrv"), TEXT("UnrealGame"), TEXT("UCElements"), TEXT("UCGameplay"), TEXT("GUI")
-#if PLATFORM_64BITS
-		, TEXT("UWeb")	// its hand-written mirrors carry placeholders; the 32-bit list is Epic's set, unchanged
-#endif
-	};
+	static const TCHAR* Packages[] = { TEXT("Engine"), TEXT("IpDrv"), TEXT("UnrealGame"), TEXT("UCElements"), TEXT("UCGameplay"), TEXT("GUI"),
+		TEXT("UWeb") };	// UWeb: its hand-written mirrors carry placeholders
 	for( INT i=0; i<ARRAY_COUNT(Packages); i++ )
 	{
 		debugf( TEXT("VERIFY: loading package %s"), Packages[i] );
@@ -331,13 +316,8 @@ static UBOOL VerifyNativeClasses()
 #endif
 	FString DumpFile;
 	Parse( appCmdLine(), TEXT("DUMP="), DumpFile );
-#if PLATFORM_64BITS
-	if( !VerifyNativeLayouts64( *DumpFile ) )
+	if( !VerifyNativeLayouts( *DumpFile ) )
 		Mismatch = true;
-#else
-	if( DumpFile.Len() )
-		DumpScriptLayouts( *DumpFile );
-#endif
 	debugf( TEXT("VERIFY: %s"), Mismatch ? TEXT("C++ / script class layout MISMATCH") : TEXT("all native class layouts match") );
 	return !Mismatch;
 }
@@ -553,7 +533,7 @@ int main( int argc, char* argv[] )
 			}
 		#endif
 
-#if __STATIC_LINK && !defined(_MSC_VER) && PLATFORM_64BITS
+#if __STATIC_LINK && !defined(_MSC_VER)
 		// verifyclasses lists every layout mismatch the class linker finds instead of stopping at the first.
 		if( argc>1 && appStricmp(argv[1],"verifyclasses")==0 )
 			GLayoutWarnOnly = 1;

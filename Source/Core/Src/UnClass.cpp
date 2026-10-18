@@ -336,7 +336,6 @@ IMPLEMENT_CLASS(UField)
 //
 // Constructors.
 //
-#if PLATFORM_64BITS
 // The C++ sizeof of every natively declared class (DECLARE_CLASS passes it here), kept because Link
 // replaces PropertiesSize with the size the loaded script properties give. Plain BSS: these constructors run
 // during static initialisation.
@@ -353,7 +352,6 @@ CORE_API INT GetNativeStructSize( UStruct* Struct )
 			return GNativeStructSizes[i];
 	return -1;
 }
-#endif
 UStruct::UStruct( ENativeConstructor, INT InSize, const TCHAR* InName, const TCHAR* InPackageName, DWORD InFlags, UStruct* InSuperStruct )
 :	UField			( EC_NativeConstructor, UClass::StaticClass(), InName, InPackageName, InFlags, InSuperStruct )
 ,	Children		( NULL )
@@ -374,14 +372,12 @@ UStruct::UStruct( ENativeConstructor, INT InSize, const TCHAR* InName, const TCH
 ,	ScriptTextCRC	( 0 )
 #endif
 {
-#if PLATFORM_64BITS
 	if( GNativeStructCount<MAX_NATIVE_STRUCT_SIZES )
 	{
 		GNativeStructs[GNativeStructCount]     = this;
 		GNativeStructSizes[GNativeStructCount] = InSize;
 		GNativeStructCount++;
 	}
-#endif
 }
 UStruct::UStruct( EStaticConstructor, INT InSize, const TCHAR* InName, const TCHAR* InPackageName, DWORD InFlags )
 :	UField			( EC_StaticConstructor, InName, InPackageName, InFlags )
@@ -403,7 +399,6 @@ UStruct::UStruct( EStaticConstructor, INT InSize, const TCHAR* InName, const TCH
 ,	ScriptTextCRC	( 0 )
 #endif
 {
-#if PLATFORM_64BITS
 	// Static link (__STATIC_LINK, every target here) registers classes through this constructor.
 	if( GNativeStructCount<MAX_NATIVE_STRUCT_SIZES )
 	{
@@ -411,7 +406,6 @@ UStruct::UStruct( EStaticConstructor, INT InSize, const TCHAR* InName, const TCH
 		GNativeStructSizes[GNativeStructCount] = InSize;
 		GNativeStructCount++;
 	}
-#endif
 }
 UStruct::UStruct( UStruct* InSuperStruct )
 :	UField( InSuperStruct )
@@ -599,19 +593,14 @@ void UStruct::Link( FArchive& Ar, UBOOL Props )
 			if( Property )
 			{
 				Property->Link( Ar, Prev );
-#if PLATFORM_64BITS
 				const FNativePlaceholder* Placeholder = FindNativePlaceholder( this, Property );
 				if( Placeholder && Placeholder->Kind==PH_ArrayElement )
 					((UArrayProperty*)Property)->Inner->ElementSize = Placeholder->Size;
 				PropertiesSize = Property->Offset + (Placeholder && Placeholder->Kind==PH_Member ? Placeholder->Size : Property->GetSize());
-#else
-				PropertiesSize = Property->Offset + Property->GetSize();
-#endif
 				Prev = Property;
 			}
 		}
 		PropertiesSize = Align(PropertiesSize,4);
-#if PLATFORM_64BITS
 		// A native class whose C++ size differs from the size its script properties give is read through
 		// two layouts; every member past the first difference is silent corruption, and objects are allocated
 		// at the script size. Fatal, except while `ucc verifyclasses` lists them all.
@@ -624,7 +613,6 @@ void UStruct::Link( FArchive& Ar, UBOOL Props )
 			else
 				appErrorf( TEXT("Native class %s: C++ sizeof=%i but script layout=%i (run ucc-bin verifyclasses)"), GetPathName(), NativeSize, PropertiesSize );
 		}
-#endif
 	}
 	else
 	{
@@ -1471,7 +1459,6 @@ IMPLEMENT_CLASS(UState);
 	UClass implementation.
 -----------------------------------------------------------------------------*/
 
-#if PLATFORM_64BITS
 // A native class's config name waits here until Register(). Epic parked the `const TCHAR*` in the 4-byte
 // ClassConfigName (an FName), which on 64-bit wrote its high half over ClassConstructor (UClass is pack(1)).
 // Plain BSS: the constructors run during static initialisation.
@@ -1494,7 +1481,6 @@ static const TCHAR* TakeNativeConfigName( UClass* Class )
 	appErrorf( TEXT("No stashed config name for native class %s"), Class->GetName() );
 	return NULL;
 }
-#endif
 
 //
 // Register the native class.
@@ -1505,11 +1491,7 @@ void UClass::Register()
 	Super::Register();
 
 	// Get stashed registration info.
-#if PLATFORM_64BITS
 	const TCHAR* InClassConfigName = TakeNativeConfigName( this );
-#else
-	const TCHAR* InClassConfigName = *(TCHAR**)&ClassConfigName;
-#endif
 	ClassConfigName = InClassConfigName;
 
 	// Init default object.
@@ -2012,11 +1994,7 @@ UClass::UClass
 ,	ClassStaticConstructor	( InClassStaticConstructor )
 ,	bPrecached				(0)								//scion rwd - mark this class as not precached
 {
-#if PLATFORM_64BITS
 	StashNativeConfigName( this, InConfigName );
-#else
-	*(const TCHAR**)&ClassConfigName = InConfigName;
-#endif
 }
 
 // Called when statically linked.
@@ -2047,11 +2025,7 @@ UClass::UClass
 ,	ClassStaticConstructor	( InClassStaticConstructor )
 ,	bPrecached				(0)								//scion rwd - mark this class as not precached
 {
-#if PLATFORM_64BITS
 	StashNativeConfigName( this, InConfigName );
-#else
-	*(const TCHAR**)&ClassConfigName = InConfigName;
-#endif
 }
 
 UBOOL CORE_API ShouldPrecacheClass(UClass *testClass)

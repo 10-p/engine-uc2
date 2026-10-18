@@ -96,7 +96,7 @@ check_verify() {
   new=$(LC_ALL=C comm -23 <(grep -a '^SIZE\|^OFFSET' "$p.check.txt" | sed -E 's/:.*//' | LC_ALL=C sort -u) \
                  <(grep -a '^SIZE\|^OFFSET' "$r.check.txt" | sed -E 's/:.*//' | LC_ALL=C sort -u))
   local nat scan ph m64 m32
-  nat=$(grep -a -o "64-bit native size check: [0-9]* classes, [0-9]* mismatches while linking" "$p.log")
+  nat=$(grep -a -o "native size check: [0-9]* classes, [0-9]* mismatches while linking" "$p.log")
   scan=$(grep -a -o "bytecode scan: [0-9]* scripts read" "$p.log")
   ph=$(grep -a -c "VERIFY: placeholder .* offset" "$p.log")
   m64=$(grep -a -o "layout-check: [0-9]* mismatches" "$p.check.txt"); m32=$(grep -a -o "layout-check: [0-9]* mismatches" "$r.check.txt")
