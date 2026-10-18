@@ -908,13 +908,11 @@ void UObject::execBoolVariable( FFrame& Stack, RESULT_DECL )
 	BYTE B = *Stack.Code++;
 	UBoolProperty* Property;
 #if SERIAL_POINTER_INDEX
-	Property = (UBoolProperty*) UObject::SerialIndexPointer( *(INT*)Stack.Code );
+	INT Index;
+	appMemcpy(&Index, Stack.Code, sizeof(INT));
+	Property = (UBoolProperty*) UObject::SerialIndexPointer( Index );
 #else
-  #if __PSX2_EE__ || __GCN__
 	appMemcpy(&Property, Stack.Code, sizeof(INT));
-  #else
-	Property = *(UBoolProperty**)Stack.Code;
-  #endif
 #endif
 
 	(this->*GNatives[B])( Stack, NULL );
@@ -1550,7 +1548,7 @@ void UObject::execUnicodeStringConst( FFrame& Stack, RESULT_DECL )
 {
 	guardSlow(UObject::execStringConst);
 	*(FString*)Result = appFromUnicode((UNICHAR*)Stack.Code);
-	while( *(_WORD*)Stack.Code )
+	while( Stack.Code[0] || Stack.Code[1] )
 		Stack.Code+=sizeof(_WORD);
 	Stack.Code+=sizeof(_WORD);
 	unguardexecSlow;
@@ -3180,11 +3178,7 @@ IMPLEMENT_FUNCTION( UObject, EX_RotationConst, execRotationConst );
 void UObject::execVectorConst( FFrame& Stack, RESULT_DECL )
 {
 	guardSlow(UObject::execVectorConst);
-#if __PSX2_EE__ || __GCN__
 	appMemcpy(Result, Stack.Code, sizeof(FVector));
-#else
-	*(FVector*)Result = *(FVector*)Stack.Code;
-#endif
 	Stack.Code += sizeof(FVector);
 	unguardexecSlow;
 }

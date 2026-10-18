@@ -65,11 +65,9 @@ BYTE CORE_API GRegisterCast( INT CastCode, const Native& Func );
 #define P_GET_OBJECT_OPTX(cls,var,def)cls*  var=def;                       Stack.Step( Stack.Object, &var    );
 #define P_GET_OBJECT_REF(cls,var)     cls*  var##T=NULL; GPropAddr=0;      Stack.Step( Stack.Object, &var##T ); if( GPropObject )GPropObject->NetDirty(GProperty); cls**    var = GPropAddr ? (cls   **)GPropAddr:&var##T;
 #define P_GET_ARRAY_REF(typ,var)      typ   var##T[256]; GPropAddr=0;      Stack.Step( Stack.Object,  var##T ); if( GPropObject )GPropObject->NetDirty(GProperty); typ*     var = GPropAddr ? (typ    *)GPropAddr: var##T;
-#if __PSX2_EE__ || __GCN__
+// Bytecode operands are not aligned: every multi-byte read below goes through appMemcpy (an unaligned
+// dereference is undefined behaviour, and a fault on ARM).
 #define P_GET_SKIP_OFFSET(var)        _WORD var; {checkSlow(*Stack.Code==EX_Skip); Stack.Code++; appMemcpy(&var, Stack.Code, sizeof(_WORD)); Stack.Code+=2; }
-#else
-#define P_GET_SKIP_OFFSET(var)        _WORD var; {checkSlow(*Stack.Code==EX_Skip); Stack.Code++; var=*(_WORD*)Stack.Code; Stack.Code+=2; }
-#endif
 #ifndef FINAL_RELEASE
 //DEBUGGER
 #define P_FINISH                      Stack.Code++; if ( *Stack.Code == EX_DebugInfo ) Stack.Step( Stack.Object, NULL );
@@ -142,11 +140,7 @@ FORCEINLINE void FFrame::Step( UObject* Context, RESULT_DECL )
 inline INT FFrame::ReadInt()
 {
 	INT Result;
-#if __PSX2_EE__ || __GCN__
 	appMemcpy(&Result, Code, sizeof(INT));
-#else
-	Result = *(INT*)Code;
-#endif
 	Code += sizeof(INT);
 	return Result;
 }
@@ -155,13 +149,11 @@ inline UObject* FFrame::ReadObject()
 	UObject* Result;
 
 #if SERIAL_POINTER_INDEX
-	Result = UObject::SerialIndexPointer( *(INT*)Code );
+	INT Index;
+	appMemcpy(&Index, Code, sizeof(INT));
+	Result = UObject::SerialIndexPointer( Index );
 #else
-  #if __PSX2_EE__ || __GCN__
 	appMemcpy(&Result, Code, sizeof(INT));
-  #else
-	Result = *(UObject**)Code;
-  #endif
 #endif
 
 	Code += sizeof(INT);
@@ -170,35 +162,23 @@ inline UObject* FFrame::ReadObject()
 inline FLOAT FFrame::ReadFloat()
 {
 	FLOAT Result;
-#if __PSX2_EE__ || __GCN__
 	appMemcpy(&Result, Code, sizeof(FLOAT));
-#else
-	Result = *(FLOAT*)Code;
-#endif
 	Code += sizeof(FLOAT);
 	return Result;
 }
 inline INT FFrame::ReadWord()
 {
 	INT Result;
-#if __PSX2_EE__ || __GCN__
 	_WORD Temporary;
 	appMemcpy(&Temporary, Code, sizeof(_WORD));
 	Result = Temporary;
-#else
-	Result = *(_WORD*)Code;
-#endif
 	Code += sizeof(_WORD);
 	return Result;
 }
 inline FName FFrame::ReadName()
 {
 	FName Result;
-#if __PSX2_EE__ || __GCN__
 	appMemcpy(&Result, Code, sizeof(FName));
-#else
-	Result = *(FName*)Code;
-#endif
 	Code += sizeof(FName);
 	return Result;
 }

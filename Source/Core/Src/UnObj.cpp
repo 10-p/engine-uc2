@@ -5399,16 +5399,12 @@ private:
 	{
 		guardSlow(FArchiveTagUsed::Name);
 
-#if __PSX2_EE__ || __GCN__
 		// Name is probably not aligned correctly.
 		// Memcpy workaround copies into aligned temporary then back.
 		FName LocalName;
 		appMemcpy(&LocalName, &Name, sizeof(FName));
 		LocalName.ClearFlags( RF_Unreachable );
 		appMemcpy(&Name, &LocalName, sizeof(FName));
-#else
-		Name.ClearFlags( RF_Unreachable );
-#endif
 
 		return *this;
 		unguardSlow;
