@@ -1838,7 +1838,7 @@ static void HandleSignal( int Signal )
 			// Avoid calling appExit again.
 			AlreadyAborting = true;
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
 			// The report and appExit() below are not async-signal-safe (malloc, the log, the inis, a
 			// wait for the file-stream thread); when the crash interrupted a thread holding one of their locks they
 			// block for ever. SIGALRM's default action ends the process if they have not finished in 10 seconds.
