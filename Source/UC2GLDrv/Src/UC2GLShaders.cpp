@@ -695,7 +695,7 @@ void UUC2GLRenderDevice::InitPixelShaders()
 	if( UsePixelShaders )
 		debugf( NAME_Init, TEXT("UC2GLDrv: pixel shaders on: %i fragment shaders compiled, %i failed; %i need post-processing, which is off (UsePostProcess), %i are not reachable on PC (engine gates)"), Ready, Failed, NeedPost, Gated );
 	else
-		debugf( NAME_Init, TEXT("UC2GLDrv: pixel shaders off (UsePixelShaders=False): every pixel-shader material is drawn with its first texture stage, as at M5") );
+		debugf( NAME_Init, TEXT("UC2GLDrv: pixel shaders off (UsePixelShaders=False): every pixel-shader material is drawn with its first texture stage") );
 
 	// The Xbox list of vertex shader combinations as a precompile list.
 	if( UsePixelShaders && PrecompileVertexShaders )
@@ -704,7 +704,7 @@ void UUC2GLRenderDevice::InitPixelShaders()
 		UVertexShaderConfigs* Configs = ConstructObject<UVertexShaderConfigs>( UVertexShaderConfigs::StaticClass(), (UObject*)-1, NAME_None, RF_Keep );
 		DOUBLE Start = appSeconds();
 		Configs->PrecacheVertexShaderEnums( this );
-		debugf( NAME_Init, TEXT("UC2GLDrv: VertexShaderConfigs.ini: %i combinations, %i vertex shaders compiled (%i failed), %i need the Xbox asset format (GPU skinning, packed terrain) or an M7 shader, %.2f s"),
+		debugf( NAME_Init, TEXT("UC2GLDrv: VertexShaderConfigs.ini: %i combinations, %i vertex shaders compiled (%i failed), %i need the Xbox asset format (GPU skinning, packed terrain) or a shader that needs post-processing, %.2f s"),
 			PrecompileSeen, VertexShadersCompiled, VertexShadersFailed, PrecompileNotApplicable, (FLOAT)(appSeconds() - Start) );
 		Configs->VertexShaderEnums.Empty();
 		VertexShadersPrecompiled = VertexShaderObjects.Num();

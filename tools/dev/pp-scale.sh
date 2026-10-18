@@ -61,7 +61,7 @@ runok() {  # runok <log>: "critical=N glerrors=N" and 0 if both 0
   [ "${c:-1}" = 0 ] && [ "${e:-1}" = 0 ]
 }
 frames() {  # frames <log>: "shot@T=frame ..." from the engine's own lines
-  grep -a -o -- "-glshot at [0-9.]* s (frame [0-9]*)" "$1" 2>/dev/null | sed -E 's/-glshot at ([0-9.]+) s \(frame ([0-9]+)\)/\1s:f\2/' | tr '\n' ' '
+  grep -a -o -- "UC2GLDrv: shot at [0-9.]* s (frame [0-9]*)" "$1" 2>/dev/null | sed -E 's/UC2GLDrv: shot at ([0-9.]+) s \(frame ([0-9]+)\)/\1s:f\2/' | tr '\n' ' '
 }
 # Waits per resolution, in seconds after post-processing goes on (W1) and after a later switch (W2): enough
 # frames for the dynamic gamma to settle (it moves 5% of the way per frame) at the software-GL frame rates here.
@@ -294,7 +294,7 @@ check_perf() {
         "$repo/tools/dev/fx-owner.sh" "$tree" custom > /dev/null 2>&1
       local suffix=""; [ $b = uc2-base.bin ] && suffix="-base"
       local log=$out/fx-pp-perf-$res$suffix-gpu.out
-      local f; f=$(grep -a -o -- "-glexec at [0-9.]* s (frame [0-9]*)" "$log" | sed -E 's/.*frame ([0-9]+)\)/\1/' | tr '\n' ' ')
+      local f; f=$(grep -a -o -- "UC2GLDrv: Exec at [0-9.]* s (frame [0-9]*)" "$log" | sed -E 's/.*frame ([0-9]+)\)/\1/' | tr '\n' ' ')
       # markers: 1 s pin, 32 s freeze, then 40/55 (480), 56 switch, 60/75 (0), 76 switch, 80/95 (480)
       read -r p1 p2 a1 a2 a3 a4 a5 a6 a7 a8 <<<"$f"
       if [ -n "${a8:-}" ]; then

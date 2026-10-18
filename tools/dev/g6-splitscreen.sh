@@ -1518,7 +1518,7 @@ mark
 pad 2 button start 1
 sleep 0.3
 pad 2 button start 0
-expect x1m-player-three-on-the-page X-1 players34 cursors \\(player 3 port 2 joined\\) 15
+expect x1m-player-three-on-the-page players34 cursors \\(player 3 port 2 joined\\) 15
 expect x1m-pad2-start-joins-player-three Split screen: pad 2 Start in the menus: joined 15
 sleep 3
 absent x1m-no-profile-box-for-player-three OpenMenu \\[GUI.GUIMessageBox\\]
@@ -1545,7 +1545,7 @@ shot page-3
 pad 3 button start 1
 sleep 0.3
 pad 3 button start 0
-expect x1m-player-four-on-the-page X-1 players34 cursors \\(player 4 port 3 joined\\) 15
+expect x1m-player-four-on-the-page players34 cursors \\(player 4 port 3 joined\\) 15
 expect x1m-pad3-start-joins-player-four Split screen: pad 3 Start in the menus: joined 15
 sleep 3
 vprobe c4
@@ -1621,7 +1621,7 @@ key Escape
 wait CloseMenu \\[UC2Arena_Character\\] 15
 sleep 3
 key Return
-expect x1m-page-again-with-four-players X-1 players34 cursors \\(page opened\\): .* players 4 20
+expect x1m-page-again-with-four-players players34 cursors \\(page opened\\): .* players 4 20
 sleep 3
 pyexec x1_snap('re')
 check x1m-cursors-three-four-on-the-reopened-page all(0 <= i < 15 for i in X1['re']['idx'][2:])

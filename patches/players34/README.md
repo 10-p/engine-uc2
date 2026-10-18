@@ -48,7 +48,7 @@ profile for them (the owner's decisions, `docs/porting/PLAN.md` "X-1 decisions")
     (`IsFinished`). B takes a player's last choice back; with nothing chosen, B of player one or two goes back to the
     character page as Epic's (not while player three or four has chosen something); B of three or four then does
     nothing. Their loadout is saved into their (transient) profile, which makes their spawn URL (`?ExplosiveWeapon=`,
-    `?EnergyWeapon=`). Log (DevUI): `X-1 players34 armory (<why>): 1P <quarter>; 2P ...; 3P ...; 4P ...; players <n>`.
+    `?EnergyWeapon=`). Log (DevUI): `players34 armory (<why>): 1P <quarter>; 2P ...; 3P ...; 4P ...; players <n>`.
   - New `Armory_PanelQuad` (extends `Armory_PanelDual`): one quarter, Epic's split-screen armory panel at half its height:
     the two lists side by side (the weapon names condensed, `TextScaleX`/`TextScaleY`), the short loadout under them.
     Players three and four's quarters never take the GUI's focus (`bOwnInput`: the GUI has two focus slots): `PadInput`

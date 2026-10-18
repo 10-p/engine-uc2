@@ -4,7 +4,7 @@
   main menu and of the pause menu (UC2Settings_Main, "KEYBOARD / MOUSE"); not
   shown on the Xbox, whose pad layouts are UC2Settings_Controller's.
 
-  Where things live (docs/porting/analysis/rebind.md):
+  Where things live:
   - a key's binding is User.ini [Engine.Input] <Key>=<command> (Engine.Input's
     per-key config strings). The page edits a copy of every keyboard and mouse
     key's binding and, when it is left (B), writes the changed ones with
@@ -13,7 +13,7 @@
     (Joy*, JoyX..) are never read or written here: the profile's controller
     layout owns them.
   - the mouse: User.ini [UCGameplay.UCPlayerInput] MouseLookSensitivity and
-    bInvertMouseLook (D-6; not in the profile, whose one invert flag is the pad's).
+    bInvertMouseLook (the mouse-look set's; not in the profile, whose one invert flag is the pad's).
   - defaults: the PC bindings of DefUser.ini (System/DefUser.ini natively and in
     the browser), read when White (DEFAULTS) is pressed.
   Black (CANCEL) drops the changes made since the page opened; B keeps them.
@@ -23,14 +23,14 @@
   button; it is captured raw (GUIController.OnNeedRawKeyPress), so letters and
   mouse buttons do not navigate. In a capture Escape cancels, Backspace or Delete
   clears the cell, a pad button cancels. A key another action has is taken from
-  it (that action loses it: its cell is cleared, F-1, the owner's choice; the
+  it (that action loses it: its cell is cleared; the
   cell's old key is unbound); the line at the bottom says what changed.
 
-  uc2 port (D-9); not Epic's.
+  Ours (patch set keys-menu), not Epic's.
 ==============================================================================*/
 
 class UC2Settings_Keys extends UC2Settings_PageBase;
-// (no include of GUI.huc: the class builds on its own from patches/keys-menu, T1; its one macro is written out)
+// (no include of GUI.huc: the class builds on its own from patches/keys-menu; its one macro is written out)
 
 // key codes (Engine.Interactions.EInputKey)
 const K_LeftMouse		= 0x01;
@@ -687,7 +687,7 @@ final function bool KeyCaptured( byte NewKey )
 /*==========================================================================================================
 function	::AssignKey
 Desc:		The key K goes to the row's column; the column's old key is unbound. If another row had K, that row
-			loses it (its cell is cleared: F-1, the owner chose clearing over D-9's swap); a key with a command no
+			loses it (its cell is cleared); a key with a command no
 			row lists (Epic's SwitchWeapon on the number keys, the gamma keys...) loses it, and the bottom line
 			says which.
 ==========================================================================================================*/
@@ -1145,7 +1145,7 @@ DefaultProperties
 	ConsoleCaption="CONSOLE"
 
 	// The actions, from DefUser.ini's PC bindings (Engine/Config/DefUser.ini [Engine.Input]) and the commands
-	// they run (docs/porting/analysis/rebind.md step 0). Command must be the exact binding DefUser.ini uses.
+	// they run. Command must be the exact binding DefUser.ini uses.
 	Actions(0)=(Caption="MOVE FORWARD",Command="MoveForward",Hint="WALK OR RUN FORWARD",Order="W,Up")
 	Actions(1)=(Caption="MOVE BACK",Command="MoveBackward",Hint="WALK OR RUN BACKWARD",Order="S,Down")
 	Actions(2)=(Caption="STRAFE LEFT",Command="StrafeLeft",Hint="STEP SIDEWAYS TO THE LEFT",Order="A,Left")

@@ -1,13 +1,13 @@
 # Helpers for the x1menu4 and x1armory parts of tools/dev/g6-splitscreen.sh (loaded with `pyfile` after g6-checks.py).
 # They read the engine log for the character page's own lines (patch set players34, UC2Arena_Character):
-#   "X-1 players34 cursors (<why>): 1P <idx>[ ready]; 2P <idx>; 3P <idx>; 4P <idx>; players <n>"
-#   "X-1 players34 text: <line one> | <line two>"
+#   "players34 cursors (<why>): 1P <idx>[ ready]; 2P <idx>; 3P <idx>; 4P <idx>; players <n>"
+#   "players34 text: <line one> | <line two>"
 # X1_LOG must be set to the engine log's path (the scenario does it with pyexec).
 import re
 
 X1_LOG = None
 X1 = {}
-CUR_RX = re.compile(r'X-1 players34 cursors \(([^)]*)\):(.*) players (\d+)')
+CUR_RX = re.compile(r'players34 cursors \(([^)]*)\):(.*) players (\d+)')
 SLOT_RX = re.compile(r'(\d)P (-?\d+)( ready)?;')
 
 
@@ -47,8 +47,8 @@ def x1_only(a, b, k):
 def x1_text():
     last = None
     for line in x1_lines():
-        if 'X-1 players34 text:' in line:
-            last = line.split('X-1 players34 text:', 1)[1].strip()
+        if 'players34 text:' in line:
+            last = line.split('players34 text:', 1)[1].strip()
     return last
 
 
@@ -71,17 +71,17 @@ def x1_chosen():
     """The classes players three and four chose ({player number: class}), from the page's lines."""
     out = {}
     for line in x1_lines():
-        m = re.search(r'X-1 players34 cursors \(player (\d) port \d+ chose (\S+)\)', line)
+        m = re.search(r'players34 cursors \(player (\d) port \d+ chose (\S+)\)', line)
         if m:
             out[int(m.group(1))] = m.group(2)
     return out
 
 
 # The four-player armory (patch set players34, UC2Arena_QuadArmory) logs
-#   "X-1 players34 armory (<why>): 1P <panel>; 2P <panel>; 3P <panel>; 4P <panel>; players <n>"
+#   "players34 armory (<why>): 1P <panel>; 2P <panel>; 3P <panel>; 4P <panel>; players <n>"
 # <panel>: "none" or "<list in use: x|e|-> <explosive row>/<energy row> sel <explosive>/<energy>[ ready <class>/<class>]"
 X1A = {}
-ARM_RX = re.compile(r'X-1 players34 armory \(([^)]*)\):(.*) players (\d+)')
+ARM_RX = re.compile(r'players34 armory \(([^)]*)\):(.*) players (\d+)')
 PANEL_RX = re.compile(r'(\d)P (none|([xe-]) (-?\d+)/(-?\d+) sel (-?\d+)/(-?\d+)(?: ready (\S+)/(\S+))?);')
 
 
@@ -101,7 +101,7 @@ def x1a_parse(line):
 def x1a_last():
     last = None
     for line in x1_lines():
-        if 'X-1 players34 armory (' in line:
+        if 'players34 armory (' in line:
             last = line
     return x1a_parse(last) if last else None
 

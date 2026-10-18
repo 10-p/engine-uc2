@@ -1,5 +1,5 @@
 // =====================================================================================================================
-// KeyGlyphs (H-5, script set key-glyphs): player one's keys in place of the pad's button glyphs.
+// KeyGlyphs (script set key-glyphs): player one's keys in place of the pad's button glyphs.
 //
 // The engine draws, for player one while they use the keyboard or the mouse, the key that does what a pad button does
 // in place of that button's glyph (Source/Engine/Src/UnKeyGlyphs.cpp). It does so only when this class exists: a
@@ -7,7 +7,7 @@
 //
 // A menu names the menus' buttons; a text that describes the game's buttons inside a menu (the combo instructions of
 // the character pages) is marked with InGame, and the engine then shows the key bound to that button's command in the
-// game. docs/porting/analysis/h5-key-glyphs.md.
+// game.
 // =====================================================================================================================
 class KeyGlyphs extends Object
 	abstract;

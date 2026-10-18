@@ -1,4 +1,4 @@
-// X-1 part B (patch set players34): the armory for three or four players (UC2Arena_Character.CloseComplete opens it
+// players34: the armory for three or four players (UC2Arena_Character.CloseComplete opens it
 // when more than two have joined; one player keeps Epic's UC2Arena_Armory, two its UC2Arena_DualArmory). Four quarters
 // in a 2x2 grid (Armory_PanelQuad: Epic's split-screen panel at half height), player one top left, two top right, three
 // bottom left, four bottom right (the corners of their 3P/4P tags); with three players the fourth quarter stays empty.
@@ -244,7 +244,7 @@ function PanelStatus()
 	ArmoryStatus("port" @ Controller.ControllerId);
 }
 
-// "X-1 players34 armory (<why>): 1P <panel>; 2P <panel>; 3P <panel>; 4P <panel>; players <n>" (DevUI), <panel> as
+// "players34 armory (<why>): 1P <panel>; 2P <panel>; 3P <panel>; 4P <panel>; players <n>" (DevUI), <panel> as
 // Armory_PanelQuad.StatusText or "none"
 final function ArmoryStatus( string Why )
 {
@@ -261,7 +261,7 @@ final function ArmoryStatus( string Why )
 
 		S @= (i + 1) $ "P" @ (P != None ? P.StatusText() : "none") $ ";";
 	}
-	log("X-1 players34 armory (" $ Why $ "):" $ S @ "players" @ Controller.GetViewportCount(true), 'DevUI');
+	log("players34 armory (" $ Why $ "):" $ S @ "players" @ Controller.GetViewportCount(true), 'DevUI');
 }
 
 defaultproperties

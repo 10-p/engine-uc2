@@ -46,7 +46,7 @@
  	UIX.DebugIconFade(bGameIcon, NewDisplaySeconds, NewIconFade, NewIconRepeat, NewFadeMultiplier);
  }
  
-+// Y-1 (player-name): without a profile, the first player's session is named by the system ini's
++// player-name: without a profile, the first player's session is named by the system ini's
 +// [Engine.GameReplicationInfo] ServerName (the launcher's server name) instead of the profile default
 +// ("Liandri Corporation", which PlayerProfile.SetServerName copies over GameReplicationInfo's default at start-up).
 +// Only while the profile-less profile still has that default: a SESSION NAME typed on the host page stays.

@@ -5,7 +5,7 @@
  
  class UC2Arena_Character extends UC2Arena_DualBase;
 +
-+// X-1 (patch set players34): the cursors of players three and four, made by tools/dev/make-player-tags.py from the 1P
++// players34: the cursors of players three and four, made by tools/dev/make-player-tags.py from the 1P
 +// cursor (patches/players34/README.md); RGBA8 (the importer cannot make DXT3 from an image, 16 KB each)
 +#exec TEXTURE IMPORT NAME=UI_Char_3PSelector FILE=Textures\UI_Char_3PSelector.tga MIPS=OFF ALPHATEXTURE=1 UCLAMPMODE=CLAMP VCLAMPMODE=CLAMP
 +#exec TEXTURE IMPORT NAME=UI_Char_4PSelector FILE=Textures\UI_Char_4PSelector.tga MIPS=OFF ALPHATEXTURE=1 UCLAMPMODE=CLAMP VCLAMPMODE=CLAMP
@@ -17,7 +17,7 @@
  var() transient	bool				bIgnoreActivation,
  									bFriendJoin;		
 +
-+// X-1 (players34): players three and four (child viewports 2 and 3): a cursor each and two lines of text
++// players34: players three and four (child viewports 2 and 3): a cursor each and two lines of text
 +var()			int							CharIndex34[2];		// their selected character index
 +var	automated	GUIImage					img_Cursor34[2];	// 3P, 4P
 +var automated	GUILabel					lbl_Players34[2];	// under the honeycomb
@@ -30,7 +30,7 @@
  	if( Id >= LAST_VIEWPORT )
  		return false;
 +
-+	// X-1 (players34): player three's or four's pad: theirs alone, never player two's focus slot
++	// players34: player three's or four's pad: theirs alone, never player two's focus slot
 +	playerIdx = Controller.FindControllerPortIndex(Id);
 +	if ( playerIdx >= MAX_VIEWPORTS )
 +		return Players34Input(playerIdx, Key, State, Axis);
@@ -42,7 +42,7 @@
  
  	bDirty = bDirty || Controller.bCurMenuInitialized;
 +
-+	// X-1 (players34): the icons players one and two left or reached changed size
++	// players34: the icons players one and two left or reached changed size
 +	if ( PlayerCount34() > MAX_VIEWPORTS )
 +	{
 +		PlaceCursors34();
@@ -56,7 +56,7 @@
  		lbl_JoinText[1].Caption = Caps(class'Localizer'.default.sPressStart);
  	}
 +
-+	UpdatePlayers34Text();	// X-1 (players34)
++	UpdatePlayers34Text();	// players34
  }
  
  final function UpdatePlayerLabel( int PlayerIndex )
@@ -65,7 +65,7 @@
  			}
  		}
 +
-+		UpdateControlVisibility34();	// X-1 (players34)
++		UpdateControlVisibility34();	// players34
  	}
  }
  
@@ -73,7 +73,7 @@
  
  final function bool IsDisplayingHandicap( int PlayerIndex )
  {
-+	if ( PlayerIndex >= MAX_VIEWPORTS )		// X-1 (players34): players three and four have no handicap panel
++	if ( PlayerIndex >= MAX_VIEWPORTS )		// players34: players three and four have no handicap panel
 +		return false;
 +
  	return pnl_Handicap[PlayerIndex].bAcceptsInput;
@@ -83,7 +83,7 @@
  {
  	local int PlayerIndex;
  
-+	// X-1 (players34): player three's or four's choice (SetCharacterIndex from Select34) is not player one's or
++	// players34: player three's or four's choice (SetCharacterIndex from Select34) is not player one's or
 +	// two's: no focus moves (GetPlayerIndex would name player two's slot)
 +	if ( GetPlayerIndex() >= MAX_VIEWPORTS )
 +	{
@@ -99,7 +99,7 @@
  	local string CharacterName;
  
 -	for ( PlayerIndex = 0; PlayerIndex < Controller.GetViewportCount(true); PlayerIndex++ )
-+	// X-1 (players34): players one and two as Epic's; three and four are "Player 3", "Player 4" (no name slot)
++	// players34: players one and two as Epic's; three and four are "Player 3", "Player 4" (no name slot)
 +	for ( PlayerIndex = 0; PlayerIndex < Min(Controller.GetViewportCount(true), MAX_VIEWPORTS); PlayerIndex++ )
  	{
  		Profile = GetProfile(PlayerIndex);
@@ -121,7 +121,7 @@
  			JoyInput[PlayerIndex].bReady = false;
  
 -			if ( !ShouldDisplayHandicap() )
-+			if ( PlayerIndex >= MAX_VIEWPORTS )		// X-1 (players34)
++			if ( PlayerIndex >= MAX_VIEWPORTS )		// players34
 +				FadeCursor34(PlayerIndex, false);
 +			else if ( !ShouldDisplayHandicap() )
  			{
@@ -132,7 +132,7 @@
  		JoyInput[PlayerIndex].bReady = false;
  
 -		if ( !ShouldDisplayHandicap() )
-+		if ( PlayerIndex >= MAX_VIEWPORTS )		// X-1 (players34)
++		if ( PlayerIndex >= MAX_VIEWPORTS )		// players34
 +			FadeCursor34(PlayerIndex, false);
 +		else if ( !ShouldDisplayHandicap() )
  		{
@@ -142,7 +142,7 @@
  
  	log(Name$"::"$GetFuncName()@"InViewport:"$InViewport.Name@"GamepadID:"$InViewport.GetGamepadID()@"ControllerId:"$Controller.ControllerId@"PlayerIndex:'"$PlayerIndex$"'",'DevUI');
  
-+	// X-1 (players34): player three or four: no profile prompt, no preview
++	// players34: player three or four: no profile prompt, no preview
 +	if ( PlayerIndex >= MAX_VIEWPORTS )
 +	{
 +		Join34(PlayerIndex);
@@ -167,7 +167,7 @@
  	i = Controller.FindViewportIndex(InViewport,true);
  
 -	
-+	// X-1 (players34): with three or four players, the players after the one leaving move up a place (so player four
++	// players34: with three or four players, the players after the one leaving move up a place (so player four
 +	// becomes player three: their viewports do too)
 +	bMoveUp = i > 0 && Controller.GetViewportCount(true) > MAX_VIEWPORTS;
  	if ( i > 0 )
@@ -197,7 +197,7 @@
  	if ( bShow )
  	{
 -		VerifyInputs( SecondPlayerActive() ? 2 : 1 );
-+		VerifyInputs( Controller.GetViewportCount(true) );	// X-1 (players34): Epic's SecondPlayerActive() ? 2 : 1
++		VerifyInputs( Controller.GetViewportCount(true) );	// players34: Epic's SecondPlayerActive() ? 2 : 1
  
  		UpdateControlVisibility();
  		UpdateJoinText();
@@ -206,8 +206,8 @@
  	Super.InitComponent(InController, InOwner);
  
 -	VerifyInputs( SecondPlayerActive() ? 2 : 1 );
-+	VerifyInputs( Controller.GetViewportCount(true) );	// X-1 (players34): Epic's SecondPlayerActive() ? 2 : 1
-+	OnRawXController = PageRawXController;				// X-1 (players34)
++	VerifyInputs( Controller.GetViewportCount(true) );	// players34: Epic's SecondPlayerActive() ? 2 : 1
++	OnRawXController = PageRawXController;				// players34
  
  	pnl_Preview[0].img_Static.Image = Material(DynamicLoadObjectFast("T_Portrait", "Portrait_Char_Null_LG", class'Material'));
  	pnl_Preview[1].img_Static.Image = Material(DynamicLoadObjectFast("T_Portrait", "Portrait_Char_Null_LG", class'Material'));
@@ -215,7 +215,7 @@
  		FadeOut(lbl_CharacterName[i]);
  		FadeOut(pnl_Handicap[i]);
  		FadeOut(btn_AltChar[i]);
-+		FadeOut(img_Cursor34[i]);	// X-1 (players34)
++		FadeOut(img_Cursor34[i]);	// players34
 +		FadeOut(lbl_Players34[i]);
  	}
  
@@ -224,7 +224,7 @@
  		FadeIn(lbl_CharacterName[i]);
  		FadeIn(pnl_Handicap[i]);
  		FadeIn(btn_AltChar[i]);
-+		FadeIn(img_Cursor34[i]);	// X-1 (players34)
++		FadeIn(img_Cursor34[i]);	// players34
 +		FadeIn(lbl_Players34[i]);
  	}
  
@@ -234,7 +234,7 @@
  	Super.CloseComplete(Sender, Type);
  
 -	Controller.OpenMenu(SecondPlayerActive() ? "UCMenu.UC2Arena_DualArmory" : "UCMenu.UC2Arena_Armory");
-+	// X-1 (players34): three or four players choose their weapons on the 2x2 armory
++	// players34: three or four players choose their weapons on the 2x2 armory
 +	if ( Controller.GetViewportCount() > MAX_VIEWPORTS )
 +		Controller.OpenMenu("UCMenu.UC2Arena_QuadArmory");
 +	else
@@ -246,7 +246,7 @@
  		Prepare(lbl_CharacterName[i]);
  		Prepare(lbl_PlayerText[i]);
  		Prepare(lbl_JoinText[i]);
-+		Prepare(img_Cursor34[i]);	// X-1 (players34)
++		Prepare(img_Cursor34[i]);	// players34
 +		Prepare(lbl_Players34[i]);
  	}
  
@@ -255,7 +255,7 @@
  	if (bDebugAnimation) log("("$PlayerOwner().Level.TimeSeconds$")"@Name$"::"$GetFuncName()@"Sender:"$Sender.Name,'UIAnimation');
  	Sender.OnEndAnimation = None;
  	SlideInBegin();
-+	// X-1 (players34): their cursors drop in now (players one and two: ReticleAppearBegin)
++	// players34: their cursors drop in now (players one and two: ReticleAppearBegin)
 +	if ( PlayerCount34() > MAX_VIEWPORTS )
 +	{
 +		PlaceCursors34(true);
@@ -268,7 +268,7 @@
  	lbl_CharacterName[0].Pulse(PulseColor, AnimTime);
  	lbl_CharacterName[1].Pulse(PulseColor, AnimTime);
  
-+	lbl_Players34[0].Pulse(PulseColor, AnimTime);	// X-1 (players34)
++	lbl_Players34[0].Pulse(PulseColor, AnimTime);	// players34
 +	lbl_Players34[1].Pulse(PulseColor, AnimTime);
 +
  	PulseColor = btn_AltChar[0].GetComponentColor(true);
@@ -279,7 +279,7 @@
  }
  
 +// =====================================================================================================================
-+// X-1 (patch set players34): players three and four (child viewports 2 and 3) on this page
++// players34: players three and four (child viewports 2 and 3) on this page
 +//
 +// A cursor each (3P green, 4P magenta: UI_Char_3PSelector / UI_Char_4PSelector, made by tools/dev/make-player-tags.py
 +// from the 1P cursor) and two lines of text under the honeycomb; no preview, handicap, alternative skin or profile
@@ -288,7 +288,7 @@
 +// otherwise drive player two's. Stick and d-pad move the cursor (Epic's hexagon moves), A or Start chooses (ready), B
 +// takes it back (or leaves when not ready), Back leaves (its viewport is removed at the next GUI tick: Timer), and so
 +// does pulling the pad out (GUIPage.PlayerUnplugged). The match spawns them with their own character and name
-+// (USplitScreenMgr::CreateSplitPlayer passes each split player's own index since X-1).
++// (USplitScreenMgr::CreateSplitPlayer passes each split player's own index).
 +// =====================================================================================================================
 +
 +// The selected character of player PlayerIndex (0-3).
@@ -324,7 +324,7 @@
 +			S @= "ready";
 +		S $= ";";
 +	}
-+	log("X-1 players34 cursors (" $ Why $ "):" $ S @ "players" @ PlayerCount34(), 'DevUI');
++	log("players34 cursors (" $ Why $ "):" $ S @ "players" @ PlayerCount34(), 'DevUI');
 +}
 +
 +// The raw keys of the page itself (its OnRawXController): reached when the GUI's focused control for a player three or
@@ -570,7 +570,7 @@
 +	if ( PC == None || PC.GamepadID < 0 || PC.GamepadID >= LAST_VIEWPORT )
 +		return;
 +
-+	log("X-1 players34: player" @ PlayerIndex + 1 @ "(pad" @ PC.GamepadID $ ") leaves the character page", 'DevUI');
++	log("players34: player" @ PlayerIndex + 1 @ "(pad" @ PC.GamepadID $ ") leaves the character page", 'DevUI');
 +	PendingLeave34 = PendingLeave34 | (1 << PC.GamepadID);
 +	PlayAction(CS_Cancel);
 +	SetTimer(0.01, false);
@@ -751,7 +751,7 @@
 +
 +// The two lines under the honeycomb, in the game's language (Engine's Localizer): "PLAYER 3 / 4", "PRESS START" while
 +// nobody is there; then a line each, named as their cursors' tags: "3P" while choosing (the cursor shows the choice),
-+// "3P READY" once chosen (Epic's sReady), "4P PRESS START" for one not there (the owner, 2026-10-11: no character names).
++// "3P READY" once chosen (Epic's sReady), "4P PRESS START" for one not there (no character names).
 +final function UpdatePlayers34Text()
 +{
 +	local int i, Count;
@@ -780,7 +780,7 @@
 +	}
 +
 +	if ( Line[0] != lbl_Players34[0].Caption || Line[1] != lbl_Players34[1].Caption )
-+		log("X-1 players34 text:" @ Line[0] @ "|" @ Line[1], 'DevUI');
++		log("players34 text:" @ Line[0] @ "|" @ Line[1], 'DevUI');
 +
 +	lbl_Players34[0].Caption = Line[0];
 +	lbl_Players34[1].Caption = Line[1];
@@ -864,7 +864,7 @@
  	return MIM_Simultaneous;
  }
  
-+// X-1 (patch set players34): players three and four (child viewports 2 and 3) have no place on a page made for two
++// players34: players three and four (child viewports 2 and 3) have no place on a page made for two
 +// (the armory): their buttons are used up here, before the page or player two's controls act on them (GetPlayerIndex
 +// would name player two's panel; a B nobody takes closes a page). UC2Arena_Character gives them their own.
 +function bool InternalOnXControllerEvent( GUIComponent Sender, byte Id, eXControllerCodes Code )

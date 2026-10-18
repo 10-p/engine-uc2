@@ -4,7 +4,7 @@
  			Index = bAllowHandicap ? 1 : 0;
  			mo.SetItem(Index,true,true,true);
  		}
-+		// Y-1 (player-name): without a profile, the session is named by the launcher's server name (the ini's)
++		// player-name: without a profile, the session is named by the launcher's server name (the ini's)
 +		Controller.SetProfileServerName(PlayerOwner(), CurrentProfile);
  		ServerName = CurrentProfile.GetServerName();
  		mo = GetRule(ServerNameIndex);
@@ -15,7 +15,7 @@
  		Profile = GetProfile(PlayerIndex);
  		if ( !GameStart.HasURLKeyValue(PlayerIndex, "Name") )
  		{
-+			// Y-1 (player-name): a player without a profile is named by GUIController.SetProfilePlayerName, as when he
++			// player-name: a player without a profile is named by GUIController.SetProfilePlayerName, as when he
 +			// changes character on this page (the first player: the launcher's name); Epic named him after his character
 +			if ( Profile != None && Profile.IsTransient() )
 +				Controller.SetProfilePlayerName(PlayerOwner(PlayerIndex), Profile);

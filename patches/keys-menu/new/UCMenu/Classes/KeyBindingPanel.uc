@@ -4,11 +4,11 @@
   Built like WeaponPriorityPanel so it sits in an ItemSelectionPanel and animates
   with the other items of a settings page.
 
-  uc2 port (D-9, docs/porting/analysis/rebind.md); not Epic's.
+  Ours (patch set keys-menu), not Epic's.
 ==============================================================================*/
 
 class KeyBindingPanel extends Settings_ListPanel;
-// (no include of GUI.huc: the class builds on its own from patches/keys-menu, T1; it used none of its macros)
+// (no include of GUI.huc: the class builds on its own from patches/keys-menu; it uses none of its macros)
 
 var automated	GUILabel			lbl_Caption;		// "KEYS"
 var automated	GUILabel			lbl_Key1, lbl_Key2;	// column headings, over the key columns

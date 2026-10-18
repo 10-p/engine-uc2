@@ -1,4 +1,4 @@
-// X-1 part B (patch set players34): one player's quarter of the four-player armory (UC2Arena_QuadArmory). Epic's
+// players34: one player's quarter of the four-player armory (UC2Arena_QuadArmory). Epic's
 // split-screen armory panel (Armory_PanelDual: the explosive and the energy lists, the short loadout) at half its
 // height: the two lists side by side, the loadout under them.
 // Players one and two use it as Epic's: the GUI's focus slots and the panel's controller mask. Players three and four

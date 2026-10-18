@@ -2315,7 +2315,7 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 	while( GExecTimes.Num() && appSeconds() - GFirstFrameTime >= GExecTimes(0) )
 	{
 		FString Command = GExecCommands(0);
-		debugf( NAME_Init, TEXT("UC2GLDrv: -glexec at %.1f s (frame %i): %s"), GExecTimes(0), FrameCounter, *Command );
+		debugf( NAME_Init, TEXT("UC2GLDrv: Exec at %.1f s (frame %i): %s"), GExecTimes(0), FrameCounter, *Command );
 		GExecTimes.Remove(0);
 		GExecCommands.Remove(0);
 		Viewport->Exec( *Command, *GLog );
@@ -2330,7 +2330,7 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 	{
 		if( appSeconds() - GFirstFrameTime >= GShotTimes(0) )
 		{
-			debugf( NAME_Init, TEXT("UC2GLDrv: -glshot at %.1f s (frame %i)"), GShotTimes(0), FrameCounter );
+			debugf( NAME_Init, TEXT("UC2GLDrv: shot at %.1f s (frame %i)"), GShotTimes(0), FrameCounter );
 			// The counters at the moment of the picture (the periodic line may not come in a short run).
 			if( CheckGLErrors )
 			{

@@ -212,7 +212,7 @@ UBOOL UUC2GLRenderDevice::InitPostProcess()
 	// back buffer's N.)
 	UC2GL_BuildReferenceProgram( this, 2 );
 	debugf( NAME_Init, TEXT("UC2GLDrv: post-processing %s (UsePostProcess=%s%s)"),
-		(UsePostProcess && UsePixelShaders) ? TEXT("on: render targets, back-buffer and depth copies, the Xbox post-process paths of the engine run") : TEXT("off: as at M6"),
+		(UsePostProcess && UsePixelShaders) ? TEXT("on: render targets, back-buffer and depth copies, the Xbox post-process paths of the engine run") : TEXT("off: no render targets, the engine's Xbox post-process paths do not run"),
 		UsePostProcess ? TEXT("True") : TEXT("False"), UsePixelShaders ? TEXT("") : TEXT(", but pixel shaders are off") );
 	debugf( NAME_Init, TEXT("UC2GLDrv: post-process reference height %i (%s)"), PostProcessReferenceHeight,
 		!PostProcessReferenceHeight ? TEXT("blurs in back-buffer pixels, as before") :
