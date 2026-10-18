@@ -8,6 +8,10 @@
 target_sources(${PROJECT_NAME} PRIVATE Src/SDLLaunchWeb.cpp)
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME SDLLaunch SUFFIX ".js")
 
+# The WebGL versions the module is linked for (the GL block below), also reported in meta.json.
+set(SDLLAUNCH_WEBGL_MIN 1)
+set(SDLLAUNCH_WEBGL_MAX 2)
+
 if(UE_WEB_PERF)
   target_link_options(${PROJECT_NAME} PRIVATE -O3 -g0 --emit-symbol-map -sASSERTIONS=0 -sSTACK_OVERFLOW_CHECK=0)
 else()
@@ -95,6 +99,7 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     -DDST=$<TARGET_FILE_DIR:${PROJECT_NAME}>/scripts -P ${CMAKE_SOURCE_DIR}/cmake/UC2ScriptsCheck.cmake
   COMMAND ${NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/emit-artifact-meta.mjs
     --out=$<TARGET_FILE_DIR:${PROJECT_NAME}> --target=uc2 --abi=${UE_ABI_VERSION} --emcc=${META_EMCC}
+    --min-webgl=${SDLLAUNCH_WEBGL_MIN} --max-webgl=${SDLLAUNCH_WEBGL_MAX}
     --scripts=scripts --scripts-under=System
     ${META_DEPS}
   COMMENT "Emitting artifact meta.json"
@@ -122,8 +127,8 @@ if(TARGET UC2GL4ESDrv)
     # without WebGL 2 (UC2GL4ESDrv falls back; MIN 1 keeps Emscripten's WebGL 1 paths and extension names).
     # FULL_ES2: client-side array emulation for whatever gl4es still sends that way (the driver itself sends
     # none).
-    -sMIN_WEBGL_VERSION=1
-    -sMAX_WEBGL_VERSION=2
+    -sMIN_WEBGL_VERSION=${SDLLAUNCH_WEBGL_MIN}
+    -sMAX_WEBGL_VERSION=${SDLLAUNCH_WEBGL_MAX}
     -sFULL_ES2=1
     # The context is created with explicitSwapControl + renderViaOffscreenBackBuffer and each frame is
     # presented with emscripten_webgl_commit_frame(): both exist only with this flag (without it the call

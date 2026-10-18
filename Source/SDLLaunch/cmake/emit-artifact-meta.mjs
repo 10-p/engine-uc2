@@ -78,13 +78,13 @@ const meta = {
   provenance: { repo: 'engine-uc2', gitSha, builtAt },
   toolchain: { emscripten: args.emcc || 'unknown', ...deps },
   buildFlags: [
-    // Descriptive, hand-maintained: keep in step with Source/SDLLaunch/cmake/Web.cmake (engine-ut2004's list,
-    // plus what this build links that it does not: the WebGL 1 limits, -sOFFSCREEN_FRAMEBUFFER, the pool size,
-    // catching at the link for openal-soft). Threaded-only artifact: the host must provide SharedArrayBuffer
-    // (cross-origin isolation) and OffscreenCanvas.
+    // Descriptive: the link flags of Source/SDLLaunch/cmake/Web.cmake the host depends on; the WebGL versions
+    // come from Web.cmake (--min-webgl, --max-webgl), the rest is kept in step by hand. Threaded-only artifact:
+    // the host must provide SharedArrayBuffer (cross-origin isolation) and OffscreenCanvas.
     '-sASYNCIFY', '-sFULL_ES2', '-sALLOW_MEMORY_GROWTH', '-sFORCE_FILESYSTEM', '-sWASMFS',
     '-pthread', '-sPROXY_TO_PTHREAD', '-sOFFSCREENCANVAS_SUPPORT', '-sOFFSCREENCANVASES_TO_PTHREAD=#canvas',
-    '-sPTHREAD_POOL_SIZE=4', '-sMAXIMUM_MEMORY=2147483648', '-sMIN_WEBGL_VERSION=1', '-sMAX_WEBGL_VERSION=1',
+    '-sPTHREAD_POOL_SIZE=4', '-sMAXIMUM_MEMORY=2147483648',
+    `-sMIN_WEBGL_VERSION=${args['min-webgl']}`, `-sMAX_WEBGL_VERSION=${args['max-webgl']}`,
     '-sOFFSCREEN_FRAMEBUFFER', '-sNO_DISABLE_EXCEPTION_CATCHING',
   ],
   exports: { symbolContract: 1 },
