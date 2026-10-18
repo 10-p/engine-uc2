@@ -114,6 +114,7 @@ class USDL2Client : public UClient, public FNotifyHook
 	FSDL2Pad			Pads[SDL2DRV_MAX_PADS];
 	FSDL2PadMapEntry	PadMap[SDL2DRV_PAD_SOURCES];
 	UBOOL				PadsInitialized;
+	UBOOL				PadsOn;					// UseJoystick as last applied (PollGamepads reads it every tick)
 	FSDL2InputTest*		InputTest;				// test key InputTestFile=<file>: the input test channel
 
 	// Constructors.

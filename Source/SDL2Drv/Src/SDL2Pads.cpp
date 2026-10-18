@@ -229,11 +229,6 @@ void USDL2Client::InitPads()
 		Pads[i].InstanceID = -1;
 		Pads[i].RepeatKey  = IK_None;
 	}
-	if( !UseJoystick )
-	{
-		debugf( NAME_Init, TEXT("SDL2 pads: off (UseJoystick=False)") );
-		return;
-	}
 	if( SDL_InitSubSystem( SDL_INIT_GAMECONTROLLER ) != 0 )
 	{
 		debugf( NAME_Init, TEXT("SDL2 pads: SDL_INIT_GAMECONTROLLER failed: %s"), appFromAnsi(SDL_GetError()) );
@@ -241,9 +236,12 @@ void USDL2Client::InitPads()
 	}
 	LoadPadMap();
 	PadsInitialized = 1;
-	// Pads already connected arrive as SDL_CONTROLLERDEVICEADDED events on the next pump.
+	PadsOn = UseJoystick != 0;
+	// Pads already connected arrive as SDL_CONTROLLERDEVICEADDED events on the next pump (opened while PadsOn).
 	debugf( NAME_Init, TEXT("SDL2 pads: GameController API up, %i joystick(s) present, threshold %i/255, stick dead zone %.2f"),
 		SDL_NumJoysticks(), PadButtonThreshold, PadStickDeadZone );
+	if( !PadsOn )
+		debugf( NAME_Init, TEXT("SDL2 pads: off (UseJoystick=False)") );
 	unguard;
 }
 
@@ -326,7 +324,7 @@ void USDL2Client::SendPadKey( INT Slot, UViewport* Viewport, EInputKey Key, EInp
 void USDL2Client::PadAdded( INT DeviceIndex )
 {
 	guard(USDL2Client::PadAdded);
-	if( !PadsInitialized || !SDL_IsGameController(DeviceIndex) )
+	if( !PadsInitialized || !PadsOn || !SDL_IsGameController(DeviceIndex) )
 		return;
 	SDL_JoystickID ID = SDL_JoystickGetDeviceInstanceID( DeviceIndex );
 	if( FindPadSlot(ID)!=INDEX_NONE )
@@ -731,11 +729,33 @@ BYTE USDL2Client::GetPadAnalogButton( INT Slot, INT ButtonIndex )
 }
 
 //
-// Hot-plug and unbound pads, once per client tick.
+// UseJoystick, hot-plug and unbound pads, once per client tick.
 //
 void USDL2Client::PollGamepads( FLOAT DeltaSeconds )
 {
 	guard(USDL2Client::PollGamepads);
+	// UseJoystick, every tick: `set ini:Engine.Engine.ViewportManager UseJoystick ...` sets it on this live client,
+	// so it takes effect at once. Off: every pad is closed as if unplugged (held buttons released, rumble stopped).
+	// On: the pads present are opened.
+	if( PadsInitialized && (UseJoystick!=0) != PadsOn )
+	{
+		PadsOn = UseJoystick != 0;
+		debugf( NAME_Log, TEXT("SDL2 pads: %s"), PadsOn ? TEXT("on (UseJoystick=True)") : TEXT("off (UseJoystick=False)") );
+		if( PadsOn )
+		{
+			for( INT i=0; i<SDL_NumJoysticks(); i++ )
+				PadAdded( i );
+		}
+		else
+		{
+			for( INT Slot=0; Slot<SDL2DRV_MAX_PADS; Slot++ )
+				if( Pads[Slot].Controller )
+				{
+					SetPadRumble( Slot, 0, 0 );
+					PadRemoved( Pads[Slot].InstanceID );
+				}
+		}
+	}
 	if( InputTest )
 		InputTest->Tick( this );
 	UpdateUnboundPads();

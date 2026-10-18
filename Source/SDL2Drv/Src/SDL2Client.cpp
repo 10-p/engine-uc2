@@ -25,6 +25,7 @@ USDL2Client::USDL2Client()
 	guard(USDL2Client::USDL2Client);
 	InMenuLoop = 0;
 	PadsInitialized = 0;
+	PadsOn = 0;
 	InputTest = NULL;
 	unguard;
 }
