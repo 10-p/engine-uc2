@@ -9,12 +9,17 @@
 ENGINE_API FKeyGlyphs GKeyGlyphs;
 
 // A log name of its own, suppressed in Default.ini like DevUI (the tests un-suppress it). The lines also start with
-// "[KeyGlyphs]" (the log file does not print the names).
+// "[KeyGlyphs]" (the log file does not print the names). RF_Native keeps the name out of the purge of unreferenced
+// names (UnObj.cpp RemoveNames): without the key-glyphs script set no object is called KeyGlyphs, and a purged
+// name's index would go to another name and the lines to that name's suppression.
 static EName KeyGlyphsLog()
 {
 	static FName Name;
 	if( Name == NAME_None )
+	{
 		Name = FName( TEXT("KeyGlyphs") );
+		Name.SetFlags( RF_Native );
+	}
 	return (EName)Name.GetIndex();
 }
 
