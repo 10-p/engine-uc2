@@ -9,7 +9,6 @@
 	(the web ucc-bin.js) leaves the table NULL and keeps Epic's socket code.
 
 	Natively nothing here is used (the hooks are compiled under __EMSCRIPTEN__ only).
-	Notebook: docs/porting/analysis/netplay-browser.md.
 =============================================================================*/
 
 #ifndef _INC_UDPLINKWEB

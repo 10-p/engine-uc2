@@ -2,8 +2,8 @@
 # UC2ALAudio - the audio device: cooked XACT data (tools/cook-audio.py) played through OpenAL Soft.
 #
 # Natively OpenAL is not linked: the device dlopens libopenal when it starts (the fetched openal-soft, copied
-# beside uc2.bin by tools/dev/mkrun-uc2.sh), so only the headers are needed here. On the web it is linked
-# (M11). Vorbis is linked statically.
+# beside uc2.bin by tools/dev/mkrun-uc2.sh), so only the headers are needed here. On the web it is linked.
+# Vorbis is linked statically.
 #=============================================================================
 
 project(UC2ALAudio CXX)
@@ -16,7 +16,7 @@ target_include_directories(${PROJECT_NAME}
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Src
 )
 if(EMSCRIPTEN)
-  # M11 (O-2): the web build links openal-soft (static, Web Audio backend; root CMakeLists.txt) and
+  # The web build links openal-soft (static, Web Audio backend; root CMakeLists.txt) and
   # UC2ALBind fills its table with the linked symbols.
   target_link_libraries(${PROJECT_NAME} PRIVATE OpenAL)
 elseif(TARGET OpenAL)

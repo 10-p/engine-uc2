@@ -1,5 +1,5 @@
 /*=============================================================================
-	UC2MovieSelfTest.cpp: `ucc-bin UC2Movie.UC2MovieSelfTest REF=<dir>` (M9, V3).
+	UC2MovieSelfTest.cpp: `ucc-bin UC2Movie.UC2MovieSelfTest REF=<dir>`.
 
 	Decodes a sample of cooked movies with the game's own player and compares with references ffmpeg wrote
 	from the same files (tools/dev/movie-selftest.sh makes them and runs this):
@@ -83,7 +83,7 @@ static UBOOL LoadText( const FString& Path, TArray<FString>& Lines )
 		FString Line = Nl >= 0 ? Text.Left(Nl) : Text;
 		Text = Nl >= 0 ? Text.Mid(Nl+1) : FString();
 		if( Line.Len() )
-			new(Lines) FString( Line );	// not AddItem: it assigns into unconstructed memory (M8 finding)
+			new(Lines) FString( Line );	// not AddItem: it assigns into unconstructed memory
 	}
 	return 1;
 }
@@ -430,9 +430,9 @@ static void LanguageChecks()
 	UObject::SetLanguage( *Saved );
 }
 
-// O-1 (2026-10-06): what a MovieMaterial shows without a picture. The device draws the player
-// appUpdateMovieMaterial returns, or the LoadingFallback when it says so; NULL with no fallback made it draw
-// Material.DefaultMaterial, UC2's bright green DefaultTexture ("videos play green").
+// What a MovieMaterial shows without a picture. The device draws the player appUpdateMovieMaterial returns,
+// or the LoadingFallback when it says so; NULL with no fallback would make it draw Material.DefaultMaterial,
+// UC2's bright green DefaultTexture.
 static void MaterialChecks()
 {
 	UMovieMaterial* M = ConstructObject<UMovieMaterial>( UMovieMaterial::StaticClass(), UObject::GetTransientPackage(), NAME_None, RF_Transient );

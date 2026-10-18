@@ -1,5 +1,5 @@
 #if SUPPORTS_PRAGMA_PACK
-#pragma pack (push,4)	// M13: script mirrors are laid out with /Zp4 (as the generated headers); 64-bit pointers sit on 4
+#pragma pack (push,4)	// script mirrors are laid out with /Zp4 (as the generated headers); 64-bit pointers sit on 4
 #endif
 // The type of function that generates the waveform sample
 enum EWaveformFunction

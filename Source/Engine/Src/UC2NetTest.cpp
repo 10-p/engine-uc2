@@ -1,26 +1,25 @@
 /*=============================================================================
 	UC2NetTest.cpp: test-only console commands and command file for the network
-	tests (tools/dev/net-test.sh). uc2 port; not Epic's. Quiet unless used.
-	F-1: the three console commands are cheats (UC2Cheats.cpp's guard: a standalone game,
-	or [Engine.GameEngine] AllowNetCheats=True, which net-test.py sets for its processes).
+	tests (tools/dev/net-test.sh). Quiet unless used.
+	The three console commands are cheats (UC2Cheats.cpp's guard: a standalone game, a listen
+	host, or [Engine.GameEngine] AllowNetCheats=True, which net-test.py sets for its processes).
 
 	Console commands (also from the SDL2 test channel's "exec ..." lines):
 	  NETPROBE <tag>                     "NetProbe: <tag> ..." lines: one summary line, one per
 	                                     pawn and one per PlayerReplicationInfo in this process's level
-	                                     (F-1c: on a network client without cheats, the local player's
+	                                     (on a network client without cheats, the local player's
 	                                     own pawn and PRI only, after a "<tag> self only" line)
 	  NETPLACE <name> <x> <y> <z> <yaw> [<pitch>]  server/listen server: move that player's pawn there
 	                                     (the client follows through the engine's own position
 	                                     correction); the optional pitch turns the view up or down
-	                                     (picture tests, tools/dev/fx-water.sh); <name> LocalPlayer:
-	                                     the player of this machine's viewport, whatever its name
-	                                     (tools/dev/m7-effects.sh, O-9b)
+	                                     (picture tests); <name> LocalPlayer: the player of this
+	                                     machine's viewport, whatever its name (tools/dev/m7-effects.sh)
 	  NETPLACENEAR <name> <other> <dist> [<first>] server: put that player's pawn <dist> units from the
 	                                     other's, at the first of 16 headings with a clear path for
 	                                     a pawn-sized box between them, facing the other
 
 	Command file: test key [UC2NetTest] CommandFile=<file> (any process; set with -ini:, read once; the dedicated
-	server has no other input). Was -nettest=<file> (F-4 follow-up).
+	server has no other input).
 	A harness appends lines; each tick runs every complete new line:
 	  exec <console command>             through UGameEngine::Exec (e.g. "exec netprobe S1",
 	                                     "exec servertravel DM-Recoil")
@@ -113,7 +112,7 @@ static void Probe( UGameEngine* Engine, const TCHAR* Tag, UBOOL SelfOnly=0 )
 		AActor* A = Level->Actors(i);
 		if( !A || A->bDeleteMe )
 			continue;
-		// F-1c: a network client without cheats hears about its own player only (what its HUD shows anyway)
+		// A network client without cheats hears about its own player only (what its HUD shows anyway)
 		if( SelfOnly && !(PC && (A==PC->Pawn || A==PC->PlayerReplicationInfo)) )
 			continue;
 		if( A->IsA(APawn::StaticClass()) )
@@ -253,14 +252,15 @@ static void PlaceNear( UGameEngine* Engine, const TCHAR* Cmd )
 	debugf( NETPROBE, TEXT("placenear %s failed: no clear spot at %.0f"), *Name, Dist );
 }
 
-// F-1: these show where every player is and move players: cheats, behind the same guard as
-// TELEPORT/WHEREAMI (UC2Cheats.cpp: a standalone game, or [Engine.GameEngine] AllowNetCheats=True for tests),
+// These show where every player is and move players: cheats, behind the same guard as
+// TELEPORT/WHEREAMI (UC2Cheats.cpp: a standalone game, a listen host, or [Engine.GameEngine] AllowNetCheats=True
+// for tests),
 // each run logged as "Cheat: <COMMAND> <arguments>".
 ENGINE_API UBOOL UC2CheatsAllowed( UEngine* Engine, APlayerController* PC, const TCHAR* Command, const TCHAR* Args, FOutputDevice& Ar );
 ENGINE_API UBOOL UC2CheatsWouldAllow( UEngine* Engine, APlayerController* PC, INT* OutNetMode, UBOOL* OutByKey );
 
-// (F-1b: the command that turned a player's view to face another is gone: the owner, 2026-10-09: test-only commands
-// do not ship; the network tests line the players up with NETPLACE instead, tools/dev/net-test.py line_up.)
+// (No command turns a player's view to face another: the network tests line the players up with NETPLACE,
+// tools/dev/net-test.py line_up.)
 ENGINE_API UBOOL UC2NetTestExec( UGameEngine* Engine, const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UC2NetTestExec);
@@ -268,7 +268,7 @@ ENGINE_API UBOOL UC2NetTestExec( UGameEngine* Engine, const TCHAR* Cmd, FOutputD
 	{
 		while( *Cmd==' ' )
 			Cmd++;
-		// F-1c: on a network client without cheats NETPROBE is not a cheat: it answers about the local player only
+		// On a network client without cheats NETPROBE is not a cheat: it answers about the local player only
 		// (the summary, its own pawn and its own PlayerReplicationInfo), with no refusal and no "Cheat:" line
 		INT NetMode = 0;
 		if( !UC2CheatsWouldAllow( Engine, NULL, &NetMode, NULL ) && NetMode==NM_Client )
@@ -328,7 +328,7 @@ ENGINE_API void UC2NetTestTick( UGameEngine* Engine )
 		int C = fgetc( T.File );
 		if( C==EOF )
 		{
-			// Lines are appended while we read (see SDL2InputTest.cpp for why the seek).
+			// Lines are appended while the file is read: clear EOF and seek in place so the next fgetc sees them.
 			clearerr( T.File );
 			fseek( T.File, 0, SEEK_CUR );
 			return;
@@ -362,7 +362,7 @@ ENGINE_API void UC2NetTestTick( UGameEngine* Engine )
 
 /*-----------------------------------------------------------------------------
 	[UC2NetTest] Drop=<spec>[,<spec>...]: deterministic packet loss for the network tests
-	(tools/dev/net-test.py handshake-loss). A test key (-ini:, read once); inert without it. Was NETDROP=.
+	(tools/dev/net-test.py handshake-loss). A test key (-ini:, read once); inert without it.
 	  <TEXT>[#n][+k]    when this process SENDS a control message starting with TEXT for the n-th time
 	                    on a connection (default 1), the packet carrying it is lost, and k more after it
 	  <<TEXT>[#n][+k]   when this process RECEIVES it for the n-th time, its next k outgoing packets on

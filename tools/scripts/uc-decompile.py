@@ -5,8 +5,7 @@
                     [--content <root>] [--class Name ...]
 
 Writes <dir>/<Class>.uc for every class of <Pkg>.u (or the named ones), decompiled from the bytecode and the
-declarations of the package, in a form `ucc make` accepts and compiles back to the same bytecode
-(docs/porting/analysis/decompile-spike.md, script-patches.md). The other 16 script packages must sit next to
+declarations of the package, in a form `ucc make` accepts and compiles back to the same bytecode. The other 16 script packages must sit next to
 <Pkg>.u (types, functions and constants are looked up across all 17); content packages (textures, meshes, ...)
 are looked up under --content (default: the folder above <Pkg>.u's), for the `#exec OBJ LOAD` lines.
 

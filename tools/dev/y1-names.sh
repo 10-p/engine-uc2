@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Y-1 check (native): the names a System Link HOST shows, driven through the game's own menus as a player drives them
+# System Link names check (native): the names a System Link host shows, driven through the game's own menus as a player drives them
 # (main menu -> NETWORKED COMBAT -> HOST SYSTEM LINK GAME -> the host page -> the character page with the default
 # character, no change -> armory -> Begin Match), then asked for its beacon over UDP as the System Link page asks
 # (tools/dev/y1/y1-beacon.py: "REPORT?<nonce>" to the UdpBeacon, GameInfo.GetBeaconText() back).
 #
 #   tools/dev/y1-names.sh <tree> rebuilt|vanilla [h1] [h2] [h3] [h4]   (default: all four, in this order)
 #
-#   <tree>    a native run tree under <WorkUC2>/run (tools/dev/mkrun-uc2.sh build-native <tree>; for vanilla
+#   <tree>    a native run tree under <repo>/../run (tools/dev/mkrun-uc2.sh build-native <tree>; for vanilla
 #             UC2_SCRIPTS=none tools/dev/mkrun-uc2.sh build-native <tree>: Epic's shipped GUI.u/UCMenu.u)
 #   h1  no profile, launched with the launcher's names (-ini:User:[DefaultPlayer]:Name=Coordinator,
 #       -ini:System:[Engine.GameReplicationInfo]:ServerName=MyBox). rebuilt: the match URL, the player's
@@ -20,9 +20,9 @@
 #   h4  restart after h3: the profile is deleted on the Profiles page, then a host without a profile: rebuilt
 #       Coordinator / OtherBox (the launcher's again); vanilla Anubis / Liandri Corporation.
 #
-# Every game run is one client under Xvfb inside <WorkUC2>/bin/capped 2G (tools/dev/m10-controls.sh --file). The
+# Every game run is one client under Xvfb inside <repo>/../bin/capped 2G (tools/dev/m10-controls.sh --file). The
 # beacon and game ports are moved off the defaults (UDP Y1_BEACON_PORT, default 18777; game Y1_GAME_PORT, 17777) with
-# -ini: so another run on the machine cannot answer. Output in <WorkUC2>/logs/y1/native/<tree>-<part>.*
+# -ini: so another run on the machine cannot answer. Output in <repo>/../logs/y1/native/<tree>-<part>.*
 # (Y1_OUT=<dir>); one PASS/FAIL line per check on stdout.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -144,7 +144,7 @@ expect profile-page-opens OpenMenu \[UCMenu.UC2Profile\] 15
 SCEN
 }
 
-# Epic's rule (vanilla) or Y-1's (rebuilt) for a player and a session without a profile
+# Epic's rule (vanilla) or the patched one (rebuilt) for a player and a session without a profile
 nopro_player() { [ "$variant" = rebuilt ] && echo "$player" || echo Anubis; }
 nopro_server() { [ "$variant" = rebuilt ] && echo "$1" || echo "Liandri Corporation"; }
 

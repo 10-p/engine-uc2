@@ -337,7 +337,7 @@ IMPLEMENT_CLASS(UField)
 // Constructors.
 //
 #if PLATFORM_64BITS
-// M13: the C++ sizeof of every natively declared class (DECLARE_CLASS passes it here), kept because Link
+// The C++ sizeof of every natively declared class (DECLARE_CLASS passes it here), kept because Link
 // replaces PropertiesSize with the size the loaded script properties give. Plain BSS: these constructors run
 // during static initialisation.
 enum { MAX_NATIVE_STRUCT_SIZES=4096 };
@@ -367,9 +367,9 @@ UStruct::UStruct( ENativeConstructor, INT InSize, const TCHAR* InName, const TCH
 ,	CppText			( NULL )
 ,	TextPos			( 0 )
 ,	Line			( 0 )
-	// uc2 port (M14): Epic's DLL builds construct native classes in zero-initialised static storage; ours
-	// (__STATIC_LINK) on the heap, where these two were left uninitialised. A non-zero ScriptTextCRC is taken as
-	// the cached CRC (GetScriptTextCRC), so `ucc make` wrote garbage into the dependency records of native classes.
+	// Epic's DLL builds construct native classes in zero-initialised static storage; the static link
+	// (__STATIC_LINK) constructs them on the heap. A non-zero ScriptTextCRC is taken as the cached CRC
+	// (GetScriptTextCRC), which `ucc make` writes into the dependency records of native classes.
 ,	StructFlags		( 0 )
 ,	ScriptTextCRC	( 0 )
 #endif
@@ -396,9 +396,9 @@ UStruct::UStruct( EStaticConstructor, INT InSize, const TCHAR* InName, const TCH
 ,	CppText			( NULL )
 ,	TextPos			( 0 )
 ,	Line			( 0 )
-	// uc2 port (M14): Epic's DLL builds construct native classes in zero-initialised static storage; ours
-	// (__STATIC_LINK) on the heap, where these two were left uninitialised. A non-zero ScriptTextCRC is taken as
-	// the cached CRC (GetScriptTextCRC), so `ucc make` wrote garbage into the dependency records of native classes.
+	// Epic's DLL builds construct native classes in zero-initialised static storage; the static link
+	// (__STATIC_LINK) constructs them on the heap. A non-zero ScriptTextCRC is taken as the cached CRC
+	// (GetScriptTextCRC), which `ucc make` writes into the dependency records of native classes.
 ,	StructFlags		( 0 )
 ,	ScriptTextCRC	( 0 )
 #endif
@@ -431,20 +431,20 @@ void UStruct::AddCppProperty( UProperty* Property )
 }
 
 //
-// M13: native placeholders. The shipped packages were compiled for 32-bit pointers and declare as `int` the
+// Native placeholders. The shipped packages were compiled for 32-bit pointers and declare as `int` the
 // script variables that stand in for C++ data script never touches: the object header, vtable pointers of
 // secondary C++ bases, private pointers and maps. On a 64-bit target the C++ data is bigger than its stand-in,
 // so Link gives each one the size of its C++ counterpart (the property itself stays a 4-byte int). Kind
 // PH_Member advances the layout by Size; PH_ArrayElement makes Size the element stride of an array<int> that
-// C++ fills with pointers. Lookup by string: a cached FName can be purged and its index reused (ufront 2.83).
-// Proven by `ucc-bin verifyclasses` (sizes, offsets, and that no bytecode reads a placeholder) and
-// tools/dev/m13-layout-check.py; docs/porting/analysis/64bit.md lists every entry and why.
-// uc2 port (T2): the table is also the one source the C++ header exporter reads (any pointer width: `ucc-bin make`
+// C++ fills with pointers. Lookup by string: a cached FName can be purged and its index reused.
+// Checked by `ucc-bin verifyclasses` (sizes, offsets, and that no bytecode reads a placeholder) and
+// tools/dev/m13-layout-check.py.
+// The table is also the one source the C++ header exporter reads (any pointer width: `ucc-bin make`
 // is a 32-bit program), so the generated <Pkg>Classes.h are 64-bit-correct as generated. CppType is the C++
 // spelling of one element of the stand-in, written in place of `INT` (`PTRINT Node`, `PTRINT TextureInterfaces[3]`,
 // `TArrayNoInit<PTRINT> OctreeNodes`); NULL for C++ data a script-exported member cannot spell (the object
 // header, base-class vtables, maps): their classes are `noexport` and hand-written, and exporting one is an error
-// (GetNativePlaceholderCppType). docs/porting/analysis/headers.md.
+// (GetNativePlaceholderCppType).
 //
 enum EPlaceholderKind { PH_Member, PH_ArrayElement };
 struct FNativePlaceholder
@@ -546,7 +546,7 @@ CORE_API const TCHAR* GetNativePlaceholderCppTypeAt( INT i )
 	return GNativePlaceholders[i].CppType;
 }
 //
-// uc2 port (T2): the C++ type the header exporter writes for an `int` property (UIntProperty::ExportCppItem): `INT`,
+// The C++ type the header exporter writes for an `int` property (UIntProperty::ExportCppItem): `INT`,
 // or the table's CppType when the property is a placeholder member (`int X` / `int X[N]` of the table's struct) or
 // the element of a placeholder array (`array<int> X`; the inner property is outered to the array property). Same
 // lookup as Link, by string, at every pointer width. A placeholder with no C++ spelling (NULL CppType) in an exported
@@ -612,9 +612,9 @@ void UStruct::Link( FArchive& Ar, UBOOL Props )
 		}
 		PropertiesSize = Align(PropertiesSize,4);
 #if PLATFORM_64BITS
-		// M13: a native class whose C++ size differs from the size its script properties give is read through
+		// A native class whose C++ size differs from the size its script properties give is read through
 		// two layouts; every member past the first difference is silent corruption, and objects are allocated
-		// at the script size. Fatal (ufront 2.83 decision 5), except while `ucc verifyclasses` lists them all.
+		// at the script size. Fatal, except while `ucc verifyclasses` lists them all.
 		INT NativeSize = GetNativeStructSize( this );
 		if( NativeSize>=0 && NativeSize!=PropertiesSize )
 		{
@@ -1472,7 +1472,7 @@ IMPLEMENT_CLASS(UState);
 -----------------------------------------------------------------------------*/
 
 #if PLATFORM_64BITS
-// M13: a native class's config name waits here until Register(). Epic parked the `const TCHAR*` in the 4-byte
+// A native class's config name waits here until Register(). Epic parked the `const TCHAR*` in the 4-byte
 // ClassConfigName (an FName), which on 64-bit wrote its high half over ClassConstructor (UClass is pack(1)).
 // Plain BSS: the constructors run during static initialisation.
 enum { MAX_NATIVE_CONFIG_NAMES=4096 };

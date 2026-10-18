@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""B-3: the split HUD's placement of several runs against a reference run (docs/porting/analysis/split-hud.md).
+"""The split HUD's placement of several runs against a reference run.
 
     b3-hud-compare.py [--rows] <ref-label>=<dir>[:<mode>] <label>=<dir>[:<mode>] ...
 
@@ -14,7 +14,7 @@ Epic's intent, from the scripts (UCHUD_Split.uc, UCHUD.SetSplitPosition): the he
 Y 33..50 in the 640x240 half, moved by SafeZoneOffsetY = 0 (client viewport index 0) or -29 (index 1); the reticle's
 anchor at (320, 240*0.5 = 120), the centre of the half.
 
-Rows (B-3b, the owner's rule for three and four players: Epic's bottom-half offset for every view below the split
+Rows (the rule for three and four players: Epic's bottom-half offset for every view below the split
 line): for every run but the reference, n3 and n4: each view's health fill top at y 33 (a view at the screen's top
 edge) or 4 (below the split line) within TOL, and its reticle within TOL of the view's centre. Printed as
 PASS/FAIL b3-hud-<label>-rows; counted in the exit code with --rows.

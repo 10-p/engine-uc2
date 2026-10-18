@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""D-7 (console) and D-8 (AutoFOV) measurements on what tools/dev/d78.sh leaves. One PASS/FAIL line per check.
+"""Console and AutoFOV measurements on what tools/dev/d78.sh leaves. One PASS/FAIL line per check.
 
-    python3 tools/dev/d78-measure.py <WorkUC2>/logs/d78/run
+    python3 tools/dev/d78-measure.py <repo>/../logs/d78/run
 
 AutoFOV keeps the vertical field of view of the 4:3 picture and widens the horizontal one (Hor+). At the same
 window height the 4:3 picture (1440x1080) must therefore be the centre of the 16:9 (1920x1080) and 21:9
@@ -202,7 +202,7 @@ else:
     result('zoom-40', False, 'missing pictures')
 
 # the sniper rifle's own zoom (AltFire) with its scope overlay (tools/dev/d78/sniper.scen; the overlay is drawn in
-# the 4:3 box, D-2): the 4:3 picture must be the centre of the wider ones here too
+# the 4:3 box): the 4:3 picture must be the centre of the wider ones here too
 def sniper_check():
     ref = pic('sniper', 'fov-sniper-1440x1080')
     res = os.path.join(run, 'sniper', 'fov.result')
@@ -372,7 +372,7 @@ for root, dirs, files in os.walk(run):
                 bad.append(f'{os.path.relpath(os.path.join(root, f), run)}: {c} Critical, {g} GL errors')
 result('logs', not bad and nlogs > 0, f'{nlogs} logs, ' + ('0 Critical, 0 GL errors' if not bad else '; '.join(bad)))
 
-# ------------------------------------------------------------------------- pictures for the owner
+# ------------------------------------------------------------------------- pictures for review
 def sheet(kind, fn, sub):
     """One picture per row: 4:3 (1440x1080), 16:9 (1920x1080), 21:9 (2560x1080), 16:9 with AUTOFOV 0 (before),
     each 360 px high, centred, labelled."""

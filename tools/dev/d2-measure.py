@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""D-2 (UI scaling) measurements on the pictures tools/dev/d2-ui-scale.sh takes. One PASS/FAIL line per check.
+"""UI scaling measurements on the pictures tools/dev/d2-ui-scale.sh takes. One PASS/FAIL line per check.
 
-    python3 tools/dev/d2-measure.py <WorkUC2>/logs/d2/run 640x480 1280x720 ...
+    python3 tools/dev/d2-measure.py <repo>/../logs/d2/run 640x480 1280x720 ...
 
 Pictures per resolution (<run>/<WxH>/): menu-<shot>.png (tools/dev/d2/menu.scen: main, main-box,
 main-box-levelOff, main-levelOff and the same for arena) and hud-<shot>.png (tools/dev/d2/deadbolt.scen: hud,
 hud-levelOff). "levelOff" = TOGGLERENDERLEVEL: the UI on a black frame. The box of a W x H window is the one
 UCanvas::ApplyUIBox computes: s = min(W/640, H/480), corner (floor((W-640s)/2), floor((H-480s)/2)).
 
-Only PIL (no numpy on this machine). Also writes <run>/contact-sheet.png (one row per resolution, the owner's
-pictures) and <run>/before-after-1920x1080.png.
+Only PIL (no numpy on this machine). Also writes <run>/contact-sheet.png (one row per resolution, for review) and <run>/before-after-1920x1080.png.
 """
 import sys, os, re, math, glob, subprocess
 from PIL import Image, ImageChops, ImageStat, ImageDraw
@@ -276,7 +275,7 @@ result('logs', crit == 0 and gl == 0 and nlogs > 0, f'{nlogs} game logs of the b
 for l in sorted(layers):
     print(f'      full-screen layer seen: {l}')
 
-# ------------------------------------------------------------------------------------- pictures for the owner
+# ------------------------------------------------------------------------------------- pictures for review
 def label(im, text):
     d = ImageDraw.Draw(im)
     d.rectangle((0, 0, 8 + 6 * len(text), 14), fill=(0, 0, 0))

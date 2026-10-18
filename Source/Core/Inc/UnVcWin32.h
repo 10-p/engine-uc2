@@ -789,7 +789,7 @@ extern "C" void* __cdecl _alloca(size_t);
 //#define appAlloca(size) _alloca((size+7)&~7)
 #define appAlloca(size) ((size==0) ? 0 : _alloca((size+7)&~7))
 
-//scion jg -- FMovieThread and FMoviePlayer: moved unchanged to UnMovieBase.h (engine-uc2 M9: every platform)
+// FMovieThread and FMoviePlayer: in UnMovieBase.h, shared by every platform.
 #include "UnMovieBase.h"
 
 #ifdef _DEBUG

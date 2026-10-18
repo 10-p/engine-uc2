@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare the program-test lines of two game logs (M11): the desktop GL binding against the GL4ES twin.
+"""Compare the program-test lines of two game logs: the desktop GL binding against the GL4ES twin.
 
   tools/dev/m11-progcmp.py <desktop.out> <twin.out> [tolerance, default 2]
 

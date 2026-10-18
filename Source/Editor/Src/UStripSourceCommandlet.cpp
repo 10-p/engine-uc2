@@ -36,7 +36,7 @@ class UStripSourceCommandlet : public UCommandlet
 
 		// Get a list of the script packages to convert
 		TArray<FString> ScriptFiles = GFileManager->FindFiles(TEXT("*.u"),1,0);
-		// uc2 port (M14): in the order NTFS listed them on Epic's machine (UC2SortLikeNTFS, Core/Src/UnObj.cpp).
+		// In the order NTFS listed them on Epic's machine (UC2SortLikeNTFS, Core/Src/UnObj.cpp).
 		UC2SortLikeNTFS( ScriptFiles );
 		// Loop through each script package, load it, strip the source from the
 		// class data, and save it back out
@@ -80,7 +80,7 @@ class UStripSourceCommandlet : public UCommandlet
 			}
 			warnf(TEXT(""));
 			warnf(TEXT("Saving %s..."),*ScriptFiles(Index));
-			// uc2 port (M14): -CONFORM saves conforming to ../GUIRes/<Pkg>.u, as `ucc make` does, so the result
+			// -CONFORM saves conforming to ../GUIRes/<Pkg>.u, as `ucc make` does, so the result
 			// keeps the shipped package's name/import/export order and GUID (a new generation is added). Without
 			// it the save is Epic's: a first-generation file with a new GUID.
 			ULinkerLoad* Conform = NULL;

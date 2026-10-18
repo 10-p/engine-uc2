@@ -1,4 +1,4 @@
-# D-6 helpers for tools/dev/d6-mouse.sh scenarios, loaded into m10-inject.py's check namespace with `pyfile`.
+# Mouse check helpers for tools/dev/d6-mouse.sh scenarios, loaded into m10-inject.py's check namespace with `pyfile`.
 # They read P (probes) and W (per-tick watch traces) and append measurements to the run's results file
 # ($D6_RESULTS, JSON lines) so that d6-mouse.sh can compare runs (the shipped scripts against ours).
 import json, math, os
@@ -137,7 +137,7 @@ def camera_lag(tag, first=None, last=None):
 
 def steady_speed(tag, start=0.6, end=1.3):
     """Horizontal ground speed (units/s) between `start` and `end` seconds after the pawn started to move, from a
-    watch trace (F-1: the walk/run speeds of the keys and the stick)."""
+    watch trace (the walk/run speeds of the keys and the stick)."""
     rows = W[tag]
     if len(rows) < 3:
         return 0.0
@@ -155,7 +155,7 @@ def steady_speed(tag, start=0.6, end=1.3):
 
 
 def hop(tag):
-    """G-8: a dodge's signature in a watch trace: the pawn's rise (highest Z above the first sample; a dodge adds
+    """A dodge's signature in a watch trace: the pawn's rise (highest Z above the first sample; a dodge adds
     DodgeSpeedZ, running on flat ground adds nothing), its displacement to the right of the first sample's view yaw at
     the last sample (left is negative), and its top horizontal speed over 3-tick spans (units/s)."""
     rows = W[tag]

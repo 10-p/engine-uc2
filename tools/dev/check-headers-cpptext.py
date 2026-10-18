@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""check-headers-cpptext.py: compare a committed generated header with one exported from a PATCHED script tree (T3).
+"""check-headers-cpptext.py: compare a committed generated header with one exported from a patched script tree.
 
   check-headers-cpptext.py <committed.h> <exported.h> <label>     exit 0 equal, 1 different (unified diff on stdout)
   check-headers-cpptext.py --count <committed.h> <exported.h>     what was taken over: "<cpptext> cpptext, <structs>
                                                                   native structs"
   check-headers-cpptext.py --merge <committed.h> <exported.h> <out.h>
                                                                   the committed header with the export's changes
-                                                                  (regen-headers on a patched tree, T4): every line
+                                                                  (regen-headers on a patched tree): every line
                                                                   the comparison sees comes from the export, the
                                                                   cpptext bodies and native struct blocks the export
                                                                   cannot have stay the committed ones

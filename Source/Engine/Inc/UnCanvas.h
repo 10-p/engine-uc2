@@ -6,7 +6,7 @@
 		* Created by Andrew Scheidecker
 =============================================================================*/
 #if SUPPORTS_PRAGMA_PACK
-#pragma pack (push,4)	// M13: script mirrors are laid out with /Zp4 (as the generated headers); 64-bit pointers sit on 4
+#pragma pack (push,4)	// script mirrors are laid out with /Zp4 (as the generated headers); 64-bit pointers sit on 4
 #endif
 
 /*
@@ -82,7 +82,7 @@ public:
 
 	virtual void SetClip( FLOAT X, FLOAT Y, FLOAT XL, FLOAT YL );
 
-	// D-2 (UI scaling, docs/porting/analysis/ui-scale.md). Non-virtual, no data: the script layout of Canvas is
+	// UI scaling. Non-virtual, no data: the script layout of Canvas is
 	// untouched; the state lives in pCanvasUtil. With [<Client>] UIScaleMode=Fit43 the canvas (ClipX/ClipY,
 	// SizeX/SizeY, every Draw*) speaks the 640x480 design pixels of the UI and CanvasToScreen maps them into a
 	// centred box of the viewport; "target" pixels are the viewport's own.

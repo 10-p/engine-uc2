@@ -263,7 +263,7 @@ void UParticleEmitter::SetDynamicAtten( FLOAT AttenFactor )
 		return;
 
 	// skip if almost equal
-	// The type was left out (MSVC's implicit int), so the threshold is 0, not 0.2: kept as shipped.
+	// Epic left the type out (MSVC's implicit int), so the threshold is 0, not 0.2: kept as shipped.
 	static const INT MIN_ATTEN_DIFF = 0.2f;
 	if( Abs(AttenFactor - DynAttenMaxActive) >= MIN_ATTEN_DIFF )
         return;

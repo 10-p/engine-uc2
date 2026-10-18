@@ -49,7 +49,7 @@ public:
 					// Make log filename.
 					if( !Filename[0] )
 					{
-                        // engine-ut2004 2.33: the base-dir prefix belongs to the Windows FILE MANAGER; a MinGW build
+                        // The base-dir prefix belongs to the Windows file manager; a MinGW build
                         // uses FFileManagerUnix, which resolves relative paths itself.
                         #if WIN32 && defined(_MSC_VER)
                         // Unix systems handle this in FFileManager* classes. --ryan.

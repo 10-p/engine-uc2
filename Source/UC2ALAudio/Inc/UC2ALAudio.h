@@ -1,11 +1,9 @@
 /*=============================================================================
-	UC2ALAudio.h: the portable audio device of the UC2 port (OpenAL Soft).
+	UC2ALAudio.h: the portable audio device (OpenAL Soft).
 
 	Plays the cooked XACT data (tools/cook-audio.py: Sounds/*.uc2cues cue tables,
 	Sounds/*.uc2wb + *.ogp Ogg Vorbis wave banks, Music/*.ogg) the way Epic's Xbox
-	device, XboxAudio/Src/XACTAudioSubsystem.cpp, played the XACT banks. The design,
-	the cooked format and every known difference from the Xbox are in
-	docs/porting/analysis/audio.md.
+	device, XboxAudio/Src/XACTAudioSubsystem.cpp, plays the XACT banks.
 
 	The launcher includes this header only to register the classes: nothing of
 	OpenAL or Vorbis is visible here (the state lives behind FUC2AudioState).
@@ -29,13 +27,13 @@ class UUC2ALAudioSubsystem : public UAudioSubsystem
 	// Configuration ([UC2ALAudio.UC2ALAudioSubsystem]).
 	FStringNoInit	OutputDevice;		// alcOpenDevice name; empty = the default device
 	FStringNoInit	Backends;			// OpenAL Soft backends to try, in order (its ALSOFT_DRIVERS, unless the environment sets that)
-	FStringNoInit	WaveFile;			// render to this .wav with OpenAL Soft's wave writer (tests); -AUDIOWAVE=
+	FStringNoInit	WaveFile;			// render to this .wav with OpenAL Soft's wave writer (tests)
 	INT				MaxVoices;			// sources in the voice pool (the Xbox had 188 2D + 64 3D)
 	UBOOL			ZoneReverb;			// zone -> I3DL2 preset (the shipped Xbox code had this in #if 0)
 	UBOOL			UseEFX;					// environmental reverb through EFX when the device has it
 	UBOOL			MusicFades;			// honour PlayMusic/StopMusic fade times (the Xbox ignored them)
 	UBOOL			CueLog;					// one DevSound line per cue request (DevSound is suppressed by default)
-	UBOOL			UseHRTF;				// headphone virtualisation (OpenAL Soft's HRTF, stereo output); engine-ut2004's key, off by default
+	UBOOL			UseHRTF;				// headphone virtualisation (OpenAL Soft's HRTF, stereo output), off by default
 
 	// Not configuration: set by UC2AudioSelfTest before Init() to mix into memory (OpenAL Soft's loopback
 	// device, a simulated clock, a fixed listener) instead of opening an output device.
@@ -73,7 +71,7 @@ class UUC2ALAudioSubsystem : public UAudioSubsystem
 	void NotifyLevelChange();
 	void NotifyZoneChange( AZoneInfo* NewZone );
 	void NotifyPauseChange( UBOOL bNowPaused );
-	class FMovieAudioStream* OpenMovieAudio( INT Rate, INT Channels, UBOOL bExclusive );	// M9
+	class FMovieAudioStream* OpenMovieAudio( INT Rate, INT Channels, UBOOL bExclusive );
 };
 
 /*-----------------------------------------------------------------------------
@@ -105,7 +103,7 @@ class UUC2AudioSelfTestCommandlet : public UCommandlet
 
 /*-----------------------------------------------------------------------------
 	UUC2ZoneSurveyCommandlet: `ucc-bin UC2ALAudio.UC2ZoneSurvey [MAP=<name>]` lists every
-	map's zones and the EZoneAudioEffect (reverb preset) each carries (O-4).
+	map's zones and the EZoneAudioEffect (reverb preset) each carries.
 -----------------------------------------------------------------------------*/
 
 class UUC2ZoneSurveyCommandlet : public UCommandlet

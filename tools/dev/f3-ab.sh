@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# F-3: the A/B pictures for the owner (docs/porting/analysis/webgl2.md), from one pinned view of DM-Deadbolt
+# Anti-aliasing and texture LOD bias A/B pictures, from one pinned view of DM-Deadbolt
 # (first PlayerStart, NumPlayers 0, post-processing off so that nothing animates in the compared box), on the
 # GL4ES twin and the desktop, one game run at a time, each inside bin/capped through tools/dev/run-uc2-shot.sh.
 #
@@ -11,7 +11,7 @@
 #                                           high-frequency energy of the far floor (tools/dev/hf-energy.py)
 #
 # Trees: F3_DESKTOP_TREE (default f3d), F3_TWIN_TREE (f3t), made from build-native unless F3_NO_MKRUN is set.
-# Output: <WorkUC2>/logs/f3/ab-*.png and ab-*.txt. The twin runs an OpenGL ES 3.0 context
+# Output: <repo>/../logs/f3/ab-*.png and ab-*.txt. The twin runs an OpenGL ES 3.0 context
 # (MESA_GLES_VERSION_OVERRIDE=3.0 = WebGL 2) unless a case says 2.0.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -42,7 +42,7 @@ aa)
   run $T aa-none 3.0 -gl4es $SP
   if [ -n "$fx" ]; then
     cp -f "$fx" "$work/run/$T/System/uc2-fxaa.bin"
-    # (a binary from before F-3's step 3 reads the old -gl* switches, not the test keys)
+    # (an older FXAA binary reads -gl* switches, not the test keys)
     UC2_BIN=uc2-fxaa.bin UC2_AA=1 run $T aa-fxaa 2.0 -gl4es -glerrors -nopostprocess -glshot=44 -glshotpresented $ES2
   fi
   UC2_AA=1 run $T aa-msaa 3.0 -gl4es $SP

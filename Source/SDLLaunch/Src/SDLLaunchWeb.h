@@ -1,5 +1,5 @@
 /*=============================================================================
-	SDLLaunchWeb.h: browser-only launcher hooks (M4w). See SDLLaunchWeb.cpp.
+	SDLLaunchWeb.h: browser-only launcher hooks (SDLLaunchWeb.cpp).
 =============================================================================*/
 
 #ifdef __EMSCRIPTEN__

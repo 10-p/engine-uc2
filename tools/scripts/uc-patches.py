@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """uc-patches: the script patch sets of patches/ (make, apply, check, rebase, compare).
 
-Our UnrealScript changes are unified diffs against the BASE: the classes of the shipped .u as tools/scripts/
+Our UnrealScript changes are unified diffs against the base: the classes of the shipped .u as tools/scripts/
 uc-decompile.py writes them (decompiled; UCMenu: its own shipped text plus decompiled defaultproperties). A tree is
 <dir>/<Pkg>/Classes/<Class>.uc; a set is patches/<set>/ with one <Pkg>.diff per package it changes and whole new
 classes under patches/<set>/new/<Pkg>/Classes/. The sets, their order and dependencies are patches/sets.txt.
-docs/porting/analysis/script-patches.md (T1); patches/README.md for users.
+patches/README.md for users.
 
   uc-patches.py make <set> --base <tree> --changed <tree> [--packages A,B] [--patches <dir>]
       write patches/<set>/ from the difference base -> changed (the set's .diff files and new/ are replaced; its
@@ -348,7 +348,7 @@ def cmd_apply(base, out, sets, pdir, quiet=False):
             dst = os.path.join(out, rel)
             write_lines(dst, read_lines(src))
             files[rel] = dst
-        # H-5: a set's resources, new/<Pkg>/<folder>/ beside Classes (files its classes import with #exec, e.g.
+        # A set's resources, new/<Pkg>/<folder>/ beside Classes (files its classes import with #exec, e.g.
         # Textures/), go into the tree as <Pkg>/<folder>/; uc-build.sh links them beside the package's Classes
         ndir = os.path.join(pdir, name, 'new')
         for pk in (sorted(os.listdir(ndir)) if os.path.isdir(ndir) else []):

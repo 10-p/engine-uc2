@@ -2,8 +2,7 @@
 	UC2AudioData.cpp: the cooked audio data - cue tables (.uc2cues), wave bank
 	indexes (.uc2wb) and Ogg Vorbis decoding from memory.
 
-	The files are written by tools/cook-audio.py; their format is specified in
-	docs/porting/analysis/audio.md ("Cooked format"). Readers ignore keywords and
+	The files are written by tools/cook-audio.py, which defines their format. Readers ignore keywords and
 	keys they do not know, so the format can grow without breaking older builds.
 =============================================================================*/
 

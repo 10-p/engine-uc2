@@ -4,7 +4,7 @@ Ogg Theora/Vorbis files the portable movie player (Source/UC2Movie) plays.
 
 Input (read only): <epic-sources>/Movies/*.xmv and <epic-sources>/Textures/Movies/*.xmv.
 
-Output (never committed; default <WorkUC2>/assets/uc2-cooked):
+Output (never committed; default <repo>/../assets/uc2-cooked):
   Movies/<Name>.ogv               Theora video + the international (first, English) audio track as Vorbis
   Movies/<Name>_<lang>.oga        Vorbis only: the deu/fra/ita/spa track of a multi-language movie, written
                                   only when it differs from the international track
@@ -19,7 +19,7 @@ The format (ours) is specified in docs/porting/analysis/video.md ("Cooked format
                       [--video-quality 7] [--keyint 150] [--audio-quality 4] [--pcm-audio-quality 5]
                       [--no-measure] [--force]
 
-Every ffmpeg/ffprobe process runs inside <WorkUC2>/bin/capped 2G (at most --jobs of them at once, default 4).
+Every ffmpeg/ffprobe process runs inside <repo>/../bin/capped 2G (at most --jobs of them at once, default 4).
 """
 
 import argparse

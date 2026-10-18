@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# H-5 check (native): player one's keys in place of the pad's button glyphs (Source/Engine/Src/UnKeyGlyphs.cpp, script
+# Key glyphs check (native): player one's keys in place of the pad's button glyphs (Source/Engine/Src/UnKeyGlyphs.cpp, script
 # set key-glyphs). One PASS/FAIL line per check on stdout, then a summary.
 #
 #   tools/dev/h5-glyphs.sh [scenario...]        (default: menu info game travel vanilla; look on request)
@@ -16,7 +16,7 @@
 #            MOUSE page from the pause menu: JUMP / DODGE := J, and the combo menu's A shows J. Pictures combo-keys,
 #            combo-pad, pause-keys, combo-rebound; pixel check on the combo menu's green A.
 #   look     pictures only (no checks of their own but the scenario's): the character page and the combo menu at
-#            1920x1080 (the D-2 box, the key caps at 2.25x), keys and pad: look-char-keys, look-char-pad, look-combo-*.
+#            1920x1080 (the UI box, the key caps at 2.25x), keys and pad: look-char-keys, look-char-pad, look-combo-*.
 #   travel   the menu path on into a match (the character page, the armory, the launch): after the level change the
 #            adrenaline menu still draws the key caps (the gate's class, font and sheet are kept from the collector).
 #   vanilla  the menu path on a tree with the shipped GUI.u and UCMenu.u (H5_VANILLA_TREE, default h5v:
@@ -24,8 +24,8 @@
 #            keyboard, no error or critical line.
 #
 # Run tree: H5_TREE (default h5: tools/dev/mkrun-uc2.sh build-native h5). H5_GL4ES=1: the same on the GL4ES twin
-# (-gl4es). Every game run is tools/dev/m10-controls.sh --file (Xvfb inside <WorkUC2>/bin/capped 2G). Output: H5_OUT
-# (default <WorkUC2>/logs/h5/glyphs[-gl4es]): <scenario>.out (engine log), .result, .inject, <scenario>-<shot>.png.
+# (-gl4es). Every game run is tools/dev/m10-controls.sh --file (Xvfb inside <repo>/../bin/capped 2G). Output: H5_OUT
+# (default <repo>/../logs/h5/glyphs[-gl4es]): <scenario>.out (engine log), .result, .inject, <scenario>-<shot>.png.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
@@ -287,7 +287,7 @@ pad button x 0
 SCEN
 }
 
-# the owner's path on into a match: the character page (the key caps loaded there), the armory, the launch; after the
+# the path on into a match: the character page (the key caps loaded there), the armory, the launch; after the
 # level change (which collects what nothing references) the adrenaline menu still draws the caps
 scen_travel() {
   to_character

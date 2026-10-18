@@ -7,7 +7,7 @@
 =============================================================================*/
 
 #include "EnginePrivate.h"
-#include "UnMovie.h"	// engine-uc2 (M9)
+#include "UnMovie.h"
 #include "UnLinker.h"
 /*-----------------------------------------------------------------------------
 	Object class implementation.
@@ -305,9 +305,9 @@ UBOOL UEngine::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UEngine::Exec);
 
-	// FLUSHCONFIG: write the config cache to the file system now (engine-ut2004's command of the same name,
-	// ufront 2.28; the web host calls it through ue_exec_command, SDLLaunchWeb.cpp, before it reads the inis
-	// to keep them). A browser tab is closed, never shut down, so nothing may wait for appExit's flush; and a
+	// FLUSHCONFIG: write the config cache to the file system now (the web host calls it through ue_exec_command,
+	// SDLLaunchWeb.cpp, before it reads the inis to keep them). A browser tab is closed, never shut down, so
+	// nothing may wait for appExit's flush; and a
 	// value that was only set (SetString: the -ini: overrides, SaveURLConfig's [DefaultPlayer] values, the
 	// resolution switches) is not written by anything else until a SaveConfig or the exit. First in the chain
 	// so that no subsystem can claim it; the reply is what the host reads to know the engine acted.
@@ -647,7 +647,7 @@ UBOOL UEngine::InputEvent( UViewport* Viewport, EInputKey iKey, EInputAction Sta
 {
 	guard(UEngine::InputEvent);
 
-	// engine-uc2 (M9): while a full-screen movie plays it owns the input, as XboxMovieThread read the pads
+	// While a full-screen movie plays it owns the input, as XboxMovieThread read the pads
 	// itself and nothing else saw them (UnMovie.cpp, appMovieInputEvent).
 	if( appMovieInputEvent( iKey, State ) )
 		return 1;

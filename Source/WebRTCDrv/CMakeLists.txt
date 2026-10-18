@@ -1,9 +1,7 @@
 #=============================================================================
-# WebRTCDrv - the browser's network driver (E-2): engine packets over the frontend's WebRTC data channels
-# (vendor/glue/webrtc-shim.js forwards the webrtc_* imports to @ufront/glue). Web build only, as in
-# engine-ut2004 (its root CMakeLists adds Source/WebRTCDrv inside if(EMSCRIPTEN)): natively the game keeps
-# IpDrv.TcpNetDriver, and the driver has no transport outside a browser. Notebook:
-# docs/porting/analysis/webrtc.md.
+# WebRTCDrv - the browser's network driver: engine packets over the frontend's WebRTC data channels
+# (vendor/glue/webrtc-shim.js forwards the webrtc_* imports to @ufront/glue). Web build only: natively the
+# game keeps IpDrv.TcpNetDriver, and the driver has no transport outside a browser.
 #=============================================================================
 
 if(NOT EMSCRIPTEN)

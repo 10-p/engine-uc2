@@ -1,10 +1,9 @@
 /*=============================================================================
-	UC2Movie.h: the movie player package (M9).
+	UC2Movie.h: the movie player package.
 
 	FUC2MoviePlayer (Src/UC2MoviePrivate.h) plays the cooked Ogg Theora/Vorbis movies through the engine's
 	portable movie interface (Engine/Inc/UnMovie.h). Registering the package sets GCreateMoviePlayer, which
 	switches movies on; nothing of Ogg, Theora or Vorbis is visible here.
-	Design and evidence: docs/porting/analysis/video.md.
 =============================================================================*/
 
 #ifndef _INC_UC2MOVIE

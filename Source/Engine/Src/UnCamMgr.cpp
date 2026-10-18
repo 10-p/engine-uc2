@@ -95,7 +95,7 @@ void UClient::StaticConstructor()
 	// scion sz - max distortion
 	new(GetClass(),TEXT("MaxDistortion"),			RF_Public)UFloatProperty(CPP_PROPERTY(MaxDistortion		), TEXT("Display"), CPF_Config );
 
-	// D-2 (UI scaling, docs/porting/analysis/ui-scale.md): where the 640x480 UI goes on a bigger window.
+	// UI scaling: where the 640x480 UI goes on a bigger window.
 	UEnum* PUIScaleMode = new(GetClass(),TEXT("EUIScaleMode"))UEnum( NULL );
 	new(PUIScaleMode->Names)FName( TEXT("Native640") );		// UISCALE_Native640
 	new(PUIScaleMode->Names)FName( TEXT("Fit43") );			// UISCALE_Fit43
@@ -140,7 +140,7 @@ void UClient::Destroy()
 UBOOL UClient::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UClient::Exec);
-	// D-2: UISCALE [Native640|Fit43] [Box|Fill] [Sharp|Soft] switches the UI mapping for this session (the ini
+	// UISCALE [Native640|Fit43] [Box|Fill] [Sharp|Soft] switches the UI mapping for this session (the ini
 	// keeps its UIScaleMode/UIMenuBackground/UISharpText); without arguments it says what is in use.
 	if( ParseCommand(&Cmd,TEXT("UISCALE")) )
 	{
@@ -278,7 +278,7 @@ UBOOL UClient::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		{
 			Parse(Cmd, TEXT("ID="), GamepadID);
 #ifndef _XBOX
-			if( SplitScreenViewports() )	// uc2 port (G-6): the Xbox branch, on a client that can draw it
+			if( SplitScreenViewports() )	// The Xbox branch, on a client that can draw it
 			{
 				debugf( NAME_DevSplitScreen, TEXT("TEST: Adding splitscreen  GamepadID:%i"), GamepadID );
 				if( BeginSplitScreen( this, GamepadID ) )
@@ -303,11 +303,11 @@ UBOOL UClient::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		if( ParseCommand(&Cmd,TEXT("REMOVE")) )
 		{
 #ifndef _XBOX
-			if( SplitScreenViewports() )	// uc2 port (G-6): the Xbox branch below
+			if( SplitScreenViewports() )	// The Xbox branch below
 			{
 				USplitScreenMgr* SplitScreenMgr = GetSplitScreenMgr();
 				check(SplitScreenMgr);
-				// X-1: SPLIT REMOVE ID=<pad> removes the split player of that pad (a player three or four leaving
+				// SPLIT REMOVE ID=<pad> removes the split player of that pad (a player three or four leaving
 				// the character page, patch set players34; never player one's view); without ID the last one, as Epic's.
 				INT RemoveID = -1;
 				if( Parse( Cmd, TEXT("ID="), RemoveID ) )
@@ -318,7 +318,7 @@ UBOOL UClient::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 							RemoveView = SplitScreenMgr->GetSplitView(i);
 					debugf( NAME_DevSplitScreen, TEXT("Split screen: removing the player of pad %i: %s"), RemoveID, RemoveView ? RemoveView->GetName() : TEXT("no such split view") );
 					// removed as Epic's REMOVE removes the last one (no ClearQueriesForViewport: on a split view of
-					// the menus, never drawn, it found another viewport's queries and crashed, measured in X-1)
+					// the menus, never drawn, it would find another viewport's queries and crash)
 					if( RemoveView )
 					{
 						SplitScreenMgr->RemoveSplitViewport( RemoveView );

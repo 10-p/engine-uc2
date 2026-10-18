@@ -1,5 +1,5 @@
 /*=============================================================================
-	UC2ZoneSurvey.cpp: `ucc-bin UC2ALAudio.UC2ZoneSurvey [MAP=<name>]` (O-4, 2026-10-06).
+	UC2ZoneSurvey.cpp: `ucc-bin UC2ALAudio.UC2ZoneSurvey [MAP=<name>]`.
 
 	Loads every map in ../Maps (or one) and lists its zones - the LevelInfo (the default zone of a level) and
 	every ZoneInfo, WaterZone, SkyZoneInfo... - with the EZoneAudioEffect each carries (ZoneInfo.uc), which is

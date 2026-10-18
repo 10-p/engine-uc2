@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""B-3: where the split-screen HUD sits, per viewport (docs/porting/analysis/split-hud.md).
+"""Where the split-screen HUD sits, per viewport.
 
     b3-hud-measure.py <out-dir> [<mode>]      mode: Fit43 (default) or Native640; reads b3-hud-<tag>-hud.png and
                                               b3-hud-<tag>.json (tags n1 n2 n3 n4) of tools/dev/g6-splitscreen.sh hud

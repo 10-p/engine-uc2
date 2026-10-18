@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # saveconfig check: script SaveConfig() / StaticSaveConfig() on PC ([Engine.Engine] ScriptSaveConfig), the engine's
-# SAVECONFIGKEYS command, and the D-6 mouse console commands that use it. One PASS/FAIL line per check, then a summary.
+# SAVECONFIGKEYS command, and the mouse console commands that use it. One PASS/FAIL line per check, then a summary.
 #
 #   tools/dev/sc-saveconfig.sh [part...]        parts: u g m w   (default: u g m, and w when the wasm tree exists)
 #
@@ -15,13 +15,13 @@
 #      the FOV are not), a level change keeps them, a restart gives them back (class defaults and the running player),
 #      the profile's pad invert/sensitivity win over the ini's and the mouse's settings are the ini's; with
 #      ScriptSaveConfig=False the commands last for the session and nothing is written
-#   m  a menu round trip and a full match (the C-2 flow: profile, Instant Action, DM-Deadbolt) with ScriptSaveConfig on and
+#   m  a menu round trip and a full match (profile, Instant Action, DM-Deadbolt) with ScriptSaveConfig on and
 #      off: no script save runs, the inis come out the same, and every key the run wrote is on the allow-list below
 #
-# Trees (<WorkUC2>/run/<name>, tools/dev/mkrun-uc2.sh; UC2_SCRIPTS=<dir with the UCGameplay.u of this branch>):
+# Trees (<repo>/../run/<name>, tools/dev/mkrun-uc2.sh; UC2_SCRIPTS=<dir with the UCGameplay.u of this branch>):
 # SC_TREE (default sc, native), SC_WASM_TREE (default scw: mkrun-uc2.sh build-native scw build-wasm-perf).
-# Every run is inside <WorkUC2>/bin/capped (ucc 3G, wasm under Node 3G, game 2G through m10-controls.sh). Output:
-# SC_OUT (default <WorkUC2>/logs/sc/check).
+# Every run is inside <repo>/../bin/capped (ucc 3G, wasm under Node 3G, game 2G through m10-controls.sh). Output:
+# SC_OUT (default <repo>/../logs/sc/check).
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)

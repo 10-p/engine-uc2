@@ -1,22 +1,21 @@
 /*=============================================================================
 	UC2GLPostProcess.cpp: render targets as shader inputs and the post-process
-	interface (M7, renderer R3).
+	interface.
 
 	The Xbox build of UC2 reads its own back buffer and depth buffer as textures
 	(distortion, depth of field, bloom, blurs, colour remap) and keeps a blurred half-size
-	copy of the back buffer. Epic implemented none of it on PC: FD3DRenderInterface's
+	copy of the back buffer. Epic implements none of it on PC: FD3DRenderInterface's
 	functions return early outside _XBOX. Here are the bodies for OpenGL. The specification
 	is the _XBOX code of Source/D3DDrv/Src/D3DRenderInterface.cpp (CopyDepthBuffer,
 	GetBackBufferCopyTarget, UpdateBackBufferCopyTarget, GetBackBufferMaterial,
 	FD3DDynamicGamma) and D3DMaterialState.cpp (UpdateDOFRampLookupTexture); functions
 	ported from there keep Epic's text and name what was changed with "UC2GLDrv:".
 
-	THE COORDINATE CONVENTIONS, in one place (docs/porting/analysis/postprocess.md has the
-	long version):
+	The coordinate conventions, in one place:
 
 	1. Every texture a material can sample is stored top row first, as Direct3D stores
 	   it: v = 0 is the top of the picture. Render-target textures get that way because
-	   the interface draws into them upside down in GL's window space (M5: the "Flipped"
+	   the interface draws into them upside down in GL's window space (the "Flipped"
 	   targets of FOpenGLRenderInterface). The engine's texture coordinates therefore need
 	   no change anywhere.
 	2. The one exception is the main framebuffer (the default render target): it is drawn
@@ -30,14 +29,14 @@
 	   (FDefaultRenderTarget::DepthBufferTexture, a D3DFMT_LIN_B8G8R8A8 view of the D24S8
 	   buffer). The copy pass writes the 24-bit depth into the bytes that view showed:
 	   blue = bits 23..16, green = 15..8, red = 7..0. GL's window depth equals D3D's z here
-	   (M5's clip fix-up maps z to 2z-w and the depth range is 0..1).
+	   (the clip fix-up maps z to 2z-w and the depth range is 0..1).
 	4. Half-texel offset. Direct3D 8 puts pixel centres on integer coordinates, so a
 	   full-target quad drawn at 0..size with texture coordinates 0..1 would read a
 	   same-size texture on texel boundaries. Epic's screen tiles do not do that:
 	   FScreenPrimUtil's canvas matrix moves every tile half a pixel up and left
 	   (UnRenderUtil.h, "- 0.5f"), so destination pixel (x,y) samples at ((x+0.5)/w,
 	   (y+0.5)/h): texel centres for a same-size copy, the shared corner of 2x2 texels for
-	   a half-size one. M5's clip fix-up makes GL rasterise exactly as D3D does, so the same
+	   a half-size one. The clip fix-up makes GL rasterise exactly as D3D does, so the same
 	   holds here with no further correction; the self-test (UC2GLSelfTest.cpp: blur-h,
 	   blur-v, blur-box, bb-copy) checks it against a CPU computation, and fails by 70 to
 	   120 of 255 if the half pixel is left out. A point-filtered read that lands exactly on
@@ -79,14 +78,14 @@ static const char* GPostCopyFragmentShader =
 	"	gl_FragColor = texture2D( uSource, vTexCoord );\n"
 	"}\n";
 
-// Depth as the Xbox's D3DFMT_LIN_B8G8R8A8 view of a D24S8 buffer shows it. Alpha was the
+// Depth as the Xbox's D3DFMT_LIN_B8G8R8A8 view of a D24S8 buffer shows it. Alpha is the
 // stencil byte there; no shader of the game reads it (DOF.psh uses green and blue only).
 // The depth arrives as a 32-bit float: the 24-bit value is reproduced to within two units
 // (self-test "depth-color"), and without the min() a depth of exactly 1 (the cleared buffer,
-// the sky) rounds up to 2^24, whose high byte does not exist: found by self-test "dof-ramp".
-// M11: 2^24-1 is written as a product because gl4es reprints every float literal of a shader
-// with six significant digits (16777215.0 became 1.67772e+07 = 16777200; found by self-test
-// "depth-color" on the twin). No literal in any shader of the driver may need more than six.
+// the sky) rounds up to 2^24, whose high byte does not exist (self-test "dof-ramp").
+// 2^24-1 is written as a product because gl4es reprints every float literal of a shader
+// with six significant digits (16777215.0 becomes 1.67772e+07 = 16777200). No literal in any
+// shader of the driver may need more than six.
 static const char* GPostDepthEncodeFragmentShader =
 	"uniform UC2_HIGHP sampler2D uSource;\n"
 	"varying vec2 vTexCoord;\n"
@@ -109,13 +108,13 @@ static const char* GPostDepthCopyFragmentShader =
 	"	gl_FragColor = vec4( 0.0 );\n"
 	"}\n";
 
-// pp-scale: the reference copy (docs/porting/analysis/pp-scale.md). One pixel of it is the average
+// The reference copy. One pixel of it is the average
 // of the k x k back-buffer pixels under it (k = back-buffer lines per reference line), read as
 // N x N bilinear samples spread evenly over them: uStep = the distance between two samples in source
 // texture coordinates (a reference pixel divided by N). N = ceil(k), at most 8, is a constant of the
 // program (UC2_TAPS, put in front of this text; the program is built again when N changes): a loop
-// with a uniform bound and a break ran about 4 ms slower per frame at 3840x2160 on the owner's
-// NVIDIA card than the snapshot it replaces (the 25 reads of 5x5 could not be issued together).
+// with a uniform bound and a break is much slower at high resolutions than the snapshot it replaces
+// (the 25 reads of 5x5 cannot be issued together).
 static const char* GPostReferenceFragmentShader =
 	"uniform sampler2D uSource;\n"
 	"uniform vec4 uStep;\n"
@@ -207,7 +206,7 @@ UBOOL UUC2GLRenderDevice::InitPostProcess()
 		ExitPostProcess();
 		return 0;
 	}
-	// pp-scale: without it the downsampling passes read the full-size snapshot (sparser, but the
+	// Without it the downsampling passes read the full-size snapshot (sparser, but the
 	// same positions): not a reason to switch post-processing off.
 	// (Built here for 2 x 2 samples to know it builds; UC2GL_UpdateReferenceCopy builds it again for the
 	// back buffer's N.)
@@ -219,7 +218,7 @@ UBOOL UUC2GLRenderDevice::InitPostProcess()
 		!PostProcessReferenceHeight ? TEXT("blurs in back-buffer pixels, as before") :
 		PostReferenceProgram ? TEXT("blurs sized for a picture of that many lines, read from a copy of the back buffer that size") :
 		TEXT("blurs sized for a picture of that many lines; the reference copy program failed, the full-size snapshot is read instead") );
-	// H-1: what GetRenderCaps hands the effects (only 1, 2 and 4 are made).
+	// What GetRenderCaps hands the effects (only 1, 2 and 4 are made).
 	INT TargetScale = PostProcessTargetScale < 2 ? 1 : PostProcessTargetScale < 4 ? 2 : 4;
 	debugf( NAME_Init, TEXT("UC2GLDrv: post-process target scale %i%s (%s)"), TargetScale,
 		TargetScale != PostProcessTargetScale ? *FString::Printf( TEXT(" (ini %i)"), PostProcessTargetScale ) : TEXT(""),
@@ -302,15 +301,13 @@ void UUC2GLRenderDevice::SetPostProcess( UBOOL Enable )
 }
 
 //
-// B-2: a 2D texture for one of the device's own GLSL draws (the copies below, the present pass), on <Unit>,
-// which is left active. Through GL4ES (the twin and the web) the fixed-function texture enables are still
+// A 2D texture for one of the device's own GLSL draws (the copies below, the present pass), on <Unit>,
+// which is left active. Through GL4ES (natively and on the web) the fixed-function texture enables are still
 // state at a GLSL draw: GL4ES puts a unit's 2D texture into the GLES 2D slot only when the enable flags of the
-// ACTIVE unit say 2D (realize_textures, texture_params.c). A fixed-function pass that left GL_TEXTURE_CUBE_MAP
-// enabled on unit 0 (an environment-mapped material: DM-Decay's water) made the bind below a no-op, and the
-// draw sampled whatever 2D texture GL4ES had last made real on that unit (a smoke particle's cloud; the
-// reference copy, and with it the emissive glow and the bloom, became that texture: a white cloud fixed on the
-// screen). Desktop GL ignores the enables while a program is in use; units beyond the texture environment
-// have none. docs/porting/analysis/decay-flash.md.
+// active unit say 2D (realize_textures, texture_params.c). A fixed-function pass that left GL_TEXTURE_CUBE_MAP
+// enabled on unit 0 (an environment-mapped material: DM-Decay's water) would make the bind below a no-op, and
+// the draw would sample whatever 2D texture GL4ES had last made real on that unit. Desktop GL ignores the
+// enables while a program is in use; units beyond the texture environment have none.
 //
 void UUC2GLRenderDevice::BindProgramTexture2D( INT Unit, GLuint Texture )
 {
@@ -403,9 +400,9 @@ GLuint UUC2GLRenderDevice::GetSampledTexture( FOpenGLTexture* Texture )
 }
 
 //
-// pp-scale: is there a reference copy to make? Post-processing on, a reference height, its
-// program, and a back buffer taller than the reference picture (at 480 lines or fewer the
-// downsampling passes read the snapshot exactly as before).
+// Is there a reference copy to make? Post-processing on, a reference height, its program, and a
+// back buffer taller than the reference picture (at 480 lines or fewer the downsampling passes
+// read the snapshot itself).
 //
 UBOOL UUC2GLRenderDevice::ReferenceCopyActive()
 {
@@ -413,7 +410,7 @@ UBOOL UUC2GLRenderDevice::ReferenceCopyActive()
 }
 
 //
-// pp-scale: the reference copy, brought up to date (see the header and GPostReferenceFragmentShader).
+// The reference copy, brought up to date (the header and GPostReferenceFragmentShader).
 //
 static void UC2GL_UpdateReferenceCopy( UUC2GLRenderDevice* RenDev )
 {
@@ -460,7 +457,7 @@ static void UC2GL_UpdateReferenceCopy( UUC2GLRenderDevice* RenDev )
 	extern UBOOL UC2GL_PixelTraceDumping( UUC2GLRenderDevice* );
 	if( UC2GL_PixelTraceDumping( RenDev ) )
 	{
-		// B-2 (GLPIXTRACE ... dump): the reference copy as the downsampling passes read it, and the main colour.
+		// GLPIXTRACE ... dump: the reference copy as the downsampling passes read it, and the main colour.
 		extern void UC2GL_PixelTraceDumpBound( UUC2GLRenderDevice*, INT, INT, UBOOL, const TCHAR* );
 		extern INT UC2GL_PixelTraceFrame();
 		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, RenDev->ReferenceFramebuffer );
@@ -488,8 +485,8 @@ void UUC2GLRenderDevice::UpdateSampledTexture( FOpenGLTexture* Texture )
 	if( Texture->DefaultUsage == FRenderTarget::RT_MATERIAL_USE_DEPTHBUFFER )
 	{
 		// Desktop GL: the main depth buffer is a texture and one quad re-encodes it.
-		// M11 (WebGL without WEBGL_depth_texture): this is the place where the depth colour
-		// would instead come from a cheap pass that draws the scene's depth as colour.
+		// (WebGL without WEBGL_depth_texture: this is the place where the depth colour
+		// would instead come from a cheap pass that draws the scene's depth as colour.)
 		if( !DepthColorTexture )
 		{
 			UC2GL_CreateColorTarget( this, DepthColorTexture, DepthColorFramebuffer, MainWidth, MainHeight );
@@ -497,11 +494,10 @@ void UUC2GLRenderDevice::UpdateSampledTexture( FOpenGLTexture* Texture )
 		}
 		if( !MainDepthStencil )
 		{
-			// M11, NOT IMPLEMENTED YET: a context without depth textures (CapDepthTexture; WebGL 1
-			// without WEBGL_depth_texture). The plan is a second draw of every depth-writing
-			// primitive into this target (docs/porting/analysis/web-renderer.md, "Fallbacks").
-			// Until then the depth colour says "near" everywhere: the depth of field, its only
-			// reader, then leaves the picture sharp instead of blurring all of it.
+			// A context without depth textures (CapDepthTexture; WebGL 1 without WEBGL_depth_texture)
+			// has no fallback (it would be a second draw of every depth-writing primitive into this
+			// target): the depth colour says "near" everywhere, and the depth of field, its only
+			// reader, leaves the picture sharp instead of blurring all of it.
 			UC2GL_LOG_ONCE( TEXT("UC2GLDrv: no depth textures on this context: the depth of field has no depth to read and stays off (fallback not implemented)") );
 			if( DepthColorVersion == -1 )
 			{
@@ -525,7 +521,7 @@ void UUC2GLRenderDevice::UpdateSampledTexture( FOpenGLTexture* Texture )
 	}
 	else if( SampleReference )
 	{
-		// pp-scale: a downsampling pass reads the back buffer as the reference picture.
+		// A downsampling pass reads the back buffer as the reference picture.
 		UC2GL_UpdateReferenceCopy( this );
 	}
 	else
@@ -574,8 +570,8 @@ void UUC2GLRenderDevice::SetGammaRamp( const BYTE* Ramp )
 }
 
 /*-----------------------------------------------------------------------------
-	G-6: dynamic gamma per split-screen viewport. FD3DDynamicGamma set the display's ramp, one for the
-	screen, so Epic's split screen switched it off (USplitScreenMgr::UpdateDetailLevels); the ramp is ours
+	Dynamic gamma per split-screen viewport. FD3DDynamicGamma sets the display's ramp, one for the
+	screen, so Epic's split screen switches it off (USplitScreenMgr::UpdateDetailLevels); here the ramp is the driver's
 	(the present pass applies it), so each viewport gets its own, applied to its rectangle
 	(FRenderCaps::ViewportDynamicGamma lifts the switch-off).
 -----------------------------------------------------------------------------*/
@@ -693,7 +689,7 @@ void FOpenGLRenderInterface::RestoreAfterDeviceDraw()
 void FOpenGLRenderInterface::PrepareSampledTargets( FOpenGLMaterialState* MaterialState )
 {
 	UBOOL Nudge = 0;
-	// pp-scale: a pass that draws the back buffer into a render target of at most three quarters
+	// A pass that draws the back buffer into a render target of at most three quarters
 	// of its height is a downsampling pass of the post-processing (the first pass of the depth of
 	// field, the emissive and bloom selections, the back-buffer copy, the luminance target; the
 	// targets are at most half the back buffer). It reads the reference copy: the back buffer as a
@@ -768,7 +764,7 @@ FRenderTarget* FOpenGLRenderInterface::GetBackBufferCopyTarget()
 	guard(FOpenGLRenderInterface::GetBackBufferCopyTarget);
 
 	// UC2GLDrv: PC's D3DDrv would dereference GetBackBufferMaterial()'s NULL here; nothing
-	// on PC calls it. Without post-processing: what M5 returned.
+	// on PC calls it. Without post-processing: the plain copy target.
 	if( !RenDev->PostProcessActive() )
 		return BackBufferCopyTarget;
 
@@ -866,7 +862,7 @@ void FOpenGLRenderInterface::UpdateBackBufferCopyTarget( UViewport* InViewport )
 	// weights should default to 0.25f
 	FLOAT OneTexelU = 1.0f / (FLOAT)FullScreenSizeX;
 	FLOAT OneTexelV = 1.0f / (FLOAT)FullScreenSizeY;
-	// UC2GLDrv (pp-scale): the taps are pixels of the reference picture (k back-buffer pixels;
+	// UC2GLDrv: the taps are pixels of the reference picture (k back-buffer pixels;
 	// GetPostProcessReference, 1 at 480 lines), read from the reference copy (PrepareSampledTargets:
 	// the target is half the back buffer), so the blurred copy is as blurred, for its share of the
 	// picture, as the Xbox's. The target itself stays half the back buffer: it is also the
@@ -988,9 +984,9 @@ void FOpenGLRenderInterface::CopyDepthBuffer( FRenderTarget* DestTarget, FRender
 
 	if( !RenDev->MainDepthStencil )
 	{
-		// M11, NOT IMPLEMENTED: a context without depth textures (WebGL 1 without
-		// WEBGL_depth_texture) has no scene depth a shader can read, so neither the copy nor
-		// the in-shader test below can be done (web-renderer.md, "Fallbacks"). The target's
+		// A context without depth textures (WebGL 1 without WEBGL_depth_texture) has no scene
+		// depth a shader can read, so neither the copy nor the in-shader test below can be done
+		// (no fallback). The target's
 		// depth is cleared: what is drawn into it (the distortion accumulation) is not hidden
 		// by nearer scene geometry.
 		UC2GL_LOG_ONCE( TEXT("UC2GLDrv: no depth textures on this context: the scene's depth cannot reach the distortion accumulation target, distortion shows through nearer geometry (fallback not implemented)") );
@@ -1025,11 +1021,11 @@ void FOpenGLRenderInterface::CopyDepthBuffer( FRenderTarget* DestTarget, FRender
 		U0,
 		1.f - V0
 	};
-	// O-8: the multisampled main depth into the texture both paths below read.
+	// The multisampled main depth into the texture both paths below read.
 	RenDev->ResolveMain( 0, 1 );
 	if( !RenDev->CapFragDepth )
 	{
-		// M11, a context without gl_FragDepth (WebGL 1 without EXT_frag_depth): the depth
+		// A context without gl_FragDepth (WebGL 1 without EXT_frag_depth): the depth
 		// cannot be written by a shader, so it is not copied. The target's depth is cleared
 		// instead (the accumulation passes still test against each other there), and every
 		// program pass drawn into this target until the next frame compares its fragment's
@@ -1210,8 +1206,8 @@ public:
 	};
 
 	FOpenGLRenderInterface*	RI;
-	UViewport*				Owner;			// G-6: the split-screen viewport this one is for (NULL: the window's)
-	INT						RampCount;		// G-6: per instance (the log line every 200th ramp)
+	UViewport*				Owner;			// The split-screen viewport this one is for (NULL: the window's)
+	INT						RampCount;		// Per instance (the log line every 200th ramp)
 	FLOAT					UpdateRate,
 							TransitionRate,
 							LastUpdateTime;
@@ -1289,7 +1285,7 @@ void FOpenGLDynamicGamma::UpdateLuminanceTarget()
 	BackBufferTexMatrix->Material = RI->GetBackBufferMaterial();
 	PSLuminanceTransform->TextureStage0 = BackBufferTexMatrix;
 
-	// G-6: the viewport's rectangle of the back buffer (all of it for the window's viewport): a split-screen
+	// The viewport's rectangle of the back buffer (all of it for the window's viewport): a split-screen
 	// viewport's ramp follows its own picture. (Epic: always 0..1, the whole back buffer.)
 	UViewport* VP = RI->Viewport;
 	FLOAT MW = Max( RI->RenDev->MainWidth, 1 ), MH = Max( RI->RenDev->MainHeight, 1 );
@@ -1485,12 +1481,12 @@ void FOpenGLDynamicGamma::UpdateDeviceGamma()
 	}
 
 	if( Owner )
-		RI->RenDev->SetViewportGammaRamp( Owner, GammaRamp );	// G-6: this viewport's rectangle only
+		RI->RenDev->SetViewportGammaRamp( Owner, GammaRamp );	// This viewport's rectangle only
 	else
 		RI->RenDev->SetGammaRamp( GammaRamp );
 	ForceUpdate = 0;
 
-	// UC2GLDrv: evidence for the log, every 200th ramp (G-6: of each viewport; "viewport" = its index).
+	// UC2GLDrv: a log line every 200th ramp (of each viewport; "viewport" = its index).
 	if( (RampCount++ % 200) == 0 )
 		debugf( NAME_Init, TEXT("UC2GLDrv: dynamic gamma ramp %i%s: luminance min %.3f max %.3f average %.3f (histogram %.3f %.3f %.3f), exponent %.3f, ramp[64,128,192] = %i %i %i"),
 			RampCount, Owner ? *FString::Printf( TEXT(" (viewport %i at %i,%i %ix%i)"), Owner->GetOuterUClient()->Viewports.FindItemIndex(Owner), Owner->OffsetX, Owner->OffsetY, Owner->SizeX, Owner->SizeY ) : TEXT(""),
@@ -1509,7 +1505,7 @@ void FOpenGLRenderInterface::UpdateDynamicGamma()
 	if( !RenDev->PostProcessActive() || !RenDev->PixelShaderFamilyReady( PS_LuminanceTexIndex ) )
 		return;
 
-	// G-6: one dynamic gamma per split-screen viewport (its own histogram, adaptation and ramp), the
+	// One dynamic gamma per split-screen viewport (its own histogram, adaptation and ramp), the
 	// window's for a viewport that is the whole window. Those of viewports that are gone are deleted.
 	FOpenGLDynamicGamma* Gamma = NULL;
 	if( UUC2GLRenderDevice::IsSplitViewport( Viewport ) )
@@ -1564,7 +1560,7 @@ void FOpenGLRenderInterface::UpdateDynamicGamma()
 FLOAT FOpenGLRenderInterface::GetAverageSceneLuminosity()
 {
 	FLOAT AverageSceneLuminosity = 0.5f;
-	FOpenGLDynamicGamma* Gamma = CurrentDynamicGamma ? CurrentDynamicGamma : DynamicGamma;	// G-6: this viewport's
+	FOpenGLDynamicGamma* Gamma = CurrentDynamicGamma ? CurrentDynamicGamma : DynamicGamma;	// This viewport's
 	if( Gamma )
 	{
 		AverageSceneLuminosity = (Gamma->CurMaxL - Gamma->CurMinL) * 0.5f ;

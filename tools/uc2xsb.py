@@ -2,8 +2,7 @@
 """uc2xsb.py: read the simple parts of a shipped Xbox XACT sound bank (.xsb, format version 11).
 
 The XDK documents no .xsb layout (xact.h only has the runtime API). What follows was decoded by comparing the 78
-shipped banks of the project with Sounds/Avaris.xap (tools/dev/audio-xsb-verify.py checks it; the evidence is in
-docs/porting/analysis/audio-f6.md, step 2). Only what a bank made of plain sounds needs is read; anything else
+shipped banks of the project with Sounds/Avaris.xap (tools/dev/audio-xsb-verify.py checks it). Only what a bank made of plain sounds needs is read; anything else
 raises XsbUnsupported, so a bank is cooked either faithfully or not at all.
 
   0x00 'SDBK'  u16 version (11)  u16 checksum
@@ -29,12 +28,12 @@ raises XsbUnsupported, so a bank is cooked either faithfully or not at all.
   3D record: u16 inside cone angle, u16 outside cone angle, s32 cone outside volume (mB), f32 minimum distance,
        f32 maximum distance, f32 distance factor, f32 rolloff factor, f32 doppler factor, 12 bytes 0
 
-Everything else of the format, decoded in M16 (docs/porting/analysis/xbox-audio-runtime.md; read_xsb_full reads it and
+Everything else of the format (read_xsb_full reads it and
 tools/dev/audio-xsb-verify.py --full compares it with the cooked cue tables, the C++ reader in Source/UC2ALAudio is the
 same layout):
   0x20 u16 at 0x20 (the "?" above): the number of RPC records
   sound +4: bits 0-8 attenuation in 16 mB steps (the volume), bits 9-15 the LFE level in -50 mB steps (0x7F = none);
-       the "5 overflowed volumes" of F-6 are the 5 sounds with an LFE level, read correctly this way
+       read as one volume field, the 5 sounds with an LFE level would overflow
   sound flags 0x10: +0 is the offset of a variation table (one play event at time 0, no pitch/volume variation)
   sound +15: 1 = the sound sends to I3DL2 (the level itself is not stored: the project's -300 mB is taken)
   sound +16: parametric EQ parameters when flag 4 (not read); RPCs are not referenced from the sound

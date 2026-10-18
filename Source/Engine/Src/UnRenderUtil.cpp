@@ -790,7 +790,7 @@ FCanvasUtil::FCanvasUtil(FRenderTarget* RenderTarget,FRenderInterface* InRI) :
 	FLOAT	SizeX = RenderTarget->GetWidth(),
 			SizeY = RenderTarget->GetHeight();
 
-	// D-2: target pixels until UCanvas::Update() says otherwise.
+	// Target pixels until UCanvas::Update() says otherwise.
 	bUIBoxed	= 0;
 	UIScale		= 1.f;
 	UIOriginX	= UIOriginY = 0.f;
@@ -1462,11 +1462,11 @@ void FScreenPrimUtil::DrawTile(FLOAT X1,FLOAT Y1,FLOAT X2,FLOAT Y2,FLOAT U1[4],F
 	NumPrimitives += 1;
 
 #else
-	// UC2 port (M7): Epic's PC branch queued these four corners, which are in quad order
+	// Epic's PC branch queues these four corners, which are in quad order
 	// (X1Y1, X2Y1, X2Y2, X1Y2), as a triangle strip. A strip of them is the two triangles
 	// X1Y1-X2Y1-X2Y2 and X2Y1-X2Y2-X1Y2: the quarter of the tile between its left edge and
-	// its centre is never drawn. Nothing on PC reached this function (its callers are the
-	// Xbox-only post-process paths), so it was never seen. In this order the corners are a
+	// its centre is never drawn (on PC nothing reaches this function in Epic's build: its
+	// callers are the Xbox-only post-process paths). In this order the corners are a
 	// triangle fan; a fan holds one tile, so each tile is its own draw (the Xbox draws
 	// them as a quad list, one after the other).
 	BeginPrimitive(PT_TriangleFan,Material);
@@ -2358,7 +2358,7 @@ void ENGINE_API FMultiSampleFilter::GenerateStreakFilter( EMultiSampleType InTyp
 }
 
 //
-// UC2 port (pp-scale): see UnRenderUtil.h.
+// See UnRenderUtil.h.
 //
 ENGINE_API FPostProcessReference GetPostProcessReference( INT BackBufferWidth, INT BackBufferHeight )
 {
@@ -2398,7 +2398,7 @@ void ENGINE_API FilterCopyRenderTarget( FRenderTarget* DestTarget, FRenderTarget
 
 	check( DestTarget && SrcTarget && RI );
 
-	// UC2 port (H-1; docs/porting/analysis/h1-bloom.md): a target-to-target pass of a chain whose targets have
+	// A target-to-target pass of a chain whose targets have
 	// TapScale (2 or 4) times the Xbox's texels per axis (RenDevPostProcessTargetScale). Its taps move TapScale
 	// times as many texels (the same distance on the screen), and each tap becomes the mean of TapScale bilinear
 	// reads 2 texels apart (offsets 2j - TapScale + 1) along each axis the filter reaches. A bilinear tap on a
@@ -2499,8 +2499,8 @@ void ENGINE_API FilterCopyRenderTarget( FRenderTarget* DestTarget, FRenderTarget
 	FLOAT OneTexelU = 1.0f / (FLOAT)SrcTarget->GetWidth();
 	FLOAT OneTexelV = 1.0f / (FLOAT)SrcTarget->GetHeight();
 
-	// UC2 port (pp-scale): a source given with its viewport is the back buffer (the first pass of
-	// the depth-of-field and emissive chains). Its taps were pixels of the Xbox's 640x480 back
+	// A source given with its viewport is the back buffer (the first pass of
+	// the depth-of-field and emissive chains). Epic's taps are pixels of the Xbox's 640x480 back
 	// buffer; here they are pixels of the reference picture (GetPostProcessReference: PixelScale
 	// back-buffer pixels each; 1 at 480 lines or without a reference), so the pass reaches the
 	// same share of the picture at any resolution. The device reads such a pass from its
@@ -2512,7 +2512,7 @@ void ENGINE_API FilterCopyRenderTarget( FRenderTarget* DestTarget, FRenderTarget
 		OneTexelV *= PixelScale;
 	}
 
-	// UC2 port (H-1): see above.
+	// See above.
 	OneTexelU *= Scale;
 	OneTexelV *= Scale;
 
@@ -2557,7 +2557,7 @@ void ENGINE_API FilterCopyRenderTarget( FRenderTarget* DestTarget, FRenderTarget
 			BlurPixelShader->BlurBlendMode = BlurBlendMode;
 		else
 			BlurPixelShader->BlurBlendMode = BLUR_ADD;
-		BlurPixelShader->BlurBlendMode |= FillFlags;	// UC2 port (H-1)
+		BlurPixelShader->BlurBlendMode |= FillFlags;
 
 		TextureCanvas.DrawTile(
 			0, 0, DestTarget->GetWidth(), DestTarget->GetHeight(),

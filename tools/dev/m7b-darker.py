@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""How much darker picture A is than picture B, pixel by pixel (M7b: the PC shadow against the Xbox one).
+"""How much darker picture A is than picture B, pixel by pixel (e.g. the PC shadow against the Xbox one).
 
     tools/dev/m7b-darker.py A.png B.png A2.png
 

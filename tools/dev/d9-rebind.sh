@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# D-9 check (native): the KEYBOARD / MOUSE settings page (UCMenu.UC2Settings_Keys): rebinding keys in game, the mouse
+# Keys page check (native): the KEYBOARD / MOUSE settings page (UCMenu.UC2Settings_Keys): rebinding keys in game, the mouse
 # sensitivity slider and invert, persistence across a restart. One PASS/FAIL line per check on stdout, then a summary.
 #
 #   tools/dev/d9-rebind.sh [scenario...]        (default: menu match restart nodefaults pad actions)
@@ -8,13 +8,13 @@
 #            keys; the slider by mouse (a click on the bar, on its plus end) and CANCEL; the slider by keyboard to 5.0;
 #            mouse invert on; a click on a key cell captures; a capture takes letters raw (S does not move the
 #            selection); JUMP / DODGE := J (J's old command replaced); a conflict (MOVE FORWARD := S: MOVE BACK
-#            loses S and W is unbound; F-1: clear, not swap); Escape cancels a capture and keeps the page; the console key opens the console during a capture
+#            loses S and W is unbound: clear, not swap); Escape cancels a capture and keeps the page; the console key opens the console during a capture
 #            and the capture waits on; a mouse button (JUMP ONLY :=
 #            mouse button 4); clearing with X, with Delete, with Backspace in a capture; a fixed row; leaving saves;
 #            the live bindings; the page reopens with them; then User.ini: exactly the changed keys differ from
 #            DefUser.ini, the pad's keys are untouched, the mouse settings are there
 #   match    a NEW process on the same User.ini (the restart): DM-Deadbolt, null renderer: the bindings and the mouse
-#            settings are back; J jumps and Space does not; mouse button 4 jumps; S walks forward and W does nothing (cleared by the conflict, F-1); the mouse
+#            settings are back; J jumps and Space does not; mouse button 4 jumps; S walks forward and W does nothing (cleared by the conflict); the mouse
 #            turns twice the default per count (sensitivity 5.0, d6-mouse.sh's measurement) and up looks down
 #            (invert); then from the PAUSE menu (OPTIONS -> KEYBOARD / MOUSE): the page shows them, DEFAULTS and CANCEL
 #            and DEFAULTS again, leave: Space jumps, J does not, the mouse turns the default amount and up looks up
@@ -25,12 +25,12 @@
 #            capture, the keyboard key goes in, D-pad right picks key 2, B leaves and saves
 #   actions  (fresh inis) a new action works once bound: from the pause menu PISTOLS := U (no key by default; UC2's own
 #            RaceWeapon), then in the game E takes the melee weapon and U the pistols back
-#   look     pictures only (no checks of their own): the page from the main menu at 640x480 and 1920x1080 (the D-2 box),
+#   look     pictures only (no checks of their own): the page from the main menu at 640x480 and 1920x1080 (the UI box),
 #            the list, a capture, and the page from the pause menu in a match
 #
 # Run tree: D9_TREE (default d9; tools/dev/mkrun-uc2.sh build-native d9 with the rebuilt UCMenu.u: UC2_SCRIPTS=<dir with
-# UCMenu.u>). Every game run is tools/dev/m10-controls.sh --file (Xvfb inside <WorkUC2>/bin/capped 2G). Output: D9_OUT
-# (default <WorkUC2>/logs/d9/rebind): <scenario>.out (engine log), .result, .inject, <scenario>-<shot>.png.
+# UCMenu.u>). Every game run is tools/dev/m10-controls.sh --file (Xvfb inside <repo>/../bin/capped 2G). Output: D9_OUT
+# (default <repo>/../logs/d9/rebind): <scenario>.out (engine log), .result, .inject, <scenario>-<shot>.png.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
@@ -40,7 +40,7 @@ sys=$work/run/$tree/System
 m10=$repo/tools/dev/m10-controls.sh
 mkdir -p "$out"
 [ -x "$sys/uc2.bin" ] || { echo "no run tree $work/run/$tree (tools/dev/mkrun-uc2.sh build-native $tree)" >&2; exit 2; }
-# Turn per mouse count at FOV 90 with MouseLookSensitivity 2.5 (D-6): 0.022 deg x 2.5 x 65536/360
+# Turn per mouse count at FOV 90 with MouseLookSensitivity 2.5: 0.022 deg x 2.5 x 65536/360
 K=10.012444
 
 # fresh inis (ours), DevUI unsuppressed (the GUI's and the page's log lines), no User.ini, no profiles

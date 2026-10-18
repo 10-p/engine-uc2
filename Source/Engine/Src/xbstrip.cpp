@@ -28,7 +28,7 @@
 #define NOMINMAX
 #include <windows.h>
 #else
-// Only the basic Windows scalar types were wanted from <D3D8.h>.
+// Only the basic Windows scalar types are needed from <D3D8.h>.
 #include <limits.h>
 #include <string.h>
 typedef unsigned char  BYTE;

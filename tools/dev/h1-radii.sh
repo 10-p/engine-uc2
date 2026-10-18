@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# H-1 part 2: does PostProcessTargetScale 2 (or 4) keep the bloom and the emissive glow the size they are at 1?
-# Notebook: docs/porting/analysis/h1-bloom.md, part 2.
+# Bloom radius check: does PostProcessTargetScale 2 (or 4) keep the bloom and the emissive glow the size they are at 1?
 #
 #   tools/dev/h1-radii.sh [<tree>] [<WxH> ...]       default tree h1; default 2560x1440 1280x720
 #   H1_REPS=3 H1_SCALES="1 2" tools/dev/h1-radii.sh h1 2560x1440
@@ -14,8 +13,8 @@
 # (the emissive accumulation is history-dependent: two scale-1 shots of the same frame differ by up to 3 px in r10).
 # Then tools/dev/h1-measure.py check with tolerances H1_TOL_R (3 px of the 720 frame) and H1_TOL_PEAK (1 level):
 # set A = the scale-1 runs' shots "on" and "on2", set B = each other scale's. Pictures and logs in
-# <WorkUC2>/logs/<tree>/fx-radii-s<scale>-r<rep>-<WxH>-gpu-*.png; the check lines on stdout, also in
-# <WorkUC2>/logs/<tree>/h1-radii-<WxH>.txt.
+# <repo>/../logs/<tree>/fx-radii-s<scale>-r<rep>-<WxH>-gpu-*.png; the check lines on stdout, also in
+# <repo>/../logs/<tree>/h1-radii-<WxH>.txt.
 #
 # The scenario also takes, in each run, "fresh2" / "fresh1" (the scale switched while running with
 # `set UC2GLRenderDevice PostProcessTargetScale <n>`: both with freshly made targets) for a second, in-run comparison.

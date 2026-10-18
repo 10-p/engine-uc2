@@ -38,13 +38,12 @@ __pycache__/
 /Save/
 /Cache/
 
-# UnrealScript is game content too (owner, 2026-10-11): the repo holds patch sets (patches/), never the script
-# sources. Epic's leaked ones are <WorkUC2>/epic-sources/<Pkg>/Classes on the dev machine; the build decompiles the
-# shipped .u into build-*/Scripts. docs/porting/analysis/scripts-removed.md.
+# UnrealScript is game content: the repo holds patch sets (patches/), never the script sources (Epic's are in
+# ../epic-sources/uc2-avaris-2226/<Pkg>/Classes); the build decompiles the shipped .u into build-*/Scripts.
 /Source/*/Classes/
 /Source/*/*.ucproject
 
-# Do NOT add a blanket *.a / *.lib / *.dll rule: a vendored prebuilt would be silently masked.
+# No blanket *.a / *.lib / *.dll rule: a vendored prebuilt would be silently masked.
 
 # Per-machine local overrides.
 .claude/settings.local.json

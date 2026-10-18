@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
 # Network play tests of the native build: dedicated server (ucc-bin server) and listen server (uc2.bin
-# <map>?Listen) with clients, all on 127.0.0.1 port 7850 (NET_PORT), inside ONE bin/capped scope.
+# <map>?Listen) with clients, all on 127.0.0.1 port 7850 (NET_PORT), inside one bin/capped scope.
 #
 #   tools/dev/net-test.sh [--keep-tree] [check ...]
 #   checks: cheats dedicated1 dedicated2 handshake-loss handshake-compat listen profile-login travel disconnect lag glshot soak
-#           (default: all of them; profile-login (G-7): a command-line join logs in as the client's saved profile)
+#           (default: all of them; profile-login: a command-line join logs in as the client's saved profile)
 #           wine   (opt-in) the Linux client against this branch's ucc.exe server under wine; needs
-#                  <WorkUC2>/run/netwin (tools/dev/mkrun-uc2.sh build-windows netwin); prefix .cache/wine-net
-#           splitclient (opt-in, X-1 part B) a listen host and one client with two local players: they join on the client's
+#                  <repo>/../run/netwin (tools/dev/mkrun-uc2.sh build-windows netwin); prefix .cache/wine-net
+#           splitclient (opt-in) a listen host and one client with two local players: they join on the client's
 #                  character page (player one's pad walks the menus), then it connects (JOINSPLIT on the host); spawn, move
 #           download, download-http   (opt-in) package download: the server lists a package (made by ucc-bin
 #                  resavepackage into <tree>/NetDownload/) that the client's tree lacks; the client fetches it through the
 #                  game connection (ChannelDownload) or, with download-http, from a local HTTP server named by the server's
 #                  RedirectToURL (IpDrv.HTTPDownload); HTTP on TCP port NET_PORT+1
 #
-# Builds a fresh run tree <WorkUC2>/run/net from build-native (tools/dev/mkrun-uc2.sh) unless --keep-tree,
+# Builds a fresh run tree <repo>/../run/net from build-native (tools/dev/mkrun-uc2.sh) unless --keep-tree,
 # then runs tools/dev/net-test.py. Results: one PASS/FAIL line per item, also in
-# <WorkUC2>/logs/net/net-summary.txt; per-process logs <check>-<proc>.log/.out in the same folder.
+# <repo>/../logs/net/net-summary.txt; per-process logs <check>-<proc>.log/.out in the same folder.
 # Memory: one 6G ceiling for the whole run (server + up to 3 clients, each well under 1G; CLAUDE.md "Running
 # anything"). Nothing is left running or listening: capped kills the scope, and the script checks the port.
 # Environment: NET_SOAK_MIN (soak minutes, default 10), NET_PORT (default 7850; keep it in 7850-7899),
-# NET_TREE (run tree name under <WorkUC2>/run, default net; results then go to <WorkUC2>/logs/<NET_TREE>).
+# NET_TREE (run tree name under <repo>/../run, default net; results then go to <repo>/../logs/<NET_TREE>).
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)

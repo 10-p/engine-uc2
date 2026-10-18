@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""G-9: split-screen detail, full (SplitScreenFullDetail=True) against the Xbox's (False), from two runs of
+"""Split-screen detail, full (SplitScreenFullDetail=True) against the Xbox's (False), from two runs of
 tools/dev/g6-splitscreen.sh's render part.
 
     g9-detail.py <full-run-dir> <xbox-run-dir> <out.png>
@@ -127,9 +127,9 @@ def centre(view, ww, wh):
 
 
 def spot_view(d, tag, kind):
-    # The single-player reference is the FULL run's for both runs: single player is the same in both (one view always
-    # gets SSDetailLevels(0)), and a run's own single picture can miss spot A (the third-person camera frozen where it
-    # was: seen once in the Xbox run, G-9 step 2; G-6 saw it for a freshly joined player, n2b).
+    # The single-player reference is the full run's for both runs: single player is the same in both (one view always
+    # gets SSDetailLevels(0)), and a run's own single picture can miss spot A (the third-person camera can stay frozen
+    # where it was, as for a freshly joined player).
     im, single = load(d, tag, kind), load(full_dir, 'n1', kind)
     if im is None or single is None:
         return None, None

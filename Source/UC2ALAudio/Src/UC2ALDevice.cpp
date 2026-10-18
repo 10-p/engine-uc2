@@ -3,7 +3,7 @@
 
 	Native builds load libopenal (the openal-soft the build fetched, copied beside
 	uc2.bin; else the system's) with dlopen when the audio device starts, so a
-	machine without it still runs the game, silently. Under Emscripten (M11) the
+	machine without it still runs the game, silently. Under Emscripten the
 	library is linked in and the table takes its symbols directly.
 =============================================================================*/
 
@@ -21,7 +21,7 @@ UBOOL UC2ALBind( FString& Error )
 	if( GALHandle )
 		return 1;
 #ifdef __EMSCRIPTEN__
-	// M11: openal-soft (the fork's Web Audio backend) is linked into the module (root CMakeLists.txt).
+	// Openal-soft (the fork's Web Audio backend) is linked into the module (root CMakeLists.txt).
 	appMemzero( &GAL, sizeof(GAL) );
 #define UC2AL_BIND_LINKED(Name,Type) GAL.Name = (Type)&Name;
 	UC2AL_CORE_FUNCS(UC2AL_BIND_LINKED)
@@ -31,7 +31,7 @@ UBOOL UC2ALBind( FString& Error )
 #else
 	// Beside the executable first (what tools/dev/mkrun-uc2.sh puts there), then the system's.
 #ifdef _WIN32
-	// Windows (M12): the build's own OpenAL32.dll (LoadLibrary), else an installed OpenAL (the system's
+	// Windows: the build's own OpenAL32.dll (LoadLibrary), else an installed OpenAL (the system's
 	// OpenAL32.dll router, or OpenAL Soft's soft_oal.dll).
 	const TCHAR* Names[] = { TEXT("OpenAL32.dll"), TEXT("soft_oal.dll") };
 #else
@@ -85,7 +85,7 @@ ALenum UC2ALFormat( INT Channels )
 }
 
 /*-----------------------------------------------------------------------------
-	OpenAL Soft's log while the device opens (O-1): which backend, and why not the others.
+	OpenAL Soft's log while the device opens: which backend, and why not the others.
 
 	openal-soft initialises its backends once, on the first device open, in its compiled order
 	(pipewire, pulse, alsa, oss, ... on Linux; web on the web), or in the order ALSOFT_DRIVERS gives; the

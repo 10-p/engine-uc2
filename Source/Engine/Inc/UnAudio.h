@@ -109,7 +109,7 @@ class ENGINE_API UAudioSubsystem : public USubsystem
 	//epic moelfke: notify when game is paused/unpaused
 	virtual void NotifyPauseChange(UBOOL bNowPaused) {}
 
-	// engine-uc2 (M9): a movie's sound as one streamed 2D source (Engine/Inc/UnMovie.h). NULL: the device
+	// A movie's sound as one streamed 2D source (Engine/Inc/UnMovie.h). NULL: the device
 	// cannot play it (the movie then runs on real time, silent). bExclusive: a full-screen movie; every other
 	// sound pauses until the stream is deleted (the Xbox played its movies with nothing else running).
 	virtual class FMovieAudioStream* OpenMovieAudio( INT Rate, INT Channels, UBOOL bExclusive ) { return NULL; }

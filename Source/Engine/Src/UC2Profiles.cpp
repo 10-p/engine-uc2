@@ -1,21 +1,19 @@
 /*=============================================================================
 	UC2Profiles.cpp: the player starts in the profile they last played with.
-	uc2 port (D-3); not Epic's.
 
 	Epic's game starts every viewport on a transient "no profile" profile (UViewport::Init)
 	and only ever picks a saved one by itself when a page that needs a profile opens and
-	exactly one exists (UC2PageBase.ForceProfileLoad). A player who created a profile
-	found "No Profile" again at the next start, with the default settings, and concluded
-	that nothing had been saved (owner's review, D-3). Nothing in Epic's code remembers a
-	profile across runs (the Xbox keeps only the save games themselves).
+	exactly one exists (UC2PageBase.ForceProfileLoad), so a player who created a profile
+	would find "No Profile" again at the next start, with the default settings. Nothing in
+	Epic's code remembers a profile across runs (the Xbox keeps only the save games themselves).
 
 	What this file adds, for the primary player (viewport 0) only:
-	- REMEMBER: once per tick, the name of the profile the primary viewport holds (empty
+	- Remember: once per tick, the name of the profile the primary viewport holds (empty
 	  while it holds the transient "no profile" one) is compared with the remembered one;
 	  when it differs it is written to User.ini [Profiles] LastProfile and User.ini is
 	  flushed. Comparing state instead of hooking script covers every way a profile
 	  changes (select, create, copy, rename, delete, "no profile") without a script change.
-	- START WITH IT: UGameEngine::Init, right after it creates the first viewport, loads the
+	- Start with it: UGameEngine::Init, right after it creates the first viewport, loads the
 	  remembered profile into that viewport's profile object the way
 	  APlayerController::execLoadProfile does (UPlayerProfile::LoadProfile, then
 	  SetProfileName); the PlayerController takes it over at its first SetGamepadID ->
@@ -23,9 +21,9 @@
 	  no longer exists or does not load leaves the transient profile (logged), and the
 	  next tick forgets it.
 
-	User.ini is per-player state and the web host persists it (ufront: the engine-owned
-	inis, written on `flushconfig`); the frontend reads the same key to know that a profile
-	names the player (D-4). Notes: docs/porting/analysis/profiles.md.
+	User.ini is per-player state and the web host persists it (the engine-owned inis,
+	written on `flushconfig`); the frontend reads the same key to know that a profile
+	names the player.
 =============================================================================*/
 
 #include "EnginePrivate.h"
@@ -60,13 +58,12 @@ static FString ActiveProfileName( UViewport* Viewport )
 	return Profile->ProfileName;
 }
 
-// G-7 (2026-10-10): the web build kept a profile as ONE flat file, Profiles/<name>.PRO, from 2026-10-07 until the
-// frontend learned a directory wildcard (ufrontend userFiles: System/Profiles/<*>/AVARIS_PROFILE.PRO); it now uses
-// Epic's layout like every other build. A flat file a web preview player still has is MOVED into Epic's folder
-// once, before the last profile is loaded; if that folder already exists the flat file is an older copy and is
-// deleted. The web host keeps the flat glob for this transition, so it sees the flat file go and forgets it.
-// Not migration machinery for inis: one rename per file, logged. Delete with the flat glob when no preview
-// player is left. (`<*>` stands for a bare `*` segment: a star and a slash would end this comment.)
+// Every build keeps a profile in Epic's layout (Profiles/<name>/AVARIS_PROFILE.PRO; the web host's userFiles glob
+// System/Profiles/<*>/AVARIS_PROFILE.PRO). A flat Profiles/<name>.PRO, the layout of an early web preview, is
+// moved into Epic's folder once, before the last profile is loaded; if that folder already exists the flat file
+// is an older copy and is deleted. The web host keeps a flat glob too, so it sees the flat file go and forgets
+// it. One rename per file, logged. (`<*>` stands for a bare `*` segment: a star and a slash would end this
+// comment.)
 static void UC2MoveFlatProfiles( ULoadSaveManager* Manager )
 {
 	// = ULoadSaveManager::GetProfileRoot (protected there; the PC layout, not the Xbox subclass's)
@@ -123,7 +120,7 @@ ENGINE_API void UC2RememberProfile( UClient* Client )
 	ReadRememberedProfile();
 
 	FString Active = ActiveProfileName( Client->Viewports(0) );
-	// Every change the poll sees, once (DevProfiles is not suppressed by default: the evidence a test reads).
+	// Every change the poll sees, once, under NAME_Log (the tests read it).
 	static FString LastSeen;
 	if( appStrcmp(*Active, *LastSeen)!=0 )
 	{
@@ -143,18 +140,18 @@ ENGINE_API void UC2RememberProfile( UClient* Client )
 }
 
 /*-----------------------------------------------------------------------------
-	D-4: whose name is it?
+	Whose name is it?
 
 	With a saved profile active the player is named after the profile (GUIController.
-	SetProfilePlayerName), so the Name of every URL the menus build is the PROFILE's name.
+	SetProfilePlayerName), so the Name of every URL the menus build is the profile's name.
 	UGameEngine::LoadMap writes each loaded URL's Name back to User.ini [DefaultPlayer]
-	(Epic's PC code), which made the profile's name the player's "own" name from then on: the
-	name a transient profile uses (D-4, GUI.u) and the name the web launcher reads back into
-	its name field. LoadMap asks this first and leaves [DefaultPlayer] Name alone while a
-	profile names the player.
-	G-7: the same for [DefaultPlayer] Class. With a profile the URL's Class is the
-	profile's character (below); written back, it became the character of the next launch
-	WITHOUT a profile. [DefaultPlayer] Class stays the profile-less player's own character.
+	(Epic's PC code), which would make the profile's name the player's "own" name from then
+	on: the name a transient profile uses (GUI.u) and the name the web launcher reads back
+	into its name field. LoadMap asks this first and leaves [DefaultPlayer] Name alone while
+	a profile names the player.
+	The same for [DefaultPlayer] Class. With a profile the URL's Class is the profile's
+	character (below); written back, it would become the character of the next launch
+	without a profile. [DefaultPlayer] Class stays the profile-less player's own character.
 -----------------------------------------------------------------------------*/
 
 ENGINE_API UBOOL UC2ProfileNamesThePlayer( UClient* Client )
@@ -163,19 +160,18 @@ ENGINE_API UBOOL UC2ProfileNamesThePlayer( UClient* Client )
 }
 
 /*-----------------------------------------------------------------------------
-	D-4 / G-7: a local player with an active profile logs in as the profile: its
-	name (D-4) and its character (G-7).
+	A local player with an active profile logs in as the profile: its name and its
+	character.
 
 	The menus put the profile's name and character in every URL they build
 	(GameStartInfo.GetName, PlayerProfile.GetURL), and the profile updates the
 	viewport's PlayerURL when it changes (SetCharacterClassName -> UpdateURL), which
 	Browse adds to a partial travel (UViewport::InitializeURL). A level loaded from
 	the command line (the web launcher's Play form: `DM-Deadbolt?Name=<launcher's
-	name>`) is an ABSOLUTE travel: the login URL is the command line on top of
-	User.ini [DefaultPlayer] alone, so the player was named and dressed by
+	name>`) is an absolute travel: the login URL is the command line on top of
+	User.ini [DefaultPlayer] alone, which would name and dress the player by
 	[DefaultPlayer] (Name: the launcher's; Class: whatever map was loaded last, which
-	after switching profiles without playing is the OTHER profile's character:
-	BLOCKERS "the character", owner's N-4, 2026-10-10).
+	after switching profiles without playing is the other profile's character).
 	MatchViewportsToActors spawns the primary viewport's PlayerController with a copy
 	of the URL whose Name is the profile's (PlayerName: the underscore form the URLs
 	use) and whose Class is the profile's character, computed by Epic's own script

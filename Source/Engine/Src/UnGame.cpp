@@ -23,18 +23,18 @@ void RegisterExtraMaps();	// UnExtraMaps.cpp
 #endif // _XBOX
 
 #include "UnScriptPatcher.h"
-#include "UnMovie.h"	// engine-uc2 (M9): WITH_PORTABLE_MOVIES lifts the Xbox-only movie hooks below
+#include "UnMovie.h"	// WITH_PORTABLE_MOVIES lifts the Xbox-only movie hooks below
 
-// uc2 port (D-3): start in the last used profile, remember it (UC2Profiles.cpp).
+// Start in the last used profile, remember it (UC2Profiles.cpp).
 ENGINE_API void UC2StartWithLastProfile( UViewport* Viewport );
 ENGINE_API void UC2RememberProfile( UClient* Client );
-ENGINE_API UBOOL UC2ProfileNamesThePlayer( UClient* Client );	// D-4
-ENGINE_API void UC2ProfileInURL( UViewport* Viewport, FURL& URL );	// D-4 (name), G-7 (character)
-ENGINE_API UBOOL UC2ProfilesExec( UClient* Client, const TCHAR* Cmd, FOutputDevice& Ar );	// D-3: PROFILESTATE
-// uc2 port (jitter): FRAMETRACE, one line per drawn frame (UC2FrameTrace.cpp); quiet unless asked for.
+ENGINE_API UBOOL UC2ProfileNamesThePlayer( UClient* Client );
+ENGINE_API void UC2ProfileInURL( UViewport* Viewport, FURL& URL );	// the profile's name and character
+ENGINE_API UBOOL UC2ProfilesExec( UClient* Client, const TCHAR* Cmd, FOutputDevice& Ar );	// PROFILESTATE
+// FRAMETRACE, one line per drawn frame (UC2FrameTrace.cpp); quiet unless asked for.
 ENGINE_API UBOOL UC2FrameTraceExec( const TCHAR* Cmd, FOutputDevice& Ar );
 ENGINE_API void UC2FrameTraceDraw( UViewport* Viewport, const FVector& CamLoc, const FRotator& CamRot, FLOAT DeltaSeconds );
-// uc2 port (F-2): the frame rate in the log, [Engine.GameEngine] FpsLogSeconds / FPSLOG (UC2FpsLog.cpp); quiet by default.
+// The frame rate in the log, [Engine.GameEngine] FpsLogSeconds / FPSLOG (UC2FpsLog.cpp); quiet by default.
 ENGINE_API void UC2FpsLogTick( UEngine* Engine );
 ENGINE_API UBOOL UC2FpsLogExec( const TCHAR* Cmd, FOutputDevice& Ar );
 
@@ -153,9 +153,9 @@ void UGameEngine::BuildServerMasterMap( UNetDriver* NetDriver, ULevel* InLevel )
 		check(InLevel->GetLevelInfo()->Game->GetClass()->GetLinker());
 		NetDriver->MasterMap->AddLinker( InLevel->GetLevelInfo()->Game->GetClass()->GetLinker() );
 
-		// ufront: and each mutator's package, as the GameInfo's: a mutator from a package of its own (dropped into
-		// System/) replicates actors to the clients, which then load it by name and GUID (UT2004's mutators asked for
-		// this themselves: Mutator.AddToPackageMap, which UC2 does not have).
+		// And each mutator's package, as the GameInfo's: a mutator from a package of its own (dropped into System/)
+		// replicates actors to the clients, which then load it by name and GUID (UC2's Mutator has no
+		// AddToPackageMap of its own).
 		for( AMutator* M=InLevel->GetLevelInfo()->Game->BaseMutator; M; M=M->NextMutator )
 			if( M->GetClass()!=AMutator::StaticClass() && M->GetClass()->GetLinker()
 			&&	NetDriver->MasterMap->AddLinker( M->GetClass()->GetLinker() )!=INDEX_NONE )
@@ -195,7 +195,7 @@ void UGameEngine::Init()
 	// Delete temporary files in cache.
 	appCleanFileCache();
 
-	// ufront: the maps the player added get the menus' Extra lists and player counts (UnExtraMaps.cpp), before
+	// The maps the player added get the menus' Extra lists and player counts (UnExtraMaps.cpp), before
 	// anything loads a game class (the Entry level does: a class reads its LevelData when it loads).
 	RegisterExtraMaps();
 
@@ -260,7 +260,7 @@ void UGameEngine::Init()
 
 		Viewport = Client->NewViewport( NAME_None );
 
-		// uc2 port (D-3): the first player starts in the profile they last played with (UC2Profiles.cpp).
+		// The first player starts in the profile they last played with (UC2Profiles.cpp).
 		UC2StartWithLastProfile( Viewport );
 
 		// Add code to Create the Menu System here				
@@ -289,12 +289,11 @@ void UGameEngine::Init()
 			Client->InteractionMaster->Console = Console;
 			Viewport->Console = Console;
 
-			// D-7: the shipped [Engine.Console] ConsoleKey=9 is Tab. The console sees every key before the
-			// menus and the bindings (it is the first script interaction), so Tab opened it instead of the
-			// scoreboard in a match (Tab=ShowScores) and instead of Start in the menus ([GUI.EmulatedJoypad]
-			// Tab=Start), and the key PC players try, the one left of 1, did nothing. Default.ini now says 192
-			// (IK_Tilde); a system ini derived before that (a kept Avaris.ini, the web's saved one) still says
-			// 9 and is moved to the tilde key here, for this run (docs/porting/analysis/console-fov.md).
+			// The shipped [Engine.Console] ConsoleKey=9 is Tab. The console sees every key before the menus and
+			// the bindings (it is the first script interaction), so Tab would open it instead of the scoreboard
+			// in a match (Tab=ShowScores) and instead of Start in the menus ([GUI.EmulatedJoypad] Tab=Start).
+			// Default.ini says 192 (IK_Tilde, the key left of 1); a system ini that still says 9 (a kept
+			// Avaris.ini, the web's saved one) is moved to the tilde key here, for this run.
 			UConsole* TheConsole = Cast<UConsole>(Console);
 			if( TheConsole && TheConsole->ConsoleKey == IK_Tab )
 			{
@@ -367,7 +366,7 @@ void UGameEngine::Init()
 	if( !Success )
 #ifdef __EMSCRIPTEN__
 	{
-		// uc2 port (F-4a, engine-ut2004): on the web a bad start-up map is not fatal (appErrorf is a throw, and
+		// On the web a bad start-up map is not fatal (appErrorf is a throw, and
 		// catching is compiled out there). Entry is loaded: stay there and let the player pick from the menus.
 		debugf( NAME_Warning, TEXT("Startup map '%s' failed to load (%s): staying in the entry level"), Parm, *Error );
 		if( !GLevel )
@@ -468,7 +467,7 @@ static INT Compare( const FItem& A, const FItem& B )
 // This always going to be the last exec handler in the chain. It
 // handles passing the command to all other global handlers.
 //
-// uc2 port: the network tests' commands (UC2NetTest.cpp).
+// The network tests' commands (UC2NetTest.cpp).
 ENGINE_API UBOOL UC2NetTestExec( UGameEngine* Engine, const TCHAR* Cmd, FOutputDevice& Ar );
 ENGINE_API UBOOL UC2CheatExec( UEngine* Engine, APlayerController* PC, const TCHAR* Cmd, FOutputDevice& Ar );	// TELEPORT/WHEREAMI
 ENGINE_API void UC2NetTestTick( UGameEngine* Engine );
@@ -476,21 +475,21 @@ ENGINE_API void UC2NetTestTick( UGameEngine* Engine );
 UBOOL UGameEngine::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UGameEngine::Exec);
-	if( UC2CheatExec( this, NULL, Cmd, Ar ) )	// uc2 port: TELEPORT/WHEREAMI, cheats (UC2Cheats.cpp)
+	if( UC2CheatExec( this, NULL, Cmd, Ar ) )	// TELEPORT/WHEREAMI, cheats (UC2Cheats.cpp)
 		return 1;
-	if( UC2NetTestExec( this, Cmd, Ar ) )	// uc2 port: NETPROBE/NETPLACE/NETPLACENEAR, cheats too
+	if( UC2NetTestExec( this, Cmd, Ar ) )	// NETPROBE/NETPLACE/NETPLACENEAR, cheats too
 		return 1;
-	if( ufrontAutoFovExec( Cmd, Ar ) )		// D-8: AUTOFOV [Off|HorPlus|Adaptive]
+	if( ufrontAutoFovExec( Cmd, Ar ) )		// AUTOFOV [Off|HorPlus|Adaptive]
 		return 1;
-	if( UC2ProfilesExec( Client, Cmd, Ar ) )	// uc2 port (D-3): PROFILESTATE (UC2Profiles.cpp)
+	if( UC2ProfilesExec( Client, Cmd, Ar ) )	// PROFILESTATE (UC2Profiles.cpp)
 		return 1;
-	if( UC2FrameTraceExec( Cmd, Ar ) )		// uc2 port (jitter): FRAMETRACE <frames> [tag]
+	if( UC2FrameTraceExec( Cmd, Ar ) )		// FRAMETRACE <frames> [tag]
 		return 1;
-	if( UC2FpsLogExec( Cmd, Ar ) )			// uc2 port (F-2): FPSLOG [seconds]
+	if( UC2FpsLogExec( Cmd, Ar ) )			// FPSLOG [seconds]
 		return 1;
 	const TCHAR* Str=Cmd;
 #if WITH_PORTABLE_MOVIES
-	// engine-uc2 (M9): the Xbox client's SUBTITLES command (XboxClient.cpp:169-180), which the profile sends
+	// The Xbox client's SUBTITLES command (XboxClient.cpp), which the profile sends
 	// when "cinematic captions" changes; off hides the cinematics' burnt-in subtitle bands (UnMovie.cpp).
 	if( ParseCommand( &Str, TEXT("SUBTITLES") ) )
 	{
@@ -1191,7 +1190,7 @@ static void MatchViewportsToActors( UClient* Client, ULevel* Level, const FURL& 
 				// else spawn player using level URL
 				FString Error;
 				debugf( NAME_Log, TEXT("Spawning new actor for Viewport %s"), Viewport->GetName() );
-				// uc2 port (D-4, G-7): with a saved profile active the player logs in under the profile's name and
+				// With a saved profile active the player logs in under the profile's name and
 				// with its character, whatever the URL says (a map from the command line or the web launcher):
 				// UC2Profiles.cpp.
 				FURL PlayerURL( URL );
@@ -1457,8 +1456,8 @@ UBOOL UGameEngine::Browse( FURL URL, const TMap<FString,FString>* TravelInfo, FS
 		: NULL;
 
 #ifdef __EMSCRIPTEN__
-	// E-2 (WebRTCDrv, docs/porting/analysis/webrtc.md): the frontend joins a game by putting
-	// "<room>_<serverSlug>?connect" on the command line (engine-ut2004's convention). A join key has no '.', so
+	// The frontend joins a game (WebRTCDrv) by putting "<room>_<serverSlug>?connect" on the command
+	// line. A join key has no '.', so
 	// FURL reads it as a local MAP; the connect option says it is the host to dial: browse it as a network URL.
 	// The option is dropped, so that no later URL built from this one (a partial travel copies every option)
 	// turns a real map name into a host.
@@ -1506,7 +1505,7 @@ UBOOL UGameEngine::Browse( FURL URL, const TMap<FString,FString>* TravelInfo, FS
 		// please document why
 		if ( PrimaryViewport && PrimaryViewport->TravelType != TRAVEL_Absolute  )
 			PrimaryViewport->InitializeURL(URL);
-		// uc2 port (G-7): a join logs in as the active saved profile (its name and character), as a local map does
+		// A join logs in as the active saved profile (its name and character), as a local map does
 		// in MatchViewportsToActors: a join from the command line (`<host>[:<port>]`, the web's `<room>?connect`) is
 		// an absolute travel and carried only User.ini [DefaultPlayer]. The URL is what UNetPendingLevel sends as
 		// the LOGIN's URL= (UnPenLev.cpp). UC2Profiles.cpp.
@@ -1900,7 +1899,7 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 	UBOOL bHasIntroMovie = URL.GetOption(TEXT("StartCinematic"),NULL) != NULL;
 	UBOOL bHasOutroMovie = URL.GetOption(TEXT("EndCinematic"),NULL) != NULL;
 	// Reset the render states so that there are no textures/vbs set
-	if (IsPlayingMovie() == FALSE && GLevel && GLevel->Engine->GRenDev)	// engine-uc2 (M9): no level or device on the first load / a server
+	if (IsPlayingMovie() == FALSE && GLevel && GLevel->Engine->GRenDev)	// no level or device on the first load / a server
 	{
 		// Flush render states
 		GLevel->Engine->GRenDev->ResetRenderStates();
@@ -2719,9 +2718,9 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 			}
 		}
 
-// UC2 port (M7b): this block was "#if defined(_XBOX)" only. The batching runs for a render device
-// with the XboxProjectors capability (UnRenDev.h; the device then draws UProjectorMultiMaterial);
-// emptying the static mesh index buffers stays Xbox-only (PC draws static meshes from them).
+// Epic's block is Xbox-only ("#if defined(_XBOX)"). The batching runs for a render device with the
+// XboxProjectors capability (UnRenDev.h; the device then draws UProjectorMultiMaterial); emptying the
+// static mesh index buffers stays Xbox-only (PC draws static meshes from them).
 #if !defined(XBOX_ASSET_FORMAT)
 	if( RenDevHasXboxProjectors() )
 	{
@@ -2859,7 +2858,7 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 
 		guard(VerifyPackages);
 #ifdef __EMSCRIPTEN__
-		FString LoadMapFailSoft;	// uc2 port (F-4a): why the verify below failed, without a throw
+		FString LoadMapFailSoft;	// why the verify below failed, without a throw
 #endif
 		try
 		{
@@ -2879,7 +2878,7 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 					);
 				}
 #ifdef __EMSCRIPTEN__
-				// uc2 port (F-4a, engine-ut2004 5f02771): on the web GetPackageLinker answers NULL (no throw) for a
+				// On the web GetPackageLinker answers NULL (no throw) for a
 				// package the join cannot have (not found, or another version than the server's), and VerifyLinker
 				// would call Verify() on NULL. Fail the join here with the reason a native client shows.
 				for (INT i = 0; i < PackageMap->List->Num(); i++)
@@ -2903,7 +2902,7 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 				}
 			}
 #ifdef __EMSCRIPTEN__
-			// uc2 port (F-4a, engine-ut2004): SafeLoadError does not throw on the web, so a failed load arrives
+			// SafeLoadError does not throw on the web, so a failed load arrives
 			// as NULL; it takes the catch's way out below.
 			if( LoadMapFailSoft.Len() == 0 && !LoadObject<ULevel>( MapParent, TEXT("MyLevel"), *URL.Map, LOAD_Verify | LOAD_Throw | LOAD_NoWarn, NULL ) )
 				LoadMapFailSoft = FString::Printf( TEXT("Could not load map '%s'"), *URL.Map );
@@ -3010,10 +3009,9 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 		FString Error;
 		if( !GLevel->Listen( Error ) )
 #ifdef __EMSCRIPTEN__
-			// uc2 port (F-4a): the web build has no exception catching (cmake/UC2Web.cmake), so appErrorf ends
-			// the module. A listen that fails there (a browser game whose WebRTC transport is not up; ucc-bin.js
-			// under Node, whose socket emulation cannot listen) leaves the level running without network
-			// instead. Not in engine-ut2004 (it keeps appErrorf); UC2 needs it to load maps under Node.
+			// The web build has no exception catching (cmake/UC2Web.cmake), so appErrorf ends the module. A listen
+			// that fails there (a browser game whose WebRTC transport is not up; ucc-bin.js under Node, whose socket
+			// emulation cannot listen) leaves the level running without network instead.
 			debugf( NAME_Warning, TEXT("%s (web: the level runs without network)"), *FString::Printf( LocalizeError(TEXT("ServerListen"),TEXT("Engine")), *Error ) );
 #else
 			appErrorf( LocalizeError(TEXT("ServerListen"),TEXT("Engine")), *Error );
@@ -3050,7 +3048,7 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 #ifndef _XBOX
 	if( GIsClient )
 	{
-		// uc2 port (D-4, G-7): not while a saved profile names the player (the URL then carries the profile's name
+		// Not while a saved profile names the player (the URL then carries the profile's name
 		// and character; [DefaultPlayer] Name and Class are the player's own, used without a profile): UC2Profiles.cpp.
 		UBOOL ProfileOwnsThem = UC2ProfileNamesThePlayer( Client );
 		if( !ProfileOwnsThem )
@@ -3188,7 +3186,7 @@ void UGameEngine::PrecacheMaterials(UViewport *Viewport, BYTE* HitData, INT* Hit
 }
 
 //
-// D-8: scoped AutoFOV override (engine-ut2004's FScopedAutoFov, UnRender.h). Everything that uses the
+// Scoped AutoFOV override. Everything that uses the
 // player's FOV while a frame is drawn reads Viewport->Actor->FovAngle: the world's scene node below, the
 // first-person weapon (UCanvas::DrawActor), the HUD's markers (WorldToScreen), the mesh LOD and shadow
 // biases. Overriding it for the frame keeps them on one value without touching the render device; it is
@@ -3223,14 +3221,14 @@ struct FScopedAutoFov
 		GAutoFovFrameBase		= Saved;
 		GAutoFovFrameEffective	= Applied;
 		Actor->FovAngle			= Applied;
-		// G-6: a split-screen viewport shows the effective FOV of its own aspect (ufrontSplitFovScale).
+		// A split-screen viewport shows the effective FOV of its own aspect (ufrontSplitFovScale).
 		FLOAT Scale;
 		if( ufrontSplitFovScale( Viewport, Applied, Scale ) )
 		{
 			Viewport->ScaleFOVX = Viewport->ScaleFOVY = Scale;
 			bSplitFov = 1;
 		}
-		// G-9: what the picture shows, per viewport (the split-screen FOV pictures read it).
+		// What the picture shows, per viewport (a log line per change).
 		if( Viewport->bShowScene )
 			ufrontLogShownFov( Viewport, Applied, Saved );
 	}
@@ -3287,7 +3285,7 @@ void UGameEngine::Draw( UViewport* Viewport, FLOAT DeltaSeconds, UBOOL Blit, BYT
 		CameraActor = Viewport->Actor;
 	}
 
-	// D-8: AutoFOV, armed after script has calculated the view (PlayerCalcView sees the real FOV) and
+	// AutoFOV, armed after script has calculated the view (PlayerCalcView sees the real FOV) and
 	// restored by the destructor on every way out of this function.
 	FScopedAutoFov AutoFovScope( Viewport );
 
@@ -3536,7 +3534,7 @@ void UGameEngine::Draw( UViewport* Viewport, FLOAT DeltaSeconds, UBOOL Blit, BYT
 		Viewport->PendingFrame = Blit ? 1 : 0;		
 	}
 
-	// uc2 port (jitter): the camera this frame was drawn with and where the pawn is on the screen (FRAMETRACE).
+	// The camera this frame was drawn with and where the pawn is on the screen (FRAMETRACE).
 	UC2FrameTraceDraw( Viewport, CameraLocation, CameraRotation, DeltaSeconds );
 
 	Viewport->Actor->Level->LevelAction = SavedAction;
@@ -3644,9 +3642,9 @@ void UGameEngine::Tick( FLOAT DeltaSeconds )
 {
 	guard(UGameEngine::Tick);
 	FUNC_CLOCK(TiCyc,TickCycles);
-	UC2NetTestTick( this );	// uc2 port: the [UC2NetTest] CommandFile=<file> test key (UC2NetTest.cpp); nothing without it
-	UC2RememberProfile( Client );	// uc2 port (D-3): User.ini [Profiles] LastProfile follows the first player's profile
-	UC2FpsLogTick( this );	// uc2 port (F-2): FpsLogSeconds / FPSLOG; nothing unless asked for
+	UC2NetTestTick( this );	// the [UC2NetTest] CommandFile=<file> test key (UC2NetTest.cpp); nothing without it
+	UC2RememberProfile( Client );	// User.ini [Profiles] LastProfile follows the first player's profile
+	UC2FpsLogTick( this );	// FpsLogSeconds / FPSLOG; nothing unless asked for
 
     if( DeltaSeconds < 0.0f )
         appErrorf(TEXT("Negative delta time!"));

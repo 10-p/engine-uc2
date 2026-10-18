@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""H-1: a numeric model of the bloom + emissive chain of UCCameraEffects.cpp (UUCScreenEmissiveWithBloom), to see
+"""A numeric model of the bloom + emissive chain of UCCameraEffects.cpp (UUCScreenEmissiveWithBloom), to see
 what the halo of a small light looks like on screen at a given resolution, and what changes when the blur targets
-get more texels (a post-process scale M) or the final upsampling gets smoother. Notebook:
-docs/porting/analysis/h1-bloom.md.
+get more texels (a post-process scale M) or the final upsampling gets smoother.
 
 Units: pixels of the 480-line reference picture ("ref px"); the screen has k = H/480 screen pixels per ref px. The
 chain, as the port runs it today (pp-scale, PostProcessReferenceHeight 480), with M = 1:

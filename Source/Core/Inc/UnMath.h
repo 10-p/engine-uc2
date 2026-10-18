@@ -2925,7 +2925,7 @@ inline FVector FVector::TransformPointBy( const FCoords &Coords ) const
 	FVector Temp;
 	ASMTransformPoint( Coords, *this, Temp);
 	return Temp;
-#elif 0 //ASMLINUX -- the C path below on GCC, as in UT2004's Linux build (static temp, no x87 clobbers)
+#elif 0 //ASMLINUX -- the C path below on GCC (static temp, no x87 clobbers)
 	static FVector Temp;
 	ASMTransformPoint( Coords, *this, Temp);
 	return Temp;
@@ -2945,7 +2945,7 @@ inline FVector FVector::TransformVectorBy( const FCoords &Coords ) const
 	FVector Temp;
 	ASMTransformVector( Coords, *this, Temp);
 	return Temp;
-#elif 0 //ASMLINUX -- the C path below on GCC, as in UT2004's Linux build ("apparently broken. --ryan.")
+#elif 0 //ASMLINUX -- the C path below on GCC ("apparently broken. --ryan.")
 	FVector Temp;
 	ASMTransformVector( Coords, *this, Temp);
 	return Temp;

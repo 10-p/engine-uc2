@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# M16: the tables UC2ALAudio builds from the shipped .xsb against the ones it builds from the cooked .uc2cues, for
+# The tables UC2ALAudio builds from the shipped .xsb against the ones it builds from the cooked .uc2cues, for
 # every bank. Needs a run tree with both in Sounds/ (tools/dev/mkrun-uc2.sh with UC2_XBOX_SOUNDS=add).
 #
 #   tools/dev/audio-xsb-compare.sh <tree>        e.g. m16-both
 #
 # Runs `ucc-bin UC2ALAudio.UC2AudioCheck DUMP=...` (capped 2G) and tools/dev/audio-xsb-compare.py on the dumps.
-# Output: <WorkUC2>/logs/<tree>/xsb-compare.out (every difference, known or NEW), the dumps in xsb-dump/.
+# Output: <repo>/../logs/<tree>/xsb-compare.out (every difference, known or NEW), the dumps in xsb-dump/.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# B-2 (owner report 2026-10-10, DM-Decay "extremely bright flash that doesn't go away"): one capped game run of a
+# DM-Decay bright flash check (a white cloud that stays): one capped game run of a
 # tools/dev/m10-inject.py scenario on DM-Decay with no bots, pictures named after the scenario's shots, then the
-# luminance measure of every picture (tools/dev/decay-flash.py). Notebook: docs/porting/analysis/decay-flash.md.
+# luminance measure of every picture (tools/dev/decay-flash.py).
 #
 #   tools/dev/decay-flash.sh <tree> <name> <scenario-file> [more uc2.bin arguments]
 #
-#   DF_RES=2285x1290     another window size (default 1280x720; the owner's screenshot is 2285x1290)
+#   DF_RES=2285x1290     another window size (default 1280x720)
 #   DF_AA=4              the device's AntiAliasing (default 0)
 #   DF_URL='?NumBots=0'  map URL options (default ?NumBots=0)
 #   DF_SECS=170          time limit
@@ -16,7 +16,7 @@
 #   add -gl4es to the arguments for the GL4ES twin (GL ES 3.0 context, as tools/dev/m11-twin.sh)
 #
 # The scenario runs after the common start (level up, match started with Fire, God, SetAutoCenterPitch 0). Output in
-# <WorkUC2>/logs/<tree>/: df-<name>-<shot>.png, df-<name>.out (game log), .inject, .lum (measure).
+# <repo>/../logs/<tree>/: df-<name>-<shot>.png, df-<name>.out (game log), .inject, .lum (measure).
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)

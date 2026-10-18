@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""CPU model of the depth of one point drawn by two passes (B-1, docs/porting/analysis/shadow-flicker.md).
+"""CPU model of the depth of one point drawn by two passes (projected shadows over terrain).
 
 The terrain is drawn by GL's fixed-function vertex stage: modelview and projection are loaded separately
 (FOpenGLRenderInterface::CommitMatrices), the GPU computes eye = MV v, clip = P eye. The projector batch drawn
 over it (ProjectorAtten.vsh) gets u_clip = MV x P multiplied on the CPU (UC2GLShaders.cpp, GetGLMatrices) and
 computes clip = u_clip v. Same vertex, same matrices, two float32 roundings. This script emulates both in float32
-(every product and sum rounded, no fused multiply-add) for the owner's camera on CTF-Aqueduct and prints, per screen
+(every product and sum rounded, no fused multiply-add) for a camera on CTF-Aqueduct and prints, per screen
 row of a plane under the camera (a ramp), the depth difference of the two paths in 24-bit depth units, against:
 the port's polygon offset (5 units, no slope), the Xbox's ZBIAS 1 (slope scale 0.25 + 1 unit; XDK d3d8.lib
 D3DDevice_SetRenderState_ZBias) and UT2004's OpenGL driver (slope 1 + 1 unit).

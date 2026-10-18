@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Network play tests: servers and clients of the native build on 127.0.0.1 (driven by tools/dev/net-test.sh,
-which runs this inside ONE bin/capped scope; not meant to run on its own).
+which runs this inside one bin/capped scope; not meant to run on its own).
 
     net-test.py <run-tree System dir> <out dir> <check> [<check> ...]
 
@@ -92,9 +92,9 @@ class Proc:
                 f.write("\n".join(lines).encode("latin-1"))
         open(self.netcmd, "w").close()
         open(self.inputcmd, "w").close()
-        # NETPROBE/NETPLACE/NETPLACENEAR are cheats (F-1, Source/Engine/Src/UC2Cheats.cpp): a client and a
+        # NETPROBE/NETPLACE/NETPLACENEAR are cheats (Source/Engine/Src/UC2Cheats.cpp): a client and a
         # dedicated server refuse them unless the process's own ini allows them for tests (a listen host needs no
-        # key). NETAIM is gone (F-1b): the players are lined up around the shooter's own view (line_up).
+        # key). The players are lined up around the shooter's own view (line_up).
         common = ["INI=Net%s.ini" % self.name, "USERINI=Net%sUser.ini" % self.name, "LOG=" + self.logname,
                   "-ini:System:[UC2NetTest]:CommandFile=" + os.path.basename(self.netcmd)]
         common += ["-ini:System:[Engine.GameEngine]:AllowNetCheats=%s" % ("True" if self.cheatkey else "False")]
@@ -106,8 +106,8 @@ class Proc:
             argv = ["./ucc-bin", "server", self.url, "PORT=%d" % PORT] + common
         else:
             argv = ["xvfb-run", "-a", "-s", "-screen 0 1024x768x24", "./uc2.bin"] + ([self.url] if self.url else []) + ["-log"] + common
-            # StartupMovies=False: with the GL device the logos would play first and own the input (M9).
-            # (The virtual pad is player one here: the default, [SDL2Drv.SDL2Client] PadsStartAtPlayerTwo=False, G-11.)
+            # StartupMovies=False: with the GL device the logos would play first and own the input.
+            # (The virtual pad is player one here: the default, [SDL2Drv.SDL2Client] PadsStartAtPlayerTwo=False.)
             argv += ["-ini:System:[SDL2Drv.SDL2Client]:InputTestFile=" + os.path.basename(self.inputcmd), "-ini:System:[UC2Movie]:StartupMovies=False"]
             if self.kind == "listen":
                 argv += ["PORT=%d" % PORT]
@@ -311,7 +311,7 @@ def crit_lines(procs):
 def finish(check, procs, allow_invalid_class=0):
     """Stop everything; '.clean' = no Critical/assert/overflow/bunch line in any log, and every client-side
     'Received invalid actor class' explained by a server-side 'persistent actor ...DefaultPhysicsVolume... has no
-    package-map index' line (one per connection: network.md step 3). allow_invalid_class is ignored."""
+    package-map index' line (one per connection). allow_invalid_class is ignored."""
     for p in procs:
         if p.alive():
             p.stop()
@@ -380,7 +380,7 @@ def check_dedicated1():
 
 def place_near(srv, name, other, d=450, tag="PL"):
     """NETPLACENEAR, then check on the server 1.5 s later that the pawn stayed (a spot can be on a jump pad or a
-    slope: in the first runs B ended 700 units from where it was put); next heading if not. Returns the
+    slope, and B ends up 700 units from where it was put); next heading if not. Returns the
     log line of the accepted placement or None."""
     first = 0
     for attempt in range(16):
@@ -403,7 +403,7 @@ def place_near(srv, name, other, d=450, tag="PL"):
 def ranged(attacker, aname, tag):
     """Make sure the attacker holds its race weapon (unlimited ammo). Under simulated loss a player sometimes
     came out of the spawn holding the melee weapon or the energy weapon (UCWeap_SniperRifle, which starts without
-    ammo) -- the same on server and client, see network.md step L3; neither can hit at 450 units. NextWeapon
+    ammo) -- the same on server and client; neither can hit at 450 units. NextWeapon
     (the Q binding) cycles to it."""
     for k in range(5):
         p = attacker.probe("%s%d" % (tag, k))
@@ -414,8 +414,8 @@ def ranged(attacker, aname, tag):
         time.sleep(1.0)
 
 
-# F-1b: NETAIM is gone from the engine (test-only commands do not ship). A client's view cannot be turned from outside,
-# so the players are lined up around the client's OWN view instead: the shooter's view (its own SDL2 test-channel
+# A client's view cannot be turned from outside (no such command ships), so the players are lined up around the
+# client's own view instead: the shooter's view (its own SDL2 test-channel
 # probe: loc and rot of the local player) and the server's NETPLACE (allowed on the server with the test key, and for
 # a listen host). P0 is an open, flat spot of DM-Deadbolt with room around it (jit-trace.sh's spot).
 P0 = (1977.8, 583.7, -34.1)
@@ -657,7 +657,7 @@ def check_listen():
 
 
 def check_profile_login():
-    """G-7: a client that joins from the command line (127.0.0.1:<port>?Name=NetB) with a saved profile active logs in
+    """A client that joins from the command line (127.0.0.1:<port>?Name=NetB) with a saved profile active logs in
     as the profile: the listen server's PlayerReplicationInfo is named after the profile and has its character, not
     the URL's Name and the ini's [DefaultPlayer] Class. The profile is made first with `ucc-bin profiletest make`
     (a new player's default profile + Character=) in the shared System/Profiles; only the client remembers it
@@ -718,7 +718,7 @@ def check_travel():
         p2 = spawn(a, "Aspawn2")
         sp = s.probe("T2")
         # After the travel the client logs in under the name its own settings give (UC2: the character's,
-        # "Anubis"), not the command line's ?Name=NetA (network.md step 6): look it up from its own probe.
+        # "Anubis"), not the command line's ?Name=NetA: look it up from its own probe.
         me = p2["summary"].get("local") if p2 else None
         sv = pawn_of(sp, me) if me else None
         cv = pawn_of(p2, me) if me else None
@@ -1021,10 +1021,10 @@ def check_handshake_loss(compat=False):
 
 
 def check_cheats():
-    """F-1b: the cheat guard in a network game (Source/Engine/Src/UC2Cheats.cpp). Without the test key anywhere: the
+    """The cheat guard in a network game (Source/Engine/Src/UC2Cheats.cpp). Without the test key anywhere: the
     listen host's own NETPROBE and WHEREAMI work (the host is the server); a client's NETPROBE answers about its own
-    player only (F-1c) and its WHEREAMI is refused. Then a client WITH the key: its NETPROBE is the full answer;
-    NETAIM no longer exists (removed from the engine)."""
+    player only and its WHEREAMI is refused. Then a client with the key: its NETPROBE is the full answer;
+    NETAIM does not exist."""
     ck = "cheats"
     l = Proc(ck, "L", "listen", "DM-Deadbolt?Listen?Name=NetL", cheatkey=False).start()
     procs = [l]
@@ -1042,7 +1042,7 @@ def check_cheats():
         l.send("exec WHEREAMI")
         m = l.wait(r"Cheat: WHEREAMI .*$", 15)
         result(bool(m) and "refused" not in m.group(0), ck + ".host-whereami-without-key", m.group(0) if m else "no line")
-        # F-1c: a client's NETPROBE without the key answers about its own player only (no refusal, no "Cheat:" line)
+        # A client's NETPROBE without the key answers about its own player only (no refusal, no "Cheat:" line)
         time.sleep(3)
         b.send("exec NETPROBE C0")
         m = b.wait(r"^NetProbe: C0 summary net=Client.*$", 15)
@@ -1143,7 +1143,7 @@ def check_download(http=False):
     try:
         sp = s.wait(r"Server Package: %s" % DLPKG, 5, from_start=True)
         result(bool(sp), ck + ".serverpackage", sp.group(0) if sp else "no 'Server Package: %s' in the server log" % DLPKG)
-        dlwarn = s.count(r"Failed to load .*HTTPDownload")   # main before D-2: "Failed to load 'Class IpDrv.IpDrv.HTTPDownload'"
+        dlwarn = s.count(r"Failed to load .*HTTPDownload")   # a misregistered HTTPDownload logs "Failed to load 'Class IpDrv.IpDrv.HTTPDownload'"
         rcv = a.wait(r"Receiving package '%s'" % DLPKG, 60)
         j = s.wait(r"Join succeeded: NetD", 120)
         # FGuid::String() prints the four DWORDs as %08X each; the file's GUID bytes are those DWORDs little-endian.
@@ -1183,9 +1183,9 @@ def check_download(http=False):
 
 
 def check_splitclient():
-    """X-1 part B, the bounded client test (the owner: "if something really breaks, it breaks"): a listen host and ONE
+    """The bounded split-screen client test: a listen host and one
     client process with two local players who join through the client's menus. On a client a split player can only be
-    made in the menus (UClient::BeginSplitScreen asks the GUI's AllowControllerJoin: the character page; G-6's in-match
+    made in the menus (UClient::BeginSplitScreen asks the GUI's AllowControllerJoin: the character page; the in-match
     join is for a standalone game or a listen host), so the client walks player one's pad (port 0) from the main menu to
     the character page (VERSUS -> DeathMatch -> DM-Deadbolt, as g6-splitscreen.sh's x1menu4), pad 1's Start joins player
     two there, and then the client connects to the host (console OPEN): after the travel its two viewports are matched

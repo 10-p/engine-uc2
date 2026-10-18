@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compose the pictures of tools/dev/jit-strip.sh into one image: a row per run (e.g. before / after), consecutive
 frames left to right, each cropped around the pawn, with the frame's length, the pawn's screen position from the
-trace, and a fixed cross where the pawn stands on average (docs/porting/analysis/jitter.md); under them a chart of
+trace, and a fixed cross where the pawn stands on average; under them a chart of
 the pawn's vertical screen offset per frame for every row. Also <out>.gif: the rows side by side as an animation
 (150 ms a frame, i.e. slowed down; the fixed cross stays put, the pawn moves against it).
 

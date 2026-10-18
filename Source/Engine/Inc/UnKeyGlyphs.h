@@ -1,9 +1,9 @@
 /*=============================================================================
-	UnKeyGlyphs.h: H-5, player one's keys in place of the pad's button glyphs.
+	UnKeyGlyphs.h: player one's keys in place of the pad's button glyphs.
 
 	The menus and the HUD show Xbox pad buttons (the button font T_Fonts2.Controller_Buttons_LG, a
 	character per button). When player one (the window's viewport, the only one with the keyboard and
-	the mouse: G-11) last touched the keyboard or the mouse, every button glyph drawn for them shows the
+	the mouse) last touched the keyboard or the mouse, every button glyph drawn for them shows the
 	key that does what the button does now:
 	  - in a menu (the GUI controller draws: UICONTEXT_Menu) the key the menus take for that button
 	    ([GUI.EmulatedJoypad], asked through MenuKey, which the GUI module sets);
@@ -14,7 +14,7 @@
 	The glyph's cell is kept (the same advance width and height): no layout moves. Phase 1 draws the key's
 	name in the UI font; phase 2 a key cap from the sheet GUI.KeyGlyphSheet when the script set has one.
 	It exists only with the script set key-glyphs (the class GUI.KeyGlyphs): a shipped GUI.u keeps the
-	Xbox glyphs. [GUI.KeyGlyphs] ShowKeys=False turns it off. docs/porting/analysis/h5-key-glyphs.md.
+	Xbox glyphs. [GUI.KeyGlyphs] ShowKeys=False turns it off.
 =============================================================================*/
 
 // Pad buttons as the glyphs name them: 0..15 are Joy1..Joy16 (XBC_A..XBC_RightThumb), then the sticks.

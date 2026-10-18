@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""H-5 phase 2: the key glyph sheet (key caps and mouse icons) and the engine's table of its cells.
+"""The key glyph sheet (key caps and mouse icons) and the engine's table of its cells.
 
     tools/dev/make-key-glyphs.py [--preview <png>]
 
@@ -14,7 +14,7 @@ the mip maps do not mix neighbours). The look follows the button font T_Fonts2.C
 Back/Start buttons): a dark glossy body, a light rim, a white legend with a dark edge. Keys are rounded caps; the mouse
 buttons and the wheel are a mouse with the part to press lit in amber. Legends are DejaVu Sans Bold (Bitstream Vera
 licence: free to embed), drawn at 4x and reduced. Keys with no cell of their own use the blank cap (BLANK) with the
-phase 1 label drawn on it by the engine. docs/porting/analysis/h5-key-glyphs.md.
+key's text label drawn on it by the engine.
 """
 import os
 import sys

@@ -20,7 +20,7 @@ Xbox ADPCM (WAVE_FORMAT_XBOX_ADPCM 0x0069) is IMA ADPCM in blocks of 36 bytes pe
 in 4-byte words: the headers of all channels, then 4 bytes (8 codes) of channel 0, 4 of channel 1, and so on.
 A block is 64 sample frames (the XDK's and the cook's unit): the header sample and the first 63 codes; the 64th
 code is not played (it predicts the next block's header sample). This is checked against source WAVs by
-`--verify` (see docs/porting/analysis/audio-f6.md).
+`--verify`.
 
 No dependency beyond the standard library. Usage:
 

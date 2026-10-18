@@ -17,7 +17,7 @@ typedef UNICHAR*		WW_LPWSTR;
 #define LPCWSTR			WW_LPCWSTR
 #define LPWSTR			WW_LPWSTR
 #elif !defined(_XBOX)
-// engine-uc2: the Win32 types this interface uses, for builds without <windows.h> (GCC, Emscripten).
+// The Win32 types this interface uses, for builds without <windows.h> (GCC, Emscripten).
 // WCHAR is 16 bits as on Windows -- UCanvas::WrapStringToArray passes appToUnicode() UNICHARs.
 typedef UNICHAR			WCHAR;
 typedef char			CHAR;

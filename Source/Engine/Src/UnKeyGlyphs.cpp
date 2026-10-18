@@ -1,7 +1,5 @@
 /*=============================================================================
-	UnKeyGlyphs.cpp: H-5, player one's keys in place of the pad's button glyphs.
-
-	See UnKeyGlyphs.h and docs/porting/analysis/h5-key-glyphs.md.
+	UnKeyGlyphs.cpp: player one's keys in place of the pad's button glyphs (UnKeyGlyphs.h).
 =============================================================================*/
 
 #include "Engine.h"

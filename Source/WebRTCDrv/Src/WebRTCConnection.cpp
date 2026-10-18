@@ -1,8 +1,6 @@
 /*=============================================================================
-	WebRTCConnection.cpp: a WebRTC data channel as a UNetConnection (E-2).
-
-	engine-ut2004's WebRTCConnection.cpp, which follows UTcpipConnection (IpDrv/Src/TcpNetDriver.cpp).
-	Notebook: docs/porting/analysis/webrtc.md.
+	WebRTCConnection.cpp: a WebRTC data channel as a UNetConnection (after UTcpipConnection,
+	IpDrv/Src/TcpNetDriver.cpp).
 =============================================================================*/
 
 #include "WebRTCDrv.h"
@@ -54,7 +52,7 @@ void UWebRTCConnection::LowLevelSend( void* Data, INT Count )
 	if( Count > MaxPacket )
 		debugf( NAME_DevNet, TEXT("[WebRTC] LowLevelSend: packet of %i bytes > MaxPacket %i on connId=%i"), Count, (INT)MaxPacket, WebRTCConnId );
 
-	// A DETACHED connection (connId -1, see UWebRTCNetDriver::InitConnect) no longer owns the wire.
+	// A detached connection (connId -1, see UWebRTCNetDriver::InitConnect) no longer owns the wire.
 	FUNC_CLOCK(WebRTCSend,Driver->SendCycles);
 	if( WebRTCConnId >= 0 )
 		webrtc_send( WebRTCConnId, Data, Count );
@@ -65,7 +63,7 @@ void UWebRTCConnection::LowLevelSend( void* Data, INT Count )
 FString UWebRTCConnection::LowLevelGetRemoteAddress()
 {
 	guard(UWebRTCConnection::LowLevelGetRemoteAddress);
-	// One distinct pseudo-address per peer: nothing in the join path parses it as an IP (network.md).
+	// One distinct pseudo-address per peer: nothing in the join path parses it as an IP.
 	return FString::Printf( TEXT("webrtc:%i"), WebRTCConnId );
 	unguard;
 }

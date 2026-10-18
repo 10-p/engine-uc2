@@ -423,7 +423,7 @@ public:
 	FLightList*	ActorLights;
 	FProjectorList*	ActorProjectors;
 	FLOAT	LastLightUpdateTime;
-	DWORD	LastProjectorGeneration;	// uc2 port (G-9): GProjectorRenderInfoGeneration when ActorProjectors was built
+	DWORD	LastProjectorGeneration;	// GProjectorRenderInfoGeneration when ActorProjectors was built
 
 	// scion sz - deferred rendering flags used depending on current FSceneNode::TFilterMode state
 	EPostProcessMaterialType IsPostProcess;
@@ -1004,10 +1004,10 @@ struct FCoronaRender
     void Reset();
 };
 
-// uc2 port (G-9): the corona state of a viewport. Epic's one global FCoronaRender keeps the lights seen last (fading
+// The corona state of a viewport. Epic's one global FCoronaRender keeps the lights seen last (fading
 // out, drawn without a depth test) and the time of the last draw: with several split-screen views a frame, every
-// view also drew the coronas the others had just seen, through walls, and the fade ran on the time between two views.
-// The Xbox never met it (coronas off while split, SSDetailLevels); SplitScreenFullDetail turns them on, so each split
+// view would also draw the coronas the others had just seen, through walls, and the fade would run on the time between
+// two views. The Xbox has coronas off while split (SSDetailLevels); SplitScreenFullDetail turns them on, so each split
 // view other than the first gets a state of its own. Viewports(0) (the single player, the first split view) keeps
 // the global, as before.
 ENGINE_API FCoronaRender& UC2CoronaRenderFor( UViewport* Viewport );
@@ -1149,29 +1149,28 @@ void ENGINE_API CalculateVertexCacheHits(UBOOL bIsTriStrip, DWORD dwVertexSize,
 	DWORD* pdwNumCacheMisses, DWORD* pdwNumPagesCrossed);
 
 /*-----------------------------------------------------------------------------
-	D-8: AutoFOV (aspect-correct field of view), ported from engine-ut2004 (ufront step 2.16)
-	and adapted to UC2. docs/porting/analysis/console-fov.md.
+	AutoFOV (aspect-correct field of view).
 -----------------------------------------------------------------------------*/
 
 //
-// UE2's FovAngle is the HORIZONTAL field of view: FCameraSceneNode::UpdateMatrices gives
+// UE2's FovAngle is the horizontal field of view: FCameraSceneNode::UpdateMatrices gives
 // FPerspectiveMatrix(FOV/2, FOV/2, 1, Aspect), whose row 1 divides by the aspect, so a wider window
 // buys width out of height (90 deg at 4:3 is 73.74 deg vertically, at 16:9 only 58.72: the world
 // looks zoomed vertically). UC2 was designed for a 4:3 picture (640x480). AutoFOV re-derives the
-// horizontal FOV from the window's aspect so the VERTICAL one stays what it is at 4:3 (Hor+):
+// horizontal FOV from the window's aspect so the vertical one stays what it is at 4:3 (Hor+):
 //
 //   Off      (0) - stock: FovAngle used as it is.
 //   HorPlus  (1) - 2*atan( tan(Fov/2) * Aspect/Ref ). The vertical FOV of Ref (4:3) at any aspect.
 //   Adaptive (2) - max(Fov, HorPlus). The default: Hor+ on windows wider than Ref, stock on narrower
 //                  ones (where Hor+ would cut both axes).
 //
-// Applied as a SCOPED override of the player's FovAngle around the frame (UGameEngine::Draw, after
+// Applied as a scoped override of the player's FovAngle around the frame (UGameEngine::Draw, after
 // PlayerCalcView), so the world, the first-person weapon, the HUD's 3D markers, the LOD and shadow
 // biases agree on one value, while everything outside the frame (script's ticks, the mouse:
 // UCPlayerInput scales by DesiredFOV) keeps the player's real FOV. Config: [ufront.AutoFOV]
-// AutoFOV / ReferenceAspect / WeaponScale (the template's section and keys; G-9 adds SplitClampToFullScreen, a
-// proposal off by default: ufrontAutoFovSize); console AUTOFOV [0|1|2]
-// for the session. At the reference aspect (640x480, 1024x768...) nothing changes, bit for bit.
+// AutoFOV / ReferenceAspect / WeaponScale / SplitClampToFullScreen (on by default: ufrontAutoFovSize);
+// console AUTOFOV [0|1|2] for the session. At the reference aspect (640x480, 1024x768...) nothing
+// changes, bit for bit.
 //
 enum EAutoFovMode
 {
@@ -1180,11 +1179,11 @@ enum EAutoFovMode
 	AUTOFOV_Adaptive = 2,
 };
 
-// The size a viewport's FOV is corrected for: its own SizeX x SizeY (G-6: a split-screen viewport too,
-// AutoFOV per viewport aspect; D-8 had used the whole window's for it).
+// The size a viewport's FOV is corrected for: its own SizeX x SizeY (a split-screen viewport too), or the
+// window's for a split strip wider than the window while SplitClampToFullScreen is on.
 ENGINE_API void ufrontAutoFovSize( UViewport* Viewport, INT& SizeX, INT& SizeY );
 
-// G-6: the ScaleFOVX/ScaleFOVY that make a split-screen viewport (ScaleX/ScaleY below 1) show exactly Fov
+// The ScaleFOVX/ScaleFOVY that make a split-screen viewport (ScaleX/ScaleY below 1) show exactly Fov
 // horizontally with square pixels. FCameraSceneNode::UpdateMatrices scales camera space by ScaleX/ScaleY and
 // the half-angle by ScaleFOVX/Y (Epic's Xbox maths: the SSDetailLevels' ReduceFOV, 0.5 for three and four
 // players, a 79 degree quarter and a 45 degree top strip of three); the edge of the view is then
@@ -1192,7 +1191,7 @@ ENGINE_API void ufrontAutoFovSize( UViewport* Viewport, INT& SizeX, INT& SizeY )
 // for a full-window viewport or with AutoFOV off (Epic's view, ReduceFOV and all).
 ENGINE_API UBOOL ufrontSplitFovScale( UViewport* Viewport, FLOAT Fov, FLOAT& OutScale );
 
-// G-9: one "[AutoFOV] shown viewport=<i> rect=X,Y WxH mode=M base=B effective=E scaleFOV=S horizontal=H vertical=V"
+// One "[AutoFOV] shown viewport=<i> rect=X,Y WxH mode=M base=B effective=E scaleFOV=S horizontal=H vertical=V"
 // line per viewport whenever it changes: the field of view the picture shows (AutoFOV and the split-screen scale
 // applied; also with AutoFOV off, Epic's ReduceFOV maths). Fov = the FOV drawn with, BaseFov = the player's own.
 ENGINE_API void ufrontLogShownFov( UViewport* Viewport, FLOAT Fov, FLOAT BaseFov );

@@ -2,12 +2,10 @@
 	UnGnuG.h: Unreal definitions for Gnu G++. Unfinished. Unsupported.
 	Copyright 1997-1999 Epic Games, Inc. All Rights Reserved.
 
-	engine-uc2 (M1): rebased on engine-ut2004's UnGnuG.h (GCC 15 / Emscripten / MinGW port of the UT2004
-	header), then given back UC2's platform contract, which is UnVcWin32.h's: ANSI-only TCHAR conversions,
-	appTrunc, appSqrt(FLOAT), appInvSqrt, appCycles64, LARGEINT, FMovieThread/FMoviePlayer,
-	appGetLanguageID. UC2's own copy of this file was a stale UT2003 leftover. The math intrinsics and
-	timer-reset parts of the UT2004 header are NOT here: UC2 declares its math in UnFile.h and defines it in
-	UnAnsi.cpp. See docs/porting/analysis/core-port.md.
+	The GCC / Clang (Emscripten) / MinGW platform header, with UC2's platform contract, which is
+	UnVcWin32.h's: ANSI-only TCHAR conversions, appTrunc, appSqrt(FLOAT), appInvSqrt, appCycles64,
+	LARGEINT, FMovieThread/FMoviePlayer, appGetLanguageID. The math is declared in UnFile.h and defined
+	in UnAnsi.cpp.
 =============================================================================*/
 
 /*----------------------------------------------------------------------------
@@ -92,7 +90,7 @@
 	#undef ASMPSX2
 	#define COMPILER "Compiled for GCN (" __VERSION__ ")"
 #elif defined(__MINGW32__)
-	// Windows built with GCC (engine-ut2004 2.33). ASMLINUX means "GCC asm", not "Linux"; what must NOT
+	// Windows built with GCC. ASMLINUX means "GCC asm", not "Linux"; what must not
 	// come with it is the Unix identity (__UNIX__/__LINUX__ select the POSIX file/socket/loader paths).
 	#define __INTEL__ 1
 	#define __INTEL_BYTE_ORDER__ 1
@@ -157,8 +155,8 @@
 enum {DEFAULT_ALIGNMENT = 8 }; // Default boundary to align memory allocations on.
 enum {CACHE_LINE_SIZE   = 32}; // Cache line size.
 
-// Member alignment. aligned(n) only (no `packed`), as in UT2004's shipped Linux header: GCC honours the
-// engine's own #pragma pack blocks. Struct layout against the shipped .u files is checked at M3.
+// Member alignment. aligned(n) only (no `packed`): GCC honours the engine's own #pragma pack blocks. The
+// struct layout against the shipped .u files is checked by UStruct::Link and `ucc verifyclasses`.
 #if __GNUG__
 #define GCC_PACK(n)  __attribute__((aligned(n)))
 #define GCC_ALIGN(n) __attribute__((aligned(n)))
@@ -264,9 +262,9 @@ typedef DWORD				BITFIELD;	// Same TYPE as DWORD, so `Ar << Bitfield` picks the 
 typedef unsigned int		BITFIELD;	// For bitfields.
 #endif
 
-// An unsigned integer as wide as a pointer. UC2's own code does not use it yet (UT2004 added it for
-// 64-bit); it is here for the ports of drivers and for M13. `unsigned long` everywhere except LLP64
-// (Win64), where long is 4 bytes. On every 32-bit target this is 4 bytes and is NOT DWORD's type.
+// An unsigned integer as wide as a pointer: the 64-bit-clean type for pointer-sized values and script
+// placeholders. `unsigned long` everywhere except LLP64 (Win64), where long is 4 bytes. On every 32-bit
+// target this is 4 bytes and is not DWORD's type.
 #if defined(_WIN64) || \
     (defined(__SIZEOF_POINTER__) && defined(__SIZEOF_LONG__) && \
      __SIZEOF_POINTER__ > __SIZEOF_LONG__)
@@ -280,7 +278,7 @@ typedef unsigned long PTRINT;
 typedef unsigned int size_t;
 #endif
 
-// Make sure characters are signed. (M13: except in the -funsigned-char audit build, UC2_UNSIGNED_CHAR_AUDIT.)
+// Make sure characters are signed (except in the -funsigned-char audit build, UC2_UNSIGNED_CHAR_AUDIT).
 #if defined(__CHAR_UNSIGNED__) && !defined(UC2_UNSIGNED_CHAR_AUDIT)
 	#error "Bad compiler option: Characters must be signed"
 #endif
@@ -318,7 +316,7 @@ typedef unsigned int size_t;
 #define TCHAR_TO_ANSI(str) (ANSICHAR*)(str)
 #define TCHAR_TO_OEM(str) (ANSICHAR*)(str)
 #define ANSI_TO_TCHAR(str) (ANSICHAR*)(str)
-// The Unix file manager's helpers (engine-ut2004 FFileManagerUnix.h); with ANSI TCHAR they copy.
+// The Unix file manager's helpers (FFileManagerUnix.h); with ANSI TCHAR they copy.
 inline char* unixToANSI( char* out, const char* in ) { char* ret = out; if(out != in) { while((*out++ = *in++)); } return ret; }
 inline int unixGetSizeANSI( const char* str ) { int len=0; while(str[len]) len++; return len+1; }
 inline char* unixToUNICODE( char* out, const char* in ) { char* ret = out; if(out != in) { while((*out++ = *in++)); } return ret; }
@@ -405,8 +403,8 @@ inline SQWORD appCycles64()
 #endif
 
 //
-// Seconds, arbitrarily based: out of line in UnUnix.cpp (gettimeofday based, as in engine-ut2004 --
-// the rdtsc version drifts with CPU frequency scaling).
+// Seconds, arbitrarily based: out of line in UnUnix.cpp (CLOCK_MONOTONIC; an rdtsc version would drift
+// with CPU frequency scaling).
 //
 
 //
@@ -461,7 +459,7 @@ inline DWORD _rotl(DWORD val, INT shift)
 	UC2 platform classes (UnVcWin32.h:792-819 on the MSVC build).
 ----------------------------------------------------------------------------*/
 
-// FMovieThread, FMoviePlayer (UnVcWin32.h:792-806 on the MSVC build): one portable definition (M9).
+// FMovieThread, FMoviePlayer (UnVcWin32.h on the MSVC build): one portable definition.
 #include "UnMovieBase.h"
 
 //scion jg -- Wrapper around the xbox function for determining language (UnUnix.cpp: LC_INT, as on PC)

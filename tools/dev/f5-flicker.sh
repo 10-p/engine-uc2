@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# F-5 step 4: consecutive frames of one spot of a map on this machine's GPU, headless, for the CTF-Aqueduct shadow
-# flicker (docs/porting/analysis/render-f5.md). One game run per call; the pictures are the frames themselves (one
+# Consecutive frames of one spot of a map on this machine's GPU, headless, to catch a flicker (e.g. CTF-Aqueduct's
+# projected shadows). One game run per call; the pictures are the frames themselves (one
 # `exec shot` per tick, as tools/dev/jit-strip.sh), so a flicker between frames is caught frame by frame.
 #
 #   tools/dev/f5-flicker.sh <name> <tree> [frames]
@@ -17,19 +17,19 @@
 #                                  repeats exactly, so two runs can be compared frame by frame)
 #   F5_PRE="cmd;cmd"               console commands run before the pawn is placed (';' separates), e.g. "Fly"
 #                                  (the pawn then stays where it is put, also with time running)
-#   F5_TELEPORT="x y z yaw pitch"  B-1: place the pawn with the TELEPORT cheat instead (WHEREAMI's output: the owner's
+#   F5_TELEPORT="x y z yaw pitch"  place the pawn with the TELEPORT cheat instead (WHEREAMI's output: a player's
 #                                  coordinates), twice like NETPLACE; F5_PLACE is then only the base of 'move'
-#   F5_RMODE=7                     B-1: the viewport's render mode (RMODE <n>; 7 = lighting only), set after placing
-#   F5_MOUSE="dx dy"               B-1: phase 'mouse' (time running, pawn standing still): one relative mouse motion
+#   F5_RMODE=7                     the viewport's render mode (RMODE <n>; 7 = lighting only), set after placing
+#   F5_MOUSE="dx dy"               phase 'mouse' (time running, pawn standing still): one relative mouse motion
 #                                  of dx dy counts (the test channel's 'mouse', as a real mouse) before every frame;
 #                                  phase 'mousefz' the same with time stopped
-#   F5_PIXTRACE="x y"              B-1: GLPIXTRACE x y all before every frame (log only: what each frame draws there)
+#   F5_PIXTRACE="x y"              GLPIXTRACE x y all before every frame (log only: what each frame draws there)
 #   F5_ARGS="..."                  more uc2.bin arguments; F5_GL4ES=1 runs the GLES twin instead of the desktop device;
 #                                  F5_SOFT=1 renders with Mesa llvmpipe on the Xvfb display instead of the GPU
 #   F5_BIN=uc2.bin                 another executable of the tree's System folder (before/after pictures)
 #   F5_RES=1280x720                window size; F5_SECS=300: time limit of the run (software GL under load: more)
-#   F5_OUT=<WorkUC2>/logs/f5/flicker  output folder
-# Output: <out>/<name>.{out,inject,result}, <name>-<phase>-NN.png. Inside <WorkUC2>/bin/capped 2G; nothing is left
+#   F5_OUT=<repo>/../logs/f5/flicker  output folder
+# Output: <out>/<name>.{out,inject,result}, <name>-<phase>-NN.png. Inside <repo>/../bin/capped 2G; nothing is left
 # running. SDL's offscreen video driver (EGL): no window on any display, as tools/dev/fx-owner.sh UC2_GPU=1.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -106,7 +106,7 @@ rm -f "$sys/Avaris.ini" "$sys/User.ini" "$sys"/Shot*.bmp "$out/$name"-*.png "$ou
 rm -rf "$sys/Profiles"; mkdir -p "$sys/Profiles"
 chan=$out/$name.channel; : > "$chan"
 dev=""; [ -n "${F5_GL4ES:-}" ] && dev="-gl4es"
-# F5_SOFT=1: Mesa llvmpipe on the Xvfb display instead of the GPU (the GLES twin runs there with an ES 2.0
+# F5_SOFT=1: Mesa llvmpipe on the Xvfb display instead of the GPU (the GL4ES device runs there with an ES 2.0
 # context, as tools/dev/m11-twin.sh: MESA_GLES_VERSION_OVERRIDE=2.0)
 video="SDL_VIDEODRIVER=offscreen"; [ -n "${F5_SOFT:-}" ] && video="MESA_GLES_VERSION_OVERRIDE=2.0"
 inner=$(mktemp)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""B-2: luminance measure of the pictures of one tools/dev/decay-flash.sh run (DM-Decay white cloud).
+"""Luminance measure of the pictures of one tools/dev/decay-flash.sh run (DM-Decay white cloud).
 
     decay-flash.py <logs/tree/df-name>        every <prefix>-<shot>.png, in shot order of <prefix>.result.shots
 

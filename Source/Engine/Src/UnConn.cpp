@@ -10,15 +10,15 @@
 #include "UnNet.h"
 
 #if DO_ENABLE_NET_TEST
-// uc2 port: the network tests' deterministic packet drop (Engine/Src/UC2NetTest.cpp).
+// The network tests' deterministic packet drop (Engine/Src/UC2NetTest.cpp).
 ENGINE_API UBOOL UC2NetTestDropPacket( UNetConnection* Connection );
 ENGINE_API void UC2NetTestNoteText( UNetConnection* Connection, const TCHAR* Text, UBOOL bSending );
 #endif
 
-// uc2 port: packet ids are _WORDs that wrap modulo MAX_PACKETID-1 (FlushNet), so "later than" must be decided
-// modulo that range, as UT2004 does with MakeRelative on INT ids. Signed distance from B to A.
+// Packet ids are _WORDs that wrap modulo MAX_PACKETID-1 (FlushNet), so "later than" must be decided
+// modulo that range. Signed distance from B to A.
 #if DO_ENABLE_NET_TEST
-// The network tests' compatibility test key [UC2NetTest] OldAcks=True (-ini:; was NETOLDACKS): this process keeps
+// The network tests' compatibility test key [UC2NetTest] OldAcks=True (set with -ini:): this process keeps
 // Epic's UC2 ack logic (ids from 0 with OutAckPacketId 0, plain comparisons), to run a fixed and an unfixed end
 // against each other.
 static INT GUC2OldAcks = -1;
@@ -28,7 +28,7 @@ static UBOOL UC2OldAcks()
 		GUC2OldAcks = appReadTestFlag( TEXT("OldAcks"), TEXT("UC2NetTest") ) ? 1 : 0;
 	return GUC2OldAcks;
 }
-// [UC2NetTest] PacketIdStart=<n> (-ini:; was NETPKTID=): every connection of this process starts its packet ids at n.
+// [UC2NetTest] PacketIdStart=<n> (set with -ini:): every connection of this process starts its packet ids at n.
 // Read once (test keys are one-shot), kept for every later connection.
 static INT GUC2PacketIdStart = -2;
 static UBOOL UC2PacketIdStart( INT& StartId )
@@ -75,7 +75,7 @@ UNetConnection::UNetConnection( UNetDriver* InDriver, const FURL& InURL )
 ,	QueuedBytes			( 0 )
 ,	URL					( InURL )
 ,	StatPeriod          ( 1.f  )
-,	OutAckPacketId		( MAX_PACKETID - 2 )	// uc2 port: "the id before 0" (UT2004: -1), so packet 0 can be NAKed
+,	OutAckPacketId		( MAX_PACKETID - 2 )	// "the id before 0", so packet 0 can be NAKed
 ,	InPacketId			( MAX_PACKETID - 2 )
 ,	LagAcc				( 9999 )
 ,	BestLagAcc			( 9999 )
@@ -92,7 +92,7 @@ UNetConnection::UNetConnection( UNetDriver* InDriver, const FURL& InURL )
 	Parse(appCmdLine(),TEXT("PktOrder="),PktOrder);
 	Parse(appCmdLine(),TEXT("PktDup="),  PktDup);
 	Parse(appCmdLine(),TEXT("PktLag="),  PktLag);
-	// uc2 port: the network tests' wrap test: [UC2NetTest] PacketIdStart=<n> starts this side's packet ids at n, so a short test
+	// The network tests' wrap test: [UC2NetTest] PacketIdStart=<n> starts this side's packet ids at n, so a short test
 	// crosses the packet-id wrap (16382 -> 0) that a real connection reaches after ~16k packets (~4.5 min at 60/s).
 	{
 		INT StartId = 0;
@@ -178,12 +178,11 @@ void UNetConnection::Destroy()
 	State = USOCK_Closed;
 
 	// Kill all channels.
-	// uc2 port: during garbage collection only destroy them; the collector deletes them afterwards (they are
+	// During garbage collection only destroy them; the collector deletes them afterwards (they are
 	// unreachable with this connection). The collector may have reached a channel first: its Destroy then
-	// routes here through UChannel::RouteDestroy, and deleting it here freed the very object whose Destroy and
-	// ConditionalDestroy were still running up the stack (they read its flags on return). Epic's allocator left
-	// freed memory readable; glibc's does not ("<channel> failed to route Destroy" at exit, AddressSanitizer:
-	// heap-use-after-free in UObject::ConditionalDestroy, freed by ~UActorChannel from here).
+	// routes here through UChannel::RouteDestroy, and deleting it here would free the very object whose Destroy
+	// and ConditionalDestroy are still running up the stack (they read its flags on return). Epic's allocator
+	// leaves freed memory readable; glibc's does not.
 	for( INT i=OpenChannels.Num()-1; i>=0; i-- )
 	{
 		if( GIsGarbageCollecting )
@@ -388,7 +387,7 @@ void UNetConnection::FlushNet()
 
 		// Send now.
 #if DO_ENABLE_NET_TEST
-		// uc2 port: the network tests' deterministic packet drop ([UC2NetTest] Drop=, UC2NetTest.cpp): the packet is lost
+		// The network tests' deterministic packet drop ([UC2NetTest] Drop=, UC2NetTest.cpp): the packet is lost
 		// as if on the wire; everything below (packet id, lag bookkeeping, LastSendTime) still happens.
 		if( UC2NetTestDropPacket( this ) )
 		{
@@ -458,7 +457,7 @@ void UNetConnection::Serialize( const TCHAR* Data, EName MsgType )
 
 	debugf(NAME_DevNet, TEXT("NetConnection sending text: %s"), Data);
 #if DO_ENABLE_NET_TEST
-	UC2NetTestNoteText( this, Data, 1 );	// uc2 port: [UC2NetTest] Drop= triggers (UC2NetTest.cpp)
+	UC2NetTestNoteText( this, Data, 1 );	// [UC2NetTest] Drop= triggers (UC2NetTest.cpp)
 #endif
 
 	// Send data to the control channel.
@@ -524,7 +523,7 @@ void UNetConnection::ReceivedPacket( FBitReader& Reader )
 
 	// Check packet ordering.
 	INT PacketId = Reader.ReadInt(MAX_PACKETID);;
-	INT PacketDelta = PacketIdDelta( PacketId, InPacketId );	// uc2 port: wrap-aware
+	INT PacketDelta = PacketIdDelta( PacketId, InPacketId );	// Wrap-aware
 	if( PacketDelta > 0 )
 	{
 		InLossAcc += PacketDelta - 1;
@@ -562,7 +561,7 @@ void UNetConnection::ReceivedPacket( FBitReader& Reader )
 
 			// Resend any old reliable packets that the receiver hasn't acknowledged.
 			guard(ReceivedVirtualNak);
-			// uc2 port: wrap-aware (PacketIdDelta); the plain '>' stopped all NAKs after the first packet-id wrap.
+			// Wrap-aware (PacketIdDelta); the plain '>' stopped all NAKs after the first packet-id wrap.
 			INT AckDelta = PacketIdDelta( AckPacketId, OutAckPacketId );
 			if( AckDelta>0 )
 			{

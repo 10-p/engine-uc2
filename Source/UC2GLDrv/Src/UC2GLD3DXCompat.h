@@ -42,7 +42,7 @@ FORCEINLINE D3DXMATRIX* D3DXMatrixIdentity( D3DXMATRIX* Out )
 	return Out;
 }
 
-// M7b: the vector helpers of SetProjectorMultiMaterial (Epic's Xbox body). D3DX's
+// The vector helpers of SetProjectorMultiMaterial (Epic's Xbox body). D3DX's
 // TransformNormal is v * M (upper 3x3), Transform is (v,1) * M; the same as FMatrix's.
 struct D3DXVECTOR3
 {

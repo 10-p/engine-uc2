@@ -8,7 +8,7 @@
 
 #include "EnginePrivate.h"
 #include "UnNet.h"
-#include "UnLinker.h"	// uc2 port: the static-index diagnostic in UPackageMapLevel::SerializeObject
+#include "UnLinker.h"	// The static-index diagnostic in UPackageMapLevel::SerializeObject
 
 /*-----------------------------------------------------------------------------
 	UPackageMapLevel implementation.
@@ -58,7 +58,7 @@ UBOOL UPackageMapLevel::SerializeObject( FArchive& Ar, UClass* Class, UObject*& 
 			Ar.SerializeInt( Index, MaxObjectIndex );
 			if( !Ar.IsError() )
 				Object = IndexToObject( Index, 1 );
-			// uc2 port: diagnostic, which export a static index named when it resolves to nothing here.
+			// Diagnostic, which export a static index named when it resolves to nothing here.
 			if( !Object && !Ar.IsError() )
 			{
 				INT Rest = Index;
@@ -258,7 +258,7 @@ void UNetDriver::TickDispatch( FLOAT DeltaTime )
 	// from any clients. If there is a gap, notify the game engine to handle it.
 
 	// Ignore hitches in frame rate that are more than half the cheat timeout
-	// (G-10b: a driver may opt out of the check as a whole, StandbyCheckEnabled; every native driver keeps it.)
+	// (A driver may opt out of the check as a whole, StandbyCheckEnabled; every native driver keeps it.)
 	if( bEnableStandbyCheatDetection && StandbyCheckEnabled() )
 	{
 		if ( DeltaTime > STANDBYCHEAT_FRAMERATECAP )

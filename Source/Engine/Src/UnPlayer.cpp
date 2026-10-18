@@ -38,7 +38,7 @@ void UPlayer::Destroy()
 	Super::Destroy();
 	unguard;
 }
-// uc2 port: TELEPORT <x> <y> <z> / WHEREAMI, cheats (UC2Cheats.cpp)
+// TELEPORT <x> <y> <z> / WHEREAMI, cheats (UC2Cheats.cpp)
 ENGINE_API UBOOL UC2CheatExec( UEngine* Engine, APlayerController* PC, const TCHAR* Cmd, FOutputDevice& Ar );
 
 UBOOL UPlayer::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
@@ -46,7 +46,7 @@ UBOOL UPlayer::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	guard(UPlayer::Exec);
 	if ( !Actor )
 		return 0;
-	// uc2 port: before the scripts, so that TELEPORT with coordinates is ours (CheatManager.Teleport has none)
+	// Before the scripts, so that TELEPORT with coordinates is ours (CheatManager.Teleport has none)
 	if( UC2CheatExec( Actor->GetLevel()->Engine, Actor, Cmd, Ar ) )
 		return 1;
 	if( Actor->GetLevel()->Exec(Cmd,Ar) )

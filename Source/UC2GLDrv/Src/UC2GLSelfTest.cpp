@@ -1,5 +1,5 @@
 /*=============================================================================
-	UC2GLSelfTest.cpp: numeric checks of the post-process primitives (M7).
+	UC2GLSelfTest.cpp: numeric checks of the post-process primitives.
 
 	There is no Xbox to compare pictures with, so the operations the effects are built
 	from are checked against a small CPU computation of what Epic's Xbox code specifies:
@@ -17,16 +17,16 @@
 	  dof-ramp     PS_DepthOfField: depth -> ramp texture -> blend alpha (absolute mode)
 	  remap        PS_ColorRemap + ColorRemap.vsh: luminance -> lookup coordinate
 	  luminance    PS_LuminanceTexIndex into the 16x16 target the dynamic gamma reads
-	  fog          fixed-function linear fog (M11)
-	  pp-sizes     (pp-scale) the camera effects' pooled blur targets are the fractions of the
+	  fog          fixed-function linear fog
+	  pp-sizes     the camera effects' pooled blur targets are the fractions of the
 	               reference picture (PostProcessReferenceHeight) Epic's formulas give
-	  ref-copy     (pp-scale) the 480-line reference copy of the back buffer, against the CPU
-	  ref-taps     (pp-scale) FilterCopyRenderTarget from the back buffer: taps in reference
+	  ref-copy     the 480-line reference copy of the back buffer, against the CPU
+	  ref-taps     FilterCopyRenderTarget from the back buffer: taps in reference
 	               pixels, read from the reference copy
-	  bb-copy-ref  (pp-scale) UpdateBackBufferCopyTarget with the reference picture
+	  bb-copy-ref  UpdateBackBufferCopyTarget with the reference picture
 	               (the tests above pp-sizes run with the reference height 0, as Epic's code;
 	               the three ref tests need a back buffer taller than 480 lines)
-	  index-narrow only without 32-bit indices (M11 fallback): 32-bit index data stored as
+	  index-narrow only without 32-bit indices (the fallback): 32-bit index data stored as
 	               16-bit and drawn
 
 	Console: POSTSELFTEST (runs at the start of the next frame). Test key: SelfTest=True
@@ -133,13 +133,13 @@ struct FSelfTest
 	}
 
 	/*-------------------------------------------------------------------------
-		Depth through points (M11): the way to check a depth buffer where it
+		Depth through points: the way to check a depth buffer where it
 		cannot be read back (OpenGL ES 2, WebGL).
 	-------------------------------------------------------------------------*/
 
 	GLuint PointProgram;
 	GLint  PointColorLoc;
-	// M11: the same, with the scene depth test of PSV_SceneDepthTest (UC2GLShaders.cpp) around it.
+	// The same, with the scene depth test of PSV_SceneDepthTest (UC2GLShaders.cpp) around it.
 	GLuint DepthTestProgram;
 	GLint  DepthTestColorLoc, DepthTestRectLoc;
 	INT    LastProbeRed, LastProbeGreen;	// pixels whose upper / lower bound held in the last probe
@@ -236,7 +236,7 @@ struct FSelfTest
 		RenDev->glBindBuffer( GL_ARRAY_BUFFER, 0 );
 		RenDev->FreeBuffer( GL_ARRAY_BUFFER, Buffer );
 	}
-	// How many pixels of a framebuffer's depth buffer are NOT within Bound units of Expected:
+	// How many pixels of a framebuffer's depth buffer are not within Bound units of Expected:
 	// a point at Expected+Bound must pass "greater or equal", one at Expected-Bound "less or
 	// equal". Nothing is written to depth; the framebuffer's colour is used as the tally.
 	INT ProbeDepth( GLuint Framebuffer, INT W, INT H, const TArray<DWORD>& Expected, INT Bound, UBOOL BottomUp )
@@ -281,7 +281,7 @@ struct FSelfTest
 		RI->RestoreAfterDeviceDraw();
 		return Wrong;
 	}
-	// M11, no gl_FragDepth: CopyDepthBuffer copies nothing and the passes drawn into the target
+	// No gl_FragDepth: CopyDepthBuffer copies nothing and the passes drawn into the target
 	// test the scene's depth in the shader (PSV_SceneDepthTest). The same two bounds as
 	// ProbeDepth, through that shader test and with GL's depth test off: a triangle at
 	// Expected+Bound must be dropped (GL_LEQUAL against the scene), one at Expected-Bound kept.
@@ -336,7 +336,7 @@ struct FSelfTest
 	}
 
 	/*-------------------------------------------------------------------------
-		M11: fixed-function distance fog (gl4es emulates it in a shader).
+		Fixed-function distance fog (gl4es emulates it in a shader).
 	-------------------------------------------------------------------------*/
 
 	// A black, untextured quad at camera-space depth Z (D3D camera space: z forward) through
@@ -432,7 +432,7 @@ struct FSelfTest
 	}
 
 	/*-------------------------------------------------------------------------
-		M11: 32-bit indices on a context without them (OES_element_index_uint
+		32-bit indices on a context without them (OES_element_index_uint
 		missing, or MaskCaps=uintindex). Only run then.
 	-------------------------------------------------------------------------*/
 
@@ -568,7 +568,7 @@ struct FSelfTest
 		RI->CopyDepthBuffer( Half, RenDev->DefaultRenderTarget );
 		if( !RenDev->CapFragDepth )
 		{
-			// M11, no gl_FragDepth: nothing is copied; what stands for the copy is the depth test
+			// No gl_FragDepth: nothing is copied; what stands for the copy is the depth test
 			// in the shaders of the passes drawn into the target. Checked with the same expected
 			// depths and bounds as the copy.
 			TArray<DWORD> Expected;
@@ -592,15 +592,14 @@ struct FSelfTest
 			debugf( NAME_Init, TEXT("UC2GLDrv: selftest depth-copy (fallback) per bound:%s"), *PerBound );
 			// Tolerance 3 units of the 24-bit depth (the copy's is 1): the depth reaches the shader
 			// as a 32-bit float from the texture and is compared with an interpolated 32-bit
-			// float, where GL's own test compares two integers; measured on the twin: 1 unit
-			// fails for 81% of the pixels, 2 for 25%, 3 for none.
+			// float, where GL's own test compares two integers (1 or 2 units are too tight).
 			Report( TEXT("depth-copy"), HW*HH, WrongAtBound ? 16777215.f : (FLOAT)Bound, 3.f, *FString::Printf( TEXT("FALLBACK (no gl_FragDepth): the scene depth test in the shader of a pass drawn into a %ix%i target after CopyDepthBuffer: target pixel (x,y) is tested against the depth of back-buffer pixel (2x+1,2y+1); probed with two triangles at the expected depth +/- N units through that test: every pixel within %i units (%i pixels not within 1); last probe: upper bound held for %i pixels, lower bound for %i"), HW, HH, Bound, WrongAt1, LastProbeRed, LastProbeGreen ) );
 			delete Half;
 			return;
 		}
 		if( RenDev->IsGLES )
 		{
-			// M11: OpenGL ES cannot read a depth buffer back. The copy is probed instead: see ProbeDepth.
+			// OpenGL ES cannot read a depth buffer back. The copy is probed instead: see ProbeDepth.
 			TArray<DWORD> Expected;
 			Expected.Add( HW * HH );
 			for( INT y=0; y<HH; y++ )
@@ -644,7 +643,7 @@ struct FSelfTest
 							Others[k]++;
 				}
 			}
-		// M11: the point probe that stands in for the read-back on OpenGL ES, run here too, where the truth is known.
+		// The point probe that stands in for the read-back on OpenGL ES, run here too, where the truth is known.
 		TArray<DWORD> Expected;
 		Expected.Add( HW * HH );
 		for( INT y=0; y<HH; y++ )
@@ -709,10 +708,10 @@ struct FSelfTest
 		FFourSampleFilter& F = Sampler.FilterList(0);
 		FLOAT MaxError = CompareFilter( Pattern, Got, 0.f, 0.f, 1.f, 1.f, F );
 
-		// H-1 (PostProcessTargetScale 2; docs/porting/analysis/h1-bloom.md): the same pass with TapScale 2: the
+		// PostProcessTargetScale 2: the same pass with TapScale 2: the
 		// taps at twice the offsets, each the mean of two bilinear reads 1 texel either side along each axis the
 		// filter reaches (PS_Blur's fill variant). The mean signed error shows a pass that loses or gains (a
-		// rounding bias: an 8-bit fill pass whose exact halves round down was -0.1 to -0.2 here).
+		// rounding bias: an 8-bit fill pass whose exact halves round down shows -0.1 to -0.2 here).
 		FilterCopyRenderTarget( Dest, Source, NULL, Sampler, RI, NULL, NULL, 0, 2 );
 		ReadTarget( Dest, Got );
 		UBOOL Reach[2] = { 0, 0 };
@@ -784,7 +783,7 @@ struct FSelfTest
 	}
 
 	/*-------------------------------------------------------------------------
-		pp-scale (docs/porting/analysis/pp-scale.md): the reference picture.
+		The reference picture.
 	-------------------------------------------------------------------------*/
 
 	// pp-sizes: the blur targets the camera effects hold in the render-target pool are the
@@ -795,7 +794,7 @@ struct FSelfTest
 	void TestTargetSizes()
 	{
 		FPostProcessReference Ref = GetPostProcessReference( RenDev->MainWidth, RenDev->MainHeight );
-		// H-1: PostProcessTargetScale multiplies every blur target's sides before Epic's truncation (the
+		// PostProcessTargetScale multiplies every blur target's sides before Epic's truncation (the
 		// back-buffer copy is not a blur target and keeps its size).
 		INT S = RenDev->GetRenderCaps()->PostProcessTargetScale;
 		struct FSize { INT W, H, Flags; };
@@ -1168,14 +1167,14 @@ struct FSelfTest
 		if( RenDev->MainSamples )
 		{
 			// The checks write and read the main framebuffer's textures directly and compare
-			// exactly: they need the single-sampled main framebuffer (O-8).
+			// exactly: they need the single-sampled main framebuffer.
 			debugf( NAME_Init, TEXT("UC2GLDrv: selftest: anti-aliasing is on (multisampled main framebuffer); the self-test needs it off: AntiAliasing=0") );
 			Failed = 1;
 			debugf( NAME_Init, TEXT("UC2GLDrv: selftest summary: %i passed, %i failed"), Passed, Failed );
 			return;
 		}
 		RI->PushState();
-		// pp-scale: the targets the frames before this one were drawn with; then the primitives
+		// The targets the frames before this one were drawn with; then the primitives
 		// as Epic's code specifies them, in back-buffer pixels (no reference picture: the tests
 		// below were written for that and stay unchanged); then the reference picture.
 		INT ConfiguredReference = RenDev->PostProcessReferenceHeight;
@@ -1203,7 +1202,7 @@ struct FSelfTest
 		RI->Clear( 1, FColor(0,0,0,0), 1, 1.f, 1, 0 );
 		debugf( NAME_Init, TEXT("UC2GLDrv: selftest summary: %i passed, %i failed"), Passed, Failed );
 
-		// M11: complete programs, to be compared between the bindings (UC2GLShaders.cpp).
+		// Complete programs, to be compared between the bindings (UC2GLShaders.cpp).
 		extern void UC2GL_RunProgramTest( UUC2GLRenderDevice* RenDev );
 		UC2GL_RunProgramTest( RenDev );
 		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, RenDev->MainFramebuffer );

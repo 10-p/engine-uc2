@@ -1,9 +1,9 @@
 /*=============================================================================
-	UnExtraMaps.cpp: the maps a player added, in the map menus (ufront).
+	UnExtraMaps.cpp: the maps a player added, in the map menus.
 
 	The map menus show maplists only (Maplists.ini, one [<Acr>_<List>] section per tab), and a map's player counts
 	come from Gametypes.ini (each game class's LevelData). A map dropped into Maps/ (or uploaded as a mod on the web)
-	is in neither, so it appeared nowhere, and with no player counts it could not be picked with a set bot count.
+	is in neither, so it would appear nowhere, and without player counts it could not be picked with a set bot count.
 	At boot, before the first level, this adds in memory only:
 
 	- [<Acr>_Extra] Label="EXTRA", Maps=... for every game whose <Acr>_Full list takes the map's prefix (DM_Full
@@ -18,7 +18,7 @@
 	An added map is one no section of Maplists.ini names (the _Extra sections excepted). Nothing is written: the keys
 	go into the config cache's copy of the two files, and again every time the cache reads them from disk
 	(GConfigFileLoaded, Core.h): CollectGarbage empties the whole cache (GConfig->UnloadAll, the names it holds may
-	be gone), so an addition made once at boot was lost at the first level change. Epic's Xbox build did the same for
+	be gone), so an addition made once at boot would be lost at the first level change. Epic's Xbox build did the same for
 	downloaded maps by writing merged copies to its cache partition (FContentManager::UpdateMapLists/UpdateMapLimits).
 =============================================================================*/
 

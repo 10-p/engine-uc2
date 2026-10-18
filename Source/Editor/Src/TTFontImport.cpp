@@ -5,7 +5,7 @@
 
 #include "EditorPrivate.h"
 
-// uc2 port: TrueType import rasterises glyphs through Windows GDI. Only Epic's MSVC build has it; elsewhere the
+// TrueType import rasterises glyphs through Windows GDI. Only Epic's MSVC build has it; elsewhere the
 // factory exists (the class is registered and serialisable) but importing a font reports an error.
 #if _MSC_VER
 #define UC2_TTF_GDI 1

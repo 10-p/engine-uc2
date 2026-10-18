@@ -1,22 +1,21 @@
 #!/usr/bin/env bash
-# M7b: projector and terrain census of the maps (GLSCENECENSUS, UC2GLSceneCensus.cpp): every projector actor with
+# Projector and terrain census of the maps (GLSCENECENSUS, UC2GLSceneCensus.cpp): every projector actor with
 # its texture, blending, flags and the surfaces it lies on, every terrain with its layers and render passes.
-# Nothing is compared here; it is the list of places where the Xbox-only paths would draw. Notebook:
-# docs/porting/analysis/projectors.md.
+# Nothing is compared here; it is the list of places where the Xbox-only paths would draw.
 #
 #   tools/dev/m7b-census.sh [map ...]               default: every map with a projector or a terrain; 3 runs at a time
 #   M7B_CENSUS_ARGS="-ini:..." tools/dev/m7b-census.sh ...   more uc2.bin arguments (e.g. the terrain capability on)
 #   M7B_CENSUS_TAG=t3 ...                            suffix of the output names (census-<map>-t3.out)
 #
-# Run trees <WorkUC2>/run/m7b-c0..2 (made from build-native when missing; uc2.bin refreshed every time), logs
-# <WorkUC2>/logs/m7b-c*/census-<map>[-tag].out, all census lines of all maps in <WorkUC2>/logs/m7b/census[-tag].txt.
+# Run trees <repo>/../run/m7b-c0..2 (made from build-native when missing; uc2.bin refreshed every time), logs
+# <repo>/../logs/m7b-c*/census-<map>[-tag].out, all census lines of all maps in <repo>/../logs/m7b/census[-tag].txt.
 # Every run: tools/dev/run-uc2-shot.sh (bin/capped 2G), no match started (the level's own actors only).
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 tag=${M7B_CENSUS_TAG:+-$M7B_CENSUS_TAG}
 maps=${*:-ACT-AnubisCheats ACT-BarrensAmbush ACT-SelketCheats CTF-Aqueduct CTF-ChemicalDawn CTF-Downfall CTF-Gauntlet][ CTF-Judgment CTF-Monoxide CTF-Recoil CTF-SkyReach CTF-TotalControl CTF-Transistor DM-AcidRain DM-Apex DM-Ascension DM-AxonCompressor DM-Azure DM-ColdFusion DM-Deadbolt DM-Decay DM-DeepCore DM-Eternal DM-Evilhands DM-Fury DM-Legacy DM-Meridian DM-Nexus DM-Phoenix DM-Praxis DM-Remnant DM-SolarFlare DM-Sovereign DM-Tempest DM-Undertow DM-Whisper OD-Ascension OD-Azure OD-Cancer OD-Echo OD-Falls OD-Obelisk OD-Overflow OD-Prism OD-Sovereign TUT-AdvMovement TUT-Combat}
-# M7B_CENSUS_PREFIX (default m7b-c): the three run trees <prefix>0..2; M7B_CENSUS_LOG (default <WorkUC2>/logs/m7b): the summary.
+# M7B_CENSUS_PREFIX (default m7b-c): the three run trees <prefix>0..2; M7B_CENSUS_LOG (default <repo>/../logs/m7b): the summary.
 pre=${M7B_CENSUS_PREFIX:-m7b-c}; logdir=${M7B_CENSUS_LOG:-$work/logs/m7b}
 mkdir -p "$logdir"
 for i in 0 1 2; do

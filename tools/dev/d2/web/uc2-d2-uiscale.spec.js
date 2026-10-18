@@ -1,17 +1,16 @@
-// engine-uc2 D-2 (UI scaling; docs/porting/analysis/ui-scale.md), browser check. It lives in engine-uc2 and runs
+// UI scaling, browser check. It lives in engine-uc2 and runs
 // with the frontend's harness (its fixtures, its served build, its memory guard) through the config beside it,
-// so nothing in the frontend repository is changed. From <WorkUC2>/ufrontend:
+// so nothing in the frontend repository is changed. From <repo>/../ufrontend:
 //   yarn build --target uc2 --engine-artifact <engine-uc2>/build-wasm-perf/Source/SDLLaunch
 //   node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=<N> -- --target uc2 \
 //     --config <engine-uc2>/tools/dev/d2/web/playwright.d2.config.js
-// (the frontend sits beside engine-uc2: <WorkUC2>/ufrontend; UFRONTEND=<dir> says otherwise).
+// (the frontend sits beside engine-uc2: <repo>/../ufrontend; UFRONTEND=<dir> says otherwise).
 //
 // With a 1920x1080 canvas the engine draws the menus (laid out on a 640x480 grid) in the centred 4:3 box
 // x 240..1680, scaled 2.25 ([SDL2Drv.SDL2Client] UIScaleMode=Fit43, the web ini's default). The test maps the
 // native mouse scenario's 640x480 positions into that box (as tools/dev/m10-inject.py does with M10_UIMAP) and
 // checks that hovering and clicking hit the drawn items; it saves the canvas before and after the click.
-// NOTE for uc2-wasm-boot.spec.js: its play test clicks at raw 640x480 canvas pixels (`at = (x, y) => [box.x + x,
-// box.y + y]`), which matched the old top-left drawing; with D-2 in the web build it needs the mapping below
+// A test that clicks at raw 640x480 canvas pixels (`at = (x, y) => [box.x + x, box.y + y]`) needs the mapping below
 // (at 1024x768: scale 1.6, origin 0,0).
 
 const fs = require('fs');

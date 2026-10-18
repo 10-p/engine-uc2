@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# D-4 check (native): whose name is the player's? The launcher's without a profile, the profile's with one.
+# Player name check (native): whose name is the player's? The launcher's without a profile, the profile's with one.
 #
 #   tools/dev/d4-names.sh
 #
-# Needs a native run tree with the REBUILT script packages (GUI.u carries the D-4 change):
-#   UC2_SCRIPTS=<WorkUC2>/run/d3-make/System tools/dev/mkrun-uc2.sh build-native d3s
+# Needs a native run tree with the rebuilt script packages (GUI.u carries the name change):
+#   UC2_SCRIPTS=<repo>/../run/d3-make/System tools/dev/mkrun-uc2.sh build-native d3s
 # (D4_TREE=<name> to change; run on a tree with the shipped packages it shows Epic's behaviour: n1 fails where the
-# character page renames the player.) Every run is one client under Xvfb inside <WorkUC2>/bin/capped 2G (through
+# character page renames the player.) Every run is one client under Xvfb inside <repo>/../bin/capped 2G (through
 # tools/dev/m10-controls.sh --file); n2-n4 restart on the same tree (M10_KEEP=1). Each run is launched the way the
 # web launcher launches the game: the name as a global option first (`Name=FrontName`, or a map URL with
-# `?Name=FrontName`) and as `-ini:User:[DefaultPlayer]:Name=FrontName` (engine-uc2 C-1).
-# Output in <WorkUC2>/logs/d3/names/ (D4_OUT=<dir>); one PASS/FAIL line per check on stdout.
+# `?Name=FrontName`) and as `-ini:User:[DefaultPlayer]:Name=FrontName`.
+# Output in <repo>/../logs/d3/names/ (D4_OUT=<dir>); one PASS/FAIL line per check on stdout.
 #
 #   n1  fresh (no profile): the menu, the character page after a character change, the match URL and the match
 #       all use FrontName (Epic: the character's name from the character page on); User.ini keeps FrontName.

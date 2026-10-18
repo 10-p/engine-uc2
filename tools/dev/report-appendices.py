@@ -2,13 +2,12 @@
 """Regenerate the appendices A-C of docs/porting/REPORT.md from git.
 
     tools/dev/report-appendices.py [TIP] > appendices.md        (TIP defaults to main)
-    tools/dev/report-appendices.py 4813dd9 | diff - <(sed -n '/^# Appendices/,$p' docs/porting/REPORT.md)
+    tools/dev/report-appendices.py <snapshot> | diff - <(sed -n '/^# Appendices/,$p' docs/porting/REPORT.md)
 
-The method is the one written at the top of the appendices (the coordinator's generator of 2026-10-08,
-kept here so anyone can reproduce them):
+The method is the one written at the top of the appendices (kept here so anyone can reproduce them):
 
-- A. Epic's files we modified: `git diff --name-status 7633696 TIP -- Source`, status M (a file that existed in
-  Epic's import). +/- from `git diff --numstat`; the commit list is `git log --reverse 7633696..TIP -- <file>`.
+- A. Epic's files we modified: `git diff --name-status IMPORT TIP -- Source`, status M (a file that existed in
+  Epic's import). +/- from `git diff --numstat`; the commit list is `git log --reverse IMPORT..TIP -- <file>`.
   Grouped by module (Source/<Module>/...), modules by file count then name, files by path; a commit line
   is the short hash and subject cut at 150 characters.
 - B. New files of ours under Source/: status A, by module: file count, lines added, the first four paths.
@@ -16,7 +15,8 @@ kept here so anyone can reproduce them):
   worktree does not matter) against `epic-sources/System/*.ini`, key by key. Multi-valued keys show only the
   values added (+) or removed (-). The comment column is the comment written above the key.
 
-Run against 4813dd9 (the report's snapshot) it reproduces the original appendices byte for byte.
+The report names its snapshot and commits by hashes of an older history; docs/porting/history-rewrite-commit-map.txt
+maps them to this one.
 """
 import collections
 import os

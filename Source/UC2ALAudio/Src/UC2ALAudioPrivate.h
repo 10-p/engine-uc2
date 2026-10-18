@@ -27,7 +27,7 @@
 
 /*-----------------------------------------------------------------------------
 	OpenAL entry points. Natively libopenal is loaded with dlopen when the device
-	starts (no library, no device: the game runs silent); under Emscripten (M11)
+	starts (no library, no device: the game runs silent); under Emscripten
 	the same table is filled with the statically linked symbols.
 -----------------------------------------------------------------------------*/
 
@@ -93,7 +93,7 @@ struct FUC2AL
 extern FUC2AL GAL;
 
 /*-----------------------------------------------------------------------------
-	The cooked data (format: docs/porting/analysis/audio.md, "Cooked format").
+	The cooked data (format: the writer, tools/cook-audio.py).
 -----------------------------------------------------------------------------*/
 
 enum { UC2_LOOP_INFINITE = 65535 };
@@ -109,7 +109,7 @@ enum EUC2Playlist
 	PL_OrderedFromRandom	= 5,
 };
 
-// How a wave is stored. Cooked: an Ogg Vorbis stream in the bank's .ogp. Xbox (M16): an entry of a shipped .xwb.
+// How a wave is stored. Cooked: an Ogg Vorbis stream in the bank's .ogp. Xbox: an entry of a shipped .xwb.
 enum EUC2WaveFormat
 {
 	WF_Vorbis		= 0,
@@ -128,7 +128,7 @@ struct FUC2Wave
 	ALuint		Buffer;			// decoded as is (0 = not yet)
 	ALuint		MonoBuffer;		// downmixed for 3D voices (stereo waves only)
 	UBOOL		bDecodeFailed;
-	DOUBLE		LastUsed;		// M16: the decoded-wave cache evicts the least recently used buffers
+	DOUBLE		LastUsed;		// The decoded-wave cache evicts the least recently used buffers
 	FUC2Wave() : Offset(0), Size(0), Rate(0), Channels(0), Frames(0), LoopStart(0), LoopLength(0), Format(WF_Vorbis),
 		bMissing(0), Buffer(0), MonoBuffer(0), bDecodeFailed(0), LastUsed(0.0) {}
 };
@@ -141,7 +141,7 @@ struct FUC2WaveBank
 	FString				DataFile;	// path relative to the cooked Sounds directory
 	UBOOL				bStream;	// music: streamed from its own file
 	UBOOL				bPersist;
-	UBOOL				bXbox;		// M16: a shipped .xwb (DataFile is the .xwb; waves are read from it one by one)
+	UBOOL				bXbox;		// A shipped .xwb (DataFile is the .xwb; waves are read from it one by one)
 	TArray<FUC2Wave>	Waves;
 	TArray<BYTE>		Data;		// the .ogp, loaded on first use (cooked banks only)
 	UBOOL				bDataTried;
@@ -232,8 +232,8 @@ UBOOL UC2LoadSoundBank( const TCHAR* Path, FUC2SoundBank& Bank, FString& Error )
 UBOOL UC2LoadWaveBank( const TCHAR* Path, FUC2WaveBank& Bank, FString& Error );
 
 /*-----------------------------------------------------------------------------
-	M16: the shipped Xbox banks (UC2XboxBanks.cpp). Formats in tools/uc2xwb.py, tools/uc2xsb.py
-	and docs/porting/analysis/xbox-audio-runtime.md; read little-endian byte by byte (no
+	The shipped Xbox banks (UC2XboxBanks.cpp). Formats in tools/uc2xwb.py and tools/uc2xsb.py;
+	read little-endian byte by byte (no
 	structure casts), so the readers are the same on every target.
 -----------------------------------------------------------------------------*/
 

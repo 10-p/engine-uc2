@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# uc-patches-regen.sh: change a script patch set (patches/<set>/). The repository holds no UnrealScript (T4,
-# docs/porting/analysis/scripts-removed.md), so a set is changed the way it is applied: on the build's decompiled base.
+# uc-patches-regen.sh: change a script patch set (patches/<set>/). The repository holds no UnrealScript,
+# so a set is changed the way it is applied: on the build's decompiled base.
 # This is the shorthand of the steps in patches/README.md, "Changing a set" (it runs exactly those commands and prints
 # them).
 #
@@ -15,8 +15,6 @@
 #     --build  the host build directory (default build-native)
 #     --work   scratch folder (default <build>/Scripts/edit-<set>; the build directory is scratch, never committed)
 #
-# Until T4 this script re-made every set from a build of the repo's script sources (Epic's leaked text with our
-# changes, `run/t1-ref`); those sources are gone and the sets are the only form of our changes.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)

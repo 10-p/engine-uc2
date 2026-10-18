@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# C-2 check (web build under Node, no browser): the wasm build's file layer writes, lists, loads and deletes a
+# Saves check (web build under Node, no browser): the wasm build's file layer writes, lists, loads and deletes a
 # profile where the web host's persistence daemon would look, and the `-ini:` overrides work and are written back.
 #
 #   tools/dev/mkrun-uc2.sh build-native c1w build-wasm-perf        # the tree: native ucc-bin + ucc-bin.js/.wasm
 #   tools/dev/c1-web-saves.sh
 #
-# Every run is inside <WorkUC2>/bin/capped (wasm under Node: 3G, native ucc: 2G). `node ucc-bin.js` is the
+# Every run is inside <repo>/../bin/capped (wasm under Node: 3G, native ucc: 2G). `node ucc-bin.js` is the
 # commandlet host built with -sNODERAWFS: the same C++ file manager, the Emscripten libc, but the HOST file
 # system relative to the working directory (System/), not WasmFS. So this shows the engine's side (which paths, which
-# bytes, which calls) and NOT the browser's file layer (WasmFS permissions, the JS backend, IndexedDB, the daemon):
-# that needs a browser, which nothing here may start. Output: PASS/FAIL lines; logs in <WorkUC2>/logs/c1/web/.
+# bytes, which calls) and not the browser's file layer (WasmFS permissions, the JS backend, IndexedDB, the daemon):
+# that needs a browser, which nothing here may start. Output: PASS/FAIL lines; logs in <repo>/../logs/c1/web/.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
@@ -17,7 +17,7 @@ tree=${C1_WEB_TREE:-c1w}
 sys=$work/run/$tree/System
 out=${C1_WEB_OUT:-$work/logs/c1/web}
 capped=$work/bin/capped
-# The frontend whose userFiles compiler is asked (G-7: the folder glob needs ufrontend branch uc2-profiles or later).
+# The frontend whose userFiles compiler is asked (the profile folder glob needs a frontend that has it).
 glue=${C1_UFRONT_GLUE:-$work/ufrontend/packages/glue/src/target/user-files.js}
 mkdir -p "$out"
 [ -f "$sys/ucc-bin.js" ] && [ -x "$sys/ucc-bin" ] || { echo "no run tree with ucc-bin.js at $sys (tools/dev/mkrun-uc2.sh build-native $tree build-wasm-perf)" >&2; exit 2; }

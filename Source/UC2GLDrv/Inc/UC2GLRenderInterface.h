@@ -1,13 +1,10 @@
 /*=============================================================================
 	UC2GLRenderInterface.h: UC2GLDrv's FRenderInterface.
 
-	Three-way merge (docs/porting/analysis/gl-renderer.md):
-	  base   engine-ut2004 D3DDrv/D3DRenderInterface.h
-	  ours   engine-ut2004 OpenGLDrv/OpenGLRenderInterface.h (structure: saved-state stack,
-	         material state pool, deferred lights/matrices, commit in DrawPrimitive)
-	  theirs UC2 D3DDrv/D3DRenderInterface.h (interface and behaviour: UC2's
-	         FRenderInterface, separate viewport/render-target/stencil stacks, per-material
-	         colour write mask, blend op, filters, PostProcessStage, light type counting)
+	Structure: saved-state stack, material state pool, deferred lights/matrices, commit in
+	DrawPrimitive. Interface and behaviour: UC2's D3DDrv/D3DRenderInterface.h (UC2's
+	FRenderInterface, separate viewport/render-target/stencil stacks, per-material colour
+	write mask, blend op, filters, PostProcessStage, light type counting).
 =============================================================================*/
 
 #ifndef _INC_UC2GLRENDERINTERFACE
@@ -15,10 +12,10 @@
 
 class UUC2GLRenderDevice;
 
-// Test key MaterialTime=<seconds> (D-4; read in UUC2GLRenderDevice::Init): the time the driver hands to
+// Test key MaterialTime=<seconds> (read in UUC2GLRenderDevice::Init): the time the driver hands to
 // materials (texture panners, rotators and oscillators, constant colours, PreSetMaterial) instead of the
 // level's TimeSeconds, so that a picture of a moving material is the same in every run (the Liandri
-// overlay's panned noise in tools/dev/m11-twin.sh). Below 0 (the default): the level's time.
+// overlay's panned noise). Below 0 (the default): the level's time.
 extern FLOAT GTestMaterialTime;
 inline FLOAT UC2GLMaterialTime( const ALevelInfo* Level )
 {
@@ -113,7 +110,7 @@ public:
 	BYTE				TwoSided;
 	BYTE				OverrideFogColor;
 	BYTE				SpecularEnable;
-	// H-1: PS_Blur's taps widened in the shader (UC2_BLUR_FILL_* of UPSBlurMaterial::BlurBlendMode, set by
+	// PS_Blur's taps widened in the shader (UC2_BLUR_FILL_* of UPSBlurMaterial::BlurBlendMode, set by
 	// SetMatState_PS_Blur; 0 otherwise): the fill variant of the program (UC2GLShaders.cpp).
 	BYTE				BlurFill;
 
@@ -125,7 +122,7 @@ public:
 	D3DBLENDOP			BlendOp;
 	FColor				OverriddenFogColor;
 	DWORD				ColorWriteMask;
-	QWORD				MaterialVertexShaderEnum;	// the unique vertex shader a material asks for (all M7)
+	QWORD				MaterialVertexShaderEnum;	// the unique vertex shader a material asks for
 	BYTE				UsePixelShaderProgram;		// UC2GLDrv: the pass was set up for its pixel shader (SetPixelShaderMaterial's real branch)
 
 	BYTE					StagesUsed;
@@ -348,25 +345,25 @@ public:
 	FRenderTargetPool		RenderTargetPool;
 	EPostProcessStage		PostProcessStage;
 
-	// M7 (UC2GLPostProcess.cpp).
+	// Render-target post-processing (UC2GLPostProcess.cpp).
 	class FOpenGLDynamicGamma*	DynamicGamma;			// FD3DDynamicGamma (the window's viewport)
-	TArray<class FOpenGLDynamicGamma*> ViewportDynamicGammas;	// G-6: one per split-screen viewport
-	class FOpenGLDynamicGamma*	CurrentDynamicGamma;	// G-6: the one of the viewport being drawn
+	TArray<class FOpenGLDynamicGamma*> ViewportDynamicGammas;	// One per split-screen viewport
+	class FOpenGLDynamicGamma*	CurrentDynamicGamma;	// The one of the viewport being drawn
 	FLOAT					DistortionScale[4];			// VSC_DISTORTION_SCALE (HandlePSVertexShader)
 	FLOAT					ColorRemapConstant[4];		// VSC_COLOR_REMAP
-	// M7b: VSC_PROJ_DIRECTIONS .. VSC_PROJ_LIFESPAN_ATTEN, 13 registers (SetProjectorMultiMaterial;
+	// VSC_PROJ_DIRECTIONS .. VSC_PROJ_LIFESPAN_ATTEN, 13 registers (SetProjectorMultiMaterial;
 	// ProjectorAtten.vsh, TexSourceTexKill3.vsh): directions 0-2, origins 3-5, back faces 6,
 	// inverse trace distances 7, clip planes 8-11, lifespan 12, all in the mesh's local space.
 	FLOAT					ProjectorShaderConstants[13][4];
 	UBOOL					PointSampleNudge;			// see GetGLMatrices
-	// M11, a context without gl_FragDepth (EXT_frag_depth): CopyDepthBuffer cannot write the
+	// A context without gl_FragDepth (EXT_frag_depth): CopyDepthBuffer cannot write the
 	// scene's depth into the distortion accumulation target, so the program passes drawn into
 	// that target this frame test the scene's depth in their fragment shader instead
 	// (PSV_SceneDepthTest, UC2GLShaders.cpp). The framebuffer is that target's; the rectangle
 	// maps gl_FragCoord.xy to the main depth texture: uv = xy * Rect.xy + Rect.zw.
 	GLuint					SceneDepthTestFramebuffer;
 	FLOAT					SceneDepthTestRect[4];
-	// M11. Between BeginOcclusionQuery and EndOcclusionQuery nothing is drawn: the engine's
+	// Between BeginOcclusionQuery and EndOcclusionQuery nothing is drawn: the engine's
 	// query geometry writes neither colour nor depth nor stencil, and there is no query to count for.
 	UBOOL					InOcclusionQuery;
 	GLuint					WireIndexBuffer;			// GLES: wireframe passes drawn as lines (DrawWireframe)
@@ -424,7 +421,7 @@ public:
 	virtual void SetPrecacheMode( EPrecacheMode PrecacheMode );
 	virtual EPrecacheMode GetPrecacheMode(void);
 	virtual void SetZBias(INT ZBias);
-	void ApplyZBias( INT ZBias );		// B-1: the engine's ZBias (0..16) as glPolygonOffset, the Xbox's slope scale
+	void ApplyZBias( INT ZBias );		// The engine's ZBias (0..16) as glPolygonOffset, the Xbox's slope scale
 
 	virtual void AddVertexShaderEnum( QWORD VertexShaderEnum );
 	virtual INT SetVertexStreams(QWORD VertexShaderEnum,FVertexStream** Streams,INT NumStreams);
@@ -478,7 +475,7 @@ public:
 	void SetPixelShaderConstant( INT Register, const void* Data, INT Count );
 
 private:
-	friend struct FUC2GLCombinerTest;	// O-9: the numeric test of the texture stages (UC2GLCombinerTest.cpp)
+	friend struct FUC2GLCombinerTest;	// The numeric test of the texture stages (UC2GLCombinerTest.cpp)
 	void SetMaterialBlending( FOpenGLMaterialState* NewMaterialState, ECullMode CullMode );
 	void ApplyCullMode( ECullMode CullMode );
 	void ApplyViewport();
@@ -493,7 +490,7 @@ private:
 	QWORD GetStateVertexShaderEnum( FOpenGLMaterialState* MaterialState, UBOOL HasDiffuse, UBOOL HasSpecular );
 	UBOOL BeginProgramPass( INT Pass, INT FirstIndex );
 	void EndProgramPass();
-	// O-9: a fixed-function pass's texture stages as a fragment program (UC2GLFFProgram.cpp).
+	// A fixed-function pass's texture stages as a fragment program (UC2GLFFProgram.cpp).
 	UBOOL BeginFixedFunctionProgram( FOpenGLMaterialState* MaterialState, UBOOL ColorSum, UBOOL Fog );
 	void EndFixedFunctionProgram();
 	UBOOL					ColorSumEnabled;			// CommitStreams turned GL_COLOR_SUM on for this pass

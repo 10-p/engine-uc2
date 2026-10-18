@@ -6,10 +6,10 @@
 	every language the cook produced, and decodes every wave of every wave bank with the
 	same code the device uses. No audio device is involved.
 
-	M16: the shipped Xbox banks are checked the same way when ../Sounds has them
+	The shipped Xbox banks are checked the same way when ../Sounds has them
 	(every .xwb entry decodes to its length, every M_<Song>.xwb streams to its end,
 	every .xsb loads); cues resolve through the device's own choice per bank (the
-	cooked file where there is one, else the .xsb/.xwb). G-10: a WMA music bank
+	cooked file where there is one, else the .xsb/.xwb). A WMA music bank
 	(M_Adoratrice.xwb) streams from the cooked ../Music/<Song>.ogg when that file is
 	there, as the device plays it. Parameters (all optional):
 	  DUMP=<dir>        write every sound bank's tables as the device holds them, from
@@ -44,7 +44,7 @@ struct FCheckBank
 	TArray<INT>		Decoded;	// per wave: 0 not tried, 1 decodes to its frames, -1 fails or differs
 };
 
-// M16: one sound bank's tables, every field the device plays, one line per record (DUMP=).
+// One sound bank's tables, every field the device plays, one line per record (DUMP=).
 static void DumpSoundBank( const FUC2SoundBank& B, const FString& File )
 {
 	FString T = FString::Printf( TEXT("bank %s sounds=%d cues=%d\n"), *B.Name, B.Sounds.Num(), B.Cues.Num() );
@@ -201,7 +201,7 @@ INT UUC2AudioCheckCommandlet::Main( const TCHAR* Parms )
 		GWarn->Logf( TEXT("decoder end trim: %d waves decoded past their end-of-stream granule position (at most %d frames) and were cut to the source length"),
 			TrimmedWaves, MaxTrim );
 
-	// M16: every shipped wave bank (.xwb): the index, then every entry decoded as the device decodes it (read from
+	// Every shipped wave bank (.xwb): the index, then every entry decoded as the device decodes it (read from
 	// the file; ADPCM/PCM to 16-bit PCM) and its length checked; music banks streamed to their end.
 	TArray<FString> XwbFiles = GFileManager->FindFiles( *(Dir + TEXT("*.xwb")), 1, 0 );
 	INT XWaves = 0, XWavesOk = 0, XWma = 0, XStreams = 0, XStreamsOk = 0, XStreamsCooked = 0, PcmWritten = 0;
@@ -231,8 +231,8 @@ INT UUC2AudioCheckCommandlet::Main( const TCHAR* Parms )
 			{
 				XWma++;
 				B->Decoded(w) = -1;
-				// G-10 (owner: "first cooked, then wma, then silence"; no WMA decoder yet): the device plays a WMA
-				// music bank from the cooked song beside the Xbox banks when there is one (PlayMusic).
+				// No WMA decoder: the device plays a WMA music bank from the cooked song beside the Xbox banks when there
+				// is one (PlayMusic), else nothing.
 				FString Cooked = Dir + TEXT("../Music/") + Stem.Mid(2) + TEXT(".ogg");
 				if( bMusic && GFileManager->FileSize( *Cooked )>0 )
 				{
@@ -331,7 +331,7 @@ INT UUC2AudioCheckCommandlet::Main( const TCHAR* Parms )
 	if( PcmDir.Len() )
 		GWarn->Logf( TEXT("PCM: %d waves of %s written to %s"), PcmWritten, *PcmBanks, *PcmDir );
 
-	// Every cue of every cue table, in every language: at least one variation decodes. M16: the sound banks are the
+	// Every cue of every cue table, in every language: at least one variation decodes. The sound banks are the
 	// cooked cue tables and the shipped .xsb files; the device takes the cooked one where both exist.
 	TArray<FString> CueFiles = GFileManager->FindFiles( *(Dir + TEXT("*.uc2cues")), 1, 0 );
 	TArray<FString> XsbFiles = GFileManager->FindFiles( *(Dir + TEXT("*.xsb")), 1, 0 );

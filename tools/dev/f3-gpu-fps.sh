@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# F-3: frame time of the anti-aliasing variants on this machine's GPU (the Quadro P620), headless (SDL's
+# Frame time of the anti-aliasing variants on this machine's GPU, headless (SDL's
 # offscreen video driver: EGL, no window), from the driver's own statistics line (test key Stats=True) ("UC2GLDrv: stats: frames a-b:
-# x ms/frame"; the F-2 FPS line is on main, not on this branch). DM-Deadbolt, the pre-match view (no input),
+# x ms/frame"). DM-Deadbolt, the pre-match view (no input),
 # 1280x720, 60 s per run, one run at a time, each inside bin/capped 2G.
 #
 #   tools/dev/f3-gpu-fps.sh [<tree> [<fxaa-binary>]]      default tree f3g (made from build-native)
 #
 # Variants: desktop GL none / 4x MSAA; GL4ES on OpenGL ES 3 none / 4x MSAA; GL4ES on OpenGL ES 2 (GLESVersion=2)
-# with the FXAA binary (before F-3 removed it) when given. Prints one line per variant: the mean ms/frame of the
+# with an older FXAA binary when given. Prints one line per variant: the mean ms/frame of the
 # stats lines after the first (frames 302 on), and the anti-aliasing line of the log. Output: logs/f3/gpu-fps-*.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)

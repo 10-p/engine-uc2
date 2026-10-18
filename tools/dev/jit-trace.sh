@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Jitter trace (native): where the player's own pawn is on the screen, frame by frame, while it runs with the
-# third-person camera following (docs/porting/analysis/jitter.md). One summary line per segment and an overall
+# third-person camera following. One summary line per segment and an overall
 # PASS/FAIL per configuration on stdout.
 #
 #   tools/dev/jit-trace.sh <name> <tree> <input> <pacing> [engine arguments...]
-#     <tree>    run tree under <WorkUC2>/run (tools/dev/mkrun-uc2.sh)
+#     <tree>    run tree under <repo>/../run (tools/dev/mkrun-uc2.sh)
 #     <input>   kbm  keyboard (W/S/D/A) with the mouse owning the look (the PC default; a 1-count mouse move first)
 #               pad  the virtual pad's left stick, the pad owning the look (a short right-stick push first)
 #     <pacing>  60        -ini:System:[Engine.Engine]:FrameRateCap=60
@@ -14,10 +14,10 @@
 #
 # Each segment runs 1.3 s (forward, back, right, left) with `FRAMETRACE` on (Source/Engine/Src/UC2FrameTrace.cpp:
 # a line per drawn frame: the camera of the frame, the pawn, its projected screen position); tools/dev/jit-analyze.py
-# measures the steady part. The game runs as the M10 scenarios do (tools/dev/m10-controls.sh --file: Xvfb inside
-# <WorkUC2>/bin/capped 2G, -nullrenderer, DM-Deadbolt without bots, God after the spawn), at 1920x1080 (16:9:
-# AutoFOV on, as the owner plays), the player put at JIT_PLACE (NETPLACE, default "1977.8 583.7 -34.1 33000 -1400":
-# room for every segment). Output: JIT_OUT (default <WorkUC2>/logs/jit/trace)/<name>.{scen,out,result,
+# measures the steady part. The game runs through tools/dev/m10-controls.sh --file (Xvfb inside
+# <repo>/../bin/capped 2G, -nullrenderer, DM-Deadbolt without bots, God after the spawn), at 1920x1080 (16:9:
+# AutoFOV on, the default), the player put at JIT_PLACE (NETPLACE, default "1977.8 583.7 -34.1 33000 -1400":
+# room for every segment). Output: JIT_OUT (default <repo>/../logs/jit/trace)/<name>.{scen,out,result,
 # summary,json}.
 #
 # JIT_LIMIT=<px> (default 1.0): the configuration PASSes when every segment's judder RMS (jit-analyze.py: each frame's

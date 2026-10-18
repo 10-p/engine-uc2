@@ -11,7 +11,7 @@
 #elif defined(_MSC_VER)
 #include <windows.h>
 #else
-// engine-uc2: portable build (GCC, Emscripten). Core's types (FLOAT, UNICHAR, CORE_API) instead of
+// Portable build (GCC, Emscripten). Core's types (FLOAT, UNICHAR, CORE_API) instead of
 // <windows.h>; the Win32 code-page functions (ANSI variants, GetCPInfoEx) are left out, as on the Xbox.
 #include "Core.h"
 #endif

@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
-# M7b verification: the Xbox shadow textures, the Xbox static projector batching and the three-layer terrain pass,
-# each against the PC path, on real content, with one PASS/FAIL line per check. Notebook:
-# docs/porting/analysis/projectors.md.
+# Xbox render path checks: the Xbox shadow textures, the Xbox static projector batching and the three-layer terrain pass,
+# each against the PC path, on real content, with one PASS/FAIL line per check.
 #
 #   tools/dev/m7b.sh [<tree>] [check ...]      default tree m7b (made from build-native when missing); default: all
 #   tools/dev/m7b.sh list
 #   M7B_ARGS="-gl4es" tools/dev/m7b.sh m7b-twin shadow projector-agree projector-differ terrain twin-match
-#                       the same checks on the GL4ES / OpenGL ES 2 twin (the browser's code path), then its pictures
+#                       the same checks on the GL4ES twin (the browser's code path), then its pictures
 #                       against the desktop's of the tree M7B_REF (default m7b; run that first)
 #   M7B_SECS=240        time limit of each game run (default 150; the twin under load needs more)
 #
 # Every game run is tools/dev/fx-owner.sh's "custom" case (bin/capped 2G, Xvfb, Mesa llvmpipe, 1280x720, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0
-# via the engine defaults of that runner, AutoFOV off, pre-D-2 UI), the pawn placed with NETPLACE, time frozen
-# (TimeDilation 0.0001) before any picture. Pictures and logs: <WorkUC2>/logs/<tree>/fx-m7b-<case>*.
+# via the engine defaults of that runner, AutoFOV off, unscaled UI), the pawn placed with NETPLACE, time frozen
+# (TimeDilation 0.0001) before any picture. Pictures and logs: <repo>/../logs/<tree>/fx-m7b-<case>*.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)

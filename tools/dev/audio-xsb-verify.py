@@ -10,7 +10,7 @@ wave bank, wave entry; no variation, no other event). Also every plain cue's sou
   tools/dev/audio-xsb-verify.py [--epic <epic-sources>]
   tools/dev/audio-xsb-verify.py --full [--cooked <cooked Sounds dir>]
 
---full (M16) checks uc2xsb.read_xsb_full, the whole format, against the cooked cue tables (the oracle: what the cook
+--full checks uc2xsb.read_xsb_full, the whole format, against the cooked cue tables (the oracle: what the cook
 wrote from the project) in every field UC2ALAudio plays: every cue (name, queue, sounds), every sound (priority,
 volume + group, pitch, category, headroom boost, I3DL2, 3D flag, min/max distance, rolloff, RPC curves, the length
 from the shipped .xwb), every track and event (play: time, delay, loops, new variation, playlist type, pitch and

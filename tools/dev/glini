@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The GL device's settings and test keys as -ini: arguments, for both device sections (F-4 follow-up: they replace the
-# -gl* / -no* command-line switches the engine no longer has).
+# The GL device's settings and test keys as -ini: arguments, for both device sections (the engine
+# has no -gl* / -no* command-line switches for them).
 #
 #   tools/dev/glini <Key>=<Value> [...]        one -ini: token per line, for [UC2GLDrv.UC2GLRenderDevice] (the desktop
 #                                              device) and [UC2GL4ESDrv.UC2GL4ESRenderDevice] (its GL4ES twin, -gl4es)

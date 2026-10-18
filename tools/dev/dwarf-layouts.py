@@ -4,7 +4,7 @@ object files (any format llvm-dwarfdump reads: ELF, COFF, wasm), one fact per li
 
     python3 tools/dev/dwarf-layouts.py build-a/Source/Engine/CMakeFiles/Engine.dir/Src/*.obj > a.txt
 
-Used at M12 to compare two compiler layouts of the whole engine (MinGW -mms-bitfields vs -mno-ms-bitfields):
+Compares two compiler layouts of the whole engine (MinGW -mms-bitfields vs -mno-ms-bitfields):
 `diff` of two outputs lists every type whose size or member offsets differ. Run it inside bin/capped.
 llvm-dwarfdump: $LLVM_DWARFDUMP, default the workspace's emsdk copy."""
 import subprocess, sys, re

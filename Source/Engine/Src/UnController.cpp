@@ -710,7 +710,7 @@ void APlayerController::execGetSplitscreenLayout( FFrame& Stack, RESULT_DECL )
 			ViewportIndex = Client->Viewports.FindItemIndex(Viewport);
 			*(UBOOL*)Result = 1;
 
-			// uc2 port (B-3, docs/porting/analysis/split-hud.md): for ClientSetHUD, which only hands the index to
+			// For ClientSetHUD, which only hands the index to
 			// the split HUD's SetSplitPosition (index 1 = "bottom half": its safe-zone offset), the row of the view
 			// in the split-screen layout when more than two views are up, so every view below the split line gets
 			// Epic's bottom-half offset and every view at the screen's top none. Two views: Epic's index, untouched.
@@ -3261,7 +3261,7 @@ AActor* APlayerController::GetViewTarget()
 	unguard;
 }
 
-// D-8: the FOV the view of this player is drawn with. Inside the frame (the HUD's markers: the lock-on
+// The FOV the view of this player is drawn with. Inside the frame (the HUD's markers: the lock-on
 // reticle, the reflect icon, the Sonar blips) FovAngle already holds AutoFOV's effective value; called
 // from anywhere else it is the base value, which is widened the same way, so a projected point lands where
 // the world is drawn either way.
@@ -3298,7 +3298,7 @@ void APlayerController::execWorldToScreen( FFrame& Stack, RESULT_DECL )
 	CameraActor->eventPlayerCalcView( 0.f, ViewActor, CameraActor->Location, CameraActor->Rotation, 0 );
 
 	FLOAT				ViewFov = AutoFovViewFov(CameraActor,View);
-	FScopedSplitFovScale SplitFov( View, ViewFov );	// G-6: as the frame draws it (UnGame.cpp FScopedAutoFov)
+	FScopedSplitFovScale SplitFov( View, ViewFov );	// As the frame draws it (UnGame.cpp FScopedAutoFov)
 	FCameraSceneNode	SceneNode(View,&View->RenderTarget,ViewActor, CameraActor->Location, CameraActor->Rotation,ViewFov);
 	FCanvasUtil			CanvasUtil(&View->RenderTarget,View->RI);
 	
@@ -3320,8 +3320,8 @@ void APlayerController::execWorldToScreen( FFrame& Stack, RESULT_DECL )
 
 	*(FVector*)Result = CanvasUtil.ScreenToCanvas.TransformFVector(SceneNode.Project(InLocation));
 
-	// D-2: the HUD draws in the viewport canvas's coordinates, which are the UI's design pixels when the UI is
-	// in a centred box (ui-scale.md); X/Y follow, so a marker drawn there lands on the actor anywhere in the
+	// The HUD draws in the viewport canvas's coordinates, which are the UI's design pixels when the UI is
+	// in a centred box; X/Y follow, so a marker drawn there lands on the actor anywhere in the
 	// viewport (outside the box too: negative or beyond 640). Z (depth) is untouched.
 	if( View->Canvas )
 		View->Canvas->TargetToDesign( ((FVector*)Result)->X, ((FVector*)Result)->Y );
@@ -3351,11 +3351,11 @@ void APlayerController::execScreenToWorld( FFrame& Stack, RESULT_DECL )
 	CameraActor->eventPlayerCalcView( 0.f, ViewActor, CameraActor->Location, CameraActor->Rotation, 0 );
 
 	FLOAT				ViewFov = AutoFovViewFov(CameraActor,View);
-	FScopedSplitFovScale SplitFov( View, ViewFov );	// G-6: as the frame draws it (UnGame.cpp FScopedAutoFov)
+	FScopedSplitFovScale SplitFov( View, ViewFov );	// As the frame draws it (UnGame.cpp FScopedAutoFov)
 	FCameraSceneNode	SceneNode(View,&View->RenderTarget,ViewActor, CameraActor->Location, CameraActor->Rotation, ViewFov);
 	FCanvasUtil			CanvasUtil(&View->RenderTarget,View->RI);
 
-	// D-2: X/Y are the viewport canvas's coordinates (design pixels when the UI is boxed), as WorldToScreen gives
+	// X/Y are the viewport canvas's coordinates (design pixels when the UI is boxed), as WorldToScreen gives
 	if( View->Canvas )
 		View->Canvas->DesignToTarget( InLocation.X, InLocation.Y );
 

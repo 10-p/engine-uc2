@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# D-5 check (native): every text-entry page takes the real keyboard; Enter accepts, Escape cancels.
+# Text entry check (native): every text-entry page takes the real keyboard; Enter accepts, Escape cancels.
 #
 #   tools/dev/d5-text.sh [k1 k2 k3 k4 k5]
 #
-# Needs a native run tree (default <WorkUC2>/run/d5: tools/dev/mkrun-uc2.sh build-native d5; D5_TREE=<name>).
-# Every run is one client under Xvfb inside <WorkUC2>/bin/capped 2G (through tools/dev/m10-controls.sh --file);
-# k2-k5 run on the tree k1 left (M10_KEEP=1). Output in <WorkUC2>/logs/d3/text/ (D5_OUT=<dir>).
+# Needs a native run tree (default <repo>/../run/d5: tools/dev/mkrun-uc2.sh build-native d5; D5_TREE=<name>).
+# Every run is one client under Xvfb inside <repo>/../bin/capped 2G (through tools/dev/m10-controls.sh --file);
+# k2-k5 run on the tree k1 left (M10_KEEP=1). Output in <repo>/../logs/d3/text/ (D5_OUT=<dir>).
 #
-# The text pages (engine-uc2 analysis/profiles.md step 0): UCMenu.UC2ProfileKeyboard (new profile, copy, rename) and
+# The text pages: UCMenu.UC2ProfileKeyboard (new profile, copy, rename) and
 # UCMenu.UC2Keyboard (a server's name when hosting), both an on-screen keyboard whose field never has the focus;
-# M10 lets the real keyboard type into it ([GUI.EmulatedJoypad] `/Type` codes, UnGUICore.cpp) with Enter = Start
+# the engine lets the real keyboard type into it ([GUI.EmulatedJoypad] `/Type` codes, UnGUICore.cpp) with Enter = Start
 # (done) and Escape = B (cancel). In a match, chat (T = Talk) is Engine.Console's Typing state.
 #   k1  new profile: typed text arrives exactly (W/a/S/d/X/q are pad keys elsewhere), Backspace edits, Escape
 #       cancels (no profile is made); New again, Enter makes "Typer".

@@ -3,8 +3,7 @@
 
 	The specification is Epic's Xbox device, XboxAudio/Src/XACTAudioSubsystem.cpp,
 	and the XACT documentation of the Xbox SDK; references in the comments are to
-	that file ("XACT :line"). docs/porting/analysis/audio.md has the mapping and
-	every known difference.
+	that file ("XACT :line").
 
 	Units: volumes in hundredths of a dB (mB), pitch in cents, times in ms in the
 	cooked data, seconds at run time. Distance attenuation is computed here with
@@ -14,7 +13,7 @@
 =============================================================================*/
 
 #include "UC2ALAudioPrivate.h"
-#include "UnMovie.h"		// M9: FMovieAudioStream
+#include "UnMovie.h"		// FMovieAudioStream
 
 #ifndef __EMSCRIPTEN__
 #include <stdlib.h>		// setenv for the wave writer
@@ -25,12 +24,12 @@
 -----------------------------------------------------------------------------*/
 
 // Music is refilled from the game thread once a frame: 4 x 32768 frames (3 s at 44.1 kHz) ride out the long frames
-// of a first-time load (8192-frame buffers left audible gaps under software GL: logs/m8/deadbolt-2).
+// of a first-time load (8192-frame buffers leave audible gaps under software GL).
 enum { UC2_MUSIC_SLOTS = 2, UC2_MUSIC_BUFFERS = 4, UC2_MUSIC_BUFFER_FRAMES = 32768 };
 // A drop-in song (no A_Music cue, PlayMusic) plays at the level of 19 of the 21 stock songs (volume=-900, no headroom boost).
 enum { UC2_DROPIN_MUSIC_VOLUME = -900 };
 
-// M16: the decoded-wave cache (OpenAL buffers of decoded PCM, both sources) keeps at most this much; least recently
+// The decoded-wave cache (OpenAL buffers of decoded PCM, both sources) keeps at most this much; least recently
 // used buffers go first. The whole game decoded would be about 1.3 GB (375 MB of Xbox ADPCM); a match uses tens of MB.
 #define UC2_DECODED_BUDGET		(192<<20)
 
@@ -101,7 +100,7 @@ struct FUC2MusicSlot
 	INT					Handle;		// 0 = free
 	FString				Song;
 	FUC2VorbisStream	Stream;
-	FUC2XwbStream		Xwb;		// M16: a shipped M_<Song>.xwb, read from the file as it plays
+	FUC2XwbStream		Xwb;		// A shipped M_<Song>.xwb, read from the file as it plays
 	UBOOL				bXwb;
 	ALuint				Source;
 	ALuint				Buffers[UC2_MUSIC_BUFFERS];
@@ -139,7 +138,7 @@ struct FUC2AudioState
 	TArray<FUC2WaveBank*>	WaveBanks;
 	TMap<FName,INT>			CueMap;			// requested name -> (bank << 16) | cue, or -1
 	TMap<FString,INT>		LoggedOnce;
-	INT						DecodedBytes;	// M16: PCM held in OpenAL buffers (the decoded-wave cache), its peak,
+	INT						DecodedBytes;	// PCM held in OpenAL buffers (the decoded-wave cache), its peak,
 	INT						DecodedPeak;	// waves decoded so far and buffers evicted
 	INT						DecodedWaves, Evicted;
 
@@ -161,8 +160,8 @@ struct FUC2AudioState
 	UBOOL					bAmbientsListed;
 	TArray<INT>				ActiveAmbients;
 	TMap<FString,FUC2CueStats> Stats;
-	TArray<class FUC2ALMovieStream*> MovieStreams;	// M9: movie sound streams alive (detached on Destroy)
-	FString					Notice;			// O-1: why sound is off or incomplete, shown once on the console
+	TArray<class FUC2ALMovieStream*> MovieStreams;	// Movie sound streams alive (detached on Destroy)
+	FString					Notice;			// Why sound is off or incomplete, shown once on the console
 	FString					Backend;		// the OpenAL Soft backend playing ("" = unknown or none)
 
 	FUC2AudioState() : bDevice(0), Device(NULL), Context(NULL), bEFX(0), bEAXReverb(0), bLoopPoints(0), Slot(0),
@@ -247,7 +246,7 @@ static INT FindSoundBank( FUC2AudioState* S, const FString& Name )
 }
 
 // XACT GetBankIdx :526 (the sound bank half): load <Bank>.uc2cues once; keep it across levels if persistent.
-// M16: without a cooked cue table, the shipped <Bank>.xsb (a retail disc's Sounds/) gives the same tables.
+// Without a cooked cue table, the shipped <Bank>.xsb (a retail disc's Sounds/) gives the same tables.
 static INT GetSoundBank( FUC2AudioState* S, const FString& Name, UBOOL bPersist )
 {
 	guard(GetSoundBank);
@@ -279,7 +278,7 @@ static INT GetSoundBank( FUC2AudioState* S, const FString& Name, UBOOL bPersist 
 	}
 	Bank->Name = Name;	// as requested (the file names it the same)
 	Bank->bPersist = bPersist;
-	// Variations without a cooked wave are left out at play time; say so once per bank, at load. M16: the source
+	// Variations without a cooked wave are left out at play time; say so once per bank, at load. The source
 	// (cooked or the shipped .xsb) is in the same line, once per bank and run.
 	debugf( NAME_DevSound, TEXT("UC2Audio: loaded sound bank %s (%d sounds, %d cues; %s)%s"), *Name, Bank->Sounds.Num(),
 		Bank->Cues.Num(), *Source, bPersist ? TEXT(", persistent") : TEXT("") );
@@ -287,7 +286,7 @@ static INT GetSoundBank( FUC2AudioState* S, const FString& Name, UBOOL bPersist 
 	unguard;
 }
 
-// One wave bank file stem (<Bank> or <Bank>_<lang>): the cooked index <Stem>.uc2wb, else (M16) the shipped
+// One wave bank file stem (<Bank> or <Bank>_<lang>): the cooked index <Stem>.uc2wb, else the shipped
 // <Stem>.xwb, whose waves are read and decoded from it on first play.
 static UBOOL LoadWaveBankFile( FUC2AudioState* S, const FString& Stem, FUC2WaveBank& Bank, FString& Error )
 {
@@ -392,7 +391,7 @@ static ALuint EnsureBuffer( FUC2AudioState* S, FUC2WaveBank* Bank, FUC2Wave* W, 
 	TArray<SWORD> Pcm;
 	INT Channels = 0, Rate = 0;
 	FString Error;
-	// Cooked: Vorbis from the pack in memory. Xbox (M16): the entry's bytes read from the .xwb, then decoded.
+	// Cooked: Vorbis from the pack in memory. Xbox: the entry's bytes read from the .xwb, then decoded.
 	if( !UC2DecodeWave( *Bank, *W, *S->SoundsDir, Pcm, Channels, Rate, Error ) || !Channels )
 	{
 		W->bDecodeFailed = 1;
@@ -460,7 +459,7 @@ static void FreeWaveBankBuffers( FUC2AudioState* S, FUC2WaveBank* Bank )
 	}
 }
 
-// M16: the decoded-wave cache is bounded. Over UC2_DECODED_BUDGET bytes of decoded PCM, the least recently used
+// The decoded-wave cache is bounded. Over UC2_DECODED_BUDGET bytes of decoded PCM, the least recently used
 // buffers go until the cache is at 3/4 of it. A buffer a voice still plays or has queued cannot go: OpenAL refuses
 // to delete it (AL_INVALID_OPERATION) and it stays. An evicted wave is decoded again on its next play.
 static void TrimDecodedCache( FUC2AudioState* S )
@@ -573,7 +572,7 @@ void UUC2ALAudioSubsystem::StaticConstructor()
 	// Compiled defaults = Default.ini's [UC2ALAudio.UC2ALAudioSubsystem].
 	MaxVoices	= 64;
 #if !defined(__EMSCRIPTEN__) && !defined(_WIN32)
-	// openal-soft's own Linux order, made explicit (O-1): PipeWire, then PulseAudio (also PipeWire's pulse
+	// openal-soft's own Linux order, made explicit: PipeWire, then PulseAudio (also PipeWire's pulse
 	// server), then ALSA, then OSS. The null and wave backends are never chosen unless asked for.
 	Backends	= TEXT("pipewire,pulse,alsa,oss");
 #endif
@@ -581,7 +580,7 @@ void UUC2ALAudioSubsystem::StaticConstructor()
 	UseEFX		= 1;
 	MusicFades	= 1;
 	CueLog		= 1;
-	UseHRTF		= 0;		// F-6: as engine-ut2004 (ufront 2.61): the player's choice, off by default
+	UseHRTF		= 0;		// the player's choice, off by default
 	unguard;
 }
 
@@ -607,8 +606,7 @@ UBOOL UUC2ALAudioSubsystem::Init()
 	S->CategoryVolumes[VOLUME_VoiceChat]= Clamp( DefaultProfile->VoiceChatVolume, 0.f, 1.f );
 
 	// Render to a file instead of a device (tests): OpenAL Soft's wave writer, chosen through its
-	// configuration before the library starts. Set with -ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=<file>
-	// (F-4e: the -audiowave=<file> switch is gone; the key always existed).
+	// configuration before the library starts. Set with -ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=<file>.
 	FString Wave = WaveFile;
 #ifndef __EMSCRIPTEN__
 	if( Wave.Len() )
@@ -618,7 +616,7 @@ UBOOL UUC2ALAudioSubsystem::Init()
 		if( appSaveStringToFile( Text, *Conf ) )
 		{
 #ifdef _WIN32
-			// Windows (M12): the CRT's _putenv copies the string and updates the process environment, which
+			// Windows: the CRT's _putenv copies the string and updates the process environment, which
 			// OpenAL32.dll reads with _wgetenv.
 			_putenv( appToAnsi(*(FString(TEXT("ALSOFT_CONF=")) + Conf)) );
 			_putenv( "ALSOFT_DRIVERS=wave" );
@@ -630,9 +628,9 @@ UBOOL UUC2ALAudioSubsystem::Init()
 	}
 #endif
 
-	// The cooked data (O-1): say so when it is not there, here and once on the console, instead of failing
+	// The cooked data: say so when it is not there, here and once on the console, instead of failing
 	// every cue in the (normally suppressed) cue log.
-	// M16: or the shipped Xbox banks (a retail disc's Sounds/: <Bank>.xsb + <Bank>.xwb, music in M_<Song>.xwb), which
+	// Or the shipped Xbox banks (a retail disc's Sounds/: <Bank>.xsb + <Bank>.xwb, music in M_<Song>.xwb), which
 	// the device reads itself where no cooked file is there. Which source each bank came from is logged at its load.
 	UBOOL bCooked = GFileManager->FileSize( *(S->SoundsDir + TEXT("A_Gameplay.uc2cues")) ) > 0;
 	UBOOL bXbox = GFileManager->FileSize( *(S->SoundsDir + TEXT("A_Gameplay.xsb")) ) > 0;
@@ -657,7 +655,7 @@ UBOOL UUC2ALAudioSubsystem::Init()
 		return 1;
 	}
 
-	// The backend order (O-1): explicit, and what the log reports against. OpenAL Soft reads ALSOFT_DRIVERS
+	// The backend order: explicit, and what the log reports against. OpenAL Soft reads ALSOFT_DRIVERS
 	// when it first opens a device; a value already in the environment (the test harness's "null", the
 	// wave writer's "wave") or an empty Backends= leaves the choice to it and its alsoft.conf.
 	FString Order;
@@ -715,7 +713,7 @@ UBOOL UUC2ALAudioSubsystem::Init()
 		debugf( NAME_Init, TEXT("UC2ALAudio: output devices of that backend: %s"), Names.Len() ? *Names : TEXT("none") );
 		return 1;
 	}
-	// HRTF (F-6), exactly as engine-ut2004's ALAudio (ufront 2.61, ALAudioSubsystem.cpp): asked for EXPLICITLY,
+	// HRTF: asked for explicitly,
 	// on or off, whenever the library knows ALC_SOFT_HRTF, because left to itself OpenAL Soft turns HRTF on when it
 	// believes the output is headphones (a browser can never tell it, a desktop only sometimes), and HRTF over
 	// speakers sounds wrong. HRTF is a stereo rendering: on a 5.1/7.1 device OpenAL Soft would render surround and
@@ -778,7 +776,7 @@ UBOOL UUC2ALAudioSubsystem::Init()
 
 	// Environmental reverb (the Xbox's I3DL2 listener) through EFX, if the device has it.
 	// (UseEFX=False, e.g. -ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:UseEFX=False: dry sound for comparison, as on a
-	// device without EFX. F-4e: the -NOEFX switch is gone.)
+	// device without EFX.)
 	UBOOL bWantEFX = UseEFX;
 	if( bWantEFX && GAL.alcIsExtensionPresent( S->Device, "ALC_EXT_EFX" ) && UC2ALBindEFX() )
 	{
@@ -949,7 +947,7 @@ static void ReleaseVoice( FUC2AudioState* S, INT VoiceIndex )
 
 // A free voice, or the least important one when all are busy: XACT steals a lower-priority sound for a
 // higher one and, at equal priority, the oldest (Xbox SDK, "Audio best practices" ch. 10). Priority
-// values: lower = more important (see audio.md). -1 when every voice is more important.
+// values: lower = more important. -1 when every voice is more important.
 static INT AllocVoice( FUC2AudioState* S, INT Priority, FString& Stolen )
 {
 	INT Victim = -1;
@@ -1205,7 +1203,7 @@ static void StartTrack( UUC2ALAudioSubsystem* Audio, FUC2AudioState* S, FUC2CueI
 	FUC2Voice& V = S->Voices(VoiceIndex);
 	if( !S->bTest )
 	{
-		// The first sound of the run (O-2: the time from the device's start to something audible).
+		// The first sound of the run: the time from the device's start to something audible.
 		static UBOOL bFirst = 1;
 		if( bFirst )
 			debugf( NAME_Log, TEXT("UC2Audio: [%7.2f] first sound: %s"), (FLOAT)(Now - S->T0), *Inst.Name );
@@ -1752,7 +1750,7 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 	}
 	else
 	{
-		// ufront (extra maps): a song the A_Music table does not name plays from the wave bank M_<Song>, the XACT
+		// A song the A_Music table does not name plays from the wave bank M_<Song>, the XACT
 		// naming the Xbox build opened directly (XboxAudio XACTAudioSubsystem.cpp:1786, ..\Sounds\M_%s.xwb), so a
 		// map's music is dropped in beside the game's (Sounds/M_<Song>.uc2wb and the file its data= names) without
 		// editing the stock table. Entry 0, looped, at the stock songs' level. A song in the sound-effect form
@@ -1781,8 +1779,8 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 		// (Logged always, once per song: a retail disc's M_Adoratrice.xwb is WMA, which this build cannot decode.)
 		INT B = Var ? Var->Bank : -1;
 		UBOOL bWMA = B>=0 && B<S->WaveBanks.Num() && S->WaveBanks(B)->Waves.Num() && S->WaveBanks(B)->Waves(0).Format==WF_WMA;
-		// G-10 (owner: "first cooked, then wma, then silence"; the WMA decoder waits for M16's video work): a WMA
-		// music bank plays from the cooked song beside the Xbox banks when there is one, ../Music/<Song>.ogg
+		// There is no WMA decoder: a WMA music bank plays from the cooked song beside the Xbox banks when there is
+		// one, ../Music/<Song>.ogg
 		// (M_<Song>.xwb -> <Song>.ogg, the cook's own naming: tools/cook-audio.py, the .uc2wb's data=).
 		if( bWMA )
 		{
@@ -1811,7 +1809,7 @@ INT UUC2ALAudioSubsystem::PlayMusic( FString Song, FLOAT FadeInTime )
 	M.bXwb = W && WB->bXbox;
 	if( M.bXwb )
 	{
-		// M16: the shipped M_<Song>.xwb, decoded from the file a block at a time (nothing read ahead).
+		// The shipped M_<Song>.xwb, decoded from the file a block at a time (nothing read ahead).
 		WB->bStream = 1;	// a music bank: never decoded whole as a cue's wave
 		bRead = M.Xwb.Open( *File, *W, Error );
 	}
@@ -1887,7 +1885,7 @@ INT UUC2ALAudioSubsystem::StopAllMusic( FLOAT FadeOutTime )
 
 static void UpdateMusic( UUC2ALAudioSubsystem* Audio, FUC2AudioState* S, FLOAT DeltaTime )
 {
-	// What a refill costs the frame it happens in (O-2: decoding 32768 frames of Vorbis on the game thread),
+	// What a refill costs the frame it happens in (decoding 32768 frames of Vorbis on the game thread),
 	// reported once after the first 8 refills of the run.
 	static INT RefillCount = 0;
 	static DOUBLE RefillTotal = 0.0, RefillMax = 0.0;
@@ -2027,7 +2025,7 @@ void UUC2ALAudioSubsystem::Update()
 	FUC2AudioState* S = State;
 	if( !S )
 		return;
-	// O-1: why sound or movies are off, once on the console (here: outside rendering's draw calls, with a
+	// Why sound or movies are off, once on the console (here: outside rendering's draw calls, with a
 	// player controller to tell). The log said it at Init already.
 	if( S->Viewport && S->Viewport->Actor )
 	{
@@ -2050,7 +2048,7 @@ void UUC2ALAudioSubsystem::Update()
 	DOUBLE Now = NowOf( S );
 	FLOAT DeltaTime = LastTime>0.0 ? Clamp( (FLOAT)(Now-LastTime), 0.f, 1.f ) : 0.f;
 	LastTime = Now;
-	// M16: what the sound data holds in memory, in the cue log every 30 s (either source; a capture is killed, not
+	// What the sound data holds in memory, in the cue log every 30 s (either source; a capture is killed, not
 	// shut down, so the summary at Destroy never comes).
 	static DOUBLE LastMemoryLine = 0.0;
 	if( CueLog && Now - LastMemoryLine >= 30.0 )
@@ -2244,7 +2242,7 @@ UBOOL UUC2ALAudioSubsystem::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 				Busy += S->Voices(i).Inst ? 1 : 0;
 			Ar.Logf( TEXT("UC2Audio: %d cue instances, %d of %d voices busy, %d emitters, %d sound banks, %d wave banks"),
 				S->Insts.Num(), Busy, S->Voices.Num(), S->Emitters.Num(), S->SoundBanks.Num(), S->WaveBanks.Num() );
-			// M16: what the decoded-wave cache and the wave packs hold (memory of either source).
+			// What the decoded-wave cache and the wave packs hold (memory of either source).
 			INT Packs = 0;
 			for( INT i=0; i<S->WaveBanks.Num(); i++ )
 				Packs += S->WaveBanks(i)->Data.Num();
@@ -2375,7 +2373,7 @@ INT UC2TestRender( UUC2ALAudioSubsystem* Audio, FLOAT MaxSeconds, TArray<FLOAT>&
 	unguard;
 }
 
-// F-6: HRTF on or off on the self-test's loopback device (alcResetDeviceSOFT keeps sources and buffers).
+// HRTF on or off on the self-test's loopback device (alcResetDeviceSOFT keeps sources and buffers).
 // Returns whether HRTF is active afterwards; Status says what the library reported.
 UBOOL UC2TestSetHRTF( UUC2ALAudioSubsystem* Audio, UBOOL bOn, FString& Status )
 {
@@ -2418,7 +2416,7 @@ void UC2TestStopAll( UUC2ALAudioSubsystem* Audio )
 }
 
 /*-----------------------------------------------------------------------------
-	M9: a movie's sound (Engine/Inc/UnMovie.h, FMovieAudioStream).
+	A movie's sound (Engine/Inc/UnMovie.h, FMovieAudioStream).
 
 	One 2D source with a queue of small buffers the movie player fills from its own Advance(); the played
 	frames (processed buffers + AL_SAMPLE_OFFSET) are the clock the movie's pictures follow. Gain 0 dB in no

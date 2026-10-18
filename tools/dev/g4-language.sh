@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# G-4: the language setting ([Engine.Engine] Language, seeded by the launcher with -ini:) reaches the menu text, the
+# Language check: the language setting ([Engine.Engine] Language, seeded by the launcher with -ini:) reaches the menu text, the
 # localised voice banks, the cinematic sound track and the loading screen. Native, headless, repeatable.
 #
 #   tools/dev/g4-language.sh [<tree>] [case ...]      default tree: g4; default: every case
@@ -12,10 +12,10 @@
 #                     cinematic's sound track, a localised class default (GET UCDeathmatch GameDescription), Fire (the
 #                     match starts) and the announcer's wave pack (A_Ann_Female[_<lang>].ogp).
 #        <lang> = int, deu, fra, ita, spa (the languages the cooked assets carry).
-# Every run: <WorkUC2>/bin/capped 2G, xvfb-run (software GL unless UC2_GPU), 1280x720, -log,
+# Every run: <repo>/../bin/capped 2G, xvfb-run (software GL unless UC2_GPU), 1280x720, -log,
 # -ini:System:[Engine.Engine]:Language=<lang>, -ini:System:[UC2Movie]:StartupMovies=False, the input test channel.
-# Output in <WorkUC2>/logs/g4/native/: <case>[-gpu].out (console), .log (System/Avaris.log), .inject, .result, <case>[-gpu]-<shot>.png and one
-# summary line per case. Notebook: docs/porting/analysis/language.md.
+# Output in <repo>/../logs/g4/native/: <case>[-gpu].out (console), .log (System/Avaris.log), .inject, .result, <case>[-gpu]-<shot>.png and one
+# summary line per case.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)

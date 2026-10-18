@@ -1,15 +1,15 @@
 /*=============================================================================
 	WebRTCLan.cpp: UC2's System Link page on the web (netplay, web build only).
 
-	THE PROBLEM. UC2's "Join System Link Game" page (UCMenu.UC2Browser) lists what IpDrv.ClientBeaconReceiver
+	UC2's "Join System Link Game" page (UCMenu.UC2Browser) lists what IpDrv.ClientBeaconReceiver
 	hears: the receiver binds BeaconPort (9777), broadcasts "REPORT?<nonce>" to ServerBeaconPort (8777) once a
 	second, and keeps every answer of the form
 	    <BeaconProduct> <game port> ?BeaconText=<GameInfo.GetBeaconText()>?Nonce=<nonce>
-	for BeaconTimeout (5 s), the answer's SOURCE ADDRESS (with the port from the text) being the row's join
+	for BeaconTimeout (5 s), the answer's source address (with the port from the text) being the row's join
 	address. The answer comes from IpDrv.UdpBeacon on a listen server. A browser has no UDP, so on the web
-	neither half ever ran (AUdpLink::BindPort fails at socket(); E-2, webrtc.md) and the page stayed empty.
+	neither half could run (AUdpLink::BindPort fails at socket()) and the page would stay empty.
 
-	THE ANSWER, the UE1 siblings' (engine-ut99 WebRTCLan.cpp, ufront 2.38): a synthetic LAN at the AUdpLink
+	This file is a synthetic LAN at the AUdpLink
 	level, so Epic's script runs unmodified. The frontend's broker already knows the servers: the glue's
 	discovery lists the broker's peers (GET /peerjs/peers, the page's own room) and status-pings each for what
 	its host pushed (webrtc_set_listen_status, which UC2's driver fills with the host's real beacon text). Here a
@@ -17,16 +17,14 @@
 	indexes an append-only room table, so that the page's join (a travel to "10.199.0.N:7777?...") can be turned
 	back into the room key by UWebRTCNetDriver::InitConnect.
 
-	Two rules this file inherits from WebRTCLan's measurements (both cost the siblings several runs):
+	Two rules:
 	- every webrtc_* call is a synchronous proxy to the browser's main thread: make them only from a link's
-	  TICK (NextReply), never from inside script (Send is reached from the receiver's script Timer); a proxied
+	  tick (NextReply), never from inside script (Send is reached from the receiver's script Timer); a proxied
 	  call there can hang the engine;
 	- never ask the glue every frame: the proxy queue overflows under load and the module aborts. Discovery is
 	  started at most every LAN_DISCOVERY_MIN_INTERVAL and polled at most four times a second.
 	And one UE fact: TArray<T>::AddItem assigns into raw memory; an element that owns FStrings is appended with
 	placement new (`new(Array)T(Item)`), never AddItem.
-
-	Notebook: docs/porting/analysis/netplay-browser.md.
 =============================================================================*/
 
 #include "WebRTCDrv.h"

@@ -1,4 +1,4 @@
-// Build a self-contained HTML page from docs/porting/REPORT.md (the owner review of 2026-10-08): a sticky table of contents (sections and features),
+// Build a self-contained HTML page from docs/porting/REPORT.md: a sticky table of contents (sections and features),
 // a filter box over the contents, styled tables.
 //   node tools/dev/report-html.cjs docs/porting/REPORT.md docs/porting/REPORT.html
 // Needs the frontend clone's node_modules (marked); bin/publish-preview serves the page at /report/.

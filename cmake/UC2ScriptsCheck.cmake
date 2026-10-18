@@ -1,4 +1,4 @@
-# UC2ScriptsCheck.cmake -- T3: the input checks of the script build (docs/porting/analysis/script-build-rules.md).
+# UC2ScriptsCheck.cmake -- the input checks of the script build.
 # Included by cmake/UC2Scripts.cmake at configure time, and run with `cmake -P` by the build (so a file replaced
 # after the configure is caught too):
 #

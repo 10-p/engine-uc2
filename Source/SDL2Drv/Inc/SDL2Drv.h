@@ -1,10 +1,9 @@
 /*=============================================================================
 	SDL2Drv.h: SDL2 client and viewport for the portable UC2 build.
 
-	Adapted from engine-ut2004's SDL2Drv (the sibling port) to UC2's UClient/UViewport
-	interface; Epic's WinDrv (PC) is the behavioural spec, XboxDrv the spec for the
-	pad routing that M10 will add (see USDL2Client::PollGamepads). Epic's stale SDL 1.2
-	driver for this codebase (Source/SDLDrv) stays in the tree as reference.
+	Epic's WinDrv (PC) is the behavioural spec, XboxDrv the spec for the pad routing
+	(SDL2Pads.cpp, USDL2Client::PollGamepads). Epic's SDL 1.2 driver for this codebase
+	(Source/SDLDrv) stays in the tree as reference.
 =============================================================================*/
 
 #ifndef _INC_SDL2DRV
@@ -36,7 +35,7 @@ class USDL2Client;
 class FSDL2InputTest;
 
 /*-----------------------------------------------------------------------------
-	Game pads (M10).
+	Game pads.
 -----------------------------------------------------------------------------*/
 
 // The Xbox build has four pad ports, and a pad's button i is sent as IK_Joy1+i
@@ -70,12 +69,12 @@ struct FSDL2Pad
 	_WORD	RumbleLeft, RumbleRight;			// last motor speeds sent
 	DOUBLE	RumbleSentTime;
 #ifdef __EMSCRIPTEN__
-	// G-10: SDL's Emscripten joystick driver has no rumble; the browser's Gamepad haptics stand in
+	// SDL's Emscripten joystick driver has no rumble; the browser's Gamepad haptics stand in
 	// (SDL2Pads.cpp, SetPadRumble). -1 = no actuator for this pad (or not found).
 	INT		WebIndex;							// navigator.getGamepads() index of this pad
 	UBOOL	WebHaptics;							// it has a vibrationActuator with playEffect
 	DOUBLE	WebHoldUntil;						// the last effect's level holds until then
-	// H-3: what the browser had pressed when the pad appeared (the press that made it list the pad), which SDL's
+	// What the browser had pressed when the pad appeared (the press that made it list the pad), which SDL's
 	// Emscripten driver takes as the pad's resting state and never reports: SDL_GameControllerButton and
 	// SDL_GameControllerAxis bits, read as pressed by the first ReadPad (SDL2Pads.cpp).
 	DWORD	HeldAtConnectButtons;
@@ -97,7 +96,7 @@ class USDL2Client : public UClient, public FNotifyHook
 	FLOAT				MouseXMultiplier,
 						MouseYMultiplier;
 
-	// Pad configuration (M10; [SDL2Drv.SDL2Client], Epic's Xbox values as defaults).
+	// Pad configuration ([SDL2Drv.SDL2Client], Epic's Xbox values as defaults).
 	INT					PadButtonThreshold;		// XINPUT_GAMEPAD_MAX_CROSSTALK: pressed above this (0..255)
 	FLOAT				PadStickDeadZone;		// radial, applied before the bindings' own DeadZone= (Xbox: 0)
 	FLOAT				PadRepeatDelay,			// first IST_Hold after (Xbox: 0.2 s)
@@ -106,16 +105,16 @@ class USDL2Client : public UClient, public FNotifyHook
 	FLOAT				PadRumbleScale;
 	FLOAT				JoyDeadZone;			// stored by SETDEADZONE, as UXboxClient (nothing reads it there either)
 	BITFIELD			LogInput;				// SDL2Input log lines for every pad event
-	BITFIELD			SplitScreenJoinInMatch;	// G-6: Start on an unbound pad during a match adds a split-screen player
-	BITFIELD			SplitScreenFullDetail;	// G-9: split-screen players keep the single player's detail (else the Xbox's)
-	BITFIELD			PadsStartAtPlayerTwo;	// G-11 (was G-9's KeyboardIsPlayer): port 0 (player one) is keyboard+mouse only, pads use ports 1-3
+	BITFIELD			SplitScreenJoinInMatch;	// Start on an unbound pad during a match adds a split-screen player
+	BITFIELD			SplitScreenFullDetail;	// Split-screen players keep the single player's detail (else the Xbox's)
+	BITFIELD			PadsStartAtPlayerTwo;	// port 0 (player one) is keyboard+mouse only, pads use ports 1-3
 
 	// Variables.
 	UBOOL				InMenuLoop;
 	FSDL2Pad			Pads[SDL2DRV_MAX_PADS];
 	FSDL2PadMapEntry	PadMap[SDL2DRV_PAD_SOURCES];
 	UBOOL				PadsInitialized;
-	FSDL2InputTest*		InputTest;				// test key InputTestFile=<file>: the M10 test channel
+	FSDL2InputTest*		InputTest;				// test key InputTestFile=<file>: the input test channel
 
 	// Constructors.
 	USDL2Client();
@@ -139,8 +138,8 @@ class USDL2Client : public UClient, public FNotifyHook
 	UViewport* GetLastCurrent();
 	class UViewport* NewViewport( const FName Name );
 	void GetInitScreenSize( INT& SizeX, INT& SizeY );
-	UBOOL SplitScreenViewports() { return 1; }	// G-6: split-screen viewports are rectangles of the one window
-	UBOOL SplitScreenKeepsFullDetail() { return SplitScreenFullDetail; }	// G-9
+	UBOOL SplitScreenViewports() { return 1; }	// Split-screen viewports are rectangles of the one window
+	UBOOL SplitScreenKeepsFullDetail() { return SplitScreenFullDetail; }
 
 	// USDL2Client interface.
 	void PumpEvents();
@@ -165,7 +164,7 @@ class USDL2Client : public UClient, public FNotifyHook
 	UBOOL PadExec( const TCHAR* Cmd, FOutputDevice& Ar );
 	UBOOL ViewportHasKeyboard( UViewport* Viewport );
 
-	// Split screen (G-6, SDL2Client.cpp).
+	// Split screen (SDL2Client.cpp).
 	UBOOL PadJoin( INT Slot );
 	void UpdateSplitLayout();
 	UBOOL CursorWanted();
@@ -186,12 +185,12 @@ class USDL2Viewport : public UViewport
 
 	// Variables.
 	SDL_Window*			Window;
-	void*				GLContext;		// M5: SDL_GLContext, created for BLIT_OpenGL render devices
+	void*				GLContext;		// SDL_GLContext, created for BLIT_OpenGL render devices
 	DWORD				BlitFlags;
 	DWORD				ViewportButtonFlags;
 	UBOOL				Captured;
 	UBOOL				HasFocus;
-	// G-6: a split-screen viewport is a rectangle of viewport 0's window, as on the Xbox (one screen, the
+	// A split-screen viewport is a rectangle of viewport 0's window, as on the Xbox (one screen, the
 	// viewports' OffsetX/OffsetY/SizeX/SizeY): it has no window of its own and borrows the render device.
 	UBOOL				SubViewport;
 	INT					WindowSizeX,	// the window's size, the frame the split-screen layouts divide
@@ -238,12 +237,12 @@ class USDL2Viewport : public UViewport
 	void DestroyGLContext();
 	USDL2Viewport* GetWindowViewport();
 
-	// UPlayer/UViewport pad hooks (M10).
+	// UPlayer/UViewport pad hooks.
 	BYTE GetAnalogButtonAmount( INT ButtonIndex );
 	void SetClientTravel( const TCHAR* NextURL, UBOOL bItems, ETravelType NextTravelType );
 };
 
-// SDL2Input: the log name of every M10 input line (quiet unless LogInput or the test channel).
+// SDL2Input: the log name of every input line (quiet unless LogInput or the test channel).
 extern FName NAME_SDL2Input;
 #define SDL2INPUT ((EName)NAME_SDL2Input.GetIndex())
 

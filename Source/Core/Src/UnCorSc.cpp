@@ -13,7 +13,7 @@ Revision history:
 #include "CorePrivate.h"
 
 #if PLATFORM_64BITS
-// M13 (ufront 2.83, engine-ut99 253aaf2): the last None-context zero-fill, where it wrote and how many bytes.
+// The last None-context zero-fill, where it wrote and how many bytes.
 static BYTE* GNullContextResult = NULL;
 static INT   GNullContextSize   = 0;
 #endif
@@ -1040,8 +1040,8 @@ void UObject::execSwitch( FFrame& Stack, RESULT_DECL )
 
 		// Compare.
 #if PLATFORM_64BITS
-		// M13: the compiled size is the 32-bit one (4 for an object); compare at least a pointer's width. Both
-		// buffers are zeroed past it above, so smaller values compare as before (engine-ut99 253aaf2).
+		// The compiled size is the 32-bit one (4 for an object); compare at least a pointer's width. Both
+		// buffers are zeroed past it above, so smaller values compare as at 32 bits.
 		if( bSize ? (appMemcmp(SwitchBuffer,Buffer,Max<INT>(bSize,sizeof(UObject*)))==0) : (*(FString*)SwitchBuffer==*(FString*)Buffer) )
 #else
 		if( bSize ? (appMemcmp(SwitchBuffer,Buffer,bSize)==0) : (*(FString*)SwitchBuffer==*(FString*)Buffer) )
@@ -1198,10 +1198,10 @@ void UObject::execLet( FFrame& Stack, RESULT_DECL )
 	} else
 #if PLATFORM_64BITS
 	{
-		// M13: `X = None.Y` zero-fills X with the compiler's byte count, the value's size in the 32-bit
-		// packages (4 for any object, 32-bit struct sizes). Where X is bigger in memory (an 8-byte pointer, a
-		// struct holding one) the rest kept its old bytes: the high half of the previous pointer. When the
-		// fill landed exactly on this variable and fell short, zero all of it (ufront 2.83, engine-ut99 253aaf2).
+		// `X = None.Y` zero-fills X with the compiler's byte count, the value's size in the 32-bit packages
+		// (4 for any object, 32-bit struct sizes). Where X is bigger in memory (an 8-byte pointer, a struct
+		// holding one) the rest would keep its old bytes, the high half of the previous pointer. When the fill
+		// landed exactly on this variable and fell short, zero all of it.
 		UProperty* DestProperty = GProperty;
 		BYTE* Dest = GPropAddr;
 		GNullContextResult = NULL;
@@ -4907,7 +4907,7 @@ void UObject::execSetPropertyText( FFrame& Stack, RESULT_DECL )
 IMPLEMENT_FUNCTION( UObject, INDEX_NONE, execSetPropertyText );
 
 /*-----------------------------------------------------------------------------
-	uc2 port: script SaveConfig() / StaticSaveConfig() on PC (UC2ScriptSaveConfig.h).
+	Script SaveConfig() / StaticSaveConfig() on PC (UC2ScriptSaveConfig.h).
 
 	Epic: "rjp - calling SaveConfig() has mucho side-effects, so behavior should be identical on both PC
 	and XBOX" and, from the line above it, "jg -- removed as it violates TCRs" (Xbox certification: no
@@ -4915,7 +4915,7 @@ IMPLEMENT_FUNCTION( UObject, INDEX_NONE, execSetPropertyText );
 	[Engine.Engine] ScriptSaveConfig is True (the default); False is Epic's no-op. An Xbox build (_XBOX)
 	keeps the no-op whatever the ini says.
 
-	One more rule, for the one script call on a LIVE game object (DeathMatch.AdjustSkill: SaveConfig() on the
+	One more rule, for the one script call on a live game object (DeathMatch.AdjustSkill: SaveConfig() on the
 	match's gametype instance, meant to keep GameDifficulty): an instance of a GameInfo holds the match's
 	rules, which the URL options overrode (GoalScore, TimeLimit, MaxPlayers, NumBots...), so saving it writes a
 	match into Gametypes.ini, where the gametype's DEFAULTS live. It is not saved (logged once). The class

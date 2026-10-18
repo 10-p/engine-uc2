@@ -59,7 +59,7 @@ void UInput::StaticInitInput()
 
 	// Create input alias struct.
 	UStruct* AliasStruct = new(StaticClass(),TEXT("Alias"))UStruct( NULL );
-	// M13: the layout of FAlias, not arithmetic (Command is at 8 and the struct 24 bytes on LP64; ufront 2.83).
+	// The layout of FAlias, not arithmetic (Command is at 8 and the struct 24 bytes on LP64).
 	AliasStruct->SetPropertiesSize( sizeof(FAlias) );
 	new(AliasStruct,TEXT("Alias"),  RF_Public)UNameProperty( EC_CppProperty, STRUCT_OFFSET(FAlias,Alias),   TEXT(""), CPF_Config );
 	new(AliasStruct,TEXT("Command"),RF_Public)UStrProperty ( EC_CppProperty, STRUCT_OFFSET(FAlias,Command), TEXT(""), CPF_Config );
@@ -313,15 +313,14 @@ UBOOL UInput::Exec( const TCHAR* Str, FOutputDevice& Ar )
 						Speed = -(-Speed-DeadZone)/(1.f-DeadZone);
 
 #if !defined(_XBOX)
-					// M10: a stick's per-tick input (DirectAxis: IST_Hold with the tick's DeltaSeconds) is a
+					// A stick's per-tick input (DirectAxis: IST_Hold with the tick's DeltaSeconds) is a
 					// position, not a delta, but ReadInput scales every axis by 20/DeltaSeconds on PC (by 1 on
-					// the Xbox), which made the stick 20/dt times stronger than on the Xbox and frame-rate
+					// the Xbox), which would make the stick 20/dt times stronger than on the Xbox and frame-rate
 					// dependent. Pre-divide here so the Xbox-tuned SpeedBase/limits mean the same on PC.
-					// (UT2004 fixed this path by multiplying by the delta instead and retuned its values.)
 					if( GetInputAction()==IST_Hold && GetInputDelta()>0.f )
 					{
 						*Axis += SpeedBase * Speed * Invert * GetInputDelta() / 20.f;
-						// F-1: UC2's compiled scripts scale the stick's walk to the keyboard's range on the Xbox
+						// UC2's compiled scripts scale the stick's walk to the keyboard's range on the Xbox
 						// only (UCPlayerController PlayerMove: aForward/aStrafe x 24000 when Level.IsXBox(), "aForward
 						// range on PC is +/- 24000.0"), so on PC Epic's shipped UCGameplay.u does not walk with the
 						// left stick at all. UCPlayerInput divides the stick by 100, takes the stick's direction from

@@ -4,8 +4,7 @@
 # This checks that they are up to date with the script sources: it compiles the scripts in a scratch run tree,
 # exports the headers there and compares each with the committed one, byte for byte (the exporter writes CRLF, the
 # repo keeps LF: CRs are dropped first). Generated = <Pkg>/Inc/<Pkg>Classes.h (IpDrv's GameSpyClasses.h is
-# hand-written). T2, docs/porting/analysis/headers.md. The repository holds no script sources (T4,
-# docs/porting/analysis/scripts-removed.md): the scripts are the build's patched tree; Source/ is only where the
+# hand-written). The repository holds no script sources: the scripts are the build's patched tree; Source/ is only where the
 # headers are committed.
 #
 #   tools/dev/check-headers.sh [options]      exit 0 when every header is current, 1 when stale (diff printed),
@@ -15,17 +14,17 @@
 #     --build <dir>          build directory with Source/UCC/ucc-bin linked with the Editor package (the native
 #                            32-bit preset; default build-native)
 #     --classes-root <dir>   the script sources: <dir>/<Pkg>/Classes (default <build>/Scripts/tree, the build's
-#                            patched tree, made by its `scripts` target). T3: a PATCHED tree (only the packages the
+#                            patched tree, made by its `scripts` target). A patched tree (only the packages the
 #                            patch sets rebuild, decompiled from the shipped .u + patches/; no Engine/) is checked
 #                            package by package: tools/scripts/uc-build.sh --headers compiles those packages against
 #                            the shipped ones and exports their headers; only those packages' generated headers are
 #                            compared (the others come from shipped packages nothing here changes), and a class's
 #                            cpptext and `struct native` blocks are not compared (the shipped packages do not carry
 #                            them; tools/dev/check-headers-cpptext.py takes the committed header's). A FULL tree (all
-#                            17 packages, e.g. Epic's leaked text on the dev machine, <WorkUC2>/epic-sources) is
+#                            17 packages, e.g. Epic's leaked text on the dev machine, <repo>/../epic-sources) is
 #                            compiled whole with tools/dev/script-build.sh (dev only; its headers lack our patches)
-#     --tree <name>          scratch run tree under <WorkUC2>/run (default hdr-<this checkout's directory name>)
-#     --logs <dir>           logs (default <WorkUC2>/logs/hdr)
+#     --tree <name>          scratch run tree under <repo>/../run (default hdr-<this checkout's directory name>)
+#     --logs <dir>           logs (default <repo>/../logs/hdr)
 #     --write                write the exported headers into Source/<Pkg>/Inc (what regen-headers.sh does). On a
 #                            patched tree: the committed header with the export's changes (check-headers-cpptext.py
 #                            --merge: its cpptext and native structs stay as committed)
@@ -70,7 +69,7 @@ mkdir -p "$logs"
 generated() { local d=${1%/Inc/*}; d=${d##*/}; [ "${1##*/}" = "${d}Classes.h" ]; }
 
 if [ ! -d "$classes_root/Engine/Classes" ]; then
-  # T3: a patched tree (the packages the patch sets rebuild). Inputs as the build had them: <build>/Scripts/build-info.txt.
+  # A patched tree (the packages the patch sets rebuild). Inputs as the build had them: <build>/Scripts/build-info.txt.
   info=$build/Scripts/build-info.txt
   shipped=${UC2_SHIPPED_SYSTEM:-$(sed -n 's/^shipped=//p' "$info" 2>/dev/null)}
   assets=${UC2_ASSETS_DIR:-$(sed -n 's/^assets=//p' "$info" 2>/dev/null)}

@@ -240,7 +240,7 @@ public:
 		ShadowColor->Color = FColor(Darkness,Darkness,Darkness,255);		
 #else
 #if defined(NEW_SHADOW_BLEND)
-		// UC2 port (M7b): the Xbox branch above, chosen at run time by a device with the
+		// The Xbox branch above, chosen at run time by a device with the
 		// XboxShadows capability (UnRenDev.h): the caster is drawn in ShadowDarkness grey, its
 		// opacity ignored, as on Xbox. The blend's material is set back to the constant colour
 		// because the PC branch below may have left its shader there.
@@ -483,7 +483,7 @@ UBitmapMaterial* UShadowBitmapMaterial::Get(FTime Time,UViewport* Viewport)
 
 #ifndef _XBOX
 	//scion jg -- Must be powers of 2 on PC no linear support and no L8
-	// ufront: only a size the PC cannot do falls back to 256. A power of two from 32 to 1024 is kept, as the Xbox
+	// Only a size the PC cannot do falls back to 256. A power of two from 32 to 1024 is kept, as the Xbox
 	// kept every size: the game's own shadows ask for 256 (every player shadow is SD_Normal; an ambient creature
 	// can ask for SD_Low..SD_SuperHigh, 128..1024), and a mod's shadow material asks for its own (jcbShadows'
 	// resolution setting).
@@ -615,8 +615,8 @@ UBitmapMaterial* UShadowBitmapMaterial::Get(FTime Time,UViewport* Viewport)
 			{
 
 // scion sz - do shadow texture blur using a 4 tap blur pixel shader
-// UC2 port (M7b): this was "#if defined(_XBOX) && defined(NEW_SHADOW_BLEND)" ... "#else" ...
-// "#endif". The Xbox branch runs for a device with the XboxShadows capability (UnRenDev.h;
+// Epic's "#if defined(_XBOX) && defined(NEW_SHADOW_BLEND)" ... "#else" ... "#endif": the
+// Xbox branch runs for a device with the XboxShadows capability (UnRenDev.h;
 // it draws through PS_ShadowBlur), PC's nine canvas tiles otherwise. Both bodies unchanged.
 #if defined(NEW_SHADOW_BLEND)
 				if( RenDevHasXboxShadows() )

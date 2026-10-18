@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# M9 / V3: the movie player's numeric self-test, headless (no window, no audio device).
+# The movie player's numeric self-test, headless (no window, no audio device).
 #
 #   tools/dev/movie-selftest.sh [<run-tree-name>]        (default m9; the tree from tools/dev/mkrun-uc2.sh)
 #
 # 1. ffmpeg (inside bin/capped) writes the references of a sample of cooked movies into
-#    <WorkUC2>/logs/<tree>/selftest/: per-picture Adler-32 of the decoded Y'CbCr (framecrc, with its frame
+#    <repo>/../logs/<tree>/selftest/: per-picture Adler-32 of the decoded Y'CbCr (framecrc, with its frame
 #    number), the packet count, two pictures converted to BGRA by ffmpeg's swscale (BT.601, limited range,
 #    chroma replicated per 2x2 as the player does: neighbor to 4:4:4 first), and the sound decoded to 16-bit
 #    PCM. Every ffmpeg decode runs with -threads 1: ffmpeg's frame-threaded Theora decoder is not
-#    deterministic (TVDisplaySelket2: two runs, two different framecrc lists; see docs/porting/analysis/video.md).
+#    deterministic (two runs on TVDisplaySelket2 give two different framecrc lists).
 # 2. `ucc-bin UC2Movie.UC2MovieSelfTest REF=<dir>` decodes the same files with the game's player and prints one
 #    PASS/FAIL line per check (summary in <dir>/selftest.out).
 set -uo pipefail

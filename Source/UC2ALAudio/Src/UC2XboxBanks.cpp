@@ -1,13 +1,12 @@
 /*=============================================================================
-	UC2XboxBanks.cpp: M16 - the shipped Xbox XACT banks read at run time.
+	UC2XboxBanks.cpp: the shipped Xbox XACT banks read at run time.
 
 	A retail disc has no cooked data: only Sounds/<Bank>.xsb (sound banks: cues,
 	sounds, tracks, events, 3D parameters) and Sounds/<Bank>[_<lang>].xwb (wave
 	banks: Xbox ADPCM, PCM, one WMA). These readers build the same in-memory tables
 	the cooked .uc2cues/.uc2wb give (UC2AudioData.cpp), so the device plays either
 	source with the same code. The offline readers tools/uc2xwb.py and
-	tools/uc2xsb.py (read_xsb_full) are the reference; the layout and how it was
-	decoded are in docs/porting/analysis/xbox-audio-runtime.md.
+	tools/uc2xsb.py (read_xsb_full) are the reference.
 
 	Portable: every field is read little-endian byte by byte with bounds checks;
 	no Xbox SDK, no structure casts, offsets fit in INT (the largest bank is 10 MB).
@@ -219,7 +218,7 @@ UBOOL UC2LoadXwbWaveBank( const TCHAR* Path, FUC2WaveBank& Bank, FString& Error 
 
 INT UC2DecodeXboxAdpcm( const BYTE* Data, INT Size, INT Channels, SWORD* Out )
 {
-	// IMA ADPCM, the reading tools/uc2xwb.py proved against 643 source waves (audio-f6.md): per channel a 4-byte
+	// IMA ADPCM, as tools/uc2xwb.py reads it (checked against the source waves): per channel a 4-byte
 	// header (s16 sample, u8 step index, u8 0) and 32 bytes of codes, low nibble first; channels interleaved in
 	// 4-byte words. A block plays the header sample and the first 63 codes (the 64th predicts the next header).
 	static const INT IndexTab[16] = { -1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8 };

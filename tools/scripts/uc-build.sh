@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # uc-build.sh: compile script packages from a patched class tree, against the shipped packages, the way Epic's
-# build machine compiled them (make, then stripsource), one package at a time. T1; docs/porting/analysis/
-# script-patches.md ("interface for the build").
+# build machine compiled them (make, then stripsource), one package at a time. The CMake build's script step
+# (cmake/UC2Scripts.cmake) runs it.
 #
 #   tools/scripts/uc-build.sh --classes <tree> --out <dir> --packages A,B,... [options]
 #
@@ -12,21 +12,21 @@
 #                      only so the targets could be, and System/ gets the shipped file back for them
 #   --out <dir>        the work tree; the result is <dir>/System/<Pkg>.u (with the shipped .u of every other
 #                      package beside it, so the folder is a complete System for checking)
-#   --shipped <dir>    the shipped script packages (default <WorkUC2>/epic-sources/System = the retail disc's)
+#   --shipped <dir>    the shipped script packages (default <repo>/../epic-sources/System = the retail disc's)
 #   --assets <dir>     the game tree: its content folders (Textures, StaticMeshes, ...) are linked into the work tree
-#                      and its System/ provides the .int files and Epic's inis (default <WorkUC2>/assets/uc2)
+#                      and its System/ provides the .int files and Epic's inis (default <repo>/../assets/uc2)
 #   --retail-inis <d>  the retail disc's System/ for Characters.ini, Gametypes.ini, Maplists.ini, which the shipped
-#                      defaults carry (default <WorkUC2>/reference/iso-extract/System; `none`: the asset tree's)
+#                      defaults carry (default <repo>/../reference/iso-extract/System; `none`: the asset tree's)
 #   --ucc <file>       the script compiler: ucc-bin (Linux) or ucc.exe (a Windows host; MSYS2 bash); default
 #                      <repo>/build-native/Source/UCC/ucc-bin. Copied into the work tree under its own name.
 #   --mem <size>       memory ceiling of each ucc run (default 3G) when it runs under the capped wrapper
-#   --capped <file>    the wrapper every ucc run goes through (<WorkUC2>/bin/capped: memory ceiling and time limit);
+#   --capped <file>    the wrapper every ucc run goes through (<repo>/../bin/capped: memory ceiling and time limit);
 #                      default <repo>/../bin/capped when it exists, else none; `none`: run ucc directly (a machine
-#                      without that wrapper; T3: the CMake build passes it explicitly)
+#                      without that wrapper; the CMake build passes it explicitly)
 #   --keep-text        do not strip (all packages keep their script text; for debugging)
 #   --headers          also export the C++ headers (`make -ForceHeads` instead of `-noh`) into <out>/<Pkg>/Inc, which
 #                      starts as a copy of <repo>/Source/<Pkg>/Inc (the exporter includes a per-class header when it
-#                      finds one there); implies --keep-text. tools/dev/check-headers.sh uses it (T3)
+#                      finds one there); implies --keep-text. tools/dev/check-headers.sh uses it
 #   --link <rel>=<dir> also link <dir> as <work tree>/<rel> (e.g. Engine/Textures for `#exec TEXTURE IMPORT` files;
 #                      none of GUI, UCGameplay, UCMenu needs one)
 #
@@ -41,13 +41,13 @@
 #                editor.stripsource -CONFORM` (every .u but Editor.u re-saved with " " text); the built packages
 #                are taken from it, UCMenu.u from before the strip (it shipped with its text).
 # Bash only (coreutils, cp, ln); no Python. Nothing is written outside --out. Linux, or MSYS2 bash on a Windows host
-# (there `ln -s` needs MSYS=winsymlinks:nativestrict and Windows symlink rights, or it copies; not run yet: T3).
+# (there `ln -s` needs MSYS=winsymlinks:nativestrict and Windows symlink rights, or it copies; not tested there).
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 classes="" out="" packages="" keep="" mem=3G keep_text=0 headers=0 links=()
-# Defaults: WorkUnreal's trees (the home since 2026-10-11: the retail disc's System/ holds the 17 shipped .u and its
+# Defaults: WorkUnreal's trees (the retail disc's System/ holds the 17 shipped .u and its
 # inis), else the UC2 workspace's layout.
 if [ -d "$work/assets/uc2-retail-assets/System" ]; then
   shipped=$work/assets/uc2-retail-assets/System retail=$work/assets/uc2-retail-assets/System

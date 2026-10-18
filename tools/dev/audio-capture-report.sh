@@ -5,7 +5,7 @@
 #
 #   tools/dev/audio-capture-report.sh <capture.wav>      -> <capture>.png, numbers on stdout
 #
-# Runs ffmpeg under <WorkUC2>/bin/capped (CLAUDE.md, "Running anything").
+# Runs ffmpeg under <repo>/../bin/capped (CLAUDE.md, "Running anything").
 set -u
 wav=${1:?capture.wav}
 here=$(cd "$(dirname "$0")/../.." && pwd)

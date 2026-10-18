@@ -3,9 +3,9 @@
 
 	UC2's D3DDrv/Src/D3DPSMaterialState.cpp carried over unchanged in behaviour (types
 	renamed; pixel shader constants go to FOpenGLRenderInterface::SetPixelShaderConstant,
-	which records them for M6). PC's D3DDrv runs these handlers for every pixel-shader
+	which hands them to the GLSL programs). PC's D3DDrv runs these handlers for every pixel-shader
 	material, including the Xbox-only ones it draws as their texture stage 0, so they
-	decide blending, depth and culling of those fallbacks; R1 does the same.
+	decide blending, depth and culling of those fallbacks; this driver does the same.
 
 	D3DPSMaterialState.cpp: pixel shader material state handling
 	Copyright 2001 Epic Games, Inc. All Rights Reserved.
@@ -140,7 +140,7 @@ void FOpenGLPSMaterialStateHandlers::SetMatState_PS_Blur( UPixelShaderMaterial* 
 	// set filter weights
 	RI->SetPixelShaderConstant( 0, BlurShader->Weights, 4 );
 
-	// H-1: FilterCopyRenderTarget's TapScale (UnRenderUtil.h, UC2_BLUR_FILL_*): the taps widened in the shader;
+	// FilterCopyRenderTarget's TapScale (UnRenderUtil.h, UC2_BLUR_FILL_*): the taps widened in the shader;
 	// the low bits are Epic's mode.
 	BYTE BlurBlendMode = BlurShader->BlurBlendMode & UC2_BLUR_MODE_MASK;
 	InMaterialState->BlurFill = BlurShader->BlurBlendMode & ~UC2_BLUR_MODE_MASK;
@@ -369,8 +369,8 @@ void FOpenGLPSMaterialStateHandlers::SetMatState_PS_Distortion( UPixelShaderMate
 	InMaterialState->ZTest = 1;
 	InMaterialState->ZWrite = 0;	
 
-	// UC2GLDrv (M7): D3DDrv's "#ifdef _XBOX" is the device's post-process switch; the
-	// "#else" branch below is PC's (and M6's) state.
+	// UC2GLDrv: D3DDrv's "#ifdef _XBOX" is the device's post-process switch; the
+	// "#else" branch below is PC's state.
 	if( RI->RenDev->PostProcessActive() )
 	{
 	// scion sz -

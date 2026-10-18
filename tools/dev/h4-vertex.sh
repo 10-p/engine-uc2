@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# H-4 regression (owner report 2026-10-11: Lauren's polygons cross at a DM-Decay spot in the browser): Lauren at the
-# owner's spot, a step back and the spot again (tools/dev/h4-vertex/spots.scen), at two window widths, on the GL4ES twin
+# Skinned-mesh LOD regression check (Lauren's polygons crossing at a DM-Decay spot): Lauren at the
+# spot, a step back and the spot again (tools/dev/h4-vertex/spots.scen), at two window widths, on the GL4ES twin
 # on this machine's GPU (UC2_GPU=1: the pawn's shadow pass runs, it does not under Mesa llvmpipe at this size), with the
-# engine's LODTrace. One capped run per width through tools/dev/decay-flash.sh. Notebook docs/porting/analysis/h4-vertex.md.
+# engine's LODTrace. One capped run per width through tools/dev/decay-flash.sh.
 #
 #   tools/dev/h4-vertex.sh <tree> [widths, default "2882 2883"]
 #
@@ -11,7 +11,7 @@
 #
 # PASS per width: the shadow pass drew the pawn (draws of both passes in the trace) AND no traced draw is STALE (an
 # index buffer of one LOD over vertices skinned for another; the defect) AND no Critical. The engine keeps the window
-# width even (SDL2Viewport Align(NewX,2)): 2883 runs at 2884 here. Pictures and logs in <WorkUC2>/logs/<tree>/.
+# width even (SDL2Viewport Align(NewX,2)): 2883 runs at 2884 here. Pictures and logs in <repo>/../logs/<tree>/.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)

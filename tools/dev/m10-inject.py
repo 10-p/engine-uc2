@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""M10 input scenario runner (used by tools/dev/m10-controls.sh; not run on its own outside Xvfb).
+"""Input scenario runner (used by tools/dev/m10-controls.sh; not run on its own outside Xvfb).
 
-Drives a running uc2.bin with real X events (XTEST through ctypes: xdotool and python3-xlib are not
-installed on ion-kubuai) and with the engine's input test channel ([SDL2Drv.SDL2Client] InputTestFile=<file> through -ini:, SDL2Drv), waits on
+Drives a running uc2.bin with real X events (XTEST through ctypes: no xdotool or python3-xlib needed) and
+with the engine's input test channel ([SDL2Drv.SDL2Client] InputTestFile=<file> through -ini:, SDL2Drv), waits on
 the engine log, and decides PASS/FAIL from log lines and probe state. Usage:
 
     m10-inject.py <scenario-file> <engine-log> <channel-file> <result-file>
@@ -17,7 +17,7 @@ Scenario language, one command per line (# comments):
     keydown <keysym> / keyup <keysym>
     type <text>                   type characters (Shift for capitals)
     move <x> <y>                  absolute pointer position in window coordinates (640x480 design pixels mapped
-                                  into the UI box when M10_UIMAP=<W>x<H> is set: D-2)
+                                  into the UI box when M10_UIMAP=<W>x<H> is set)
     rmove <dx> <dy> [steps]       relative pointer motion, split in <steps> events 20 ms apart
     click <button> [x y]          button 1 left, 2 middle, 3 right; 4/5 wheel up/down
     pad <channel command>         e.g. "pad button a 1" (written to the channel as is)
@@ -32,7 +32,7 @@ Scenario language, one command per line (# comments):
     check <name> <python expr>    record PASS/FAIL; the expression sees P (probes by tag), yawdiff(a,b),
                                   pitchdiff(a,b), dist(a,b), fwd(a,b), side(a,b) (displacement along/right of a's facing)
     fail_fast                     stop at the first failed check (default: keep going)
-D-6 additions (an engine without them prints none of their lines; older scenarios are unaffected):
+Camera and lock-on (an engine without them prints none of their lines; older scenarios are unaffected):
     probe <tag>                   also keeps the "probe2" line (P[tag].cam, .camrot, .locked, .enemy, .mouselook,
                                   .sens, .invert, .padinvert, .autocenter) and the "probe3" lines (P[tag].others: list
                                   of dicts name, loc, dist, los, face) when the engine logs them
@@ -40,14 +40,14 @@ D-6 additions (an engine without them prints none of their lines; older scenario
                                   W[tag] (list of dicts: i, t, pitch, yaw, cam, camrot, loc, locked, mouselook)
     pyfile <path>                 run a Python file in the namespace 'check' and 'pyexec' see (helper functions)
     pyexec <python statement>     run one statement in that namespace (e.g. save a measurement)
-G-6 additions:
+Split screen:
     vprobe <tag>                  every viewport ("viewports <tag>" on the channel) into V[tag]: a list of dicts
                                   i, name, pad, rect (x,y,w,h), scale, fovscale, menu, scene, disabled, split (index
                                   in the split-screen manager, -1 none), overlay, window, actor, pawn, loc, rot,
                                   hud, fov; VS[tag] = (viewport count, split views, screen (w,h)). Helpers for
                                   'check': vdist(a,b,i) (pawn i's move), vyaw(a,b,i), vsplit(tag) (the split views
                                   in order), vrects(tag); rows also have 'acc' (the pawn's acceleration, i.e. the input's walk, x/y)
-D-9 additions:
+Menus and bindings:
     probe <tag>                   also keeps P[tag].caption (the "probe4" line: the focused control's caption, or the
                                   nearest one above it in the focus chain)
     keys <tag> <Key> [<Key>...]   the first viewport's bindings of those keys (engine key names: J, Space, LeftMouse)
@@ -131,11 +131,11 @@ def key_event(name, down):
 
 
 # M10_KEYHOLD=<seconds>: how long `key` holds a key when the scenario gives no time (default 0.12). A press
-# and its release inside one engine frame are lost; big windows in software GL (D-2's 1920x1080 runs) have
+# and its release inside one engine frame are lost; big windows in software GL (1920x1080) have
 # frames of half a second on the character page. Below the X server's auto-repeat delay (0.66 s) no repeat.
 KEYHOLD = float(os.environ.get('M10_KEYHOLD', '0.12'))
 # M10_SLOW=<factor>: every scenario `sleep` is that much longer (default 1). For big windows in software GL,
-# where two wheel clicks 0.5 s apart can land in one engine frame and count once (D-2's 1920x1080 mouse run).
+# where two wheel clicks 0.5 s apart can land in one engine frame and count once (1920x1080).
 SLOW = float(os.environ.get('M10_SLOW', '1'))
 
 
@@ -158,7 +158,7 @@ def type_text(text):
         time.sleep(0.05)
 
 
-# D-2: with the UI in a centred 4:3 box ([SDL2Drv.SDL2Client] UIScaleMode=Fit43), the scenarios' absolute
+# With the UI in a centred 4:3 box ([SDL2Drv.SDL2Client] UIScaleMode=Fit43), the scenarios' absolute
 # positions are 640x480 design pixels; M10_UIMAP=<W>x<H> (the window size; m10-controls.sh sets it from M10_RES)
 # maps them into the box the engine draws the menus in: scale s = min(W/640, H/480), origin ((W-640s)/2,
 # (H-480s)/2), floored as UCanvas::Update does. Unset, or 640x480: positions are window pixels, as before.
@@ -252,7 +252,7 @@ PROBE_RX = re.compile(r'probe (\S+) level=(\S+) menu=(\S+) focus=(\S+) text="(.*
                       r'ammo=([-\d.]+) shots=(\d+) mouse=\(([-\d.]+),([-\d.]+)\) pads=(\d+)')
 
 
-# D-7/D-8: fields after pads= (console typing line, scoreboard, the player's FOV, viewport size); absent from
+# Fields after pads= (console typing line, scoreboard, the player's FOV, viewport size); absent from
 # an older engine, then they read -1 / '' / 0.
 PROBE_EXTRA_RX = re.compile(r'console=(-?\d+) typed="(.*)" scores=(-?\d+) fov=([-\d.]+) desiredfov=([-\d.]+) view=(\d+)x(\d+)')
 
@@ -279,7 +279,7 @@ class Probe:
 
 P = {}
 
-# D-6: the probe's second line (camera, lock-on, the look's owner and the mouse settings) and the other pawns.
+# The probe's second line (camera, lock-on, the look's owner and the mouse settings) and the other pawns.
 PROBE2_RX = re.compile(r'probe2 (\S+) cam=\(([-\d.]+),([-\d.]+),([-\d.]+)\) camrot=\((-?\d+),(-?\d+),(-?\d+)\) locked=(\S*) '
                        r'enemy=(\S+) mouselook=(\S*) sens=(\S*) invert=(\S*) padinvert=(\S*) autocenter=(\S*)')
 PROBE3_RX = re.compile(r'probe3 (\S+) other (\d+) (\S+) loc=\(([-\d.]+),([-\d.]+),([-\d.]+)\) dist=([-\d.]+) los=(\d) '
@@ -290,10 +290,10 @@ K = {}
 WATCH_RX = re.compile(r'watch (\S+) (\d+) t=([-\d.]+) rot=\((-?\d+),(-?\d+)\) cam=\(([-\d.]+),([-\d.]+),([-\d.]+)\) '
                       r'camrot=\((-?\d+),(-?\d+)\) loc=\(([-\d.]+),([-\d.]+),([-\d.]+)\) locked=(\S*) mouselook=(\S*)')
 W = {}
-# G-6: the per-viewport probe.
+# The per-viewport probe.
 V = {}
 VS = {}
-VC = {}  # H-3: (window captured, cursor wanted) per vprobe tag
+VC = {}  # (window captured, cursor wanted) per vprobe tag
 VPS_RX = re.compile(r'vps (\S+) n=(\d+) split=(\d+) screen=(\d+)x(\d+)')
 VP_RX = re.compile(r'vp (\S+) (\d+) name=(\S+) pad=(\d+) rect=\((-?\d+),(-?\d+),(-?\d+),(-?\d+)\) scale=\(([-\d.]+),([-\d.]+)\) '
                    r'fovscale=\(([-\d.]+),([-\d.]+)\) menu=(\d) scene=(\d) disabled=(\d) split=(-?\d+) overlay=(\d) window=(\d) '
@@ -376,7 +376,7 @@ def probe(tag):
     P[tag] = Probe(m)
     pr = P[tag]
     pr.cam = None; pr.others = []; pr.caption = ''
-    # The D-6 lines follow the first one in the same call (an engine without them has none: 3 s, then go on).
+    # The probe2/probe3 lines follow the first one in the same call (an engine without them has none: 3 s, then go on).
     if wait_for(r'probe2 ' + re.escape(tag) + ' cam=', 3) is not None:
         time.sleep(0.2)
         pump_log()
@@ -486,7 +486,7 @@ def execute(line):
     if True:
         if cmd in ('seek', 'tryseek'):
             # seek <max> <expr> ;; <command>: probe as '_', stop when <expr> holds, else run <command>
-            # tryseek: the same, but not reaching <expr> only prints a note and the scenario goes on (D-8)
+            # tryseek: the same, but not reaching <expr> only prints a note and the scenario goes on
             head, _, action = rest.partition(';;')
             limit, _, expr = head.strip().partition(' ')
             for _ in range(int(limit) + 1):

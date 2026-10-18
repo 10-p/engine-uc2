@@ -1,8 +1,7 @@
 /*=============================================================================
 	UC2GLRenderDevice.h: UC2GLDrv.UC2GLRenderDevice, UC2's OpenGL render device.
 
-	engine-ut2004 OpenGLDrv's UOpenGLRenderDevice brought to UC2's URenderDevice
-	(UnRenDev.h): 16-bit cache ids per ECacheHint, ResetRenderStates, LoadVertexShaderEnum,
+	UC2's URenderDevice (UnRenDev.h) on OpenGL: 16-bit cache ids per ECacheHint, ResetRenderStates, LoadVertexShaderEnum,
 	ReadPixels without the flip flag. Behaviour of the PC D3DDrv (UD3DRenderDevice) where
 	the interface says what to do.
 
@@ -32,14 +31,14 @@ struct FOpenGLDeviceCaps
 #define D3DPMISCCAPS_TSSARGTEMP				0x00000400
 
 //
-//	Programmable materials (M6).
+//	Programmable materials.
 //
 enum EPixelShaderState
 {
 	PSS_None		= 0,	// no Xbox shader for the enum value, or pixel shaders are off
 	PSS_Ready		= 1,	// translated, compiled, drawn with a program
 	PSS_Failed		= 2,	// did not compile: its materials take the stage-0 fallback
-	PSS_M7			= 3,	// needs a back-buffer copy, the depth buffer or a render target, and UsePostProcess is off
+	PSS_M7			= 3,	// needs post-processing (a back-buffer copy, the depth buffer or a render target), and UsePostProcess is off
 	PSS_EngineGated	= 4,	// translated, but the PC engine path never asks for it
 };
 
@@ -55,12 +54,12 @@ struct FOpenGLProgram
 					FogParamsLoc, FogColorLoc,
 					TexMatrixLoc[4],
 					ConstantLoc[8],
-					DistortionScaleLoc,		// M7: VSC_DISTORTION_SCALE
-					DistortionScreenLoc,	// M7: clip space to back-buffer texture coordinates
-					ColorRemapLoc,			// M7: VSC_COLOR_REMAP
-					ProjectorLoc,			// M7b: VSC_PROJ_* (u_proj[13])
-					SceneDepthRectLoc,		// M11: the scene depth test in the shader (PSV_SceneDepthTest)
-					FillStepLoc;			// H-1: one texel of the source of PS_Blur's fill variant (u_fillStep)
+					DistortionScaleLoc,		// VSC_DISTORTION_SCALE
+					DistortionScreenLoc,	// Clip space to back-buffer texture coordinates
+					ColorRemapLoc,			// VSC_COLOR_REMAP
+					ProjectorLoc,			// VSC_PROJ_* (u_proj[13])
+					SceneDepthRectLoc,		// The scene depth test in the shader (PSV_SceneDepthTest)
+					FillStepLoc;			// One texel of the source of PS_Blur's fill variant (u_fillStep)
 };
 
 //
@@ -96,7 +95,7 @@ public:
 									CheckGLErrors;
 	INT								LevelOfAnisotropy,
 									MaxTextureUnits,
-									MaterialStages;		// O-9: the stage count the material compiler is given (Epic's D3DDrv: exactly 4)
+									MaterialStages;		// the stage count the material compiler is given (Epic's D3DDrv: exactly 4)
 	FLOAT							DetailTexMipBias,
 									DefaultTexMipBias;
 
@@ -115,20 +114,19 @@ public:
 	UBOOL							IsGeForce;	// D3DDrv: GeForce1/2-class (2 textures); never true here
 
 	// The main framebuffer: the default render target. Its depth/stencil attachment is a
-	// texture (M7), so a shader can read the scene's depth (depth of field).
+	// texture, so a shader can read the scene's depth (depth of field).
 	GLuint							MainFramebuffer,
 									MainColorTexture,
 									MainDepthStencil,		// texture (CapDepthTexture) ...
-									MainDepthRenderbuffer;	// ... or renderbuffer (M11: no depth textures)
+									MainDepthRenderbuffer;	// ... or renderbuffer (no depth textures)
 	INT								MainWidth,
 									MainHeight;
-	// M11 / O-8, anti-aliasing. AntiAliasing (ini) is the number of samples.
+	// Anti-aliasing. AntiAliasing (ini) is the number of samples (0 = off).
 	// Desktop GL: MainFramebuffer is then a multisampled framebuffer (renderbuffers), and
 	// MainColorTexture / MainDepthStencil are its resolve, in MainResolveFramebuffer, brought up
 	// to date (ResolveMain) before anything reads them: the copies the post-process samples,
-	// the depth copy, the present pass, ReadPixels. Desktop GL and (F-3) OpenGL ES 3 / WebGL 2 through
-	// GL4ES; OpenGL ES 2 / WebGL 1 have no multisampled framebuffers and get no anti-aliasing (the
-	// FXAA that stood in for it there until F-3 was removed at the owner's word, 2026-10-09).
+	// the depth copy, the present pass, ReadPixels. Desktop GL and OpenGL ES 3 / WebGL 2 through
+	// GL4ES; OpenGL ES 2 / WebGL 1 have no multisampled framebuffers and get no anti-aliasing.
 	INT								AntiAliasing;
 	INT								MainSamples;			// 0: the main framebuffer is single-sampled
 	GLuint							MainResolveFramebuffer,
@@ -140,31 +138,31 @@ public:
 	// The framebuffer that holds MainColorTexture / MainDepthStencil (the main one without MSAA).
 	GLuint MainTextureFramebuffer() { return MainSamples ? MainResolveFramebuffer : MainFramebuffer; }
 
-	// Render-target post-processing (M7; UC2GLPostProcess.cpp, docs/porting/analysis/postprocess.md).
-	// UsePostProcess=False is exactly M6: no capability reported to the engine, the M7 pixel
-	// shaders stay on their fallback, the interface answers what PC's D3DDrv answers.
+	// Render-target post-processing (UC2GLPostProcess.cpp). UsePostProcess=False: no capability
+	// reported to the engine, the pixel shaders that need post-processing stay on their fallback,
+	// the interface answers what PC's D3DDrv answers.
 	UBOOL							UsePostProcess,
-									DOFShippedBlurAlpha;	// UUCScreenDOF: the blur alpha byte the shipped binary read (65) instead of script's
-	// O-7, F-5: the distance over which screen-space distortion fades out (DistortionAccum.vsh;
+									DOFShippedBlurAlpha;	// UUCScreenDOF: the blur alpha byte the shipped binary reads (65) instead of script's
+	// The distance over which screen-space distortion fades out (DistortionAccum.vsh;
 	// Epic's DISTORTION_CULL_DISTANCE, 5000 on the Xbox). A config property like the others, so
 	// each device class reads it from its own ini section (UC2GLMaterialState.cpp).
 	FLOAT							DistortionCullDistance;
-	// M7b (docs/porting/analysis/projectors.md): the Xbox shadow textures (FRenderCaps::XboxShadows:
+	// The Xbox shadow textures (FRenderCaps::XboxShadows:
 	// caster in ShadowDarkness grey, PS_ShadowBlur). Reported only while the PS_Blur family is
 	// drawn (post-processing on): PS_ShadowBlur shares its handler.
 	UBOOL							UseXboxShadows;
 	UBOOL XboxShadowsActive();
-	// M7b: three terrain layers per pass through PS_Terrain3Layer (FRenderCaps::
+	// Three terrain layers per pass through PS_Terrain3Layer (FRenderCaps::
 	// MaxSimultaneousTerrainLayers = 3, the value the Xbox build hard-codes in UnTerrain.cpp).
 	UBOOL							UseTerrain3Layer;
 	UBOOL Terrain3LayerActive();
-	// M7b: the Xbox's static projector batching (FRenderCaps::XboxProjectors: UGameEngine::LoadMap
+	// The Xbox's static projector batching (FRenderCaps::XboxProjectors: UGameEngine::LoadMap
 	// re-packs level-static projectors, drawn with UProjectorMultiMaterial: SetProjectorMultiMaterial,
 	// the 12 PS_Projector_*, ProjectorAtten.vsh). Read when a map loads.
 	UBOOL							UseXboxProjectors;
 	UBOOL XboxProjectorsActive();
 	UBOOL ProjectorShadersReady();
-	// M7b: InitPixelShaders has run since the context was made. The engine loads the command-line
+	// InitPixelShaders has run since the context was made. The engine loads the command-line
 	// map before the viewport (and so the GL context) exists and builds terrain passes and the
 	// static projector batches from the caps then: until the shaders are known the caps say
 	// what the switches ask for (both shaders compile everywhere: psh2glsl --gputest, GLSL ES too).
@@ -191,16 +189,16 @@ public:
 	INT								SnapshotCopies,
 									DepthColorCopies,
 									DepthBufferCopies;
-	// pp-scale (docs/porting/analysis/pp-scale.md): the post-processing works on a picture of
-	// PostProcessReferenceHeight lines (ini, default 480 = the Xbox's; 0 = in back-buffer pixels,
-	// as before; console PPREFERENCE). A pass that draws the back buffer into a smaller render
+	// The post-processing works on a picture of PostProcessReferenceHeight lines (ini, default
+	// 480 = the Xbox's; 0 = in back-buffer pixels, Epic's; console PPREFERENCE). A pass that draws
+	// the back buffer into a smaller render
 	// target (the first, downsampling pass of every blur chain) reads ReferenceTexture: the back
 	// buffer brought down to that many lines by an area-averaging pass, so that the chains run
 	// texel for texel as on the Xbox. Made only when the back buffer is taller than the reference.
 	INT								PostProcessReferenceHeight;
-	// H-1 (docs/porting/analysis/h1-bloom.md): the camera effects' blur targets get this many times
-	// the Xbox's texels per axis (ini PostProcessTargetScale: 1 = the Xbox's count, the default; 2 or
-	// 4), their taps the same factor with a fill (UnRenderUtil.cpp, FilterCopyRenderTarget): the same
+	// The camera effects' blur targets get this many times the Xbox's texels per axis (ini
+	// PostProcessTargetScale: 1 = the Xbox's count; 2, the default; or 4), their taps the same factor
+	// with a fill (UnRenderUtil.cpp, FilterCopyRenderTarget): the same
 	// blur over the same area of the screen, sampled more finely, so the bloom's last target is not
 	// magnified into 24-pixel facets at 1440 lines. FRenderCaps::PostProcessTargetScale.
 	INT								PostProcessTargetScale;
@@ -222,7 +220,7 @@ public:
 									XboxClientDefaultsApplied;
 	GLint							PresentRampLoc,
 									PresentUseRampLoc;
-	// G-6: the ramps of split-screen viewports, each applied by the present pass to its own rectangle.
+	// The ramps of split-screen viewports, each applied by the present pass to its own rectangle.
 	struct FViewportRamp
 	{
 		UViewport*	Viewport;
@@ -249,7 +247,7 @@ public:
 
 	GLuint							NullTextureID;
 
-	// Programmable materials (M6; UC2GLShaders.cpp).
+	// Programmable materials (UC2GLShaders.cpp).
 	UBOOL							UsePixelShaders,
 									PrecompileVertexShaders;
 	BYTE							PixelShaderState[PS_MAX];	// EPixelShaderState
@@ -262,14 +260,14 @@ public:
 									PrecompileSeen, PrecompileNotApplicable,
 									ProgramDraws, ProgramFallbackDraws;
 
-	// O-9 (UC2GLFFProgram.cpp): the texture stages of fixed-function passes as GLSL instead
+	// The texture stages of fixed-function passes as GLSL (UC2GLFFProgram.cpp) instead
 	// of GL's texture environment. UseFixedFunctionPrograms is the ini switch
 	// (FixedFunctionPrograms; console FFPROGRAMS [0|1]);
 	// FFProgramsActive says whether they are in use (desktop GL only). The stage count and
 	// the texture-op caps the material compiler sees follow from it (UpdateTextureCaps).
 	UBOOL							UseFixedFunctionPrograms,
 									FFProgramsActive,
-									LogFFPrograms,			// log every generated program (no switch any more: set in a debugger)
+									LogFFPrograms,			// log every generated program (no switch: set in a debugger)
 									MaskCombine3,			// test key MaskCaps=combine3: as if GL_ATI_texture_env_combine3 were missing
 									MaskCombine4;			// test key MaskCaps=combine4: as if GL_NV_texture_env_combine4 were missing
 	INT								GLFixedFunctionUnits,	// GL_MAX_TEXTURE_UNITS: units of the texture environment
@@ -292,20 +290,21 @@ public:
 	#undef GL_EXT
 	#undef GL_PROC
 	// The library under the binding (UC2GLRawFuncs.h): the same functions on desktop GL,
-	// OpenGL ES 2 / WebGL itself under GL4ES.
+	// OpenGL ES / WebGL itself under GL4ES.
 	#define GL_RAW(ret,func,parms) static ret (APIENTRY *Raw_##func)parms;
 	#include "UC2GLRawFuncs.h"
 	#undef GL_RAW
 
-	// The GL binding (UC2GLBinding.h; M11). This class binds desktop OpenGL through SDL;
-	// UC2GL4ESDrv.UC2GL4ESRenderDevice overrides the Binding* virtuals to bind OpenGL ES 2 /
-	// WebGL 1 through GL4ES. Everything else is the same object code for both.
+	// The GL binding (UC2GLBinding.h). This class binds desktop OpenGL through SDL;
+	// UC2GL4ESDrv.UC2GL4ESRenderDevice overrides the Binding* virtuals to bind OpenGL ES 3 /
+	// WebGL 2 (ES 2 / WebGL 1 as the fallback) through GL4ES. Everything else is the same object
+	// code for both.
 	UBOOL							IsGLES;				// the context is OpenGL ES (behind GL4ES)
-	// F-3: the OpenGL ES major version behind GL4ES: 3 (OpenGL ES 3.0 / WebGL 2: depth textures,
+	// The OpenGL ES major version behind GL4ES: 3 (OpenGL ES 3.0 / WebGL 2: depth textures,
 	// multisampled framebuffers, gl_FragDepth and fragment highp in core; GL4ES emits GLSL ES 3.00)
 	// or 2 (OpenGL ES 2 / WebGL 1: each of those an extension, with the fallbacks). 0 on desktop GL.
 	INT								GLESMajor;
-	// Depth-stencil storage and attachments go through the binding on desktop GL and (F-3) on
+	// Depth-stencil storage and attachments go through the binding on desktop GL and on
 	// OpenGL ES 3 / WebGL 2 through GL4ES (our fork sizes depth formats and passes the DEPTH_STENCIL
 	// attachment point, multisampled storage and blits through); around GL4ES on OpenGL ES 2 / WebGL 1.
 	UBOOL DepthStencilThroughBinding() { return !IsGLES || GLESMajor >= 3; }
@@ -366,13 +365,12 @@ public:
 	TArray<GLuint>					FreeArrayBuffers, FreeElementBuffers;
 	GLuint NewBuffer( GLenum Target );
 	void FreeBuffer( GLenum Target, GLuint& Buffer );
-	// Test key NoLODBias: every texture LOD bias is 0 (verification: until F-3 GL4ES ignored the LOD
-	// bias of the fixed-function path, and this was what the desktop was compared with; our fork
-	// applies it since, and the key shows the difference it makes).
+	// Test key NoLODBias: every texture LOD bias is 0 (verification: the key shows the difference the
+	// LOD bias makes; the gl4es fork applies the bias of the fixed-function path).
 	UBOOL							NoLODBias;
-	// (no switch any more: set in a debugger) glGetError after every draw call and texture upload, with what it was (slow; to find the call behind an error -glerrors reports).
+	// (no switch: set in a debugger) glGetError after every draw call and texture upload, with what it was (slow; to find the call behind an error CheckGLErrors reports).
 	UBOOL							CheckGLErrorsPerDraw;
-	// Test key Stats=True: one log line every 300 frames (M11, G5): frame time and what a frame costs
+	// Test key Stats=True: one log line every 300 frames: frame time and what a frame costs
 	// in calls the driver makes (per frame averages over the interval).
 	UBOOL							LogStats;
 	INT								StatDraws,			// draw calls (passes), all
@@ -409,14 +407,14 @@ public:
 
 	// Main framebuffer and present pass.
 	UBOOL CreateMainFramebuffer( INT Width, INT Height );
-	static void GetFrameSize( UViewport* Viewport, INT& Width, INT& Height );	// G-6: the window, not the viewport
+	static void GetFrameSize( UViewport* Viewport, INT& Width, INT& Height );	// The window, not the viewport
 	void DestroyMainFramebuffer();
 	UBOOL CreatePresentProgram();
 	void DrawPresentPass( UViewport* Viewport );
 	void InitGLState();
 
 	// Post-processing (UC2GLPostProcess.cpp).
-	// The one condition for everything M7 added: the ini switch, pixel shaders (the
+	// The one condition for the render-target post-processing: the ini switch, pixel shaders (the
 	// post-process materials are pixel-shader materials) and the copy programs.
 	FORCEINLINE UBOOL PostProcessActive() { return UsePostProcess && UsePixelShaders && PostCopyProgram; }
 	UBOOL InitPostProcess();
@@ -424,7 +422,7 @@ public:
 	void DestroyPostProcessTargets();
 	void SetPostProcess( UBOOL Enable );
 	void DrawPostQuad( GLuint Program, GLint RectLoc, GLuint SourceTexture, GLuint DestFramebuffer, INT DestWidth, INT DestHeight, const FLOAT* Rect, UBOOL DepthOnly );
-	void BindProgramTexture2D( INT Unit, GLuint Texture );	// B-2: a 2D texture for the device's own GLSL draws
+	void BindProgramTexture2D( INT Unit, GLuint Texture );	// A 2D texture for the device's own GLSL draws
 	GLuint GetSampledTexture( FOpenGLTexture* Texture );
 	void UpdateSampledTexture( FOpenGLTexture* Texture );
 	void SetGammaRamp( const BYTE* Ramp );

@@ -992,7 +992,7 @@ TList<FProjectorRenderBatch*>*	GProjectorBatchList;
 
 FCoronaRender GCoronaRender;
 
-// uc2 port (G-9): one corona state per split-screen view (UnRender.h).
+// One corona state per split-screen view (UnRender.h).
 #define UC2_SPLIT_CORONA_STATES 4
 static FCoronaRender	GSplitCoronaRender[UC2_SPLIT_CORONA_STATES];
 static UViewport*		GSplitCoronaViewport[UC2_SPLIT_CORONA_STATES];
@@ -1116,7 +1116,7 @@ static void RenderActor(FRenderState& RenderState,FDynamicActor* DynamicActor,UB
 	// Don't do lighting/projector calcs when in post processing mode
 	// Also always use the BaseLitActor for lighting and only update its lighting once per frame
 	if(	( BaseLitDynActor->LastLightUpdateTime != BaseLitActor->Level->TimeSeconds
-		||	BaseLitDynActor->LastProjectorGeneration != GProjectorRenderInfoGeneration ) &&	// uc2 port (G-9): UnProjector.h
+		||	BaseLitDynActor->LastProjectorGeneration != GProjectorRenderInfoGeneration ) &&	// UnProjector.h
 		RenderState.SceneNode->FilterMode != FSceneNode::Filter_PostProcess )
 	{
 		// need to update these		
@@ -2224,7 +2224,7 @@ void RenderLevel(FLevelSceneNode* SceneNode,FRenderInterface* RI)
 
 	if(!SceneNode->Parent)
 	{
-		FCoronaRender& CoronaRender = UC2CoronaRenderFor( SceneNode->Viewport );	// uc2 port (G-9)
+		FCoronaRender& CoronaRender = UC2CoronaRenderFor( SceneNode->Viewport );
 		CoronaRender.iVisible	= 0;
 		appMemzero(CoronaRender.VisibleLights, sizeof(CoronaRender.VisibleLights));
 	}
@@ -3099,7 +3099,7 @@ void RenderLevel(FLevelSceneNode* SceneNode,FRenderInterface* RI)
 	if( !SceneNode->Parent && (SceneNode->Viewport->Actor->ShowFlags & SHOW_Coronas) )
 	{
 		RI->PushState();
-		UC2CoronaRenderFor( SceneNode->Viewport ).RenderCoronas( SceneNode, RI );	// uc2 port (G-9)
+		UC2CoronaRenderFor( SceneNode->Viewport ).RenderCoronas( SceneNode, RI );
 		RI->PopState();
 	}
 

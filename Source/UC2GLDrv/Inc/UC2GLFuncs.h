@@ -1,7 +1,7 @@
 /*=============================================================================
 	UC2GLFuncs.h: the OpenGL entry points and extensions UC2GLDrv uses.
 
-	X-macro list in engine-ut2004 OpenGLDrv's OpenGLFuncs.h form, cut to what this driver
+	X-macro list, cut to what this driver
 	calls. GL_EXT(_name) declares a SUPPORTS_name flag; GL_PROC(ext,ret,func,parms) declares
 	a pointer that FindProcs fills; a missing pointer clears SUPPORTS<ext>.
 	_GL      : OpenGL 1.1-1.5 as used here (required)
@@ -141,8 +141,8 @@ GL_PROC(_FBO,void,glGenRenderbuffers,(GLsizei,GLuint*))
 GL_PROC(_FBO,void,glDeleteRenderbuffers,(GLsizei,const GLuint*))
 GL_PROC(_FBO,void,glBindRenderbuffer,(GLenum,GLuint))
 GL_PROC(_FBO,void,glRenderbufferStorage,(GLenum,GLenum,GLsizei,GLsizei))
-// Multisampled renderbuffers and their resolve (GL 3.0 / ARB_framebuffer_object; M11/O-8 anti-aliasing,
-// desktop binding only: OpenGL ES 2 and WebGL 1 have neither)
+// Multisampled renderbuffers and their resolve (GL 3.0 / ARB_framebuffer_object, OpenGL ES 3 / WebGL 2;
+// anti-aliasing: OpenGL ES 2 and WebGL 1 have neither)
 GL_PROC(_MSAA,void,glRenderbufferStorageMultisample,(GLenum,GLsizei,GLenum,GLsizei,GLsizei))
 GL_PROC(_MSAA,void,glBlitFramebuffer,(GLint,GLint,GLint,GLint,GLint,GLint,GLint,GLint,GLbitfield,GLenum))
 

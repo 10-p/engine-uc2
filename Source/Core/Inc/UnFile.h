@@ -306,13 +306,13 @@ CORE_API const TCHAR* appCmdLine();
 // True when a command-line token is a global option of the form Key=Value rather than a map URL
 // (a URL's own options follow a '?', so "DM-Map?Name=x" is a URL and "Name=x" is an option).
 CORE_API UBOOL appIsGlobalOptionToken( const TCHAR* Token );
-// Apply every `-ini:<File>:[<Section>]:<Key>=<Value>` token on the command line (engine-ut2004's switch,
-// ported for the launcher's player name and any per-launch setting). <File> is the config cache's generic
+// Apply every `-ini:<File>:[<Section>]:<Key>=<Value>` token on the command line (the launcher's player name
+// and any per-launch setting). <File> is the config cache's generic
 // name (`System` = Avaris.ini, `User` = User.ini) or a literal ini name. A value with spaces needs the whole
 // token quoted ("-ini:...=a b"); the value is WRITTEN into the ini (the file is marked dirty), not just
 // overridden for the run. Called once by appInit, right after GConfig->Init.
 CORE_API void appApplyIniOverrides();
-// uc2 port (F-4 follow-up): a TEST key of the system ini (Avaris.ini), set from outside with -ini:. One-shot: read once
+// A test key of the system ini (Avaris.ini), set from outside with -ini:. One-shot: read once
 // and taken out of the in-memory ini of every named section, so a test hook never persists into Avaris.ini (a later
 // run of the same tree, or the web's saved ini, cannot inherit it). The value comes from the first section that has
 // the key. Returns whether it was there.
@@ -494,8 +494,8 @@ CORE_API TCHAR* appI64toa( const SQWORD Num );
 typedef int QSORT_RETURN;
 typedef QSORT_RETURN(CDECL* QSORT_COMPARE)( const void* A, const void* B );
 CORE_API void appQsort( void* Base, INT Num, INT Width, QSORT_COMPARE Compare );
-// uc2 port: file names in the order NTFS lists them (FindFiles' order on Epic's machines; readdir() order is
-// the file system's). M14 (Editor, .uc files), S2 (Core, localization files). Core/Src/UnObj.cpp.
+// File names in the order NTFS lists them (FindFiles' order on Epic's machines; readdir() order is the file
+// system's): the Editor's .uc files, Core's localization files. Core/Src/UnObj.cpp.
 CORE_API void UC2SortLikeNTFS( TArray<FString>& Files );
 
 //
@@ -742,9 +742,9 @@ inline void* operator new[]( size_t Size,const ANSICHAR* File, INT Line = __LINE
 #endif
 #endif
 
-// UT_REPLACEMENT_ALLOC (engine-ut2004 2.19c): these replace the global allocation functions. GCC/clang
-// emit an inline replacement out of line (weak) wherever it is not inlined -- always at -O0 -- and the
-// linker then routes the WHOLE program's operator new through GMalloc, including Emscripten's own static
+// UT_REPLACEMENT_ALLOC: these replace the global allocation functions. GCC/clang emit an inline
+// replacement out of line (weak) wherever it is not inlined -- always at -O0 -- and the linker then
+// routes the whole program's operator new through GMalloc, including Emscripten's own static
 // initialisers that run before appInit (GMalloc is still the error allocator then). Forcing the inline
 // keeps engine allocations on GMalloc and system allocations on the C++ runtime at every -O level.
 #if defined(__GNUC__) || defined(__clang__)
@@ -769,7 +769,7 @@ UT_REPLACEMENT_ALLOC inline void operator delete( void* Ptr )
 
 #if !defined(_MSC_VER)
 // C++14 sized deallocation: without these the compiler calls the C++ runtime's sized operator delete,
-// which hands memory that came from GMalloc to free(). (engine-ut2004 defines the same pair.)
+// which hands memory that came from GMalloc to free().
 UT_REPLACEMENT_ALLOC inline void operator delete( void* Ptr, size_t )
 {
 	guardSlow(delete);

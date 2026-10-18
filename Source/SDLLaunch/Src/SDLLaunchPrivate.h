@@ -4,7 +4,7 @@
 
 Revision history:
 	* Created by Daniel Vogel (based on XLaunch).
-	* engine-uc2 (M4): rewritten for SDL2 and UC2's static link.
+	* Rewritten for SDL2 and UC2's static link.
 =============================================================================*/
 
 #include <stdio.h>

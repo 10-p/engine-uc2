@@ -1,8 +1,7 @@
 /*=============================================================================
-	UC2FpsLog.cpp: the frame rate in the log, one line per interval. uc2 port
-	(F-2, docs/porting/analysis/platform-f4.md); not Epic's. Quiet by default.
+	UC2FpsLog.cpp: the frame rate in the log, one line per interval. Quiet by default.
 
-	Why: STAT FPS (UnStats.cpp, UEngine::bShowFrameRate) draws the frame rate on the
+	STAT FPS (UnStats.cpp, UEngine::bShowFrameRate) draws the frame rate on the
 	screen only; a benchmark run by a tool, a headless run and a browser run need it in
 	the log, and a mean alone hides the slow frames players notice.
 

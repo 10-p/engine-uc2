@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DM-Azure sky haze A/B (F-5 step 6, docs/porting/analysis/render-f5.md): numbers and a sheet from the frames
+"""DM-Azure sky haze A/B: numbers and a sheet from the frames
 tools/dev/f5-flicker.sh made of one NETPLACE view on three renderers.
 
   f5-haze.py <dir> <out.png> [<desktop suffix>]      e.g. "-fix": the desktop frames of another executable

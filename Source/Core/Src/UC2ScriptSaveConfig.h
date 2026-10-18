@@ -1,14 +1,13 @@
 /*=============================================================================
 	UC2ScriptSaveConfig.h: script SaveConfig() / StaticSaveConfig() on PC.
-	uc2 port, not Epic's. Private to Core (UnCorSc.cpp, UnObj.cpp, UnMisc.cpp).
+	Private to Core (UnCorSc.cpp, UnObj.cpp, UnMisc.cpp).
 
 	Epic compiled UObject::execSaveConfig / execStaticSaveConfig out on PC and Xbox alike
 	("rjp - calling SaveConfig() has mucho side-effects, so behavior should be identical on
 	both PC and XBOX"; the Xbox reason is its certification rules about unprompted disk
-	writes: settings persist through the profile there). This is a PC game now:
+	writes: settings persist through the profile there). On PC
 	[Engine.Engine] ScriptSaveConfig (default True) turns the two natives back on; False
 	is Epic's no-op. It is read once, at start-up (appInit), after the -ini: overrides.
-	Notes: docs/porting/analysis/saveconfig.md.
 =============================================================================*/
 
 #ifndef UC2_SCRIPT_SAVECONFIG_H
@@ -25,7 +24,7 @@ UBOOL UC2ScriptSaveConfigEnabled();
 void UC2SaveConfigFromScript( UObject* Object, UBOOL bStatic );
 
 // Called by UClass::Link / UClass::Serialize right after a class default has loaded its config: records the
-// inherited globalconfig properties this class DELIBERATELY gives another default than its superclass (see UnObj.cpp).
+// inherited globalconfig properties this class deliberately gives another default than its superclass (UnObj.cpp).
 void UC2NoteDefaultOverrides( UClass* Class );
 
 // The SAVECONFIGKEYS console command (UObject::StaticExec): "SAVECONFIGKEYS <Class> <Property> [<Property>...]"

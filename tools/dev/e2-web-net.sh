@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# E-2: run the frontend's uc2 WebRTC net spec (ufrontend packages/e2e/uc2-wasm-net.spec.js) against THIS worktree's
+# Run the frontend's uc2 WebRTC net spec (packages/e2e/uc2-wasm-net.spec.js) against this worktree's
 # wasm-perf artifact, under the memory rules of CLAUDE.md ("Running anything").
 #
 #   tools/dev/e2-web-net.sh <tag> [spec] [extra playwright args...]
-#     <tag>   names the logs: <WorkUC2>/logs/e2/e2e-<tag>.txt, .trace, -proof.txt, -pages/<page>-console.txt
+#     <tag>   names the logs: <repo>/../logs/e2/e2e-<tag>.txt, .trace, -proof.txt, -pages/<page>-console.txt
 #     spec    default uc2-wasm-net.spec.js
 #
 # What it does, in order (and refuses to start when it cannot do it safely):
 #   1. refuses if another e2e-mem-guard runs or :8080/:8081/:9000 are taken (one harness run machine-wide);
-#   2. reassembles <WorkUC2>/ufrontend/serve-web with this worktree's build-wasm-perf artifact (yarn build, capped 4G)
-#      and records the sha256 of serve-web/SDLLaunch.wasm against the artifact's, before AND after the run;
-#   3. loads a null PulseAudio sink and removes it BY ITS MODULE INDEX afterwards (never by module name: that
+#   2. reassembles <repo>/../ufrontend/serve-web with this worktree's build-wasm-perf artifact (yarn build, capped 4G)
+#      and records the sha256 of serve-web/SDLLaunch.wasm against the artifact's, before and after the run;
+#   3. loads a null PulseAudio sink and removes it by its module index afterwards (not by module name: that
 #      removes every null sink on the machine);
 #   4. runs bin/capped 8G 1800 -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=16 -- --target uc2 <spec>.
 # Exit status: the run's.

@@ -7,7 +7,7 @@
 	translated to GL in FOpenGLRenderInterface::SetMaterialBlending/CommitTexCoords, so
 	this file stays diffable against the specification: `diff` it against UC2's
 	D3DMaterialState.cpp to see every deliberate change; each one is marked "UC2GLDrv:".
-	Code under #ifdef _XBOX is kept as it is (never compiled; reference for M6/M7/M9).
+	Code under #ifdef _XBOX is kept as it is (never compiled; reference).
 
 	D3DMaterialState.cpp: Unreal Direct3D rendering interface implementation.
 	Copyright 2001 Epic Games, Inc. All Rights Reserved.
@@ -1367,7 +1367,7 @@ void FOpenGLRenderInterface::UpdateDOFRampLookupTexture( UMaterial* DOFShader, B
 
 	unguard
 #else
-	// UC2GLDrv (M7): the same computation with the texture written the GL way
+	// UC2GLDrv: the same computation with the texture written the GL way
 	// (UC2GLPostProcess.cpp); PC's D3DDrv has no body here.
 	extern void UC2GL_UpdateDOFRampLookupTexture( FOpenGLRenderInterface* RI, UMaterial* DOFShader, BYTE FocusType );
 	if( RenDev->PostProcessActive() )
@@ -1375,12 +1375,12 @@ void FOpenGLRenderInterface::UpdateDOFRampLookupTexture( UMaterial* DOFShader, B
 #endif //_XBOX
 }
 
-// UC2GLDrv (fx-fixes, O-7): the distance over which screen-space distortion fades out.
+// UC2GLDrv: the distance over which screen-space distortion fades out.
 // DistortionAccum.vsh scales each vertex's distortion by 1 - saturate(z / D)^2 (z: camera-space
-// depth), and Epic's driver sets D = DISTORTION_CULL_DISTANCE = 5000 (D3DMaterialState.cpp
-// 1377): at 2500 units 75% is left, at 4000 36%, at 5000 nothing. It is the one place the
-// range of the effect is decided. Here D is the device's config property DistortionCullDistance
-// (F-5: read like every other device key from the device class's own ini section, so the GL4ES
+// depth), and Epic's driver sets D = DISTORTION_CULL_DISTANCE = 5000 (D3DMaterialState.cpp):
+// at 2500 units 75% is left, at 4000 36%, at 5000 nothing. It is the one place the range of the
+// effect is decided. Here D is the device's config property DistortionCullDistance
+// (read like every other device key from the device class's own ini section, so the GL4ES
 // device reads [UC2GL4ESDrv.UC2GL4ESRenderDevice]; compiled default 15000 as the ini; a value that
 // is not positive means the Xbox's 5000), console DISTORTIONCULLDISTANCE [<units>]
 // (UC2GLRenderDevice.cpp).
@@ -1392,7 +1392,7 @@ void FOpenGLRenderInterface::HandlePSVertexShader( UMaterial* InMaterial, FOpenG
 {
 	guard(FOpenGLRenderInterface::HandlePSVertexShader);
 
-	// UC2GLDrv (M7): D3DDrv's "#ifndef _XBOX return;" is the device's post-process switch.
+	// UC2GLDrv: D3DDrv's "#ifndef _XBOX return;" is the device's post-process switch.
 	// The constants go to the interface (uniforms of the GLSL ports of Distortion.vsh,
 	// DistortionAccum.vsh and ColorRemap.vsh, UC2GLShaders.cpp) instead of VSC_* registers.
 	if( !RenDev->PostProcessActive() )
@@ -1407,7 +1407,7 @@ void FOpenGLRenderInterface::HandlePSVertexShader( UMaterial* InMaterial, FOpenG
 		PixelShaderMaterial->PixelShaderType <= PS_DistortionAccum)
 	{
 		static FLOAT MAX_DISTORTION_AMT_CLAMP = (UTexture::__Client) ? UTexture::__Client->MaxDistortion : 20.f;
-		// UC2GLDrv (O-7, F-5): Epic's "static FLOAT DISTORTION_CULL_DISTANCE = 5000.f;" is the
+		// UC2GLDrv: Epic's "static FLOAT DISTORTION_CULL_DISTANCE = 5000.f;" is the
 		// device setting above (5000 when it is not positive).
 		static FLOAT LoggedCullDistance = 0.f;
 		FLOAT DISTORTION_CULL_DISTANCE = RenDev->DistortionCullDistance > 0.f ? RenDev->DistortionCullDistance : 5000.f;
@@ -1416,8 +1416,9 @@ void FOpenGLRenderInterface::HandlePSVertexShader( UMaterial* InMaterial, FOpenG
 			LoggedCullDistance = DISTORTION_CULL_DISTANCE;
 			debugf( NAME_Init, TEXT("UC2GLDrv: distortion fades out over %.0f units (DistortionCullDistance of %s; the Xbox's is 5000)"), DISTORTION_CULL_DISTANCE, RenDev->GetClass()->GetPathName() );
 		}
-		// UC2GLDrv: an ini without MaxDistortion (PC's Default.ini has none) reads as 0, which
-		// would switch all distortion off and divide by zero below: Epic's no-client value.
+		// UC2GLDrv: an ini without MaxDistortion reads as 0 until the device puts 35 there (its first
+		// frame, UC2GLRenderDevice.cpp); 0 would switch all distortion off and divide by zero below, so
+		// it takes Epic's no-client value.
 		if( MAX_DISTORTION_AMT_CLAMP <= 0.f )
 			MAX_DISTORTION_AMT_CLAMP = 20.f;
 
@@ -1540,13 +1541,13 @@ UBOOL FOpenGLRenderInterface::SetPixelShaderMaterial( UPixelShaderMaterial* InSh
 	HandlePSVertexShader( InShader, MaterialState );
 
 #ifndef _XBOX
-	// UC2GLDrv (M6): PC's test here is InShader->IsXboxOnly() == 0, because PC had hand-written
+	// UC2GLDrv: PC's test here is InShader->IsXboxOnly() == 0, because PC had hand-written
 	// DX8 shaders for some types only. Ours is whether the material's whole shader family is
 	// translated, compiled and has its inputs at this milestone (UUC2GLRenderDevice::
 	// PixelShaderFamilyReady): then the Xbox branch below is taken, Xbox-only or not.
 	// Otherwise, and always with UsePixelShaders=False, PC's Xbox-only fallback: texture
 	// stage 0 through SetSimpleMaterial, then the state handler.
-	// M7: the families that stay on the fallback are those whose input is the back buffer, the
+	// The families that stay on the fallback are those whose input is the back buffer, the
 	// depth buffer or another render target (distortion, blur, depth of field, bloom and emissive
 	// select, motion blur, luminance, player cam, colour remap): UC2GL_IsM7PixelShader.
 	if( RenDev->PixelShaderFamilyReady( InShader->PixelShaderType ) )
@@ -3124,7 +3125,7 @@ UBOOL FOpenGLRenderInterface::SetTerrainMaterial( UTerrainMaterial* TerrainMater
 			case 3:
 				{
 				CurrentState->MaterialPasses[0]->PixelShader = PS_Terrain3Layer;
-				// UC2GLDrv (M7b): the Xbox's constants (D3DDrv's "#ifdef _XBOX"): c0..c2 select the
+				// UC2GLDrv: the Xbox's constants (D3DDrv's "#ifdef _XBOX"): c0..c2 select the
 				// red, green and blue weight of the combined weight map. Reached only when the caps
 				// report three layers (UseTerrain3Layer), i.e. when the program exists.
 				static FLOAT MaskCoefficients[3*4] = {	1.f, 0.f, 0.f, 0.f,	
@@ -3442,10 +3443,10 @@ public:
 UBOOL FOpenGLRenderInterface::SetProjectorMultiMaterial( UProjectorMultiMaterial* ProjectorMultiMaterial, FOpenGLModifierInfo InModifierInfo, FString* ErrorString, UMaterial** ErrorMaterial )
 {
 	guard(FOpenGLRenderInterface::SetProjectorMultiMaterial);
-	// UC2GLDrv (M7b): Epic's body below was "#ifdef _XBOX"; on PC this function set nothing and
-	// returned 1. Nothing on PC asks for a UProjectorMultiMaterial (UnSkeletalMesh.cpp does only in
-	// its GPU-skinning branch, XBOX_ASSET_FORMAT data); since M7b the static projector batches do
-	// (FRenderCaps::XboxProjectors, UnGame.cpp; docs/porting/analysis/projectors.md). Without the
+	// UC2GLDrv: Epic's body below is "#ifdef _XBOX"; on PC this function sets nothing and returns
+	// 1. Nothing else on PC asks for a UProjectorMultiMaterial (UnSkeletalMesh.cpp does only in its
+	// GPU-skinning branch, XBOX_ASSET_FORMAT data); the static projector batches do
+	// (FRenderCaps::XboxProjectors, UnGame.cpp). Without the
 	// projector shaders the device does not report that capability and PC's empty body stands.
 	if( !RenDev->ProjectorShadersReady() )
 	{
@@ -3820,7 +3821,7 @@ UBOOL FOpenGLRenderInterface::SetProjectorMultiMaterial( UProjectorMultiMaterial
 	
 	CurrentState->NumMaterialPasses = NumProjPasses;
 
-	// UC2GLDrv (M7b): which projectors are drawn this way, once each (verification).
+	// UC2GLDrv: which projectors are drawn this way, once each (verification).
 	{
 		static TMap<AProjector*,INT> Logged;
 		AProjector* First = ProjectorMultiMaterial->RenderEntries(0)->Projector;
@@ -4881,7 +4882,7 @@ UBOOL FOpenGLRenderInterface::SetMovieMaterial(UMovieMaterial* pMovieMaterial,
 
 #else
 
-// UC2GLDrv (M9): the PC branch (Epic's returned 0 here: no movies on PC) is Src/UC2GLMovie.cpp.
+// UC2GLDrv: the PC branch (Epic's returned 0 here: no movies on PC) is Src/UC2GLMovie.cpp.
 
 #endif
 /*----------------------------------------------------------------------------

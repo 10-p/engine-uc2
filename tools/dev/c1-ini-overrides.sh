@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# C-1 check: the `-ini:<File>:[<Section>]:<Key>=<Value>` command-line overrides (appApplyIniOverrides,
+# Check of the `-ini:<File>:[<Section>]:<Key>=<Value>` command-line overrides (appApplyIniOverrides,
 # Source/Core/Src/UnMisc.cpp), one PASS/FAIL line per check.
 #
 #   tools/dev/c1-ini-overrides.sh
 #
-# Needs a native run tree: tools/dev/mkrun-uc2.sh build-native c1   (override: C1_TREE=<name> under <WorkUC2>/run).
-# Every game or ucc run is inside <WorkUC2>/bin/capped (CLAUDE.md): 2G for the client, 2G for ucc-bin.
-# Output in <WorkUC2>/logs/c1/ini/ (C1_OUT=<dir>): a-*.out/.result (the client with good overrides), b-*.out/.result
+# Needs a native run tree: tools/dev/mkrun-uc2.sh build-native c1   (override: C1_TREE=<name> under <repo>/../run).
+# Every game or ucc run is inside <repo>/../bin/capped (CLAUDE.md): 2G for the client, 2G for ucc-bin.
+# Output in <repo>/../logs/c1/ini/ (C1_OUT=<dir>): a-*.out/.result (the client with good overrides), b-*.out/.result
 # (the client with malformed ones), c-ucc.out (ucc-bin), and the inis each run left behind (a-Avaris.ini ...).
 #
 # How "takes effect" is proven: not from our own log line only. The client is started with the override on its

@@ -253,7 +253,7 @@ public:
 //	Canvas space is in pixel coordinates, 0 through to viewport width/height.
 //
 //epic rwd - changed to support batching
-// D-2: FCanvasUtil::UIContext.
+// FCanvasUtil::UIContext.
 enum EUIContext
 {
 	UICONTEXT_Game	= 0,	// the HUD, script, the engine's own 2D
@@ -284,7 +284,7 @@ public:
 
 	UBOOL						bZTest;				// scion sz - to enable z-buffer test
 
-	// D-2 (UI scaling, docs/porting/analysis/ui-scale.md): set by UCanvas::Update() for the viewport canvas.
+	// UI scaling: set by UCanvas::Update() for the viewport canvas.
 	// With [<Client>] UIScaleMode=Fit43 the canvas's coordinates are the 640x480 design pixels of the game's UI
 	// and CanvasToScreen puts them into a centred box of the target; a canvas built anywhere else (camera
 	// effects, scripted textures, the editor) keeps the target's pixels (bUIBoxed 0, scale 1, origin 0).
@@ -676,13 +676,13 @@ public:
 	void GenerateStreakFilter( EMultiSampleType InType, FLOAT Angle, FLOAT Scale=1.0f );
 };
 
-// UC2 port (pp-scale): the picture the post-process sizes and distances refer to. Epic's camera
-// effects were made for the Xbox's 640x480 back buffer: their targets are fractions of it and
+// The picture the post-process sizes and distances refer to. Epic's camera
+// effects are made for the Xbox's 640x480 back buffer: their targets are fractions of it and
 // their taps and insets are its pixels. With a reference height R (FRenderCaps::
 // PostProcessReferenceHeight, normally 480) the reference picture is R lines tall and as wide as
 // the back buffer's aspect gives (square pixels), whatever the real resolution; one of its pixels
 // is PixelScale = H / R back-buffer pixels. Without a reference (R = 0) it is the back buffer
-// itself and PixelScale is 1: Epic's behaviour. docs/porting/analysis/pp-scale.md.
+// itself and PixelScale is 1: Epic's behaviour.
 struct FPostProcessReference
 {
 	FLOAT	Width,			// the reference picture, in its own pixels
@@ -691,7 +691,7 @@ struct FPostProcessReference
 };
 ENGINE_API FPostProcessReference GetPostProcessReference( INT BackBufferWidth, INT BackBufferHeight );
 
-// UC2 port (H-1): what FilterCopyRenderTarget adds to UPSBlurMaterial::BlurBlendMode (EBlurBlendMode, 0..3) for a
+// What FilterCopyRenderTarget adds to UPSBlurMaterial::BlurBlendMode (EBlurBlendMode, 0..3) for a
 // pass with TapScale 2 or 4: every tap of the pass is to be the mean of TapScale reads 2 source texels apart along X
 // and/or Y (UC2_BLUR_FILL_4: four reads, else two), computed in the shader (UC2GLDrv: the fill variant of PS_Blur).
 #define UC2_BLUR_MODE_MASK	0x1f
@@ -701,9 +701,9 @@ ENGINE_API FPostProcessReference GetPostProcessReference( INT BackBufferWidth, I
 
 // scion sz
 // Used for different blurring and sampling routines
-// UC2 port (H-1): TapScale (1, 2 or 4; RenDevPostProcessTargetScale) for a target-to-target pass of a chain whose
+// TapScale (1, 2 or 4; RenDevPostProcessTargetScale) for a target-to-target pass of a chain whose
 // targets have that many times the Xbox's texels per axis: the same blur on the screen, sampled more finely
-// (UnRenderUtil.cpp, docs/porting/analysis/h1-bloom.md). Ignored for a pass from the back buffer (SrcViewport).
+// (UnRenderUtil.cpp). Ignored for a pass from the back buffer (SrcViewport).
 void ENGINE_API FilterCopyRenderTarget( FRenderTarget* DestTarget,
 										FRenderTarget* SrcTarget,
 										UViewport* SrcViewport, 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""audio-itd.py: interaural differences in a stereo capture (F-6, HRTF on/off).
+"""audio-itd.py: interaural differences in a stereo capture (HRTF on/off).
 
 Plain stereo panning (OpenAL Soft without HRTF) only changes the level between the channels; HRTF also delays the
 far ear by a fraction of a millisecond. This cuts the capture into windows, keeps the clearly lateral ones (one

@@ -1,29 +1,28 @@
 #!/usr/bin/env bash
-# Pictures for the owner's review items O-5, O-6, O-7 (DM-Azure pool, DM-Azure waterfall, DM-Praxis pane
-# distortion range), regenerated deterministically: fixed camera (NETPLACE with pitch), fixed times, the
-# virtual pad for movement. Notebook: docs/porting/analysis/fx-fixes.md.
+# Effect pictures (DM-Azure pool, DM-Azure waterfall, DM-Praxis pane distortion range and others), made
+# deterministically: fixed camera (NETPLACE with pitch), fixed times, the virtual pad for movement.
 #
 #   tools/dev/fx-owner.sh [<tree>] [case ...]       default tree: fx; default: every case
 #   tools/dev/fx-owner.sh fx pool waterfall-1p
 #   tools/dev/fx-owner.sh list
 #   UC2_BIN=uc2-before.bin tools/dev/fx-owner.sh fx pool   another executable from the tree's System folder
 #                                                          (the pictures get the suffix "-before")
-#   FX_ARGS="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:MatCensus=True" tools/dev/fx-owner.sh ...       more uc2.bin arguments (O-9)
-#   FX_SECS=240 (custom case only): another time limit for the run (M7b: the GL4ES twin under load)
+#   FX_ARGS="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:MatCensus=True" tools/dev/fx-owner.sh ...       more uc2.bin arguments
+#   FX_SECS=240 (custom case only): another time limit for the run (e.g. the GL4ES device under load)
 #   UC2_GPU=1 tools/dev/fx-owner.sh fx waterfall-1p        render on this machine's GPU instead of Mesa
 #                                                          llvmpipe: SDL's offscreen video driver (EGL, no
-#                                                          window, nothing on the owner's display); the
+#                                                          window, nothing on the display); the
 #                                                          pictures get the suffix "-gpu"
 #
 # Each case is one game run of tools/dev/m10-inject.py's scenario language (wait/sleep/chan/pad/shot) inside
-# <WorkUC2>/bin/capped 2G, headless (Xvfb, software GL), 1280x720, map URL <map>?Name=FxCam, -ini:System:[UC2Movie]:StartupMovies=False,
+# <repo>/../bin/capped 2G, headless (Xvfb, software GL), 1280x720, map URL <map>?Name=FxCam, -ini:System:[UC2Movie]:StartupMovies=False,
 # the engine's input test channel (-ini:System:[SDL2Drv.SDL2Client]:InputTestFile=, SDL2Drv) for console commands and the virtual pad. Output in
-# <WorkUC2>/logs/<tree>/: fx-<case>[-before]-<shot>.png, fx-<case>[-before].out (game log), .inject (runner),
+# <repo>/../logs/<tree>/: fx-<case>[-before]-<shot>.png, fx-<case>[-before].out (game log), .inject (runner),
 # and one line per case: Critical count, GL errors, failed programs, the shots taken, anything left running.
 #
 # Console commands used (all exist without cheats): SetAutoCenterPitch 0 (UCPlayerController), ToggleThirdCam,
 # NETPLACE <name> x y z yaw [pitch] (UC2NetTest.cpp; places the pawn and the view), GLPIXTRACE x y (driver),
-# DISTORTIONCULLDISTANCE (driver, O-7), set ... (property of every object of a class).
+# DISTORTIONCULLDISTANCE (driver), set ... (property of every object of a class).
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
@@ -32,9 +31,9 @@ if [ $# -gt 0 ] && [ -d "$work/run/$1" ]; then tree=$1; shift; fi
 sys=$work/run/$tree/System
 out=$work/logs/$tree
 bin=${UC2_BIN:-uc2.bin}
-# AutoFOV off unless UC2_AUTOFOV is set: the before/after pairs compare with executables older than D-8.
+# AutoFOV off unless UC2_AUTOFOV is set: the before/after pairs compare with executables without AutoFOV.
 fovarg="-ini:System:[ufront.AutoFOV]:AutoFOV=0"; [ -n "${UC2_AUTOFOV:-}" ] && fovarg=""
-# Likewise the UI as before D-2 (640x480 drawn 1:1, top-left) unless UC2_UIBOX is set: the references (e.g. the
+# Likewise the UI as Epic draws it (640x480 drawn 1:1, top-left) unless UC2_UIBOX is set: the references (e.g. the
 # wine oracle's DM-Praxis view, made by the original PC binary) have the old HUD. tools/dev/d2-ui-scale.sh
 # measures the UI box itself and does not use this runner.
 [ -z "${UC2_UIBOX:-}" ] && fovarg="$fovarg -ini:System:[SDL2Drv.SDL2Client]:UIScaleMode=Native640"

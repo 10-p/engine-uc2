@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""H-4: summarise the engine's LODTrace lines (test key [Engine.SkeletalMeshInstance] LODTrace=True; UnSkeletalMesh.cpp).
+"""Summarise the engine's LODTrace lines (test key [Engine.SkeletalMeshInstance] LODTrace=True; UnSkeletalMesh.cpp).
 
     lodtrace.py <engine log or harness log> [more logs...]
 
 Per log: the traced draws counted by pass (main scene / the pawn's shadow), mesh, LOD, whether the driver uploaded
 the skinned vertices and whether the draw was STALE (one LOD's index buffer drawn over vertices skinned for another
-LOD: Lauren's polygons crossing, docs/porting/analysis/h4-vertex.md). Last line per log:
+LOD: Lauren's polygons crossing). Last line per log:
     lodtrace <log>: draws=N stale=M main_stale=K shadow_stale=J two_lods_in_a_frame=F
 """
 import re

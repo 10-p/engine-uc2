@@ -5417,12 +5417,11 @@ void DrawSkelImpostor( FDynamicActor* Owner, FVector* Origin, FLevelSceneNode* S
 }
 
 //
-// uc2 port (H-4): LODTrace test key, [Engine.SkeletalMeshInstance] LODTrace=True through -ini: (read once, never kept
+// LODTrace test key, [Engine.SkeletalMeshInstance] LODTrace=True through -ini: (read once, never kept
 // in the ini; appReadTestKey). For the skeletal meshes of the pawn the player views, one line per draw of the
 // software-skinned stream: the pass (main scene or the pawn's shadow), the width the LOD was computed with, the LOD
 // factor and level, whether the driver uploaded the vertex pool, the LOD the pool's vertices were skinned for, and
 // "stale" when that is not the LOD being drawn (one LOD's index buffer over another LOD's vertices).
-// Notebook: docs/porting/analysis/h4-vertex.md.
 //
 static INT						GUC2LodTrace = -1;
 static USkeletalMeshInstance*	GUC2LodTraceInst = NULL;
@@ -5630,11 +5629,10 @@ void USkeletalMeshInstance::Render( FDynamicActor* Owner, FLevelSceneNode* Scene
 		}
 		CurrentLODLevel = NewLODLevel;
 
-		// uc2 port (H-4): UT2004's fix (engine-ut2004 UnSkeletalMesh.cpp), missing from build 2226. The software-skinned
-		// vertices reach the driver through a vertex pool whose revision changes once per frame (FVertexPool::SetClient);
-		// a mesh drawn twice in one frame at two LOD levels (the pawn's shadow pass computes its LOD with the 252-pixel
-		// shadow viewport's width, the scene with the window's) drew the second LOD's index buffer over the first
-		// LOD's vertices: Lauren's hair polygons across her body in the browser (docs/porting/analysis/h4-vertex.md).
+		// The software-skinned vertices reach the driver through a vertex pool whose revision changes once per frame
+		// (FVertexPool::SetClient); a mesh drawn twice in one frame at two LOD levels (the pawn's shadow pass computes its
+		// LOD with the 252-pixel shadow viewport's width, the scene with the window's) would draw the second LOD's index
+		// buffer over the first LOD's vertices.
 		if( OldLODLevel != NewLODLevel ) // Fixes corruption when meshes are rendered multiple times in a single frame  (from Bob Berry.)
 			SkinStream.Revision++;
 	}

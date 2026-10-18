@@ -1,5 +1,5 @@
 /*=============================================================================
-	UC2EditorRegistrants.cpp: static-link registration of the Editor package (uc2 port, M14).
+	UC2EditorRegistrants.cpp: static-link registration of the Editor package.
 
 	Epic always built Editor as a DLL, where every IMPLEMENT_CLASS registers itself when the DLL loads.
 	Under __STATIC_LINK a class exists only once something calls its StaticClass(), which is what the
@@ -191,7 +191,7 @@ EDITOR_API void UC2InitializeEditorRegistrants( INT& Lookup )
 }
 
 /*-----------------------------------------------------------------------------
-	`ucc-bin verifyclasses` for Editor (M14): the script and C++ layouts of the Editor classes that have script.
+	`ucc-bin verifyclasses` for Editor: the script and C++ layouts of the Editor classes that have script.
 	The generated EditorClasses.h lists sizes only; UEditorEngine is hand-written (Editor.h) and its C++ names
 	differ from the script's in places, so its members are listed here by both names. The caller loads Editor.
 -----------------------------------------------------------------------------*/

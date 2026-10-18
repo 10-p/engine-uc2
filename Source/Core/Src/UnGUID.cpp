@@ -30,13 +30,13 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <string.h>
-#include "Core.h"	// UnUnix.h (appGetLocalIP) needs Core.h's types; as in engine-ut2004
+#include "Core.h"	// UnUnix.h (appGetLocalIP) needs Core.h's types
 
 /*----------------------------------------------------------------------------
 	Private definitions.
 ----------------------------------------------------------------------------*/
 
-typedef unsigned int    unsigned32;	// 32 bits on LP64 too (engine-ut2004)
+typedef unsigned int    unsigned32;	// 32 bits on LP64 too
 typedef unsigned short  unsigned16;
 typedef unsigned char   unsigned8;
 typedef unsigned char   byte;

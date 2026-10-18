@@ -2,7 +2,7 @@
 	UnThreadingPosix.h: pthread implementation of the UnThreadingBase.h
 	interfaces (the counterpart of UnThreadingWindows.h).
 
-	engine-uc2 (M1). Used by every non-MSVC target: Linux, Emscripten (built
+	Used by every non-MSVC target: Linux, Emscripten (built
 	with -pthread) and MinGW (winpthreads). The class set, factory methods and
 	semantics follow UnThreadingWindows.h/.cpp one for one; where Win32 has no
 	pthread equivalent (TerminateThread, SuspendThread, thread priorities,

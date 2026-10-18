@@ -1,11 +1,11 @@
 /*=============================================================================
 	UC2GLDrv.h: UC2's OpenGL render device, public header.
 
-	A three-way merge (docs/porting/analysis/gl-renderer.md): engine-ut2004's OpenGLDrv
-	(structure, GL code) brought to UC2's render interface, with UC2's own D3DDrv as the
-	specification of behaviour. M5 = renderer R1, fixed function; see the notebook for
-	what is deferred to M6 (pixel-shader materials, vertex shaders) and M7 (render-target
-	post-processing) and where the hooks are.
+	UC2's render interface on OpenGL, with UC2's own D3DDrv as the specification of
+	behaviour: fixed-function texture stages (as GLSL programs or GL's texture environment),
+	pixel-shader materials from the translated Xbox shaders, vertex shaders composed from
+	the .vsh fragments, render-target post-processing. The binding (desktop GL or GL4ES)
+	is chosen at run time by the device class (UC2GLBinding.h).
 =============================================================================*/
 
 #ifndef _INC_UC2GLDRV

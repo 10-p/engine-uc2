@@ -1,17 +1,16 @@
 /*=============================================================================
-	WebRTCNetDriver.cpp: the browser's network driver (E-2, web build only).
+	WebRTCNetDriver.cpp: the browser's network driver (web build only).
 
-	engine-ut2004's WebRTCNetDriver.cpp (ufront steps 2.36b, 2.38, 2.40), adapted to UC2:
+	On UC2's UNetDriver:
 	- every received packet updates the driver's receive clock (UNetDriver::UpdateLastReceiveTime, as
 	  UTcpNetDriver does): UC2's "standby cheat" check fires NotifyStandbyHack after 1 s (server) or 3 s
-	  (client) without one; G-10/G-10b: this driver opts out of that check (StandbyCheckEnabled), so
-	  a vanished guest no longer pauses the host's match, nor a vanished host the guest's game;
-	- no emscripten_sleep while waiting for a pipe: the template slept 100 ms per tick (a listen server with
-	  nobody connected ran at 10 frames a second) because its engine once shared the browser's main thread
-	  with PeerJS; here the engine has run on a worker since M4w and the transport lives on the main thread;
+	  (client) without one; this driver opts out of that check (StandbyCheckEnabled), so a vanished
+	  guest does not pause the host's match, nor a vanished host the guest's game;
+	  - no sleep while waiting for a pipe: the engine runs on a worker and the transport lives on the main
+	  thread, so a wait would only slow a listen server with nobody connected;
 	- the listen server's status (name, map, players) comes from the level the driver serves
 	  (Notify->NotifyGetLevel()) rather than a launcher global;
-	- the server name the peer id is built from is the CONFIG value [Engine.GameReplicationInfo] ServerName
+	- the server name the peer id is built from is the config value [Engine.GameReplicationInfo] ServerName
 	  (the launcher's seed), not GameReplicationInfo's class default: UC2's profile code overwrites that
 	  default with the profile's own server name at start-up (Engine/Classes/PlayerProfile.uc:764), the
 	  same "Liandri Corporation" on every install, and never writes the ini;
@@ -19,7 +18,6 @@
 	  command line); netplay: UC2's own System Link page (UCMenu.UC2Browser, UDP beacons) is fed by the
 	  synthetic LAN in WebRTCLan.cpp: the listen status carries the host's beacon text, and a join from that
 	  page dials a synthetic address that InitConnect turns back into the room key.
-	Notebook: docs/porting/analysis/webrtc.md.
 =============================================================================*/
 
 #include "WebRTCDrv.h"
@@ -31,7 +29,7 @@
 // Receive buffer: as UTcpNetDriver's NETWORK_MAX_PACKET.
 #define WEBRTC_RECV_BUFFER		576
 
-// The client has exactly ONE transport slot: the glue gives every client connect the same connection id (0).
+// The client has exactly one transport slot: the glue gives every client connect the same connection id (0).
 // A server travel calls InitConnect for the pending level while the old level's driver still ticks, so the
 // new driver takes the slot and detaches the old one (see InitConnect / LowLevelDestroy).
 static UWebRTCNetDriver* GClientDriver = NULL;
@@ -41,9 +39,9 @@ static UWebRTCNetDriver* GClientDriver = NULL;
 
 	UNetDriver's config properties are read from [WebRTCDrv.WebRTCNetDriver]. The web Default.ini carries that
 	section, but an Avaris.ini derived by an older build (the frontend keeps it in IndexedDB) has none, and
-	then every property UNetDriver::StaticConstructor does not default is ZERO: ConnectionTimeout 0 drops
+	then every property UNetDriver::StaticConstructor does not default is zero: ConnectionTimeout 0 drops
 	every connection at once, KeepAliveTime 0 sends no keep-alives, RelevantTimeout 0 closes actor channels
-	(the guest's own PlayerController) a tick after opening them (engine-ut2004, ufront 2.36b). Substitute the
+	(the guest's own PlayerController) a tick after opening them. Substitute the
 	web Default.ini values for anything not positive, and say what was substituted.
 -----------------------------------------------------------------------------*/
 
@@ -163,7 +161,7 @@ void UWebRTCNetDriver::TickDispatch( FLOAT DeltaTime )
 	// Accept new incoming connections (listen server).
 	// ACCEPTC_Ignore is not a refusal: ULevel::NotifyAcceptingConnection returns it during a server travel.
 	// Over UDP that drops one connect packet and the client retries; a pipe closed here would make the guest
-	// reconnect, be ignored again and livelock (engine-ut2004 measured this). So park the pipe and offer it
+	// reconnect, be ignored again and livelock. So park the pipe and offer it
 	// again on a later tick, the parked ones before new arrivals.
 	TArray<INT> Incoming = ParkedAccepts;
 	ParkedAccepts.Empty();
@@ -346,7 +344,7 @@ void UWebRTCNetDriver::LowLevelDestroy()
 	ParkedAccepts.Empty();
 	if( GClientDriver==this )
 		GClientDriver = NULL;
-	// webrtc_destroy() is global. On a client the old level's driver dies AFTER the pending level's
+	// webrtc_destroy() is global. On a client the old level's driver dies after the pending level's
 	// InitConnect (inside LoadMap), so a detached driver must not tear down the newer one's transport. A
 	// listen server's old driver dies before the next InitListen.
 	if( !bDetached )
@@ -355,18 +353,16 @@ void UWebRTCNetDriver::LowLevelDestroy()
 }
 
 //
-// G-10/G-10b: no "standby cheat" check over WebRTC (UNetDriver::TickDispatch). Its server half: a server that hears
+// No "standby cheat" check over WebRTC (UNetDriver::TickDispatch). Its server half: a server that hears
 // from none of its in-game clients for STANDBYCHEAT_TIMEOUT (1 s) calls ULevel::NotifyStandbyHack, which pauses the
 // match through PlayerController.ToggleStandbyMode until a packet arrives; its client half does the same to a
 // client that hears nothing from its server for 3 s. It was written against a cable modem's Standby button on the
-// Xbox (Epic's own UTcpNetDriverXbox already leaves LAN clients out). Over WebRTC it fired on a peer that simply
-// vanished (tab closed, crash, network gone: the glue waits RECONNECT_GRACE_MS for a reconnect before it reports the
-// pipe closed): the host's match, or the guest's game, stood paused until ConnectionTimeout. Without it, the
-// vanished peer is dropped at ConnectionTimeout like any dead connection, as engine-ut2004's WebRTC driver does
-// (UT2004 has no standby check at all). G-10 (commit e34f3ad) left the guests out of the server half through
-// ShouldIncludeInStandbyCheck; G-10b turns the whole check off for this driver, which covers both halves with one
-// switch. The check, its pause and every other driver (IpDrv.TcpNetDriver natively) are unchanged. Owner decision
-// of 2026-10-10 ("yes exclude webrtc"); docs/porting/analysis/web-g10.md.
+// Xbox (Epic's own UTcpNetDriverXbox already leaves LAN clients out). Over WebRTC it would fire on a peer that
+// simply vanished (tab closed, crash, network gone: the glue waits RECONNECT_GRACE_MS for a reconnect before it
+// reports the pipe closed) and keep the host's match, or the guest's game, paused until ConnectionTimeout. Without
+// it, the vanished peer is dropped at ConnectionTimeout like any dead connection. The check is off for this driver
+// as a whole, both halves with one switch; the check, its pause and every other driver (IpDrv.TcpNetDriver
+// natively) are unchanged.
 //
 UBOOL UWebRTCNetDriver::StandbyCheckEnabled() const
 {

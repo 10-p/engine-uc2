@@ -116,7 +116,7 @@ UObject::UObject( ENativeConstructor, UClass* InClass, const TCHAR* InName, cons
 	// Setup registration info, for processing now (if inited) or later (if starting up).
 	check(sizeof(Outer       )>=sizeof(InPackageName));
 #if SERIAL_POINTER_INDEX
-	// M13: FName and _LinkerIndex are 4 bytes, the stashed name and the autoregister chain are pointers.
+	// FName and _LinkerIndex are 4 bytes, the stashed name and the autoregister chain are pointers.
 	// Park them in pointer-sized members that are NULL until Register() (which clears them again).
 	*(const TCHAR  **)&StateFrame   = InName;
 	*(const TCHAR  **)&Outer        = InPackageName;
@@ -152,7 +152,7 @@ UObject::UObject( EStaticConstructor, const TCHAR* InName, const TCHAR* InPackag
 	// Setup registration info, for processing now (if inited) or later (if starting up).
 	check(sizeof(Outer       )>=sizeof(InPackageName));
 #if SERIAL_POINTER_INDEX
-	// M13: see the native constructor above.
+	// As in the native constructor above.
 	*(const TCHAR  **)&StateFrame   = InName;
 #else
 	check(sizeof(_LinkerIndex)>=sizeof(GAutoRegister));
@@ -1443,24 +1443,24 @@ void UObject::LoadLocalized( UBOOL* bHasLocEntry )
 	unguardobj;
 }
 
-// uc2 port: when set, SaveConfig writes only these properties (SAVECONFIGKEYS, UC2SaveConfigKeys below).
+// When set, SaveConfig writes only these properties (SAVECONFIGKEYS, UC2SaveConfigKeys below).
 static const TArray<UProperty*>* GSaveConfigOnly = NULL;
 
-// uc2 port: set while script's SaveConfig() / StaticSaveConfig() run (UC2SaveConfigFromScript below): a globalconfig
+// Set while script's SaveConfig() / StaticSaveConfig() run (UC2SaveConfigFromScript below): a globalconfig
 // property that another class deliberately sets is not written, and its name is collected here.
 static UBOOL GSaveConfigKeepSubclasses = 0;
 static FString GSaveConfigNotWritten;
 
-// A globalconfig property is read from the section of the class that DECLARES it, for every subclass of that class,
-// so a value written there replaces what any such class's defaultproperties say: Engine.PlayerController's
-// DesiredFOV=85 pinned UCPlayerController, which sets 90, after a console SetWeaponHand had saved the whole class.
+// A globalconfig property is read from the section of the class that declares it, for every subclass of that class,
+// so a value written there replaces what any such class's defaultproperties say (a saved Engine.PlayerController
+// DesiredFOV=85 would override UCPlayerController's 90).
 // When a class default has loaded (UClass::Link / UClass::Serialize, after LoadConfig, so ini keys are applied and
 // the defaults are still the ones script's defaultproperties made), UC2NoteDefaultOverrides records each inherited
-// globalconfig property whose default differs from the superclass's: the class DELIBERATELY sets it. A script save
+// globalconfig property whose default differs from the superclass's: the class sets it on purpose. A script save
 // leaves such a property out (UC2SetByAnotherClass). Recorded at load because later the two cannot be told apart: a
 // subclass that did not see a change script made to its parent's default (Handedness after SetHand) differs too.
 // One record per config property a class default holds a value of its own for, taken when the class default has loaded
-// its config: the properties it DECLARES (bOverride 0: no superclass value to compare with later) and the inherited ones
+// its config: the properties it declares (bOverride 0: no superclass value to compare with later) and the inherited ones
 // it sets differently from its superclass (bOverride 1: its defaultproperties made it so). Text is the value then
 // (UProperty::ExportText, compared with the same call later). Never freed (the static destruction order).
 struct FUC2ConfigRecord { UClass* Class; UProperty* Prop; INT Index; UBOOL bOverride; FString Text; };
@@ -1518,10 +1518,10 @@ static UBOOL UC2SetByAnotherClass( UObject* Object, UProperty* Prop )
 	return 0;
 }
 
-// uc2 port: set while a CLASS DEFAULT is saved for script (StaticSaveConfig): write only what changed. A whole-class dump
+// Set while a class default is saved for script (StaticSaveConfig): write only what changed. A whole-class dump
 // writes every config property at its current value, which for the ones nobody touched is the compiled default: the ini
-// then holds a stale copy of a script default, shadowing the next build's (a User.ini lives for years; the web keeps it
-// for ever). A property is written when its value differs from the ini's (key present), or, for one the class inherits,
+// would then hold a stale copy of a script default, shadowing the next build's (a User.ini lives long, on the web too).
+// A property is written when its value differs from the ini's (key present), or, for one the class inherits,
 // from the superclass default's (key absent); one the class declares itself, with no key in the ini, from the value
 // the class default had when it loaded (UC2NoteDefaultOverrides). Arrays and maps are not compared and not written.
 static UBOOL GSaveConfigChangedOnly = 0;
@@ -2729,8 +2729,8 @@ static void ShowClasses( UClass* Class, FOutputDevice& Ar, int Indent )
 }
 
 //
-// uc2 port: script's SaveConfig() / StaticSaveConfig() (UnCorSc.cpp): UObject::SaveConfig, except that a globalconfig
-// property some subclass gives another default is left out (UC2SubclassSetsOtherDefault) and logged.
+// Script's SaveConfig() / StaticSaveConfig() (UnCorSc.cpp): UObject::SaveConfig, except that a globalconfig
+// property another class sets its own default for is left out (UC2SetByAnotherClass) and logged.
 //
 void UC2SaveConfigFromScript( UObject* Object, UBOOL bStatic )
 {
@@ -2749,13 +2749,13 @@ void UC2SaveConfigFromScript( UObject* Object, UBOOL bStatic )
 }
 
 //
-// uc2 port: SAVECONFIGKEYS <Class> <Property> [<Property>...]
+// SAVECONFIGKEYS <Class> <Property> [<Property>...]
 //
 // Writes the named config properties of the class's default object to the ini, and only those. Script's
 // StaticSaveConfig() writes the whole class, which carries along anything else that was changed in the class
 // default at run time (UCPlayerInput's defaults hold the active profile's pad invert and sensitivity, written
-// there by the profile). A setting that must persist alone (the D-6 mouse settings, UCPlayerInput.MouseLookSens /
-// MouseLookInvert) asks for exactly its keys: ConsoleCommand("SAVECONFIGKEYS UCGameplay.UCPlayerInput <Prop>").
+// there by the profile). A setting that must persist alone (the mouse settings, UCPlayerInput.MouseLookSensitivity /
+// bInvertMouseLook) asks for exactly its keys: ConsoleCommand("SAVECONFIGKEYS UCGameplay.UCPlayerInput <Prop>").
 // Each key is written by UObject::SaveConfig itself (same file, section, ExportText, flush). ScriptSaveConfig=False
 // answers "off" and writes nothing. Reply: one "SaveConfigKeys:" line per property.
 //
@@ -3565,8 +3565,8 @@ void UObject::SafeLoadError( DWORD LoadFlags, const TCHAR* Error, const TCHAR* F
 #ifndef __EMSCRIPTEN__
 	if(   LoadFlags & LOAD_Throw   ) appThrowf( TEXT("%s"), Error   );
 #else
-	// uc2 port (F-4a, engine-ut2004's fail-soft loaders): the web build compiles C++ exception catching
-	// out (cmake/UC2Web.cmake), so a throw is an abort. Do NOT re-throw on LOAD_Throw: each loader
+	// The web build compiles C++ exception catching out (cmake/UC2Web.cmake), so a throw is an abort.
+	// No re-throw on LOAD_Throw: each loader
 	// (GetPackageLinker, StaticLoadObject, LoadPackage) has already reported the error and returns NULL,
 	// which its callers handle (DynamicLoadObject -> None, LoadMap -> "could not load map").
 	(void)Error;
@@ -3613,7 +3613,7 @@ ULinkerLoad* UObject::GetPackageLinker
 			// Resolve filename from package name.
 			if( !InOuter )
 #ifdef __EMSCRIPTEN__
-				return NULL;	// uc2 port (F-4a): fail soft, as engine-ut2004 (see SafeLoadError)
+				return NULL;	// fail soft on the web (SafeLoadError)
 #else
 				appThrowf( LocalizeError(TEXT("PackageResolveFailed"),TEXT("Core")) );
 #endif
@@ -3623,7 +3623,7 @@ ULinkerLoad* UObject::GetPackageLinker
 				if( (LoadFlags & LOAD_AllowDll) && InOuter->IsA(UPackage::StaticClass()) && ((UPackage*)InOuter)->DllHandle )
 					return NULL;
 #ifdef __EMSCRIPTEN__
-				// uc2 port (F-4a): fail soft (engine-ut2004): a missing package is a failed load, not an abort.
+				// Fail soft on the web: a missing package is a failed load, not an abort.
 				debugf( NAME_Warning, TEXT("Package not found: %s (returning NULL, not throwing)"), InOuter->GetName() );
 				return NULL;
 #else
@@ -3637,7 +3637,7 @@ ULinkerLoad* UObject::GetPackageLinker
 			if( !appFindPackageFile( InFilename, CompatibleGuid, NewFilename ) )
 #ifdef __EMSCRIPTEN__
 			{
-				// uc2 port (F-4a): fail soft (engine-ut2004). Callers handle a NULL linker.
+				// Fail soft on the web. Callers handle a NULL linker.
 				debugf( NAME_Warning, TEXT("Package file not found: %s (returning NULL, not throwing)"), InFilename );
 				return NULL;
 			}
@@ -3652,9 +3652,8 @@ ULinkerLoad* UObject::GetPackageLinker
 			{
 				if( appStrstr(T,PATH_SEPARATOR) )
 					T = appStrstr(T,PATH_SEPARATOR)+appStrlen(PATH_SEPARATOR);
-				// uc2 port (M14): '\\' as on Windows, where it is PATH_SEPARATOR. Without it a script's
-				// `#exec OBJ LOAD FILE=..\Textures\T_HUD.utx` named the package "" (cut at the first '.'), which
-				// became a transient "PackageN" and every texture of T_HUD.utx was saved as an import from it.
+				// '\\' as on Windows, where it is PATH_SEPARATOR: a script's `#exec OBJ LOAD FILE=..\Textures\T_HUD.utx`
+				// must name the package T_HUD, not "" (cut at the first '.').
 				else if( appStrstr(T,TEXT("\\")) )
 					T = appStrstr(T,TEXT("\\"))+1;
 				else if( appStrstr(T,TEXT("/")) )
@@ -3706,15 +3705,15 @@ ULinkerLoad* UObject::GetPackageLinker
 
 		// Create new linker.
 #ifdef __EMSCRIPTEN__
-		const UBOOL FreshLinker = !Result;	// uc2 port (F-4a, engine-ut2004 bfdd422): only a linker made HERE may be dropped below
+		const UBOOL FreshLinker = !Result;	// only a linker made here may be dropped below
 #endif
 		if( !Result )
 		{
 			Result = new ULinkerLoad( InOuter, NewFilename, LoadFlags );
 #ifdef __EMSCRIPTEN__
-			// uc2 port (F-4a, engine-ut2004): the ULinkerLoad constructor fails SOFT on the web (an
-			// unopenable, corrupt or too old package leaves Success != 1 and logs why). Drop the half-built
-			// linker and return NULL: a failed load, not an abort. Only a FRESHLY created linker: a found one
+			// The ULinkerLoad constructor fails soft on the web (an unopenable, corrupt or too old package
+			// leaves Success != 1 and logs why). Drop the half-built linker and return NULL: a failed load,
+			// not an abort. Only a freshly created linker: a found one
 			// may legitimately be mid-construction (Success == the sentinel) during nested imports.
 			if( Result && Result->Success != 1 )
 			{
@@ -3735,7 +3734,7 @@ ULinkerLoad* UObject::GetPackageLinker
 #ifdef __EMSCRIPTEN__
 		{
 			debugf( NAME_Warning, TEXT("[PACKAGE-LOAD] '%s' is an incompatible version of package '%s' (GUID mismatch)"), NewFilename, InOuter->GetName() );
-			// Drop the linker only if it was made HERE: one that was already there belongs to a package in use
+			// Drop the linker only if it was made here: one that was already there belongs to a package in use
 			// (natively the throw leaves it alone too).
 			if( FreshLinker )
 				GObjLoaders.RemoveItem( Result );
@@ -3884,7 +3883,7 @@ UObject* UObject::StaticLoadObject( UClass* ObjectClass, UObject* InOuter, const
 		if( !Result && !(LoadFlags & LOAD_NoRemap) )
 #ifdef __EMSCRIPTEN__
 		{
-			// uc2 port (F-4a, engine-ut2004's fail-soft loaders): no throw on the web (catching is compiled
+			// No throw on the web (catching is compiled
 			// out there). The same as the catch below does with that error: try a remapped package, then report
 			// the failed load (SafeLoadError does not throw on the web) and return NULL.
 			EndLoad();
@@ -4270,12 +4269,10 @@ INT CDECL LinkerExportSort( const void* A, const void* B )
 	return GTempSave->MapObject(((FObjectExport*)B)->_Object) - GTempSave->MapObject(((FObjectExport*)A)->_Object);
 }
 
-// uc2 port (S2): SavePackage's three sorts by usage count must not depend on the C library. appQsort is the
-// C library's qsort, which leaves the order of equal keys to the library: glibc's (a merge sort) keeps them in
-// table order, msvcrt's (ucc.exe; seen under wine 10) does not, so the same scripts compiled by ucc-bin and by
-// ucc.exe appended the new names, imports and exports of a conformed save in different orders (same GUID and
-// generation, different tables). A stable merge sort gives every platform the order glibc gives.
-// docs/porting/analysis/ucc-windows.md, step 3.
+// SavePackage's three sorts by usage count must not depend on the C library. appQsort is the C library's qsort,
+// which leaves the order of equal keys to the library (glibc's merge sort keeps table order, msvcrt's does not),
+// so ucc-bin and ucc.exe would append the new names, imports and exports of a conformed save in different orders.
+// A stable merge sort gives every platform the order glibc gives.
 static void UC2StableSort( void* Base, INT Num, INT Width, QSORT_COMPARE Compare )
 {
 	if( Num < 2 )
@@ -4608,10 +4605,9 @@ UBOOL UObject::SavePackage( UObject* InOuter, UObject* Base, DWORD TopLevelFlags
 			}
 
 			// Sort imports by usage count.
-			// uc2 port (D-9): sort only the imports after the conformed ones, as the names and exports are sorted. Epic's
-			// line sorted Num()-SortStartPosition entries FROM 0: a conformed save that added imports reordered that many
-			// of the previous generation's (UCMenu.u with the keys page: imports 17 and 19 swapped, and the operand bytes
-			// of every function that names them changed). It ran only in a conformed save that adds imports.
+			// Sort only the imports after the conformed ones, as the names and exports are sorted. Epic's line sorted
+			// Num()-SortStartPosition entries from 0, which reorders that many of the previous generation's imports (and the
+			// operand bytes of every function that names them) in a conformed save that adds imports.
 			GTempSave = Linker;
 			UC2StableSort( &Imports(SortStartPosition), Imports.Num() - SortStartPosition, sizeof(Imports(0)), LinkerImportSort );
 			Linker->Summary.ImportCount = Linker->ImportMap.Num();
@@ -5344,7 +5340,7 @@ private:
 		// Object could be a misaligned pointer.
 		// Copy the contents of the pointer into a temporary and work on that.
 		UObject* Obj;
-		appMemcpy(&Obj, &Object, sizeof(UObject*));	// M13: a pointer's width, was sizeof(INT)
+		appMemcpy(&Obj, &Object, sizeof(UObject*));	// a pointer's width
 		
 #if DO_GUARD_SLOW
 		guard(CheckValid);
@@ -5395,7 +5391,7 @@ private:
 
 		// Contents of pointer might have been modified.
 		// Copy the results back into the misaligned pointer.
-		appMemcpy(&Object, &Obj, sizeof(UObject*));	// M13
+		appMemcpy(&Object, &Obj, sizeof(UObject*));
 		return *this;
 		unguardSlow;
 	}
@@ -5590,13 +5586,12 @@ void UObject::RemoveNames( DWORD RemoveFlags, DWORD KeepFlags )
 	GConfig->Flush(0);
 #endif
 
-	// engine-uc2: the config cache is dropped by UnloadAll() below, and with it every value that was set but
-	// not written yet. SetString (appApplyIniOverrides' `-ini:` switches, FURL::SaveURLConfig's [DefaultPlayer]
+	// The config cache is dropped by UnloadAll() below, and with it every value that was set but not written
+	// yet. SetString (appApplyIniOverrides' `-ini:` switches, FURL::SaveURLConfig's [DefaultPlayer]
 	// name/class/weapons, the launcher's resolution switches) only marks the ini dirty; only SaveConfig flushes.
-	// Whenever no SaveConfig ran before the next garbage purge (every level change, and StaticExit, which runs
-	// BEFORE appExit's own flush) those values were lost: `ucc-bin ... -ini:System:[S]:K=V` never reached the
-	// ini, and on the web nothing else writes the inis before the tab is closed. Write the dirty files first,
-	// while the FNames the cache is keyed by are still valid. (The Xbox never writes inis.)
+	// A garbage purge runs at every level change and in StaticExit, before appExit's own flush, and on the web
+	// nothing else writes the inis before the tab is closed: write the dirty files first, while the FNames the
+	// cache is keyed by are still valid. (The Xbox never writes inis.)
 #ifndef _XBOX
 	if( GConfig )
 		GConfig->Flush( 0 );
@@ -5703,15 +5698,14 @@ void UObject::ParseParms( const TCHAR* Parms )
 -----------------------------------------------------------------------------*/
 
 /*-----------------------------------------------------------------------------
-	uc2 port: file order (M14, moved here from Editor's UMakeCommandlet.cpp in S2).
+	File order.
 
-	FindFiles returned Epic's files in NTFS directory order: names compared code unit by code unit after
-	upper-casing (NTFS's upcase table; for these ASCII names, so '_' sorts after the letters). readdir() order
-	on Linux is the file system's (ext4: hash order, a different one on another file system), and the order can
-	matter: UMakeCommandlet creates classes in .uc file order (M14); CacheDrivers below reads the localization
-	files in this order, and reading a file creates the FNames of its sections and keys, so the order fixes
-	their FName indices, which decide the order of equal-usage names that a conformed save appends (S2:
-	UCGameplay.u and UCMenu.u came out with their new names in different orders from ucc-bin and ucc.exe).
+	On Epic's machine FindFiles returned files in NTFS directory order: names compared code unit by code unit
+	after upper-casing (NTFS's upcase table; for these ASCII names, so '_' sorts after the letters). readdir()
+	order on Linux is the file system's (ext4: hash order), and the order matters: UMakeCommandlet creates
+	classes in .uc file order; CacheDrivers below reads the localization files in this order, and reading a
+	file creates the FNames of its sections and keys, so the order fixes their FName indices, which decide the
+	order of equal-usage names that a conformed save appends.
 -----------------------------------------------------------------------------*/
 
 static INT UC2CompareNTFS( const FString& A, const FString& B )
@@ -5780,7 +5774,7 @@ void UObject::CacheDrivers( UBOOL ForceRefresh )
 		// Gather list of all files in the default localization folder
 		// with the default language extension
 		TArray<FString> Files = GFileManager->FindFiles( Filename, 1, 0 );
-		UC2SortLikeNTFS( Files ); // uc2 port (S2): Windows' order, on every file system
+		UC2SortLikeNTFS( Files ); // Windows' order, on every file system
 
 		// For each file in the list
 		for( INT j = 0; j < Files.Num(); j++ )
@@ -5858,7 +5852,7 @@ void UObject::CacheDrivers( UBOOL ForceRefresh )
 
 		// Get a list of all localization directories
 		TArray<FString> CoreLangs = GFileManager->FindFiles( TEXT("Localization\\*"), 0, 1 );
-		UC2SortLikeNTFS( CoreLangs ); // uc2 port (S2)
+		UC2SortLikeNTFS( CoreLangs );
 
 		// For each directory
 		for( INT i = 0; i < CoreLangs.Num(); i++ ) {

@@ -1,6 +1,5 @@
 /*=============================================================================
-	WebRTCDrv.cpp: the WebRTC network driver package (E-2, web build only).
-	Notebook: docs/porting/analysis/webrtc.md.
+	WebRTCDrv.cpp: the WebRTC network driver package (web build only).
 =============================================================================*/
 
 #include "WebRTCDrv.h"

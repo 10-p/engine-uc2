@@ -1,5 +1,5 @@
 /*=============================================================================
-	UC2GLCombinerTest.cpp: numeric test of the texture stages (O-9). Not Epic's.
+	UC2GLCombinerTest.cpp: numeric test of the texture stages.
 
 	Every Direct3D 8 texture operation the material compiler (UC2GLMaterialState.cpp)
 	emits, and the others the GL translation knows, is drawn through the driver's own
@@ -19,7 +19,7 @@
 
 	Also: eight stages in one pass, the colour sum (secondary colour), linear fog, a
 	projected 2D lookup (s/q, t/q), cube-map face selection, a cube map followed by a 2D
-	stage in one pass (GL4ES' per-unit textures, B-2) and the per-stage LOD bias
+	stage in one pass (GL4ES' per-unit textures) and the per-stage LOD bias
 	(on stage 0 and stage 5). A case that needs more stages than the device reports is
 	SKIPPED, with that said on its line.
 
@@ -85,7 +85,7 @@ static const FCTCase GCTCases[] =
 	{ TEXT("blendfactoralpha"),			2, 0, { BASE, { D3DTOP_BLENDFACTORALPHA, TA_T, TA_C, 0, D3DTOP_BLENDFACTORALPHA, TA_T, TA_C, 0 } } },
 	{ TEXT("blendcurrentalpha"),		2, 0, { BASE, { D3DTOP_BLENDCURRENTALPHA, TA_T, TA_D, 0, KEEPA } } },
 	{ TEXT("blendtexturealphapm"),		2, 0, { BASE, { D3DTOP_BLENDTEXTUREALPHAPM, TA_T, TA_C, 0, KEEPA } } },
-	// UC2GLMaterialState.cpp 791 (specular stage, per-pixel specularity) and 884 (AddToCurrent):
+	// UC2GLMaterialState.cpp: the specular stage (per-pixel specularity) and AddToCurrent:
 	{ TEXT("modulatealpha_addcolor"),	2, 0, { BASE, { D3DTOP_MODULATEALPHA_ADDCOLOR, TA_C, TA_T, 0, KEEPA } } },
 	// 1094 (Combiner CO_Add_With_Mask_Modulation, not swapped):
 	{ TEXT("modulatealpha_addcolor-2"),	2, 0, { BASE, { D3DTOP_MODULATEALPHA_ADDCOLOR, TA_T, TA_C, 0, D3DTOP_SELECTARG1, TA_T, 0, 0 } } },
@@ -210,7 +210,7 @@ struct FUC2GLCombinerTest
 				Level[i*4+3] = 255;
 			}
 			// (Through the driver's storage helper, as engine textures: on GLES it goes around GL4ES,
-			// which would replace levels 1 and 2 by a chain generated from level 0. F-3.)
+			// which would replace levels 1 and 2 by a chain generated from level 0.)
 			RenDev->TexImage2D( GL_TEXTURE_2D, Mip->TextureID, GL_TEXTURE_2D, l, GL_RGBA, Size, Size, GL_RGBA, GL_UNSIGNED_BYTE, Level );
 		}
 		if( !RenDev->IsGLES )
@@ -565,11 +565,11 @@ struct FUC2GLCombinerTest
 		Report( TEXT("cube-faces"), Compared, MaxError, 0.f, *Worst );
 	}
 
-	// B-2 (decay-flash.md, "GL4ES push preparation"): a cube map on stage 0 and a 2D texture on stage 1 of one
-	// pass, as DM-Decay's water. The interface leaves unit 0 (cube map enabled, 2D disabled) active at the draw.
-	// GL4ES before the fork's per-unit fix chose every unit's 2D texture from the ACTIVE unit's enables and,
-	// those saying cube map, bound none: stage 1 read the 2D texture GL4ES last bound on unit 1 (the earlier
-	// cases' Tex[1]) instead of this one. Run right after RunCube, with a texture no earlier case put on unit 1.
+	// A cube map on stage 0 and a 2D texture on stage 1 of one pass, as DM-Decay's water. The interface leaves
+	// unit 0 (cube map enabled, 2D disabled) active at the draw. A GL4ES without the fork's per-unit fix chooses
+	// every unit's 2D texture from the active unit's enables and, those saying cube map, binds none: stage 1 would
+	// read the 2D texture GL4ES last bound on unit 1 (the earlier cases' Tex[1]) instead of this one. Run right
+	// after RunCube, with a texture no earlier case put on unit 1.
 	void RunCube2D()
 	{
 		if( RenDev->NumTextureUnits < 2 )
@@ -630,8 +630,7 @@ struct FUC2GLCombinerTest
 			Skip( *Name, *FString::Printf( TEXT("needs %i stages, this path has %i"), Stage + 1, RenDev->NumTextureUnits ) );
 			return;
 		}
-		// (F-3: on OpenGL ES, GL4ES' fixed-function shaders apply the unit's bias since our fork's
-		// "Apply the texture unit's LOD bias" commit; before, this case was skipped there.)
+		// (On OpenGL ES, the fork's GL4ES fixed-function shaders apply the unit's bias.)
 		// Bias +1 on a texture drawn 1:1 (LOD 0) takes mip level 1 (green); NoLODBias: level 0 (red).
 		FOpenGLMaterialState MS;
 		InitPass( MS, Stage + 1, Factor[0] );

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stipple and flicker of a projected shadow over consecutive frames (B-1, docs/porting/analysis/shadow-flicker.md).
+"""Stipple and flicker of a projected shadow over consecutive frames.
 
   b1-stipple.py <prefix> [--box x0,y0,x1,y1] [--thr T] [--frames N] [--diff out.png] [--strip out.png]
 

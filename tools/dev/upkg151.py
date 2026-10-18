@@ -4,8 +4,8 @@
     upkg151.py <file.u>            summary + tables
     upkg151.py <file.u> --names    one name per line
 
-The reader itself is tools/scripts/ucpkg.py (Package; moved there in T1 so the shipping script tools and the dev
-tools share one parser, docs/porting/analysis/script-patches.md). Layout: docs/porting/analysis/package-format-v151.md.
+The reader itself is tools/scripts/ucpkg.py (Package; the shipping script tools and the dev
+tools share one parser). Layout: docs/porting/analysis/package-format-v151.md.
 """
 import os
 import sys

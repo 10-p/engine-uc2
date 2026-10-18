@@ -1,23 +1,21 @@
 /*=============================================================================
-	UnMovie.h: the portable movie interface (engine-uc2, M9).
+	UnMovie.h: the portable movie interface.
 
-	UC2's movies were Xbox-only: XboxDrv's CXMVPlayer (an FMoviePlayer) decoded XMV files with the XDK's
-	XMV decoder, XboxMovieThread drew them full screen on a thread, and D3DDrv's SetMovieMaterial put their
-	frames on MovieMaterial textures. On every other platform nothing played.
+	Epic's movies are Xbox-only: XboxDrv's CXMVPlayer (an FMoviePlayer) decodes XMV files with the XDK's
+	XMV decoder, XboxMovieThread draws them full screen on a thread, and D3DDrv's SetMovieMaterial puts their
+	frames on MovieMaterial textures.
 
 	This header is the platform-independent replacement of the same interface:
 	  - FPortableMoviePlayer: an FMoviePlayer that decodes one movie and delivers frames as BGRA pictures,
 	    clocked by its sound (or by real time when it has none). Implemented by Source/UC2Movie (cooked Ogg
 	    Theora/Vorbis files, tools/cook-movies.py) and created through GCreateMoviePlayer, which stays NULL in a
-	    build without a movie package (then nothing plays, as before).
+	    build without a movie package (then nothing plays).
 	  - FMovieAudioStream: one streamed 2D sound for a movie, implemented by the audio device
 	    (UAudioSubsystem::OpenMovieAudio; UC2ALAudio on OpenAL Soft).
 	  - The engine-side behaviour of XboxMovieThread.cpp, written portably in UnMovie.cpp: full-screen
 	    playback (start-up logos, ladder cinematics, the loading screen), name resolution from the Xbox paths
 	    the content uses, and the MovieMaterial update a render device calls from SetMovieMaterial.
 	WITH_PORTABLE_MOVIES is the named capability that lifts the Xbox-only movie hooks in UnGame.cpp.
-
-	Design, threading, synchronisation and the cooked format: docs/porting/analysis/video.md.
 =============================================================================*/
 
 #ifndef _INC_UNMOVIE
@@ -115,16 +113,16 @@ ENGINE_API UBOOL appCanPlayFullscreenMovie( EFullscreenMovieKind Kind );
 // pressed, as XboxMovieThread did. Returns 1 if it played (to the end or skipped).
 ENGINE_API UBOOL appPlayMovieFullscreen( const TCHAR* Name, EFullscreenMovieKind Kind, UBOOL bSkippable );
 
-// The MovieMaterial part of SetMovieMaterial (D3DMaterialState.cpp:4539 on the Xbox), for any render device:
+// The MovieMaterial part of SetMovieMaterial (D3DMaterialState.cpp on the Xbox), for any render device:
 // bReset, opening on first use, advancing when bNeedsFrameUpdate, OnDonePlaying, USize/VSize. Returns the
 // player whose picture to show, or NULL with bOutFallback: show the material's LoadingFallback.
 // While a movie has no picture (not decoded yet, or it cannot be opened at all) and the material has no
-// LoadingFallback, the "player" returned is a small opaque black picture (O-1, 2026-10-06): returning NULL
-// made the device fall back to Material.DefaultMaterial, which is UC2's bright green DefaultTexture (the
-// Xbox did the same for a movie it could not open, but there every movie existed). Logged once per material.
+// LoadingFallback, the "player" returned is a small opaque black picture: NULL would make the device fall back
+// to Material.DefaultMaterial, which is UC2's bright green DefaultTexture (the Xbox does the same for a movie it
+// cannot open, but there every movie exists). Logged once per material.
 ENGINE_API FPortableMoviePlayer* appUpdateMovieMaterial( class UMovieMaterial* Material, UBOOL& bOutFallback );
 
-// Test key [UC2Movie] MaterialShotTimes (D-4): set when a MovieMaterial's clock passes one of those times. A
+// Test key [UC2Movie] MaterialShotTimes: set when a MovieMaterial's clock passes one of those times. A
 // material is updated in the middle of drawing a frame, where a screenshot would read half a frame, so the
 // render device takes it (SHOT) once the frame is complete and clears the flag (UC2GLDrv: in Present).
 extern ENGINE_API UBOOL GMovieMaterialShotPending;

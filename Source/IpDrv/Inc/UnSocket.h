@@ -36,7 +36,7 @@
 
 	//#define WSAEWOULDBLOCK		EWOULDBLOCK
 	#define WSAEWOULDBLOCK		EAGAIN
-	#define WSAEINPROGRESS		EINPROGRESS	// uc2 port (D-2): as engine-ut2004; a non-blocking connect() says so here
+	#define WSAEINPROGRESS		EINPROGRESS	// a non-blocking connect() under way
 
 	#define WSAENOTSOCK			ENOTSOCK
 	#define WSATRY_AGAIN		TRY_AGAIN

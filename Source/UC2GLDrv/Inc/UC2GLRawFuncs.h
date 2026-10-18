@@ -1,12 +1,12 @@
 /*=============================================================================
-	UC2GLRawFuncs.h: entry points of the GL library UNDER the binding.
+	UC2GLRawFuncs.h: entry points of the GL library under the binding.
 
 	For the desktop binding these are the same functions as the main table's. For the GL4ES
-	binding they are OpenGL ES 2 / WebGL itself, called around gl4es for the few things gl4es
-	does not do the way this driver needs (M11, docs/porting/analysis/web-renderer.md,
-	decision 2): depth-stencil storage and its attachment to a framebuffer, the hardware's
+	binding they are OpenGL ES / WebGL itself, called around gl4es for the things gl4es does
+	not do the way this driver needs: depth-stencil storage and its attachment to a
+	framebuffer, the engine's texture uploads, gl4es' "texture 0" stand-in, the hardware's
 	own extension string and shader precision. Every use restores the raw state it changes
-	(gl4es caches bindings), see UUC2GLRenderDevice::CreateDepthStencil*.
+	(gl4es caches bindings), e.g. UUC2GLRenderDevice::CreateDepthStencil*.
 
 	GL_RAW(ret,func,parms) declares UUC2GLRenderDevice::Raw_<func>.
 =============================================================================*/

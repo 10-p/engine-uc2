@@ -1,36 +1,36 @@
 #!/usr/bin/env bash
-# DEV-ONLY PROOF TOOL. Build every UnrealScript package from Epic's leaked script sources with our ucc-bin (`ucc-bin
-# make`), the way Epic's build machine did (Source/BuildProcess/sync_avaris.pl), into a tree of its own; then (stage
-# `compare`) compare the result with the shipped packages. M14; docs/porting/analysis/scripts.md.
+# Dev-only proof tool. Build every UnrealScript package from Epic's leaked script sources with this build's ucc-bin
+# (`ucc-bin make`), the way Epic's build machine did (Source/BuildProcess/sync_avaris.pl), into a tree of its own; then
+# (stage `compare`) compare the result with the shipped packages.
 #
-# The repository holds no UnrealScript since 2026-10-11 (docs/porting/analysis/scripts-removed.md): the build makes the
-# patched packages from the player's shipped .u and patches/ (cmake/UC2Scripts.cmake, tools/scripts/). This tool is
-# what proved our compiler against Epic's leaked text (M14, S2) and it needs that text, which only the dev machine
-# has (<WorkUC2>/epic-sources/<Pkg>/Classes, read-only). It is never a build input.
+# The repository holds no UnrealScript: the build makes the patched packages from the player's shipped .u and patches/
+# (cmake/UC2Scripts.cmake, tools/scripts/). This tool checks the compiler against Epic's leaked text and needs that
+# text, which only the dev machine
+# has (<repo>/../epic-sources/<Pkg>/Classes, read-only). It is never a build input.
 #
 #   tools/dev/script-build.sh [options] [stage...]
 #     stages: assemble make strip compare (default: all four, in that order)
 #     --build <dir>     build directory with Source/UCC/ucc-bin (default build-native). A Windows build directory
 #                       (Source/UCC/ucc.exe and no ucc-bin, e.g. build-windows) switches to the Windows compiler:
 #                       ucc.exe is copied into the tree and every ucc run (make, strip) goes through wine via
-#                       tools/dev/m12-wine.sh, in the prefix $UC2_WINEPREFIX (default <WorkUC2>/.cache/wine-scripts;
+#                       tools/dev/m12-wine.sh, in the prefix $UC2_WINEPREFIX (default <repo>/../.cache/wine-scripts;
 #                       created on first use, its wineserver is killed after each run). Everything else (assemble,
-#                       the inis, compare) is the same. S2, docs/porting/analysis/ucc-windows.md.
-#     --tree <name>     output tree <WorkUC2>/run/<name>; must start with m14, d<N> (a D-phase task's prefix,
+#                       the inis, compare) is the same.
+#     --tree <name>     output tree <repo>/../run/<name>; must start with m14, d<N> (a D-phase task's prefix,
 #                       e.g. d3-make), f<N> (an F-task's, e.g. f1-make), g<N> (a G-task's, e.g. g8-make), s<N>
 #                       (a spike's, e.g. s2-make), t<N> (a T-task's, e.g. t2-hdr), hdr (tools/dev/check-headers.sh's,
-#                       logs in <WorkUC2>/logs/hdr) or jit (default m14-make)
-#     --logs <dir>      where the logs go (default <WorkUC2>/logs/m14; a d<N>/f<N>/g<N>/s<N>/t<N> tree: <WorkUC2>/logs/<that
+#                       logs in <repo>/../logs/hdr) or jit (default m14-make)
+#     --logs <dir>      where the logs go (default <repo>/../logs/m14; a d<N>/f<N>/g<N>/s<N>/t<N> tree: <repo>/../logs/<that
 #                       prefix>; jit: logs/jit)
 #     --mem <size>      memory ceiling of the `ucc-bin make` run (default 3G; also under wine)
 #     --headers         also export the C++ headers (into <tree>/<Pkg>/Inc, a scratch copy, never Source/)
 #     --classes-root <dir>  where the script sources are: <dir>/<Pkg>/Classes for all 17 packages (source folder
-#                       names: Gameplay for GamePlay). Default: $UC2_EPIC_SOURCES (<WorkUC2>/epic-sources) when it
+#                       names: Gameplay for GamePlay). Default: $UC2_EPIC_SOURCES (<repo>/../epic-sources) when it
 #                       has Core/Classes, Epic's leaked text; otherwise this option is required. Any full tree
-#                       works (e.g. epic-sources with --classes overrides, or the T4 snapshot of the old Source/)
+#                       works (e.g. epic-sources with --classes overrides)
 #     --extra "<args>"  more `ucc-bin make` arguments
 #     --classes <Pkg>=<dir>  take <Pkg>'s classes from <dir> instead of <classes root>/<Pkg>/Classes (repeatable;
-#                       spike S1 uses it for decompiled text: docs/porting/analysis/decompile-spike.md; e.g. the
+#                       e.g. decompiled text: the
 #                       build's patched Scripts/tree/UCGameplay/Classes on top of Epic's others)
 #
 # The tree: content folders hard-linked from the asset tree (never written), System/ a real copy of the asset
@@ -46,8 +46,8 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 assets=${UC2_ASSETS_DIR:-$work/assets/uc2}
 epic=${UC2_EPIC_SOURCES:-$work/epic-sources}
-# The SHIPPED script packages, the baseline for conforming and comparing. Not the asset tree's System/: since
-# asset tree v2 (D-4, D-6) some of its packages are rebuilt ones (System/SCRIPTS.txt), and conforming against
+# The shipped script packages, the baseline for conforming and comparing. Not the asset tree's System/: some of its
+# packages may be rebuilt ones (System/SCRIPTS.txt), and conforming against
 # those would chain generations and compare a build with itself.
 shipped=${UC2_SHIPPED_SYSTEM:-$epic/System}
 capped=$work/bin/capped
@@ -190,9 +190,9 @@ make_scripts() {
   return $rc
 }
 
-# Epic ran `ucc editor.stripsource` on the made packages before they shipped (docs/porting/analysis/scripts.md,
-# step 2): it loads every .u but Editor.u, replaces script and C++ text with " " and saves. Same here, saving
-# conformed to ../GUIRes (-CONFORM, our addition) so the result lines up with the shipped files. The made packages
+# Epic ran `ucc editor.stripsource` on the made packages before they shipped: it loads every .u but Editor.u,
+# replaces script and C++ text with " " and saves. Same here, saving conformed to ../GUIRes (-CONFORM, this
+# build's addition) so the result lines up with the shipped files. The made packages
 # (with their text) stay in <tree>/Unstripped/.
 strip_scripts() {
   local log=$logs/$tree-strip.log
@@ -207,7 +207,7 @@ strip_scripts() {
   cp -f "$assets/System/DefUser.ini" "$run/System/User.ini"
   # And with the retail disc's per-class inis where they differ from the leak's (later) ones: the shipped
   # defaults carry them (UCDeathmatch.LevelData without the Overdrive maps of the leak's Gametypes.ini; the
-  # character speeds of the retail Characters.ini). Read-only copies from <WorkUC2>/reference/iso-extract.
+  # character speeds of the retail Characters.ini). Read-only copies from <repo>/../reference/iso-extract.
   local retail=$work/reference/iso-extract/System f
   if [ -d "$retail" ]; then
     for f in Characters.ini Gametypes.ini Maplists.ini; do cp -f "$retail/$f" "$run/System/$f"; done

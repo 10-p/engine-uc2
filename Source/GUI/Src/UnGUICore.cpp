@@ -672,7 +672,7 @@ UBOOL UGUIController::ValidMousePos()
 
 	INT ptX, ptY;
 	GetCursorPos( ptX, ptY );
-	// D-2: the cursor may be anywhere in the viewport, also outside the UI's box (design pixels below 0 or
+	// The cursor may be anywhere in the viewport, also outside the UI's box (design pixels below 0 or
 	// beyond ResX/ResY there)
 	FLOAT X1 = 0.f, Y1 = 0.f, X2 = ResX, Y2 = ResY;
 	UViewport* Viewport = Cast<UViewport>(ViewportOwner);
@@ -703,7 +703,7 @@ void UGUIController::GetCursorPos( INT& ptX, INT& ptY )
 		}
 
 		Viewport->UpdateMousePosition();
-		// D-2: window pixels -> the canvas's (design pixels when the UI is boxed)
+		// Window pixels -> the canvas's (design pixels when the UI is boxed)
 		FLOAT X = Viewport->WindowsMouseX, Y = Viewport->WindowsMouseY;
 		if ( Viewport->Canvas )
 			Viewport->Canvas->TargetToDesign( X, Y );
@@ -858,17 +858,16 @@ void  UGUIController::NativeTick(FLOAT DeltaTime)
 }
 
 /*-----------------------------------------------------------------------------
-	M10: keyboard and mouse as a pad in the menus.
+	Keyboard and mouse as a pad in the menus.
 
 	The menus act on pad codes (XControllerEvent). Epic's PC build turned some keys into
 	those codes with a hard-wired table (letters A B X Y K W, Enter = Start, Escape = Back),
-	which collided with WASD and with typing. The table is now ini data, section
+	which collides with WASD and with typing. Here the table is ini data, section
 	[GUI.EmulatedJoypad] of the system ini:
 	    <engine key>=<pad code>[/<pad code while a text field is on the page>]
 	pad codes: A B X Y Black White LeftTrigger RightTrigger PadUp PadDown PadLeft PadRight
 	Start Back LeftThumb RightThumb, AltUp AltDown AltLeft AltRight (right stick), Type (the
 	key types or edits text), Raw (not converted). Without the section, Epic's table applies.
-	docs/porting/analysis/controls.md has the defaults and the reasons.
 -----------------------------------------------------------------------------*/
 
 enum EEmulatedPadSpecial
@@ -890,7 +889,7 @@ struct FEmulatedPadKey
 
 static FEmulatedPadKey	GEmulatedPad[IK_MAX];
 static UBOOL			GEmulatedPadLoaded = 0;
-static TArray<BYTE>		GEmulatedPadOrder;	// H-5: the keys in the order of the section (the first one names a button)
+static TArray<BYTE>		GEmulatedPadOrder;	// the keys in the order of the section (the first one names a button)
 
 static BYTE ParseEmulatedPadCode( const TCHAR* Name )
 {
@@ -945,7 +944,7 @@ static void LoadEmulatedPad()
 	}
 	if( !Section )
 	{
-		// Epic's PC table (UnGUICore.cpp before M10).
+		// Epic's PC table.
 		static const BYTE Epic[][2] =
 		{
 			{ IK_Up, XBC_PadUp }, { IK_Down, XBC_PadDown }, { IK_Left, XBC_PadLeft }, { IK_Right, XBC_PadRight },
@@ -1021,14 +1020,14 @@ static UBOOL IsTypingKey( BYTE iKey )
 static void MouseClickPress( UGUIController* C );
 static void MouseClickRelease( UGUIController* C );
 
-// D-5: a character key whose PRESS acted as a pad button while no text field was up (X on the host page's
-// session name, which opens UC2Keyboard at once): SDL delivers that key's character AFTER the press, by
-// then to the keyboard page the press opened, and the page took it as the first typed letter (an "x"
-// replaced the name). The character of that one press is not typed; cleared at the key's release, at
-// any other press, and once its character has been dropped.
+// A character key whose press acted as a pad button while no text field was up (X on the host page's
+// session name, which opens UC2Keyboard at once): SDL delivers that key's character after the press, by
+// then to the keyboard page the press opened, which would take it as the first typed letter. The
+// character of that one press is not typed; cleared at the key's release, at any other press, and once
+// its character has been dropped.
 static BYTE GPadKeyHeld = 0;
 
-// D-9: the keys whose press a raw key capture (OnNeedRawKeyPress) has seen, and the keys held down (a
+// The keys whose press a raw key capture (OnNeedRawKeyPress) has seen, and the keys held down (a
 // press not yet released, so an auto-repeated press is told from a fresh one); see NativeKeyEvent.
 static BYTE  GRawCapturePressed[256];	// indexed by the BYTE key code
 static BYTE  GRawKeyHeld[256];
@@ -1042,7 +1041,7 @@ static BYTE EmulatedPadCode( BYTE iKey, UBOOL TextEntry )
 }
 
 /*-----------------------------------------------------------------------------
-	H-5: the menus' key for a pad button (UnKeyGlyphs.h, FKeyGlyphs::MenuKey).
+	The menus' key for a pad button (UnKeyGlyphs.h, FKeyGlyphs::MenuKey).
 
 	The first key of [GUI.EmulatedJoypad] (in the section's order) that the menus turn into that button:
 	Enter for A, Escape for B... With a text field on the page the table's text codes apply (Space for A).
@@ -1215,9 +1214,9 @@ UBOOL UGUIController::NativeKeyEvent(BYTE& iKey, BYTE& State, FLOAT Delta )
 	// =============================================================================================
 	// Pass the raw input to the Controllers NeedRawKeyPress delegate (for KeyConfigs)
 	// =============================================================================================
-	// D-9: the delegate gets a key on its release, as Epic's code does, but only a key freshly PRESSED
-	// while the delegate was set: UC2's menus act on presses, so the release of the Enter (pad A) or the
-	// click that started a capture (UCMenu's keys page) came next and was taken as the key to bind; and
+	// The delegate gets a key on its release, as Epic's code does, but only a key freshly pressed while
+	// the delegate was set: UC2's menus act on presses, so the release of the Enter (pad A) or the click
+	// that started a capture (UCMenu's keys page) comes next and must not be taken as the key to bind; and
 	// SDL's auto-repeat sends more presses of a key that is held down (not fresh: GRawKeyHeld).
 	UBOOL bFreshPress = State == IST_Press && !GRawKeyHeld[iKey];
 	if ( State == IST_Press )
@@ -1278,7 +1277,7 @@ UBOOL UGUIController::NativeKeyEvent(BYTE& iKey, BYTE& State, FLOAT Delta )
 #ifndef _XBOX
 	if ( bEmulatedJoypad )
 	{
-		// M10: [GUI.EmulatedJoypad] (see LoadEmulatedPad).
+		// [GUI.EmulatedJoypad] (LoadEmulatedPad).
 		UGUIEditBox* TextBox = TextEntryTarget( this );
 		BYTE Code = EmulatedPadCode( iKey, TextBox!=NULL );
 		if ( TextBox && Code == EJP_Raw && IsTypingKey(iKey) )
@@ -1288,7 +1287,7 @@ UBOOL UGUIController::NativeKeyEvent(BYTE& iKey, BYTE& State, FLOAT Delta )
 		if ( Code >= XBC_A && Code <= XBC_RightThumb )
 		{
 			if ( State == IST_Press && !TextBox && IsTypingKey(iKey) )
-				GPadKeyHeld = iKey;	// D-5: its character must not reach a page this press opens
+				GPadKeyHeld = iKey;	// its character must not reach a page this press opens
 			iKey = Code;
 		}
 		else if ( Code >= EJP_AltUp && Code <= EJP_AltRight )
@@ -1305,7 +1304,7 @@ UBOOL UGUIController::NativeKeyEvent(BYTE& iKey, BYTE& State, FLOAT Delta )
 			// Nothing else on the page sees a typing key.
 			if ( iKey==IK_Backspace || iKey==IK_Delete || iKey==IK_Home || iKey==IK_End )
 			{
-				// D-5: a keyboard page opens with its whole text selected (typing replaces it); Backspace
+				// A keyboard page opens with its whole text selected (typing replaces it); Backspace
 				// on that selection clears it, as on any PC text field. GUIEditBox's own Backspace (the
 				// on-screen keyboard's key, kept for the pad) deletes one character and drops the selection;
 				// its Delete clears a selected text, so a real Backspace on a selection is given as Delete.
@@ -1345,8 +1344,8 @@ UBOOL UGUIController::NativeKeyEvent(BYTE& iKey, BYTE& State, FLOAT Delta )
 		FLOAT dX=0.0f;
 		FLOAT dY=0.0f;
 
-		// D-2: the deltas are window pixels; MouseX/MouseY are the canvas's (design pixels when the UI is in a
-		// box, ui-scale.md), so the software cursor keeps the speed it has on the window
+		// The deltas are window pixels; MouseX/MouseY are the canvas's (design pixels when the UI is in a
+		// box), so the software cursor keeps the speed it has on the window
 		UViewport* MouseViewport = Cast<UViewport>(ViewportOwner);
 		FLOAT MouseScale = (MouseViewport && MouseViewport->Canvas) ? MouseViewport->Canvas->GetUIScale() : 1.f;
 
@@ -1651,8 +1650,8 @@ void  UGUIController::NativePreRender(UCanvas* Canvas)
 		return;
 
 	UViewport* Viewport = CastChecked<UViewport>(ViewportOwner);
-	// D-2: the canvas's size, which is the UI's 640x480 design space when the UI is in a centred box
-	// (UIScaleMode=Fit43, docs/porting/analysis/ui-scale.md) and the viewport's pixels otherwise (as before)
+	// The canvas's size, which is the UI's 640x480 design space when the UI is in a centred box
+	// (UIScaleMode=Fit43) and the viewport's pixels otherwise
 	ResX = Canvas->SizeX;
 	ResY = Canvas->SizeY;
 
@@ -1717,12 +1716,12 @@ void  UGUIController::NativePostRender(UCanvas* Canvas)
 	if ( !Canvas || !ViewportOwner /*|| bControllerUnplugged*/ )
 		return;
 
-	KeyGlyphRegister( this );	// H-5
+	KeyGlyphRegister( this );
 
 	Canvas->CurX = 0;
 	Canvas->Style=1;
-	// D-2: what the pages draw now is menu: clipped to the UI's box as the Xbox's screen clipped it, a full-screen
-	// page background follows UIMenuBackground (UnCanvas.cpp, ui-scale.md)
+	// What the pages draw is menu: clipped to the UI's box as the Xbox's screen clipped it, a full-screen
+	// page background follows UIMenuBackground (UnCanvas.cpp)
 	Canvas->SetUIContext( UICONTEXT_Menu );
 
 	UGUIPage* page = NULL;
@@ -1781,7 +1780,7 @@ void  UGUIController::NativePostRender(UCanvas* Canvas)
 		Canvas->ForcedAlpha = LastAlpha;
 	}
 
-	// D-2: the pages are drawn; the designer's frames and the cursor are not clipped to the UI's box
+	// The pages are drawn; the designer's frames and the cursor are not clipped to the UI's box
 	Canvas->SetUIContext( UICONTEXT_Game );
 
 	if ( bDesignMode )
@@ -1826,7 +1825,7 @@ void  UGUIController::NativePostRender(UCanvas* Canvas)
 			Canvas->Style = STY_Alpha;
 
 			FLOAT MouseScale = Max<FLOAT>(Canvas->SizeX / 640, 1.f);
-			// D-2: the software cursor goes over the whole viewport, also outside the UI's box
+			// The software cursor goes over the whole viewport, also outside the UI's box
 			FLOAT CX1 = 0.f, CY1 = 0.f, CX2 = Canvas->SizeX, CY2 = Canvas->SizeY;
 			if ( Canvas->IsUIBoxed() )
 				Canvas->GetTargetInDesign( CX1, CY1, CX2, CY2 );
@@ -1873,7 +1872,7 @@ void  UGUIController::NativePostRender(UCanvas* Canvas)
 		LastMouseX = MouseX;
 		MouseX = ViewportOwner->WindowsMouseX;
 		MouseY = ViewportOwner->WindowsMouseY;
-		Canvas->TargetToDesign( MouseX, MouseY );	// D-2: window pixels -> the canvas's
+		Canvas->TargetToDesign( MouseX, MouseY );	// window pixels -> the canvas's
 
 		if ( ActiveControl )
 			ViewportOwner->SelectedCursor = ActiveControl->MouseCursorIndex;
@@ -1903,7 +1902,7 @@ void UGUIController::execMouseEmulation( FFrame& Stack, RESULT_DECL )
 		MouseX = (Master->Client->Viewports(0)->SizeX) / 2;
 		MouseY = (Master->Client->Viewports(0)->SizeY) / 2;
 		if ( Master->Client->Viewports(0)->Canvas )
-			Master->Client->Viewports(0)->Canvas->TargetToDesign( MouseX, MouseY );	// D-2
+			Master->Client->Viewports(0)->Canvas->TargetToDesign( MouseX, MouseY );
 	}
 
 	unguardexec;
@@ -2443,14 +2442,14 @@ UBOOL UGUIController::NativeKeyType(BYTE& iKey, TCHAR Unicode )
 		}
 
 #ifndef _XBOX
-		// M10: an on-screen keyboard page's field takes what a real keyboard types.
+		// An on-screen keyboard page's field takes what a real keyboard types.
 		// (Its delegate directly: the field is display-only for focus purposes, bAcceptsInput false,
 		// so UGUIComponent::NativeKeyType would refuse; UC2KeyboardPanel calls the same handler for
 		// its own key buttons.)
 		UGUIEditBox* TextBox = bEmulatedJoypad ? TextEntryTarget( this ) : NULL;
 		if ( TextBox && GPadKeyHeld && (BYTE)appToUpper(Unicode) == GPadKeyHeld )
 		{
-			// D-5: the character of the key press that opened this page (see GPadKeyHeld).
+			// The character of the key press that opened this page (GPadKeyHeld).
 			debugf( NAME_DevUI, TEXT("Dropped '%c': its key opened %s"), Unicode, TextBox->GetMenuPath() );
 			GPadKeyHeld = 0;
 		}
@@ -2602,7 +2601,7 @@ void UGUIController::LookUnderCursor(FLOAT dX, FLOAT dY)
 	ActiveControl = UnderCursor(MouseX, MouseY);
 
 #ifndef _XBOX
-	// M10: moving the mouse over a menu item selects it, as the D-pad would (only on real
+	// Moving the mouse over a menu item selects it, as the D-pad would (only on real
 	// motion, so a resting cursor never takes the focus back from keyboard or pad navigation).
 	if ( (dX != 0.f || dY != 0.f) && ActiveControl && ActiveControl->bTabStop && ActiveControl->bAcceptsInput &&
 		ActiveControl->MenuState == MSAT_Blurry && ActiveControl->PageOwner == ActivePage &&
@@ -2617,7 +2616,7 @@ void UGUIController::LookUnderCursor(FLOAT dX, FLOAT dY)
 
 #ifndef _XBOX
 //
-// M10: a left click is A on the item under the cursor. Epic's MousePressed/MouseReleased give the
+// A left click is A on the item under the cursor. Epic's MousePressed/MouseReleased give the
 // item the focus and call its OnClick; UC2's pad-driven items have no OnClick (they act on
 // XControllerEvent), and its lists act on their selected row, not the row under the cursor.
 // So: on press, a list selects the row under the cursor (its own InternalOnClick, which Epic

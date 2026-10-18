@@ -13,7 +13,7 @@ Revision history:
 	#pragma warning( disable : 4201 )
 #endif
 
-// Socket API. engine-uc2 (as engine-ut2004): keyed on the platform, not the compiler -- Windows is WinSock
+// Socket API, keyed on the platform, not the compiler: Windows is WinSock
 // whichever compiler built it (MinGW has no <sys/socket.h>).
 #ifdef _WIN32
 	#define __WINSOCK__ 1
@@ -137,7 +137,7 @@ public:
 		*Error = 0;
 		ThreadId = 1;
 
-#ifdef _WIN32	// engine-uc2: the declarations above switch on __UNIX__, which MinGW does not define
+#ifdef _WIN32	// The declarations above switch on __UNIX__, which MinGW does not define
 		HANDLE hThread = CreateThread( NULL, 0, ResolveThreadEntry, this, 0, &ThreadId );
 		check(hThread);
 		CloseHandle( hThread );

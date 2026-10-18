@@ -1,5 +1,5 @@
 #if SUPPORTS_PRAGMA_PACK
-#pragma pack (push,4)	// M13: script mirrors are laid out with /Zp4 (as the generated headers); 64-bit pointers sit on 4
+#pragma pack (push,4)	// script mirrors are laid out with /Zp4 (as the generated headers); 64-bit pointers sit on 4
 #endif
 
 /* scion ======================================================================
@@ -67,7 +67,7 @@ public:
 	BYTE DefaultAlphaRef;
 
 	UUCScreenDOF();
-	// UC2 port (M7): the body of Epic's Xbox constructor, run on first use where the render
+	// The body of Epic's Xbox constructor, run on first use where the render
 	// device has the post-process capability (UCCameraEffects.cpp).
 	void InitSharedDOFResources();
 

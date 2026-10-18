@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # A strip of consecutive rendered frames of the player's pawn running forward with the third-person camera following
-# (docs/porting/analysis/jitter.md), for people: the same view before and after the fix, side by side.
+# for review: the same view from two builds, side by side.
 #
 #   tools/dev/jit-strip.sh <name> <tree> [frames]      e.g. jit-strip.sh before jit-main 12
 #
 # One game run on this machine's GPU, headless (SDL's offscreen video driver: no window on any display; as
-# tools/dev/fx-owner.sh UC2_GPU=1), inside <WorkUC2>/bin/capped 2G, 1280x720, DM-Deadbolt without bots, uneven frame
+# tools/dev/fx-owner.sh UC2_GPU=1), inside <repo>/../bin/capped 2G, 1280x720, DM-Deadbolt without bots, uneven frame
 # pacing (JIT_STRIP_PATTERN, [SDLLaunch] FramePattern set with -ini:, default 40:70:40:40:55:70 ms: below). The player
 # is put at jit-trace.sh's spot, the mouse given the look (one count through the test channel), and runs forward on
-# the virtual pad's LEFT stick (the left stick does not take the look from the mouse; there is no X window for keys);
+# the virtual pad's left stick (the left stick does not take the look from the mouse; there is no X window for keys);
 # FRAMETRACE is on and once the run is steady, <frames> consecutive frames are saved (one `exec shot` per tick: each
 # picture is the frame whose trace line precedes the shot's "test: exec shot" line). tools/dev/jit-strip.py crops them
 # around the pawn and marks the screen spot where it stands still.
-# Output: JIT_OUT (default <WorkUC2>/logs/jit/strip)/<name>.{out,inject,result} and <name>-NN.png.
+# Output: JIT_OUT (default <repo>/../logs/jit/strip)/<name>.{out,inject,result} and <name>-NN.png.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
@@ -22,7 +22,7 @@ sys=$work/run/$tree/System
 inject=$repo/tools/dev/m10-inject.py
 place=${JIT_PLACE:-1977.8 583.7 -34.1 33000 -1400}
 # Frame lengths in turn (ms). Saving a picture costs ~35-45 ms of the frame here, so the pattern is that of a slow
-# browser frame (the owner's preview measured 25-48 ms frames: docs/porting/analysis/web-renderer.md) and still uneven.
+# browser frame (25-48 ms) and still uneven.
 pattern=${JIT_STRIP_PATTERN:-40:70:40:40:55:70}
 mkdir -p "$out"
 [ -x "$sys/uc2.bin" ] || { echo "no run tree $work/run/$tree" >&2; exit 2; }

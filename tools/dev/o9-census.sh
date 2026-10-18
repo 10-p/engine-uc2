@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# O-9: material census of maps (GLMATCENSUS, UC2GLPixelTrace.cpp): every material in memory compiled with
-# 8 stages + three-operand ops (A), 4 stages + ops (B: Epic's D3DDrv, the Xbox), 4 stages without (C: NVIDIA
-# before O-9). Nothing is drawn for it, so it runs on Mesa (Xvfb). Notebook: docs/porting/analysis/o9-nvidia.md.
+# Material census of maps (GLMATCENSUS, UC2GLPixelTrace.cpp): every material in memory compiled with
+# 8 stages + three-operand ops (A), 4 stages + ops (B: Epic's D3DDrv, the Xbox), 4 stages without (C: a texture
+# environment without combine3/combine4). Nothing is drawn for it, so it runs on Mesa (Xvfb).
 #
 #   tools/dev/o9-census.sh [map ...]          default: every DM-, CTF- and OD- map; 3 runs at a time
 #
-# Run trees <WorkUC2>/run/o9c0..2 (made from build-native when missing), logs <WorkUC2>/logs/o9c*/census-<map>.out,
-# one line per map in <WorkUC2>/logs/o9/census-summary.txt. Every run: tools/dev/run-uc2-shot.sh (capped 2G).
+# Run trees <repo>/../run/o9c0..2 (made from build-native when missing), logs <repo>/../logs/o9c*/census-<map>.out,
+# one line per map in <repo>/../logs/o9/census-summary.txt. Every run: tools/dev/run-uc2-shot.sh (capped 2G).
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 maps=${*:-$(cd "$work/assets/uc2/Maps" && ls DM-*.unr CTF-*.unr OD-*.unr | sed 's/\.unr$//')}
-# O9_CENSUS_PREFIX (default o9c): the three run trees <prefix>0..2; O9_CENSUS_LOG (default <WorkUC2>/logs/o9): the summary.
+# O9_CENSUS_PREFIX (default o9c): the three run trees <prefix>0..2; O9_CENSUS_LOG (default <repo>/../logs/o9): the summary.
 pre=${O9_CENSUS_PREFIX:-o9c}; logdir=${O9_CENSUS_LOG:-$work/logs/o9}
 mkdir -p "$logdir"
 for i in 0 1 2; do

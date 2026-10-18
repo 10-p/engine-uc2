@@ -14,7 +14,7 @@
 #if _MSC_VER
 #include "../../zlib/zlib.h"
 #else
-// engine-uc2 (as engine-ut2004): the vendored zlib, by path -- consumers include this header without
+// The vendored zlib, by path: consumers include this header without
 // linking zlib, and <zlib.h> would pick a system copy natively and is absent under Emscripten.
 #include "../../../Thirdparty/zlib/zlib.h"
 #endif
@@ -237,10 +237,9 @@ public:
 		guard(DeleteFiles);
 		FString Dir(FilePattern);
 		// Strip off the trailing file pattern, so it is a pure directory
-		// engine-uc2: at the last separator of EITHER kind. Epic looked for '\\' only, so with the POSIX
-		// file managers' '/' the pattern stayed in Dir and every file was deleted as "<dir>/*/<file>":
-		// nothing was deleted, DeleteDirectory(Tree) then failed on a non-empty directory, and deleting a
-		// saved profile (ULoadSaveManager::DeleteGameObject) never worked on Linux (D-3).
+		// At the last separator of either kind: Epic looked for '\\' only, which with the POSIX file
+		// managers' '/' leaves the pattern in Dir, so nothing is deleted and DeleteDirectory(Tree) fails on a
+		// non-empty directory (ULoadSaveManager::DeleteGameObject deletes a saved profile this way).
 		INT Index = Max( Dir.InStr(TEXT("\\"),1), Dir.InStr(TEXT("/"),1) );
 		if (Index != -1)
 		{

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Generate Source/Editor/Src/UC2EpicClassOrder.h: the order in which Epic's Win32 DLL build registered native
-classes, which is the order `ucc make` walked sibling classes in (M14; docs/porting/analysis/scripts.md).
+classes, which is the order `ucc make` walked sibling classes in.
 
 Why it matters. UEditorEngine::MakeScripts parses classes depth-first over the class tree, visiting siblings in
 object-table order (TObjectIterator). A class that names a type declared in another class (`var UCPawn.EWeapon-

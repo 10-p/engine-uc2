@@ -1,5 +1,5 @@
 /*=============================================================================
-	SDL2Pads.cpp: game pads through SDL's GameController API (M10).
+	SDL2Pads.cpp: game pads through SDL's GameController API.
 
 	The specification is Epic's Xbox driver, which this reproduces on SDL:
 	  - XboxViewport.cpp:16-42, 397-506  the button table, the 30/255 press threshold
@@ -10,15 +10,13 @@
 	    bound to no viewport going to the InteractionMaster only, the active controller
 	    id restored after the pads were read;
 	  - XboxViewport.cpp:330-392  rumble from the player's WaveformManager, zeroed on travel.
-	    In the browser SDL has no rumble; G-10 drives the Gamepad API's haptics instead (below).
-	What is mapping or tuning is ini data: [SDL2Drv.PadMap] (SDL control -> Xbox control) and
-	the Pad* settings of [SDL2Drv.SDL2Client]. docs/porting/analysis/controls.md has the
-	table with the evidence for every row.
+	    In the browser SDL has no rumble; the Gamepad API's haptics stand in (below).
+	    What is mapping or tuning is ini data: [SDL2Drv.PadMap] (SDL control -> Xbox control) and
+	    the Pad* settings of [SDL2Drv.SDL2Client].
 
-	Split screen (G-6): Start on an unbound pad joins a player as UXboxClient::
-	UpdateGamepadUnboundInput does (USDL2Client::PadJoin, SDL2Client.cpp); each bound pad is
-	read by its own viewport only. G-11, the owner's rule of 2026-10-10 ([SDL2Drv.SDL2Client]
-	PadsStartAtPlayerTwo, G-9's KeyboardIsPlayer renamed): by default (False) the first pad takes
+	    Split screen: Start on an unbound pad joins a player as UXboxClient::
+	    UpdateGamepadUnboundInput does (USDL2Client::PadJoin, SDL2Client.cpp); each bound pad is
+	    read by its own viewport only. [SDL2Drv.SDL2Client] PadsStartAtPlayerTwo: by default (False) the first pad takes
 	port 0 and drives player one together with the keyboard and the mouse, exchangeable at any
 	moment, and a second pad's Start joins player two; True keeps port 0 for the keyboard and the
 	mouse alone and the pads take ports 1-3, so the first pad's Start joins player two. Either way
@@ -36,16 +34,15 @@ FName NAME_SDL2Input;
 
 #ifdef __EMSCRIPTEN__
 /*-----------------------------------------------------------------------------
-	G-10: rumble in the browser (owner, 2026-10-10: "Web rumble now").
+	Rumble in the browser.
 
 	SDL's Emscripten joystick driver has no rumble (EMSCRIPTEN_JoystickRumble returns SDL_Unsupported(),
-	SDL_GameControllerHasRumble is false; G-5 measured every request refused). The browser's Gamepad API has
+	SDL_GameControllerHasRumble is false). The browser's Gamepad API has
 	haptics on Chrome and Edge: navigator.getGamepads()[i].vibrationActuator.playEffect('dual-rumble',
 	{startDelay, duration, weakMagnitude, strongMagnitude}). Both calls below run on the page's MAIN thread (the
 	engine runs on a worker under PROXY_TO_PTHREAD, where there is no navigator.getGamepads): the probe at
 	connect is a synchronous proxied call, the effects are asynchronous ones (the engine never waits for the
 	page). No actuator (Firefox, Safari, a pad without motors): logged once when the pad connects, then nothing.
-	Notebook: docs/porting/analysis/web-g10.md.
 -----------------------------------------------------------------------------*/
 
 //
@@ -76,7 +73,7 @@ static INT WebPadProbe( const char* Id, INT Ordinal )
 }
 
 //
-// H-3: the buttons pressed on the browser's pad Index right now (bit i = Gamepad.buttons[i].pressed), 0 if it is not
+// The buttons pressed on the browser's pad Index right now (bit i = Gamepad.buttons[i].pressed), 0 if it is not
 // listed. A browser lists a pad only at its first press, and that press is already down in the snapshot SDL's
 // Emscripten driver keeps as the pad's starting state (SDL_sysjoystick.c Emscripten_JoyStickConnected copies the
 // event's buttons; EMSCRIPTEN_JoystickUpdate reports CHANGES only), so SDL never reports it: read it here once.
@@ -125,7 +122,7 @@ static const TCHAR* GStickAxisKeyNames[SDL2DRV_PAD_STICKAXES] = { TEXT("JoyX"), 
 static const EInputKey GStickAxisKeys[SDL2DRV_PAD_STICKAXES] = { IK_JoyX, IK_JoyY, IK_JoyU, IK_JoyV };
 
 //
-// The compiled default of [SDL2Drv.PadMap], the table in controls.md: used for every
+// The compiled default of [SDL2Drv.PadMap] (the shipped Default.ini's table): used for every
 // control the ini section does not name (an ini from the PC or Xbox release has no such section).
 //
 static void DefaultPadMap( FSDL2PadMapEntry* Map )
@@ -281,7 +278,7 @@ INT USDL2Client::FindPadSlot( INT InstanceID )
 // The viewport a pad port belongs to (UXboxClient::GetGamepadViewport): the one whose
 // GamepadID is the port. On PC, ULevel::SpawnPlayActor gives the first viewport GamepadID 0,
 // so by default the first pad and the keyboard both drive player one; with PadsStartAtPlayerTwo
-// (G-11, G-9's KeyboardIsPlayer) no pad gets port 0 and the keyboard's player is its own.
+// no pad gets port 0 and the keyboard's player is its own.
 //
 UViewport* USDL2Client::GetPadViewport( INT Slot )
 {
@@ -292,8 +289,8 @@ UViewport* USDL2Client::GetPadViewport( INT Slot )
 }
 
 //
-// G-11: whether a viewport has the keyboard and the mouse: the window's own viewport (player one; G-6 sends the
-// keyboard and the mouse to it only, a split-screen viewport is a rectangle of the window with its pad alone).
+// Whether a viewport has the keyboard and the mouse: the window's own viewport (player one; the keyboard and the
+// mouse go to it only, a split-screen viewport is a rectangle of the window with its pad alone).
 //
 UBOOL USDL2Client::ViewportHasKeyboard( UViewport* Viewport )
 {
@@ -321,7 +318,7 @@ void USDL2Client::SendPadKey( INT Slot, UViewport* Viewport, EInputKey Key, EInp
 }
 
 //
-// A pad was connected: first free port, as the Xbox's four fixed ports. G-11: with PadsStartAtPlayerTwo port 0
+// A pad was connected: first free port, as the Xbox's four fixed ports. With PadsStartAtPlayerTwo port 0
 // belongs to the keyboard and the mouse (player one), so the pads take ports 1-3: a fourth pad finds none.
 // By default a pad plugged in while port 0 is free takes it and is player one's again at once (the port's
 // viewport kept its GamepadID when the pad went: PadRemoved).
@@ -358,7 +355,7 @@ void USDL2Client::PadAdded( INT DeviceIndex )
 	const char* Name = SDL_GameControllerName( GC );
 	appStrncpy( Pad.Name, Name ? appFromAnsi(Name) : TEXT("pad"), ARRAY_COUNT(Pad.Name) );
 	UViewport* BoundTo = GetPadViewport( Slot );
-	// H-5: a pad that is player one's (port 0 unless PadsStartAtPlayerTwo, G-11), plugged in now or at the start, says
+	// A pad that is player one's (port 0 unless PadsStartAtPlayerTwo), plugged in now or at the start, says
 	// the player uses it: the pad's glyphs until the keyboard or the mouse is touched
 	if( Slot==0 && !PadsStartAtPlayerTwo )
 		GKeyGlyphs.NoteDevice( 0, TEXT("pad connected") );
@@ -367,7 +364,7 @@ void USDL2Client::PadAdded( INT DeviceIndex )
 		PadsStartAtPlayerTwo ? TEXT(" (keyboard and mouse are player one on port 0: Start joins)")
 		: ViewportHasKeyboard(BoundTo) ? TEXT(" (player one, with the keyboard and mouse)") : TEXT("") );
 #ifdef __EMSCRIPTEN__
-	// G-10: SDL has no rumble here; look for the browser's haptics on this pad (once, at connect).
+	// SDL has no rumble here; look for the browser's haptics on this pad (once, at connect).
 	Pad.WebIndex = -1;
 	if( !SDL_GameControllerHasRumble(GC) )
 	{
@@ -389,7 +386,7 @@ void USDL2Client::PadAdded( INT DeviceIndex )
 			debugf( NAME_Log, TEXT("SDL2 pads: pad %i has no rumble: SDL has none in the browser and %s"), Slot,
 				Probe<0 ? TEXT("the browser lists no pad with its id") : TEXT("this browser gives the pad no vibrationActuator (dual-rumble: Chrome, Edge)") );
 	}
-	// H-3: the press that made the browser list this pad (the owner's Start on the character page) is the pad's starting
+	// The press that made the browser list this pad (e.g. Start on the character page) is the pad's starting
 	// state for SDL, never an event: take it from the browser and give it to the first read as a press (a tap).
 	Pad.HeldAtConnectButtons = Pad.HeldAtConnectAxes = 0;
 	DWORD Pressed = Pad.WebIndex>=0 ? WebPadPressed( Pad.WebIndex ) : 0;
@@ -439,10 +436,10 @@ void USDL2Client::PadRemoved( INT InstanceID )
 		if( Pad.Position[b] > PadButtonThreshold )
 			SendPadKey( Slot, Viewport, (EInputKey)(IK_Joy1+b), IST_Release );
 
-	// G-11 (owner, 2026-10-10): "The 'gamepad disconnected' message should never trigger for player 1 because we
-	// always have the keyboard and mouse available. If it really disconnects then we just reconnect it and we're
-	// back." The removal (IK_JoySlider2: the binding's ControllerRemoved, i.e. the HUD's "controller unplugged",
-	// GUIController.SetGamepadStatus opening UCMenu.ControllerRemovedMenu, the pause) goes to a pad-only player
+	// Player one never gets the "gamepad disconnected" message: the keyboard and the mouse are always there, and a
+	// pad plugged back is theirs again. The removal (IK_JoySlider2: the binding's ControllerRemoved, i.e. the HUD's
+	// "controller unplugged", GUIController.SetGamepadStatus opening UCMenu.ControllerRemovedMenu, the pause) goes to
+	// a pad-only player
 	// as on the Xbox (UXboxClient::DetectDevices), and to the interaction master for a pad bound to nobody; the
 	// viewport with the keyboard and the mouse gets none. It keeps its GamepadID, so the pad plugged back (the first
 	// free port: this one) is bound to it again by PadAdded, silently (the insertion's ControllerAdded does nothing).
@@ -490,7 +487,7 @@ void USDL2Client::ReadPad( INT Slot, BYTE* NewPosition )
 				continue;
 			UBOOL Down = SDL_GameControllerGetButton( GC, (SDL_GameControllerButton)Source ) != 0;
 #ifdef __EMSCRIPTEN__
-			Down = Down || (Pad.HeldAtConnectButtons & (1u<<Source))!=0;	// H-3: the press that listed the pad
+			Down = Down || (Pad.HeldAtConnectButtons & (1u<<Source))!=0;	// The press that listed the pad
 #endif
 			if( Entry.Target < SDL2DRV_PAD_BUTTONS )
 				NewPosition[Entry.Target] = Max<BYTE>( NewPosition[Entry.Target], Down ? 255 : 0 );
@@ -505,7 +502,7 @@ void USDL2Client::ReadPad( INT Slot, BYTE* NewPosition )
 			INT Raw = SDL_GameControllerGetAxis( GC, (SDL_GameControllerAxis)Axis );
 #ifdef __EMSCRIPTEN__
 			if( Pad.HeldAtConnectAxes & (1u<<Axis) )
-				Raw = 32767;	// H-3: a trigger (a button in the browser's standard mapping) that listed the pad
+				Raw = 32767;	// A trigger (a button in the browser's standard mapping) that listed the pad
 #endif
 			if( Entry.Target < SDL2DRV_PAD_BUTTONS )
 			{
@@ -520,7 +517,7 @@ void USDL2Client::ReadPad( INT Slot, BYTE* NewPosition )
 	}
 
 #ifdef __EMSCRIPTEN__
-	// H-3: the press that listed the pad is read once: down in this read, up in the next (a tap, as SDL then reports the
+	// The press that listed the pad is read once: down in this read, up in the next (a tap, as SDL then reports the
 	// button as it is, and the browser's release of it changes nothing SDL had).
 	Pad.HeldAtConnectButtons = Pad.HeldAtConnectAxes = 0;
 #endif
@@ -566,11 +563,11 @@ static void SendButtonEdges( USDL2Client* Client, INT Slot, UViewport* Viewport,
 		{
 			if( Client->LoggingInput() )
 				debugf( SDL2INPUT, TEXT("pad %i button %i value %i > %i"), Slot, b, New, T );
-			// G-6: Start on a pad bound to no viewport may join a player (XboxClient.cpp:881); a press
+			// Start on a pad bound to no viewport may join a player (XboxClient.cpp:881); a press
 			// that made a player is used up there.
 			if( !Viewport && b==12 && Client->PadJoin( Slot ) )
 				continue;
-			// H-5: player one's pad was used: the pad's glyphs again
+			// Player one's pad was used: the pad's glyphs again
 			if( Viewport && Client->ViewportHasKeyboard( Viewport ) )
 				GKeyGlyphs.NoteDevice( 0, TEXT("pad button") );
 			Client->SendPadKey( Slot, Viewport, Key, IST_Press );
@@ -608,7 +605,7 @@ void USDL2Client::UpdateBoundPad( USDL2Viewport* Viewport, FLOAT DeltaSeconds )
 	ReadPad( Slot, NewPosition );
 	SendButtonEdges( this, Slot, Viewport, NewPosition );
 
-	// H-5: a stick pushed past half way on player one's pad is a touch of the pad (not its drift)
+	// A stick pushed past half way on player one's pad is a touch of the pad (not its drift)
 	if( ViewportHasKeyboard( Viewport ) )
 		for( INT a=0; a<SDL2DRV_PAD_STICKAXES; a++ )
 			if( Abs(Pad.Axes[a]) > 0.5f )
@@ -637,7 +634,7 @@ void USDL2Client::UpdateBoundPad( USDL2Viewport* Viewport, FLOAT DeltaSeconds )
 	if( Manager )
 	{
 		Manager->GetRumbleState( DeltaSeconds, Left, Right );
-		// How long these levels hold: the rest of the waveform's current sample (G-10, the browser's effects
+		// How long these levels hold: the rest of the waveform's current sample (the browser's effects
 		// need a duration; the Xbox motors and SDL's refreshed request do not use it).
 		UForceFeedbackWaveform* W = Manager->FFWaveform;
 		if( W && !Manager->bIsPaused && Manager->CurrentSample>=0 && Manager->CurrentSample<W->Samples.Num() )
@@ -678,7 +675,7 @@ void USDL2Client::UpdateUnboundPads()
 //
 // Motor speeds to SDL. Sent when they change, and refreshed while they run (SDL needs a
 // duration; the Xbox motors run until told otherwise).
-// G-10, in the browser: to the Gamepad API's haptics instead (SDL has no rumble there): an effect
+// In the browser: to the Gamepad API's haptics instead (SDL has no rumble there): an effect
 // per change of level, lasting HoldSeconds (the rest of the waveform sample, from UpdateBoundPad)
 // and 50 ms more, sent again if the level still holds when it runs out; a stop when it drops to 0.
 //

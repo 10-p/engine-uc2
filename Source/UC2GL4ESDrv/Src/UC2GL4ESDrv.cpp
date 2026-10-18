@@ -1,13 +1,13 @@
 /*=============================================================================
-	UC2GL4ESDrv.cpp: the GL4ES binding of UC2GLDrv (M11).
+	UC2GL4ESDrv.cpp: the GL4ES binding of UC2GLDrv.
 
 	Native (Linux): SDL2Drv creates the window and, from the attributes set here, an OpenGL
-	ES 2.0 context (EGL or GLX, SDL's choice); gl4es is handed SDL's lookup.
+	ES 3.0 context, ES 2.0 as the fallback (EGL or GLX, SDL's choice); gl4es is handed SDL's lookup.
 	Web: under PROXY_TO_PTHREAD the canvas belongs to the engine's worker
 	(OFFSCREENCANVASES_TO_PTHREAD), and SDL's GL path is EGL, which Emscripten runs on the
 	browser's main thread, where the canvas no longer is (Emscripten issue 24792). So SDL
-	keeps the window and the input only, and the WebGL 1 context is created here, directly
-	on the worker (engine-ut2004's arrangement, there inside its SDL2Viewport.cpp); the
+	keeps the window and the input only, and the WebGL 2 (or 1) context is created here, directly
+	on the worker; the
 	frame is presented with emscripten_webgl_commit_frame (the link has
 	-sOFFSCREEN_FRAMEBUFFER, without which that call does nothing).
 =============================================================================*/
@@ -51,7 +51,7 @@ UUC2GL4ESRenderDevice::UUC2GL4ESRenderDevice()
 void UUC2GL4ESRenderDevice::StaticConstructor()
 {
 	// UUC2GLRenderDevice::StaticConstructor declared the shared properties on its class and set
-	// the compiled defaults, which this class's default object starts from. F-3: GLESVersion.
+	// the compiled defaults, which this class's default object starts from. This class adds GLESVersion.
 	new(GetClass(),TEXT("GLESVersion"),RF_Public)UIntProperty( CPP_PROPERTY(GLESVersion), TEXT("Options"), CPF_Config );
 	GLESVersion = 3;
 }
@@ -103,16 +103,15 @@ UBOOL UUC2GL4ESRenderDevice::BindingCreateContext( UViewport* Viewport, UBOOL Fu
 #if defined(__EMSCRIPTEN__)
 	// The engine draws at the canvas's size in DEVICE pixels, whatever the ini or the caller
 	// asks for: the canvas's CSS box is the page's business, and a frame of another size would
-	// be resampled by the browser (the first browser picture was the 640x480 of the ini
-	// stretched over a 1024x768 box). The template does the same in its viewport (ufront 2.71).
+	// be resampled by the browser (the ini's 640x480 stretched over a 1024x768 box).
 	// Both calls are answered by the browser's main thread.
 	{
 		double CssW = 0.0, CssH = 0.0;
 		if( emscripten_get_element_css_size( "#canvas", &CssW, &CssH ) == EMSCRIPTEN_RESULT_SUCCESS )
 		{
 			double	Ratio	= emscripten_get_device_pixel_ratio();
-			// Y-5: odd widths too (the viewport no longer rounds the width to even on the web, as
-			// engine-ut2004 ufront 2.71): a 1023-CSS-pixel box at 125 % is 1279 device pixels, not 1278.
+			// Odd widths too (the viewport does not round the width to even on the web): a 1023-CSS-pixel
+			// box at 125 % is 1279 device pixels, not 1278.
 			INT		W		= (INT)(CssW * Ratio + 0.5),
 					H		= (INT)(CssH * Ratio + 0.5);
 			if( W >= 320 && H >= 200 && (W != NewX || H != NewY) )
@@ -133,7 +132,7 @@ UBOOL UUC2GL4ESRenderDevice::BindingCreateContext( UViewport* Viewport, UBOOL Fu
 	}
 	EmscriptenWebGLContextAttributes Attrs;
 	emscripten_webgl_init_context_attributes( &Attrs );
-	// F-3: WebGL 2 = OpenGL ES 3.0, through GL4ES' ES 3 back end (our fork); WebGL 1 = OpenGL ES 2
+	// WebGL 2 = OpenGL ES 3.0, through GL4ES' ES 3 back end (our fork); WebGL 1 = OpenGL ES 2
 	// where the browser has no WebGL 2 or the ini asks for it (GLESVersion=2).
 	INT Major = RequestedGLES( GLESVersion );
 	Attrs.majorVersion					= Major >= 3 ? 2 : 1;
@@ -256,21 +255,20 @@ UBOOL UUC2GL4ESRenderDevice::BindingInit()
 	if( Initialized )
 		return 1;
 
-	// gl4es is configured through its environment only. The values are engine-ut2004's,
-	// each for the reason given there (its GL4ESRenderDevice.cpp); the ones that matter most:
-	// USEVBO: without it gl4es hands GLES client-side pointers for data that IS in buffer
+	// gl4es is configured through its environment only; the ones that matter most:
+	// USEVBO: without it gl4es hands GLES client-side pointers for data that is in buffer
 	// objects, and WebGL has no client-side arrays (Emscripten then copies every vertex
-	// range before every draw). BATCH 0: its draw-call merging was measured as a loss there.
-	// F-3: GL4ES' OpenGL ES 3 back end (our fork) on an OpenGL ES 3 / WebGL 2 context.
+	// range before every draw). BATCH 0: its draw-call merging costs more than it saves.
+	// GL4ES' OpenGL ES 3 back end (the fork's) on an OpenGL ES 3 / WebGL 2 context.
 	setenv( "LIBGL_ES",				GLESMajor >= 3 ? "3" : "2", 1 );
-	// The owner (2026-10-09): "fragment highp: Set high." GL4ES' own fixed-function shaders are
+	// Fragment highp: GL4ES' own fixed-function shaders are
 	// mediump by default and samplers lowp; with this every shader is highp where the hardware
 	// has it (always on OpenGL ES 3 / WebGL 2).
 	setenv( "LIBGL_FORCEHIGHP",		"1", 1 );
 	// GL4ES' ES 2 shader conversion inserts int overloads of pow/max/min/clamp/mod for desktop GLSL
 	// that mixes int and float; the driver's shaders are written in the GLSL ES subset and need none.
-	// NVIDIA's own OpenGL ES driver rejects those overloads (the ES 2 path did not start there: F-3,
-	// webgl2.md); GL4ES' ES 3 path does not insert them anyway (GLSL ES 3.00 forbids it).
+	// Some OpenGL ES drivers reject those overloads (NVIDIA's); GL4ES' ES 3 path does not insert
+	// them anyway (GLSL ES 3.00 forbids it).
 	setenv( "LIBGL_NOINTOVLHACK",	"1", 1 );
 	setenv( "LIBGL_NOBANNER",		"1", 1 );
 	setenv( "LIBGL_NOERROR",		"0", 1 );	// glGetError keeps working (CheckGLErrors)
@@ -281,13 +279,12 @@ UBOOL UUC2GL4ESRenderDevice::BindingInit()
 	setenv( "LIBGL_FPS",			"0", 1 );
 	setenv( "LIBGL_SILENTSTUB",		"1", 1 );
 	setenv( "LIBGL_NOTEXRECT",		"1", 1 );
-	// No "precompiled shader archive": where the hardware has program binaries (Mesa has)
-	// gl4es keeps its generated fixed-function programs in ~/.gl4es.psa. A test vehicle does
-	// not write into the user's home directory, and the twin should build its programs the
-	// way the browser has to (WebGL has no program binaries).
+	// No "precompiled shader archive": where the hardware has program binaries gl4es keeps its
+	// generated fixed-function programs in ~/.gl4es.psa. The device does not write into the
+	// user's home directory, and natively it builds its programs the way the browser has to
+	// (WebGL has no program binaries).
 	setenv( "LIBGL_NOPSA",			"1", 1 );
-	// (F-4 follow-up: the -gl4esdebug switch is gone; gl4es' own LIBGL_DBGSHADERCONV=15 / LIBGL_LOGSHADERERROR=1 in the
-	// environment do the same.)
+	// (gl4es' own LIBGL_DBGSHADERCONV=15 / LIBGL_LOGSHADERERROR=1 in the environment debug its shader conversion.)
 
 	set_getprocaddress( UC2GL4ES_RawGetProcAddress );
 	initialize_gl4es();

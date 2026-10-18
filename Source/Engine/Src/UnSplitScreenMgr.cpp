@@ -199,7 +199,7 @@ UViewport* USplitScreenMgr::SetupOverlayViewport()
 		// use default GUIController
 		OverlayView->GUIController = Client->Viewports(0)->GUIController;
 		OverlayView->GUIController->ViewportOwner = OverlayView;
-		// uc2 port (H-3, docs/porting/analysis/h3-pads.md): the GUI sets bShowWindowsMouse on its ViewportOwner each menu
+		// The GUI sets bShowWindowsMouse on its ViewportOwner each menu
 		// frame and clears it on its owner when the last menu closes; the viewport it leaves would keep the menus' 1 for
 		// good (a PC driver then never captures the mouse again). The flag goes with the GUI.
 		Client->Viewports(0)->bShowWindowsMouse = 0;
@@ -270,7 +270,7 @@ UBOOL USplitScreenMgr::RemoveOverlayViewport()
 
 	// reset ViewportOwner
 	Client->Viewports(0)->GUIController->ViewportOwner = Client->Viewports(0);
-	// uc2 port (H-3): the windows-mouse flag comes back with the GUI (as GUIController.SetControllerStatus sets it).
+	// The windows-mouse flag comes back with the GUI (as GUIController.SetControllerStatus sets it).
 	Client->Viewports(0)->bShowWindowsMouse = Client->Viewports(0)->GUIController->bActive && Client->Viewports(0)->bWindowsMouseAvailable;
 	if( OverlayView && OverlayView != Client->Viewports(0) )
 		OverlayView->bShowWindowsMouse = 0;
@@ -534,7 +534,7 @@ APlayerController* USplitScreenMgr::CreateSplitPlayer( UViewport* Viewport, INT 
 		UGameStartInfoBase* GSI = UGameStartInfoBase::GetGameStart();
 		check(GSI);
 
-		// uc2 port (X-1): the split player's own index (its place in ActiveSplitViews, the GUI's child viewport
+		// The split player's own index (its place in ActiveSplitViews, the GUI's child viewport
 		// order). Epic passed 1 to every split player, so a third and a fourth player took the second one's name and
 		// URL options; for one or two players this is 1, as before.
 		INT PlayerIndex = ActiveSplitViews.FindItemIndex( Viewport );
@@ -550,7 +550,7 @@ APlayerController* USplitScreenMgr::CreateSplitPlayer( UViewport* Viewport, INT 
 	if( LevelInfo && 
 		(LevelInfo->NetMode == NM_Standalone || LevelInfo->NetMode == NM_ListenServer ) )
 	{
-		// uc2 port (X-1): the limit is for a viewport to be created. A viewport passed in already is one of the split
+		// The limit is for a viewport to be created. A viewport passed in already is one of the split
 		// views (MatchSplitViewportsToActors after a travel); with four of them (= MaxSplitScreens) Epic's check
 		// refused every one and players two to four never spawned. Never reached on the Xbox (two players).
 		if( !Viewport && NumActiveSplitViews() >= MaxSplitScreens )
@@ -1034,13 +1034,13 @@ void USplitScreenMgr::UpdateSizes()
 	unguard;
 }
 
-/* uc2 port (B-3) ===========================================================
+/* ============================================================================
 * USplitScreenMgr::HUDLayoutRow
 * ============================================================================
 * UC2's split HUD knows the Xbox's two halves only: UCHUD.SetSplitPosition(ViewportIndex, ...) gives index 1 "the
 * bottom half" (no upper safe zone: SafeZoneOffsetY -29) and index 0 none; PlayerController.ClientSetHUD passes the
-* view's index in Client->Viewports (GetSplitscreenLayout). With two views that index IS the row of UpdateSizes'
-* layout (top half 0, bottom half 1). With three or four (Scion's layouts, which UC2's menus never reach) it is not:
+* view's index in Client->Viewports (GetSplitscreenLayout). With two views that index is the row of UpdateSizes'
+* layout (top half 0, bottom half 1). With three or four (Scion's layouts, reached through patch set players34) it is not:
 * the client's order of equal-OffsetZ viewports is ZSortViewports' unstable sort, so the offset landed on one quarter
 * (the top-right one with four players). This returns the row in the layout UpdateSizes builds, by the view's place in
 * ActiveSplitViews (not by its rectangle, which may not be laid out yet when a joining player's HUD is made): 0 = at
@@ -1066,7 +1066,7 @@ INT USplitScreenMgr::HUDLayoutRow( UViewport* Viewport )
 	unguard;
 }
 
-/* uc2 port (G-6) ===========================================================
+/* ============================================================================
 * USplitScreenMgr::RefreshPlayerHUDs
 * ============================================================================
 * On the Xbox the split-screen layout only changes in the menus, and every player gets its HUD when the next
@@ -1111,7 +1111,7 @@ void USplitScreenMgr::RefreshPlayerHUDs()
 		// The weapons' crosshairs, which UCPlayerController caches (ScriptedCrosshairs), are squeezed for a split
 		// HUD when a weapon first makes them (UCWeapon.CreateScriptedCrosshair: ScaleY = 0.5 if the HUD
 		// IsSplitScreen, i.e. more than one viewport); one made before the layout changed keeps the old
-		// shape (the crosshair of a player who was alone sat on the bottom edge of a half screen). Give them
+		// shape (the crosshair of a player who was alone would sit on the bottom edge of a half screen). Give them
 		// the shape that rule gives now. (By name: the classes are UCGameplay's and UCElements' scripts.)
 		UArrayProperty* Crosshairs = FindField<UArrayProperty>( PC->GetClass(), TEXT("ScriptedCrosshairs") );
 		if( Crosshairs && Cast<UObjectProperty>(Crosshairs->Inner) )
@@ -1154,7 +1154,7 @@ void USplitScreenMgr::UpdateDetailLevels()
 	// dynamic gamma adjusts the device gamma ramp
 	// so it is a full screen effect and doesn't make sense
 	// when any split views are active
-	// uc2 port (G-6): unless the render device applies it per viewport (FRenderCaps::ViewportDynamicGamma)
+	// Unless the render device applies it per viewport (FRenderCaps::ViewportDynamicGamma)
 	URenderDevice* RenDev = Client->Viewports(0)->RenDev;
 	UBOOL bViewportGamma = RenDev && RenDev->GetRenderCaps() && RenDev->GetRenderCaps()->ViewportDynamicGamma;
 	if( NumActiveSplitViews() != 0 )
@@ -1187,7 +1187,7 @@ void USplitScreenMgr::UpdateDetailLevels()
 			// detail level we should revert to
 			INT DetailLevelIdx = Min<INT>( NumValidVPs-1, SSDetailLevels.Num()-1 );		
 			FSplitScreenDetailLevel& SplitDetailLevel = SSDetailLevels( DetailLevelIdx );
-			// uc2 port (G-9): on a client that keeps full detail (SDL2Drv SplitScreenFullDetail, True on PC) every
+			// On a client that keeps full detail (SDL2Drv SplitScreenFullDetail, default False) every
 			// split view gets entry 0, the single player's settings, except ReduceFOV: that is the FOV maths of
 			// the layout (Epic's view with AutoFOV off; AutoFOV replaces it per frame), not a detail setting.
 			FSplitScreenDetailLevel FullDetailLevel = SSDetailLevels( 0 );

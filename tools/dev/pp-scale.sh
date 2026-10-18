@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pp-scale: do the post-process blurs cover the same share of the picture at every resolution, as on the Xbox at
-# 640x480? One PASS/FAIL line per check (INFO lines decide nothing). Notebook: docs/porting/analysis/pp-scale.md.
+# 640x480? One PASS/FAIL line per check (INFO lines decide nothing).
 #
 #   tools/dev/pp-scale.sh [<tree>] [check ...]        default tree: pp; default: every check except perf
 #   tools/dev/pp-scale.sh pp glow dof
@@ -19,9 +19,9 @@
 #             in 640x480 pixels, same resolutions
 #   identity  640x480, post-processing on, a frame frozen from the start: this binary against main's (the tree's
 #             System/uc2-base.bin), twice each; every pixel outside the two spinning pickups must be equal
-#   aspect    1920x1080 with AutoFOV on (the owner's normal view): the tube's glow (the 4:3 middle of the 16:9
+#   aspect    1920x1080 with AutoFOV on (the normal view): the tube's glow (the 4:3 middle of the 16:9
 #             picture is the 4:3 picture), this binary and main's; sheets
-#   sheets    the owner's picture sheets from the pictures above (also logs/pp2): logs/<tree>/sheets
+#   sheets    picture sheets from the pictures above (also logs/pp2): logs/<tree>/sheets
 #   perf      (not in the default list) frames per second at 1920x1080 and 3840x2160 on the GPU (UC2_GPU=1 of
 #             tools/dev/fx-owner.sh, offscreen, no window), reference height 480 then 0 in one run, and main's
 #             binary
@@ -29,9 +29,9 @@
 # The pictures are frozen in time (set LevelInfo TimeDilation 0.0001) once the match runs, so the shots of one run
 # differ only in what the run switched (post-processing, PPREFERENCE, an effect); the dynamic gamma (the bloom's
 # threshold follows it) converges over frames, so each shot waits long enough at every resolution (the log's
-# frame numbers are printed). Every run goes through tools/dev/run-uc2-shot.sh (<WorkUC2>/bin/capped 2G; 3G at
-# 2880x2160 through UC2_CAP), headless, AA off, AutoFOV off and the pre-D-2 UI unless the check says otherwise.
-# Pictures, logs and sheets: <WorkUC2>/logs/<tree>/pp-*.
+# frame numbers are printed). Every run goes through tools/dev/run-uc2-shot.sh (<repo>/../bin/capped 2G; 3G at
+# 2880x2160 through UC2_CAP), headless, AA off, AutoFOV off and Epic's 1:1 UI unless the check says otherwise.
+# Pictures, logs and sheets: <repo>/../logs/<tree>/pp-*.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
@@ -309,10 +309,10 @@ check_perf() {
   rm -f "$scen"
 }
 
-# sheets: the owner's picture sheets from the pictures the checks left (in this tree's logs and in PP_ALSO, default
+# sheets: the picture sheets from the pictures the checks left (in this tree's logs and in PP_ALSO, default
 # logs/pp2): per effect, 640x480 | 1440x1080 old | 1440x1080 new (and the same at 2880x2160), whole pictures at the
 # 480-line scale, and a part of them enlarged twice from each picture's own resolution (pp-measure.py crop);
-# the 16:9 AutoFOV view, main's binary against this one. Into <WorkUC2>/logs/<tree>/sheets.
+# the 16:9 AutoFOV view, main's binary against this one. Into <repo>/../logs/<tree>/sheets.
 check_sheets() {
   local d=$out/sheets also=${PP_ALSO:-$work/logs/pp2} spec e on old new box res n=0
   mkdir -p "$d"

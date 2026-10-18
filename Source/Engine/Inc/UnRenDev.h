@@ -770,44 +770,43 @@ struct FRenderCaps
 	INT MaxSimultaneousTerrainLayers;
 	INT		PixelShaderVersion;	//!!powervr_aaron: Terrain optimisation code needs to know whether pixel shaders are being used
 	UBOOL	HardwareTL;			//!!powervr_aaron: Terrain optimisation code needs to know whether SW TnL is being used
-	// UC2 port (M7): the device implements the render-target post-processing interface the
+	// The device implements the render-target post-processing interface the
 	// Xbox build uses (render-target pool, back-buffer copy and material, CopyDepthBuffer,
 	// post-process stages, depth-of-field ramp, the post-process pixel shaders). Epic compiled
 	// the code that drives it for Xbox only; where this is set that code runs instead of the
 	// PC branch (RenDevHasXboxPostProcess below). 0 for every device that does not set it.
 	UBOOL	XboxPostProcess;
-	// UC2 port (M7): not a capability but a review switch a device can expose: 1 = the always-on
-	// depth of field takes its blur alpha as the shipped binary did (UUCScreenDOF::PostRender).
+	// Not a capability but a switch a device can expose: 1 = the always-on depth of field
+	// takes its blur alpha as the shipped binary does (UUCScreenDOF::PostRender; UC2GLDrv: on by default).
 	UBOOL	ShippedDOFBlurAlpha;
-	// UC2 port (M7b): the device filters projected shadow textures as the Xbox build does
+	// The device filters projected shadow textures as the Xbox build does
 	// (the caster drawn in ShadowDarkness grey, then one PS_ShadowBlur tile: a horizontal
 	// four-tap blur, negated) instead of PC's alpha-encoded caster and nine-tile box blur.
 	// UShadowBitmapMaterial (UnShadowProjector.cpp) takes the _XBOX && NEW_SHADOW_BLEND branch
 	// where this is set (RenDevHasXboxShadows below). 0 for every device that does not set it.
 	UBOOL	XboxShadows;
-	// UC2 port (M7b): the device draws UProjectorMultiMaterial (the Xbox projector material:
+	// The device draws UProjectorMultiMaterial (the Xbox projector material:
 	// ProjectorAtten.vsh + the PS_Projector_* shaders). UGameEngine::LoadMap then re-packs every
 	// level-static projector into one DT_StaticProjectorBatch actor, as the Xbox build does
 	// (AProjector::RebuildStaticPrimsBatch; RenDevHasXboxProjectors below). 0 for every device
 	// that does not set it.
 	UBOOL	XboxProjectors;
-	// UC2 port (pp-scale): the height of the picture the Xbox post-processing was made for (480:
+	// The height of the picture the Xbox post-processing was made for (480:
 	// the Xbox's 640x480). The camera effects size their blur targets for a picture of this many
 	// lines (and the back buffer's aspect) and measure their back-buffer taps and screen
 	// distances in its pixels, so that every blur covers the same share of the picture at any
-	// resolution (GetPostProcessReference, UnRenderUtil.h). 0 = Epic's code as it was: sizes and
+	// resolution (GetPostProcessReference, UnRenderUtil.h). 0 = Epic's code: sizes and
 	// distances in pixels of the real back buffer. Set by the device (UC2GLDrv:
-	// PostProcessReferenceHeight); docs/porting/analysis/pp-scale.md.
+	// PostProcessReferenceHeight).
 	INT		PostProcessReferenceHeight;
-	// UC2 port (H-1): the camera effects' blur targets get this many times the texels per axis (1 = the
+	// The camera effects' blur targets get this many times the texels per axis (1 = the
 	// Xbox's count for the reference picture; 2 or 4), their target-to-target taps the same factor, with a
 	// fill so that every tap still covers what it did: the same blur on the screen, sampled more finely
-	// (no 24-pixel facets at 1440 lines). Set by the device (UC2GLDrv: PostProcessTargetScale);
-	// docs/porting/analysis/h1-bloom.md.
+	// (no 24-pixel facets at 1440 lines). Set by the device (UC2GLDrv: PostProcessTargetScale).
 	INT		PostProcessTargetScale;
-	// UC2 port (G-6): the device applies dynamic gamma per viewport (a luminance histogram of each viewport's
+	// The device applies dynamic gamma per viewport (a luminance histogram of each viewport's
 	// rectangle, its ramp applied to that rectangle), so it is not a full-screen effect there and split screen
-	// keeps it (USplitScreenMgr::UpdateDetailLevels switches it off otherwise, as on the Xbox, whose ramp was
+	// keeps it (USplitScreenMgr::UpdateDetailLevels switches it off otherwise, as on the Xbox, whose ramp is
 	// the display's).
 	UBOOL	ViewportDynamicGamma;
 
@@ -897,32 +896,32 @@ class ENGINE_API URenderDevice : public USubsystem
 };
 
 //
-// UC2 port (M7): does the engine's render device report FRenderCaps::XboxPostProcess?
+// Does the engine's render device report FRenderCaps::XboxPostProcess?
 // The one test every lifted "#ifdef _XBOX" post-process gate uses (UnRender.cpp,
 // UnPixelShaderMaterial.cpp, which also answers for PSDistortionBaseMaterial, and
 // UCCameraEffects.cpp). False without a client or a device (dedicated server,
 // commandlets), for the null device and for any device that leaves the capability unset:
-// those keep the PC branch, exactly as before.
+// those keep the PC branch.
 //
 ENGINE_API UBOOL RenDevHasXboxPostProcess();
 
 //
-// UC2 port (M7b): does the engine's render device report FRenderCaps::XboxShadows? The test of
+// Does the engine's render device report FRenderCaps::XboxShadows? The test of
 // the lifted "_XBOX && NEW_SHADOW_BLEND" shadow-texture gates (UnShadowProjector.cpp). False
 // without a client or a device and for any device that leaves the capability unset.
 //
 ENGINE_API UBOOL RenDevHasXboxShadows();
 
 //
-// UC2 port (M7b): does the engine's render device report FRenderCaps::XboxProjectors? The test of
+// Does the engine's render device report FRenderCaps::XboxProjectors? The test of
 // the lifted "_XBOX" static-projector batching in UGameEngine::LoadMap (UnGame.cpp).
 //
 ENGINE_API UBOOL RenDevHasXboxProjectors();
-// UC2 port (pp-scale): FRenderCaps::PostProcessReferenceHeight of the engine's render device;
+// FRenderCaps::PostProcessReferenceHeight of the engine's render device;
 // 0 without a client, a device or a reference (sizes and distances in back-buffer pixels).
 //
 ENGINE_API INT RenDevPostProcessReferenceHeight();
-// UC2 port (H-1): FRenderCaps::PostProcessTargetScale of the engine's render device: 1, 2 or 4 (1 without one).
+// FRenderCaps::PostProcessTargetScale of the engine's render device: 1, 2 or 4 (1 without one).
 ENGINE_API INT RenDevPostProcessTargetScale();
 
 #endif

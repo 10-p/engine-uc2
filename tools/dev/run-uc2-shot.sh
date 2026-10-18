@@ -6,8 +6,8 @@
 #   tools/dev/run-uc2-shot.sh m6 deadbolt 60 28 DM-Deadbolt $(tools/dev/glini CheckGLErrors=True ShotTimes=38,44 PixelShaderToggleTimes=41)
 #   (the GL device's settings and test keys go in with -ini:, tools/dev/glini writes them for both device sections)
 #
-# <tree>      run tree under <WorkUC2>/run (made by tools/dev/mkrun-uc2.sh)
-# <name>      output prefix: <WorkUC2>/logs/<tree>/<name>.out, <name>-N.png (from System/Shot0000N.bmp)
+# <tree>      run tree under <repo>/../run (made by tools/dev/mkrun-uc2.sh)
+# <name>      output prefix: <repo>/../logs/<tree>/<name>.out, <name>-N.png (from System/Shot0000N.bmp)
 # <seconds>   wall-clock limit of the run
 # <fire-at>   seconds after launch at which the left mouse button (Fire) is clicked three times; 0 = never
 #
@@ -20,10 +20,10 @@
 #   UC2_BIN=uc2-before.bin  another executable in the tree's System folder (before/after pictures from one
 #                        tree; default uc2.bin)
 #
-#   UC2_AA=1             keep the device's anti-aliasing (O-8: on by default since M11); without it every run gets
+#   UC2_AA=1             keep the device's anti-aliasing (on in the native ini); without it every run gets
 #                        AntiAliasing=0 (-ini:), so pictures compare with the references made before anti-aliasing existed
 #
-# Everything runs inside <WorkUC2>/bin/capped 2G (CLAUDE.md, "Running anything: memory ceiling, always");
+# Everything runs inside <repo>/../bin/capped 2G (CLAUDE.md, "Running anything: memory ceiling, always");
 #   UC2_CAP=3G           another ceiling (pp-scale: 3G for 2880x2160 and larger windows)
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -52,11 +52,11 @@ if [ -n "${UC2_POSTCMD:-}" ]; then
 fi
 
 aaarg=$("$repo/tools/dev/glini" AntiAliasing=0 | tr '\n' ' '); [ -n "${UC2_AA:-}" ] && aaarg=""
-# AutoFOV off unless UC2_AUTOFOV is set: the reference pictures these runs are compared with (the M7 effect
-# pairs, the wine oracle's DM-Praxis view, the O-9 before/after pairs) were made with the 4:3 field of view, and
-# at 16:9 D-8's Hor+ widens the framing. tools/dev/d78.sh measures AutoFOV itself and does not use this runner.
+# AutoFOV off unless UC2_AUTOFOV is set: the reference pictures these runs are compared with (the effect pairs,
+# the wine oracle's DM-Praxis view, the before/after pairs) are made with the 4:3 field of view, and at 16:9
+# AutoFOV's Hor+ widens the framing. tools/dev/d78.sh measures AutoFOV itself and does not use this runner.
 fovarg="-ini:System:[ufront.AutoFOV]:AutoFOV=0"; [ -n "${UC2_AUTOFOV:-}" ] && fovarg=""
-# Likewise the UI as before D-2 (640x480 drawn 1:1, top-left) unless UC2_UIBOX is set: the references (e.g. the
+# Likewise the UI as Epic draws it (640x480 drawn 1:1, top-left) unless UC2_UIBOX is set: the references (e.g. the
 # wine oracle's DM-Praxis view, made by the original PC binary) have the old HUD. tools/dev/d2-ui-scale.sh
 # measures the UI box itself and does not use this runner.
 [ -z "${UC2_UIBOX:-}" ] && fovarg="$fovarg -ini:System:[SDL2Drv.SDL2Client]:UIScaleMode=Native640"

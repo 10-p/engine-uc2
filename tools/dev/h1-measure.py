@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""H-1 measurements on screenshots (docs/porting/analysis/h1-bloom.md). Coordinates are given in the 1280x720 frame
+"""Bloom measurements on screenshots. Coordinates are given in the 1280x720 frame
 and mapped to each picture (AutoFOV off: the horizontal field of view is fixed, so a picture W wide shows the 1280
 frame scaled by W/1280, centred vertically), so one set of numbers serves every resolution of the same view. Pure
 Python + PIL.

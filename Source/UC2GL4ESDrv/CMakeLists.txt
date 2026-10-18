@@ -1,15 +1,15 @@
 #=============================================================================
-# UC2GL4ESDrv - the GL4ES binding of UC2GLDrv (M11): UC2GL4ESDrv.UC2GL4ESRenderDevice.
+# UC2GL4ESDrv - the GL4ES binding of UC2GLDrv: UC2GL4ESDrv.UC2GL4ESRenderDevice.
 #
-# NOT a second driver. The renderer is Source/UC2GLDrv, compiled once; this package is a subclass of its
-# device that overrides the binding (OpenGL ES 2 context through SDL/EGL on Linux, WebGL 1 on the web;
-# entry points from gl4es, which translates the driver's desktop-GL calls). It is the only code that
-# links gl4es. Linux carries it as "the native twin" of the web renderer (-gl4es), so the renderer tests
-# run against the web code path without a browser. docs/porting/analysis/web-renderer.md.
+# Not a second driver. The renderer is Source/UC2GLDrv, compiled once; this package is a subclass of its
+# device that overrides the binding (an OpenGL ES 3 context, ES 2 as the fallback, through SDL/EGL on Linux;
+# WebGL 2, WebGL 1 as the fallback, on the web; entry points from gl4es, which translates the driver's
+# desktop-GL calls). It is the only code that links gl4es. On Linux it is the -GL4ES device, so the
+# renderer tests run the web code path without a browser.
 #=============================================================================
 
 if(NOT TARGET gl4es::GL OR NOT TARGET UC2GLDrv)
-  # Windows: no gl4es, no twin (root CMakeLists.txt, M11 block).
+  # Windows: no gl4es (root CMakeLists.txt).
   return()
 endif()
 

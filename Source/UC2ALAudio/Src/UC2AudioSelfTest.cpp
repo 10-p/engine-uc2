@@ -6,8 +6,7 @@
 	The device is initialised in loopback mode (OpenAL Soft mixes into memory at a
 	simulated clock, 48 kHz stereo float) and plays one known cue at a time through its
 	own code (StartInst onwards). Each result is compared with what the XACT parameters
-	say, computed here independently from the documented rules (docs/porting/analysis/
-	audio.md, "Units and meanings" and "Runtime mapping"):
+	say, computed here independently from XACT's rules:
 
 	  gain    total energy out / energy of the decoded wave = Pan * 10^(mB/1000) / PitchRatio,
 	          mB = Volume + group Volume + variation volume - 600 (headroom, unless boosted)
@@ -18,8 +17,8 @@
 	pitch   the sound lasts Frames/Rate / 2^(cents/1200)
 	loops   a play event with Loop Count n lasts n+1 times the wave; an infinite one never ends
 	picker  the variation sequence of N plays follows the playlist type's rule
-	hrtf    (F-6) with OpenAL Soft's HRTF a source to one side reaches the near ear first (an interaural
-	        time difference); plain panning has none. UseHRTF itself is engine-ut2004's ini key.
+	hrtf    with OpenAL Soft's HRTF a source to one side reaches the near ear first (an interaural
+	time difference); plain panning has none.
 =============================================================================*/
 
 #include "UC2ALAudioPrivate.h"
@@ -82,7 +81,7 @@ static DOUBLE SourceEnergy( FUC2TestPlay& P, INT& Frames, INT& Rate, INT& First,
 	FString Error;
 	Frames = Rate = 0;
 	First = Last = -1;
-	// (M16: either source: the cooked pack the device loaded, or the shipped .xwb entry read again)
+	// (either source: the cooked pack the device loaded, or the shipped .xwb entry read again)
 	if( !P.Wave || !P.WaveBank || (!P.WaveBank->bXbox && !P.WaveBank->Data.Num())
 	 || !UC2DecodeWave( *P.WaveBank, *P.Wave, TEXT("../Sounds/"), Pcm, Channels, Rate, Error ) )
 		return 0.0;
@@ -134,8 +133,8 @@ static DOUBLE OutputEnergy( const TArray<FLOAT>& Out, DOUBLE& Left, DOUBLE& Righ
 // The pitch actually applied, measured: 2 ms power envelopes of the source (at its rate) and of the output
 // (48 kHz); the time scale r that best maps the output's envelope onto the source's (least variance of their
 // log ratio, i.e. any constant gain is ignored) is the playback rate ratio. Searched over 0.5..2 in steps of
-// 0.0005 (0.4-1.7 cents). (A first/last-audible-sample duration was thrown off by the resampler's ringing at a
-// hard cut; a 10-90% energy span by onset detail: logs/m8/selftest-1/-2.)
+// 0.0005 (0.4-1.7 cents). (A first/last-audible-sample duration would be thrown off by the resampler's ringing
+// at a hard cut, a 10-90% energy span by onset detail.)
 static void Envelope( const TArray<DOUBLE>& Power, INT Window, TArray<DOUBLE>& Env )
 {
 	Env.Empty();
@@ -563,12 +562,12 @@ INT UUC2AudioSelfTestCommandlet::Main( const TCHAR* Parms )
 		Check( Unknown==0.f, FString::Printf( TEXT("duration of an unknown cue = %.1f"), Unknown ) );
 	}
 
-	// --- 7. HRTF (F-6): the same side source as the pan check, with OpenAL Soft's HRTF off and on (alcResetDeviceSOFT
+	// --- 7. HRTF: the same side source as the pan check, with OpenAL Soft's HRTF off and on (alcResetDeviceSOFT
 	// on the loopback device). Off: plain panning, no time difference (|lag| <= 2 frames: the far channel is 16 dB
 	// down and carries the reverb send). On: the near ear leads by a fraction of a millisecond and is still the
 	// louder one. Accepted: 8..48 frames (0.17..1.0 ms) at 48 kHz; a head's own ITD is ~0.6-0.8 ms at 90 degrees, and
-	// the correlation peak also carries the data set's filter delay (first measured: 42 frames, 0.875 ms,
-	// OpenAL Soft's embedded "Default HRTF"; logs/f6/selftest-1.out).
+	// the correlation peak also carries the data set's filter delay (about 42 frames with OpenAL Soft's embedded
+	// "Default HRTF").
 	GWarn->Logf( TEXT("--- hrtf: a source 2000 units to the right / left, OpenAL Soft's HRTF off and on (interaural time and level difference)") );
 	for( INT On=0; On<=1; On++ )
 	{

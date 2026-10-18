@@ -1,16 +1,12 @@
 /*=============================================================================
-	WebRTCDrv.h: the browser's network driver (E-2, web build only).
+	WebRTCDrv.h: the browser's network driver (web build only).
 
-	Ported from engine-ut2004's Source/WebRTCDrv (ufront's WebRTC net driver) and adapted to UC2's
-	UNetDriver (Engine/Inc/UnNetDrv.h: FLOAT time, the "standby cheat" receive clock, PreServerTravel).
-	Packets travel over the frontend's WebRTC data channel, which the glue opens reliable and ordered
-	(measured: "rtc=ordered=true/maxRetx=null", docs/porting/analysis/webrtc.md): a packet is lost only
-	while a pipe is down and the glue reconnects, and the engine's own acks and resends (written for lossy
-	datagrams, network.md) run on top of it. The transport lives in
+	The WebRTC net driver on UC2's UNetDriver (Engine/Inc/UnNetDrv.h: FLOAT time, the "standby cheat"
+	receive clock, PreServerTravel). Packets travel over the frontend's WebRTC data channel, which the
+	glue opens reliable and ordered: a packet is lost only while a pipe is down and the glue reconnects,
+	and the engine's own acks and resends (written for lossy datagrams) run on top of it. The transport lives in
 	the frontend (@ufront/glue, packages/glue/src/webrtc); the engine reaches it through the webrtc_*
 	imports that vendor/glue/webrtc-shim.js forwards to Module.UE.net.
-
-	Notebook: docs/porting/analysis/webrtc.md.
 =============================================================================*/
 
 #ifndef _INC_WEBRTCDRV
@@ -102,7 +98,7 @@ class UWebRTCNetDriver : public UNetDriver
 	// As UTcpNetDriver (IpDrv/Inc/UnTcpNetDriver.h): connections still loading are not force-failed at a
 	// server travel, which is what the native travel tests verified.
 	void PreServerTravel() {}
-	// G-10/G-10b (owner: "yes exclude webrtc"): no standby check over WebRTC, neither half (see the .cpp).
+	// No standby check over WebRTC, neither half (the .cpp says why).
 	UBOOL StandbyCheckEnabled() const;
 
 	// UWebRTCNetDriver interface.

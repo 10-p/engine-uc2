@@ -1,4 +1,4 @@
-# G-6 helpers for tools/dev/m10-inject.py scenarios (loaded with `pyfile`; tools/dev/g6-splitscreen.sh).
+# Split-screen helpers for tools/dev/m10-inject.py scenarios (loaded with `pyfile`; tools/dev/g6-splitscreen.sh).
 # They read V/VS (the `vprobe` results) and compute what Scion's USplitScreenMgr::UpdateSizes
 # (Source/Engine/Src/UnSplitScreenMgr.cpp) gives each split view, so a check compares the engine with the
 # layout written down independently here.
@@ -115,7 +115,7 @@ def only_moved4(tags, k, far=50.0, still=2.0):
     return tot[k] > far and all(t < still for i, t in enumerate(tot) if i != k)
 
 
-# G-9/G-11 (PadsStartAtPlayerTwo=True): the keyboard and the mouse are player one on port 0, a pad joins on port 1..3, so the
+# With PadsStartAtPlayerTwo=True the keyboard and the mouse are player one on port 0, a pad joins on port 1..3, so the
 # virtual pad v of the test channel is port v+1. The helpers below take both.
 def spawn_port(port, vpad, tries=10):
     """Press virtual pad vpad's fire until the split player on port `port` has a pawn."""

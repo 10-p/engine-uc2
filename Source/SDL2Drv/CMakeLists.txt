@@ -1,5 +1,5 @@
 #=============================================================================
-# SDL2Drv - the SDL2 client and viewport (window, keyboard, mouse; pads at M10).
+# SDL2Drv - the SDL2 client and viewport (window, keyboard, mouse, game pads).
 #=============================================================================
 
 project(SDL2Drv CXX)

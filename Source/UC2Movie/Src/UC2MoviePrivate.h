@@ -6,7 +6,6 @@
 	reader on its own file handle and pulls only its own pages, so memory stays bounded (one 16 KB read
 	buffer, the pages of one stream, one decoded picture) whatever the interleaving of the file.
 	No thread: everything happens in Advance(), called by the render device or the full-screen loop.
-	Design and evidence: docs/porting/analysis/video.md.
 =============================================================================*/
 
 #ifndef _INC_UC2MOVIEPRIVATE

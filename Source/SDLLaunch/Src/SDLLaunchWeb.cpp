@@ -1,10 +1,9 @@
 /*=============================================================================
-	SDLLaunchWeb.cpp: what the launcher needs only in the browser (M4w).
+	SDLLaunchWeb.cpp: what the launcher needs only in the browser.
 
-	Compiled only under Emscripten (Source/SDLLaunch/CMakeLists.txt). SDLLaunch.cpp calls
+	Compiled only under Emscripten (added by Source/SDLLaunch/cmake/Web.cmake). SDLLaunch.cpp calls
 	UC2WebSetEngine() once the engine exists and UC2WebYieldFrame() once per frame, both inside
-	#ifdef __EMSCRIPTEN__ blocks. The arrangement is engine-ut2004's (its SDLLaunch.cpp, ufront 2.13.2
-	and 2.43); notebook: docs/porting/analysis/web-smoke.md (W1).
+	#ifdef __EMSCRIPTEN__ blocks.
 =============================================================================*/
 
 // Before the engine headers: emscripten.h pulls in <time.h>, and UnFile.h #defines clock().
@@ -21,8 +20,8 @@
 static UEngine* GUC2WebEngine = NULL;
 
 //
-// The tab hidden: the engine keeps ticking, only the sound is silenced (engine-ut2004's SDLLaunch.cpp, D-16 /
-// BRWSR-03; F-4b). The listener gain is the master volume of the current OpenAL context, which UC2ALAudio never
+// The tab hidden: the engine keeps ticking, only the sound is silenced. The listener gain is the master volume
+// of the current OpenAL context, which UC2ALAudio never
 // sets (it sets each source's gain), so this does not fight the game's own volumes. Registered from the engine's
 // worker, so the callback runs on that thread, between frames (at the yield).
 //
@@ -50,11 +49,11 @@ void UC2WebSetEngine( UEngine* Engine )
 //
 // main() runs on a worker (-sPROXY_TO_PTHREAD) in a blocking loop. Everything else that must reach that
 // thread arrives as an event-loop task: SDL's input events (registered with the calling thread as the
-// callback thread), the host's console commands (postMessage, see vendor/glue/wasmfs-shim.js), and later
+// callback thread), the host's console commands (postMessage, vendor/glue/wasmfs-shim.js), and later
 // the composite of an OffscreenCanvas frame. UGameEngine::GetMaxTickRate() is 0 for a standalone client,
 // so the launcher's limiter never sleeps and nothing would ever be delivered. Asyncify unwinds the engine
-// stack here and resumes it from a 0 ms timer: engine-ut2004 measured that a timer task, unlike a
-// MessagePort task, also gives the compositor a rendering opportunity between frames (ufront 2.43).
+// stack here and resumes it from a 0 ms timer: a timer task, unlike a MessagePort task, also gives the
+// compositor a rendering opportunity between frames.
 // EM_ASYNC_JS registers itself as an Asyncify import (__asyncjs__*), no ASYNCIFY_IMPORTS entry needed.
 //
 EM_ASYNC_JS( void, uc2_web_yield_frame, (void), {
@@ -78,7 +77,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE char* ue_exec_command( const char* Cmd )
 	if( GUC2WebEngine && Cmd )
 	{
 		FStringOutputDevice Out;
-		// M11: what the engine itself does not take goes to the first viewport, as a line typed
+		// What the engine itself does not take goes to the first viewport, as a line typed
 		// on the console would (the render device's commands, the player's exec functions).
 		if( !GUC2WebEngine->Exec( Cmd, Out ) && GUC2WebEngine->Client && GUC2WebEngine->Client->Viewports.Num() )
 			GUC2WebEngine->Client->Viewports(0)->Exec( Cmd, Out );

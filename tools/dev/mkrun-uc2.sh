@@ -2,13 +2,13 @@
 # Assemble a native run tree from a build directory.
 #
 #   tools/dev/mkrun-uc2.sh <build-dir> [<tree-name> [<more-build-dirs>...]]
-#   tools/dev/mkrun-uc2.sh build-native            ->  <WorkUC2>/run/native
+#   tools/dev/mkrun-uc2.sh build-native            ->  <repo>/../run/native
 #   tools/dev/mkrun-uc2.sh build-native m4w build-wasm   ->  native and web binaries in one tree
 #
 # The tree is hard links into the canonical asset tree for the content folders (they are never written in
 # place; symlinks would break the engine's package lookup) and a real copy of System/, because the engine
 # derives and rewrites its inis and writes its logs there. The build's executables go into System/.
-# Re-running replaces the tree: it only ever removes <WorkUC2>/run/<tree-name>, which it created itself.
+# Re-running replaces the tree: it only ever removes <repo>/../run/<tree-name>, which it created itself.
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -36,13 +36,13 @@ done
 cp -a "$assets/System" "$run/System"
 chmod -R u+w "$run/System"
 
-# M8: the cooked audio (tools/cook-audio.py: Sounds/ and Music/), hard-linked like the content folders. The
+# The cooked audio (tools/cook-audio.py: Sounds/ and Music/), hard-linked like the content folders. The
 # audio device reads ../Sounds and ../Music from System/, as the Xbox read ..\Sounds. A missing cooked tree
 # only means a silent game.
 cooked=${UC2_COOKED_DIR:-$work/assets/uc2-cooked}
-# Since asset tree v1 (tools/dev/mkassets-uc2.sh) the cooked folders are in the asset tree and arrive with the
-# content folders above; these links only serve an older asset tree. F-6: an explicit UC2_COOKED_DIR (a cook
-# that is not installed yet, e.g. <WorkUC2>/logs/f6/cooked) replaces the asset tree's Sounds/ and Music/ links.
+# In an asset tree made by tools/dev/mkassets-uc2.sh the cooked folders are in the tree and arrive with the
+# content folders above; these links serve a tree without them. An explicit UC2_COOKED_DIR (a cook
+# that is not installed yet, e.g. <repo>/../logs/f6/cooked) replaces the asset tree's Sounds/ and Music/ links.
 for d in Sounds Music; do
   if [ -n "${UC2_COOKED_DIR:-}" ] && [ -d "$cooked/$d" ]; then
     rm -rf "${run:?}/$d"
@@ -56,9 +56,9 @@ for d in Sounds Music; do
   fi
 done
 
-# M16: UC2_XBOX_SOUNDS plays the shipped Xbox banks instead (UC2ALAudio reads Sounds/<Bank>.xsb + .xwb itself where
-# no cooked file is there; docs/porting/analysis/xbox-audio-runtime.md):
-#   UC2_XBOX_SOUNDS=1    Sounds/ = the shipped banks only (hard links of <WorkUC2>/epic-sources/Sounds, which is the
+# UC2_XBOX_SOUNDS plays the shipped Xbox banks instead (UC2ALAudio reads Sounds/<Bank>.xsb + .xwb itself where
+# no cooked file is there):
+#   UC2_XBOX_SOUNDS=1    Sounds/ = the shipped banks only (hard links of <repo>/../epic-sources/Sounds, which is the
 #                        retail disc's Sounds/ by name and size), and no Music/ (the disc has none: its music is
 #                        Sounds/M_<Song>.xwb). A retail-disc tree.
 #   UC2_XBOX_SOUNDS=add  the cooked Sounds/ and Music/ as above, plus the shipped .xsb/.xwb beside them (the device
@@ -82,7 +82,7 @@ case "${UC2_XBOX_SOUNDS:-}" in
   *) echo "UC2_XBOX_SOUNDS must be 1 or add" >&2; exit 1;;
 esac
 
-# M9: the cooked movies (tools/cook-movies.py: Movies/ and Textures/Movies/), hard-linked the same way. The
+# The cooked movies (tools/cook-movies.py: Movies/ and Textures/Movies/), hard-linked the same way. The
 # player reads ../Movies and ../Textures/Movies from System/, as the Xbox read D:\Movies and D:\Textures\Movies.
 if [ -d "$run/Movies" ]; then
   rm -rf "$run/Movies/.cook"
@@ -101,11 +101,11 @@ fi
 cp -f "$repo"/Engine/Config/*.ini "$run/System/"
 
 # Script packages built from source over the asset tree's:
-# - T3: the build's own, <build-dir>/Scripts/System/*.u (the `scripts` target: the shipped .u decompiled, patches/
+# - the build's own, <build-dir>/Scripts/System/*.u (the `scripts` target: the shipped .u decompiled, patches/
 #   applied, compiled; only the packages the patch sets rebuild are there). Present unless the build was configured
 #   with -DUC2_SCRIPT_PATCHES=OFF.
-# - M14: UC2_SCRIPTS=<dir> takes them from <dir> instead (e.g. tools/dev/script-build.sh's <WorkUC2>/run/m14-make/System,
-#   or <WorkUC2>/assets/uc2-shipped/System); UC2_SCRIPTS=none: none at all (the asset tree's .u, a "shipped" tree).
+# - UC2_SCRIPTS=<dir> takes them from <dir> instead (e.g. tools/dev/script-build.sh's <repo>/../run/m14-make/System,
+#   or <repo>/../assets/uc2-shipped/System); UC2_SCRIPTS=none: none at all (the asset tree's .u, a "shipped" tree).
 scripts_dir=${UC2_SCRIPTS:-}
 scripts_from="UC2_SCRIPTS"
 if [ -z "$scripts_dir" ] && [ -d "$build/Scripts/System" ]; then
@@ -129,11 +129,11 @@ copy_bins() {
   for bin in "$1"/Source/UCC/ucc-bin "$1"/Source/SDLLaunch/uc2*; do
     [ -f "$bin" ] && [ -x "$bin" ] && cp -f "$bin" "$run/System/"
   done
-  # M8: the OpenAL Soft the build fetched; UC2ALAudio loads it from beside uc2.bin (dlopen).
+  # The OpenAL Soft the build fetched; UC2ALAudio loads it from beside uc2.bin (dlopen).
   if [ -f "$1"/_deps/openalsoft-build/libopenal.so.1 ]; then
     cp -fL "$1"/_deps/openalsoft-build/libopenal.so.1 "$run/System/libopenal.so.1"
   fi
-  # M12: a Windows (MinGW) build: ucc.exe, uc2.exe and the OpenAL32.dll the build compiled (LoadLibrary'd
+  # A Windows (MinGW) build: ucc.exe, uc2.exe and the OpenAL32.dll the build compiled (LoadLibrary'd
   # from beside the exe). Run under wine from System/ (tools/dev/m12-wine-smoke.sh).
   for bin in "$1"/Source/UCC/ucc.exe "$1"/Source/SDLLaunch/uc2.exe "$1"/_deps/openalsoft-build/OpenAL32.dll; do
     [ -f "$bin" ] && cp -f "$bin" "$run/System/"

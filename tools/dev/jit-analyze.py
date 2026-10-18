@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Jitter of the player's pawn on the screen, from the engine's FRAMETRACE lines ("frametrace <tag> <i> ...") (docs/porting/analysis/jitter.md).
+"""Jitter of the player's pawn on the screen, from the engine's FRAMETRACE lines ("frametrace <tag> <i> ...").
 
     jit-analyze.py <engine-log> [--json out.json] [--tags run,back,...] [--strip <tag>:<first>:<count>]
 
@@ -20,11 +20,10 @@ the previous frame's) and, over them:
               least-squares slope `ahead = a + b (v dt)`. b = 1: the camera of the frame was computed before the
               pawn's move of that frame (each frame the pawn is drawn its own move ahead of its rest place);
               b = 0: the pawn's place in front of the camera does not depend on the frame time.
-              The bob MUST be in it (D-4, 2026-10-10): the camera's target is pawn + WalkBob, and on a strafe the
+              The bob must be in it: the camera's target is pawn + WalkBob, and on a strafe the
               bob's sideways sway (+-3.4 units at 430 units/s, about 1.3 Hz) lies along the velocity, so the fit of
               the pawn alone takes that sway for a frame-time dependence wherever a 1.3 s segment's frame times
-              happen to correlate with its phase: the browser spec's b = 0.217-0.247 on strafe right (a19) was
-              exactly that (the same trace: 0.000 with the bob, 0.217 without; forward and back are unaffected,
+              happen to correlate with its phase (forward and back are unaffected,
               their bob is across the velocity). `ahead_nobob` reports the fit without the bob for comparison only.
   root        the same jitter for the mesh's root bone as posed for the frame (rscr)
   bob         the largest |WalkBob| (the camera's target includes it)

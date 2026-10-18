@@ -2,7 +2,7 @@
 	UnThreadingPosix.cpp: pthread implementation of the UnThreadingBase.h
 	interfaces (the counterpart of UnThreadingWindows.cpp).
 
-	engine-uc2 (M1). See UnThreadingPosix.h for what differs from Win32.
+	UnThreadingPosix.h says what differs from Win32.
 =============================================================================*/
 
 #if !defined(_MSC_VER)
@@ -779,7 +779,7 @@ FRunnableThread* FThreadFactoryPosix::CreateThread(FRunnable* InRunnable,
 void FThreadFactoryPosix::Destroy(FRunnableThread* InThread)
 {
 	// FRunnableThread has no virtual destructor (UnThreadingBase.h), so delete through the concrete type
-	// this factory created; FThreadFactoryWin deletes through the base (see core-port.md).
+	// this factory created (FThreadFactoryWin deletes through the base).
 	delete (FRunnableThreadPosix*)InThread;
 }
 

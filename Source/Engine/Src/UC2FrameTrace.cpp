@@ -1,17 +1,15 @@
 /*=============================================================================
 	UC2FrameTrace.cpp: a per-frame trace of what the first viewport draws around
-	the player's own pawn. uc2 port; not Epic's. Quiet unless asked for.
+	the player's own pawn. Quiet unless asked for.
 
-	Why: the owner saw the player's pawn lag and snap in front of the third-person
-	camera (docs/porting/analysis/jitter.md). The trace says, for every drawn frame,
-	where the camera of that frame was, where the pawn was drawn, and where on the
-	screen that is, so the jitter is a number.
+	For every drawn frame the trace says where the camera of that frame was, where the
+	pawn was drawn and where on the screen that is, so a pawn that lags or snaps in front
+	of the third-person camera shows up as numbers.
 
 	Console command (also the SDL2 test channel's "exec ...", the web's ue_exec_command):
 	  FRAMETRACE <frames> [tag]   one "FrameTrace:" line for each of the next <frames>
 	                              frames the first viewport draws with a pawn to view
 	                              (0 stops it)
-	(F-4e: the -frametrace=<frames> command-line switch is gone; the console command is the only way.)
 
 	A line (all positions world units, rotations Unreal units, screen in viewport pixels):
 	  frametrace <tag> <i> t=<Level.TimeSeconds> dt=<the frame's DeltaSeconds> cam=(x,y,z) camrot=(p,y,r)
@@ -20,7 +18,7 @@
 	pawn: the view target's Location; bob: its WalkBob; root: the skeletal mesh's root bone as
 	posed for this frame (world space; = pawn when the mesh is not skeletal); scr / rscr: pawn /
 	root projected with this frame's camera as FCameraSceneNode does; look: which device owns the
-	look (UCPlayerInput.bMouseOwnsLook, D-6), "-" without one.
+	look (UCPlayerInput.bMouseOwnsLook), "-" without one.
 =============================================================================*/
 
 #include "EnginePrivate.h"

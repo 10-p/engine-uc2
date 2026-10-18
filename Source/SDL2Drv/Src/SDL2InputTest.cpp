@@ -1,5 +1,5 @@
 /*=============================================================================
-	SDL2InputTest.cpp: the M10 input test channel (see SDL2InputTest.h).
+	SDL2InputTest.cpp: the input test channel (SDL2InputTest.h).
 
 	Only active with the test key [SDL2Drv.SDL2Client] InputTestFile=<file> (-ini:). Nothing here runs in a normal game.
 =============================================================================*/
@@ -52,7 +52,7 @@ static FString GetPropText( UObject* Obj, const TCHAR* Name )
 }
 
 //
-// D-6: a struct property's bytes (a vector or rotator of a script class), NULL if there is none.
+// A struct property's bytes (a vector or rotator of a script class), NULL if there is none.
 //
 static BYTE* GetStructPropData( UObject* Obj, const TCHAR* Name, const TCHAR* StructName )
 {
@@ -77,7 +77,7 @@ static FRotator GetRotatorProp( UObject* Obj, const TCHAR* Name )
 }
 
 //
-// D-6: the i-th pawn of another controller (bots and other players), in the level's controller list order.
+// The i-th pawn of another controller (bots and other players), in the level's controller list order.
 //
 static APawn* OtherPawn( APlayerController* PC, INT Index )
 {
@@ -233,7 +233,7 @@ UBOOL FSDL2InputTest::Execute( USDL2Client* Client, const TCHAR* Line )
 	const TCHAR* Cmd = Line;
 	if( ParseCommand(&Cmd,TEXT("PAD")) )
 	{
-		// G-6: an optional virtual pad index first ("pad 2 button start 1"); without one, pad 0.
+		// An optional virtual pad index first ("pad 2 button start 1"); without one, pad 0.
 		INT Pad = 0;
 		while( *Cmd==' ' )
 			Cmd++;
@@ -342,7 +342,7 @@ UBOOL FSDL2InputTest::Execute( USDL2Client* Client, const TCHAR* Line )
 	}
 	else if( ParseCommand(&Cmd,TEXT("KEYS")) )
 	{
-		// D-9: the first viewport's bindings of the named keys, one line: keys <tag> <Key>="<binding>" ...
+		// The first viewport's bindings of the named keys, one line: keys <tag> <Key>="<binding>" ...
 		FString Tag, Name, Out;
 		ParseToken( Cmd, Tag, 0 );
 		UInput* Input = Client->Viewports.Num() ? Client->Viewports(0)->Input : NULL;
@@ -357,7 +357,7 @@ UBOOL FSDL2InputTest::Execute( USDL2Client* Client, const TCHAR* Line )
 	}
 	else if( ParseCommand(&Cmd,TEXT("MOUSE")) )
 	{
-		// D-6: exact relative motion, as SDL delivers a mouse's motion in relative mode (xrel/yrel in counts,
+		// Exact relative motion, as SDL delivers a mouse's motion in relative mode (xrel/yrel in counts,
 		// y down = +). Pushed into SDL's queue, so it reaches USDL2Viewport::HandleEvent through PumpEvents like
 		// a real event. One per tick: the harness paces a path by writing one line per step.
 		FString SX, SY;
@@ -383,7 +383,7 @@ UBOOL FSDL2InputTest::Execute( USDL2Client* Client, const TCHAR* Line )
 	}
 	else if( ParseCommand(&Cmd,TEXT("PLACE")) || ParseCommand(&Cmd,TEXT("AIM")) )
 	{
-		// D-6 lock-on set-up (test only): put another pawn where the test wants it, or face it.
+		// Lock-on set-up (test only): put another pawn where the test wants it, or face it.
 		UBOOL bPlace = appStrnicmp( Line, TEXT("PLACE"), 5 )==0;
 		FString SI, SD, SA;
 		ParseToken( Cmd, SI, 0 );
@@ -422,7 +422,7 @@ UBOOL FSDL2InputTest::Execute( USDL2Client* Client, const TCHAR* Line )
 	}
 	else if( ParseCommand(&Cmd,TEXT("WATCH")) )
 	{
-		// D-6: a state line every client tick for the next <ticks> ticks.
+		// A state line every client tick for the next <ticks> ticks.
 		FString Ticks, Tag;
 		ParseToken( Cmd, Ticks, 0 );
 		if( !ParseToken( Cmd, Tag, 0 ) )
@@ -472,7 +472,7 @@ void FSDL2InputTest::Probe( USDL2Client* Client, const TCHAR* Tag )
 	if( !Text.Len() && Page )
 		Text = GetPropText( FindEditBoxByName( Page, 0 ), TEXT("TextStr") );
 	FString Item = GetListItem( Focus );
-	// D-7/D-8: the console's typing line, the scoreboard and the player's FOV (base and desired).
+	// The console's typing line, the scoreboard and the player's FOV (base and desired).
 	UConsole* Console = Cast<UConsole>( Viewport->Console );
 	FString Typed = Console ? Console->TypedStr.Replace( TEXT("\""), TEXT("'") ) : FString();
 
@@ -499,7 +499,7 @@ void FSDL2InputTest::Probe( USDL2Client* Client, const TCHAR* Tag )
 		PC->myHUD ? (INT)PC->myHUD->bShowScores : -1,
 		PC->FovAngle, PC->DesiredFOV,
 		Viewport->SizeX, Viewport->SizeY );
-	// D-6: the camera the player sees (UCPlayerController's per-frame view), lock-on state and which device owns
+	// The camera the player sees (UCPlayerController's per-frame view), lock-on state and which device owns
 	// the look (UCPlayerInput), on a line of their own so older parsers of the line above are unaffected.
 	FVector  Cam    = GetVectorProp( PC, TEXT("CurrentCameraLocation") );
 	FRotator CamRot = GetRotatorProp( PC, TEXT("CurrentCameraRotation") );
@@ -514,7 +514,7 @@ void FSDL2InputTest::Probe( USDL2Client* Client, const TCHAR* Tag )
 		*GetPropText( PC->PlayerInput, TEXT("bInvertMouseLook") ),
 		*GetPropText( PC->PlayerInput, TEXT("bInvertMouse") ),
 		*GetPropText( PC, TEXT("bAutoCenterPitch") ) );
-	// D-9: the caption of the focused control, or of the nearest control above it in the focus chain that has
+	// The caption of the focused control, or of the nearest control above it in the focus chain that has
 	// one (a GUILabelButton; the slider of a menu option has none, the option has), on a line of its own.
 	FString Caption;
 	{
@@ -532,7 +532,7 @@ void FSDL2InputTest::Probe( USDL2Client* Client, const TCHAR* Tag )
 			Caption = GetPropText( Chain[i], TEXT("Caption") );
 	}
 	debugf( SDL2INPUT, TEXT("probe4 %s caption=\"%s\""), Tag, *Caption.Replace( TEXT("\""), TEXT("'") ) );
-	// D-6: the other pawns (lock-on targets), with line of sight and the view rotation that faces them
+	// The other pawns (lock-on targets), with line of sight and the view rotation that faces them
 	for( INT i=0; ; i++ )
 	{
 		APawn* Other = OtherPawn( PC, i );
@@ -548,7 +548,7 @@ void FSDL2InputTest::Probe( USDL2Client* Client, const TCHAR* Tag )
 }
 
 //
-// G-6: every viewport of the client: its rectangle of the window, scales, the split-screen flags, its pad and
+// Every viewport of the client: its rectangle of the window, scales, the split-screen flags, its pad and
 // its player (pawn location and view rotation, HUD class), for tools/dev/g6-splitscreen.sh.
 //
 void FSDL2InputTest::ProbeViewports( USDL2Client* Client, const TCHAR* Tag )
@@ -559,7 +559,7 @@ void FSDL2InputTest::ProbeViewports( USDL2Client* Client, const TCHAR* Tag )
 	USplitScreenMgr* Mgr = Client->GetSplitScreenMgr();
 	INT ScreenX = 0, ScreenY = 0;
 	Client->GetInitScreenSize( ScreenX, ScreenY );
-	// H-3: the window's mouse capture (the browser's pointer lock) and whether a menu wants the cursor, at the end.
+	// The window's mouse capture (the browser's pointer lock) and whether a menu wants the cursor, at the end.
 	USDL2Viewport* Win = Client->Viewports.Num() ? (USDL2Viewport*)Client->Viewports(0) : NULL;
 	debugf( SDL2INPUT, TEXT("vps %s n=%i split=%i screen=%ix%i captured=%i cursor=%i"), Tag, Client->Viewports.Num(), Mgr ? Mgr->NumActiveSplitViews() : 0, ScreenX, ScreenY,
 		Win ? (INT)Win->Captured : 0, (INT)Client->CursorWanted() );
@@ -586,7 +586,7 @@ void FSDL2InputTest::ProbeViewports( USDL2Client* Client, const TCHAR* Tag )
 			V->GUIController ? (INT)V->GUIController->bActive : -1,
 			Pawn && Pawn->Weapon ? (INT)Pawn->Weapon->FlashCount : -1,
 			Pawn ? Pawn->Acceleration.X : 0.f, Pawn ? Pawn->Acceleration.Y : 0.f,
-			// H-3: which device owns this player's look (UCPlayerInput.bMouseOwnsLook of the rebuilt package; "-" without).
+			// Which device owns this player's look (UCPlayerInput.bMouseOwnsLook of the rebuilt package; "-" without).
 			PC && PC->PlayerInput && FindField<UBoolProperty>( PC->PlayerInput->GetClass(), TEXT("bMouseOwnsLook") )
 				? *GetPropText( PC->PlayerInput, TEXT("bMouseOwnsLook") ) : TEXT("-"),
 			Pawn ? Pawn->GetClass()->GetName() : TEXT("None"),
@@ -597,7 +597,7 @@ void FSDL2InputTest::ProbeViewports( USDL2Client* Client, const TCHAR* Tag )
 }
 
 //
-// D-6: one compact line per client tick while a watch runs (time, view rotation, camera, pawn).
+// One compact line per client tick while a watch runs (time, view rotation, camera, pawn).
 //
 void FSDL2InputTest::Watch( USDL2Client* Client )
 {

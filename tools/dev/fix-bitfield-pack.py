@@ -10,7 +10,7 @@ it. The tag on the FIRST bitfield of a run is correct (script aligns there too) 
 A second rule, for headers generated from script only (the ones with the "automatically generated" banner):
 the first data member of a class gets GCC_PACK(4) unless it is a bitfield (those are tagged already). Without
 it GCC places a small first member (BYTE, _WORD) in the unused tail bytes of the parent class, which MSVC and
-the script linker never do. engine-ut2004's exporter has this rule (LastIt == NULL); UC2's had lost it.
+the script linker never do. UT2004's exporter has this rule (LastIt == NULL); UC2's does not.
 
   tools/dev/fix-bitfield-pack.py [--check] <header>...
 """

@@ -6,7 +6,7 @@ Revision history:
 	* Created by Tim Sweeney.
 =============================================================================*/
 
-#if _MSC_VER	// engine-uc2: MinGW takes the portable path (FFileManagerUnix, POSIX threading, argv)
+#if _MSC_VER	// MinGW takes the portable path (FFileManagerUnix, POSIX threading, argv)
 	#include <windows.h>
 #else
 	#include <errno.h>
@@ -42,13 +42,13 @@ Revision history:
 #include "UCElements.h"
 #include "UCGameplay.h"
 #include "GUI.h"
-#if UC2_WITH_UC2ALAUDIO	// M8: the cooked-audio check commandlet (UC2ALAudio.UC2AudioCheck)
+#if UC2_WITH_UC2ALAUDIO	// the cooked-audio check commandlet (UC2ALAudio.UC2AudioCheck)
 #include "UC2ALAudio.h"
 #endif
-#if UC2_WITH_UC2MOVIE	// M9: the movie player and its self-test commandlet (UC2Movie.UC2MovieSelfTest)
+#if UC2_WITH_UC2MOVIE	// the movie player and its self-test commandlet (UC2Movie.UC2MovieSelfTest)
 #include "UC2Movie.h"
 #endif
-#if UC2_WITH_EDITOR	// M14: the script compiler (ucc-bin make), the header exporter and the editor commandlets
+#if UC2_WITH_EDITOR	// the script compiler (ucc-bin make), the header exporter and the editor commandlets
 void UC2InitializeEditorRegistrants( INT& Lookup );	// Editor/Src/UC2EditorRegistrants.cpp
 UBOOL UC2VerifyEditorClasses();						// Editor/Src/UC2EditorRegistrants.cpp
 #endif
@@ -162,9 +162,9 @@ extern CORE_API void GetNativePlaceholder( INT i, const TCHAR*& Package, const T
 extern CORE_API UBOOL IsNativePlaceholder( UProperty* Property );
 extern CORE_API const TCHAR* GetNativePlaceholderCppTypeAt( INT i );
 #endif
-// M13: `verifyclasses DUMP=<file>` writes the linked layout of every class, script struct and function (its
+// `verifyclasses DUMP=<file>` writes the linked layout of every class, script struct and function (its
 // parameters) for tools/dev/m13-layout-check.py, which compares it with the DWARF of the same binary. Opt-in on
-// every width (the 32-bit dump is the reference for "same as before"); nothing else changes without DUMP=.
+// every width (the 32-bit dump is the reference); nothing else changes without DUMP=.
 static void DumpScriptLayouts( const TCHAR* DumpFile )
 {
 	FArchive* Out = GFileManager->CreateFileWriter( DumpFile );
@@ -204,7 +204,7 @@ static void DumpScriptLayouts( const TCHAR* DumpFile )
 }
 
 #if PLATFORM_64BITS
-// M13: the 64-bit layout proof (docs/porting/analysis/64bit.md). The shipped packages were compiled for 32-bit
+// The 64-bit layout check. The shipped packages were compiled for 32-bit
 // pointers, so at 64 bits "C++ and script agree" means: the property system, linking those packages with this
 // target's rules (object references 8 bytes aligned to 4, arrays/strings sizeof(FArray), the native
 // placeholders of UnClass.cpp), gives every native class the size and member offsets the C++ compiler gives it.
@@ -257,7 +257,7 @@ static UBOOL VerifyNativeLayouts64( const TCHAR* DumpFile )
 		else
 		{
 			debugf( TEXT("VERIFY: placeholder %s.%s.%s offset %i, C++ size %i (%s)"), Pkg, StructName, PropName, Found->Offset, Size, Kind ? TEXT("array element") : TEXT("member") );
-			// T2: the header exporter writes a PTRINT row as `PTRINT X[ArrayDim]` / `TArrayNoInit<PTRINT> X`; the
+			// The header exporter writes a PTRINT row as `PTRINT X[ArrayDim]` / `TArrayNoInit<PTRINT> X`; the
 			// size Link gives it must be that spelling's size.
 			const TCHAR* CppType = GetNativePlaceholderCppTypeAt( i );
 			INT Spelled = Kind ? (INT)sizeof(PTRINT) : Found->ArrayDim * (INT)sizeof(PTRINT);
@@ -323,7 +323,7 @@ static UBOOL VerifyNativeClasses()
 	#undef AUTOGENERATE_NAME
 	#undef NAMES_ONLY
 	#undef VERIFY_CLASS_SIZES
-#if UC2_WITH_EDITOR	// M14: the Editor package's script/C++ layouts too
+#if UC2_WITH_EDITOR	// the Editor package's script/C++ layouts too
 	debugf( TEXT("VERIFY: loading package Editor") );
 	UObject::LoadPackage( NULL, TEXT("Editor"), LOAD_NoFail );
 	if( !UC2VerifyEditorClasses() )
@@ -344,8 +344,8 @@ static UBOOL VerifyNativeClasses()
 #endif
 
 #if __STATIC_LINK && !defined(_MSC_VER)
-// M13: "ucc profiletest save|load <profile> <export.txt>": the save game format across pointer widths.
-// (C-2 adds list|exists|delete, see below; G-7 adds make <profile> <export.txt> [Character=<class>].)
+// "ucc profiletest save|load|make|list|exists|delete <profile> <export.txt> [Character=<class>]": the save
+// game format across pointer widths.
 // save: a profile of the configured class with a deterministic non-default value in every plain property
 // (ints, floats, bytes, bools, names, strings), written through ULoadSaveManager as the game does
 // (System/Profiles/<profile>/AVARIS_PROFILE.PRO); load: read it back. Either way every property is exported as
@@ -359,8 +359,8 @@ static UBOOL ProfileTest( const TCHAR* Parms )
 	UObject::LoadPackage( NULL, TEXT("Engine"), LOAD_NoFail );
 	ULoadSaveManager* Manager = ConstructObject<ULoadSaveManager>( ULoadSaveManager::StaticClass() );
 	Manager->Init( NULL );
-	// C-2: "list" writes the names ListGameObjects finds (one per line) to <export.txt>; "exists" and "delete" return
-	// whether the profile <profile> exists / was deleted (Profiles/<name>/AVARIS_PROFILE.PRO on every build since G-7).
+	// "list" writes the names ListGameObjects finds (one per line) to <export.txt>; "exists" and "delete" return
+	// whether the profile <profile> exists / was deleted (Profiles/<name>/AVARIS_PROFILE.PRO).
 	if( Mode==TEXT("LIST") )
 	{
 		TArray<FString> Names;
@@ -378,7 +378,7 @@ static UBOOL ProfileTest( const TCHAR* Parms )
 	UClass* Cls = Manager->getGameProfileClass() ? Manager->getGameProfileClass() : UPlayerProfile::StaticClass();
 	UPlayerProfile* Profile = ConstructObject<UPlayerProfile>( Cls );
 	UBOOL Ok;
-	// G-7: "make" saves a profile with the class's DEFAULT values (a new player's profile, playable, unlike "save"'s
+	// "make" saves a profile with the class's default values (a new player's profile, playable, unlike "save"'s
 	// test pattern) and, given Character=<class>, that character (tools/dev/net-test.py profile-login).
 	if( Mode==TEXT("MAKE") )
 	{
@@ -526,8 +526,8 @@ int main( int argc, char* argv[] )
 		#endif
 		
 		// Parse command line.
-		// 4096, Core's GCmdLine (F-4 follow-up: -ini: tokens make long lines; Epic's 1024 had no bound check here and
-		// overflowed the stack). A token that does not fit is dropped whole.
+		// 4096, Core's GCmdLine (-ini: tokens make long lines; Epic's 1024 had no bound check here). A token that does
+		// not fit is dropped whole.
 		TCHAR CmdLine[4096], *CmdLinePtr=CmdLine;
 		*CmdLinePtr = 0;
 		#if _MSC_VER
@@ -554,7 +554,7 @@ int main( int argc, char* argv[] )
 		#endif
 
 #if __STATIC_LINK && !defined(_MSC_VER) && PLATFORM_64BITS
-		// M13: verifyclasses lists every layout mismatch the class linker finds instead of stopping at the first.
+		// verifyclasses lists every layout mismatch the class linker finds instead of stopping at the first.
 		if( argc>1 && appStricmp(argv[1],"verifyclasses")==0 )
 			GLayoutWarnOnly = 1;
 #endif
@@ -584,13 +584,13 @@ int main( int argc, char* argv[] )
 			AUTO_INITIALIZE_REGISTRANTS_UCELEMENTS;
 			AUTO_INITIALIZE_REGISTRANTS_UCGAMEPLAY;
 			AUTO_INITIALIZE_REGISTRANTS_GUI;
-#if UC2_WITH_UC2ALAUDIO	// M8
+#if UC2_WITH_UC2ALAUDIO
 			AUTO_INITIALIZE_REGISTRANTS_UC2ALAUDIO;
 #endif
-#if UC2_WITH_UC2MOVIE	// M9
+#if UC2_WITH_UC2MOVIE
 			AUTO_INITIALIZE_REGISTRANTS_UC2MOVIE;
 #endif
-#if UC2_WITH_EDITOR	// M14: what AUTO_INITIALIZE_REGISTRANTS_EDITOR does (Editor/Src/UC2EditorRegistrants.cpp says why)
+#if UC2_WITH_EDITOR	// what AUTO_INITIALIZE_REGISTRANTS_EDITOR does (Editor/Src/UC2EditorRegistrants.cpp)
 			UC2InitializeEditorRegistrants( Lookup );
 #endif
 			check( Lookup < ARRAY_COUNT(GNativeLookupFuncs) );
@@ -630,7 +630,7 @@ int main( int argc, char* argv[] )
 		}
 #endif
 #if __STATIC_LINK && !defined(_MSC_VER)
-		else if( Token==TEXT("PROFILETEST") )	// M13
+		else if( Token==TEXT("PROFILETEST") )
 		{
 			const TCHAR* Parms = appCmdLine();
 			UBOOL Ok = ProfileTest( Parms );
@@ -746,9 +746,8 @@ int main( int argc, char* argv[] )
 					GIsEditor = Default->IsEditor;
 					GLazyLoad = Default->LazyLoad;
 					UCommandlet* Commandlet = ConstructObject<UCommandlet>( Class );
-					// uc2 port: keep it alive while it runs. Nothing references the commandlet object, so the garbage
-					// collection in the server's LoadMap freed it under its own Main() (AddressSanitizer:
-					// heap-use-after-free on Commandlet->ShowErrorCount below). Epic's and UT2004's UCC have the same.
+					// Keep it alive while it runs: nothing references the commandlet object, and the garbage collection
+					// in the server's LoadMap would free it under its own Main() (Commandlet->ShowErrorCount below).
 					Commandlet->AddToRoot();
 					Commandlet->InitExecution();
 					Commandlet->ParseParms( appCmdLine() );

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""G-6: measure the pictures of tools/dev/g6-splitscreen.sh's render part, per split-screen viewport.
+"""Measure the pictures of tools/dev/g6-splitscreen.sh's render part, per split-screen viewport.
 
     g6-measure.py <out-dir>          reads g6-render-<tag>[-nopp|-hud|-nohud|-nohud-nopp].png and g6-render-<tag>.json
 

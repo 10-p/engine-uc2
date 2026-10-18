@@ -28,7 +28,7 @@ IMPLEMENT_CLASS(UPendingLevel);
 	UNetPendingLevel implementation.
 -----------------------------------------------------------------------------*/
 
-// uc2 port: NetDriver->Time of the last control message the pending connection received (or 0 at creation).
+// NetDriver->Time of the last control message the pending connection received (or 0 at creation).
 static FLOAT GUC2HandshakeProgress = 0.f;
 
 //
@@ -70,7 +70,7 @@ UNetPendingLevel::UNetPendingLevel( UEngine* InEngine, const FURL& InURL )
 		bSameHostAsLast = false;
 	}
 
-	// uc2 port: handshake progress clock (Tick); one pending level exists at a time.
+	// Handshake progress clock (Tick); one pending level exists at a time.
 	GUC2HandshakeProgress = 0.f;
 
 	// Try to create network driver.
@@ -168,7 +168,7 @@ void UNetPendingLevel::NotifyReceivedText( UNetConnection* Connection, const TCH
 	guard(UNetPendingLevel::NotifyReceivedText);
 	check(Connection==NetDriver->ServerConnection);
 	debugf( NAME_DevNet, TEXT("PendingLevel received: %s  %f/%f"), Text, NetDriver->Time, Connection->LastReceiveTime );
-	GUC2HandshakeProgress = NetDriver->Time;	// uc2 port: see Tick
+	GUC2HandshakeProgress = NetDriver->Time;	// See Tick
 
 	// This client got a response from the server.
 	//scion bcl -- promoted from Championship
@@ -639,11 +639,11 @@ void UNetPendingLevel::Tick( FLOAT DeltaTime )
 	NetDriver->TickDispatch( DeltaTime );
 	NetDriver->TickFlush();
 
-	// uc2 port: a handshake that stops making progress before WELCOME fails after InitialConnectTimeout without a
+	// A handshake that stops making progress before WELCOME fails after InitialConnectTimeout without a
 	// control message from the server. The server's acks of our keep-alives keep the connection from timing out,
-	// so a server that lost its CHALLENGE and never resends it (Epic's UC2 ack logic, fixed in UnConn.cpp; an
-	// unfixed server still does it) left the client waiting in the menu forever. Measured from the last message
-	// received (UC2HandshakeProgress), after this tick's packets were processed, so a long frame on our side
+	// so a server that lost its CHALLENGE and never resends it (Epic's ack logic, which UnConn.cpp corrects; a server
+	// built without that still does it) would leave the client waiting in the menu forever. Counted from the last
+	// message received (GUC2HandshakeProgress), after this tick's packets were processed, so a long frame on this side
 	// (software GL starting up) does not count. Downloads start only after WELCOME and are not limited by this.
 	if( !Success && Error==TEXT("") && NetDriver->ServerConnection
 	&&	NetDriver->Time - GUC2HandshakeProgress > NetDriver->InitialConnectTimeout )

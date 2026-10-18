@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Run one Windows program of the M12 build under wine, in the M12 wine prefix, and leave nothing running.
+# Run one Windows program of the MinGW build under wine, in its own wine prefix, and leave nothing running.
 #
 #   bin/capped 3G 300 -- tools/dev/m12-wine.sh <dir> <program.exe> [arguments...]
-#   bin/capped 3G 300 -- tools/dev/m12-wine.sh <WorkUC2>/run/m12/System ucc.exe verifyclasses
+#   bin/capped 3G 300 -- tools/dev/m12-wine.sh <repo>/../run/m12/System ucc.exe verifyclasses
 #
-# Always call it through <WorkUC2>/bin/capped (CLAUDE.md, "Running anything").
+# Always call it through <repo>/../bin/capped (CLAUDE.md, "Running anything").
 #
-# - Prefix: $UC2_WINEPREFIX, default <WorkUC2>/.cache/wine-m12 (created on first use). Never ~/.wine.
+# - Prefix: $UC2_WINEPREFIX, default <repo>/../.cache/wine-m12 (created on first use). Never ~/.wine.
 # - No desktop integration and nothing installed: winemenubuilder, mscoree (Mono) and mshtml (Gecko) are
 #   disabled, so wine never asks to download anything; winedbg too (no crash dialog).
-# - Display: the owner's DISPLAY/WAYLAND_DISPLAY are dropped. The program sees an X display only when the
+# - Display: the caller's DISPLAY/WAYLAND_DISPLAY are dropped. The program sees an X display only when the
 #   caller sets UC2_WINE_DISPLAY (an Xvfb started by the caller, e.g. ":97").
 # - WINEDEBUG=-all unless the caller set WINEDEBUG.
 # - After the program returns (or is stopped by a TERM), `wineserver -k` for this prefix; exit status = the

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""G-6: per-cue table of UC2ALAudio cue logs (DevSound lines "UC2Audio: [t] <cue> on <actor>: played|culled|...").
+"""Per-cue table of UC2ALAudio cue logs (DevSound lines "UC2Audio: [t] <cue> on <actor>: played|culled|...").
 
     g6-cuetab.py <log>.out [<log>.out ...]     one column per log: count per (cue, outcome), and the totals
 """

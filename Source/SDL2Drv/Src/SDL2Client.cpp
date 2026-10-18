@@ -1,8 +1,8 @@
 /*=============================================================================
 	SDL2Client.cpp: USDL2Client, the SDL2 viewport manager.
 
-	Behaviour follows Epic's UWindowsClient (Source/WinDrv/Src/WinClient.cpp); the SDL
-	calls come from engine-ut2004's SDL2Drv. The Windows message pump of the PC build
+	Behaviour follows Epic's UWindowsClient (Source/WinDrv/Src/WinClient.cpp). The Windows
+	message pump of the PC build
 	(CMainLoop in UnEngineWin.h + WWindowsViewportWindow::WndProc) becomes PumpEvents,
 	which hands each SDL event to the viewport that owns its window.
 =============================================================================*/
@@ -41,7 +41,7 @@ void USDL2Client::StaticConstructor()
 	new(GetClass(),TEXT("MouseXMultiplier"),  RF_Public)UFloatProperty(CPP_PROPERTY(MouseXMultiplier),  TEXT("Display"),  CPF_Config );
 	new(GetClass(),TEXT("MouseYMultiplier"),  RF_Public)UFloatProperty(CPP_PROPERTY(MouseYMultiplier),  TEXT("Display"),  CPF_Config );
 
-	// M10 pads: what the Xbox driver hard-codes, as settings (SDL2Pads.cpp, controls.md).
+	// Pads: what the Xbox driver hard-codes, as settings (SDL2Pads.cpp).
 	new(GetClass(),TEXT("PadButtonThreshold"),RF_Public)UIntProperty  (CPP_PROPERTY(PadButtonThreshold),TEXT("Input"),    CPF_Config );
 	new(GetClass(),TEXT("PadStickDeadZone"),  RF_Public)UFloatProperty(CPP_PROPERTY(PadStickDeadZone),  TEXT("Input"),    CPF_Config );
 	new(GetClass(),TEXT("PadRepeatDelay"),    RF_Public)UFloatProperty(CPP_PROPERTY(PadRepeatDelay),    TEXT("Input"),    CPF_Config );
@@ -54,10 +54,10 @@ void USDL2Client::StaticConstructor()
 	new(GetClass(),TEXT("SplitScreenFullDetail"),RF_Public)UBoolProperty(CPP_PROPERTY(SplitScreenFullDetail),TEXT("Display"),CPF_Config );
 	new(GetClass(),TEXT("PadsStartAtPlayerTwo"),RF_Public)UBoolProperty(CPP_PROPERTY(PadsStartAtPlayerTwo),TEXT("Input"),CPF_Config );
 
-	// Compiled defaults for the inherited UClient settings, equal to Default.ini's [SDL2Drv.SDL2Client]
-	// (a copy of [WinDrv.WindowsClient]). UClient::StaticConstructor registers them without values, so
-	// an ini that has no section for this client (Epic's, the retail one, an old Avaris.ini) would
-	// otherwise get a 0x0 window, black gamma and the effects switched off (engine-ut2004 hit the same).
+	// Compiled defaults for the inherited UClient settings, the values of Default.ini's [SDL2Drv.SDL2Client].
+	// UClient::StaticConstructor registers them without values, so an ini that has no section for this client
+	// (Epic's, the retail one, an old Avaris.ini) would otherwise get a 0x0 window, black gamma and the effects
+	// switched off.
 	WindowedViewportX	= 640;
 	WindowedViewportY	= 480;
 	FullscreenViewportX	= 640;
@@ -79,7 +79,7 @@ void USDL2Client::StaticConstructor()
 	for( INT i=0; i<LODSET_MAX; i++ )
 		TextureLODSet[i] = 4;					// "Normal" in UClient's ETextureDetail list
 	TextureLODSet[LODSET_Lightmap] = 0;			// "UltraHigh"
-	UseJoystick			= 1;		// M10: pads on (WinDrv's DirectInput joystick was off by default)
+	UseJoystick			= 1;		// pads on (WinDrv's DirectInput joystick is off by default)
 	StartupFullscreen	= 0;
 	MouseXMultiplier	= 1.0f;
 	MouseYMultiplier	= 1.0f;
@@ -91,12 +91,12 @@ void USDL2Client::StaticConstructor()
 	PadRumbleScale		= 1.0f;
 	JoyDeadZone			= 0.35f;	// [XboxDrv.XboxClient] JoyDeadZone in Epic's inis
 	LogInput			= 0;
-	SplitScreenJoinInMatch	= 1;	// G-6: players 3 and 4 (UC2's menus stop at two; splitscreen.md)
-	SplitScreenFullDetail	= 0;	// G-9/2026-10-10: the owner keeps Epic's split-screen detail reductions (the key gives full detail; splitscreen.md)
-	PadsStartAtPlayerTwo	= 0;	// G-11 (owner, 2026-10-10): the first pad drives player one with keyboard+mouse; True = pads join from player two
-	UIScaleMode			= UISCALE_Fit43;	// D-2: the UI in a centred 4:3 box (Native640 = as before)
-	UIMenuBackground	= UIMENUBG_Fill;	// D-2: menu backgrounds fill the window (ui-scale.md)
-	UISharpText			= 1;				// D-2: glyphs from bigger sizes of the font when the UI is scaled up
+	SplitScreenJoinInMatch	= 1;	// players 3 and 4 during a match
+	SplitScreenFullDetail	= 0;	// Epic's split-screen detail reductions (True: full detail)
+	PadsStartAtPlayerTwo	= 0;	// the first pad drives player one with keyboard+mouse; True = pads join from player two
+	UIScaleMode			= UISCALE_Fit43;	// the UI in a centred 4:3 box (Native640: 1:1 from the top-left)
+	UIMenuBackground	= UIMENUBG_Fill;	// menu backgrounds fill the window
+	UISharpText			= 1;				// glyphs from bigger sizes of the font when the UI is scaled up
 
 	unguard;
 }
@@ -118,10 +118,10 @@ void USDL2Client::Init( UEngine* InEngine )
 	NAME_SDL2Input = FName( TEXT("SDL2Input") );
 	NAME_SDL2Input.SetFlags( RF_Native );
 
-	// F-1: relative mouse counts exactly as the device sends them (no acceleration, no scaling), what DirectInput
+	// Relative mouse counts exactly as the device sends them (no acceleration, no scaling), what DirectInput
 	// gave WinDrv. These are SDL 2's defaults on every desktop backend (raw input on Windows, XInput2 raw motion on
 	// X11, the unaccelerated relative-pointer deltas on Wayland; MODE_WARP=1 would warp the system cursor and read its
-	// accelerated motion); engine-ut2004's SDL2Drv relies on the same defaults without naming them. Said here so
+	// accelerated motion). Said here so
 	// that a backend or SDL version change cannot bring acceleration in unnoticed. Normal priority: an SDL_MOUSE_*
 	// environment variable still wins (SDL's rule), e.g. for a player who wants warping.
 	// The browser's pointer lock is the frontend's (unadjustedMovement where the browser allows it).
@@ -133,10 +133,10 @@ void USDL2Client::Init( UEngine* InEngine )
 		appErrorf( TEXT("Couldn't initialize SDL2 video: %s"), appFromAnsi(SDL_GetError()) );
 	debugf( NAME_Init, TEXT("SDL2 video driver: %s"), appFromAnsi(SDL_GetCurrentVideoDriver()) );
 
-	// Pads (M10, SDL2Pads.cpp), and the test channel that drives a virtual one (SDL2InputTest.h).
+	// Pads (SDL2Pads.cpp), and the test channel that drives a virtual one (SDL2InputTest.h).
 	InitPads();
-	// The channel's file: test key [SDL2Drv.SDL2Client] InputTestFile=<file>, set with -ini: (F-4 follow-up; was
-	// -inputtest=<file>), read once and never kept in the ini.
+	// The channel's file: test key [SDL2Drv.SDL2Client] InputTestFile=<file>, set with -ini:, read once and
+	// never kept in the ini.
 	FString TestFile;
 	if( appReadTestKey( TEXT("InputTestFile"), TestFile, TEXT("SDL2Drv.SDL2Client") ) && TestFile.Len() && PadsInitialized )
 		InputTest = new FSDL2InputTest( *TestFile );
@@ -168,9 +168,9 @@ void USDL2Client::Destroy()
 {
 	guard(USDL2Client::Destroy);
 
-	// Make sure to shut down Viewports first. G-6: last first, so the split-screen viewports go before
+	// Make sure to shut down Viewports first, last first, so the split-screen viewports go before
 	// viewport 0, whose window, device and console they borrow (a viewport's Destroy also takes it out of
-	// the list, which made the old forward loop skip every second one).
+	// the list, so a forward loop would skip every second one).
 	for( INT i=Viewports.Num()-1; i>=0; i-- )
 		if( i < Viewports.Num() )
 			Viewports(i)->ConditionalDestroy();
@@ -227,7 +227,7 @@ UBOOL USDL2Client::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	if( PadExec( Cmd, Ar ) )
 		return 1;
 	// UXboxClient's "TOGGLERENDERLEVEL" (XboxClient.cpp: "Used to hack level rendering"): the level is not
-	// drawn, the HUD and the menus are. D-2's checks measure the UI on a black frame with it (ui-scale.md).
+	// drawn, the HUD and the menus are (on a black frame).
 	if( ParseCommand(&Cmd,TEXT("TOGGLERENDERLEVEL")) )
 	{
 		extern UBOOL GRenderLevel;
@@ -302,10 +302,9 @@ USDL2Viewport* USDL2Client::FindViewport( DWORD WindowID )
 
 // Game pads: SDL2Pads.cpp (USDL2Client::PollGamepads and the rest). Keyboard and mouse never
 // change Engine->ActiveControllerId: on PC they are pad 0, the id ULevel::SpawnPlayActor gives the
-// first viewport ("fake the GamepadID", UnLevAct.cpp). G-11 (owner's rule, 2026-10-10): by default
-// (PadsStartAtPlayerTwo=False) the first pad takes port 0 and drives player one with them, the two exchangeable at
-// any moment (G-6's model); with PadsStartAtPlayerTwo port 0 is theirs alone, the pads take ports 1-3 and a pad's
-// Start joins as player two (G-9's model, then called KeyboardIsPlayer).
+// first viewport ("fake the GamepadID", UnLevAct.cpp). By default (PadsStartAtPlayerTwo=False) the first pad takes
+// port 0 and drives player one with them, the two exchangeable at any moment; with PadsStartAtPlayerTwo port 0 is
+// theirs alone, the pads take ports 1-3 and a pad's Start joins as player two.
 
 //
 // Perform timer-tick processing on all visible viewports.  This causes
@@ -321,8 +320,8 @@ void USDL2Client::Tick( FLOAT DeltaSeconds )
 	PollGamepads( DeltaSeconds );
 	Engine->ActiveControllerId = PreviousControllerId;
 
-	// H-3: UGameEngine::Tick takes the mouse back when the menus close ("If game is paused, release the cursor") only
-	// while there is ONE viewport; in split screen nothing did until the next key or button release. The window's
+	// UGameEngine::Tick takes the mouse back when the menus close ("If game is paused, release the cursor") only
+	// while there is one viewport; in split screen nothing would until the next key or button release. The window's
 	// capture follows the menus' cursor here instead, the same rule (captured again only with CaptureMouse).
 	if( Viewports.Num()>1 && !GIsEditor )
 	{
@@ -332,11 +331,11 @@ void USDL2Client::Tick( FLOAT DeltaSeconds )
 			Main->SetMouseCapture( !Want, 0, 1 );
 	}
 
-	// Blit any viewports that need blitting. G-6: split-screen viewports are rectangles of one window, so
+	// Blit any viewports that need blitting. Split-screen viewports are rectangles of one window, so
 	// one frame is presented, as UXboxClient::Tick does: only the first viewport drawn is given Blit (it
 	// presents the whole frame at the start of its next draw, UGameEngine::Draw), and a viewport the
 	// split-screen manager disabled (bDisableDraw: the split views while the menus are up) is not drawn.
-	// With one viewport this is what it always was.
+	// With one viewport this is Epic's loop.
 	UBOOL BlitViewport = 1;
 	DOUBLE CurrentTime = appSeconds();
 	for( INT i=0; i<Viewports.Num(); i++ )
@@ -449,7 +448,7 @@ void USDL2Client::GetInitScreenSize( INT& SizeX, INT& SizeY )
 {
 	guard(USDL2Client::GetInitScreenSize);
 
-	// G-6: the window's size once it has one: the screen the split-screen layouts divide
+	// The window's size once it has one: the screen the split-screen layouts divide
 	// (UXboxClient::GetInitScreenSize: the back buffer's size). Viewport 0's SizeX/SizeY are its own
 	// rectangle while split.
 	USDL2Viewport* Main = Viewports.Num() ? (USDL2Viewport*)Viewports(0) : NULL;
@@ -473,7 +472,7 @@ void USDL2Client::GetInitScreenSize( INT& SizeX, INT& SizeY )
 }
 
 /*-----------------------------------------------------------------------------
-	Split screen (G-6, docs/porting/analysis/splitscreen.md).
+	Split screen.
 -----------------------------------------------------------------------------*/
 
 //
@@ -481,8 +480,8 @@ void USDL2Client::GetInitScreenSize( INT& SizeX, INT& SizeY )
 // when the menus allow a player to join, the pad takes a viewport that has no pad, or a new split-screen
 // player is made for it (UClient::BeginSplitScreen). Returns whether the press was used up (it then does
 // not reach the menus). PC addition (SplitScreenJoinInMatch): in a running match, where UC2's menus never
-// allow a join and stop at two players anyway (GUIController.AllowControllerJoin, MAX_VIEWPORTS=2), the
-// press adds a split-screen player directly, up to the manager's MaxSplitScreens (4).
+// allow a join (GUIController.AllowControllerJoin), the press adds a split-screen player directly, up to the
+// manager's MaxSplitScreens (4).
 //
 UBOOL USDL2Client::PadJoin( INT Slot )
 {
@@ -491,7 +490,7 @@ UBOOL USDL2Client::PadJoin( INT Slot )
 		return 0;
 	if( AllowControllerJoin() )
 	{
-		// G-9/G-11: with PadsStartAtPlayerTwo the window's viewport is the keyboard's player (port 0) even before
+		// With PadsStartAtPlayerTwo the window's viewport is the keyboard's player (port 0) even before
 		// its controller was given that port: a pad never takes it, it joins as a player of its own.
 		for( INT i=PadsStartAtPlayerTwo ? 1 : 0; i<Viewports.Num(); i++ )
 			if( Viewports(i)->GetGamepadID()==UViewport::INVALID_GAMEPAD_ID && Viewports(i)->Actor )
@@ -543,13 +542,12 @@ void USDL2Client::UpdateSplitLayout()
 // Whether the window shows the cursor: a menu's cursor of the window's viewport, or, while split, of the
 // overlay viewport that draws the menus (it has no window of its own).
 //
-// H-3: only the viewport that OWNS the GUIController counts, and only while the GUI is up. bShowWindowsMouse is set
+// Only the viewport that owns the GUIController counts, and only while the GUI is up. bShowWindowsMouse is set
 // on the GUI's ViewportOwner every menu frame (GUIController::NativePreRender) and cleared on it when the last menu
 // closes (GUIController.SetControllerStatus); when a player joins in the menus, USplitScreenMgr hands the GUI to the
-// overlay viewport (ViewportOwner = OverlayView), so viewport 0 kept the 1 its menus had left and nobody cleared it:
-// the cursor stayed wanted through the split-screen match and the mouse was never captured again (on the web: no
-// pointer lock and the browser's pointer over the game; h3-pads.md). With one viewport the GUI is always viewport 0's
-// and bShowWindowsMouse is only ever set while it is active, so this is what it was.
+// overlay viewport (ViewportOwner = OverlayView), so viewport 0 would keep the 1 its menus had left, the cursor would
+// stay wanted through the split-screen match and the mouse would never be captured again (on the web: no pointer
+// lock). With one viewport the GUI is always viewport 0's and bShowWindowsMouse is only set while it is active.
 //
 UBOOL USDL2Client::CursorWanted()
 {

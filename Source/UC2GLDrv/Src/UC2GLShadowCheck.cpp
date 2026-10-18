@@ -1,6 +1,6 @@
 /*=============================================================================
 	UC2GLShadowCheck.cpp: numeric check of the projected-shadow textures, end to end
-	(M7b; docs/porting/analysis/projectors.md). Debug only, not Epic's.
+	Debug only.
 
 	Console: GLSHADOWCHECK (runs at the start of the next frame). For every shadow material
 	(UShadowBitmapMaterial) whose two render targets exist, both are read back as the last

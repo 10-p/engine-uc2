@@ -3,7 +3,7 @@
 
   tools/dev/audio-music-check.py <capture.wav> <source-track.wav> <expected-gain-dB> [<control-track.wav>]
 
-Both files are decoded with ffmpeg (inside <WorkUC2>/bin/capped) to 8 kHz mono; their 50 ms level envelopes
+Both files are decoded with ffmpeg (inside <repo>/../bin/capped) to 8 kHz mono; their 50 ms level envelopes
 (dB) are correlated over lags of 0..10 s to find where the track starts in the capture; then the energy ratio
 from 4 s after that start (past a 3 s fade-in) over 40 s gives the mix gain applied to the track, compared with
 the expected one. A control track should correlate clearly worse. Prints one CHECK line; exit 1 on failure.

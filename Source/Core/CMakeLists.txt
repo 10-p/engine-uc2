@@ -1,10 +1,9 @@
 #=============================================================================
 # Core - engine foundation: object system, names, memory, file I/O, math, serialisation, the
-# UnrealScript VM. Modelled on engine-ut2004/Source/Core/CMakeLists.txt.
+# UnrealScript VM.
 #
 # The file list is Core.vcproj's PC Release set, minus the Windows/Xbox/console platform layers, plus
-# the portable platform layer (UnUnix.cpp, UnThreadingPosix.cpp). Every file left out, and why, is in
-# docs/porting/analysis/core-port.md ("Excluded files").
+# the portable platform layer (UnUnix.cpp, UnThreadingPosix.cpp).
 #=============================================================================
 
 project(Core CXX)
@@ -54,7 +53,7 @@ target_include_directories(${PROJECT_NAME}
 target_compile_definitions(${PROJECT_NAME} PRIVATE GPackage=GCorePackage)
 
 # zlib: Inc/FFileManagerGeneric.h (compressed-file reads) uses it, and that header is compiled by the
-# launchers, so the dependency is PUBLIC. UC2 has no Ogg/Vorbis in Core (UnUnix.cpp's include was stale).
+# launchers, so the dependency is PUBLIC. Core has no Ogg/Vorbis.
 target_link_libraries(${PROJECT_NAME} PUBLIC zlib)
 
 # The pthread platform layer. Emscripten already compiles everything with -pthread (root CMakeLists).

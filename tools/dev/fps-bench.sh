@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Frame-rate benchmark (F-2, docs/porting/analysis/platform-f4.md): the game on this machine's GPU, headless, a fixed
+# Frame-rate benchmark: the game on this machine's GPU, headless, a fixed
 # camera path, the engine's own FPS log line ([Engine.GameEngine] FpsLogSeconds / FPSLOG, Source/Engine/Src/UC2FpsLog.cpp).
 # Prints one summary line.
 #
 #   tools/dev/fps-bench.sh <tree> <map> <seconds> [WxH] [engine arguments...]
 #   tools/dev/fps-bench.sh f4 DM-Praxis 20 1920x1080
-#     <tree>     run tree under <WorkUC2>/run (tools/dev/mkrun-uc2.sh)
+#     <tree>     run tree under <repo>/../run (tools/dev/mkrun-uc2.sh)
 #     <seconds>  length of the measured window (a multiple of 4 gives whole turns)
 #     WxH        window size, default 1280x720 (set with -ini:, as every other setting)
 #   FPS_PLACE="x y z yaw pitch"   where the camera stands (default: a fixed spot for DM-Praxis and DM-Deadbolt, else
 #                                 the spawn point, which is random)
 #   FPS_TURN=0                    no turn: the view stays where FPS_PLACE put it (a fixed view, no teleports)
 #   FPS_SOFT=1                    Mesa llvmpipe under Xvfb instead of the GPU
-#   FPS_OUT=<dir>                 output (default <WorkUC2>/logs/fps): <name>.out (game log), .scen, .inject
+#   FPS_OUT=<dir>                 output (default <repo>/../logs/fps): <name>.out (game log), .scen, .inject
 #   FPS_NAME=<name>               output name (default <tree>-<map>-<WxH>)
 #
 # The path: the level up, the match started with the virtual pad's trigger, God, no bots, the pawn and the view put at
@@ -20,7 +20,7 @@
 # 0.25 s (a full turn every 4 s, the same at any frame rate). The measured window is the first FPS line.
 # GPU: SDL's offscreen video driver (EGL, no window; as tools/dev/fx-owner.sh UC2_GPU=1). Vsync is whatever the ini says
 # ([UC2GLDrv.UC2GLRenderDevice] UseVSync, False by default); nothing caps the frame rate of a standalone game.
-# Runs inside <WorkUC2>/bin/capped 2G. Do not judge timings while the machine is loaded: the line prints the load.
+# Runs inside <repo>/../bin/capped 2G. Do not judge timings while the machine is loaded: the line prints the load.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)

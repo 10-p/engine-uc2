@@ -21,10 +21,9 @@ enum EHTTPState
 
 class UHTTPDownload : public UDownload
 {
-	// uc2 port (D-2): package IpDrv, not Engine. Epic's DLL build registered the class under the DLL's package
-	// (IMPLEMENT_CLASS uses GPackage there), so it was IpDrv.HTTPDownload, the name Default.ini's DownloadManagers and
-	// [IpDrv.HTTPDownload] use; the static link takes this argument, which made it Engine.HTTPDownload. engine-ut2004
-	// says IpDrv here too.
+	// Package IpDrv, not Engine. Epic's DLL build registered the class under the DLL's package (IMPLEMENT_CLASS
+	// uses GPackage there), so it is IpDrv.HTTPDownload, the name Default.ini's DownloadManagers and
+	// [IpDrv.HTTPDownload] use; the static link takes this argument.
 	DECLARE_CLASS(UHTTPDownload,UDownload,CLASS_Transient|CLASS_Config,IpDrv);
     	
 	// Config.

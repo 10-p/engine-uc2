@@ -273,7 +273,7 @@ enum ECamOrientation
 // Struct for storing Matinee camera orientations (this is mirrored in MatObject.uc and SceneManager.uc - keep all definitions in sync!)
 class UMatSubAction;
 #if SUPPORTS_PRAGMA_PACK
-#pragma pack (push,4)	// M13: script mirrors are laid out with /Zp4 (as the generated headers); 64-bit pointers sit on 4
+#pragma pack (push,4)	// script mirrors are laid out with /Zp4 (as the generated headers); 64-bit pointers sit on 4
 #endif
 struct ENGINE_API FOrientation
 {
@@ -532,7 +532,7 @@ struct ENGINE_API FPlayerNameInfo
 #include "UnEngine.h"			// Unreal engine.
 #include "UnGame.h"				// Unreal game engine.
 #include "UnCanvas.h"			// Canvas interface.
-#include "UnKeyGlyphs.h"		// H-5: player one's keys in place of the pad's button glyphs.
+#include "UnKeyGlyphs.h"		// Player one's keys in place of the pad's button glyphs.
 #include "UnCamera.h"			// Viewport subsystem.
 #include "UnCameraEffects.h"	// Camera effects.
 #include "UnRender.h"			// High-level rendering definitions.

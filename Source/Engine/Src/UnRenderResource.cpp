@@ -42,7 +42,7 @@ void UIndexBuffer::Serialize(FArchive& Ar)
 }
 
 //
-// UC2 port (M7): the capability behind which the Xbox-only post-process paths run
+// The capability behind which the Xbox-only post-process paths run
 // (FRenderCaps::XboxPostProcess, UnRenDev.h).
 //
 ENGINE_API UBOOL RenDevHasXboxPostProcess()
@@ -55,7 +55,7 @@ ENGINE_API UBOOL RenDevHasXboxPostProcess()
 }
 
 //
-// UC2 port (M7b): the capability behind which level-static projectors are batched and drawn
+// The capability behind which level-static projectors are batched and drawn
 // with the Xbox projector material (FRenderCaps::XboxProjectors, UnRenDev.h; UnGame.cpp).
 //
 ENGINE_API UBOOL RenDevHasXboxProjectors()
@@ -71,7 +71,7 @@ ENGINE_API UBOOL RenDevHasXboxProjectors()
 }
 
 //
-// UC2 port (M7b): the capability behind which the Xbox shadow-texture filter runs
+// The capability behind which the Xbox shadow-texture filter runs
 // (FRenderCaps::XboxShadows, UnRenDev.h; UnShadowProjector.cpp).
 //
 ENGINE_API UBOOL RenDevHasXboxShadows()
@@ -87,7 +87,7 @@ ENGINE_API UBOOL RenDevHasXboxShadows()
 }
 
 //
-// UC2 port (pp-scale): FRenderCaps::PostProcessReferenceHeight of the engine's render device
+// FRenderCaps::PostProcessReferenceHeight of the engine's render device
 // (0 without a client, a device or a reference: sizes and distances in back-buffer pixels).
 //
 ENGINE_API INT RenDevPostProcessReferenceHeight()
@@ -100,7 +100,7 @@ ENGINE_API INT RenDevPostProcessReferenceHeight()
 }
 
 //
-// UC2 port (H-1): FRenderCaps::PostProcessTargetScale of the engine's render device: 1, 2 or 4 (1 without one;
+// FRenderCaps::PostProcessTargetScale of the engine's render device: 1, 2 or 4 (1 without one;
 // 3 counts as 2, above 4 as 4: the fill of FilterCopyRenderTarget is made for those three).
 //
 ENGINE_API INT RenDevPostProcessTargetScale()

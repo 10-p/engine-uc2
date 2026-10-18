@@ -7,7 +7,7 @@
 #   tools/dev/run-uc2-audio.sh m8 menu 60 0 ''
 #   tools/dev/run-uc2-audio.sh m8 deadbolt 80 28 'DM-Deadbolt?NumBots=3'
 #
-# Writes <WorkUC2>/logs/<tree>/<name>.wav, .out (the game's log), .png (spectrogram), .report.txt.
+# Writes <repo>/../logs/<tree>/<name>.wav, .out (the game's log), .png (spectrogram), .report.txt.
 # The run tree's Default.ini gets DevSound unsuppressed (the cue log) and loses Avaris.ini/User.ini so the
 # change takes effect; nothing outside the run tree is touched.
 # Environment: UC2_AUDIO_ENV="VAR=value ..." extra environment for uc2.bin.

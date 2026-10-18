@@ -10,7 +10,7 @@ coarse alignment (lags -3..+3 s); then the WAVEFORMS are cross-correlated (tools
 around it). Dubbing keeps the timing and loudness of the lines, so envelopes cannot tell the languages apart,
 but only the English mix contains the English stem's waveform. The sfx stem (*-sfx.wav), shared by every
 language, is the control: its waveform should correlate about equally with all five tracks.
-Every decode runs inside <WorkUC2>/bin/capped.
+Every decode runs inside <repo>/../bin/capped.
 """
 import argparse, atexit, math, os, shutil, struct, subprocess, sys, tempfile
 
@@ -19,7 +19,7 @@ work = os.path.abspath(os.path.join(here, '..', '..', '..'))
 capped = os.path.join(work, 'bin', 'capped')
 epic = os.path.join(work, 'epic-sources')
 
-# cinematic XMV -> production stem prefix in TestMaps (matched by duration: see docs/porting/analysis/video.md)
+# cinematic XMV -> production stem prefix in TestMaps (matched by duration)
 PAIRS = [
     ('03_AscPre3', 'AscPre3_comp2'),
     ('04_AscPre6', 'AscPre6_Road_to_Capitol'),

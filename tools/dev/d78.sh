@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# D-7 (console) and D-8 (AutoFOV) verification, measured: one PASS/FAIL line per check (tools/dev/d78-measure.py).
+# Console and AutoFOV checks: one PASS/FAIL line per check (tools/dev/d78-measure.py).
 #
 #   tools/dev/d78.sh                 run everything, then measure
 #   tools/dev/d78.sh run             only the game runs
@@ -7,14 +7,14 @@
 #
 # Trees (tools/dev/mkrun-uc2.sh): D78_TREE (default d78) has the build under test; D78_REF_TREE (default d78-ref)
 # has main's binary (the 4:3 regression anchor). Every game run is one tools/dev/m10-controls.sh --file run
-# (Xvfb, software GL, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0, under <WorkUC2>/bin/capped: 2G at 640x480/1024x768, 3G for the run that goes up
-# to 2560x1080). Pictures and logs: <WorkUC2>/logs/d78/run/<what>/, measurements in <WorkUC2>/logs/d78/run/summary.txt.
+# (Xvfb, software GL, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0, under <repo>/../bin/capped: 2G at 640x480/1024x768, 3G for the run that goes up
+# to 2560x1080). Pictures and logs: <repo>/../logs/d78/run/<what>/, measurements in <repo>/../logs/d78/run/summary.txt.
 #   ident/<res>/   the pinned DM-Deadbolt view (tools/dev/d2/deadbolt.scen), -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False, ours and main's,
 #                  at 640x480 and 1024x768 (AutoFOV must change nothing at 4:3)
 #   fov/           tools/dev/d78/fov.scen, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False: one frozen game at 1440x1080, 1920x1080 and 2560x1080
 #                  (third person, cinematic letterbox, first person with the level and on black, zoom 40,
 #                  lock-on), AUTOFOV 0 for the before pictures
-#   fov-pp/        the same with post-processing (the owner's pictures; not measured)
+#   fov-pp/        the same with post-processing (pictures for review; not measured)
 #   sniper/        tools/dev/d78/sniper.scen, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False: the sniper rifle's zoom and scope at the three sizes
 #   console/       tools/dev/d78/console-game.scen and console-menu.scen
 set -u

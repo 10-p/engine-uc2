@@ -279,7 +279,7 @@ class EDITOR_API UEditorEngine : public UEngine
 	FLOAT FovAngle;
 	BITFIELD GodMode:1;
 	BITFIELD AutoSave:1;
-	BYTE AutosaveTimeMinutes GCC_PACK(4);	// uc2 port (M14): after a bitfield run MSVC and the script start a new DWORD; GCC would use the bitfield's
+	BYTE AutosaveTimeMinutes GCC_PACK(4);	// after a bitfield run MSVC and the script start a new DWORD; GCC would use the bitfield's
 	FStringNoInit GameCommandLine;
 	TArray<FString> EditPackages;
 	BITFIELD	AlwaysShowTerrain:1;			// Always show the terrain in the overhead 2D view?
@@ -610,7 +610,7 @@ public:
 #define OUT_ARRAY_EXPORT_PF TEXT("..\\XboxTextures\\Source\\%s.uma")
 
 //#include "UnLinker.h"
-struct FObjectExport; // uc2 port: MSVC let UObject's friend declaration name it here; ISO C++ needs a declaration.
+struct FObjectExport; // MSVC let UObject's friend declaration name it here; ISO C++ needs a declaration.
 
 /**
  * This exporter knows how to export the various arrays contained within a

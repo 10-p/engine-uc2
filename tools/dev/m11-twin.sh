@@ -1,45 +1,44 @@
 #!/usr/bin/env bash
-# M11 / G2: every renderer test against the GL4ES twin of the driver, one PASS/FAIL line per check.
+# Every renderer test of the GL4ES device against the desktop device, one PASS/FAIL line per check.
 #
 #   tools/dev/m11-twin.sh [check ...]          default: every check, in this order
 #   tools/dev/m11-twin.sh list
 #
-# The twin is the same uc2.bin with -gl4es (render device UC2GL4ESDrv.UC2GL4ESRenderDevice: an OpenGL ES 3.0
-# context behind gl4es' ES 3 back end, the code path the browser runs on WebGL 2; F-3, docs/porting/analysis/
-# webgl2.md. The OpenGL ES 2 / WebGL 1 path, kept for browsers without WebGL 2, is check es2). Reference is always the desktop binding of the same
+# The GL4ES device ("twin") is the same uc2.bin with -gl4es (render device UC2GL4ESDrv.UC2GL4ESRenderDevice: an
+# OpenGL ES 3.0 context behind gl4es' ES 3 back end, the code path the browser runs on WebGL 2. The OpenGL ES 2 /
+# WebGL 1 path, kept for browsers without WebGL 2, is check es2). Reference is always the desktop binding of the same
 # binary, run in the same call from the same pinned views. Two run trees are rebuilt from build-native:
-# <WorkUC2>/run/m11 (desktop) and run/m11t (twin); logs and pictures go to logs/m11 and logs/m11t. Every run
-# is inside <WorkUC2>/bin/capped (2G) through tools/dev/run-uc2-shot.sh; nothing is left running.
+# <repo>/../run/m11 (desktop) and run/m11t (twin); logs and pictures go to logs/m11 and logs/m11t. Every run
+# is inside <repo>/../bin/capped (2G) through tools/dev/run-uc2-shot.sh; nothing is left running.
 #
 #   shaders    tools/psh2glsl.py --selftest: the 100 pixel shaders, interpreter against Epic's compiled words
 #   gputest    tools/psh2glsl.py --gputest: the GLSL of every pixel shader against the interpreter (desktop GL)
 #   boot       twin: menu for 40 s; device class, 97 fragment + 405 vertex shaders through gl4es, 0 GL errors
-#              (84 until M7b, which compiles the 12 projector shaders and PS_Terrain3Layer too)
-#   selftest   -ini:System:[UC2GLDrv.UC2GLRenderDevice]:SelfTest=True numeric checks on both bindings: 15 of 15 on each (M7's ten + fixed-function fog + pp-scale's
-#              pp-sizes, ref-copy, ref-taps, bb-copy-ref, which run at 1280x720), same tolerances
-#   progtest   485 complete programs (97 pixel shaders x 5 vertex shader enums; 420 = 84 x 5 before M7b) drawn on both, compared
+#   selftest   -ini:System:[UC2GLDrv.UC2GLRenderDevice]:SelfTest=True numeric checks on both bindings: 15 of 15 on
+#              each (the post-process primitives, fixed-function fog, and pp-sizes, ref-copy, ref-taps,
+#              bb-copy-ref, which run at 1280x720), same tolerances
+#   progtest   485 complete programs (97 pixel shaders x 5 vertex shader enums) drawn on both, compared
 #   pinned     DM-Deadbolt (first PlayerStart) and the menu, desktop against twin: post-processing off (static
 #              part of the frame) and on
 #   effects    tools/dev/m7-effects.sh on both; the desktop's B pictures are the twin's fx-<effect>-b.ref.png
-#   m6         the M6 pixel-shader pictures (pixel shaders on / off) on both
+#   m6         the pixel-shader pictures (pixel shaders on / off) on both
 #   fallbacks  the twin with each capability masked (test key MaskCaps, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:
 #              MaskCaps=<cap>): s3tc (engine decodes DXT), maxlevel on the desktop (mip chains completed by the
 #              driver), fragdepth (depth test in the distortion passes' shaders), uintindex (32-bit indices stored
 #              as 16-bit); fragdepth and uintindex are WebGL 1 cases (core in WebGL 2), masked on the ES 3 twin.
 #              depthtexture: a WebGL 1 context without WEBGL_depth_texture (core in WebGL 2), whose fallback is
-#              NOT implemented: run on the OpenGL ES 2 path and reported as an INFO line (what happens instead);
-#              since F-3 only a browser without WebGL 2 can be in that case (owner 2026-10-09: WebGL 1 stays
-#              as the fallback)
+#              not implemented: run on the OpenGL ES 2 path and reported as an INFO line (what happens instead);
+#              only a browser without WebGL 2 can be in that case
 #   es2        the OpenGL ES 2 / WebGL 1 path (GLESVersion=2 on an ES 2.0 context): boot and the self-test
 #   movies     tools/dev/m9-movies.py scenarios logos, logos-skip, menu-movie on the twin
 #
 # M11_SERIAL=1 runs the two bindings one after the other instead of side by side (one game run at a time).
-# Thresholds are in the check functions, each with its reason; docs/porting/analysis/web-renderer.md has the
-# measurements they come from. A line starting with "INFO" is a measurement that decides nothing.
+# Thresholds are in the check functions, each with its reason. A line starting with "INFO" is a measurement that
+# decides nothing.
 set -u
 # The twin's OpenGL ES context is version 3.0 (= WebGL 2), not the 3.2 Mesa gives by default: ES-3.1/3.2
-# leniency would hide what WebGL 2 rejects (web-renderer.md, "A stricter twin"; F-3: 2.0 until then, now the
-# es2 check's context). MESA_DEBUG=1 makes Mesa print every error it
+# leniency would hide what WebGL 2 rejects (2.0 is the es2 check's context). MESA_DEBUG=1 makes Mesa print every
+# error it
 # raises, including those gl4es' own glGetError calls swallow; the boot check counts those lines. Neither
 # affects a desktop OpenGL context.
 export MESA_GLES_VERSION_OVERRIDE=${MESA_GLES_VERSION_OVERRIDE:-3.0}
@@ -73,7 +72,7 @@ fi
 PIN='set UCDeathmatch NumPlayers 0'
 
 # Both bindings at once (two trees): desktop in the background, twin in the foreground. M11_SERIAL=1: one after the
-# other (a loaded machine: one game run at a time; the coordinator's rule of 2026-10-08).
+# other (a loaded machine: one game run at a time).
 both() {  # both <name> <secs> <fire> <map> <args...>
   local name=$1 secs=$2 fire=$3 map=$4; shift 4
   if [ -n "${M11_SERIAL:-}" ]; then
@@ -130,16 +129,15 @@ check_progtest() {
   [ -f "$LD/fx-selftest.out" ] && [ -f "$LT/fx-selftest.out" ] && [ -z "${ran_selftest:-}" ] && : # logs of this call or an earlier one
   local line; line=$(python3 "$repo/tools/dev/m11-progcmp.py" "$LD/fx-selftest.out" "$LT/fx-selftest.out" 2 2>&1 | tail -1)
   # Tolerance 2 of 255: both sides compute in 32-bit floats on the same rasteriser; the last step is a
-  # rounding to 8 bits (measured: largest difference 1).
+  # rounding to 8 bits.
   if [[ "$line" == "progtest: 485 programs on side A, 485 on side B"*", 0 programs outside the tolerance or missing" ]]; then result PASS progtest "$line"; else result FAIL progtest "$line (run 'selftest' first: it makes the two logs)"; fi
 }
 
 check_pinned() {
   # DM-Deadbolt, first PlayerStart, picture 0 with post-processing off, picture 1 with it on.
   both pinned-deadbolt 100 34 DM-Deadbolt -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,56 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=48
-  # The desktop once more without texture LOD bias (test key NoLODBias). Until F-3 GL4ES ignored the bias and this
-  # was the picture the twin was expected to equal; since our fork applies it (webgl2.md, step 4) the twin must be
-  # nearer the desktop WITH the bias than this one: that is the check that the bias reaches the GLES path.
+  # The desktop once more without texture LOD bias (test key NoLODBias). The gl4es fork applies the bias, so the
+  # twin must be nearer the desktop with the bias than this one: that is the check that the bias reaches the GLES path.
   UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D pinned-deadbolt-nb 75 34 DM-Deadbolt -opengl -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NoLODBias=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44 > "$LD/pinned-deadbolt-nb.report" 2>&1
   local a b c ok=1 e
   # Static part of this view: x >= 760 (left of it: the pawn, a pickup, the HUD, which animate).
@@ -150,12 +148,10 @@ check_pinned() {
   echo "INFO m11-pinned deadbolt, post-processing off, static part, desktop vs twin: $a" | tee -a "$summary"
   echo "INFO m11-pinned deadbolt, post-processing off, static part, desktop without LOD bias vs twin (must be the larger): $b" | tee -a "$summary"
   echo "INFO m11-pinned deadbolt, post-processing on, static part, desktop vs twin: $c" | tee -a "$summary"
-  # Thresholds (static part), against the desktop with its LOD bias (F-3; before, against the desktop without
-  # it, with the same numbers): at most 0.01% of the pixels off by more than 32 levels (measured on the ES 3
-  # twin: 0.001%, 4 pixels of an edge) and 0.5% by more than 8 (measured 0.26%: the residue, see the notebook),
-  # mean below 0.8 (measured 0.384); the desktop without the bias further away than the one with it (measured
-  # 0.871 against 0.384; 1.415 against 0.374 the other way round while GL4ES ignored the bias); with
-  # post-processing on (glow spreads every difference) the mean stays below 3.
+  # Thresholds (static part), against the desktop with its LOD bias: at most 0.01% of the pixels off by more than
+  # 32 levels (an edge's few pixels) and 0.5% by more than 8, mean below 0.8 (typically about 0.4); the desktop
+  # without the bias further away than the one with it; with post-processing on (glow spreads every difference)
+  # the mean stays below 3.
   le "$(num above32 "$a")" 0.01 && le "$(num above8 "$a")" 0.5 && le "$(num mean "$a")" 0.8 || ok=0
   le "$(num mean "$a")" "$(num mean "$b")" && ! le "$(num mean "$b")" "$(num mean "$a")" || ok=0
   le "$(num mean "$c")" 3 || ok=0
@@ -184,7 +180,7 @@ check_effects() {
       st=$("$imgdiff" "$LD/fx-$n-b.png" "$LT/fx-$n-b.png" --side "$LT/fx-$n-b-desktop-twin.png" --diff "$LT/fx-$n-b-desktop-twin-diff.png")
       # Threshold: mean difference of the whole B picture to the desktop's below 6 of 255. Two desktop runs
       # of the same effect differ by up to about 2 (animated pawn, pickups, particles, accumulated glow);
-      # a wrong effect differs by 8 to 80 (the A/B differences in docs/porting/analysis/postprocess.md).
+      # a wrong effect differs by 8 to 80.
       le "$(num mean "$st")" 6 || ok=0
     else
       ok=0; st="no pair of B pictures"
@@ -196,7 +192,7 @@ check_effects() {
 }
 
 check_m6() {
-  # M6's pictures: picture 0 pixel shaders on, picture 1 off (docs/porting/analysis/shaders.md, S4), no post-processing.
+  # The pixel-shader pictures: picture 0 pixel shaders on, picture 1 off, no post-processing.
   local fails=0 spec name map secs fire extra a b
   for spec in "deadbolt|DM-Deadbolt|100|34|" "octane|CTF-Octane|125|38|" "axon|DM-AxonCompressor|110|38|" "dualdiffuse|DM-AxonCompressor|110|38|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:DualDiffuse=12"; do
     IFS='|' read -r name map secs fire extra <<<"$spec"
@@ -242,8 +238,8 @@ check_fallbacks() {
     fi
   done
   # The mask whose fallback is not implemented, on the WebGL 1 path (an OpenGL ES 2.0 context, GLESVersion=2): the
-  # only place where it can happen since F-3 (depth textures are core in WebGL 2). Run, so that what happens is
-  # on record; an INFO line, not a failure: the owner decides whether WebGL 1 stays supported at all (webgl2.md).
+  # only place where it can happen (depth textures are core in WebGL 2). Run, so that what happens is on record;
+  # an INFO line, not a failure.
   for sw in glnodepthtexture; do
     MESA_GLES_VERSION_OVERRIDE=2.0 UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $T fb-$sw 110 34 DM-Deadbolt -gl4es $ES2 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=${sw#glno} -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=50:POSTSELFTEST@100:exit > "$LT/fb-$sw.report" 2>&1
     st=$("$imgdiff" "$LT/fb-ref-0.png" "$LT/fb-$sw-0.png" --box 760,0,1280,720 --diff "$LT/fb-$sw-diff.png" 2>&1)

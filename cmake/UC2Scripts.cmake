@@ -1,5 +1,5 @@
 #=============================================================================
-# UC2Scripts.cmake -- T3: the patched script packages as part of the build.
+# UC2Scripts.cmake -- the patched script packages as part of the build.
 #
 # The game's logic is UnrealScript compiled into the 17 .u packages of the game's System folder. This repo holds no
 # script, only patch sets (patches/, patches/README.md). With UC2_SCRIPT_PATCHES ON (the default) the build turns
@@ -14,8 +14,7 @@
 #     host build's (UC2_SCRIPTS_DIR); the web artifact carries it (Source/SDLLaunch/cmake/Web.cmake).
 #
 # OFF: nothing is produced (no Scripts/ folder) and the game runs the shipped .u (plus Epic's load-time patches).
-# Run trees take Scripts/System/*.u (tools/dev/mkrun-uc2.sh). docs/porting/analysis/script-build-rules.md, BUILD.md
-# ("Script patches").
+# Run trees take Scripts/System/*.u (tools/dev/mkrun-uc2.sh). BUILD.md ("Script patches").
 #=============================================================================
 
 option(UC2_SCRIPT_PATCHES "Build the patched script packages (patches/) into <build>/Scripts/System; OFF: the shipped .u only" ON)
@@ -130,8 +129,8 @@ string(APPEND _help "the content folders Textures/, StaticMeshes/, ...: tools/de
 string(APPEND _help "without the script patches: -DUC2_SCRIPT_PATCHES=OFF.")
 
 # The game folder: the cache variable, else the environment variable the dev tools read (tools/dev/mkrun-uc2.sh),
-# else the workspace beside the repo: WorkUnreal's cooked tree (<repo>/../assets/uc2-assets, the home since
-# 2026-10-11), else the UC2 workspace's layout (<repo>/../assets/uc2), when one is there.
+# else the workspace beside the repo: WorkUnreal's cooked tree (<repo>/../assets/uc2-assets), else the UC2
+# workspace's layout (<repo>/../assets/uc2), when one is there.
 set(_assets "${UC2_ASSETS_DIR}")
 set(_from "UC2_ASSETS_DIR")
 if(NOT _assets AND DEFINED ENV{UC2_ASSETS_DIR})

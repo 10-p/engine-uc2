@@ -1,10 +1,9 @@
 /*=============================================================================
 	UnMovieBase.h: the movie base classes every platform shares.
 
-	UC2 declared these two classes in UnVcWin32.h (lines 792-806 of Epic's file), the Windows/Xbox platform
-	header, so only the MSVC builds had them; the GCC port carried a copy in UnGnuG.h. They are moved here
-	unchanged (M9) so every platform header includes one definition. The Xbox player (XboxDrv's CXMVPlayer,
-	XboxMovieThread) and the portable one (Engine/Inc/UnMovie.h, Source/UC2Movie) derive from them.
+	Epic declared these two classes in UnVcWin32.h, the Windows/Xbox platform header; here they are, unchanged,
+	the one definition every platform header includes. The Xbox player (XboxDrv's CXMVPlayer, XboxMovieThread)
+	and the portable one (Engine/Inc/UnMovie.h, Source/UC2Movie) derive from them.
 =============================================================================*/
 
 #ifndef _INC_UNMOVIEBASE

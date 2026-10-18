@@ -7,10 +7,9 @@
 =============================================================================*/
 
 // This is a hack, but MUST be defined for 64-bit platforms right now! --ryan.
-// M13: every 64-bit target (PLATFORM_64BITS, Core.h), not only x86_64. An object reference in bytecode keeps
+// Every 64-bit target (PLATFORM_64BITS, Core.h), not only x86_64. An object reference in bytecode keeps
 // its 4-byte slot (the shipped .u files are 32-bit; every jump and skip offset counts those slots) and holds
 // the object's index in the object table, INDEX_NONE for None: UObject::SerialPointerIndex/SerialIndexPointer.
-// (Ryan's side table GSerializedPointers was searched linearly for every reference at every load and GC.)
 #if PLATFORM_64BITS
 #define SERIAL_POINTER_INDEX 1
 #endif
@@ -324,7 +323,7 @@ public:
 // Script wrapper for the XBox Live XUID struct.
 //
 #if SUPPORTS_PRAGMA_PACK
-#pragma pack (push,4)	// M13: script mirrors are laid out with /Zp4 (as the generated headers); 64-bit pointers sit on 4
+#pragma pack (push,4)	// script mirrors are laid out with /Zp4 (as the generated headers); 64-bit pointers sit on 4
 #endif
 struct CORE_API FLiveUser
 {
@@ -472,7 +471,7 @@ public: \
 // Register a class at startup time.
 
 #if __STATIC_LINK
-	// uc2 port (M14): a package compiled with UC2_STATIC_CLASS_ACCESSORS (only Editor) also gets one C function
+	// A package compiled with UC2_STATIC_CLASS_ACCESSORS (only Editor) also gets one C function
 	// per class, UC2StaticClass<TClass>(), so its classes declared inside .cpp files (most commandlets) can be
 	// registered from outside those files. Nothing else changes; every other package compiles exactly as before.
 	#if UC2_STATIC_CLASS_ACCESSORS
@@ -1433,7 +1432,7 @@ template< class T > T* ConstructObject( UClass* Class, UObject* Outer=(UObject*)
 {
 	check(Class->IsChildOf(T::StaticClass()));
 	if( Outer==(UObject*)-1 )
-		Outer = T::GetTransientPackage();	// T::, not UObject::: dependent, so UPackage may still be incomplete here (engine-ut2004)
+		Outer = T::GetTransientPackage();	// T::, not UObject::: dependent, so UPackage may still be incomplete here
 	return (T*)UObject::StaticConstructObject( Class, Outer, Name, SetFlags );
 }
 

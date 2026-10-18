@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# M14 S3: the game on rebuilt script packages, headless and repeatable. Since T4 (the repo holds no script sources)
-# the packages are by default the build's own (<build>/Scripts/System: the shipped .u decompiled, patches/ applied,
+# The game on rebuilt script packages, headless and repeatable. The packages are by default the build's own
+# (<build>/Scripts/System: the shipped .u decompiled, patches/ applied,
 # compiled); a full rebuild of Epic's leaked text (tools/dev/script-build.sh, dev only) still works through M14_SCRIPTS.
 # One PASS/FAIL line per check; the existing suites are reused, nothing is re-implemented here.
 #
@@ -12,11 +12,11 @@
 #   M14_TREE      run tree with them [m14-run]; M14_SHIP the same build with the shipped .u [m14-ship]
 #   M14_BUILD     build directory [build-native]
 #   M14_NO_MKRUN  1: use the trees as they are
-#   M14_PREFIX    the name every tree of this run starts with [m14]: a D-phase task uses its own (d3-m14 makes
+#   M14_PREFIX    the name every tree of this run starts with [m14]: a parallel run uses its own (d3-m14 makes
 #                 d3-m14-run, d3-m14-ship, d3-m14-census-*, d3-m14-movies, d3-m14-net); M14_OUT the summary's
-#                 directory [<WorkUC2>/logs/m14/check]
-#   M14_CENSUS_WORKERS  servers at once in the census [4]; 2 while the machine is loaded (owner's rule, 2026-10-10)
-# Output: <WorkUC2>/logs/m14/check/ (summary m14-summary.txt); the suites write to <WorkUC2>/logs/<tree>.
+#                 directory [<repo>/../logs/m14/check]
+#   M14_CENSUS_WORKERS  servers at once in the census [4]; 2 while the machine is loaded
+# Output: <repo>/../logs/m14/check/ (summary m14-summary.txt); the suites write to <repo>/../logs/<tree>.
 #
 # Checks:
 #   verify    ucc-bin verifyclasses on the rebuilt packages: exit 0, all layouts match (Editor's included)
@@ -35,7 +35,7 @@
 #   movies    tools/dev/m9-movies.py --tree m14-movies (rebuilt packages installed by mkrun's UC2_SCRIPTS)
 #   net       NET_TREE=m14-net NET_SOAK_MIN=2 tools/dev/net-test.sh dedicated2 travel (rebuilt packages)
 #   leftovers no uc2.bin/ucc-bin/Xvfb running in an m14 tree
-# Memory: every program inside <WorkUC2>/bin/capped; the suites keep their own ceilings (2G per game run), the
+# Memory: every program inside <repo>/../bin/capped; the suites keep their own ceilings (2G per game run), the
 # census 8G for its 4 servers per tree (the two trees one after the other), net-test 6G.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -172,7 +172,7 @@ print('mean %.2f' % (sum(ImageStat.Stat(ImageChops.difference(a,b)).mean)/3))" "
 
 census_of() {	# census_of <name> <port> <scripts dir, or none: the shipped .u>
   local name=$1 port=$2 scr=$3
-  # map-census.sh itself KILLs a server that has not ended 30 s after its TERM and fails that map (D-1).
+  # map-census.sh itself kills a server that has not ended 30 s after its TERM and fails that map.
   ( cd "$repo" && UC2_SCRIPTS=$scr CENSUS_NAME=$name CENSUS_PORT=$port "$capped" 8G 1800 -- tools/dev/map-census.sh "$repo/$build" 15 "${M14_CENSUS_WORKERS:-4}" ) > "$out/$name.out" 2>&1
 }
 

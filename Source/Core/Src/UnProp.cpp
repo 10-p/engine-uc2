@@ -473,7 +473,7 @@ UBOOL UIntProperty::NetSerializeItem( FArchive& Ar, UPackageMap* Map, void* Data
 void UIntProperty::ExportCppItem( FOutputDevice& Out, UBOOL IsParam ) const
 {
 	guard(UIntProperty::ExportCppItem);
-	// uc2 port (T2): a native placeholder (an int standing in for a C++ pointer) is exported as its C++ type,
+	// A native placeholder (an int standing in for a C++ pointer) is exported as its C++ type,
 	// PTRINT, so the generated headers are right at 64 bits (Core/Src/UnClass.cpp, GNativePlaceholders).
 	extern CORE_API const TCHAR* GetNativePlaceholderCppType( const UProperty* IntProperty );
 	Out.Log( GetNativePlaceholderCppType( this ) );
@@ -1129,8 +1129,8 @@ void UObjectProperty::Link( FArchive& Ar, UProperty* Prev )
 	guard(UObjectProperty::Link);
 	Super::Link( Ar, Prev );
 	ElementSize = sizeof(UObject*);
-	// M13: 4, not sizeof(UObject*). The C++ mirrors of script classes are #pragma pack(4) (Epic's /Zp4), so an
-	// 8-byte pointer sits on a 4-byte boundary there too. Same value as before on every 32-bit target.
+	// 4, not sizeof(UObject*). The C++ mirrors of script classes are #pragma pack(4) (Epic's /Zp4), so an
+	// 8-byte pointer sits on a 4-byte boundary there too. The same value as sizeof on every 32-bit target.
 	Offset      = Align( GetOuterUField()->GetPropertiesSize(), 4 );
 	if( ((PropertyFlags & CPF_EditInline) && (PropertyFlags & CPF_ExportObject)) || (PropertyFlags & CPF_Automated) )
 		PropertyFlags |= CPF_NeedCtorLink;

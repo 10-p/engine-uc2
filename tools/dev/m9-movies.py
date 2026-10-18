@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""M9 / V5: the movies in the running game, every scenario repeatable, one PASS/FAIL line each.
+"""The movies in the running game, every scenario repeatable, one PASS/FAIL line each.
 
   tools/dev/m9-movies.py [--build build-native] [--tree m9] [--only logos,cinematic,...] [--no-mkrun]
 
-Rebuilds the run tree <WorkUC2>/run/<tree> from the build (tools/dev/mkrun-uc2.sh), then runs each scenario
-headless (Xvfb, Mesa software GL) inside <WorkUC2>/bin/capped 2G, with OpenAL Soft's null backend or its wave
-writer ([UC2ALAudio.UC2ALAudioSubsystem] WaveFile= through -ini:, for the sound evidence). Writes logs, screenshots and captures to <WorkUC2>/logs/<tree>/
+Rebuilds the run tree <repo>/../run/<tree> from the build (tools/dev/mkrun-uc2.sh), then runs each scenario
+headless (Xvfb, Mesa software GL) inside <repo>/../bin/capped 2G, with OpenAL Soft's null backend or its wave
+writer ([UC2ALAudio.UC2ALAudioSubsystem] WaveFile= through -ini:, for the sound evidence). Writes logs, screenshots and captures to <repo>/../logs/<tree>/
 under stable names (m9-<scenario>.*). Decisions come from log lines and measurements:
   logos           start, advance (two engine screenshots at known movie times, each compared with the cooked
                   file's frame shown at that time: PSNR against its own frame and against the other's), end on
@@ -109,7 +109,7 @@ def run_game(tree, name, secs, args, inject='', binary='./uc2.bin', xvfb=True, a
     if xvfb:
         cmd += ['xvfb-run', '-a', '-s', '-screen 0 1280x720x24']
     if binary == './uc2.bin':
-        # M11: UC2_GLARGS="-gl4es" runs every scenario on the GL4ES/GLES2 twin of the driver
+        # UC2_GLARGS="-gl4es" runs every scenario on the GL4ES device
         # (a -nullrenderer on the command line still wins: the launcher takes the first switch of its table)
         args = args + os.environ.get('UC2_GLARGS', '').split()
     cmd += ['python3', inner, log, inject, binary] + args
@@ -249,10 +249,9 @@ def scen_logos_skip(a, tmp):
 
 def scen_menu(a, tmp):
     # the arena page: Down to INSTANT ACTION, Return (10 s after start-up: the menu takes input after a few
-    # seconds under software GL); it opens with the CTF portrait movie. See docs/porting/analysis/video.md (V5).
-    # 640x480 whatever the tree's Default.ini says (D-4: run-uc2-shot.sh's UC2_RES leaves a tree at 1280x720, so
-    # in m11-twin.sh, which runs the effects first, the regions below were measured on a 1280x720 picture and the
-    # size test failed: the "menu-movie timing FAIL" of a19 and before). The game ends itself at 100 s after its
+    # seconds under software GL); it opens with the CTF portrait movie.
+    # 640x480 whatever the tree's Default.ini says (run-uc2-shot.sh's UC2_RES leaves a tree at 1280x720, and the
+    # regions below are measured on a 640x480 picture). The game ends itself at 100 s after its
     # first frame (its last line gives the GL error count); the limit of 150 s only stops a hang.
     text, shots, dt, left = run_game(a.tree, 'menu-movie', 150, ['-log', '-ini:System:[UC2Movie]:StartupMovies=False', '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True', '-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True',
                                      '-ini:System:[SDL2Drv.SDL2Client]:WindowedViewportX=640', '-ini:System:[SDL2Drv.SDL2Client]:WindowedViewportY=480',
@@ -271,10 +270,9 @@ def scen_menu(a, tmp):
         # Regions of the 640x480 arena page (UCMenu.UC2Arena_Main, behind the "no profile" dialog): the game
         # type portrait (a MovieMaterial) and two parts that do not move (the page title, the list).
         # The page's background animates everywhere else.
-        # The shots are taken at the portrait's own movie time 10 s and 12 s ([UC2Movie] MaterialShotTimes, D-4): the
-        # page has then been open 10 s on any machine (at 3 s and 5 s the twin was still building it: the portrait
-        # frame not yet shown, the description still typing), where fixed times after the first frame depend on when
-        # the injected keys were taken.
+        # The shots are taken at the portrait's own movie time 10 s and 12 s ([UC2Movie] MaterialShotTimes): the
+        # page has then been open 10 s on any machine (a slow machine may still be building it at 3 s), where fixed
+        # times after the first frame depend on when the injected keys were taken.
         regions = {'portrait': (412, 96, 565, 176), 'title': (495, 40, 600, 68), 'list': (60, 82, 360, 110)}
         p = {k: psnr(crop(x, size, v), crop(y, size, v)) for k, v in regions.items()}
         result('menu-movie-shots', size == (640, 480) and p['portrait'] < 20.0 and p['title'] > 30.0 and p['list'] > 30.0,
@@ -389,8 +387,7 @@ def main():
     ap.add_argument('--menu-inject', default='Startup time|10.0|Down,Return')
     ap.add_argument('--menu-args', default='-ini:System:[UC2Movie]:MaterialShotTimes=10,12')
     # expected level of the movie's sound in the capture: 0 dB at the source (no category, no headroom: the
-    # Xbox played XMV sound outside XACT) plus OpenAL Soft's gain for a centred 2D stereo source (measured, see
-    # the notebook)
+    # Xbox played XMV sound outside XACT) plus OpenAL Soft's gain for a centred 2D stereo source
     ap.add_argument('--movie-gain', type=float, default=0.0)
     a = ap.parse_args()
     a.menu_args = a.menu_args.split()

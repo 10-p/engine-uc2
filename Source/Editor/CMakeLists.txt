@@ -1,6 +1,7 @@
 #=============================================================================
-# Editor - the UnrealScript compiler (`ucc-bin make`), the C++ header exporter and the editor commandlets (M14).
-# Native only (the root CMakeLists lists it in UC2_NATIVE_ONLY_PACKAGES). Every source of Editor.vcproj.
+# Editor - the UnrealScript compiler (`ucc-bin make`), the C++ header exporter and the editor commandlets.
+# Built at 32-bit pointers only (root CMakeLists.txt), never on the web. The sources of Editor.vcproj plus
+# UC2EditorRegistrants.cpp (the glob below).
 #=============================================================================
 
 project(Editor CXX)

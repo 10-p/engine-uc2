@@ -369,7 +369,7 @@ CORE_API TCHAR* appItoa( const INT Num )
 	return _itoa( Num, Buffer, 10 );
 #endif
 #else
-	// TCHAR is ANSI off MSVC (as engine-ut2004's UnAnsi.cpp does on Unix).
+	// TCHAR is ANSI off MSVC.
 	static TCHAR Buffer[20];
 	snprintf( Buffer, sizeof(Buffer), "%d", Num );
 	return Buffer;
@@ -1867,10 +1867,10 @@ void FFileStream::Destroy()
 		Destroyed = 1;
 #ifndef _XBOX
 		debugf(TEXT("Waiting for file streaming thread to finish..."));
-		// uc2 port (D-1): bounded. A crash report runs appExit() on the thread that crashed or got the signal, which
-		// can be the file-stream thread itself (seen: a SIGTERM handled on it); it would wait here for ever for itself.
-		// Polled every 0.1 s as engine-ut2004's stream manager does (Epic's appSleep(1) made every exit take 1 s); the
-		// thread notices within 1 ms. If it has not finished after 5 s, its streams are left alone: it may still use them.
+		// Bounded. A crash report runs appExit() on the thread that crashed or got the signal, which can be the
+		// file-stream thread itself; it would wait here for ever for itself. Polled every 0.1 s (Epic's appSleep(1)
+		// made every exit take 1 s); the thread notices within 1 ms. If it has not finished after 5 s, its streams
+		// are left alone: it may still use them.
 		DOUBLE GiveUp = appSeconds() + 5.0;
 		while (Destroyed == 1 && appSeconds() < GiveUp)
 			appSleep(0.1f);
@@ -1991,18 +1991,18 @@ CORE_API UBOOL appIsGlobalOptionToken( const TCHAR* Token )
 //
 // Apply every `-ini:<File>:[<Section>]:<Key>=<Value>` token on the command line. See UnFile.h.
 //
-// Ported from engine-ut2004 (UnMisc.cpp), where the launcher's "Player Name" box emits
-// `-ini:User:[DefaultPlayer]:Name=<name>`; nothing read it until the switch was implemented. The
+// The launchers emit these (e.g. `-ini:User:[DefaultPlayer]:Name=<name>` for the player name). The
 // file part uses the config cache's generic names (FConfigCacheIni::ValidateFileName), so `System` and
 // `User` resolve to this build's inis (Avaris.ini and User.ini) and no path is hardcoded here. Applied
 // straight after GConfig->Init, before any class loads its config properties.
 //
 // What to know:
-//  - The value is stored with SetString, which marks the ini dirty: it is WRITTEN to the ini when the
-//    config cache flushes (at exit, or by `flushconfig`). That is deliberate (one mechanism, and the web
-//    persistence daemon keeps the ini), but it means a launch-only override does not exist.
+//  - The value is stored with SetString, which marks the ini dirty: it is written to the ini when the
+//    config cache flushes (the flush before a garbage purge, at exit, or by `flushconfig`). That is
+//    deliberate (one mechanism, and the web persistence daemon keeps the ini), but it means a launch-only
+//    override does not exist.
 //  - Spaces: the launchers join argv with plain spaces (no re-quoting), and ParseToken splits on spaces,
-//    so a value with spaces must reach us as ONE token in double quotes: argv element
+//    so a value with spaces must arrive as one token in double quotes: argv element
 //    `"-ini:System:[Sec]:Key=a b"` (the quotes are part of the element, as the frontend emits them).
 //    `=`, `?` and `:` inside the value are fine (the first `=` after `]:` ends the key); a double quote
 //    inside the value is not (it ends the token).
@@ -2219,7 +2219,7 @@ CORE_API void appInit( const TCHAR* InPackage, const TCHAR* InCmdLine, FMalloc* 
 	if( GConfig->GetString( TEXT("Engine.Engine"), TEXT("Language"), Temp, ARRAY_COUNT(Temp) ) )
 		UObject::SetLanguage( Temp );
 #endif
-	// G-4: say which language this run uses ([Engine.Engine] Language, the launcher's Language setting), so a
+	// Say which language this run uses ([Engine.Engine] Language, the launcher's Language setting), so a
 	// log alone tells which menu text, voice banks and movie tracks to expect.
 	debugf( NAME_Init, TEXT("Language: %s"), UObject::GetLanguage() );
 

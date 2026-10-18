@@ -496,10 +496,10 @@ struct ENGINE_API HHitProxy
 //scion bcl -- added loadsavemanager
 class ULoadSaveManager;
 
-// D-2 (UI scaling, docs/porting/analysis/ui-scale.md): [<Client>] UIScaleMode and UIMenuBackground.
+// UI scaling: [<Client>] UIScaleMode and UIMenuBackground.
 enum EUIScaleMode
 {
-	UISCALE_Native640	= 0,	// the canvas is the window's pixels: the 640x480 UI drawn 1:1 from the top-left (before D-2)
+	UISCALE_Native640	= 0,	// the canvas is the window's pixels: the 640x480 UI drawn 1:1 from the top-left (Epic's)
 	UISCALE_Fit43		= 1,	// the canvas is the 640x480 design space, drawn in a centred 4:3 box of the window
 };
 enum EUIMenuBackground
@@ -543,9 +543,9 @@ class ENGINE_API UClient : public UObject
 	FLOAT		MinDesiredFrameRate;
 	UViewport*	LastCurrent;						// The viewport that was last current
 	FLOAT		MaxDistortion;						// scion sz - maximum screen space distortion offset in pixels
-	BYTE		UIScaleMode;						// D-2: EUIScaleMode
-	BYTE		UIMenuBackground;					// D-2: EUIMenuBackground (Fit43 only)
-	BITFIELD	UISharpText;						// D-2: a scaled-up UI takes its glyphs from bigger sizes of the font
+	BYTE		UIScaleMode;						// EUIScaleMode
+	BYTE		UIMenuBackground;					// EUIMenuBackground (Fit43 only)
+	BITFIELD	UISharpText;						// A scaled-up UI takes its glyphs from bigger sizes of the font
 
 	// scion sz -
 	class UViewportMgr*		ViewportMgr;
@@ -579,15 +579,15 @@ class ENGINE_API UClient : public UObject
 	virtual UViewport* GetLastCurrent()=0;
 	virtual void ZSortViewports();
 	virtual void GetInitScreenSize( INT& SizeX, INT& SizeY )=0;
-	// uc2 port (G-6): the capability the Xbox client has by construction. A client that draws split-screen
+	// The capability the Xbox client has by construction. A client that draws split-screen
 	// viewports as rectangles of one screen (UXboxClient; SDL2Drv's USDL2Client) gets the Xbox's split-screen
 	// paths (SPLIT ADD/REMOVE make and remove real players); WinDrv's one-window-per-viewport client keeps
 	// Epic's PC stand-ins.
 	virtual UBOOL SplitScreenViewports() { return 0; }
-	// uc2 port (G-9): whether split-screen players keep the single player's detail (USplitScreenMgr::
+	// Whether split-screen players keep the single player's detail (USplitScreenMgr::
 	// UpdateDetailLevels: Scion's SSDetailLevels lower it per player count for the Xbox: no coronas, blob shadows,
 	// lower DetailMode, fewer particles, no decals/projectors/deco layers for 3-4). SDL2Drv's [SDL2Drv.SDL2Client]
-	// SplitScreenFullDetail (True on PC); every other client keeps the Xbox's reductions.
+	// SplitScreenFullDetail (default False: the Xbox's reductions); every other client keeps the reductions.
 	virtual UBOOL SplitScreenKeepsFullDetail() { return 0; }
 
     INT GetTextureLODBias (ELODSet LODSet);

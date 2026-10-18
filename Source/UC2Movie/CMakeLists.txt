@@ -1,7 +1,6 @@
 #=============================================================================
-# UC2Movie - the movie player (M9): cooked Ogg Theora/Vorbis movies (tools/cook-movies.py), behind the
-# engine's portable movie interface (Engine/Inc/UnMovie.h). Built on every target; on the web it compiles
-# but stays idle until a render device and an audio device exist there (M11).
+# UC2Movie - the movie player: cooked Ogg Theora/Vorbis movies (tools/cook-movies.py), behind the engine's
+# portable movie interface (Engine/Inc/UnMovie.h). Built on every target, the web included.
 #=============================================================================
 
 project(UC2Movie CXX)

@@ -7,7 +7,7 @@ Every field the device plays is compared: cue name and sounds; sound priority, v
 boost, I3DL2 level, 3D flag, min/max distance, rolloff, length, loop count, ignored events, RPC curves; per track
 the play event (time, delay, loops, new variation, playlist type, pitch and volume ranges), the waves (bank, entry,
 weight) and the set volume / set pitch events. A difference is KNOWN when it is one of the documented inferences
-(docs/porting/analysis/xbox-audio-runtime.md, step 1), else NEW. Exit status 1 if anything is NEW.
+(KNOWN_SOUND and KNOWN_WEIGHTS below), else NEW. Exit status 1 if anything is NEW.
 
   tools/dev/audio-xsb-compare.py <dump dir>
 """

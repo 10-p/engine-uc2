@@ -1,12 +1,12 @@
-# toolchain-aarch64-linux-gnu.cmake -- cross-compile the Linux arm64 (aarch64, LP64) build (M13, preset arm64).
+# toolchain-aarch64-linux-gnu.cmake -- cross-compile the Linux arm64 (aarch64, LP64) build (preset arm64).
 #
-# Build-only for now (owner, 2026-10-04): the code is kept 64-bit clean and the same LP64 data model as
-# native64 (x86_64), which is the build that is actually run. Needs, on Debian/Ubuntu:
+# A build-only target: the code is kept 64-bit clean with the same LP64 data model as native64 (x86_64), the
+# 64-bit build that is run. Needs, on Debian/Ubuntu:
 #   sudo apt install g++-aarch64-linux-gnu            # the cross compiler (+ binutils)
 #   sudo apt install qemu-user qemu-user-binfmt       # to run ucc-bin under emulation
 # and for the client (SDL2's X11/GL probes, fetched SDL2 is built from source): the arm64 X11/GL development
 # packages through multiarch (`dpkg --add-architecture arm64`; libx11-dev:arm64 libxext-dev:arm64
-# libgl-dev:arm64 ...). docs/porting/BLOCKERS.md has the list. char is unsigned on arm: the build keeps
+# libgl-dev:arm64 ...). char is unsigned on arm: the build keeps
 # -fsigned-char (CMakeLists.txt), and the x86_64 -funsigned-char audit build (UC2_UNSIGNED_CHAR_AUDIT) is what
 # shows the code does not depend on it.
 set(CMAKE_SYSTEM_NAME Linux)

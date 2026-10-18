@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Assemble a self-contained Windows folder of the game from a MinGW build (M12), ready to copy to a real Windows
+# Assemble a self-contained Windows folder of the game from a MinGW build, ready to copy to a real Windows
 # machine, and check that the programs need nothing but Windows' own DLLs and the ones shipped beside them.
 #
 #   tools/dev/package-windows.sh [<build-dir> [<dest>]]
-#   tools/dev/package-windows.sh build-windows                  ->  <WorkUC2>/run/m12-package
+#   tools/dev/package-windows.sh build-windows                  ->  <repo>/../run/m12-package
 #
 #   UC2_PACKAGE_CONTENT=0   only System/ (programs, DLL, inis, script packages, localisation): to be put over the
 #                           System folder of an asset tree that is already on the Windows machine
@@ -11,9 +11,9 @@
 #                           report's addresses are then resolved with the unstripped exe from the build directory
 #
 # The folder: <dest>/System (uc2.exe, ucc.exe, OpenAL32.dll, our inis over the asset tree's System/, README-Windows.txt,
-# DLLS.txt) and, unless UC2_PACKAGE_CONTENT=0, the content folders of <WorkUC2>/assets/uc2 and the cooked
-# Sounds/Music of <WorkUC2>/assets/uc2-cooked, hard-linked (a copy of the folder to another disk copies the data).
-# Nothing in the asset tree is written. Re-running replaces <dest>, which must be under <WorkUC2>/run.
+# DLLS.txt) and, unless UC2_PACKAGE_CONTENT=0, the content folders of <repo>/../assets/uc2 and the cooked
+# Sounds/Music of <repo>/../assets/uc2-cooked, hard-linked (a copy of the folder to another disk copies the data).
+# Nothing in the asset tree is written. Re-running replaces <dest>, which must be under <repo>/../run.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)

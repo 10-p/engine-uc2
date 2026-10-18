@@ -4,19 +4,14 @@
 
 Revision history:
 	* Created by Ryan C. Gordon, based on ut2003's win32 Launch.cpp.
-	* engine-uc2 (M4): rewritten. Structure from engine-ut2004's SDL2 launcher
-	  (Source/SDLLaunch/Src/SDLLaunch.cpp there); what UC2 itself does at startup from
-	  Source/Launch/Src/Launch.cpp + Engine/Inc/UnEngineWin.h (the PC WinMain) and the static
-	  registration from Source/XboxLaunch/Src/Launch.cpp, as Source/UCC/Src/UCC.cpp does it.
-	  Epic's SDL 1.2 version of this file is in git history (7633696).
-
-	Not here yet, by milestone: movies (M9), pads (M10), the Emscripten main loop (M4w).
-	The OpenGL render device (UC2GLDrv) is in since M5, the OpenAL audio device (UC2ALAudio)
-	since M8.
+	* Rewritten for SDL2 and UC2's static link: what UC2 does at start-up comes from
+	Source/Launch/Src/Launch.cpp + Engine/Inc/UnEngineWin.h (the PC WinMain), the static
+	registration from Source/XboxLaunch/Src/Launch.cpp, as Source/UCC/Src/UCC.cpp does it.
+	The browser's main loop is in SDLLaunchWeb.cpp.
 =============================================================================*/
 
 #include "SDLLaunchPrivate.h"
-#include "SDLLaunchWeb.h"	// M4w: empty off Emscripten
+#include "SDLLaunchWeb.h"	// empty off Emscripten
 
 #if __STATIC_LINK
 // Every package linked into uc2.bin, as XboxLaunch/Src/Launch.cpp does for the static XBE.
@@ -38,20 +33,20 @@ Revision history:
 #if UC2_WITH_UC2GLDRV
 #include "UC2GLDrv.h"
 #endif
-#if UC2_WITH_UC2GL4ESDRV	// M11: the GL4ES binding of UC2GLDrv (GLES2 natively, WebGL on the web)
+#if UC2_WITH_UC2GL4ESDRV	// The GL4ES binding of UC2GLDrv (GLES2 natively, WebGL on the web)
 #include "UC2GL4ESDrv.h"
 #endif
-#if UC2_WITH_UC2ALAUDIO	// M8
+#if UC2_WITH_UC2ALAUDIO
 #include "UC2ALAudio.h"
 #endif
-#if UC2_WITH_UC2MOVIE	// M9
+#if UC2_WITH_UC2MOVIE
 #include "UC2Movie.h"
 #endif
-#if UC2_WITH_WEBRTCDRV	// E-2: the browser's network driver (web build only)
+#if UC2_WITH_WEBRTCDRV	// The browser's network driver (web build only)
 #include "WebRTCDrv.h"
 #endif
 #endif
-#include "UnMovie.h"	// M9: appPlayMovieFullscreen (Engine)
+#include "UnMovie.h"	// AppPlayMovieFullscreen (Engine)
 
 /*-----------------------------------------------------------------------------
 	Global variables.
@@ -216,16 +211,15 @@ void CMainLoop::RunLoop()
 	unguard;
 
 	// Enforce optional maximum tick rate.
-	UBOOL LimiterSlept = 0;	// F-4b: as engine-ut2004, the web yields only when the limiter did not sleep
+	UBOOL LimiterSlept = 0;	// the web yields only when the limiter did not sleep
 	guard(EnforceTickRate);
 	if( !GIsBenchmarking && IncludeMessaging )
 	{
 		FLOAT MaxTickRate = Engine->GetMaxTickRate();
 		// A frame-rate cap for a game that has no cap of its own (a standalone game or a listen server:
-		// GetMaxTickRate returns 0 there): [Engine.Engine] FrameRateCap=<fps>, the key engine-ut99 and
-		// engine-unreal1 read (the frontend's launcher writes it with -ini:System:[Engine.Engine]:FrameRateCap=<n>).
-		// Absent or <= 0: uncapped, as engine-ut2004 (which has no cap). F-4e: it replaces D-6's -maxfps=<n>
-		// switch; tests set it with -ini: for frame-rate-dependent behaviour (Epic's integer view rotation per
+		// GetMaxTickRate returns 0 there): [Engine.Engine] FrameRateCap=<fps>, the key the frontend's launcher
+		// writes (-ini:System:[Engine.Engine]:FrameRateCap=<n>). Absent or <= 0: uncapped. Tests set it with -ini:
+		// for frame-rate-dependent behaviour (Epic's integer view rotation per
 		// tick, the lazy camera) without a GPU, where the null renderer otherwise runs at a thousand frames a second.
 		static FLOAT MaxFps = -1.f;
 		if( MaxFps < 0.f )
@@ -238,10 +232,10 @@ void CMainLoop::RunLoop()
 		}
 		if( MaxFps > 0.f && (MaxTickRate <= 0.f || MaxFps < MaxTickRate) )
 			MaxTickRate = MaxFps;
-		// jitter (port, docs/porting/analysis/jitter.md): [SDLLaunch] FramePattern=<ms>:<ms>:... gives the frames
+		// [SDLLaunch] FramePattern=<ms>:<ms>:... gives the frames
 		// these lengths in turn (a game without a cap of its own only; it takes the place of FrameRateCap): uneven
 		// frame pacing, as a browser has it, made repeatable for the frame trace (FRAMETRACE, UC2FrameTrace.cpp).
-		// A test key, set with -ini:System:[SDLLaunch]:FramePattern=16.7:33.3:... (F-4e: was -framepattern=), read once
+		// A test key, set with -ini:System:[SDLLaunch]:FramePattern=16.7:33.3:..., read once
 		// and never kept in the ini (appReadTestKey).
 		static INT   PatternNum = -1;
 		static FLOAT Pattern[32];
@@ -282,11 +276,10 @@ void CMainLoop::RunLoop()
 	unguard;
 
 #ifdef __EMSCRIPTEN__
-	// M4w: give the engine worker's event loop one turn per frame (input, host commands, the frame's present);
+	// Give the engine worker's event loop one turn per frame (input, host commands, the frame's present);
 	// the limiter above already did when it slept (appSleep is emscripten_sleep, the same kind of yield), so
-	// exactly one yield per frame, as engine-ut2004's WorkerYield. F-4b: the test is whether the limiter slept,
-	// not the engine's own tick rate (the launcher's frame cap sleeps with an engine rate of 0, and yielded
-	// twice per frame). SDLLaunchWeb.cpp says why.
+	// exactly one yield per frame. The test is whether the limiter slept, not the engine's own tick rate (the
+	// launcher's frame cap sleeps with an engine rate of 0). SDLLaunchWeb.cpp has the yield.
 	if( !LimiterSlept )
 		UC2WebYieldFrame();
 #else
@@ -341,15 +334,11 @@ static void MainLoop( UEngine* Engine )
 -----------------------------------------------------------------------------*/
 
 //
-// -*RENDERER switches (engine-ut2004's SelectRenderDevice, cut down): the first switch present whose
-// device is in this build sets [Engine.Engine] RenderDevice for this run. The GL devices join at M5.
-//
-// Y-5: engine-ut2004 asks "is the class in this binary", which there also means "can it run here": its
-// web build does not link OpenGLDrv, so a typed -OPENGLRENDERER is logged and ignored and the game boots
-// on its default device. Here the web build links UC2GLDrv.UC2GLRenderDevice as the GL4ES device's parent
-// class, but its desktop binding cannot make a context in a browser (UC2GL_HAS_DESKTOP_BINDING is 0): taken,
-// the viewport asserted RenDev. So a switch also says whether its device runs on this platform; one that
-// does not is logged and ignored as engine-ut2004 does, and the ini's device (GL4ES on the web) boots.
+// -*RENDERER switches: the first switch present whose device is in this build and runs on this platform
+// sets [Engine.Engine] RenderDevice for this run. The web build links UC2GLDrv.UC2GLRenderDevice as the
+// GL4ES device's parent class, but its desktop binding cannot make a context in a browser
+// (UC2GL_HAS_DESKTOP_BINDING is 0), so a switch also says whether its device runs here; one that does not
+// is logged and ignored, and the ini's device (GL4ES on the web) boots.
 //
 #if UC2_WITH_UC2GLDRV && !UC2GL_HAS_DESKTOP_BINDING
 	#define UC2_DESKTOP_GL_RUNS 0
@@ -360,8 +349,8 @@ struct FRenderSwitch { const TCHAR* Param; const TCHAR* Device; UBOOL RunsHere; 
 static const FRenderSwitch GRenderSwitches[] =
 {
 	{ TEXT("NULLRENDERER"), TEXT("Engine.NullRenderDevice"),			1 },
-	{ TEXT("OPENGL"),       TEXT("UC2GLDrv.UC2GLRenderDevice"),			UC2_DESKTOP_GL_RUNS },	// M5
-	{ TEXT("GL4ES"),        TEXT("UC2GL4ESDrv.UC2GL4ESRenderDevice"),	1 },	// M11: the same driver on GLES2 through GL4ES
+	{ TEXT("OPENGL"),       TEXT("UC2GLDrv.UC2GLRenderDevice"),			UC2_DESKTOP_GL_RUNS },
+	{ TEXT("GL4ES"),        TEXT("UC2GL4ESDrv.UC2GL4ESRenderDevice"),	1 },	// The same driver on GLES2 through GL4ES
 };
 
 static void SelectRenderDevice()
@@ -408,9 +397,9 @@ static void ReplaceMissingDrivers()
 		}
 	}
 #if UC2_WITH_WEBRTCDRV
-	// E-2: a browser has no sockets. The web Default.ini names the WebRTC driver, but an Avaris.ini derived
-	// by an older web build (the frontend keeps it) still names the TCP one: switch it, as engine-ut2004's
-	// launcher does; the frontend leaves P2P to the engine (its netModeSetting.ts seeds nothing for it).
+	// A browser has no sockets. The web Default.ini names the WebRTC driver, but an Avaris.ini derived
+	// by an older web build (the frontend keeps it) may still name the TCP one: switch it; the frontend leaves
+	// P2P to the engine (its netModeSetting.ts seeds nothing for it).
 	FString NetDevice = GConfig->GetStr( TEXT("Engine.Engine"), TEXT("NetworkDevice") );
 	if( appStricmp( *NetDevice, TEXT("IpDrv.TcpNetDriver") )==0 )
 	{
@@ -534,8 +523,8 @@ int main( int argc, char** argv )
 	setbuf( stderr, NULL );
 	appArgv0( argv[0] );
 
-	// Command line: everything after the program name (appInit no longer drops a first token off Windows).
-	// 4096 characters, the size of Core's GCmdLine: settings go in as -ini: tokens (F-4 follow-up), and a test run's
+	// Command line: everything after the program name (appInit keeps the first token off Windows too).
+	// 4096 characters, the size of Core's GCmdLine: settings go in as -ini: tokens, and a test run's
 	// line passes 1024 (a token that does not fit is dropped whole, with a warning below).
 	TCHAR CmdLine[4096]=TEXT("");
 	UBOOL CmdLineCut = 0;
@@ -583,16 +572,16 @@ int main( int argc, char** argv )
 #if UC2_WITH_UC2GLDRV
 		AUTO_INITIALIZE_REGISTRANTS_UC2GLDRV;
 #endif
-#if UC2_WITH_UC2GL4ESDRV	// M11
+#if UC2_WITH_UC2GL4ESDRV
 		AUTO_INITIALIZE_REGISTRANTS_UC2GL4ESDRV;
 #endif
-#if UC2_WITH_UC2ALAUDIO	// M8
+#if UC2_WITH_UC2ALAUDIO
 		AUTO_INITIALIZE_REGISTRANTS_UC2ALAUDIO;
 #endif
-#if UC2_WITH_UC2MOVIE	// M9
+#if UC2_WITH_UC2MOVIE
 		AUTO_INITIALIZE_REGISTRANTS_UC2MOVIE;
 #endif
-#if UC2_WITH_WEBRTCDRV	// E-2
+#if UC2_WITH_WEBRTCDRV
 		AUTO_INITIALIZE_REGISTRANTS_WEBRTCDRV;
 #endif
 		AUTO_INITIALIZE_REGISTRANTS_IPDRV;
@@ -647,7 +636,7 @@ int main( int argc, char** argv )
 		{
 			ExitSplash();
 #ifdef __EMSCRIPTEN__
-			UC2WebSetEngine( Engine );	// M4w: ue_exec_command
+			UC2WebSetEngine( Engine );	// Ue_exec_command
 #endif
 
 			UViewport* InitialViewport = NULL;
@@ -664,7 +653,7 @@ int main( int argc, char** argv )
 			if( InitialViewport )
 				InitialViewport->Exec( TEXT("LOADWINDOWPOSITION") );
 
-			// M9: the start-up logos, as the Xbox launcher played Movies/UC2_Logos.xmv (Launch.cpp:402,
+			// The start-up logos, as the Xbox launcher played Movies/UC2_Logos.xmv (Launch.cpp:402,
 			// XboxMovieThread.cpp:1049): full screen, skippable by a key or button. Nothing plays with the null
 			// renderer, on a dedicated server, or with
 			// [UC2Movie] StartupMovies=False (UnMovie.cpp, appCanPlayFullscreenMovie).

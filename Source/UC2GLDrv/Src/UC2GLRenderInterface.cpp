@@ -1,10 +1,10 @@
 /*=============================================================================
 	UC2GLRenderInterface.cpp: UC2GLDrv's FRenderInterface.
 
-	Structure from engine-ut2004's OpenGLDrv (OpenGLRenderInterface.cpp: saved state stack,
-	deferred lights/matrices, CommitStreams, DrawPrimitive); behaviour from UC2's D3DDrv
-	(D3DRenderInterface.cpp: UC2's state stacks, SetMaterial, light selection, stencil,
-	colour write masks, what the PC build does with the post-process interface).
+	Saved state stack, deferred lights/matrices, CommitStreams, DrawPrimitive; behaviour from
+	UC2's D3DDrv (D3DRenderInterface.cpp: UC2's state stacks, SetMaterial, light selection,
+	stencil, colour write masks), with pixel-shader materials (UC2GLShaders.cpp) and the
+	post-process interface (UC2GLPostProcess.cpp).
 
 	How D3D state becomes GL state (the rules every function below follows):
 	- Clip space: the engine's projections are D3D's (z in [0,1], pixel centres on integer
@@ -15,15 +15,16 @@
 	- Culling and front faces follow from that: D3D's CW is the GL back face; flipped targets
 	  swap the two.
 	- Viewports are D3D rectangles (origin top left), converted per target.
-	- Texture stages are D3D8 stages (UC2GLD3DTypes.h) translated to texture_env_combine
-	  (+ ATI_texture_env_combine3 for the three-operand ops) in SetMaterialBlending.
+	- Texture stages are D3D8 stages (UC2GLD3DTypes.h), drawn as GLSL fragment programs
+	(UC2GLFFProgram.cpp, the default) or translated to texture_env_combine (+ combine3 /
+	combine4 for the three-operand ops) in SetMaterialBlending.
 	- Vertex colours are D3DCOLOR; the resources swizzle them on upload.
 =============================================================================*/
 
 #include "UC2GLDrv.h"
 
 //
-// Log a message once per call site (R1 diagnostics for paths that are deferred).
+// Log a message once per call site (diagnostics for paths without a full implementation).
 //
 #define UC2GL_LOG_ONCE(...) { static UBOOL Logged = 0; if( !Logged ) { Logged = 1; debugf( NAME_Init, __VA_ARGS__ ); } }
 
@@ -453,7 +454,7 @@ void FOpenGLRenderInterface::Clear(UBOOL UseColor,FColor Color,UBOOL UseDepth,FL
 	if( ClearFlags )
 		RenDev->glClear( ClearFlags );
 
-	// M7: copies of the main framebuffer are stale now (UC2GLPostProcess.cpp).
+	// Copies of the main framebuffer are stale now (UC2GLPostProcess.cpp).
 	if( UseColor && SavedRenderTargetState.GetCurrentState()->Framebuffer == RenDev->MainFramebuffer )
 		RenDev->MainColorVersion++;
 	if( UseDepth )
@@ -485,7 +486,7 @@ void FOpenGLRenderInterface::SetRenderStateDirect(BYTE State,DWORD Value)
 
 //
 // Vertex shader constants: PC's fixed-function path has no use for them.
-// M6: the spliced GLSL vertex shaders take these as uniforms.
+// The spliced GLSL vertex shaders take these as uniforms.
 //
 void FOpenGLRenderInterface::SetVertexShaderConstant(INT Register,const void* pConstantData,DWORD ConstantCount)
 {
@@ -785,18 +786,18 @@ void FOpenGLRenderInterface::SetTransform(ETransformType Type,const FMatrix& Mat
 }
 
 //
-// D3DRS_ZBIAS as a GL polygon offset. B-1 (docs/porting/analysis/shadow-flicker.md): the Xbox's
+// D3DRS_ZBIAS as a GL polygon offset. The Xbox's
 // D3DDevice_SetRenderState_ZBias (XDK d3d8.lib, state.obj) sets D3DRS_POLYGONOFFSETZSLOPESCALE to
 // -0.25 x ZBias and D3DRS_POLYGONOFFSETZOFFSET to -ZBias, the NV2A's form of glPolygonOffset(factor,
-// units); engine-ut2004's OpenGLDrv uses (-ZBias, -ZBias). The slope term is what keeps a second pass
+// units). The slope term is what keeps a second pass
 // over the same surface (the projectors, ZBias 1) in front of it where the surface is seen at a grazing
 // angle: there the two passes' depths differ by many depth units, in proportion to the depth slope
 // (rasterisation, and the two transform paths of this driver: the fixed-function stage loads modelview
-// and projection, the vertex shaders get their product, UC2GLShaders.cpp), and a constant offset alone
-// let whole triangles of CTF-Aqueduct's terrain lose their tree shadows as the view turned. The slope
-// scale is the Xbox's; the constant stays 5 units per ZBias (the Xbox's is 1), the margin this driver
-// had since R1 for the non-invariant transforms on surfaces seen face on (5 units at 5000 world units
-// from the camera are 0.7 world units).
+// and projection, the vertex shaders get their product, UC2GLShaders.cpp); with a constant offset alone
+// whole triangles of a terrain (CTF-Aqueduct's) lose their tree shadows as the view turns. The slope
+// scale is the Xbox's; the constant is 5 units per ZBias (the Xbox's is 1), a margin for the
+// non-invariant transforms on surfaces seen face on (5 units at 5000 world units from the camera are
+// 0.7 world units).
 //
 void FOpenGLRenderInterface::ApplyZBias( INT ZBias )
 {
@@ -960,7 +961,7 @@ INT FOpenGLRenderInterface::SetMaterial(UMaterial* InMaterial, FString* ErrorStr
 
 	// keep track of last material set
 	CurrentState->LastMaterial = InMaterial;
-	UMaterial* RequestedMaterial = InMaterial;	// O-9: the census (UC2GLPixelTrace.cpp)
+	UMaterial* RequestedMaterial = InMaterial;	// The census (UC2GLPixelTrace.cpp)
 
 	// Release old material state.
 	for(INT PassIndex = 0;PassIndex < CurrentState->NumMaterialPasses;PassIndex++)
@@ -1199,7 +1200,7 @@ static FGLCombineArg GLFixedArg( GLint Source, GLint Operand )
 #define GL_OPERAND3_ALPHA_NV	0x859B
 #endif
 
-// O-9: a three-operand operation (a*b + c) without combine3, as NV_texture_env_combine4's
+// A three-operand operation (a*b + c) without combine3, as NV_texture_env_combine4's
 // "Arg0*Arg1 + Arg2*Arg3" (GL_ADD in GL_COMBINE4_NV mode): Src[3] holds the fourth source.
 // Mode is then GL_COMBINE4_NV; SetMaterialBlending switches the unit to that mode and brings
 // the other half of the stage into the same four-operand form (ToCombine4).
@@ -1329,7 +1330,7 @@ static void TranslateStageOp( UUC2GLRenderDevice* RenDev, D3DTEXTUREOP Op, DWORD
 }
 
 //
-// O-9: one half of a stage in NV_texture_env_combine4's form Src0*Src1 + Src2*Src3 (GL_ADD or
+// One half of a stage in NV_texture_env_combine4's form Src0*Src1 + Src2*Src3 (GL_ADD or
 // GL_ADD_SIGNED), when the other half needs GL_COMBINE4_NV mode. Returns 0 for an operation
 // that has no such form (SUBTRACT, DOT3, MODULATE_ADD_ATI); the caller then keeps GL_COMBINE.
 //
@@ -1414,7 +1415,7 @@ void FOpenGLRenderInterface::SetMaterialBlending( FOpenGLMaterialState* NewMater
 		FOpenGLTexture*				Texture	= (Stage.Texture && Stage.Texture->TextureID) ? Stage.Texture : NULL;
 		GLenum						Target	= (Texture && Texture->IsCubemap) ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
 
-		// O-9: units beyond the texture environment's (GL_MAX_TEXTURE_UNITS; NVIDIA: 4) exist
+		// Units beyond the texture environment's (GL_MAX_TEXTURE_UNITS; NVIDIA: 4) exist
 		// for fragment programs only: no enables, no texture environment there.
 		UBOOL FixedUnit = s < RenDev->GLFixedFunctionUnits;
 		RenDev->glActiveTexture( GL_TEXTURE0 + s );
@@ -1430,7 +1431,7 @@ void FOpenGLRenderInterface::SetMaterialBlending( FOpenGLMaterialState* NewMater
 			RenDev->glDisable( GL_TEXTURE_CUBE_MAP );
 			RenDev->glEnable( GL_TEXTURE_2D );
 		}
-		// M7: the default render target is sampled through its copy (UC2GLPostProcess.cpp).
+		// The default render target is sampled through its copy (UC2GLPostProcess.cpp).
 		RenDev->glBindTexture( Target, Texture ? RenDev->GetSampledTexture( Texture ) : RenDev->NullTextureID );
 
 		if( Texture )
@@ -1453,7 +1454,7 @@ void FOpenGLRenderInterface::SetMaterialBlending( FOpenGLMaterialState* NewMater
 				MinFilter = MinLinear ? GL_LINEAR_MIPMAP_LINEAR : GL_NEAREST_MIPMAP_LINEAR;
 			RenDev->glTexParameteri( Target, GL_TEXTURE_MIN_FILTER, MinFilter );
 			RenDev->glTexParameteri( Target, GL_TEXTURE_MAG_FILTER, MagLinear ? GL_LINEAR : GL_NEAREST );
-			// O-8: D3DDrv makes every stage's default minifying filter D3DTEXF_ANISOTROPIC when
+			// D3DDrv makes every stage's default minifying filter D3DTEXF_ANISOTROPIC when
 			// LevelOfAnisotropy > 1 (D3DRenderState.cpp); the stages here default to LINEAR, so
 			// a linear filter of a texture with mipmaps is that default. Point-filtered stages
 			// (the post-process reads) and textures without mipmaps (render targets) stay at 1.
@@ -1477,7 +1478,7 @@ void FOpenGLRenderInterface::SetMaterialBlending( FOpenGLMaterialState* NewMater
 		if( ColorMode == GL_DOT3_RGBA )
 			AlphaMode = GL_REPLACE;	// DOT3_RGBA writes alpha itself; the alpha combiner is ignored
 
-		// O-9: NV_texture_env_combine4 for a three-operand half; the other half into the same form.
+		// NV_texture_env_combine4 for a three-operand half; the other half into the same form.
 		GLint EnvMode = GL_COMBINE;
 		if( ColorMode == UC2GL_MODE_COMBINE4_ADD || AlphaMode == UC2GL_MODE_COMBINE4_ADD )
 		{
@@ -1674,7 +1675,7 @@ INT FOpenGLRenderInterface::SetDynamicIndexBuffer(FIndexBuffer* IndexBuffer,INT 
 	FOpenGLDynamicIndexBuffer* DynamicIndexBuffer;
 	if( IndexBuffer->GetIndexSize() == sizeof(DWORD) )
 	{
-		// M11: without 32-bit indices this buffer stores them narrowed to 16 bits (UC2GLResource.cpp).
+		// Without 32-bit indices this buffer stores them narrowed to 16 bits (UC2GLResource.cpp).
 		if( !RenDev->DynamicIndexBuffer32 )
 			RenDev->DynamicIndexBuffer32 = new FOpenGLDynamicIndexBuffer(RenDev,RenDev->CapUIntIndex ? sizeof(DWORD) : sizeof(_WORD));
 		DynamicIndexBuffer = RenDev->DynamicIndexBuffer32;
@@ -1782,7 +1783,7 @@ void FOpenGLRenderInterface::GetGLMatrices( FMatrix& ModelView, FMatrix& Project
 			Width	= Max<INT>( VPState->ViewportWidth, 1 ),
 			Height	= Max<INT>( VPState->ViewportHeight, 1 );
 
-	// The half-pixel shift that puts D3D's pixel centres (integer coordinates) on GL's. M7:
+	// The half-pixel shift that puts D3D's pixel centres (integer coordinates) on GL's. And:
 	// a pass that point-samples a render target is drawn 1/32 pixel short of it, so that a
 	// read on a texel boundary takes the texel to the right and below, as hardware does
 	// (UC2GLPostProcess.cpp, convention 4).
@@ -2081,9 +2082,9 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 
 	if( NumPrimitives <= 0 || !CurrentState->VertexShader )
 		return;
-	// M11: the engine's own query geometry (the boxes of FOcclusionQueryManager::RenderQuery, drawn
+	// The engine's own query geometry (the boxes of FOcclusionQueryManager::RenderQuery, drawn
 	// with OcclusionFB: colour, alpha and depth writes off) is not drawn while a query is open: there
-	// is nothing to count (GetOcclusionQueryResults answers "visible"). M7b: a deferred query
+	// is nothing to count (GetOcclusionQueryResults answers "visible"). A deferred query
 	// (BeginDeferredQuery) wraps an actor's real draw instead, which must be drawn: only the projector
 	// batches use it (Projector.uc bUseDeferredHWOcclusionTests), and they exist only with the Xbox
 	// static projector batching (FRenderCaps::XboxProjectors).
@@ -2112,7 +2113,7 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 
 	for( INT Pass=0; Pass<CurrentState->NumMaterialPasses; Pass++ )
 	{
-		// M7: a stage that samples the default render target gets an up-to-date copy of it.
+		// A stage that samples the default render target gets an up-to-date copy of it.
 		PrepareSampledTargets( CurrentState->MaterialPasses[Pass] );
 		if( MatricesDirty )
 			CommitMatrices();
@@ -2134,11 +2135,11 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 		{
 			CommitStreams( FirstIndex );
 			CommitTexCoords( Pass );
-			// O-9: the texture stages as a fragment program (UC2GLFFProgram.cpp).
+			// The texture stages as a fragment program (UC2GLFFProgram.cpp).
 			FFProgrammed = BeginFixedFunctionProgram( CurrentState->MaterialPasses[Pass], ColorSumEnabled, CurrentState->DistanceFogEnabled );
 		}
 
-		// GLPIXTRACE (debug, UC2GLPixelTrace.cpp; fx-fixes): the traced pixel before this pass.
+		// GLPIXTRACE (debug, UC2GLPixelTrace.cpp): the traced pixel before this pass.
 		extern UBOOL UC2GL_PixelTraceActive( UUC2GLRenderDevice* );
 		extern void UC2GL_PixelTraceRead( FOpenGLRenderInterface*, FColor& );
 		extern void UC2GL_PixelTraceLog( FOpenGLRenderInterface*, INT, const FColor&, const FColor& );
@@ -2190,7 +2191,7 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 			GetLastMaterial() ? GetLastMaterial()->GetPathName() : TEXT("None") ) );
 	}
 
-	// M7: copies of the main framebuffer are stale now (UC2GLPostProcess.cpp).
+	// Copies of the main framebuffer are stale now (UC2GLPostProcess.cpp).
 	if( SavedRenderTargetState.GetCurrentState()->Framebuffer == RenDev->MainFramebuffer )
 		RenDev->MainColorVersion++;
 	RenDev->MainDepthVersion++;
@@ -2199,7 +2200,7 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 }
 
 //
-// M11: a wireframe pass on GLES. The edges of the triangles the draw call describes, as a
+// A wireframe pass on GLES. The edges of the triangles the draw call describes, as a
 // line list in a scratch index buffer (D3DFILL_WIREFRAME draws every edge; shared edges are
 // drawn twice here as there). Returns 0 if the indices are not at hand; the caller then
 // draws the triangles filled.
@@ -2279,7 +2280,7 @@ UBOOL FOpenGLRenderInterface::DrawWireframe( GLenum Type, INT FirstIndex, INT Co
 /*-----------------------------------------------------------------------------
 	What PC's D3DDrv does not implement (Xbox paths).
 	The post-process interface (back-buffer copy and material, CopyDepthBuffer, dynamic
-	gamma, the depth-of-field ramp) is in UC2GLPostProcess.cpp since M7.
+	gamma, the depth-of-field ramp) is in UC2GLPostProcess.cpp.
 -----------------------------------------------------------------------------*/
 
 // GPU skinning is Xbox-only; PC skins on the CPU (UsePCSkeletalShader=False).
@@ -2301,8 +2302,8 @@ void FOpenGLRenderInterface::SetTerrainTransform( FMatrix& WorldMat, INT HeightM
 //
 UBOOL FOpenGLRenderInterface::BeginOcclusionQuery(void)
 {
-	// M11: the engine's query geometry (wireframe boxes with every write off) is not drawn
-	// while there is nothing to count for it; real draws inside a deferred query are (M7b): see
+	// The engine's query geometry (wireframe boxes with every write off) is not drawn
+	// while there is nothing to count for it; real draws inside a deferred query are: see
 	// DrawPrimitive.
 	InOcclusionQuery = 1;
 	return 1;

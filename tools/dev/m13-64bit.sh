@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
-# M13: the 64-bit build checked end to end, headless and repeatable. One PASS/FAIL line per check.
+# The 64-bit build checked end to end, headless and repeatable. One PASS/FAIL line per check.
 #
 #   tools/dev/m13-64bit.sh                     every check, against the 64-bit tree run/m13 (and run/m13-32)
 #   tools/dev/m13-64bit.sh verify census       only these checks (names below)
 #   M13_TREE=m13-uchar M13_BUILD=build-native64-uchar tools/dev/m13-64bit.sh     the -funsigned-char build
 #
 # Environment (defaults in brackets):
-#   M13_TREE      the 64-bit run tree under <WorkUC2>/run [m13]; rebuilt from M13_BUILD unless M13_NO_MKRUN=1
+#   M13_TREE      the 64-bit run tree under <repo>/../run [m13]; rebuilt from M13_BUILD unless M13_NO_MKRUN=1
 #   M13_BUILD     its build directory [build-native64]
 #   M13_REF       the 32-bit reference tree [m13-32], rebuilt from M13_REFBUILD [build-native] if missing
 #   M13_SOAK      soak length in seconds [1200]
-#   M13_CENSUS_WORKERS  servers at once in the census [4]; 2 while the machine is loaded (owner's rule, 2026-10-10)
+#   M13_CENSUS_WORKERS  servers at once in the census [4]; 2 while the machine is loaded
 #   M13_FX        the m7-effects.sh effects to run [all]
-# Output: <WorkUC2>/logs/m13 (the m13 tree) or <WorkUC2>/logs/m13/<tree> (others; <WorkUC2>/logs/<tree> is then
+# Output: <repo>/../logs/m13 (the m13 tree) or <repo>/../logs/m13/<tree> (others; <repo>/../logs/<tree> is then
 # a link there, because the suites write to logs/<tree>), stable names, PASS/FAIL lines also in m13-summary.txt.
-# A D-phase task's tree (M13_TREE=d<N>-..., M13_REF likewise) writes to <WorkUC2>/logs/d<N>/<tree> instead, and its
+# A D-phase task's tree (M13_TREE=d<N>-..., M13_REF likewise) writes to <repo>/../logs/d<N>/<tree> instead, and its
 # census trees are <tree>-census-N / <ref>-census-N.
 #
-# Every program runs inside <WorkUC2>/bin/capped (CLAUDE.md "Running anything"): the suites keep their own
-# ceilings (2G per game run: a 64-bit game measured below that, docs/porting/analysis/64bit.md), ucc-bin
+# Every program runs inside <repo>/../bin/capped (CLAUDE.md "Running anything"): the suites keep their own
+# ceilings (2G per game run), ucc-bin
 # verifyclasses 3G, the census 8G for its 4 servers, the soak 3G. Nothing is left running (checked last).
 #
 # Checks (existing suites reused; nothing is re-implemented here but the comparisons):
@@ -39,9 +39,9 @@
 #              build loads the other's file back to the values it was saved with (ULoadSaveManager, the game's path)
 #   soak       M13_SOAK s: menu -> DM-Deadbolt with 4 bots -> menu -> DM-Azure with 4 bots; 0 Critical, the
 #              resident size sampled every 30 s does not grow over the second map (flat RSS)
-#   base32     (not in the default list) the 32-bit build after M13, tree M13_REF: verifyclasses as before,
+#   base32     (not in the default list) the 32-bit build, tree M13_REF: verifyclasses as for the 64-bit build,
 #              controls keyboard+pad, audio self-test 39/0, movie self-test 96/0, glselftest 10/10, and the pinned
-#              picture against main's 32-bit build (M13_BASEBUILD, default <WorkUC2>/engine-uc2/build-native, read
+#              picture against main's 32-bit build (M13_BASEBUILD, default <repo>/../engine-uc2/build-native, read
 #              only, copied into run tree M13_BASE=m13-main32): same view, static part >= 99.9% within 2 levels
 #   asan       (not in the default list) the native64-asan build (tree m13-asan): verifyclasses, a server with
 #              bots, the menu and a map with bots; 0 AddressSanitizer reports; UBSan sites listed
@@ -58,7 +58,7 @@ soak=${M13_SOAK:-1200}
 case "$tree" in m13*|d[0-9]*|t[0-9]*) ;; *) echo "M13_TREE must start with m13 (or a D-phase or T-task's prefix d<N>, t<N>)" >&2; exit 2;; esac
 case "$tree" in m13) out=$work/logs/m13;; m13*) out=$work/logs/m13/$tree;; *) out=$work/logs/${tree%%-*}/$tree;; esac
 mkdir -p "$out"
-# The suites write to <WorkUC2>/logs/<tree>: for other trees that is a link into logs/m13.
+# The suites write to <repo>/../logs/<tree>: for other trees that is a link into logs/m13.
 if [ "$tree" != m13 ]; then
   [ -e "$work/logs/$tree" ] && [ ! -L "$work/logs/$tree" ] && { echo "$work/logs/$tree exists and is not a link" >&2; exit 2; }
   ln -sfn "$out" "$work/logs/$tree"
@@ -112,8 +112,8 @@ check_census() {
   local c64=m13-census-$tree c32=m13-census-$ref s64 s32 n64 p64 diffs
   # A D-phase tree (d<N>-...) names its census trees after itself, so they keep the task's prefix.
   case "$tree" in m13*) ;; *) c64=$tree-census c32=$ref-census;; esac
-  # map-census.sh itself KILLs a server that has not ended 30 s after its TERM and fails that map (D-1), so no
-  # watcher is needed here any more.
+  # map-census.sh itself kills a server that has not ended 30 s after its TERM and fails that map, so no
+  # watcher is needed here.
   for c in "$c64:$build:7880" "$c32:$refbuild:7890"; do
     local name=${c%%:*} rest=${c#*:}; local b=${rest%%:*} port=${rest#*:}
     mkdir -p "$out/$name"; [ -L "$work/logs/$name" ] || { rm -rf "$work/logs/$name"; ln -sfn "$out/$name" "$work/logs/$name"; }
@@ -301,7 +301,7 @@ check_saves() {	# a profile saved by the 64-bit build loads in the 32-bit one an
   fi
 }
 
-check_base32() {	# gate (c): the 32-bit build after M13 behaves as before (tree M13_REF; main's build as M13_BASE)
+check_base32() {	# the 32-bit build behaves as main's 32-bit build (tree M13_REF; main's build as M13_BASE)
   local o=$out/base32 base=${M13_BASE:-m13-main32} basebuild=${M13_BASEBUILD:-$work/engine-uc2/build-native} rc v ctl st mv gl cmp vb vr
   mkdir -p "$o"
   [ -x "$work/run/$base/System/uc2.bin" ] || "$repo/tools/dev/mkrun-uc2.sh" "$basebuild" "$base" > /dev/null

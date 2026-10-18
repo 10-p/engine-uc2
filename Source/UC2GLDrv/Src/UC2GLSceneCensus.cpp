@@ -1,7 +1,6 @@
 /*=============================================================================
 	UC2GLSceneCensus.cpp: what a level contains that the Xbox-only projector, terrain
-	and shadow paths would draw differently (M7b; docs/porting/analysis/projectors.md).
-	Debug only, not Epic's.
+	and shadow paths would draw differently. Debug only.
 
 	Console: GLSCENECENSUS (runs at the start of the next frame). One line per projector
 	actor (decals, shadows, static map projectors), per terrain and a summary:

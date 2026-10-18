@@ -1,9 +1,9 @@
 /*=============================================================================
-	UC2GLShaders.cpp: programmable materials (M6, renderer R2).
+	UC2GLShaders.cpp: programmable materials.
 
 	The Xbox build draws everything through vertex shaders spliced from the fragments in
 	Source/ShaderData/VertexShaders and, for pixel-shader materials, the register-combiner
-	shaders in Source/ShaderData/PixelShaders. The PC build never got most of that. Here:
+	shaders in Source/ShaderData/PixelShaders. Epic's PC build has most of that compiled out. Here:
 
 	- Fragment shaders: generated from Epic's .psh sources by tools/psh2glsl.py
 	  (Shaders/*.glsl, embedded through Shaders/UC2GLPixelShaders.inc).
@@ -15,8 +15,7 @@
 	  not (static-mesh vertex colours) are read off the vertex streams.
 	- Programs: one per (pixel shader, variant, vertex shader enum), linked on first use.
 
-	Every snippet names the .vsh file it stands for. docs/porting/analysis/shaders.md has the
-	design notes and the list of what waits for M7.
+	Every snippet names the .vsh file it stands for.
 =============================================================================*/
 
 #include "UC2GLDrv.h"
@@ -40,14 +39,14 @@ enum
 {
 	PSV_CubeMask		= 0x0f,	// stage n samples a cube map (PS_GLOBALFLAGS_TEXMODE_ADJUST)
 	PSV_SpecularEnable	= 0x10,	// D3DRS_SPECULARENABLE for shaders without xfc
-	PSV_SceneDepthTest	= 0x20,	// M11: no gl_FragDepth; the scene's depth is tested in the shader (UC2GL_SceneDepthTestMain)
-	PSV_FillX			= 0x40,	// H-1: every texture read is the mean of reads 2 texels apart along x (UC2GL_WithFill)
+	PSV_SceneDepthTest	= 0x20,	// No gl_FragDepth; the scene's depth is tested in the shader (UC2GL_SceneDepthTestMain)
+	PSV_FillX			= 0x40,	// Every texture read is the mean of reads 2 texels apart along x (UC2GL_WithFill)
 	PSV_FillY			= 0x80,	//      ... along y
 	PSV_Fill4			= 0x100,//      four reads per axis (else two)
 };
 
 //
-// H-1 (docs/porting/analysis/h1-bloom.md): the fill variant of a pixel shader, for FilterCopyRenderTarget's
+// The fill variant of a pixel shader, for FilterCopyRenderTarget's
 // TapScale (PS_Blur's passes in chains whose targets have 2 or 4 times the Xbox's texels per axis). Each of the
 // generated body's texture reads, texture2DProj(u_texN, tc), becomes the mean of 2 (4) bilinear reads at offsets
 // 2j - N + 1 texels of the source (u_fillStep: one texel) along the axes asked for: a tap that covered 2 coarse
@@ -84,15 +83,15 @@ static FString UC2GL_WithFill( const FString& Body, DWORD Variant )
 #define UC2GL_SCENEDEPTH_UNIT 7
 
 //
-// M11, PSV_SceneDepthTest. The generated body's main() is renamed and this main() put after
+// PSV_SceneDepthTest. The generated body's main() is renamed and this main() put after
 // it: the fragment is dropped where the depth test GL_LEQUAL against the scene's depth would
 // drop it, as if the scene's depth had been copied into the target (CopyDepthBuffer). The
 // half unit of the 24-bit depth makes "<=" compare as the quantised depth buffer would.
 // The fragment's own depth comes from the clip-space z and w of the vertex shader, interpolated
 // with perspective and divided here: that is exactly the window depth (z/w is affine in screen
-// space), and it is highp, where gl_FragCoord is only mediump in GLSL ES 1.00 (on Mesa's ES 2.0
-// context mediump is 16-bit: gl_FragCoord.z missed by up to 2^-11 = 8192 depth units, found by
-// the self-test). The vertex side is UC2GL_WithSceneDepthTestVertex. Also used by the self-test.
+// space), and it is highp, where gl_FragCoord is only mediump in GLSL ES 1.00 (mediump can be
+// 16-bit: gl_FragCoord.z then misses by up to 2^-11 = 8192 depth units). The vertex side is
+// UC2GL_WithSceneDepthTestVertex. Also used by the self-test.
 //
 #define UC2GL_SCENEDEPTH_VS_FLAG (((QWORD)1) << 63)	// in a vertex shader key: the depth varying is written (no unique shader is that large)
 
@@ -135,20 +134,20 @@ FString UC2GL_WithSceneDepthTestVertex( const FString& Source )
 #define UC2GL_LOG_ONCE(...) { static UBOOL Logged = 0; if( !Logged ) { Logged = 1; debugf( NAME_Init, __VA_ARGS__ ); } }
 
 /*-----------------------------------------------------------------------------
-	Which shaders are drawn for real at this milestone.
+	Which shaders need the post-processing.
 -----------------------------------------------------------------------------*/
 
 //
 // These read a copy of the back buffer, the depth buffer or another render target, or belong
 // to the post-process chain the engine runs only for a device with the XboxPostProcess
-// capability. With UsePostProcess (M7) they are drawn like every other shader; without it
-// they stay on the stage-0 fallback (SetPixelShaderMaterial), which is the M6 behaviour.
+// capability. With UsePostProcess they are drawn like every other shader; without it
+// they stay on the stage-0 fallback (SetPixelShaderMaterial).
 //
 static UBOOL UC2GL_IsM7PixelShader( INT Type )
 {
 	switch( Type )
 	{
-	// M7: post-process chain (FPostProcessRender, UCCameraEffects, shadow blur): render targets as input.
+	// Post-process chain (FPostProcessRender, UCCameraEffects, shadow blur): render targets as input.
 	case PS_Blur:
 	case PS_DepthOfField:
 	case PS_Mask:
@@ -158,7 +157,7 @@ static UBOOL UC2GL_IsM7PixelShader( INT Type )
 	case PS_EmissiveSelectBlur:
 	case PS_ShadowBlur:
 	case PS_DepthSwizzleColor:
-	// M7: the back-buffer copy as a texture.
+	// The back-buffer copy as a texture.
 	case PS_Refraction:
 	case PS_LuminanceTexIndex:
 	case PS_UseTexIndex:
@@ -170,7 +169,7 @@ static UBOOL UC2GL_IsM7PixelShader( INT Type )
 	case PS_ColorRemap:
 	case PS_ColorRemapMasked:
 	case PS_ColorRemapGrayScale:
-	// M7: distortion (back buffer through a dependent read, accumulation target).
+	// Distortion (back buffer through a dependent read, accumulation target).
 	case PS_Distortion:
 	case PS_ModulatedDistortion:
 	case PS_AdditiveDistortion:
@@ -183,10 +182,9 @@ static UBOOL UC2GL_IsM7PixelShader( INT Type )
 }
 
 //
-// Until M7b the 12 projector shaders and PS_Terrain3Layer were listed here: translated, but
-// nothing in the PC code path asked for them. Since M7b both are drawn (SetProjectorMultiMaterial
-// and the terrain caps, docs/porting/analysis/projectors.md); the list is empty and kept for
-// the start-up log's count.
+// Shaders translated but never asked for by the PC code path. The 12 projector shaders and
+// PS_Terrain3Layer are drawn (SetProjectorMultiMaterial and the terrain caps), so the list is
+// empty and kept for the start-up log's count.
 //
 static UBOOL UC2GL_IsEngineGatedPixelShader( INT Type )
 {
@@ -224,9 +222,9 @@ static GLuint UC2GL_CompileShader( UUC2GLRenderDevice* RenDev, GLenum Type, cons
 FString UUC2GLRenderDevice::BuildVertexShaderSource( QWORD Enum )
 {
 	// GPU skinning and the packed terrain vertices exist only with XBOX_ASSET_FORMAT.
-	// M7: VS_Distortion, VS_DistortionAccum and VS_ColorRemap (Distortion.vsh,
+	// VS_Distortion, VS_DistortionAccum and VS_ColorRemap (Distortion.vsh,
 	// DistortionAccum.vsh, ColorRemap.vsh) are composed below, with what
-	// FD3DCombinedVertexShader skips for each of them. M7b: VS_Projector_Atten and
+	// FD3DCombinedVertexShader skips for each of them; VS_Projector_Atten and
 	// VS_Projector_Atten_Clip (ProjectorAtten.vsh, TexSourceTexKill3.vsh) too.
 	DWORD Unique = VS_GETUNIQUESHADER(Enum);
 	UBOOL Projector = Unique == VS_Projector_Atten || Unique == VS_Projector_Atten_Clip;
@@ -288,7 +286,7 @@ FString UUC2GLRenderDevice::BuildVertexShaderSource( QWORD Enum )
 		TEXT("uniform vec4 u_distortionScale;\n")	// VSC_DISTORTION_SCALE
 		TEXT("uniform vec4 u_distortionScreen;\n")	// clip space xy to back-buffer texture coordinates (scale, offset)
 		TEXT("uniform vec4 u_colorRemap;\n")		// VSC_COLOR_REMAP
-		TEXT("uniform vec4 u_proj[13];\n")			// VSC_PROJ_DIRECTIONS .. VSC_PROJ_LIFESPAN_ATTEN (M7b)
+		TEXT("uniform vec4 u_proj[13];\n")			// VSC_PROJ_DIRECTIONS .. VSC_PROJ_LIFESPAN_ATTEN
 		TEXT("varying vec4 v_color0;\n")			// oD0
 		TEXT("varying vec4 v_color1;\n")			// oD1
 		TEXT("varying float v_fog;\n")				// oFog
@@ -361,7 +359,7 @@ FString UUC2GLRenderDevice::BuildVertexShaderSource( QWORD Enum )
 
 	if( Projector )
 	{
-		// ProjectorAtten.vsh (M7b), register for register: u_proj[0..2] = directions, [3..5]
+		// ProjectorAtten.vsh, register for register: u_proj[0..2] = directions, [3..5]
 		// origins, [6] back-face flags, [7] 1/max trace distance, [12] lifespan, one component
 		// per projector (x, y, z). Distance: 1 - ((P - O) . D) / max, 0 behind the origin, at
 		// least 0. Direction: N . -D, or 1 where back faces are wanted. Their product goes out
@@ -687,7 +685,7 @@ void UUC2GLRenderDevice::InitPixelShaders()
 		}
 		else
 		{
-			// One line per failing shader; its materials take the M5 stage-0 fallback.
+			// One line per failing shader; its materials take the stage-0 fallback.
 			debugf( NAME_Warning, TEXT("UC2GLDrv: pixel shader %i (%s.psh) is not usable; its materials are drawn with their first texture stage"), Type, GUC2GLPixelShaders[Type].Name );
 			PixelShaderState[Type] = PSS_Failed;
 			Failed++;
@@ -712,7 +710,7 @@ void UUC2GLRenderDevice::InitPixelShaders()
 		VertexShadersPrecompiled = VertexShaderObjects.Num();
 	}
 
-	// M7b: from now on the caps report what the shaders can do (see ShaderStateKnown).
+	// From now on the caps report what the shaders can do (see ShaderStateKnown).
 	ShaderStateKnown = 1;
 
 	unguard;
@@ -964,13 +962,13 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 	for( INT s=0; s<4; s++ )
 		if( Source.TexOp[s] == 1 && s < MaterialState->StagesUsed && MaterialState->Stages[s].Texture && MaterialState->Stages[s].Texture->TextureID && MaterialState->Stages[s].Texture->IsCubemap )
 			Variant |= 1 << s;
-	// M11: a pass into the distortion accumulation target on a context without gl_FragDepth
+	// A pass into the distortion accumulation target on a context without gl_FragDepth
 	// (CopyDepthBuffer, UC2GLPostProcess.cpp) tests the scene's depth itself.
 	UBOOL SceneDepthTest = SceneDepthTestFramebuffer && SavedRenderTargetState.GetCurrentState()->Framebuffer == SceneDepthTestFramebuffer
 		&& MaterialState->ZTest && DepthEnabled && RenDev->MainDepthStencil;
 	if( SceneDepthTest )
 		Variant |= PSV_SceneDepthTest;
-	// H-1: PS_Blur with FilterCopyRenderTarget's TapScale (SetMatState_PS_Blur).
+	// PS_Blur with FilterCopyRenderTarget's TapScale (SetMatState_PS_Blur).
 	if( MaterialState->BlurFill & UC2_BLUR_FILL_X )	Variant |= PSV_FillX;
 	if( MaterialState->BlurFill & UC2_BLUR_FILL_Y )	Variant |= PSV_FillY;
 	if( MaterialState->BlurFill & UC2_BLUR_FILL_4 )	Variant |= PSV_Fill4;
@@ -1102,7 +1100,7 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 	}
 	RenDev->glActiveTexture( GL_TEXTURE0 );
 
-	// M7: the unique vertex shaders' constants (HandlePSVertexShader).
+	// The unique vertex shaders' constants (HandlePSVertexShader).
 	if( Program->DistortionScaleLoc >= 0 || Program->DistortionScreenLoc >= 0 )
 	{
 		FOpenGLRenderTargetState*	RTState = SavedRenderTargetState.GetCurrentState();
@@ -1114,8 +1112,8 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 			// Xbox: x and y are pixels of a 640x480 back buffer, z and w the ratio of the
 			// back-buffer texture to the back buffer (1). Here: the same fraction of the
 			// picture, in texture coordinates of the back-buffer copy.
-			// pp-scale: pixels of the post-process reference picture (PostProcessReferenceHeight;
-			// 480, the Xbox's, also when it is 0: the distortion was scaled so from M7 on).
+			// Pixels of the post-process reference picture (PostProcessReferenceHeight; 480, the
+			// Xbox's, also when it is 0).
 			FLOAT PixelScale = MainH / (FLOAT)(RenDev->PostProcessReferenceHeight > 0 ? RenDev->PostProcessReferenceHeight : 480);
 			RenDev->glUniform4f( Program->DistortionScaleLoc, DistortionScale[0] * PixelScale / MainW, DistortionScale[1] * PixelScale / MainH, 0.f, 0.f );
 			// GL window coordinates of the current viewport, as coordinates of the copy (top row first).
@@ -1145,7 +1143,7 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 	}
 	if( Program->FillStepLoc >= 0 )
 	{
-		// H-1: the fill variant reads its source (every stage of PS_Blur binds the same texture) one texel apart.
+		// The fill variant reads its source (every stage of PS_Blur binds the same texture) one texel apart.
 		FOpenGLTexture* Source = MaterialState->Stages[0].Texture;
 		FLOAT W = Source ? Max( Source->CachedWidth, 1 ) : 1.f, H = Source ? Max( Source->CachedHeight, 1 ) : 1.f;
 		RenDev->glUniform4f( Program->FillStepLoc, 1.f / W, 1.f / H, 0.f, 0.f );
@@ -1170,7 +1168,7 @@ void FOpenGLRenderInterface::EndProgramPass()
 }
 
 /*-----------------------------------------------------------------------------
-	Program test (M11): complete programs, vertex side included, drawn and read back.
+	Program test: complete programs, vertex side included, drawn and read back.
 
 	For every usable pixel shader and five vertex shader enums (texture coordinates passed
 	through; + vertex colours; + five directional lights; + fog; + 4x2 texture transforms on

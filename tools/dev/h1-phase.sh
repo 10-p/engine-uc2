@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# H-1 part 2: scale 1 against PostProcessTargetScale 2 over the 16 positions of the scale-1 bloom grid.
-# Notebook: docs/porting/analysis/h1-bloom.md, part 2.
+# Bloom phase check: scale 1 against PostProcessTargetScale 2 over the 16 positions of the scale-1 bloom grid.
 #
 #   tools/dev/h1-phase.sh [<tree>] [<WxH>]        default tree h1, 2560x1440
 #   H1_CHECK_ONLY=1 tools/dev/h1-phase.sh ...     measure an earlier run again
@@ -12,7 +11,7 @@
 # time over the 4 x 4 grid positions (one GPU run, tools/dev/fx-owner.sh custom, bin/capped 2G; waits for a load
 # below H1_MAXLOAD, default 14) and takes scale 1 and scale 2 (both with freshly made targets) and the effect off
 # at each. Then tools/dev/h1-measure.py check over all 16: set A scale 1, set B scale 2 (H1_TOL_R 3 px of the 720
-# frame, H1_TOL_PEAK 1 level). Output: <WorkUC2>/logs/<tree>/fx-phase-<WxH>-gpu-q<n>{s1,s2,off}.png, the lines on
+# frame, H1_TOL_PEAK 1 level). Output: <repo>/../logs/<tree>/fx-phase-<WxH>-gpu-q<n>{s1,s2,off}.png, the lines on
 # stdout and in h1-phase-<WxH>.txt.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)

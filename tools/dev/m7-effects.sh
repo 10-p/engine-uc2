@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerate the A/B pictures of M7 (render targets and post-processing) and print one line per effect.
+# Regenerate the A/B pictures of the render-target post-processing and print one line per effect.
 #
 #   tools/dev/m7-effects.sh [<tree>] [effect ...]        default tree: m7; default: every effect
 #   tools/dev/m7-effects.sh m7 bloom praxis-panes
@@ -7,11 +7,11 @@
 #   tools/dev/m7-effects.sh m7 selftest                   only the numeric self-test of the primitives
 #
 # Every effect is one run of the native client through tools/dev/run-uc2-shot.sh, i.e. inside
-# <WorkUC2>/bin/capped 2G with a time limit, headless (Xvfb, software GL), 1280x720, the first PlayerStart
+# <repo>/../bin/capped 2G with a time limit, headless (Xvfb, software GL), 1280x720, the first PlayerStart
 # pinned (`set UCDeathmatch NumPlayers 0`), Fire injected to start the match, two engine screenshots taken at
 # fixed times after the first frame. Between the two screenshots either post-processing is switched on
-# (-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False ... -glpptoggle: picture A = off = the M6 picture, picture B = on) or a console command is
-# issued (-glexec). Nothing is left running. Output, stable names, in <WorkUC2>/logs/<tree>/:
+# (UsePostProcess=False with the test key PostProcessToggleTimes: picture A = off, picture B = on) or a console
+# command is issued (test key Exec). Nothing is left running. Output, stable names, in <repo>/../logs/<tree>/:
 #
 #   fx-<effect>-a.png, fx-<effect>-b.png     the pair (what A and B are is in the table below)
 #   fx-<effect>-ab.png                       both side by side, A left
@@ -23,14 +23,12 @@
 #
 # `changed` is the share of pixels that differ at all between A and B. If fx-<effect>-b.ref.png exists (copy a
 # picture you have looked at and accepted there), the line also gives the mean difference of B to it: a later
-# change of the renderer (the GL4ES/WebGL twin at M11) shows up as a number, not only as a picture.
+# change of the renderer (e.g. the GL4ES device) shows up as a number, not only as a picture.
 # Animated things (the pawn's idle pose, pickups, the HUD) differ between any two runs; expect a few percent.
 #
-# UC2_GLARGS="-gl4es" (M11) adds arguments to every run: the same pictures from the GL4ES/GLES2 twin of the
-# driver (tools/dev/m11-twin.sh uses a second run tree for it and installs the desktop's B pictures as refs).
-#
-# What the on side should look like is in docs/porting/analysis/postprocess.md (per-effect table). There is no
-# Xbox reference picture for any of them.
+# UC2_GLARGS="-gl4es" adds arguments to every run: the same pictures from the GL4ES device (tools/dev/m11-twin.sh
+# uses a second run tree for it and installs the desktop's B pictures as refs). There is no Xbox reference picture
+# for any of them.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
@@ -39,12 +37,12 @@ if [ $# -gt 0 ] && [ -d "$work/run/$1" ]; then tree=$1; shift; fi
 out=$work/logs/$tree
 shot=$repo/tools/dev/run-uc2-shot.sh
 # The self-test's report below is redirected by this shell before run-uc2-shot.sh makes the folder: on a brand-new
-# tree it said "FAILED to run" (render-f5.md, D-4).
+# tree it would say "FAILED to run".
 mkdir -p "$out"
 
 # name | map | pinned spawn (1/0) | seconds | fire at | "A label" | "B label" | uc2.bin arguments
 # liandri: the overlay's noise is three panned textures (UCScreenLiandri Noise1-3), so its picture depends on the
-# level time of the shot's frame; MaterialTime=100 (a GL test key, D-4) pins the time materials see: the same noise
+# level time of the shot's frame; MaterialTime=100 (a GL test key) pins the time materials see: the same noise
 # in every run, which m11-twin.sh's desktop vs twin comparison needs.
 EFFECTS='
 bloom|DM-Deadbolt|1|100|34|post-processing off (M6)|on: emissive glow and bloom on the lamps, always-on depth of field|-ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44,56 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:PostProcessToggleTimes=48
@@ -97,8 +95,8 @@ echo "$EFFECTS" | while IFS='|' read -r name map pinned secs fire la lb args; do
   if [ "$want" != "  " ] && [ "${want#* $name }" = "$want" ]; then continue; fi
   tries=1
   # DM-Praxis: the panes are not in view from the start the pin picks. The view of the wine reference
-  # logs/oracle/DM-Praxis-windows-A.png is that of PlayerStart0 (-1220,288,680, yaw 5220; every start was
-  # shot and compared, docs/porting/analysis/o9-nvidia.md, O-9b), so the pawn is moved there with the test
+  # logs/oracle/DM-Praxis-windows-A.png is that of PlayerStart0 (-1220,288,680, yaw 5220), so the pawn is moved
+  # there with the test
   # command NETPLACE (UC2NetTest.cpp; LocalPlayer = this viewport's player), twice: the second once the
   # pawn stands. One run. Picture A must then match the reference (mean difference below 8 of 255; any
   # other start gives more than 20); if it does not, the line says FAILED: the panes or the camera changed.

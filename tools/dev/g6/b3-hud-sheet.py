@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""B-3: one sheet per layout with the split HUD of several runs side by side (docs/porting/analysis/split-hud.md).
+"""One sheet per layout with the split HUD of several runs side by side.
 
     b3-hud-sheet.py <out.png-prefix> <label>=<dir>[:<mode>] ...
 

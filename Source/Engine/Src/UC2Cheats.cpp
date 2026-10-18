@@ -1,8 +1,7 @@
 /*=============================================================================
 	UC2Cheats.cpp: the position cheats TELEPORT and WHEREAMI, and the one guard
-	every position/inspection command of the port goes through. uc2 port; not
-	Epic's. docs/CHEAT-COMMANDS.md is the reference (names and format shared with
-	the other engines of the frontend).
+	every position/inspection command goes through. docs/CHEAT-COMMANDS.md is the
+	reference (names and format shared with the other engines of the frontend).
 
 	Console commands (the console, a key binding, the SDL2 test channel's "exec ...",
 	the web's ue_exec_command):
@@ -54,7 +53,7 @@ static APlayerController* FirstLocalPlayer( UEngine* Engine )
 // from (NULL: the first viewport's, if any).
 //
 //
-// The same rule without logging anything (F-1c: NETPROBE on a network client answers about the local player only
+// The same rule without logging anything (NETPROBE on a network client answers about the local player only
 // when cheats are off, UC2NetTest.cpp). Out: the net mode, and whether only the test key allowed it.
 //
 ENGINE_API UBOOL UC2CheatsWouldAllow( UEngine* Engine, APlayerController* PC, INT* OutNetMode, UBOOL* OutByKey )
@@ -84,9 +83,9 @@ ENGINE_API UBOOL UC2CheatsWouldAllow( UEngine* Engine, APlayerController* PC, IN
 ENGINE_API UBOOL UC2CheatsAllowed( UEngine* Engine, APlayerController* PC, const TCHAR* Command, const TCHAR* Args, FOutputDevice& Ar )
 {
 	guard(UC2CheatsAllowed);
-	// F-1b (coordinator's rule, 2026-10-09; UC2CheatsWouldAllow above): the local player of a standalone game (UC2's
-	// own rule: the CheatManager, PlayerController.AddCheats) and the local player of a LISTEN server (the host is the
-	// server's authority; UT2004's admin/host precedent). Every network client and a dedicated server: refused, unless
+	// UC2CheatsWouldAllow above: the local player of a standalone game (UC2's own rule: the CheatManager,
+	// PlayerController.AddCheats) and the local player of a listen server (the host is the server's authority).
+	// Every network client and a dedicated server: refused, unless
 	// the test key [Engine.GameEngine] AllowNetCheats opens them for the network tests (tools/dev/net-test.py).
 	UBOOL ByKey = 0;
 	UBOOL Allowed = UC2CheatsWouldAllow( Engine, PC, NULL, &ByKey );
@@ -106,7 +105,7 @@ ENGINE_API UBOOL UC2CheatsAllowed( UEngine* Engine, APlayerController* PC, const
 //
 // WHEREAMI and TELEPORT <x> <y> <z> [<yaw> [<pitch>]]. Called first by UPlayer::Exec (so that
 // TELEPORT with coordinates is not taken by CheatManager.Teleport, which has no parameters)
-// and by UGameEngine::Exec (the -nettest file, a process without a player).
+// and by UGameEngine::Exec (the [UC2NetTest] CommandFile, a process without a player).
 //
 ENGINE_API UBOOL UC2CheatExec( UEngine* Engine, APlayerController* PC, const TCHAR* Cmd, FOutputDevice& Ar )
 {

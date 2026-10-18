@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare recompiled UnrealScript packages with the shipped ones, object by object (M14).
+"""Compare recompiled UnrealScript packages with the shipped ones, object by object.
 
     tools/dev/script-diff.py <shipped System dir> <recompiled System dir> [--patches ScriptPatches.h]
                              [--details <file>] [--functions <file>] [--patch-table <file>] [--packages A,B,...]
@@ -12,7 +12,7 @@ UClass/UProperty and subclasses/UConst/UEnum/UTextBuffer; script bytecode token 
 reads it; tagged default properties as FPropertyTag), the parse must consume each export exactly, and the two
 parses are compared field by field with references resolved to object paths.
 
-Differences that are explained, and how each is recognised (docs/porting/analysis/scripts.md has the evidence):
+Differences that are explained, and how each is recognised:
   stripsource   the shipped packages went through `ucc editor.stripsource` after `make`: ScriptText/CppText
                 text buffers hold " " (Editor.u was skipped by that commandlet), and loading for it set
                 CLASS_FullDefaults (0x08000000) in every class's flags;
@@ -30,7 +30,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'scripts'))
 # The package reader and the export/bytecode/patch-table parsers live in tools/scripts/ucpkg.py (shared with
-# uc-decompile.py and uc-patches.py, script-patches.md T1).
+# uc-decompile.py and uc-patches.py).
 from ucpkg import (Package, PACKAGES, PROPERTY_CLASSES, CLASS_FullDefaults, ParseError, PatchedView,  # noqa: E402
                    disasm, fmt_tag, parse_export, parse_patches)
 
@@ -269,7 +269,7 @@ class Comparison:
                     continue
                 diffs = [k2 for k2 in set(fa) | set(fb) if k2 != 'script' and fa.get(k2) != fb.get(k2)]
                 if set(diffs) & {'line', 'textpos'}:
-                    # where the function stands in the source text (T1: the decompiled text places Epic's appended
+                    # where the function stands in the source text (the decompiled text places Epic's appended
                     # functions elsewhere than Epic's source did)
                     diffs = [k2 for k2 in diffs if k2 not in ('line', 'textpos')]
                     self.neutral_('positions')

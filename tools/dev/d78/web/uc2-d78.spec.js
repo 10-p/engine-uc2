@@ -1,6 +1,6 @@
-// engine-uc2 D-7 (console) and D-8 (AutoFOV), browser check (docs/porting/analysis/console-fov.md). It lives in
+// Console and AutoFOV, browser check. It lives in
 // engine-uc2 and runs with the frontend's harness through the config beside it, so nothing in the frontend
-// repository changes. From <WorkUC2>/ufrontend:
+// repository changes. From <repo>/../ufrontend:
 //   yarn build --target uc2 --engine-artifact <engine-uc2>/build-wasm-perf/Source/SDLLaunch
 //   node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=<N> -- --target uc2 \
 //     --config <engine-uc2>/tools/dev/d78/web/playwright.d78.config.js
@@ -69,10 +69,10 @@ test('uc2 D-7/D-8: the tilde key opens the console, commands run; AutoFOV widens
         await page.keyboard.up(k);
     };
 
-    // D-7: the console key the engine uses (the web ini's ConsoleKey=192)
+    // The console key the engine uses (the web ini's ConsoleKey=192)
     step('console key is the tilde key', count(/Console: Engine\.Console, ConsoleKey 192/) > 0,
         t.findLogs(/Console: Engine\.Console, ConsoleKey/).pop());
-    // D-8: AutoFOV's mode and the menu level's view at 16:9
+    // AutoFOV's mode and the menu level's view at 16:9
     step('AutoFOV on (Adaptive)', count(/\[AutoFOV\] mode=2 referenceAspect=1\.333333/) > 0,
         t.findLogs(/\[AutoFOV\] mode=/).pop());
     const fovLine = t.findLogs(/\[AutoFOV\] viewport=1920x1080 aspect=[\d.]+ base=[\d.]+ effective=[\d.]+/).pop();

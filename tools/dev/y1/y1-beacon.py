@@ -1,4 +1,4 @@
-# Y-1 helper for m10-inject.py scenarios (pyfile): ask a listen server's System Link beacon for its text, as UC2's
+# System Link helper for m10-inject.py scenarios (pyfile): ask a listen server's System Link beacon for its text, as UC2's
 # "Join System Link Game" page does natively (IpDrv.ClientBeaconReceiver -> IpDrv.UdpBeacon.ReceivedText "REPORT?<nonce>"
 # -> BroadcastBeacon: "<BeaconProduct> <game port> ?BeaconText=<GameInfo.GetBeaconText()>?Nonce=<nonce>").
 # BEACON = the reply's beacon text split on '|' (game type, server name, map, maplist, players, max players, purity,

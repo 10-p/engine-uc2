@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# D-6 check (native): mouse look like a PC shooter, the game pad as on the Xbox, measured. One PASS/FAIL line per
+# Mouse and pad check (native): mouse look like a PC shooter, the game pad as on the Xbox, measured. One PASS/FAIL line per
 # check on stdout, then a summary line.
 #
 #   tools/dev/d6-mouse.sh [scenario...]        (default: look ini lazy pad lock before)
@@ -9,7 +9,7 @@
 #           flick, the circle), the sensitivity, FOV and invert settings (mouse invert apart from the pad's, both
 #           applied), auto-centring only under the pad, the look keys, mouse after stick
 #   ini     the mouse's settings read from User.ini as the launcher passes them (-ini:, which also writes them there)
-#   lazy    F-1: [UCGameplay.UCPlayerInput] bLazyMouseCamera=True: the mouse still turns linearly, the third-person
+#   lazy    [UCGameplay.UCPlayerInput] bLazyMouseCamera=True: the mouse still turns linearly, the third-person
 #           camera is Epic's lazy one under the mouse too (it moves on after a flick, then rests)
 #   pad     the right stick's turn and look-up curves (rotation reached 0.1-1.0 s after the stick is pushed to
 #           0.35/0.5/0.75/1.0) on our scripts and on the SHIPPED scripts with the same ini: must match; the stick
@@ -18,28 +18,28 @@
 #           motion, switch target with Lock + D, break away by mouse motion past the clamp (degrees), not by a
 #           smaller one; the stick's break-away still works; aim adhesion follows a target under the pad, not under
 #           the mouse
-#   before  the look scenario as the owner played it natively (shipped scripts, main's DefUser.ini at 47b1b18):
-#           evidence, its drift checks are expected to FAIL there (labelled "before-")
-#   epic    (on request) the mouse as Epic's PC leak had it, which the web build used until 2026-10-07: evidence
-#   accel   (on request; F-1) no mouse acceleration: real X motion at two speeds with the X server's acceleration
+#   before  the look scenario with the shipped scripts and the DefUser.ini that came before the mouse-look settings
+#           (read from git): its drift checks are expected to FAIL there (labelled "before-")
+#   epic    (on request) the mouse with Epic's PC DefUser.ini (read from git), for comparison
+#   accel   (on request) no mouse acceleration: real X motion at two speeds with the X server's acceleration
 #           turned up; the same turn per count (and the SDL warp-mode control run, evidence)
-#   walk    (on request; F-1) steady ground speeds: W, Shift+W, the pad's left stick at 1.0/0.5/0.35 (both trees)
-#   cheat   (on request; F-1) WHEREAMI/TELEPORT allowed and logged standalone and for a listen host
-#   dodge   (on request; G-8) bDoubleTapDodge=True: a double tap of A dodges (more sideways than A held as long,
+#   walk    (on request) steady ground speeds: W, Shift+W, the pad's left stick at 1.0/0.5/0.35 (both trees)
+#   cheat   (on request) WHEREAMI/TELEPORT allowed and logged standalone and for a listen host
+#   dodge   (on request) bDoubleTapDodge=True: a double tap of A dodges (more sideways than A held as long,
 #           the pawn rises), Space + A still does, a double tap in the air against a wall wall-dodges; Lock + D still
 #           switches target, with Lock held a double tap switches and does not dodge, locked on it dodges and keeps the
 #           target; then the key off (the default): a double tap does not dodge, Space + A still does
-#   vanilla (on request; F-1) the D6_SHIP_TREE (Epic's shipped scripts) with OUR DefUser.ini: the mouse turns the view
+#   vanilla (on request) the D6_SHIP_TREE (Epic's shipped scripts) with this repo's DefUser.ini: the mouse turns the view
 #           through Epic's PC path (the stick's curve: capped, not linear), up looks up, the Right arrow strafes,
 #           PageUp looks up
 #
-# Trees (<WorkUC2>/run/<name>, made by tools/dev/mkrun-uc2.sh): D6_TREE (rebuilt packages, default d6-run),
+# Trees (<repo>/../run/<name>, made by tools/dev/mkrun-uc2.sh): D6_TREE (rebuilt packages, default d6-run),
 # D6_SHIP_TREE (shipped packages, default d6-ship). Every game run is tools/dev/m10-controls.sh --file (Xvfb inside
-# <WorkUC2>/bin/capped 2G), -nullrenderer with [Engine.Engine] FrameRateCap=60 (30 for the pad curves, the Xbox's rate): the camera's lag
+# <repo>/../bin/capped 2G), -nullrenderer with [Engine.Engine] FrameRateCap=60 (30 for the pad curves, the Xbox's rate): the camera's lag
 # shows at real frame rates, and software GL runs at a few frames a second here, where a lazy camera arrives in one
 # frame; FrameRateCap, set with -ini:, caps the null renderer's thousand), mouse motion as exact counts through the engine's test
 # channel (`mouse <dx> <dy>`: an SDL motion event; Source/SDL2Drv/Src/SDL2InputTest.h). Output: D6_OUT (default
-# <WorkUC2>/logs/d6/mouse): <scenario>.out (engine log), .result, .inject, .json (measurements).
+# <repo>/../logs/d6/mouse): <scenario>.out (engine log), .result, .inject, .json (measurements).
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
@@ -82,15 +82,14 @@ run() {
 
 # The open spot of tools/dev/jit-trace.sh (DM-Deadbolt; room for every move the scenarios make: forward 560 units,
 # back, right down a ramp, left back; the camera arm never shortened by a wall). The spawn is random and a pawn next
-# to a wall slides along it or stops (look-right-arrow-strafes-and-never-turns failed 1 of 2 runs on 2026-10-09), so
+# to a wall slides along it or stops (look-right-arrow-strafes-and-never-turns would then fail), so
 # every scenario that measures the pawn's or the camera's movement starts from here: TELEPORT (the guarded cheat,
 # allowed in the standalone game these runs are; native, so the shipped scripts have it too), twice as jit-trace.sh
 # places, then checked. D6_SPOT overrides it ("x y z yaw pitch").
 SPOT=${D6_SPOT:-1977.8 583.7 -34.1 33000 -1400}
-# The lock scenario's spot: a PlayerStart where all twelve lock checks passed in two earlier runs (logs/jit/d6-lock-jit-main,
-# logs/d9/reg/d6-lock-base1: the pull-back 2021 -> 1742). At the open spot above the lock's pull-back never happens
-# (1753 -> 1753, 1799 -> 1799, every time: jitter.md step 4, d34-docs-tests.md), nor at (-2367.6, 3733.8) (1773 ->
-# 1757); those two PlayerStarts were what made the lock checks "spawn-dependent".
+# The lock scenario's spot: a PlayerStart where the lock's camera pull-back happens (2021 -> 1742 units), which every
+# lock check needs. At the open spot above it never happens (1753 -> 1753), nor at (-2367.6, 3733.8), so the lock
+# checks would depend on the spawn without a fixed spot.
 LOCK_SPOT=${D6_LOCK_SPOT:-1025.2 1698.1 -528.2 22112 0}
 # place <probe> <check> [spot]: put the pawn at $SPOT (or the spot given) and check that it is there
 place() {
@@ -137,7 +136,7 @@ for i in range(1, n + 1):
 PY
 }
 
-# look [before]: $1 = "before" for the owner's configuration (reduced distances, no new settings)
+# look [before]: $1 = "before" for the configuration before the mouse-look settings (reduced distances, no new settings)
 scen_look() {
   local p=look sc=1
   [ "${1:-}" = before ] && { p=before; sc=5; }
@@ -297,7 +296,7 @@ probe Ae
 pyexec save('look-auto-centre-under-the-pad', [P['Ad'].rot[0], P['Ae'].rot[0]])
 check look-auto-centre-under-the-pad P['Ad'].mouselook == 'False' and abs(((P['Ae'].rot[0]+1400+32768)&65535)-32768) < abs(((P['Ad'].rot[0]+1400+32768)&65535)-32768) - 100
 SCEN
-  # 7. the keys, from the open spot: the Right arrow strafes and never turns (F-1), PageUp looks up; then the mouse
+  # 7. the keys, from the open spot: the Right arrow strafes and never turns, PageUp looks up; then the mouse
   # right after the stick (no adhesion/friction/curve on the mouse)
   place Kp $p-placed-for-the-keys
   cat <<SCEN
@@ -387,7 +386,7 @@ probe lb3
 pyexec save('pad-left-stick-walk', {'full-1s-a': round(fwd('la','lb'),1), 'full-1s-b': round(fwd('lb','lb2'),1), 'half-1s': round(fwd('lb2','lb3'),1)})
 SCEN
   # From a fixed open spot (jit-trace.sh's): back, forward, then half forward. The shipped scripts scale the stick
-  # for walking on the Xbox only (PlayerMove); since F-1 the engine does it on PC (UnIn.cpp), for both packages:
+  # for walking on the Xbox only (PlayerMove); the engine does it on PC (UnIn.cpp), for both packages:
   # checked on both, and the distances compared below.
   echo "check pad-left-stick-walks (fwd('la','lb') < -150 or fwd('lb','lb2') > 150) and fwd('la','lb') < 20 and fwd('lb','lb2') > -20"
   cat <<SCEN
@@ -518,8 +517,7 @@ check lock-aim-adhesion-under-the-pad abs(yawdiff('mc','md')) > 100 and P['md'].
 SCEN
 }
 
-# epic: the mouse as the PC leak shipped it (shipped scripts, Epic's DefUser.ini: the web build's inis until
-# 2026-10-07, so the browser the owner played on 2026-10-06): evidence only
+# epic: the mouse as Epic's PC files had it (shipped scripts, Epic's DefUser.ini): for comparison only
 scen_epic() {
   start epic
   echo "probe Sa"; mlines 20 0 1; echo "probe Sb"
@@ -557,7 +555,7 @@ pyexec save('epic-camera-after-flick', round(cam_moved('Db','Dc'),2))
 SCEN
 }
 
-# ini: the mouse's settings from User.ini, given the way the launcher gives settings (-ini:, C-1, which also writes
+# ini: the mouse's settings from User.ini, given the way the launcher gives settings (-ini:, which also writes
 # them into User.ini): sensitivity 1.0 and the mouse inverted; the pad's invert stays off
 scen_ini() {
   start ini
@@ -600,7 +598,7 @@ check lazy-camera-comes-to-rest cam_moved('Dc','Dd') < 0.5
 SCEN
 }
 
-# accel [warp]: no mouse acceleration (F-1 step 6). Real X pointer motion (XTEST, the path m10-controls.sh uses),
+# accel [warp]: no mouse acceleration. Real X pointer motion (XTEST, the path m10-controls.sh uses),
 # with the X server's pointer acceleration turned up to 4x above a threshold of 1 (XChangePointerControl on the test's
 # Xvfb): 200 counts slowly (100 events of 2) and fast (5 events of 40), both axes; the view must turn the same per
 # count at both speeds (SDL's relative mode reads raw motion). "warp" is the control run with the environment's
@@ -634,9 +632,9 @@ check $p-n-counts-in-n-counts-out abs(M['ys']/K-1) < 0.01 and abs(M['yf']/K-1) <
 SCEN
 }
 
-# walk (F-1): does UC2 walk? The steady ground speed (0.6-1.3 s after the start) of W, of the pad's left stick at 1.0,
+# walk: does UC2 walk? The steady ground speed (0.6-1.3 s after the start) of W, of the pad's left stick at 1.0,
 # 0.5 and 0.35 deflection, and of W with Shift held, from the same open spot (TELEPORT, jit-trace.sh's spot): numbers
-# for the owner's "Shift = walk" (on both packages: UnIn.cpp scales the stick on PC for both since F-1)
+# for "Shift = walk" (on both packages: UnIn.cpp scales the stick on PC for both)
 scen_walk() {
   start walk
   local spot="1977.8 583.7 -34.1 33000 0"
@@ -666,8 +664,8 @@ check walk-pad-full-runs M['pad1.0'] > 300
 SCEN
 }
 
-# cheat (F-1, F-1b): WHEREAMI and TELEPORT in a standalone game (allowed; "Cheat:" lines; WHEREAMI's output pasted
-# into TELEPORT gives the same place and view), then the same process's map reloaded as a LISTEN server: the host is
+# cheat: WHEREAMI and TELEPORT in a standalone game (allowed; "Cheat:" lines; WHEREAMI's output pasted
+# into TELEPORT gives the same place and view), then the same process's map reloaded as a listen server: the host is
 # allowed too (the refusals of clients and dedicated servers: tools/dev/net-test.sh cheats)
 scen_cheat() {
   start cheat
@@ -707,7 +705,7 @@ expect cheat-netplace-allowed-for-a-listen-host ^place LocalPlayer ok 10
 SCEN
 }
 
-# vanilla: Epic's shipped scripts with OUR DefUser.ini (F-1): the mouse is Epic's PC mouse (into the stick's
+# vanilla: Epic's shipped scripts with this repo's DefUser.ini: the mouse is Epic's PC mouse (into the stick's
 # variables, through the pad's clamp and curve): it turns the view, right turns right, up looks up; capped (200
 # counts in one tick turn less than 3x what 20 do); the Right arrow strafes (never turns), PageUp looks up
 scen_vanilla() {
@@ -742,7 +740,7 @@ check vanilla-pageup-looks-up pitchdiff('Kc','Kd') > 500
 SCEN
 }
 
-# dodge (G-8): [UCGameplay.UCPlayerInput] bDoubleTapDodge=True (rebuilt UCGameplay.u). PlayersOnly first (the bots
+# dodge: [UCGameplay.UCPlayerInput] bDoubleTapDodge=True (rebuilt UCGameplay.u). PlayersOnly first (the bots
 # stand still: no hits push the pawn). From the open spot (TELEPORT, jit-trace.sh's), a double tap of A against A held
 # for the same 0.6 s: the double tap dodges (the pawn rises, goes further to the left, faster); Space + A still dodges;
 # then against a wall on the left (the place where A held from the open spot stops: WHEREAMI 1938.2 1125.8 -34.3), a

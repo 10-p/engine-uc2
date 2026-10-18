@@ -1,38 +1,38 @@
 #!/usr/bin/env bash
-# M10 controls test: keyboard, mouse, text entry and game pad, headless and repeatable.
+# Controls test: keyboard, mouse, text entry and game pad, headless and repeatable.
 #
 #   tools/dev/m10-controls.sh                    every scenario, one PASS/FAIL line each
 #   tools/dev/m10-controls.sh keyboard pad       only these scenarios
 #   tools/dev/m10-controls.sh --file <scenario> <name> [uc2.bin arguments...]   one ad-hoc scenario file
 #
-# Needs the run tree <WorkUC2>/run/m10 (tools/dev/mkrun-uc2.sh build-native m10). Each scenario is one game
-# run under Xvfb inside <WorkUC2>/bin/capped 2G (CLAUDE.md, "Running anything: memory ceiling, always"); the
+# Needs the run tree <repo>/../run/m10 (tools/dev/mkrun-uc2.sh build-native m10). Each scenario is one game
+# run under Xvfb inside <repo>/../bin/capped 2G (CLAUDE.md, "Running anything: memory ceiling, always"); the
 # keyboard and mouse are real X events (XTEST, tools/dev/m10-inject.py), the pad is a virtual SDL game
 # controller driven through the engine's test channel (-ini:System:[SDL2Drv.SDL2Client]:InputTestFile=, Source/SDL2Drv/Src/SDL2InputTest.h), so
 # the path from SDL onwards is the real one. PASS/FAIL comes from engine log lines and probe state (location,
 # rotation, ammo, menu page, text-field contents), never from a picture; screenshots are taken for people.
 #
-# Output in <WorkUC2>/logs/m10/: <scenario>.out (engine log), <scenario>.result (every check),
+# Output in <repo>/../logs/m10/: <scenario>.out (engine log), <scenario>.result (every check),
 # <scenario>-<shot>.png, <scenario>.inject (runner transcript).
 #
-# M12: the same scenarios drive the Windows build under wine (tools/dev/m12-wine-smoke.sh sets these):
-#   M10_TREE=m12            run tree under <WorkUC2>/run (default m10)
-#   M10_OUT=<dir>           output directory (default <WorkUC2>/logs/m10)
+# The same scenarios drive the Windows build under wine (tools/dev/m12-wine-smoke.sh sets these):
+#   M10_TREE=m12            run tree under <repo>/../run (default m10)
+#   M10_OUT=<dir>           output directory (default <repo>/../logs/m10)
 #   M10_LAUNCH="<command>"  what starts the game from System/ (default ./uc2.bin); it gets the arguments
 #   M10_STOPSIG=INT         signal that ends the game after the scenario (default TERM)
 #   M10_MEM=3G              capped's ceiling (default 2G)
 #   M10_PROC=uc2.exe        process name for the "left running" check (default uc2.bin)
-#   M10_SECS=1500          --file only: the run's time limit in seconds (default 240; M13's soak is longer)
+#   M10_SECS=1500          --file only: the run's time limit in seconds (default 240; a soak run takes longer)
 #   M10_KEEP=1              do not reset the tree first: keep the inis and saved profiles the last run left (default: reset)
 #   M10_URL=<url>           map URL given to the game as its first argument (default none: the menu)
 #   M10_SETTLE=12           seconds between "level up for play" and the Fire that starts the match (default 6;
 #                           under wine the first frames of the level come later and an early Fire is lost)
-#   M10_RES=1920x1080       window size (D-2): written to the tree's Default.ini after the reset, Xvfb's screen
+#   M10_RES=1920x1080       window size: written to the tree's Default.ini after the reset, Xvfb's screen
 #                           made at least that big, and M10_UIMAP=<the same> given to m10-inject.py so the
 #                           scenarios' 640x480 positions land in the centred 4:3 UI box (M10_UIMAP=none: raw)
 #   M10_INI="K=V K2=V2"     set existing keys of the tree's Default.ini after the reset (every line "K=..." gets V;
-#                           D-2 uses it for UIScaleMode=Native640)
-#   M10_XVFB=2560x1080      Xvfb's screen at least this big (D-8: a scenario that changes the window size with
+#                           e.g. UIScaleMode=Native640)
+#   M10_XVFB=2560x1080      Xvfb's screen at least this big (a scenario that changes the window size with
 #                           TEMPSETRES needs room for the biggest)
 # The game is also given UC2_WINE_DISPLAY=$DISPLAY (Xvfb's), which tools/dev/m12-wine.sh needs.
 set -u
@@ -54,7 +54,7 @@ mkdir -p "$out"
 # also un-suppresses the DevUI/DevGUI log names (the GUI's own "OpenMenu"/"handled XC_*" lines) in the run
 # tree's copy only.
 prep_tree() {
-  # C-2: M10_KEEP=1 runs on the tree as the previous run left it (saved profiles, derived inis): a restart test.
+  # M10_KEEP=1 runs on the tree as the previous run left it (saved profiles, derived inis): a restart test.
   [ -z "${M10_KEEP:-}" ] || return 0
   cp -f "$repo"/Engine/Config/*.ini "$sys/"
   sed -i '/^Suppress=DevUI\r\?$/d; /^Suppress=DevGUI\r\?$/d' "$sys/Default.ini"
@@ -64,7 +64,7 @@ prep_tree() {
   set_res
 }
 
-# D-2: M10_RES=<W>x<H> -> the windowed size in the tree's Default.ini (also with M10_KEEP), the Xvfb screen.
+# M10_RES=<W>x<H> -> the windowed size in the tree's Default.ini (also with M10_KEEP), the Xvfb screen.
 xvfb_screen=1280x720
 set_res() {
   local kv
@@ -85,9 +85,10 @@ set_res() {
 }
 
 # run_one <name> <scenario-file> <seconds> [uc2.bin args...]
-# (-ini:System:[UC2Movie]:StartupMovies=False: since M9 the logos play first and a full-screen movie owns the input. -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0: the key and
-# button timings here were calibrated without the anti-aliasing that is on by default since M11 (O-8); with its
-# 4x multisampling the software rasteriser's frames are slower and the menu steps came late on a loaded machine.)
+# (-ini:System:[UC2Movie]:StartupMovies=False: the logos play first and a full-screen movie owns the input.
+# -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0:
+# the key and button timings here are calibrated without the native ini's anti-aliasing; with its 4x multisampling
+# the software rasteriser's frames are slower and the menu steps come late on a loaded machine.)
 run_one() {
   local name=$1 scen=$2 secs=$3; shift 3
   prep_tree

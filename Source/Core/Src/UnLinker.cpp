@@ -313,7 +313,7 @@ ULinkerLoad::ULinkerLoad( UObject* InParent, const TCHAR* InFilename, DWORD InLo
 	if( !Loader )
 #ifdef __EMSCRIPTEN__
 	{
-		// uc2 port (F-4a, engine-ut2004's fail-soft loaders): no throw on the web (catching is compiled out
+		// No throw on the web (catching is compiled out
 		// there). Success stays != 1; GetPackageLinker drops the half-built linker and returns NULL.
 		debugf( NAME_Warning, TEXT("[PACKAGE-LOAD] Could not open package file '%s'"), InFilename );
 		return;
@@ -621,7 +621,7 @@ void ULinkerLoad::VerifyImport( INT i )
 						return;
 					}
 #ifdef __EMSCRIPTEN__
-					// uc2 port (F-4a, engine-ut2004): the dependency is present but the referenced object is
+					// The dependency is present but the referenced object is
 					// private (an incompatible package). Mark broken links, say so, continue: no throw on the web.
 					if( Cast<UPackage>(LinkerRoot) )
 						Cast<UPackage>(LinkerRoot)->PackageFlags |= PKG_BrokenLinks;
@@ -676,7 +676,7 @@ void ULinkerLoad::VerifyImport( INT i )
 				return;
 			}
 #ifdef __EMSCRIPTEN__
-			// uc2 port (F-4a, engine-ut2004): the dependency is present but the referenced object is missing.
+			// The dependency is present but the referenced object is missing.
 			// Mark broken links, say so, continue: no throw on the web.
 			if( Cast<UPackage>(LinkerRoot) )
 				Cast<UPackage>(LinkerRoot)->PackageFlags |= PKG_BrokenLinks;

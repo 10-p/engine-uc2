@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""One-shot import of the pristine Epic tree into the engine-uc2 layout (M0).
+"""One-shot import of the pristine Epic tree into the engine-uc2 layout.
 
-Reads   <WorkUC2>/epic-sources (never written)
+Reads   <repo>/../epic-sources (never written)
 Writes  <repo>/Source, <repo>/Thirdparty, <repo>/Engine/Config, <repo>/docs/epic
 
 Rules (see docs/SOURCE-LAYOUT.md):
@@ -9,8 +9,7 @@ Rules (see docs/SOURCE-LAYOUT.md):
   * code files get CRLF -> LF, bytes otherwise untouched (the sources are Latin-1, some .uc carry 0x02 bytes)
   * Windows-native project files (.vcproj/.sln/.bat/.rc/...) are copied byte for byte
   * no UnrealScript: the packages' Classes/ folders (.uc, .huc, .upkg) and Epic's .ucproject files are game
-    content and stay in epic-sources (owner, 2026-10-11; T4, docs/porting/analysis/scripts-removed.md). The first
-    import carried them; the history rewrite of T4 removed them from every commit, this script now skips them
+    content and stay in epic-sources; this script skips them
 The script refuses to overwrite: it is the record of how the first commit was made, not a sync tool.
 """
 import os

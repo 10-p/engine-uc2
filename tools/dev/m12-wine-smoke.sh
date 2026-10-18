@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# M12: the Windows build (MinGW, i686) checked under wine, headless and repeatable. One PASS/FAIL line per check.
+# The Windows build (MinGW, i686) checked under wine, headless and repeatable. One PASS/FAIL line per check.
 #
 #   tools/dev/m12-wine-smoke.sh                 every check
 #   tools/dev/m12-wine-smoke.sh verify server   only these (names below)
 #
-# Needs: the wine run tree  <WorkUC2>/run/m12         (tools/dev/mkrun-uc2.sh build-windows m12)
-#        the Linux reference <WorkUC2>/run/m12-native  (tools/dev/mkrun-uc2.sh build-native m12-native), only for
+# Needs: the wine run tree  <repo>/../run/m12         (tools/dev/mkrun-uc2.sh build-windows m12)
+#        the Linux reference <repo>/../run/m12-native  (tools/dev/mkrun-uc2.sh build-native m12-native), only for
 #        the 'pinned' comparison; without it that check says SKIP.
-# Every program runs inside <WorkUC2>/bin/capped (3G for wine, 2G for the Linux reference) through
-# tools/dev/m12-wine.sh (own prefix <WorkUC2>/.cache/wine-m12, wineserver killed after every run, no owner display,
-# Xvfb where a window is needed). Output: <WorkUC2>/logs/m12/smoke-<check>.* (stable names), the M10 runner's
-# files in <WorkUC2>/logs/m12/smoke-controls/, and the PASS/FAIL lines also in <WorkUC2>/logs/m12/smoke-summary.txt.
+# Every program runs inside <repo>/../bin/capped (3G for wine, 2G for the Linux reference) through
+# tools/dev/m12-wine.sh (own prefix <repo>/../.cache/wine-m12, wineserver killed after every run, nothing on the
+# display, Xvfb where a window is needed). Output: <repo>/../logs/m12/smoke-<check>.* (stable names), the controls runner's
+# files in <repo>/../logs/m12/smoke-controls/, and the PASS/FAIL lines also in <repo>/../logs/m12/smoke-summary.txt.
 #
 # Checks (PASS/FAIL is decided by log lines and measurements, never by looking):
 #   verify     ucc.exe verifyclasses: exit 0 and "VERIFY: all native class layouts match"
@@ -27,21 +27,21 @@
 #   selftest   ucc.exe UC2ALAudio.UC2AudioSelfTest: "39 checks, 0 failed"
 #   capture    uc2.exe with [UC2ALAudio.UC2ALAudioSubsystem] WaveFile= (-ini:) on the menu for 60 s (OpenAL32.dll's wave writer) -> the music is NuBattle at
 #              -19.0 dB (tools/dev/audio-music-check.py, Recoil as control), 0 Critical
-#   keyboard   the M10 keyboard scenario (real X key events through wine; tools/dev/m10-controls.sh)
-#   pad        the M10 pad scenario (SDL's virtual controller through the engine's test channel)
+#   keyboard   the keyboard scenario of tools/dev/m10-controls.sh (real X key events through wine)
+#   pad        its pad scenario (SDL's virtual controller through the engine's test channel)
 #   netjoin    the Linux client (run/m12-native) joins a ucc.exe server under wine on 127.0.0.1:7797 and spawns
 #              (Fire on SDL2Drv's virtual pad): server "Join succeeded", client probe pawn=1, no assertion, the
 #              server then shuts down cleanly (SKIP without the tree). Both builds need the net-join fixes.
 #   nosound    OpenAL32.dll moved aside for one run: "sound is off", the menu still comes up, exit 0
-#   leftovers  no wineserver of the M12 prefix, no uc2.exe/ucc.exe left running
+#   leftovers  no wineserver of the prefix, no uc2.exe/ucc.exe left running
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 capped=$work/bin/capped
 wine=$repo/tools/dev/m12-wine.sh
-# The trees, output folder and wine prefix can be chosen (defaults: M12's). M12_TREE/M12_REF take a run-tree
-# name (M13: M12_TREE=m13-win64 M12_REF=m13 M12_OUT=<WorkUC2>/logs/m13/win64 UC2_WINEPREFIX=<WorkUC2>/.cache/wine-m13)
-# or a path (the net-join check: M12_TREE=<WorkUC2>/run/netwin M12_REF=<WorkUC2>/run/net).
+# The trees, output folder and wine prefix can be chosen. M12_TREE/M12_REF take a run-tree name (64-bit:
+# M12_TREE=m13-win64 M12_REF=m13 M12_OUT=<repo>/../logs/m13/win64 UC2_WINEPREFIX=<repo>/../.cache/wine-m13)
+# or a path (the net-join check: M12_TREE=<repo>/../run/netwin M12_REF=<repo>/../run/net).
 treepath() { case "$1" in */*) echo "$1";; *) echo "$work/run/$1";; esac; }
 tree=$(treepath "${M12_TREE:-m12}")
 treename=$(basename "$tree")
@@ -59,7 +59,7 @@ result() {	# result <PASS|FAIL|SKIP> <check> <details>
   echo "$1 $2: $3" | tee -a "$summary"
 }
 crit() { grep -a -c "Critical" "$1" 2>/dev/null || true; }
-# A fresh configuration in the wine tree, as the M10 runner does: tracked inis, nothing derived.
+# A fresh configuration in the wine tree, as the controls runner does: tracked inis, nothing derived.
 prep() {
   cp -f "$repo"/Engine/Config/*.ini "$1/"
   rm -f "$1/Avaris.ini" "$1/User.ini" "$1"/Shot*.bmp
@@ -140,7 +140,7 @@ PY
   fi
 }
 
-# M10 runner, wine settings. $1 = scenario or --file ...
+# The controls runner, wine settings. $1 = scenario or --file ...
 m10_wine() {
   M10_TREE=$treename M10_OUT=$out/smoke-controls M10_LAUNCH="$wine $sys uc2.exe" M10_STOPSIG=USR1 M10_MEM=3G \
     M10_PROC=uc2.exe M10_SETTLE=12 "$repo/tools/dev/m10-controls.sh" "$@"

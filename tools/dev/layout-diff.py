@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compare C++ record layouts of the engine between i386 (the reference) and wasm32.
 
-    source <WorkUC2>/env.sh
+    source <repo>/../env.sh
     tools/dev/layout-diff.py build-wasm [-j 8] [--filter REGEX]
 
 Every translation unit of the Emscripten build (its compile_commands.json) is parsed twice with the
@@ -16,7 +16,6 @@ wasm32 aligns DOUBLE/QWORD/SQWORD to 8, so a record differs exactly where an 8-b
 `#pragma pack(4)`. verifyclasses checks native CLASSES only; this also finds script STRUCTS (array
 element strides) and anything else. TUs that include SDL.h do not parse for i386 here (no i386 SDL
 configuration); they are listed as not compared (their engine records are compared in the other TUs).
-Notebook: docs/porting/analysis/web-smoke.md (W0).
 """
 import argparse, json, os, re, shlex, subprocess, sys
 from concurrent.futures import ThreadPoolExecutor

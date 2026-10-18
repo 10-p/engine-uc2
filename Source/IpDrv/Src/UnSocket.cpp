@@ -363,7 +363,7 @@ UBOOL SetNonBlocking( INT Socket )
 UBOOL SetSocketReuseAddr( INT Socket, UBOOL ReUse )
 {
 	INT optval = ReUse?1:0;
-#ifdef _WIN32	// engine-uc2: WinSock's optval is const char*, whichever compiler (was _MSC_VER)
+#ifdef _WIN32	// WinSock's optval is const char*, whichever compiler
 	return setsockopt( Socket, SOL_SOCKET, SO_REUSEADDR, (char *)&optval, sizeof(INT) );
 #else
 	return setsockopt( Socket, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(INT) );

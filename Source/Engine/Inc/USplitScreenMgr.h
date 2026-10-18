@@ -36,10 +36,10 @@ public:
 
 	void UpdateDisplayFlags();
 
-	// uc2 port (G-6): the players' HUDs after the layout changed during a match (UnSplitScreenMgr.cpp).
+	// The players' HUDs after the layout changed during a match (UnSplitScreenMgr.cpp).
 	void RefreshPlayerHUDs();
 
-	// uc2 port (B-3): the row of UpdateSizes' layout a split view is in (0 top, 1 below the split line) when more than
+	// The row of UpdateSizes' layout a split view is in (0 top, 1 below the split line) when more than
 	// two views are up, else -1 (UnSplitScreenMgr.cpp).
 	INT HUDLayoutRow( UViewport* Viewport );
 

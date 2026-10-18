@@ -18,7 +18,7 @@
 //
 class EDITOR_API UPrefab : public UObject
 {
-	// uc2 port (D-2): package Editor, not Engine: the package Epic's Editor DLL registered it under (IMPLEMENT_CLASS uses
+	// Package Editor, not Engine: the package Epic's Editor DLL registered it under (IMPLEMENT_CLASS uses
 	// the DLL's GPackage there), so a prefab saved by Epic's UnrealEd imports Editor.Prefab. The static link takes this
 	// argument. No shipped package or ini names the class.
 	DECLARE_CLASS(UPrefab,UObject,CLASS_SafeReplace,Editor)

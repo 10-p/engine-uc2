@@ -1,6 +1,5 @@
 /*=============================================================================
-	UC2GLPixelTrace.cpp: "what is drawn under this pixel" (debug only; fx-fixes,
-	docs/porting/analysis/fx-fixes.md). Not Epic's.
+	UC2GLPixelTrace.cpp: "what is drawn under this pixel" (debug only).
 
 	Console: GLPIXTRACE <x> <y> [all]   (x, y: pixels of the main framebuffer, top-left
 	origin). During the next whole frame every pass of every draw is logged that changes
@@ -17,9 +16,9 @@
 	distortion (alpha > 0) and their mean and largest red/green (the accumulated offsets,
 	DistortionAccum.psh), and writes it as PixTraceAccum-<frame>-<n>.ppm in the working folder.
 
-	GLPIXTRACE <x> <y> all dump (B-2, docs/porting/analysis/decay-flash.md): also every render target after
+	GLPIXTRACE <x> <y> all dump: also every render target after
 	each pass that draws into it, as PixTrace-<frame>-<n>.ppm (colour) and -a.pgm (alpha), and at each refresh
-	of the reference copy (pp-scale) that copy and the main colour it was made from (PixTrace-<frame>-ref<k>,
+	of the reference copy that copy and the main colour it was made from (PixTrace-<frame>-ref<k>,
 	-main<k>), top row first, in the working folder. About 100 files for a frame of DM-Decay.
 
 	Quiet unless armed: two calls from DrawPrimitive, which return at once.
@@ -31,11 +30,11 @@ static INT	GPixTraceFrame	= -1;	// the device frame being traced (-1: off)
 static INT	GPixTraceX		= 0,
 			GPixTraceY		= 0;
 static UBOOL GPixTraceAll	= 0;
-static UBOOL GPixTraceDump	= 0;	// B-2: "dump": every render target after each pass, and the device's copies
+static UBOOL GPixTraceDump	= 0;	// "dump": every render target after each pass, and the device's copies
 static INT	GPixTraceDraw	= 0;
 
 //
-// B-2: the framebuffer bound now (W x H) as <Name>.ppm (colour) and <Name>-a.pgm (alpha), top row first.
+// The framebuffer bound now (W x H) as <Name>.ppm (colour) and <Name>-a.pgm (alpha), top row first.
 //
 void UC2GL_PixelTraceDumpBound( UUC2GLRenderDevice* RenDev, INT W, INT H, UBOOL BottomFirst, const TCHAR* Name )
 {
@@ -113,7 +112,7 @@ void UC2GL_PixelTraceRead( FOpenGLRenderInterface* RI, FColor& Out )
 	INT X, Y;
 	TracedPixel( RI, X, Y );
 	BYTE RGBA[4] = { 0, 0, 0, 0 };
-	// M11 (O-8): a multisampled main framebuffer cannot be read: read its resolve, made now.
+	// A multisampled main framebuffer cannot be read: read its resolve, made now.
 	UUC2GLRenderDevice* RenDev = RI->RenDev;
 	UBOOL Resolved = RenDev->MainSamples && RI->SavedRenderTargetState.GetCurrentState()->Framebuffer == RenDev->MainFramebuffer;
 	if( Resolved )
@@ -165,7 +164,7 @@ void UC2GL_PixelTraceLog( FOpenGLRenderInterface* RI, INT Pass, const FColor& Be
 		Before.R, Before.G, Before.B, Before.A, After.R, After.G, After.B, After.A );
 	if( Main )
 	{
-		// B-1: the depth state of the pass and the depth buffer at the pixel after it (24-bit units; the
+		// The depth state of the pass and the depth buffer at the pixel after it (24-bit units; the
 		// depth/stencil read works on a single-sample target only, so with anti-aliasing it reads 0)
 		GLfloat Factor = 0.f, Units = 0.f;
 		GLuint DS = 0;
@@ -224,7 +223,7 @@ void UC2GL_PixelTraceLog( FOpenGLRenderInterface* RI, INT Pass, const FColor& Be
 }
 
 /*-----------------------------------------------------------------------------
-	O-9: material census (test key MatCensus=True). Every distinct compilation of a material is
+	Material census (test key MatCensus=True). Every distinct compilation of a material is
 	logged once, as the material compiler left it: passes, blending, and per stage the
 	colour and alpha operation with their arguments and the texture target. Comparing the
 	census of two runs (e.g. 8 stages and exact operations against 4 stages without
@@ -282,9 +281,9 @@ void UC2GL_MaterialCensus( FOpenGLRenderInterface* RI, UMaterial* Requested, UMa
 /*
 	GLMATCENSUS (console; runs at the start of the next frame): every material object in
 	memory is compiled, lit and unlit, with three sets of device caps, and nothing is drawn:
-	  A  8 stages, MODULATEALPHA_ADDCOLOR and MULTIPLYADD (fragment programs; Mesa before O-9)
+	  A  8 stages, MODULATEALPHA_ADDCOLOR and MULTIPLYADD (fragment programs, or a texture environment with them)
 	  B  4 stages, the same ops (Epic's D3DDrv on every card it accepted, and the Xbox)
-	  C  4 stages, neither op (the NVIDIA driver before O-9)
+	  C  4 stages, neither op (a texture environment without combine3/combine4)
 	Logged: every material whose passes differ between A and B or between B and C, with the
 	three compilations, and a summary. Pixel-shader, projector, terrain, particle and movie
 	materials are skipped (they are not plain fixed-function materials or need a draw context).

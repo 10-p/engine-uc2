@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare the script layout the engine computes at run time with the C++ layout the compiler chose (M13).
+"""Compare the script layout the engine computes at run time with the C++ layout the compiler chose.
 
     ./ucc-bin verifyclasses DUMP=layout.txt                  # (in a run tree) the linked layout of every class
                                                               # and script struct: size, offset of each property

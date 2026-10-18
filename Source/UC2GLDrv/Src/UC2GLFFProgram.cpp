@@ -1,26 +1,23 @@
 /*=============================================================================
-	UC2GLFFProgram.cpp: the texture stages of fixed-function materials as GLSL (O-9).
-	Not Epic's.
+	UC2GLFFProgram.cpp: the texture stages of fixed-function materials as GLSL.
 
 	Epic's material compiler (UC2GLMaterialState.cpp) describes every fixed-function pass
 	as Direct3D 8 texture stages: per stage a colour and an alpha operation (D3DTOP_*) on
 	up to three arguments (D3DTA_*: CURRENT, TEXTURE, DIFFUSE, TFACTOR, with COMPLEMENT and
-	ALPHAREPLICATE). M5 translated each stage into GL's GL_COMBINE texture environment
-	(FOpenGLRenderInterface::SetMaterialBlending / TranslateStageOp). That needs
-	ATI_texture_env_combine3 (or NV_texture_env_combine4) for the three-operand operations
-	and as many fixed-function texture units as stages, and the owner's NVIDIA GPU has
-	neither combine3 nor more than 4 such units (docs/porting/analysis/o9-nvidia.md).
+	ALPHAREPLICATE). GL's GL_COMBINE texture environment can take each stage
+	(FOpenGLRenderInterface::SetMaterialBlending / TranslateStageOp, the fallback), but that
+	needs ATI_texture_env_combine3 (or NV_texture_env_combine4) for the three-operand
+	operations and as many fixed-function texture units as stages, and some drivers (NVIDIA's)
+	have neither combine3 nor more than 4 such units.
 
 	Here a pass is turned into a small fragment shader instead, one per combination of
 	operations, arguments and texture targets (cached), linked WITHOUT a vertex shader: the
 	fixed-function vertex stage (transform, lighting, texgen, texture matrices, fog
-	coordinate) stays what it was, and the shader does what GL's fixed-function fragment
-	stage did after the combiners: the colour sum (secondary colour) and linear fog (on the
-	fragment's eye-space |z|, recovered from gl_FragCoord.z and the projection since F-5; before
-	that gl_FogFragCoord, which NVIDIA hands as the signed eye-space z, and Mesa as a value that
-	fogs DM-Azure's sky zone far more than NVIDIA and GL4ES do). Alpha
-	test, blending, depth and stencil are per-fragment operations after the shader, as
-	before. The operations are Direct3D 8's definitions (d3d8types.h / the DirectX 8 SDK's
+	coordinate) stays as it is, and the shader does what GL's fixed-function fragment
+	stage does after the combiners: the colour sum (secondary colour) and linear fog (on the
+	fragment's eye-space |z|, recovered from gl_FragCoord.z and the projection; gl_FogFragCoord
+	differs between drivers). Alpha test, blending, depth and stencil are per-fragment
+	operations after the shader. The operations are Direct3D 8's definitions (d3d8types.h / the DirectX 8 SDK's
 	"Texture Blending" pages), every stage result saturated to [0,1] as D3D does:
 
 	  SELECTARG1 a1   SELECTARG2 a2   MODULATE a1*a2   MODULATE2X 2*a1*a2   MODULATE4X 4*a1*a2
@@ -34,7 +31,7 @@
 	Texture lookups are those of the fixed-function stage: 2D textures at (s/q, t/q)
 	(texture2DProj), cube maps at (s,t,r). Stage 0's CURRENT is the diffuse colour, as
 	D3D's. The texture-unit LOD bias (glTexEnv TEXTURE_FILTER_CONTROL, set per stage by
-	SetMaterialBlending) applies to these lookups as it did to the combiners; units the
+	SetMaterialBlending) applies to these lookups as it does to the combiners; units the
 	fixed-function stage does not have (NVIDIA: 4 and up) get the stage's bias in the lookup.
 
 	Desktop GL only: under GL4ES (WebGL) gl4es already generates a shader of the same kind
@@ -231,12 +228,12 @@ static FString FFBuildSource( const FUC2GLFFKey& Key )
 		Body += TEXT("\tcur.rgb = clamp( cur.rgb + gl_SecondaryColor.rgb, 0.0, 1.0 );\n");
 	if( Fog )
 	{
-		// F-5: the fog distance is the fragment's own eye-space depth |z|, recovered from its window
+		// The fog distance is the fragment's own eye-space depth |z|, recovered from its window
 		// depth through the projection (clip z = A z + B, clip w = C z + D; perspective and
 		// orthographic alike): what D3D's table fog uses (D3DRS_FOGTABLEMODE, per pixel, depth;
 		// Epic's Fog.vsh: -camera-space z) and what GL4ES computes on the web. Not
-		// gl_FogFragCoord: Mesa's fixed-function vertex stage hands a larger value for DM-Azure's
-		// sky-zone draws than NVIDIA's and GL4ES' (render-f5.md step 6: the hazy sky on Mesa).
+		// gl_FogFragCoord: Mesa's fixed-function vertex stage hands a larger value for sky-zone draws
+		// (DM-Azure's) than NVIDIA's and GL4ES'.
 		Body += TEXT("\tfloat ndc = (2.0 * gl_FragCoord.z - gl_DepthRange.near - gl_DepthRange.far) / gl_DepthRange.diff;\n")
 				TEXT("\tfloat eyeZ = (gl_ProjectionMatrix[3][2] - ndc * gl_ProjectionMatrix[3][3]) / (ndc * gl_ProjectionMatrix[2][3] - gl_ProjectionMatrix[2][2]);\n")
 				TEXT("\tcur.rgb = mix( gl_Fog.color.rgb, cur.rgb, clamp( (gl_Fog.end - abs( eyeZ )) * gl_Fog.scale, 0.0, 1.0 ) );\n");

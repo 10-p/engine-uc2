@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Flicker measure over consecutive frames (F-5 step 4, docs/porting/analysis/render-f5.md).
+"""Flicker measure over consecutive frames.
 
   f5-flicker.py <prefix> [--frames N] [--box x0,y0,x1,y1] [--thr T] [--map out.png] [--strip out.png]
 

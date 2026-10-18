@@ -1,17 +1,17 @@
 /*=============================================================================
-	UnMovie.cpp: the engine side of movie playback on every platform (engine-uc2, M9).
+	UnMovie.cpp: the engine side of movie playback on every platform.
 
-	What XboxDrv/Src/XboxMovieThread.cpp and XMVHelper.cpp did around the XDK's decoder, written once for any
+	What XboxDrv/Src/XboxMovieThread.cpp and XMVHelper.cpp do around the XDK's decoder, written once for any
 	render device, audio device and movie player (Engine/Inc/UnMovie.h):
 	  - finding the cooked movie for a name the content gives, with the Xbox's audio-language rule;
 	  - full-screen playback (start-up logos, ladder cinematics) in viewport 0, blocking, skippable, with
 	    the "hide subtitles" bands and the "LOADING..." text of XboxMovieThread::Render;
 	  - the loading screen (static: see PlayLoadingMovie);
-	  - the MovieMaterial update a render device's SetMovieMaterial calls (D3DMaterialState.cpp:4539);
+	  - the MovieMaterial update a render device's SetMovieMaterial calls (D3DMaterialState.cpp);
 	  - the hooks UnGame.cpp calls (PlayIntroCinematic, PlayOutroCinematic, PlayLoadingMovie, SetEngineReady,
 	    IsPlayingMovie: the names and signatures of XboxMovieThread.cpp).
-	No thread: the Xbox ran full-screen movies on a thread; here they run in the calling thread's loop, which
-	is also what the single-threaded web build can do. Design and evidence: docs/porting/analysis/video.md.
+	No thread: the Xbox runs full-screen movies on a thread; here they run in the calling thread's loop, which
+	is also what the single-threaded web build can do.
 =============================================================================*/
 
 #include "EnginePrivate.h"
@@ -126,7 +126,7 @@ UBOOL appFindMovie( const TCHAR* Name, FString& VideoFile, FString& AudioFile, F
 }
 
 /*-----------------------------------------------------------------------------
-	Saying why movies do not play (O-1): once in the log per movie, once for the player.
+	Saying why movies do not play: once in the log per movie, once for the player.
 -----------------------------------------------------------------------------*/
 
 static FString	GMovieNotice;			// waiting to be shown on the console (appTakeMovieNotice)
@@ -238,7 +238,7 @@ UBOOL appCanPlayFullscreenMovie( EFullscreenMovieKind Kind )
 		return 0;
 	// Per kind in Avaris.ini: [UC2Movie] StartupMovies, Cinematics, LoadingMovie (absent = on). Read here, when a movie
 	// is asked for, so an -ini:System:[UC2Movie]:StartupMovies=False on the command line (applied in appInit) is seen by
-	// the start-up logos. (F-4 follow-up: the switches -nostartupmovies, -nomovie and -nullmovies are gone.)
+	// the start-up logos.
 	const TCHAR* Key = Kind == FSMOVIE_Startup ? TEXT("StartupMovies") : Kind == FSMOVIE_Cinematic ? TEXT("Cinematics") : TEXT("LoadingMovie");
 	UBOOL bOn = 1;
 	GConfig->GetBool( TEXT("UC2Movie"), Key, bOn );
@@ -281,12 +281,12 @@ static void UnwrapPlayer( UMovieMaterial* M )
 	M->ConditionalDestroy();
 }
 
-// Test key [UC2Movie] ShotTimes=<seconds>[,<seconds>...] (-ini:; was -movieshot=): the engine's SHOT exec when the
+// Test key [UC2Movie] ShotTimes=<seconds>[,<seconds>...] (set with -ini:): the engine's SHOT exec when the
 // first full-screen movie's clock passes those times (verification: the picture is then a known frame of the cooked
 // file, which the log names).
-// Test key [UC2Movie] MaterialShotTimes=<seconds>[,<seconds>...] (D-4): the same for the first MovieMaterial that
+// Test key [UC2Movie] MaterialShotTimes=<seconds>[,<seconds>...]: the same for the first MovieMaterial that
 // shows a picture (a menu page's portrait): the screenshots are then taken a known time after the page opened,
-// whatever the machine's load (tools/dev/m9-movies.py menu-movie; times after the first frame were not).
+// whatever the machine's load (tools/dev/m9-movies.py menu-movie).
 static TArray<FLOAT> GMovieShotTimes;
 static TArray<FLOAT> GMaterialShotTimes;
 ENGINE_API UBOOL GMovieMaterialShotPending = 0;
@@ -322,7 +322,7 @@ static void DrawMovieFrame( UViewport* Viewport, UMovieMaterial* M, FPortableMov
 		return;
 	UCanvas* Canvas = Viewport->Canvas;
 	Canvas->Update();
-	Canvas->ApplyUIBox( 0 );	// D-2: this frame is laid out in the viewport's own pixels (below)
+	Canvas->ApplyUIBox( 0 );	// This frame is laid out in the viewport's own pixels (below)
 	Viewport->RI->Clear( 1, FColor(0,0,0), 1, 1.f );
 	FLOAT SX = Viewport->SizeX, SY = Viewport->SizeY;
 	FLOAT W = SX, H = SX * Player->GetHeight() / Max(Player->GetWidth(),1);
@@ -403,7 +403,7 @@ UBOOL appPlayMovieFullscreen( const TCHAR* Name, EFullscreenMovieKind Kind, UBOO
 	const TCHAR* Ending = TEXT("ended");
 	INT Presented = 0, LastLogged = -1;
 	DOUBLE LastTime = Start;
-	// Decode cost (O-2): the time Advance takes (reading, decoding, converting, feeding the sound), per call.
+	// Decode cost: the time Advance takes (reading, decoding, converting, feeding the sound), per call.
 	DOUBLE AdvanceTotal = 0.0, AdvanceMax = 0.0;
 	INT Advances = 0, PictureChanges = 0;
 	while( 1 )
@@ -463,12 +463,12 @@ UBOOL appPlayMovieFullscreen( const TCHAR* Name, EFullscreenMovieKind Kind, UBOO
 }
 
 /*-----------------------------------------------------------------------------
-	MovieMaterial (D3DMaterialState.cpp:4539-4624 on the Xbox).
+	MovieMaterial (D3DMaterialState.cpp on the Xbox).
 -----------------------------------------------------------------------------*/
 
-// What a MovieMaterial shows while it has no picture: an opaque black 4x4 picture that never changes (O-1).
-// Without it the device fell back to Material.DefaultMaterial, UC2's bright green DefaultTexture: every movie
-// texture of a build without the cooked movies (the web build so far) was a green square.
+// What a MovieMaterial shows while it has no picture: an opaque black 4x4 picture that never changes.
+// Without it the device would fall back to Material.DefaultMaterial, UC2's bright green DefaultTexture, and a
+// movie texture whose cooked movie is missing would be a green square.
 class FBlackMoviePicture : public FPortableMoviePlayer
 {
 public:

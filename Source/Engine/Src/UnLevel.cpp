@@ -134,7 +134,7 @@ void ULevel::DetailChange( EDetailMode NewDetailMode )
 	guard(ULevel::DetailChange);
 	
 	// flag corona rendering to reset, it will have dandling ptrs now
-    UC2ResetCoronas();	// uc2 port (G-9): the split-screen views' too (was GCoronaRender.Reset())
+    UC2ResetCoronas();	// the split-screen views' too (Epic: GCoronaRender.Reset())
 	
 	// scion sz - 
 	// Reset level info detail setting.
@@ -456,7 +456,7 @@ void ULevel::Destroy()
 	GLIPSincShutdownLevel();
 #endif
 
-    UC2ResetCoronas();	// uc2 port (G-9): the split-screen views' too (was GCoronaRender.Reset())
+    UC2ResetCoronas();	// the split-screen views' too (Epic: GCoronaRender.Reset())
 	Super::Destroy();
 	unguard;
 }
@@ -508,7 +508,7 @@ void ULevel::ReconcileActors()
 	guard(ULevel::ReconcileActors);
 	check(GIsEditor);
 
-    UC2ResetCoronas();	// uc2 port (G-9): the split-screen views' too (was GCoronaRender.Reset())
+    UC2ResetCoronas();	// the split-screen views' too (Epic: GCoronaRender.Reset())
 
 	// Dissociate all actor Viewports and remember their view properties.
 	for( INT i=0; i<Actors.Num(); i++ )

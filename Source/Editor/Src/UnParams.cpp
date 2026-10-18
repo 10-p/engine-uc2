@@ -19,7 +19,7 @@
 	fetched, or 0 if not.
 -----------------------------------------------------------------------------*/
 
-// uc2 port (M14): Engine/Src/UnParams.cpp defines the same five parsers (GetFVECTOR x2, GetSUBSTRING,
+// Engine/Src/UnParams.cpp defines the same five parsers (GetFVECTOR x2, GetSUBSTRING,
 // GetFROTATOR x2; same code, explicit (INT) casts there). Each DLL had its own copy; linked statically
 // into one program they collide, so the Engine's serve both. The Editor-only parsers below stay.
 #if !__STATIC_LINK

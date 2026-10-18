@@ -12,7 +12,7 @@
 
 #include "EditorPrivate.h"
 
-// uc2 port: glibc's <math.h> defines MAXFLOAT as a macro, which breaks the local constant of that name below.
+// glibc's <math.h> defines MAXFLOAT as a macro, which breaks the local constant of that name below.
 #ifdef MAXFLOAT
 #undef MAXFLOAT
 #endif

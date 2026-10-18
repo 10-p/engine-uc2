@@ -1,8 +1,8 @@
 /*=============================================================================
-	UC2GLMovie.cpp: MovieMaterial on the OpenGL device (engine-uc2 M9).
+	UC2GLMovie.cpp: MovieMaterial on the OpenGL device.
 
 	The PC branch of SetMovieMaterial. UC2's D3DDrv drew movie materials only on the Xbox
-	(D3DMaterialState.cpp:4539, carried over unchanged in UC2GLMaterialState.cpp under #ifdef _XBOX) and
+	(D3DMaterialState.cpp, carried over unchanged in UC2GLMaterialState.cpp under #ifdef _XBOX) and
 	returned 0 on PC. This file is the portable equivalent, kept out of UC2GLMaterialState.cpp so that file
 	stays diffable against Epic's (its PC stub is the only line range removed there):
 	  - the movie logic (bReset, open on first use, advance once per level time step, OnDonePlaying,
@@ -32,7 +32,9 @@ UBOOL FOpenGLRenderInterface::SetMovieMaterial(UMovieMaterial* pMovieMaterial,
 	FPortableMoviePlayer* Player = appUpdateMovieMaterial( pMovieMaterial, bFallback );
 	if( !Player )
 	{
-		// No picture yet: the loading fallback (or the default material), as the Xbox did.
+		// No picture yet and the material has a LoadingFallback: draw that. (appUpdateMovieMaterial returns
+		// NULL only then; without a fallback it hands a black picture, so the DefaultMaterial choice and the
+		// return below are not reached.)
 		if( bFallback )
 			return SetMaterial( pMovieMaterial->LoadingFallback == NULL ? pMovieMaterial->DefaultMaterial :
 				pMovieMaterial->LoadingFallback, ErrorString, ErrorMaterial, NULL );

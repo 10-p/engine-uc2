@@ -1,36 +1,36 @@
 #!/usr/bin/env bash
-# O-9: fixed-function materials on NVIDIA as on Mesa and as Epic's D3D path specifies. One PASS/FAIL line per
-# check; notebook docs/porting/analysis/o9-nvidia.md.
+# Fixed-function materials on NVIDIA as on Mesa and as Epic's D3D path specifies. One PASS/FAIL line per
+# check.
 #
 #   tools/dev/o9-nvidia.sh [check ...]          default: every check, in this order
 #   tools/dev/o9-nvidia.sh list
 #
 #   combiner-mesa   -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CombinerTest=True on Mesa llvmpipe (Xvfb): fragment programs; the texture environment with
-#                   combine3; with combine4 only (-ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=combine3); and "before" = main's NVIDIA path emulated
+#                   combine3; with combine4 only (-ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=combine3); and "before" = a texture-environment-only path emulated
 #                   (texture environment, no combine3/combine4, 4 units): the three-operand cases must fail
 #                   there and only there
 #   combiner-gpu    the same on this machine's NVIDIA GPU, headless (SDL offscreen video driver, EGL; nothing on
-#                   the display): programs; texture environment (combine4); "before" (-ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=combine4: main's path)
+#                   the display): programs; texture environment (combine4); "before" (-ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=combine4: no program, no combine4)
 #   combiner-twin   the same test on the GL4ES / OpenGL ES 2 twin (the browser's code path; gl4es emulates the
 #                   texture environment, combine3 included, in its own shaders)
 #   caps            the material compiler gets the same stage count and the same texture-op caps on NVIDIA and Mesa
 #   pictures-other  DM-AcidRain and DM-Tempest from a PlayerStart (tools/dev/o9/acidrain.scen, tempest.scen):
 #                   views where a fifth of the drawn materials depend on the three-operand caps (-ini:System:[UC2GLDrv.UC2GLRenderDevice]:MatCensus=True);
-#                   whole frame without the pawn, NVIDIA before/after against Mesa after
+#                   whole frame without the pawn, NVIDIA "before"/programs against Mesa programs
 #   pictures        DM-Azure, wooden pillar and cobra statue (tools/dev/o9/azure.scen through fx-owner.sh, time
-#                   frozen, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0): NVIDIA before (main's binary) and after, Mesa before and after; crops of the
+#                   frozen, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0): NVIDIA with uc2-before.bin (an older binary in the tree) and uc2.bin, Mesa likewise; crops of the
 #                   shots without post-processing compared (the dynamic gamma depends on the frame rate)
 #
-# Run tree <WorkUC2>/run/o9 (made from build-native unless O9_NO_MKRUN=1; main's executable must be there as
+# Run tree <repo>/../run/o9 (made from build-native unless O9_NO_MKRUN=1; main's executable must be there as
 # System/uc2-before.bin for the "before" pictures: build main and copy its uc2.bin). Logs and pictures in
-# <WorkUC2>/logs/o9. Every run inside <WorkUC2>/bin/capped 2G; GPU runs one at a time; nothing left running.
+# <repo>/../logs/o9. Every run inside <repo>/../bin/capped 2G; GPU runs one at a time; nothing left running.
 set -u
 export MESA_GLES_VERSION_OVERRIDE=${MESA_GLES_VERSION_OVERRIDE:-2.0}   # the twin: a strict ES 2.0 context (m11-twin.sh)
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 capped=$work/bin/capped
 imgdiff=$repo/tools/dev/imgdiff.py
-T=${O9_TREE:-o9}; sys=$work/run/$T/System; out=$work/logs/$T   # O9_TREE: another run tree / log folder (M7b)
+T=${O9_TREE:-o9}; sys=$work/run/$T/System; out=$work/logs/$T   # O9_TREE: another run tree / log folder
 ALL="combiner-mesa combiner-gpu combiner-twin caps pictures pictures-other"
 if [ "${1:-}" = list ]; then sed -n '/^#   combiner-mesa/,/^#                   frozen/p' "$0"; exit 0; fi
 want=${*:-$ALL}
@@ -56,7 +56,7 @@ ctrun() {
   [ $kind = gpu ] && env="$env SDL_VIDEODRIVER=offscreen"
   [ $kind = twin ] && set -- -gl4es "$@"
   # A fresh Avaris.ini every run: the settings passed with -ini: (FixedFunctionPrograms=False ...) are written into it
-  # and would otherwise carry over to the next run (F-4 follow-up: they were switches, which did not persist).
+  # and would otherwise carry over to the next run.
   rm -f "$sys/Avaris.ini"
   "$capped" 2G 180 -- xvfb-run -a -s "-screen 0 1280x720x24" bash -c \
     "cd '$sys' && $env ./uc2.bin -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CombinerTest=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=50:exit $* > '$out/ct-$name.out' 2>&1"
@@ -140,8 +140,8 @@ check_pictures() {
     [ -f "$f" ] || { result FAIL pictures "missing $f (see $out/pictures-runs.txt)"; return; }
   done
   # Numbers from the shots without post-processing (the dynamic gamma ramp adapts with the frame rate, which is
-  # very different on the GPU and on llvmpipe); Mesa (after) is the reference: what Mesa drew before O-9 for
-  # these materials (combine3, 2-3 stages).
+  # very different on the GPU and on llvmpipe); Mesa (uc2.bin) is the reference: Mesa draws these materials with
+  # combine3 in 2-3 stages.
   local after before mesa gpuenv cafter cbefore cgpuenv
   after=$("$imgdiff" "$p-gpu-nopp.png" "$p-nopp.png" --box $PILLAR)
   before=$("$imgdiff" "$p-before-gpu-nopp.png" "$p-nopp.png" --box $PILLAR)

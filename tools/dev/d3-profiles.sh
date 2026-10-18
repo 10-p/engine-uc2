@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# D-3 check (native): the player starts in the profile they last played with, with its settings.
+# Profile check (native): the player starts in the profile they last played with, with its settings.
 #
 #   tools/dev/d3-profiles.sh
 #
-# Needs the native run tree <WorkUC2>/run/d3 (tools/dev/mkrun-uc2.sh build-native d3; D3_TREE=<name> to change).
-# Every run is one client under Xvfb inside <WorkUC2>/bin/capped 2G (through tools/dev/m10-controls.sh --file);
-# runs 2-5 start a NEW process on the SAME tree (M10_KEEP=1: nothing reset), i.e. restarts.
-# Output in <WorkUC2>/logs/d3/profiles/ (D3_OUT=<dir>): r<N>.out (engine log), r<N>.result (the run's own
+# Needs the native run tree <repo>/../run/d3 (tools/dev/mkrun-uc2.sh build-native d3; D3_TREE=<name> to change).
+# Every run is one client under Xvfb inside <repo>/../bin/capped 2G (through tools/dev/m10-controls.sh --file);
+# runs 2-5 start a new process on the same tree (M10_KEEP=1: nothing reset), i.e. restarts.
+# Output in <repo>/../logs/d3/profiles/ (D3_OUT=<dir>): r<N>.out (engine log), r<N>.result (the run's own
 # checks), screenshots, User.ini after each run; one PASS/FAIL line per check on stdout.
 #
 #   r1  fresh configuration (no profiles, no derived inis): create profile "Saver" on the on-screen keyboard

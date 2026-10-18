@@ -5,7 +5,7 @@ Input (read only): the XACT project as text (Sounds/Avaris.xap), the source WAVs
 Music/) and the shipped Xbox banks (Sounds/*.xsb, *.xwb): a cross-check, and the source of a wave whose WAV is
 not in SoundData/ (decoded from the .xwb by tools/uc2xwb.py; the report lists them as XWB-SOURCE).
 
-Output (never committed; default <WorkUC2>/assets/uc2-cooked):
+Output (never committed; default <repo>/../assets/uc2-cooked):
   Sounds/<WaveBankFile>.uc2wb    wave bank index (text): one line per wave entry
   Sounds/<WaveBankFile>.ogp      the wave bank's waves, each a complete Ogg Vorbis stream, concatenated
   Sounds/<SoundBank>.uc2cues     cue table (text): cues -> sounds -> tracks -> events -> variations
@@ -18,7 +18,7 @@ The formats are specified in docs/porting/analysis/audio.md ("Cooked format"). U
   tools/cook-audio.py [--epic <epic-sources>] [--out <dir>] [--jobs 6] [--banks A_Music,A_Weapon]
                       [--no-encode] [--quality 4] [--music-quality 5] [--no-xwb-sources]
 
-Run it under the memory ceiling: <WorkUC2>/bin/capped 4G 3600 -- tools/cook-audio.py
+Run it under the memory ceiling: <repo>/../bin/capped 4G 3600 -- tools/cook-audio.py
 """
 
 import argparse
@@ -40,7 +40,7 @@ import uc2xwb
 FORMAT_VERSION = 1
 
 # Entries whose project WAV is not the wave the Xbox shipped: taken from the shipped .xwb even though the WAV exists
-# (owner decision 2026-10-09, F-6). (wave bank file stem, entry index): reason.
+# (the shipped wave wins). (wave bank file stem, entry index): reason.
 XWB_PREFERRED = {
     ('A_ChemicalDawn', 7): 'Machine_Generator03: the tree\'s WAV has 55,808 frames; the project\'s play region '
                            '193,426 and the shipped entry 193,472',
@@ -362,7 +362,7 @@ def build_sound(node, report, bankname):
     s = collections.OrderedDict()
     s['name'] = node.get('Name')
     # No Priority key = 255 (the least important): the shipped .xsb stores 255 for every one of the 674 sounds
-    # without the key (owner decision 2026-10-09, F-6; the cook of 2026-10-04 wrote 0, the most important).
+    # without the key (0 would be the most important).
     s['priority'] = num(node.get('Priority'), 255)
     s['volume'] = num(node.get('Volume'))
     s['pitch'] = num(node.get('Pitch'))

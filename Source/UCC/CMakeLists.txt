@@ -1,5 +1,5 @@
 #=============================================================================
-# UCC - commandlet host (ucc-bin): `ucc-bin server <map>`, `batchexport`, and from M14 `make`.
+# UCC - commandlet host (ucc-bin): `ucc-bin server <map>`, `batchexport`, `make` and the check commandlets.
 #=============================================================================
 
 project(UCC CXX)
@@ -16,28 +16,28 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 # Static link: every package whole, so the class registrants and native tables survive; exported dynamically
 # because appGetDllHandle finds a linked-in package by looking up its GLoaded<Package> symbol in the program.
 set(LINK_PACKAGES GUI UCGameplay UCElements UnrealGame UWeb IpDrv Engine Core)
-# M8: UC2ALAudio for its check commandlet (`ucc-bin UC2ALAudio.UC2AudioCheck`); no audio device runs in ucc.
+# UC2ALAudio for its check commandlet (`ucc-bin UC2ALAudio.UC2AudioCheck`); no audio device runs in ucc.
 if(TARGET UC2ALAudio)
   list(PREPEND LINK_PACKAGES UC2ALAudio)
   target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_UC2ALAUDIO=1)
   if(EMSCRIPTEN)
-    # M11/O-2: openal-soft is linked into the web builds, and its JS half (Module.alsoftConfig, read with
-    # stringToNewUTF8) needs malloc exported; the browser build exports it already (cmake/Web.cmake).
+    # openal-soft is linked into the web builds, and its JS half (Module.alsoftConfig, read with
+    # stringToNewUTF8) needs malloc exported; the browser build exports it already (SDLLaunch/cmake/Web.cmake).
     target_link_options(${PROJECT_NAME} PRIVATE "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free']")
   endif()
 endif()
-# M9: the movie player (factory + `ucc-bin UC2Movie.UC2MovieSelfTest`).
+# The movie player (factory + `ucc-bin UC2Movie.UC2MovieSelfTest`).
 if(TARGET UC2Movie)
   list(PREPEND LINK_PACKAGES UC2Movie)
   target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_UC2MOVIE=1)
 endif()
-# M14: the Editor package (script compiler `ucc-bin make`, header exporter, editor commandlets); native only.
+# The Editor package (script compiler `ucc-bin make`, header exporter, editor commandlets); 32-bit pointers only.
 if(TARGET Editor)
   list(PREPEND LINK_PACKAGES Editor)
   target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_EDITOR=1)
 endif()
 if(MINGW)
-  # M12: ucc.exe, a console program. Static link, as everywhere; nothing is exported (on Windows
+  # ucc.exe, a console program. Static link, as everywhere; nothing is exported (on Windows
   # appGetDllHandle answers "linked in" for every package, which is what Epic's static builds did), and
   # winpthread comes in statically through the root -static. ws2_32: IpDrv's WinSock.
   set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME ucc)
@@ -54,21 +54,21 @@ if(MINGW)
 elseif(NOT EMSCRIPTEN)
   target_link_options(${PROJECT_NAME} PRIVATE -Wl,-export-dynamic)
 else()
-  # M4w: ucc-bin.js + ucc-bin.wasm, a Node program that runs inside a run tree like the native ucc-bin
+  # ucc-bin.js + ucc-bin.wasm, a Node program that runs inside a run tree like the native ucc-bin
   # (`cd <run>/System && node ucc-bin.js verifyclasses`). It is the wasm32 test vehicle: same objects as the
-  # browser build, no browser. Every flag and why: docs/porting/analysis/web-smoke.md (W0).
+  # browser build, no browser.
   # Static link: appGetDllHandle answers the "in this binary" sentinel on Emscripten, so nothing needs
   # exporting dynamically.
   target_link_options(${PROJECT_NAME} PRIVATE
     -sNO_DISABLE_EXCEPTION_CATCHING   # for openal-soft only (UC2ALAudio links it); the engine's code is compiled
-                                      #   without catching and its loaders fail soft (cmake/UC2Web.cmake, F-4a)
+                                      #   without catching and its loaders fail soft (cmake/UC2Web.cmake)
     -sENVIRONMENT=node
     -sNODERAWFS=1                     # the host file system, relative to the working directory
     -pthread                          # every object is compiled -pthread (atomics); Core starts the
     -sPROXY_TO_PTHREAD                #   file-streaming thread; main() runs on a worker as in the browser
     -sPTHREAD_POOL_SIZE=2             # main + the file-streaming thread
     -sEXIT_RUNTIME=1                  # main()'s return value is the process exit code
-    -sSTACK_SIZE=2097152              # engine-ut2004's value (the Emscripten default is 64 KB)
+    -sSTACK_SIZE=2097152              # 2 MB (the Emscripten default is 64 KB)
     -sINITIAL_MEMORY=268435456
     -sALLOW_MEMORY_GROWTH=1
     -sMAXIMUM_MEMORY=2147483648

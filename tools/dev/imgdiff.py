@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare two pictures of the same size (M11: desktop driver against the GL4ES twin or the browser).
+"""Compare two pictures of the same size (e.g. the desktop driver against the GL4ES twin or the browser).
 
   tools/dev/imgdiff.py A.png B.png [--box x0,y0,x1,y1] [--mask x0,y0,x1,y1 ...] [--side out.png] [--diff out.png]
 

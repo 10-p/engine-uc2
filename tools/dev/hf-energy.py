@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""High-frequency energy of a picture region (F-3, texture LOD bias: is a far texture sharper?).
+"""High-frequency energy of a picture region (texture LOD bias: is a far texture sharper?).
 
   tools/dev/hf-energy.py A.png [B.png ...] --box x0,y0,x1,y1 [--crop out.png --scale N]
 

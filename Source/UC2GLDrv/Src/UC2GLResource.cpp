@@ -1,8 +1,7 @@
 /*=============================================================================
 	UC2GLResource.cpp: UC2GLDrv resources.
 
-	GL code from engine-ut2004's OpenGLDrv (OpenGLResource.cpp: texture upload, render
-	targets, buffer objects); what is cached and when from UC2's D3DDrv (D3DResource.cpp:
+	Texture upload, render targets, buffer objects; what is cached and when from UC2's D3DDrv (D3DResource.cpp:
 	formats, render target rules, the engine back link, the default render target).
 =============================================================================*/
 
@@ -121,11 +120,11 @@ INT FOpenGLTexture::CalculateFootprint()
 // P8/G16/RGBA7 to RGBA8 and copies DXT blocks unchanged.
 //
 //
-// M11: DXT1/3/5 decoded by the driver, from the texture's compressed data (GetTextureData), into
+// DXT1/3/5 decoded by the driver, from the texture's compressed data (GetTextureData), into
 // B,G,R,A bytes (what GL_BGRA uploads). Used where the hardware takes no S3TC (MaskCaps=s3tc, WebGL 1
 // without WEBGL_compressed_texture_s3tc). It replaces UTexture::ConvertDXT, which only exists for
-// textures that are UTextures: the BSP lightmaps (DXT1 FTextures of the engine) have none, and the
-// first no-S3TC run of the twin crashed there (G2, 2026-10-07). Standard S3TC: DXT1 with its
+// textures that are UTextures: the BSP lightmaps (DXT1 FTextures of the engine) have none. Standard S3TC:
+// DXT1 with its
 // three-colour + transparent mode when c0 <= c1, DXT3 explicit 4-bit alpha, DXT5 interpolated alpha.
 //
 static void UC2GL_Expand565( _WORD C, INT* RGB )
@@ -218,7 +217,7 @@ static BYTE* UC2GL_DecodeDXTMip( FTexture* Texture, INT MipIndex, ETextureFormat
 	BYTE* Pixels = new BYTE[ Width * Height * 4 ];
 	if( !Texture )
 	{
-		// A cube map face the cube map leaves empty (fx-fixes O-5, see UploadMip): zeros.
+		// A cube map face the cube map leaves empty (UploadMip): zeros.
 		appMemzero( Pixels, Width * Height * 4 );
 		return Pixels;
 	}
@@ -230,7 +229,7 @@ static BYTE* UC2GL_DecodeDXTMip( FTexture* Texture, INT MipIndex, ETextureFormat
 }
 
 //
-// UploadMip with Texture NULL (fx-fixes, O-5; ported to M11's driver): a cube map face the
+// UploadMip with Texture NULL: a cube map face the
 // cubemap leaves empty. D3D allocates all six faces of a cube texture and fills those that
 // exist, so the cube stays usable; GL needs every face for a complete cube map (an incomplete
 // one disables texturing: DM-Azure's pool drew its vertex colour instead of
@@ -311,7 +310,7 @@ void FOpenGLTexture::UploadMip( GLenum Target, FTexture* Texture, ETextureFormat
 }
 
 //
-// M11. The levels the engine does not have, down to 1x1, for a context without
+// The levels the engine does not have, down to 1x1, for a context without
 // GL_TEXTURE_MAX_LEVEL (OpenGL ES 2, WebGL 1: a mip chain that stops early makes the texture
 // incomplete, i.e. black). The engine keeps log2 of the SMALLER side levels, so every
 // non-square mipmapped texture is short by one or more. Each missing level is the box
@@ -417,7 +416,7 @@ void FOpenGLTexture::CompleteChain( GLenum Target, FTexture* Texture, ETextureFo
 }
 
 //
-// M11. A DXT mip chain that the engine ends before 1x1 (it has log2 of the SMALLER side
+// A DXT mip chain that the engine ends before 1x1 (it has log2 of the smaller side
 // levels, so every non-square texture), completed for a context without
 // GL_TEXTURE_MAX_LEVEL when the data goes to the hardware compressed (CompleteChain does
 // the same for uncompressed data). Each missing level is one 4x4 block of a
@@ -529,7 +528,7 @@ void FOpenGLTexture::CompleteCompressedChain( GLenum Target, FTexture* Texture, 
 }
 
 //
-// M11. The storage of an engine texture goes to GLES around gl4es (UUC2GLRenderDevice::
+// The storage of an engine texture goes to GLES around gl4es (UUC2GLRenderDevice::
 // TexImage2D, CompressedTexImage2D), but gl4es' fixed-function emulation only samples a
 // texture whose storage it has seen itself, and gl4es generates mipmaps for a texture it
 // believes to lack them. So a new texture is first defined through gl4es, once per texture
@@ -700,7 +699,7 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 			// The main framebuffer: not owned (UD3DRenderDevice's back buffer surfaces).
 			DeleteGLObjects();
 			IsDefaultTarget	= 1;
-			// M7: which of the main framebuffer's buffers a material sees through this texture
+			// Which of the main framebuffer's buffers a material sees through this texture
 			// (the default target has one cache id per usage). What is bound when a stage
 			// samples it is decided in UUC2GLRenderDevice::GetSampledTexture.
 			DefaultUsage	= RenderTarget->MaterialUsageFlag;
@@ -732,7 +731,7 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 
 				if( RenderTarget->CreationFlags & FRenderTarget::RT_CREATE_DEPTH )
 				{
-					// (M11: storage and attachment through the device's helpers, which go
+					// (Storage and attachment through the device's helpers, which go
 					// around gl4es on GLES.)
 					DepthStencilID = RenDev->CreateDepthStencilRenderbuffer( USize, VSize );
 					RenDev->AttachDepthStencilRenderbuffer( FramebufferID, DepthStencilID );
@@ -740,8 +739,8 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 				else
 				{
 					// Without RT_CREATE_DEPTH, D3DDrv borrows the back buffer's depth surface
-					// (a texture since M7: UUC2GLRenderDevice::CreateMainFramebuffer).
-					// M11: OpenGL ES 2 and WebGL 1 want every attachment of a framebuffer to
+					// (a texture: UUC2GLRenderDevice::CreateMainFramebuffer).
+					// OpenGL ES 2 and WebGL 1 want every attachment of a framebuffer to
 					// have the same size (WebGL: FRAMEBUFFER_INCOMPLETE_DIMENSIONS for the 16x16
 					// luminance target with the 640x480 depth), where D3D and desktop GL use the
 					// corner of a larger depth buffer. A smaller target gets no depth buffer
@@ -817,7 +816,7 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 		{
 			for( INT FaceIndex=0; FaceIndex<6; FaceIndex++ )
 			{
-				// fx-fixes (O-5): an empty face is uploaded too (zeroed, UploadMip), or GL's cube
+				// An empty face is uploaded too (zeroed, UploadMip), or GL's cube
 				// map is incomplete and the stage samples nothing.
 				FTexture* Face = Cubemap->GetFace( FaceIndex );
 				UploadMip( GL_TEXTURE_CUBE_MAP_POSITIVE_X + FaceIndex, Face, ActualFormat, MipIndex, FirstMip, Width, Height );
@@ -1110,7 +1109,7 @@ FOpenGLIndexBuffer::~FOpenGLIndexBuffer()
 }
 
 //
-// M11: a context without 32-bit indices (WebGL 1 without OES_element_index_uint; MaskCaps=uintindex
+// A context without 32-bit indices (WebGL 1 without OES_element_index_uint; MaskCaps=uintindex
 // masks them anywhere). 32-bit index data is narrowed to 16 bits in place (the WORDs land at or
 // below the DWORDs they come from, so a forward loop is safe). Exact when no index is above
 // 65535, which holds for every index buffer this engine makes (it makes no 32-bit ones: only
@@ -1209,7 +1208,7 @@ INT FOpenGLDynamicIndexBuffer::AddIndices(FIndexBuffer* Indices)
 	guard(FOpenGLDynamicIndexBuffer::AddIndices);
 
 	INT		SourceSize	= Indices->GetSize();
-	// M11: the 32-bit dynamic buffer of a context without 32-bit indices stores 16-bit ones.
+	// The 32-bit dynamic buffer of a context without 32-bit indices stores 16-bit ones.
 	UBOOL	Narrow		= Indices->GetIndexSize() == sizeof(DWORD) && IndexSize == sizeof(_WORD);
 	INT		Size		= Narrow ? SourceSize / 2 : SourceSize;
 	check( Narrow || Indices->GetIndexSize() == IndexSize );

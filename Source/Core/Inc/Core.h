@@ -93,7 +93,7 @@ public:
 #endif
 #endif
 
-// Pointer width (M13). 64-bit for x86_64 (Unix and MinGW's _WIN64), arm64 and any other LP64 target; wasm32,
+// Pointer width. 64-bit for x86_64 (Unix and MinGW's _WIN64), arm64 and any other LP64 target; wasm32,
 // i386 and i686 MinGW are 32-bit. The shipped script packages were compiled for 32-bit pointers, so the
 // 64-bit build keeps their 4-byte pointer slots in bytecode (SERIAL_POINTER_INDEX, UnObjBas.h) and gives
 // script ints that stand in for C++ pointers their C++ size when classes are linked (UnClass.cpp).
@@ -132,8 +132,8 @@ public:
 #endif
 
 
-// OS specific include. (engine-ut2004: UnUnix.cpp is the platform layer of every non-MSVC target,
-// MinGW included, so its prototypes must be visible there too.)
+// OS specific include. (UnUnix.cpp is the platform layer of every non-MSVC target, MinGW included, so its
+// prototypes must be visible there too.)
 #if __UNIX__ || defined(__MINGW32__)
 	#include "UnUnix.h"
 #ifndef __MWERKS__
@@ -581,7 +581,7 @@ CORE_API extern FOutputDevice* GLog;
 CORE_API extern FOutputDeviceError* GError;
 CORE_API extern FFeedbackContext*		GWarn;
 CORE_API extern FConfigCache*			GConfig;
-// ufront: called when the config cache reads a file from disk (FConfigCacheIni::Find): a reload after the cache was
+// Called when the config cache reads a file from disk (FConfigCacheIni::Find): a reload after the cache was
 // emptied (CollectGarbage unloads it all) gets the engine's in-memory additions again (Engine UnExtraMaps.cpp).
 CORE_API extern void					(*GConfigFileLoaded)( const TCHAR* Filename, class FConfigFile& File );
 CORE_API extern FTransactionBase*		GUndo;

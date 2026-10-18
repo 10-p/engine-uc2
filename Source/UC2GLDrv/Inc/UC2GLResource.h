@@ -2,7 +2,7 @@
 	UC2GLResource.h: UC2GLDrv resources (textures, render targets, vertex and index
 	buffers).
 
-	Structure from engine-ut2004's OpenGLDrv (OpenGLResource.h); caching scheme from UC2's
+	Caching scheme from UC2's
 	D3DDrv (D3DResource.h, D3DRenderDevice.h): the engine's FRenderResource carries a
 	16-bit cache id that the render device hands out per cache (textures, vertex buffers,
 	index buffers), and every driver resource points back at its engine resource so the
@@ -128,7 +128,7 @@ public:
 	GLenum					UploadBindTarget;	// GL_TEXTURE_2D or GL_TEXTURE_CUBE_MAP while Cache uploads
 	GLuint					StorageSeenID;		// the texture name gl4es has seen a storage of (PrepareStorage)
 	void PrepareStorage();
-	// M11: OpenGL ES has no GL_TEXTURE_MAX_LEVEL, so a mip chain must go down to 1x1.
+	// OpenGL ES has no GL_TEXTURE_MAX_LEVEL, so a mip chain must go down to 1x1.
 	void CompleteCompressedChain( GLenum Target, FTexture* Texture, ETextureFormat ActualFormat, INT LastMipIndex, INT FirstMip, INT Width, INT Height );
 	void CompleteChain( GLenum Target, FTexture* Texture, ETextureFormat ActualFormat, INT LastMipIndex, INT FirstMip, INT Width, INT Height );
 	UBOOL					OwnsTexture,
@@ -244,7 +244,7 @@ struct FShaderDeclaration
 //
 //	FOpenGLVertexShader: a fixed-function vertex declaration (D3D's FVF shader).
 //	The QWORD VertexShaderEnum is recorded and otherwise ignored, as on PC (fixed-function
-//	T&L, CPU skinning). M6: GLSL vertex shaders spliced from the .vsh fragments key on it.
+//	T&L, CPU skinning); the GLSL vertex shaders composed from the .vsh fragments key on it.
 //
 class FOpenGLVertexShader
 {
@@ -320,7 +320,7 @@ class FOpenGLDynamicIndexBuffer : public FOpenGLIndexBuffer
 {
 public:
 	INT		Tail;
-	// M11: the indices added last, kept on the CPU where wireframe is drawn as lines by the
+	// The indices added last, kept on the CPU where wireframe is drawn as lines by the
 	// driver (GLES has no polygon mode); ShadowBase is the buffer index of its first element.
 	TArray<BYTE>	Shadow;
 	INT				ShadowBase;

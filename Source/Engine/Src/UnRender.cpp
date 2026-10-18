@@ -1752,21 +1752,21 @@ void FLevelSceneNode::Render(FRenderInterface* RI)
 }
 
 /*-----------------------------------------------------------------------------
-	D-8: AutoFOV (UnRender.h; docs/porting/analysis/console-fov.md).
+	AutoFOV (UnRender.h).
 -----------------------------------------------------------------------------*/
 
 ENGINE_API APlayerController*	GAutoFovScopeActor		= NULL;
 ENGINE_API FLOAT				GAutoFovFrameBase		= 90.0f;
 ENGINE_API FLOAT				GAutoFovFrameEffective	= 90.0f;
 
-// Read once from [ufront.AutoFOV] of the system ini (the template's section: a free section, so the
+// Read once from [ufront.AutoFOV] of the system ini (the section the sibling engines share, so the
 // frontend's -ini:System:[ufront.AutoFOV]:AutoFOV=0 reaches it); AUTOFOV on the console changes the mode
 // for the session.
 static UBOOL	GAutoFovParsed		= 0;
 static INT		GAutoFovMode		= AUTOFOV_Adaptive;
 static FLOAT	GAutoFovRef			= 4.0f / 3.0f;
 static FLOAT	GAutoFovWeapon		= 1.0f;
-static UBOOL	GAutoFovSplitClamp	= 1;	// G-9, the owner's choice (2026-10-10): [ufront.AutoFOV] SplitClampToFullScreen, one player's FOV for every viewport
+static UBOOL	GAutoFovSplitClamp	= 1;	// [ufront.AutoFOV] SplitClampToFullScreen: no split viewport wider than the full-window FOV
 static INT		GAutoFovLastX		= -1;
 static INT		GAutoFovLastY		= -1;
 static FLOAT	GAutoFovLastBase	= -1.0f;
@@ -1803,10 +1803,10 @@ static void ufrontParseAutoFov()
 
 ENGINE_API void ufrontAutoFovSize( UViewport* Viewport, INT& SizeX, INT& SizeY )
 {
-	// G-6: per viewport aspect. (D-8 used SizeX/ScaleX x SizeY/ScaleY for a split view, the window's.)
+	// Per viewport aspect.
 	SizeX = Viewport ? Viewport->SizeX : 0;
 	SizeY = Viewport ? Viewport->SizeY : 0;
-	// G-9 (a proposal for the owner, off by default): a split viewport wider than the window (the two-player
+	// SplitClampToFullScreen (on by default): a split viewport wider than the window (the two-player
 	// strips, the three-player top strip) is corrected for the window's aspect instead of its own, so its
 	// horizontal FOV is never wider than the full-screen one (106 at 16:9 instead of 139); it shows less
 	// vertically than the single view. Quarters (the window's aspect) are unchanged.
@@ -1821,7 +1821,7 @@ ENGINE_API void ufrontAutoFovSize( UViewport* Viewport, INT& SizeX, INT& SizeY )
 	}
 }
 
-// G-9: the field of view a viewport's picture shows, after AutoFOV and the split-screen scale: one line per viewport
+// The field of view a viewport's picture shows, after AutoFOV and the split-screen scale: one line per viewport
 // whenever it changes, "[AutoFOV] shown viewport=<index> rect=X,Y WxH mode=M base=B effective=E scaleFOV=S
 // horizontal=H vertical=V". FCameraSceneNode::UpdateMatrices: camera x ScaleX/ScaleY, half-angle h x ScaleFOVX/Y,
 // aspect (W*ScaleX)/(H*ScaleY) of the viewport's own render target; so the edge of the view is
@@ -2381,7 +2381,7 @@ void FPlayerSceneNode::Render(FRenderInterface* RI)
 			RI->Clear( 1, FColor(0,0,0), 0, 0, 0, 0 );
 			Viewport->ScaleFOVY = 1.f / Viewport->CinematicsRatio;
 			FLOAT BandScale = Viewport->ScaleFOVY;
-			// D-8: ScaleFOVY multiplies the vertical half-ANGLE of the view. When AutoFOV has widened the
+			// ScaleFOVY multiplies the vertical half-ANGLE of the view. When AutoFOV has widened the
 			// view (ViewFOV is the effective FOV of this frame), the band must show the vertical extent the
 			// 4:3 band shows, so the scale is applied to the base FOV and widened in tan space as the
 			// horizontal is; at the reference aspect (no widening) Epic's line above stands alone.
@@ -2433,8 +2433,8 @@ void FPlayerSceneNode::Render(FRenderInterface* RI)
 		}
 		else
 		{
-			// uc2 port: nothing else clears the colour buffer of a frame without the level (on the Xbox a movie
-			// covered it); TOGGLERENDERLEVEL then shows the HUD on black (D-2's measurements, ui-scale.md).
+			// Nothing else clears the colour buffer of a frame without the level (on the Xbox a movie
+			// covers it); TOGGLERENDERLEVEL then shows the HUD on black.
 			RI->Clear( 1, FColor(0,0,0), 0, 1.f, 0, 0 );
 		}
 
@@ -2887,7 +2887,7 @@ void FActorSceneNode::Render(FRenderInterface* RI)
 	if( !bShadowScene && 
 		Viewport->IsLit() && 
 		( DynamicActor->LastLightUpdateTime != RenderActor->Level->TimeSeconds
-		||	DynamicActor->LastProjectorGeneration != GProjectorRenderInfoGeneration ) )	// uc2 port (G-9): UnProjector.h
+		||	DynamicActor->LastProjectorGeneration != GProjectorRenderInfoGeneration ) )	// UnProjector.h
 	{
 		// need to update these
 		DynamicActor->EmptyLights();
@@ -3340,7 +3340,7 @@ void FPostProcessRender::Render()
 	if( !PPDrawList )
 		return;
 
-	// UC2 port (M7): the rest of this function was "#ifdef _XBOX". It runs when the render
+	// The rest of this function is "#ifdef _XBOX" in Epic's code. It runs when the render
 	// device has the post-process capability (FRenderCaps::XboxPostProcess). Without it the
 	// list is empty anyway: no material answers IsPostProcess() (PSDistortionBaseMaterial).
 #ifndef _XBOX

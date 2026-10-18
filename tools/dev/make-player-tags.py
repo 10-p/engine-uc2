@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""X-1: the 3P / 4P cursor tags of the character page, made from the game's own 1P tag.
+"""The 3P / 4P cursor tags of the character page, made from the game's own 1P tag.
 
     tools/dev/make-player-tags.py --src <dir> --out <dir> [--page <png> --rect X,Y,SIZE] [--final <dir>]
 
@@ -8,7 +8,7 @@ repository):
     cd <run tree>/System && ./ucc-bin batchexport T_UI_2.utx Texture dds <dir>
     -> <dir>/UI_Char_1PSelector.dds, UI_Char_2PSelector.dds   (64x64 DXT3, one mip)
 
-What the script does (docs/porting/analysis/x1-players34.md, "The artwork"):
+What the script does:
   1. the "1P" label of the 1P tag is cleaned: in each label row the tag's own fill is interpolated across the glyph
      pixels, up to the tag's dark diagonal edge, which is kept;
   2. 3P = the cleaned 1P flipped top-to-bottom about the hexagon's own centre row (y' = 64 - y: the outline lands on
@@ -20,10 +20,10 @@ What the script does (docs/porting/analysis/x1-players34.md, "The artwork"):
      outer corner as the edge allows with one pixel to spare (the tag narrows towards the hexagon's middle);
   4. the whole cursor is hue-rotated (HSV, saturation and value kept) to each candidate colour.
 Writes <out>/UI_Char_{3P,4P}Selector-<colour>.tga (64x64 RGBA, run-length coded, what a patch set would import into
-UCMenu.u), <out>/player-tags-sheet.png (the owner's sheet) and <out>/player-tags-report.txt (the numeric checks).
+UCMenu.u), <out>/player-tags-sheet.png (a review sheet) and <out>/player-tags-report.txt (the numeric checks).
 With --page (a 1280x720 shot of the character page) and --rect (the cursor's rectangle in that shot) the sheet also
-shows all four cursors on a portrait of the real page: a mock-up composited here, NOT the engine's rendering.
-With --final <dir> it also writes the owner's pair (2026-10-11: 3P green, 4P magenta) as <dir>/UI_Char_3PSelector.tga
+shows all four cursors on a portrait of the real page: a mock-up composited here, not the engine's rendering.
+With --final <dir> it also writes the chosen pair (3P green, 4P magenta) as <dir>/UI_Char_3PSelector.tga
 and <dir>/UI_Char_4PSelector.tga: the patch set players34 imports them into UCMenu.u (patches/players34/README.md):
     tools/dev/make-player-tags.py --src <dds dir> --out <scratch dir> --final patches/players34/new/UCMenu/Textures
 """
@@ -78,7 +78,7 @@ CANDIDATES = [                # name, hue in degrees (1P is about 52, 2P about 1
     ('green', 120.0), ('red', 0.0), ('magenta', 300.0), ('orange', 28.0), ('violet', 270.0),
 ]
 PAIRS = [('green', 'magenta'), ('red', 'green'), ('magenta', 'orange')]
-FINAL = ('green', 'magenta')   # the owner's choice for players three and four (PLAN.md "X-1 decisions")
+FINAL = ('green', 'magenta')   # the colours of players three and four
 
 
 def lum(p):

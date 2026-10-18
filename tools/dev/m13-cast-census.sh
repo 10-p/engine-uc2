@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pointer-width cast census of a build log (M13): every distinct source line where GCC reports a pointer
+# Pointer-width cast census of a build log: every distinct source line where GCC reports a pointer
 # narrowed to a smaller integer ("loses precision", an error that -fpermissive turns into a warning) or an
 # integer widened into a pointer (-Wint-to-pointer-cast). Fetched libraries (_deps) are not ours and skipped.
 #

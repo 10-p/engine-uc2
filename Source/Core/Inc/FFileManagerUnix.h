@@ -1,10 +1,9 @@
 /*=============================================================================
 	FFileManagerUnix.h: Unreal Unix based file manager.
 
-	engine-uc2 (M1): engine-ut2004's FFileManagerUnix.h (UTF-8 punctuation in comments made ASCII),
-	which replaces UC2's stale UT2003-era FFileManagerLinux.h (that header is now a shim to this one).
-	UC2 changes: no GFileManagerBytesRead/LoadingTime statistics. GetUserDir() is not a virtual of UC2's
-	FFileManager (the engine-ut2004 2.37 Core.h hunk is not ported), so here it is a plain member.
+	The file manager of every non-MSVC target (FFileManagerLinux.h is a typedef of it). No
+	GFileManagerBytesRead/LoadingTime statistics; GetUserDir() is not a virtual of UC2's FFileManager,
+	so here it is a plain member.
 	Copyright 1997-1999 Epic Games, Inc. All Rights Reserved.
 
 	Revision history:
@@ -19,24 +18,22 @@
 #include <unistd.h>
 #include <limits.h>
 #include "FFileManagerGeneric.h"
-// ufront 2.33: Windows' mkdir takes no mode -- permissions are not a filesystem attribute there.
+// Windows' mkdir takes no mode: permissions are not a filesystem attribute there.
 #ifdef _WIN32
 #  define UT_MKDIR(p) mkdir(p)
 #else
 #  define UT_MKDIR(p) mkdir((p), S_IRUSR | S_IWUSR | S_IXUSR)
 #endif
 
-// ufront 2.33 * THE ut2004 WINDOWS STARTUP CRASH. MinGW's open() defaults to TEXT mode, which translates
-// CRLF and stops at Ctrl-Z -- so read() returns FEWER bytes than asked for, every archive read "fails",
-// and the engine died reading its own ini before it could log a word. The fopen() calls in this file
-// already say "rb"; these open() calls said nothing. O_BINARY is 0 on POSIX (no text/binary distinction),
-// so OR-ing it in is a no-op for Linux and the web.
+// Binary-mode opens. MinGW's open() defaults to text mode, which translates CRLF and stops at Ctrl-Z, so
+// read() would return fewer bytes than asked for and every archive read would fail. O_BINARY is 0 on POSIX
+// (no text/binary distinction), so OR-ing it in is a no-op for Linux and the web.
 #ifndef O_BINARY
 #  define O_BINARY 0
 #endif
 
 #ifndef _WIN32
-#include <pwd.h>	// ufront 2.33: no passwd database on Windows (see the home-dir lookup below)
+#include <pwd.h>	// no passwd database on Windows
 #endif
 #include <stdlib.h>
 #include <ctype.h>
@@ -201,7 +198,7 @@ public:
 		}
 		FLOAT	DeltaTime	= (FLOAT) (appSeconds() - StartTime);
 		if( DeltaTime > 100.f ) DeltaTime = 0.0f; //!!
-		// engine-uc2: UC2 has no GFileManagerBytesRead/GFileManagerLoadingTime load statistics.
+		// UC2 has no GFileManagerBytesRead/GFileManagerLoadingTime load statistics.
 		unguardSlow;
 	}
 	void Seek( INT InPos )
@@ -423,7 +420,7 @@ public:
             return 0;
 
         struct tm tm;
-        // ufront 2.33: Windows spells the reentrant localtime `localtime_s`, with the arguments reversed
+        // Windows spells the reentrant localtime `localtime_s`, with the arguments reversed
         // and an errno_t return (0 == success).
 #ifdef _WIN32
         if (localtime_s(&tm, &statbuf.st_mtime) != 0)
@@ -598,9 +595,9 @@ public:
 		return 0;	
 		unguard;
 	}
-	// M13: a directory exists too. Core.h's default asks FileSize(), which is -1 for a directory here (the Windows
-	// file manager answers for directories), so ULoadSaveManager::ExistsGameObject never found a saved profile
-	// and no profile ever loaded on Linux or MinGW ("Unable to load profile"). Found by the cross-width save test.
+	// A directory exists too. Core.h's default asks FileSize(), which is -1 for a directory here (the Windows
+	// file manager answers for directories), and ULoadSaveManager::ExistsGameObject looks for a saved profile's
+	// directory.
 	UBOOL Exists( const TCHAR* FakePath )
 	{
 		guard(FFileManagerUnix::Exists);
@@ -718,13 +715,8 @@ public:
         unguard;
 	}
 	// --- gam
-	// ufront 2.37: the home-dir redirect is now OPT-IN, and the default is what every one of our
-	// launchers already asked for. It used to be the other way round -- user files (log, User.ini,
-	// saves, the download cache) went to ~/.ut2004/System/ unless you remembered `-nohomedir` --
-	// which meant EVERY caller carried the flag (web ENGINE_OPTS_DEFAULT, the Android bridge, the
-	// native smoke harness, every doc'd command line) and the one that forgot silently wrote its
-	// state somewhere nobody looked. `-nohomedir` is still ACCEPTED and is now a no-op, so no
-	// existing command line, ini or script breaks; `-usehomedir` restores the old behaviour.
+	// User files (log, User.ini, saves, the download cache) stay in the game tree unless `-usehomedir`
+	// sends them to a folder in the user's home (CalcHomeDir). `-nohomedir` is accepted and changes nothing.
 	void Init(UBOOL Startup)
 	{
         if (UseHomeDir())
@@ -752,15 +744,15 @@ public:
 
 	    char *Home = getenv("HOME");
 #if defined(_WIN32)
-    	// ufront 2.33: Windows has no $HOME and no passwd database. USERPROFILE is its equivalent
-    	// (C:\Users\<name>); fall back to the base dir, which is where we land by default anyway.
+    	// Windows has no $HOME and no passwd database. USERPROFILE is its equivalent
+    	// (C:\Users\<name>); else the base dir, the default anyway.
     	if ( Home == NULL )
     		Home = getenv("USERPROFILE");
     	if ( Home == NULL )
     		return(appBaseDir());
 #elif defined(__ANDROID__)
     	// bionic has no getpwent/setpwent/endpwent (no passwd-db enumeration). $HOME is provided
-    	// by the Android app shell (set in the JNI bridge, step 2.10b); fall back to cwd otherwise.
+    	// by the Android app shell; fall back to cwd otherwise.
     	if ( Home == NULL )
     		Home = (char*)".";
 #else

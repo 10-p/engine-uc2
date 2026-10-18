@@ -140,7 +140,7 @@ UBOOL FLinkerPatchData::Apply( ULinkerLoad* Loader, FPatchReader& Ar, UBOOL bCre
 	}
 
 	// add any new imports to the linker's import table
-	// uc2 port: AppendImport -> VerifyImport may have to find or create the linker of the new import's
+	// AppendImport -> VerifyImport may have to find or create the linker of the new import's
 	// package (GetPackageLinker, which checks GObjBeginLoadCount): that happens when ApplyPatches made this
 	// linker with LOAD_NoVerify for a package that so far existed only as the empty UPackage a network client
 	// creates for each USES line (UNetPendingLevel::NotifyReceivedText). Epic's shipped build compiled check()
@@ -288,10 +288,10 @@ void FScriptPatcher::ApplyPatches( UBOOL bCreateDependencies )
 			check(Loader);
 			UObject::EndLoad();
 
-			// uc2 port (M14): a patch is made for the package it was compared against: the shipped first-generation
+			// A patch is made for the package it was compared against: the shipped first-generation
 			// file with exactly NameCount names and ExportCount exports. A package rebuilt from the source by
 			// `ucc-bin make` (tools/dev/script-build.sh) is a later generation of it (conformed save) and already
-			// contains what the patch carries (docs/porting/analysis/scripts.md), so it is left alone. The patch
+			// contains what the patch carries, so it is left alone. The patch
 			// table itself is not touched.
 			if( Loader->Summary.Generations.Num()!=1
 			||	Loader->Summary.Generations(0).NameCount!=Update->NameCount

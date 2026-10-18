@@ -45,16 +45,15 @@ FORCEINLINE void ViewportTransformTexMatrix( UTexMatrix* TexMatrix, UMaterial* M
 	TexMatrix->Matrix.M[3][1] = (FLOAT)Viewport->OffsetY / Material->MaterialVSize();
 }
 
-/* UC2 port (pp-scale) =======================================================
+/* Post-process target sizes ==================================================
 * The blur targets of the depth of field, the emissive glow and the bloom are
-* sized for the reference picture (GetPostProcessReference, UnRenderUtil.h;
-* docs/porting/analysis/pp-scale.md). The sizes are FLOAT products, which Epic
-* passed to ObtainRenderTarget's INT parameters (truncated) but compared with
-* the targets' INT sizes as FLOATs: wherever a product is not a whole number
-* (1366x768 x 0.25 = 341.5, and most sizes of a 16:9 reference picture) the
-* targets were released and obtained again every frame, and the emissive
-* accumulation target (deleted and created again) lost its streaks. Both now
-* use the truncated whole number. At 640x480 every product is whole: as before.
+* sized for the reference picture (GetPostProcessReference, UnRenderUtil.h).
+* The sizes are FLOAT products, which Epic passed to ObtainRenderTarget's INT
+* parameters (truncated) but compared with the targets' INT sizes as FLOATs:
+* wherever a product is not a whole number (1366x768 x 0.25 = 341.5) the
+* targets would be released and obtained again every frame, and the emissive
+* accumulation target would lose its streaks. Both use the truncated whole
+* number. At 640x480 every product is whole.
 * ============================================================================
 */
 static FORCEINLINE INT UCPP_TargetSize( FLOAT Size )
@@ -90,7 +89,7 @@ void UUCScreenBlur::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenBlur::PostRender);
 #ifndef _XBOX
-	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// Epic returns here on every platform but Xbox; the rest of the function
 	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
 	if( !RenDevHasXboxPostProcess() )
 		return;
@@ -152,7 +151,7 @@ UUCScreenDOF::UUCScreenDOF()
 #ifdef _XBOX
 	InitSharedDOFResources();
 #else
-	// UC2 port (M7): Epic's Xbox-only construction (the shared material and its reference
+	// Epic's Xbox-only construction (the shared material and its reference
 	// count). The render device may not exist yet when an effect object is constructed, and
 	// its capability can be switched while the game runs, so PreRender does it on first use
 	// instead (InitSharedDOFResources below; PixelShaderDOFMaterial says whether this object
@@ -194,7 +193,7 @@ void UUCScreenDOF::Destroy()
 	guard(UUCScreenDOF::Destroy);
 	Super::Destroy();
 #ifndef _XBOX
-	// UC2 port (M7): only an object that took its reference (see the constructor).
+	// Only an object that took its reference (the constructor).
 	if( PixelShaderDOFMaterial != NULL )
 #endif
 	{
@@ -239,14 +238,14 @@ void UUCScreenDOF::PreRender(UViewport* Viewport,FRenderInterface* RI)
 	guard(UUCScreenDOF::PreRender);
 
 #ifndef _XBOX
-	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// Epic returns here on every platform but Xbox; the rest of the function
 	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
 	if( !RenDevHasXboxPostProcess() )
 		return;
 #endif
 
 #ifndef _XBOX
-	// UC2 port (M7): see the constructor.
+	// As in the constructor.
 	if( PixelShaderDOFMaterial == NULL )
 		InitSharedDOFResources();
 #endif
@@ -256,12 +255,12 @@ void UUCScreenDOF::PreRender(UViewport* Viewport,FRenderInterface* RI)
 	
 	checkSlow( BlurTargets.Num() >= 2 );
 
-	// UC2 port (pp-scale): the sizes are fractions of the reference picture (480 lines, the back
+	// The sizes are fractions of the reference picture (480 lines, the back
 	// buffer's aspect) instead of the back buffer, so the blur covers the same share of the picture
 	// as on the Xbox at any resolution; Epic's: RI->GetRenderTarget()->GetWidth() * BlurTargetScaleX
 	// (GetPostProcessReference gives exactly that without a reference height).
 	FPostProcessReference Reference = GetPostProcessReference( RI->GetRenderTarget()->GetWidth(), RI->GetRenderTarget()->GetHeight() );
-	FLOAT BlurSizeX = Reference.Width * BlurTargetScaleX * Viewport->ScaleX * RenDevPostProcessTargetScale();	// UC2 port (H-1): x PostProcessTargetScale
+	FLOAT BlurSizeX = Reference.Width * BlurTargetScaleX * Viewport->ScaleX * RenDevPostProcessTargetScale();	// x PostProcessTargetScale
 	FLOAT BlurSizeY = Reference.Height * BlurTargetScaleY * Viewport->ScaleY * RenDevPostProcessTargetScale();
 
 	if( BlurTargets.Num() < 2 )
@@ -284,7 +283,7 @@ void UUCScreenDOF::PreRender(UViewport* Viewport,FRenderInterface* RI)
 			BlurSizeX *= 0.5f;
 		}
 
-		// UC2 port (pp-scale): compared as the whole numbers the target is created with (see
+		// Compared as the whole numbers the target is created with (
 		// UCPP_TargetSize); Epic compared the INT size with the FLOAT product.
 		if( !BlurTargets(i) ||
 			BlurTargets(i)->GetWidth() != UCPP_TargetSize(BlurSizeX) ||
@@ -314,7 +313,7 @@ void UUCScreenDOF::PostRender(UViewport* Viewport,FRenderInterface* RI)
 	guard(UUCScreenDOF::PostRender);
 
 #ifndef _XBOX
-	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// Epic returns here on every platform but Xbox; the rest of the function
 	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
 	if( !RenDevHasXboxPostProcess() )
 		return;
@@ -341,13 +340,12 @@ void UUCScreenDOF::PostRender(UViewport* Viewport,FRenderInterface* RI)
 			ModulateBlurColor.A = AbsoluteBlurAlpha;
 		}
 #ifndef _XBOX
-		// UC2 port (M7), for the owner's review (docs/porting/analysis/runtime-port.md,
-		// "Deviation"): script puts ThirdPersonAlpha (100) or FirstPersonAlpha (65) into
-		// AbsoluteBlurAlpha per camera mode. Epic's header had fallen behind the script, so
-		// the shipped binary read the byte at FirstPersonAlpha's place here: always 65. We
-		// read what script intends; a device can ask for the shipped value
-		// (FRenderCaps::ShippedDOFBlurAlpha; UC2GLDrv: DOFShippedBlurAlpha / DOFSHIPPEDALPHA).
-		// Set on every frame so that the switch takes effect at once.
+		// Script puts ThirdPersonAlpha (100) or FirstPersonAlpha (65) into AbsoluteBlurAlpha per
+		// camera mode. Epic's header lagged behind the script, so the shipped binary read the byte at
+		// FirstPersonAlpha's place here: always 65. A device that asks for the shipped value
+		// (FRenderCaps::ShippedDOFBlurAlpha; UC2GLDrv: DOFShippedBlurAlpha, on by default, console
+		// DOFSHIPPEDALPHA) gets 65 in every mode, otherwise script's value is used. Set on every frame
+		// so that the switch takes effect at once.
 		ModulateBlurColor.A = Viewport->RenDev->GetRenderCaps()->ShippedDOFBlurAlpha ? FirstPersonAlpha : AbsoluteBlurAlpha;
 #endif
 		break;
@@ -374,7 +372,7 @@ void UUCScreenDOF::PostRender(UViewport* Viewport,FRenderInterface* RI)
 		else
 		{
 			// down sample in the horizontal direction and use a horizontal blur filter
-			FilterCopyRenderTarget( BlurTargets(i), SrcTarget, NULL, SamplerHorizBlur, RI, NULL, NULL, 0, RenDevPostProcessTargetScale() );	// UC2 port (H-1): TapScale
+			FilterCopyRenderTarget( BlurTargets(i), SrcTarget, NULL, SamplerHorizBlur, RI, NULL, NULL, 0, RenDevPostProcessTargetScale() );	// TapScale
 		}
 
 		SrcTarget = BlurTargets(i);
@@ -560,7 +558,7 @@ void UUCScreenMotionBlur::PreRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenMotionBlur::PreRender);
 #ifndef _XBOX
-	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// Epic returns here on every platform but Xbox; the rest of the function
 	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
 	if( !RenDevHasXboxPostProcess() )
 		return;
@@ -588,7 +586,7 @@ void UUCScreenMotionBlur::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenMotionBlur::PostRender);
 #ifndef _XBOX
-	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// Epic returns here on every platform but Xbox; the rest of the function
 	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
 	if( !RenDevHasXboxPostProcess() )
 		return;
@@ -710,7 +708,7 @@ void UUCScreenHeatShimmer::PreRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenHeatShimmer::PreRender);
 #ifndef _XBOX
-	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// Epic returns here on every platform but Xbox; the rest of the function
 	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
 	if( !RenDevHasXboxPostProcess() )
 		return;
@@ -726,7 +724,7 @@ void UUCScreenHeatShimmer::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenHeatShimmer::PostRender);
 #ifndef _XBOX
-	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// Epic returns here on every platform but Xbox; the rest of the function
 	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
 	if( !RenDevHasXboxPostProcess() )
 		return;
@@ -776,7 +774,7 @@ void UUCScreenRadialBlur::PreRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenRadialBlur::PreRender);
 #ifndef _XBOX
-	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// Epic returns here on every platform but Xbox; the rest of the function
 	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
 	if( !RenDevHasXboxPostProcess() )
 		return;
@@ -791,7 +789,7 @@ void UUCScreenRadialBlur::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenRadialBlur::PostRender);
 #ifndef _XBOX
-	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// Epic returns here on every platform but Xbox; the rest of the function
 	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
 	if( !RenDevHasXboxPostProcess() )
 		return;
@@ -836,12 +834,12 @@ void UUCScreenRadialBlur::PostRender(UViewport* Viewport,FRenderInterface* RI)
 	FLOAT RadialBlurDistanceX=RadialBlurDistance;
 	FLOAT RadialBlurDistanceY=RadialBlurDistance;
 
-	// UC2 port (pp-scale): RadialBlurDistance is the inset, in pixels of the Xbox's 640x480 screen,
+	// RadialBlurDistance is the inset, in pixels of the Xbox's 640x480 screen,
 	// of the zoomed copies drawn below: a zoom of 1 - 2d/640 across and 1 - 2d/480 down. The insets
 	// are scaled so that both zoom factors stay the Xbox's at any resolution and aspect (across: the
 	// screen's width over 4/3 of the reference height; down: its height over the reference height),
 	// which puts every point of the picture's 4:3 middle exactly where the Xbox put it. 1 and 1 at
-	// 640x480 and without a reference height (Epic's pixels). docs/porting/analysis/pp-scale.md.
+	// 640x480 and without a reference height (Epic's pixels).
 	FLOAT InsetScaleX = 1.f, InsetScaleY = 1.f;
 	INT ReferenceHeight = RenDevPostProcessReferenceHeight();
 	if( ReferenceHeight > 0 )
@@ -935,7 +933,7 @@ void UUCScreenBloom::PreRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenBloom::PreRender);
 #ifndef _XBOX
-	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// Epic returns here on every platform but Xbox; the rest of the function
 	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
 	if( !RenDevHasXboxPostProcess() )
 		return;
@@ -946,10 +944,10 @@ void UUCScreenBloom::PreRender(UViewport* Viewport,FRenderInterface* RI)
 
 	checkSlow( BlurTargets.Num() == 2 );
 
-	// UC2 port (pp-scale): fractions of the reference picture, compared as whole numbers (see
+	// Fractions of the reference picture, compared as whole numbers (see
 	// UCPP_TargetSize and UUCScreenDOF::PreRender).
 	FPostProcessReference Reference = GetPostProcessReference( RI->GetRenderTarget()->GetWidth(), RI->GetRenderTarget()->GetHeight() );
-	FLOAT BlurSizeX = Reference.Width * BlurTargetScaleX * Viewport->ScaleX * RenDevPostProcessTargetScale();	// UC2 port (H-1): x PostProcessTargetScale
+	FLOAT BlurSizeX = Reference.Width * BlurTargetScaleX * Viewport->ScaleX * RenDevPostProcessTargetScale();	// x PostProcessTargetScale
 	FLOAT BlurSizeY = Reference.Height * BlurTargetScaleY * Viewport->ScaleY * RenDevPostProcessTargetScale();
 
 	// create a render target for selecting hot pixels
@@ -1015,7 +1013,7 @@ void UUCScreenBloom::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenBloom::PostRender);
 #ifndef _XBOX
-	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// Epic returns here on every platform but Xbox; the rest of the function
 	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
 	if( !RenDevHasXboxPostProcess() )
 		return;
@@ -1090,11 +1088,11 @@ void UUCScreenBloom::PostRender(UViewport* Viewport,FRenderInterface* RI)
 
 	// 1st pass (horizontal blur)
 	static FMultiSampleFilter SamplerHorizBlur( FMultiSampleFilter::MULTI_SAMPLE_HORIZ_1221 );
-	FilterCopyRenderTarget( BlurTargets(0), SelectTarget, NULL, SamplerHorizBlur, RI, NULL, NULL, 0, RenDevPostProcessTargetScale() );	// UC2 port (H-1): TapScale
+	FilterCopyRenderTarget( BlurTargets(0), SelectTarget, NULL, SamplerHorizBlur, RI, NULL, NULL, 0, RenDevPostProcessTargetScale() );	// TapScale
 
 	// 1st pass (vertical blur)
 	static FMultiSampleFilter SamplerVertBlur( FMultiSampleFilter::MULTI_SAMPLE_VERT_1221 );
-	FilterCopyRenderTarget( BlurTargets(1), BlurTargets(0), NULL, SamplerVertBlur, RI, NULL, NULL, 0, RenDevPostProcessTargetScale() );	// UC2 port (H-1): TapScale
+	FilterCopyRenderTarget( BlurTargets(1), BlurTargets(0), NULL, SamplerVertBlur, RI, NULL, NULL, 0, RenDevPostProcessTargetScale() );	// TapScale
 
 	//
 	// add results from blur to frame buffer
@@ -1211,7 +1209,7 @@ void UUCScreenEmissive::PreRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenEmissive::PreRender);
 #ifndef _XBOX
-	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// Epic returns here on every platform but Xbox; the rest of the function
 	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
 	if( !RenDevHasXboxPostProcess() )
 		return;
@@ -1223,10 +1221,10 @@ void UUCScreenEmissive::PreRender(UViewport* Viewport,FRenderInterface* RI)
 	// get pointer to render target pool
 	FRenderTargetPool* RenderTargetPool = RI->GetRenderTargetPool();
 
-	// UC2 port (pp-scale): fractions of the reference picture, compared as whole numbers (see
+	// Fractions of the reference picture, compared as whole numbers (see
 	// UCPP_TargetSize and UUCScreenDOF::PreRender).
 	FPostProcessReference Reference = GetPostProcessReference( BackBufferTarget->GetWidth(), BackBufferTarget->GetHeight() );
-	FLOAT BlurSizeX = Reference.Width * BlurTargetScaleX * Viewport->ScaleX * RenDevPostProcessTargetScale();	// UC2 port (H-1): x PostProcessTargetScale
+	FLOAT BlurSizeX = Reference.Width * BlurTargetScaleX * Viewport->ScaleX * RenDevPostProcessTargetScale();	// x PostProcessTargetScale
 	FLOAT BlurSizeY = Reference.Height * BlurTargetScaleY * Viewport->ScaleY * RenDevPostProcessTargetScale();
 
 	// Accumulation target (check for sizeX/sizeY changes)
@@ -1316,7 +1314,7 @@ void UUCScreenEmissive::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenEmissive::PostRender);
 #ifndef _XBOX
-	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// Epic returns here on every platform but Xbox; the rest of the function
 	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
 	if( !RenDevHasXboxPostProcess() )
 		return;
@@ -1440,13 +1438,13 @@ void UUCScreenEmissive::PostRender(UViewport* Viewport,FRenderInterface* RI)
 			if( i%2 == 1 )
 			{
 				// down sample in the vertical direction and use a vertical blur filter
-				FilterCopyRenderTarget( BlurTargets(i), SrcTarget, NULL, SamplerVertBlur, RI, NULL, NULL, 0, RenDevPostProcessTargetScale() );	// UC2 port (H-1): TapScale
+				FilterCopyRenderTarget( BlurTargets(i), SrcTarget, NULL, SamplerVertBlur, RI, NULL, NULL, 0, RenDevPostProcessTargetScale() );	// TapScale
 			}
 			// even targets used for horizontal blur
 			else
 			{
 				// down sample in the horizontal direction and use a horizontal blur filter
-				FilterCopyRenderTarget( BlurTargets(i), SrcTarget, NULL, SamplerHorizBlur, RI, NULL, NULL, 0, RenDevPostProcessTargetScale() );	// UC2 port (H-1): TapScale
+				FilterCopyRenderTarget( BlurTargets(i), SrcTarget, NULL, SamplerHorizBlur, RI, NULL, NULL, 0, RenDevPostProcessTargetScale() );	// TapScale
 			}
 
 			SrcTarget = BlurTargets(i);
@@ -1466,11 +1464,11 @@ void UUCScreenEmissive::PostRender(UViewport* Viewport,FRenderInterface* RI)
 		// up sample and use a box blur filter to blend the result from this blur
 		// pass back into the FeedbackBlurTarget
 		if( pass == 0 )
-			FilterCopyRenderTarget( FeedbackBlurTarget, SrcTarget, NULL, SamplerBoxBlur, RI, NULL, NULL, 0, RenDevPostProcessTargetScale() );	// UC2 port (H-1): TapScale
+			FilterCopyRenderTarget( FeedbackBlurTarget, SrcTarget, NULL, SamplerBoxBlur, RI, NULL, NULL, 0, RenDevPostProcessTargetScale() );	// TapScale
 		else
 		{
 			static FColor FeedBackAlpha(255,255,255,255/*127 for FB_AlphaBlend*/);
-			FilterCopyRenderTarget( FeedbackBlurTarget, SrcTarget, NULL, SamplerBoxBlur, RI, &FeedBackAlpha, FeedbackBlend, 0, RenDevPostProcessTargetScale() );	// UC2 port (H-1): TapScale
+			FilterCopyRenderTarget( FeedbackBlurTarget, SrcTarget, NULL, SamplerBoxBlur, RI, &FeedBackAlpha, FeedbackBlend, 0, RenDevPostProcessTargetScale() );	// TapScale
 		}
 
 	}
@@ -1706,7 +1704,7 @@ void UUCScreenBerserk::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenBerserk::PostRender);
 #ifndef _XBOX
-	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// Epic returns here on every platform but Xbox; the rest of the function
 	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
 	if( !RenDevHasXboxPostProcess() )
 		return;
@@ -1850,7 +1848,7 @@ void UUCScreenMenuPause::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenMenuPause::PostRender);
 #ifndef _XBOX
-	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// Epic returns here on every platform but Xbox; the rest of the function
 	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
 	if( !RenDevHasXboxPostProcess() )
 		return;
@@ -1955,7 +1953,7 @@ void UUCScreenSniperOverlay::PreRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenSniperOverlay::PreRender);
 #ifndef _XBOX
-	// UC2 port (M7): Xbox-only until the render device can post-process (FRenderCaps::XboxPostProcess).
+	// Epic's is Xbox-only; here it runs when the render device can post-process (FRenderCaps::XboxPostProcess).
 	if( RenDevHasXboxPostProcess() )
 #endif
 	{
@@ -1999,7 +1997,7 @@ void UUCScreenSniperOverlay::PostRender(UViewport* Viewport,FRenderInterface* RI
 {
 	guard(UUCScreenSniperOverlay::PostRender);
 #ifndef _XBOX
-	// UC2 port (M7): Xbox-only until the render device can post-process; the overlays exist
+	// Runs when the render device can post-process (Epic's is Xbox-only); the overlays exist
 	// once PreRender ran with the capability.
 	if( RenDevHasXboxPostProcess() && DOFOverlay != NULL && RadialBlurOverlay != NULL )
 #endif
@@ -2193,7 +2191,7 @@ void UUCScreenTeleportOverlay::PreRender(UViewport* Viewport,FRenderInterface* R
 {
 	guard(UUCScreenTeleportOverlay::PreRender);
 #ifndef _XBOX
-	// UC2 port (M7): Xbox-only until the render device can post-process (FRenderCaps::XboxPostProcess).
+	// Epic's is Xbox-only; here it runs when the render device can post-process (FRenderCaps::XboxPostProcess).
 	if( RenDevHasXboxPostProcess() )
 #endif
 	{
@@ -2244,7 +2242,7 @@ void UUCScreenTeleportOverlay::PostRender(UViewport* Viewport,FRenderInterface* 
 {
 	guard(UUCScreenTeleportOverlay::PostRender);
 #ifndef _XBOX
-	// UC2 port (M7): Xbox-only until the render device can post-process; the overlay exists
+	// Runs when the render device can post-process (Epic's is Xbox-only); the overlay exists
 	// once PreRender ran with the capability.
 	if( RenDevHasXboxPostProcess() && RadialBlurOverlay != NULL )
 #endif
@@ -2412,7 +2410,7 @@ void UUCScreenLiandri::PostRender(UViewport* Viewport,FRenderInterface* RI)
 {
 	guard(UUCScreenLiandri::PostRender);
 #ifndef _XBOX
-	// UC2 port (M7): Epic's "return" for every platform but Xbox; the rest of the function
+	// Epic returns here on every platform but Xbox; the rest of the function
 	// runs when the render device can post-process (FRenderCaps::XboxPostProcess).
 	if( !RenDevHasXboxPostProcess() )
 		return;

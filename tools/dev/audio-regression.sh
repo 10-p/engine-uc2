@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# The audio regression suite of M8, for later milestones to rerun: no ears and no Xbox needed.
+# The audio regression suite: no ears and no Xbox needed.
 #
 #   tools/dev/audio-regression.sh <tree>        (a run tree made by tools/dev/mkrun-uc2.sh, e.g. m8)
 #
-#  1. ucc-bin UC2ALAudio.UC2AudioCheck      every cooked wave decodes to its length, every cue resolves (M16: also
+#  1. ucc-bin UC2ALAudio.UC2AudioCheck      every cooked wave decodes to its length, every cue resolves (also
 #                                           every shipped .xwb entry and .xsb, on a tree made with UC2_XBOX_SOUNDS)
 #  2. ucc-bin UC2ALAudio.UC2AudioSelfTest   gain/pan/pitch/loops/playlists/reverb against the XACT numbers
 #  3. captures through OpenAL Soft's wave writer (tools/dev/run-uc2-audio.sh), fixed names:
@@ -12,8 +12,8 @@
 #       audio-praxis-efx    DM-Praxis (has reverb zones), same inputs plus "Ghost" after the spawn (the walk crosses
 #                           zones: Underwater and back), EFX reverb on
 #       audio-praxis-dry    the same with UseEFX=False (set with -ini:)
-# Output: <WorkUC2>/logs/<tree>/audio-*, and one line per item in <WorkUC2>/logs/<tree>/audio-summary.txt.
-# Everything runs inside <WorkUC2>/bin/capped (2G each, one at a time).
+# Output: <repo>/../logs/<tree>/audio-*, and one line per item in <repo>/../logs/<tree>/audio-summary.txt.
+# Everything runs inside <repo>/../bin/capped (2G each, one at a time).
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
@@ -24,11 +24,11 @@ mkdir -p "$out"
 summary=$out/audio-summary.txt
 : > "$summary"
 
-# M16: a previous suite's last capture leaves an Avaris.ini derived with its -ini: settings (UseEFX=False, WaveFile=):
+# A previous suite's last capture leaves an Avaris.ini derived with its -ini: settings (UseEFX=False, WaveFile=):
 # the self-test would then run dry and fail its reverb checks. Start from the tree's Default.ini like each capture.
 rm -f "$sys/Avaris.ini"
 ( cd "$sys" && "$work/bin/capped" 2G 600 -- ./ucc-bin UC2ALAudio.UC2AudioCheck > "$out/audio-check.out" 2>&1 )
-# (M16: on a tree with the shipped Xbox banks, the .xwb/.xsb lines of the check too.)
+# (On a tree with the shipped Xbox banks, the .xwb/.xsb lines of the check too.)
 echo "SUMMARY audio-check: $(grep -a -E '^(Xbox )?wave banks:' "$out/audio-check.out" | sed 's/^wave banks: //' | tr '\n' ';' | sed 's/;$//'); $(grep -a '^Xbox sound banks:' "$out/audio-check.out" | sed 's/$/; /')$(grep -a '^cues \[int\]' "$out/audio-check.out"); $(grep -a '^UC2AudioCheck:' "$out/audio-check.out")" | tee -a "$summary"
 
 ( cd "$sys" && "$work/bin/capped" 2G 900 -- ./ucc-bin UC2ALAudio.UC2AudioSelfTest > "$out/audio-selftest.out" 2>&1 )

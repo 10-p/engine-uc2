@@ -9,7 +9,7 @@ Revision history:
 
 
 #include "EnginePrivate.h"
-#include "UnLinker.h"	// D-2: a font's package export table (sharper text)
+#include "UnLinker.h"	// A font's package export table (sharper text)
 #include "wordwrap.h"
 
 #ifdef _XBOX
@@ -53,7 +53,7 @@ void UCanvas::DrawTile
 		if ( DrawColor.W != 1.0 )
 			Style = STY_Alpha;
 
-		// D-2: a tile that covers the whole design space is a full-screen layer, not a UI element: the game's
+		// A tile that covers the whole design space is a full-screen layer, not a UI element: the game's
 		// fades, flashes and overlays (UCPlayerController's blood and ColorOverlay) cover the whole viewport,
 		// stretched; a menu page's background follows UIMenuBackground (Box: stays in the box; Fill: the
 		// whole viewport, its picture scaled to cover it with the aspect kept, the overflow cropped).
@@ -64,7 +64,7 @@ void UCanvas::DrawTile
 			UClient* Client = Viewport->GetOuterUClient();
 			UBOOL bMenu = pCanvasUtil->UIContext == UICONTEXT_Menu;
 			UBOOL bFill = !bMenu || (Client && Client->UIMenuBackground == UIMENUBG_Fill);
-			// Say once per material what happened to it (the notebook's evidence of which layers these are).
+			// Say once per material what happened to it (which layers these are).
 			static TArray<UMaterial*> Reported;
 			if( Reported.FindItemIndex(Material) == INDEX_NONE && Reported.Num() < 256 )
 			{
@@ -93,7 +93,7 @@ void UCanvas::DrawTile
 				bLayer = 1;
 			}
 		}
-		// D-2: the menus are clipped to the box, as the Xbox's 640x480 screen clipped them (UC2's pages have
+		// The menus are clipped to the box, as the Xbox's 640x480 screen clipped them (UC2's pages have
 		// decorations that run past x=640: a black header bar over the menu level otherwise). The HUD is not:
 		// its markers on actors (WorldToScreen) may be anywhere in the viewport.
 		if( !bLayer && pCanvasUtil->bUIBoxed && !pTransformMat && pCanvasUtil->UIContext == UICONTEXT_Menu && XL != 0.f && YL != 0.f )
@@ -187,7 +187,7 @@ void UCanvas::SetClip( FLOAT X, FLOAT Y, FLOAT XL, FLOAT YL )
 TCHAR Ellipsis[4] = TEXT("...");
 
 /*-----------------------------------------------------------------------------
-	D-2: sharper text in a scaled-up UI (docs/porting/analysis/ui-scale.md).
+	Sharper text in a scaled-up UI.
 
 	UC2's text is laid out with bitmap fonts made for 640x480 ("T_Fonts2.SuiGeneris_12pt"), so a UI drawn x2.25
 	or x4.5 magnifies the glyph textures. The same package has the family in other sizes; by glyph height in
@@ -423,7 +423,7 @@ static FLOAT DrawString
 	// Whether we already checked if we need to draw the ellipsis character
 	bool bCheckedEllipsis = Font == Canvas->XBoxButtonFont;
 
-	// D-2: the bigger sizes of this font to take the glyphs' pixels from, when the UI is scaled up
+	// The bigger sizes of this font to take the glyphs' pixels from, when the UI is scaled up
 	FSharpFontFamily* Sharp = NULL;
 	INT SharpStart = 0;
 	if( Canvas->IsUIBoxed() )
@@ -437,7 +437,7 @@ static FLOAT DrawString
 	{
 		UBOOL bUnderlineNext = 0;
 		INT Ch = (TCHARU)Font->RemapChar(Text[i]);
-		TCHAR SourceChar = Text[i];		// D-2: the character Ch is (for the sharp glyph)
+		TCHAR SourceChar = Text[i];		// The character Ch is (for the sharp glyph)
 
 		// Handle ampersand underlining.
 		if( bHandleApersand )
@@ -460,7 +460,7 @@ static FLOAT DrawString
 		{
 			UTexture* Tex;
 			FFontCharacter& Char = Font->Characters(Ch);
-			// H-5: a pad button of player one, who uses the keyboard: their key in the glyph's cell, the advance kept
+			// A pad button of player one, who uses the keyboard: their key in the glyph's cell, the advance kept
 			// (UnKeyGlyphs.cpp). A cell outside the clip region is not drawn either way.
 			if( Font == Canvas->XBoxButtonFont && !bHandleApersand && Ch != NULLCHARACTER && Char.USize > 0 && Char.VSize > 0 )
 			{
@@ -543,7 +543,7 @@ static FLOAT DrawString
 					FLOAT		TileX = Canvas->OrgX + X,
 								TileY = Canvas->OrgY + Y;
 
-					// D-2: a whole glyph (not clipped, not an underline) from a taller size of the font. The taller
+					// A whole glyph (not clipped, not an underline) from a taller size of the font. The taller
 					// sizes do not all have every character (SuiGeneris_40pt has digits only): the first one,
 					// going down from the preferred one, that has this character gives it; none: the font's own.
 					if( Sharp && !bDrawUnderline && CU == Char.StartU && CV == Char.StartV && CUSize == Char.USize && CVSize == Char.VSize
@@ -600,7 +600,7 @@ static FLOAT DrawString
 	unguardSlow;
 }
 
-// H-5: DrawString for the key labels (UnKeyGlyphs.cpp).
+// DrawString for the key labels (UnKeyGlyphs.cpp).
 ENGINE_API FLOAT KeyGlyphDrawString( UCanvas* Canvas, UFont* Font, FLOAT ScaleX, FLOAT ScaleY, FLOAT X, FLOAT Y, const TCHAR* Text, FPlane Color )
 {
 	return DrawString( Canvas, Font, ScaleX, ScaleY, X, Y, Text, Color, 0, 0 );
@@ -987,7 +987,7 @@ void UCanvas::Init( UViewport* InViewport )
 
 		XBoxButtonFont = Cast<UFont>(StaticLoadObject(UFont::StaticClass(),NULL,*XBoxButtonFontName,NULL,LOAD_NoWarn,NULL));
 		checkSlow(XBoxButtonFont);
-		// H-5: the button font's in-game mark (c|0x80 draws c), UnKeyGlyphs.h
+		// The button font's in-game mark (c|0x80 draws c), UnKeyGlyphs.h
 		GKeyGlyphs.PrepareButtonFont( XBoxButtonFont );
 	}
 	unguard;
@@ -999,13 +999,13 @@ void UCanvas::Update()
 	// Call UnrealScript to reset.
 	eventReset();
 
-	// H-5: the key glyphs look at the bindings again (they may have changed since the last frame)
+	// The key glyphs look at the bindings again (they may have changed since the last frame)
 	GKeyGlyphs.NewFrame();
 
 	if ( !pCanvasUtil )
 		pCanvasUtil = NEW FCanvasUtil(&Viewport->RenderTarget,Viewport->RI);
 
-	// D-2: the client's UIScaleMode (never in the editor).
+	// The client's UIScaleMode (never in the editor).
 	UClient* Client = Viewport->GetOuterUClient();
 	ApplyUIBox( !GIsEditor && Client && Client->UIScaleMode == UISCALE_Fit43 );
 
@@ -1016,14 +1016,14 @@ void UCanvas::Update()
 }
 
 /*-----------------------------------------------------------------------------
-	D-2: the UI's 640x480 design space in a centred box (docs/porting/analysis/ui-scale.md).
+	The UI's 640x480 design space in a centred box.
 
 	UC2 lays out every menu and HUD element in 640x480 pixels (the Xbox's screen). With UIScaleMode=Fit43 the
 	viewport canvas presents that space to script and to the GUI (ClipX/ClipY/SizeX/SizeY = 640x480) and its
 	CanvasToScreen puts it into the largest 4:3 rectangle of the viewport, centred: scale
 	s = min(W/640, H/480), origin ((W-640s)/2, (H-480s)/2) floored to whole pixels. The 3D world is not drawn
 	through the canvas and keeps the whole viewport. At 640x480 this is the identity and the code below takes
-	the exact path it took before D-2. A split-screen viewport (G-6) gets 640 x 480*ScaleY (the shape UC2's split
+	Epic's path. A split-screen viewport gets 640 x 480*ScaleY (the shape UC2's split
 	HUD is laid out for, see below) fitted the same way into its own rectangle.
 -----------------------------------------------------------------------------*/
 
@@ -1036,7 +1036,7 @@ void UCanvas::ApplyUIBox( UBOOL bWanted )
 
 	FLOAT W = Viewport->SizeX, H = Viewport->SizeY;
 	FLOAT DW = 640.f, DH = 480.f;
-	// G-6: a split-screen viewport's design space is 640 wide and its share of 480 high. UC2's split HUD
+	// A split-screen viewport's design space is 640 wide and its share of 480 high. UC2's split HUD
 	// (UCHUD_Split, WeaponSelectorSplit.huc, UCHUD.SetSplitPosition) is laid out for the Xbox's top/bottom
 	// halves, 640x240, and knows no other shape ("if we are going to support more than 2 split-screen, this
 	// function needs to be adjusted"); a quarter of the screen therefore shows that 640x240 layout fitted
@@ -1051,7 +1051,7 @@ void UCanvas::ApplyUIBox( UBOOL bWanted )
 		BX = appFloor( (W - DW * S) * 0.5f );
 		BY = appFloor( (H - DH * S) * 0.5f );
 	}
-	// The identity (a 640x480 window, or UIScaleMode=Native640): exactly what Update() did before D-2.
+	// The identity (a 640x480 window, or UIScaleMode=Native640): Epic's Update().
 	UBOOL bBoxed = bWanted && W > 0.f && H > 0.f && !( S == 1.f && BX == 0.f && BY == 0.f && DW == W && DH == H );
 
 	pCanvasUtil->bUIBoxed	= bBoxed;
@@ -1353,7 +1353,7 @@ void UCanvas::DrawActorTile( AActor* Actor, FLOAT X, FLOAT Y, FLOAT XL, FLOAT YL
 	Viewport->ScaleY = 1.f;
 	if( IsUIBoxed() )
 	{
-		// D-2: the tile is in design pixels; the 3D viewport needs the viewport's own
+		// The tile is in design pixels; the 3D viewport needs the viewport's own
 		FLOAT X2 = X + XL, Y2 = Y + YL;
 		DesignToTarget( X, Y );
 		DesignToTarget( X2, Y2 );
@@ -1417,15 +1417,15 @@ void UCanvas::DrawActor( AActor* Actor, UBOOL WireFrame, UBOOL ClearZ, FLOAT Dis
 	{
 		return;
 	}
-	// D-8: AutoFOV, the canvas-drawn actor pass (engine-ut2004 UnCanvas.cpp; ufront steps 2.16 and 2.29).
+	// AutoFOV, the canvas-drawn actor pass.
 	// The first-person weapon is drawn here (UCWeapon.RenderOverlays: Canvas.DrawActor(self,false,true,
 	// DisplayFOV), its own FOV, 60 by default) as a separate scene node, so the world's override does not
 	// reach it: without this it would keep its 4:3 horizontal FOV while the world widened, and look bigger
 	// and cut off at the bottom. Its placement (Pawn.CalcDrawOffset) divides by the weapon's DisplayFOV, not
-	// by the player's FOV, so it needs no pinning (UT99's trap, 2.29, does not exist here).
+	// by the player's FOV, so it needs no pinning.
 	// A caller that gave no FOV (execDrawActor's default: combo effects, Inventory.RenderOverlays) means
 	// the player's FOV: inside the frame that is the base value the override replaced, not the overridden
-	// one (the template's double-correction trap), outside the frame the actor's own.
+	// one (which would correct it twice), outside the frame the actor's own.
 	{
 		UBOOL InFrame = GAutoFovScopeActor && GAutoFovScopeActor == Viewport->Actor;
 		if( DisplayFOV < 0.f )
@@ -1453,7 +1453,7 @@ void UCanvas::DrawActor( AActor* Actor, UBOOL WireFrame, UBOOL ClearZ, FLOAT Dis
 	if( ClearZ )
 		Viewport->RI->Clear(0,FColor(0,0,0),1,1.0f,0);
 	{
-		FScopedSplitFovScale SplitFov( Viewport, DisplayFOV );	// G-6: the actor's FOV in a split-screen viewport
+		FScopedSplitFovScale SplitFov( Viewport, DisplayFOV );	// The actor's FOV in a split-screen viewport
 		FActorSceneNode(Viewport,&Viewport->RenderTarget,Actor,CameraActor,CameraLocation,CameraRotation,DisplayFOV).Render(Viewport->RI);
 	}
 	Viewport->Actor->RendMap = OldRendMap;
@@ -1471,7 +1471,7 @@ void UCanvas::execDrawActor( FFrame& Stack, RESULT_DECL )
 	P_GET_OBJECT(AActor, Actor);
 	P_GET_UBOOL(WireFrame);
 	P_GET_UBOOL_OPTX(ClearZ, 0);
-	// D-8: -1 = "not given" (the player's FOV); DrawActor resolves it (AutoFOV needs to know which).
+	// -1 = "not given" (the player's FOV); DrawActor resolves it (AutoFOV needs to know which).
 	P_GET_FLOAT_OPTX(DisplayFOV,-1.f);
 	P_FINISH;
 
@@ -1614,7 +1614,7 @@ void UCanvas::execDrawPortal( FFrame& Stack, RESULT_DECL )
 
 	if( IsUIBoxed() )
 	{
-		// D-2: design pixels -> the viewport's own (the portal is a 3D viewport and a clear in target pixels)
+		// Design pixels -> the viewport's own (the portal is a 3D viewport and a clear in target pixels)
 		FLOAT X1 = X, Y1 = Y, X2 = X + Width, Y2 = Y + Height;
 		DesignToTarget( X1, Y1 );
 		DesignToTarget( X2, Y2 );
@@ -2264,7 +2264,7 @@ void UCanvas::execSetCanvasMatrix(FFrame& Stack,RESULT_DECL)
 		pCanvasUtil->Flush();
 		if( IsUIBoxed() )
 		{
-			// D-2: the same rotation and clip-space scale, composed with the box's mapping
+			// The same rotation and clip-space scale, composed with the box's mapping
 			pCanvasUtil->CanvasToScreen = FRotationMatrix(newRotation) * UICanvasToScreen() *
 										   FScaleMatrix(newScale);
 		}

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Measurements of the post-process blurs on screenshots, for tools/dev/pp-scale.sh (docs/porting/analysis/pp-scale.md).
+"""Measurements of the post-process blurs on screenshots, for tools/dev/pp-scale.sh.
 
 Every picture is first brought to the 480-line scale of the Xbox's picture (an area average: PIL's BOX filter; a
 4:3 picture becomes 640x480), so numbers from different resolutions compare directly: a blur that covers the same
 share of the picture gives the same number. Coordinates are in that 480-line picture.
 
     pp-measure.py glow <off.png> <on.png> [x y half]
-        The glow the post-processing adds around a bright thing (the coordinator's measure of 2026-10-07): the
+        The glow the post-processing adds around a bright thing: the
         profile of (on - off), mean of R, G, B, down the column band x-half .. x+half-1, averaged across it; the
         peak within 15 rows of y, and the run of rows around the peak above 10% of it, as a share of the height.
         Default: the DM-Deadbolt ceiling tube from the pinned first PlayerStart, x=411 y=138 half=10.

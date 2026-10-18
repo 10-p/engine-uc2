@@ -1,4 +1,4 @@
-# X-1 helpers for the x1menu4 and x1armory parts of tools/dev/g6-splitscreen.sh (loaded with `pyfile` after g6-checks.py).
+# Helpers for the x1menu4 and x1armory parts of tools/dev/g6-splitscreen.sh (loaded with `pyfile` after g6-checks.py).
 # They read the engine log for the character page's own lines (patch set players34, UC2Arena_Character):
 #   "X-1 players34 cursors (<why>): 1P <idx>[ ready]; 2P <idx>; 3P <idx>; 4P <idx>; players <n>"
 #   "X-1 players34 text: <line one> | <line two>"
@@ -77,7 +77,7 @@ def x1_chosen():
     return out
 
 
-# X-1 part B: the four-player armory (patch set players34, UC2Arena_QuadArmory) logs
+# The four-player armory (patch set players34, UC2Arena_QuadArmory) logs
 #   "X-1 players34 armory (<why>): 1P <panel>; 2P <panel>; 3P <panel>; 4P <panel>; players <n>"
 # <panel>: "none" or "<list in use: x|e|-> <explosive row>/<energy row> sel <explosive>/<energy>[ ready <class>/<class>]"
 X1A = {}

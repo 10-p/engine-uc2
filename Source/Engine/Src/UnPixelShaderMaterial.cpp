@@ -244,7 +244,7 @@ void UPSDistortionMaterial::PreRender(FRenderInterface* RI)
 {
 	guard(UPSDistortionBaseMaterial::PreRender);
 
-	// UC2 port (M7): was "#ifdef _XBOX" / "#else"; the Xbox branch runs when the render device
+	// Epic's "#ifdef _XBOX" / "#else": the Xbox branch runs when the render device
 	// has the post-process capability (FRenderCaps::XboxPostProcess), PC's otherwise.
 	if( RenDevHasXboxPostProcess() )
 	{
@@ -295,7 +295,7 @@ void UPSBlendedDistortionMaterial::PreRender(FRenderInterface* RI)
 	guard(UPSBlendedDistortionMaterial::PreRender);
 	Super::PreRender(RI);
 
-	// UC2 port (M7): was "#ifdef _XBOX" / "#else"; the Xbox branch runs when the render device
+	// Epic's "#ifdef _XBOX" / "#else": the Xbox branch runs when the render device
 	// has the post-process capability (FRenderCaps::XboxPostProcess), PC's otherwise.
 	if( RenDevHasXboxPostProcess() )
 	{
@@ -344,7 +344,7 @@ void UPSDistortionBaseMaterial::PreRender(FRenderInterface* RI)
 	guard(UPSDistortionBaseMaterial::PreRender);
 	Super::PreRender(RI);
 
-	// UC2 port (M7): was "#ifdef _XBOX" / "#else"; the Xbox branch runs when the render device
+	// Epic's "#ifdef _XBOX" / "#else": the Xbox branch runs when the render device
 	// has the post-process capability (FRenderCaps::XboxPostProcess), PC's otherwise.
 	if( RenDevHasXboxPostProcess() )
 	{
@@ -399,7 +399,7 @@ void UPSDistortionBaseMaterial::PreRender(FRenderInterface* RI)
 }
 
 //
-// UC2 port (M7): PSDistortionBaseMaterial's cpptext declares these two outside _XBOX; they
+// PSDistortionBaseMaterial's cpptext declares these two outside _XBOX; they
 // give PC's answers ("so that something would be drawn on the PC": no post-process list,
 // always sorted as translucent) unless the render device has the post-process capability,
 // and then the Xbox ones (the inline body in the _XBOX branch of the class).
@@ -836,7 +836,7 @@ FORCEINLINE void ApplyViewportXForm( FMatrix& M, UViewport* Viewport )
 void UPSBackBufferEffect::PreRender(FRenderInterface* RI)
 {
 	guard(UPSBackBufferEffect::PreRender);
-	// UC2 port (M7): was "#ifdef _XBOX" / "#else"; the Xbox branch runs when the render device
+	// Epic's "#ifdef _XBOX" / "#else": the Xbox branch runs when the render device
 	// has the post-process capability (FRenderCaps::XboxPostProcess), PC's otherwise.
 	if( RenDevHasXboxPostProcess() )
 	{
@@ -880,7 +880,7 @@ void UPSBackBufferEffect::PreRender(FRenderInterface* RI)
 void UPSPlayerCamMaterial::PreRender(FRenderInterface* RI)
 {
 	guard(UPSPlayerCamMaterial::PreRender);
-	// UC2 port (M7): was "#ifdef _XBOX" / "#else"; the Xbox branch runs when the render device
+	// Epic's "#ifdef _XBOX" / "#else": the Xbox branch runs when the render device
 	// has the post-process capability (FRenderCaps::XboxPostProcess), PC's otherwise.
 	if( RenDevHasXboxPostProcess() )
 	{
@@ -937,7 +937,7 @@ void UPSDiffuseOpacity::PreRender(FRenderInterface* RI)
 void UPSColorRemapMaterial::PreRender(FRenderInterface* RI)
 {
 	guard(UPSColorRemapMaterial::PreRender);
-	// UC2 port (M7): was "#ifdef _XBOX" / "#else"; the Xbox branch runs when the render device
+	// Epic's "#ifdef _XBOX" / "#else": the Xbox branch runs when the render device
 	// has the post-process capability (FRenderCaps::XboxPostProcess), PC's otherwise.
 	if( RenDevHasXboxPostProcess() )
 	{

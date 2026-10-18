@@ -82,7 +82,7 @@ UBaseGUIController* UInteractionMaster::GetGUIController( UViewport* InViewport 
 	unguard;
 }
 
-// D-7: keys whose press the console took while it was typing (or that opened or closed it), until their
+// Keys whose press the console took while it was typing (or that opened or closed it), until their
 // release. The console is the first script interaction and sees every key before the menus, but Epic's
 // Console.uc only consumes key PRESSES: the release went on to the menus, whose pages act on releases
 // (UGUIPage::NativeKeyEvent closes the page on the release of Escape), so Escape on an empty console line
@@ -111,7 +111,7 @@ int UInteractionMaster::MasterProcessKeyType(EInputKey iKey, TCHAR Unicode)
 	if ( eventProcess_KeyType( GlobalInteractions, tiKey, FString::Printf(TEXT("%c"), Unicode) ) )
 		return 1;
 
-	// D-7: the control character of a key whose press the console took (see GConsoleOwnsKey)
+	// The control character of a key whose press the console took (see GConsoleOwnsKey)
 	if ( (INT)iKey < 0x20 && GConsoleOwnsKey[(BYTE)iKey] )
 		return 1;
 	
@@ -151,7 +151,7 @@ int UInteractionMaster::MasterProcessKeyEvent(EInputKey iKey, EInputAction State
 	BYTE tiKey = iKey;
 	BYTE tState = State;
 
-	// D-7: see GConsoleOwnsKey
+	// See GConsoleOwnsKey
 	UBOOL WasTyping = ConsoleIsTyping( Console );
 	UBOOL OwnedRelease = State == IST_Release && GConsoleOwnsKey[(BYTE)iKey];
 	if ( OwnedRelease )
@@ -285,7 +285,7 @@ void UInteractionMaster::MasterProcessPostRender(UViewport* Viewport)
 			GlobalInteractions(i)->NativePostRender(Canvas);
 		}
 	}
-	// D-2: the global interactions (the console's typing line, the GUI) are UI: clipped to the UI's box as the
+	// The global interactions (the console's typing line, the GUI) are UI: clipped to the UI's box as the
 	// Xbox's 640x480 screen clipped them (the console's line starts at x=32 and is 640 wide); UnCanvas.cpp
 	Canvas->SetUIContext( UICONTEXT_Menu );
 	eventProcess_PostRender( GlobalInteractions, Canvas );

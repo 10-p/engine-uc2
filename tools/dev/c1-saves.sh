@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# C-2 check (native): which files does the game write, and does a saved profile survive a restart?
+# Saves check (native): which files does the game write, and does a saved profile survive a restart?
 #
 #   tools/dev/c1-saves.sh
 #
-# Needs the native run tree <WorkUC2>/run/c1 (tools/dev/mkrun-uc2.sh build-native c1; C1_TREE=<name> to change).
-# Everything runs inside <WorkUC2>/bin/capped (the client under Xvfb through m10-controls.sh, 2G each).
-# Output in <WorkUC2>/logs/c1/saves/ (C1_OUT=<dir>): before.tsv / after1.tsv / after2.tsv (every file of the
+# Needs the native run tree <repo>/../run/c1 (tools/dev/mkrun-uc2.sh build-native c1; C1_TREE=<name> to change).
+# Everything runs inside <repo>/../bin/capped (the client under Xvfb through m10-controls.sh, 2G each).
+# Output in <repo>/../logs/c1/saves/ (C1_OUT=<dir>): before.tsv / after1.tsv / after2.tsv (every file of the
 # tree: path, size, mtime, link count), written1.txt / written2.txt (what the run added or changed), the
 # runs' logs and screenshots, and one PASS/FAIL line per check on stdout.
 #
 # Run 1 starts from a fresh configuration (our tracked inis, no Avaris.ini/User.ini, no profiles, no logs),
-# creates a profile on the on-screen keyboard page (UC2ProfileKeyboard, typed on the real keyboard: the M10
+# creates a profile on the on-screen keyboard page (UC2ProfileKeyboard, typed on the real keyboard: m10-controls.sh's
 # `text` scenario), leaves the profile page, plays a deathmatch on DM-Deadbolt for a few seconds and is stopped
-# with SIGTERM (the normal way out here). Run 2 starts from the SAME tree (M10_KEEP=1: nothing reset), opens the
+# with SIGTERM (the normal way out here). Run 2 starts from the same tree (M10_KEEP=1: nothing reset), opens the
 # profile page, expects the saved profile in the list, selects it, and asks the engine which profile the
-# viewport holds (`getall PlayerProfile ProfileName`). The listings diff is the file inventory of C-2.
-# Since D-3 (Engine/Src/UC2Profiles.cpp) the restarted game is in the saved profile from the start; run 2 checks
+# viewport holds (`getall PlayerProfile ProfileName`). The listings diff is the file inventory.
+# The restarted game is in the saved profile from the start (Engine/Src/UC2Profiles.cpp); run 2 checks
 # that first (tools/dev/d3-profiles.sh is the full restart test).
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)

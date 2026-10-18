@@ -3,19 +3,19 @@
 #
 #   tools/dev/map-census.sh <build-dir> [seconds-per-map] [workers]
 #
-# Each worker gets its own run tree (<WorkUC2>/run/census-N) and its own port, so logs and inis do not collide.
+# Each worker gets its own run tree (<repo>/../run/census-N) and its own port, so logs and inis do not collide.
 # A map PASSES when its level is brought up for play, nothing Critical is logged, the server is still ticking when
 # the timeout sends it SIGTERM, and it then exits cleanly: within CENSUS_GRACE seconds (default 30; after that
 # `timeout -k` KILLs it and the map FAILs as a hang), without the crash handler ("Aborting." on stdout, a
 # "Developer Backtrace" in the log) and with its log closed ("Log file closed"). Result table:
-# <WorkUC2>/logs/census/summary.tsv (+ one log per map): `exit=` is the server's own exit status (137 = KILLed
+# <repo>/../logs/census/summary.tsv (+ one log per map): `exit=` is the server's own exit status (137 = KILLed
 # after the grace), `shutdown=` the seconds from the SIGTERM to the end of the process.
 # CENSUS_NAME (default census) names the run trees (<name>-N) and the log folder; CENSUS_PORT (default 7780)
-# the first port: a second census (M13's 64-bit one: CENSUS_NAME=m13-census) does not collide with this one.
+# the first port: a second census (tools/dev/m13-64bit.sh's: CENSUS_NAME=m13-census-<tree>) does not collide with this one.
 # CENSUS_NODE=1: <build-dir> is an Emscripten build and each map runs as `node ucc-bin.js` (the wasm32 objects of the
 # browser build, under Node). Node's socket emulation cannot listen, so the server logs "can't listen ... the level
-# runs without network" (a warning on the web, F-4a) and keeps ticking. A map FAILS there also when the module
-# aborts ("Aborted(" or "RuntimeError" on stdout). Wrap the whole census in <WorkUC2>/bin/capped (about 1.5G per worker).
+# runs without network" (a warning on the web) and keeps ticking. A map FAILS there also when the module
+# aborts ("Aborted(" or "RuntimeError" on stdout). Wrap the whole census in <repo>/../bin/capped (about 1.5G per worker).
 set -uo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)

@@ -2,7 +2,7 @@
 	UC2GLBinding.h: which OpenGL UC2GLDrv talks to.
 
 	One driver source, compiled once. The binding is a property of the render device
-	OBJECT, chosen by its class (M11; docs/porting/analysis/web-renderer.md, decision 1):
+	object, chosen by its class:
 
 	  UC2GLDrv.UC2GLRenderDevice         desktop OpenGL (2.0+ compatibility profile with
 	                                     framebuffer objects). The context comes from SDL2Drv
@@ -10,12 +10,13 @@
 	                                     up with SDL_GL_GetProcAddress into the device's
 	                                     pointer table (UC2GLFuncs.h). libGL is never linked.
 	  UC2GL4ESDrv.UC2GL4ESRenderDevice   a subclass in its own small package
-	                                     (Source/UC2GL4ESDrv): an OpenGL ES 2 context (SDL/EGL
-	                                     on Linux, WebGL 1 on the web) behind GL4ES, which
-	                                     translates the same fixed-function and GLSL calls.
-	                                     The pointer table is filled from gl4es' lookup; the
-	                                     few calls that must reach GLES2 itself (depth-stencil
-	                                     storage and attachment) go through a second, "raw"
+	                                     (Source/UC2GL4ESDrv): an OpenGL ES 3 context, ES 2 as
+	                                     the fallback (SDL/EGL on Linux, WebGL 2 or 1 on the
+	                                     web), behind GL4ES, which translates the same
+	                                     fixed-function and GLSL calls. The pointer table is
+	                                     filled from gl4es' lookup; the calls that must reach
+	                                     OpenGL ES itself (depth-stencil storage and attachment,
+	                                     engine texture uploads) go through a second, "raw"
 	                                     table filled from the library under gl4es.
 
 	The device's Binding* virtuals are the whole interface between the two; everything else
@@ -41,7 +42,7 @@
 	#pragma pack(pop)
 #endif
 
-// Prototypes are deliberately NOT requested: every call goes through the device's pointer
+// Prototypes are deliberately not requested: every call goes through the device's pointer
 // table, so a stray direct call to a GL function fails to link instead of silently binding
 // to a libGL nobody loaded (or, in a build with gl4es, to gl4es behind the device's back).
 #ifdef GL_GLEXT_PROTOTYPES

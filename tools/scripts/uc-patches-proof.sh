@@ -1,18 +1,15 @@
 #!/usr/bin/env bash
-# uc-patches-proof.sh: the bytecode proofs of the script patch pipeline (T1; docs/porting/analysis/
-# script-patches.md, step 3). Each proof prints one PASS/FAIL line; the exit status is the number of FAILs.
+# uc-patches-proof.sh: the bytecode proofs of the script patch pipeline. Each proof prints one PASS/FAIL line; the exit status is the number of FAILs.
 #
 #   tools/scripts/uc-patches-proof.sh [p1] [p2] [p3] [options]     (no proof named: all three)
-#     --work <dir>   scratch tree (default <WorkUC2>/run/t1-proof); everything is written below it
+#     --work <dir>   scratch tree (default <repo>/../run/t1-proof); everything is written below it
 #     --reference <file>  P2's regression reference (default patches/reference.sha256)
 #     --write-reference   P2 writes the reference from its build instead of checking it (after a set changed on
 #                    purpose: commit the new file with the patch)
 #     --ref <dir>    dev machine only: P2 also compares its build, bytecode by bytecode, with the System folder of
-#                    another build (T1's reference, <WorkUC2>/run/t1-ref/System: `tools/dev/script-build.sh --tree
-#                    t1-ref` of the leak's sources with our changes, before the sources left the repo; it matches
-#                    the sets as they were at 4cbe12f)
-#     --shipped <dir> the shipped .u (default <WorkUC2>/epic-sources/System); other options go to uc-build.sh
-#     --engine-textures <dir>  P1 only, dev only: Epic's Engine source folder (default <WorkUC2>/epic-sources/
+#                    another build (e.g. <repo>/../run/t1-ref/System)
+#     --shipped <dir> the shipped .u (default <repo>/../epic-sources/System); other options go to uc-build.sh
+#     --engine-textures <dir>  P1 only, dev only: Epic's Engine source folder (default <repo>/../epic-sources/
 #                    Engine). Engine.u holds 68 textures that `#exec TEXTURE IMPORT` made from image files the disc
 #                    does not have and the decompiler cannot recreate; with this folder P1 puts those lines (from
 #                    its Classes/*.uc) back before `defaultproperties` and links its Textures/, so the rest of
@@ -24,17 +21,15 @@
 #       the patcher's).
 #   P2  regression: base + the default sets, compiled and stripped, gives exactly the packages of
 #       patches/reference.sha256 (sha256 and size of each package the default build rebuilds; the build is
-#       deterministic, P3). Until T4 (2026-10-11) P2 compared with a build of the repo's script sources (Epic's leaked
-#       text with our changes); those sources are gone, the patches are the only form of our changes, so the
-#       reference is the packages they produced when P2 last passed that comparison. With --ref <dir> the old
-#       comparison runs too: uc-patches.py compare (bytecode of every function and state, every default, every
+#       deterministic, P3). With --ref <dir> P2 also compares its build with that build's packages: uc-patches.py
+#       compare (bytecode of every function and state, every default, every
 #       declaration; names, imports and exports as sets).
 #   P3  determinism: decompile twice (two Python hash seeds), apply twice, build twice: identical bytes.
 #
 #   tools/scripts/uc-patches-proof.sh rebase --old-decompiler <file> [--new-decompiler <file>] [--patches-out <dir>]
-#       when uc-decompile.py changes: the sets (patches/) were made against the base of the OLD decompiler (e.g.
+#       when uc-decompile.py changes: the sets (patches/) were made against the base of the old decompiler (e.g.
 #       `git show <rev>:tools/scripts/uc-decompile.py > old.py`); for every set k the old base + sets 1..k is built
-#       and decompiled with the NEW one (default: tools/scripts/uc-decompile.py), `uc-patches.py rebase` re-makes
+#       and decompiled with the new one (default: tools/scripts/uc-decompile.py), `uc-patches.py rebase` re-makes
 #       each set against the new base into --patches-out (default: the repo's patches/), and the proof builds
 #       new base + rebased sets and compares it with the old chain's build (uc-patches.py compare: equal).
 set -uo pipefail
@@ -46,7 +41,7 @@ reference=$repo/patches/reference.sha256
 write_ref=0
 shipped=$work/epic-sources/System
 content=$work/assets/uc2
-# WorkUnreal (the home since 2026-10-11): the retail disc's System/ holds the 17 shipped .u; the cooked tree the content.
+# The WorkUnreal layout: the retail disc's System/ holds the 17 shipped .u; the cooked tree the content.
 [ -d "$work/assets/uc2-retail-assets/System" ] && shipped=$work/assets/uc2-retail-assets/System
 [ -d "$work/assets/uc2-assets/System" ] && content=$work/assets/uc2-assets
 capped=$work/bin/capped

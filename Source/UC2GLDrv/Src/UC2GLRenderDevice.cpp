@@ -1,13 +1,12 @@
 /*=============================================================================
 	UC2GLRenderDevice.cpp: UC2GLDrv.UC2GLRenderDevice.
 
-	From engine-ut2004's OpenGLDrv (OpenGLRenderDevice.cpp): the GL entry point table bound
-	through SDL, extension discovery, SetRes through the viewport, resource lists. From UC2's
-	D3DDrv (D3DRenderDevice.cpp): the resource caches with 16-bit ids, Flush/FlushResource,
-	ResetRenderStates, the default render target, the gamma formula, render caps, the
-	hardware workarounds' defaults (CubemapTextureAddressing, IsGeForce, DUMMY_MODULATE2X).
-	New: the main framebuffer object and the present pass, GL error checking per frame, and
-	a screenshot test key for verification (ShotTimes=<seconds>,...).
+	The GL entry point table bound through the binding, extension discovery, SetRes through the
+	viewport, resource lists; from UC2's D3DDrv (D3DRenderDevice.cpp): the resource caches with
+	16-bit ids, Flush/FlushResource, ResetRenderStates, the default render target, the gamma
+	formula, render caps, the hardware workarounds' defaults (CubemapTextureAddressing, IsGeForce,
+	DUMMY_MODULATE2X). The main framebuffer object and the present pass, GL error checking per
+	frame, and the test keys (ShotTimes=<seconds>,... and the others below).
 =============================================================================*/
 
 #include "UC2GLDrv.h"
@@ -37,12 +36,12 @@ D3DTEXTUREOP DUMMY_MODULATE2X = D3DTOP_MODULATE2X;
 static TArray<FLOAT>	GShotTimes;
 static TArray<FLOAT>	GPSToggleTimes;
 static TArray<FLOAT>	GPPToggleTimes;
-// O-9: COMBINERTEST / test key CombinerTest: the numeric test of the texture stages
+// COMBINERTEST / test key CombinerTest: the numeric test of the texture stages
 // (UC2GLCombinerTest.cpp), like GSelfTestPending.
 static INT				GCombinerTestPending = 0;
-static INT				GMatCensusPending = 0;	// O-9: GLMATCENSUS (UC2GLPixelTrace.cpp)
-static INT				GSceneCensusPending = 0;	// M7b: GLSCENECENSUS (UC2GLSceneCensus.cpp)
-static INT				GShadowCheckPending = 0;	// M7b: GLSHADOWCHECK (UC2GLShadowCheck.cpp)
+static INT				GMatCensusPending = 0;	// GLMATCENSUS (UC2GLPixelTrace.cpp)
+static INT				GSceneCensusPending = 0;	// GLSCENECENSUS (UC2GLSceneCensus.cpp)
+static INT				GShadowCheckPending = 0;	// GLSHADOWCHECK (UC2GLShadowCheck.cpp)
 // Test key Exec=<seconds>:<command>[@<seconds>:<command>...]: console commands run through the
 // viewport at those times after the first frame; '+' stands for a space in a command
 // (verification: "Exec=40:BlurMe@50:set+UCScreenBerserk+Enabled+1"). Times ascending.
@@ -54,7 +53,7 @@ static TArray<FString>	GExecCommands;
 // frame (0 = no, 1 = at the next frame with a player, n = n frames from now).
 static INT				GSelfTestPending = 0;
 static UBOOL			GShotRamp = 0;
-// Test key ShotPresented (O-8): ShotTimes pictures are what the present pass put on the screen (the gamma
+// Test key ShotPresented: ShotTimes pictures are what the present pass put on the screen (the gamma
 // applied), read from the default framebuffer before the swap, instead of the main framebuffer.
 static UBOOL			GShotPresented = 0;
 static TArray<FColor>	GPresentedPixels;
@@ -62,7 +61,7 @@ static INT				GPresentedWidth = 0, GPresentedHeight = 0;
 static BYTE				GLastGammaRamp[256];
 void UC2GL_RememberGammaRamp( const BYTE* Ramp ) { appMemcpy( GLastGammaRamp, Ramp, 256 ); }
 static DOUBLE			GFirstFrameTime = 0.0;
-// Test keys read by other files of the driver (F-4 follow-up: they were -glmatcensus, -gldualdiffuse=, -glno<cap>).
+// Test keys read by other files of the driver.
 UBOOL					GTestMatCensus = 0;		// MatCensus=True (UC2GLPixelTrace.cpp)
 INT						GTestDualDiffuse = -1;	// DualDiffuse=<n> (UC2GLMaterialState.cpp); -1 = not set
 FString					GTestCapMask;			// MaskCaps=..., upper case between commas
@@ -201,7 +200,7 @@ void UUC2GLRenderDevice::StaticConstructor()
 	new(GetClass(),TEXT("DefaultTexMipBias"),	RF_Public)UFloatProperty( CPP_PROPERTY(DefaultTexMipBias	), TEXT("Options"), CPF_Config );
 
 	// Compiled defaults = the PC D3DDrv's Default.ini values, so a missing ini section
-	// still gives the PC look (SDL2Drv's lesson: unset config properties are zero).
+	// still gives the PC look (unset config properties are zero).
 	UsePrecaching			= 1;
 	UseTrilinear			= 1;
 	UseMipmapping			= 1;
@@ -209,40 +208,37 @@ void UUC2GLRenderDevice::StaticConstructor()
 	UseCubemaps				= 1;
 	CheckGLErrors			= 0;
 	UsePixelShaders			= 1;
-	// O-9: fixed-function texture stages as GLSL (UC2GLFFProgram.cpp).
+	// Fixed-function texture stages as GLSL (UC2GLFFProgram.cpp).
 	UseFixedFunctionPrograms= 1;
 	PrecompileVertexShaders	= 1;
 	UsePostProcess			= 1;
-	// O-3, F-5 (owner, 2026-10-09: "change in the cpp files to have sensible defaults"): the
-	// depth-of-field blur alpha the shipped binary read (65 in every camera mode), as the ini
-	// says, also for an ini that predates the key.
+	// The depth-of-field blur alpha the shipped binary reads (65 in every camera mode), as the ini
+	// says, also for an ini without the key.
 	DOFShippedBlurAlpha		= 1;
-	// O-7, F-5: the owner's raised distortion range (the Xbox's is 5000), as the ini says.
+	// A raised distortion range (the Xbox's is 5000), as the ini says.
 	DistortionCullDistance	= 15000.f;
-	// M7b: the Xbox's shadow textures (lighter, sharper than PC's; analysis/projectors.md).
+	// The Xbox's shadow textures (lighter, sharper than PC's).
 	UseXboxShadows			= 1;
-	// M7b: terrain drawn three layers at a time as the Xbox build does: no visible difference
-	// (analysis/projectors.md), so off unless asked for.
-	UseTerrain3Layer		= 1;	// owner 2026-10-10: the Xbox single pass is never slower (A/B up to 20% faster) and draws the same picture (M7b pinned)
-	// M7b: the Xbox's static projector batch and its projector material: level-static projectors
-	// drawn as the Xbox draws them, which differs from PC's path on six maps (analysis/projectors.md
-	// step 3). Dynamic projectors, including those on skeletal meshes, keep PC's path either way.
+	// Terrain drawn three layers at a time as the Xbox build does: the same picture in one pass.
+	UseTerrain3Layer		= 1;
+	// The Xbox's static projector batch and its projector material: level-static projectors
+	// drawn as the Xbox draws them, which differs from PC's path on some maps. Dynamic projectors,
+	// including those on skeletal meshes, keep PC's path either way.
 	UseXboxProjectors		= 1;
-	// pp-scale: the blurs cover the share of the picture they cover on the Xbox's 640x480, also
-	// for an ini that predates the key.
+	// The blurs cover the share of the picture they cover on the Xbox's 640x480, also for an ini
+	// without the key.
 	PostProcessReferenceHeight = 480;
-	// H-1: the blur targets at twice the Xbox's texel count (owner, 2026-10-11: "2x is a nice middle ground. This
-	// game won't run at 640x480 again, so it will always benefit"); 1 = the Xbox's count, 4 accepted. A missing ini
-	// entry gets this default.
+	// The blur targets at twice the Xbox's texel count per axis (finer at today's resolutions); 1 = the Xbox's
+	// count, 4 accepted. A missing ini entry gets this default.
 	PostProcessTargetScale = 2;
-	// O-8 (owner, 2026-10-06): 16x anisotropic filtering and 4x anti-aliasing by default, also
-	// for an ini that predates the keys.
+	// 16x anisotropic filtering and 4x anti-aliasing for an ini without the keys (the shipped native ini
+	// says the same; the web ini sets AntiAliasing=0).
 	LevelOfAnisotropy		= 16;
 	AntiAliasing			= 4;
 	MaxTextureUnits			= 8;
-	// O-9: UC2's D3DDrv clamps MaxSimultaneousTextures and MaxTextureBlendStages to 4 and
+	// UC2's D3DDrv clamps MaxSimultaneousTextures and MaxTextureBlendStages to 4 and
 	// refuses any card that has fewer (D3DRenderDevice.cpp, CheckDeviceCaps; Xbox and PC), so
-	// its material compiler only ever split materials into passes for 4 stages.
+	// its material compiler only ever splits materials into passes for 4 stages.
 	MaterialStages			= 4;
 	DetailTexMipBias		= 0.8f;
 	DefaultTexMipBias		= -0.5f;
@@ -263,10 +259,10 @@ void UUC2GLRenderDevice::Destroy()
 	Super::Destroy();
 	Flush( NULL );
 
-	// M7: the render-target pool dies with this object, and FRenderTargetPool's destructor
+	// The render-target pool dies with this object, and FRenderTargetPool's destructor
 	// asserts that no reference is left. The camera effects release theirs when they are
 	// destroyed, which at exit can be after the device (on Xbox the game never exits). The
-	// targets still held are handed to their holders: no longer the pool's, so their
+	// targets still held are handed to their holders: no longer in the pool, so their
 	// RemovePoolRef does nothing (they are leaked, at exit).
 	FRenderTargetPool& Pool = RenderInterface.RenderTargetPool;
 	for( INT i=0; i<Pool.RenderTargets.Num(); i++ )
@@ -316,7 +312,7 @@ void UUC2GLRenderDevice::FindProc( void*& ProcAddress, const char* Name, const c
 }
 
 //
-// O-9: the stage count and texture-op caps the material compiler (UC2GLMaterialState.cpp)
+// The stage count and texture-op caps the material compiler (UC2GLMaterialState.cpp)
 // is given. Epic's D3DDrv gave it the hardware's MaxSimultaneousTextures /
 // MaxTextureBlendStages (clamped to 4, D3DRenderDevice.cpp) and its TextureOpCaps; here:
 // - fragment programs (desktop GL, FixedFunctionPrograms): every D3D operation is exact and
@@ -421,8 +417,8 @@ void UUC2GLRenderDevice::BindingSetContextAttributes()
 	SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 0 );
 	SDL_GL_SetAttribute( SDL_GL_STENCIL_SIZE, 0 );
 	SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
-	// The platform's default profile (compatibility): the fixed-function pipeline is what R1
-	// draws with. Said explicitly because the attributes are process-wide and the GL4ES
+	// The platform's default profile (compatibility: the driver uses fixed-function state next to
+	// its GLSL programs). Said explicitly because the attributes are process-wide and the GL4ES
 	// binding asks for an ES profile.
 	SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, 0 );
 	SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 2 );
@@ -492,8 +488,8 @@ void UUC2GLRenderDevice::BindingSwap( UViewport* Viewport )
 const ANSICHAR* UUC2GLRenderDevice::ShaderPrologue( UBOOL Fragment )
 {
 	// UC2_HIGHP: for the samplers that read depth. A sampler's default precision in GLSL ES
-	// is lowp, which Mesa computes in 16-bit floats (a 24-bit depth came back with 11 bits:
-	// self-test "depth-color" on the twin) and which mobile hardware may honour as well.
+	// is lowp, which Mesa computes in 16-bit floats (a 24-bit depth keeps 11 bits) and which
+	// mobile hardware may honour as well.
 	if( !IsGLES )
 		return "#version 120\n#define UC2_HIGHP\n";
 	if( Fragment && !CapFragmentHighp )
@@ -513,7 +509,7 @@ UBOOL UUC2GLRenderDevice::CheckGLError( const TCHAR* Tag, UBOOL Log )
 {
 	UBOOL Any = 0;
 	GLenum Error;
-	// M11: on GLES the library under gl4es is asked as well. gl4es answers glGetError from
+	// On GLES the library under gl4es is asked as well. gl4es answers glGetError from
 	// its own record of what IT rejected; an error OpenGL ES raised for a call gl4es passed
 	// on stays in the hardware's error flag and would never be seen.
 	while( (Error = glGetError()) != GL_NO_ERROR || (IsGLES && Raw_glGetError && (Error = Raw_glGetError()) != GL_NO_ERROR) )
@@ -549,7 +545,7 @@ UBOOL UUC2GLRenderDevice::Init()
 	debugf( NAME_Init, TEXT("Initializing UC2GLDrv (class %s; binding: %s)"), GetClass()->GetPathName(), BindingName() );
 
 	// The engine's conventions stay D3D's (BGRA colours, D3D canvas pixel offset); the
-	// driver converts (see UC2GLRenderInterface.cpp).
+	// driver converts (UC2GLRenderInterface.cpp).
 	GIsOpenGL		= 0;
 
 	SupportsCubemaps	= UseCubemaps;
@@ -562,7 +558,7 @@ UBOOL UUC2GLRenderDevice::Init()
 	ScratchBuffer.Empty();
 	ScratchBuffer.Add( 65536 );
 
-	// Test keys (F-4 follow-up; they replace the -gl* command-line switches): set from outside with
+	// Test keys (they replace the -gl* command-line switches): set from outside with
 	// -ini:System:[UC2GLDrv.UC2GLRenderDevice]:<Key>=<Value>, read once here and never kept in the ini
 	// (appReadTestKey). The GL4ES binding reads its own section first, then the desktop device's, so a test sets
 	// them once for either device. The device's ordinary settings (CheckGLErrors, UsePixelShaders, UsePostProcess,
@@ -570,19 +566,19 @@ UBOOL UUC2GLRenderDevice::Init()
 	// FixedFunctionPrograms) are config properties of the class's own section, set with -ini: like any setting.
 	//   ShotTimes=<s>,<s>...            the engine's SHOT exec at those times after the first frame
 	//   ShotRamp=True                   screenshots show the dynamic gamma ramp of the present pass
-	//   ShotPresented=True              screenshots are what the present pass put on the screen (O-8)
+	//   ShotPresented=True              screenshots are what the present pass put on the screen
 	//   Exec=<s>:<cmd>[@<s>:<cmd>...]   console commands at those times; '+' stands for a space
 	//   PixelShaderToggleTimes=<s>,...  flip UsePixelShaders at those times (one run, both pictures)
 	//   PostProcessToggleTimes=<s>,...  flip UsePostProcess at those times
 	//   SelfTest=True                   POSTSELFTEST at the 10th frame with a player
-	//   CombinerTest=True               COMBINERTEST likewise (O-9)
-	//   MatCensus=True                  the material census of GLMATCENSUS on every material (O-9)
+	//   CombinerTest=True               COMBINERTEST likewise
+	//   MatCensus=True                  the material census of GLMATCENSUS on every material
 	//   Stats=True                      a frame-statistics line every 300 frames
 	//   NoLODBias=True                  texture LOD bias not applied
 	//   MaskCaps=<cap>,...              behave as if a capability were missing: combine3, combine4, depthtexture,
 	//                                   fragdepth, uintindex, maxlevel, s3tc
-	//   DualDiffuse=<n>                 the dual-diffuse test material state (M6, UC2GLMaterialState.cpp)
-	//   MaterialTime=<s>                materials see this time, not the level's (D-4: moving materials such as
+	//   DualDiffuse=<n>                 the dual-diffuse test material state (UC2GLMaterialState.cpp)
+	//   MaterialTime=<s>                materials see this time, not the level's (moving materials such as
 	//                                   the Liandri overlay's panned noise picture the same in every run)
 	FString OwnSection = GetClass()->GetPathName();
 	const TCHAR* BaseSection = TEXT("UC2GLDrv.UC2GLRenderDevice");
@@ -677,7 +673,7 @@ void UUC2GLRenderDevice::Exit( UViewport* Viewport )
 			glDeleteProgram( PresentProgram );
 		PresentProgram = 0;
 		LogPixelShaderStats();
-		// M7: what the interface holds of the post-process path goes while the device can
+		// What the interface holds of the post-process path goes while the device can
 		// still flush the render targets.
 		extern void UC2GL_DeleteDynamicGamma( FOpenGLRenderInterface* RI );
 		UC2GL_DeleteDynamicGamma( &RenderInterface );
@@ -772,11 +768,10 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 			LevelOfAnisotropy, (INT)MaxAnisotropy );
 		if( !SUPPORTS_GL_EXT_texture_compression_s3tc )
 			debugf( NAME_Init, TEXT("UC2GLDrv: no S3TC; DXT textures are decompressed on upload") );
-		// O-8: multisampling where the main framebuffer can be multisampled: desktop GL and (F-3)
+		// Multisampling where the main framebuffer can be multisampled: desktop GL and
 		// OpenGL ES 3 / WebGL 2. OpenGL ES 2 / WebGL 1 have no multisampled framebuffer objects (the
 		// context's own antialias attribute only reaches the default framebuffer, which receives
-		// nothing but the present quad): no anti-aliasing there. (Until F-3 FXAA in the present
-		// pass stood in for it; removed at the owner's word once real MSAA reached the web.)
+		// nothing but the present quad): no anti-aliasing there.
 		UBOOL CanMultisample = SUPPORTS_MSAA && (!IsGLES || GLESMajor >= 3);
 		debugf( NAME_Init, TEXT("UC2GLDrv: anti-aliasing: %s"),
 			AntiAliasing <= 1 ? TEXT("off") : !CanMultisample ? TEXT("none (no multisampled framebuffers on this context)") : *FString::Printf( TEXT("%ix multisampled main framebuffer, resolved before it is read"), AntiAliasing ) );
@@ -804,12 +799,12 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 
 		if( CheckGLErrors ) CheckGLError( TEXT("SetRes: device textures and buffers") );
 
-		// Render-target post-processing (M7): the copy programs. Before the pixel shaders:
+		// Render-target post-processing: the copy programs. Before the pixel shaders:
 		// which of those are compiled depends on it.
 		InitPostProcess();
 		if( CheckGLErrors ) CheckGLError( TEXT("SetRes: post-process programs") );
 
-		// Programmable materials (M6): fragment shaders of every integrated pixel shader,
+		// Programmable materials: fragment shaders of every integrated pixel shader,
 		// vertex shaders of the VertexShaderConfigs.ini list.
 		InitPixelShaders();
 		if( CheckGLErrors ) CheckGLError( TEXT("SetRes: pixel and vertex shaders") );
@@ -841,7 +836,7 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 -----------------------------------------------------------------------------*/
 
 //
-// G-6: the size of the frame the viewport is drawn in: the window (the client's screen size) when the client
+// The size of the frame the viewport is drawn in: the window (the client's screen size) when the client
 // draws split-screen viewports as rectangles of one window, else the viewport itself as before.
 //
 void UUC2GLRenderDevice::GetFrameSize( UViewport* Viewport, INT& Width, INT& Height )
@@ -881,11 +876,11 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8, Width, Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL );
 	if( CheckGLErrors ) CheckGLError( TEXT("main framebuffer: colour texture") );
 
-	// M7: depth and stencil live in a texture, not a renderbuffer, so the depth can be read
+	// Depth and stencil live in a texture, not a renderbuffer, so the depth can be read
 	// by a shader (UUC2GLRenderDevice::UpdateSampledTexture, depth of field). GL 3.0 /
 	// EXT_packed_depth_stencil + ARB_depth_texture; on WebGL this needs WEBGL_depth_texture
-	// (M11: without it the depth colour has to come from a pass that writes depth as colour).
-	// M11: where the context has no depth textures (CapDepthTexture) it is a renderbuffer,
+	// (without it the depth colour has to come from a pass that writes depth as colour).
+	// Where the context has no depth textures (CapDepthTexture) it is a renderbuffer,
 	// and the two readers of depth take their fallbacks (UC2GLPostProcess.cpp).
 	if( CapDepthTexture )
 		MainDepthStencil = CreateDepthStencilTexture( Width, Height );
@@ -909,9 +904,9 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 		return 0;
 	}
 
-	// O-8: the multisampled main framebuffer; the one built above becomes its resolve.
+	// The multisampled main framebuffer; the one built above becomes its resolve.
 	MainSamples = 0;
-	// F-3: OpenGL ES 3 / WebGL 2 as well, through GL4ES (our fork passes multisampled renderbuffer
+	// OpenGL ES 3 / WebGL 2 as well, through GL4ES (our fork passes multisampled renderbuffer
 	// storage and the resolve blit through; these renderbuffers are GL4ES' own, not raw).
 	if( DepthStencilThroughBinding() && AntiAliasing > 1 && SUPPORTS_MSAA && MainDepthStencil )
 	{
@@ -958,7 +953,7 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 	MainColorVersion++;
 	MainDepthVersion++;
 
-	// The engine's back buffer target now stands for this framebuffer.
+	// The engine's back buffer target stands for this framebuffer.
 	if( DefaultRenderTarget )
 		DefaultRenderTarget->UpdateSurfaces( Width, Height );
 
@@ -979,7 +974,7 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 }
 
 //
-// O-8: the multisampled main framebuffer's colour and/or depth-stencil into MainColorTexture /
+// The multisampled main framebuffer's colour and/or depth-stencil into MainColorTexture /
 // MainDepthStencil, if anything was drawn since the last resolve. Leaves GL_FRAMEBUFFER bound
 // to the interface's current target. (Scissor off for the blit: it applies to blits.)
 //
@@ -1040,24 +1035,24 @@ void UUC2GLRenderDevice::DestroyMainFramebuffer()
 }
 
 /*-----------------------------------------------------------------------------
-	Depth-stencil storage (M11).
+	Depth-stencil storage.
 
 	Desktop GL: a GL_DEPTH24_STENCIL8 texture or renderbuffer on the depth and the stencil
-	attachment points, as since M7.
+	attachment points.
 
-	GLES2 behind gl4es: done with the raw library, around gl4es, because gl4es decides from
+	OpenGL ES 2 behind gl4es: done with the raw library, around gl4es, because gl4es decides from
 	the OpenGL ES extension names (OES_depth_texture, OES_packed_depth_stencil, OES_depth24)
 	which WebGL 1 does not have under those names, and then gives a depth attachment a 16-bit
 	renderbuffer plus a separate stencil renderbuffer, a combination WebGL 1 rejects. What
 	WebGL 1 has: the DEPTH_STENCIL renderbuffer format in core, and with WEBGL_depth_texture a
 	DEPTH_STENCIL / UNSIGNED_INT_24_8 texture; either goes on the one DEPTH_STENCIL_ATTACHMENT
-	point. OpenGL ES 2 proper (the native twin) has the same storage through
+	point. OpenGL ES 2 proper (the native GL4ES device) has the same storage through
 	OES_packed_depth_stencil (+ OES_depth_texture) but no combined attachment point: the image
-	goes on both points. That attachment call is the one place where the twin and the browser
+	goes on both points. That attachment call is the one place where native ES 2 and the browser
 	run different lines.
 
 	gl4es caches texture and renderbuffer bindings, so the raw calls put back what was bound.
-	The texture NAME is gl4es' (it tracks names, and the texture is later bound for sampling
+	The texture name is gl4es' (it tracks names, and the texture is later bound for sampling
 	through it); renderbuffers are raw throughout (the driver uses no other renderbuffers).
 -----------------------------------------------------------------------------*/
 
@@ -1065,7 +1060,7 @@ GLuint UUC2GLRenderDevice::CreateDepthStencilTexture( INT Width, INT Height )
 {
 	GLuint Texture = 0;
 	glGenTextures( 1, &Texture );
-	// F-3: OpenGL ES 3 / WebGL 2 through GL4ES (our fork gives the texture a sized format) as on
+	// OpenGL ES 3 / WebGL 2 through GL4ES (our fork gives the texture a sized format) as on
 	// desktop GL; only OpenGL ES 2 / WebGL 1 go around it (below).
 	if( DepthStencilThroughBinding() )
 	{
@@ -1076,9 +1071,9 @@ GLuint UUC2GLRenderDevice::CreateDepthStencilTexture( INT Width, INT Height )
 		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
 		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0 );
 		glTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, Width, Height, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL );
-		// GL4ES: not left bound. Measured on the ES 3 twin (webgl2.md, step 6, experiment G): with the
-		// depth texture still bound through GL4ES after its creation, the self-test's depth values did
-		// not reach the passes that read it (depth-color, depth-copy, dof-ramp failed); unbound, 15/15.
+		// GL4ES: not left bound. With the depth texture still bound through GL4ES after its creation,
+		// the depth values do not reach the passes that read it (the self-test's depth-color,
+		// depth-copy and dof-ramp checks).
 		if( IsGLES )
 			glBindTexture( GL_TEXTURE_2D, 0 );
 		return Texture;
@@ -1144,8 +1139,8 @@ void UUC2GLRenderDevice::DeleteDepthStencilRenderbuffer( GLuint& Renderbuffer )
 //
 // GLES: makes Framebuffer the one OpenGL ES itself has bound and returns what was. gl4es
 // keeps its own idea of the bound framebuffer and makes it real when it needs it, which is
-// not necessarily when the driver's glBindFramebuffer returns (first browser run with
-// frames: the raw attachment call answered GL_INVALID_OPERATION, i.e. no framebuffer bound).
+// not necessarily when the driver's glBindFramebuffer returns (a raw attachment call would
+// then answer GL_INVALID_OPERATION: no framebuffer bound).
 //
 GLint UUC2GLRenderDevice::RawBindFramebuffer( GLuint Framebuffer )
 {
@@ -1162,9 +1157,8 @@ GLint UUC2GLRenderDevice::RawBindFramebuffer( GLuint Framebuffer )
 //
 // The colour attachment goes through gl4es (it tracks colour attachments). While attaching,
 // gl4es sets sampling parameters of the texture on whatever GLES has bound at that moment,
-// so on GLES the texture is bound for the duration of the call. (The one GL error of the
-// browser runs up to G4 run 12, reported here, was gl4es realising its "texture 0" inside
-// this call: PrepareGL4ESTextureZero.)
+// so on GLES the texture is bound for the duration of the call. (gl4es realising its
+// "texture 0" inside this call is what PrepareGL4ESTextureZero prevents.)
 //
 void UUC2GLRenderDevice::AttachColorTexture( GLuint Texture )
 {
@@ -1306,7 +1300,7 @@ void UUC2GLRenderDevice::CompressedTexImage2D( GLenum BindTarget, GLuint Texture
 }
 
 //
-// M11. Storage of ENGINE textures on GLES goes to the library under gl4es, compressed or
+// Storage of engine textures on GLES goes to the library under gl4es, compressed or
 // not. gl4es keeps its own idea of a texture's mip chain: at the first draw with a mipmap
 // filter it calls glGenerateMipmap on any texture whose levels it has not seen arrive down
 // to 1x1, which would replace the engine's mip levels (and fails on compressed ones). What
@@ -1325,7 +1319,7 @@ void UUC2GLRenderDevice::TexImage2D( GLenum BindTarget, GLuint Texture, GLenum T
 		return;
 	}
 	// OpenGL ES 2: the internal format is the format; BGRA only as an extension WebGL does
-	// not have, so the D3DCOLOR bytes are reordered here (one path for the twin and the web).
+	// not have, so the D3DCOLOR bytes are reordered here (one path for native ES and the web).
 	if( Format == GL_BGRA )
 	{
 		INT Bytes = Width * Height * 4;
@@ -1354,12 +1348,12 @@ void UUC2GLRenderDevice::TexImage2D( GLenum BindTarget, GLuint Texture, GLenum T
 }
 
 //
-// M11. gl4es remembers, per vertex attribute, which buffer and offset it last sent to
+// gl4es remembers, per vertex attribute, which buffer and offset it last sent to
 // OpenGL ES and skips the call when the next draw asks for the same. It does not forget that
 // when the buffer is deleted: a new buffer that gets the old one's name (GLES hands names
 // out again at once) with the same layout is taken for "already sent", while GLES has reset
-// the attribute to no buffer at the deletion. The draw then reads nothing (found by the
-// self-test's depth probe: its second draw from a freshly created buffer drew no pixel).
+// the attribute to no buffer at the deletion. The draw then reads nothing (the self-test's
+// depth probe draws twice from freshly created buffers).
 // So on GLES buffer names are never deleted while the device lives: a freed one is emptied
 // and reused, by target (a WebGL buffer keeps the target it was first bound to).
 //
@@ -1416,20 +1410,16 @@ void UUC2GLRenderDevice::BindQuadBuffer()
 }
 
 //
-// What the context can do (see the Cap* members). Desktop GL 2.0 + FBO has all of it.
-//
-//
-// GLES: gl4es' "texture 0" (M11, G4).
+// GLES: gl4es' "texture 0".
 //
 // gl4es treats texture 0 as an object with parameters, as desktop GL and OpenGL ES 2 do (they
-// have a default texture); WebGL has none. Two consequences, both seen:
+// have a default texture); WebGL has none. Two consequences:
 // - The first time gl4es realises a unit with texture 0 bound, it sets that texture's filter
 //   and wrap parameters with nothing bound under it, and WebGL answers GL_INVALID_OPERATION
-//   (the one GL error of every browser run up to G4 run 12, inside the first
-//   glFramebufferTexture2D: gl4es realize_textures -> realize_1texture).
+//   (inside the first glFramebufferTexture2D: gl4es realize_textures -> realize_1texture).
 // - Its texture 0 has the default minifying filter NEAREST_MIPMAP_LINEAR and no mipmaps, so at
 //   a draw gl4es calls glGenerateMipmap for it (realize_textures, drawing) without making that
-//   unit active: on whatever texture the ACTIVE unit has, which can be an engine texture with
+//   unit active: on whatever texture the active unit has, which can be an engine texture with
 //   DXT storage (Mesa with an ES 2.0 context: "GL_INVALID_OPERATION in generate mipmaps on
 //   compressed texture"; gl4es' own glGetError calls hide it from CheckGLErrors).
 // So: every unit starts with a texture of our own under gl4es' "texture 0" (1x1 opaque black,
@@ -1455,7 +1445,7 @@ void UUC2GLRenderDevice::PrepareGL4ESTextureZero()
 		}
 	}
 	// gl4es keeps sampler parameters and applies them when it next realises the unit. That has
-	// to happen NOW, while no texture of gl4es' own was ever bound for real (so its "texture 0"
+	// to happen now, while no texture of gl4es' own was ever bound for real (so its "texture 0"
 	// is our stand-in): 2D binds are deferred, so bind another name and 0 again to mark unit 0
 	// changed, and glFlush realises it (gl4es realize_textures). From then on gl4es' record of
 	// texture 0 matches what it wants and it never sets texture 0's parameters again.
@@ -1472,6 +1462,9 @@ void UUC2GLRenderDevice::PrepareGL4ESTextureZero()
 	glDeleteTextures( 1, &Scratch );
 }
 
+//
+// What the context can do (the Cap* members). Desktop GL 2.0 + FBO has all of it.
+//
 void UUC2GLRenderDevice::DetectCapabilities()
 {
 	CapDepthTexture = CapFragDepth = CapUIntIndex = CapTextureMaxLevel = CapFragmentHighp = 1;
@@ -1489,7 +1482,7 @@ void UUC2GLRenderDevice::DetectCapabilities()
 							;
 		CapFragDepth		= FindRawExt("GL_EXT_frag_depth") || FindRawExt("EXT_frag_depth");
 		CapUIntIndex		= FindRawExt("GL_OES_element_index_uint") || FindRawExt("OES_element_index_uint");
-		// F-3: OpenGL ES 3.0 / WebGL 2 have depth textures (sized DEPTH24_STENCIL8), 32-bit indices
+		// OpenGL ES 3.0 / WebGL 2 have depth textures (sized DEPTH24_STENCIL8), 32-bit indices
 		// and, in the GLSL ES 3.00 GL4ES emits there, gl_FragDepth in core: a WebGL 2 context lists
 		// none of the extension names above.
 		if( GLESMajor >= 3 )
@@ -1540,7 +1533,7 @@ static const char* GPresentVertexShader =
 // UD3DRenderDevice::UpdateGamma's ramp, normalised:
 //   out = (Contrast+0.5) * in^(1/Gamma) + (Brightness-0.5)*0.5 - Contrast*0.5 + 0.25
 // uGamma = ( 1/Gamma, Contrast+0.5, (Brightness-0.5)*0.5 - Contrast*0.5 + 0.25, enabled ).
-// M7: with dynamic gamma the ramp is the 256-entry table FD3DDynamicGamma::UpdateDeviceGamma
+// With dynamic gamma the ramp is the 256-entry table FD3DDynamicGamma::UpdateDeviceGamma
 // computes (uRamp, one channel; uUseRamp 1), looked up per colour channel at texel centres.
 static const char* GPresentFragmentShader =
 	"uniform sampler2D uScene;\n"
@@ -1635,7 +1628,7 @@ void UUC2GLRenderDevice::DrawPresentPass( UViewport* Viewport )
 	glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
 	glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
 
-	// B-2: the 2D enables too (GL4ES; UC2GLPostProcess.cpp, BindProgramTexture2D).
+	// The 2D enables too (GL4ES; UC2GLPostProcess.cpp, BindProgramTexture2D).
 	if( GammaRampActive && GammaRampTexture && ApplyGamma && PostProcessActive() )
 		BindProgramTexture2D( 1, GammaRampTexture );
 	BindProgramTexture2D( 0, MainColorTexture );
@@ -1652,7 +1645,7 @@ void UUC2GLRenderDevice::DrawPresentPass( UViewport* Viewport )
 	glVertexAttribPointer( 0, 2, GL_FLOAT, GL_FALSE, 0, NULL );
 	glEnableVertexAttribArray( 0 );
 	glDrawArrays( GL_TRIANGLE_STRIP, 0, 4 );
-	// G-6: split-screen viewports' own dynamic gamma ramps, each over its rectangle (nothing when not split).
+	// Split-screen viewports' own dynamic gamma ramps, each over its rectangle (nothing when not split).
 	DrawViewportRamps( Viewport, DrawableX, DrawableY );
 	glDisableVertexAttribArray( 0 );
 	glBindBuffer( GL_ARRAY_BUFFER, 0 );
@@ -1728,7 +1721,7 @@ void UUC2GLRenderDevice::InitGLState()
 					   PlaneQ[4] = { 0.f, 0.f, 0.f, 1.f };
 	for( INT s=0; s<Min<INT>(Max<INT>(GLFixedFunctionUnits,GLProgramUnits),MAX_STAGES); s++ )
 	{
-		// (O-9: every unit fragment programs may use; texture environment state only on its own units.)
+		// (Every unit fragment programs may use; texture environment state only on its own units.)
 		glActiveTexture( GL_TEXTURE0 + s );
 		glClientActiveTexture( GL_TEXTURE0 + s );
 		if( s < GLFixedFunctionUnits )
@@ -1942,7 +1935,7 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 			LogPixelShaderStats();
 			UsePixelShaders = Wanted;
 			InitPixelShaders();
-			// M7b: the terrain pixel shader comes and goes with them.
+			// The terrain pixel shader comes and goes with them.
 			RefreshTerrainPasses();
 		}
 		Ar.Logf( TEXT("UC2GLDrv: pixel shaders %s (frame %i)"), UsePixelShaders ? TEXT("on") : TEXT("off"), FrameCounter );
@@ -2022,7 +2015,7 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	else if( ParseCommand(&Cmd,TEXT("GLPROBE")) )
 	{
 		// GLPROBE <tag>: one log line with where the player is (verification of input in the
-		// browser, where the native test channel of SDL2Drv does not exist: M11).
+		// browser, where the native test channel of SDL2Drv does not exist).
 		while( *Cmd == ' ' )
 			Cmd++;
 		APlayerController*	Player	= LastViewport ? LastViewport->Actor : NULL;
@@ -2041,7 +2034,7 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	}
 	else if( ParseCommand(&Cmd,TEXT("DISTORTIONCULLDISTANCE")) )
 	{
-		// DISTORTIONCULLDISTANCE [<units>]: the distance over which distortion fades out (O-7,
+		// DISTORTIONCULLDISTANCE [<units>]: the distance over which distortion fades out (
 		// UC2GLMaterialState.cpp); 5000 is the Xbox's. No argument: show it. (fx-fixes)
 		if( appStrlen(Cmd) && appAtof(Cmd) > 0.f )
 			DistortionCullDistance = appAtof(Cmd);
@@ -2061,7 +2054,7 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	else if( ParseCommand(&Cmd,TEXT("FFPROGRAMS")) )
 	{
 		// FFPROGRAMS [0|1]: fixed-function texture stages as fragment programs or as GL's texture
-		// environment (O-9; no argument: toggle). The next material set is compiled for it.
+		// environment (no argument: toggle). The next material set is compiled for it.
 		UBOOL Wanted = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !UseFixedFunctionPrograms;
 		if( Wanted != UseFixedFunctionPrograms && ValidContext && !LockedViewport )
 		{
@@ -2080,7 +2073,7 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	}
 	else if( ParseCommand(&Cmd,TEXT("XBOXSHADOWS")) )
 	{
-		// M7b: XBOXSHADOWS [0|1] (no argument: toggle). Shadow textures are redrawn every
+		// XBOXSHADOWS [0|1] (no argument: toggle). Shadow textures are redrawn every
 		// update, so the next one shows the change.
 		UseXboxShadows = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !UseXboxShadows;
 		Ar.Logf( TEXT("UC2GLDrv: Xbox shadow textures %s%s (frame %i)"), UseXboxShadows ? TEXT("on") : TEXT("off"),
@@ -2089,7 +2082,7 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	}
 	else if( ParseCommand(&Cmd,TEXT("GLSTATS")) )
 	{
-		// M7b: the Stats line now, for the frames since the last one (or since GLSTATS RESET).
+		// The Stats line now, for the frames since the last one (or since GLSTATS RESET).
 		if( ParseCommand(&Cmd,TEXT("RESET")) )
 		{
 			StatTime0 = 0.0;
@@ -2101,9 +2094,9 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	}
 	else if( ParseCommand(&Cmd,TEXT("XBOXPROJECTORS")) )
 	{
-		// M7b: XBOXPROJECTORS [0|1] (no argument: toggle). The engine batches static projectors
+		// XBOXPROJECTORS [0|1] (no argument: toggle). The engine batches static projectors
 		// when a map loads (UGameEngine::LoadMap), so the change shows from the next map on.
-		// (Switching a loaded level over was tried: the static actor leaf lists of
+		// (A loaded level cannot be switched over: the static actor leaf lists of
 		// ULevel::BuildRenderData do not follow a projector re-attached at run time.)
 		UseXboxProjectors = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !UseXboxProjectors;
 		Ar.Logf( TEXT("UC2GLDrv: Xbox projector batching %s from the next map load%s (frame %i)"), UseXboxProjectors ? TEXT("on") : TEXT("off"),
@@ -2112,7 +2105,7 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	}
 	else if( ParseCommand(&Cmd,TEXT("TERRAIN3LAYER")) )
 	{
-		// M7b: TERRAIN3LAYER [0|1] (no argument: toggle). The engine builds a terrain's passes
+		// TERRAIN3LAYER [0|1] (no argument: toggle). The engine builds a terrain's passes
 		// from the caps when it loads (ATerrainInfo::CheckComputeDataOnLoad -> Update), so every
 		// terrain of the current level is updated the same way again.
 		UseTerrain3Layer = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !UseTerrain3Layer;
@@ -2121,14 +2114,14 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	}
 	else if( ParseCommand(&Cmd,TEXT("GLSHADOWCHECK")) )
 	{
-		// M7b: shadow textures recomputed from their caster targets (UC2GLShadowCheck.cpp).
+		// Shadow textures recomputed from their caster targets (UC2GLShadowCheck.cpp).
 		GShadowCheckPending = 1;
 		Ar.Logf( TEXT("UC2GLDrv: the shadow check runs at the start of the next frame; results in the log") );
 		return 1;
 	}
 	else if( ParseCommand(&Cmd,TEXT("GLSCENECENSUS")) )
 	{
-		// M7b: the level's projectors and terrains (UC2GLSceneCensus.cpp; analysis/projectors.md).
+		// The level's projectors and terrains (UC2GLSceneCensus.cpp).
 		GSceneCensusPending = 1;
 		Ar.Logf( TEXT("UC2GLDrv: the scene census runs at the start of the next frame; results in the log") );
 		return 1;
@@ -2147,8 +2140,8 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	}
 	else if( ParseCommand(&Cmd,TEXT("DOFSHIPPEDALPHA")) )
 	{
-		// DOFSHIPPEDALPHA [0|1]: UUCScreenDOF's blur alpha as the shipped binary read it
-		// (docs/porting/analysis/runtime-port.md, "Deviation"); no argument: toggle.
+		// DOFSHIPPEDALPHA [0|1]: UUCScreenDOF's blur alpha as the shipped binary reads it
+		// (UCCameraEffects.cpp); no argument: toggle.
 		DOFShippedBlurAlpha = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !DOFShippedBlurAlpha;
 		Ar.Logf( TEXT("UC2GLDrv: depth-of-field blur alpha %s (frame %i)"), DOFShippedBlurAlpha ? TEXT("as the shipped binary read it") : TEXT("as script sets it"), FrameCounter );
 		return 1;
@@ -2156,8 +2149,8 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	else if( ParseCommand(&Cmd,TEXT("PPREFERENCE")) )
 	{
 		// PPREFERENCE [<lines>]: the picture height the post-process blurs are made for
-		// (PostProcessReferenceHeight; 480 = the Xbox's, 0 = back-buffer pixels as before;
-		// docs/porting/analysis/pp-scale.md). The camera effects resize their targets on the
+		// (PostProcessReferenceHeight; 480 = the Xbox's, 0 = back-buffer pixels, Epic's). The camera
+		// effects resize their targets on the
 		// next frame. No argument: say what it is.
 		if( appStrlen(Cmd) )
 			PostProcessReferenceHeight = Max( appAtoi(Cmd), 0 );
@@ -2190,20 +2183,20 @@ FRenderInterface* UUC2GLRenderDevice::Lock( UViewport* Viewport, BYTE* HitData, 
 	LastViewport = Viewport;
 
 	// The window may have been resized without SetRes (SDL2Drv calls SetRes for that, but
-	// keep the framebuffer honest either way). G-6: the window's size; a split-screen viewport is a
-	// rectangle of it (OffsetX/OffsetY/SizeX/SizeY), as the Xbox's viewports were of its back buffer.
+	// keep the framebuffer honest either way): the window's size; a split-screen viewport is a
+	// rectangle of it (OffsetX/OffsetY/SizeX/SizeY), as the Xbox's viewports are of its back buffer.
 	INT FrameX, FrameY;
 	GetFrameSize( Viewport, FrameX, FrameY );
 	if( FrameX != MainWidth || FrameY != MainHeight )
 		CreateMainFramebuffer( FrameX, FrameY );
 
-	// M7: the client settings the Xbox build has and PC's ini and UClient::Init do not give,
+	// The client settings the Xbox build has and PC's ini and UClient::Init do not give,
 	// applied the first time a frame is drawn with post-processing on.
 	// - UClient::MaxDistortion (pixels of screen-space distortion; DefaultXbox.ini: 35) is what
 	//   the engine gives its full-screen distortion quad. An ini without the key reads 0,
 	//   which would leave every distortion without displacement.
 	// - UClient::Init sets DynamicGamma = 1 and LuminosityBias = 1 under _XBOX. (DynamicGamma
-	//   already reads True on this build, see the notebook; this makes it deliberate.)
+	//   already reads True on this build; this makes it deliberate.)
 	//   DYNAMICGAMMA 0 / LUMINOSITYBIAS on the console change them afterwards.
 	if( PostProcessActive() && !XboxClientDefaultsApplied )
 	{
@@ -2357,7 +2350,7 @@ void UUC2GLRenderDevice::ReadPixels( UViewport* Viewport, FColor* Pixels )
 	if( !Viewport || !Pixels || !ValidContext )
 		return;
 
-	// G-6: the viewport's rectangle of the frame (all of it for a viewport that is the whole window).
+	// The viewport's rectangle of the frame (all of it for a viewport that is the whole window).
 	INT X0 = Clamp( Viewport->OffsetX, 0, MainWidth ), Y0 = Clamp( Viewport->OffsetY, 0, MainHeight );
 	INT Width = Min( Viewport->SizeX, MainWidth - X0 ), Height = Min( Viewport->SizeY, MainHeight - Y0 );
 	appMemzero( Pixels, sizeof(FColor) * Viewport->SizeX * Viewport->SizeY );
@@ -2389,7 +2382,7 @@ void UUC2GLRenderDevice::ReadPixels( UViewport* Viewport, FColor* Pixels )
 			C.A = 255;
 			if( GShotRamp && PostProcessActive() )
 			{
-				// G-6: the ramp of the split-screen viewport the pixel is in, as the present pass applies it.
+				// The ramp of the split-screen viewport the pixel is in, as the present pass applies it.
 				const BYTE* Ramp = GammaRampActive ? GLastGammaRamp : NULL;
 				for( INT r=0; r<ViewportRamps.Num(); r++ )
 				{
@@ -2417,28 +2410,28 @@ void UUC2GLRenderDevice::SetEmulationMode( EHardwareEmulationMode Mode )
 
 FRenderCaps* UUC2GLRenderDevice::GetRenderCaps()
 {
-	// The engine's terrain code picks its render method from these caps (UnTerrain.cpp). M5 said
-	// one layer per pass, no pixel shader; since M7b the terrain pixel shader is used (below).
+	// The engine's terrain code picks its render method from these caps (UnTerrain.cpp): one layer
+	// per pass without a pixel shader, three with the terrain pixel shader (UseTerrain3Layer, below).
 	RenderCaps.HardwareTL					= 1;
 	RenderCaps.PixelShaderVersion			= 0;
-	// M7b: three when PS_Terrain3Layer is drawn (UseTerrain3Layer): the engine then renders runs
+	// Three when PS_Terrain3Layer is drawn (UseTerrain3Layer): the engine then renders runs
 	// of three opaque layers as one RM_CombinedWeightMap pass (UnTerrain.cpp,
 	// UTerrainSector::GenerateTriangles), as the Xbox build does with its hard-coded 3.
 	RenderCaps.MaxSimultaneousTerrainLayers	= Terrain3LayerActive() ? 3 : 1;
-	// M7: the one capability that lifts the engine's and the game's Xbox-only post-process
-	// paths (docs/porting/analysis/postprocess.md, "Engine gates").
+	// The one capability that lifts the engine's and the game's Xbox-only post-process
+	// paths (RenDevHasXboxPostProcess, UnRenDev.h).
 	RenderCaps.XboxPostProcess				= PostProcessActive() ? 1 : 0;
 	RenderCaps.ShippedDOFBlurAlpha			= DOFShippedBlurAlpha ? 1 : 0;
-	// M7b: the Xbox shadow-texture filter (UnShadowProjector.cpp; analysis/projectors.md).
+	// The Xbox shadow-texture filter (UnShadowProjector.cpp).
 	RenderCaps.XboxShadows					= XboxShadowsActive() ? 1 : 0;
-	// M7b: level-static projectors batched and drawn with the Xbox projector material.
+	// Level-static projectors batched and drawn with the Xbox projector material.
 	RenderCaps.XboxProjectors				= XboxProjectorsActive() ? 1 : 0;
-	// pp-scale: the picture height the camera effects size their blurs for (UnRenderUtil.h,
+	// The picture height the camera effects size their blurs for (UnRenderUtil.h,
 	// GetPostProcessReference).
 	RenderCaps.PostProcessReferenceHeight	= Max( PostProcessReferenceHeight, 0 );
-	// H-1: the blur targets' texels per axis, times the Xbox's: 1, 2 or 4 (3 counts as 2, above 4 as 4).
+	// The blur targets' texels per axis, times the Xbox's: 1, 2 or 4 (3 counts as 2, above 4 as 4).
 	RenderCaps.PostProcessTargetScale		= !PostProcessActive() || PostProcessTargetScale < 2 ? 1 : PostProcessTargetScale < 4 ? 2 : 4;
-	// G-6: dynamic gamma per viewport (UC2GLPostProcess.cpp, SetViewportGammaRamp), with the post-processing.
+	// Dynamic gamma per viewport (UC2GLPostProcess.cpp, SetViewportGammaRamp), with the post-processing.
 	RenderCaps.ViewportDynamicGamma			= PostProcessActive() ? 1 : 0;
 	return &RenderCaps;
 }
@@ -2466,7 +2459,7 @@ UBOOL UUC2GLRenderDevice::Terrain3LayerActive()
 }
 
 //
-// M7b: the engine builds a terrain's passes from the caps when it loads (ATerrainInfo::
+// The engine builds a terrain's passes from the caps when it loads (ATerrainInfo::
 // CheckComputeDataOnLoad -> Update); after the caps change every terrain is updated the same way.
 //
 void UUC2GLRenderDevice::RefreshTerrainPasses()

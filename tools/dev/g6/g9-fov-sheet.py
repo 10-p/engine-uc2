@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""G-9: the split-screen FOV A/B sheets from tools/dev/g6-splitscreen.sh's `fov` part.
+"""The split-screen FOV A/B sheets from tools/dev/g6-splitscreen.sh's `fov` part.
 
     g9-fov-sheet.py <out-dir>
 
-Reads, for the runs g9-fov (default ini) and g9-fovclamp ([ufront.AutoFOV] SplitClampToFullScreen=True):
+Reads, for the runs g9-fov ([ufront.AutoFOV] SplitClampToFullScreen=False) and g9-fovclamp (the default ini, True):
   <run>.out               the engine log: "test: log g9fov <tag>" markers and the "[AutoFOV] shown viewport=<i>
                           rect=X,Y WxH mode=M base=B effective=E scaleFOV=S horizontal=H vertical=V" lines
   <run>-<tag>.png/.json   the picture and the viewports (vprobe) of each tag n<k>-on / n<k>-epic
 Writes <out>/fov-<k>players.png (k = 2, 3, 4): four panels - the single-player reference (AutoFOV on), AutoFOV on
-(today's default), Epic's maths (AutoFOV=0), and the proposal (Hor+ clamped to the full-screen FOV) - with every
+unclamped, Epic's maths (AutoFOV=0), and the default (Hor+ clamped to the full-screen FOV) - with every
 viewport's horizontal x vertical FOV written in it, read from the engine's line in force when the shot was taken.
-Prints the table and compares every logged value with the FOV computed here from the rectangle alone (Hor+ maths of
-D-8, ufrontSplitFovScale of G-6, Epic's ReduceFOV of SplitScreenMgr.uc): a check line per variant.
+Prints the table and compares every logged value with the FOV computed here from the rectangle alone (AutoFOV's Hor+
+maths, ufrontSplitFovScale, Epic's ReduceFOV of SplitScreenMgr.uc): a check line per variant.
 """
 import json, math, os, re, sys
 from PIL import Image, ImageDraw, ImageFont

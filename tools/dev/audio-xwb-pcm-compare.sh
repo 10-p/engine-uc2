@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# M16: the C++ Xbox ADPCM/PCM decoder of UC2ALAudio against tools/uc2xwb.py, byte for byte: every wave of the given
+# The C++ Xbox ADPCM/PCM decoder of UC2ALAudio against tools/uc2xwb.py, byte for byte: every wave of the given
 # banks decoded by `ucc-bin UC2ALAudio.UC2AudioCheck PCM=<dir> PCMBANKS=<a+b+c>` (16-bit little-endian) and by
 # uc2xwb.decode_entry, compared as bytes.
 #

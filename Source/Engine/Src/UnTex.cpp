@@ -181,7 +181,7 @@ UTexture::UTexture()
 		MipZero			= FColor(64,128,64,0);
 		MaxColor		= FColor(255,255,255,255);
 	}
-	LastUpdateTime  = GIsUCC ? 0 : appSeconds();	// H-5: Texture.InternalTime, a saved property: zero in ucc (see PostLoad)
+	LastUpdateTime  = GIsUCC ? 0 : appSeconds();	// Texture.InternalTime, a saved property: zero in ucc (see PostLoad)
 	OLDSpecular		= 1.f;
 
 	unguardobj;
@@ -363,7 +363,7 @@ void UTexture::PostLoad()
 
 	// Init animation.
 	Accumulator = 0;
-	// H-5: in ucc, no clock value in a texture: the constructor's (Texture.InternalTime, a saved property) made a
+	// In ucc, no clock value in a texture: the constructor's (Texture.InternalTime, a saved property) made a
 	// package with an imported texture (GUI.KeyGlyphSheet) differ from build to build; this one is zero there too.
 	// The game ticks it from the first frame as before.
 	SetLastUpdateTime(GIsUCC ? 0 : appSeconds());

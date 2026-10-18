@@ -1,9 +1,9 @@
 /*=============================================================================
-	UC2GL4ESDrv.h: UC2GL4ESDrv.UC2GL4ESRenderDevice, the GL4ES binding of UC2GLDrv (M11).
+	UC2GL4ESDrv.h: UC2GL4ESDrv.UC2GL4ESRenderDevice, the GL4ES binding of UC2GLDrv.
 
 	UUC2GLRenderDevice is the renderer; this subclass only changes what it is bound to
-	(UC2GLBinding.h): an OpenGL ES 2 context (SDL/EGL natively, WebGL 1 in the browser) and
-	GL4ES in front of it. Native Linux carries it as the twin of the web renderer.
+	(UC2GLBinding.h): an OpenGL ES 3 context, ES 2 as the fallback (SDL/EGL natively, WebGL 2 or 1
+	in the browser), and GL4ES in front of it. On Linux it is the -GL4ES device.
 =============================================================================*/
 
 #ifndef _INC_UC2GL4ESDRV
@@ -17,7 +17,7 @@ class UUC2GL4ESRenderDevice : public UUC2GLRenderDevice
 {
 	DECLARE_CLASS(UUC2GL4ESRenderDevice,UUC2GLRenderDevice,CLASS_Config,UC2GL4ESDrv)
 public:
-	// F-3: which OpenGL ES the binding asks for (ini GLESVersion): 3 = OpenGL ES 3.0 / WebGL 2
+	// Which OpenGL ES the binding asks for (ini GLESVersion): 3 = OpenGL ES 3.0 / WebGL 2
 	// (the default), 2 = OpenGL ES 2 / WebGL 1. Where a version-3 context cannot be had, the
 	// binding falls back to 2; GLESMajor (base class) says what was obtained.
 	INT GLESVersion;

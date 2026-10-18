@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
-# G-7 check (native): a launch straight into a map plays the ACTIVE profile's character; [DefaultPlayer] Class only
+# Character check (native): a launch straight into a map plays the active profile's character; [DefaultPlayer] Class only
 # without a profile. Also the web preview's flat profile files (Profiles/<name>.PRO) moved into Epic's folder.
 #
 #   tools/dev/d3-character.sh
 #
-# Needs the native run tree <WorkUC2>/run/g7c (tools/dev/mkrun-uc2.sh build-native g7c; D3C_TREE=<name> to change).
-# Every run is one client under Xvfb inside <WorkUC2>/bin/capped 2G (through tools/dev/m10-controls.sh --file); every
-# run after c0 starts a NEW process on the SAME tree (M10_KEEP=1), i.e. a restart. "Direct" = the map is the game's
+# Needs the native run tree <repo>/../run/g7c (tools/dev/mkrun-uc2.sh build-native g7c; D3C_TREE=<name> to change).
+# Every run is one client under Xvfb inside <repo>/../bin/capped 2G (through tools/dev/m10-controls.sh --file); every
+# run after c0 starts a new process on the same tree (M10_KEEP=1), i.e. a restart. "Direct" = the map is the game's
 # first argument, as the web launcher's Play form starts it (an absolute travel: no menu builds the URL).
-# Output in <WorkUC2>/logs/g7/character/ (D3C_OUT=<dir>): c<N>.out (engine log), c<N>.result, User.ini after each run;
+# Output in <repo>/../logs/g7/character/ (D3C_OUT=<dir>): c<N>.out (engine log), c<N>.result, User.ini after each run;
 # one PASS/FAIL line per check on stdout.
 #
-#   c0   fresh tree, NO profile, direct DM-Deadbolt with -ini:User:[DefaultPlayer]:Class=<Z> (Malcolm): plays Z.
+#   c0   fresh tree, no profile, direct DM-Deadbolt with -ini:User:[DefaultPlayer]:Class=<Z> (Malcolm): plays Z.
 #   c1   menus: create profile "Alpha" (on-screen keyboard), Instant Action, two Rights on the character page (X), play.
 #   c1m  direct: plays X (Alpha's).                       User.ini [DefaultPlayer] Class stays Z after c1 and c1m.
 #   c2   menus: starts in Alpha; create "Bravo", Instant Action, its character page left as it is (Y: a new
 #        profile's default, Anubis; a fresh profile has two characters unlocked, Anubis and Sapphire, and Right
 #        stops at Sapphire: run 2), play.
 #   c2m  direct: plays Y (Bravo's).
-#   c3   menus: starts in Bravo; select Alpha on the Profiles page; quit WITHOUT playing (the BLOCKERS case: before
-#        G-7 the next direct launch took [DefaultPlayer] Class, the class of the last map played = Bravo's).
+#   c3   menus: starts in Bravo; select Alpha on the Profiles page; quit without playing (the next direct launch
+#        must not take [DefaultPlayer] Class, the class of the last map played = Bravo's).
 #   c3m  direct: plays X (Alpha's).
 #   c4m  Profiles/ removed (no profile at all): direct, plays Z (the ini's class, kept through the profile sessions).
 #   c5m  the web preview's flat files: Profiles/Alpha.PRO alone (moved into Profiles/Alpha/, then loaded: plays X),
