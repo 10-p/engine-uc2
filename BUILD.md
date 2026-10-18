@@ -3,20 +3,20 @@
 This is the private engine repo for the Unreal Championship 2 port: engine source only. Game content (maps,
 textures, sounds, movies, the compiled `.u` packages) lives out of tree in the game folder (`<workspace>/assets/uc2-assets`
 here) and is never tracked. One build step reads it: the script patches (below, "Script patches"), which turn the
-game's shipped `.u` into our patched packages; `-DUC2_SCRIPT_PATCHES=OFF` builds without them and reads nothing.
+game's shipped `.u` into our patched packages; `-DUE_SCRIPT_PATCHES=OFF` builds without them and reads nothing.
 Run trees are assembled from a build and the asset tree by `tools/dev/mkrun-uc2.sh`.
 
 ## Quick start
 
 ```
 # Linux, with the game folder (System/ with the 17 shipped .u and Epic's inis, Maps/, Textures/, ...):
-cmake --preset native -DUC2_ASSETS_DIR=/path/to/UC2
+cmake --preset native -DUE_ASSETS_DIR=/path/to/UC2
 cmake --build build-native -j8
 #   -> build-native/Source/SDLLaunch/uc2.bin, build-native/Source/UCC/ucc-bin,
 #      build-native/Scripts/System/{UCGameplay,GUI,UCMenu}.u (the patched script packages)
 
 # the same without the script patches (the game runs the shipped .u; no game folder needed to build):
-cmake --preset native -DUC2_SCRIPT_PATCHES=OFF
+cmake --preset native -DUE_SCRIPT_PATCHES=OFF
 cmake --build build-native -j8
 
 # the web build after it (it takes build-native/Scripts; Emscripten 5.0.7 in the environment, here
@@ -71,7 +71,7 @@ cmake --build build-wasm-perf -j4               # inside bin/capped 6G (CLAUDE.m
 ```
 
 - `scripts/` beside them (T3): the patched script packages (a copy of the build's `Scripts/System`, empty with
-  `UC2_SCRIPT_PATCHES=OFF`), listed in `meta.json` as `"scripts": [{"path": "scripts/GUI.u", "assetPath":
+  `UE_SCRIPT_PATCHES=OFF`), listed in `meta.json` as `"scripts": [{"path": "scripts/GUI.u", "assetPath":
   "System/GUI.u", "size": …, "sha256": "sha256-…"}]`: each replaces the asset tree's file at `assetPath` (the frontend
   overlays them on its manifest, precache and published tree). The artifact relinks when they change.
 - The artifact names are fixed (`SDLLaunch.js`, `.wasm`, `.data`, `meta.json`): the frontend (`ufrontend`,
@@ -87,7 +87,7 @@ cmake --build build-wasm-perf -j4               # inside bin/capped 6G (CLAUDE.m
 - `ucc-bin.js` under Node is the wasm32 test vehicle (`cd <run>/System && node ucc-bin.js verifyclasses`;
   `CENSUS_NODE=1 tools/dev/map-census.sh build-wasm-perf` loads every map).
 
-The three web modes (`UC2_WEB_PERF`, `UC2_WEB_DEBUG`, set by the presets):
+The three web modes (`UE_WEB_PERF`, `UE_WEB_DEBUG`, set by the presets):
 
 | Preset | Compile and link | For |
 |---|---|---|
@@ -193,13 +193,13 @@ tools/dev/m14-scripts-check.sh                            # the game checks on t
   and commit them with the change. `tools/dev/check-headers.sh` (CMake target `check-headers` of the native preset,
   not in ALL) exports and compares: exit 0 current, 1 stale (unified diff printed, also in `<workspace>/logs/hdr/`), 2
   could not run. Both read the build's patched tree `build-*/Scripts/tree` by default (`--classes-root <dir>` for
-  another `<dir>/<Pkg>/Classes`; CMake: `-DUC2_HEADERS_CLASSES_ROOT=<dir>`) and take `--build <dir>`.
+  another `<dir>/<Pkg>/Classes`; CMake: `-DUE_HEADERS_CLASSES_ROOT=<dir>`) and take `--build <dir>`.
   `docs/porting/analysis/headers.md`. A patched tree has only the packages the patches rebuild: the check compiles
   those against the shipped ones (`uc-build.sh --headers`, into `build-*/Scripts/headers`) and compares their
   generated headers, except what the shipped packages do not carry (each class's cpptext, and `struct native` blocks:
   `UStruct::StructFlags` is not saved), which is taken from the committed header (`tools/dev/check-headers-cpptext.py`;
   `regen-headers.sh` keeps them as committed); a changed or added member, function, event, enum or constant is caught.
-  With `-DUC2_SCRIPT_PATCHES=OFF` there is no patched tree: the target says so and fails unless a root is given.
+  With `-DUE_SCRIPT_PATCHES=OFF` there is no patched tree: the target says so and fails unless a root is given.
 - A run tree takes the build's packages (`tools/dev/mkrun-uc2.sh build-native <tree>`). The script patcher leaves
   rebuilt packages alone (it patches only the first-generation shipped files it was made for) and logs
   `ScriptPatcher: <Pkg> ... patch not applied`; the packages that were not rebuilt are the shipped ones and are patched.
@@ -248,12 +248,12 @@ which (`UC2_SCRIPTS=<dir>` takes them from another folder, `UC2_SCRIPTS=none` ke
 
 | Option | Default | Meaning |
 |---|---|---|
-| `UC2_SCRIPT_PATCHES` | ON | OFF: no `Scripts/` at all; the game runs the shipped `.u` (with Epic's load-time patches). Nothing of the game folder is read. |
-| `UC2_SCRIPT_PATCH_SETS` | `default` | the sets to apply, `;` or `,` separated (`patches/sets.txt` names); `default` = those marked `on` there, in its order. Dependencies are enforced (`keys-menu` needs `mouse-look`; everything needs `epic-fixes`) |
-| `UC2_ASSETS_DIR` | empty | the game folder: `System/` (the shipped `.u`, Epic's `DefaultXbox.ini`, `DefUserXbox.ini`, `Default.ini`, `DefUser.ini`, `Localization/`) and the content folders the scripts load (`Textures/`, `StaticMeshes/`, ...); `tools/dev/mkassets-uc2.sh` makes one from Epic's tree. Empty: the `UC2_ASSETS_DIR` environment variable (the dev tools read it too), else `<repo>/../assets/uc2` when it exists (this workspace's layout), else the configure stops and says what to pass. Engine-ut2004 names its game folder the same way (`UT_ASSETS_DIR`) |
-| `UC2_SCRIPT_PACKAGES_DIR` | `UC2_ASSETS_DIR/System` | where the 17 shipped `.u` are, if not in the game folder (e.g. the game folder has rebuilt ones: point this at the disc's `System`) |
-| `UC2_SCRIPT_RETAIL_INIS_DIR` | empty | optional: the retail disc's `System/`; its `Characters.ini`, `Gametypes.ini`, `Maplists.ini` are what the shipped packages' config defaults were stripped with (without it the game folder's are used, and a few config defaults differ from the shipped ones). Empty: `<repo>/../reference/iso-extract/System` when it exists |
-| `UC2_SCRIPTS_DIR` | `build-native/Scripts/System` | non-host presets: the host build's packages (`build-windows/...` on a Windows host). Missing with patches ON: the configure stops ("run the native preset first, or pass UC2_SCRIPTS_DIR, or -DUC2_SCRIPT_PATCHES=OFF") |
+| `UE_SCRIPT_PATCHES` | ON | OFF: no `Scripts/` at all; the game runs the shipped `.u` (with Epic's load-time patches). Nothing of the game folder is read. |
+| `UE_SCRIPT_PATCH_SETS` | `default` | the sets to apply, `;` or `,` separated (`patches/sets.txt` names); `default` = those marked `on` there, in its order. Dependencies are enforced (`keys-menu` needs `mouse-look`; everything needs `epic-fixes`) |
+| `UE_ASSETS_DIR` | empty | the game folder: `System/` (the shipped `.u`, Epic's `DefaultXbox.ini`, `DefUserXbox.ini`, `Default.ini`, `DefUser.ini`, `Localization/`) and the content folders the scripts load (`Textures/`, `StaticMeshes/`, ...); `tools/dev/mkassets-uc2.sh` makes one from Epic's tree. Empty: the `UC2_ASSETS_DIR` environment variable (the dev tools read it too), else `<repo>/../assets/uc2` when it exists (this workspace's layout), else the configure stops and says what to pass. Engine-ut2004 names its game folder the same way (`UT_ASSETS_DIR`) |
+| `UE_SCRIPT_PACKAGES_DIR` | `UE_ASSETS_DIR/System` | where the 17 shipped `.u` are, if not in the game folder (e.g. the game folder has rebuilt ones: point this at the disc's `System`) |
+| `UE_SCRIPT_RETAIL_INIS_DIR` | empty | optional: the retail disc's `System/`; its `Characters.ini`, `Gametypes.ini`, `Maplists.ini` are what the shipped packages' config defaults were stripped with (without it the game folder's are used, and a few config defaults differ from the shipped ones). Empty: `<repo>/../reference/iso-extract/System` when it exists |
+| `UE_SCRIPTS_DIR` | `build-native/Scripts/System` | non-host presets: the host build's packages (`build-windows/...` on a Windows host). Missing with patches ON: the configure stops ("run the native preset first, or pass UE_SCRIPTS_DIR, or -DUE_SCRIPT_PATCHES=OFF") |
 
 - Every error stops the **configure** with what to do: no game folder, a rebuilt package in it (named, with its
   sha256 and the shipped one), an unknown set or a missing dependency, no Python/bash, no host packages.
@@ -267,7 +267,7 @@ which (`UC2_SCRIPTS=<dir>` takes them from another folder, `UC2_SCRIPTS=none` ke
   edit|make <set>`).
 - `check-headers` (below) defaults to the build's patched tree.
 - Windows host (MSYS2 `mingw32` shell, not run yet): the same commands with `cmake --preset windows
-  -DUC2_ASSETS_DIR=C:/path/to/UC2`; `uc-build.sh` runs `ucc.exe` under MSYS2's bash, and links the content folders into
+  -DUE_ASSETS_DIR=C:/path/to/UC2`; `uc-build.sh` runs `ucc.exe` under MSYS2's bash, and links the content folders into
   its work tree with `ln -s` (set `MSYS=winsymlinks:nativestrict` with Developer Mode, or it copies them).
 - Notebook: `docs/porting/analysis/script-build-rules.md`.
 
@@ -275,12 +275,12 @@ which (`UC2_SCRIPTS=<dir>` takes them from another folder, `UC2_SCRIPTS=none` ke
 
 | Option | Default | Meaning |
 |---|---|---|
-| `UC2_ALLOW_64BIT` | OFF | build x86_64 instead of demoting to `-m32` |
-| `UC2_UNSIGNED_CHAR_AUDIT` | OFF | `-funsigned-char` instead of `-fsigned-char` (audit build) |
-| `UC2_SANITIZE` | empty | `-fsanitize=` list, e.g. `address,undefined` |
-| `UC2_WEB_PERF`, `UC2_WEB_DEBUG` | OFF | the three web build modes (see the presets) |
-| `UC2_SCRIPT_PATCHES`, `UC2_SCRIPT_PATCH_SETS`, `UC2_ASSETS_DIR`, `UC2_SCRIPT_PACKAGES_DIR`, `UC2_SCRIPT_RETAIL_INIS_DIR`, `UC2_SCRIPTS_DIR` | see "Script patches" | the patched script packages |
-| `UC2_HEADERS_CLASSES_ROOT` | empty | `check-headers`' script sources (default: the build's `Scripts/tree`; with the patches OFF, `Source/`) |
+| `UE_ALLOW_64BIT` | OFF | build x86_64 instead of demoting to `-m32` |
+| `UE_UNSIGNED_CHAR_AUDIT` | OFF | `-funsigned-char` instead of `-fsigned-char` (audit build) |
+| `UE_SANITIZE` | empty | `-fsanitize=` list, e.g. `address,undefined` |
+| `UE_WEB_PERF`, `UE_WEB_DEBUG` | OFF | the three web build modes (see the presets) |
+| `UE_SCRIPT_PATCHES`, `UE_SCRIPT_PATCH_SETS`, `UE_ASSETS_DIR`, `UE_SCRIPT_PACKAGES_DIR`, `UE_SCRIPT_RETAIL_INIS_DIR`, `UE_SCRIPTS_DIR` | see "Script patches" | the patched script packages |
+| `UE_HEADERS_CLASSES_ROOT` | empty | `check-headers`' script sources (default: the build's `Scripts/tree`; with the patches OFF, `Source/`) |
 
 ## Things that are fixed on purpose
 

@@ -5,7 +5,7 @@
 # only supplies what a cross build cannot infer.
 #
 # 32-bit (i686) by default, matching this engine's Linux and web builds (CMakeLists.txt demotes an x86_64
-# compiler to -m32 and defines PLATFORM_32BIT); MINGW_TARGET_ARCH=x86_64 (preset windows64, UC2_ALLOW_64BIT)
+# compiler to -m32 and defines PLATFORM_32BIT); MINGW_TARGET_ARCH=x86_64 (preset windows64, UE_ALLOW_64BIT)
 # builds the 64-bit program.
 #
 # Usage: `cmake --preset windows` (the preset points here). Standalone:

@@ -1,5 +1,5 @@
 # engine-uc2 holds the PORT SOURCE only. Game content lives out of tree in <WorkUC2>/assets/uc2
-# (UC2_ASSETS_DIR) and is never tracked here.
+# (UE_ASSETS_DIR) and is never tracked here.
 
 # CMake build trees, one per preset. Regenerable; includes FetchContent checkouts under build-*/_deps/.
 /build/

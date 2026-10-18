@@ -2,7 +2,7 @@
 # UC2Scripts.cmake -- the patched script packages as part of the build.
 #
 # The game's logic is UnrealScript compiled into the 17 .u packages of the game's System folder. This repo holds no
-# script, only patch sets (patches/, patches/README.md). With UC2_SCRIPT_PATCHES ON (the default) the build turns
+# script, only patch sets (patches/, patches/README.md). With UE_SCRIPT_PATCHES ON (the default) the build turns
 # the user's shipped .u into text, applies the chosen sets and compiles the packages they change:
 #
 #   host preset (the build runs its own ucc: native Linux; MinGW i686 on a Windows host)
@@ -11,22 +11,22 @@
 #     Scripts/work/                tools/scripts/uc-build.sh's work tree (ucc make + stripsource, its logs)
 #     Scripts/System/<Pkg>.u       the result: only the packages the sets rebuild
 #   other presets (wasm*, windows/windows64 from Linux, native64*, arm64): Scripts/System/ is a verified copy of the
-#     host build's (UC2_SCRIPTS_DIR); the web artifact carries it (Source/SDLLaunch/cmake/Web.cmake).
+#     host build's (UE_SCRIPTS_DIR); the web artifact carries it (Source/SDLLaunch/cmake/Web.cmake).
 #
 # OFF: nothing is produced (no Scripts/ folder) and the game runs the shipped .u (plus Epic's load-time patches).
 # Run trees take Scripts/System/*.u (tools/dev/mkrun-uc2.sh). BUILD.md ("Script patches").
 #=============================================================================
 
-option(UC2_SCRIPT_PATCHES "Build the patched script packages (patches/) into <build>/Scripts/System; OFF: the shipped .u only" ON)
-set(UC2_SCRIPT_PATCH_SETS "default" CACHE STRING
+option(UE_SCRIPT_PATCHES "Build the patched script packages (patches/) into <build>/Scripts/System; OFF: the shipped .u only" ON)
+set(UE_SCRIPT_PATCH_SETS "default" CACHE STRING
     "Script patch sets to apply, a ;- or ,-separated list of patches/sets.txt names (default: the sets marked on there)")
-set(UC2_ASSETS_DIR "" CACHE PATH
+set(UE_ASSETS_DIR "" CACHE PATH
     "The game folder: System/ (the shipped .u and Epic's inis) and the content folders (Textures/, StaticMeshes/, ...)")
-set(UC2_SCRIPT_PACKAGES_DIR "" CACHE PATH
-    "The 17 shipped script packages (default: UC2_ASSETS_DIR/System)")
-set(UC2_SCRIPT_RETAIL_INIS_DIR "" CACHE PATH
+set(UE_SCRIPT_PACKAGES_DIR "" CACHE PATH
+    "The 17 shipped script packages (default: UE_ASSETS_DIR/System)")
+set(UE_SCRIPT_RETAIL_INIS_DIR "" CACHE PATH
     "Optional: the retail disc's System/ (Characters.ini, Gametypes.ini, Maplists.ini for the strip; default: the game folder's)")
-set(UC2_SCRIPTS_DIR "" CACHE PATH
+set(UE_SCRIPTS_DIR "" CACHE PATH
     "Non-host presets: the host build's Scripts/System (default: build-native/Scripts/System; build-windows/... on a Windows host)")
 
 set(UC2_SCRIPTS_OUT "${CMAKE_BINARY_DIR}/Scripts")
@@ -52,7 +52,7 @@ endif()
 # The web artifact (Source/SDLLaunch/cmake/Web.cmake) copies Scripts/System when SDLLaunch links: relink when the
 # packages change (the stamp) or the mode does (this file is rewritten only when its content changes). Every branch
 # below defines the target `scripts`.
-set(_mode "patches=${UC2_SCRIPT_PATCHES} sets=${UC2_SCRIPT_PATCH_SETS} host=${UC2_SCRIPTS_HOST} dir=${UC2_SCRIPTS_DIR}\n")
+set(_mode "patches=${UE_SCRIPT_PATCHES} sets=${UE_SCRIPT_PATCH_SETS} host=${UC2_SCRIPTS_HOST} dir=${UE_SCRIPTS_DIR}\n")
 set(_mode_file "${CMAKE_BINARY_DIR}/CMakeFiles/uc2-scripts-mode.txt")
 set(_old_mode "")
 if(EXISTS "${_mode_file}")
@@ -64,19 +64,19 @@ endif()
 if(EMSCRIPTEN AND TARGET SDLLaunch)
   add_dependencies(SDLLaunch scripts)
   set_property(TARGET SDLLaunch APPEND PROPERTY LINK_DEPENDS "${_mode_file}")
-  if(UC2_SCRIPT_PATCHES)
+  if(UE_SCRIPT_PATCHES)
     set_property(TARGET SDLLaunch APPEND PROPERTY LINK_DEPENDS "${UC2_SCRIPTS_STAMP}")
   endif()
 endif()
 
-if(NOT UC2_SCRIPT_PATCHES)
+if(NOT UE_SCRIPT_PATCHES)
   # Vanilla: nothing produced, and nothing left over from an earlier patched configure of this build directory
   # (a run tree or the web artifact would pick it up).
   if(EXISTS "${UC2_SCRIPTS_OUT}")
     file(REMOVE_RECURSE "${UC2_SCRIPTS_OUT}")
   endif()
   message(STATUS "Script patches: OFF (the game runs the shipped .u)")
-  add_custom_target(scripts COMMAND ${CMAKE_COMMAND} -E echo "scripts: UC2_SCRIPT_PATCHES is OFF, nothing to build")
+  add_custom_target(scripts COMMAND ${CMAKE_COMMAND} -E echo "scripts: UE_SCRIPT_PATCHES is OFF, nothing to build")
   return()
 endif()
 
@@ -86,7 +86,7 @@ file(MAKE_DIRECTORY "${UC2_SCRIPTS_OUT}/stamp")
 # Not the host: copy (and check) the host build's packages.
 #-----------------------------------------------------------------------------
 if(NOT UC2_SCRIPTS_HOST)
-  set(_dir "${UC2_SCRIPTS_DIR}")
+  set(_dir "${UE_SCRIPTS_DIR}")
   if(NOT _dir)
     if(CMAKE_HOST_WIN32)
       set(_dir "${CMAKE_SOURCE_DIR}/build-windows/Scripts/System")
@@ -100,7 +100,7 @@ if(NOT UC2_SCRIPTS_HOST)
       "Script patches are ON, and this preset cannot compile scripts itself: it takes the packages the host preset\n"
       "built, and there are none in ${_dir}.\n"
       "Run the native preset first (cmake --preset native && cmake --build build-native; on a Windows host the\n"
-      "windows preset), or pass -DUC2_SCRIPTS_DIR=<a host build's Scripts/System>, or -DUC2_SCRIPT_PATCHES=OFF.")
+      "windows preset), or pass -DUE_SCRIPTS_DIR=<a host build's Scripts/System>, or -DUE_SCRIPT_PATCHES=OFF.")
   endif()
   set(_info "")
   if(EXISTS "${_dir}/../build-info.txt")
@@ -113,7 +113,7 @@ if(NOT UC2_SCRIPTS_HOST)
   endif()
   # Always runs (the host build may have changed); the stamp moves only when the copy changed.
   add_custom_target(scripts ALL
-    COMMAND ${CMAKE_COMMAND} -DUC2_CHECK=copy -DSRC=${_dir} -DDST=${UC2_SCRIPTS_SYSTEM} -DSTAMP=${UC2_SCRIPTS_STAMP}
+    COMMAND ${CMAKE_COMMAND} -DUE_CHECK=copy -DSRC=${_dir} -DDST=${UC2_SCRIPTS_SYSTEM} -DSTAMP=${UC2_SCRIPTS_STAMP}
             -DREQUIRE=1 -P ${CMAKE_SOURCE_DIR}/cmake/UC2ScriptsCheck.cmake
     BYPRODUCTS ${UC2_SCRIPTS_STAMP}
     COMMENT "Script packages from the host build"
@@ -124,15 +124,15 @@ endif()
 #-----------------------------------------------------------------------------
 # Host: decompile, apply, build.
 #-----------------------------------------------------------------------------
-set(_help "Pass the game folder: -DUC2_ASSETS_DIR=<dir> (its System/ holds the shipped .u and Epic's inis, beside it ")
+set(_help "Pass the game folder: -DUE_ASSETS_DIR=<dir> (its System/ holds the shipped .u and Epic's inis, beside it ")
 string(APPEND _help "the content folders Textures/, StaticMeshes/, ...: tools/dev/mkassets-uc2.sh makes one), or build ")
-string(APPEND _help "without the script patches: -DUC2_SCRIPT_PATCHES=OFF.")
+string(APPEND _help "without the script patches: -DUE_SCRIPT_PATCHES=OFF.")
 
 # The game folder: the cache variable, else the environment variable the dev tools read (tools/dev/mkrun-uc2.sh),
 # else the workspace beside the repo: WorkUnreal's cooked tree (<repo>/../assets/uc2-assets), else the UC2
 # workspace's layout (<repo>/../assets/uc2), when one is there.
-set(_assets "${UC2_ASSETS_DIR}")
-set(_from "UC2_ASSETS_DIR")
+set(_assets "${UE_ASSETS_DIR}")
+set(_from "UE_ASSETS_DIR")
 if(NOT _assets AND DEFINED ENV{UC2_ASSETS_DIR})
   set(_assets "$ENV{UC2_ASSETS_DIR}")
   set(_from "the UC2_ASSETS_DIR environment variable")
@@ -153,11 +153,11 @@ foreach(_f DefaultXbox.ini DefUserXbox.ini Default.ini DefUser.ini)
     message(FATAL_ERROR "Script patches: ${_assets} (${_from}) is not a game folder: no System/${_f}.\n${_help}")
   endif()
 endforeach()
-set(_shipped "${UC2_SCRIPT_PACKAGES_DIR}")
+set(_shipped "${UE_SCRIPT_PACKAGES_DIR}")
 if(NOT _shipped)
   set(_shipped "${_assets}/System")
 endif()
-set(_retail "${UC2_SCRIPT_RETAIL_INIS_DIR}")
+set(_retail "${UE_SCRIPT_RETAIL_INIS_DIR}")
 # The retail disc's System/: WorkUnreal's retail tree, else the UC2 workspace's ISO extract.
 if(NOT _retail AND EXISTS "${CMAKE_SOURCE_DIR}/../assets/uc2-retail-assets/System/Gametypes.ini")
   get_filename_component(_retail "${CMAKE_SOURCE_DIR}/../assets/uc2-retail-assets/System" ABSOLUTE)
@@ -168,7 +168,7 @@ endif()
 if(_retail)
   foreach(_f Characters.ini Gametypes.ini Maplists.ini)
     if(NOT EXISTS "${_retail}/${_f}")
-      message(FATAL_ERROR "Script patches: UC2_SCRIPT_RETAIL_INIS_DIR=${_retail} has no ${_f} (the retail disc's System/)")
+      message(FATAL_ERROR "Script patches: UE_SCRIPT_RETAIL_INIS_DIR=${_retail} has no ${_f} (the retail disc's System/)")
     endif()
   endforeach()
 else()
@@ -184,16 +184,16 @@ endif()
 
 find_package(Python3 COMPONENTS Interpreter)
 if(NOT Python3_Interpreter_FOUND)
-  message(FATAL_ERROR "Script patches need Python 3 (tools/scripts/*.py): install it, or -DUC2_SCRIPT_PATCHES=OFF.")
+  message(FATAL_ERROR "Script patches need Python 3 (tools/scripts/*.py): install it, or -DUE_SCRIPT_PATCHES=OFF.")
 endif()
-find_program(UC2_BASH bash)
-if(NOT UC2_BASH)
-  message(FATAL_ERROR "Script patches need bash (tools/scripts/uc-build.sh; on Windows: MSYS2), or -DUC2_SCRIPT_PATCHES=OFF.")
+find_program(UE_BASH bash)
+if(NOT UE_BASH)
+  message(FATAL_ERROR "Script patches need bash (tools/scripts/uc-build.sh; on Windows: MSYS2), or -DUE_SCRIPT_PATCHES=OFF.")
 endif()
 set(_tools ${CMAKE_SOURCE_DIR}/tools/scripts)
 
 # The sets, resolved and checked by uc-patches.py (order and dependencies are patches/sets.txt's).
-string(REPLACE ";" "," _req "${UC2_SCRIPT_PATCH_SETS}")
+string(REPLACE ";" "," _req "${UE_SCRIPT_PATCH_SETS}")
 string(STRIP "${_req}" _req)
 if(_req STREQUAL "default" OR _req STREQUAL "")
   set(_sel --default)
@@ -203,7 +203,7 @@ endif()
 execute_process(COMMAND ${Python3_EXECUTABLE} ${_tools}/uc-patches.py sets ${_sel}
   RESULT_VARIABLE _rc OUTPUT_VARIABLE _sets ERROR_VARIABLE _err OUTPUT_STRIP_TRAILING_WHITESPACE)
 if(NOT _rc EQUAL 0)
-  message(FATAL_ERROR "UC2_SCRIPT_PATCH_SETS=${UC2_SCRIPT_PATCH_SETS}: ${_err}")
+  message(FATAL_ERROR "UE_SCRIPT_PATCH_SETS=${UE_SCRIPT_PATCH_SETS}: ${_err}")
 endif()
 execute_process(COMMAND ${Python3_EXECUTABLE} ${_tools}/uc-patches.py packages --sets ${_sets} --compile-list ${_shipped}
   RESULT_VARIABLE _rc OUTPUT_VARIABLE _out ERROR_VARIABLE _err OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -258,7 +258,7 @@ endforeach()
 
 # 1. The shipped input, checked again at build time (a file replaced after the configure).
 add_custom_command(OUTPUT ${_stamps}/shipped.stamp
-  COMMAND ${CMAKE_COMMAND} -DUC2_CHECK=shipped -DDIR=${_shipped} -DSUMS=${CMAKE_SOURCE_DIR}/patches/shipped.sha256
+  COMMAND ${CMAKE_COMMAND} -DUE_CHECK=shipped -DDIR=${_shipped} -DSUMS=${CMAKE_SOURCE_DIR}/patches/shipped.sha256
           "-DPACKAGES=${UC2_SCRIPT_PACKAGES_ALL}" -P ${CMAKE_SOURCE_DIR}/cmake/UC2ScriptsCheck.cmake
   COMMAND ${CMAKE_COMMAND} -E touch ${_stamps}/shipped.stamp
   DEPENDS ${_shipped_files} ${CMAKE_SOURCE_DIR}/patches/shipped.sha256 ${CMAKE_SOURCE_DIR}/cmake/UC2ScriptsCheck.cmake
@@ -323,7 +323,7 @@ if(NOT _retail STREQUAL "none")
   endforeach()
 endif()
 add_custom_command(OUTPUT ${_stamps}/build.stamp ${_outputs}
-  COMMAND ${UC2_BASH} ${_tools}/uc-build.sh --classes ${UC2_SCRIPTS_OUT}/tree --out ${UC2_SCRIPTS_OUT}/work
+  COMMAND ${UE_BASH} ${_tools}/uc-build.sh --classes ${UC2_SCRIPTS_OUT}/tree --out ${UC2_SCRIPTS_OUT}/work
           --packages ${_compile_c} --keep ${_keep_c} --shipped ${_shipped} --assets ${_assets}
           --retail-inis ${_retail} --ucc $<TARGET_FILE:UCC> --capped ${_capped}
   COMMAND ${CMAKE_COMMAND} -E make_directory ${UC2_SCRIPTS_SYSTEM}
@@ -338,7 +338,7 @@ set(UC2_SCRIPTS_TREE "${UC2_SCRIPTS_OUT}/tree")
 # The bytecode proofs of the pipeline (tools/scripts/uc-patches-proof.sh; minutes; not part of ALL).
 if(NOT CMAKE_HOST_WIN32)
   add_custom_target(scripts-proof
-    COMMAND ${UC2_BASH} ${_tools}/uc-patches-proof.sh --work ${UC2_SCRIPTS_OUT}/proof --shipped ${_shipped}
+    COMMAND ${UE_BASH} ${_tools}/uc-patches-proof.sh --work ${UC2_SCRIPTS_OUT}/proof --shipped ${_shipped}
             --assets ${_assets} --retail-inis ${_retail} --ucc $<TARGET_FILE:UCC> --capped ${_capped}
     DEPENDS UCC
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}

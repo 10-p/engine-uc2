@@ -59,7 +59,7 @@ if [ ! -x "$build/Source/UCC/ucc-bin" ] || [ ! -d "$build/Source/Editor" ]; then
 fi
 if [ -z "$classes_root" ]; then
   classes_root=$build/Scripts/tree
-  [ -d "$classes_root" ] || { echo "check-headers: no patched script tree at $classes_root: build the scripts first (cmake --build $build --target scripts; configured with UC2_SCRIPT_PATCHES ON), or pass --classes-root <dir> (<dir>/<Pkg>/Classes)" >&2; exit 2; }
+  [ -d "$classes_root" ] || { echo "check-headers: no patched script tree at $classes_root: build the scripts first (cmake --build $build --target scripts; configured with UE_SCRIPT_PATCHES ON), or pass --classes-root <dir> (<dir>/<Pkg>/Classes)" >&2; exit 2; }
 fi
 [ -d "$classes_root" ] || { echo "check-headers: no script sources at $classes_root" >&2; exit 2; }
 classes_root=$(cd "$classes_root" && pwd)

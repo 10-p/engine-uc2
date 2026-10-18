@@ -16,8 +16,8 @@ describe it (`bin/setup.sh` on a new machine). `$W` below is `/home/ion/WorkUnre
 | `engine-uc2/` | this repo | GitHub `10-p/engine-uc2` (private, `origin`); history rewritten 2026-10-11 (no UnrealScript sources) |
 | `unreal-frontend-arch-private/` | the frontend (`main`), target `uc2` | no push without the owner's go-ahead |
 | `emsdk/` | Emscripten 5.0.7 | `source ../env.sh` |
-| `assets/uc2-assets/` | the cooked asset tree: the game folder (`UC2_ASSETS_DIR`) and what the frontend target serves | an overlay mount of the workspace's read-only image (`assets/mount-assets.sh`); never committed anywhere |
-| `assets/uc2-retail-assets/` | the retail disc's files (its `System/` holds the 17 shipped `.u`, `Characters/Gametypes/Maplists.ini`; `Sounds/` the Xbox banks) | read-only; the script build reads only its three inis (`UC2_SCRIPT_RETAIL_INIS_DIR`) |
+| `assets/uc2-assets/` | the cooked asset tree: the game folder (`UE_ASSETS_DIR`) and what the frontend target serves | an overlay mount of the workspace's read-only image (`assets/mount-assets.sh`); never committed anywhere |
+| `assets/uc2-retail-assets/` | the retail disc's files (its `System/` holds the 17 shipped `.u`, `Characters/Gametypes/Maplists.ini`; `Sounds/` the Xbox banks) | read-only; the script build reads only its three inis (`UE_SCRIPT_RETAIL_INIS_DIR`) |
 | `bin/capped`, `bin/mem-watchdog` | the memory ceiling and its watchdog (below) | every heavy run |
 | `run/`, `logs/` | run trees (`tools/dev/mkrun-uc2.sh`, or the workspace's `bin/mkruntree.sh <name> uc2 <build>`) and tool logs | scratch |
 | `/home/ion/WorkUC2` | the port's original workspace: `epic-sources/` (Epic's pristine leaked tree, `reference/epic-sources.sha256`) and `reference/` (ISOs, Xbox SDKs, community packs, the owner's brief) | read-only, never copied; a separate home may host long-term specialised work. Only the tools built on Epic's leaked text need it (`tools/dev/script-build.sh`, the Engine part of `uc-patches-proof.sh` P1, `mkassets-uc2.sh`, `import-epic-sources.py`, the report tools): point them at it explicitly; no build, test or publish reads it |

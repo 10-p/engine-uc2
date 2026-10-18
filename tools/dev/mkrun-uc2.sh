@@ -103,7 +103,7 @@ cp -f "$repo"/Engine/Config/*.ini "$run/System/"
 # Script packages built from source over the asset tree's:
 # - the build's own, <build-dir>/Scripts/System/*.u (the `scripts` target: the shipped .u decompiled, patches/
 #   applied, compiled; only the packages the patch sets rebuild are there). Present unless the build was configured
-#   with -DUC2_SCRIPT_PATCHES=OFF.
+#   with -DUE_SCRIPT_PATCHES=OFF.
 # - UC2_SCRIPTS=<dir> takes them from <dir> instead (e.g. tools/dev/script-build.sh's <repo>/../run/m14-make/System,
 #   or <repo>/../assets/uc2-shipped/System); UC2_SCRIPTS=none: none at all (the asset tree's .u, a "shipped" tree).
 scripts_dir=${UC2_SCRIPTS:-}

@@ -7,7 +7,7 @@
 # and for the client (SDL2's X11/GL probes, fetched SDL2 is built from source): the arm64 X11/GL development
 # packages through multiarch (`dpkg --add-architecture arm64`; libx11-dev:arm64 libxext-dev:arm64
 # libgl-dev:arm64 ...). char is unsigned on arm: the build keeps
-# -fsigned-char (CMakeLists.txt), and the x86_64 -funsigned-char audit build (UC2_UNSIGNED_CHAR_AUDIT) is what
+# -fsigned-char (CMakeLists.txt), and the x86_64 -funsigned-char audit build (UE_UNSIGNED_CHAR_AUDIT) is what
 # shows the code does not depend on it.
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)

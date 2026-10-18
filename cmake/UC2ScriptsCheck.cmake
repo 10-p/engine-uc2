@@ -2,9 +2,9 @@
 # Included by cmake/UC2Scripts.cmake at configure time, and run with `cmake -P` by the build (so a file replaced
 # after the configure is caught too):
 #
-#   cmake -DUC2_CHECK=shipped -DDIR=<System> -DSUMS=<patches/shipped.sha256> -DPACKAGES=A;B;... -P UC2ScriptsCheck.cmake
+#   cmake -DUE_CHECK=shipped -DDIR=<System> -DSUMS=<patches/shipped.sha256> -DPACKAGES=A;B;... -P UC2ScriptsCheck.cmake
 #       every <DIR>/<Pkg>.u of PACKAGES must be the shipped file (sha256 listed in SUMS)
-#   cmake -DUC2_CHECK=copy -DSRC=<dir> -DDST=<dir> [-DSTAMP=<file>] [-DREQUIRE=1] -P UC2ScriptsCheck.cmake
+#   cmake -DUE_CHECK=copy -DSRC=<dir> -DDST=<dir> [-DSTAMP=<file>] [-DREQUIRE=1] -P UC2ScriptsCheck.cmake
 #       mirror SRC/*.u into DST (each must be an Unreal package; files of DST not in SRC are removed; a missing SRC
 #       empties DST unless REQUIRE); STAMP is touched only when something in DST changed
 cmake_minimum_required(VERSION 3.21)
@@ -40,9 +40,9 @@ function(uc2_scripts_check_shipped dir sums packages out)
     string(APPEND _msg "the same files as Epic's System folder), and these are not:\n${_bad}\n")
     string(APPEND _msg "A package rebuilt from source (for example one an earlier patched build installed into the game ")
     string(APPEND _msg "folder, see System/SCRIPTS.txt there) cannot be the base: decompiling it would apply the patches ")
-    string(APPEND _msg "twice.\n\nPut the shipped files back (from the disc), or point -DUC2_SCRIPT_PACKAGES_DIR=<dir> at a ")
+    string(APPEND _msg "twice.\n\nPut the shipped files back (from the disc), or point -DUE_SCRIPT_PACKAGES_DIR=<dir> at a ")
     string(APPEND _msg "folder holding the 17 shipped .u files, or build without the script patches: ")
-    string(APPEND _msg "-DUC2_SCRIPT_PATCHES=OFF.\n\nThe shipped checksums are patches/shipped.sha256 (`sha256sum -c` in ")
+    string(APPEND _msg "-DUE_SCRIPT_PATCHES=OFF.\n\nThe shipped checksums are patches/shipped.sha256 (`sha256sum -c` in ")
     string(APPEND _msg "the System folder checks them).")
   endif()
   set(${out} "${_msg}" PARENT_SCOPE)
@@ -102,12 +102,12 @@ function(uc2_scripts_mirror src dst require changed err)
   set(${err} "" PARENT_SCOPE)
 endfunction()
 
-if(CMAKE_SCRIPT_MODE_FILE AND UC2_CHECK STREQUAL "shipped")
+if(CMAKE_SCRIPT_MODE_FILE AND UE_CHECK STREQUAL "shipped")
   uc2_scripts_check_shipped("${DIR}" "${SUMS}" "${PACKAGES}" _m)
   if(_m)
     message(FATAL_ERROR "${_m}")
   endif()
-elseif(CMAKE_SCRIPT_MODE_FILE AND UC2_CHECK STREQUAL "copy")
+elseif(CMAKE_SCRIPT_MODE_FILE AND UE_CHECK STREQUAL "copy")
   if(REQUIRE)
     set(_req 1)
   else()
@@ -116,7 +116,7 @@ elseif(CMAKE_SCRIPT_MODE_FILE AND UC2_CHECK STREQUAL "copy")
   uc2_scripts_mirror("${SRC}" "${DST}" ${_req} _ch _e)
   if(_e)
     message(FATAL_ERROR "scripts: ${_e}\nRun the host preset first (cmake --build build-native), pass "
-                        "-DUC2_SCRIPTS_DIR=<its Scripts/System>, or configure with -DUC2_SCRIPT_PATCHES=OFF.")
+                        "-DUE_SCRIPTS_DIR=<its Scripts/System>, or configure with -DUE_SCRIPT_PATCHES=OFF.")
   endif()
   file(GLOB _now LIST_DIRECTORIES false "${DST}/*.u")
   list(LENGTH _now _n)

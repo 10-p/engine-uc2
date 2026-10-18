@@ -53,7 +53,7 @@ const deps = Object.fromEntries(
 
 // The script packages the build compiled from the patch sets (Web.cmake mirrors the build's Scripts/System into
 // <out>/<--scripts>/). Each entry replaces the asset tree's file at `assetPath` (<--scripts-under>/<name>): the
-// frontend overlays them on the manifest, the precache and the published tree. An empty list (UC2_SCRIPT_PATCHES OFF,
+// frontend overlays them on the manifest, the precache and the published tree. An empty list (UE_SCRIPT_PATCHES OFF,
 // or no --scripts) means the shipped packages. `sha256` is in the `checksums` form.
 const scripts = [];
 if (args.scripts && existsSync(join(dir, args.scripts))) {

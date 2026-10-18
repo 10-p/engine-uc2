@@ -26,9 +26,9 @@ endif()
 # Options
 #-----------------------------------------------------------------------------
 
-option(UC2_ALLOW_64BIT "Build x86_64 instead of demoting to -m32 (32-bit is the default; it matches wasm32)" OFF)
-option(UC2_WEB_PERF    "Emscripten: shipping build -- -O3, no assertions, no debug info" OFF)
-option(UC2_WEB_DEBUG   "Emscripten: -O0 instead of the -O2 dev default" OFF)
+option(UE_ALLOW_64BIT "Build x86_64 instead of demoting to -m32 (32-bit is the default; it matches wasm32)" OFF)
+option(UE_WEB_PERF    "Emscripten: shipping build -- -O3, no assertions, no debug info" OFF)
+option(UE_WEB_DEBUG   "Emscripten: -O0 instead of the -O2 dev default" OFF)
 
 # Every package is a static library: Epic's own __STATIC_LINK scheme, the one the Xbox XBE used.
 set(LIB_TYPE STATIC)
@@ -60,12 +60,12 @@ endif()
 set(UC2_PTR_BYTES ${CMAKE_SIZEOF_VOID_P})
 if(EMSCRIPTEN)
   set(UC2_PTR_BYTES 4)
-elseif(TARGET_IS_X86 AND NOT UC2_ALLOW_64BIT)
+elseif(TARGET_IS_X86 AND NOT UE_ALLOW_64BIT)
   set(UC2_PTR_BYTES 4)
 endif()
 message(STATUS "Target arch: ${TARGET_ARCH}; pointer width: ${UC2_PTR_BYTES} bytes")
 
-if(NOT EMSCRIPTEN AND TARGET_IS_X86 AND TARGET_IS_64BIT AND NOT UC2_ALLOW_64BIT)
+if(NOT EMSCRIPTEN AND TARGET_IS_X86 AND TARGET_IS_64BIT AND NOT UE_ALLOW_64BIT)
   message(STATUS "Building x86 binary with x86_64 compiler (-m32)")
   set(TARGET_IS_64BIT FALSE)
   set(TARGET_ARCH "x86")
@@ -126,15 +126,15 @@ add_definitions(-DSUPPORTS_PRAGMA_PACK=1)
 # Sanitizer builds (preset native64-asan). -fno-sanitize=vptr,alignment: UE's placement construction of
 # objects trips UBSan's vptr check at start-up, and the script mirrors are pack(4) on purpose (8-byte pointers on
 # 4-byte boundaries). The engine allocator is plain malloc on Linux (FMallocAnsi), so ASan sees every block.
-set(UC2_SANITIZE "" CACHE STRING "-fsanitize= list for every target, e.g. address,undefined (empty: none)")
-if(UC2_SANITIZE)
-  add_compile_options(-fsanitize=${UC2_SANITIZE} -fno-sanitize=vptr,alignment -fno-omit-frame-pointer)
-  add_link_options(-fsanitize=${UC2_SANITIZE} -fno-sanitize=vptr,alignment)
+set(UE_SANITIZE "" CACHE STRING "-fsanitize= list for every target, e.g. address,undefined (empty: none)")
+if(UE_SANITIZE)
+  add_compile_options(-fsanitize=${UE_SANITIZE} -fno-sanitize=vptr,alignment -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=${UE_SANITIZE} -fno-sanitize=vptr,alignment)
 endif()
-option(UC2_UNSIGNED_CHAR_AUDIT "Build with -funsigned-char (arm64's char) instead of -fsigned-char" OFF)
-if(UC2_UNSIGNED_CHAR_AUDIT)
+option(UE_UNSIGNED_CHAR_AUDIT "Build with -funsigned-char (arm64's char) instead of -fsigned-char" OFF)
+if(UE_UNSIGNED_CHAR_AUDIT)
   add_compile_options(-pipe -funsigned-char -fno-strict-aliasing)
-  add_definitions(-DUC2_UNSIGNED_CHAR_AUDIT=1)
+  add_definitions(-DUE_UNSIGNED_CHAR_AUDIT=1)
 else()
   add_compile_options(-pipe -fsigned-char -fno-strict-aliasing)
 endif()
@@ -158,9 +158,9 @@ if(EMSCRIPTEN)
     set(CMAKE_C_FLAGS_${cfg} "")
     set(CMAKE_CXX_FLAGS_${cfg} "")
   endforeach()
-  if(UC2_WEB_PERF)
+  if(UE_WEB_PERF)
     add_compile_options(-O3 -g0)
-  elseif(UC2_WEB_DEBUG)
+  elseif(UE_WEB_DEBUG)
     add_compile_options(-O0 -g)
   else()
     add_compile_options(-O2 -g)
@@ -317,9 +317,9 @@ if(EMSCRIPTEN)
   set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
   get_directory_property(_UC2_SAVED_DEFS COMPILE_DEFINITIONS)
   get_directory_property(_UC2_SAVED_OPTS COMPILE_OPTIONS)
-  if(UC2_WEB_PERF)
+  if(UE_WEB_PERF)
     set(_UC2_AL_OPT -O3 -g0)
-  elseif(UC2_WEB_DEBUG)
+  elseif(UE_WEB_DEBUG)
     set(_UC2_AL_OPT -O0 -g)
   else()
     set(_UC2_AL_OPT -O2 -g)
@@ -431,8 +431,8 @@ foreach(pkg IN LISTS UC2_PACKAGES)
 endforeach()
 
 # The patched script packages (target `scripts`, part of ALL): decompile the shipped .u, apply patches/, compile
-# with this build's ucc on the host preset; copy the host build's on the others. Options UC2_SCRIPT_PATCHES (ON),
-# UC2_SCRIPT_PATCH_SETS, UC2_ASSETS_DIR, UC2_SCRIPT_PACKAGES_DIR, UC2_SCRIPT_RETAIL_INIS_DIR, UC2_SCRIPTS_DIR:
+# with this build's ucc on the host preset; copy the host build's on the others. Options UE_SCRIPT_PATCHES (ON),
+# UE_SCRIPT_PATCH_SETS, UE_ASSETS_DIR, UE_SCRIPT_PACKAGES_DIR, UE_SCRIPT_RETAIL_INIS_DIR, UE_SCRIPTS_DIR:
 # cmake/UC2Scripts.cmake and BUILD.md "Script patches".
 include(UC2Scripts)
 
@@ -443,11 +443,11 @@ include(UC2Scripts)
 # scratch tree and needs the game folder. The scripts are the build's patched tree (Scripts/tree, made by the
 # `scripts` target; check-headers.sh compiles the packages the patches rebuild against the shipped ones and checks
 # their headers): the repository holds no script sources, Source/ is only where the headers are committed.
-# UC2_HEADERS_CLASSES_ROOT=<dir> checks another tree (<dir>/<Pkg>/Classes); with UC2_SCRIPT_PATCHES OFF there is no
+# UE_HEADERS_CLASSES_ROOT=<dir> checks another tree (<dir>/<Pkg>/Classes); with UE_SCRIPT_PATCHES OFF there is no
 # patched tree and the target needs it.
-set(UC2_HEADERS_CLASSES_ROOT "" CACHE PATH "Script tree (<dir>/<Pkg>/Classes) the check-headers target exports from (default: <build>/Scripts/tree)")
+set(UE_HEADERS_CLASSES_ROOT "" CACHE PATH "Script tree (<dir>/<Pkg>/Classes) the check-headers target exports from (default: <build>/Scripts/tree)")
 if(TARGET Editor AND TARGET UCC AND NOT WIN32 AND NOT EMSCRIPTEN AND NOT CMAKE_CROSSCOMPILING)
-  set(_hdr_root "${UC2_HEADERS_CLASSES_ROOT}")
+  set(_hdr_root "${UE_HEADERS_CLASSES_ROOT}")
   set(_hdr_deps UCC)
   # (<repo>/Source holds no scripts: a cache value naming it counts as unset.)
   if(_hdr_root STREQUAL "${CMAKE_SOURCE_DIR}/Source")
@@ -465,7 +465,7 @@ if(TARGET Editor AND TARGET UCC AND NOT WIN32 AND NOT EMSCRIPTEN AND NOT CMAKE_C
       USES_TERMINAL VERBATIM)
   else()
     add_custom_target(check-headers
-      COMMAND ${CMAKE_COMMAND} -E echo "check-headers: no script tree: UC2_SCRIPT_PATCHES is OFF (no Scripts/tree) and UC2_HEADERS_CLASSES_ROOT is not set"
+      COMMAND ${CMAKE_COMMAND} -E echo "check-headers: no script tree: UE_SCRIPT_PATCHES is OFF (no Scripts/tree) and UE_HEADERS_CLASSES_ROOT is not set"
       COMMAND ${CMAKE_COMMAND} -E false
       VERBATIM)
   endif()

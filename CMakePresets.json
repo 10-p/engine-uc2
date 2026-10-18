@@ -21,48 +21,48 @@
             "description": "64-bit native build (LP64). Builds in build-native64/.",
             "inherits": "native-base",
             "binaryDir": "${sourceDir}/build-native64",
-            "cacheVariables": { "UC2_ALLOW_64BIT": "ON" }
+            "cacheVariables": { "UE_ALLOW_64BIT": "ON" }
         },
         {
             "name": "native64-uchar",
-            "displayName": "Native Linux x86_64, char unsigned (M13 audit)",
+            "displayName": "Native Linux x86_64, char unsigned (audit build)",
             "description": "native64 with -funsigned-char instead of -fsigned-char: the char signedness of arm64, on a machine that runs the tests. Builds in build-native64-uchar/.",
             "inherits": "native64",
             "binaryDir": "${sourceDir}/build-native64-uchar",
-            "cacheVariables": { "UC2_UNSIGNED_CHAR_AUDIT": "ON" }
+            "cacheVariables": { "UE_UNSIGNED_CHAR_AUDIT": "ON" }
         },
         {
             "name": "native64-asan",
-            "displayName": "Native Linux x86_64 with AddressSanitizer + UBSan (M13)",
+            "displayName": "Native Linux x86_64 with AddressSanitizer + UBSan",
             "description": "native64 with -fsanitize=address,undefined (no vptr/alignment). Run with ASAN_OPTIONS=detect_leaks=0. Builds in build-native64-asan/.",
             "inherits": "native64",
             "binaryDir": "${sourceDir}/build-native64-asan",
-            "cacheVariables": { "UC2_SANITIZE": "address,undefined" }
+            "cacheVariables": { "UE_SANITIZE": "address,undefined" }
         },
         {
             "name": "arm64",
             "displayName": "Linux arm64 (aarch64 cross, build-only)",
-            "description": "LP64 like native64. Needs g++-aarch64-linux-gnu (docs/porting/BLOCKERS.md). Builds in build-arm64/.",
+            "description": "LP64 like native64. Needs g++-aarch64-linux-gnu (BUILD.md, arm64). Builds in build-arm64/.",
             "inherits": "native-base",
             "binaryDir": "${sourceDir}/build-arm64",
             "toolchainFile": "${sourceDir}/cmake/toolchain-aarch64-linux-gnu.cmake",
-            "cacheVariables": { "UC2_ALLOW_64BIT": "ON" }
+            "cacheVariables": { "UE_ALLOW_64BIT": "ON" }
         },
         {
             "name": "wasm",
             "displayName": "Web (Emscripten/WASM) -- dev default",
-            "description": "-O2 with DWARF and assertions. Builds in build-wasm/. Source <WorkUC2>/env.sh first (sets EMSDK).",
+            "description": "-O2 with DWARF and assertions. Builds in build-wasm/. Source <repo>/../env.sh first (sets EMSDK).",
             "generator": "Unix Makefiles",
             "binaryDir": "${sourceDir}/build-wasm",
             "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
-            "cacheVariables": { "UC2_WEB_PERF": "OFF", "UC2_WEB_DEBUG": "OFF" }
+            "cacheVariables": { "UE_WEB_PERF": "OFF", "UE_WEB_DEBUG": "OFF" }
         },
         {
             "name": "wasm-debug",
             "displayName": "Web (Emscripten/WASM) -- -O0, last resort",
             "inherits": "wasm",
             "binaryDir": "${sourceDir}/build-wasm-debug",
-            "cacheVariables": { "UC2_WEB_DEBUG": "ON" }
+            "cacheVariables": { "UE_WEB_DEBUG": "ON" }
         },
         {
             "name": "wasm-perf",
@@ -70,7 +70,7 @@
             "description": "-O3, no assertions, no debug info. Builds in build-wasm-perf/.",
             "inherits": "wasm",
             "binaryDir": "${sourceDir}/build-wasm-perf",
-            "cacheVariables": { "UC2_WEB_PERF": "ON", "CMAKE_BUILD_TYPE": "Release" }
+            "cacheVariables": { "UE_WEB_PERF": "ON", "CMAKE_BUILD_TYPE": "Release" }
         },
         {
             "name": "windows",
@@ -91,7 +91,7 @@
             "displayName": "Windows x86_64 (MinGW-w64 cross)",
             "inherits": "windows",
             "binaryDir": "${sourceDir}/build-windows64",
-            "cacheVariables": { "MINGW_TARGET_ARCH": "x86_64", "UC2_ALLOW_64BIT": "ON" }
+            "cacheVariables": { "MINGW_TARGET_ARCH": "x86_64", "UE_ALLOW_64BIT": "ON" }
         }
     ],
     "buildPresets": [

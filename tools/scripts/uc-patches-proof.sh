@@ -152,7 +152,7 @@ EOP
     if [ $write_ref = 1 ]; then
       {
         echo "# patches/reference.sha256: the script packages the DEFAULT build makes (the sets marked on in sets.txt), from"
-        echo "# the shipped .u (shipped.sha256) and the retail disc's per-class inis (UC2_SCRIPT_RETAIL_INIS_DIR), with this"
+        echo "# the shipped .u (shipped.sha256) and the retail disc's per-class inis (UE_SCRIPT_RETAIL_INIS_DIR), with this"
         echo "# repo's decompiler, patches and ucc. A regression reference (the build is deterministic): scripts-proof P2"
         echo "# (tools/scripts/uc-patches-proof.sh p2) builds base + default sets and checks every package against it;"
         echo "# \`sha256sum -c\` in build-native/Scripts/System checks a build by hand. When a set (or the decompiler, or"
