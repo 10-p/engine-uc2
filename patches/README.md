@@ -71,12 +71,12 @@ depends on it.
 UCMutators): the shipped files get the same fixes in memory. To rebuild them anyway, name them:
 `uc-patches.py packages --sets epic-fixes --with-epic-only` lists them, and `uc-build.sh --packages` takes them.
 Engine cannot be rebuilt completely from the disc: it contains editor icons imported from image files the disc
-does not have (see `docs/porting/analysis/script-patches.md`).
+does not have.
 
 ## Changing a script: change its set (developers)
 
-This repository holds no UnrealScript, not even ours: there is no source tree to edit (the sources left on
-2026-10-11, `docs/porting/analysis/scripts-removed.md`). **A change to the game's scripts is a change to a patch set**,
+This repository holds no UnrealScript, not even ours: there is no source tree to edit. **A change to the game's
+scripts is a change to a patch set**,
 made on the text the build decompiles from your own `.u` files. Sets are generated, never edited by hand: you edit
 classes in a scratch tree and `uc-patches.py make` writes the set's diffs. A set is a diff against the base **plus every
 set before it** in `sets.txt`, so you edit a tree of exactly that (not `Scripts/tree`, which has the later sets in it
@@ -120,17 +120,16 @@ Then:
 9. **Commit** the set, the reference and any header together, and say in the set's `README.md` what changed.
 
 If a later set has a hunk on the lines you changed, step 4's check names it: re-make that set the same way
-(`uc-patches-regen.sh edit <later set>`: its trees are built on the set you just changed). Epic's leaked script text
-(`<WorkUC2>/epic-sources/<Pkg>/Classes`, on the development machine only, never a build input) is a reading aid: its
+(`uc-patches-regen.sh edit <later set>`: its trees are built on the set you just changed). Epic's script text in
+the Epic drop (`<repo>/../epic-sources/uc2-avaris-2226/<Pkg>/Classes`, never a build input) is a reading aid: its
 comments and names are what the decompiler cannot recover.
 
 ## The proofs
 
 `tools/scripts/uc-patches-proof.sh` (CMake target `scripts-proof`, not in ALL) proves that the sets compile to what
 they should. **P1**: base + `epic-fixes` equals the shipped packages plus Epic's in-memory patches, function by
-function. **P2**: base + the default sets gives exactly the packages of `reference.sha256` (a regression reference;
-until 2026-10-11 P2 compared with a build of the repo's own script sources, which are gone; on the development machine
-`--ref <WorkUC2>/run/t1-ref/System` still runs that bytecode comparison against T1's build of them). **P3**: decompile,
+function. **P2**: base + the default sets gives exactly the packages of `reference.sha256` (a regression reference; `--ref
+<System dir>` also compares the build, bytecode by bytecode, with another build's packages). **P3**: decompile,
 apply and build are deterministic. When `uc-decompile.py` changes, the base text changes: `uc-patches-proof.sh rebase
 --old-decompiler <old uc-decompile.py>` re-makes every set against the new base and shows that the compiled result did
 not move.

@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # GL renderer R1 (M5): UC2GLDrv notebook
 
 Running notebook for M5 (PLAN.md row M5, renderer R1: fixed function). Branch `m5-gl`, worktree

@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # B-1: CTF-Aqueduct projector shadow flicker and stipple (the owner's reproduction): notebook
 
 Branch `b1-shadow-flicker` (from main 81fd44e), worktree `../engine-uc2-b1`, run trees `<WorkUC2>/run/b1*`, logs and

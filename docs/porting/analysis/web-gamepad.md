@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # Game pads in the browser (G-5)
 
 Running notebook of the engine side of task G-5 (PLAN.md "Owner review of 2026-10-10"). Worktree

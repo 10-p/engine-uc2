@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # Unlock all content (ufront, owner 2026-10-12)
 
 The launcher's Advanced "Unlock all content" button (ufrontend 2.86, target data `unlockAll`) writes

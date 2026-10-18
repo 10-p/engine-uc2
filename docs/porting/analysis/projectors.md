@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # M7b: projector batching, three-layer terrain, shadow blur (the Xbox paths M7 left): notebook
 
 Branch `m7b-projectors`, worktree `../engine-uc2-m7b` (from main e4ce0a5), run trees `<WorkUC2>/run/m7b*`, logs and

@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # F-3: GL4ES on an OpenGL ES 3 / WebGL 2 context: notebook
 
 Branch `f3-webgl2`, worktree `/home/ion/WorkUC2/engine-uc2-f3-webgl2` (from main `1372dec`), run trees `run/f3*`,

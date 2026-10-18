@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # G-10: four owner decisions for the web build (2026-10-10)
 
 Running notebook of task G-10. Worktree `/home/ion/WorkUC2/engine-uc2-g10-web`, branch `g10-web` from main 486f17e.

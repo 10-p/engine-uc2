@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # H-4: character vertex corruption, window-width dependent (owner report 2026-10-11): notebook
 
 Worktree `../engine-uc2-h4-vertex`, branch `h4-vertex` from main `7ceeee7`; run trees `run/h4*`, pictures and logs

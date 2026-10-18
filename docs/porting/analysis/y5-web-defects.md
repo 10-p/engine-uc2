@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # Y-5: two web defects the launcher E2E found, fixed as engine-ut2004 does
 
 Branch `y5-web` (worktree `<WorkUC2>/engine-uc2-y5-web`, from main `cfe0918`); frontend branch `uc2-y5-web`

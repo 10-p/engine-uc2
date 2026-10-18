@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # T4 notebook: every UnrealScript source leaves the repository
 
 Task T4 of the UC2 port. The owner (2026-10-11): "Unreal Script is asset material, content, we should not push it to a

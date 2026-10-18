@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # H-3: "Force gamepads to start with second player" on the web, the pointer, the pad camera (2026-10-11)
 
 Worktrees: engine `/home/ion/WorkUC2/engine-uc2-h3-pads` (branch `h3-pads` from main 7ceeee7), frontend

@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # B-3 notebook: where the split-screen HUD sits (the owner's question of 2026-10-10)
 
 Worktree `/home/ion/WorkUC2/engine-uc2-b3`, branch `b3-split-hud` (from main 81fd44e: G-6 and G-9 merged). Run trees

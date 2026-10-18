@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # X-2: sound banks loaded lazily on the web (every first use stalled the match)
 
 Branch `x2-sounds` (from main `a16ad39`). No engine code change: the fix is frontend data and a frontend generator

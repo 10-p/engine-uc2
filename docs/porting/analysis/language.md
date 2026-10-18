@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # Language option (E-4): one launcher choice, every engine's language
 
 Running notebook of the `e4-language` branch (worktree `../engine-uc2-e4`), started 2026-10-08 from main's tip

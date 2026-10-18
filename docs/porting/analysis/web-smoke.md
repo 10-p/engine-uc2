@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # Early web smoke (M4w): the engine as WebAssembly
 
 Running notebook, appended after every step so a successor can continue. Goal (PLAN.md row M4w): the engine

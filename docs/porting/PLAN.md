@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # engine-uc2 porting plan (read this first)
 
 Approved by the owner on 2026-10-04. Progress is recorded in `LOG.md`, open problems in `BLOCKERS.md`,

@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # B-2: DM-Decay white cloud that stays on screen (owner report 2026-10-10): notebook
 
 Worktree `../engine-uc2-b2`, branch `b2-decay-flash` from main `81fd44e`; run trees `run/b2*`, pictures and logs

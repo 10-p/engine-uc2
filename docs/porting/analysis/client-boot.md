@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # Client boot: SDL2 client, launcher, menu with null render and null audio (M4)
 
 Running notebook, appended after every step so a successor can continue. Goal (PLAN.md row M4): `uc2.bin`

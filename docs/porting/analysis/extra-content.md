@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # Added content: maps and mutators a player drops in (ufront, owner 2026-10-15)
 
 The owner: maps added as mods (on the web) or dropped into the game's folders (native) must appear in the map menu, in

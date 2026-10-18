@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # D-3 stale text and D-4 test hygiene (2026-10-10)
 
 Tasks D-3 and D-4 of PLAN.md "Owner review of 2026-10-10". Worktree `engine-uc2-d34`, branch `d34-docs-tests`

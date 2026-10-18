@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # H-1: the bloom is blocky at high resolutions (survey, measurement, prototype): notebook
 
 Branch `h1-bloom`, worktree `../engine-uc2-h1-bloom` (from main `7ceeee7`), run trees `<WorkUC2>/run/h1*`, pictures and

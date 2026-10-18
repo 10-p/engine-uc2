@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # M14 notebook: script compiler (`ucc make`) and the proof against the shipped `.u`
 
 > **2026-10-11 (T4): historical.** The repository no longer holds the script sources this notebook compiles

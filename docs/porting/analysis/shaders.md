@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # Programmable materials (M6, renderer R2): notebook
 
 Branch `m6-shaders`, worktree `../engine-uc2-m6`. Scope: PLAN.md row M6. Steps S1 (pixel-shader translator),

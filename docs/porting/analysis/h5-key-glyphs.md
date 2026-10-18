@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # H-5 notebook: key glyphs for keyboard players
 
 Worktree `/home/ion/WorkUC2/engine-uc2-h5-glyphs`, branch `h5-glyphs` (from main 7ceeee7). Run trees

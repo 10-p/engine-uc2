@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # Design notes (2026-10-04)
 
 Renderer, audio, porting-order, input and video design, grounded in the code. File:line references are to

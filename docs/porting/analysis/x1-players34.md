@@ -1,3 +1,5 @@
+Record - kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # X-1 (examination): players 3 and 4 joining from the character page (2026-10-11)
 
 Worktree `/home/ion/WorkUC2/engine-uc2-x1-players34`, branch `x1-players34` (from main a16ad39). Logs and pictures

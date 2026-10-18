@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # Y-1 notebook: the launcher's player name and server name for a profile-less player and host
 
 Branch `y1-names` (worktree `engine-uc2-y1-names`, from main c97a75a); frontend `ufrontend-y1` (branch `uc2-y1-names`).

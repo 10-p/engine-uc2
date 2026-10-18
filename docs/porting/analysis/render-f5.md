@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # F-5 renderer items (owner review of 2026-10-09): notebook
 
 Branch `f5-render`, worktree `<WorkUC2>/engine-uc2-f5-render` (from main `1372dec`), run trees `<WorkUC2>/run/f5*`,

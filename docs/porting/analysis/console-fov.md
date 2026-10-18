@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # D-7 / D-8 notebook: the console, and AutoFOV (Hor+ widescreen field of view)
 
 Tasks (PLAN.md Phase D, owner's review of 2026-10-06): D-7 "Is the console locked or hidden? Can we unlock it?";

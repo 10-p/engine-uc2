@@ -1,46 +1,83 @@
 # engine-uc2: Unreal Championship 2 portable engine
 
-## What?
+Unreal Championship 2: The Liandri Conflict (Unreal Engine 2 build 2226 "Avaris", package version 151), from Epic's
+Xbox/Win32 source tree, for Linux, Windows (MinGW-w64) and the Web (Emscripten). Source only: the game content
+(maps, textures, sounds, movies and the shipped script packages) comes from your own copy of the game and is never
+tracked. The repository holds no UnrealScript either, only our changes to the scripts as patch sets
+([`patches/`](./patches/README.md)), which the build applies to scripts decompiled from your shipped `.u` files.
 
-Unreal Championship 2: The Liandri Conflict (Unreal Engine 2 build 2226, package version 151), ported from
-Epic's Xbox/Win32 source tree to Linux, Windows (MinGW-w64) and the Web (Emscripten). Private engine
-repository: source only. Game content lives out of tree in `<WorkUC2>/assets/uc2`
-(`tools/dev/mkassets-uc2.sh` builds it from the Epic tree; `tools/dev/mkrun-uc2.sh` assembles a run tree). The game's
-UnrealScript is content too: the repo holds none, only our changes to it as patch sets ([`patches/`](./patches/README.md)),
-which the build applies to scripts decompiled from your own game files.
-
-- Agent guide: [`CLAUDE.md`](./CLAUDE.md)
 - Building: [`BUILD.md`](./BUILD.md)
-- The plan and where we are: [`docs/porting/PLAN.md`](./docs/porting/PLAN.md), [`docs/porting/LOG.md`](./docs/porting/LOG.md),
-  open problems in [`docs/porting/BLOCKERS.md`](./docs/porting/BLOCKERS.md)
-- Every change to Epic's engine, where and why: [`docs/porting/REPORT.md`](./docs/porting/REPORT.md)
+- Configuration defaults and why they differ from Epic's: [`Engine/Config/README.md`](./Engine/Config/README.md)
+- The script patch sets: [`patches/README.md`](./patches/README.md)
 - How the Epic tree was imported: [`docs/SOURCE-LAYOUT.md`](./docs/SOURCE-LAYOUT.md)
+- Agent guide: [`CLAUDE.md`](./CLAUDE.md)
+- `docs/porting/` holds the port's notebooks: records kept as history, not the current state.
 
 ## Changes from the original source
 
-* Core's platform layer on GCC/Clang (engine-ut2004's `UnUnix.cpp`/`UnGnuG.h` with UC2's platform contract),
-  POSIX threads, every package a static library (`__STATIC_LINK`, as the Xbox build).
-* An SDL2 client and launcher (`SDL2Drv`, `SDLLaunch`: `uc2.bin`, `uc2.exe`, `SDLLaunch.js`), game pads through
-  SDL's GameController API, keyboard and mouse for the PC.
-* An OpenGL render device (`UC2GLDrv`) with the Xbox pixel shaders translated to GLSL and the Xbox
-  post-processing (distortion, glow, bloom, depth of field); on the web the same driver through GL4ES on WebGL 2
-  (WebGL 1 as the fallback).
-* Audio from the cooked XACT data through OpenAL Soft (`UC2ALAudio`); the XMV movies transcoded to Ogg Theora
-  (`UC2Movie`).
-* GCC/MinGW and Emscripten builds; 32-bit by default (the shipped scripts' layout), x86_64 Linux and Windows too.
-* A WebAssembly build with a WebRTC net driver (`WebRTCDrv`) for the browser.
+- **WebAssembly build**: the engine as `SDLLaunch.{js,wasm,data}` plus `meta.json`, on a worker with WasmFS fed by
+  the host and WebGL 2 (WebGL 1 as the fallback); package loads and a failed map fail soft; `ucc-bin.js` runs the
+  commandlets under Node.
+- **SDL2 client** (`SDL2Drv`) in place of WinDrv: windows, keyboard, mouse, text input and game pads.
+- **OpenGL renderer** (`UC2GLDrv`): Epic's D3DDrv carried onto OpenGL 2 with framebuffer objects, the Xbox pixel
+  shaders translated to GLSL, gamma in a present pass, multisampling.
+- **GL4ES renderer** (`UC2GL4ESDrv`): the same driver on OpenGL ES 3 / WebGL 2 (ES 2 / WebGL 1 as the fallback)
+  through gl4es; the web renderer, and the `-GL4ES` device on Linux.
+- **Null renderer**: Epic's `NullRenderDevice`, chosen by the ini, by `-NULLRENDERER`, or when the ini names a device
+  the build lacks.
+- **WebRTC net driver** (`WebRTCDrv`, web only): engine packets over the frontend's data channels; the System Link
+  page lists the broker's servers.
+- **OpenAL Soft audio** (`UC2ALAudio`): the Xbox XACT device (cues, music, zone reverb, voice pool) on OpenAL Soft,
+  from the cooked sound data or the shipped Xbox banks.
+- **64-bit and ARM**: LP64 builds (x86_64 Linux and Windows, arm64 cross) on the shipped 32-bit script layout, with
+  the C++/script layout checked at load on every pointer width.
+- **Windows build**: MinGW-w64 cross builds (i686 and x86_64), statically linked, no runtime DLL but OpenAL's.
+- **GCC/Clang portability**: Epic's MSVC code builds with GCC, Clang (Emscripten) and MinGW unchanged in behaviour.
+- **Keyboard and mouse**: PC bindings, menus driven by keyboard and mouse, the console on the key left of 1, the
+  PC mouse look of the mouse-look patch set.
+- **Split screen and four pads**: up to four players in one window, joining from the menus or a match; players three
+  and four on the character page (players34).
+- **Custom maps and mutators**: maps dropped into the map paths appear in the game's lists; a mutator's package joins
+  the server's package map.
+- **Script patch sets**: the build decompiles the shipped `.u`, applies `patches/` and compiles the packages they
+  change, proved equal to the shipped bytecode plus Epic's load-time patches.
+- **Native script compiler**: `ucc make` (Linux i386, MinGW i686) compiles packages equal to the shipped ones.
+- **Theora movies** (`UC2Movie`): the XMV movies cooked to Ogg Theora/Vorbis and played full screen, on materials and
+  as the loading screen.
+- **Save games**: player profiles in Epic's layout on every platform, portable between 32- and 64-bit builds.
+- **Languages**: every cooked language from `[Engine.Engine] Language` (menus, voices, movie tracks).
+- **Xbox post-processing on PC**: distortion, emissive glow, bloom, depth of field, the camera effects and dynamic
+  gamma, plus the Xbox shadows, projectors and three-layer terrain.
+- **Xbox Live content**: the alternate skins and the downloadable maps in the game folder are available.
+- **Portable platform layer**: Core's Unix layer (Linux, MinGW, Emscripten) with UC2's platform contract.
+
+The features of every engine of the frontend, with this one's, are listed in the frontend's change inventory
+(`<repo>/../unreal-frontend-arch-private/docs/14-change-inventory.md`).
 
 ## Status
 
-Plays natively on Linux (x86 32-bit and x86_64): every map loads, the menus, matches with bots, effects,
-sound, movies, controls and network play (M0-M14, D-1..D-9, C-1/C-2, O-1..O-11, F-1..F-6 in `LOG.md`); Epic's
-shipped script packages play as shipped, the rebuilt ones add the PC mouse (F-1). Windows:
-built with MinGW and run under wine only (never on real Windows). Web: boots to the menu and plays in the
-frontend's browser specs (boot, audio, saves, keys, net, jitter); the owner's preview is the frontend's `uc2`
-target. arm64: the cross build configures and builds (F-4c, `docs/porting/analysis/platform-f4.md`); it has
-not been run on hardware. What is open is in `BLOCKERS.md` and the owner's review tasks in `PLAN.md`.
+Linux x86 (32-bit, the reference) and x86_64 play: every map loads, menus, matches with bots, effects, sound,
+movies, controls, split screen and network play. Windows builds run under wine here and have not been run on Windows
+itself. The web build boots and plays in the frontend's browser specs (target `uc2`). The arm64 cross build builds and
+its `ucc-bin` runs under qemu; it has not been run on arm64 hardware.
 
 ## Building
 
-Short version: `cmake --preset native && cmake --build build-native -j12`. Every preset, the web build and
-the artifact: [`BUILD.md`](./BUILD.md).
+`cmake --preset native && cmake --build build-native -j8` (the game folder beside the repo, or
+`-DUE_ASSETS_DIR=<dir>`). Every preset, the web artifact and the script build: [`BUILD.md`](./BUILD.md).
+
+## Credits
+
+- Epic Games: the Unreal Championship 2 "Avaris" source tree (Xbox/Win32) this engine is built from.
+- This engine shares its platform layer, SDL2 client and WebRTC driver with engine-ut2004 (Epic's UT2004 source and
+  its Linux port by Loki Software and Ryan C. Gordon), which in turn adapted fgsfdsfgs/UE1's SDL key map.
+- ptitSeb: gl4es (fork 10-p/gl4es), on Ryan Hileman's glshim.
+- OpenAL Soft (Chris Robinson, kcat; LGPL), SDL2, Xiph.Org (Ogg, Vorbis, Theora), zlib (Jean-loup Gailly, Mark
+  Adler), Doug Lea's dlmalloc (inside Epic's code), Emscripten.
+- The runesofwar.net setup guide: the PC ini defaults the shipped inis follow.
+- Reference tools, not shipped: xemu, extract-xiso (XboxDev), the Xbox SDK.
+
+## Trademarks
+
+Unreal Engine, Unreal Championship 2: The Liandri Conflict and related trademarks or copyrights are owned by Epic
+Games. This repository is not affiliated with or endorsed by Epic Games. Do not use for commercial purposes.

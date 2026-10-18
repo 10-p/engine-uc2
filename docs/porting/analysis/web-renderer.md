@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # The renderer on the web (M11a): GL4ES / GLES2 twin and WebGL: notebook
 
 Branch `m11-webgl`, worktree `../engine-uc2-m11`, run trees `run/m11*`, logs and pictures `<WorkUC2>/logs/m11`.

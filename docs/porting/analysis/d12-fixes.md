@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # D-1 / D-2 (owner review 2026-10-10): the dedicated-server exit-time crash/hang, and the two misregistered classes
 
 Branch `d12-fixes` (worktree `engine-uc2-d12`), from main `2ed330f`. Logs: `<WorkUC2>/logs/d12/`. Run trees: `run/d12-*`

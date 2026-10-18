@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # Netplay: UC2's System Link browser on the web (the player-driven network E2E)
 
 Branch `netplay`, worktree `<WorkUC2>/engine-uc2-netplay` (from main aa0f54e). Frontend: `<WorkUC2>/ufrontend-netplay`

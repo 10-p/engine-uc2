@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # M1 — Core port notebook (running)
 
 Goal (PLAN.md row M1): `Source/Core` compiles with `g++ -m32` (GCC 15) and Emscripten 5.0.7 under CMake,

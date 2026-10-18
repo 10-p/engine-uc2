@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # UC2 package format (version 151, licensee 0) versus what the frontend tools read (UT2004: 128 / 29)
 
 Needed at M11 for `ufrontend/packages/glue/lib/unreal/reader.cjs` (and its users: `generate-deps`,

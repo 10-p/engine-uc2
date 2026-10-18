@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # M16 audio: the shipped Xbox banks (`.xsb` + `.xwb`) played at run time
 
 Running notebook for the audio part of milestone M16 ("original Xbox assets track", PLAN.md row M16, owner review of

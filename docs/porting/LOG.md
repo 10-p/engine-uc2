@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # engine-uc2 progress log
 
 One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entry.

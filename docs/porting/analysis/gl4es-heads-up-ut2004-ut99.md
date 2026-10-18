@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # Heads-up for engine-ut2004 / engine-ut99 agents: GL4ES fork change in `realize_textures` (2026-10-10)
 
 From the engine-uc2 port (B-2, "DM-Decay blown-out overlay"). Full explanation: the fork commit's message, and

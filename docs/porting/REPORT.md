@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # UC2 port: every change to the engine, where and why
 
 Review report for the owner, 2026-10-08. The engine (`engine-uc2`) is reviewed as of main `4813dd9`. The

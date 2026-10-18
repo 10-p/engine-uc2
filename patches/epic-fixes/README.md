@@ -22,7 +22,7 @@ the patch was made for), so it must carry the fixes itself: that is this set.
   shipped package + the patcher for all 7 packages (script-diff.py: problems 0; every one of the 30 entries
   identical to the patcher's bytecode/object). What the patcher cannot do and a compiler does anyway shows as
   findings: CTFFlag.home's LabelTableOffset (the patcher left the shipped 16), ConnectionFailureMenu's ProbeMask
-  (the new Timer is probed), Engine.NetworkDevice's config default (static build, scripts.md finding 6).
+  (the new Timer is probed), Engine.NetworkDevice's config default (the static build's).
 - **Packages**: Engine, UnrealGame, UCGameplay, UCInventory, UCMutators, GUI, UCMenu. Only those another set
   changes are rebuilt by default (GUI, UCGameplay, UCMenu); see ../README.md to rebuild the others.
 - **Ini keys**: none. **Depends on**: nothing; every other set depends on it.

@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # Engine package: compile baseline before any porting (2026-10-04)
 
 Measured for planning M2, before Core's port landed. Method: every `Source/Engine/Src/*.cpp` (107 files) through

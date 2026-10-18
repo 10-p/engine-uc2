@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # Blockers and open questions
 
 Audited 2026-10-10 with the owner ("make sure that all of them are needed or close them"): the closed entries are

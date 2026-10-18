@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # First runtime: from "links" to "every map loads on a headless server" (M3)
 
 What it took to get from a linked `ucc-bin` to a dedicated server that loads any of the 58 maps and ticks.

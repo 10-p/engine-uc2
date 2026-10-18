@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # O-9: the NVIDIA fixed-function gap: notebook
 
 Branch `o9-nvidia`, worktree `<WorkUC2>/engine-uc2-o9` (base: main `d6d7e33`). Run trees `<WorkUC2>/run/o9*`,

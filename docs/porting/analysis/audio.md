@@ -1,3 +1,5 @@
+Record — kept as history; the current state is in README.md, BUILD.md and the change inventory.
+
 # Audio (M8): cooked XACT data + UC2ALAudio on OpenAL Soft
 
 Running notebook for milestone M8 (PLAN.md row M8). Branch `m8-audio`, worktree `../engine-uc2-m8`.
