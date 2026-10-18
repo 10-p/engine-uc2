@@ -350,7 +350,7 @@ static const FRenderSwitch GRenderSwitches[] =
 {
 	{ TEXT("NULLRENDERER"), TEXT("Engine.NullRenderDevice"),			1 },
 	{ TEXT("OPENGL"),       TEXT("UC2GLDrv.UC2GLRenderDevice"),			UC2_DESKTOP_GL_RUNS },
-	{ TEXT("GL4ES"),        TEXT("UC2GL4ESDrv.UC2GL4ESRenderDevice"),	1 },	// The same driver on GLES2 through GL4ES
+	{ TEXT("GL4ES"),        TEXT("UC2GL4ESDrv.UC2GL4ESRenderDevice"),	1 },	// The same driver on OpenGL ES through GL4ES
 };
 
 static void SelectRenderDevice()

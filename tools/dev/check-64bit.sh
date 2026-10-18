@@ -14,7 +14,7 @@
 #   M13_FX        the m7-effects.sh effects to run [all]
 # Output: <repo>/../logs/m13 (the m13 tree) or <repo>/../logs/m13/<tree> (others; <repo>/../logs/<tree> is then
 # a link there, because the suites write to logs/<tree>), stable names, PASS/FAIL lines also in m13-summary.txt.
-# A D-phase task's tree (M13_TREE=d<N>-..., M13_REF likewise) writes to <repo>/../logs/d<N>/<tree> instead, and its
+# A tree named d<N>-... (M13_TREE, M13_REF likewise) writes to <repo>/../logs/d<N>/<tree> instead, and its
 # census trees are <tree>-census-N / <ref>-census-N.
 #
 # Every program runs inside <repo>/../bin/capped (CLAUDE.md "Running anything"): the suites keep their own
