@@ -7,7 +7,7 @@
 #
 # Trees (tools/dev/mkrun-uc2.sh): D78_TREE (default d78) has the build under test; D78_REF_TREE (default d78-ref)
 # has main's binary (the 4:3 regression anchor). Every game run is one tools/dev/m10-controls.sh --file run
-# (Xvfb, software GL, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0, under <repo>/../bin/capped: 2G at 640x480/1024x768, 3G for the run that goes up
+# (Xvfb, software GL, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0, under <repo>/../bin/capped: 2G at 640x480/1024x768, 3G for the run that goes up
 # to 2560x1080). Pictures and logs: <repo>/../logs/d78/run/<what>/, measurements in <repo>/../logs/d78/run/summary.txt.
 #   ident/<res>/   the pinned DM-Deadbolt view (tools/dev/d2/deadbolt.scen), -ini:System:[UC2GLDrv.UC2GLRenderDevice]:UsePostProcess=False -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:UsePostProcess=False, ours and main's,
 #                  at 640x480 and 1024x768 (AutoFOV must change nothing at 4:3)

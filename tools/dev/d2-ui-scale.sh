@@ -11,7 +11,7 @@
 #
 # Trees (tools/dev/mkrun-uc2.sh): D2_TREE (default d2) has the build under test; D2_REF_TREE (default d2-ref)
 # has main's binary (the regression anchor at 640x480 and the "before" pictures). Every game run is one
-# tools/dev/m10-controls.sh --file run (Xvfb, software GL, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0, under <repo>/../bin/capped: 2G, 3G from
+# tools/dev/m10-controls.sh --file run (Xvfb, software GL, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0, under <repo>/../bin/capped: 2G, 3G from
 # 2560x1440 up). Pictures and logs: <repo>/../logs/d2/run/<res>/ (<what>-<shot>.png), measurements in
 # <repo>/../logs/d2/run/summary.txt, a contact sheet in <repo>/../logs/d2/run/contact-sheet.png.
 # Scenarios: tools/dev/d2/menu.scen (main menu, arena page; Fill and Box; the level on and off) and

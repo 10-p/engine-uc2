@@ -18,7 +18,7 @@
 #                   views where a fifth of the drawn materials depend on the three-operand caps (-ini:System:[UC2GLDrv.UC2GLRenderDevice]:MatCensus=True);
 #                   whole frame without the pawn, NVIDIA "before"/programs against Mesa programs
 #   pictures        DM-Azure, wooden pillar and cobra statue (tools/dev/o9/azure.scen through fx-owner.sh, time
-#                   frozen, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0): NVIDIA with uc2-before.bin (an older binary in the tree) and uc2.bin, Mesa likewise; crops of the
+#                   frozen, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0): NVIDIA with uc2-before.bin (an older binary in the tree) and uc2.bin, Mesa likewise; crops of the
 #                   shots without post-processing compared (the dynamic gamma depends on the frame rate)
 #
 # Run tree <repo>/../run/o9 (made from build-native unless O9_NO_MKRUN=1; main's executable must be there as
@@ -59,7 +59,7 @@ ctrun() {
   # and would otherwise carry over to the next run.
   rm -f "$sys/Avaris.ini"
   "$capped" 2G 180 -- xvfb-run -a -s "-screen 0 1280x720x24" bash -c \
-    "cd '$sys' && $env ./uc2.bin -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CombinerTest=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=50:exit $* > '$out/ct-$name.out' 2>&1"
+    "cd '$sys' && $env ./uc2.bin -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CombinerTest=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=50:exit $* > '$out/ct-$name.out' 2>&1"
 }
 # Judge one run: expect "all" (0 failed) or "three" (exactly the three-operand cases fail). ctcheck <check> <name> <expect> <what>
 ctcheck() {
@@ -130,9 +130,9 @@ check_pictures() {
   local b
   # (After first: fx-owner.sh clears fx-azure-*.png, which includes the "-before" pictures.)
   for b in uc2.bin uc2-before.bin; do
-    FX_ARGS="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0" UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/azure.scen" FX_MAP=DM-Azure FX_NAME=azure "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
+    FX_ARGS="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0" UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/azure.scen" FX_MAP=DM-Azure FX_NAME=azure "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
     if [ -n "$(gpu_busy)" ]; then result FAIL pictures "another headless GPU run is going on"; return; fi
-    FX_ARGS="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0" UC2_GPU=1 UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/azure.scen" FX_MAP=DM-Azure FX_NAME=azure "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
+    FX_ARGS="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0" UC2_GPU=1 UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/azure.scen" FX_MAP=DM-Azure FX_NAME=azure "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
   done
   local p=$out/fx-azure ok=1 shot
   for f in "$p-pp.png" "$p-before-gpu-pp.png" "$p-gpu-pp.png" "$p-nopp.png" "$p-before-nopp.png" "$p-gpu-nopp.png" "$p-before-gpu-nopp.png" "$p-gpu-texenv.png" \
@@ -174,9 +174,9 @@ check_pictures_other() {
   for spec in acidrain:DM-AcidRain tempest:DM-Tempest; do
     n=${spec%%:*}; map=${spec#*:}
     for b in uc2.bin uc2-before.bin; do
-      FX_ARGS="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MatCensus=True" UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/$n.scen" FX_MAP=$map FX_NAME=$n "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
+      FX_ARGS="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MatCensus=True" UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/$n.scen" FX_MAP=$map FX_NAME=$n "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
       if [ -n "$(gpu_busy)" ]; then result FAIL pictures-other "another headless GPU run is going on"; return; fi
-      FX_ARGS="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MatCensus=True" UC2_GPU=1 UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/$n.scen" FX_MAP=$map FX_NAME=$n "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
+      FX_ARGS="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MatCensus=True" UC2_GPU=1 UC2_BIN=$b FX_SCENARIO="$repo/tools/dev/o9/$n.scen" FX_MAP=$map FX_NAME=$n "$repo/tools/dev/fx-owner.sh" $T custom | tee -a "$out/pictures-runs.txt"
     done
     local p=$out/fx-$n f
     for f in "$p-nopp.png" "$p-gpu-nopp.png" "$p-before-gpu-nopp.png" "$p-before-nopp.png" "$p-gpu-texenv.png"; do

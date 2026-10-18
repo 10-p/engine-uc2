@@ -20,7 +20,7 @@ sed -i -E "s/^(WindowedViewportX|FullscreenViewportX)=.*/\\1=1280/; s/^(Windowed
 [ -n "$fx" ] && cp -f "$fx" "$sys/uc2-fxaa.bin"
 ES2="-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:GLESVersion=2"
 glini=$repo/tools/dev/glini
-NOAA=$("$glini" AntiAliasing=0)
+NOAA=$("$glini" NumAASamples=0)
 FXNOAA="-glnoaa"   # the FXAA binary predates the test keys
 one() {  # one <name> <binary> <args...>
   local name=$1 bin=$2; shift 2

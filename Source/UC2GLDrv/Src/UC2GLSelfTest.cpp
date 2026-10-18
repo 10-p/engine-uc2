@@ -1168,7 +1168,7 @@ struct FSelfTest
 		{
 			// The checks write and read the main framebuffer's textures directly and compare
 			// exactly: they need the single-sampled main framebuffer.
-			debugf( NAME_Init, TEXT("UC2GLDrv: selftest: anti-aliasing is on (multisampled main framebuffer); the self-test needs it off: AntiAliasing=0") );
+			debugf( NAME_Init, TEXT("UC2GLDrv: selftest: anti-aliasing is on (multisampled main framebuffer); the self-test needs it off: NumAASamples=0") );
 			Failed = 1;
 			debugf( NAME_Init, TEXT("UC2GLDrv: selftest summary: %i passed, %i failed"), Passed, Failed );
 			return;

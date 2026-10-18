@@ -6,7 +6,7 @@
 #   tools/dev/decay-flash.sh <tree> <name> <scenario-file> [more uc2.bin arguments]
 #
 #   DF_RES=2285x1290     another window size (default 1280x720)
-#   DF_AA=4              the device's AntiAliasing (default 0)
+#   DF_AA=4              the device's NumAASamples (default 0)
 #   DF_URL='?NumBots=0'  map URL options (default ?NumBots=0)
 #   DF_SECS=170          time limit
 #   DF_MAP=DM-Fury       another map (default DM-Decay)
@@ -51,7 +51,7 @@ cp -f "$repo"/Engine/Config/*.ini "$sys/"
 sed -i -E "s/^(WindowedViewportX|FullscreenViewportX)=.*/\\1=$W/; s/^(WindowedViewportY|FullscreenViewportY)=.*/\\1=$H/" "$sys/Default.ini"
 rm -f "$sys/Avaris.ini" "$sys/User.ini" "$sys"/Shot*.bmp "$out/$tag"-*.png "$out/$tag".result*
 chan=$out/$tag.channel; : > "$chan"
-glargs=$("$repo/tools/dev/glini" AntiAliasing=$aa CheckGLErrors=True | tr '\n' ' ')
+glargs=$("$repo/tools/dev/glini" NumAASamples=$aa CheckGLErrors=True | tr '\n' ' ')
 inner=$(mktemp)
 cat > "$inner" <<INNER
 cd "$sys" || exit 1

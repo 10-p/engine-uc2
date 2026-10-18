@@ -21,7 +21,7 @@
 #                        tree; default uc2.bin)
 #
 #   UC2_AA=1             keep the device's anti-aliasing (on in the native ini); without it every run gets
-#                        AntiAliasing=0 (-ini:), so pictures compare with the references made before anti-aliasing existed
+#                        NumAASamples=0 (-ini:), so pictures compare with the references made before anti-aliasing existed
 #
 # Everything runs inside <repo>/../bin/capped 2G (CLAUDE.md, "Running anything: memory ceiling, always");
 #   UC2_CAP=3G           another ceiling (pp-scale: 3G for 2880x2160 and larger windows)
@@ -51,7 +51,7 @@ if [ -n "${UC2_POSTCMD:-}" ]; then
   postcmd=1
 fi
 
-aaarg=$("$repo/tools/dev/glini" AntiAliasing=0 | tr '\n' ' '); [ -n "${UC2_AA:-}" ] && aaarg=""
+aaarg=$("$repo/tools/dev/glini" NumAASamples=0 | tr '\n' ' '); [ -n "${UC2_AA:-}" ] && aaarg=""
 # AutoFOV off unless UC2_AUTOFOV is set: the reference pictures these runs are compared with (the effect pairs,
 # the wine oracle's DM-Praxis view, the before/after pairs) are made with the 4:3 field of view, and at 16:9
 # AutoFOV's Hor+ widens the framing. tools/dev/d78.sh measures AutoFOV itself and does not use this runner.

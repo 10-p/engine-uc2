@@ -290,7 +290,7 @@ check_perf() {
     local X=${res%x*} Y=${res#*x} b
     for b in uc2.bin uc2-base.bin; do
       UC2_GPU=1 UC2_BIN=$b FX_SCENARIO=$scen FX_MAP=DM-Deadbolt FX_NAME=pp-perf-$res \
-        FX_ARGS="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:AntiAliasing=0 -ini:System:[SDL2Drv.SDL2Client]:WindowedViewportX=$X -ini:System:[SDL2Drv.SDL2Client]:WindowedViewportY=$Y -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=1:set+UCDeathmatch+NumPlayers+0@32:set+LevelInfo+TimeDilation+0.0001@40:GLINFO@55:GLINFO@56:PPREFERENCE+0@60:GLINFO@75:GLINFO@76:PPREFERENCE+480@80:GLINFO@95:GLINFO" \
+        FX_ARGS="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0 -ini:System:[SDL2Drv.SDL2Client]:WindowedViewportX=$X -ini:System:[SDL2Drv.SDL2Client]:WindowedViewportY=$Y -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=1:set+UCDeathmatch+NumPlayers+0@32:set+LevelInfo+TimeDilation+0.0001@40:GLINFO@55:GLINFO@56:PPREFERENCE+0@60:GLINFO@75:GLINFO@76:PPREFERENCE+480@80:GLINFO@95:GLINFO" \
         "$repo/tools/dev/fx-owner.sh" "$tree" custom > /dev/null 2>&1
       local suffix=""; [ $b = uc2-base.bin ] && suffix="-base"
       local log=$out/fx-pp-perf-$res$suffix-gpu.out

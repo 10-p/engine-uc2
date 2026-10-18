@@ -32,8 +32,8 @@ DELTAS = [
     ('Default.ini', 'Engine.Engine', 'NetworkDevice', 'IpDrv.TcpNetDriver', 'WebRTCDrv.WebRTCNetDriver', None),
     # Anti-aliasing off by default on the web (heavy on a laptop; the player can set it in the ini): no multisampled
     # main framebuffer in the browser unless the player sets it.
-    ('Default.ini', 'UC2GLDrv.UC2GLRenderDevice', 'AntiAliasing', '4', '0', None),
-    ('Default.ini', 'UC2GL4ESDrv.UC2GL4ESRenderDevice', 'AntiAliasing', '4', '0', None),
+    ('Default.ini', 'UC2GLDrv.UC2GLRenderDevice', 'NumAASamples', '4', '0', None),
+    ('Default.ini', 'UC2GL4ESDrv.UC2GL4ESRenderDevice', 'NumAASamples', '4', '0', None),
     # (No delta for [SDL2Drv.SDL2Client] PadsStartAtPlayerTwo: False natively and on the web; the launcher's "Force
     # gamepads to start with second player" sets it per player.)
 ]

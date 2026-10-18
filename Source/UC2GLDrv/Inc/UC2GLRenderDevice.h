@@ -121,13 +121,13 @@ public:
 									MainDepthRenderbuffer;	// ... or renderbuffer (no depth textures)
 	INT								MainWidth,
 									MainHeight;
-	// Anti-aliasing. AntiAliasing (ini) is the number of samples (0 = off).
+	// Anti-aliasing. NumAASamples (ini) is the number of samples (0 = off).
 	// Desktop GL: MainFramebuffer is then a multisampled framebuffer (renderbuffers), and
 	// MainColorTexture / MainDepthStencil are its resolve, in MainResolveFramebuffer, brought up
 	// to date (ResolveMain) before anything reads them: the copies the post-process samples,
 	// the depth copy, the present pass, ReadPixels. Desktop GL and OpenGL ES 3 / WebGL 2 through
 	// GL4ES; OpenGL ES 2 / WebGL 1 have no multisampled framebuffers and get no anti-aliasing.
-	INT								AntiAliasing;
+	INT								NumAASamples;
 	INT								MainSamples;			// 0: the main framebuffer is single-sampled
 	GLuint							MainResolveFramebuffer,
 									MainMSColorRenderbuffer,

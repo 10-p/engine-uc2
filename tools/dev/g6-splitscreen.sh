@@ -2015,26 +2015,26 @@ for part in $parts; do
             python3 "$repo/tools/dev/g6/g6-measure.py" "$out" > "$out/g6-measure.txt" 2>&1; tail -n 30 "$out/g6-measure.txt";;
     menu)   scen_menu   > "$scen"; run_game g6-menu   0 420 "" "$scen";;
     x1proto) # needs a run tree with a prototype GUI.u that allows four child viewports
-            scen_x1proto > "$scen"; run_game x1-proto 0 720 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0;;
+            scen_x1proto > "$scen"; run_game x1-proto 0 720 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0;;
     x1menu4) # four players from the character page; Epic's shipped scripts: the vanilla variant
             x1_vanilla=1; grep -a -q UI_Char_3PSelector "$sys/UCMenu.u" && x1_vanilla=0
             x1_vanilla=$x1_vanilla scen_x1menu4 > "$scen"; cp "$scen" "$out/x1-menu4.scen"
-            run_game x1-menu4 0 900 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0
+            run_game x1-menu4 0 900 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0
             # hosting (the system-link flow, a listen server): players three and four join and play there too
             if [ $x1_vanilla = 0 ] && [ "${X1_HOST:-1}" = 1 ]; then
               x1_vanilla=0 x1_host=1 scen_x1menu4 | sed "s#x1-menu4.out#x1-host4.out#; s#x1-menu4-oob#x1-host4-oob#" > "$scen"
               cp "$scen" "$out/x1-host4.scen"
-              run_game x1-host4 0 900 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0
+              run_game x1-host4 0 900 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0
             fi
             echo "  x1menu4: $([ $x1_vanilla = 1 ] && echo "vanilla (Epic's GUI.u/UCMenu.u)" || echo "patch set players34"); out-of-bounds lines $(cat "$out/x1-menu4-oob.txt" 2>/dev/null)";;
     x1armory) # the 2x2 armory with four, then three players (patch set players34)
             for n in ${X1A_PLAYERS:-4 3}; do
               x1a_n=$n scen_x1armory > "$scen"; cp "$scen" "$out/x1-armory$n.scen"
-              run_game x1-armory$n 0 900 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0
+              run_game x1-armory$n 0 900 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0
             done
             ;;
     x1probe) # a third and fourth pad's Start on the character page and in the match (MSAA off as m10)
-            scen_x1probe > "$scen"; run_game x1-probe 0 600 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0;;
+            scen_x1probe > "$scen"; run_game x1-probe 0 600 "" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0;;
     h3menu) # the system-link flow, the pad arriving on the character page; both pad modes
             # (H3_MODES="ticked unticked" by default; one of them alone for a quicker look)
             for m in ${H3_MODES:-ticked unticked}; do
@@ -2078,7 +2078,7 @@ PY
             menu_kb=1 scen_menu > "$scen"; run_game g9-kbmenu 0 420 "" "$scen" $KBPLAYER;;
     unplug) # player one's pad pulled out and back (no page), a pad-only player's (Epic's page); the default ini
             # (No MSAA: llvmpipe then draws a few frames a second, so a 1.2 s key or stick hold is read; m10-controls.sh does the same.)
-            scen_unplug > "$scen"; run_game g11-unplug 0 420 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:AntiAliasing=0
+            scen_unplug > "$scen"; run_game g11-unplug 0 420 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0
             cp "$scen" "$out/g11-unplug.scen";;
     fov)    # two GPU runs: the unclamped Hor+ maths (SplitClampToFullScreen=False) with AutoFOV on and Epic's maths,
     # and the default (SplitClampToFullScreen=True: one player's FOV for every viewport); then one sheet per layout

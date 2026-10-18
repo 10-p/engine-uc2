@@ -193,7 +193,7 @@ void UUC2GLRenderDevice::StaticConstructor()
 	new(GetClass(),TEXT("PostProcessReferenceHeight"),RF_Public)UIntProperty( CPP_PROPERTY(PostProcessReferenceHeight), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("PostProcessTargetScale"),RF_Public)UIntProperty( CPP_PROPERTY(PostProcessTargetScale), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("LevelOfAnisotropy"),	RF_Public)UIntProperty	( CPP_PROPERTY(LevelOfAnisotropy	), TEXT("Options"), CPF_Config );
-	new(GetClass(),TEXT("AntiAliasing"),		RF_Public)UIntProperty	( CPP_PROPERTY(AntiAliasing			), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("NumAASamples"),		RF_Public)UIntProperty	( CPP_PROPERTY(NumAASamples			), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("MaxTextureUnits"),		RF_Public)UIntProperty	( CPP_PROPERTY(MaxTextureUnits		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("MaterialStages"),		RF_Public)UIntProperty	( CPP_PROPERTY(MaterialStages		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("DetailTexMipBias"),	RF_Public)UFloatProperty( CPP_PROPERTY(DetailTexMipBias		), TEXT("Options"), CPF_Config );
@@ -232,9 +232,9 @@ void UUC2GLRenderDevice::StaticConstructor()
 	// count, 4 accepted. A missing ini entry gets this default.
 	PostProcessTargetScale = 2;
 	// 16x anisotropic filtering and 4x anti-aliasing for an ini without the keys (the shipped native ini
-	// says the same; the web ini sets AntiAliasing=0).
+	// says the same; the web ini sets NumAASamples=0).
 	LevelOfAnisotropy		= 16;
-	AntiAliasing			= 4;
+	NumAASamples			= 4;
 	MaxTextureUnits			= 8;
 	// UC2's D3DDrv clamps MaxSimultaneousTextures and MaxTextureBlendStages to 4 and
 	// refuses any card that has fewer (D3DRenderDevice.cpp, CheckDeviceCaps; Xbox and PC), so
@@ -562,7 +562,7 @@ UBOOL UUC2GLRenderDevice::Init()
 	// -ini:System:[UC2GLDrv.UC2GLRenderDevice]:<Key>=<Value>, read once here and never kept in the ini
 	// (appReadTestKey). The GL4ES binding reads its own section first, then the desktop device's, so a test sets
 	// them once for either device. The device's ordinary settings (CheckGLErrors, UsePixelShaders, UsePostProcess,
-	// UseXboxShadows, UseXboxProjectors, UseTerrain3Layer, AntiAliasing, MaxTextureUnits, MaterialStages,
+	// UseXboxShadows, UseXboxProjectors, UseTerrain3Layer, NumAASamples, MaxTextureUnits, MaterialStages,
 	// FixedFunctionPrograms) are config properties of the class's own section, set with -ini: like any setting.
 	//   ShotTimes=<s>,<s>...            the engine's SHOT exec at those times after the first frame
 	//   ShotRamp=True                   screenshots show the dynamic gamma ramp of the present pass
@@ -581,6 +581,12 @@ UBOOL UUC2GLRenderDevice::Init()
 	//   MaterialTime=<s>                materials see this time, not the level's (moving materials such as
 	//                                   the Liandri overlay's panned noise picture the same in every run)
 	FString OwnSection = GetClass()->GetPathName();
+	// An ini written before NumAASamples has the same count as AntiAliasing: read once when NumAASamples is absent.
+	{
+		INT Samples = 0;
+		if( !GConfig->GetInt( *OwnSection, TEXT("NumAASamples"), Samples ) && GConfig->GetInt( *OwnSection, TEXT("AntiAliasing"), Samples ) )
+			NumAASamples = Samples;
+	}
 	const TCHAR* BaseSection = TEXT("UC2GLDrv.UC2GLRenderDevice");
 	const TCHAR* GL4ESSection = TEXT("UC2GL4ESDrv.UC2GL4ESRenderDevice");
 	#define UC2GL_TESTKEY(Key,Value) appReadTestKey( TEXT(Key), Value, *OwnSection, BaseSection, GL4ESSection )
@@ -774,7 +780,7 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 		// nothing but the present quad): no anti-aliasing there.
 		UBOOL CanMultisample = SUPPORTS_MSAA && (!IsGLES || GLESMajor >= 3);
 		debugf( NAME_Init, TEXT("UC2GLDrv: anti-aliasing: %s"),
-			AntiAliasing <= 1 ? TEXT("off") : !CanMultisample ? TEXT("none (no multisampled framebuffers on this context)") : *FString::Printf( TEXT("%ix multisampled main framebuffer, resolved before it is read"), AntiAliasing ) );
+			NumAASamples <= 1 ? TEXT("off") : !CanMultisample ? TEXT("none (no multisampled framebuffers on this context)") : *FString::Printf( TEXT("%ix multisampled main framebuffer, resolved before it is read"), NumAASamples ) );
 
 		SupportsCubemaps = UseCubemaps;
 
@@ -908,11 +914,11 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 	MainSamples = 0;
 	// OpenGL ES 3 / WebGL 2 as well, through GL4ES (our fork passes multisampled renderbuffer
 	// storage and the resolve blit through; these renderbuffers are GL4ES' own, not raw).
-	if( DepthStencilThroughBinding() && AntiAliasing > 1 && SUPPORTS_MSAA && MainDepthStencil )
+	if( DepthStencilThroughBinding() && NumAASamples > 1 && SUPPORTS_MSAA && MainDepthStencil )
 	{
 		GLint MaxSamples = 0;
 		glGetIntegerv( GL_MAX_SAMPLES, &MaxSamples );
-		INT Samples = Min<INT>( AntiAliasing, MaxSamples );
+		INT Samples = Min<INT>( NumAASamples, MaxSamples );
 		if( Samples <= 1 )
 			debugf( NAME_Init, TEXT("UC2GLDrv: no multisampled main framebuffer: GL_MAX_SAMPLES is %i"), MaxSamples );
 		else

@@ -7,7 +7,7 @@
 #   uc2.bin ... $("$repo/tools/dev/glini" CheckGLErrors=True ShotTimes=44,56 Exec=50:POSTSELFTEST)
 #
 # Both sections, because each device reads its OWN class section for its settings (CheckGLErrors, UsePostProcess,
-# AntiAliasing, UsePixelShaders, UseXboxProjectors, MaxTextureUnits, FixedFunctionPrograms...), and a run may use either
+# NumAASamples, UsePixelShaders, UseXboxProjectors, MaxTextureUnits, FixedFunctionPrograms...), and a run may use either
 # (-opengl / -gl4es). Test keys (ShotTimes, ShotRamp, ShotPresented, Exec, PixelShaderToggleTimes,
 # PostProcessToggleTimes, SelfTest, CombinerTest, MatCensus, Stats, NoLODBias, MaskCaps, DualDiffuse) are read once and
 # taken out of the ini of both sections (Source/UC2GLDrv/Src/UC2GLRenderDevice.cpp Init), so they never persist; the
