@@ -131,14 +131,15 @@ tools/dev/package-windows.sh build-windows                        # <repo>/../ru
 
 ```
 bin/capped 4G 900 -- cmake --preset arm64                         # aarch64-linux-gnu-g++, LP64
-bin/capped 6G 7200 -- cmake --build build-arm64 -j4 --target UCC  # ucc-bin
+bin/capped 6G 7200 -- cmake --build build-arm64 -j3               # uc2.bin, ucc-bin
 tools/dev/mkrun-uc2.sh build-arm64 arm64
 (cd ../run/arm64/System && ../../../bin/capped 2G 900 -- qemu-aarch64 -L /usr/aarch64-linux-gnu ./ucc-bin verifyclasses)
 ```
 
-The same LP64 code as `native64` (the layout contract below, `-fsigned-char`). Without arm64 X11/GL development
-packages the fetched SDL2 is configured without X11 (the client builds for the offscreen/KMS paths only); a desktop
-arm64 client needs them through multiarch.
+The same LP64 code as `native64` (the layout contract below, `-fsigned-char`). The toolchain file shows pkg-config
+the target's `.pc` files only, so no host library reaches the link. Without arm64 X11/GL and audio development
+packages the fetched SDL2 is configured without X11 and without its audio backends (the client builds for the
+offscreen/KMS paths only); a desktop arm64 client needs them through multiarch.
 
 ## 64-bit
 

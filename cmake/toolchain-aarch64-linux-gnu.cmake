@@ -19,6 +19,13 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+# pkg-config sees the target's .pc files only: the host's (x86_64 PipeWire, PulseAudio, sndio, libsamplerate) would
+# turn on SDL2's and OpenAL Soft's audio backends and put host libraries on the arm64 link.
+set(ENV{PKG_CONFIG_LIBDIR} "/usr/lib/${_TRIPLE}/pkgconfig:/usr/${_TRIPLE}/lib/pkgconfig:/usr/share/pkgconfig")
+set(ENV{PKG_CONFIG_PATH} "")
+# The cross compiler also searches the host's /usr/include, where SDL2 finds samplerate.h with no arm64 libsamplerate
+# to link: SDL2 resamples with its own code here.
+set(SDL_LIBSAMPLERATE OFF CACHE BOOL "SDL2 audio resampling through libsamplerate (no arm64 library)")
 # Run test programs (none at configure time today) under qemu when it is there.
 find_program(_QEMU_AARCH64 qemu-aarch64)
 if(_QEMU_AARCH64)
