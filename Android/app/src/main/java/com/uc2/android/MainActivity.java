@@ -181,6 +181,13 @@ public class MainActivity extends Activity {
         col.addView(storageSwitch);
 
         statusText = label(col, "Looking at the storage…", 13f, 0xFF9AA0A8, 14);
+        // A copy's progress and the last result, under the status where they are in view.
+        progressText = label(col, "", 12f, 0xFF9AA0A8, 10);
+        progressText.setVisibility(View.GONE);
+        progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        progressBar.setMax(100);
+        progressBar.setVisibility(View.GONE);
+        col.addView(progressBar, wide(dp(12)));
 
         pickButton = mkButton(col, "Choose the UC2 folder…");
         pickButton.setOnClickListener(new View.OnClickListener() {
@@ -200,13 +207,6 @@ public class MainActivity extends Activity {
         });
 
         buildScaleRow(col);
-
-        progressText = label(col, "", 12f, 0xFF9AA0A8, 16);
-        progressText.setVisibility(View.GONE);
-        progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        progressBar.setMax(100);
-        progressBar.setVisibility(View.GONE);
-        col.addView(progressBar, wide(dp(12)));
 
         label(col, "Choose the UC2 folder (on the device or an SD card) and copy it to internal storage for the fastest "
                 + "loading. Playing from the UC2 folder directly needs access to all files.", 11f, 0xFF6E747C, 24);
