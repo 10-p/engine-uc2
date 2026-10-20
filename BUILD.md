@@ -243,10 +243,10 @@ the reference (wasm32 has its layout).
 
 ## CI
 
-`.github/workflows/build.yml` builds `native` and `native64` (Linux), `windows` and `windows64` (MinGW-w64) and
-`wasm-perf` on every push and pull request with `-DUE_SCRIPT_PATCHES=OFF` (no game folder in CI: the binaries run the
-shipped script packages and the web artifact's `scripts/` is empty), uploads the binaries, and a push to `main`
-replaces the rolling `latest` release.
+`.github/workflows/build.yml` builds `native` and `native64` (Linux), `windows` and `windows64` (MinGW-w64),
+`wasm-perf` and the Android APK (arm64-v8a and x86_64) on every push and pull request with `-DUE_SCRIPT_PATCHES=OFF`
+(no game folder in CI: the binaries run the shipped script packages and the web artifact's `scripts/` is empty),
+uploads the binaries, and a push to `main` replaces the rolling `latest` release.
 
 ## Scripts: `ucc-bin make`
 
