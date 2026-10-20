@@ -1,5 +1,6 @@
 package com.uc2.android;
 
+import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.WindowManager;
@@ -70,6 +71,15 @@ public class GameActivity extends SDLActivity {
 
         // A match can go on for long without a touch (a pad, spectating).
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        // The whole screen is the game's: the window draws under the system bars, with no bar backgrounds of its
+        // own. Without FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS the window of this legacy theme paints a black band over
+        // the navigation bar's place (the home line) even while SDL's immersive mode hides the bar.
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(Color.TRANSPARENT);
+        getWindow().setNavigationBarContrastEnforced(false);
+        getWindow().setDecorFitsSystemWindows(false);
 
         try {
             addContentView(new PadOverlayView(this), new FrameLayout.LayoutParams(
