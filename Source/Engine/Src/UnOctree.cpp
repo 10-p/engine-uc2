@@ -816,7 +816,8 @@ void FOctreeNode::ActorZeroExtentLineCheck(FCollisionOctree* o,
 			//scion superville: Ignore extent type if proper flag set, otherwise check against extent flag
 			if( ((testActor->bAcceptExtraTraceFlags && (o->ChkTraceFlags & TRACE_IgnoreExtent)) || testActor->bBlockZeroExtentTraces) &&
 				testActor != o->ChkActor &&
-				!o->ChkActor->IsOwnedBy(testActor) &&
+				// A trace without a source actor (the corona occlusion test) has no owner to skip.
+				(!o->ChkActor || !o->ChkActor->IsOwnedBy(testActor)) &&
 				testActor->ShouldTrace(o->ChkActor, o->ChkTraceFlags) )
 			{
 #if TIME_OCTREE			
@@ -985,7 +986,7 @@ void FOctreeNode::ActorNonZeroExtentLineCheck(FCollisionOctree* o, const FPlane*
 			//scion superville: Ignore extent flags if proper trace flag set, otherwise check against extent type
 			if( ((testActor->bAcceptExtraTraceFlags && (o->ChkTraceFlags & TRACE_IgnoreExtent)) || testActor->bBlockNonZeroExtentTraces) &&
 				testActor != o->ChkActor &&
-				!o->ChkActor->IsOwnedBy(testActor) &&
+				(!o->ChkActor || !o->ChkActor->IsOwnedBy(testActor)) &&
 				testActor->ShouldTrace(o->ChkActor, o->ChkTraceFlags) )
 			{
 
