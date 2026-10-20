@@ -174,7 +174,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 - The SDK parts are the packages' exactly: `compileSdk` 36 (platform 36), build-tools 36.0.0 (what AGP 9.4 asks for)
   and NDK 28.2.13676358. The SDK in `/usr/lib/android-sdk` is read-only, so a part AGP would download instead fails
   the build with its name. `targetSdk` stays 34 (Android 14's behaviour for the app); `minSdk` is 30 (Android 11:
-  All files access, and the C11 threads OpenAL Soft uses).
+  All files access, which reading the game folder in place needs).
 - OpenAL Soft is built without C++20 modules on Android (`ALSOFT_ENABLE_MODULES=OFF`: the NDK's clang 19 rejects
   libc++'s range adaptors across a module boundary) and without RTKit.
 - SDL2: one checkout for SDL's C library (the root CMakeLists gets it as `FETCHCONTENT_SOURCE_DIR_SDL2`) and SDL's

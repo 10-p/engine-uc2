@@ -50,7 +50,7 @@ android {
 
     defaultConfig {
         applicationId = 'com.uc2.android'
-        // Android 11: All files access (the game folder in place), and the C11 threads OpenAL Soft uses.
+        // Android 11: All files access, which reading the game folder in place needs.
         minSdk = 30
         targetSdk = 34
         versionCode = 1
