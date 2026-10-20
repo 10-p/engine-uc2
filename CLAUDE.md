@@ -12,7 +12,7 @@ Linux, Windows (MinGW-w64) and the Web (Emscripten). Private: proprietary source
 | `unreal-frontend-arch-private/` | the frontend (`main`), target `uc2`; the e2e specs in `packages/e2e` | read it, change it only in its own work |
 | `epic-sources/uc2-avaris-2226/` | Epic's drop, the baseline (`epic-sources/README.md`; import commit `9fc7bcf`) | read-only; tools that read it take `UC2_EPIC_SOURCES=<dir>` |
 | `assets/uc2-assets/` | the cooked game folder (`UE_ASSETS_DIR`), also what the frontend target serves | read-only overlay mount; never committed |
-| `assets/uc2-retail-assets/` | the retail disc's files (`System/`: the 17 shipped `.u` and the per-class inis, `UE_SCRIPT_RETAIL_INIS_DIR`) | read-only |
+| `assets/uc2-retail-assets/` | the retail disc's files; only the pipeline proof's P1 reads its `System/` inis (`uc-patches-proof.sh --retail-inis`), the build and the publish read the game folder alone | read-only |
 | `emsdk/` | Emscripten 5.0.7 | `source ../env.sh` |
 | `bin/capped`, `bin/mem-watchdog` | the memory ceiling and its watchdog (below) | every heavy run |
 | `run/`, `logs/` | run trees (`tools/dev/mkrun-uc2.sh`) and tool logs | scratch |

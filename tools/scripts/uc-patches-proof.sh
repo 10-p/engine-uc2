@@ -8,7 +8,10 @@
 #                    purpose: commit the new file with the patch)
 #     --ref <dir>    dev machine only: P2 also compares its build, bytecode by bytecode, with the System folder of
 #                    another build (e.g. <repo>/../run/t1-ref/System)
-#     --shipped <dir> the shipped .u (default <repo>/../assets/uc2-retail-assets/System); other options go to uc-build.sh
+#     --shipped <dir> the shipped .u (default <repo>/../assets/uc2-assets/System, the game folder's); other options go to uc-build.sh
+#     --retail-inis <dir>  P1 only: the per-class inis the shipped packages were stripped with (default
+#                    <repo>/../assets/uc2-retail-assets/System, the retail disc's). P2 and P3 strip with the game
+#                    folder's inis, as the build does.
 #     --engine-textures <dir>  P1 only, dev only: Epic's Engine source folder (default <repo>/../epic-sources/
 #                    uc2-avaris-2226/Engine). Engine.u holds 68 textures that `#exec TEXTURE IMPORT` made from image files the disc
 #                    does not have and the decompiler cannot recreate; with this folder P1 puts those lines (from
@@ -39,9 +42,11 @@ W=$work/run/t1-proof
 ref=""
 reference=$repo/patches/reference.sha256
 write_ref=0
-# The WorkUnreal layout: the retail disc's System/ holds the 17 shipped .u; the cooked tree the content.
-shipped=$work/assets/uc2-retail-assets/System
+# The WorkUnreal layout: the game folder holds the 17 shipped .u and the content; the retail disc's System/ the
+# inis P1 needs.
 content=$work/assets/uc2-assets
+shipped=$content/System
+retail_inis=$work/assets/uc2-retail-assets/System
 capped=$work/bin/capped
 [ -x "$capped" ] || capped=none
 SP=$repo/Source/Engine/Inc/ScriptPatches.h
@@ -62,7 +67,8 @@ while [ $# -gt 0 ]; do
     --shipped) shipped=$2; build_args+=(--shipped "$2"); shift 2;;
     --assets) content=$2; build_args+=(--assets "$2"); shift 2;;
     --capped) capped=$2; build_args+=("$1" "$2"); shift 2;;
-    --ucc|--retail-inis|--mem) build_args+=("$1" "$2"); shift 2;;
+    --retail-inis) retail_inis=$2; shift 2;;
+    --ucc|--mem) build_args+=("$1" "$2"); shift 2;;
     *) echo "unknown argument $1" >&2; exit 2;;
   esac
 done
@@ -106,7 +112,8 @@ for pr in "${proofs[@]}"; do
       echo "P1: Engine left out (no --engine-textures folder: its #exec-imported textures cannot be recreated from the disc)"
     fi
     list=$(IFS=,; echo "${pk[*]}")
-    echo "P1: packages ${list}"
+    echo "P1: packages ${list} (stripped with the inis of $retail_inis)"
+    [ -d "$retail_inis" ] || { echo "FAIL P1: no $retail_inis (--retail-inis: the System/ the shipped packages were stripped with)"; fails=$((fails+1)); continue; }
     t base "$W/p1-base" "${dpk[@]}" > "$W/p1-decompile.txt" 2>&1 || { echo "FAIL P1: decompile (see $W/p1-decompile.txt)"; fails=$((fails+1)); continue; }
     t up apply --base "$W/p1-base" --sets epic-fixes --out "$W/p1-tree" || { echo "FAIL P1: apply"; fails=$((fails+1)); continue; }
     if [ -d "$W/p1-tree/Engine" ]; then
@@ -130,7 +137,7 @@ print('P1: Engine: %d #exec TEXTURE IMPORT lines from %s (dev aid)' % (n, src))
 EOP
       links=(--link "Engine/Textures=$engine_tex/Textures")
     fi
-    t build "$W/p1-tree" "$W/p1" "$list" "${links[@]}" > "$W/p1-build.txt" 2>&1 || { echo "FAIL P1: build (see $W/p1-build.txt)"; tail -5 "$W/p1-build.txt"; fails=$((fails+1)); continue; }
+    t build "$W/p1-tree" "$W/p1" "$list" "${links[@]}" --retail-inis "$retail_inis" > "$W/p1-build.txt" 2>&1 || { echo "FAIL P1: build (see $W/p1-build.txt)"; tail -5 "$W/p1-build.txt"; fails=$((fails+1)); continue; }
     t py "$repo/tools/dev/script-diff.py" "$shipped" "$W/p1/System" --packages "$list" --patches "$SP" \
       --details "$W/p1-compare.txt" --patch-table "$W/p1-patches.txt" --functions "$W/p1-functions.txt" > "$W/p1-summary.txt"
     cat "$W/p1-summary.txt"
@@ -150,7 +157,7 @@ EOP
     if [ $write_ref = 1 ]; then
       {
         echo "# patches/reference.sha256: the script packages the DEFAULT build makes (the sets marked on in sets.txt), from"
-        echo "# the shipped .u (shipped.sha256) and the retail disc's per-class inis (UE_SCRIPT_RETAIL_INIS_DIR), with this"
+        echo "# the shipped .u (shipped.sha256) and the game folder's per-class inis (the ones the game runs with), with this"
         echo "# repo's decompiler, patches and ucc. A regression reference (the build is deterministic): scripts-proof P2"
         echo "# (tools/scripts/uc-patches-proof.sh p2) builds base + default sets and checks every package against it;"
         echo "# \`sha256sum -c\` in build-native/Scripts/System checks a build by hand. When a set (or the decompiler, or"

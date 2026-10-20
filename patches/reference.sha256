@@ -1,12 +1,12 @@
 # patches/reference.sha256: the script packages the DEFAULT build makes (the sets marked on in sets.txt), from
-# the shipped .u (shipped.sha256) and the retail disc's per-class inis (UE_SCRIPT_RETAIL_INIS_DIR), with this
+# the shipped .u (shipped.sha256) and the game folder's per-class inis (the ones the game runs with), with this
 # repo's decompiler, patches and ucc. A regression reference (the build is deterministic): scripts-proof P2
 # (tools/scripts/uc-patches-proof.sh p2) builds base + default sets and checks every package against it;
 # `sha256sum -c` in build-native/Scripts/System checks a build by hand. When a set (or the decompiler, or
 # the compiler) changes on purpose, regenerate it and commit it with the change:
 #   tools/scripts/uc-patches-proof.sh p2 --write-reference      (patches/README.md, "Changing a script")
-# UCGameplay.u 1589538 bytes
-1e795f9302687d8c8821de8cc8adf0857ed541b3b2e5e271134d5a2d5d2270dc  UCGameplay.u
+# UCGameplay.u 1589857 bytes
+5ba249e182ee4868515ae4b6f56ae05670f5b26634cd7ac3c63ace074a32204b  UCGameplay.u
 # GUI.u 1772432 bytes
 39538dde1ee9b21169aa9aba5232b750f4640c7edadb7d061b6df32d4eb4ab60  GUI.u
 # UCMenu.u 2504340 bytes

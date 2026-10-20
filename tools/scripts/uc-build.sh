@@ -12,11 +12,13 @@
 #                      only so the targets could be, and System/ gets the shipped file back for them
 #   --out <dir>        the work tree; the result is <dir>/System/<Pkg>.u (with the shipped .u of every other
 #                      package beside it, so the folder is a complete System for checking)
-#   --shipped <dir>    the shipped script packages (default <repo>/../assets/uc2-retail-assets/System, the retail disc's)
+#   --shipped <dir>    the shipped script packages (default <repo>/../assets/uc2-assets/System: the game folder's .u
+#                      are the shipped ones, patches/shipped.sha256 checks them)
 #   --assets <dir>     the game tree: its content folders (Textures, StaticMeshes, ...) are linked into the work tree
 #                      and its System/ provides the .int files and Epic's inis (default <repo>/../assets/uc2-assets)
-#   --retail-inis <d>  the retail disc's System/ for Characters.ini, Gametypes.ini, Maplists.ini, which the shipped
-#                      defaults carry (default <repo>/../assets/uc2-retail-assets/System; `none`: the asset tree's)
+#   --retail-inis <d>  a System/ whose Characters.ini, Gametypes.ini and Maplists.ini the strip loads instead of the
+#                      asset tree's (default `none`: the asset tree's, the inis the game runs with; the pipeline proof
+#                      passes the retail disc's, which the shipped defaults carry)
 #   --ucc <file>       the script compiler: ucc-bin (Linux) or ucc.exe (a Windows host; MSYS2 bash); default
 #                      <repo>/build-native/Source/UCC/ucc-bin. Copied into the work tree under its own name.
 #   --mem <size>       memory ceiling of each ucc run (default 3G) when it runs under the capped wrapper
@@ -47,9 +49,9 @@ set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
 classes="" out="" packages="" keep="" mem=3G keep_text=0 headers=0 links=()
-# Defaults: the WorkUnreal trees beside the repo (the retail disc's System/ holds the 17 shipped .u and its inis).
-shipped=$work/assets/uc2-retail-assets/System retail=$work/assets/uc2-retail-assets/System
+# Defaults: the game folder beside the repo (its System/ holds the 17 shipped .u and the inis the game runs with).
 assets=$work/assets/uc2-assets
+shipped=$assets/System retail=none
 ucc=$repo/build-native/Source/UCC/ucc-bin
 capped=$work/bin/capped
 [ -x "$capped" ] || capped=none
@@ -178,10 +180,9 @@ if [ $keep_text = 0 ]; then
   mkdir -p "$out/Strip"
   cp -f "$out/System/Default.ini" "$out/System/Avaris.ini"
   cp -f "$out/System/DefUser.ini" "$out/System/User.ini"
-  if [ "$retail" != none ] && [ -d "$retail" ]; then
+  if [ "$retail" != none ]; then
+    [ -d "$retail" ] || { echo "uc-build: no --retail-inis folder $retail" >&2; exit 2; }
     for f in Characters.ini Gametypes.ini Maplists.ini; do cp -f "$retail/$f" "$out/System/$f"; done
-  else
-    echo "uc-build: note: no $retail: the strip uses the asset tree's per-class inis" | tee -a "$log" >&2
   fi
   rm -f "$out/System/ucc.log"
   t0=$SECONDS

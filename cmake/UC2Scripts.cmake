@@ -25,7 +25,7 @@ set(UE_ASSETS_DIR "" CACHE PATH
 set(UE_SCRIPT_PACKAGES_DIR "" CACHE PATH
     "The 17 shipped script packages (default: UE_ASSETS_DIR/System)")
 set(UE_SCRIPT_RETAIL_INIS_DIR "" CACHE PATH
-    "Optional: the retail disc's System/ (Characters.ini, Gametypes.ini, Maplists.ini for the strip; default: the game folder's)")
+    "Optional: a System/ whose Characters.ini, Gametypes.ini and Maplists.ini the strip loads instead of the game folder's (the pipeline proof passes the retail disc's)")
 set(UE_SCRIPTS_DIR "" CACHE PATH
     "Non-host presets: the host build's Scripts/System (default: build-native/Scripts/System; build-windows/... on a Windows host)")
 
@@ -152,15 +152,13 @@ set(_shipped "${UE_SCRIPT_PACKAGES_DIR}")
 if(NOT _shipped)
   set(_shipped "${_assets}/System")
 endif()
+# The per-class inis the strip loads: the game folder's, the ones the game runs with, unless an override names
+# another System/.
 set(_retail "${UE_SCRIPT_RETAIL_INIS_DIR}")
-# The retail disc's System/: the retail tree beside the repo (<repo>/../assets/uc2-retail-assets) when it is there.
-if(NOT _retail AND EXISTS "${CMAKE_SOURCE_DIR}/../assets/uc2-retail-assets/System/Gametypes.ini")
-  get_filename_component(_retail "${CMAKE_SOURCE_DIR}/../assets/uc2-retail-assets/System" ABSOLUTE)
-endif()
 if(_retail)
   foreach(_f Characters.ini Gametypes.ini Maplists.ini)
     if(NOT EXISTS "${_retail}/${_f}")
-      message(FATAL_ERROR "Script patches: UE_SCRIPT_RETAIL_INIS_DIR=${_retail} has no ${_f} (the retail disc's System/)")
+      message(FATAL_ERROR "Script patches: UE_SCRIPT_RETAIL_INIS_DIR=${_retail} has no ${_f}")
     endif()
   endforeach()
 else()

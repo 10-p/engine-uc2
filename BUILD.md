@@ -24,9 +24,10 @@ cmake --build build-native -j8
 cmake --preset wasm-perf && cmake --build build-wasm-perf -j4
 ```
 
-In the WorkUnreal folder the game folder (`assets/uc2-assets`) and the retail disc (`assets/uc2-retail-assets`) sit
-beside the repo and the configure finds both without options (`cmake/UC2Scripts.cmake`); the folder's
-`bin/build-all-engines.sh engine-uc2` builds every preset in order.
+In the WorkUnreal folder the game folder (`assets/uc2-assets`) sits beside the repo and the configure finds it
+without options (`cmake/UC2Scripts.cmake`); the build reads nothing else — the retail disc
+(`assets/uc2-retail-assets`) is read only by the pipeline proof's P1. The folder's `bin/build-all-engines.sh
+engine-uc2` builds every preset in order.
 
 ## Prerequisites
 
@@ -161,6 +162,13 @@ every class, script struct and event parameter struct with the binary's DWARF. I
 64 bits; `tools/dev/m13-cast-census.sh <build.log>` counts pointer-to-int narrowing (0). 32-bit stays the default and
 the reference (wasm32 has its layout).
 
+## CI
+
+`.github/workflows/build.yml` builds `native` and `native64` (Linux), `windows` and `windows64` (MinGW-w64) and
+`wasm-perf` on every push and pull request with `-DUE_SCRIPT_PATCHES=OFF` (no game folder in CI: the binaries run the
+shipped script packages and the web artifact's `scripts/` is empty), uploads the binaries, and a push to `main`
+replaces the rolling `latest` release.
+
 ## Scripts: `ucc-bin make`
 
 The game runs on the shipped compiled scripts (the 17 `.u` of the game folder's `System/`, plus the 30 load-time
@@ -241,7 +249,7 @@ folder, `UC2_SCRIPTS=none` keeps the game folder's).
 | `UE_SCRIPT_PATCH_SETS` | `default` | the sets to apply, `;` or `,` separated (`patches/sets.txt` names); `default` = those marked `on` there, in its order. Dependencies are enforced (`keys-menu` needs `mouse-look`; everything needs `epic-fixes`) |
 | `UE_ASSETS_DIR` | empty | the game folder: `System/` (the shipped `.u`, Epic's `DefaultXbox.ini`, `DefUserXbox.ini`, `Default.ini`, `DefUser.ini`, `Localization/`) and the content folders the scripts load (`Textures/`, `StaticMeshes/`, ...); `tools/dev/mkassets-uc2.sh` makes one from Epic's tree. Empty: the `UC2_ASSETS_DIR` environment variable (the dev tools read it too), else `<repo>/../assets/uc2-assets` when it exists, else the configure stops and says what to pass |
 | `UE_SCRIPT_PACKAGES_DIR` | `UE_ASSETS_DIR/System` | where the 17 shipped `.u` are, if not in the game folder (e.g. the game folder has rebuilt ones: point this at the disc's `System`) |
-| `UE_SCRIPT_RETAIL_INIS_DIR` | empty | optional: the retail disc's `System/`; its `Characters.ini`, `Gametypes.ini`, `Maplists.ini` are what the shipped packages' config defaults were stripped with (without it the game folder's are used, and a few config defaults differ from the shipped ones). Empty: `<repo>/../assets/uc2-retail-assets/System` when it exists |
+| `UE_SCRIPT_RETAIL_INIS_DIR` | empty | optional: a `System/` whose `Characters.ini`, `Gametypes.ini` and `Maplists.ini` the strip loads instead of the game folder's. Empty: the game folder's, the inis the game runs with, so the patched packages' config defaults and the inis agree. The pipeline proof's P1 passes the retail disc's, which the shipped packages were stripped with (`tools/scripts/uc-patches-proof.sh --retail-inis`) |
 | `UE_SCRIPTS_DIR` | `build-native/Scripts/System` | non-host presets: the host build's packages (`build-windows/...` on a Windows host). Missing with patches ON: the configure stops ("run the native preset first, or pass UE_SCRIPTS_DIR, or -DUE_SCRIPT_PATCHES=OFF") |
 
 - Every error stops the configure with what to do: no game folder, a rebuilt package in it (named, with its sha256

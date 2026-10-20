@@ -205,15 +205,8 @@ strip_scripts() {
   # which loads every class's config again, ran after sync_avaris.pl had deleted the Xbox Avaris.ini/User.ini.
   cp -f "$assets/System/Default.ini" "$run/System/Avaris.ini"
   cp -f "$assets/System/DefUser.ini" "$run/System/User.ini"
-  # And with the retail disc's per-class inis where they differ from the leak's (later) ones: the shipped
-  # defaults carry them (UCDeathmatch.LevelData without the Overdrive maps of the leak's Gametypes.ini; the
-  # character speeds of the retail Characters.ini). Read-only copies from <repo>/../assets/uc2-retail-assets.
-  local retail=$work/assets/uc2-retail-assets/System f
-  if [ -d "$retail" ]; then
-    for f in Characters.ini Gametypes.ini Maplists.ini; do cp -f "$retail/$f" "$run/System/$f"; done
-  else
-    echo "note: no $retail: the strip uses the leak's per-class inis (a few config defaults will differ)" >&2
-  fi
+  # The per-class inis (Characters, Gametypes, Maplists) are the run tree's own: the game folder's, which the
+  # game runs with.
   set +e
   local t0=$SECONDS
   (cd "$run/System" && "$capped" "$mem" 3600 -- "${ucc_run[@]}" editor.stripsource -CONFORM -log=ucc.log) > "$log.out" 2>&1
