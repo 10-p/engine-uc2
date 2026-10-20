@@ -24,6 +24,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.CompoundButton;
@@ -211,6 +212,10 @@ public class MainActivity extends Activity {
                 + "loading. Playing from the UC2 folder directly needs access to all files.", 11f, 0xFF6E747C, 24);
 
         setContentView(scroll);
+        // In touch mode the first D-pad press only leaves touch mode and never reaches dispatchKeyEvent.
+        scroll.getViewTreeObserver().addOnTouchModeChangeListener(new ViewTreeObserver.OnTouchModeChangeListener() {
+            @Override public void onTouchModeChanged(boolean inTouchMode) { if (!inTouchMode) cancelCountdown(true); }
+        });
 
         // The last choice; the first time, internal when there is a copy there.
         storageSwitch.setChecked(prefs().getBoolean(PREF_EXTERNAL, !GameFolder.isGameFolder(GameFolder.internalRoot(this))));
