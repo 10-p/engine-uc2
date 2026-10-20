@@ -1,7 +1,7 @@
 # engine-uc2: agent guide
 
 Unreal Championship 2 (Unreal Engine 2 build 2226 "Avaris", package version 151) from Epic's Xbox/Win32 tree, for
-Linux, Windows (MinGW-w64) and the Web (Emscripten). Private: proprietary source. What the engine changes:
+Linux, Windows (MinGW-w64), the Web (Emscripten) and Android. Private: proprietary source. What the engine changes:
 [`README.md`](./README.md); how to build it: [`BUILD.md`](./BUILD.md).
 
 ## The work folder: `/home/ion/WorkUnreal` (`<repo>/..`)
@@ -19,6 +19,7 @@ Linux, Windows (MinGW-w64) and the Web (Emscripten). Private: proprietary source
 
 The repo: `Source/` (Epic's packages and ours), `Engine/Config/` (the inis, [`README.md`](./Engine/Config/README.md)),
 `patches/` (the script patch sets), `cmake/`, `vendor/glue/` (the frontend's ABI files, vendored), `Thirdparty/`,
+`Android/` (the Gradle/NDK project of the Android app, BUILD.md "Android"),
 `tools/` (the cookers and format readers), `tools/scripts/` (the script patch pipeline), `tools/dev/` (checks and
 measurements: each script's header says what it does and how to run it), `docs/` (the Epic import notes and the port's
 notebooks: records, kept as history).

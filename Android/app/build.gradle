@@ -1,0 +1,111 @@
+plugins { id 'com.android.application' }
+
+// SDL2: one checkout for both halves of SDL, the C library the root CMakeLists builds (handed to it as
+// FETCHCONTENT_SOURCE_DIR_SDL2) and the Java classes of SDLActivity (its android-project sources), so the
+// two always match. -Psdl2Dir=<dir> (or SDL2_SOURCE_DIR) takes a local checkout; without one the branch the
+// root CMakeLists fetches for the native builds is cloned once into Android/build/SDL2.
+def sdl2Branch = 'release-2.32.x'
+def sdl2Given = project.findProperty('sdl2Dir') ?: System.getenv('SDL2_SOURCE_DIR')
+def sdl2Dir = file(sdl2Given ?: "${rootDir}/build/SDL2")
+def sdl2Java = new File(sdl2Dir, 'android-project/app/src/main/java')
+if (!new File(sdl2Java, 'org/libsdl/app/SDLActivity.java').isFile()) {
+    if (sdl2Given)
+        throw new GradleException("sdl2Dir=${sdl2Dir} is not an SDL2 checkout (no android-project/app/src/main/java)")
+    logger.lifecycle("Fetching SDL2 (${sdl2Branch}) into ${sdl2Dir}")
+    sdl2Dir.parentFile.mkdirs()
+    def git = ['git', 'clone', '--depth', '1', '-b', sdl2Branch, 'https://github.com/libsdl-org/SDL.git', sdl2Dir.path].execute()
+    git.waitForProcessOutput(System.out, System.err)
+    if (git.exitValue() != 0)
+        throw new GradleException("could not clone SDL2 into ${sdl2Dir}")
+}
+
+// The ABIs: the Pixel class of phones (arm64-v8a) and the emulator (x86_64); -Pabis=arm64-v8a builds one.
+def uc2Abis = (project.findProperty('abis') ?: 'arm64-v8a,x86_64').split(',').collect { it.trim() }
+
+// What the APK installs into the game folder's System/ before each start (GameActivity): the Android inis,
+// generated from the native ones by tools/dev/sync-android-ini.py.
+abstract class Uc2SystemOverlay extends DefaultTask {
+    @InputDirectory abstract DirectoryProperty getConfigDir()
+    @OutputDirectory abstract DirectoryProperty getOutputDir()
+    @TaskAction void run() {
+        def out = new File(outputDir.get().asFile, 'system')
+        out.deleteDir()
+        out.mkdirs()
+        ['Default.ini', 'DefUser.ini'].each { name ->
+            java.nio.file.Files.copy(new File(configDir.get().asFile, name).toPath(), new File(out, name).toPath())
+        }
+    }
+}
+def uc2SystemOverlay = tasks.register('uc2SystemOverlay', Uc2SystemOverlay) {
+    configDir.set(file("${rootDir}/../Engine/Config/android"))
+    outputDir.set(layout.buildDirectory.dir('generated/uc2/assets'))
+}
+
+android {
+    namespace = 'com.uc2.android'
+    // Android 16, what the phones run; the app keeps Android 14's behaviour (targetSdk).
+    compileSdk = 36
+    // Ubuntu's google-android-ndk-r28c-installer (BUILD.md, "Android"), also AGP's default.
+    ndkVersion = '28.2.13676358'
+
+    defaultConfig {
+        applicationId = 'com.uc2.android'
+        // Android 11: All files access (the game folder in place), and the C11 threads OpenAL Soft uses.
+        minSdk = 30
+        targetSdk = 34
+        versionCode = 1
+        versionName = '0.1'
+        ndk { abiFilters.addAll(uc2Abis) }
+        externalNativeBuild {
+            cmake {
+                abiFilters.addAll(uc2Abis)
+                def cmakeArgs = [
+                    '-DANDROID_STL=c++_shared',
+                    "-DFETCHCONTENT_SOURCE_DIR_SDL2=${sdl2Dir}".toString(),
+                    // The game runs the game folder's script packages: the patched ones are built by a native
+                    // host build and copied into the game folder like any other content (BUILD.md, "Android").
+                    '-DUE_SCRIPT_PATCHES=OFF',
+                ]
+                // The engine optimised in every variant (the Gradle debug variant would build it at -O0);
+                // -PnativeDebug keeps the variant's own CMAKE_BUILD_TYPE.
+                if (!project.hasProperty('nativeDebug'))
+                    cmakeArgs += '-DCMAKE_BUILD_TYPE=RelWithDebInfo'
+                arguments.addAll(cmakeArgs)
+                // libUC2.so (SDLLaunch) with libSDL2.so, the process set-up bridge, and libopenal.so, which is
+                // packaged but not linked: UC2ALAudio dlopens it when the audio device starts.
+                targets.addAll(['SDLLaunch', 'uc2_android_bridge', 'OpenAL'])
+            }
+        }
+    }
+
+    buildTypes {
+        // Installable as it is (the debug key): a release build for testing on a device, not for a store.
+        release { signingConfig = signingConfigs.debug }
+    }
+
+    // The engine's own root CMakeLists: its ANDROID branches build the game as libUC2.so.
+    externalNativeBuild {
+        cmake {
+            path = file('../../CMakeLists.txt')
+        }
+    }
+
+    sourceSets {
+        main { java.srcDir(sdl2Java) }
+    }
+
+    // The libraries extracted to the file system at install, as dlopen of libopenal.so by name expects.
+    packaging { jniLibs { useLegacyPackaging = true } }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    // targetSdk 34 is below what the Play store asks for; the APK is for testing on a device.
+    lint { disable.add('ExpiredTargetSdkVersion') }
+}
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(uc2SystemOverlay, { it.outputDir })
+    }
+}

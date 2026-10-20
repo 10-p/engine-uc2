@@ -1,7 +1,7 @@
 # engine-uc2: Unreal Championship 2 portable engine
 
 Unreal Championship 2: The Liandri Conflict (Unreal Engine 2 build 2226 "Avaris", package version 151), from Epic's
-Xbox/Win32 source tree, for Linux, Windows (MinGW-w64) and the Web (Emscripten). Source only: the game content
+Xbox/Win32 source tree, for Linux, Windows (MinGW-w64), the Web (Emscripten) and Android. Source only: the game content
 (maps, textures, sounds, movies and the shipped script packages) comes from your own copy of the game and is never
 tracked. The repository holds no UnrealScript either, only our changes to the scripts as patch sets
 ([`patches/`](./patches/README.md)), which the build applies to scripts decompiled from your shipped `.u` files.
@@ -29,8 +29,11 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   page lists the broker's servers.
 - **OpenAL Soft audio** (`UC2ALAudio`): the Xbox XACT device (cues, music, zone reverb, voice pool) on OpenAL Soft,
   from the cooked sound data or the shipped Xbox banks.
-- **64-bit and ARM**: LP64 builds (x86_64 Linux and Windows, arm64 cross) on the shipped 32-bit script layout, with
-  the C++/script layout checked at load on every pointer width.
+- **64-bit and ARM**: LP64 builds (x86_64 Linux and Windows, arm64 cross, Android arm64 and x86_64) on the shipped
+  32-bit script layout, with the C++/script layout checked at load on every pointer width.
+- **Android build**: a Gradle/NDK project (`Android/`): the engine as `libUC2.so` under SDL's activity, rendering through
+  GL4ES on OpenGL ES 3, sound on OpenSL ES, the game folder read in place from shared storage or from an internal copy
+  the launcher makes and clears, and an on-screen pad that is a virtual SDL controller (the mouse is off).
 - **Windows build**: MinGW-w64 cross builds (i686 and x86_64), statically linked, no runtime DLL but OpenAL's.
 - **GCC/Clang portability**: Epic's MSVC code builds with GCC, Clang (Emscripten) and MinGW unchanged in behaviour.
 - **Keyboard and mouse**: PC bindings, menus driven by keyboard and mouse, the console on the key left of 1, the
@@ -59,7 +62,8 @@ The features of every engine of the frontend, with this one's, are listed in the
 Linux x86 (32-bit, the reference) and x86_64 play: every map loads, menus, matches with bots, effects, sound,
 movies, controls, split screen and network play. Windows builds run under wine here and have not been run on Windows
 itself. The web build boots and plays in the frontend's browser specs (target `uc2`). The arm64 cross build builds and
-its `ucc-bin` runs under qemu; it has not been run on arm64 hardware.
+its `ucc-bin` runs under qemu; it has not been run on arm64 hardware. The Android build (arm64) boots to the menus
+and plays a match with bots on a Pixel 7 Pro (Android 17), from shared storage.
 
 ## Building
 

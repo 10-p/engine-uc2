@@ -47,3 +47,15 @@ __pycache__/
 
 # Per-machine local overrides.
 .claude/settings.local.json
+
+# The Android Gradle project's build state (Android/): Gradle's caches, the build trees, the NDK's CMake trees
+# (FetchContent checkouts under them), the SDL checkout the build fetches, this machine's SDK paths, Android
+# Studio's project files.
+/Android/.gradle/
+/Android/.kotlin/
+/Android/build/
+/Android/app/build/
+/Android/app/.cxx/
+/Android/local.properties
+/Android/.idea/
+*.iml
