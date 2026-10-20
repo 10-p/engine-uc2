@@ -1,0 +1,268 @@
+name: build
+
+# Builds the presets on every push and pull request and uploads the binaries as workflow artifacts; the newest
+# build of main is also kept as the rolling "latest" release. Nothing here runs the game (no GPU, no game
+# folder): every configure passes -DUE_SCRIPT_PATCHES=OFF, so the build reads nothing of the game folder and
+# the binaries run the shipped script packages (BUILD.md, "Script patches").
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: linux (${{ matrix.preset }})
+    runs-on: ubuntu-24.04
+    # A stock ubuntu:24.04 container: the runner image's preinstalled amd64 -dev packages block the :i386 ones.
+    container: ubuntu:24.04
+    # Container jobs default to sh; the steps use bash features.
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        # SDL2 and openal-soft are fetched and built from source (CMakeLists.txt), so the development files
+        # they configure against (X11, GL, ALSA, PulseAudio, udev, D-Bus) have to be the target's architecture.
+        include:
+          - preset: native
+            elf: ELF 32-bit
+            packages: >-
+              gcc-multilib g++-multilib
+              libx11-dev:i386 libxext-dev:i386 libxrandr-dev:i386 libxcursor-dev:i386 libxi-dev:i386
+              libxinerama-dev:i386 libxss-dev:i386 libxxf86vm-dev:i386 libgl-dev:i386
+              libasound2-dev:i386 libpulse-dev:i386 libudev-dev:i386 libdbus-1-dev:i386
+          - preset: native64
+            elf: ELF 64-bit
+            packages: >-
+              libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev
+              libxinerama-dev libxss-dev libxxf86vm-dev libgl-dev
+              libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
+    steps:
+      - name: Base tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates cmake make g++ pkg-config python3 file
+
+      - uses: actions/checkout@v4
+
+      - name: Install the build dependencies
+        run: |
+          dpkg --add-architecture i386
+          apt-get update
+          apt-get install -y --no-install-recommends ${{ matrix.packages }}
+
+      # FetchContent clones SDL2, openal-soft and gl4es into the build directory; the key changes when the files
+      # that declare them do.
+      - name: Cache fetched dependencies
+        uses: actions/cache@v4
+        with:
+          path: build-${{ matrix.preset }}/_deps
+          key: deps-${{ matrix.preset }}-${{ hashFiles('CMakeLists.txt', 'cmake/*.cmake', 'Source/*/CMakeLists.txt', 'Source/SDLLaunch/cmake/*.cmake') }}
+
+      # No game folder on the runner: the script patches are off.
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }} -DUE_SCRIPT_PATCHES=OFF
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }} -j$(nproc)
+
+      # The 32-bit preset demotes the x86_64 compiler to -m32, so the ELF class is checked. SDL2 is linked
+      # statically and libopenal is dlopened when the audio device starts, so neither is a DT_NEEDED of uc2.bin.
+      - name: Check the binaries
+        run: |
+          set -euo pipefail
+          b=build-${{ matrix.preset }}
+          test -x $b/Source/SDLLaunch/uc2.bin
+          test -x $b/Source/UCC/ucc-bin
+          test -f $b/_deps/openalsoft-build/libopenal.so.1
+          file -b $b/Source/SDLLaunch/uc2.bin | grep -q '${{ matrix.elf }}'
+          needed=$(readelf -d $b/Source/SDLLaunch/uc2.bin | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p')
+          echo "$needed"
+          if echo "$needed" | grep -qiE 'libSDL2|libopenal'; then
+            echo "::error::uc2.bin needs a library it should carry or dlopen: $needed"; exit 1
+          fi
+
+      # The three files a run tree puts side by side in System/ (tools/dev/mkrun-uc2.sh); libopenal.so.1 is a
+      # symlink in the build tree, so it is copied dereferenced.
+      - name: Stage the run files
+        run: |
+          set -euo pipefail
+          b=build-${{ matrix.preset }}
+          mkdir -p dist
+          cp -L $b/Source/SDLLaunch/uc2.bin $b/Source/UCC/ucc-bin $b/_deps/openalsoft-build/libopenal.so.1 dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uc2-${{ matrix.preset }}
+          path: dist/
+          if-no-files-found: error
+          # Short retention keeps the artifact quota free; the `latest` job keeps the newest build.
+          retention-days: 7
+
+  windows:
+    name: windows (${{ matrix.preset }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - preset: windows
+            objdump: i686-w64-mingw32-objdump
+          - preset: windows64
+            objdump: x86_64-w64-mingw32-objdump
+    steps:
+      - uses: actions/checkout@v4
+
+      # Ubuntu's mingw-w64 carries both targets and both thread models; the toolchain file picks the -posix
+      # compilers (cmake/toolchain-mingw-w64.cmake).
+      - name: Install MinGW-w64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mingw-w64
+
+      - name: Cache fetched dependencies
+        uses: actions/cache@v4
+        with:
+          path: build-${{ matrix.preset }}/_deps
+          key: deps-${{ matrix.preset }}-${{ hashFiles('CMakeLists.txt', 'cmake/*.cmake', 'Source/*/CMakeLists.txt', 'Source/SDLLaunch/cmake/*.cmake') }}
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }} -DUE_SCRIPT_PATCHES=OFF
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }} -j$(nproc)
+
+      # The programs run outside the build machine: Windows system DLLs only (the list of
+      # tools/dev/package-windows.sh). OpenAL32.dll is built beside them and loaded with LoadLibrary, not imported.
+      - name: Check the programs import only system DLLs
+        run: |
+          set -euo pipefail
+          b=build-${{ matrix.preset }}
+          for f in $b/Source/SDLLaunch/uc2.exe $b/Source/UCC/ucc.exe $b/_deps/openalsoft-build/OpenAL32.dll; do
+            imports=$(${{ matrix.objdump }} -p "$f" | sed -n 's/^\tDLL Name: //p' | sort -u)
+            echo "$f: $(echo $imports)"
+            bad=$(echo "$imports" | grep -viE '^(ADVAPI32|AVRT|GDI32|IMM32|KERNEL32|msvcrt|ole32|OLEAUT32|OpenAL32|SETUPAPI|SHELL32|USER32|VERSION|WINMM|WS2_32)\.dll$' || true)
+            if [ -n "$bad" ]; then echo "::error::$f: non-system DLL imports: $bad"; exit 1; fi
+          done
+
+      # The three files a Windows folder puts side by side in System/ (tools/dev/package-windows.sh).
+      - name: Stage the run files
+        run: |
+          set -euo pipefail
+          b=build-${{ matrix.preset }}
+          mkdir -p dist
+          cp $b/Source/SDLLaunch/uc2.exe $b/Source/UCC/ucc.exe $b/_deps/openalsoft-build/OpenAL32.dll dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uc2-${{ matrix.preset }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  web:
+    name: web (wasm-perf)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # emcc must be on PATH before the configure step; the preset's toolchain file reads $EMSDK.
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 5.0.7
+          actions-cache-folder: emsdk-cache
+
+      # A fresh emsdk has no SDL2 port headers until the port is built; the engine compiles with -pthread, so
+      # the threaded variant is the one it links.
+      - name: Build the SDL2 port into the emsdk sysroot
+        run: embuilder build sdl2-mt
+
+      - name: Cache fetched dependencies
+        uses: actions/cache@v4
+        with:
+          path: build-wasm-perf/_deps
+          key: deps-wasm-perf-${{ hashFiles('CMakeLists.txt', 'cmake/*.cmake', 'Source/*/CMakeLists.txt', 'Source/SDLLaunch/cmake/*.cmake') }}
+
+      # No game folder on the runner: the script patches are off, so the artifact's scripts/ is empty and the
+      # link preloads only the tracked web inis (Engine/Config/web).
+      - name: Configure
+        run: cmake --preset wasm-perf -DUE_SCRIPT_PATCHES=OFF
+
+      - name: Build
+        run: cmake --build --preset wasm-perf -j$(nproc)
+
+      # meta.json records the commit it was linked from; it must be the commit built.
+      - name: Check artifact provenance
+        run: |
+          set -euo pipefail
+          sha=$(python3 -c "import json;print(json.load(open('build-wasm-perf/Source/SDLLaunch/meta.json'))['provenance']['gitSha'])")
+          echo "meta.json gitSha=$sha  HEAD=$GITHUB_SHA"
+          case "$GITHUB_SHA" in "$sha"*) ;; *) echo "::error::meta.json gitSha does not match HEAD"; exit 1;; esac
+
+      # The browser artifact as the frontend consumes it. The symbol map beside it (SDLLaunch.js.symbols) is a
+      # side file and never ships.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uc2-web
+          path: |
+            build-wasm-perf/Source/SDLLaunch/SDLLaunch.js
+            build-wasm-perf/Source/SDLLaunch/SDLLaunch.wasm
+            build-wasm-perf/Source/SDLLaunch/SDLLaunch.data
+            build-wasm-perf/Source/SDLLaunch/meta.json
+            build-wasm-perf/Source/SDLLaunch/scripts/
+          if-no-files-found: error
+          retention-days: 7
+
+  # The newest build of main as a release: release assets do not expire, workflow artifacts do. The release is
+  # deleted and recreated so its tag moves to the new commit and retired builds drop out.
+  latest:
+    name: rolling "latest" release
+    needs: [linux, windows, web]
+    if: github.event_name == 'push' && github.ref_name == 'main'
+    runs-on: ubuntu-24.04
+    # The default workflow token is read-only.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Pack one zip per build
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          shopt -s nullglob
+          n=0
+          for d in artifacts/*/; do
+            name=$(basename "$d")
+            ( cd "$d" && zip -qr "$GITHUB_WORKSPACE/out/$name.zip" . )
+            n=$((n + 1))
+          done
+          [ "$n" -gt 0 ] || { echo "::error::no artifacts were downloaded: nothing to publish"; exit 1; }
+          ls -la out/
+
+      - name: Publish (replacing the previous one)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest out/*.zip \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "latest — $(git log -1 --format=%s | cut -c1-72)" \
+            --notes "$(printf '%s\n' \
+              "The newest UC2 engine build of \`main\`, replaced on every push." \
+              "" \
+              "Built with the script patches off (\`-DUE_SCRIPT_PATCHES=OFF\`: no game folder in CI): the binaries run the shipped script packages, and the web artifact's \`scripts/\` is empty." \
+              "" \
+              "Commit: \`$GITHUB_SHA\`" \
+              "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID")"
