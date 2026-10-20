@@ -116,13 +116,18 @@ void USDL2Viewport::InitKeyMap()
 }
 
 #if defined(__ANDROID__)
+// A Back press went to the exit question (its release goes nowhere either).
+static UBOOL GBackAskedExit = 0;
+
 //
-// The frame of an Android viewport: the window's surface (the whole screen) times RenderScale; the present pass
-// draws it over the whole surface.
+// The frame of an Android viewport: the window's surface (the whole screen) times RenderScale, below 1 fewer pixels
+// than the screen, above 1 more (supersampling); the present pass draws it over the whole surface. Its longer side
+// stays within 8192, what the GPUs Android runs on can render to.
 //
 static void AndroidFrameSize( USDL2Client* Client, INT SurfaceX, INT SurfaceY, INT& FrameX, INT& FrameY )
 {
-	FLOAT Scale = Clamp( Client->RenderScale, 0.25f, 1.f );
+	FLOAT Scale = Clamp( Client->RenderScale, 0.1f, 4.f );
+	Scale = Min( Scale, 8192.f / Max( SurfaceX, SurfaceY ) );
 	FrameX = Align( Max( 320, appRound( SurfaceX * Scale ) ), 2 );
 	FrameY = Max( 240, appRound( SurfaceY * Scale ) );
 }
@@ -1015,6 +1020,15 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 				ToggleFullscreen();
 				break;
 			}
+#if defined(__ANDROID__)
+			// Back with nothing left to go back to (the menus' first page) asks whether to exit the game.
+			if( Ev.key.keysym.scancode==SDL_SCANCODE_AC_BACK && !Ev.key.repeat && Client->BackLeavesGame() )
+			{
+				GBackAskedExit = 1;
+				Client->AskToExit();
+				break;
+			}
+#endif
 			if( Client->LoggingInput() && !Ev.key.repeat )
 				debugf( SDL2INPUT, TEXT("key %s press (viewport %i)"), Input ? Input->GetKeyName(Key) : TEXT("?"), Client->Viewports.FindItemIndex(this) );
 			// Player one is on the keyboard (the key glyphs follow; only the window's viewport gets keys)
@@ -1031,6 +1045,14 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 		{
 			if( (INT)Ev.key.keysym.scancode >= SDL2DRV_MAX_SCANCODES )
 				break;
+#if defined(__ANDROID__)
+			// The release of a Back that asked to exit is not Escape's either (the GUI closes a page on Escape's release).
+			if( Ev.key.keysym.scancode==SDL_SCANCODE_AC_BACK && GBackAskedExit )
+			{
+				GBackAskedExit = 0;
+				break;
+			}
+#endif
 			EInputKey Key = (EInputKey)KeyMap[Ev.key.keysym.scancode];
 			if( Key==IK_None )
 				break;

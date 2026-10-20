@@ -32,8 +32,9 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
 - **64-bit and ARM**: LP64 builds (x86_64 Linux and Windows, arm64 cross, Android arm64 and x86_64) on the shipped
   32-bit script layout, with the C++/script layout checked at load on every pointer width.
 - **Android build**: a Gradle/NDK project (`Android/`): the engine as `libUC2.so` under SDL's activity, rendering through
-  GL4ES on OpenGL ES 3, sound on OpenSL ES, the game folder read in place from shared storage or from an internal copy
-  the launcher makes and clears, and an on-screen pad that is a virtual SDL controller (the mouse is off).
+  GL4ES on OpenGL ES 3, sound on OpenSL ES, the game folder copied into internal storage from a folder chosen with the
+  system's folder picker (or read in place from shared storage), a resolution scale up to supersampling, an exit prompt
+  on Back, and an on-screen pad that is a virtual SDL controller (the mouse is off).
 - **Windows build**: MinGW-w64 cross builds (i686 and x86_64), statically linked, no runtime DLL but OpenAL's.
 - **GCC/Clang portability**: Epic's MSVC code builds with GCC, Clang (Emscripten) and MinGW unchanged in behaviour.
 - **Keyboard and mouse**: PC bindings, menus driven by keyboard and mouse, the console on the key left of 1, the

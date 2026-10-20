@@ -181,6 +181,10 @@ class USDL2Client : public UClient, public FNotifyHook
 	void FeedTouchPad();
 	UBOOL IsTouchPad( INT InstanceID );
 	void PublishTouchPadState();
+
+	// Android's Back (SDL2Android.cpp; nothing off Android).
+	UBOOL BackLeavesGame();
+	void AskToExit();
 };
 
 /*-----------------------------------------------------------------------------

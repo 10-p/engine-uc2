@@ -9,6 +9,10 @@
 	the menus' pad navigation, the bindings). The overlay asks which layout to draw (menus or
 	match) and whether the pad is in use through nativeTouchPadState.
 
+	Back on the menus' first page (in the menu level, one page on the GUI's stack) asks the
+	activity to confirm exiting the game (GameActivity.showExitDialog); everywhere else Back is
+	Escape (SDL2Viewport.cpp).
+
 	Off Android the client's functions here do nothing.
 =============================================================================*/
 
@@ -165,6 +169,52 @@ void USDL2Client::PublishTouchPadState()
 	GTouchState.store( State );
 }
 
+//
+// Whether Back has nothing left to go back to: the menu level, with the GUI on its first page (its MenuStack, read
+// through the class's property: the GUI package is not this one's).
+//
+UBOOL USDL2Client::BackLeavesGame()
+{
+	guard(USDL2Client::BackLeavesGame);
+	UGameEngine* GameEngine = Cast<UGameEngine>( Engine );
+	ULevel* Level = GameEngine ? GameEngine->GLevel : NULL;
+	if( !Level || appStricmp( Level->GetOuter()->GetName(), TEXT("MENU") )!=0 )
+		return 0;
+	UBaseGUIController* GUI = Viewports.Num() ? Viewports(0)->GUIController : NULL;
+	UArrayProperty* Stack = GUI ? FindField<UArrayProperty>( GUI->GetClass(), TEXT("MenuStack") ) : NULL;
+	INT Pages = Stack ? ((FArray*)((BYTE*)GUI + Stack->Offset))->Num() : 0;
+	debugf( NAME_Log, TEXT("SDL2Drv: Back in the menus with %i page(s) open%s"), Pages, Pages<=1 ? TEXT(": asking to exit") : TEXT("") );
+	return Pages <= 1;
+	unguard;
+}
+
+//
+// GameActivity.showExitDialog on the activity: its dialog quits through SDL (SDL_QUIT, then the engine's own exit).
+//
+void USDL2Client::AskToExit()
+{
+	guard(USDL2Client::AskToExit);
+	JNIEnv* Env = (JNIEnv*)SDL_AndroidGetJNIEnv();
+	jobject Activity = (jobject)SDL_AndroidGetActivity();
+	if( !Env || !Activity )
+	{
+		debugf( NAME_Warning, TEXT("SDL2Drv: no activity to ask whether to exit") );
+		return;
+	}
+	jclass Class = Env->GetObjectClass( Activity );
+	jmethodID Show = Env->GetMethodID( Class, "showExitDialog", "()V" );
+	if( Show )
+		Env->CallVoidMethod( Activity, Show );
+	if( Env->ExceptionCheck() )
+	{
+		Env->ExceptionClear();
+		debugf( NAME_Warning, TEXT("SDL2Drv: GameActivity.showExitDialog failed") );
+	}
+	Env->DeleteLocalRef( Class );
+	Env->DeleteLocalRef( Activity );
+	unguard;
+}
+
 #else
 
 void USDL2Client::InitTouchPad() {}
@@ -172,6 +222,8 @@ void USDL2Client::ExitTouchPad() {}
 void USDL2Client::FeedTouchPad() {}
 UBOOL USDL2Client::IsTouchPad( INT InstanceID ) { return 0; }
 void USDL2Client::PublishTouchPadState() {}
+UBOOL USDL2Client::BackLeavesGame() { return 0; }
+void USDL2Client::AskToExit() {}
 
 #endif
 

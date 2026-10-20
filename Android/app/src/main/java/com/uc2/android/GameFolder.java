@@ -16,7 +16,9 @@ import java.util.Arrays;
  * Where the game folder is: a folder named UC2 (System, Maps, Textures, Sounds, Music, Movies, ...) on
  * shared storage, the complete game, slow to read through Android's storage layer; or the app's internal
  * copy of it, fast, deleted with the app. The launcher chooses and passes the choice to the game process
- * on the Intent ({@link GameActivity#EXTRA_STORAGE_MODE}).
+ * on the Intent ({@link GameActivity#EXTRA_STORAGE_MODE}). The engine reads its folder by path: a UC2
+ * folder in this app's own folder on a volume needs no permission, one anywhere else on shared storage
+ * needs All files access (a folder chosen with Android's folder picker is copied in instead, Storage).
  */
 final class GameFolder {
     private static final String TAG = "UC2";
@@ -53,6 +55,18 @@ final class GameFolder {
             Log.w(TAG, "could not look through the storage volumes", t);
         }
         return primary;
+    }
+
+    /**
+     * Whether a folder is inside this app's own folders on a storage volume
+     * (Android/data/com.uc2.android/files), which the app reads and writes without any permission.
+     */
+    static boolean isAppSpecific(Context ctx, File root) {
+        if (root == null) return false;
+        String path = root.getAbsolutePath();
+        for (File appDir : ctx.getExternalFilesDirs(null))
+            if (appDir != null && path.startsWith(appDir.getAbsolutePath())) return true;
+        return false;
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.uc2.android;
 
+import android.app.AlertDialog;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
@@ -7,6 +8,9 @@ import android.view.WindowManager;
 import android.widget.FrameLayout;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Locale;
 
 import org.libsdl.app.SDLActivity;
 
@@ -34,6 +38,15 @@ public class GameActivity extends SDLActivity {
      * The launcher's countdown then starts the game without a touch.
      */
     static final String EXTRA_ARGS = "com.uc2.android.ARGS";
+
+    /**
+     * The frame's size as a multiple of the screen's (the launcher's resolution scale): below 1 fewer
+     * pixels than the screen, above 1 more (supersampling). The engine gets it as
+     * [SDL2Drv.SDL2Client] RenderScale, which it also keeps in the game folder's ini.
+     */
+    static final String EXTRA_RENDER_SCALE = "com.uc2.android.RENDER_SCALE";
+
+    private AlertDialog exitDialog;
 
     private static boolean bridgeLoaded = false;
 
@@ -109,11 +122,41 @@ public class GameActivity extends SDLActivity {
 
     @Override
     protected String[] getArguments() {
-        // The engine writes its inis, its log and the saves into the game folder, as on a desktop.
+        // The engine writes its inis, its log and the saves into the game folder, as on a desktop. The
+        // command line from adb comes first (a map URL must be the first argument), then the settings.
+        ArrayList<String> args = new ArrayList<String>();
         String extra = getIntent() != null ? getIntent().getStringExtra(EXTRA_ARGS) : null;
-        if (extra == null || extra.trim().isEmpty()) return new String[0];
-        Log.i(TAG, "engine arguments: " + extra);
-        return extra.trim().split("\\s+");
+        if (extra != null && !extra.trim().isEmpty()) args.addAll(Arrays.asList(extra.trim().split("\\s+")));
+        float scale = getIntent() != null ? getIntent().getFloatExtra(EXTRA_RENDER_SCALE, 0f) : 0f;
+        if (scale > 0f) args.add(String.format(Locale.US, "-ini:System:[SDL2Drv.SDL2Client]:RenderScale=%.2f", scale));
+        Log.i(TAG, "engine arguments: " + args);
+        return args.toArray(new String[0]);
+    }
+
+    /**
+     * Called by the engine (SDL2Drv's AskToExit) when Back has nothing left to go back to: the usual
+     * Android confirmation. Exit quits through SDL, so the engine saves its settings and shuts down.
+     */
+    public void showExitDialog() {
+        runOnUiThread(new Runnable() {
+            @Override public void run() {
+                if (exitDialog != null && exitDialog.isShowing()) return;
+                exitDialog = new AlertDialog.Builder(GameActivity.this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        .setTitle("Exit game?")
+                        .setNegativeButton("Cancel", null)
+                        .setPositiveButton("Exit", new android.content.DialogInterface.OnClickListener() {
+                            @Override public void onClick(android.content.DialogInterface d, int which) {
+                                Log.i(TAG, "exit confirmed");
+                                SDLActivity.nativeSendQuit();
+                            }
+                        })
+                        .create();
+                exitDialog.show();
+                // A pad's confirm button lands on Cancel, as console exit prompts do; Exit is one step away.
+                android.widget.Button cancel = exitDialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+                if (cancel != null) cancel.requestFocus();
+            }
+        });
     }
 
     @Override

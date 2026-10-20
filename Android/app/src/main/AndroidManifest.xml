@@ -6,7 +6,8 @@
     <uses-feature android:name="android.hardware.gamepad" android:required="false" />
     <!-- Network play (IpDrv). -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- The game folder is read in place from shared storage: All files access. -->
+    <!-- Only for running the game in place from shared storage outside the app's own folder (/sdcard/UC2, an
+         SD card's UC2): All files access, asked for then. A folder chosen with the folder picker needs none. -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
     <application
@@ -16,12 +17,13 @@
         android:hardwareAccelerated="true"
         android:extractNativeLibs="true">
 
-        <!-- The launcher: storage access, the game folder's location (shared storage or the app's internal
-             copy), copying and clearing the internal copy; starts the game. -->
+        <!-- The launcher: where the game folder is (the internal copy, made from a folder chosen with the
+             folder picker, or shared storage in place), copying and clearing the internal copy, the resolution
+             scale; starts the game. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
