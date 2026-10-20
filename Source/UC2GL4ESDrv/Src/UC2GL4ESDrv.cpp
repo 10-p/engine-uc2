@@ -1,8 +1,9 @@
 /*=============================================================================
 	UC2GL4ESDrv.cpp: the GL4ES binding of UC2GLDrv.
 
-	Native (Linux): SDL2Drv creates the window and, from the attributes set here, an OpenGL
-	ES 3.0 context, ES 2.0 as the fallback (EGL or GLX, SDL's choice); gl4es is handed SDL's lookup.
+	Native (Linux, Android): SDL2Drv creates the window and, from the attributes set here, an
+	OpenGL ES 3.0 context, ES 2.0 as the fallback (EGL or GLX, SDL's choice; EGL on Android); gl4es
+	is handed SDL's lookup.
 	Web: under PROXY_TO_PTHREAD the canvas belongs to the engine's worker
 	(OFFSCREENCANVASES_TO_PTHREAD), and SDL's GL path is EGL, which Emscripten runs on the
 	browser's main thread, where the canvas no longer is (Emscripten issue 24792). So SDL
@@ -18,6 +19,11 @@
 #include <emscripten.h>
 #include <emscripten/html5.h>
 #include <emscripten/html5_webgl.h>
+#endif
+
+#if defined(__ANDROID__)
+#include <string.h>
+#include <sys/system_properties.h>	// __system_property_get: is this the emulator
 #endif
 
 #include "UC2GL4ESDrv.h"
@@ -284,7 +290,26 @@ UBOOL UUC2GL4ESRenderDevice::BindingInit()
 	// user's home directory, and natively it builds its programs the way the browser has to
 	// (WebGL has no program binaries).
 	setenv( "LIBGL_NOPSA",			"1", 1 );
+	// No framebuffer unbind and rebind around a draw that samples a texture attached to the bound framebuffer: gl4es
+	// switches that workaround on by itself for ARM and Imagination GPUs (Android's Mali), and its check indexes the
+	// bound textures with the texture unit read back from the driver's program, out of range, a crash on the first
+	// draw of a match. Off, every target runs gl4es the same way.
+	setenv( "LIBGL_FBOUNBIND",		"0", 1 );
 	// (gl4es' own LIBGL_DBGSHADERCONV=15 / LIBGL_LOGSHADERERROR=1 in the environment debug its shader conversion.)
+#if defined(__ANDROID__)
+	// The Android emulator's OpenGL ES translator advertises GL_EXT_texture_format_BGRA8888 and then uploads BGRA
+	// textures with the channels and alpha wrong: there gl4es swizzles BGRA to RGBA itself. Devices' drivers do it right.
+	{
+		char Qemu[PROP_VALUE_MAX] = { 0 }, Hardware[PROP_VALUE_MAX] = { 0 };
+		__system_property_get( "ro.kernel.qemu", Qemu );
+		__system_property_get( "ro.hardware", Hardware );
+		if( Qemu[0] == '1' || strstr( Hardware, "goldfish" ) || strstr( Hardware, "ranchu" ) )
+		{
+			setenv( "LIBGL_NOBGRA", "1", 1 );
+			debugf( NAME_Init, TEXT("UC2GL4ESDrv: the Android emulator: gl4es converts BGRA textures itself (LIBGL_NOBGRA)") );
+		}
+	}
+#endif
 
 	set_getprocaddress( UC2GL4ES_RawGetProcAddress );
 	initialize_gl4es();

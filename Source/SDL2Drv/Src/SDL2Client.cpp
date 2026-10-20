@@ -27,6 +27,7 @@ USDL2Client::USDL2Client()
 	PadsInitialized = 0;
 	PadsOn = 0;
 	InputTest = NULL;
+	TouchPadJoystick = NULL;
 	unguard;
 }
 
@@ -54,6 +55,9 @@ void USDL2Client::StaticConstructor()
 	new(GetClass(),TEXT("SplitScreenJoinInMatch"),RF_Public)UBoolProperty(CPP_PROPERTY(SplitScreenJoinInMatch),TEXT("Input"),CPF_Config );
 	new(GetClass(),TEXT("SplitScreenFullDetail"),RF_Public)UBoolProperty(CPP_PROPERTY(SplitScreenFullDetail),TEXT("Display"),CPF_Config );
 	new(GetClass(),TEXT("PadsStartAtPlayerTwo"),RF_Public)UBoolProperty(CPP_PROPERTY(PadsStartAtPlayerTwo),TEXT("Input"),CPF_Config );
+	new(GetClass(),TEXT("UseMouse"),          RF_Public)UBoolProperty (CPP_PROPERTY(UseMouse),          TEXT("Input"),    CPF_Config );
+	new(GetClass(),TEXT("TouchPad"),          RF_Public)UBoolProperty (CPP_PROPERTY(TouchPad),          TEXT("Input"),    CPF_Config );
+	new(GetClass(),TEXT("RenderScale"),       RF_Public)UFloatProperty(CPP_PROPERTY(RenderScale),       TEXT("Display"),  CPF_Config );
 
 	// Compiled defaults for the inherited UClient settings, the values of Default.ini's [SDL2Drv.SDL2Client].
 	// UClient::StaticConstructor registers them without values, so an ini that has no section for this client
@@ -95,6 +99,13 @@ void USDL2Client::StaticConstructor()
 	SplitScreenJoinInMatch	= 1;	// players 3 and 4 during a match
 	SplitScreenFullDetail	= 0;	// Epic's split-screen detail reductions (True: full detail)
 	PadsStartAtPlayerTwo	= 0;	// the first pad drives player one with keyboard+mouse; True = pads join from player two
+#if defined(__ANDROID__)
+	UseMouse			= 0;	// a phone is driven by its pads and the on-screen pad
+#else
+	UseMouse			= 1;
+#endif
+	TouchPad			= 1;	// Android only
+	RenderScale			= 1.0f;	// Android only: the screen's own resolution
 	UIScaleMode			= UISCALE_Fit43;	// the UI in a centred 4:3 box (Native640: 1:1 from the top-left)
 	UIMenuBackground	= UIMENUBG_Fill;	// menu backgrounds fill the window
 	UISharpText			= 1;				// glyphs from bigger sizes of the font when the UI is scaled up
@@ -129,6 +140,16 @@ void USDL2Client::Init( UEngine* InEngine )
 	SDL_SetHint( SDL_HINT_MOUSE_RELATIVE_MODE_WARP, "0" );
 	SDL_SetHint( SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE, "0" );
 	SDL_SetHint( SDL_HINT_MOUSE_RELATIVE_SPEED_SCALE, "1.0" );
+	// Without the mouse, touches are not turned into mouse events either (SDL's default does).
+	if( !UseMouse )
+		SDL_SetHint( SDL_HINT_TOUCH_MOUSE_EVENTS, "0" );
+#if defined(__ANDROID__)
+	// The system's Back is a key (SDL_SCANCODE_AC_BACK, the game's Escape) instead of closing the activity.
+	SDL_SetHint( SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1" );
+	// Landscape only, either way up: SDLActivity sets the orientation from this hint and the window's shape when the
+	// window is created, and a portrait surface would not match the frame.
+	SDL_SetHint( SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight" );
+#endif
 
 	if( SDL_InitSubSystem( SDL_INIT_VIDEO ) != 0 )
 		appErrorf( TEXT("Couldn't initialize SDL2 video: %s"), appFromAnsi(SDL_GetError()) );
@@ -136,6 +157,8 @@ void USDL2Client::Init( UEngine* InEngine )
 
 	// Pads (SDL2Pads.cpp), and the test channel that drives a virtual one (SDL2InputTest.h).
 	InitPads();
+	// The on-screen pad, a virtual SDL controller (Android).
+	InitTouchPad();
 	// The channel's file: test key [SDL2Drv.SDL2Client] InputTestFile=<file>, set with -ini:, read once and
 	// never kept in the ini.
 	FString TestFile;
@@ -185,6 +208,7 @@ void USDL2Client::Destroy()
 		delete InputTest;
 		InputTest = NULL;
 	}
+	ExitTouchPad();
 	ExitPads();
 	SDL_QuitSubSystem( SDL_INIT_VIDEO );
 
@@ -248,6 +272,8 @@ UBOOL USDL2Client::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 void USDL2Client::PumpEvents()
 {
 	guard(USDL2Client::PumpEvents);
+	// The on-screen pad's state, read by SDL when it updates its joysticks in the poll below.
+	FeedTouchPad();
 	SDL_Event Ev;
 	while( SDL_PollEvent(&Ev) )
 	{
@@ -282,6 +308,8 @@ void USDL2Client::PumpEvents()
 		if( Viewport && Viewport->Actor )
 			Viewport->HandleEvent( Ev );
 	}
+	// What the on-screen pad draws (menus or match), for its UI thread; also while a full-screen movie pumps.
+	PublishTouchPadState();
 	unguard;
 }
 
@@ -557,6 +585,21 @@ UBOOL USDL2Client::CursorWanted()
 		UViewport* V = Viewports(i);
 		if( V->bShowWindowsMouse && (i==0 || V->bShowMenu)
 		&&	V->GUIController && V->GUIController->ViewportOwner==V && V->GUIController->bActive )
+			return 1;
+	}
+	return 0;
+}
+
+//
+// Whether the menus are up: the GUI of the viewport that owns it is active (what CursorWanted asks, without the
+// windowed cursor, which a full-screen window or a client without the mouse never has).
+//
+UBOOL USDL2Client::MenuActive()
+{
+	for( INT i=0; i<Viewports.Num(); i++ )
+	{
+		UViewport* V = Viewports(i);
+		if( V->GUIController && V->GUIController->ViewportOwner==V && V->GUIController->bActive )
 			return 1;
 	}
 	return 0;

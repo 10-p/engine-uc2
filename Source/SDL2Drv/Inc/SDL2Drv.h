@@ -108,6 +108,9 @@ class USDL2Client : public UClient, public FNotifyHook
 	BITFIELD			SplitScreenJoinInMatch;	// Start on an unbound pad during a match adds a split-screen player
 	BITFIELD			SplitScreenFullDetail;	// Split-screen players keep the single player's detail (else the Xbox's)
 	BITFIELD			PadsStartAtPlayerTwo;	// port 0 (player one) is keyboard+mouse only, pads use ports 1-3
+	BITFIELD			UseMouse;				// mouse events reach the game (False: ignored, never captured)
+	BITFIELD			TouchPad;				// Android: the on-screen pad (SDL2Android.cpp)
+	FLOAT				RenderScale;			// Android: the frame's size as a fraction of the screen's
 
 	// Variables.
 	UBOOL				InMenuLoop;
@@ -116,6 +119,7 @@ class USDL2Client : public UClient, public FNotifyHook
 	UBOOL				PadsInitialized;
 	UBOOL				PadsOn;					// UseJoystick as last applied (PollGamepads reads it every tick)
 	FSDL2InputTest*		InputTest;				// test key InputTestFile=<file>: the input test channel
+	void*				TouchPadJoystick;		// SDL_Joystick* of the on-screen pad (a virtual SDL controller), Android
 
 	// Constructors.
 	USDL2Client();
@@ -169,6 +173,14 @@ class USDL2Client : public UClient, public FNotifyHook
 	UBOOL PadJoin( INT Slot );
 	void UpdateSplitLayout();
 	UBOOL CursorWanted();
+	UBOOL MenuActive();
+
+	// The on-screen pad (SDL2Android.cpp; empty off Android).
+	void InitTouchPad();
+	void ExitTouchPad();
+	void FeedTouchPad();
+	UBOOL IsTouchPad( INT InstanceID );
+	void PublishTouchPadState();
 };
 
 /*-----------------------------------------------------------------------------

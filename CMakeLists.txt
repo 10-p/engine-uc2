@@ -1,7 +1,7 @@
 #=============================================================================
 # engine-uc2 -- the portable build of Unreal Championship 2 (UE2 build 2226, package version 151) for Linux,
-# Windows (MinGW) and the web (Emscripten), in place of Epic's Visual Studio solution (Source/Avaris.sln).
-# Presets and options: BUILD.md.
+# Windows (MinGW), the web (Emscripten) and Android (the Gradle project in Android/, which builds this file with
+# the NDK), in place of Epic's Visual Studio solution (Source/Avaris.sln). Presets and options: BUILD.md.
 #=============================================================================
 
 cmake_minimum_required(VERSION 3.21)
@@ -11,6 +11,9 @@ project(UC2 C CXX)
 
 if(EMSCRIPTEN)
   message(STATUS "Building for Emscripten/WebAssembly")
+endif()
+if(ANDROID)
+  message(STATUS "Building for Android (${ANDROID_ABI}, API ${ANDROID_PLATFORM})")
 endif()
 
 set(CMAKE_CXX_STANDARD 14)
@@ -57,15 +60,16 @@ endif()
 
 # The pointer width this build will actually produce. CMAKE_SIZEOF_VOID_P does not see the -m32 demotion
 # below and keeps a stale value on reconfigure, so it is corrected here once and read everywhere else.
+# Android takes the width of its ABI (the NDK's toolchain sets CMAKE_SIZEOF_VOID_P right).
 set(UC2_PTR_BYTES ${CMAKE_SIZEOF_VOID_P})
 if(EMSCRIPTEN)
   set(UC2_PTR_BYTES 4)
-elseif(TARGET_IS_X86 AND NOT UE_ALLOW_64BIT)
+elseif(TARGET_IS_X86 AND NOT UE_ALLOW_64BIT AND NOT ANDROID)
   set(UC2_PTR_BYTES 4)
 endif()
 message(STATUS "Target arch: ${TARGET_ARCH}; pointer width: ${UC2_PTR_BYTES} bytes")
 
-if(NOT EMSCRIPTEN AND TARGET_IS_X86 AND TARGET_IS_64BIT AND NOT UE_ALLOW_64BIT)
+if(NOT EMSCRIPTEN AND NOT ANDROID AND TARGET_IS_X86 AND TARGET_IS_64BIT AND NOT UE_ALLOW_64BIT)
   message(STATUS "Building x86 binary with x86_64 compiler (-m32)")
   set(TARGET_IS_64BIT FALSE)
   set(TARGET_ARCH "x86")
@@ -150,6 +154,16 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fdelayed-template-parsing>
                       -Wno-writable-strings -Wno-reserved-user-defined-literal)
+  if(UC2_PTR_BYTES EQUAL 8)
+    # As for GCC above (Android's 64-bit ABIs are the Clang builds at 8 bytes).
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Werror=int-to-pointer-cast>)
+  endif()
+  if(ANDROID)
+    # Epic's code calls methods through null pointers on purpose ("Must be safe for NULL objects":
+    # UObject::GetFullName's `if( this )`), as MSVC allowed; Clang would delete those checks, and on Android a
+    # null page faults.
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-delete-null-pointer-checks>)
+  endif()
 endif()
 
 if(EMSCRIPTEN)
@@ -182,7 +196,9 @@ add_subdirectory(Thirdparty/zlib)
 
 #-----------------------------------------------------------------------------
 # Fetched libraries (never vendored). SDL2 for the native client (SDL2Drv, SDLLaunch); the web build takes
-# SDL2 from Emscripten's -sUSE_SDL=2 port, so nothing is fetched there.
+# SDL2 from Emscripten's -sUSE_SDL=2 port, so nothing is fetched there. Android builds it shared (libSDL2.so: the
+# library SDLActivity's Java half loads first, with SDL's JNI in it); the Gradle build points
+# FETCHCONTENT_SOURCE_DIR_SDL2 at the SDL checkout whose Java sources it compiles, so both halves are one SDL.
 #-----------------------------------------------------------------------------
 
 if(NOT EMSCRIPTEN)
@@ -194,15 +210,20 @@ if(NOT EMSCRIPTEN)
     GIT_SHALLOW    TRUE
   )
   set(SDL_TEST OFF CACHE BOOL "" FORCE)
-  set(SDL_SHARED OFF CACHE BOOL "" FORCE)
-  set(SDL_STATIC ON CACHE BOOL "" FORCE)
+  if(ANDROID)
+    set(SDL_SHARED ON CACHE BOOL "" FORCE)
+    set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+  else()
+    set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+    set(SDL_STATIC ON CACHE BOOL "" FORCE)
+  endif()
   # SDL2main is only a WinMain shim, built for MinGW only (uc2.exe does not link it: SDLLaunch/CMakeLists.txt).
   if(MINGW)
     set(SDL2_DISABLE_SDL2MAIN OFF CACHE BOOL "" FORCE)
   else()
     set(SDL2_DISABLE_SDL2MAIN ON CACHE BOOL "" FORCE)
   endif()
-  if(NOT MINGW)
+  if(NOT MINGW AND NOT ANDROID)
     set(SDL_X11 ON CACHE BOOL "" FORCE)
     set(SDL_WAYLAND OFF CACHE BOOL "" FORCE)
     set(SDL_X11_SHARED OFF CACHE BOOL "" FORCE)
@@ -216,6 +237,10 @@ if(NOT EMSCRIPTEN)
     set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)
   endif()
   FetchContent_MakeAvailable(SDL2)
+  # The packages link SDL2::SDL2-static; on Android that is the shared library.
+  if(ANDROID AND NOT TARGET SDL2::SDL2-static)
+    add_library(SDL2::SDL2-static ALIAS SDL2)
+  endif()
 endif()
 
 # Audio: Ogg/Vorbis vendored; OpenAL Soft fetched from a fork (openal-soft 1.25 plus a Web Audio backend).
@@ -251,10 +276,19 @@ if(NOT EMSCRIPTEN)
   set(ALSOFT_BACKEND_NULL ON CACHE BOOL "" FORCE)
   # A MinGW build must not pick up the HOST's Linux audio headers (libpipewire-0.3-dev on the build machine:
   # pipewire/utils.h needs <sys/un.h>, which MinGW lacks). Windows uses openal-soft's WASAPI backend.
-  if(WIN32)
+  if(WIN32 OR ANDROID)
     foreach(be PIPEWIRE PULSEAUDIO ALSA OSS JACK SNDIO)
       set(ALSOFT_BACKEND_${be} OFF CACHE BOOL "" FORCE)
     endforeach()
+  endif()
+  # Android: OpenSL ES, the NDK's own audio API (libOpenSLES). No C++20 modules: the NDK's clang 19 rejects libc++'s
+  # range adaptors instantiated across a module boundary (al/auxeffectslot.cpp, views::drop). No RTKit: Android has
+  # no D-Bus, and its probe would find the build machine's.
+  if(ANDROID)
+    set(ALSOFT_BACKEND_OPENSL ON CACHE BOOL "" FORCE)
+    set(ALSOFT_REQUIRE_OPENSL ON CACHE BOOL "" FORCE)
+    set(ALSOFT_ENABLE_MODULES OFF CACHE BOOL "" FORCE)
+    set(ALSOFT_RTKIT OFF CACHE BOOL "" FORCE)
   endif()
   set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
   # The engine's directory-wide definitions and -fpermissive are not openal-soft's business.
@@ -347,9 +381,9 @@ endif()
 add_subdirectory(Thirdparty/Theora)
 
 # GL4ES: the driver's desktop OpenGL calls translated to OpenGL ES 3 / WebGL 2 (ES 2 / WebGL 1 as the fallback),
-# fetched from a fork branch. The web build renders through it; the native Linux build carries it too, as the
-# second binding of the one GL driver (Source/UC2GL4ESDrv, `-GL4ES`), so the renderer tests run the web code
-# path without a browser. Not built on Windows.
+# fetched from a fork branch. The web and Android builds render through it; the native Linux build carries it too,
+# as the second binding of the one GL driver (Source/UC2GL4ESDrv, `-GL4ES`), so the renderer tests run the web
+# code path without a browser. Not built on Windows.
 if(EMSCRIPTEN OR (UNIX AND NOT APPLE AND NOT MINGW))
   include(FetchContent)
   set(GL4ES_GIT_REPOSITORY "https://github.com/10-p/gl4es.git"
@@ -385,6 +419,12 @@ if(EMSCRIPTEN OR (UNIX AND NOT APPLE AND NOT MINGW))
     if(NOT TARGET gl4es::GL)
       add_library(gl4es::GL ALIAS GL)
     endif()
+    # Android has no desktop GL headers: the driver's <GL/gl.h> and <GL/glext.h> are gl4es' copies, in a folder
+    # of their own (gl4es' include/ also has EGL/, GLES/ and KHR/, which must not shadow the NDK's).
+    if(ANDROID)
+      set(UC2_GL_HEADERS_DIR "${CMAKE_BINARY_DIR}/gl4es-gl-headers")
+      file(COPY "${gl4es_SOURCE_DIR}/include/GL" DESTINATION "${UC2_GL_HEADERS_DIR}")
+    endif()
     message(STATUS "gl4es (static, GLES2): ${GL4ES_GIT_REPOSITORY}@${GL4ES_GIT_TAG}")
   else()
     message(FATAL_ERROR "gl4es: expected target 'GL' was not created")
@@ -414,6 +454,11 @@ if(EMSCRIPTEN)
   list(REMOVE_ITEM UC2_NATIVE_ONLY_PACKAGES UCC SDL2Drv SDLLaunch)
 endif()
 
+# Android is the game alone (libUC2.so): no commandlet host, no script compiler.
+if(ANDROID)
+  list(REMOVE_ITEM UC2_PACKAGES UCC Editor)
+endif()
+
 # The script compiler (Editor package, `ucc-bin make`) is built at 32-bit pointers only: its hand-written
 # UEditorEngine (Editor.h) mirrors script's `int Pad[8]` with four pointers, a layout that only holds at 32 bits.
 # That is 32-bit Linux and MinGW i686 (`ucc.exe make`); ucc-bin / ucc.exe link it when the target exists.
@@ -429,6 +474,14 @@ foreach(pkg IN LISTS UC2_PACKAGES)
     add_subdirectory(Source/${pkg})
   endif()
 endforeach()
+
+# The Android app's process set-up (Android/app/src/main/cpp/android_bridge.cpp): a small JNI library that
+# GameActivity calls before SDL starts, to give the engine its game folder (UC2_ANDROID_BASEDIR, the working
+# directory, $HOME).
+if(ANDROID)
+  add_library(uc2_android_bridge SHARED ${CMAKE_SOURCE_DIR}/Android/app/src/main/cpp/android_bridge.cpp)
+  target_link_libraries(uc2_android_bridge PRIVATE android log)
+endif()
 
 # The patched script packages (target `scripts`, part of ALL): decompile the shipped .u, apply patches/, compile
 # with this build's ucc on the host preset; copy the host build's on the others. Options UE_SCRIPT_PATCHES (ON),

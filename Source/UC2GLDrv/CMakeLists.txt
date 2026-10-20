@@ -23,3 +23,8 @@ target_include_directories(${PROJECT_NAME}
 target_compile_definitions(${PROJECT_NAME} PRIVATE GPackage=GUC2GLDrvPackage ThisPackage=UC2GLDrv)
 
 target_link_libraries(${PROJECT_NAME} PUBLIC Engine PRIVATE SDL2::SDL2-static)
+
+# Android: the <GL/gl.h> of gl4es (root CMakeLists.txt), the NDK having OpenGL ES headers only.
+if(UC2_GL_HEADERS_DIR)
+  target_include_directories(${PROJECT_NAME} PUBLIC ${UC2_GL_HEADERS_DIR})
+endif()

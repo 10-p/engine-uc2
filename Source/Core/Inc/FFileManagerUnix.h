@@ -750,6 +750,10 @@ public:
     		Home = getenv("USERPROFILE");
     	if ( Home == NULL )
     		return(appBaseDir());
+#elif defined(__ANDROID__)
+    	// bionic has no passwd database to enumerate; the app's JNI bridge sets $HOME (app-private storage).
+    	if ( Home == NULL )
+    		return(appBaseDir());
 #else
     	if ( Home == NULL )
     	{

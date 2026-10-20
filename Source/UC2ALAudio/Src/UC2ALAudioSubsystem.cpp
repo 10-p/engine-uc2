@@ -571,7 +571,10 @@ void UUC2ALAudioSubsystem::StaticConstructor()
 	new(GetClass(),TEXT("UseHRTF"),      RF_Public)UBoolProperty (CPP_PROPERTY(UseHRTF),      TEXT("Audio"), CPF_Config );
 	// Compiled defaults = Default.ini's [UC2ALAudio.UC2ALAudioSubsystem].
 	MaxVoices	= 64;
-#if !defined(__EMSCRIPTEN__) && !defined(_WIN32)
+#if defined(__ANDROID__)
+	// The one backend of the Android build (OpenSL ES).
+	Backends	= TEXT("opensl");
+#elif !defined(__EMSCRIPTEN__) && !defined(_WIN32)
 	// openal-soft's own Linux order, made explicit: PipeWire, then PulseAudio (also PipeWire's pulse
 	// server), then ALSA, then OSS. The null and wave backends are never chosen unless asked for.
 	Backends	= TEXT("pipewire,pulse,alsa,oss");

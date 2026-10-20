@@ -3,7 +3,8 @@
 `Default.ini`, `DefUser.ini`, `DefaultXbox.ini`, `DefUserXbox.ini` and `KeyBinds.ini` are Epic's `System/` files of the
 PC tree; `Default.ini` and `DefUser.ini` carry our defaults, the other three stay Epic's bytes (`DefaultXbox.ini` and
 `DefUserXbox.ini` are reference copies nothing reads; `KeyBinds.ini` holds the pad layouts `UC2Settings_Controller`
-offers). `tools/dev/mkrun-uc2.sh` copies them over the game folder's when it assembles a run tree. `Default.ini`,
+offers). `tools/dev/mkrun-uc2.sh` copies them over the game folder's when it assembles a run tree; the web and Android
+builds carry generated variants of `Default.ini` and `DefUser.ini` (`web/`, `android/`, below). `Default.ini`,
 `DefUser.ini` and `web/*.ini` are LF; the three Epic copies keep Epic's CRLF (`tools/dev/sync-web-ini.py --check`
 compares them with the Epic drop). The engine reads both endings. Against Epic's files:
 `git diff --ignore-cr-at-eol 9fc7bcf -- Engine/Config`.
@@ -31,6 +32,7 @@ same.
 | `[SDL2Drv.SDL2Client] PadButtonThreshold`, `PadStickDeadZone`, `PadRepeatDelay`, `PadRepeatRate`, `PadRumble`, `PadRumbleScale`, `JoyDeadZone`, `LogInput` | (none) | `30`, `0`, `0.2`, `0.1`, `True`, `1`, `0.35`, `False` | What the Xbox driver hard-codes, with the Xbox's values (`XINPUT_GAMEPAD_MAX_CROSSTALK` 30/255; the bindings carry the dead zone; key repeat 0.2/0.1 s). `LogInput` writes the `SDL2Input` lines. |
 | `[SDL2Drv.SDL2Client] MaxDistortion` | (none; `DefaultXbox.ini` has `35.0`) | `35.0` | The largest screen-space displacement of a distortion material, in pixels of a 640x480 frame; without it distortion displaces nothing. |
 | `[SDL2Drv.SDL2Client] UIScaleMode`, `UIMenuBackground`, `UISharpText` | (none: the UI drawn 1:1 from the top-left) | `Fit43`, `Fill`, `True` | `Fit43` draws the 640x480 menus and HUD in the largest centred 4:3 box of the window, the 3D world on the whole window; `Native640` draws them 1:1 from the top-left. `UIMenuBackground=Fill` fills the bars beside the box with the menu background; `UISharpText` keeps text sharp when the box is scaled. |
+| `[SDL2Drv.SDL2Client] UseMouse`, `TouchPad`, `RenderScale` | (none) | `True`, `True`, `1.0` | `UseMouse=False` leaves the mouse out: no events, no capture, no cursor (compiled default `False` on Android). `TouchPad` (Android): the on-screen pad, a virtual SDL controller fed by the app's overlay. `RenderScale` (Android): the frame's size as a fraction of the screen's, scaled up to the whole screen by the present pass. |
 | `[SDL2Drv.SDL2Client] SplitScreenJoinInMatch`, `SplitScreenFullDetail`, `PadsStartAtPlayerTwo` | (none) | `True`, `False`, `False` | Start on an unbound pad joins a match in progress (standalone or listen); `SplitScreenFullDetail=False` keeps the Xbox's detail reductions per split-screen player (`SplitScreenMgr.uc` `SSDetailLevels`), `True` gives every player the single player's detail; `PadsStartAtPlayerTwo=True` leaves player one to the keyboard and mouse and puts the first pad on player two. |
 | new section `[SDL2Drv.PadMap]` | (none: hard-coded in the Xbox driver) | SDL control = `Joy1`..`Joy16` / `JoyX` `JoyY` `JoyU` `JoyV` [`Invert`] | The SDL controller to Xbox control table (Black = right shoulder, White = left shoulder); the same table is compiled in for controls the section does not name. |
 | new section `[UC2GLDrv.UC2GLRenderDevice]` | (none) | the device's settings; where Epic's `[D3DDrv.D3DRenderDevice]` has the setting, its value, plus the keys below | The device reads its own class section. |
@@ -94,3 +96,21 @@ the web file has it) and a row here.
 | `Default.ini` | `[Engine.Engine] AudioDevice` | `UC2ALAudio.UC2ALAudioSubsystem` | kept as the web file has it (`WEB_KEYS`) | The same device, on openal-soft's Web Audio backend (the context starts on the page's first click or key; without Web Audio, AudioWorklet or cross-origin isolation the game runs silent and says why). |
 | `Default.ini` | sections `[UC2ALAudio.UC2ALAudioSubsystem]`, `[UC2Movie]` | the native section, or none | kept as the web file has them (`WEB_SECTIONS`) | The web audio and movie settings, written out (`Backends=` empty: the web build has one backend; movies on). |
 | `Default.ini` | new section `[WebRTCDrv.WebRTCNetDriver]` | none | the `[IpDrv.TcpNetDriver]` values except `ConnectionTimeout=60.0`, `InitialConnectTimeout=300.0` and `DownloadManagers=Engine.ChannelDownload` only (`WEB_SECTIONS`) | The driver reads its own class section; the timeouts are longer because a browser streams a map's files on demand and a guest sends nothing while it loads. |
+
+## `android/`: the Android app's inis
+
+`android/Default.ini` and `android/DefUser.ini` go into the APK (`Android/app/build.gradle`), and the app installs
+them into the game folder's `System/` before every start, each only where it differs, so the `Avaris.ini` and
+`User.ini` the engine derives on a phone come from them. They are generated: `tools/dev/sync-android-ini.py` writes
+them as the native files with the differences below and nothing else (`--check` fails when they are not that). A new
+Android difference is an entry in the script's `DELTAS` and a row here.
+
+| File | Setting | Native | Android | Why |
+|---|---|---|---|---|
+| `Default.ini` | `[Engine.Engine] RenderDevice` | `UC2GLDrv.UC2GLRenderDevice` | `UC2GL4ESDrv.UC2GL4ESRenderDevice` | OpenGL ES only: the same driver behind GL4ES. `uc2.bin` on Android also switches an `Avaris.ini` from a desktop build that names the desktop device. |
+| `Default.ini` | `[SDL2Drv.SDL2Client] StartupFullscreen` | `False` | `True` | The window is the whole screen anyway (the client makes it so on Android). |
+| `Default.ini` | `[SDL2Drv.SDL2Client] UseMouse` | `True` | `False` | A phone is played with pads and the on-screen pad: the mouse is left out (also the compiled default on Android). |
+| `Default.ini` | `[SDL2Drv.SDL2Client] RenderScale` | `1.0` | `0.5` | The frame at half the screen's resolution each way (a phone's screen has three to four times the pixels of a 1080p one), scaled up to the screen; `1.0` draws at the screen's own. |
+| `Default.ini` | `[GUI.GUIController] bHideMouseCursor` | `False` | `True` | No mouse, so the menus draw no cursor. |
+| `Default.ini` | `[UC2GL4ESDrv.UC2GL4ESRenderDevice] NumAASamples` | `4` | `0` | No multisampled main framebuffer by default on a phone's GPU. |
+| `Default.ini` | `[UC2GL4ESDrv.UC2GL4ESRenderDevice] UseVSync` | `False` | `True` | The frame paced by the display: no tearing, and no frames the screen never shows (heat, battery). |

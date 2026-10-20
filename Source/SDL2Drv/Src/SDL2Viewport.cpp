@@ -106,8 +106,27 @@ void USDL2Viewport::InitKeyMap()
 	KeyMap[SDL_SCANCODE_PAUSE]			= IK_Pause;
 	KeyMap[SDL_SCANCODE_PRINTSCREEN]	= IK_PrintScrn;
 
+#if defined(__ANDROID__)
+	// The system's Back (trapped by the client: SDL_HINT_ANDROID_TRAP_BACK_BUTTON) is Escape: back in the menus,
+	// the menu in a match.
+	KeyMap[SDL_SCANCODE_AC_BACK]		= IK_Escape;
+#endif
+
 	#undef INIT_KEY_RANGE
 }
+
+#if defined(__ANDROID__)
+//
+// The frame of an Android viewport: the window's surface (the whole screen) times RenderScale; the present pass
+// draws it over the whole surface.
+//
+static void AndroidFrameSize( USDL2Client* Client, INT SurfaceX, INT SurfaceY, INT& FrameX, INT& FrameY )
+{
+	FLOAT Scale = Clamp( Client->RenderScale, 0.25f, 1.f );
+	FrameX = Align( Max( 320, appRound( SurfaceX * Scale ) ), 2 );
+	FrameY = Max( 240, appRound( SurfaceY * Scale ) );
+}
+#endif
 
 //
 // SDL mouse button -> EInputKey.
@@ -706,6 +725,19 @@ UBOOL USDL2Viewport::ResizeViewport( DWORD NewBlitFlags, INT InNewX, INT InNewY,
 	INT NewY = InNewX!=INDEX_NONE ? InNewY : (NewBlitFlags&BLIT_Fullscreen) ? Client->FullscreenViewportY : Client->WindowedViewportY;
 	check(NewX>=0);
 	check(NewY>=0);
+#if defined(__ANDROID__)
+	// One window, the whole screen: always full screen (immersive), the frame sized from the surface whatever the ini
+	// or the caller asks.
+	if( Window && !(NewBlitFlags & BLIT_Temporary) && !SubViewport )
+	{
+		NewBlitFlags |= BLIT_Fullscreen;
+		SDL_SetWindowFullscreen( Window, SDL_WINDOW_FULLSCREEN_DESKTOP );
+		INT SurfaceX = 0, SurfaceY = 0;
+		SDL_GetWindowSize( Window, &SurfaceX, &SurfaceY );
+		if( SurfaceX>0 && SurfaceY>0 )
+			AndroidFrameSize( Client, SurfaceX, SurfaceY, NewX, NewY );
+	}
+#endif
 #if !defined(__EMSCRIPTEN__)
 	NewX = Align(NewX,2);	// not on the web: see OpenWindow
 #endif
@@ -734,6 +766,7 @@ UBOOL USDL2Viewport::ResizeViewport( DWORD NewBlitFlags, INT InNewX, INT InNewY,
 	if( !(NewBlitFlags & BLIT_Fullscreen) && (OldBlitFlags & BLIT_Fullscreen) && Captured )
 		SetMouseCapture( 0, 0, 0 );
 
+#if !defined(__ANDROID__)	// (Android: full screen above; the surface has the screen's size.)
 	if( Window && !(NewBlitFlags & BLIT_Temporary) )
 	{
 		if( NewBlitFlags & BLIT_Fullscreen )
@@ -752,6 +785,7 @@ UBOOL USDL2Viewport::ResizeViewport( DWORD NewBlitFlags, INT InNewX, INT InNewY,
 			SetDrag( 0 );
 		}
 	}
+#endif
 
 	// An OpenGL render device needs a GL window and context.
 	if( (NewBlitFlags & BLIT_OpenGL) && !(NewBlitFlags & BLIT_Temporary) && !EnsureGLContext() )
@@ -763,7 +797,7 @@ UBOOL USDL2Viewport::ResizeViewport( DWORD NewBlitFlags, INT InNewX, INT InNewY,
 
 	// Update the window.
 	UpdateWindowFrame();
-	bWindowsMouseAvailable = !(NewBlitFlags & BLIT_Fullscreen);
+	bWindowsMouseAvailable = !(NewBlitFlags & BLIT_Fullscreen) && Client->UseMouse;
 
 	// Save info.
 	if( RenDev && !GIsEditor && bSaveSize && NewX && NewY )
@@ -808,7 +842,15 @@ UBOOL USDL2Viewport::EnsureGLContext()
 	}
 	if( !Window )
 		return 0;
-	if( !(SDL_GetWindowFlags(Window) & SDL_WINDOW_OPENGL) )
+#if defined(__ANDROID__)
+	// SDL makes every Android window an OpenGL one, its EGL surface configured from the attributes current when it
+	// was created, before the render device set its own: created again, it takes the device's (an OpenGL ES 3
+	// context needs an ES 3 configuration).
+	UBOOL Recreate = 1;
+#else
+	UBOOL Recreate = !(SDL_GetWindowFlags(Window) & SDL_WINDOW_OPENGL);
+#endif
+	if( Recreate )
 	{
 		INT X=0, Y=0, W=0, H=0;
 		SDL_GetWindowPosition( Window, &X, &Y );
@@ -817,6 +859,9 @@ UBOOL USDL2Viewport::EnsureGLContext()
 		strncpy( Title, SDL_GetWindowTitle(Window), ARRAY_COUNT(Title)-1 );
 		Title[ARRAY_COUNT(Title)-1] = 0;
 		Uint32 Flags = SDL_WINDOW_OPENGL | (SDL_GetWindowFlags(Window) & (SDL_WINDOW_RESIZABLE|SDL_WINDOW_FULLSCREEN|SDL_WINDOW_HIDDEN));
+#if defined(__ANDROID__)
+		Flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+#endif
 		if( Captured )
 			SDL_SetRelativeMouseMode( SDL_FALSE );
 		SDL_DestroyWindow( Window );
@@ -925,6 +970,18 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 				{
 					// WM_SIZE: the window manager resized us.
 					INT NewX = Ev.window.data1, NewY = Ev.window.data2;
+#if defined(__ANDROID__)
+					// The surface changed (the system bars gave their space to the full screen, a resize in
+					// multi-window): the full-screen frame follows it.
+					if( NewX>0 && NewY>0 && RenDev && (BlitFlags & BLIT_OpenGL) )
+					{
+						INT FrameX = 0, FrameY = 0;
+						AndroidFrameSize( Client, NewX, NewY, FrameX, FrameY );
+						if( FrameX!=WindowSizeX || FrameY!=WindowSizeY )
+							RenDev->SetRes( this, NewX, NewY, 1 );
+					}
+					break;
+#endif
 					if( !(BlitFlags & BLIT_Fullscreen) && NewX>0 && NewY>0 && (NewX!=WindowSizeX || NewY!=WindowSizeY) )
 					{
 						if( RenDev && (BlitFlags & (BLIT_OpenGL|BLIT_Direct3D)) )
@@ -997,6 +1054,8 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 		}
 		case SDL_MOUSEMOTION:
 		{
+			if( !Client->UseMouse )
+				break;
 			// DirectInput's relative axes.
 			FLOAT MX = Client->MouseXMultiplier!=0.f ? Client->MouseXMultiplier : 1.f;
 			FLOAT MY = Client->MouseYMultiplier!=0.f ? Client->MouseYMultiplier : 1.f;
@@ -1017,6 +1076,8 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 		case SDL_MOUSEBUTTONDOWN:
 		case SDL_MOUSEBUTTONUP:
 		{
+			if( !Client->UseMouse )
+				break;
 			EInputKey Key = MouseButtonKey( Ev.button.button );
 			if( Key==IK_None )
 				break;
@@ -1044,6 +1105,8 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 		}
 		case SDL_MOUSEWHEEL:
 		{
+			if( !Client->UseMouse )
+				break;
 			INT Notches = Ev.wheel.y;
 			if( Ev.wheel.direction == SDL_MOUSEWHEEL_FLIPPED )
 				Notches = -Notches;
@@ -1107,6 +1170,12 @@ void USDL2Viewport::SetMouseCapture( UBOOL Capture, UBOOL Clip, UBOOL OnlyFocus 
 	guard(USDL2Viewport::SetMouseCapture);
 	if( !Window )
 		return;
+	// Without the mouse there is nothing to capture: only the state the callers compare with is kept.
+	if( !GetOuterUSDL2Client()->UseMouse )
+	{
+		Captured = Capture;
+		return;
+	}
 
 	Clip |= Capture;
 	if( Clip && OnlyFocus && !(SDL_GetWindowFlags(Window) & SDL_WINDOW_INPUT_FOCUS) )

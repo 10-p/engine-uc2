@@ -63,6 +63,75 @@ FMallocAnsi Malloc;
 #include "FOutputDeviceFile.h"
 FOutputDeviceFile Log;
 
+#if defined(__ANDROID__)
+#include <android/log.h>
+#include <pthread.h>
+#include <unistd.h>
+
+//
+// The log on logcat (tag UC2), one entry per line, and in Avaris.log: appInit is given this device, which
+// hands every line on to the file device.
+//
+class FOutputDeviceAndroidLog : public FOutputDevice
+{
+public:
+	FOutputDevice* AuxOut;
+	FOutputDeviceAndroidLog( FOutputDevice* InAuxOut ) : AuxOut( InAuxOut ) {}
+	void Serialize( const TCHAR* Data, enum EName Event )
+	{
+		if( Event != NAME_Title && !FName::SafeSuppressed(Event) )
+			__android_log_print( ANDROID_LOG_INFO, "UC2", "%s: %s", appToAnsi(FName::SafeString(Event)), appToAnsi(Data) );
+		AuxOut->Serialize( Data, Event );
+	}
+	void Flush()
+	{
+		AuxOut->Flush();
+	}
+};
+FOutputDeviceAndroidLog AndroidLog( &Log );
+
+//
+// stdout and stderr (printf, the error device, the libraries' own messages) to logcat: an app's stdio goes
+// nowhere, so a pipe takes it and a thread writes each line as an entry with the tag UC2-stdio.
+//
+static int GStdioPipe[2] = { -1, -1 };
+static void* StdioToLogcat( void* )
+{
+	char Line[1024];
+	size_t Len = 0;
+	char Buf[512];
+	ssize_t N;
+	while( (N = read( GStdioPipe[0], Buf, sizeof(Buf) )) > 0 )
+	{
+		for( ssize_t i=0; i<N; i++ )
+		{
+			if( Buf[i] == '\n' || Len == sizeof(Line)-1 )
+			{
+				Line[Len] = 0;
+				if( Len )
+					__android_log_write( ANDROID_LOG_INFO, "UC2-stdio", Line );
+				Len = 0;
+				if( Buf[i] == '\n' )
+					continue;
+			}
+			if( Buf[i] != '\r' )
+				Line[Len++] = Buf[i];
+		}
+	}
+	return NULL;
+}
+static void RedirectStdioToLogcat()
+{
+	if( pipe( GStdioPipe ) != 0 )
+		return;
+	dup2( GStdioPipe[1], STDOUT_FILENO );
+	dup2( GStdioPipe[1], STDERR_FILENO );
+	pthread_t Thread;
+	if( pthread_create( &Thread, NULL, StdioToLogcat, NULL ) == 0 )
+		pthread_detach( Thread );
+}
+#endif
+
 // Error handler.
 #include "FOutputDeviceAnsiError.h"
 FOutputDeviceAnsiError Error;
@@ -381,10 +450,23 @@ static void SelectRenderDevice()
 //
 static void ReplaceMissingDrivers()
 {
+#if defined(__ANDROID__) && UC2_WITH_UC2GL4ESDRV
+	// Android has OpenGL ES only: the desktop device (linked as the GL4ES device's parent class) cannot make a
+	// context, so an ini from a desktop build, or one naming a device this build lacks, gets the GL4ES device.
+	const TCHAR* RenderReplacement = TEXT("UC2GL4ESDrv.UC2GL4ESRenderDevice");
+	FString IniDevice = GConfig->GetStr( TEXT("Engine.Engine"), TEXT("RenderDevice") );
+	if( appStricmp( *IniDevice, TEXT("UC2GLDrv.UC2GLRenderDevice") )==0 )
+	{
+		debugf( NAME_Init, TEXT("RenderDevice=%s cannot run on Android (no desktop OpenGL): using %s"), *IniDevice, RenderReplacement );
+		GConfig->SetString( TEXT("Engine.Engine"), TEXT("RenderDevice"), RenderReplacement );
+	}
+#else
+	const TCHAR* RenderReplacement = TEXT("Engine.NullRenderDevice");
+#endif
 	struct { const TCHAR* Key; const TCHAR* Replacement; } Drivers[] =
 	{
 		{ TEXT("ViewportManager"),	TEXT("SDL2Drv.SDL2Client")		},
-		{ TEXT("RenderDevice"),		TEXT("Engine.NullRenderDevice")	},
+		{ TEXT("RenderDevice"),		RenderReplacement				},
 		{ TEXT("AudioDevice"),		TEXT("Engine.NullAudioDevice")	},
 	};
 	for( INT i=0; i<ARRAY_COUNT(Drivers); i++ )
@@ -517,7 +599,11 @@ static void OverrideResolution()
 	main.
 -----------------------------------------------------------------------------*/
 
+#if defined(__ANDROID__)
+static int UC2Main( int argc, char** argv )
+#else
 int main( int argc, char** argv )
+#endif
 {
 	setbuf( stdout, NULL );
 	setbuf( stderr, NULL );
@@ -556,7 +642,11 @@ int main( int argc, char** argv )
 		GIsClient = GIsGuarded = 1;
 		GSynchronizeFactory = &SynchFactory;
 		GThreadFactory      = &ThreadFactory;
+#if defined(__ANDROID__)
+		appInit( GPackage, CmdLine, &Malloc, &AndroidLog, &Error, &Warn, &FileManager, FConfigCacheIni::Factory, 1 );
+#else
 		appInit( GPackage, CmdLine, &Malloc, &Log, &Error, &Warn, &FileManager, FConfigCacheIni::Factory, 1 );
+#endif
 		if( CmdLineCut )
 			debugf( NAME_Warning, TEXT("The command line is longer than %i characters: the arguments after '%s' were dropped"), ARRAY_COUNT(CmdLine), CmdLine + Max(0, appStrlen(CmdLine) - 40) );
 
@@ -696,6 +786,39 @@ int main( int argc, char** argv )
 	GIsStarted = 0;
 	return ErrorLevel;
 }
+
+#if defined(__ANDROID__)
+//
+// Android: SDLActivity loads libUC2.so and calls SDL_main on its SDL thread, whose stack is Android's default
+// 1 MB. The engine runs on a thread of its own with the 8 MB a Linux main thread has (the script VM and the
+// level code recurse deeply); SDL_main waits for it. SDL's Android calls attach whichever thread makes them.
+//
+struct FUC2MainArgs { int argc; char** argv; int Result; };
+static void* UC2MainThread( void* Arg )
+{
+	FUC2MainArgs* Args = (FUC2MainArgs*)Arg;
+	Args->Result = UC2Main( Args->argc, Args->argv );
+	return NULL;
+}
+extern "C" __attribute__((visibility("default"))) int SDL_main( int argc, char** argv )
+{
+	RedirectStdioToLogcat();
+	FUC2MainArgs Args = { argc, argv, 1 };
+	pthread_attr_t Attr;
+	pthread_attr_init( &Attr );
+	pthread_attr_setstacksize( &Attr, 8 * 1024 * 1024 );
+	pthread_t Thread;
+	if( pthread_create( &Thread, &Attr, UC2MainThread, &Args ) != 0 )
+	{
+		__android_log_print( ANDROID_LOG_ERROR, "UC2", "could not start the engine thread: running it on the SDL thread" );
+		Args.Result = UC2Main( argc, argv );
+	}
+	else
+		pthread_join( Thread, NULL );
+	pthread_attr_destroy( &Attr );
+	return Args.Result;
+}
+#endif
 
 /*-----------------------------------------------------------------------------
 	The End.

@@ -23,14 +23,14 @@
 	in the driver asks UUC2GLRenderDevice::IsGLES (and the Cap* flags) at run time, so both
 	bindings run the same object code and a renderer fix reaches the web by itself.
 
-	UC2GL_HAS_DESKTOP_BINDING is 0 where no desktop OpenGL exists (Emscripten): the base
-	class then cannot create a context and says so.
+	UC2GL_HAS_DESKTOP_BINDING is 0 where no desktop OpenGL exists (Emscripten, Android): the
+	base class then cannot create a context and says so.
 =============================================================================*/
 
 #ifndef _INC_UC2GLBINDING
 #define _INC_UC2GLBINDING
 
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__) || defined(__ANDROID__)
 	#define UC2GL_HAS_DESKTOP_BINDING 0
 #else
 	#define UC2GL_HAS_DESKTOP_BINDING 1

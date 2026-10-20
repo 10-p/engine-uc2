@@ -67,9 +67,14 @@
 #include <dirent.h>
 #endif
 
+#if defined(__ANDROID__)
+#include <sys/system_properties.h>	// __system_property_get: debug.uc2.nofault
+#endif
+
 // Stack traces via C runtime...
-// backtrace()/backtrace_symbols() are a glibc extension: no <execinfo.h> on MinGW either.
-#if ((MACOSX) || (__FreeBSD__) || defined(__EMSCRIPTEN__) || defined(_WIN32))
+// backtrace()/backtrace_symbols() are a glibc extension: no <execinfo.h> on MinGW either, nor in bionic
+// before API 33.
+#if ((MACOSX) || (__FreeBSD__) || defined(__EMSCRIPTEN__) || defined(_WIN32) || defined(__ANDROID__))
 #  define HAVE_EXECINFO_H 0
 #else
 #  define HAVE_EXECINFO_H 1
@@ -1489,6 +1494,15 @@ void* appGetDllHandle( const TCHAR* Filename )
 	const char* Error;
 	dlerror();	// Clear any error condition.
 
+#if defined(__ANDROID__)
+	// The game is libUC2.so, loaded by the app's class loader into its own linker namespace: bionic's
+	// dlopen(NULL) is the app_process executable, whose lookup never reaches it. RTLD_DEFAULT from code in
+	// the library searches the library's own group, so a package linked into it is found and answered with
+	// the sentinel (appGetDllExport looks the sentinel's symbols up the same way).
+	if( dlsym( RTLD_DEFAULT, appToAnsi(Test) ) )
+		return (void*)-1;
+#endif
+
 	// Check if the library was linked to the executable.
 	Result = (void*)dlopen( NULL, RTLD_NOW | RTLD_GLOBAL );
 	Error = dlerror();
@@ -1618,10 +1632,11 @@ void* appGetDllExport( void* DllHandle, const TCHAR* ProcName )
 	check(DllHandle);
 	check(ProcName);
 
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__) || defined(__ANDROID__)
 	// On Emscripten, all modules are statically linked. The sentinel (void*)-1
 	// from appGetDllHandle means "in main binary." Look up symbols in the
 	// global scope using RTLD_DEFAULT (works for -lopenal linked functions).
+	// On Android the sentinel is the game library (appGetDllHandle), and -1 is bionic's RTLD_NEXT.
 	if( DllHandle == (void*)-1 )
 	{
 		void* Result = dlsym( RTLD_DEFAULT, appToAnsi(ProcName) );
@@ -2383,6 +2398,14 @@ CORE_API const TCHAR* appBaseDir()
 
 	if( !BaseDir[0] )
 	{
+#if defined(__ANDROID__)
+		// The app's JNI bridge sets UC2_ANDROID_BASEDIR to the game folder's System directory on the chosen
+		// storage and changes into it before SDL starts; changing into it again here keeps the relative
+		// ../Maps, ../Textures paths right whatever the process's start-up did to the working directory.
+		const ANSICHAR* AndroidBaseDir = getenv( "UC2_ANDROID_BASEDIR" );
+		if( AndroidBaseDir && AndroidBaseDir[0] && chdir( AndroidBaseDir ) != 0 )
+			fprintf( stderr, "appBaseDir: chdir(%s) failed: %s\n", AndroidBaseDir, strerror(errno) );
+#endif
 		// If the executable isn't launched from its own directory, then the
 		// dynamic linker won't be able to find the shared libraries.
 		getcwd( AnsiBaseDir, sizeof(AnsiBaseDir) );
@@ -3048,7 +3071,15 @@ void appPlatformInit()
 	// disposition, so the system's crash reporter or a debugger sees the fault itself. The
 	// job-control signals below are installed either way: they are how the engine shuts down
 	// cleanly.
+#if defined(__ANDROID__)
+	// An app has no environment of its own: the system property debug.uc2.nofault=1 does the same
+	// (`adb shell setprop debug.uc2.nofault 1`), and debuggerd then writes a tombstone with the backtrace.
+	char NoFaultProp[PROP_VALUE_MAX] = { 0 };
+	__system_property_get( "debug.uc2.nofault", NoFaultProp );
+	const UBOOL bNoFaultHandler = (NoFaultProp[0] != 0 && NoFaultProp[0] != '0');
+#else
 	const UBOOL bNoFaultHandler = (getenv("UT_NO_FAULT_HANDLER") != NULL);
+#endif
 	if( bNoFaultHandler )
 		debugf( NAME_Init, TEXT("UT_NO_FAULT_HANDLER set: leaving SIGSEGV/SIGILL/SIGTRAP/SIGIOT/SIGBUS/SIGFPE to the OS.") );
 

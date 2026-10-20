@@ -1,11 +1,18 @@
 #=============================================================================
-# SDLLaunch - the game executable, uc2.bin (uc2.exe on Windows; SDLLaunch.js/.wasm on the web).
+# SDLLaunch - the game executable, uc2.bin (uc2.exe on Windows; SDLLaunch.js/.wasm on the web; libUC2.so on
+# Android, the library SDLActivity loads and whose SDL_main it calls).
 #=============================================================================
 
 project(SDLLaunch CXX)
 
-add_executable(${PROJECT_NAME} Src/SDLLaunch.cpp)
-set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME uc2.bin)
+if(ANDROID)
+  # The name GameActivity.getLibraries() lists after SDL2.
+  add_library(${PROJECT_NAME} SHARED Src/SDLLaunch.cpp)
+  set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME UC2)
+else()
+  add_executable(${PROJECT_NAME} Src/SDLLaunch.cpp)
+  set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME uc2.bin)
+endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/Src
@@ -50,6 +57,16 @@ if(MINGW)
   target_link_libraries(${PROJECT_NAME} PRIVATE
     -Wl,--whole-archive ${LINK_PACKAGES} -Wl,--no-whole-archive
     SDL2::SDL2-static zlib ws2_32 winmm)
+elseif(ANDROID)
+  # bionic has pthread and libm in libc. libopenal.so is packaged beside it but not linked: UC2ALAudio dlopens it
+  # when the audio device starts, as natively. OpenGL ES and EGL are SDL's (it looks them up at run time); log is
+  # the logcat sink, android the native activity API SDL's video uses.
+  target_link_libraries(${PROJECT_NAME} PRIVATE
+    -Wl,--whole-archive ${LINK_PACKAGES} -Wl,--no-whole-archive
+    SDL2::SDL2-static zlib log android dl m)
+  # appGetDllHandle finds a linked-in package by its GLoaded<Package> symbol: keep every symbol in the
+  # dynamic table.
+  target_link_options(${PROJECT_NAME} PRIVATE -Wl,-export-dynamic)
 else()
 target_link_libraries(${PROJECT_NAME} PRIVATE
   -Wl,--whole-archive ${LINK_PACKAGES} -Wl,--no-whole-archive

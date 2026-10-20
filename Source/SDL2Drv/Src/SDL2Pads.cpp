@@ -329,6 +329,13 @@ void USDL2Client::PadAdded( INT DeviceIndex )
 	SDL_JoystickID ID = SDL_JoystickGetDeviceInstanceID( DeviceIndex );
 	if( FindPadSlot(ID)!=INDEX_NONE )
 		return;
+	// The on-screen pad (Android) is player one's when no real pad is: with one on port 0 it stays off (its
+	// overlay hides, SDL2Android.cpp), rather than taking port 1, whose Start would join a second player.
+	if( IsTouchPad( ID ) && Pads[0].Controller )
+	{
+		debugf( NAME_Log, TEXT("SDL2 pads: the on-screen pad stays off: pad 0 is %s"), Pads[0].Name );
+		return;
+	}
 	INT Slot = INDEX_NONE;
 	for( INT i=PadsStartAtPlayerTwo ? 1 : 0; i<SDL2DRV_MAX_PADS && Slot==INDEX_NONE; i++ )
 		if( !Pads[i].Controller )
