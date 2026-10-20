@@ -44,10 +44,11 @@ import java.util.Locale;
  *
  * The engine reads its game folder by path. Internal storage (the app's own, fast, deleted with the app)
  * needs no permission: "Choose the UC2 folder" opens Android's folder picker, which gives the app that
- * folder only, and "Copy the game into internal storage" copies it in (only what is new or changed). A
- * UC2 folder in the app's own folder on a volume (Android/data/com.uc2.android/files/UC2) is read in place
- * without permission too; running in place from anywhere else on shared storage (/sdcard/UC2, an SD
- * card's UC2) needs All files access, which is asked for only then. "Clear internal storage" deletes the
+ * folder only, and "Copy to internal storage" copies it in (only what is new or changed; with no folder
+ * chosen yet it opens the picker first). A UC2 folder in the app's own folder on a volume
+ * (Android/data/com.uc2.android/files/UC2) is read in place without permission too; running in place from
+ * anywhere else on shared storage (/sdcard/UC2, an SD card's UC2) needs All files access: starting from there
+ * without it asks to allow it or to copy the game to internal storage instead. "Clear internal storage" deletes the
  * internal copy; "Copy settings and saves" writes the internal copy's inis and saves back to the chosen
  * folder. The resolution scale is the frame's size against the screen's (above 1: supersampling).
  *
@@ -73,6 +74,8 @@ public class MainActivity extends Activity {
     private boolean opRunning = false;
     private boolean gameLaunched = false;
     private boolean scaleUpdating = false;
+    private boolean startWhenAllowed = false;  // back from the access page with access: start the game
+    private boolean copyAfterPick = false;     // a folder picked for a copy: copy it
 
     private Switch storageSwitch;
     private Button startButton, pickButton, copyButton, clearButton, exportButton;
@@ -109,6 +112,10 @@ public class MainActivity extends Activity {
         } else {
             cancelCountdown(true);
             refreshStatusAsync();
+            if (startWhenAllowed) {
+                startWhenAllowed = false;
+                if (Environment.isExternalStorageManager()) launchGame();
+            }
         }
     }
 
@@ -178,7 +185,7 @@ public class MainActivity extends Activity {
         pickButton.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { pickFolder(); }
         });
-        copyButton = mkButton(col, "Copy the game into internal storage");
+        copyButton = mkButton(col, "Copy to internal storage");
         copyButton.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { doCopyToInternal(); }
         });
@@ -200,13 +207,8 @@ public class MainActivity extends Activity {
         progressBar.setVisibility(View.GONE);
         col.addView(progressBar, wide(dp(12)));
 
-        label(col, "\"Choose the UC2 folder\" gives the app that folder only (the game's System, Maps, Textures, "
-                + "Sounds, Music, Movies… folders), on the shared storage or an SD card; the game is copied from it "
-                + "into internal storage, which is fast and is deleted with the app. To run the game in place from "
-                + "shared storage instead, put it in " + new File(getExternalFilesDir(null), GameFolder.NAME)
-                + " (no permission needed), or at " + new File(Environment.getExternalStorageDirectory(), GameFolder.NAME)
-                + " or the top of an SD card, which needs All files access (asked for when you start the game).",
-                11f, 0xFF6E747C, 24);
+        label(col, "Choose the UC2 folder (on the device or an SD card) and copy it to internal storage for the fastest "
+                + "loading. Playing from the UC2 folder directly needs access to all files.", 11f, 0xFF6E747C, 24);
 
         setContentView(scroll);
 
@@ -234,7 +236,7 @@ public class MainActivity extends Activity {
     }
 
     private void applyStorageSwitchText() {
-        storageSwitch.setText(storageSwitch.isChecked() ? "Shared storage (in place, slower)" : "Internal storage (fast)");
+        storageSwitch.setText(storageSwitch.isChecked() ? "UC2 folder (slower)" : "Internal storage (fast)");
     }
 
     // ---- resolution scale -----------------------------------------------------------------------
@@ -349,7 +351,7 @@ public class MainActivity extends Activity {
         if (GameActivity.MODE_INTERNAL.equals(mode)) {
             if (!GameFolder.isGameFolder(GameFolder.internalRoot(this))) {
                 cancelCountdown(true);
-                showMessage("Internal storage has no game: choose the UC2 folder and copy it in first, or switch to shared storage.");
+                showMessage("There's no game in internal storage yet. Copy it from the UC2 folder first.");
                 return;
             }
         } else {
@@ -375,15 +377,21 @@ public class MainActivity extends Activity {
         // This activity stays: Back from the game comes here.
     }
 
-    /** Running in place from shared storage outside the app's own folder: All files access, explained first. */
+    /**
+     * Playing in place from the UC2 folder needs All files access; copying the game to internal storage does not.
+     * Allow access opens the system's page for it, and the game starts when the player comes back with it on.
+     */
     private void askAllFilesAccess() {
         new AlertDialog.Builder(this)
                 .setTitle("Allow access to all files?")
-                .setMessage("To run the game in place from " + new File(Environment.getExternalStorageDirectory(), GameFolder.NAME)
-                        + " or an SD card, Android asks you to allow UC2 access to all files.\n\nWithout it, choose the UC2 "
-                        + "folder and copy it into internal storage, which gives the app that folder only.")
-                .setPositiveButton("Allow", new DialogInterface.OnClickListener() {
+                .setMessage("To play from the UC2 folder, UC2 needs access to all files. Or copy the game to internal "
+                        + "storage \u2014 no access needed.")
+                .setNeutralButton("Copy to internal storage", new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface d, int w) { doCopyToInternal(); }
+                })
+                .setPositiveButton("Allow access", new DialogInterface.OnClickListener() {
                     @Override public void onClick(DialogInterface d, int w) {
+                        startWhenAllowed = true;
                         try {
                             startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
                                     Uri.parse("package:" + getPackageName())));
@@ -421,7 +429,10 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != REQ_PICK_FOLDER || resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        if (requestCode != REQ_PICK_FOLDER) return;
+        final boolean copy = copyAfterPick;
+        copyAfterPick = false;
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
         final Uri tree = data.getData();
         try {
             getContentResolver().takePersistableUriPermission(tree,
@@ -435,8 +446,9 @@ public class MainActivity extends Activity {
             @Override public void run() {
                 final boolean ok = Storage.isGameTree(getContentResolver(), tree);
                 ui.post(new Runnable() { @Override public void run() {
-                    showMessage(ok ? "UC2 folder chosen: " + folderName(tree) + ". Copy it into internal storage to play from there."
-                            : "That folder has no System/Core.u: choose the game's UC2 folder itself.");
+                    if (!ok) showMessage("That folder doesn't contain the game (no System/Core.u). Choose the UC2 folder.");
+                    else if (copy) doCopyToInternal();
+                    else showMessage("UC2 folder chosen: " + folderName(tree));
                     refreshStatusAsync();
                 } });
             }
@@ -461,22 +473,28 @@ public class MainActivity extends Activity {
         final Uri tree = chosenFolder();
         final File src = GameFolder.externalRoot(this);
         if (tree == null && !GameFolder.isGameFolder(src)) {
-            showMessage("Choose the UC2 folder first.");
+            // No folder yet: choose it, and the copy follows.
+            copyAfterPick = true;
+            pickFolder();
             return;
         }
-        startOp("Copying into internal storage…");
+        startOp("Copying to internal storage…");
         new Thread(new Runnable() {
             @Override public void run() {
                 String err;
                 if (tree != null) {
                     err = Storage.isGameTree(getContentResolver(), tree)
                             ? Storage.syncFromTree(getContentResolver(), tree, dst, throttledListener())
-                            : "The chosen folder has no System/Core.u (or the app lost access to it): choose the UC2 folder again.";
+                            : "UC2 can't read the chosen folder anymore. Choose the UC2 folder again.";
                 } else {
                     err = Storage.syncTree(src, dst, throttledListener());
                 }
-                final String msg = err == null ? "Copied: " + dst : err;
-                ui.post(new Runnable() { @Override public void run() { finishOp(msg); } });
+                final String error = err;
+                ui.post(new Runnable() { @Override public void run() {
+                    // A finished copy is what the game runs from.
+                    if (error == null) storageSwitch.setChecked(false);
+                    finishOp(error == null ? "Copy complete." : error);
+                } });
             }
         }, "uc2-copy").start();
     }
@@ -613,11 +631,11 @@ public class MainActivity extends Activity {
                         + (Storage.isGameTree(getContentResolver(), tree) ? "" : "  (no System/Core.u, or no access)");
                 String shared = extReady ? Storage.human(Storage.dirSize(external)) + "  " + external
                         : Environment.isExternalStorageManager() ? "no game folder at " + external
-                        : "not readable without All files access (asked for when you start from it)";
+                        : "needs access to all files";
                 final String s = "Internal storage free: " + Storage.human(free) + '\n'
                         + "Internal copy: " + (intReady ? Storage.human(Storage.dirSize(internal)) + "  " + internal : "none") + '\n'
                         + "Chosen UC2 folder: " + chosen + '\n'
-                        + "Shared storage, in place: " + shared;
+                        + "UC2 folder, in place: " + shared;
                 ui.post(new Runnable() { @Override public void run() { statusText.setText(s); } });
             }
         }, "uc2-status").start();

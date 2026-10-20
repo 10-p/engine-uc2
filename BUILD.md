@@ -190,10 +190,12 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
   tree as a native run tree without its binaries). The engine reads it by path, so the launcher (`MainActivity`) offers:
   - the app's internal copy (`/data/data/com.uc2.android/files/UC2`, fast, deleted with the app), made from a folder
     chosen with Android's folder picker ("Choose the UC2 folder": the app gets that folder only, on the shared storage
-    or an SD card) by "Copy the game into internal storage" (only what is new or changed: a stopped copy resumes);
+    or an SD card) by "Copy to internal storage" (only what is new or changed: a stopped copy resumes; with no folder
+    chosen yet it opens the picker first), after which the game runs from the copy;
   - the game in place on shared storage: in the app's own folder (`Android/data/com.uc2.android/files/UC2`) with no
-    permission, or at `/sdcard/UC2` or the top of an SD card with All files access, which the launcher asks for only
-    when the game starts from there.
+    permission, or at `/sdcard/UC2` or the top of an SD card with All files access. Starting from there without it
+    asks "Allow access to all files?" with Allow access (Android's page for it; the game starts on the way back once
+    it is on), Copy to internal storage, or Cancel.
 
   It also clears the internal copy, and copies its settings and saves (`System/Avaris.ini`, `System/User.ini`,
   `Save/`, `Saves/`) back to the chosen folder (or the shared one). Its resolution scale (a slider from 0.25 to 1 and a
