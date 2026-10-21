@@ -25,7 +25,7 @@ set(UE_ASSETS_DIR "" CACHE PATH
 set(UE_SCRIPT_PACKAGES_DIR "" CACHE PATH
     "The 17 shipped script packages (default: UE_ASSETS_DIR/System)")
 set(UE_SCRIPT_RETAIL_INIS_DIR "" CACHE PATH
-    "Optional: a System/ whose Characters.ini, Gametypes.ini and Maplists.ini the strip loads instead of the game folder's (the pipeline proof passes the retail disc's)")
+    "Optional, the pipeline proof's only: the System/ with the Characters.ini, Gametypes.ini and Maplists.ini the shipped packages were stripped with (target scripts-proof; empty: the proof's own default). The build strips with the game folder's")
 set(UE_SCRIPTS_DIR "" CACHE PATH
     "Non-host presets: the host build's Scripts/System (default: build-native/Scripts/System; build-windows/... on a Windows host)")
 
@@ -152,17 +152,19 @@ set(_shipped "${UE_SCRIPT_PACKAGES_DIR}")
 if(NOT _shipped)
   set(_shipped "${_assets}/System")
 endif()
-# The per-class inis the strip loads: the game folder's, the ones the game runs with, unless an override names
-# another System/.
+# The per-class inis the strip loads are the game folder's, the ones the game runs with. The retail disc's set
+# (UE_SCRIPT_RETAIL_INIS_DIR) reaches only the pipeline proof.
 set(_retail "${UE_SCRIPT_RETAIL_INIS_DIR}")
+set(_proof_retail "")
 if(_retail)
   foreach(_f Characters.ini Gametypes.ini Maplists.ini)
     if(NOT EXISTS "${_retail}/${_f}")
       message(FATAL_ERROR "Script patches: UE_SCRIPT_RETAIL_INIS_DIR=${_retail} has no ${_f}")
     endif()
   endforeach()
+  set(_proof_retail --retail-inis ${_retail})
 else()
-  set(_retail none)
+  set(_retail "the proof's default")
 endif()
 
 # Every package present and shipped. All 17: the build loads every one of them (the compiler resolves against them,
@@ -213,7 +215,7 @@ foreach(_l IN LISTS _out)
 endforeach()
 string(REPLACE "," ";" _setlist "${_sets}")
 message(STATUS "Script patches: ON, sets ${_sets}; rebuilds ${_keep} (compiles ${_compile}); shipped .u from ${_shipped}; "
-               "game folder ${_assets} (${_from}); retail inis: ${_retail}")
+               "game folder ${_assets} (${_from}), whose inis the strip loads; the proof's retail inis: ${_retail}")
 file(WRITE "${UC2_SCRIPTS_OUT}/build-info.txt" "sets=${_sets}\npackages=${_keep}\nshipped=${_shipped}\nassets=${_assets}\n")
 
 # Nothing from an earlier selection may survive: a stale .u in Scripts/System would be installed by run trees.
@@ -304,18 +306,13 @@ foreach(_p IN LISTS _keep)
   list(APPEND _copies COMMAND ${CMAKE_COMMAND} -E copy ${UC2_SCRIPTS_OUT}/work/System/${_p}.u ${UC2_SCRIPTS_SYSTEM}/${_p}.u)
 endforeach()
 set(_inis "")
-foreach(_f DefaultXbox.ini DefUserXbox.ini Default.ini DefUser.ini)
+foreach(_f DefaultXbox.ini DefUserXbox.ini Default.ini DefUser.ini Characters.ini Gametypes.ini Maplists.ini)
   list(APPEND _inis ${_assets}/System/${_f})
 endforeach()
-if(NOT _retail STREQUAL "none")
-  foreach(_f Characters.ini Gametypes.ini Maplists.ini)
-    list(APPEND _inis ${_retail}/${_f})
-  endforeach()
-endif()
 add_custom_command(OUTPUT ${_stamps}/build.stamp ${_outputs}
   COMMAND ${UE_BASH} ${_tools}/uc-build.sh --classes ${UC2_SCRIPTS_OUT}/tree --out ${UC2_SCRIPTS_OUT}/work
           --packages ${_compile_c} --keep ${_keep_c} --shipped ${_shipped} --assets ${_assets}
-          --retail-inis ${_retail} --ucc $<TARGET_FILE:UCC> --capped ${_capped}
+          --ucc $<TARGET_FILE:UCC> --capped ${_capped}
   COMMAND ${CMAKE_COMMAND} -E make_directory ${UC2_SCRIPTS_SYSTEM}
   ${_copies}
   COMMAND ${CMAKE_COMMAND} -E touch ${_stamps}/build.stamp ${UC2_SCRIPTS_STAMP}
@@ -329,7 +326,7 @@ set(UC2_SCRIPTS_TREE "${UC2_SCRIPTS_OUT}/tree")
 if(NOT CMAKE_HOST_WIN32)
   add_custom_target(scripts-proof
     COMMAND ${UE_BASH} ${_tools}/uc-patches-proof.sh --work ${UC2_SCRIPTS_OUT}/proof --shipped ${_shipped}
-            --assets ${_assets} --retail-inis ${_retail} --ucc $<TARGET_FILE:UCC> --capped ${_capped}
+            --assets ${_assets} ${_proof_retail} --ucc $<TARGET_FILE:UCC> --capped ${_capped}
     DEPENDS UCC
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     USES_TERMINAL VERBATIM)
