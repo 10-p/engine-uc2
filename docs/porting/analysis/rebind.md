@@ -231,7 +231,7 @@ GUI.u and UCGameplay.u rebuild byte-identical to the asset tree's: the package t
   committed `targets/uc2/file-manifest.json` only `system/ucmenu.u` differs; deps: 208 packages, 1,804 references,
   all resolved); `yarn build --target uc2 --assets ... --manifest ... --deps ... --engine-artifact <this worktree>`;
   sha256 of `serve-web/SDLLaunch.wasm` = this build's before and after each run (`logs/d9/e2e-engine-proof*.txt`);
-  sound to the null sink `uc2d9`. New opt-in spec `uc2-wasm-keys.spec.js` (ufrontend 48657a4, local; README section
+  sound to the null sink `uc2d9`. New opt-in spec `uc2-wasm-keys.spec.js` (ufrontend 5a1f7b8, local; README section
   "Keys and mouse settings in game"): run 1 17/18 (its `getall UCPlayerInput` answer came back empty: the check
   now reads User.ini, and the page's own line proves the running value), run 2 **1 passed, 19/19 steps**
   (`logs/d9/e2e-keys-2.txt`): main menu -> OPTIONS -> KEYBOARD / MOUSE, sensitivity 3.0, JUMP / DODGE := J, Escape

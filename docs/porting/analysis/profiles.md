@@ -152,7 +152,7 @@ leaves a player without one. Same on the Xbox: with exactly one profile, `ForceP
   URL whose `Name` is the active profile's (`UC2ProfileNameInURL`). Needed because the profile's name had reached a
   directly started map only by leaking into [DefaultPlayer] (r2m failed once the leak was closed: `?Name=Player`,
   PlayerReplicationInfo "Player-1"): the GUI binds `SetPlayerName` only when a menu is first shown.
-- Frontend (ufrontend 52e993d, 9a1c80a, d23794f): `network.playerName.ownedBy` (generic, data-driven), the uc2 target
+- Frontend (ufrontend 0b269e9, 5785ebd, 341635a): `network.playerName.ownedBy` (generic, data-driven), the uc2 target
   names `User.ini [Profiles] LastProfile`; the field is disabled while it is set. Unit tests: glue 726 pass (4 new),
   frontend 371 (5 new), root 28, build 185; gates no-engine-specifics, lint, abi-parity clean.
 - Test: `tools/dev/d4-names.sh` (n1 no profile through the character page into a match, n2 profile created, n3 direct
@@ -170,7 +170,7 @@ leaves a player without one. Same on the Xbox: with exactly one profile, `ForceP
   player at once, User.ini [DefaultPlayer] Name stays FrontName, LastProfile=Saver; n3 3+2: a direct start of
   `DM-Deadbolt?Name=FrontName` with the profile: PlayerReplicationInfo `Saver`; n4 4+2: deleting the profile gives
   the player FrontName back, LastProfile empty).
-- Frontend e2e spec written (ufrontend b9fb10e, `packages/e2e/uc2-wasm-saves.spec.js`, opt-in), not yet run.
+- Frontend e2e spec written (ufrontend 646970f, `packages/e2e/uc2-wasm-saves.spec.js`, opt-in), not yet run.
 
 Next: the same D-4 script on the shipped packages (evidence of Epic's behaviour), D-5 native scenarios, then the
 browser runs (wasm-perf rebuilt with every engine change).

@@ -3,7 +3,7 @@ Record — kept as history; the current state is in README.md, BUILD.md and the 
 # X-2: sound banks loaded lazily on the web (every first use stalled the match)
 
 Branch `x2-sounds` (from main `a16ad39`). No engine code change: the fix is frontend data and a frontend generator
-(ufrontend branch `uc2-x2-sounds`, commits `b271e03` and `60418a3`; its notebook
+(ufrontend branch `uc2-x2-sounds`, commits `b53e40c` and `3db4481`; its notebook
 `docs/migration/notes/uc2-sound-precache.md` has the bank table and every number). Logs: `<WorkUC2>/logs/x2`.
 
 The owner (2026-10-11): sound banks load on first use, once per character's sounds and again per taunt, "at least

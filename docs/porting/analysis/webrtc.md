@@ -142,7 +142,7 @@ before and after, null sink by index, removed): **1 passed (1.7 min)**:
   UDP sockets; harmless); `Failed to assign pawn class to new player!` in the menu after leaving (also natively).
 - Memory (Node, 2 s): PSS host browser 1,654 MiB, guest browser 1,550 MiB, all Chromium 3,098 MiB; cgroup
   memory.peak 5,676 MiB (ceiling 8G, not hit); machine in use peak 13.4 GB (10.0 GB before the run).
-Frontend committed (ufrontend 6f2a302 target data + README, 079462e spec + profile + e2e README); `yarn test` 28/28,
+Frontend committed (ufrontend 495a7f3 target data + README, 50e2f07 spec + profile + e2e README); `yarn test` 28/28,
 `yarn gates` "all CI-tier gates green" (`logs/e2/fe-test-1.txt`, `fe-gates-1.txt`).
 
 ### Step 4 (2026-10-08): link statistics; the spec again; Epic's loss/lag simulation over WebRTC
@@ -187,7 +187,7 @@ for transparent reconnects): recorded as an owner note.
   `logs/e2/net-summary.txt`, commit 8d22b06): 31 PASS + leftovers PASS, 0 FAIL (dedicated1 8, dedicated2 9, listen
   8, travel 6).
 - `run/e2/System/ucc-bin verifyclasses` (capped 2G): "All native class layouts match".
-- Frontend spec, second test (ufrontend bfc37e7): host from the LAUNCHER FORM (map, travel options, "Host a game",
+- Frontend spec, second test (ufrontend b34d1bc): host from the LAUNCHER FORM (map, travel options, "Host a game",
   Copy invite link captured from the clipboard call, Start) and the guest opening only the copied link: asserts the
   invite names the server the panel shows (generated on a first visit, not the stock name), the engine listened
   under that room/name, the join, both spawns, a clean leave.
@@ -198,7 +198,7 @@ for transparent reconnects): recorded as an owner note.
 rc 0, 0 errors (uc2.exe, ucc.exe); wasm-perf `build-wasm-perf-2.log` rc 0, 0 errors, SDLLaunch.wasm sha256
 6cea1425ad13fa539d0fa40657c664760972700b74dda620805613af90d1cf9c (the artifact of every run below).
 
-(b) Browser, `tools/dev/e2-web-net.sh final-1` and `final-2` (ufrontend bfc37e7, serve-web proven = the artifact by
+(b) Browser, `tools/dev/e2-web-net.sh final-1` and `final-2` (ufrontend b34d1bc, serve-web proven = the artifact by
 sha256 before and after each run, null sink by module index, removed afterwards): **2 passed, 2 passed**:
 - test 1 (URL host + invite URL guest): walk 687 / 651 units seen on the host, rest agreement 0.0 / 0.0, Suicide
   `score=-1 deaths=1` on both, leave dropped by the host after 2.6 s by the engine's channel-0 close;

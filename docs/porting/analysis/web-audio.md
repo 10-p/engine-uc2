@@ -241,8 +241,8 @@ shows the menu up and its GL milestones afterwards). Two browsers ran at once fo
 From now on the run command itself refuses to start unless `pgrep -f e2e-mem-guard` finds nothing and :8080 is
 free.
 
-Frontend commits (ufrontend, branch uc2, local): `03858a5` test(e2e) the spec + testMatch (opt-in),
-`f49e003` feat(targets) target.json (webAudio recommended, audioBuffer, cook by-products excluded) + README.
+Frontend commits (ufrontend, branch uc2, local): `a51b743` test(e2e) the spec + testMatch (opt-in),
+`591384d` feat(targets) target.json (webAudio recommended, audioBuffer, cook by-products excluded) + README.
 Gates: `yarn test` 28/28, `yarn gates` "all CI-tier gates green", eslint + prettier clean on my files.
 
 ## Step 4 - O-4 survey (2026-10-06)

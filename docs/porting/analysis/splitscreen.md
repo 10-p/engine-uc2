@@ -791,7 +791,7 @@ Builds (`bin/capped 6G`): native `-j4` (`logs/g11/build-native-0.log`), wasm-per
 preloaded data has `PadsStartAtPlayerTwo=False` and no `KeyboardIsPlayer`), windows MinGW `-j2` (`build-windows.log`,
 `uc2.exe` has the new line): 0 errors each. No script changed: no package to switch.
 
-Browser (frontend worktree `ufrontend-pads` at d51dfe1, serve-web assembled with this worktree's `build-wasm-perf`,
+Browser (frontend worktree `ufrontend-pads` at abd6107, serve-web assembled with this worktree's `build-wasm-perf`,
 sha256 `af499b50d5ef18225652ef8426430f9bbd0e89419fb95632db0180192f761257` before and after each run; harness
 `e2e-mem-guard --max-gb=23` inside `bin/capped 7G`, one run machine-wide, null sink by module index;
 `logs/g11/run-gamepad-e2e.sh`):

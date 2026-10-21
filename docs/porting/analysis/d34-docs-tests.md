@@ -32,7 +32,7 @@ Proof: `report-appendices.py 4813dd9` is byte-identical to the appendices in REP
 - README.md: WebGL 2 (WebGL 1 fallback), F-1..F-6 in the status line; `Engine/Config/README.md:86` "WebGL 1" ->
   WebGL 2 since F-3; `docs/SOURCE-LAYOUT.md:15`: Epic's three reference inis are Epic's CRLF bytes again (9d5683a),
   only Default/DefUser are LF. BUILD.md's status (2026-10-09) is current.
-- Frontend (patch only, `logs/d34/frontend-docs.patch`, against ufrontend `uc2` 1fdc55d, `git apply --check` OK):
+- Frontend (patch only, `logs/d34/frontend-docs.patch`, against ufrontend `uc2` bd7c42b, `git apply --check` OK):
   root README row, `targets/uc2/README.md` (title, manifest 1,227 files / 1,992.8 MB, "What the engine needed",
   Rendering on WebGL 2 and no -nopostprocess option, StartupMovies key, the mouse paragraph without the removed
   migration), `branding/help.md`, `branding/portal-notes.json`, `target.json`'s two comments (WebGL 1,
@@ -125,7 +125,7 @@ lock spot problem of step 3). The wasm-perf build (started -j4) was stopped and 
 ## Step 8: builds, the frontend copy, the queue
 
 - `build-wasm-perf` at -j2 rc 0 (`logs/d34/build-wasm-perf-2.log`): `SDLLaunch.wasm` sha256 `488c57bc...13c61`.
-- The frontend is NOT written: an on-disk copy `run/d34-ufrontend` (tar of the checkout at `1fdc55d` without `.git`
+- The frontend is NOT written: an on-disk copy `run/d34-ufrontend` (tar of the checkout at `bd7c42b` without `.git`
   and test-results; on disk because /tmp is tmpfs) with `logs/d34/frontend-jitter-spec.patch` applied; `yarn build
   --target uc2 --engine-artifact <this worktree>/build-wasm-perf/Source/SDLLaunch` in it under `capped 4G` rc 0;
   `serve-web/SDLLaunch.wasm` has the same sha256 (`logs/d34/wasm-sha256.txt`).
@@ -224,7 +224,7 @@ blur's remaining time, e.g. a longer BlurTime or a shot keyed to it).
 ## Step 15: the browser spec (D-4 2), status
 
 - The spec's OWN code, extracted from the file and run under Node on the a19b browser trace
-  (`logs/d34/jit/spec-measure-check.cjs`): unpatched (the frontend's `uc2` 1fdc55d) fwd/back/right/left b = -0.000 /
+  (`logs/d34/jit/spec-measure-check.cjs`): unpatched (the frontend's `uc2` bd7c42b) fwd/back/right/left b = -0.000 /
   0.001 / **0.217 FAIL** / -0.039 (exactly a19b's numbers); patched (`frontend-jitter-spec.patch`) -0.000 / 0.001 /
   **-0.000** / -0.000, judder 0.66 / 0.31 / 0.45 / 0.50 px: all ok.
 - Live runs: the wasm of fc4d7c4 (sha256 `fa492eed...48b7d0342`, built -j2, `logs/d34/wasm-sha256.txt`) is in

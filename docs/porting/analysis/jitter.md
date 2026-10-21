@@ -177,7 +177,7 @@ after the move. Nothing to fix there; it also confirms the cause is that one cal
 mean nothing: the pawn is behind the camera.)
 
 Browser (frontend clone, uc2 branch; spec `packages/e2e/uc2-wasm-jitter.spec.js`, opt-in line in
-`playwright.config.js`, ufrontend commit aeaacc4, local): this worktree's wasm-perf (`SDLLaunch.wasm` sha256
+`playwright.config.js`, ufrontend commit 156d736, local): this worktree's wasm-perf (`SDLLaunch.wasm` sha256
 b559394aa3525c79...; the same before and after every run: `logs/jit/web/engine-proof-*.txt`); sound to a null sink
 `uc2jit` loaded and unloaded by module index; one harness machine-wide (checked first); `bin/capped 6G 1500 -- node
 packages/e2e/tools/e2e-mem-guard.mjs --max-gb=14 -- --target uc2 uc2-wasm-jitter.spec.js`; mem-guard peak 12.2 GB

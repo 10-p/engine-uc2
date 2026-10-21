@@ -12,7 +12,7 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
     binaries left behind; `docs/SOURCE-LAYOUT.md`). `git ls-files` holds no package, media or binary file.
   - Presets: `native` (pointer width 4, `-m32`), `native64` (8), `wasm` (emcc 5.0.7 from the workspace's own
     `emsdk/`), `windows` all configure. Only `Thirdparty/zlib` is in the build so far.
-  - Frontend: `ufrontend/` cloned at `7fb637e`, local branch `uc2` (no such branch on the remote).
+  - Frontend: `ufrontend/` cloned at `4affbe7`, local branch `uc2` (no such branch on the remote).
   - Assets v0: `assets/uc2` = 595 files, 1.1 GB (58 maps + 9 ComboMatinees, 62 `.utx`, 45 `.usx`, 16 `.ukx`,
     17 `.u`, 29 top-level inis, 16 ladder inis, 5 languages), built by `tools/dev/mkassets-uc2.sh`; every file's
     sha256 is present in the pristine manifest.
@@ -179,8 +179,8 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
     package), so for those the numeric tests are the only evidence.
   - New ini switch `UsePixelShaders` (default True) restores the M5 behaviour for comparison.
 - 2026-10-04 — **M4w complete: the game boots in a browser** (W2, through the frontend's own harness, as the
-  owner directed). In the frontend clone `<WorkUC2>/ufrontend`, branch `uc2` (commits `2f4e39d`, `b244955`,
-  `15ede5e`, `b5b0eb9`, local only): the package reader handles versions 145–151 (all 208 packages of the uc2
+  owner directed). In the frontend clone `<WorkUC2>/ufrontend`, branch `uc2` (commits `c490326`, `2d32173`,
+  `381eed9`, `04df802`, local only): the package reader handles versions 145–151 (all 208 packages of the uc2
   tree parse to their exact length; other targets' output byte-identical), a minimal `targets/uc2` with
   neutral placeholder branding, and `packages/e2e/uc2-wasm-boot.spec.js`.
   - Coordinator's runs: `bin/capped 4G 420 -- node packages/e2e/tools/e2e-mem-guard.mjs --max-gb=12 --
@@ -302,7 +302,7 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   movie self-test 99/0, m9-movies 19/0, the wasm32 code under Node 39/0 and 99/0, browser spec
   `uc2-wasm-audio.spec.js` 3/3 twice (Web Audio device, menu music, output not silent by an analyser, logos with
   sound and skippable). Asset tree v1 (8cbea58) carries the cooked folders; frontend manifest regenerated
-  (ufrontend 05862c4, 1,223 files). Coordinator re-verification on main after the renderer merge.
+  (ufrontend 2ecfa57, 1,223 files). Coordinator re-verification on main after the renderer merge.
 - 2026-10-07 — **C-1 and C-2 (web ini overrides, what persists) merged (`web-ini-saves`, 3a5a532).**
   `appApplyIniOverrides` ported from engine-ut2004 (`-ini:<File>:[<Section>]:<Key>=<Value>`, called once in
   `appInit`; a malformed token is logged and ignored; values are written back to the ini as in the template),
@@ -313,7 +313,7 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   starts on a transient "No Profile" and does not auto-select the saved one (D-3). The web build writes the
   same profile flat, `System/Profiles/<name>.PRO` (`__EMSCRIPTEN__` only, ULoadSaveManager.cpp), because the
   frontend's `userFiles` globs allow a wildcard only in the file name (coordinator's decision; alternative:
-  teach the frontend directory wildcards and revert 22e9dbf). Frontend (ufrontend f90b70f): `network.playerName`
+  teach the frontend directory wildcards and revert 22e9dbf). Frontend (ufrontend d6554d4): `network.playerName`
   (User.ini [DefaultPlayer] Name), `userFiles: System/Profiles/*.PRO`, player files excluded from the manifest.
   Coordinator's re-run on main: `tools/dev/c1-ini-overrides.sh` ALL PASS, `tools/dev/c1-saves.sh` ALL PASS
   (profile listed and loaded after a restart, bytes unchanged), `m10-controls.sh keyboard text` PASS; frontend
@@ -410,7 +410,7 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   target): `network.playerName.ownedBy` disables the name field while a profile owns it. **Asset tree v2:**
   `tools/dev/mkassets-uc2.sh` overlays `assets/uc2-scripts/System/GUI.u` (rebuilt from main: 17 packages compare
   clean) and keeps the shipped file in `assets/uc2-shipped/System`; `System/SCRIPTS.txt` says so; frontend
-  manifest regenerated (ufrontend 477eca5; dependencies unchanged; GUI is not a server package, Core.u
+  manifest regenerated (ufrontend 4419272; dependencies unchanged; GUI is not a server package, Core.u
   unchanged). Coordinator's run on main (`logs/coord/a7/summary.txt`): windows/wasm-perf build; verifyclasses;
   d3-profiles, d4-names, d5-text, c1-ini-overrides ALL PASS; c1-saves ALL PASS (after rebuilding its tree);
   controls 5/5; browser boot 3/3, audio 3/3, saves 1/1 (profile restored after closing the tab), engine proven
@@ -456,7 +456,7 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   (`PostProcessReferenceHeight=480`), back-buffer taps in reference pixels through an area-averaged reference
   copy, radial-blur insets scaled; glow width 8.54% of the height at 640x480 and 1440x1080, 8.33% at 2880x2160
   (was 4.17% / 3.12%); 4K about 10% faster; fixed Epic's per-frame re-creation of blur targets at sizes like
-  1366x768. Asset tree: `UCGameplay.u` rebuilt from main (17c1750c), ufrontend 6893b45. Coordinator's runs on
+  1366x768. Asset tree: `UCGameplay.u` rebuilt from main (17c1750c), ufrontend 9e1f22b. Coordinator's runs on
   main (`logs/coord/a9..a11`): native/windows/wasm-perf build; verifyclasses; scripts 0 problems except
   UCGameplay's intended 18; `m7b.sh` 11/0; `sc-saveconfig.sh` 91/0; `d6-mouse.sh` 69/0; `d3-profiles` PASS;
   controls 5/5; `pp-scale.sh` selftest/glow/dof/radial 6/0; `m7-effects.sh` self-test 15/15 and 14/14 effect lines
@@ -479,7 +479,7 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   (web build only) ported from engine-ut2004 and adapted (UC2's standby clock fed per packet, a closed data
   channel closes the connection, listen status for the glue, no per-tick sleep); web inis select
   `WebRTCDrv.WebRTCNetDriver` (ConnectionTimeout 60); `Browse` turns the launcher's `<key>?connect` into a network
-  URL; frontend (ufrontend 6f2a302..4ac0d6d): uc2 `network` modes (p2p only), `serverName` from Avaris.ini (the
+  URL; frontend (ufrontend 495a7f3..5654da2): uc2 `network` modes (p2p only), `serverName` from Avaris.ini (the
   profile only overwrites the class default), notices, host/client milestones, `uc2-wasm-net.spec.js`.
   Coordinator's run on main (`logs/coord/a13/summary.txt`): native/windows/wasm-perf build; verifyclasses; native
   net dedicated1/dedicated2/listen/travel 32/0; browser boot 4/4, net 2/2 (host + guest: join, spawn, the guest's
@@ -496,7 +496,7 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
   lazy camera (the pad) hides it. Fix, UCGameplay.u only: `PlayerCalcView` computes the view again when this frame's
   camera was the mouse's and the pawn has moved (`UCPlayerController.uc` MouseLookCamera/MouseCameraLeftBehind,
   `UCPlayerInput.uc` MouseCameraTime). Coordinator's run on main (`logs/coord/a14`): native/windows/wasm-perf build;
-  scripts 0 errors; UCGameplay.u switched (9ca783e7; SCRIPTS.txt; ufrontend 21b49eb); verifyclasses; jit-trace kbm
+  scripts 0 errors; UCGameplay.u switched (9ca783e7; SCRIPTS.txt; ufrontend 7189566); verifyclasses; jit-trace kbm
   uneven 0.53 px (before 10.5-20.7), 60 fps 0.26, uncapped 0.01 (limit 1.0); pad 1.87 px worst segment, identical
   before the fix (jit-main 17c1750c: 1.87; the lazy camera on the test spot's ramp); m10 5/5; d6-mouse 67/2 (the
   spawn-dependent lock check, and the pad walk check at a spawn by a wall: rerun twice 21/0, walk -353/+408); browser
@@ -529,7 +529,7 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
     / 4 none, was 2417/6/15); A_Vehicle cooked (31 cues, cut content); priority 255 for sounds without one (674 lines);
     cue tables inside the Ogg packs: recommended NO (banks do not line up, start-up would read 37x more; spike kept);
     `[UC2ALAudio.UC2ALAudioSubsystem] UseHRTF` as engine-ut2004 (interaural delay measured). Cook installed into
-    assets/uc2-cooked (85 files) and the asset tree; ufrontend manifest 6e77b28. a18: audio-check 7191/7191,
+    assets/uc2-cooked (85 files) and the asset tree; ufrontend manifest ec41dfe. a18: audio-check 7191/7191,
     self-test 45/45, deadbolt capture clean, web audio spec 3/3.
   - **F-1 vanilla scripts** (9764bc8, 01139e3): Epic's shipped GUI.u/UCGameplay.u/UCMenu.u play as Epic shipped them
     with the curated inis (Epic's PC mouse path; pad curve within 0.17-0.43% of Epic's; the left stick walks on PC
@@ -542,7 +542,7 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
     (`[Engine.GameEngine] AllowNetCheats` for the tests only, never shipped), NETPLACE/NETPLACENEAR/NETPROBE behind the
     same guard (a client's NETPROBE answers about itself only), NETAIM deleted (owner: test-specific commands do not
     ship); `docs/CHEAT-COMMANDS.md` for the frontend. Packages switched: UCGameplay.u 4ed72f0b, UCMenu.u b9202a59
-    (ufrontend 227e5c3). a18 + followup: builds, scripts 0 errors, verifyclasses, jit 0.52 px, d6 89/2 then 16/0 and
+    (ufrontend 165ce9d). a18 + followup: builds, scripts 0 errors, verifyclasses, jit 0.52 px, d6 89/2 then 16/0 and
     15/1 (the vanilla arrow-strafe check is spawn-dependent: a wall; to pin), m10 rebuilt 5/5 and vanilla 2/2,
     d9 119/0 on a fresh tree, d4 PASS, net listen 9/9, boot 4/4, keys 1/1, audio 3/3, saves 1/1; the browser net
     spec 2/2 on the f1b branch. Preview republished 13:55 with the 9764bc8 build (the cheat-guard build follows with
@@ -560,7 +560,7 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
     line was cut at 1,024 characters, silently in SDLLaunch and unchecked in UCC: now 4,096 with a warning;
     o9-nvidia reused a tree's Avaris.ini between runs); Epic's three reference inis byte-identical again
     (sync-web-ini --check compares them); `FrameRateCap` default 0; meta.json branch only; `-sOFFSCREEN_FRAMEBUFFER`
-    kept (UC2GL4ESDrv asks for `renderViaOffscreenBackBuffer`, the 2.43 present fix). Frontend 1fdc55d: the uc2 specs
+    kept (UC2GL4ESDrv asks for `renderViaOffscreenBackBuffer`, the 2.43 present fix). Frontend bd7c42b: the uc2 specs
     pass `-ini:` keys; the "GL4ES without post-processing" launcher option removed.
   - **F-3 GL4ES on WebGL 2** (c4aee1b, ff abb4cc8; fork 10-p/gl4es fix/cubemap-bind-active-unit 98441ed -> 6b6bccd4,
     7 commits: ES 3.0 back end `LIBGL_ES=3`, GLSL ES 3.00 output, `LIBGL_FORCEHIGHP`, LOD bias applied, real
@@ -592,11 +592,11 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
 - 2026-10-10 — **The parked items done (owner: "work on them now"), the task audit, M16 audio.** Coordinator's checks
   on main `logs/coord/a20` (full, after G-4..G-8, D-1..D-4, M16 audio) and `a21` (+followup; G-9, G-10, G-10b).
   Repository on GitHub since today: `10-p/engine-uc2` (private; no CI).
-  - **G-4 language** (7e7fc5b; ufrontend 7b540c8): a Language control in Advanced for every target from target data
+  - **G-4 language** (7e7fc5b; ufrontend df766eb): a Language control in Advanced for every target from target data
     (uc2 int/deu/fra/ita/spa; ut2004 int/det/frt/itt/est; the three UT99/Unreal 1 targets ship English only: no
     control); per game (THE RULE: one home, the ini); browser spec: French seeded, `Joueur`, back to `int`, no seed
     when unchanged; UC2 natively in all five languages (menu caption, loading screen, cinematic track, announcer bank).
-  - **G-5 gamepad on the web** (9ce41dd; ufrontend 1d9beff): Emscripten's SDL2 port delivers the browser's pads to the
+  - **G-5 gamepad on the web** (9ce41dd; ufrontend 115dd54): Emscripten's SDL2 port delivers the browser's pads to the
     engine thread by itself; the launcher gets a generic `gamepad` target block, a "Game pad" switch, a "press any
     button" hint and connect/disconnect notices (UC2 only declares it; written for any target); `UseJoystick=True` in
     the web ini; the spec (fake gamepad) drives menus, spawns, fires, walks, turns, hot-plugs: 26/26; triggers are
@@ -611,15 +611,15 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
     fixed on the way: per-view corona lists, a stale projector cache crashing with four players); keyboard+mouse a
     player of their own (`KeyboardIsPlayer=True` natively; pads take ports 1-3; the web keeps the pad as player one:
     `False` there, 495cbe6); kbplayer 34/34, old input phase 39/39.
-  - **G-7 profiles** (d846e75; ufrontend e845bec): the frontend's userFiles accept one directory wildcard, the web
+  - **G-7 profiles** (d846e75; ufrontend 113ab10): the frontend's userFiles accept one directory wildcard, the web
     build uses Epic's `Profiles/<name>/AVARIS_PROFILE.PRO` again (22e9dbf reverted; a preview player's flat file is
     moved once); the active profile's character on direct launches and network joins (`UC2ProfileInURL` from
     `MatchViewportsToActors` and `Browse`); d3-character ALL PASS with a negative control; profile-login 8/8; saves
     spec and net spec in the browser.
-  - **G-8 double-tap dodge** (9357aec; ufrontend d0151bf): `[UCGameplay.UCPlayerInput] bDoubleTapDodge` (off) in the
+  - **G-8 double-tap dodge** (9357aec; ufrontend c19c3ac): `[UCGameplay.UCPlayerInput] bDoubleTapDodge` (off) in the
     rebuilt package, keys and stick, wall dodge, Lock rules (Lock held: taps pick targets; locked on: a double tap
     dodges and keeps the target); the frontend's unit tests read the target's own defaults (5 targets green).
-  - **G-1/2/3** (ufrontend 5433972): uc2 `audioHrtf` switch (HRTF ACTIVE in the engine log); the precache list from a
+  - **G-1/2/3** (ufrontend 7064db9): uc2 `audioHrtf` switch (HRTF ACTIVE in the engine log); the precache list from a
     capture (all of System + the 118 files the menu loads, 480 files / 408 MiB, 20% of the cache budget): the
     engine's own start Start->menu 14.6 -> 7.8 s, cue tables 1.0-1.3 -> 0.36 s; media stored uncompressed by default
     (ogg/oga/ogv/mp4/jpg/png/gif/avi: under 10% gain), `--compress-all`, the manifest marks them; publish 43% faster
@@ -631,14 +631,14 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
     `map-census.sh` FAILs on a hang; a note for engine-ut2004 (`logs/d12/engine-ut2004-note.md`).
   - **D-3/D-4** (14719eb): REPORT.md section 60 "changes since" + regenerated appendices (`tools/dev/
     report-appendices.py`), stale comments fixed, O-3 logged above; d6 scenarios pinned to fixed spots; the browser
-    strafe slope was the spec's fit without the walk bob (frontend 275273e); m7-effects self-test window;
+    strafe slope was the spec's fit without the walk bob (frontend 32bcb60); m7-effects self-test window;
     `MaterialTime` and `[UC2Movie] MaterialShotTimes` test keys make the twin 34/34.
   - **M16 audio** (d334834): the shipped `.xwb/.xsb` load and play at run time (`Source/UC2ALAudio/Src/UC2XboxBanks.cpp`),
     PCM byte-identical to the Python readers (371 waves), the `.xsb` tables equal to the cooked ones but documented
     rounding (2459 sounds, 2469 cues); a disc-only `Sounds/` tree plays everything (20 of 21 songs: `M_Adoratrice.xwb`
     is WMA: cooked Ogg first (G-10), WMA with M16's video decoder, else silence); F-6's "5 overflowed volumes" were
     LFE levels in the same field.
-  - **G-10/G-10b** (d6caa7f, c93514c; ufrontend b7c3a64, d589ecd): WebRTC connections excluded from the Xbox standby
+  - **G-10/G-10b** (d6caa7f, c93514c; ufrontend 335d8c6, 8d04c31): WebRTC connections excluded from the Xbox standby
     check on both ends (`UNetDriver::StandbyCheckEnabled()`; a vanished guest or host no longer pauses the other side:
     net spec 4/4); web rumble through the browser's `vibrationActuator` (effects recorded: Nakhti 0.51/0.77 for
     0.25 s, death 0.8/0.8 for 0.75 s); AA off by default on the web; Adoratrice from the cooked Ogg on a disc tree.
@@ -670,7 +670,7 @@ One dated entry per green gate (PLAN.md), newest last. Evidence goes in the entr
     within 0.7 design px: the health bar's gap and the lower reticle of player one are Epic's; owner: "apply Epic's
     rule"); for three and four players the safe-zone offset follows the view's row (`HUDLayoutRow`, `Source/Engine/Src/
     UnSplitScreenMgr.cpp`; Epic's bottom-half offset below the split line). `g6-splitscreen.sh hud/hudmenu` phases.
-  - **G-11 pad rule** (c44d0c7; ufrontend 1fa63c0): G-9's `KeyboardIsPlayer` renamed `[SDL2Drv.SDL2Client]
+  - **G-11 pad rule** (c44d0c7; ufrontend 34663c7): G-9's `KeyboardIsPlayer` renamed `[SDL2Drv.SDL2Client]
     PadsStartAtPlayerTwo` (default False on every platform: keyboard, mouse and the first pad are all player one and
     can be swapped freely; a second player plugs a second pad). True: pads take ports 2+, the keyboard and mouse own
     port 1. No "press a button" hints or pad notices; no controller-removed page and no pause when the keyboard's

@@ -348,7 +348,7 @@ guard spawns `yarn`, the workspace's shim in `bin/`; my first try without it fai
   400 px slow 10.0125, 400 px in two steps 10.01, 100 px up 10.01; the view unchanged 1.5 s after the mouse stopped;
   the engine's `ScriptPatcher: UCGameplay is not the package the patch was made for ... rebuilt from source` line
   proves the rebuilt package was loaded. Mem-guard peak 12.0 GB machine-wide (other agents included).
-- Frontend gates: `yarn lint` rc 0, `yarn test` 28/28; committed in ufrontend 51cab98 (local), with the uc2 target
+- Frontend gates: `yarn lint` rc 0, `yarn test` 28/28; committed in ufrontend 153d8dc (local), with the uc2 target
   README's "Mouse look" section. serve-web is left assembled with this branch's engine and `run/d6-webassets`.
 
 ## What the owner will feel, and what is labelled how
@@ -386,7 +386,7 @@ fix it but changes Epic's pad arithmetic, so it is an owner decision).
 
 State at the cut-off (the coordinator's resume message; the branch was at 3f66eb6): what had been done after the
 last notebook entry, with its evidence on disk:
-- The browser test DID land: ufrontend commit 51cab98 (local, `packages/e2e/uc2-wasm-boot.spec.js` test
+- The browser test DID land: ufrontend commit 153d8dc (local, `packages/e2e/uc2-wasm-boot.spec.js` test
   "mouse look (D-6)" + `targets/uc2/README.md` "Mouse look"), run 3 **1 passed** (step 7, `logs/d6/e2e-boot-3.txt`,
   engine proven by `logs/d6/e2e-engine-proof.txt`). The frontend clone is clean because it is committed.
 - `tools/dev/m14-scripts-check.sh` (M14_PREFIX=d6-m14, rebuilt packages from `run/d6-make`, final binary;

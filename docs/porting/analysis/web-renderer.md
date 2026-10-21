@@ -488,7 +488,7 @@ series, the owner's desktop) held 9.5-10.5 GB; the browser run itself peaks at 2
 
 ## Checkpoint, 2026-10-05 12:30 (after a second interruption): everything known that was not on disk
 
-Engine branch: 17 commits up to "self-test check 'fog'". Frontend clone, branch `uc2`: `b1e7ef6` (target data,
+Engine branch: 17 commits up to "self-test check 'fog'". Frontend clone, branch `uc2`: `7b947ff` (target data,
 spec with two tests, profile, both READMEs; committed through its gates: doc-sync and prettier passed).
 
 ### G2 as it stands (the script `tools/dev/m11-twin.sh` has NOT been run end to end yet)
@@ -603,7 +603,7 @@ lost (the main fix holds the click 1 s).
 The previous agent was stopped by the usage limit. I (Opus 5.5) continue from this notebook and its 19
 commits; nothing is redone. First actions: committed its uncommitted launcher change (`a860ac8`: the web
 `ue_exec_command` hands what the engine does not take to the first viewport, so `GLPROBE` and the device's
-commands reach it through the shell's `ueExec`), and the frontend's uncommitted spec (`ufrontend c26c4b7`,
+commands reach it through the shell's `ueExec`), and the frontend's uncommitted spec (`ufrontend 9bfac7c`,
 work in progress: tolerate one known start-up GL error, the play test with real keyboard and mouse events;
 one unused parameter removed and prettier applied so the hooks pass).
 
@@ -715,7 +715,7 @@ inside `capped 4G 300`, then `capped 6G 600 -- node packages/e2e/tools/e2e-mem-g
     locks is the frontend's business (its README); not asserted here.
 - Published to the owner's preview: `bin/publish-preview .../build-wasm-perf/Source/SDLLaunch` ->
   `2026-10-06 23:11:07 published ... (a4975f2 ...)`.
-- Frontend commits: `c26c4b7` (work in progress), `68e3a5d` (green spec).
+- Frontend commits: `9bfac7c` (work in progress), `635450e` (green spec).
 
 ## G4: the canvas against the twin (2026-10-06)
 
@@ -890,7 +890,7 @@ DM-Deadbolt, static part of the pinned view, `-glnos3tc` against the same bindin
 before the fix: any WebGL 1 context without `WEBGL_compressed_texture_s3tc` (most phones), which would have
 crashed at the first level.
 
-## Gate, 2026-10-07 (engine `93c2f27` and before; frontend `17758ef`)
+## Gate, 2026-10-07 (engine `93c2f27` and before; frontend `125679e`)
 
 **(a) Builds** (all `capped 6G`): native `cmake --build build-native` -> `[100%] Built target SDLLaunch`
 (`logs/m11/build-native-56.log`); wasm-perf -> `Built target SDLLaunch` (`build-wasm-perf-18.log`); wasm (debug
@@ -931,7 +931,7 @@ DM-Deadbolt vs twin 1.124 (tolerance 3), 0 GL errors in every test, DM-Deadbolt 
 anisotropy and FXAA), 98.6 draws, 34,399 primitives, 3 snapshots + 1 depth-as-colour per frame; browser PSS peak
 1376-1719 MiB, cgroup peak 3296 MiB, wasm memory 256 MiB, JS heap 24 MiB; play test every step ok (W 638 units,
 mouse 300 px = 15,725 yaw units, pointer lock not granted in the headless page). Run 23 had first failed (run 22)
-because the cooked start-up logos now play first: the spec passes `-nostartupmovies` (frontend `17758ef`).
+because the cooked start-up logos now play first: the spec passes `-nostartupmovies` (frontend `125679e`).
 Published after runs 20, 24 and 25 (`serve/PUBLISHED.txt`).
 
 **(d) Desktop regressions on fresh trees**: `tools/dev/m7-effects.sh m11r selftest` -> `fx selftest summary: 11

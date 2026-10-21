@@ -4,7 +4,7 @@ Record — kept as history; the current state is in README.md, BUILD.md and the 
 
 Running notebook of task G-10. Worktree `/home/ion/WorkUC2/engine-uc2-g10-web`, branch `g10-web` from main 486f17e.
 Logs `/home/ion/WorkUC2/logs/g10/`, run trees `run/g10*`. The frontend clone `/home/ion/WorkUC2/ufrontend` (branch
-`uc2`, 275273e) is only used for harness runs; frontend changes are a patch file, `logs/g10/frontend.patch`.
+`uc2`, 32bcb60) is only used for harness runs; frontend changes are a patch file, `logs/g10/frontend.patch`.
 
 The four decisions (owner, 2026-10-10):
 
@@ -85,7 +85,7 @@ The four decisions (owner, 2026-10-10):
 
 - Builds: `logs/g10/build.sh <preset> <tag> <jobs>` inside `bin/capped 6G` (configure once, then build); started at
   -j5 each, stopped and restarted at -j2 when the machine's load passed 24, then -j4 once it fell to 17 (incremental).
-- Frontend: `logs/g10/frontend.patch` (prettier-formatted, `git apply --check` clean on `uc2` 275273e):
+- Frontend: `logs/g10/frontend.patch` (prettier-formatted, `git apply --check` clean on `uc2` 32bcb60):
   - `packages/e2e/lib/fake-gamepad.js`: the fake pad has a `vibrationActuator` (one object per pad, the same in every
     snapshot; `type`/`effects` 'dual-rumble'), whose `playEffect`/`reset` are recorded; `effects(page)`;
     `connect(page, id, index, { vibration: false })` for a pad without one.
@@ -267,10 +267,10 @@ regenerates). serve-web holds this branch's artifact (ecdb59aa...). Open questio
 
 # G-10b: the client half of the standby check over WebRTC (2026-10-10)
 
-Coordinator, after the G-10 merge (main d6caa7f; the G-10 frontend patch is uc2 b7c3a64): make the client half
+Coordinator, after the G-10 merge (main d6caa7f; the G-10 frontend patch is uc2 335d8c6): make the client half
 consistent, the least invasive way; TcpNetDriver byte-for-byte Epic's. Worktree `/home/ion/WorkUC2/engine-uc2-g10b`,
 branch `g10b-standby-client` from main d6caa7f; logs `logs/g10/g10b/`; frontend patch `logs/g10/frontend-g10b.patch`
-(on top of b7c3a64).
+(on top of 335d8c6).
 
 ## Step 0 - what the client half does to a web guest
 

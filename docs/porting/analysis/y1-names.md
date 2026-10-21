@@ -150,7 +150,7 @@ The web (step 1's packages, artifact sha256 5884f482..., the profile-less path i
   h4 `...|Liandri Corporation|...|Anubis|0`; no Critical/signal/Accessed None but the Entry one.
 - `tools/dev/d4-names.sh` (D4_TREE=y1): ALL PASS (`logs/y1/d4-final`); `m14-scripts-check.sh verify menu patcher`
   (M14_PREFIX=y1-m14): PASS x3 (`logs/y1/m14-check-1.txt`).
-- Web (ufrontend-y1 aec5944, serve-web from this build: wasm 5884f482..., overlays GUI.u 39538dde..., UCMenu.u
+- Web (ufrontend-y1 6c77600, serve-web from this build: wasm 5884f482..., overlays GUI.u 39538dde..., UCMenu.u
   ce8775ff..., proved before/after by the runner `logs/y1/run-e2e*.sh`):
   - `uc2-wasm-netplay.spec.js` `y1-full-2`: **1 passed (7.0 min)**; host beacon `CTF|E2E Netplay Host|CTF-Aqueduct|
     CTF_Custom|1|4|0||NetHost|0`, URL `Name=NetHost`, the guest's row "E2E Netplay Host", both scoreboards NetHost and

@@ -3,7 +3,7 @@ Record — kept as history; the current state is in README.md, BUILD.md and the 
 # Y-5: two web defects the launcher E2E found, fixed as engine-ut2004 does
 
 Branch `y5-web` (worktree `<WorkUC2>/engine-uc2-y5-web`, from main `cfe0918`); frontend branch `uc2-y5-web`
-(worktree `<WorkUC2>/ufrontend-y5`, from ufrontend main `e1c695d`). Logs `<WorkUC2>/logs/y5/`. Newest step at the
+(worktree `<WorkUC2>/ufrontend-y5`, from ufrontend main `424ea70`). Logs `<WorkUC2>/logs/y5/`. Newest step at the
 bottom.
 
 The defects (Y-4, `ufrontend/docs/migration/notes/uc2-real-e2e.md`, "Findings the new tests made"; the two
@@ -108,7 +108,7 @@ engine-ut2004 keeps it); listed as an open question.
 
 ### 4. Web: the launcher E2E (numerically checked: DOM sizes and log lines; the menu by OCR)
 
-Frontend worktree `ufrontend-y5` (branch `uc2-y5-web`, `173c14e`): the two `test.fail` marks removed;
+Frontend worktree `ufrontend-y5` (branch `uc2-y5-web`, `ce47434`): the two `test.fail` marks removed;
 renderer-absent expects the new line, resolution-dsf-exact also checks the GL device's `main framebuffer`.
 `corepack yarn build --target uc2 --engine-artifact <this worktree>/build-wasm-perf/Source/SDLLaunch` (capped 6G);
 runner `logs/y5/run-e2e.sh` (Y-4's, pointed here: refuses with another e2e-mem-guard, ports 8080/8081/9000 taken or

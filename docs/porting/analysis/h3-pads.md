@@ -145,7 +145,7 @@ flow at the map list (the third accept went to the page while it was still anima
 character page went to the map list): the scenario now confirms each accept (`wait handled XC_A`) and waits for the
 character page by probe.
 
-## Step 5 - the browser gate on the final engine (wasm-perf sha256 317e8b74d4cbb0f7..., frontend uc2-h3-pads 44ded11)
+## Step 5 - the browser gate on the final engine (wasm-perf sha256 317e8b74d4cbb0f7..., frontend uc2-h3-pads edb4cdd)
 
 serve-web assembled from this worktree's `build-wasm-perf` (the served wasm's sha256 equal to the artifact's before and
 after every run, `logs/h3/web/*-sha-*.txt`); `e2e-mem-guard --max-gb=23` in `capped 7G`; load 15-20.

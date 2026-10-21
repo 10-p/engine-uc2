@@ -133,7 +133,7 @@ blockquote{margin:12px 0;padding:4px 14px;border-left:3px solid var(--accent);co
 <li class="d3"><a href="#40-13-lost-handshake-packets-and-the-packet-id-wrap-branch-net-loss">40.13 Lost handshake packets and the packet-id wrap (branch net-loss)</a></li>
 <li class="d3"><a href="#40-14-network-test-tools-and-the-native-servers">40.14 Network test tools and the native servers</a></li>
 <li class="d3"><a href="#40-15-webrtc-network-driver-for-the-browser-e-2">40.15 WebRTC network driver for the browser (E-2)</a></li>
-<li class="d2"><a href="#the-frontend-ufrontend-branch-uc2-42-commits-7fb637e-4ac0d6d">The frontend (ufrontend, branch uc2, 42 commits 7fb637e..4ac0d6d)</a></li>
+<li class="d2"><a href="#the-frontend-ufrontend-branch-uc2-42-commits-4affbe7-5654da2">The frontend (ufrontend, branch uc2, 42 commits 4affbe7..5654da2)</a></li>
 <li class="d3"><a href="#40-16-the-uc2-target-descriptor-manifests-branding-precache">40.16 The uc2 target: descriptor, manifests, branding, precache</a></li>
 <li class="d3"><a href="#40-17-package-versions-145-151-in-the-shared-glue-affects-every-target">40.17 Package versions 145-151 in the shared glue (affects every target)</a></li>
 <li class="d3"><a href="#40-18-shared-frontend-code-added-for-uc2-name-ownership-user-files-one-line-each-details-in-section-30">40.18 Shared frontend code added for UC2 (name ownership, user files): one line each, details in section 30</a></li>
@@ -176,7 +176,7 @@ blockquote{margin:12px 0;padding:4px 14px;border-left:3px solid var(--accent);co
 <h1 id="uc2-port-every-change-to-the-engine-where-and-why"><a class="anchor" href="#uc2-port-every-change-to-the-engine-where-and-why">#</a>UC2 port: every change to the engine, where and why</h1>
 <p>Review report for the owner, 2026-10-08. The engine (<code>engine-uc2</code>) is reviewed as of main <code>4813dd9</code>. The
 third-person jitter fix merged after that (<code>c59c02d</code>) has its own section, 50. The frontend (<code>ufrontend</code>) is reviewed
-as of branch <code>uc2</code> <code>4ac0d6d</code>.</p>
+as of branch <code>uc2</code> <code>5654da2</code>.</p>
 <p>Four writers produced sections 10-40 by reading the code and the notebooks. The coordinator wrote this overview,
 section 50 and the generated appendices. Nothing was re-run for this report: measurements are quoted from LOG.md
 and the notebooks, labelled <em>measured</em>, <em>seen only</em> or <em>not verified</em>.</p>
@@ -1454,7 +1454,7 @@ quotes (the launchers join argv with plain spaces).</li>
 </li>
 <li>script: none. Frontend: <code>ufrontend/packages/glue/src/config/ini-identity.js</code> <code>iniOverrideArg</code> emits the tokens;
 <code>ufrontend/packages/frontend/src/shell/boot.ts:752</code> calls <code>ueExecResult(&#39;flushconfig&#39;, 4000)</code> through <code>ue_exec_command</code> before it reads the
-inis (per web-ini-saves.md; not re-read). Frontend commit <code>f90b70f</code> (LOG.md).</li>
+inis (per web-ini-saves.md; not re-read). Frontend commit <code>d6554d4</code> (LOG.md).</li>
 <li>Tests: <code>tools/dev/c1-ini-overrides.sh</code> (30 checks, 0 failures at <code>logs/c1/c1-ini-run4.txt</code>): a system key and a user key reach the class
 defaults (proven by the console command <code>get &lt;Class&gt; &lt;Property&gt;</code>, not by the engine&#39;s own log line), a quoted token with spaces, <code>?</code> and <code>=</code>
 arrives whole, an <code>-ini:</code> token as the first token still boots to the menu, seven malformed tokens are logged and ignored without
@@ -1514,7 +1514,7 @@ every plain property through the game&#39;s own save path, or loads one, and exp
 cross-layout save test).</li>
 <li>Frontend (per the notebooks, not read): <code>userFiles: [&quot;System/Profiles/*.PRO&quot;]</code>; <code>network.playerName</code> (<code>System/User.ini</code>, section
 <code>DefaultPlayer</code>, key <code>Name</code>); <code>manifestExclude</code> entries for <code>System/Profiles/**</code>, <code>*.PRO</code>, <code>System/Shot*.bmp</code>, <code>System/AutoPatch.txt</code>
-(ufrontend <code>f90b70f</code>).</li>
+(ufrontend <code>d6554d4</code>).</li>
 <li>Tests: <code>tools/dev/c1-saves.sh</code> (native file inventory by diffing a 1,231-file tree before and after a session: it added only
 <code>Avaris.ini</code>, <code>User.ini</code>, <code>Avaris.log</code> and <code>Profiles/&lt;name&gt;/AVARIS_PROFILE.PRO</code>; plus the restart check: the profile is listed and loaded
 by a new process, <code>CharacterClassName</code> comes from the file), 11 PASS; <code>tools/dev/c1-web-saves.sh</code> (Node, 16 PASS: flat file, list, exists,
@@ -4191,7 +4191,7 @@ deltas: render device, <code>UseJoystick=False</code>, network device, and the w
 </li>
 <li><p>Frontend (ufrontend <code>uc2</code> branch; detail in the frontend section): <code>packages/e2e/uc2-wasm-boot.spec.js</code> (menu,
 DM-Deadbolt with post-processing, a play test with real input; compares the canvas with the twin&#39;s reference
-pictures, tolerances 10 and 3), commits <code>b1e7ef6</code>, <code>c26c4b7</code>, <code>68e3a5d</code>, <code>17758ef</code>.</p>
+pictures, tolerances 10 and 3), commits <code>7b947ff</code>, <code>9bfac7c</code>, <code>635450e</code>, <code>125679e</code>.</p>
 </li>
 </ul>
 <p><strong>How the parts fit.</strong> Same driver as R-19; the only web-specific code is context creation/presentation in the
@@ -4636,7 +4636,7 @@ Epic&#39;s code.</p>
 <hr>
 <h1 id="30-input-ui-scripts-profiles-and-saves"><a class="anchor" href="#30-input-ui-scripts-profiles-and-saves">#</a>30. Input, UI, scripts, profiles and saves</h1>
 <p>Code as of main <code>4813dd9</code> (snapshot <code>/home/ion/WorkUC2/engine-uc2-report</code>), baseline <code>7633696</code> (Epic&#39;s tree as
-imported). Frontend: <code>ufrontend</code> branch <code>uc2</code> at <code>4ac0d6d</code> against <code>7fb637e</code>. <code>path:line</code> are snapshot line numbers.
+imported). Frontend: <code>ufrontend</code> branch <code>uc2</code> at <code>5654da2</code> against <code>4affbe7</code>. <code>path:line</code> are snapshot line numbers.
 Notebooks behind this section: <code>docs/porting/analysis/</code> <code>client-boot.md</code> (M4), <code>controls.md</code> (M10), <code>scripts.md</code>
 (M14), <code>ui-scale.md</code> (D-2), <code>profiles.md</code> (D-3/D-4/D-5), <code>mouse.md</code> (D-6), <code>console-fov.md</code> (D-7/D-8),
 <code>saveconfig.md</code>, <code>rebind.md</code> (D-9), <code>web-ini-saves.md</code> (C-2).</p>
@@ -4843,7 +4843,7 @@ defaults (the WinDrv section&#39;s values, so Epic&#39;s own Default.ini still g
 <code>ViewportManager=SDL2Drv.SDL2Client</code> in <code>[Engine.Engine]</code>. <code>MouseXMultiplier/MouseYMultiplier</code> are not in the
 ini (compiled 1.0). Web inis identical for these keys.</li>
 <li>Web: the same driver through Emscripten&#39;s SDL2 port. Pointer lock is the frontend&#39;s existing shared
-<code>packages/frontend/src/shell/rawPointerLock.ts</code> (in the base <code>7fb637e</code>, not ours): raw deltas where the browser
+<code>packages/frontend/src/shell/rawPointerLock.ts</code> (in the base <code>4affbe7</code>, not ours): raw deltas where the browser
 allows <code>unadjustedMovement</code> (Windows, macOS), the desktop&#39;s accelerated deltas on Linux browsers.</li>
 <li>Tools: every scenario of <code>tools/dev/m10-controls.sh</code> drives this path with real X events (XTEST, from
 <code>tools/dev/m10-inject.py</code>).</li>
@@ -5221,8 +5221,8 @@ regenerated by <code>tools/dev/sync-web-ini.py</code>):</li>
 <p>Superseded (2026-10-09/10): see section 60, 30.5.</p>
 </blockquote>
 <ul>
-<li>Frontend: <code>ufrontend</code> <code>51cab98</code> test &quot;mouse look (D-6)&quot; in <code>packages/e2e/uc2-wasm-boot.spec.js</code> and the
-<code>targets/uc2/README.md</code> &quot;Mouse look&quot; section; manifests for the rebuilt package <code>40216a2</code>, <code>6893b45</code>.</li>
+<li>Frontend: <code>ufrontend</code> <code>153d8dc</code> test &quot;mouse look (D-6)&quot; in <code>packages/e2e/uc2-wasm-boot.spec.js</code> and the
+<code>targets/uc2/README.md</code> &quot;Mouse look&quot; section; manifests for the rebuilt package <code>8510f59</code>, <code>9e1f22b</code>.</li>
 <li>Tools: <code>tools/dev/d6-mouse.sh</code> (<code>look ini migrate pad lock before epic</code>), <code>tools/dev/d6-checks.py</code> (circle
 least-squares fit, camera there-and-back metric), <code>m10-inject.py</code>.</li>
 </ul>
@@ -5511,7 +5511,7 @@ command), <code>Source/Engine/Src/UnRender.cpp:2352</code> clears to black with 
 <li>Tools: <code>tools/dev/d2-ui-scale.sh</code> + <code>tools/dev/d2-measure.py</code> (runs and PIL checks at 8 sizes),
 <code>tools/dev/d2/*.scen</code>, the browser spec outside the frontend <code>tools/dev/d2/web/uc2-d2-uiscale.spec.js</code> +
 <code>playwright.d2.config.js</code>; <code>m10-controls.sh</code> <code>M10_RES</code>, <code>M10_UIMAP</code> (clicks mapped into the box).</li>
-<li>Frontend: <code>ufrontend</code> <code>735f607</code> the boot spec&#39;s play test maps 640x480 positions into the box.</li>
+<li>Frontend: <code>ufrontend</code> <code>e76227c</code> the boot spec&#39;s play test maps 640x480 positions into the box.</li>
 </ul>
 <p><strong>How the parts fit.</strong> Native only. Scripts and the GUI keep drawing in 640x480 design pixels (the HUD&#39;s
 <code>pos_*</code> structs, the crosshair at 320,240, absolute menu layouts, relative ones times <code>ResX/ResY</code>); the canvas
@@ -5571,10 +5571,10 @@ profile is one flat file <code>Profiles/&lt;name&gt;.PRO</code> (same bytes) ins
 <code>Source/UCC/Src/UCC.cpp:335-</code> <code>ucc-bin profiletest save|load|list|exists|delete</code>.</li>
 <li>Ini: <code>User.ini [Profiles] LastProfile</code> (written by the engine; not in <code>DefUser.ini</code>; a section no class reads).
 The dead <code>[Engine.PlayerProfile] defaultProfileDirectoryPath</code> (<code>Default.ini:510</code>) is Epic&#39;s and read nowhere.</li>
-<li>Frontend: <code>targets/uc2/target.json</code> <code>userFiles: [&quot;System/Profiles/*.PRO&quot;]</code> (<code>f90b70f</code>), <code>manifestExclude</code>
+<li>Frontend: <code>targets/uc2/target.json</code> <code>userFiles: [&quot;System/Profiles/*.PRO&quot;]</code> (<code>d6554d4</code>), <code>manifestExclude</code>
 <code>System/Profiles/**</code>, <code>*.PRO</code>, <code>System/Shot*.bmp</code>, <code>System/AutoPatch.txt</code>; <code>Avaris.ini</code>/<code>User.ini</code> persisted as
 engine files (the existing manifestExclude derivation + <code>flushconfig</code>); README section &quot;Profiles, the player
-name and text entry&quot; (<code>899b27e</code>); opt-in <code>packages/e2e/uc2-wasm-saves.spec.js</code> (<code>b9fb10e</code> .. <code>e3a508d</code>).</li>
+name and text entry&quot; (<code>1a8f570</code>); opt-in <code>packages/e2e/uc2-wasm-saves.spec.js</code> (<code>646970f</code> .. <code>c69301f</code>).</li>
 <li>Tools: <code>tools/dev/d3-profiles.sh</code>, <code>tools/dev/c1-saves.sh</code> (file inventory + restart), <code>tools/dev/c1-web-saves.sh</code>
 (the wasm <code>ucc-bin.js</code> under Node with the frontend&#39;s own <code>userFiles</code> compiler).</li>
 </ul>
@@ -5622,11 +5622,11 @@ stopped working with a rebuilt GUI.u; M14 finding).</li>
 only while no saved profile names the player (<code>UC2ProfileNamesThePlayer</code>, <code>UC2Profiles.cpp:130</code>);
 <code>UnGame.cpp:1162-1167</code> <code>MatchViewportsToActors</code> spawns the first viewport&#39;s player with a copy of the URL whose
 <code>Name</code> is the active profile&#39;s (<code>UC2ProfileNameInURL</code>, <code>UC2Profiles.cpp:149</code>).</li>
-<li>Frontend (generic, data-driven, every target): <code>network.playerName.ownedBy</code> (<code>52e993d</code>):
+<li>Frontend (generic, data-driven, every target): <code>network.playerName.ownedBy</code> (<code>0b269e9</code>):
 <code>packages/glue/src/config/ini-identity.js</code> <code>readPersistedNameOwner</code>, <code>packages/frontend/src/stores/net.ts</code>
 <code>resolveNameOwner</code>/<code>nameOwnerHint</code>, <code>NetworkPanel.vue</code> (field <code>:disabled</code>, hint), <code>ProxyNetworkPanel.vue</code>, tests
 <code>config-name-owner.test.ts</code>, <code>ini-identity.test.cjs</code>; the uc2 target names <code>User.ini [Profiles] LastProfile</code>
-with its hint (<code>targets/uc2/target.json:70-74</code>, <code>9a1c80a</code>, <code>d23794f</code>).</li>
+with its hint (<code>targets/uc2/target.json:70-74</code>, <code>5785ebd</code>, <code>341635a</code>).</li>
 <li>Tools: <code>tools/dev/d4-names.sh</code> (n1..n4); the saves spec with <code>UC2_E2E_REBUILT_GUI=1</code>.</li>
 </ul>
 <p><strong>How the parts fit.</strong> The <code>.uc</code> decides the name without a profile; the engine keeps <code>[DefaultPlayer] Name</code> as
@@ -5858,7 +5858,7 @@ first met when D-9&#39;s package added imports. Runs only in <code>ucc make</cod
 <li>Engine pieces used: <code>SET Input</code> (Epic&#39;s <code>StaticExec</code>/<code>GlobalSetProperty</code>), <code>SAVECONFIGKEYS</code> (30.15).</li>
 <li>Test channel <code>keys</code>, <code>probe4</code> (<code>84c3082</code>). Tools: <code>tools/dev/d9-rebind.sh</code> (menu, match, restart, nodefaults,
 pad, actions, look); <code>tools/dev/mkassets-uc2.sh</code> lists UCMenu (<code>69ae15d</code>).</li>
-<li>Frontend: opt-in <code>packages/e2e/uc2-wasm-keys.spec.js</code> (<code>48657a4</code>), manifest for the rebuilt package (<code>f6ae5b2</code>),
+<li>Frontend: opt-in <code>packages/e2e/uc2-wasm-keys.spec.js</code> (<code>5a1f7b8</code>), manifest for the rebuilt package (<code>5c87870</code>),
 README &quot;Keys and mouse settings in game&quot;.</li>
 </ul>
 <p><strong>How the parts fit.</strong> The page is script (UCMenu.u); the capture fix and the key-by-key save are native; the
@@ -6066,7 +6066,7 @@ tree&#39;s copies.</p>
 files are put aside in <code>assets/uc2-shipped/System</code> (never deleted), <code>System/SCRIPTS.txt</code> lists each rebuilt package
 with the first 16 hex digits of its sha256, and <code>MANIFEST.sha256</code> is regenerated. A package missing from the
 rebuilt folder keeps the shipped file. Run trees take an overlay with <code>mkrun-uc2.sh UC2_SCRIPTS=&lt;dir&gt;</code>. Frontend
-manifests follow the tree (<code>477eca5</code> GUI.u, <code>40216a2</code> and <code>6893b45</code> UCGameplay.u, <code>f6ae5b2</code> UCMenu.u); <code>Core.u</code> is
+manifests follow the tree (<code>4419272</code> GUI.u, <code>8510f59</code> and <code>9e1f22b</code> UCGameplay.u, <code>5c87870</code> UCMenu.u); <code>Core.u</code> is
 unchanged, so the frontend&#39;s asset fingerprint (sha256 of Core.u) still holds.</p>
 <p><strong>Network.</strong> A rebuilt package keeps the shipped GUID and adds a generation (a conformed save). <code>UCGameplay</code> is a
 server package: native dedicated servers and all clients (native and web) must switch together; a peer with the
@@ -6182,8 +6182,8 @@ their generated web copies; every row in <code>Engine/Config/README.md</code>. <
 <hr>
 <h1 id="40-audio-movies-networking-and-the-frontend"><a class="anchor" href="#40-audio-movies-networking-and-the-frontend">#</a>40. Audio, movies, networking and the frontend</h1>
 <p>Code as of main <code>4813dd9</code> (snapshot <code>/home/ion/WorkUC2/engine-uc2-report</code>), baseline <code>7633696</code> (Epic&#39;s tree as
-imported). Frontend: <code>ufrontend</code> branch <code>uc2</code> at <code>4ac0d6d</code> against <code>7fb637e</code> (its base on origin/main; the branch has
-since moved on with an unrelated jitter spec, <code>aeaacc4</code>, which is not covered). <code>path:line</code> are snapshot line numbers.
+imported). Frontend: <code>ufrontend</code> branch <code>uc2</code> at <code>5654da2</code> against <code>4affbe7</code> (its base on origin/main; the branch has
+since moved on with an unrelated jitter spec, <code>156d736</code>, which is not covered). <code>path:line</code> are snapshot line numbers.
 Notebooks behind this section (<code>docs/porting/analysis/</code>): <code>audio.md</code> (M8), <code>video.md</code> (M9), <code>web-audio.md</code> (O-1,
 O-2, O-4), <code>network.md</code> (net-join, net-loss), <code>webrtc.md</code> (E-2), <code>design.md</code> (audio and video design notes), plus
 <code>LOG.md</code> and <code>PLAN.md</code> (&quot;Owner review of 2026-10-06&quot;). Where a notebook and the code disagree the code is used and
@@ -7300,7 +7300,7 @@ dedicated1/dedicated2/listen/travel 32 PASS. Browser boot 4/4. <em>Not verified<
 <p><strong>Off switch.</strong> None for the driver itself: an ini that names <code>IpDrv.TcpNetDriver</code> is switched back to the WebRTC driver at launch
 (<code>ReplaceMissingDrivers</code>). Nothing goes online unless the player hosts or opens an invite link.</p>
 <hr>
-<h2 id="the-frontend-ufrontend-branch-uc2-42-commits-7fb637e-4ac0d6d"><a class="anchor" href="#the-frontend-ufrontend-branch-uc2-42-commits-7fb637e-4ac0d6d">#</a>The frontend (<code>ufrontend</code>, branch <code>uc2</code>, 42 commits <code>7fb637e..4ac0d6d</code>)</h2>
+<h2 id="the-frontend-ufrontend-branch-uc2-42-commits-4affbe7-5654da2"><a class="anchor" href="#the-frontend-ufrontend-branch-uc2-42-commits-4affbe7-5654da2">#</a>The frontend (<code>ufrontend</code>, branch <code>uc2</code>, 42 commits <code>4affbe7..5654da2</code>)</h2>
 <p>The frontend is a separate repository (the shared launcher, build and test shell for UT2004, UT99, Unreal 1 and now UC2).
 Everything below is on the local branch <code>uc2</code>; nothing was pushed. 42 files changed, +4,075 / -34 lines. Of those, 9 files
 are the new <code>targets/uc2/</code> (data), 6 are new e2e files, and <strong>the other 27 touch shared code, shared tests or shared docs, listed in
@@ -7310,8 +7310,8 @@ keys specs) are covered by section 30; here each gets one line.</p>
 <p><strong>What the player/owner sees.</strong> A fourth game card in the launcher (&quot;UC2 Web (experimental)&quot;, chip <code>v2226</code>), the Play panel with
 DeathMatch and Capture the Flag, 3 bots / 10 minutes toggles, a Multiplayer panel with P2P only, Advanced fields for the
 audio buffer, and a sound/graphics capability check.</p>
-<p><strong>Where.</strong> <code>targets/uc2/</code> (all new; first commit <code>b244955</code>, later <code>f49e003</code>, <code>f90b70f</code>, <code>05862c4</code>, <code>9a1c80a</code>, <code>d23794f</code>, <code>6f2a302</code>,
-<code>477eca5</code>, <code>40216a2</code>, <code>6893b45</code>, <code>f6ae5b2</code>, <code>4ac0d6d</code>):</p>
+<p><strong>Where.</strong> <code>targets/uc2/</code> (all new; first commit <code>2d32173</code>, later <code>591384d</code>, <code>d6554d4</code>, <code>2ecfa57</code>, <code>5785ebd</code>, <code>341635a</code>, <code>495a7f3</code>,
+<code>4419272</code>, <code>8510f59</code>, <code>9e1f22b</code>, <code>5c87870</code>, <code>5654da2</code>):</p>
 <ul>
 <li><code>target.json</code> (182 lines): <code>id uc2</code>, <code>engineFamily UE2</code>, <code>abiVersion 1</code>; <code>publish</code> (folder <code>uc2</code>, chip <code>v2226</code>, <code>chipWarn: true</code>,
 engine repo <code>engine-uc2</code> branch <code>main</code>, preset dir <code>.</code>); <code>assetMarkers</code> (SHA-256 of <code>System/Core.u</code>, 72,051 bytes, package version
@@ -7323,7 +7323,7 @@ options <code>-log</code>); <code>videoDrivers</code> (GL4ES default, GL4ES with
 threads and features, workers, <code>Atomics.wait</code>, OffscreenCanvas + WebGL on it, OPFS sync access; recommended: GPU
 acceleration, IndexedDB, <code>webAudio</code>, <code>webrtc</code>, <code>pointerLock</code>); <code>audioBuffer {10 ms x 3}</code>; <code>notices</code> (join-failed, join-refused,
 version-mismatch, host-failed, regexes on the engine&#39;s own lines); <code>telemetry</code> (<code>LoadMap:</code> and <code>Critical:</code> patterns).</li>
-<li><code>file-manifest.json</code> (1,224 entries, 1,991 MB at <code>4ac0d6d</code>) and <code>dependency-manifest.json</code> (208 packages, 1,804 import
+<li><code>file-manifest.json</code> (1,224 entries, 1,991 MB at <code>5654da2</code>) and <code>dependency-manifest.json</code> (208 packages, 1,804 import
 references, all resolved), both <strong>generated</strong> from the owner&#39;s local asset tree with <code>generate-manifest.cjs</code> and
 <code>generate-deps.cjs</code> (commands in the README).</li>
 <li><code>precache.json</code>: 17 <code>System/*.u</code> packages + <code>Maps/Entry.unr</code> + <code>Maps/Menu.unr</code> (10.5 MB).</li>
@@ -7334,7 +7334,7 @@ branding.</li>
 <p><strong>How the parts fit.</strong> The shared frontend reads the descriptor and builds the page, the file system manifest, the <code>-ini:</code> seeds
 (player name, server name, network device) and the engine command line; the engine reads the manifest-backed files on demand.
 The manifest has to match the asset tree the artifact is served with: after D-4, D-6, saveconfig and D-9 each rebuilt <code>GUI.u</code>,
-<code>UCGameplay.u</code> and <code>UCMenu.u</code>, a frontend commit regenerated the manifests (<code>477eca5</code>, <code>40216a2</code>, <code>6893b45</code>, <code>f6ae5b2</code>).</p>
+<code>UCGameplay.u</code> and <code>UCMenu.u</code>, a frontend commit regenerated the manifests (<code>4419272</code>, <code>8510f59</code>, <code>9e1f22b</code>, <code>5c87870</code>).</p>
 <p><strong>Why.</strong> PLAN M11: &quot;frontend <code>targets/uc2/*</code>, v151 support in generate-deps/manifest/travel, e2e boot/net specs, gates&quot;.</p>
 <p><strong>Decisions and alternatives.</strong> P2P only (owner&#39;s choice). Travel limited to the two game classes proven on this build (the CTF toggle
 is labelled &quot;not yet verified on the web build&quot;). The cooked sound and movies are in the manifest (asset tree v1) so they are
@@ -7372,7 +7372,7 @@ i16 (class, super, package are words 0, 2, 4 on load); <code>Cur.i16()</code>, <
 <code>tableLayout</code>. <code>packages/glue/lib/unreal/property-codec.cjs</code> (+26): <code>assertCodecVersion</code> makes the tagged-property decoder <strong>throw</strong> on a
 version &gt;= 145 (&quot;not supported here yet&quot;). <code>writer.cjs</code> (+7, comment: it only writes v128). Tests <code>packages/glue/test/unreal-package-versions.test.cjs</code>
 (350 lines, 11 tests, synthesised v128/v147/v151 through both readers plus the real tree when <code>.ufront/publish.local.json</code> names <code>assets.uc2</code>),
-<code>_target-fixtures.cjs</code>, <code>target-config.test.cjs</code>. Commit <code>2f4e39d</code> (2026-10-04). Docs: glue <code>CHANGELOG.md</code>, <code>README.md</code>.</p>
+<code>_target-fixtures.cjs</code>, <code>target-config.test.cjs</code>. Commit <code>c490326</code> (2026-10-04). Docs: glue <code>CHANGELOG.md</code>, <code>README.md</code>.</p>
 <p><strong>How the parts fit.</strong> Engine-side counterpart: UC2&#39;s <code>UnLinker.cpp</code>/<code>UnObj.cpp</code> (<code>FCompactIndex&lt;&lt;</code>) define the layouts. The two glue
 readers (build-time <code>generate-deps</code>, run-time <code>reader.cjs</code> for generators) share one function so they cannot disagree.</p>
 <p><strong>Why.</strong> Without it <code>yarn deps</code> cannot read a version-151 package (PLAN: &quot;Frontend Node tools must learn package v151&quot;).</p>
@@ -7387,13 +7387,13 @@ import chain is rooted in a <code>Core.Package</code>, all 1,804 import referenc
 <p><strong>Off switch.</strong> None.</p>
 <h3 id="40-18-shared-frontend-code-added-for-uc2-name-ownership-user-files-one-line-each-details-in-section-30"><a class="anchor" href="#40-18-shared-frontend-code-added-for-uc2-name-ownership-user-files-one-line-each-details-in-section-30">#</a>40.18 Shared frontend code added for UC2 (name ownership, user files): one line each, details in section 30</h3>
 <ul>
-<li><strong><code>network.playerName.ownedBy</code> (D-4)</strong>, commit <code>52e993d</code> (+ target data <code>9a1c80a</code>, <code>d23794f</code>): the launcher&#39;s name field is disabled while the game&#39;s
+<li><strong><code>network.playerName.ownedBy</code> (D-4)</strong>, commit <code>0b269e9</code> (+ target data <code>5785ebd</code>, <code>341635a</code>): the launcher&#39;s name field is disabled while the game&#39;s
 own identity names the player (UC2: <code>User.ini [Profiles] LastProfile</code>). <strong>Shared code:</strong> <code>packages/frontend/src/components/NetworkPanel.vue</code>,
 <code>ProxyNetworkPanel.vue</code>, <code>stores/net.ts</code> (<code>nameOwner</code>, <code>resolveNameOwner</code>, <code>nameOwnerHint</code>), <code>config/network.ts</code>, <code>env.d.ts</code>;
 <code>packages/glue/src/config/ini-identity.js</code> (<code>readPersistedNameOwner</code>) and <code>src/index.js</code>; docs <code>docs/06-targets-and-branding.md</code>,
 <code>packages/frontend/README.md</code>, <code>packages/glue/CHANGELOG.md</code>; tests <code>config-name-owner.test.ts</code> (107 lines), <code>ini-identity.test.cjs</code> (+93). A target
 without <code>ownedBy</code> never disables the field (UT2004, UT99, Unreal 1 are unaffected by design). Section 30 explains D-4.</li>
-<li><strong>Player name through <code>-ini:</code>, profiles as user files, player files never served (D-3/C-2)</strong>, commit <code>f90b70f</code>: target data only.</li>
+<li><strong>Player name through <code>-ini:</code>, profiles as user files, player files never served (D-3/C-2)</strong>, commit <code>d6554d4</code>: target data only.</li>
 <li><strong>Saves spec and keys spec</strong> (<code>uc2-wasm-saves.spec.js</code>, <code>uc2-wasm-keys.spec.js</code>, opt-in, 542 and 255 lines): section 30.</li>
 </ul>
 <h3 id="40-19-the-uc2-end-to-end-specs"><a class="anchor" href="#40-19-the-uc2-end-to-end-specs">#</a>40.19 The uc2 end-to-end specs</h3>
@@ -7404,8 +7404,8 @@ proves <code>serve-web/</code> holds the artifact under test and mutes the outpu
 <li><code>lib/engines/uc2.profile.js</code> (109 lines): the engine-specific data the shared harness needs: boot, render, host and client milestone regexes
 (the engine&#39;s log lines, which come WITHOUT the <code>Log: </code> tag with <code>-log</code>), <code>bootSurface</code>, <code>netSurface</code>, <code>dmGameArgs</code>.</li>
 <li><code>uc2-wasm-boot.spec.js</code> (785 lines, 4 tests, in the default set): menu with the GL device; <code>DM-Deadbolt</code> by URL with post-processing; keyboard + mouse
-play test (INSTANT ACTION, Fire, W, mouse look); mouse look linear (D-6). It launches with <code>-nostartupmovies</code> (<code>17758ef</code>), so it never sees the logos.</li>
-<li><code>uc2-wasm-audio.spec.js</code> (392 lines, 3 tests, <strong>opt-in</strong>, commits <code>03858a5</code>, <code>721c6dd</code>): (1) the menu plays its music through openal-soft on Web Audio
+play test (INSTANT ACTION, Fire, W, mouse look); mouse look linear (D-6). It launches with <code>-nostartupmovies</code> (<code>125679e</code>), so it never sees the logos.</li>
+<li><code>uc2-wasm-audio.spec.js</code> (392 lines, 3 tests, <strong>opt-in</strong>, commits <code>a51b743</code>, <code>1cd2925</code>): (1) the menu plays its music through openal-soft on Web Audio
 and the output is not silent (log lines for the device, the 23 cue tables, a wave pack, the music; the <code>AudioContext</code> <code>running</code>; an <code>AnalyserNode</code> on
 the worklet node: audible share &gt; 0.5); (2) the logos play with their sound and on time (<code>-NULLMOVIES</code>); (3) a key press ends the logos and the music
 follows. It builds its own browser context with <code>--mute-audio</code> (the suite&#39;s fixture ignores <code>launchOptions</code>; the first run proved the flag had no effect:
@@ -7427,7 +7427,7 @@ memory guard stopped the first attempt (saves reported a browser profile outlivi
 <p><strong>Off switch.</strong> The audio, saves and keys specs are opt-in (named explicitly).</p>
 <h3 id="40-20-docs-and-ci-gate-edits"><a class="anchor" href="#40-20-docs-and-ci-gate-edits">#</a>40.20 Docs and CI-gate edits</h3>
 <p><strong>Where (shared files).</strong> <code>.ufront/gates/no-engine-specifics.sh</code> (6 lines): the <code>uc2</code> literal is now forbidden in generic glue/frontend source, like <code>ut2004</code>,
-<code>ut99</code>, <code>unreal1</code> (commit <code>b244955</code>); <code>README.md</code> (one table row); <code>docs/06-targets-and-branding.md</code> (the <code>ownedBy</code> field); <code>docs/migration/STATE.md</code>
+<code>ut99</code>, <code>unreal1</code> (commit <code>2d32173</code>); <code>README.md</code> (one table row); <code>docs/06-targets-and-branding.md</code> (the <code>ownedBy</code> field); <code>docs/migration/STATE.md</code>
 (a 2026-10-04 &quot;NEW TARGET uc2 (first light)&quot; entry); <code>test/skeleton.test.mjs</code> (adds <code>uc2</code> to the manifest-vs-engine-<code>Paths=</code> check and two captured
 console lines); <code>packages/frontend/test/capabilities.test.ts</code> (adds <code>uc2</code>).</p>
 <p><strong>Disadvantages, risks, deviations.</strong> <code>STATE.md</code> and the root <code>README.md</code> describe the first-light state only; later work (render, sound, online) is
@@ -7665,7 +7665,7 @@ slope <code>b</code> (how far ahead the pawn sits, plotted against velocity × f
 <li><code>tools/dev/script-build.sh</code> now also accepts <code>jit*</code> trees.</li>
 </ul>
 </li>
-<li>Frontend: <code>packages/e2e/uc2-wasm-jitter.spec.js</code> (ufrontend <code>aeaacc4</code>). It is opt-in, has a line in
+<li>Frontend: <code>packages/e2e/uc2-wasm-jitter.spec.js</code> (ufrontend <code>156d736</code>). It is opt-in, has a line in
 <code>playwright.config.js</code>, and makes the same measurement in the browser from the FRAMETRACE lines.</li>
 </ul>
 <p><strong>How the parts fit.</strong></p>
@@ -7940,7 +7940,7 @@ source WAVs); the 19 waves without a source and the long <code>Machine_Generator
 <code>A_Vehicle</code> is cooked from the shipped <code>.xsb</code>/<code>.xwb</code> (31 cues; cut content); the 674 sounds without a priority
 get 255, as the shipped <code>.xsb</code> stores. Cues: 2,465 fully, 0 partly, 4 with no wave anywhere in the project (was
 2,417 / 6 / 15). Cue tables inside the Ogg packs: spiked and NOT recommended. Installed in <code>assets/uc2-cooked</code> (85
-files) and the asset tree; ufrontend manifest <code>6e77b28</code>. Truth: <code>audio-f6.md</code>; LOG.md 2026-10-09 F-6.</li>
+files) and the asset tree; ufrontend manifest <code>ec41dfe</code>. Truth: <code>audio-f6.md</code>; LOG.md 2026-10-09 F-6.</li>
 <li><strong>40.2 the device (F-6, F-4b).</strong> <code>[UC2ALAudio.UC2ALAudioSubsystem] UseHRTF</code> as engine-ut2004 (default off; the
 interaural delay measured when on): &quot;No HRTF&quot; no longer holds. <code>-NOEFX</code> and <code>-audiowave=</code> are the ini keys <code>UseEFX</code>
 and <code>WaveFile</code>. Status now: audio-check 7,191/7,191 waves, self-test 45/45. <code>audio.md</code>&#39;s &quot;below 0.1 = silence&quot;
@@ -7949,8 +7949,8 @@ corrected (D-3).</li>
 project: <code>ST_Primary</code>, <code>JG_JumpChargeEthereal</code>, ...). The localised taunt order is unchanged (kept as the Xbox had it).</li>
 <li><strong>40.15 WebRTC.</strong> <code>WebRTCDrv.h</code> and <code>webrtc.md</code> now say what was measured: the glue&#39;s channel is reliable and
 ordered (D-3).</li>
-<li><strong>Frontend (40.16-40.20).</strong> Since <code>4ac0d6d</code> the frontend&#39;s <code>uc2</code> branch has the F-1/F-6 manifests (<code>227e5c3</code>,
-<code>6e77b28</code>) and the specs passing their test settings as <code>-ini:</code> keys (<code>1fdc55d</code>, the &quot;without post-processing&quot;
+<li><strong>Frontend (40.16-40.20).</strong> Since <code>5654da2</code> the frontend&#39;s <code>uc2</code> branch has the F-1/F-6 manifests (<code>165ce9d</code>,
+<code>ec41dfe</code>) and the specs passing their test settings as <code>-ini:</code> keys (<code>bd7c42b</code>, the &quot;without post-processing&quot;
 launcher option removed). Its first-light texts (help.md, portal-notes.json, the target README, the root README row,
 STATE.md) have replacement text in <code>logs/d34/frontend-docs.patch</code> (not committed: frontend work is the
 coordinator&#39;s). The jitter spec&#39;s strafe slope (0.217-0.247 on WebGL 2) was the spec&#39;s fit leaving out the walk bob:

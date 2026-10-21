@@ -399,7 +399,7 @@ Verification (all builds WITHOUT the FetchContent override, `-UFETCHCONTENT_SOUR
 - `tools/dev/m7-effects.sh f3m`: 14 effects `critical=0 glerrors=0 programs_failed=0+0`, praxis-panes vs wine 2.318;
   its own self-test step printed "FAILED to run" (no summary within the 60 s run; the log was overwritten by the next
   call, not diagnosed); `m7-effects.sh f3m selftest` right after: **15 passed, 0 failed**.
-- Browser (main's frontend `1fdc55d`, its specs with `-ini:` keys and "WebGL [12]"; `serve-web/SDLLaunch.wasm` =
+- Browser (main's frontend `bd7c42b`, its specs with `-ini:` keys and "WebGL [12]"; `serve-web/SDLLaunch.wasm` =
   `a15832ad...` before and after): `uc2-wasm-boot.spec.js` **4 passed** (menu vs twin 9.055 / 10, map vs twin 2.900 / 3,
   0 GL errors, `binding: WebGL 2 through GL4ES`, `drawn 4x multisampled`, `[PERF] 22.52 ms/frame` DM-Deadbolt with
   post-processing). The first attempt was stopped by the mem guard's machine-wide budget (14 GB: the owner's desktop
