@@ -19,8 +19,8 @@ if (!new File(sdl2Java, 'org/libsdl/app/SDLActivity.java').isFile()) {
         throw new GradleException("could not clone SDL2 into ${sdl2Dir}")
 }
 
-// The ABIs: the Pixel class of phones (arm64-v8a) and the emulator (x86_64); -Pabis=arm64-v8a builds one.
-def uc2Abis = (project.findProperty('abis') ?: 'arm64-v8a,x86_64').split(',').collect { it.trim() }
+// The ABIs: 32-bit and 64-bit ARM devices in one APK; -Pabis=<list> builds others (x86_64 for a fast emulator).
+def uc2Abis = (project.findProperty('abis') ?: 'armeabi-v7a,arm64-v8a').split(',').collect { it.trim() }
 
 // What the APK installs into the game folder's System/ before each start (GameActivity): the Android inis,
 // generated from the native ones by tools/dev/sync-android-ini.py.
@@ -41,6 +41,19 @@ def uc2SystemOverlay = tasks.register('uc2SystemOverlay', Uc2SystemOverlay) {
     outputDir.set(layout.buildDirectory.dir('generated/uc2/assets'))
 }
 
+// Signing: ueAndroidSigning (a Gradle property, e.g. in ~/.gradle/gradle.properties) or UE_ANDROID_SIGNING names a
+// properties file kept outside the repository with storeFile, storePassword, keyAlias and keyPassword. With it every
+// variant is signed with that key, so each new APK installs over the last; without it, with the debug key.
+def ueSigningPath = project.findProperty('ueAndroidSigning') ?: System.getenv('UE_ANDROID_SIGNING')
+def ueSigning = null
+if (ueSigningPath) {
+    def signingFile = file(ueSigningPath)
+    if (!signingFile.isFile())
+        throw new GradleException("ueAndroidSigning=${ueSigningPath} is not a file")
+    ueSigning = new Properties()
+    signingFile.withInputStream { ueSigning.load(it) }
+}
+
 android {
     namespace = 'com.uc2.android'
     // Android 16, what the phones run; the app keeps Android 14's behaviour (targetSdk).
@@ -53,8 +66,8 @@ android {
         // Android 11: All files access, which reading the game folder in place needs.
         minSdk = 30
         targetSdk = 34
-        versionCode = 1
-        versionName = '0.1'
+        versionCode = 10000
+        versionName = '1.0.0'
         ndk { abiFilters.addAll(uc2Abis) }
         externalNativeBuild {
             cmake {
@@ -78,9 +91,19 @@ android {
         }
     }
 
+    signingConfigs {
+        if (ueSigning) {
+            release {
+                storeFile = file(ueSigning.getProperty('storeFile'))
+                storePassword = ueSigning.getProperty('storePassword')
+                keyAlias = ueSigning.getProperty('keyAlias')
+                keyPassword = ueSigning.getProperty('keyPassword')
+            }
+        }
+    }
     buildTypes {
-        // Installable as it is (the debug key): a release build for testing on a device, not for a store.
-        release { signingConfig = signingConfigs.debug }
+        release { signingConfig = ueSigning ? signingConfigs.release : signingConfigs.debug }
+        debug { if (ueSigning) signingConfig = signingConfigs.release }
     }
 
     // The engine's own root CMakeLists: its ANDROID branches build the game as libUC2.so.

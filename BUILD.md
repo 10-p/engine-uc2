@@ -146,10 +146,10 @@ offscreen/KMS paths only); a desktop arm64 client needs them through multiarch.
 ## Android
 
 `Android/` is a Gradle project (Android Gradle plugin 9.4.0, Gradle 9.6.0 through the wrapper) whose
-`externalNativeBuild` is this repository's root `CMakeLists.txt`, built with the NDK for `arm64-v8a` (phones such as
-the Pixel 7 Pro) and `x86_64` (the emulator). The APK holds the engine (`libUC2.so`, `SDL_main` in
-`Source/SDLLaunch`), `libSDL2.so`, `libopenal.so` (OpenSL ES), the process set-up bridge (`libuc2_android_bridge.so`)
-and the Android inis; the game folder stays on the phone's storage.
+`externalNativeBuild` is this repository's root `CMakeLists.txt`, built with the NDK for `armeabi-v7a` and `arm64-v8a`
+(32-bit and 64-bit ARM devices in one APK; `-Pabis=x86_64` builds one for a fast emulator). The APK holds the engine
+(`libUC2.so`, `SDL_main` in `Source/SDLLaunch`), `libSDL2.so`, `libopenal.so` (OpenSL ES), the process set-up bridge
+(`libuc2_android_bridge.so`) and the Android inis; the game folder stays on the phone's storage.
 
 Ubuntu's packages (Debian's `google-android-*-installer`s fetch Google's SDK parts into `/usr/lib/android-sdk`):
 
@@ -162,13 +162,17 @@ printf 'sdk.dir=/usr/lib/android-sdk\ncmake.dir=/usr\n' > Android/local.properti
 
 ```
 cd Android
-./gradlew assembleDebug        # -> app/build/outputs/apk/debug/app-debug.apk (assembleRelease: the same, debug-signed)
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-#   -Pabis=arm64-v8a      one ABI only (default arm64-v8a,x86_64)
+./gradlew assembleRelease      # -> app/build/outputs/apk/release/app-release.apk (assembleDebug: the debuggable one)
+adb install -r app/build/outputs/apk/release/app-release.apk
+#   -Pabis=arm64-v8a      one ABI only (default armeabi-v7a,arm64-v8a)
 #   -Psdl2Dir=<dir>       a local SDL2 checkout (or SDL2_SOURCE_DIR)
 #   -PnativeDebug         the engine at the Gradle variant's own build type (-O0 for debug)
 ```
 
+- Signing: every variant is signed with the key the Gradle property `ueAndroidSigning` names, a properties file kept
+  outside the repository (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`), set in `~/.gradle/gradle.properties`
+  or as `UE_ANDROID_SIGNING`. One key signs every release, so each APK installs over the last; without the property
+  the build uses the debug key.
 - The Gradle daemon runs on an installed JDK 17 (`gradle/gradle-daemon-jvm.properties`), whatever `java` is on the
   `PATH` or Android Studio's own JDK; Android Studio opens `Android/` as it is.
 - The SDK parts are the packages' exactly: `compileSdk` 36 (platform 36), build-tools 36.0.0 (what AGP 9.4 asks for)
@@ -244,7 +248,7 @@ the reference (wasm32 has its layout).
 ## CI
 
 `.github/workflows/build.yml` builds `native` and `native64` (Linux), `windows` and `windows64` (MinGW-w64),
-`wasm-perf` and the Android APK (arm64-v8a and x86_64) on every push and pull request with `-DUE_SCRIPT_PATCHES=OFF`
+`wasm-perf` and the Android APK (armeabi-v7a and arm64-v8a) on every push and pull request with `-DUE_SCRIPT_PATCHES=OFF`
 (no game folder in CI: the binaries run the shipped script packages and the web artifact's `scripts/` is empty),
 uploads the binaries, and a push to `main` replaces the rolling `latest` release.
 
