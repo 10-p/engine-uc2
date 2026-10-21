@@ -2094,7 +2094,7 @@ void ENGINE_API CalculateVertexCacheHits(UBOOL bIsTriStrip, DWORD dwVertexSize,
 
 	// Simulate a vertex cache
 	static const int CACHE_SIZE = 18;
-	static const int PAGE_SIZE  = 4096;
+	static const int SIM_PAGE_SIZE = 4096;	// not PAGE_SIZE: a system header may define that macro
 	DWORD rgdwCache[CACHE_SIZE];
 	INT   iCachePtr      = 0;
 	DWORD dwLastPageAddr = 0;
@@ -2107,7 +2107,7 @@ void ENGINE_API CalculateVertexCacheHits(UBOOL bIsTriStrip, DWORD dwVertexSize,
 		// This makes all kinds of assumptions such as page size is 4k,
 		// page across then back is ok, etc etc. Seems to be an ok
 		// estimate on data locality though.
-		DWORD dwPage = dwVertexSize * pIndices[i] / PAGE_SIZE;
+		DWORD dwPage = dwVertexSize * pIndices[i] / SIM_PAGE_SIZE;
 
 		if( ( dwPage > dwLastPageAddr ) || ( dwPage+1 < dwLastPageAddr ) )
 		{

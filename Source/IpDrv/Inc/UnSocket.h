@@ -50,7 +50,8 @@
 	#define ioctlsocket			ioctl
 	#define WSAGetLastError()	errno
 
-	#define GCC_OPT_INT_CAST	(DWORD*)
+	// The length argument of recvfrom/getsockopt is a socklen_t*: (DWORD*) is a pointer-type mismatch on 32-bit ARM.
+	#define GCC_OPT_INT_CAST	(socklen_t*)
 #endif
 
 // IP address macros.
