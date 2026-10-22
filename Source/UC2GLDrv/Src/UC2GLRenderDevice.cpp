@@ -598,7 +598,7 @@ UBOOL UUC2GLRenderDevice::Init()
 	//   Stats=True                      a frame-statistics line every 300 frames
 	//   NoLODBias=True                  texture LOD bias not applied
 	//   MaskCaps=<cap>,...              behave as if a capability were missing: combine3, combine4, depthtexture,
-	//                                   fragdepth, uintindex, maxlevel, s3tc
+	//                                   fragdepth, uintindex, maxlevel, s3tc, asyncreadback
 	//   DualDiffuse=<n>                 the dual-diffuse test material state (UC2GLMaterialState.cpp)
 	//   MaterialTime=<s>                materials see this time, not the level's (moving materials such as
 	//                                   the Liandri overlay's panned noise picture the same in every run)

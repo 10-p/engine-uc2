@@ -5,8 +5,9 @@
 	binding they are OpenGL ES / WebGL itself, called around gl4es for the things gl4es does
 	not do the way this driver needs: depth-stencil storage and its attachment to a
 	framebuffer, the engine's texture uploads, gl4es' "texture 0" stand-in, the hardware's
-	own extension string and shader precision. Every use restores the raw state it changes
-	(gl4es caches bindings), e.g. UUC2GLRenderDevice::CreateDepthStencil*.
+	own extension string and shader precision, and the dynamic gamma's luminance readback
+	(gl4es keeps pixel pack buffers in memory and has no fences). Every use restores the raw
+	state it changes (gl4es caches bindings), e.g. UUC2GLRenderDevice::CreateDepthStencil*.
 
 	GL_RAW(ret,func,parms) declares UUC2GLRenderDevice::Raw_<func>.
 =============================================================================*/
@@ -30,6 +31,17 @@ GL_RAW(void,glBindFramebuffer,(GLenum,GLuint))
 GL_RAW(void,glFramebufferTexture2D,(GLenum,GLenum,GLenum,GLuint,GLint))
 GL_RAW(void,glFramebufferRenderbuffer,(GLenum,GLenum,GLenum,GLuint))
 GL_RAW(void,glGetShaderPrecisionFormat,(GLenum,GLenum,GLint*,GLint*))
+GL_RAW(void,glGenBuffers,(GLsizei,GLuint*))
+GL_RAW(void,glDeleteBuffers,(GLsizei,const GLuint*))
+GL_RAW(void,glBindBuffer,(GLenum,GLuint))
+GL_RAW(void,glBufferData,(GLenum,GLsizeiptr,const GLvoid*,GLenum))
+GL_RAW(void,glReadPixels,(GLint,GLint,GLsizei,GLsizei,GLenum,GLenum,GLvoid*))
+GL_RAW(void*,glMapBufferRange,(GLenum,GLintptr,GLsizeiptr,GLbitfield))
+GL_RAW(GLboolean,glUnmapBuffer,(GLenum))
+GL_RAW(void,glGetBufferSubData,(GLenum,GLintptr,GLsizeiptr,GLvoid*))
+GL_RAW(GLsync,glFenceSync,(GLenum,GLbitfield))
+GL_RAW(GLenum,glClientWaitSync,(GLsync,GLbitfield,GLuint64))
+GL_RAW(void,glDeleteSync,(GLsync))
 
 /*-----------------------------------------------------------------------------
 	The End.
