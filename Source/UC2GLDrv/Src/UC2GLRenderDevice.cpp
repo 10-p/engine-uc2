@@ -31,6 +31,18 @@ D3DTEXTUREOP DUMMY_MODULATE2X = D3DTOP_MODULATE2X;
 #include "UC2GLRawFuncs.h"
 #undef GL_RAW
 
+#include <stdlib.h>
+
+#ifndef GL_COMPRESSED_RGBA_ASTC_4x4_KHR
+#define GL_COMPRESSED_RGBA_ASTC_4x4_KHR 0x93B0
+#endif
+#ifndef GL_TEXTURE_ASTC_DECODE_PRECISION_EXT
+#define GL_TEXTURE_ASTC_DECODE_PRECISION_EXT 0x8F69
+#endif
+#ifndef GL_RGBA8
+#define GL_RGBA8 0x8058
+#endif
+
 // Test key ShotTimes=<seconds>[,<seconds>...]: run the engine's SHOT exec at those times after the
 // first frame (verification; the files are System/ShotNNNNN.bmp). The test keys are read in Init.
 static TArray<FLOAT>	GShotTimes;
@@ -454,6 +466,16 @@ void* UUC2GLRenderDevice::BindingGetProcAddress( const char* Name )
 void* UUC2GLRenderDevice::BindingGetRawProcAddress( const char* Name )
 {
 	return BindingGetProcAddress( Name );
+}
+
+GLenum UUC2GLRenderDevice::BindingDXTUploadFormat( GLenum Format )
+{
+	return 0;
+}
+
+void* UUC2GLRenderDevice::BindingTranscodeDXT( GLenum Format, GLenum UploadFormat, INT Width, INT Height, const BYTE* Data, INT& Size )
+{
+	return NULL;
 }
 
 UBOOL UUC2GLRenderDevice::BindingContextAlive()
@@ -1280,7 +1302,7 @@ void UUC2GLRenderDevice::CompressedTexImage2D( GLenum BindTarget, GLuint Texture
 		glCompressedTexImage2D( Target, Level, Format, Width, Height, 0, Size, Data );
 		return;
 	}
-	if( !CapRawS3TC )
+	if( !CapDXTUpload )
 	{
 		// gl4es decodes to RGBA8 (and makes the smaller mip levels itself).
 		glCompressedTexImage2D( Target, Level, Format, Width, Height, 0, Size, Data );
@@ -1291,8 +1313,26 @@ void UUC2GLRenderDevice::CompressedTexImage2D( GLenum BindTarget, GLuint Texture
 	GLenum	Query = BindTarget == GL_TEXTURE_CUBE_MAP ? GL_TEXTURE_BINDING_CUBE_MAP : GL_TEXTURE_BINDING_2D;
 	GLint	Bound = 0;
 	Raw_glGetIntegerv( Query, &Bound );
+	// Without S3TC the binding transcodes DXT to a format the hardware has (ASTC, ETC2).
+	GLenum	UploadFormat	= BindingDXTUploadFormat( Format );
+	void*	Transcoded		= NULL;
+	if( UploadFormat != Format )
+	{
+		Transcoded = BindingTranscodeDXT( Format, UploadFormat, Width, Height, Data, Size );
+		if( !Transcoded )
+		{
+			debugf( NAME_Warning, TEXT("UC2GLDrv: transcoding a %ix%i DXT image (format 0x%04x) to 0x%04x failed"), Width, Height, Format, UploadFormat );
+			return;
+		}
+		Data	= (const BYTE*)Transcoded;
+		Format	= UploadFormat;
+	}
 	Raw_glBindTexture( BindTarget, Texture );
 	Raw_glCompressedTexImage2D( Target, Level, Format, Width, Height, 0, Size, Data );
+	free( Transcoded );
+	// DXT data loses nothing at ASTC's 8-bit decode precision, which samples faster than the default 16-bit.
+	if( Level == 0 && CapASTCDecodeMode && BindTarget == GL_TEXTURE_2D && Format == GL_COMPRESSED_RGBA_ASTC_4x4_KHR )
+		Raw_glTexParameteri( BindTarget, GL_TEXTURE_ASTC_DECODE_PRECISION_EXT, GL_RGBA8 );
 	if( CheckGLErrors )
 	{
 		GLenum Error = Raw_glGetError();
@@ -1474,13 +1514,12 @@ void UUC2GLRenderDevice::PrepareGL4ESTextureZero()
 void UUC2GLRenderDevice::DetectCapabilities()
 {
 	CapDepthTexture = CapFragDepth = CapUIntIndex = CapTextureMaxLevel = CapFragmentHighp = 1;
-	CapRawS3TC = 0;
+	CapDXTUpload = CapASTCDecodeMode = 0;
 	if( IsGLES )
 	{
-		// (EXT_texture_compression_s3tc alone may mean DXT1 only on OpenGL ES; the ANGLE pair or the WebGL extension has all three.)
-		CapRawS3TC			= Raw_glCompressedTexImage2D != NULL &&
-							(  FindRawExt("WEBGL_compressed_texture_s3tc") || FindRawExt("GL_WEBGL_compressed_texture_s3tc")
-							|| (FindRawExt("GL_EXT_texture_compression_s3tc") && FindRawExt("GL_ANGLE_texture_compression_dxt3") && FindRawExt("GL_ANGLE_texture_compression_dxt5")) );
+		CapASTCDecodeMode	= FindRawExt("GL_EXT_texture_compression_astc_decode_mode");
+		// The binding decides from the hardware's formats: DXT as it is (S3TC), else transcoded (ASTC, ETC2).
+		CapDXTUpload		= Raw_glCompressedTexImage2D != NULL && BindingDXTUploadFormat( GL_COMPRESSED_RGBA_S3TC_DXT5_EXT ) != 0;
 		CapDepthTexture		= ( FindRawExt("GL_OES_depth_texture") || FindRawExt("WEBGL_depth_texture") || FindRawExt("GL_WEBGL_depth_texture") )
 #ifndef __EMSCRIPTEN__
 							&& FindRawExt("GL_OES_packed_depth_stencil")
@@ -1509,13 +1548,16 @@ void UUC2GLRenderDevice::DetectCapabilities()
 	if( GTestCapMask.InStr( TEXT(",MAXLEVEL,") ) >= 0 )		CapTextureMaxLevel = 0;
 	if( GTestCapMask.InStr( TEXT(",S3TC,") ) >= 0 )
 	{
-		// GLES: gl4es decodes. Desktop: the engine's decoder.
-		CapRawS3TC = 0;
+		// GLES: the engine's decoder. Desktop: the engine's decoder.
+		CapDXTUpload = 0;
 		if( !IsGLES )
 			SUPPORTS_GL_EXT_texture_compression_s3tc = 0;
 	}
 	debugf( NAME_Init, TEXT("UC2GLDrv: capabilities: S3TC %s, depth texture %s, gl_FragDepth %s, 32-bit indices %s, texture max level %s, fragment highp %s"),
-		UseHardwareS3TC() ? TEXT("yes") : TEXT("NO (fallback: the driver decodes DXT to RGBA8)"),
+		!UseHardwareS3TC() ? TEXT("NO (fallback: the driver decodes DXT to RGBA8)")
+		: !IsGLES || BindingDXTUploadFormat( GL_COMPRESSED_RGBA_S3TC_DXT5_EXT ) == GL_COMPRESSED_RGBA_S3TC_DXT5_EXT ? TEXT("yes")
+		: BindingDXTUploadFormat( GL_COMPRESSED_RGBA_S3TC_DXT5_EXT ) == GL_COMPRESSED_RGBA_ASTC_4x4_KHR ? TEXT("no, DXT is transcoded to ASTC 4x4")
+		: TEXT("no, DXT is transcoded to ETC2"),
 		CapDepthTexture ? TEXT("yes") : TEXT("NO (no fallback: the depth of field and the hiding of distortion behind nearer geometry are lost)"),
 		CapFragDepth ? TEXT("yes") : TEXT("NO (fallback: the distortion passes test the scene's depth in the shader)"),
 		CapUIntIndex ? TEXT("yes") : TEXT("NO (fallback: 32-bit index data stored as 16-bit)"),

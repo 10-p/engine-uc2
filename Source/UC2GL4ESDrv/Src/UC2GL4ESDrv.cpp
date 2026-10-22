@@ -36,6 +36,10 @@ extern "C"
 	void set_getprocaddress( void* (*NewProcAddress)( const char* ) );
 	void initialize_gl4es( void );
 	void* gl4es_GetProcAddress( const char* Name );
+	// include/gl4estranscode.h
+	unsigned int gl4es_dxt_upload_format( unsigned int DXTFormat );
+	int gl4es_dxt_upload_size( unsigned int Format, int Width, int Height );
+	void* gl4es_dxt_transcode( unsigned int DXTFormat, unsigned int Format, int Width, int Height, const void* Data );
 }
 
 /*-----------------------------------------------------------------------------
@@ -326,6 +330,18 @@ void* UUC2GL4ESRenderDevice::BindingGetProcAddress( const char* Name )
 void* UUC2GL4ESRenderDevice::BindingGetRawProcAddress( const char* Name )
 {
 	return UC2GL4ES_RawGetProcAddress( Name );
+}
+
+// gl4es' choice for DXT: as it is where the hardware has S3TC, else ASTC 4x4 or ETC2, else none.
+GLenum UUC2GL4ESRenderDevice::BindingDXTUploadFormat( GLenum Format )
+{
+	return gl4es_dxt_upload_format( Format );
+}
+
+void* UUC2GL4ESRenderDevice::BindingTranscodeDXT( GLenum Format, GLenum UploadFormat, INT Width, INT Height, const BYTE* Data, INT& Size )
+{
+	Size = gl4es_dxt_upload_size( UploadFormat, Width, Height );
+	return gl4es_dxt_transcode( Format, UploadFormat, Width, Height, Data );
 }
 
 /*-----------------------------------------------------------------------------
