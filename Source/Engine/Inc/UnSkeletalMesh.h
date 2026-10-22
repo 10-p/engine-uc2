@@ -506,7 +506,13 @@ struct FSkinGPUMonoVertex
 	}
 };
 
+#if SUPPORTS_PRAGMA_PACK
+#pragma pack(pop)
+#endif
+
 // Array specifying bones needed for each GPU-rendered skeletal skin chunk.
+// Outside the pack(1) block: packed, the TArray sits at offset 2, where 32-bit ARM faults on its ldrd/strd.
+// It serializes field by field, never as raw memory.
 struct FGPUBoneChunk
 {
 	_WORD FirstBoneSlot; // First destination bone slot.
@@ -519,12 +525,6 @@ struct FGPUBoneChunk
 			<< F.ChunkBoneIndices;				
 	}
 };
-
-
-
-#if SUPPORTS_PRAGMA_PACK
-#pragma pack(pop)
-#endif
 
 //jg -- Format of export/fixup string for skeletal mesh vertex streams
 #define SKELMESH_VS_PF TEXT("%s_vs_%d")
