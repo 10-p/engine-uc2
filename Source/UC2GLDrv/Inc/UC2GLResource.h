@@ -14,8 +14,23 @@
 
 class UUC2GLRenderDevice;
 
-#define INITIAL_DYNAMIC_VERTEXBUFFER_SIZE	(1024*1024)	// Initial size of the dynamic vertex buffer, in bytes.
-#define INITIAL_DYNAMIC_INDEXBUFFER_SIZE	(256*1024)	// Initial size of the dynamic index buffers, in bytes.
+//
+//	FOpenGLUploadPool: the buffer names of a dynamic vertex or index buffer. Every upload of a
+//	frame takes a name of its own and fills it whole with glBufferData, so an upload never
+//	writes a buffer that a draw of the frame still reads (glBufferSubData into such a buffer
+//	makes the driver copy it or wait), and a state saved before a later upload keeps its data.
+//	Names come back at the next frame; refilling one gives it new storage.
+//
+struct FOpenGLUploadPool
+{
+	TArray<GLuint>	Names;
+	INT				Used;
+	INT				Frame;
+
+	FOpenGLUploadPool() : Used(0), Frame(-1) {}
+	GLuint Next( UUC2GLRenderDevice* RenDev, GLenum Target );
+	void Free( UUC2GLRenderDevice* RenDev, GLenum Target );
+};
 
 //
 //	TOpenGLResourceCache: UC2's TResourceCache (D3DRenderDevice.h), unchanged in behaviour.
@@ -259,7 +274,7 @@ public:
 };
 
 //
-//	FOpenGLVertexStream: a vertex buffer object (static) or the rolling dynamic buffer.
+//	FOpenGLVertexStream: a vertex buffer object (static) or the dynamic buffer.
 //	Colours are stored as D3DCOLOR (B,G,R,A bytes) by the engine; they are swizzled to
 //	R,G,B,A while uploading so the fixed-function colour arrays read them correctly.
 //
@@ -280,17 +295,17 @@ public:
 };
 
 //
-//	FOpenGLDynamicVertexStream
+//	FOpenGLDynamicVertexStream: BufferID is the name of the last upload.
 //
 class FOpenGLDynamicVertexStream : public FOpenGLVertexStream
 {
 public:
-	INT		Tail;
+	FOpenGLUploadPool	Pool;
 
 	FOpenGLDynamicVertexStream(UUC2GLRenderDevice* InRenDev);
+	~FOpenGLDynamicVertexStream();
 
-	void Reallocate(INT NewSize);
-	// Adds the vertices of Stream at the end of the buffer; returns the index of the first one.
+	// Uploads the vertices of Stream to a buffer of their own; returns the index of the first one.
 	INT AddVertices(FVertexStream* Stream);
 };
 
@@ -314,21 +329,21 @@ public:
 };
 
 //
-//	FOpenGLDynamicIndexBuffer
+//	FOpenGLDynamicIndexBuffer: BufferID is the name of the last upload.
 //
 class FOpenGLDynamicIndexBuffer : public FOpenGLIndexBuffer
 {
 public:
-	INT		Tail;
+	FOpenGLUploadPool	Pool;
 	// The indices added last, kept on the CPU where wireframe is drawn as lines by the
 	// driver (GLES has no polygon mode); ShadowBase is the buffer index of its first element.
 	TArray<BYTE>	Shadow;
 	INT				ShadowBase;
 
 	FOpenGLDynamicIndexBuffer(UUC2GLRenderDevice* InRenDev,INT InIndexSize);
+	~FOpenGLDynamicIndexBuffer();
 
-	void Reallocate(INT NewSize);
-	// Adds the indices at the end of the buffer; returns the first index.
+	// Uploads the indices to a buffer of their own; returns the first index.
 	INT AddIndices(FIndexBuffer* Indices);
 };
 

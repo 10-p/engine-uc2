@@ -282,11 +282,15 @@ public:
 		FOpenGLVertexStream*	Streams[16];
 		INT						StreamStrides[16];
 		INT						NumStreams;
+		// The buffer names the streams and the index buffer had when set: a dynamic buffer
+		// moves to another name with every upload.
+		GLuint					StreamBuffers[16];
 
 		BYTE					ForceDefSphereMap;
 
 		FOpenGLIndexBuffer*		IndexBuffer;
 		INT						IndexBufferBase;
+		GLuint					IndexBufferID;
 
 		ECullMode				CullMode;
 

@@ -909,7 +909,7 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 			continue;
 		INT	Stride	= CurrentState->StreamStrides[StreamIndex],
 			Offset	= Stride * BaseVertex;
-		RenDev->glBindBuffer( GL_ARRAY_BUFFER, Stream->BufferID );
+		RenDev->glBindBuffer( GL_ARRAY_BUFFER, CurrentState->StreamBuffers[StreamIndex] );
 
 		FStreamDeclaration& Decl = Shader->Declaration.Streams[StreamIndex];
 		for( INT ComponentIndex=0; ComponentIndex<Decl.NumComponents; ComponentIndex++ )
