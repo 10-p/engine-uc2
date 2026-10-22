@@ -1196,6 +1196,31 @@ void UC2GL_UpdateDOFRampLookupTexture( FOpenGLRenderInterface* RI, UMaterial* DO
 	Dynamic gamma: FD3DDynamicGamma (D3DRenderInterface.cpp 3150-3450).
 -----------------------------------------------------------------------------*/
 
+//
+// Whether the luminance target can be read back without waiting for the GPU: into a pixel pack
+// buffer behind a fence (OpenGL 3.2, OpenGL ES 3.0, WebGL 2), called on the library under the
+// binding. Otherwise glReadPixels returns the pixels at once, after everything drawn so far.
+// Test key MaskCaps=asyncreadback masks it.
+//
+static UBOOL UC2GL_AsyncReadback( UUC2GLRenderDevice* RenDev )
+{
+	extern FString GTestCapMask;
+	typedef UUC2GLRenderDevice D;
+	UBOOL Version = RenDev->IsGLES ? RenDev->GLESMajor >= 3 : RenDev->GLMajorVersion * 10 + RenDev->GLMinorVersion >= 32;
+#ifdef __EMSCRIPTEN__
+	UBOOL Fetch = D::Raw_glGetBufferSubData != NULL;
+#else
+	UBOOL Fetch = D::Raw_glMapBufferRange && D::Raw_glUnmapBuffer;
+#endif
+	UBOOL Can = Version && Fetch && D::Raw_glGenBuffers && D::Raw_glDeleteBuffers && D::Raw_glBindBuffer && D::Raw_glBufferData
+		&& D::Raw_glReadPixels && D::Raw_glBindFramebuffer && D::Raw_glGetIntegerv
+		&& D::Raw_glFenceSync && D::Raw_glClientWaitSync && D::Raw_glDeleteSync
+		&& GTestCapMask.InStr( TEXT(",ASYNCREADBACK,") ) < 0;
+	UC2GL_LOG_ONCE( TEXT("UC2GLDrv: dynamic gamma: the luminance target is read back %s"),
+		Can ? TEXT("asynchronously (pixel pack buffer and fence)") : TEXT("synchronously (glReadPixels waits for the GPU)") );
+	return Can;
+}
+
 class FOpenGLDynamicGamma
 {
 public:
@@ -1218,6 +1243,11 @@ public:
 	FHistogram				Histogram;
 	FLOAT					CurMinL, CurMaxL, CurAvgL;
 	BYTE					GammaRamp[256];
+	// The asynchronous readback (UC2GL_AsyncReadback): each update reads the luminance target into
+	// ReadBuffer behind ReadFence, and the next update makes the histogram from it once the fence has passed.
+	GLuint					ReadBuffer;
+	GLsync					ReadFence;
+	INT						ReadWidth, ReadHeight;
 
 	FOpenGLDynamicGamma( FOpenGLRenderInterface* InRI, UViewport* InOwner=NULL ) :
 		RI(InRI),
@@ -1229,17 +1259,32 @@ public:
 		LuminanceSampleWidth(16),
 		LuminanceSampleHeight(16),
 		LuminanceTarget(NULL),
-		ForceUpdate(0)
+		ForceUpdate(0),
+		ReadBuffer(0),
+		ReadFence(NULL),
+		ReadWidth(0),
+		ReadHeight(0)
 	{
-		appMemzero( &Histogram, sizeof(Histogram) );
 		CurMinL = 0.0f;
 		CurMaxL = 1.0f;
 		CurAvgL = 0.5f;
+		// Until the first histogram arrives the ramp stays where it starts.
+		appMemzero( &Histogram, sizeof(Histogram) );
+		Histogram.MinL = CurMinL;
+		Histogram.MaxL = CurMaxL;
+		Histogram.AvgL = CurAvgL;
 	}
 	~FOpenGLDynamicGamma()
 	{
 		if( LuminanceTarget )
 			delete LuminanceTarget;
+		if( RI->RenDev->ContextAlive() )
+		{
+			if( ReadFence )
+				UUC2GLRenderDevice::Raw_glDeleteSync( ReadFence );
+			if( ReadBuffer )
+				UUC2GLRenderDevice::Raw_glDeleteBuffers( 1, &ReadBuffer );
+		}
 	}
 
 	void UpdateLuminanceTarget();
@@ -1320,8 +1365,6 @@ void FOpenGLDynamicGamma::UpdateHistogram()
 	guard(FOpenGLDynamicGamma::UpdateHistogram);
 	check(LuminanceTarget);
 
-	appMemzero( &Histogram, sizeof(Histogram) );
-
 	UUC2GLRenderDevice* RenDev = RI->RenDev;
 	FOpenGLTexture* LuminanceTex = (FOpenGLTexture*) RenDev->GetCachedResource( LuminanceTarget->GetCacheId(),CH_Texture );
 	if( !LuminanceTex || !LuminanceTex->FramebufferID )
@@ -1334,12 +1377,69 @@ void FOpenGLDynamicGamma::UpdateHistogram()
 	// target back (16x16 pixels). The byte Epic's loop takes from each A8R8G8B8 pixel is the
 	// first in memory: blue. Row order does not matter to a histogram.
 	TArray<BYTE> Pixels;
-	Pixels.Add( Width * Height * 4 );
-	RenDev->glBindFramebuffer( GL_FRAMEBUFFER, LuminanceTex->FramebufferID );
-	RenDev->glPixelStorei( GL_PACK_ALIGNMENT, 1 );
-	RenDev->glReadPixels( 0, 0, Width, Height, GL_BGRA, GL_UNSIGNED_BYTE, &Pixels(0) );
-	RenDev->glBindFramebuffer( GL_FRAMEBUFFER, RI->SavedRenderTargetState.GetCurrentState()->Framebuffer );
-	BYTE* Bits = &Pixels(0);
+	BYTE* Bits = NULL;
+	if( UC2GL_AsyncReadback( RenDev ) )
+	{
+		// The pixels read at the previous update, once the GPU is past them; then the read of this
+		// update's target. Draws reach the library under gl4es as they are made (no glBegin, no
+		// batching), so the raw read sees the target just drawn.
+		typedef UUC2GLRenderDevice D;
+		UBOOL Ready = 0;
+		if( ReadFence )
+		{
+			GLenum Wait = D::Raw_glClientWaitSync( ReadFence, 0, 0 );
+			if( Wait != GL_ALREADY_SIGNALED && Wait != GL_CONDITION_SATISFIED )
+				return;
+			D::Raw_glDeleteSync( ReadFence );
+			ReadFence = NULL;
+			Ready = 1;
+		}
+		if( !ReadBuffer )
+			D::Raw_glGenBuffers( 1, &ReadBuffer );
+		D::Raw_glBindBuffer( GL_PIXEL_PACK_BUFFER, ReadBuffer );
+		if( Ready )
+		{
+			Pixels.Add( ReadWidth * ReadHeight * 4 );
+#ifdef __EMSCRIPTEN__
+			D::Raw_glGetBufferSubData( GL_PIXEL_PACK_BUFFER, 0, Pixels.Num(), &Pixels(0) );
+#else
+			void* Mapped = D::Raw_glMapBufferRange( GL_PIXEL_PACK_BUFFER, 0, Pixels.Num(), GL_MAP_READ_BIT );
+			if( Mapped )
+				appMemcpy( &Pixels(0), Mapped, Pixels.Num() );
+			else
+				Ready = 0;
+			D::Raw_glUnmapBuffer( GL_PIXEL_PACK_BUFFER );
+#endif
+		}
+		// RGBA rows of a 16-pixel target are 4-byte aligned, the default pack alignment.
+		GLint ReadBound = 0;
+		D::Raw_glGetIntegerv( GL_READ_FRAMEBUFFER_BINDING, &ReadBound );
+		D::Raw_glBindFramebuffer( GL_READ_FRAMEBUFFER, LuminanceTex->FramebufferID );
+		D::Raw_glBufferData( GL_PIXEL_PACK_BUFFER, Width * Height * 4, NULL, GL_STREAM_READ );
+		D::Raw_glReadPixels( 0, 0, Width, Height, GL_RGBA, GL_UNSIGNED_BYTE, NULL );
+		D::Raw_glBindFramebuffer( GL_READ_FRAMEBUFFER, ReadBound );
+		D::Raw_glBindBuffer( GL_PIXEL_PACK_BUFFER, 0 );
+		ReadFence	= D::Raw_glFenceSync( GL_SYNC_GPU_COMMANDS_COMPLETE, 0 );
+		INT PrevWidth = ReadWidth, PrevHeight = ReadHeight;
+		ReadWidth	= Width;
+		ReadHeight	= Height;
+		if( !Ready )
+			return;
+		Width	= PrevWidth;
+		Height	= PrevHeight;
+		Bits	= &Pixels(0) + 2;	// RGBA: blue is the third byte
+	}
+	else
+	{
+		Pixels.Add( Width * Height * 4 );
+		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, LuminanceTex->FramebufferID );
+		RenDev->glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+		RenDev->glReadPixels( 0, 0, Width, Height, GL_BGRA, GL_UNSIGNED_BYTE, &Pixels(0) );
+		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, RI->SavedRenderTargetState.GetCurrentState()->Framebuffer );
+		Bits = &Pixels(0);
+	}
+
+	appMemzero( &Histogram, sizeof(Histogram) );
 
 	FLOAT LuminosityBias = RI->Viewport->GetOuterUClient()->LuminosityBias;
 	// UC2GLDrv: UClient::Init sets LuminosityBias to 1 under _XBOX only and it is not a config
