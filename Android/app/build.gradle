@@ -83,6 +83,13 @@ android {
                 // -PnativeDebug keeps the variant's own CMAKE_BUILD_TYPE.
                 if (!project.hasProperty('nativeDebug'))
                     cmakeArgs += '-DCMAKE_BUILD_TYPE=RelWithDebInfo'
+                // -Pgl4esDir=<dir> (or GL4ES_SOURCE_DIR) builds a local gl4es checkout instead of the fork's branch.
+                def gl4esDir = project.findProperty('gl4esDir') ?: System.getenv('GL4ES_SOURCE_DIR')
+                if (gl4esDir) {
+                    if (!file(gl4esDir).isDirectory())
+                        throw new GradleException("gl4esDir=${gl4esDir} is not a directory")
+                    cmakeArgs += "-DFETCHCONTENT_SOURCE_DIR_GL4ES=${gl4esDir}".toString()
+                }
                 arguments.addAll(cmakeArgs)
                 // libUC2.so (SDLLaunch) with libSDL2.so, the process set-up bridge, and libopenal.so, which is
                 // packaged but not linked: UC2ALAudio dlopens it when the audio device starts.

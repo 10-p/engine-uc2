@@ -316,11 +316,12 @@ public:
 									CapUIntIndex,		// 32-bit index buffers
 									CapTextureMaxLevel,	// GL_TEXTURE_MAX_LEVEL: a mip chain may stop before 1x1
 									CapFragmentHighp,	// highp float in fragment shaders
-									CapRawS3TC;			// GLES: the hardware takes DXT data (gl4es itself always decodes it in software)
+									CapDXTUpload,		// GLES: DXT goes to the hardware compressed, in BindingDXTUploadFormat's format
+									CapASTCDecodeMode;	// GLES: ASTC can be decoded at 8-bit precision (EXT_texture_compression_astc_decode_mode)
 	// A compressed image for a texture, handed to the library under the binding (GLES: gl4es
 	// would decode it to RGBA8 on the CPU). BindTarget is GL_TEXTURE_2D or GL_TEXTURE_CUBE_MAP.
 	void CompressedTexImage2D( GLenum BindTarget, GLuint Texture, GLenum Target, INT Level, GLenum Format, INT Width, INT Height, INT Size, const BYTE* Data, UBOOL FirstStorage );
-	UBOOL UseHardwareS3TC() { return IsGLES ? CapRawS3TC : SUPPORTS_GL_EXT_texture_compression_s3tc; }
+	UBOOL UseHardwareS3TC() { return IsGLES ? CapDXTUpload : SUPPORTS_GL_EXT_texture_compression_s3tc; }
 	// The same for uncompressed data of an engine texture (Format GL_BGRA, GL_LUMINANCE,
 	// GL_ALPHA or GL_RGB with 5-6-5; tightly packed rows).
 	void TexImage2D( GLenum BindTarget, GLuint Texture, GLenum Target, INT Level, GLint Internal, INT Width, INT Height, GLenum Format, GLenum Type, const BYTE* Data );
@@ -333,6 +334,11 @@ public:
 	virtual UBOOL BindingInit();
 	virtual void* BindingGetProcAddress( const char* Name );
 	virtual void* BindingGetRawProcAddress( const char* Name );
+	// GLES: the format the hardware takes a DXT image in (the DXT format itself where it has S3TC, else one the
+	// binding transcodes it to, with BindingTranscodeDXT), 0 where it takes none; the transcode, a block image of
+	// Size bytes released with free(), NULL on failure.
+	virtual GLenum BindingDXTUploadFormat( GLenum Format );
+	virtual void* BindingTranscodeDXT( GLenum Format, GLenum UploadFormat, INT Width, INT Height, const BYTE* Data, INT& Size );
 	virtual UBOOL BindingContextAlive();
 	virtual void BindingGetDrawableSize( UViewport* Viewport, INT& Width, INT& Height );
 	virtual void BindingSetSwapInterval( INT Interval );
