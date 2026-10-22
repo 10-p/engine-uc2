@@ -44,10 +44,12 @@ FOpenGLRenderInterface::FOpenGLSavedState::FOpenGLSavedState()
 	VertexShader		= NULL;
 	appMemzero(Streams,sizeof(Streams));
 	appMemzero(StreamStrides,sizeof(StreamStrides));
+	appMemzero(StreamBuffers,sizeof(StreamBuffers));
 	NumStreams			= 0;
 
 	IndexBuffer			= NULL;
 	IndexBufferBase		= 0;
+	IndexBufferID		= 0;
 
 	CullMode			= CM_None;
 
@@ -1556,7 +1558,10 @@ INT FOpenGLRenderInterface::SetVertexStreams(QWORD VertexShaderEnum,FVertexStrea
 
 	// Unset any additional old streams.
 	for(INT StreamIndex = NumStreams;StreamIndex < CurrentState->NumStreams;StreamIndex++)
+	{
 		CurrentState->Streams[StreamIndex] = NULL;
+		CurrentState->StreamBuffers[StreamIndex] = 0;
+	}
 
 	// Build the shader declarations.
 	FShaderDeclaration	ShaderDeclaration;
@@ -1592,6 +1597,7 @@ INT FOpenGLRenderInterface::SetVertexStreams(QWORD VertexShaderEnum,FVertexStrea
 
 		CurrentState->Streams[StreamIndex]			= GLVertexStream;
 		CurrentState->StreamStrides[StreamIndex]	= Streams[StreamIndex]->GetStride();
+		CurrentState->StreamBuffers[StreamIndex]	= GLVertexStream->BufferID;
 	}
 
 	CurrentState->NumStreams = NumStreams;
@@ -1613,8 +1619,12 @@ INT FOpenGLRenderInterface::SetDynamicStream(QWORD VertexShaderEnum,FVertexStrea
 
 	CurrentState->Streams[0]		= RenDev->DynamicVertexStream;
 	CurrentState->StreamStrides[0]	= Stride;
+	CurrentState->StreamBuffers[0]	= RenDev->DynamicVertexStream->BufferID;
 	for(INT StreamIndex = 1;StreamIndex < CurrentState->NumStreams;StreamIndex++)
+	{
 		CurrentState->Streams[StreamIndex] = NULL;
+		CurrentState->StreamBuffers[StreamIndex] = 0;
+	}
 	CurrentState->NumStreams = 1;
 
 	FShaderDeclaration	ShaderDeclaration;
@@ -1656,11 +1666,13 @@ INT FOpenGLRenderInterface::SetIndexBuffer(FIndexBuffer* IndexBuffer,INT BaseVer
 
 		CurrentState->IndexBuffer		= GLIndexBuffer;
 		CurrentState->IndexBufferBase	= BaseVertexIndex;
+		CurrentState->IndexBufferID		= GLIndexBuffer->BufferID;
 	}
 	else
 	{
 		CurrentState->IndexBuffer		= NULL;
 		CurrentState->IndexBufferBase	= 0;
+		CurrentState->IndexBufferID		= 0;
 	}
 
 	return RequiresCaching ? IndexBuffer->GetSize() : 0;
@@ -1691,6 +1703,7 @@ INT FOpenGLRenderInterface::SetDynamicIndexBuffer(FIndexBuffer* IndexBuffer,INT 
 
 	CurrentState->IndexBuffer		= DynamicIndexBuffer;
 	CurrentState->IndexBufferBase	= BaseVertexIndex;
+	CurrentState->IndexBufferID		= DynamicIndexBuffer->BufferID;
 
 	return BaseIndex;
 
@@ -1848,7 +1861,7 @@ void FOpenGLRenderInterface::CommitStreams( INT FirstIndex )
 			continue;
 		INT	Stride		= CurrentState->StreamStrides[StreamIndex],
 			Offset		= Stride * BaseVertex;
-		RenDev->glBindBuffer( GL_ARRAY_BUFFER, Stream->BufferID );
+		RenDev->glBindBuffer( GL_ARRAY_BUFFER, CurrentState->StreamBuffers[StreamIndex] );
 
 		FStreamDeclaration& Decl = Shader->Declaration.Streams[StreamIndex];
 		for( INT ComponentIndex=0; ComponentIndex<Decl.NumComponents; ComponentIndex++ )
@@ -1896,7 +1909,7 @@ void FOpenGLRenderInterface::CommitStreams( INT FirstIndex )
 			case FVF_TexCoord7:
 			{
 				FGLTexCoordSet& Set = GTexCoordSets[Component.Function - FVF_TexCoord0];
-				Set.Buffer		= Stream->BufferID;
+				Set.Buffer		= CurrentState->StreamBuffers[StreamIndex];
 				Set.NumCoords	= NumCoords;
 				Set.Stride		= Stride;
 				Set.Offset		= Offset;
@@ -2153,7 +2166,7 @@ void FOpenGLRenderInterface::DrawPrimitive(EPrimitiveType PrimitiveType,INT Firs
 		else if( CurrentState->IndexBuffer )
 		{
 			INT IndexSize = CurrentState->IndexBuffer->IndexSize;
-			RenDev->glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, CurrentState->IndexBuffer->BufferID );
+			RenDev->glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, CurrentState->IndexBufferID );
 			if( MinIndex != INDEX_NONE && MaxIndex != INDEX_NONE && MaxIndex >= MinIndex )
 				RenDev->glDrawRangeElements( Type, MinIndex, MaxIndex, Count, IndexSize == 4 ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT, (const BYTE*)(PTRINT)(FirstIndex * IndexSize) );
 			else
