@@ -94,7 +94,7 @@ The three web modes (`UE_WEB_PERF`, `UE_WEB_DEBUG`, set by the presets):
 
 `abiVersion` is `UE_ABI_VERSION` of the vendored `vendor/glue/ue_abi.h` (2). `toolchain` names Emscripten's version
 and every repository FetchContent pulled for the artifact as `<repo>@<branch>`, never a commit (the branch tip is what
-a rebuild takes): `gl4es` (`10-p/gl4es@fix/cubemap-bind-active-unit`) and `openal-soft`
+a rebuild takes): `gl4es` (`10-p/gl4es@ufront`) and `openal-soft`
 (`10-p/openal-soft-web@ufront/web`), from the cache variables `FetchContent_Declare` reads (`cmake/ArtifactDeps.cmake`:
 `GL4ES_GIT_*`, `OPENALSOFT_GIT_*`); a local checkout override shows as `local:<path>`. SDL2 on the web is Emscripten's
 own port (named by the Emscripten version). `buildFlags` lists the link flags the host depends on (the WebGL versions
@@ -374,7 +374,7 @@ folder, `UC2_SCRIPTS=none` keeps the game folder's).
 ## Fetched libraries
 
 SDL2 (`libsdl-org/SDL@release-2.32.x`; native and Windows), OpenAL Soft (`10-p/openal-soft-web@ufront/web`; native as
-a shared library, Windows as `OpenAL32.dll`, web static) and GL4ES (`10-p/gl4es@fix/cubemap-bind-active-unit`; Linux
+a shared library, Windows as `OpenAL32.dll`, web static) and GL4ES (`10-p/gl4es@ufront`; Linux
 and web) are fetched by CMake at configure time into `build-*/_deps/`, on their branches (not pinned: the latest wins;
 the root `CMakeLists.txt` says why each option is set). The first configure of each preset therefore needs network
 access; later configures re-fetch the branch tips. Vendored in `Thirdparty/`: zlib, Ogg/Vorbis, Theora (decoder).
