@@ -433,8 +433,8 @@ void UStruct::AddCppProperty( UProperty* Property )
 // C++ fills with pointers. Lookup by string: a cached FName can be purged and its index reused.
 // Checked by `ucc-bin verifyclasses` (sizes, offsets, and that no bytecode reads a placeholder) and
 // tools/dev/layout-check.py.
-// The table is also the one source the C++ header exporter reads (any pointer width: `ucc-bin make`
-// is a 32-bit program), so the generated <Pkg>Classes.h are 64-bit-correct as generated. CppType is the C++
+// The table is also the one source the C++ header exporter reads (`ucc-bin make` at either pointer
+// width), so the generated <Pkg>Classes.h are 64-bit-correct as generated. CppType is the C++
 // spelling of one element of the stand-in, written in place of `INT` (`PTRINT Node`, `PTRINT TextureInterfaces[3]`,
 // `TArrayNoInit<PTRINT> OctreeNodes`); NULL for C++ data a script-exported member cannot spell (the object
 // header, base-class vtables, maps): their classes are `noexport` and hand-written, and exporting one is an error
@@ -501,6 +501,8 @@ static const FNativePlaceholder GNativePlaceholders[] =
 	{ TEXT("GUI"),    TEXT("UIXInteraction"), TEXT("m_pUIPlugin"),           (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// ITitleUIPlugin*
 	{ TEXT("GUI"),    TEXT("UIXInteraction"), TEXT("LiveInterface"),         (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// XboxLiveManager*
 	{ TEXT("GUI"),    TEXT("UIXInteraction"), TEXT("FriendsInterface"),      (INT)sizeof(void*), PH_Member, TEXT("PTRINT") },	// LiveFriendsList*
+	{ TEXT("Editor"), TEXT("EditorEngine"), TEXT("Pad"),            (INT)(4*sizeof(void*) + 4*sizeof(INT)), PH_Member, NULL },	// four W* windows, AutosaveCounter, Pad[3] (Editor.h)
+	{ TEXT("Editor"), TEXT("EditorEngine"), TEXT("ConstraintsVtbl"),(INT)sizeof(void*),          PH_Member, NULL },	// vtable of FEditorConstraints Constraints (Editor.h)
 	{ TEXT("UWeb"),   TEXT("WebResponse"),  TEXT("ReplacementMap"), (INT)sizeof(TMap<FString,FString>),      PH_Member, NULL },
 	{ TEXT("UWeb"),   TEXT("WebRequest"),   TEXT("VariableMap"),    (INT)sizeof(TMultiMap<FString,FString>), PH_Member, NULL },
 };

@@ -459,10 +459,10 @@ if(ANDROID)
   list(REMOVE_ITEM UC2_PACKAGES UCC Editor)
 endif()
 
-# The script compiler (Editor package, `ucc-bin make`) is built at 32-bit pointers only: its hand-written
-# UEditorEngine (Editor.h) mirrors script's `int Pad[8]` with four pointers, a layout that only holds at 32 bits.
-# That is 32-bit Linux and MinGW i686 (`ucc.exe make`); ucc-bin / ucc.exe link it when the target exists.
-if(UC2_PTR_BYTES EQUAL 8)
+# The script compiler (Editor package, `ucc-bin make`) is built at both pointer widths on a native build, and for
+# MinGW i686 (`ucc.exe make`); ucc-bin / ucc.exe link it when the target exists. The 64-bit cross builds (windows64,
+# arm64) leave it out: they take the host build's script packages.
+if(UC2_PTR_BYTES EQUAL 8 AND CMAKE_CROSSCOMPILING)
   list(REMOVE_ITEM UC2_PACKAGES Editor)
 endif()
 
@@ -492,7 +492,7 @@ include(UC2Scripts)
 # `cmake --build build-native --target check-headers`: the generated Source/<Pkg>/Inc/<Pkg>Classes.h must be what
 # the header exporter of this build's ucc-bin writes from the scripts (tools/dev/check-headers.sh; fails with the
 # diff when stale; regenerate with tools/dev/regen-headers.sh). Only where ucc-bin carries the script compiler and
-# runs on the build host: native Linux, 32-bit (the Editor target). Not part of ALL: it compiles script packages in a
+# runs on the build host: native Linux (the Editor target). Not part of ALL: it compiles script packages in a
 # scratch tree and needs the game folder. The scripts are the build's patched tree (Scripts/tree, made by the
 # `scripts` target; check-headers.sh compiles the packages the patches rebuild against the shipped ones and checks
 # their headers): the repository holds no script sources, Source/ is only where the headers are committed.

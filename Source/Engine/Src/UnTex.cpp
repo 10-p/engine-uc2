@@ -540,60 +540,38 @@ void UTexture::CreateMips( UBOOL FullMips, UBOOL Downsample )
 						{
 							// Get 4 pixels from a one-higher-level mipmap.
 							INT TexCoord = U*2 + V*2*ThisUTile;
-							FPlane C(0,0,0,0);
-							if( TrueSource )
-							{	
-								C += TrueSource[ TexCoord +  0 +  0 ].Plane();
-								C += TrueSource[ TexCoord + UD +  0 ].Plane();
-								C += TrueSource[ TexCoord +  0 + VD ].Plane();
-								C += TrueSource[ TexCoord + UD + VD ].Plane();
-							}
-							else
+							const INT Offsets[4] = { TexCoord + 0 + 0, TexCoord + UD + 0, TexCoord + 0 + VD, TexCoord + UD + VD };
+							FColor S[4];
+							for( INT i=0; i<4; i++ )
 							{
-								switch( Format )
+								if( TrueSource )
+									S[i] = TrueSource[ Offsets[i] ];
+								else switch( Format )
 								{
 								case TEXF_A8:
-									{
-										BYTE A;
-										A = Src.DataArray( TexCoord +  0 +  0 );
-										C += FColor( A,A,A,A );
-										A = Src.DataArray( TexCoord + UD +  0 );
-										C += FColor( A,A,A,A );
-										A = Src.DataArray( TexCoord +  0 + VD );
-										C += FColor( A,A,A,A ); 
-										A = Src.DataArray( TexCoord + UD + VD );
-										C += FColor( A,A,A,A );
-									}
-									break;
 								case TEXF_L8:
 									{
-										BYTE A;
-										A = Src.DataArray( TexCoord +  0 +  0 );
-										C += FColor( A,A,A,A );
-										A = Src.DataArray( TexCoord + UD +  0 );
-										C += FColor( A,A,A,A );
-										A = Src.DataArray( TexCoord +  0 + VD );
-										C += FColor( A,A,A,A ); 
-										A = Src.DataArray( TexCoord + UD + VD );
-										C += FColor( A,A,A,A );
+										BYTE A = Src.DataArray( Offsets[i] );
+										S[i] = FColor( A,A,A,A );
 									}
 									break;
 								case TEXF_P8:
-									C += Colors[ Src.DataArray( TexCoord +  0 +  0 ) ].Plane();
-									C += Colors[ Src.DataArray( TexCoord + UD +  0 ) ].Plane();
-									C += Colors[ Src.DataArray( TexCoord +  0 + VD ) ].Plane(); 
-									C += Colors[ Src.DataArray( TexCoord + UD + VD ) ].Plane();
+									S[i] = Colors[ Src.DataArray( Offsets[i] ) ];
 									break;
 								case TEXF_RGBA8:
-									C += ((FColor*)(&Src.DataArray(0)))[ TexCoord +  0 +  0 ].Plane();
-									C += ((FColor*)(&Src.DataArray(0)))[ TexCoord + UD +  0 ].Plane();
-									C += ((FColor*)(&Src.DataArray(0)))[ TexCoord +  0 + VD ].Plane(); 
-									C += ((FColor*)(&Src.DataArray(0)))[ TexCoord + UD + VD ].Plane();							
+									S[i] = ((FColor*)(&Src.DataArray(0)))[ Offsets[i] ];
 									break;
 								}
 							}
+							// The average rounded down, in integers: the same texel at every floating-point precision.
 							FColor MipTexel;
-							TrueDest[V*Dest.USize+U] = MipTexel = FColor( C/4.f );
+							TrueDest[V*Dest.USize+U] = MipTexel = FColor
+							(
+								(S[0].R + S[1].R + S[2].R + S[3].R) / 4,
+								(S[0].G + S[1].G + S[2].G + S[3].G) / 4,
+								(S[0].B + S[1].B + S[2].B + S[3].B) / 4,
+								(S[0].A + S[1].A + S[2].A + S[3].A) / 4
+							);
 							switch( Format )
 							{
 							case TEXF_A8:

@@ -586,6 +586,57 @@ void FScriptCompiler::EmitChainUpdate( FNestInfo* Nest )
 	unguard;
 }
 
+#if SERIAL_POINTER_INDEX
+//
+// A struct's size at 32-bit pointers: the layout of UStruct::Link and each UProperty::Link with the 32-bit sizes of
+// a pointer (4), an FString or a dynamic array (12), a delegate (8) and a map (20). Native placeholders count as the
+// script ints they are at 32 bits.
+//
+static INT GetScriptPropertySize( UProperty* Property )
+{
+	if( Property->IsA(UByteProperty::StaticClass()) )
+		return 1;
+	if( Property->IsA(UDelegateProperty::StaticClass()) )
+		return 8;
+	if( Property->IsA(UStrProperty::StaticClass()) || Property->IsA(UArrayProperty::StaticClass()) )
+		return 12;
+	if( Property->IsA(UMapProperty::StaticClass()) )
+		return 20;
+	if( Property->IsA(UFixedArrayProperty::StaticClass()) )
+		return GetScriptPropertySize( ((UFixedArrayProperty*)Property)->Inner ) * ((UFixedArrayProperty*)Property)->Count;
+	if( Property->IsA(UStructProperty::StaticClass()) )
+		return GetScriptStructSize( ((UStructProperty*)Property)->Struct );
+	return 4;	// int, float, a bool's bitfield, name, object, class
+}
+INT GetScriptStructSize( UStruct* Struct )
+{
+	guard(GetScriptStructSize);
+	INT Size = Struct->GetInheritanceSuper() ? Align( GetScriptStructSize(Struct->GetInheritanceSuper()), 4 ) : 0;
+	UProperty* Prev = NULL;
+	for( UField* Field=Struct->Children; Field && Field->GetOuter()==Struct; Field=Field->Next )
+	{
+		UProperty* Property = Cast<UProperty>( Field, CLASS_IsAUProperty );
+		if( !Property )
+			continue;
+		// A bool that shares the previous bool's bitfield adds nothing.
+		if( Cast<UBoolProperty>(Property) && Cast<UBoolProperty>(Prev) && Property->Offset==Prev->Offset )
+		{
+			Prev = Property;
+			continue;
+		}
+		INT ElementSize = GetScriptPropertySize( Property );
+		INT Alignment
+		=	Property->IsA(UByteProperty::StaticClass())   ? 1
+		:	Property->IsA(UStructProperty::StaticClass()) ? (ElementSize==2 ? 2 : ElementSize>=4 ? 4 : 1)
+		:	4;
+		Size = Align( Size, Alignment ) + ElementSize * Property->ArrayDim;
+		Prev = Property;
+	}
+	return Align( Size, 4 );
+	unguard;
+}
+#endif
+
 //
 // Emit a variable size, making sure it's within reason.
 //
@@ -1689,7 +1740,7 @@ void FScriptCompiler::CompileConst( UStruct* Scope )
 			Start++;
 
 		// Format constant.
-		appStrncpy( Value, Start, Min(1024,Input+InputPos-Start+1) );
+		appStrncpy( Value, Start, Min(1024,(INT)(Input+InputPos-Start+1)) );
 	}
 
 	// Create constant.
@@ -2048,7 +2099,7 @@ UBOOL FScriptCompiler::CompileFieldExpr
 			ResultType.PropertyClass = Scope->GetOwnerClass()->ClassWithin;
 
 		if( OuterSizeFixup )
-			TopNode->Script(OuterSizeFixup) = (BYTE)ResultType.GetSize();
+			TopNode->Script(OuterSizeFixup) = (BYTE)ResultType.GetScriptSize();
 
 		// if this field is a local property, mark it as referenced
 		if ( Scope->GetClass() == UFunction::StaticClass() )
@@ -2172,7 +2223,7 @@ UBOOL FScriptCompiler::CompileFieldExpr
 			Writer << Function->FriendlyName;
 
 			if( OuterSizeFixup )
-				TopNode->Script(OuterSizeFixup) = (BYTE)ResultType.GetSize();
+				TopNode->Script(OuterSizeFixup) = (BYTE)ResultType.GetScriptSize();
 
 			ResultType = FToken(FPropertyBase(CPT_Delegate));	
 			return 1;
@@ -2381,7 +2432,7 @@ UBOOL FScriptCompiler::CompileFieldExpr
 		ResultType.PropertyFlags &= ~CPF_OutParm;
 
 		if( OuterSizeFixup )
-			TopNode->Script(OuterSizeFixup) = (BYTE)ResultType.GetSize();
+			TopNode->Script(OuterSizeFixup) = (BYTE)ResultType.GetScriptSize();
 
 //scion bcl - conditional compling
 		// Re-enable emitting here.
@@ -3034,7 +3085,7 @@ UBOOL FScriptCompiler::CompileExpr
 					// Insert skipover info for handling null contexts.
 					FRetryPoint ContextEnd; InitRetry(ContextEnd);
 					_WORD wSkip = TopNode->Script.Num() - ContextStart.CodeTop; Writer << wSkip;
-					EmitSize( Token.GetSize(), TEXT("Context expression") );//!!hardcoded size
+					EmitSize( Token.GetScriptSize(), TEXT("Context expression") );//!!hardcoded size
 					CodeSwitcheroo( ContextStart, ContextEnd );
 					continue;
 				}
@@ -3061,7 +3112,7 @@ UBOOL FScriptCompiler::CompileExpr
 			_WORD wSkip = TopNode->Script.Num() - ContextStart.CodeTop;
 			Writer << wSkip;
 			
-			EmitSize( Token.GetSize(), TEXT("Context expression") );//!!hardcoded size
+			EmitSize( Token.GetScriptSize(), TEXT("Context expression") );//!!hardcoded size
 			CodeSwitcheroo( ContextStart, ContextEnd );
 		}
 		else break;
@@ -5999,7 +6050,7 @@ void FScriptCompiler::CompileCommand( FToken& Token, UBOOL& NeedSemicolon )
 		if( TopNest->SwitchType.ArrayDim != 1 )
 			appThrowf( TEXT("Can't switch on arrays") );
 		FRetryPoint HighRetry; InitRetry(HighRetry);
-		EmitSize( TopNest->SwitchType.GetSize(), TEXT("'Switch'") );//!!hardcoded size
+		EmitSize( TopNest->SwitchType.GetScriptSize(), TEXT("'Switch'") );//!!hardcoded size
 		CodeSwitcheroo(LowRetry,HighRetry);
 		TopNest->SwitchType.PropertyFlags &= ~(CPF_OutParm);
 

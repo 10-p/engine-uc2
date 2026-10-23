@@ -31,7 +31,7 @@ if(TARGET UC2Movie)
   list(PREPEND LINK_PACKAGES UC2Movie)
   target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_UC2MOVIE=1)
 endif()
-# The Editor package (script compiler `ucc-bin make`, header exporter, editor commandlets); 32-bit pointers only.
+# The Editor package (script compiler `ucc-bin make`, header exporter, editor commandlets), where it is built.
 if(TARGET Editor)
   list(PREPEND LINK_PACKAGES Editor)
   target_compile_definitions(${PROJECT_NAME} PRIVATE UC2_WITH_EDITOR=1)
