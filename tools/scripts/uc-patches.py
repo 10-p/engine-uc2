@@ -194,27 +194,22 @@ def cmd_make(name, base, changed, packages, pdir):
     if gone:
         raise PatchError('classes removed in the changed tree (a set cannot delete a class): %s' % ', '.join(gone))
     sdir = os.path.join(pdir, name)
-    os.makedirs(sdir, exist_ok=True)
-    # the set's files for the packages in scope are replaced; with --packages, the others are kept
-    for f in os.listdir(sdir):
-        if f.endswith('.diff') and (not packages or f[:-5] in packages):
-            os.remove(os.path.join(sdir, f))
-    for pk in (os.listdir(os.path.join(sdir, 'new')) if os.path.isdir(os.path.join(sdir, 'new')) else []):
-        if not packages or pk in packages:
-            # only the classes: a set's resources (new/<Pkg>/<folder>/, files an #exec imports) are not made from trees
-            if os.path.isdir(os.path.join(sdir, 'new', pk, 'Classes')):
-                shutil.rmtree(os.path.join(sdir, 'new', pk, 'Classes'))
+    # everything is made (and checked) first; the set's files are replaced only when nothing failed
     per_pkg = {}
+    new_classes = []
     stats = []
     for rel in sorted(cf):
         b = read_lines(cf[rel])
         if rel not in bf:
             if b and IDENT.search(b[0]):
                 raise PatchError('%s: a new class must be our own text, not a decompiled/shipped one' % rel)
-            write_lines(os.path.join(sdir, 'new', rel), b)
+            new_classes.append((rel, b))
             stats.append('new %s (%d lines)' % (rel, len(b)))
             continue
         a = read_lines(bf[rel])
+        if a and ident_split(a[0])[1] is None and a == b:
+            # an earlier set's new class (our text, no identity line), unchanged by this set
+            continue
         if not a or ident_split(a[0])[1] is None:
             raise PatchError('%s: the base file has no identity line (not written by uc-decompile)' % bf[rel])
         if b:
@@ -229,6 +224,18 @@ def cmd_make(name, base, changed, packages, pdir):
             stats.append('diff %s (%d hunks, +%d -%d)' % (rel, sum(1 for x in d if x.startswith('@@')),
                                                          sum(1 for x in d[2:] if x.startswith('+') and not x.startswith('+++')),
                                                          sum(1 for x in d[2:] if x.startswith('-') and not x.startswith('---'))))
+    os.makedirs(sdir, exist_ok=True)
+    # the set's files for the packages in scope are replaced; with --packages, the others are kept
+    for f in os.listdir(sdir):
+        if f.endswith('.diff') and (not packages or f[:-5] in packages):
+            os.remove(os.path.join(sdir, f))
+    for pk in (os.listdir(os.path.join(sdir, 'new')) if os.path.isdir(os.path.join(sdir, 'new')) else []):
+        if not packages or pk in packages:
+            # only the classes: a set's resources (new/<Pkg>/<folder>/, files an #exec imports) are not made from trees
+            if os.path.isdir(os.path.join(sdir, 'new', pk, 'Classes')):
+                shutil.rmtree(os.path.join(sdir, 'new', pk, 'Classes'))
+    for rel, b in new_classes:
+        write_lines(os.path.join(sdir, 'new', rel), b)
     for pkg, lines in per_pkg.items():
         write_lines(os.path.join(sdir, pkg + '.diff'), lines)
     print('set %s: %s' % (name, '; '.join(stats) if stats else 'empty'))
