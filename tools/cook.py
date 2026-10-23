@@ -220,7 +220,8 @@ def open_input(args):
     st = os.stat(path)
     dest = os.path.join(args.cache, 'disc', os.path.splitext(os.path.basename(path))[0])
     stamp = os.path.join(dest, '.extracted')
-    key = '%s %d %d\n' % (os.path.basename(path), st.st_size, int(st.st_mtime))
+    # the folders are part of the key: an image extracted for another list is extracted again (kept files resume)
+    key = '%s %d %d %s\n' % (os.path.basename(path), st.st_size, int(st.st_mtime), ','.join(DISC_DIRS))
     if os.path.exists(stamp) and open(stamp).read() == key:
         say('input: %s, extracted before into %s' % (path, dest))
         return dest
