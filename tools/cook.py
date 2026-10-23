@@ -237,7 +237,8 @@ def check_tools(args):
             why = ex.strerror if isinstance(ex, OSError) and ex.strerror else str(ex)
             problems.append(('%s beside cook.py (%s)' % (TABLES, why), 'the disc\'s packages, written in the PC '
                              'packages\' tables so that they play online with the PC game folder',
-                             'the tool\'s archive, which has it (in the repository: tools/dev/make-pc-tables.py)'))
+                             'the tool\'s archive or the repository, which have it (tools/dev/make-pc-tables.py '
+                             'writes it)'))
     steps = ffmpeg_steps(args)
     if steps:
         missing = [t for t in ('ffmpeg', 'ffprobe') if not shutil.which(t)]

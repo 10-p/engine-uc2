@@ -50,8 +50,9 @@ def load(path):
 
 
 def save(path, packages):
-    # mtime 0: the same tables give the same file
-    with gzip.GzipFile(path, 'wb', 9, mtime=0) as raw, io.TextIOWrapper(raw, encoding='utf-8') as f:
+    # no name and mtime 0 in the gzip header: the same tables give the same file
+    with open(path, 'wb') as out, gzip.GzipFile('', 'wb', 9, out, mtime=0) as raw, \
+            io.TextIOWrapper(raw, encoding='utf-8') as f:
         json.dump({'format': FORMAT, 'packages': packages}, f, separators=(',', ':'), sort_keys=True)
 
 

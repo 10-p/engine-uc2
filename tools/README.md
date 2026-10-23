@@ -94,8 +94,8 @@ The disc's maps, textures, static meshes and animations are Xbox-format packages
   the PC game folder see the same packages (the network refers to objects and names by their index in the tables).
   The data comes from the disc; its object references and names (`uc2xrefs.py`, with the property types of the
   script packages, `uc2types.py`) are rewritten into the PC tables, a map's merged copies into the imports they
-  stand for. The tables are in `tools/uc2-pc-tables.json.gz`, generated from the PC game folder (derived from game
-  content: never committed):
+  stand for. The tables are in `tools/uc2-pc-tables.json.gz`, part of the tool and committed (tables only: names,
+  GUIDs, the merged copies' imports; no content), generated again from the PC game folder when its packages change:
 
   ```bash
   tools/cook-xbox-packages.py --in <disc folder> --out <dir> --disc-tables
@@ -140,7 +140,7 @@ movie cook takes at most 4).
 | Tool | What it does |
 |---|---|
 | `cook.py` | the entry point above |
-| `uc2-pc-tables.json.gz` | the PC packages' tables the disc's packages are written in (generated: `tools/dev/make-pc-tables.py`, never committed) |
+| `uc2-pc-tables.json.gz` | the PC packages' tables the disc's packages are written in (written by `tools/dev/make-pc-tables.py`; committed) |
 | `cook-audio.py` | the audio step: the XACT project to `.uc2wb`, `.ogp`, `.uc2cues` and `Music/*.ogg`, with `Sounds/cook-report.txt` (everything it did not understand, the cross-check with the shipped banks) |
 | `cook-movies.py` | the movie step: XMV to Ogg Theora/Vorbis, with `Movies/movie-manifest.json` and `cook-report.txt` (frame and sample accounting, PSNR/SSIM against the decoded XMV) |
 | `cook-xbox-packages.py` | the package step of a disc: the Xbox-format maps, textures, static meshes and animations as PC packages, with `Maps/xbox-packages.txt` (per package what was converted, copied or left out, and every texture or mesh without data) |

@@ -8,7 +8,8 @@ writes the disc's packages into (uc2xtables.py says how).
 
 --pc is the game folder clients run (Epic's PC packages: Maps/, Textures/, StaticMeshes/, Animations/ and the
 script packages in System/); --disc the disc's packages converted with their own tables. One entry per package
-of --disc that --pc has. Prints per package what was matched; the file is generated, never committed.
+of --disc that --pc has. Prints per package what was matched. The file is part of the tool and committed (tables
+only, no content); the same inputs give the same bytes.
 """
 import argparse
 import os

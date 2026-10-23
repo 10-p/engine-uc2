@@ -48,6 +48,7 @@ does and how to run it), `docs/` (the Epic import notes and the port's notebooks
 - Vendored libraries live in `Thirdparty/`, never under `Source/`. Fetched ones (SDL2, GL4ES, OpenAL Soft) stay
   fetched.
 - Never commit assets, `build-*/` or anything from the work folder's asset and reference trees.
+  `tools/uc2-pc-tables.json.gz` is the cook's, not content: the PC packages' tables, committed.
 - Commits: one coherent step each, Conventional Commits naming the feature (`feat:`, `fix:`, `refactor:`, `build:`,
   `docs:`), never a stage number or a date. Docs change in the same commit as the code they describe.
 - Deleting or overwriting anything outside `build-*/` and your own scratch files needs the owner. A missing tool or an
