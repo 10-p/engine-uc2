@@ -249,10 +249,17 @@ void UUC2GL4ESRenderDevice::BindingSwap( UViewport* Viewport )
 	gl4es.
 -----------------------------------------------------------------------------*/
 
+#if defined(__EMSCRIPTEN__)
+extern "C" void emscripten_glGetBufferSubData( GLenum Target, GLintptr Offset, GLsizeiptr Size, void* Data );
+#endif
+
 // The library under gl4es.
 static void* UC2GL4ES_RawGetProcAddress( const char* Name )
 {
 #if defined(__EMSCRIPTEN__)
+	// Emscripten's WebGL 2 lookup has no glGetBufferSubData (WebGL 2's getBufferSubData); the linked one serves.
+	if( !strcmp( Name, "glGetBufferSubData" ) )
+		return (void*)&emscripten_glGetBufferSubData;
 	return emscripten_webgl_get_proc_address( Name );
 #else
 	return SDL_GL_GetProcAddress( Name );
