@@ -117,9 +117,11 @@ CORE_API FString appClipboardPaste();
 	#define unguard				}
 	#define unguardf(msg)		}
 #else
+	// A string literal thrown (the Window package's "NoRoute") is a const TCHAR* to GCC, which MSVC's catch(TCHAR*)
+	// also took: it passes through as a string, not as an unwinding error (appUnwindf sets GIsCriticalError).
 	#define guard(func)			{static const TCHAR __FUNC_NAME__[]=TEXT(#func); try{
-	#define unguard				}catch(TCHAR*Err){throw Err;}catch(...){appUnwindf(TEXT("%s"),__FUNC_NAME__); throw;}}
-	#define unguardf(msg)		}catch(TCHAR*Err){throw Err;}catch(...){appUnwindf(TEXT("%s"),__FUNC_NAME__); appUnwindf msg; throw;}}
+	#define unguard				}catch(TCHAR*Err){throw Err;}catch(const TCHAR*){throw;}catch(...){appUnwindf(TEXT("%s"),__FUNC_NAME__); throw;}}
+	#define unguardf(msg)		}catch(TCHAR*Err){throw Err;}catch(const TCHAR*){throw;}catch(...){appUnwindf(TEXT("%s"),__FUNC_NAME__); appUnwindf msg; throw;}}
 #endif
 
 //

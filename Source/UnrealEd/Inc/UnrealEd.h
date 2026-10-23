@@ -8,7 +8,12 @@
 #ifndef _INC_UNREALED
 #define _INC_UNREALED
 
+#ifdef _MSC_VER
 #define UNREALED_API DLL_EXPORT
+#else
+// GCC's DLL_EXPORT is extern "C", which cannot qualify a class; the editor is one static executable.
+#define UNREALED_API
+#endif
 
 /*-----------------------------------------------------------------------------
 	Includes.
@@ -24,7 +29,7 @@
 #include "Engine.h"
 #include "UnRender.h"
 #include "Window.h"
-#include "..\..\Editor\Src\EditorPrivate.h"		//!!
+#include "../../Editor/Src/EditorPrivate.h"		//!!
 
 #include "UnrealEdClasses.h"
 
@@ -37,7 +42,7 @@
 // unrealed stuff
 #include "GenericDlgOptions.h"
 #include "UnTexAlignTools.h"
-#include "Res\resource.h"
+#include "res/resource.h"
 #include "UnrealEdMisc.h"
 #include "Browser.h"
 #include "BrowserMaster.h"

@@ -3,7 +3,8 @@
 `Default.ini`, `DefUser.ini`, `DefaultXbox.ini`, `DefUserXbox.ini` and `KeyBinds.ini` are Epic's `System/` files of the
 PC tree; `Default.ini` and `DefUser.ini` carry our defaults, the other three stay Epic's bytes (`DefaultXbox.ini` and
 `DefUserXbox.ini` are reference copies nothing reads; `KeyBinds.ini` holds the pad layouts `UC2Settings_Controller`
-offers). `tools/dev/mkrun-uc2.sh` copies them over the game folder's when it assembles a run tree; the web and Android
+offers). `DefUnrealEd.ini` is the editor's (below). `tools/dev/mkrun-uc2.sh` copies them over the game folder's when it
+assembles a run tree; the web and Android
 builds carry generated variants of `Default.ini` and `DefUser.ini` (`web/`, `android/`, below). `Default.ini`,
 `DefUser.ini` and `web/*.ini` are LF; the three Epic copies keep Epic's CRLF (`tools/dev/sync-web-ini.py --check`
 compares them with the Epic drop). The engine reads both endings. Against Epic's files:
@@ -70,6 +71,14 @@ same.
 | `[UCGameplay.UCPlayerInput] aTurn_FrictionRange`, `aLookUp_FrictionRange` | `(Min=1.0,Max=0.75)`, `(Min=1.0,Max=0.65)` | `(Min=1.0,Max=0.95)`, `(Min=1.0,Max=0.9)` | The retail disc's (Xbox) values: the section is the pad's, the mouse has its own channel. |
 | `[UCGameplay.UCPlayerController] LockSearchTimer` | `0.1` | `0.3` | The retail disc's pause between lock-target switches. |
 | new keys `[UCGameplay.UCPlayerInput] MouseLookSensitivity`, `bInvertMouseLook`, `bLazyMouseCamera`, `bDoubleTapDodge` | (none) | `2.5`, `False`, `False`, `False` | The mouse-look patch set's settings (the shipped package ignores them): linear mouse turn (0.022 degrees per count x sensitivity at FOV 90), its own invert, Epic's lazy third-person camera under the mouse when `True`, UT2004-style double-tap dodge. |
+
+## The editor's inis (`UnrealEd.exe`, BUILD.md "The editor")
+
+| File or setting | Epic | Ours | Why |
+|---|---|---|---|
+| `DefUnrealEd.ini` (the viewport layout and the browsers; `UnrealEd.ini` is made from it on the first start) | the game folder's, every `Device=D3DDrv.D3DRenderDevice` | the same file (LF) with `Device=UC2WGLDrv.UC2WGLRenderDevice` | The editor's device; D3DDrv is not built. |
+| the editor's system ini | `Avaris.ini`, the game's | `UC2Editor.ini`, made from `Default.ini` on the first start | `Default.ini` names the game's SDL client and device. The editor sets `[Engine.Engine] ViewportManager=WinDrv.WindowsClient` and `RenderDevice=UC2WGLDrv.UC2WGLRenderDevice` (an `Engine.NullRenderDevice` stays) in its own file, so the game's ini is untouched. `INI=<file>` on the command line names another, which then gets these two drivers. |
+| `[UC2WGLDrv.UC2WGLRenderDevice]` (read from no shipped ini) | (none) | the keys of `[UC2GLDrv.UC2GLRenderDevice]`, with the compiled defaults `UsePostProcess=False`, `NumAASamples=0`, plus `GDIPresent` | The editor's viewports show the level as PC's D3DDrv drew it, without the Xbox post-processing, and one context draws every viewport window. `GDIPresent=True` draws every viewport in framebuffer objects and copies each finished frame into its window with GDI instead of `SwapBuffers` (the present pass's gamma left out, as D3DDrv's gamma ramp is in a window); its compiled default is `True` under wine, where `SwapBuffers` on the viewport windows leaves parts of them unpainted, and `False` on Windows. |
 
 ## Read from no shipped ini
 

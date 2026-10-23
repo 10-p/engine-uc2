@@ -6,9 +6,12 @@
 		* Created by Tim Sweeney
 =============================================================================*/
 
+#ifndef _INC_WINDOW
+#define _INC_WINDOW
+
 #include <commctrl.h>
-#include "..\Src\Res\WindowRes.h"
-#include "..\..\core\inc\unmsg.h"
+#include "../Src/Res/WindowRes.h"
+#include "../../Core/Inc/UnMsg.h"
 #include <richedit.h>
 
 #ifndef SM_CXVIRTUALSCREEN
@@ -2834,6 +2837,8 @@ public:
 
 	HCURSOR SaveCursor;
 };
+
+#endif
 
 /*-----------------------------------------------------------------------------
 	The End.

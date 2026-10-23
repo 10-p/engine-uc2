@@ -1180,8 +1180,8 @@ FVector FHeaderItem::ToHSL( FVector RGB )
 	guard(FHeaderItem::ToHSL);
 	FVector HSL(0,0,0);
 
-	unsigned char minval = min(RGB.X, min(RGB.Y, RGB.Z));
-	unsigned char maxval = max(RGB.X, max(RGB.Y, RGB.Z));
+	unsigned char minval = Min(RGB.X, Min(RGB.Y, RGB.Z));
+	unsigned char maxval = Max(RGB.X, Max(RGB.Y, RGB.Z));
 	float mdiff  = float(maxval) - float(minval);
 	float msum   = float(maxval) + float(minval);
 
@@ -2592,7 +2592,7 @@ void FObjectConfigItem::LazyLoadClass()
 		if( !Class )
 		{
 			Failed = 1;
-			Caption = FString::Printf( LocalizeError("FailedConfigLoad",TEXT("Window")), ClassName );
+			Caption = FString::Printf( LocalizeError("FailedConfigLoad",TEXT("Window")), *ClassName );
 		}
 	}
 	unguard;

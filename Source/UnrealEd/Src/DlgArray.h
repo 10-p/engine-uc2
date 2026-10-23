@@ -25,8 +25,8 @@ class WDlgArray : public WDialog
 	// Constructor.
 	WDlgArray( UObject* InContext, WWindow* InOwnerWindow )
 		:	WDialog			( TEXT("Search for Actors"), IDDIALOG_SEARCH, InOwnerWindow )
-		,	CloseButton		( this, IDPB_CLOSE,		FDelegate(this,(TDelegate)OnClose) )
-		,	OkButton		( this, IDPB_OK,		FDelegate(this,(TDelegate)OnOk) )
+		,	CloseButton		( this, IDPB_CLOSE,		FDelegate(this,(TDelegate)&WDlgArray::OnClose) )
+		,	OkButton		( this, IDPB_OK,		FDelegate(this,(TDelegate)&WDlgArray::OnOk) )
 		,	MX		( this, IDEC_MX )
 		,	MY		( this, IDEC_MY )
 		,	MZ		( this, IDEC_MZ )

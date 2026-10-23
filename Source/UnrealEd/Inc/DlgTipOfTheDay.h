@@ -23,7 +23,7 @@ class WDlgTipOfTheDay : public WDialog
 	// Constructor.
 	WDlgTipOfTheDay( UObject* InContext, WWindow* InOwnerWindow )
 	:	WDialog			( TEXT("Tip of the Day"), IDDIALOG_TOTD, InOwnerWindow )
-	,	CloseButton		( this, IDOK,			FDelegate(this,(TDelegate)OnClose) )
+	,	CloseButton		( this, IDOK,			FDelegate(this,(TDelegate)&WDlgTipOfTheDay::OnClose) )
 	,	NextTipButton	( this, IDPB_NEXT_TIP,	FDelegate(this,(TDelegate)OnNextTip) )
 	,	ShowTipsCheck	( this, IDCK_SHOW_TIPS )
 	{

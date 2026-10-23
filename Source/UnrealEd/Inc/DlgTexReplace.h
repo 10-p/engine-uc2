@@ -84,8 +84,8 @@ class WDlgTexReplace : public WDialog
 
 			RECT rect;
 			::GetWindowRect( GetDlgItem( hWnd, IDSC_TEXTURE1 ), &rect );
-			INT Width = min( rect.right - rect.left, pTexture1->MaterialUSize()),
-				Height = min( rect.bottom - rect.top, pTexture1->MaterialVSize());
+			INT Width = Min<INT>( rect.right - rect.left, pTexture1->MaterialUSize()),
+				Height = Min<INT>( rect.bottom - rect.top, pTexture1->MaterialVSize());
 			::ScreenToClient( hWnd, &(*((POINT*)&rect)) );
 			pViewport1->OpenWindow( (DWORD)hWnd, 0, Width, Height, rect.left, rect.top );
 		}
@@ -105,8 +105,8 @@ class WDlgTexReplace : public WDialog
 
 			RECT rect;
 			::GetWindowRect( GetDlgItem( hWnd, IDSC_TEXTURE2 ), &rect );
-			INT Width = min( rect.right - rect.left, pTexture2->MaterialUSize()),
-				Height = min( rect.bottom - rect.top, pTexture2->MaterialVSize());
+			INT Width = Min<INT>( rect.right - rect.left, pTexture2->MaterialUSize()),
+				Height = Min<INT>( rect.bottom - rect.top, pTexture2->MaterialVSize());
 			::ScreenToClient( hWnd, &(*((POINT*)&rect)) );
 			pViewport2->OpenWindow( (DWORD)hWnd, 0, Width, Height, rect.left, rect.top );
 		}

@@ -12,7 +12,7 @@
 
 #ifdef WITH_LIPSINC
 
-#include "..\\..\\ImpersonatorLib\\include\\ImpersonatorLib.h"
+#include "../../ImpersonatorLib/include/ImpersonatorLib.h"
 
 struct LIPSincToolTipStrings
 {

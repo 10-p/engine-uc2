@@ -110,6 +110,9 @@ FOpenGLRenderInterface::FOpenGLRenderInterface(UUC2GLRenderDevice* InRenDev)
 	InOcclusionQuery		= 0;
 	SceneDepthTestFramebuffer	= 0;
 	WireIndexBuffer			= 0;
+	HitData					= NULL;
+	HitSize					= NULL;
+	HitCount				= 0;
 }
 
 FOpenGLRenderInterface::~FOpenGLRenderInterface()
@@ -133,6 +136,11 @@ void FOpenGLRenderInterface::Locked( UViewport* InViewport, BYTE* InHitData, INT
 
 	Viewport = InViewport;
 	SceneDepthTestFramebuffer = 0;
+	HitData		= InHitData;
+	HitSize		= InHitSize;
+	HitCount	= 0;
+	HitStack.Empty();
+	HitFrames.Empty();
 
 	// The default target: the device's main framebuffer.
 	SavedRenderTargetState.Reset();
@@ -189,6 +197,24 @@ void FOpenGLRenderInterface::Unlocked()
 		SavedRenderTargetState.Reset();
 	}
 	RenDev->glBindFramebuffer( GL_FRAMEBUFFER, RenDev->MainFramebuffer );
+
+	// The hit stack of the frame (FD3DRenderDevice::Unlock), and a line that names it: a hit frame is a click.
+	if( HitSize )
+	{
+		*HitSize = HitCount;
+		FString Stack;
+		for( INT Offset = 0; Offset < HitCount && HitData; )
+		{
+			HHitProxy* Proxy = (HHitProxy*)&HitData[Offset];
+			if( Proxy->Size <= 0 )
+				break;
+			Stack += FString::Printf( TEXT("%s%s"), Stack.Len() ? TEXT(" > ") : TEXT(""), Proxy->GetName() );
+			Offset += Proxy->Size;
+		}
+		debugf( NAME_Log, TEXT("UC2GLDrv: hit test at %i,%i (%ix%i): %s"), Viewport->HitX, Viewport->HitY, Viewport->HitXL, Viewport->HitYL, HitCount ? *Stack : TEXT("nothing") );
+	}
+	HitData = NULL;
+	HitSize = NULL;
 
 	Viewport = NULL;
 
@@ -500,13 +526,155 @@ void FOpenGLRenderInterface::SetPixelShaderConstant( INT Register, const void* D
 		appMemcpy( PixelShaderConstants[Register+i], (const FLOAT*)Data + i*4, sizeof(FLOAT)*4 );
 }
 
-// Hit testing is editor-only (D3DDrv reads back pixels); the game never hits.
+/*-----------------------------------------------------------------------------
+	Hit testing (the editor's clicks; FD3DRenderInterface::PushHit/PopHit).
+-----------------------------------------------------------------------------*/
+
+// The fill colour: D3DDrv's IGNOREPIX as an X8R8G8B8 pixel. Only red, green and blue are compared.
+#define UC2GL_HIT_FILL_R	0x00
+#define UC2GL_HIT_FILL_G	0xfe
+#define UC2GL_HIT_FILL_B	0x0d
+
+UBOOL FOpenGLRenderInterface::GetHitRect( INT& X, INT& Y, INT& W, INT& H )
+{
+	UViewport* HitViewport = RenDev->LockedViewport;
+	if( !HitViewport )
+		return 0;
+	// HitX/HitY are pixels of the render target from its top left, as D3DDrv's locked surface takes them.
+	FOpenGLRenderTargetState* RTState = SavedRenderTargetState.GetCurrentState();
+	INT X0 = Clamp( HitViewport->HitX, 0, RTState->Width ),
+		Y0 = Clamp( HitViewport->HitY, 0, RTState->Height ),
+		X1 = Clamp( HitViewport->HitX + HitViewport->HitXL, 0, RTState->Width ),
+		Y1 = Clamp( HitViewport->HitY + HitViewport->HitYL, 0, RTState->Height );
+	if( X1 <= X0 || Y1 <= Y0 )
+		return 0;
+	X = X0;
+	W = X1 - X0;
+	H = Y1 - Y0;
+	Y = RTState->Flipped ? Y0 : RTState->Height - Y1;
+	return 1;
+}
+
+UBOOL FOpenGLRenderInterface::ReadHitRect( INT X, INT Y, INT W, INT H, FColor& Found )
+{
+	GLuint Framebuffer = SavedRenderTargetState.GetCurrentState()->Framebuffer;
+	// A multisampled main framebuffer cannot be read: its resolve framebuffer takes the rectangle first.
+	UBOOL Resolve = RenDev->MainSamples && Framebuffer == RenDev->MainFramebuffer;
+	if( Resolve )
+	{
+		RenDev->glBindFramebuffer( GL_READ_FRAMEBUFFER, RenDev->MainFramebuffer );
+		RenDev->glBindFramebuffer( GL_DRAW_FRAMEBUFFER, RenDev->MainResolveFramebuffer );
+		RenDev->glDisable( GL_SCISSOR_TEST );
+		RenDev->glBlitFramebuffer( X, Y, X + W, Y + H, X, Y, X + W, Y + H, GL_COLOR_BUFFER_BIT, GL_NEAREST );
+		RenDev->glEnable( GL_SCISSOR_TEST );
+		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, RenDev->MainResolveFramebuffer );
+		// The resolve holds a rectangle of this frame only.
+		RenDev->ResolvedColorVersion = -1;
+	}
+	BYTE Pixels[16 * 16 * 4];
+	W = Min( W, 16 );
+	H = Min( H, 16 );
+	RenDev->glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+	RenDev->glReadPixels( X, Y, W, H, GL_BGRA, GL_UNSIGNED_BYTE, Pixels );
+	if( Resolve )
+		RenDev->glBindFramebuffer( GL_FRAMEBUFFER, Framebuffer );
+	// The rows from the top, the order D3DDrv scans the surface in.
+	UBOOL Flipped = SavedRenderTargetState.GetCurrentState()->Flipped;
+	for( INT Row = 0; Row < H; Row++ )
+	{
+		const BYTE* P = Pixels + (Flipped ? Row : H - 1 - Row) * W * 4;
+		for( INT Column = 0; Column < W; Column++, P += 4 )
+			if( P[2] != UC2GL_HIT_FILL_R || P[1] != UC2GL_HIT_FILL_G || P[0] != UC2GL_HIT_FILL_B )
+			{
+				Found = FColor( P[2], P[1], P[0] );
+				return 1;
+			}
+	}
+	return 0;
+}
+
+void FOpenGLRenderInterface::FillHitRect( INT X, INT Y, INT W, INT H )
+{
+	RenDev->glScissor( X, Y, W, H );
+	RenDev->glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+	RenDev->glClearColor( UC2GL_HIT_FILL_R / 255.f, UC2GL_HIT_FILL_G / 255.f, UC2GL_HIT_FILL_B / 255.f, 0.f );
+	RenDev->glClear( GL_COLOR_BUFFER_BIT );
+	// The viewport's scissor rectangle, and the write masks with the next pass.
+	ApplyViewport();
+	InvalidateHardwareState();
+}
+
 void FOpenGLRenderInterface::PushHit(const BYTE* Data,INT Count)
 {
+	guard(FOpenGLRenderInterface::PushHit);
+
+	INT Index = HitStack.Add( Count );
+	appMemcpy( &HitStack(Index), Data, Count );
+	FHitFrame& Frame = HitFrames( HitFrames.Add() );
+	Frame.Count			= Count;
+	Frame.DrewBefore	= 0;
+	Frame.DrewColor		= FColor(0,0,0);
+
+	INT X, Y, W, H;
+	if( GetHitRect( X, Y, W, H ) )
+	{
+		// What the enclosing proxy drew so far would be lost under the fill.
+		if( HitFrames.Num() > 1 )
+		{
+			FHitFrame& Parent = HitFrames( HitFrames.Num() - 2 );
+			FColor Color;
+			if( !Parent.DrewBefore && ReadHitRect( X, Y, W, H, Color ) )
+			{
+				Parent.DrewBefore	= 1;
+				Parent.DrewColor	= Color;
+			}
+		}
+		FillHitRect( X, Y, W, H );
+	}
+
+	unguard;
 }
 
 void FOpenGLRenderInterface::PopHit(INT Count,UBOOL Force)
 {
+	guard(FOpenGLRenderInterface::PopHit);
+
+	check( Count <= HitStack.Num() );
+	check( HitFrames.Num() );
+	FHitFrame Frame = HitFrames.Last();
+	HitFrames.Remove( HitFrames.Num() - 1 );
+
+	UBOOL	Hit			= Frame.DrewBefore;
+	FColor	HitColor	= Frame.DrewColor;
+	INT X, Y, W, H;
+	if( GetHitRect( X, Y, W, H ) )
+	{
+		FColor Color;
+		if( ReadHitRect( X, Y, W, H, Color ) )
+		{
+			if( !Hit )
+				HitColor = Color;
+			Hit = 1;
+		}
+		// The enclosing proxy is hit only by what it draws itself.
+		if( HitFrames.Num() )
+			FillHitRect( X, Y, W, H );
+	}
+
+	if( (Hit || Force) && HitData && HitSize )
+	{
+		((HHitProxy*)&HitStack(HitStack.Num()-Count))->HitColor = HitColor;
+		if( HitStack.Num() <= *HitSize )
+		{
+			HitCount = HitStack.Num();
+			appMemcpy( HitData, &HitStack(0), HitCount );
+		}
+		else
+			HitCount = 0;
+	}
+	HitStack.Remove( HitStack.Num()-Count, Count );
+
+	unguard;
 }
 
 /*-----------------------------------------------------------------------------

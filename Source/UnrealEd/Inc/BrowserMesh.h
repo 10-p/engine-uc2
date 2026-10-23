@@ -180,7 +180,7 @@ class WBrowserMesh : public WBrowser
 
 		if( GetCurrentMeshName().Len() )
 			Caption += FString::Printf( TEXT(" - %s"),
-				GetCurrentMeshName() );
+				*GetCurrentMeshName() );
 
 		SetText( *Caption );
 		unguard;

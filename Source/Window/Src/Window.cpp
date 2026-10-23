@@ -1918,8 +1918,8 @@ void WLog::OnShowWindow( UBOOL bShow )
 				TArray<TCHAR> Text( Reader->TotalSize() );
 				Reader->Serialize( &Text(0), Text.Num()/sizeof(TCHAR)-GUnicode*2 );
 				delete Reader;
-				INT CrCount=0;
-				for( INT Ofs=Text.Num()-1; Ofs>0 && CrCount<MaxLines; Ofs-- )
+				INT CrCount=0, Ofs;
+				for( Ofs=Text.Num()-1; Ofs>0 && CrCount<MaxLines; Ofs-- )
 					CrCount += (Text(Ofs)=='\n');
 				while( Ofs<Text.Num() && Text(Ofs)=='\n' )
 					Ofs++;
@@ -2003,7 +2003,7 @@ void WLog::OnCopyData( HWND hWndSender, COPYDATASTRUCT* CD )
 		Exec->Exec( TEXT("TakeFocus"), *GLogWindow );
 		TCHAR NewURL[1024];
 		if
-		(	ParseToken(*(TCHAR**)&CD->lpData,NewURL,ARRAY_COUNT(NewURL),0)
+		(	ParseToken(*(const TCHAR**)&CD->lpData,NewURL,ARRAY_COUNT(NewURL),0)
 		&&	NewURL[0]!='-')
 			Exec->Exec( *(US+TEXT("Open ")+NewURL),*GLogWindow );
 	}

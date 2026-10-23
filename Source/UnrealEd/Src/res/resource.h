@@ -1231,7 +1231,7 @@
 #define ID_BuildBSP                     40161
 #define ID_BuildLighting                40162
 #define ID_BuildPaths                   40163
-#define ID_ViewPrefs                    -25372
+#define ID_ViewPrefs                    40164
 #define ID_ToolsLevelStats              40165
 #define ID_ViewportPopupAnimate         40171
 #define ID_ViewportPopupModeLit         40174

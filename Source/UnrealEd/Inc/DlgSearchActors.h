@@ -21,7 +21,7 @@ class WDlgSearchActors : public WDialog
 	// Constructor.
 	WDlgSearchActors( UObject* InContext, WWindow* InOwnerWindow )
 	:	WDialog			( TEXT("Search for Actors"), IDDIALOG_SEARCH, InOwnerWindow )
-	,	CloseButton		( this, IDPB_CLOSE,			FDelegate(this,(TDelegate)OnClose) )
+	,	CloseButton		( this, IDPB_CLOSE,			FDelegate(this,(TDelegate)&WDlgSearchActors::OnClose) )
 	,	GotoActorButton	( this, IDPB_GOTOACTOR,		FDelegate(this,(TDelegate)OnActorListDblClick) )
 	,	DeleteActorButton( this, IDPB_DELETEACTOR,	FDelegate(this,(TDelegate)OnDeleteActor) )
 	,	NameEdit		( this, IDEC_NAME )

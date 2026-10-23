@@ -23,7 +23,7 @@ class WDlgAddSpecial : public WDialog
 	:	WDialog			( TEXT("Add Special"), IDDIALOG_ADD_SPECIAL, InOwnerWindow )
 	,	PrefabCombo		( this, IDCB_PREFABS )
 	,	OKButton		( this, IDOK, FDelegate(this,(TDelegate)OnOK) )
-	,	CloseButton	( this, IDPB_CLOSE, FDelegate(this,(TDelegate)OnClose) )
+	,	CloseButton	( this, IDPB_CLOSE, FDelegate(this,(TDelegate)&WDlgAddSpecial::OnClose) )
 	{
 	}
 

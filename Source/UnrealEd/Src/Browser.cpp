@@ -11,7 +11,7 @@
 
 #include "UnrealEd.h"
 
-INT CDECL ClassSortCompare( const void *elem1, const void *elem2 )
+static INT CDECL ClassSortCompare( const void *elem1, const void *elem2 )
 {
 	return appStricmp((*(UClass**)elem1)->GetName(),(*(UClass**)elem2)->GetName());
 }
@@ -171,7 +171,7 @@ void WBrowser::SetCaption( FString* Tail )
 	Caption = Description;
 
 	if( Tail && Tail->Len() )
-		Caption = *FString::Printf(TEXT("%s - %s"), *Caption, *Tail );
+		Caption = *FString::Printf(TEXT("%s - %s"), *Caption, **Tail );
 
 	if( IsDocked() )
 		OwnerWindow->SetText( *Caption );

@@ -55,8 +55,13 @@ class   FDebuggerWatch;
 class   FDebuggerWatchNode;
 class       FDebuggerArrayNode;
 
+#ifdef _MSC_VER
 enum    EUserAction;
 enum    EBreakType;
+#else
+// Standard C++ has no forward declaration of an enum without its underlying type.
+#include "UnDebuggerInterface.h"
+#endif
 
 #ifndef WINDRV_API
 #define WINDRV_API DLL_IMPORT

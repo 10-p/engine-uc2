@@ -34,7 +34,7 @@ class WDlgMapCheck : public WDialog
 	WDlgMapCheck( UObject* InContext, WWindow* InOwnerWindow )
 	:	WDialog				( TEXT("Check Map"), IDDIALOG_MAP_CHECK, InOwnerWindow )
 	,	RefreshButton		( this, IDPB_REFRESH, FDelegate(this,(TDelegate)OnRefresh) )
-	,	CloseButton			( this, IDPB_CLOSE, FDelegate(this,(TDelegate)OnClose) )
+	,	CloseButton			( this, IDPB_CLOSE, FDelegate(this,(TDelegate)&WDlgMapCheck::OnClose) )
 	,	GotoActorButton		( this, IDPB_GOTOACTOR, FDelegate(this,(TDelegate)OnItemListDblClk) )
 	,	DeleteActorButton	( this, IDPB_DELETEACTOR, FDelegate(this,(TDelegate)OnDeleteActor) )
 	,	ItemList			( this, IDLC_ITEMS )

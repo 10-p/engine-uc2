@@ -951,11 +951,11 @@ void WBrowserAnimation::SetCaption( void )
 
 	if( GetCurrentMeshName().Len() )
 		Caption += FString::Printf( TEXT(" - %s "),
-			GetCurrentMeshName() );
+			*GetCurrentMeshName() );
 
 	if( GetCurrentAnimName().Len() )
 		Caption += FString::Printf( TEXT(" - %s "),
-			GetCurrentAnimName() );
+			*GetCurrentAnimName() );
 
 	SetText( *Caption );
 	unguard;

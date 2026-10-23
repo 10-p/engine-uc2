@@ -10,7 +10,7 @@
 =============================================================================*/
 
 #include "UnrealEd.h"
-#include "..\..\core\inc\UnMsg.h"
+#include "../../Core/Inc/UnMsg.h"
 
 extern WSurfacePropSheet* GSurfPropSheet;
 extern WBuildPropSheet* GBuildSheet;
@@ -576,8 +576,8 @@ void WViewportFrame::ComputePositionData()
 	// Compute the sizing percentages for this window.
 	//
 	// Avoid divide by zero
-	rcParent.right = max(rcParent.right, 1);
-	rcParent.bottom = max(rcParent.bottom, 1);
+	rcParent.right = Max<LONG>(rcParent.right, 1);
+	rcParent.bottom = Max<LONG>(rcParent.bottom, 1);
 
 	pVC->PctLeft = rcThis.left / (FLOAT)rcParent.right;
 	pVC->PctTop = rcThis.top / (FLOAT)rcParent.bottom;

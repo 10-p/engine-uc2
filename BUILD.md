@@ -112,6 +112,7 @@ re-fetched on every configure, never by a plain `cmake --build`.
 bin/capped 4G 600 -- cmake --preset windows                      # i686-w64-mingw32-g++-posix (GCC 13)
 bin/capped 6G 1800 -- cmake --build build-windows -j8             # -> Source/UCC/ucc.exe (with the script compiler),
                                                                   #    Source/SDLLaunch/uc2.exe,
+                                                                  #    Source/UnrealEd/UnrealEd.exe (the editor),
                                                                   #    _deps/openalsoft-build/OpenAL32.dll
 tools/dev/mkrun-uc2.sh build-windows m12                          # run tree <repo>/../run/m12 (exe + dll in System/)
 tools/dev/m12-wine-smoke.sh                                       # every check under wine, PASS/FAIL lines
@@ -132,6 +133,30 @@ tools/dev/package-windows.sh build-windows                        # <repo>/../ru
 - Under wine: `tools/dev/m12-wine.sh <dir> <prog.exe> [args]` (inside `capped`) runs one program in a private prefix
   (`$UC2_WINEPREFIX`, default `<repo>/../.cache/wine-m12`) and kills its wineserver afterwards.
 - `windows64` (x86_64): see "64-bit" below.
+
+### The editor, UnrealEd.exe
+
+Built by the `windows` preset only (32-bit, like the Editor package it is made of; `windows64` has none). Epic's
+`Source/UnrealEd` (the editor's frame, browsers and tools), `Source/Window` (its widget library) and `Source/WinDrv`
+(the Win32 client and viewports) on the Editor package, statically linked like `uc2.exe`, with the game's packages.
+Its viewports draw through `UC2WGLDrv.UC2WGLRenderDevice` (`Source/UC2WGLDrv`): the GL driver `UC2GLDrv` bound to
+WGL, one context for every viewport window, which takes the place of Epic's D3DDrv (D3DDrv needs the DirectX 8 SDK's
+d3dx8, which MinGW-w64 does not have). Clicking in a viewport selects (hit testing, `UC2GLRenderInterface.cpp`, as
+D3DDrv does it: the hit rectangle is read back around every hit proxy).
+
+- Resources: the dialogs, menus, bitmaps, icons and cursors of the three packages (`Src/Res`, `Src/res`), compiled by
+  `windres` and merged into one object (`cmake/UC2Win32Resources.cmake`, `tools/merge-res.py`: their DLL-era numbers
+  clash in one program; a clash keeps the later package's resource, so the editor's dialogs win over Window's
+  installer pages).
+- Run: `tools/dev/mkrun-uc2.sh build-windows <tree>` puts `UnrealEd.exe` in `System/` with the game's `Editor.u`,
+  `UnrealEd.u` and our `DefUnrealEd.ini`; start it from `System/` (under wine: `wine ./UnrealEd.exe`). It reads its own
+  system ini, `UC2Editor.ini` (made from `Default.ini` on the first start), where it sets `WinDrv.WindowsClient` and
+  `UC2WGLDrv.UC2WGLRenderDevice`, so the game's `Avaris.ini` is untouched. The log is `Editor.log`.
+- `tools/dev/package-windows.sh` ships it beside `uc2.exe` when the build has it.
+- Under wine, viewports are presented through GDI (`[UC2WGLDrv.UC2WGLRenderDevice] GDIPresent`, `Engine/Config/README.md`).
+  In wine's virtual desktop the maximised editor frame (whose window rectangle starts at -4,-4) is drawn 4 pixels right
+  of and below where wine puts the pointer: clicks hit what is under the pointer in the editor's own coordinates, so a
+  one-pixel wireframe line is hit 4 pixels up and left of where it shows.
 
 ## arm64 (aarch64 Linux, cross-compiled)
 
