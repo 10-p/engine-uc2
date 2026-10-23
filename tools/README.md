@@ -80,7 +80,9 @@ The disc's maps, textures, static meshes and animations are Xbox-format packages
   meshes without geometry, listed in `Maps/xbox-packages.txt`), and `Maps/ComboMatinees/` (not on the disc). Vertex
   positions and normals come back quantised as the Xbox stored them.
 
-The formats and the measured differences are in `docs/porting/analysis/xbox-packages.md`.
+The formats and the measured differences are in `docs/porting/analysis/xbox-packages.md`;
+`tools/dev/xbox-packages-check.py --game <cooked folder> --epic <uc2-avaris-2226> --disc <disc folder>` compares a
+cook with Epic's PC packages and the `.LIN` cut with Epic's Xbox maps.
 
 ## What has to be installed
 

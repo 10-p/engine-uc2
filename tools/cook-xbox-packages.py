@@ -291,9 +291,10 @@ def main():
                 report.append('%s: FAILED: %s' % (rel, err))
                 continue
             line = ('%s: %d converted, %d copied, %d editor-only and %d Xbox-only left out, %d failed, '
-                    '%d warnings (%.1f s)' % (rel, counts['converted'], counts['copied'], counts['editor-only'],
-                                              counts['left out'], counts['failed'], len(warnings), secs))
-            print(line, flush=True)
+                    '%d warnings' % (rel, counts['converted'], counts['copied'], counts['editor-only'],
+                                     counts['left out'], counts['failed'], len(warnings)))
+            # the report holds no timings: the same disc gives the same report
+            print('%s (%.1f s)' % (line, secs), flush=True)
             report.append(line)
             report.extend('    ' + w for w in warnings)
     os.makedirs(os.path.join(a.out, 'Maps'), exist_ok=True)
