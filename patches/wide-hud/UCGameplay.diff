@@ -11,7 +11,7 @@
  	DrawH=18.0
 --- a/UCGameplay/Classes/UCHUD.uc
 +++ b/UCGameplay/Classes/UCHUD.uc
-@@ -270,6 +270,139 @@
+@@ -270,6 +270,70 @@
  native final simulated function DrawFFALeaderboard(Canvas C);
  
  native simulated function DrawCompass(Canvas Canvas, UCPawn P);
@@ -57,83 +57,14 @@
 +	C.ClipX -= float(Max(Shift, 0));
 +}
 +
-+// The console messages as Engine.HUD.DisplayMessages shows them (lifetime, order, height, wrap width), each line
-+// centred on the canvas.
-+final simulated function DisplayMessagesCentred(Canvas C)
++// The console messages, right-justified at ConsoleMessagePosX, keep to the right side.
++final simulated function DisplayMessagesWide(Canvas C)
 +{
-+	local int i, j, MessageCount;
-+	local float XL, YL, YPos, WrapXL;
-+	local byte OldStyle;
-+	local Font OldFont;
-+	local array<string> MessageLines;
-+
-+	for (i = 0; i < ConsoleMessageCount; i++)
-+	{
-+		if (TextMessages[i].Text == "")
-+		{
-+			break;
-+		}
-+		else if (TextMessages[i].MessageLife < Level.TimeSeconds)
-+		{
-+			TextMessages[i].Text = "";
-+			if (i < ConsoleMessageCount - 1)
-+			{
-+				for (j = i; j < ConsoleMessageCount - 1; j++)
-+				{
-+					TextMessages[j] = TextMessages[j + 1];
-+				}
-+			}
-+			TextMessages[j].Text = "";
-+			break;
-+		}
-+		else
-+		{
-+			MessageCount++;
-+		}
-+	}
-+	if (MessageCount <= 0)
-+	{
-+		return;
-+	}
-+	OldStyle = C.Style;
-+	OldFont = C.Font;
-+	C.Style = 1;
-+	YPos = (ConsoleMessagePosY * HudCanvasScale * float(C.SizeY)) + (((1.0 - HudCanvasScale) / 2.0) * float(C.SizeY)) + float(SafeZoneOffsetY);
-+	C.Font = GetConsoleFont(C);
-+	C.TextSize("A", XL, YL);
-+	YPos -= YL * float(MessageCount) + 1.0;
-+	YPos -= YL;
-+	// the lines wrap within the band about the centre that leaves the left side (the weapon selector) as free as
-+	// Epic's right-justified lines did: they began no further left than ConsoleMessagePosX less ConsoleMessageXL
-+	WrapXL = (float(C.SizeX) - (2.0 * (((ConsoleMessagePosX * HudCanvasScale * float(C.SizeX)) + (((1.0 - HudCanvasScale) / 2.0) * float(C.SizeX))) - (float(C.SizeX) * ConsoleMessageXL))));
-+	WrapXL = FMin(WrapXL, float(C.SizeX) * ConsoleMessageXL);
-+	for (i = 0; i < MessageCount; i++)
-+	{
-+		if (TextMessages[i].Text == "")
-+		{
-+			break;
-+		}
-+		C.DrawColor = TextMessages[i].TextColor;
-+		MessageLines.Length = 0;
-+		C.TextSize(TextMessages[i].Text, XL, YL);
-+		if (XL > WrapXL)
-+		{
-+			C.WrapStringToArray(TextMessages[i].Text, MessageLines, WrapXL);
-+		}
-+		else
-+		{
-+			MessageLines[0] = TextMessages[i].Text;
-+		}
-+		for (j = 0; j < MessageLines.Length; j++)
-+		{
-+			C.TextSize(MessageLines[j], XL, YL);
-+			C.SetPos(((float(C.SizeX) - XL) * 0.5) + float(SafeZoneOffsetX), YPos);
-+			C.DrawText(MessageLines[j], false);
-+			YPos += YL;
-+		}
-+	}
-+	C.Style = OldStyle;
-+	C.Font = OldFont;
++	local int LeftShift, RightShift;
++	GetSideShifts(C, LeftShift, RightShift);
++	BeginSide(C, RightShift);
++	DisplayMessages(C);
++	EndSide(C, RightShift);
 +}
 +
 +// The voice menu keeps to the left side (its arrow is placed at the HUD's SafeZoneOffsetX).
@@ -151,12 +82,12 @@
  
  final simulated function SetColor(name NewColorName, Color NewColor)
  {
-@@ -764,15 +897,12 @@
+@@ -764,15 +828,12 @@
  			{
  				DisplayProgressMessage(Canvas);
  			}
 -			DisplayMessages(Canvas);
-+			DisplayMessagesCentred(Canvas);
++			DisplayMessagesWide(Canvas);
  		}
  		else
  		{
@@ -166,11 +97,11 @@
 -			}
 -			DisplayMessages(Canvas);
 +			DrawVoiceMenu(Canvas);
-+			DisplayMessagesCentred(Canvas);
++			DisplayMessagesWide(Canvas);
  		}
  	}
  	if (((AnnDuration > 0.0) && (AnnText != "")))
-@@ -871,27 +1001,30 @@
+@@ -871,7 +932,10 @@
  	local float UL;
  	local float VL;
  	local bool bSplitScreen;
@@ -181,12 +112,12 @@
  	Alpha = 220.0;
  	if ((AnnDuration < 1.0))
  	{
- 		Alpha = FMax(5.0, Lerp(AnnDuration, 0.0, 220.0));
- 	}
+@@ -880,13 +944,13 @@
  	bSplitScreen = IsSplitScreen();
--	X = (bAnnGameCritical ? CriticalAnnounceX : AnnPositionX);
+ 	X = (bAnnGameCritical ? CriticalAnnounceX : AnnPositionX);
  	Y = (bAnnGameCritical ? CriticalAnnounceY : AnnPositionY);
 -	(X += float(SafeZoneOffsetX));
++	(X += float(SafeZoneOffsetX + RightShift));
  	(Y += float(SafeZoneOffsetY));
  	if (!(bSplitScreen))
  	{
@@ -198,24 +129,7 @@
  	}
  	if (bAnnGameCritical)
  	{
- 		C.Font = StaticGetAvarisFont(CriticalAnnounceFontIndex);
- 		C.TextSize(AnnText, XL, YL);
-+		// the text is right-justified at X: centred on the canvas
-+		X = (((float(C.SizeX) + XL) * 0.5) + float(SafeZoneOffsetX));
- 		if (((AnnClass != None) && AnnClass.default.bOverrideHUDColor))
- 		{
- 			C.DrawColor = AnnClass.default.OverrideColor;
-@@ -916,6 +1049,9 @@
- 		TimePassed = (Level.TimeSeconds - AnnStartTime);
- 		C.Font = StaticGetAvarisFont(AnnounceFontIndex);
- 		C.TextSize(AnnText, XL, YL);
-+		// the text is right-justified at X: centred on the canvas, the panel behind it from 3 + its margin left of
-+		// the text to 43 right of it (Epic's panel at the right edge of the 4:3 screen, the text ending at 597)
-+		X = (((float(C.SizeX) + XL) * 0.5) + float(SafeZoneOffsetX));
- 		if (!(bSplitScreen))
- 		{
- 			if ((TimePassed < 0.15))
-@@ -923,7 +1059,7 @@
+@@ -923,7 +987,7 @@
  				C.DrawColor = C.MakeColor(byte(255), byte(255), byte(255), byte(255));
  				UL = float(RewardAnnZapMaterial.MaterialUSize());
  				VL = float(RewardAnnZapMaterial.MaterialVSize());
@@ -224,25 +138,25 @@
  				C.DrawTile(RewardAnnZapMaterial, UL, VL, 0.0, 0.0, UL, VL);
  			}
  			else
-@@ -931,13 +1067,13 @@
+@@ -931,13 +995,13 @@
  				C.DrawColor = C.MakeColor(byte(Alpha), byte(Alpha), byte(Alpha), byte(Alpha));
  				if ((TimePassed < 0.25))
  				{
 -					C.SetPos(Lerp(((TimePassed - 0.15) / 0.1), (640.0 - float(RewardAnnZapMaterial.MaterialUSize())), ((600.0 - XL) - ((45.0 * (40.0 + XL)) / float(RewardAnnBackMaterial.MaterialUSize())))), Lerp(((TimePassed - 0.15) / 0.1), 430.0, 360.0));
 -					C.DrawTile(RewardAnnBackMaterial, (float(C.SizeX) - C.CurX), Lerp(((TimePassed - 0.15) / 0.1), float(RewardAnnZapMaterial.MaterialVSize()), 120.0), 0.0, 0.0, float(RewardAnnBackMaterial.MaterialUSize()), float(RewardAnnBackMaterial.MaterialVSize()));
-+					C.SetPos(Lerp(((TimePassed - 0.15) / 0.1), ((X + 43.0) - float(RewardAnnZapMaterial.MaterialUSize())), (((X + 3.0) - XL) - ((45.0 * (40.0 + XL)) / float(RewardAnnBackMaterial.MaterialUSize())))), Lerp(((TimePassed - 0.15) / 0.1), 430.0, 360.0));
-+					C.DrawTile(RewardAnnBackMaterial, ((X + 43.0) - C.CurX), Lerp(((TimePassed - 0.15) / 0.1), float(RewardAnnZapMaterial.MaterialVSize()), 120.0), 0.0, 0.0, float(RewardAnnBackMaterial.MaterialUSize()), float(RewardAnnBackMaterial.MaterialVSize()));
++					C.SetPos((Lerp(((TimePassed - 0.15) / 0.1), (640.0 - float(RewardAnnZapMaterial.MaterialUSize())), ((600.0 - XL) - ((45.0 * (40.0 + XL)) / float(RewardAnnBackMaterial.MaterialUSize())))) + float(RightShift)), Lerp(((TimePassed - 0.15) / 0.1), 430.0, 360.0));
++					C.DrawTile(RewardAnnBackMaterial, (float(C.SizeX + RightShift) - C.CurX), Lerp(((TimePassed - 0.15) / 0.1), float(RewardAnnZapMaterial.MaterialVSize()), 120.0), 0.0, 0.0, float(RewardAnnBackMaterial.MaterialUSize()), float(RewardAnnBackMaterial.MaterialVSize()));
  				}
  				else
  				{
 -					C.SetPos(((600.0 - XL) - ((45.0 * (40.0 + XL)) / float(RewardAnnBackMaterial.MaterialUSize()))), 360.0);
 -					C.DrawTile(RewardAnnBackMaterial, (float(C.SizeX) - C.CurX), 120.0, 0.0, 0.0, float(RewardAnnBackMaterial.MaterialUSize()), float(RewardAnnBackMaterial.MaterialVSize()));
-+					C.SetPos((((X + 3.0) - XL) - ((45.0 * (40.0 + XL)) / float(RewardAnnBackMaterial.MaterialUSize()))), 360.0);
-+					C.DrawTile(RewardAnnBackMaterial, ((X + 43.0) - C.CurX), 120.0, 0.0, 0.0, float(RewardAnnBackMaterial.MaterialUSize()), float(RewardAnnBackMaterial.MaterialVSize()));
++					C.SetPos((((600.0 - XL) - ((45.0 * (40.0 + XL)) / float(RewardAnnBackMaterial.MaterialUSize()))) + float(RightShift)), 360.0);
++					C.DrawTile(RewardAnnBackMaterial, (float(C.SizeX + RightShift) - C.CurX), 120.0, 0.0, 0.0, float(RewardAnnBackMaterial.MaterialUSize()), float(RewardAnnBackMaterial.MaterialVSize()));
  				}
  			}
  		}
-@@ -948,7 +1084,7 @@
+@@ -948,7 +1012,7 @@
  		{
  			if ((TimePassed < 0.35))
  			{
@@ -251,7 +165,7 @@
  			}
  			else if ((TimePassed < 0.45))
  			{
-@@ -962,6 +1098,7 @@
+@@ -962,6 +1026,7 @@
  			C.DrawTextClipped(AnnText);
  		}
  	}
@@ -259,7 +173,7 @@
  }
  
  final simulated function DrawCompassArrow(Canvas Canvas, Actor Source, Actor Target, Color DrawColor, float MaxDist)
-@@ -1157,6 +1294,7 @@
+@@ -1157,6 +1222,7 @@
  	local UCPlayerController UPC;
  	local Color oldColor;
  	local byte oldstyle;
@@ -267,7 +181,7 @@
  	Super.DrawHUD(Canvas);
  	P = UCPawn(PlayerOwner.Pawn);
  	UPC = UCPlayerController(PlayerOwner);
-@@ -1184,13 +1322,20 @@
+@@ -1184,13 +1250,20 @@
  	oldstyle = Canvas.Style;
  	Canvas.Style = 5;
  	Canvas.Font = StaticGetAvarisFont(0);
@@ -289,7 +203,7 @@
  	DrawGameHUD(Canvas);
  	DrawPlayerInfo(Canvas);
  	if ((P.PickupNotifier != None))
-@@ -1224,19 +1369,23 @@
+@@ -1224,19 +1297,23 @@
  	weapText = (PickupText @ Caps(P.PickupNotifier.Pickup.InventoryType.default.ItemName));
  	C.Font = StaticGetAvarisFont(0);
  	C.TextSize(weapText, XL, YL);
@@ -317,16 +231,16 @@
  }
  
  final function DrawBasicLeaderBoard(Canvas Canv)
-@@ -2067,7 +2216,7 @@
+@@ -2067,7 +2144,7 @@
  	}
  	if (ScoreBoard.bDisplayMessages)
  	{
 -		DisplayMessages(C);
-+		DisplayMessagesCentred(C);
++		DisplayMessagesWide(C);
  	}
  }
  
-@@ -2097,7 +2246,7 @@
+@@ -2097,7 +2174,7 @@
  	{
  		C.Font = StaticGetAvarisFont(1);
  		C.TextSize(NamedPlayerInfo.PlayerName, XL, YL, 1.0, 1.0);
@@ -335,7 +249,7 @@
  		C.Style = 5;
  		if ((NamedPlayerInfo.Team != None))
  		{
-@@ -2142,32 +2291,28 @@
+@@ -2142,32 +2219,28 @@
  		Text = UCScoreboard(ScoreBoard).GetPressFireText(PlayerOwner.PlayerReplicationInfo, True);
  		DrawStatusBarText(Canvas, Text);
  	}
@@ -373,7 +287,7 @@
  }
  
  final simulated function DrawSpectatingText(Canvas C, UCPawn ViewTarget)
-@@ -2208,7 +2353,9 @@
+@@ -2208,7 +2281,9 @@
  	local float Buffer;
  	local float LargestXL;
  	local float TextScale;
@@ -383,7 +297,7 @@
  	C.TextSize(StatusText, XL, YL);
  	Buffer = 6.0;
  	if (IsSplitScreen())
-@@ -2229,8 +2376,8 @@
+@@ -2229,8 +2304,8 @@
  	C.DrawColor = cHUDBlack;
  	C.DrawColor.A = 200;
  	C.Style = 5;
@@ -394,52 +308,30 @@
  	C.DrawColor = cHUDWhite;
  	LargestXL = ((ScreenWidth + float(SafeZoneOffsetX)) - float((46 * 2)));
  	TextScale = 1.0;
-@@ -2360,11 +2507,8 @@
- 	local float FadeValue;
- 	local float MessageX;
- 	local float MessageY;
--	local float AnnouncementX;
- 	local float DummyX;
- 	local float DummyY;
--	local float AnnouncementXL;
--	local float AnnouncementYL;
+@@ -2367,6 +2442,7 @@
+ 	local float AnnouncementYL;
  	local float MessageXL;
  	local float MessageYL;
++	local int LeftShift, RightShift;
  	if ((LocalMessage.Message != None))
-@@ -2381,26 +2525,15 @@
+ 	{
+ 		C.Font = LocalMessage.StringFont;
+@@ -2381,9 +2457,12 @@
  			FadeValue = (LocalMessage.EndOfLife - Level.TimeSeconds);
  			C.DrawColor.A = byte((float(C.DrawColor.A) * (FadeValue / LocalMessage.Lifetime)));
  		}
--		MessageX = 47.0;
++		GetSideShifts(C, LeftShift, RightShift);
+ 		MessageX = 47.0;
 -		MessageY = 432.0;
 -		C.SetPos(MessageX, MessageY);
-+		C.TextSize(LocalMessage.StringMessage, MessageXL, MessageYL);
-+		MessageX = (((float(C.SizeX) - MessageXL) * 0.5) + float(SafeZoneOffsetX));
++		// 48 above the canvas's bottom (432 on the full screen; a split view's design space is 240 high)
 +		MessageY = (float(C.SizeY) - 48.0);
++		// at the left side; whether it gives way to the announcement is decided at the 4:3 positions of both
++		C.SetPos((MessageX + float(LeftShift)), MessageY);
  		if (((AnnDuration > 0.0) && (AnnText != "")))
  		{
--			C.TextSize(AnnText, AnnouncementXL, AnnouncementYL);
--			C.TextSize(LocalMessage.StringMessage, MessageXL, MessageYL);
--			AnnouncementX = (597.0 - (AnnouncementXL + float(5)));
--			if (((MessageX + MessageXL) > AnnouncementX))
--			{
--			}
--			else
--			{
--				C.DrawTextClipped(LocalMessage.StringMessage, False);
--			}
-+			MessageY = ((((bAnnGameCritical ? CriticalAnnounceY : AnnPositionY) + float(SafeZoneOffsetY)) - 8.0) - MessageYL);
- 		}
--		else
--		{
--			C.DrawTextClipped(LocalMessage.StringMessage, False);
--		}
-+		C.SetPos(MessageX, MessageY);
-+		C.DrawTextClipped(LocalMessage.StringMessage, False);
- 		DX = (LocalMessage.DX / float(C.SizeX));
- 		DY = (LocalMessage.DY / float(C.SizeY));
- 		LocalMessage.Drawn = True;
-@@ -2468,14 +2601,27 @@
+ 			C.TextSize(AnnText, AnnouncementXL, AnnouncementYL);
+@@ -2468,14 +2547,27 @@
  final simulated function DrawElements(Canvas C)
  {
  	local int i;
@@ -468,7 +360,7 @@
  			}
  			(i)++;
  		}
-@@ -2853,10 +2999,10 @@
+@@ -2853,10 +2945,10 @@
  	pos_LeaderBoardName(1)=(X=588.0,Y=69.0,W=0.0,H=0.0)
  	pos_LeaderBoardName(2)=(X=588.0,Y=82.0,W=0.0,H=0.0)
  	pos_LeaderBoardName(3)=(X=588.0,Y=96.0,W=0.0,H=0.0)
