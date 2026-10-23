@@ -21,6 +21,9 @@
 
 #include "SDL2Drv.h"
 
+// The frame trace's count of the mouse motion each frame received (UC2FrameTrace.cpp).
+ENGINE_API void UC2FrameTraceMouse( INT DX, INT DY );
+
 /*-----------------------------------------------------------------------------
 	Class implementation.
 -----------------------------------------------------------------------------*/
@@ -1089,6 +1092,7 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 			// A mouse move of a few pixels is a touch of the mouse (not a jitter of the desk)
 			if( Abs(Ev.motion.xrel) + Abs(Ev.motion.yrel) >= 3 )
 				GKeyGlyphs.NoteDevice( 1, TEXT("mouse move") );
+			UC2FrameTraceMouse( Ev.motion.xrel, Ev.motion.yrel );
 			if( Ev.motion.xrel )
 				CauseInputEvent( IK_MouseX, IST_Axis, +MX * Ev.motion.xrel );
 			if( Ev.motion.yrel )

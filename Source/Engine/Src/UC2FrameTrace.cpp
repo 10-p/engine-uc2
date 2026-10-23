@@ -15,10 +15,14 @@
 	  frametrace <tag> <i> t=<Level.TimeSeconds> dt=<the frame's DeltaSeconds> cam=(x,y,z) camrot=(p,y,r)
 	  fov=<the FOV drawn with, AutoFOV included> view=<W>x<H> pawn=(x,y,z) vel=(x,y,z)
 	  bob=(x,y,z) root=(x,y,z) scr=(x,y) rscr=(x,y) phys=<n> look=<mouse|pad|->
+	  mouse=(dx,dy,n) wall=<appSeconds> lag=<z>
 	pawn: the view target's Location; bob: its WalkBob; root: the skeletal mesh's root bone as
 	posed for this frame (world space; = pawn when the mesh is not skeletal); scr / rscr: pawn /
 	root projected with this frame's camera as FCameraSceneNode does; look: which device owns the
-	look (UCPlayerInput.bMouseOwnsLook), "-" without one.
+	look (UCPlayerInput.bMouseOwnsLook), "-" without one; mouse: the viewport's relative mouse motion
+	since the frame before (counts, and how many motion events brought them); wall: the time the line
+	was written; lag: how far the mesh is drawn from its resting place, vertically (PrePivot -
+	DesiredPrePivot, the step smoothing of a walking pawn).
 =============================================================================*/
 
 #include "EnginePrivate.h"
@@ -40,6 +44,19 @@ static FName FrameTraceLogName()
 static INT		GFrameTraceLeft  = 0;
 static INT		GFrameTraceIndex = 0;
 static FString	GFrameTraceTag;
+static INT		GFrameTraceMouseX = 0;
+static INT		GFrameTraceMouseY = 0;
+static INT		GFrameTraceMouseEvents = 0;
+
+//
+// One relative mouse motion as the viewport received it (USDL2Viewport, SDL_MOUSEMOTION).
+//
+ENGINE_API void UC2FrameTraceMouse( INT DX, INT DY )
+{
+	GFrameTraceMouseX += DX;
+	GFrameTraceMouseY += DY;
+	GFrameTraceMouseEvents++;
+}
 
 ENGINE_API UBOOL UC2FrameTraceExec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
@@ -98,6 +115,8 @@ static const TCHAR* LookOwner( APlayerController* PC )
 ENGINE_API void UC2FrameTraceDraw( UViewport* Viewport, const FVector& CamLoc, const FRotator& CamRot, FLOAT DeltaSeconds )
 {
 	guard(UC2FrameTraceDraw);
+	const INT MouseX = GFrameTraceMouseX, MouseY = GFrameTraceMouseY, MouseEvents = GFrameTraceMouseEvents;
+	GFrameTraceMouseX = GFrameTraceMouseY = GFrameTraceMouseEvents = 0;
 	if( GFrameTraceLeft <= 0 || !Viewport || !Viewport->Actor )
 		return;
 	APlayerController* PC = Viewport->Actor;
@@ -118,7 +137,7 @@ ENGINE_API void UC2FrameTraceDraw( UViewport* Viewport, const FVector& CamLoc, c
 	ProjectToViewport( Viewport, CamLoc, CamRot, Fov, Pawn->Location, SX, SY );
 	ProjectToViewport( Viewport, CamLoc, CamRot, Fov, Root, RX, RY );
 	debugf( FRAMETRACE,
-		TEXT("frametrace %s %i t=%.5f dt=%.5f cam=(%.2f,%.2f,%.2f) camrot=(%i,%i,%i) fov=%.3f view=%ix%i pawn=(%.2f,%.2f,%.2f) vel=(%.1f,%.1f,%.1f) bob=(%.2f,%.2f,%.2f) root=(%.2f,%.2f,%.2f) scr=(%.2f,%.2f) rscr=(%.2f,%.2f) phys=%i look=%s"),
+		TEXT("frametrace %s %i t=%.5f dt=%.5f cam=(%.2f,%.2f,%.2f) camrot=(%i,%i,%i) fov=%.3f view=%ix%i pawn=(%.2f,%.2f,%.2f) vel=(%.1f,%.1f,%.1f) bob=(%.2f,%.2f,%.2f) root=(%.2f,%.2f,%.2f) scr=(%.2f,%.2f) rscr=(%.2f,%.2f) phys=%i look=%s mouse=(%i,%i,%i) wall=%.5f lag=%.3f"),
 		*GFrameTraceTag, GFrameTraceIndex++,
 		PC->Level ? PC->Level->TimeSeconds : 0.f, DeltaSeconds,
 		CamLoc.X, CamLoc.Y, CamLoc.Z, CamRot.Pitch, CamRot.Yaw, CamRot.Roll,
@@ -129,7 +148,9 @@ ENGINE_API void UC2FrameTraceDraw( UViewport* Viewport, const FVector& CamLoc, c
 		Root.X, Root.Y, Root.Z,
 		SX, SY, RX, RY,
 		(INT)Pawn->Physics,
-		LookOwner( PC ) );
+		LookOwner( PC ),
+		MouseX, MouseY, MouseEvents, appSeconds(),
+		Pawn->PrePivot.Z - Pawn->DesiredPrePivot.Z );
 	if( GFrameTraceLeft == 0 )
 		debugf( FRAMETRACE, TEXT("frametrace %s done after %i frames"), *GFrameTraceTag, GFrameTraceIndex );
 	unguard;
