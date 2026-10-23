@@ -133,16 +133,51 @@ and others. Xbox `DM-Legacy.LIN` (1,967,247 bytes): 1,602 exports, 74 imports, w
 
 ## Results with the engine
 
-- 64-bit dedicated server (`ucc-bin Engine.ServerCommandlet <map>`): all 57 maps and the menu bring their level up
-  for play with no critical error; DM-Legacy loads the same script-referenced packages as with Epic's PC packages.
+- 64-bit dedicated server (`ucc-bin Engine.ServerCommandlet <map>`): the 56 maps and the menu bring their level up
+  for play with no critical error, with the disc's tables and with the PC tables; DM-Legacy loads the same
+  script-referenced packages as with Epic's PC packages.
+- Network play (`tools/dev/net-test.py dedicated1` with `NET_SERVER_SYS`: join, spawn, the server seeing the client
+  move, both agreeing on where it stopped, no critical line): a dedicated server on the disc's packages in the PC
+  tables with a client on the PC game folder passes all 8 items, and the other way round too. With the disc's own
+  tables the client joins but refuses the map: `Package 'DM-Deadbolt' version mismatch`.
 - Client (`SDL_VIDEODRIVER=offscreen`, 1280x720, the same camera placements on both): DM-Legacy differs from the
   PC-package picture by 0.06 to 0.85 of 255 on average per pixel; DM-Azure (terrain, characters) by 0.06 to 0.59;
   the main menu renders.
 
+## The PC tables
+
+A client loads a package only with the server's GUID (`UObject::GetPackageLinker`, `CompatibleGuid`), and the network
+refers to objects and names by their index in the tables (`UPackageMap::Compute`: the last generation's export and
+name counts per package, in the server's package order). The disc's packages have their own GUIDs and their tables in
+another order, so the conversion writes each package in the tables of Epic's PC package (`uc2xtables.py`, the tables
+file made by `tools/dev/make-pc-tables.py` from the PC game folder):
+
+- The census (180 packages: 56 maps, the menu and the entry level, 62 texture, 45 static mesh, 15 animation
+  packages). Texture, mesh and animation packages: the PC tables hold the same objects as the disc's in another order
+  (34 of them are PC packages of versions 140 to 150; the tables are written as they are, the data at version 151).
+  Maps: every PC export is in the disc's map but 119 (lights, emitters and zone infos the Xbox build removed, written
+  without data); the disc's map adds its merged copies (`MyLevel.cla<N>`, 3,511 referenced), the Xbox-precomputed
+  terrain layer weight maps and sector blocks, the clipped static projector primitives and two terrain primitives.
+- Matching: exports and imports by path and class; names by text; each merged copy by walking the two maps' common
+  exports side by side (references and names aligned, with a sequence match where the two differ: the PC's static
+  mesh instance lights and light map records): every referenced copy matched one PC import of its class, with no
+  conflicting vote. One texture package holds two exports of the same path twice (`S_NK_Lights`, Polys and Model):
+  the tables file names the one the PC's references use.
+- Rewriting: every object reference and name in the export data (`uc2xrefs.py`: the state frame, the tagged
+  properties with the script packages' property types, the native data of 14 classes; walked over all 173,473
+  exports of Epic's PC packages of version 151 and the 131,957 of the conversion with no reference out of range).
+  The static projectors also lose the `bHidden` and `DrawType` the Xbox batching set (`DT_StaticProjectorBatch`),
+  as in Epic's PC maps.
+- Result (`xbox-packages-check.py`, tables): 180 of 180 packages with the PC GUID and generations and the PC tables
+  in their order, nothing added after them; in the packages of version 151, 102,555 of 119,173 exports with data are
+  byte-identical to Epic's. The others are what the converters rebuild (static meshes, skeletal meshes, textures
+  without pixels, terrain, light maps, instance lights) and disc content that differs from the PC's: the fluid
+  surfaces' clamp bitmaps, one level title (OD-Obelisk), an editor value after the level's model reference.
+- A package of the PC folder that the disc lacks (`Maps/ComboMatinees/`, `Animations/K_Cine_Selket_Cheats.ukx`) has
+  no tables entry and is not written.
+
 ## Notes
 
-- The converted packages keep the Xbox packages' GUIDs: a server and a client have to run the same cook (a game
-  folder with Epic's PC packages has other GUIDs and other export tables).
 - `XboxTextures/*.rdf` and Epic's `XboxMaps/*.unr` are not on the disc and not needed; the converter reads only the
   disc's files.
 

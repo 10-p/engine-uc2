@@ -129,6 +129,7 @@ class Package:
     def __init__(self):
         self.version, self.licensee, self.flags = 151, 0, 0
         self.guid = bytes(16)
+        self.gens = None        # [(export count, name count)] per generation; None: one, of the whole tables
         self.names, self.imports, self.exports = [], [], []
         self.path = None
 
@@ -238,7 +239,7 @@ class Package:
         p = cls()
         p.path = path
         r = Reader(data)
-        p.version, p.licensee, p.flags, counts, p.guid, _ = cls._summary(r)
+        p.version, p.licensee, p.flags, counts, p.guid, p.gens = cls._summary(r)
         nc, no, ec, eo, ic, io = counts
         p._read_names(Reader(data, no), nc)
         p._read_imports(Reader(data, io), ic)
@@ -253,7 +254,7 @@ class Package:
         for s, fl in self.names:
             b = s.encode('latin-1') + b'\0'
             names += struct.pack('<i', len(b)) + b + struct.pack('<I', fl)
-        head = 12 + 24 + 16 + 4 + 8
+        head = 12 + 24 + 16 + 4 + 8 * len(self.gens or [None])
         body = bytearray()
         offsets = []
         pos = head + len(names)
@@ -281,7 +282,8 @@ class Package:
         summary = struct.pack('<IHHI', TAG, self.version, licensee, self.flags)
         summary += struct.pack('<6i', len(self.names), head, len(self.exports), export_off,
                                len(self.imports), import_off)
-        summary += self.guid + struct.pack('<iii', 1, len(self.exports), len(self.names))
+        gens = self.gens or [(len(self.exports), len(self.names))]
+        summary += self.guid + struct.pack('<i', len(gens)) + b''.join(struct.pack('<ii', *g) for g in gens)
         with open(path, 'wb') as f:
             f.write(summary + names + body + imports + exports)
 

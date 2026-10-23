@@ -3,9 +3,13 @@
 packages of the same content, and the disc's .LIN cut with Epic's Xbox maps. Prints one line per check.
 
     tools/dev/xbox-packages-check.py --game <cooked game folder> --epic <uc2-avaris-2226> [--disc <disc folder>]
-                                     [--only lin,bsp,terrain,textures,meshes,anims] [--maps DM-Legacy,DM-Azure]
+                                     [--only tables,lin,bsp,terrain,textures,meshes,anims]
+                                     [--maps DM-Legacy,DM-Azure]
 
 Checks (docs/porting/analysis/xbox-packages.md has the numbers of a full run):
+  tables    each package against Epic's PC package of the same path: the GUID and generations identical, the
+            names, imports and exports of the PC tables in the same order (export flags but the load flags), what
+            was added after them, and the exports whose data is byte-identical, per class
   lin       (needs --disc) each XboxMaps/<Map>.LIN cut by uc2xpkg.read_lin against Epic's XboxMaps/<Map>.unr: the
             runtime exports byte-identical, the skeletal mesh streams expanded back (uc2xskel.lin_expand)
   bsp       each map's level model against Epic's PC map: geometry (vectors, points, nodes, surface indices,
@@ -53,6 +57,44 @@ def level_model(pkg):
 
 def by_path(pkg, cls):
     return {pkg.export_path(i).lower(): i for i in range(len(pkg.exports)) if pkg.export_class(i) == cls}
+
+
+def check_tables(game, epic):
+    import collections
+    pkgs = same_guid = same_tables = 0
+    added = collections.Counter()
+    same, differ = collections.Counter(), collections.Counter()
+    bad = []
+    for folder, ext in (('Maps', '.unr'), ('Textures', '.utx'), ('StaticMeshes', '.usx'), ('Animations', '.ukx')):
+        for path in files_in(game, folder, ext):
+            ref = find_ci(epic, '%s/%s' % (folder, os.path.basename(path)))
+            if ref is None:
+                continue
+            g, e = Package.load(path), Package.load(ref)
+            pkgs += 1
+            same_guid += g.guid == e.guid and g.gens == e.gens
+            load = uc2xpkg.RF_LoadRuntime | uc2xpkg.RF_LoadForEdit
+            ok = (g.names[:len(e.names)] == e.names and g.imports[:len(e.imports)] == e.imports and
+                  all((x.cls, x.sup, x.pkg, x.name, x.flags | load) == (y.cls, y.sup, y.pkg, y.name, y.flags | load)
+                      for x, y in zip(g.exports, e.exports)) and len(g.exports) >= len(e.exports))
+            same_tables += ok
+            if not ok or g.guid != e.guid:
+                bad.append(os.path.relpath(path, game))
+            added['names'] += len(g.names) - len(e.names)
+            added['imports'] += len(g.imports) - len(e.imports)
+            added['exports'] += len(g.exports) - len(e.exports)
+            if e.version != 151:
+                continue
+            for j, (x, y) in enumerate(zip(g.exports, e.exports)):
+                if x.data and y.data:
+                    (same if x.data == y.data else differ)[e.export_class(j)] += 1
+    say('tables: %d packages, %d with the PC GUID and generations, %d with the PC tables; added after them %d '
+        'names, %d imports, %d exports%s' % (pkgs, same_guid, same_tables, added['names'], added['imports'],
+                                             added['exports'], '; differ: ' + ', '.join(bad) if bad else ''))
+    classes = sorted(set(same) | set(differ), key=lambda c: -(same[c] + differ[c]))
+    say('tables: export data identical in the packages of version 151: %d of %d (%s)' % (
+        sum(same.values()), sum(same.values()) + sum(differ.values()),
+        ', '.join('%s %d/%d' % (c, same[c], same[c] + differ[c]) for c in classes)))
 
 
 def check_lin(disc, epic, maps):
@@ -252,11 +294,13 @@ def main():
     ap.add_argument('--game', required=True, help='a game folder cooked from the disc')
     ap.add_argument('--epic', required=True, help="Epic's tree (uc2-avaris-2226)")
     ap.add_argument('--disc', default='', help="the disc's files, for the lin check")
-    ap.add_argument('--only', default='lin,bsp,terrain,textures,meshes,anims')
+    ap.add_argument('--only', default='tables,lin,bsp,terrain,textures,meshes,anims')
     ap.add_argument('--maps', default='')
     a = ap.parse_args()
     only = set(a.only.split(','))
     maps = map_names(a.game, {m.strip().lower() for m in a.maps.split(',') if m.strip()})
+    if 'tables' in only:
+        check_tables(a.game, a.epic)
     if 'lin' in only and a.disc:
         check_lin(a.disc, a.epic, maps)
     if 'bsp' in only:

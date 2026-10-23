@@ -20,7 +20,9 @@
 # Memory: one 6G ceiling for the whole run (server + up to 3 clients, each well under 1G; CLAUDE.md "Running
 # anything"). Nothing is left running or listening: capped kills the scope, and the script checks the port.
 # Environment: NET_SOAK_MIN (soak minutes, default 10), NET_PORT (default 7850; keep it in 7850-7899),
-# NET_TREE (run tree name under <repo>/../run, default net; results then go to <repo>/../logs/<NET_TREE>).
+# NET_TREE (run tree name under <repo>/../run, default net; results then go to <repo>/../logs/<NET_TREE>),
+# NET_SERVER_SYS (the dedicated server's System dir, another game folder's: e.g. one cooked from the Xbox disc, the
+# clients on the tree's PC packages), NET_VIDEO=offscreen (clients on SDL's offscreen video, no Xvfb).
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)

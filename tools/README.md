@@ -79,6 +79,18 @@ The disc's maps, textures, static meshes and animations are Xbox-format packages
   `Lights` (editor data), the textures and texture-package static meshes the Xbox never shipped (placeholders and
   meshes without geometry, listed in `Maps/xbox-packages.txt`), and `Maps/ComboMatinees/` (not on the disc). Vertex
   positions and normals come back quantised as the Xbox stored them.
+- **The PC tables.** Each package is written in the tables of the PC package clients run (`uc2xtables.py`): its
+  GUID, generations, names, imports and exports in their order, so a server on the disc's packages and a client on
+  the PC game folder see the same packages (the network refers to objects and names by their index in the tables).
+  The data comes from the disc; its object references and names (`uc2xrefs.py`, with the property types of the
+  script packages, `uc2types.py`) are rewritten into the PC tables, a map's merged copies into the imports they
+  stand for. The tables are in `tools/uc2-pc-tables.json.gz`, generated from the PC game folder (derived from game
+  content: never committed):
+
+  ```bash
+  tools/cook-xbox-packages.py --in <disc folder> --out <dir> --disc-tables
+  tools/dev/make-pc-tables.py --pc <PC game folder> --disc <dir>
+  ```
 
 The formats and the measured differences are in `docs/porting/analysis/xbox-packages.md`;
 `tools/dev/xbox-packages-check.py --game <cooked folder> --epic <uc2-avaris-2226> --disc <disc folder>` compares a
@@ -125,6 +137,7 @@ movie cook takes at most 4).
 | `uc2xpkg.py` | reads and writes packages in both formats; cuts a `.LIN` back into its exports |
 | `uc2xpr.py` | reads the XPR bundles |
 | `uc2xbsp.py`, `uc2xtex.py`, `uc2xmesh.py`, `uc2xskel.py`, `uc2xterrain.py` | the converters of the classes whose native data differs (models, textures, static meshes, skeletal meshes and animations, terrain) |
+| `uc2xtables.py`, `uc2xrefs.py`, `uc2types.py` | the disc's packages in the PC packages' tables: the tables file, where an export's data holds references and names, the script packages' property types |
 | `xiso.py` | lists and extracts an Xbox disc image (XDVDFS) |
 | `uc2xwb.py` | reads the shipped wave banks (`.xwb`) and decodes Xbox ADPCM and PCM waves |
 | `uc2xsb.py` | reads the shipped sound banks (`.xsb`) |

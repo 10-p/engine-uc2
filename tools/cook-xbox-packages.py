@@ -11,14 +11,19 @@ Input (read only; --in <dir>, the disc's files):
   System/Script.lin             the script packages' and the entry level's linear-load stream
   System/*.u                    the script packages (the .LIN streams hold reads from them)
 
+Also read: --tables <file> (default uc2-pc-tables.json.gz next to this script), the tables of the PC packages
+clients run, which the packages are written in (uc2xtables.py; tools/dev/make-pc-tables.py makes the file).
+
 Output (never committed; --out <dir>, a game folder):
   Maps/<Map>.unr, Maps/Entry.unr (from System/Script.lin), Textures/*.utx, StaticMeshes/*.usx, Animations/*.ukx
-  Maps/xbox-packages.txt        per package: exports converted, copied and left out, and every warning (the
-                                textures without pixels and the meshes without geometry on the disc)
+  Maps/xbox-packages.txt        per package: exports converted, copied and left out, what the PC tables took, and
+                                every warning (the textures without pixels and the meshes without geometry on the
+                                disc)
 
 Usage:
 
   tools/cook-xbox-packages.py --in <disc folder> --out <game folder> [--only DM-Legacy,T_FX] [--jobs N]
+  tools/cook-xbox-packages.py --in <disc folder> --out <dir> --disc-tables     the disc's own tables
 
 The formats and what the conversion keeps are in docs/porting/analysis/xbox-packages.md. Per export: the
 tagged properties are the same in both formats and are copied; the classes whose native data differs are rewritten
@@ -26,7 +31,8 @@ by the converters (uc2xbsp.py: models, uc2xtex.py: textures, uc2xmesh.py: static
 meshes and animations, uc2xterrain.py: terrain); everything else is copied as it is. Left out: what the PC never
 loads (editor-only exports, which a .LIN does not hold) and Xbox-only data the PC builds itself (terrain sector
 blocks and layer weight maps, clipped static projectors). The maps are converted first: their merged copies of
-texture-package textures supply the pixels those packages lack. tools/cook.py runs it as one step of a whole cook
+texture-package textures supply the pixels those packages lack. Each package is then rewritten into its PC
+package's tables, so that a server on these packages and a client on the PC ones agree. tools/cook.py runs it as one step of a whole cook
 (--source xbox).
 """
 
@@ -44,9 +50,13 @@ import uc2xmesh     # noqa: E402
 import uc2xpkg      # noqa: E402
 import uc2xpr       # noqa: E402
 import uc2xskel     # noqa: E402
+import uc2types     # noqa: E402
+import uc2xtables   # noqa: E402
 import uc2xterrain  # noqa: E402
 import uc2xtex      # noqa: E402
 
+TABLES = 'uc2-pc-tables.json.gz'
+DT_StaticProjectorBatch = 13    # Actor.EDrawType
 FOLDERS = (
     ('XboxMaps', '.lin', 'Maps', '.unr'),
     ('XboxTextures', '.utx', 'Textures', '.utx'),
@@ -93,6 +103,7 @@ def _init(disc):
         foreign.add_file(path)
     _state['foreign'] = foreign
     _state['conv'] = converters()
+    _state['types'] = uc2types.Types(uc2xpkg.files_in(disc, 'System', '.u'))
 
 
 def prefer_for(name, is_map):
@@ -136,7 +147,8 @@ def static_projectors(pkg, counts):
     """The Xbox saves static projectors already clipped (StaticPrims, and their StaticProjectorClippedPrim
     objects). The PC clips them when the projector attaches, unless StaticPrims came from the package (then
     AProjector::Attach keeps them and UGameEngine::LoadMap's batching empties them): the PC gets projectors
-    without them, as in Epic's PC maps."""
+    without them, as in Epic's PC maps, and without the bHidden and DrawType the batching set
+    (AProjector::RebuildStaticPrimsBatch)."""
     for i, e in enumerate(pkg.exports):
         if not e.data:
             continue
@@ -147,6 +159,12 @@ def static_projectors(pkg, counts):
             counts['left out'] += 1
         elif e.runtime() and cls not in ('Model', 'Polys', 'Texture', 'StaticMesh', 'SkeletalMesh'):
             data = uc2xpkg.drop_tags(e.data, e.flags, pkg, ('staticprims',))
+            batched = len(data) != len(e.data)
+            if not batched:
+                props, _ = uc2xtex.read_tags(pkg, e.data, e.flags)
+                batched = any(k[0].lower() == 'drawtype' and v == DT_StaticProjectorBatch for k, v in props.items())
+            if batched:
+                data = uc2xpkg.drop_tags(data, e.flags, pkg, ('bhidden', 'drawtype'))
             if len(data) != len(e.data):
                 lazy = e.lazy
                 if lazy:
@@ -154,8 +172,9 @@ def static_projectors(pkg, counts):
                 e.data = data
 
 
-def convert_package(src, dst, copies=None, write=True):
-    """Convert one package; returns (dst, counts, warnings, the map's copies of texture-package assets)."""
+def convert_package(src, dst, copies=None, write=True, tables=None):
+    """Convert one package, into the PC package's tables when tables are given (uc2xtables.py); returns (dst,
+    counts, warnings, the map's copies of texture-package assets)."""
     name = os.path.splitext(os.path.basename(dst))[0]
     is_map = src.lower().endswith('.lin')
     pkg = load_xbox(src)
@@ -218,6 +237,11 @@ def convert_package(src, dst, copies=None, write=True):
         e.lin = None
         counts['converted'] += 1
     static_projectors(pkg, counts)
+    if tables is not None:
+        pkg, stats = uc2xtables.apply(pkg, tables, _state['types'], ctx.warn)
+        counts.update(stats)
+    else:
+        pkg.gens = None
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     pkg.write(dst + '.part', licensee=0)
     os.replace(dst + '.part', dst)
@@ -225,13 +249,24 @@ def convert_package(src, dst, copies=None, write=True):
 
 
 def _job(args):
-    src, dst, copies, write = args
+    src, dst, copies, write, tables = args
     t = time.time()
     try:
-        dst, counts, warnings, found = convert_package(src, dst, copies, write)
+        dst, counts, warnings, found = convert_package(src, dst, copies, write, tables)
         return src, dst, counts, warnings, found, time.time() - t, None
     except Exception as ex:
         return src, dst, None, [], None, time.time() - t, '%s: %s' % (type(ex).__name__, ex)
+
+
+def with_tables(job, out, tables, disc_tables):
+    """A job with its package's PC tables, written under the name the PC folder gives it."""
+    src, dst, write = job
+    if disc_tables:
+        return src, dst, write, None
+    rel, t = uc2xtables.find(tables, os.path.relpath(dst, out).replace(os.sep, '/'))
+    if t is None:
+        return src, dst, write, None
+    return src, os.path.join(out, rel), write, t if write else None
 
 
 def plan(disc, out, only):
@@ -256,12 +291,24 @@ def main():
     ap.add_argument('--out', required=True, help='the game folder the PC packages go to')
     ap.add_argument('--only', default='', help='comma-separated package names (without extension)')
     ap.add_argument('--jobs', type=int, default=max(1, (os.cpu_count() or 2) // 2))
+    ap.add_argument('--tables', default=os.path.join(here, TABLES),
+                    help='the PC packages\' tables (default: %s next to this script)' % TABLES)
+    ap.add_argument('--disc-tables', action='store_true',
+                    help="keep the disc's tables (for tools/dev/make-pc-tables.py): no network play with the PC "
+                         "packages")
     a = ap.parse_args()
     only = {s.strip().lower() for s in a.only.split(',') if s.strip()}
     jobs = plan(a.disc, a.out, only)
     if not any(w for _, _, w in jobs):
         sys.exit('no Xbox packages under %s' % a.disc)
-    report = []
+    tables = {}
+    if not a.disc_tables:
+        if not os.path.isfile(a.tables):
+            sys.exit('%s: no PC tables (tools/dev/make-pc-tables.py makes them)' % a.tables)
+        tables = uc2xtables.load(a.tables)
+    jobs = [with_tables(j, a.out, tables, a.disc_tables) for j in jobs]
+    report = ['%s: no PC tables, written with the disc\'s' % os.path.relpath(d, a.out)
+              for _, d, w, t in jobs if w and t is None and not a.disc_tables]
     failed = 0
     maps = [j for j in jobs if j[0].lower().endswith('.lin')]
     rest = [j for j in jobs if not j[0].lower().endswith('.lin')]
@@ -269,7 +316,7 @@ def main():
                                                 initargs=(a.disc,)) as pool:
         copies = None
         results = []
-        for r in pool.map(_job, [(s, d, None, w) for s, d, w in maps]):
+        for r in pool.map(_job, [(s, d, None, w, t) for s, d, w, t in maps]):
             results.append(r)
             if r[4] is not None:
                 if copies is None:
@@ -277,10 +324,10 @@ def main():
                 else:
                     copies.merge(r[4])
         if copies is not None:
-            for src, _, _ in rest:
+            for src, _, _, _ in rest:
                 if src.lower().endswith('.utx'):
                     copies.add_originals(uc2xpkg.Package.load(src))
-        results += list(pool.map(_job, [(s, d, copies, w) for s, d, w in rest]))
+        results += list(pool.map(_job, [(s, d, copies, w, t) for s, d, w, t in rest]))
         for src, dst, counts, warnings, _, secs, err in results:
             if counts is None and not err:
                 continue
@@ -293,6 +340,12 @@ def main():
             line = ('%s: %d converted, %d copied, %d editor-only and %d Xbox-only left out, %d failed, '
                     '%d warnings' % (rel, counts['converted'], counts['copied'], counts['editor-only'],
                                      counts['left out'], counts['failed'], len(warnings)))
+            if 'exports' in counts:
+                line += ('; PC tables: %d exports from the disc, %d not on the disc, %d disc exports left out, '
+                         'added %d names, %d imports, %d exports' % (
+                             counts['exports'], counts.get('PC exports not on the disc', 0),
+                             counts.get('disc exports left out', 0), counts.get('names added', 0),
+                             counts.get('imports added', 0), counts.get('exports added', 0)))
             # the report holds no timings: the same disc gives the same report
             print('%s (%.1f s)' % (line, secs), flush=True)
             report.append(line)
