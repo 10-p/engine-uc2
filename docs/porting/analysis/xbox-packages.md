@@ -2,6 +2,9 @@ Record — kept as history; the current state is in tools/README.md and the conv
 
 # The Xbox disc's packages: what they hold and how they become PC packages
 
+Two ways were weighed: a cook tool that writes PC packages (branch A, built, below) and loaders in the engine that
+read the Xbox packages as they are (branch B, "Branch B" at the end). Recommendation: branch A.
+
 The retail disc's maps, textures, static meshes and animations are Xbox-format packages (version 151, licensee 1,
 Epic's `XBOX_ASSET_FORMAT`). The engine loads only the PC format (licensee 0) and never defines the Xbox macros, so
 `tools/cook-xbox-packages.py` converts them, and `tools/cook.py --source xbox` runs it in place of `--pc-packages`.
@@ -142,3 +145,64 @@ and others. Xbox `DM-Legacy.LIN` (1,967,247 bytes): 1,602 exports, 74 imports, w
   folder with Epic's PC packages has other GUIDs and other export tables).
 - `XboxTextures/*.rdf` and Epic's `XboxMaps/*.unr` are not on the disc and not needed; the converter reads only the
   disc's files.
+
+## Branch B: loaders in the engine for the Xbox packages as they are
+
+The idea: a package with licensee 1 takes Xbox serialisation paths at run time (many serialisers already branch on
+`Ar.LicenseeVer() == XBOX_PACKAGE_FORMAT`), its bulk data comes from the `.xpr` bundles, and the D3D resources become
+what the GL renderer uploads; Epic's sources document the format. What that takes, checked against the code and the
+disc:
+
+**The maps cannot be read as they are.** A `.LIN` is not a package: it is the bytes one Xbox session read, and
+`LIN_LOAD` (`FFileReaderLinear`) only works by repeating that session read for read. The stream holds the reads
+from every package already open at recording time, interleaved with the map's: over DM-Legacy, Menu and OD-Cancer,
+310 KB from `UCMenu.u`, 68 KB from `UCGameplay.u`, 5 KB from `GUI.u`, 31 KB from `UCEffects.u`, reads from `S_Team`,
+`S_FX`, `T_Portrait` and others, and 175 KB found in no file of the disc (objects that exist only inside other
+streams, such as `Script.lin`). A replay therefore needs, byte for byte, the Xbox's script packages and load
+history: the port rebuilds `UCMenu.u`, `UCGameplay.u` and `GUI.u` from patched sources, applies `ScriptPatches.h`
+at load, loads script packages from files instead of `Script.lin`, and sorts `EndLoad` by offset (`#ifndef _XBOX`).
+Any difference reads the next export from the wrong bytes. Reading a map in the engine means cutting the stream
+first, which is what `uc2xpkg.read_lin` does by replaying the order and searching each export; Epic's code has no
+such reader, because the Xbox never needed one.
+
+**The existing licensee-1 branches assume the Xbox structures.** 19 serialisers branch on the licensee; 10 are
+compiled only under `XBOX_ASSET_FORMAT`/`_XBOX` (TUmaArray's `bIsInXPR`, the skeletal GPU vertex, the motion block,
+terrain, projectors), and of the 9 compiled on the PC, `FBspNode` and `FBspSurf` read wrongly with the PC layout
+(`iLeaf`, `iSection`, `iFirstVertex`, `iLightMap` are 16-bit on the Xbox and `INT` on the PC, so 4 bytes are read
+where 2 were written; the 32-bit index fields keep the next field's bytes in their high half). Each class needs a
+licensee-1 reader into the PC structures, unpacking as it goes.
+
+**The bulk data needs formats that are not in Epic's code.** Epic's drop calls the XDK for them and does not hold
+it: texture swizzling (`XGSwizzleRect`, `XGUnswizzleRect` in `XboxDrv/Src/XBUtil.cpp`, `Bundler/basetexture.cpp`),
+the D3D texture header (`XGSetTextureHeader`), the index push buffers (`XGCompileDrawIndexedVertices`,
+`D3DDrv/Src/D3DPushBuffer.h`: NV2A methods, which GL cannot run and which have to be decoded back to indices). The
+`_uma` arrays are memory images of the Xbox structures (packed positions over a per-mesh box, 11:11:10 normals, BGRA
+colours), not their serialised form. The run time also needs an index of all 599 bundles, since the Xbox loaded them
+in groups named by script (`LoadXPRGroup`, `RequiredXPRs`; stubs on the PC).
+
+**What the PC paths need, the Xbox conversion removed.** The port skins on the CPU (`UsePCSkeletalShader=False`)
+from SkinningStream, SmoothVerts, SmoothSections and SmoothIndexBuffer, which the Xbox emptied (rebuild at load from
+the raw lazy arrays with `CreateSkinningStream`, or a GPU skinning path in UC2GLDrv; merged map meshes have no raw
+arrays, so they need their twin in a `.ukx`, found by content). The PC builds terrain from the G16 heightmap, which
+was never bundled (rebuild from the sector blocks, or the Xbox block renderer and its vertex shader in GL). The
+level's BSP render data is rebuilt from FLightMaps the Xbox left out (here the engine is simpler than the tool: skip
+`BuildRenderData` for licensee-1 levels, Epic's own Xbox behaviour, through a named capability). Static projector
+prims, layer weight maps (cleared with their mips not loaded on a server), and texture-package textures whose pixels
+exist only in a map's copy all need handling as in branch A.
+
+**What it would take.** A C++ stream cutter (or a cook step for the maps only), about 20 licensee-1 readers and
+PostLoad fix-ups across Core and Engine (Model, StaticMesh, StaticMeshInstance, StaticProjectorClippedPrim,
+SkeletalMesh and its LOD model, MeshAnimation, Texture, the terrain classes), a bundle manager in the engine, texture
+unswizzling and format conversion and push-buffer decoding in the render path, the rebuilders above, and the test
+of every target (Linux, Windows, the Web build, which would stream 447 MB of bundles, Android). It reuses no less
+reverse-engineered knowledge than branch A (the stream order, the XDK formats, the content matching), and it puts
+it into Epic's code instead of a tool.
+
+**Recommendation: branch A.** The format knowledge both branches rely on is the same: branch A's converters are
+written from those serialisers, and the parts Epic's code does not document (the stream cut, the XDK formats) are
+needed by either. A is built and checked on every map; it leaves the engine as it is; its output is plain PC
+packages, so every target loads it with no run-time cost; and the disc already needs a cook step (audio, movies).
+Branch B adds engine surface on every target for no gain in fidelity: the data lost on the disc is lost to both. If
+loading Xbox packages in the engine is wanted anyway, the smallest version is a hybrid: the tool cuts the `.LIN`
+streams into licensee-1 `.unr`, and the engine reads licensee-1 packages and the bundles, which is still all of the
+engine work above but the stream cutter.
