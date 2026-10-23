@@ -1,6 +1,6 @@
 #=============================================================================
 # Editor - the UnrealScript compiler (`ucc-bin make`), the C++ header exporter and the editor commandlets.
-# Built at 32-bit pointers only (root CMakeLists.txt), never on the web. The sources of Editor.vcproj plus
+# Built by native builds at both pointer widths and by MinGW i686 (root CMakeLists.txt), never on the web. The sources of Editor.vcproj plus
 # UC2EditorRegistrants.cpp (the glob below).
 #=============================================================================
 

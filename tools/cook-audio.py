@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """cook-audio.py: cook Unreal Championship 2's XACT audio project into the files UC2ALAudio plays.
 
-Input (read only): the XACT project as text (Sounds/Avaris.xap), the source WAVs it names (SoundData/,
-Music/) and the shipped Xbox banks (Sounds/*.xsb, *.xwb): a cross-check, and the source of a wave whose WAV is
-not in SoundData/ (decoded from the .xwb by tools/uc2xwb.py; the report lists them as XWB-SOURCE).
+Input (read only; --src <dir>): Epic's tree or the game's Xbox disc. The XACT project as text (Sounds/Avaris.xap),
+the source WAVs it names (SoundData/, Music/; Epic's tree only) and the shipped Xbox banks (Sounds/*.xsb, *.xwb): a
+cross-check, and the source of every wave whose WAV is not there (decoded from the .xwb by tools/uc2xwb.py; the
+report lists them as XWB-SOURCE). From a disc every wave comes from the banks, music too (Sounds/M_<Song>.xwb:
+Xbox ADPCM, or WMA decoded by ffmpeg).
 
 Output (never committed; --out <dir>):
   Sounds/<WaveBankFile>.uc2wb    wave bank index (text): one line per wave entry
@@ -12,11 +14,14 @@ Output (never committed; --out <dir>):
   Music/<Track>.ogg              one streamed Ogg Vorbis file per music track (Music/*.wav)
   Sounds/cook-report.txt         everything the cook did not understand, missing files, the .xsb cross-check
   .cache/                        per-wave encoder output, reused by the next cook when the source is unchanged
+                                 (--cache <dir> puts it elsewhere, e.g. one cache for several cooks)
 
 The formats are specified in docs/porting/analysis/audio.md ("Cooked format"). Usage:
 
-  tools/cook-audio.py [--epic <epic-sources>] --out <dir> [--jobs 6] [--banks A_Music,A_Weapon]
-                      [--no-encode] [--quality 4] [--music-quality 5] [--no-xwb-sources]
+  tools/cook-audio.py [--src <epic-sources or disc>] --out <dir> [--cache <dir>] [--jobs 6]
+                      [--banks A_Music,A_Weapon] [--no-encode] [--quality 4] [--music-quality 5] [--no-xwb-sources]
+
+tools/cook.py runs it as one step of a whole cook.
 
 Run it under the memory ceiling: <repo>/../bin/capped 4G 3600 -- tools/cook-audio.py
 """
@@ -339,6 +344,7 @@ class WaveEntry:
         self.missing = None     # reason
         self.loop = (0, 0)      # loop region in sample frames (start, length)
         self.ogg = None         # encoded cache file
+        self.track = None       # music: the track name (Music/<track>.ogg), from the entry's file name
         self.offset = self.size = 0
 
 
@@ -595,11 +601,22 @@ def read_xwb(path):
                       for e in b['entries']])
 
 
+_xwb_cache = {}
+
+
+def read_xwb_cached(path):
+    """uc2xwb.read_xwb, keeping the last bank read: entries are decoded bank by bank."""
+    if path not in _xwb_cache:
+        _xwb_cache.clear()
+        _xwb_cache[path] = uc2xwb.read_xwb(path)
+    return _xwb_cache[path]
+
+
 def source_from_xwb(xwb_path, wb, e, cache_dir):
     """Decodes entry e of the shipped bank to <cache>/xwb/<bank>.<index>.wav, cut to the project's play region
     (the source's length; ADPCM pads to 64 frames). Returns (path, note) or (None, reason)."""
     try:
-        bank = uc2xwb.read_xwb(xwb_path)
+        bank = read_xwb_cached(xwb_path)
     except uc2xwb.XwbError as ex:
         return None, str(ex)
     if e.index >= len(bank['entries']):
@@ -721,10 +738,38 @@ def shipped_only_banks(root, sounds_dir, say):
                                                 for tr in s['tracks'])))
 
 
+def music_from_xwb(xwb_path, wb, e, cache_dir):
+    """A music track from its shipped bank (M_<Song>.xwb, one entry): Xbox ADPCM is decoded like any wave; WMA is
+    stored as a whole ASF stream, which is taken out and decoded by ffmpeg to <cache>/xwb/<bank>.<index>.wav.
+    Returns (path, note) or (None, reason)."""
+    try:
+        bank = read_xwb_cached(xwb_path)
+    except uc2xwb.XwbError as ex:
+        return None, str(ex)
+    if e.index >= len(bank['entries']):
+        return None, 'entry %d not in the shipped bank (%d entries)' % (e.index, len(bank['entries']))
+    xe = bank['entries'][e.index]
+    if xe['tag'] != uc2xwb.TAG_WMA:
+        return source_from_xwb(xwb_path, wb, e, cache_dir)
+    out = os.path.join(cache_dir, 'xwb', '%s.%d.wav' % (wb.stem, e.index))
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    asf = os.path.join(cache_dir, 'xwb', '%s.%d.wma' % (wb.stem, e.index))
+    with open(asf, 'wb') as f:
+        f.write(bank['data'][xe['offset']:xe['offset'] + xe['length']])
+    cmd = ['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-i', asf, '-map_metadata', '-1',
+           '-fflags', '+bitexact', '-flags:a', '+bitexact', '-c:a', 'pcm_s16le', '-f', 'wav', out + '.part']
+    r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    os.remove(asf)
+    if r.returncode != 0 or not os.path.exists(out + '.part'):
+        return None, 'WMA not decoded: %s' % (r.stderr.decode('latin-1', 'replace').strip() or r.returncode)
+    os.replace(out + '.part', out)
+    return out, 'WMA %d ch %d Hz, %d bytes, decoded by ffmpeg' % (xe['channels'], xe['rate'], xe['length'])
+
+
 def check_against_xwb(xwb_path, wb, e, cache_dir):
     """For a bank rebuilt from the binary: does the WAV found by name hold the shipped wave? Returns (ok, note)."""
     try:
-        bank = uc2xwb.read_xwb(xwb_path)
+        bank = read_xwb_cached(xwb_path)
         _, ch, dec = uc2xwb.decode_entry(bank, e.index)
         _, sch, ref = uc2xwb.read_wav_pcm16(e.source)
     except uc2xwb.XwbError as ex:
@@ -876,9 +921,12 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     work = os.path.abspath(os.path.join(here, '..', '..'))
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--epic', default=os.environ.get('UC2_EPIC_SOURCES') or os.path.join(work, 'epic-sources', 'uc2-avaris-2226'),
-                    help='the pristine Epic tree (read only; default $UC2_EPIC_SOURCES or <repo>/../epic-sources/uc2-avaris-2226)')
+    ap.add_argument('--src', '--epic', dest='src',
+                    default=os.environ.get('UC2_EPIC_SOURCES') or os.path.join(work, 'epic-sources', 'uc2-avaris-2226'),
+                    help='Epic\'s tree or the Xbox disc (read only; default $UC2_EPIC_SOURCES or '
+                         '<repo>/../epic-sources/uc2-avaris-2226)')
     ap.add_argument('--out', required=True, help='the folder the cooked Sounds/ and Music/ go to')
+    ap.add_argument('--cache', default='', help='the encoder cache (default <out>/.cache)')
     ap.add_argument('--jobs', type=int, default=6, help='parallel ffmpeg encoders')
     ap.add_argument('--quality', default='4', help='libvorbis quality for sound effects and speech')
     ap.add_argument('--music-quality', default='5', help='libvorbis quality for music')
@@ -894,11 +942,11 @@ def main():
                          'off by default because the Xbox played them in their own order)')
     args = ap.parse_args()
 
-    xap = os.path.join(args.epic, 'Sounds', 'Avaris.xap')
-    sounds_dir = os.path.join(args.epic, 'Sounds')
+    xap = os.path.join(args.src, 'Sounds', 'Avaris.xap')
+    sounds_dir = os.path.join(args.src, 'Sounds')
     out_sounds = os.path.join(args.out, 'Sounds')
     out_music = os.path.join(args.out, 'Music')
-    cache = os.path.join(args.out, '.cache')
+    cache = args.cache or os.path.join(args.out, '.cache')
     for d in (out_sounds, out_music, cache):
         os.makedirs(d, exist_ok=True)
 
@@ -945,7 +993,7 @@ def main():
         if not wb.lang and wb.stem != wb.name:
             say('WAVE BANK %s: file %s does not match its name' % (wb.name, wb.bank_file))
 
-    src_index = SourceIndex(args.epic)
+    src_index = SourceIndex(args.src)
     xwb_files = {os.path.splitext(f)[0]: os.path.join(sounds_dir, f) for f in os.listdir(sounds_dir)
                  if f.lower().endswith('.xwb')}
     missing = []
@@ -962,12 +1010,21 @@ def main():
                     path = src_index.find(m.group(1))
                     if path:
                         say('SOURCE %s\\%s: %s is outside the tree; using %s' % (
-                            wb.bank_file, e.name, e.file, os.path.relpath(path, args.epic)))
+                            wb.bank_file, e.name, e.file, os.path.relpath(path, args.src)))
             if wb.music:
-                # Music entries name ..\Music\<Track>.wma or .wav; the cook uses Music/<Track>.wav (the source).
-                stem = os.path.splitext(os.path.basename(e.file.replace('\\', '/')))[0]
-                path = src_index.find('Music/%s.wav' % stem)
-            preferred = XWB_PREFERRED.get((wb.stem, e.index))
+                # Music entries name ..\Music\<Track>.wma or .wav; the cook uses Music/<Track>.wav (the source),
+                # else the shipped bank's track.
+                e.track = os.path.splitext(os.path.basename(e.file.replace('\\', '/')))[0]
+                path = src_index.find('Music/%s.wav' % e.track)
+                if path is None and not args.no_xwb_sources and wb.stem in xwb_files:
+                    path, note = music_from_xwb(xwb_files[wb.stem], wb, e, cache)
+                    if path:
+                        e.src_label = 'xwb:%s.xwb:%d' % (wb.stem, e.index)
+                        from_xwb.append((wb.bank_file, e.index, e.name, note))
+                    else:
+                        say('XWB-SOURCE %s entry %d %s: not decoded (%s)' % (wb.bank_file, e.index, e.name, note))
+            # (Only where the tree has the WAV: on a disc every wave comes from the bank anyway.)
+            preferred = XWB_PREFERRED.get((wb.stem, e.index)) if path else None
             if (path is None or preferred) and not wb.music and not args.no_xwb_sources and wb.stem in xwb_files:
                 # No WAV in the project (or one that is not the shipped wave): the Xbox's own copy of the wave,
                 # decoded from the shipped bank.
@@ -1003,7 +1060,7 @@ def main():
             if wb.from_binary and not e.src_label:
                 ok, note = check_against_xwb(xwb_files[wb.stem], wb, e, cache)
                 say('SHIPPED-ONLY %s entry %d %s: source %s, %s%s' % (
-                    wb.bank_file, e.index, e.name, os.path.relpath(e.source, args.epic), note,
+                    wb.bank_file, e.index, e.name, os.path.relpath(e.source, args.src), note,
                     '' if ok else ' (does not match: the shipped wave is used)'))
                 if not ok:
                     path, note = source_from_xwb(xwb_files[wb.stem], wb, e, cache)
@@ -1242,7 +1299,7 @@ def main():
     say('encoded: %d sources (%d now, %d from the cache), %d failures' % (len(jobs), fresh, len(jobs) - fresh,
                                                                          len(failures)))
     for src, err in failures:
-        say('ENCODE FAILED %s: %s' % (os.path.relpath(src, args.epic), err))
+        say('ENCODE FAILED %s: %s' % (os.path.relpath(src, args.src), err))
 
     # --- pack + write ---------------------------------------------------------------------------------------
     music_rel = {}
@@ -1257,7 +1314,7 @@ def main():
             if len(wb.entries) != 1:
                 say('MUSIC bank %s has %d entries (one expected)' % (wb.bank_file, len(wb.entries)))
             for e in ent:
-                track = os.path.splitext(os.path.basename(e.source))[0]
+                track = e.track
                 dst = os.path.join(out_music, track + '.ogg')
                 shutil.copyfile(jobs[(e.source, q)], dst)
                 e.offset, e.size = 0, os.path.getsize(dst)
@@ -1279,13 +1336,14 @@ def main():
         write_wavebank(wb, out_sounds, music_rel)
 
     # Music tracks that no wave bank names (Music/*.wav has 23, the project 21) are cooked too.
-    for fn in sorted(os.listdir(os.path.join(args.epic, 'Music'))):
+    music_src = os.path.join(args.src, 'Music')
+    for fn in sorted(os.listdir(music_src) if os.path.isdir(music_src) else []):
         if not fn.lower().endswith('.wav'):
             continue
         dst = os.path.join(out_music, os.path.splitext(fn)[0] + '.ogg')
         if os.path.exists(dst):
             continue
-        src, enc, err, _ = cached_encode((os.path.join(args.epic, 'Music', fn), cache, args.music_quality))
+        src, enc, err, _ = cached_encode((os.path.join(args.src, 'Music', fn), cache, args.music_quality))
         if err:
             say('ENCODE FAILED Music/%s: %s' % (fn, err))
             continue

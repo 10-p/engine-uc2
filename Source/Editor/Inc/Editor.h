@@ -179,6 +179,10 @@ struct HBackdrop : public HHitProxy
 
 typedef void (*POLY_CALLBACK)( UModel* Model, INT iSurf );
 
+#if SUPPORTS_PRAGMA_PACK
+#pragma pack (push,4)	// script mirrors are laid out with /Zp4 (as the generated headers); 64-bit pointers sit on 4
+#endif
+
 /*-----------------------------------------------------------------------------
 	FConstraints.
 -----------------------------------------------------------------------------*/
@@ -458,6 +462,10 @@ class EDITOR_API UEditorEngine : public UEngine
 	void brushclipDeleteMarkers();
 	void polygonDeleteMarkers();
 };
+
+#if SUPPORTS_PRAGMA_PACK
+#pragma pack (pop)
+#endif
 
 /*-----------------------------------------------------------------------------
 	Parameter parsing functions.

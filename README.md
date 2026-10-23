@@ -7,6 +7,7 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
 ([`patches/`](./patches/README.md)), which the build applies to scripts decompiled from your shipped `.u` files.
 
 - Building: [`BUILD.md`](./BUILD.md)
+- Cooking the game folder from Epic's tree or the Xbox disc: [`tools/README.md`](./tools/README.md)
 - Configuration defaults and why they differ from Epic's: [`Engine/Config/README.md`](./Engine/Config/README.md)
 - The script patch sets: [`patches/README.md`](./patches/README.md)
 - How the Epic tree was imported: [`docs/SOURCE-LAYOUT.md`](./docs/SOURCE-LAYOUT.md)
@@ -45,7 +46,8 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   the server's package map.
 - **Script patch sets**: the build decompiles the shipped `.u`, applies `patches/` and compiles the packages they
   change, proved equal to the shipped bytecode plus Epic's load-time patches.
-- **Native script compiler**: `ucc make` (Linux i386, MinGW i686) compiles packages equal to the shipped ones.
+- **Native script compiler**: `ucc make` (Linux i386 and x86_64, MinGW i686) compiles packages equal to the shipped
+  ones, the same bytes at both pointer widths.
 - **Theora movies** (`UC2Movie`): the XMV movies cooked to Ogg Theora/Vorbis and played full screen, on materials and
   as the loading screen.
 - **Save games**: player profiles in Epic's layout on every platform, portable between 32- and 64-bit builds.

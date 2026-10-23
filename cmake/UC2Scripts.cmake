@@ -41,7 +41,7 @@ include(${CMAKE_SOURCE_DIR}/cmake/UC2ScriptsCheck.cmake)
 set(UC2_SCRIPT_PACKAGES_ALL Core Engine UCAnnouncements Editor UnrealEd IpDrv UWeb GamePlay UnrealGame UCElements
     UCGameplay UCEffects UCCharacters UCInventory UCMutators GUI UCMenu)
 
-# Host: this build has the script compiler (the Editor package in ucc, 32-bit pointers) and runs on this machine.
+# Host: this build has the script compiler (the Editor package in ucc) and runs on this machine.
 set(UC2_SCRIPTS_HOST OFF)
 if(TARGET Editor AND TARGET UCC AND NOT EMSCRIPTEN)
   if((CMAKE_HOST_WIN32 AND WIN32) OR (CMAKE_HOST_SYSTEM_NAME STREQUAL CMAKE_SYSTEM_NAME AND NOT CMAKE_HOST_WIN32))
@@ -125,7 +125,7 @@ endif()
 # Host: decompile, apply, build.
 #-----------------------------------------------------------------------------
 set(_help "Pass the game folder: -DUE_ASSETS_DIR=<dir> (its System/ holds the shipped .u and Epic's inis, beside it ")
-string(APPEND _help "the content folders Textures/, StaticMeshes/, ...: tools/dev/mkassets-uc2.sh makes one), or build ")
+string(APPEND _help "the content folders Textures/, StaticMeshes/, ...: tools/cook.py makes one, tools/README.md), or build ")
 string(APPEND _help "without the script patches: -DUE_SCRIPT_PATCHES=OFF.")
 
 # The game folder: the cache variable, else the environment variable the dev tools read (tools/dev/mkrun-uc2.sh),

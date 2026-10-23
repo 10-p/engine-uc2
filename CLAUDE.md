@@ -20,9 +20,9 @@ Linux, Windows (MinGW-w64), the Web (Emscripten) and Android. Private: proprieta
 The repo: `Source/` (Epic's packages and ours), `Engine/Config/` (the inis, [`README.md`](./Engine/Config/README.md)),
 `patches/` (the script patch sets), `cmake/`, `vendor/glue/` (the frontend's ABI files, vendored), `Thirdparty/`,
 `Android/` (the Gradle/NDK project of the Android app, BUILD.md "Android"),
-`tools/` (the cookers and format readers), `tools/scripts/` (the script patch pipeline), `tools/dev/` (checks and
-measurements: each script's header says what it does and how to run it), `docs/` (the Epic import notes and the port's
-notebooks: records, kept as history).
+`tools/` (the cookers and format readers; `tools/cook.py` is the one entry point, [`tools/README.md`](./tools/README.md)),
+`tools/scripts/` (the script patch pipeline), `tools/dev/` (checks and measurements: each script's header says what it
+does and how to run it), `docs/` (the Epic import notes and the port's notebooks: records, kept as history).
 
 - The baseline is the Epic drop in `~/WorkUnreal/epic-sources/`, see its README. A change is ours when the repo differs
   from that drop.
@@ -48,6 +48,7 @@ notebooks: records, kept as history).
 - Vendored libraries live in `Thirdparty/`, never under `Source/`. Fetched ones (SDL2, GL4ES, OpenAL Soft) stay
   fetched.
 - Never commit assets, `build-*/` or anything from the work folder's asset and reference trees.
+  `tools/uc2-pc-tables.json.gz` is the cook's, not content: the PC packages' tables, committed.
 - Commits: one coherent step each, Conventional Commits naming the feature (`feat:`, `fix:`, `refactor:`, `build:`,
   `docs:`), never a stage number or a date. Docs change in the same commit as the code they describe.
 - Deleting or overwriting anything outside `build-*/` and your own scratch files needs the owner. A missing tool or an

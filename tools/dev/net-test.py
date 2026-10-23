@@ -10,7 +10,9 @@ appInit / FOutputDeviceFile options) and its own command files:
                      "exec netplacenear ...", "exec servertravel ..." -- every process has one
   [SDL2Drv.SDL2Client] InputTestFile=<file> (-ini:)  SDL2Drv's input test channel (clients and the listen server): the virtual pad
 Each client and the listen server has its own Xvfb display (xvfb-run -a), so a virtual pad never depends on
-which window has the focus. Results: one "PASS|FAIL <check>.<item>: <details>" line per item on stdout and in
+which window has the focus; NET_VIDEO=offscreen runs them on SDL's offscreen video instead (no X server).
+NET_SERVER_SYS=<System dir> runs the dedicated server from another run tree (a server on one game folder, the
+clients on another). Results: one "PASS|FAIL <check>.<item>: <details>" line per item on stdout and in
 <out>/net-summary.txt; logs as <out>/<check>-<proc>.log/.out. Decided by log lines and probe values only.
 """
 import shutil
@@ -22,6 +24,8 @@ SUMMARY = os.path.join(OUT, "net-summary.txt")
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 WINSYS = os.environ.get("NET_WIN_SYS", os.path.join(os.path.dirname(os.path.dirname(SYS)), "netwin", "System"))
 PORT = int(os.environ.get("NET_PORT", "7850"))
+SERVER_SYS = os.environ.get("NET_SERVER_SYS") or None
+OFFSCREEN = os.environ.get("NET_VIDEO") == "offscreen"
 results = []
 
 
@@ -105,7 +109,7 @@ class Proc:
         elif self.kind == "server":
             argv = ["./ucc-bin", "server", self.url, "PORT=%d" % PORT] + common
         else:
-            argv = ["xvfb-run", "-a", "-s", "-screen 0 1024x768x24", "./uc2.bin"] + ([self.url] if self.url else []) + ["-log"] + common
+            argv = ([] if OFFSCREEN else ["xvfb-run", "-a", "-s", "-screen 0 1024x768x24"]) + ["./uc2.bin"] + ([self.url] if self.url else []) + ["-log"] + common
             # StartupMovies=False: with the GL device the logos would play first and own the input.
             # (The virtual pad is player one here: the default, [SDL2Drv.SDL2Client] PadsStartAtPlayerTwo=False.)
             argv += ["-ini:System:[SDL2Drv.SDL2Client]:InputTestFile=" + os.path.basename(self.inputcmd), "-ini:System:[UC2Movie]:StartupMovies=False"]
@@ -115,6 +119,8 @@ class Proc:
                 argv += ["-nullrenderer"]
         argv += self.extra
         env = dict(os.environ, SDL_AUDIODRIVER="dummy")
+        if OFFSCREEN and self.kind != "server":
+            env["SDL_VIDEODRIVER"] = "offscreen"
         self.out = open(os.path.join(OUT, "%s-%s.out" % (self.check, self.name)), "w")
         self.popen = subprocess.Popen(argv, cwd=self.sys, stdout=self.out, stderr=subprocess.STDOUT, env=env,
                                       start_new_session=True)
@@ -246,7 +252,7 @@ class Proc:
 
 
 def server(check, url="DM-Deadbolt", extra=(), wine=False):
-    s = Proc(check, "srv", "server", url, extra=extra, sysdir=WINSYS if wine else None, wine=wine).start()
+    s = Proc(check, "srv", "server", url, extra=extra, sysdir=WINSYS if wine else SERVER_SYS, wine=wine).start()
     if not s.wait(r"TcpNetDriver on port|Bringing Level .* up for play", 180 if wine else 60):
         return s
     s.wait(r"TcpNetDriver on port", 60 if wine else 20, from_start=True)

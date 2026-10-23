@@ -2,7 +2,8 @@
 """cook-movies.py: cook Unreal Championship 2's Xbox movies (XMV: WMV2 video, Xbox ADPCM or PCM audio) into
 Ogg Theora/Vorbis files the portable movie player (Source/UC2Movie) plays.
 
-Input (read only): <epic-sources>/Movies/*.xmv and <epic-sources>/Textures/Movies/*.xmv.
+Input (read only; --src <dir>): Movies/*.xmv and Textures/Movies/*.xmv of Epic's tree or of the game's Xbox disc
+(the same files).
 
 Output (never committed; --out <dir>):
   Movies/<Name>.ogv               Theora video + the international (first, English) audio track as Vorbis
@@ -15,11 +16,12 @@ Output (never committed; --out <dir>):
 
 The format (ours) is specified in docs/porting/analysis/video.md ("Cooked format"). Usage:
 
-  tools/cook-movies.py [--epic <epic-sources>] --out <dir> [--jobs 4] [--only UC2_Logos,Portrait_Char_Anubis]
+  tools/cook-movies.py [--src <epic-sources or disc>] --out <dir> [--jobs 4] [--only UC2_Logos,Portrait_Char_Anubis]
                       [--video-quality 7] [--keyint 150] [--audio-quality 4] [--pcm-audio-quality 5]
                       [--no-measure] [--force]
 
-Every ffmpeg/ffprobe process runs inside <repo>/../bin/capped 2G (at most --jobs of them at once, default 4).
+Every ffmpeg/ffprobe process runs inside <repo>/../bin/capped 2G when that exists, else with a one-hour time limit
+(at most --jobs of them at once, default 4). tools/cook.py runs it as one step of a whole cook.
 """
 
 import argparse
@@ -52,9 +54,15 @@ def log(msg):
 
 
 def run(cmd, timeout=3600, mem='2G', binary=False):
-    """Run cmd under the memory ceiling. Returns (rc, stdout, stderr lines)."""
-    full = [capped, mem, str(timeout), '--'] + cmd
-    r = subprocess.run(full, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    """Run cmd under the memory ceiling (or only the time limit without bin/capped). Returns (rc, stdout, stderr
+    lines)."""
+    if os.access(capped, os.X_OK):
+        r = subprocess.run([capped, mem, str(timeout), '--'] + cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    else:
+        try:
+            r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return 124, b'' if binary else '', ['timeout: %s ran longer than %d s' % (cmd[0], timeout)]
     err = r.stderr.decode('utf-8', 'replace').splitlines()
     out = r.stdout if binary else r.stdout.decode('utf-8', 'replace')
     return r.returncode, out, err
@@ -121,8 +129,8 @@ def frame_rate(pts):
 def pcm_stats(src, stream, warnings, wav=None):
     """Decode one audio stream to s16le: sample frames and SHA-1 of the PCM. With wav, also write the PCM
     there as a WAV file (the encoder's input: see the note on PCM timestamps in cook_one)."""
-    full = [capped, '2G', '3600', '--', 'ffmpeg', '-v', 'warning', '-i', src, '-map', '0:a:%d' % stream,
-            '-f', 's16le', '-']
+    full = ([capped, '2G', '3600', '--'] if os.access(capped, os.X_OK) else []) + \
+        ['ffmpeg', '-v', 'warning', '-i', src, '-map', '0:a:%d' % stream, '-f', 's16le', '-']
     p = subprocess.Popen(full, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     h = hashlib.sha1()
     n = 0
@@ -345,7 +353,7 @@ def cook_one(src, kind, outdir, args):
     os.rmdir(tmp)
 
     res = {
-        'name': name, 'kind': kind, 'source': os.path.relpath(src, args.epic), 'source_bytes': os.path.getsize(src),
+        'name': name, 'kind': kind, 'source': os.path.relpath(src, args.src), 'source_bytes': os.path.getsize(src),
         'source_sha1': src_sha1, 'settings': settings,
         'video': {'codec': v['codec_name'], 'size': '%dx%d' % (v['width'], v['height']), 'pix_fmt': v['pix_fmt'],
                   'fps': fps, 'packets_in': len(pts), 'last_pts': pts[-1], 'slots': slots,
@@ -443,8 +451,10 @@ def report(results, outdir, args):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--epic', default=os.environ.get('UC2_EPIC_SOURCES') or os.path.join(work, 'epic-sources', 'uc2-avaris-2226'),
-                    help='the pristine Epic tree (read only; default $UC2_EPIC_SOURCES or <repo>/../epic-sources/uc2-avaris-2226)')
+    ap.add_argument('--src', '--epic', dest='src',
+                    default=os.environ.get('UC2_EPIC_SOURCES') or os.path.join(work, 'epic-sources', 'uc2-avaris-2226'),
+                    help='Epic\'s tree or the Xbox disc (read only; default $UC2_EPIC_SOURCES or '
+                         '<repo>/../epic-sources/uc2-avaris-2226)')
     ap.add_argument('--out', required=True, help='the folder the cooked Movies/ and Textures/Movies/ go to')
     ap.add_argument('--jobs', type=int, default=4)
     ap.add_argument('--only', default='')
@@ -459,8 +469,8 @@ def main():
 
     srcs = []
     for kind, sub in (('movie', 'Movies'), ('texture', os.path.join('Textures', 'Movies'))):
-        d = os.path.join(args.epic, sub)
-        for f in sorted(os.listdir(d)):
+        d = os.path.join(args.src, sub)
+        for f in sorted(os.listdir(d) if os.path.isdir(d) else []):
             if f.lower().endswith('.xmv'):
                 srcs.append((os.path.join(d, f), kind))
     only = set(x for x in args.only.split(',') if x)

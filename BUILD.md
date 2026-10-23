@@ -3,8 +3,10 @@
 Engine source only. Game content (maps, textures, sounds, movies, the compiled `.u` packages) lives out of tree in the
 game folder (`<repo>/../assets/uc2-assets` in the WorkUnreal folder) and is never tracked. One build step reads it: the
 script patches ("Script patches" below), which turn the game's shipped `.u` into our patched packages;
-`-DUE_SCRIPT_PATCHES=OFF` builds without them and reads nothing. `tools/dev/mkrun-uc2.sh` assembles a run tree from a
-build and the game folder.
+`-DUE_SCRIPT_PATCHES=OFF` builds without them and reads nothing. `tools/cook.py` cooks the game folder from Epic's
+source tree or the game's Xbox disc, and with `--build <build-dir>` makes it a folder the build runs in
+([`tools/README.md`](./tools/README.md)); `tools/dev/mkrun-uc2.sh` assembles a run tree from a build and the game
+folder.
 
 ## Quick start
 
@@ -51,7 +53,8 @@ lists them). Emscripten 5.0.7 is private to the work folder: `source <repo>/../e
 | `windows` | `build-windows/` | Windows x86, MinGW-w64 cross |
 | `windows64` | `build-windows64/` | Windows x86_64, MinGW-w64 cross (LLP64) |
 
-Build `native` first: every other preset copies its patched script packages. Several builds at once on one machine:
+`native` and `native64` compile the patched script packages themselves; every other preset copies the `native`
+build's (`UE_SCRIPTS_DIR`), so build that one first. Several builds at once on one machine:
 `<repo>/../bin/capped 6G 7200 -- cmake --build <dir> -j3`.
 
 ## Web (Emscripten)
@@ -248,7 +251,8 @@ load stops if a native class's C++ size differs from its script size. `ucc-bin v
 the running ABI (sizes, placeholders, and that no bytecode reads a placeholder); `tools/dev/layout-check.py` compares
 every class, script struct and event parameter struct with the binary's DWARF. Integer-to-pointer casts are errors at
 64 bits; `tools/dev/m13-cast-census.sh <build.log>` counts pointer-to-int narrowing (0). 32-bit stays the default and
-the reference (wasm32 has its layout).
+the reference (wasm32 has its layout). `native64` is a script host too: its `ucc-bin make` compiles the patched packages
+byte for byte as the 32-bit one does ("Scripts: `ucc-bin make`").
 
 ## CI
 
@@ -260,13 +264,13 @@ uploads the binaries, and a push to `main` replaces the rolling `latest` release
 ## Scripts: `ucc-bin make`
 
 The game runs on the shipped compiled scripts (the 17 `.u` of the game folder's `System/`, plus the 30 load-time
-patches of `Source/Engine/Inc/ScriptPatches.h`). The native 32-bit Linux build also contains Epic's script compiler
-(the `Editor` package linked into `ucc-bin`). This repository holds no script sources: the build compiles the patched
+patches of `Source/Engine/Inc/ScriptPatches.h`). The native Linux builds (`native` and `native64`) also contain Epic's
+script compiler (the `Editor` package linked into `ucc-bin`). This repository holds no script sources: the build compiles the patched
 packages from your shipped `.u` and `patches/` (next section), and a script is changed by changing its set
 (`patches/README.md`, "Changing a script").
 
 ```
-bin/capped 6G 3600 -- cmake --build build-native -j4      # ucc-bin with Editor (32-bit pointers only) + Scripts/System
+bin/capped 6G 3600 -- cmake --build build-native -j4      # ucc-bin with Editor + Scripts/System (native64 the same)
 bin/capped 6G 600 -- cmake --build build-native --target check-headers   # are the generated headers current?
 tools/dev/regen-headers.sh                                # regenerate them into Source/*/Inc
 tools/dev/m14-scripts-check.sh                            # the game checks on the build's packages
@@ -322,11 +326,14 @@ About 25 s the first time; each stage has a stamp, so an unchanged input rebuild
 rebuilds from the apply on, and a new `ucc-bin` or shipped file from where it enters. Needs Python 3 and bash (on
 Windows: MSYS2).
 
-Which preset compiles. The script compiler is `ucc` with the Editor package, 32-bit pointers only, and it runs on the
-build machine: the host preset is `native` on Linux and `windows` (MinGW i686, `ucc.exe`) on a Windows host. Every
-other preset (`wasm*`, `windows`/`windows64` cross-built from Linux, `native64*`, `arm64`) copies the host build's
-`Scripts/System` into its own `build-*/Scripts/System` (checked: Unreal packages; the host build's sets are printed at
-configure), so build the host preset first. The web artifact carries them (`build-wasm*/Source/SDLLaunch/scripts/` and
+Which preset compiles. The script compiler is `ucc` with the Editor package, and it runs on the build machine: the
+host presets are `native` and `native64` (with `native64-uchar` and `native64-asan`) on Linux and `windows` (MinGW
+i686, `ucc.exe`) on a Windows host. At 64 bits the compiler writes the bytecode the shipped packages hold (4-byte object
+slots, and the 32-bit size of a skipped context's zero fill and of a switch value) and mip-maps imported textures in
+integers, so both widths compile the same bytes (`patches/reference.sha256`). Every other preset (`wasm*`,
+`windows`/`windows64` cross-built from Linux, `arm64`) copies the host build's `Scripts/System` into its own
+`build-*/Scripts/System` (checked: Unreal packages; the host build's sets are printed at configure), so build the host
+preset first. The web artifact carries them (`build-wasm*/Source/SDLLaunch/scripts/` and
 `meta.json` `scripts`, above). Run trees take them: `tools/dev/mkrun-uc2.sh <build-dir> <tree>` installs
 `<build-dir>/Scripts/System/*.u` over the game folder's and says which (`UC2_SCRIPTS=<dir>` takes them from another
 folder, `UC2_SCRIPTS=none` keeps the game folder's).
@@ -335,7 +342,7 @@ folder, `UC2_SCRIPTS=none` keeps the game folder's).
 |---|---|---|
 | `UE_SCRIPT_PATCHES` | ON | OFF: no `Scripts/` at all; the game runs the shipped `.u` (with Epic's load-time patches). Nothing of the game folder is read. |
 | `UE_SCRIPT_PATCH_SETS` | `default` | the sets to apply, `;` or `,` separated (`patches/sets.txt` names); `default` = those marked `on` there, in its order. Dependencies are enforced (`keys-menu` needs `mouse-look`; everything needs `epic-fixes`) |
-| `UE_ASSETS_DIR` | empty | the game folder: `System/` (the shipped `.u`, Epic's `DefaultXbox.ini`, `DefUserXbox.ini`, `Default.ini`, `DefUser.ini`, `Localization/`) and the content folders the scripts load (`Textures/`, `StaticMeshes/`, ...); `tools/dev/mkassets-uc2.sh` makes one from Epic's tree. Empty: the `UC2_ASSETS_DIR` environment variable (the dev tools read it too), else `<repo>/../assets/uc2-assets` when it exists, else the configure stops and says what to pass |
+| `UE_ASSETS_DIR` | empty | the game folder: `System/` (the shipped `.u`, Epic's `DefaultXbox.ini`, `DefUserXbox.ini`, `Default.ini`, `DefUser.ini`, `Localization/`) and the content folders the scripts load (`Textures/`, `StaticMeshes/`, ...); `tools/cook.py` makes one (without `--build`; `tools/README.md`). Empty: the `UC2_ASSETS_DIR` environment variable (the dev tools read it too), else `<repo>/../assets/uc2-assets` when it exists, else the configure stops and says what to pass |
 | `UE_SCRIPT_PACKAGES_DIR` | `UE_ASSETS_DIR/System` | where the 17 shipped `.u` are, if not in the game folder (e.g. the game folder has rebuilt ones: point this at the disc's `System`) |
 | `UE_SCRIPT_RETAIL_INIS_DIR` | empty | the pipeline proof's only (target `scripts-proof`): the `System/` with the `Characters.ini`, `Gametypes.ini` and `Maplists.ini` the shipped packages were stripped with (the retail disc's); empty: the proof's own default. The build always strips with the game folder's three inis, the ones the game runs with, so the patched packages' config defaults and the inis agree, and a change to them rebuilds the packages |
 | `UE_SCRIPTS_DIR` | `build-native/Scripts/System` | non-host presets: the host build's packages (`build-windows/...` on a Windows host). Missing with patches ON: the configure stops ("run the native preset first, or pass UE_SCRIPTS_DIR, or -DUE_SCRIPT_PATCHES=OFF") |
@@ -353,6 +360,17 @@ folder, `UC2_SCRIPTS=none` keeps the game folder's).
 - Windows host (MSYS2 `mingw32` shell): the same commands with `cmake --preset windows -DUE_ASSETS_DIR=C:/path/to/UC2`;
   `uc-build.sh` runs `ucc.exe` under MSYS2's bash and links the content folders into its work tree with `ln -s` (set
   `MSYS=winsymlinks:nativestrict` with Developer Mode, or it copies them). Not run on Windows yet.
+
+## The cook as a zip
+
+```bash
+cmake --build build-native --target cook-tool
+```
+
+`build-native/uc2-cook-<git describe --tags>.zip`: `tools/cook.py`, the scripts it runs, the PC tables and a `README.txt`
+in one folder, for players who cook the game folder from their disc (`tools/dev/pack-cook-tool.py`,
+`tools/README.md`). Any preset's build directory has the target (`make cook-tool` there); it needs only Python 3 and
+is not part of ALL.
 
 ## Options
 

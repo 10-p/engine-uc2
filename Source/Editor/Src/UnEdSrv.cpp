@@ -3369,9 +3369,9 @@ UBOOL UEditorEngine::Exec_Poly( const TCHAR* Str, FOutputDevice& Ar )
 	{
 		Trans->Begin( TEXT("Poly Set") );
 		Level->Model->ModifySelectedSurfs( 1 );
-		DWORD Ptr;
+		QWORD Ptr;
 		if( !Parse(Str,TEXT("TEXTURE="),Ptr) )   Ptr = 0;
-		UTexture *Texture = (UTexture*)Ptr;
+		UTexture *Texture = (UTexture*)(PTRINT)Ptr;
 		if( Texture )
 		{
 			for( INT x = 0 ; x < Level->Model->Surfs.Num() ; ++x )

@@ -112,6 +112,10 @@ enum EPropertyReferenceType
 	CPRT_DualReference			=4,		// we're referencing this property in a way that both changes its value and references the value (combination of CPRT_AssignmentReference and CPRT_AssignValue)
 };
 
+#if SERIAL_POINTER_INDEX
+INT GetScriptStructSize( UStruct* Struct );
+#endif
+
 //
 // Basic information describing a type.
 //
@@ -136,8 +140,9 @@ public:
 	EPropertyReferenceType ReferenceType;
 
 	// Constructors.
+	// The union is cleared through a pointer member: on 64-bit targets BitMask covers only half of it.
 	FPropertyBase( EPropertyType InType, EPropertyReferenceType InRefType = CPRT_None )
-	:	Type(InType), ArrayDim(1), PropertyFlags(0), BitMask(0), MetaClass(NULL), ReferenceType(InRefType)
+	:	Type(InType), ArrayDim(1), PropertyFlags(0), PropertyClass(NULL), MetaClass(NULL), ReferenceType(InRefType)
 	{}
 	FPropertyBase( UEnum* InEnum, EPropertyReferenceType InRefType = CPRT_None )
 	:	Type(CPT_Byte), ArrayDim(1), PropertyFlags(0), Enum(InEnum), MetaClass(NULL), ReferenceType(InRefType)
@@ -237,6 +242,35 @@ public:
 		?	ElementSizes[ Type ]
 		:	Struct->GetPropertiesSize();
 		return ElementSize * ArrayDim;
+	}
+	// The size bytecode records for a value (a null context's zero fill, a switch value): the size at 32-bit
+	// pointers on every target, as the shipped packages hold it and the interpreter reads it (execContext, execSwitch).
+	INT GetScriptSize() const
+	{
+#if SERIAL_POINTER_INDEX
+		static const INT ElementSizes[CPT_MAX] =
+		{
+			0,
+			1,	// BYTE
+			4,	// INT
+			4,	// DWORD
+			4,	// FLOAT
+			4,	// UObject*
+			4,	// FName
+			8,	// FScriptDelegate
+			0,
+			0,
+			0,
+			0
+		};
+		INT ElementSize
+		=	Type!=CPT_Struct
+		?	ElementSizes[ Type ]
+		:	GetScriptStructSize( Struct );
+		return ElementSize * ArrayDim;
+#else
+		return GetSize();
+#endif
 	}
 	UBOOL IsVector() const
 	{
@@ -795,7 +829,11 @@ public:
 	FArchive& operator<<( class FName& N )
 	{NAME_INDEX W=N.GetIndex(); ByteOrderSerialize(&W, sizeof(W)); return *this;}
 	FArchive& operator<<( class UObject*& Res )
+#if SERIAL_POINTER_INDEX
+	{INT D = UObject::SerialPointerIndex(Res); ByteOrderSerialize(&D,sizeof(D)); return *this;}
+#else
 	{DWORD D = (DWORD)Res; ByteOrderSerialize(&D,sizeof(D)); return *this;}
+#endif
 	FArchive& operator<<( TCHAR* S )
 	{Serialize(S,appStrlen(S)+1); return *this;}
 	FArchive& operator<<( enum EExprToken E )
