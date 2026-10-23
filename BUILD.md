@@ -15,7 +15,7 @@ folder.
 cmake --preset native -DUE_ASSETS_DIR=/path/to/UC2
 cmake --build build-native -j8
 #   -> build-native/Source/SDLLaunch/uc2.bin, build-native/Source/UCC/ucc-bin,
-#      build-native/Scripts/System/{UCGameplay,GUI,UCMenu}.u (the patched script packages)
+#      build-native/Scripts/System/{UCGameplay,UCMutators,GUI,UCMenu}.u (the patched script packages)
 
 # the same without the script patches (the game runs the shipped .u; no game folder needed to build):
 cmake --preset native -DUE_SCRIPT_PATCHES=OFF
@@ -345,7 +345,7 @@ your game files, as part of `cmake --build` (target `scripts`, in ALL):
 3. applies the chosen sets (`tools/scripts/uc-patches.py apply`, exact context) into `build-*/Scripts/tree`;
 4. compiles them with this build's `ucc-bin make` against the shipped packages and strips them as Epic did
    (`tools/scripts/uc-build.sh`, work tree and logs in `build-*/Scripts/work`) into `build-*/Scripts/System/<Pkg>.u`:
-   only the packages the sets change (default: UCGameplay, GUI, UCMenu).
+   only the packages the sets change (default: UCGameplay, UCMutators, GUI, UCMenu).
 
 About 25 s the first time; each stage has a stamp, so an unchanged input rebuilds nothing, a changed patch file
 rebuilds from the apply on, and a new `ucc-bin` or shipped file from where it enters. Needs Python 3 and bash (on

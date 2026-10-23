@@ -30,7 +30,7 @@
 #                      starts as a copy of <repo>/Source/<Pkg>/Inc (the exporter includes a per-class header when it
 #                      finds one there); implies --keep-text. tools/dev/check-headers.sh uses it
 #   --link <rel>=<dir> also link <dir> as <work tree>/<rel> (e.g. Engine/Textures for `#exec TEXTURE IMPORT` files;
-#                      none of GUI, UCGameplay, UCMenu needs one)
+#                      none of GUI, UCGameplay, UCMenu, UCMutators needs one)
 #
 # Stages (each a `ucc-bin` run under bin/capped):
 #   make <Pkg>   for each package to build, in EditPackages order: System/ holds only the packages before it (shipped,

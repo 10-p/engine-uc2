@@ -8,14 +8,18 @@
 The HUD-alone picture (TOGGLERENDERLEVEL: the level not drawn, black around the HUD) is cut into the client's
 viewports (the vprobe's rectangles). Each viewport's pixels are mapped back into the design space its canvas gives the
 HUD, as UCanvas::ApplyUIBox does: 640 x 480*ScaleY (640x240 for a half or a quarter), with Fit43 scaled by
-s = min(w/640, h/DH) and centred (origin floored), with Native640 1:1 from the viewport's corner. Elements, each the
-bounding box of a colour inside a design-space region:
-  health    the health bar's green fill            (x 0..320, upper half of the design height)
-  weapons   the weapon list (anything lit)         (x 0..215, lower half)
+s = min(w/640, h/DH) and centred (origin floored), with Native640 1:1 from the viewport's corner. With Fit43 on a
+viewport wider than its box the HUD's side groups (patch set wide-hud) move out by the room beside the box in whole
+design pixels (UCHUD.GetSideShifts): the left elements' regions move with them. Elements, each the bounding box of
+a colour inside a design-space region (L, R: the side's shift applies):
+  health    the health bar's green fill            (L, x 0..320, upper half of the design height)
+  weapons   the weapon list (anything lit)         (L, x 0..215, lower half)
   score     the rank/score box (anything lit)      (x 250..420, top third)
+  right     the right side's top group (anything lit: enemy info, leaderboard, compass)  (R, x 427..640, top half)
   reticle   the crosshair's bright pixels          (x 250..390, the design centre +-60)
-plus the whole HUD's bounding box. The reticle's centre is also given against the viewport's centre in window
-pixels. Coordinates printed in design pixels (x0,y0)-(x1,y1), x1/y1 exclusive.
+plus the whole HUD's bounding box. In window pixels: the left elements' distance from the viewport's left edge, the
+right one's from its right edge, the score box's and the reticle's centre against the viewport's centre.
+Coordinates printed in design pixels (x0,y0)-(x1,y1), x1/y1 exclusive.
 """
 import json, os, sys
 from PIL import Image, ImageChops
@@ -37,11 +41,12 @@ def lum_mask(im, lo):
 
 
 ELEMENTS = {
-    # name: (mask function, design region as fractions/pixels: x0, x1, y0 (fraction of DH), y1 (fraction of DH))
-    'health':  (lambda im: band_mask(im, (0, 150, 0), (140, 255, 140)), (0, 320, 0.0, 0.5)),
-    'weapons': (lambda im: lum_mask(im, 40), (0, 215, 0.5, 1.0)),
-    'score':   (lambda im: lum_mask(im, 40), (250, 420, 0.0, 0.34)),
-    'reticle': (lambda im: lum_mask(im, 150), (250, 390, None, None)),
+    # name: (mask function, side, design region as fractions/pixels: x0, x1, y0 (fraction of DH), y1 (fraction of DH))
+    'health':  (lambda im: band_mask(im, (0, 150, 0), (140, 255, 140)), 'L', (0, 320, 0.0, 0.5)),
+    'weapons': (lambda im: lum_mask(im, 40), 'L', (0, 215, 0.5, 1.0)),
+    'score':   (lambda im: lum_mask(im, 40), 'C', (250, 420, 0.0, 0.34)),
+    'right':   (lambda im: lum_mask(im, 40), 'R', (427, 640, 0.0, 0.5)),
+    'reticle': (lambda im: lum_mask(im, 150), 'C', (250, 390, None, None)),
 }
 
 
@@ -50,11 +55,11 @@ def ui_box(rect, win, mode):
     W, H = win
     dh = 480.0 * (h / H) if 0 < h < H else 480.0
     if mode == 'Native640':
-        return 1.0, 0, 0, float(w), float(h)   # the canvas is the viewport, 1:1 (Epic's PC path; the Xbox's screen at 640x480)
+        return 1.0, 0, 0, float(w), float(h), 0, 0   # the canvas is the viewport, 1:1 (Epic's PC path; the Xbox's screen at 640x480)
     s = min(w / 640.0, h / dh)
     bx = int((w - 640.0 * s) // 2)
     by = int((h - dh * s) // 2)
-    return s, bx, by, 640.0, dh
+    return s, bx, by, 640.0, dh, -int(bx / s + 0.5), int((w - bx - 640.0 * s) / s + 0.5)
 
 
 def measure(out, mode):
@@ -73,10 +78,11 @@ def measure(out, mode):
         out_views = []
         for r in views:
             x, y, w, h = r['rect']
-            s, bx, by, dw, dh = ui_box(r['rect'], win, mode)
+            s, bx, by, dw, dh, lsh, rsh = ui_box(r['rect'], win, mode)
             crop = im.crop((x, y, x + w, y + h))
             v = {'i': r['i'], 'split': r['split'], 'rect': [x, y, w, h], 'hud': r.get('hud'), 'player': r.get('player'),
-                 'pawn': r.get('pawn'), 's': s, 'box': [bx, by, round(dw * s, 2), round(dh * s, 2)], 'design': [dw, dh]}
+                 'pawn': r.get('pawn'), 's': s, 'box': [bx, by, round(dw * s, 2), round(dh * s, 2)], 'design': [dw, dh],
+                 'shifts': [lsh, rsh]}
 
             def to_design(px, py):
                 return round((px - bx) / s, 1), round((py - by) / s, 1)
@@ -86,7 +92,9 @@ def measure(out, mode):
 
             whole = lum_mask(crop, 24).getbbox()
             v['all'] = list(to_design(*whole[:2]) + to_design(*whole[2:])) if whole else None
-            for name, (fn, (rx0, rx1, ry0, ry1)) in ELEMENTS.items():
+            for name, (fn, side, (rx0, rx1, ry0, ry1)) in ELEMENTS.items():
+                sh = lsh if side == 'L' else rsh if side == 'R' else 0
+                rx0, rx1 = rx0 + sh, rx1 + sh
                 if ry0 is None:
                     ry0, ry1 = dh / 2 - 60, dh / 2 + 60
                 else:
@@ -105,6 +113,12 @@ def measure(out, mode):
                 bb = (bb[0] + px0, bb[1] + py0, bb[2] + px0, bb[3] + py0)
                 v[name] = list(to_design(bb[0], bb[1]) + to_design(bb[2], bb[3]))
                 v[name + '_px'] = [bb[0] + x, bb[1] + y, bb[2] + x, bb[3] + y]
+                if side == 'L':
+                    v[name + '_edge_px'] = bb[0]
+                elif side == 'R':
+                    v[name + '_edge_px'] = w - bb[2]
+                else:
+                    v[name + '_off_px'] = round((bb[0] + bb[2]) / 2.0 - w / 2.0, 1)
                 if name == 'reticle':
                     cx, cy = (bb[0] + bb[2]) / 2.0, (bb[1] + bb[3]) / 2.0
                     v['reticle_centre_px'] = [round(cx + x, 1), round(cy + y, 1)]
@@ -136,9 +150,13 @@ def main():
         for v in r['views']:
             print(f"  viewport i={v['i']} split={v['split']} rect={tuple(v['rect'])} hud={v['hud']} pawn={v['pawn']} "
                   f"design {v['design'][0]:.0f}x{v['design'][1]:.0f} s={v['s']:.4f} box at ({v['box'][0]},{v['box'][1]}) "
-                  f"{v['box'][2]}x{v['box'][3]}")
-            for name in ['all', 'health', 'weapons', 'score', 'reticle']:
+                  f"{v['box'][2]}x{v['box'][3]}, side shifts {tuple(v['shifts'])}")
+            for name in ['all', 'health', 'weapons', 'score', 'right', 'reticle']:
                 extra = ''
+                if v.get(name + '_edge_px') is not None:
+                    extra = f"  {v[name + '_edge_px']} px from the viewport's {'left' if name != 'right' else 'right'} edge"
+                if name == 'score' and v.get('score_off_px') is not None:
+                    extra = f"  centre {v['score_off_px']:+.1f} px from the viewport's centre"
                 if name == 'reticle' and v.get('reticle'):
                     extra = (f"  centre {tuple(v['reticle_centre_px'])} px, from the viewport centre "
                              f"{tuple(v['reticle_off_px'])} px = {tuple(v['reticle_off_design'])} design")

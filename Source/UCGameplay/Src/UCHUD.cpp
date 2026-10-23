@@ -164,6 +164,37 @@ void AUCHUD::DrawVitalsAt( UCanvas* C, APawn* P, INT LeftShift, INT RightShift )
 	unguard;
 }
 
+// The size DrawTextDualFont gives a text on one line, measured by its own layout with nothing drawn.
+void AUCHUD::execTextSizeDualFont(FFrame &Stack, RESULT_DECL)
+{
+	guard(AUCHUD::execTextSizeDualFont);
+
+	P_GET_OBJECT(UCanvas, C);
+	P_GET_STR(Text);
+	P_GET_OBJECT(UFont, SecondaryFont);
+	P_GET_FLOAT_REF(XL);
+	P_GET_FLOAT_REF(YL);
+	P_FINISH;
+
+	*XL = 0.f;
+	*YL = 0.f;
+	if (C && SecondaryFont)
+	{
+		FLOAT OldX = C->CurX, OldY = C->CurY, OldYL = C->CurYL;
+		C->CurX = 0.f;
+		C->CurY = 0.f;
+		C->CurYL = 0.f;
+		C->DrawTextDualFont(*Text, SecondaryFont, 1.f, 1.f, 0.f, 0, 0);
+		*XL = C->CurX;
+		*YL = C->CurYL;
+		C->CurX = OldX;
+		C->CurY = OldY;
+		C->CurYL = OldYL;
+	}
+
+	unguardexec;
+}
+
 // The side groups' shifts on a window wider than the UI box: how far the window reaches past the 640-wide design
 // space on each side, in whole design pixels (LeftShift 0 or less, RightShift 0 or more); 0 and 0 when the UI is
 // not boxed.
@@ -938,8 +969,18 @@ void AUCHUD::DrawComboMenu(UCanvas* C, AUCPawn* P)
 	AUCPlayerController* UCP = Cast<AUCPlayerController>(PlayerOwner);
 	if (bDebugComboHUD || (UCP && UCP->ComboLevel != 0 && !P->bIsStunned))
 	{
-		FLOAT CenterX = C->SizeX * 0.503f;
-		FLOAT CenterY = C->SizeY * 0.504f;
+		// the menu's icons (pos_Combo, about the centre) with the middle of their extent on the canvas's centre
+		FLOAT MinX = 0.f, MaxX = 0.f, MinY = 0.f, MaxY = 0.f;
+		for (INT i = 0; i < UCONST_COMBO_INDEX_AWAKEN && i < pos_Combo.Num(); i++)
+		{
+			const FIconPosn& Posn = pos_Combo(i);
+			MinX = i ? Min(MinX, Posn.X) : Posn.X;
+			MaxX = i ? Max(MaxX, Posn.X + Posn.W) : Posn.X + Posn.W;
+			MinY = i ? Min(MinY, Posn.Y) : Posn.Y;
+			MaxY = i ? Max(MaxY, Posn.Y + Posn.H) : Posn.Y + Posn.H;
+		}
+		FLOAT CenterX = C->SizeX * 0.5f - (MinX + MaxX) * 0.5f;
+		FLOAT CenterY = C->SizeY * 0.5f - (MinY + MaxY) * 0.5f;
 		for (INT i = 0; i < UCONST_COMBO_INDEX_AWAKEN; i++)
 		{
 			AUCCombo* DefaultCombo = P->ComboList(i) ? P->ComboList(i)->GetDefaultObject<AUCCombo>() : NULL;

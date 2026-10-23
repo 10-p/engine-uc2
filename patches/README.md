@@ -33,8 +33,8 @@ hand); a package rebuilt from source cannot be the base and is refused.
 2. **Apply.** `tools/scripts/uc-patches.py apply --base <base> --default --out <tree>` applies the sets in the
    order of `sets.txt`. A hunk must match its context exactly (no fuzz); if it does not, the command stops and
    says which hunk.
-3. **Build.** `tools/scripts/uc-build.sh --classes <tree> --packages UCAnnouncements,UCGameplay,GUI,UCMenu
-   --keep UCGameplay,GUI,UCMenu --out <dir>` compiles each package with the game's own script compiler
+3. **Build.** `tools/scripts/uc-build.sh --classes <tree> --packages UCAnnouncements,UCGameplay,UCMutators,GUI,UCMenu
+   --keep UCGameplay,UCMutators,GUI,UCMenu --out <dir>` compiles each package with the game's own script compiler
    (`ucc-bin make`) against your shipped packages and strips the text as Epic did. The result is
    `<dir>/System/<Pkg>.u`. UCAnnouncements is compiled only so UCGameplay can be (the shipped one refers to
    packages that come after it); `uc-patches.py packages --default --compile-list <System>` prints the list.
@@ -54,7 +54,7 @@ change: every other package stays the shipped one.
 | `players34` | players three and four join from the character page (a cursor each, a line of text, their own character and name in the match; a 2x2 armory for three or four) | GUI, UCMenu | on |
 | `key-glyphs` | player one's keys in place of the pad's button glyphs while they use the keyboard or the mouse (the engine draws them; the set switches it on) | GUI, UCMenu | on |
 | `keys-menu` | the KEYBOARD / MOUSE settings page | UCMenu | on |
-| `wide-hud` | the HUD on a window wider than 4:3: its left and right groups at the window's sides, at their 4:3 distance from them; the crosshair on the window's centre | UCGameplay | on |
+| `wide-hud` | the HUD on a window wider than 4:3, and in each split-screen view: its left and right groups (the mutators' too) at the sides, at their 4:3 distance from them; its centred items exactly centred | UCGameplay, UCMutators | on |
 
 Each set's folder has a `README.md` (what it changes, its ini keys, what it depends on), one `<Pkg>.diff` per
 package it changes (paths `<Pkg>/Classes/<Class>.uc`; `patch -p1` reads them too) and whole new classes under
@@ -68,8 +68,8 @@ resource that is generated says so, with its generator, in the set's README.
 made for (the shipped files); a rebuilt package is skipped, so it must carry Epic's fixes itself. Every other set
 depends on it.
 
-**Packages that only `epic-fixes` touches are not rebuilt by default** (Engine, UnrealGame, UCInventory,
-UCMutators): the shipped files get the same fixes in memory. To rebuild them anyway, name them:
+**Packages that only `epic-fixes` touches are not rebuilt by default** (Engine, UnrealGame, UCInventory): the
+shipped files get the same fixes in memory. To rebuild them anyway, name them:
 `uc-patches.py packages --sets epic-fixes --with-epic-only` lists them, and `uc-build.sh --packages` takes them.
 Engine cannot be rebuilt completely from the disc: it contains editor icons imported from image files the disc
 does not have.
@@ -99,7 +99,7 @@ diffs of other packages, e.g. `epic-fixes`' `Engine.diff`, are kept):
 ```
 tools/scripts/uc-patches.py apply --base build-native/Scripts/base --sets epic-fixes,epic-source --out $W/before
 tools/scripts/uc-patches.py apply --base build-native/Scripts/base --sets epic-fixes,epic-source,mouse-look --out $W/edit
-tools/scripts/uc-patches.py make mouse-look --base $W/before --changed $W/edit --packages GUI,UCAnnouncements,UCGameplay,UCMenu
+tools/scripts/uc-patches.py make mouse-look --base $W/before --changed $W/edit --packages GUI,UCAnnouncements,UCGameplay,UCMenu,UCMutators
 tools/scripts/uc-patches.py check --base build-native/Scripts/base --default
 ```
 

@@ -31,7 +31,8 @@
 #          hud     GPU as render: where each viewport's HUD sits, 1-4 players joined in the match, player one
 #                  at spot A, frozen frame: the picture and the HUD alone (TOGGLERENDERLEVEL); measured per viewport
 #                  by tools/dev/g6/b3-hud-measure.py (health bar, weapon list, score box, reticle in design pixels).
-#                  G6_RES and G6_ARGS (-ini:System:[SDL2Drv.SDL2Client]:UIScaleMode=...) choose the shape
+#                  G6_RES and G6_ARGS (-ini:System:[SDL2Drv.SDL2Client]:UIScaleMode=...) choose the shape; G6_HUD_URL
+#                  the match (default DM-Deadbolt?NumBots=0; e.g. ...?Mutator=UCMutators.MutRetribution for its HUD items)
 #          x1probe Xvfb: UC2's menu flow with pads 0 and 1, then pads 2 and 3 press Start on the character page
 #                  (no player: GUIController.AllowControllerJoin's MAX_VIEWPORTS=2) and in the match (players 3 and 4),
 #                  player three's pause menu, back to the main menu
@@ -2042,7 +2043,7 @@ for part in $parts; do
               h3_ticked=$t scen_h3menu > "$scen"; cp "$scen" "$out/h3-$m.scen"; run_game h3-$m 0 480 "" "$scen" $ka
             done;;
     hud)    # the split HUD's placement per viewport (GPU, frozen frame, the HUD alone)
-            scen_hud > "$scen"; run_game b3-hud 1 480 "DM-Deadbolt?NumBots=0" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True
+            scen_hud > "$scen"; run_game b3-hud 1 480 "${G6_HUD_URL:-DM-Deadbolt?NumBots=0}" "$scen" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=True
             uimode=Fit43; case "${G6_ARGS:-}" in *UIScaleMode=Native640*) uimode=Native640;; esac
             python3 "$repo/tools/dev/g6/b3-hud-measure.py" "$out" $uimode > "$out/b3-hud-measure.txt" 2>&1; tail -n 40 "$out/b3-hud-measure.txt";;
     hudmenu) # two players joined in UC2's menus (Xvfb, the menu flow), their HUDs measured as the hud part's n2

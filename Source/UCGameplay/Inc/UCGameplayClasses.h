@@ -948,6 +948,7 @@ public:
     FLOAT InstructionTextScaleY;
     FLOAT XboxInstructionScaleX;
     FLOAT XboxInstructionScaleY;
+    DECLARE_FUNCTION(execTextSizeDualFont);
     DECLARE_FUNCTION(execDrawVitalsWide);
     DECLARE_FUNCTION(execGetSideShifts);
     DECLARE_FUNCTION(execDrawCompass);
@@ -2341,6 +2342,7 @@ public:
 
 #endif
 
+AUTOGENERATE_FUNCTION(AUCHUD,-1,execTextSizeDualFont);
 AUTOGENERATE_FUNCTION(AUCHUD,-1,execDrawVitalsWide);
 AUTOGENERATE_FUNCTION(AUCHUD,-1,execGetSideShifts);
 AUTOGENERATE_FUNCTION(AUCHUD,-1,execDrawCompass);
@@ -2473,6 +2475,7 @@ VERIFY_CLASS_SIZE(UUCScreenTeleportOverlay);\
 #ifdef NATIVES_ONLY
 NATIVE_INFO(AUCHUD) GUCGameplayAUCHUDNatives[] = 
 { 
+	MAP_NATIVE(AUCHUD,execTextSizeDualFont)
 	MAP_NATIVE(AUCHUD,execDrawVitalsWide)
 	MAP_NATIVE(AUCHUD,execGetSideShifts)
 	MAP_NATIVE(AUCHUD,execDrawCompass)

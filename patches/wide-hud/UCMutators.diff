@@ -1,0 +1,158 @@
+--- a/UCMutators/Classes/Element_CampFireBombTimer.uc
++++ b/UCMutators/Classes/Element_CampFireBombTimer.uc
+@@ -175,7 +175,7 @@
+ 	Scripts(1)=(ScriptName=BlinkOut,Actions=(ElementAction_Color'BlinkOutBack',ElementAction_Color'BlinkOutLine',ElementAction_Hide'HideExclamation'))
+ 	Scripts(2)=(ScriptName=GainedTime,Actions=(ElementAction_Hide'ShowArrow',ElementAction_Color'BlinkWhite',ElementAction_Color'BlinkOutBack2',ElementAction_Color'BlinkOutLine2',ElementAction_Hide'HideArrow'))
+ 	ElementName=CampfireBombTimer
+-	DrawX=272.0
++	DrawX=273.0
+ 	DrawY=130.0
+ 	DrawW=94.0
+ 	DrawH=18.0
+--- a/UCMutators/Classes/Element_KillerList.uc
++++ b/UCMutators/Classes/Element_KillerList.uc
+@@ -26,13 +26,32 @@
+ 	local float MaxXL;
+ 	local int i;
+ 	local string Text;
++	local int LeftShift, RightShift;
++	local float RightX;
++	local float TopY;
+ 	if ((!(bHidden) && (Marker != None)))
+ 	{
++		// the list keeps to the right side of a window wider than 4:3 (UCHUD.GetSideShifts), its text clip with it
++		if (UCHUD(ElementHUD) != None)
++		{
++			UCHUD(ElementHUD).GetSideShifts(C, LeftShift, RightShift);
++		}
++		(relativeDrawX += float(RightShift));
++		(C.ClipX += float(RightShift));
++		// right-justified at 600 from DrawY at the full screen's share of the canvas (a split view's design space is
++		// 240 high); in a split view whose compass is on the right, where the list would be, beside the compass
++		RightX = 600.0;
++		TopY = (DrawY * (float(C.SizeY) / 480.0));
++		if ((((UCHUD(ElementHUD) != None) && UCHUD(ElementHUD).bDrawCompass) && (C.SizeY < 480)) && (UCHUD(ElementHUD).pos_CompassBorder.X > 320.0))
++		{
++			RightX = (UCHUD(ElementHUD).pos_CompassBorder.X - 8.0);
++			TopY = UCHUD(ElementHUD).pos_CompassBorder.Y;
++		}
+ 		C.Font = ElementHUD.LoadFont(0);
+-		YPos = ((DrawY + float(SafeZoneOffsetY)) + relativeDrawY);
++		YPos = ((TopY + float(SafeZoneOffsetY)) + relativeDrawY);
+ 		C.DrawColor = DrawColor;
+ 		C.StrLen(RetributionListString, XL, YL);
+-		C.SetPos((((600.0 - XL) + float(SafeZoneOffsetX)) + relativeDrawX), YPos);
++		C.SetPos((((RightX - XL) + float(SafeZoneOffsetX)) + relativeDrawX), YPos);
+ 		C.DrawText(RetributionListString);
+ 		(YPos += YL);
+ 		i = 0;
+@@ -47,7 +66,7 @@
+ 		}
+ 		(MaxXL += 90.0);
+ 		ChildElements[0].DrawW = MaxXL;
+-		ChildElements[0].DrawX = (600.0 - MaxXL);
++		ChildElements[0].DrawX = (RightX - MaxXL);
+ 		i = 0;
+ 		while ((i < Marker.Killers.Length))
+ 		{
+@@ -59,9 +78,9 @@
+ 				C.DrawColor = DrawColor;
+ 				Text = Marker.Killers[i].Killer.PlayerName;
+ 				C.StrLen(Text, XL, YL);
+-				C.SetPos((((520.0 - XL) + float(SafeZoneOffsetX)) + relativeDrawX), YPos);
++				C.SetPos(((((RightX - 80.0) - XL) + float(SafeZoneOffsetX)) + relativeDrawX), YPos);
+ 				C.DrawText(Text);
+-				C.SetPos(530.0, YPos);
++				C.SetPos((((RightX - 70.0) + float(SafeZoneOffsetX)) + relativeDrawX), YPos);
+ 				C.DrawText("[", False);
+ 				(C.CurY -= C.CurYL);
+ 				C.DrawColor = ScoreBonusColor;
+@@ -72,12 +91,13 @@
+ 				(C.CurY -= C.CurYL);
+ 				Text = (":" $ ((Marker.Killers[i].TimeRemaining < 10) ? ("0" $ string(Marker.Killers[i].TimeRemaining)) : string(Marker.Killers[i].TimeRemaining)));
+ 				C.StrLen(Text, XL, YL);
+-				C.CurX = (((590.0 - XL) + float(SafeZoneOffsetX)) + relativeDrawX);
++				C.CurX = ((((RightX - 10.0) - XL) + float(SafeZoneOffsetX)) + relativeDrawX);
+ 				C.DrawText(Text);
+ 				(YPos += ChildElements[0].DrawH);
+ 			}
+ 			(i)++;
+ 		}
++		(C.ClipX -= float(RightShift));
+ 	}
+ }
+ 
+--- a/UCMutators/Classes/Element_WeaponMaster.uc
++++ b/UCMutators/Classes/Element_WeaponMaster.uc
+@@ -9,15 +9,23 @@
+ 	local float YL;
+ 	local int i;
+ 	local int LeaderKills;
++	local int LeftShift, RightShift;
+ 	if (!(bHidden))
+ 	{
++		// the counts keep to the left side of a window wider than 4:3 (UCHUD.GetSideShifts)
++		if (UCHUD(ElementHUD) != None)
++		{
++			UCHUD(ElementHUD).GetSideShifts(C, LeftShift, RightShift);
++		}
++		(relativeDrawX += float(LeftShift));
+ 		WeaponMasterPRI = WeaponMasterReplicationInfo(ElementHUD.PlayerOwner.PlayerReplicationInfo.GetExtraPRI(Class'UCMutators.WeaponMasterReplicationInfo'));
+ 		if ((WeaponMasterPRI != None))
+ 		{
+ 			C.DrawColor = DrawColor;
+ 			C.Font = ElementHUD.LoadFont(4);
+ 			C.StrLen("W", XL, YL);
+-			C.SetPos(((80.0 + relativeDrawX) + float(SafeZoneOffsetX)), (((350.0 - YL) + relativeDrawY) + float(SafeZoneOffsetY)));
++			// the heights at the full screen's share of the canvas (a split view's design space is 240 high)
++			C.SetPos(((80.0 + relativeDrawX) + float(SafeZoneOffsetX)), ((((350.0 * (float(C.SizeY) / 480.0)) - YL) + relativeDrawY) + float(SafeZoneOffsetY)));
+ 			C.DrawText(((string(WeaponMasterPRI.KillsWithWeapon) $ "/") $ string(Class'UCMutators.GameRules_WeaponMaster'.default.KillsPerWeapon)));
+ 			i = 0;
+ 			while ((i < ElementHUD.PlayerOwner.GameReplicationInfo.PRIArray.Length))
+@@ -29,7 +37,7 @@
+ 				}
+ 				(i)++;
+ 			}
+-			C.SetPos(((140.0 + relativeDrawX) + float(SafeZoneOffsetX)), (((395.0 - YL) + relativeDrawY) + float(SafeZoneOffsetY)));
++			C.SetPos(((140.0 + relativeDrawX) + float(SafeZoneOffsetX)), ((((395.0 * (float(C.SizeY) / 480.0)) - YL) + relativeDrawY) + float(SafeZoneOffsetY)));
+ 			C.DrawText(string(LeaderKills));
+ 		}
+ 	}
+--- a/UCMutators/Classes/RetributionMarker.uc
++++ b/UCMutators/Classes/RetributionMarker.uc
+@@ -18,6 +18,16 @@
+ 	Super.PostNetBeginPlay();
+ 	SetTimer(Level.TimeDilation, True);
+ 	if (Owner.IsA('PlayerController'))
++	{
++		CreateHUDElement();
++		SetFuncTimer('CheckHUDElement', 0.5, True);
++	}
++}
++
++// A HUD that replaces the player's (a split screen started or ended) gets the list too
++final simulated function CheckHUDElement()
++{
++	if (((ListElement != None) && (UCHUD(PlayerController(Owner).myHUD) != None)) && (ListElement.ElementHUD != PlayerController(Owner).myHUD))
+ 	{
+ 		CreateHUDElement();
+ 	}
+--- a/UCMutators/Classes/WeaponMasterReplicationInfo.uc
++++ b/UCMutators/Classes/WeaponMasterReplicationInfo.uc
+@@ -8,6 +8,16 @@
+ {
+ 	Super.PostNetBeginPlay();
+ 	if (Owner.IsA('PlayerController'))
++	{
++		CreateHUDElement();
++		SetFuncTimer('CheckHUDElement', 0.5, True);
++	}
++}
++
++// A HUD that replaces the player's (a split screen started or ended) gets the counts too
++final simulated function CheckHUDElement()
++{
++	if (((DisplayElement != None) && (UCHUD(PlayerController(Owner).myHUD) != None)) && (DisplayElement.ElementHUD != PlayerController(Owner).myHUD))
+ 	{
+ 		CreateHUDElement();
+ 	}
