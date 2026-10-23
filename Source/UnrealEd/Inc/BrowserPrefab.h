@@ -1077,7 +1077,16 @@ class WBrowserPrefab : public WBrowser
 		GPrefabLevel = new( UObject::GetTransientPackage(), TEXT("PrefabLevel") )ULevel( GUnrealEd, 0 );
 
 		if( Viewport )
-			Viewport->Actor->XLevel = GPrefabLevel;
+		{
+			// The viewport's camera was an actor of the previous prefab level, deleted above or taken by the garbage
+			// collector with a map change (WM_EDC_MAPCHANGE): the viewport gets a new camera in the new level.
+			Viewport->Actor = NULL;
+			GPrefabLevel->SpawnViewActor( Viewport );
+			Viewport->Actor->ShowFlags	= GShowFlags;
+			Viewport->Actor->RendMap	= RendMap;
+			Viewport->Actor->XLevel		= GPrefabLevel;
+			Viewport->Actor->Location	= FVector(500,0,300);
+		}
 
 		unguard;
 	}
