@@ -296,8 +296,7 @@ void CMainLoop::RunLoop()
 			MaxFps = 0.f;
 			GConfig->GetFloat( TEXT("Engine.Engine"), TEXT("FrameRateCap"), MaxFps, GIni );
 			MaxFps = Max( 0.f, MaxFps );
-			if( MaxFps > 0.f )
-				debugf( NAME_Init, TEXT("FrameRateCap=%g: a game without a tick rate of its own is capped at %g fps"), MaxFps, MaxFps );
+			debugf( NAME_Init, TEXT("ufront: client frame rate cap %.0f fps%s"), MaxFps, MaxFps > 0.f ? TEXT("") : TEXT(" (uncapped)") );
 		}
 		if( MaxFps > 0.f && (MaxTickRate <= 0.f || MaxFps < MaxTickRate) )
 			MaxTickRate = MaxFps;
