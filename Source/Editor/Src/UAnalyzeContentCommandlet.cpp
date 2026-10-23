@@ -378,7 +378,7 @@ class UAnalyzeContentCommandlet : public UCommandlet
 				warnf( TEXT("All textures") );
 				warnf( TEXT("") );
 				for (INT i=0; i<TextureStats.Textures.Num(); i++)
-					warnf( TEXT("%s"), TextureStats.Textures(i) );
+					warnf( TEXT("%s"), *TextureStats.Textures(i) );
 				warnf( TEXT("") );
 				warnf( TEXT("") );
 			}
@@ -387,7 +387,7 @@ class UAnalyzeContentCommandlet : public UCommandlet
 				warnf( TEXT("Textures without miplevels") );
 				warnf( TEXT("") );
 				for (INT i=0; i<TextureStats.TexturesNoMips.Num(); i++)
-					warnf( TEXT("%s"), TextureStats.TexturesNoMips(i) );
+					warnf( TEXT("%s"), *TextureStats.TexturesNoMips(i) );
 				warnf( TEXT("") );
 				warnf( TEXT("") );
 			}			
@@ -396,7 +396,7 @@ class UAnalyzeContentCommandlet : public UCommandlet
 				warnf( TEXT("RGBA textures") );
 				warnf( TEXT("") );
 				for (INT i=0; i<TextureStats.TexturesRGBA.Num(); i++)
-					warnf( TEXT("%s"), TextureStats.TexturesRGBA(i) );
+					warnf( TEXT("%s"), *TextureStats.TexturesRGBA(i) );
 				warnf( TEXT("") );
 				warnf( TEXT("") );
 			}
@@ -405,7 +405,7 @@ class UAnalyzeContentCommandlet : public UCommandlet
 				warnf( TEXT("PAL8 textures") );
 				warnf( TEXT("") );
 				for (INT i=0; i<TextureStats.TexturesPAL8.Num(); i++)
-					warnf( TEXT("%s"), TextureStats.TexturesPAL8(i) );
+					warnf( TEXT("%s"), *TextureStats.TexturesPAL8(i) );
 							warnf( TEXT("") );
 				warnf( TEXT("") );
 				warnf( TEXT("") );
@@ -415,7 +415,7 @@ class UAnalyzeContentCommandlet : public UCommandlet
 				warnf( TEXT("DXT1 textures") );
 				warnf( TEXT("") );
 				for (INT i=0; i<TextureStats.TexturesDXT1.Num(); i++)
-					warnf( TEXT("%s"), TextureStats.TexturesDXT1(i) );
+					warnf( TEXT("%s"), *TextureStats.TexturesDXT1(i) );
 				warnf( TEXT("") );
 				warnf( TEXT("") );
 			}
@@ -424,7 +424,7 @@ class UAnalyzeContentCommandlet : public UCommandlet
 				warnf( TEXT("DXT3 textures") );
 				warnf( TEXT("") );
 				for (INT i=0; i<TextureStats.TexturesDXT3.Num(); i++)
-					warnf( TEXT("%s"), TextureStats.TexturesDXT3(i) );
+					warnf( TEXT("%s"), *TextureStats.TexturesDXT3(i) );
 				warnf( TEXT("") );
 				warnf( TEXT("") );
 			}
@@ -433,7 +433,7 @@ class UAnalyzeContentCommandlet : public UCommandlet
 				warnf( TEXT("DXT5 textures") );
 				warnf( TEXT("") );
 				for (INT i=0; i<TextureStats.TexturesDXT5.Num(); i++)
-					warnf( TEXT("%s"), TextureStats.TexturesDXT5(i) );
+					warnf( TEXT("%s"), *TextureStats.TexturesDXT5(i) );
 				warnf( TEXT("") );
 				warnf( TEXT("") );
 			}

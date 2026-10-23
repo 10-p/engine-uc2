@@ -2592,7 +2592,7 @@ void FObjectConfigItem::LazyLoadClass()
 		if( !Class )
 		{
 			Failed = 1;
-			Caption = FString::Printf( LocalizeError("FailedConfigLoad",TEXT("Window")), ClassName );
+			Caption = FString::Printf( LocalizeError("FailedConfigLoad",TEXT("Window")), *ClassName );
 		}
 	}
 	unguard;

@@ -24,10 +24,10 @@ void WINDRV_API DirectInputError( const FString Error, HRESULT hr, UBOOL Fatal )
 {
 #ifdef _UNICODE
 	debugf( TEXT("%s"), DXGetErrorString8W(hr) );
-	debugf( TEXT("%s"), Error );
+	debugf( TEXT("%s"), *Error );
 #else
 	debugf( TEXT("%s"), DXGetErrorString8A(hr) );
-	debugf( TEXT("%s"), Error );
+	debugf( TEXT("%s"), *Error );
 #endif
 	if ( Fatal )
 		appErrorf(TEXT("unrecoverable error - bombing out"));

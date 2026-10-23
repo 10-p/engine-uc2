@@ -2239,7 +2239,7 @@ class WBrowserTexture : public WBrowser
 		{
 			Extra = *FString::Printf( TEXT("%s %s"), GUnrealEd->CurrentMaterial->GetClass()->GetName(), GUnrealEd->CurrentMaterial->GetPathName() );
 			if( Cast<UBitmapMaterial>(GUnrealEd->CurrentMaterial) )
-				Extra = *FString::Printf( TEXT("%s (%dx%d)"), Extra, Cast<UBitmapMaterial>(GUnrealEd->CurrentMaterial)->USize, Cast<UBitmapMaterial>(GUnrealEd->CurrentMaterial)->VSize );
+				Extra = *FString::Printf( TEXT("%s (%dx%d)"), *Extra, Cast<UBitmapMaterial>(GUnrealEd->CurrentMaterial)->USize, Cast<UBitmapMaterial>(GUnrealEd->CurrentMaterial)->VSize );
 		}
 
 		WBrowser::SetCaption( &Extra );

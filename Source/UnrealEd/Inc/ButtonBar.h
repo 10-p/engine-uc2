@@ -361,7 +361,7 @@ class WButtonGroup : public WWindow
 				WBB_MoverType* pwbbmt = &(MoverTypes(x));
 				if( pwbbmt->ID == Command )
 				{
-					GUnrealEd->Exec( *FString::Printf(TEXT("BRUSH ADDMOVER CLASS=%s"), pwbbmt->Name ) );
+					GUnrealEd->Exec( *FString::Printf(TEXT("BRUSH ADDMOVER CLASS=%s"), *pwbbmt->Name ) );
 					break;
 				}
 			}
@@ -375,7 +375,7 @@ class WButtonGroup : public WWindow
 				WBB_VolumeType* pwbbvt = &(VolumeTypes(x));
 				if( pwbbvt->ID == Command )
 				{
-					GUnrealEd->Exec( *FString::Printf(TEXT("BRUSH ADDVOLUME CLASS=%s"), pwbbvt->Name ) );
+					GUnrealEd->Exec( *FString::Printf(TEXT("BRUSH ADDVOLUME CLASS=%s"), *pwbbvt->Name ) );
 					break;
 				}
 			}

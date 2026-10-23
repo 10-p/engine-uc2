@@ -2982,7 +2982,7 @@ void DrawMaterial( UViewport* InViewport, UMaterial* InMaterial, FString InName,
 
 	FLOAT TexW, TexH;
 	InViewport->Canvas->WrappedStrLenf( InViewport->Canvas->SmallFont, TexW, TexH, *Title );
-	INT W = DrawField( InViewport, InX+Width+8, InY, BorderColor, TEXT(""), BorderColor, TEXT("%s"), Title );
+	INT W = DrawField( InViewport, InX+Width+8, InY, BorderColor, TEXT(""), BorderColor, TEXT("%s"), *Title );
 	if( InName.Len() )
 		DrawField( InViewport, InX+Width+8+W, InY, FColor(0,255,255), TEXT(""), FColor(0,255,255), TEXT(" (%s)"), *InName );
 
@@ -3713,7 +3713,7 @@ void DrawMatineeActions( UViewport* Viewport )
 
 		CurY += FontHeight*2;
 		if( Action->Comment.Len() )
-			DrawField( Viewport, CurX, CurY, FColor(0,0,0), TEXT(""), FColor(0,255,255), TEXT("%s"), Action->Comment );
+			DrawField( Viewport, CurX, CurY, FColor(0,0,0), TEXT(""), FColor(0,255,255), TEXT("%s"), *Action->Comment );
 
 		CurX = 4;
 

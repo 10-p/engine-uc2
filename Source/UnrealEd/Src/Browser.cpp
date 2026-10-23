@@ -171,7 +171,7 @@ void WBrowser::SetCaption( FString* Tail )
 	Caption = Description;
 
 	if( Tail && Tail->Len() )
-		Caption = *FString::Printf(TEXT("%s - %s"), *Caption, *Tail );
+		Caption = *FString::Printf(TEXT("%s - %s"), *Caption, **Tail );
 
 	if( IsDocked() )
 		OwnerWindow->SetText( *Caption );
