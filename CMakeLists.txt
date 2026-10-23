@@ -388,7 +388,7 @@ if(EMSCRIPTEN OR (UNIX AND NOT APPLE AND NOT MINGW))
   include(FetchContent)
   set(GL4ES_GIT_REPOSITORY "https://github.com/10-p/gl4es.git"
       CACHE STRING "GL4ES git remote (the 10-p fork carries the cubemap/combiner fixes; upstream: ptitSeb/gl4es)")
-  set(GL4ES_GIT_TAG "fix/cubemap-bind-active-unit" CACHE STRING "GL4ES git ref")
+  set(GL4ES_GIT_TAG "ufront" CACHE STRING "GL4ES git ref")
   FetchContent_Declare(
     GL4ES
     GIT_REPOSITORY ${GL4ES_GIT_REPOSITORY}
