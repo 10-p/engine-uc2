@@ -165,13 +165,13 @@
 +	CountY = ((int(Outer.bYAxis) - int(YAxisCountSeen)) & 255);
 +	XAxisCountSeen = Outer.bXAxis;
 +	YAxisCountSeen = Outer.bYAxis;
-+	if ((Outer.aMouseX == float(0)))
++	if (((Outer.aMouseX == float(0)) && (CountX <= 1)))
 +	{
-+		StickCountX = Min(CountX, 1);
++		StickCountX = CountX;
 +	}
-+	if ((Outer.aMouseY == float(0)))
++	if (((Outer.aMouseY == float(0)) && (CountY <= 1)))
 +	{
-+		StickCountY = Min(CountY, 1);
++		StickCountY = CountY;
 +	}
 +	LinearTurn = Outer.aTurn;
 +	LinearLookUp = Outer.aLookUp;

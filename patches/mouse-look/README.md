@@ -11,6 +11,10 @@ and `MouseLookInvert` for the session.
   as one of its sticks moves (the left stick too, so a pad player who only walks has Epic's pad camera: the lazy
   camera, auto-centred pitch, aim adhesion); on PC a player starts with the mouse, except a split-screen
   player on a viewport other than the window's (players 2-4), which the mouse never reaches: always the pad's.
+- **Mouse or stick**: the mouse and the pad's right stick share `aMouseX`/`aMouseY` and the counts
+  `bXAxis`/`bYAxis`. A bound stick reports once a tick, at rest too, so a tick with more reports than the stick's
+  own carries the mouse, which takes the linear channel; the stick's own number (0 or 1) is learned from ticks
+  without motion and at most one report (a tick whose mouse reports cancel out, +1 and -1, teaches nothing).
 - **Ini keys** (User.ini / DefUser.ini `[UCGameplay.UCPlayerInput]`, globalconfig): `MouseLookSensitivity=2.5`,
   `bInvertMouseLook=False`, `bLazyMouseCamera=False`, `bDoubleTapDodge=False`. The shipped package ignores them.
 - **Network**: UCGameplay is a server package; a network game needs the same package on both sides.
