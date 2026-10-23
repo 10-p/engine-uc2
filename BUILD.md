@@ -146,8 +146,8 @@ offscreen/KMS paths only); a desktop arm64 client needs them through multiarch.
 ## Android
 
 `Android/` is a Gradle project (Android Gradle plugin 9.4.0, Gradle 9.6.0 through the wrapper) whose
-`externalNativeBuild` is this repository's root `CMakeLists.txt`, built with the NDK for `armeabi-v7a` and `arm64-v8a`
-(32-bit and 64-bit ARM devices in one APK; `-Pabis=x86_64` builds one for a fast emulator). The APK holds the engine
+`externalNativeBuild` is this repository's root `CMakeLists.txt`, built with the NDK for `armeabi-v7a`, `arm64-v8a` and
+`x86_64` (32-bit and 64-bit ARM devices, x86 Chromebooks and the emulator, in one APK). The APK holds the engine
 (`libUC2.so`, `SDL_main` in `Source/SDLLaunch`), `libSDL2.so`, `libopenal.so` (OpenSL ES), the process set-up bridge
 (`libuc2_android_bridge.so`) and the Android inis; the game folder stays on the phone's storage.
 
@@ -164,7 +164,6 @@ printf 'sdk.dir=/usr/lib/android-sdk\ncmake.dir=/usr\n' > Android/local.properti
 cd Android
 ./gradlew assembleRelease      # -> app/build/outputs/apk/release/app-release.apk (assembleDebug: the debuggable one)
 adb install -r app/build/outputs/apk/release/app-release.apk
-#   -Pabis=arm64-v8a      one ABI only (default armeabi-v7a,arm64-v8a)
 #   -Psdl2Dir=<dir>       a local SDL2 checkout (or SDL2_SOURCE_DIR)
 #   -Pgl4esDir=<dir>      a local gl4es checkout (or GL4ES_SOURCE_DIR)
 #   -PnativeDebug         the engine at the Gradle variant's own build type (-O0 for debug)
@@ -253,7 +252,7 @@ the reference (wasm32 has its layout).
 ## CI
 
 `.github/workflows/build.yml` builds `native` and `native64` (Linux), `windows` and `windows64` (MinGW-w64),
-`wasm-perf` and the Android APK (armeabi-v7a and arm64-v8a) on every push and pull request with `-DUE_SCRIPT_PATCHES=OFF`
+`wasm-perf` and the Android APK (armeabi-v7a, arm64-v8a and x86_64) on every push and pull request with `-DUE_SCRIPT_PATCHES=OFF`
 (no game folder in CI: the binaries run the shipped script packages and the web artifact's `scripts/` is empty),
 uploads the binaries, and a push to `main` replaces the rolling `latest` release.
 
