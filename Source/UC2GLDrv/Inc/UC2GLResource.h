@@ -14,21 +14,30 @@
 
 class UUC2GLRenderDevice;
 
+#define INITIAL_DYNAMIC_VERTEXBUFFER_SIZE	(1024*1024)	// Initial size of the desktop GL dynamic vertex buffer, in bytes.
+#define INITIAL_DYNAMIC_INDEXBUFFER_SIZE	(256*1024)	// Initial size of the desktop GL dynamic index buffers, in bytes.
+
 //
-//	FOpenGLUploadPool: the buffer names of a dynamic vertex or index buffer. Every upload of a
-//	frame takes a name of its own and fills it whole with glBufferData, so an upload never
-//	writes a buffer that a draw of the frame still reads (glBufferSubData into such a buffer
-//	makes the driver copy it or wait), and a state saved before a later upload keeps its data.
-//	Names come back at the next frame; refilling one gives it new storage.
+//	FOpenGLUploadPool: the buffer names of a dynamic vertex or index buffer.
+//	On an OpenGL ES context every upload of a frame takes a name of its own and fills it whole
+//	with glBufferData: ES drivers copy or wait on a glBufferSubData into a buffer that a draw of
+//	the frame still reads. Names come back at the next frame; refilling one gives it new storage.
+//	On desktop GL the uploads append to one buffer with glBufferSubData, which is orphaned when
+//	full (D3D's NOOVERWRITE and DISCARD locks). Either way a state saved before a later upload
+//	keeps its data.
 //
 struct FOpenGLUploadPool
 {
 	TArray<GLuint>	Names;
 	INT				Used;
 	INT				Frame;
+	INT				Tail;			// Desktop GL: the end of the appended data in Names(0)
+	INT				RingSize;		// Desktop GL: the size of Names(0)
 
-	FOpenGLUploadPool() : Used(0), Frame(-1) {}
-	GLuint Next( UUC2GLRenderDevice* RenDev, GLenum Target );
+	FOpenGLUploadPool() : Used(0), Frame(-1), Tail(0), RingSize(0) {}
+	// Uploads Size bytes and returns the buffer they are in; Offset is their byte offset there,
+	// a multiple of Align on desktop GL. Leaves the buffer bound to Target.
+	GLuint Upload( UUC2GLRenderDevice* RenDev, GLenum Target, const void* Data, INT Size, INT Align, INT InitialSize, INT& Offset );
 	void Free( UUC2GLRenderDevice* RenDev, GLenum Target );
 };
 
@@ -305,7 +314,7 @@ public:
 	FOpenGLDynamicVertexStream(UUC2GLRenderDevice* InRenDev);
 	~FOpenGLDynamicVertexStream();
 
-	// Uploads the vertices of Stream to a buffer of their own; returns the index of the first one.
+	// Uploads the vertices of Stream through Pool; returns the index of the first one in BufferID.
 	INT AddVertices(FVertexStream* Stream);
 };
 
@@ -343,7 +352,7 @@ public:
 	FOpenGLDynamicIndexBuffer(UUC2GLRenderDevice* InRenDev,INT InIndexSize);
 	~FOpenGLDynamicIndexBuffer();
 
-	// Uploads the indices to a buffer of their own; returns the first index.
+	// Uploads the indices through Pool; returns the index of the first one in BufferID.
 	INT AddIndices(FIndexBuffer* Indices);
 };
 

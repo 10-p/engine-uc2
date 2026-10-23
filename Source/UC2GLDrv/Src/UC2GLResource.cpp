@@ -991,16 +991,43 @@ void FOpenGLVertexStream::Cache(FVertexStream* SourceStream)
 	FOpenGLDynamicVertexStream.
 -----------------------------------------------------------------------------*/
 
-GLuint FOpenGLUploadPool::Next( UUC2GLRenderDevice* RenDev, GLenum Target )
+GLuint FOpenGLUploadPool::Upload( UUC2GLRenderDevice* RenDev, GLenum Target, const void* Data, INT Size, INT Align, INT InitialSize, INT& Offset )
 {
-	if( Frame != RenDev->FrameCounter )
+	if( RenDev->IsGLES )
 	{
-		Frame	= RenDev->FrameCounter;
-		Used	= 0;
+		if( Frame != RenDev->FrameCounter )
+		{
+			Frame	= RenDev->FrameCounter;
+			Used	= 0;
+		}
+		if( Used == Names.Num() )
+			Names.AddItem( RenDev->NewBuffer( Target ) );
+		GLuint Name = Names(Used++);
+		RenDev->glBindBuffer( Target, Name );
+		RenDev->glBufferData( Target, Size, Data, GL_STREAM_DRAW );
+		Offset = 0;
+		return Name;
 	}
-	if( Used == Names.Num() )
+	if( !Names.Num() )
 		Names.AddItem( RenDev->NewBuffer( Target ) );
-	return Names(Used++);
+	GLuint Name = Names(0);
+	RenDev->glBindBuffer( Target, Name );
+	if( Size > RingSize )
+	{
+		RingSize	= Max( InitialSize, Size * 2 );
+		Tail		= RingSize;
+	}
+	if( Align > 0 && Tail % Align )
+		Tail += Align - (Tail % Align);
+	if( Tail + Size > RingSize )
+	{
+		RenDev->glBufferData( Target, RingSize, NULL, GL_STREAM_DRAW );
+		Tail = 0;
+	}
+	RenDev->glBufferSubData( Target, Tail, Size, Data );
+	Offset	= Tail;
+	Tail	+= Size;
+	return Name;
 }
 
 void FOpenGLUploadPool::Free( UUC2GLRenderDevice* RenDev, GLenum Target )
@@ -1012,7 +1039,7 @@ void FOpenGLUploadPool::Free( UUC2GLRenderDevice* RenDev, GLenum Target )
 			RenDev->FreeBuffer( Target, Names(i) );
 	}
 	Names.Empty();
-	Used = 0;
+	Used = Tail = RingSize = 0;
 }
 
 FOpenGLDynamicVertexStream::FOpenGLDynamicVertexStream(UUC2GLRenderDevice* InRenDev)
@@ -1045,14 +1072,13 @@ INT FOpenGLDynamicVertexStream::AddVertices(FVertexStream* Stream)
 	INT					NumComponents = Stream->GetComponents( Components );
 	UC2GL_CopyVertices( Swizzled, Raw, Size, Stride, Components, NumComponents );
 
-	BufferID	= Pool.Next( RenDev, GL_ARRAY_BUFFER );
+	INT Offset	= 0;
+	BufferID	= Pool.Upload( RenDev, GL_ARRAY_BUFFER, Swizzled, Size, Stride, INITIAL_DYNAMIC_VERTEXBUFFER_SIZE, Offset );
 	CachedSize	= Size;
-	RenDev->glBindBuffer( GL_ARRAY_BUFFER, BufferID );
-	RenDev->glBufferData( GL_ARRAY_BUFFER, Size, Swizzled, GL_STREAM_DRAW );
 	RenDev->StatBufferUploads++; RenDev->StatBufferBytes += Size;
 	// (G5: no InvalidateHardwareState: a buffer upload changes no material state; the streams and the index buffer are bound by every draw)
 
-	return 0;
+	return Stride ? Offset / Stride : 0;
 
 	unguard;
 }
@@ -1215,21 +1241,21 @@ INT FOpenGLDynamicIndexBuffer::AddIndices(FIndexBuffer* Indices)
 	if( Narrow )
 		UC2GL_NarrowIndices( &RenDev->ScratchBuffer(0), SourceSize / sizeof(DWORD) );
 
-	BufferID	= Pool.Next( RenDev, GL_ELEMENT_ARRAY_BUFFER );
+	INT Offset	= 0;
+	BufferID	= Pool.Upload( RenDev, GL_ELEMENT_ARRAY_BUFFER, &RenDev->ScratchBuffer(0), Size, IndexSize, INITIAL_DYNAMIC_INDEXBUFFER_SIZE, Offset );
 	CachedSize	= Size;
-	RenDev->glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, BufferID );
-	RenDev->glBufferData( GL_ELEMENT_ARRAY_BUFFER, Size, &RenDev->ScratchBuffer(0), GL_STREAM_DRAW );
 	RenDev->StatBufferUploads++; RenDev->StatBufferBytes += Size;
 	// (G5: no InvalidateHardwareState: a buffer upload changes no material state; the streams and the index buffer are bound by every draw)
 
+	INT	BaseIndex = Offset / IndexSize;
 	if( RenDev->IsGLES )
 	{
 		Shadow.Empty( Size );
 		Shadow.Add( Size );
 		appMemcpy( &Shadow(0), &RenDev->ScratchBuffer(0), Size );
-		ShadowBase = 0;
+		ShadowBase = BaseIndex;
 	}
-	return 0;
+	return BaseIndex;
 
 	unguard;
 }
