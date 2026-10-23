@@ -214,7 +214,7 @@ if has g; then
   echo "== g1: set the mouse, the hand; change level (tree $tree, SIGKILL after)"
   { gstart; cat <<'SCEN'
 probe a
-check g1-defaults-before P['a'].sens.startswith('2.5') and P['a'].invert == 'False' and P['a'].padinvert == 'False'
+check g1-defaults-before P['a'].sens.startswith('5') and P['a'].invert == 'False' and P['a'].padinvert == 'False'
 chan exec getall UCPlayerInput MouseSensitivity_Y
 expect g1-pad-sensitivity-is-the-profiles-not-the-inis MouseSensitivity_Y = 0\.8 10
 chan exec MouseLookSens 1.5
@@ -297,7 +297,7 @@ SCEN
   game g3 "$gout/g3.scen" fresh KILL '-ini:System:[Engine.Engine]:ScriptSaveConfig=False'
   for c in g3-session-has-the-values g3-no-key-written g3-no-script-save g3-the-next-level-keeps-the-session-values; do fromresult "$gout/g3.result" $c; done
   u=$gout/g3-User.ini
-  check g3-file-sensitivity-unchanged expect_ini "$u" UCGameplay.UCPlayerInput MouseLookSensitivity 2.5
+  check g3-file-sensitivity-unchanged expect_ini "$u" UCGameplay.UCPlayerInput MouseLookSensitivity 5
   check g3-file-invert-unchanged expect_ini "$u" UCGameplay.UCPlayerInput bInvertMouseLook False
   check g3-file-no-hand absent_ini "$u" Engine.Controller Handedness
   check g3-off-is-logged logline 'Script SaveConfig: off' "$gout/g3-Avaris.log"

@@ -5,7 +5,7 @@
 #   tools/dev/d9-rebind.sh [scenario...]        (default: menu match restart nodefaults pad actions)
 #
 #   menu     from the main menu (OPTIONS -> KEYBOARD / MOUSE, software GL, 640x480): the page opens with DefUser.ini's
-#            keys; the slider by mouse (a click on the bar, on its plus end) and CANCEL; the slider by keyboard to 5.0;
+#            keys; the slider by mouse (a click on the bar, on its plus end) and CANCEL; the slider by keyboard to 10.0;
 #            mouse invert on; a click on a key cell captures; a capture takes letters raw (S does not move the
 #            selection); JUMP / DODGE := J (J's old command replaced); a conflict (MOVE FORWARD := S: MOVE BACK
 #            loses S and W is unbound: clear, not swap); Escape cancels a capture and keeps the page; the console key opens the console during a capture
@@ -15,10 +15,10 @@
 #            DefUser.ini, the pad's keys are untouched, the mouse settings are there
 #   match    a NEW process on the same User.ini (the restart): DM-Deadbolt, null renderer: the bindings and the mouse
 #            settings are back; J jumps and Space does not; mouse button 4 jumps; S walks forward and W does nothing (cleared by the conflict); the mouse
-#            turns twice the default per count (sensitivity 5.0, d6-mouse.sh's measurement) and up looks down
+#            turns twice the default per count (sensitivity 10.0, d6-mouse.sh's measurement) and up looks down
 #            (invert); then from the PAUSE menu (OPTIONS -> KEYBOARD / MOUSE): the page shows them, DEFAULTS and CANCEL
 #            and DEFAULTS again, leave: Space jumps, J does not, the mouse turns the default amount and up looks up
-#   restart  another new process: the defaults persisted (live bindings and User.ini = DefUser.ini's, mouse 2.5)
+#   restart  another new process: the defaults persisted (live bindings and User.ini = DefUser.ini's, mouse 5)
 #   nodefaults  (after restart, on its User.ini) a DefUser.ini without [Engine.Input]: DEFAULTS says so and changes
 #            no key (instead of clearing them all), leaving writes nothing
 #   pad      the page with the game pad (virtual SDL pad): D-pad to the list, A captures, a pad button cancels a
@@ -40,8 +40,8 @@ sys=$work/run/$tree/System
 m10=$repo/tools/dev/m10-controls.sh
 mkdir -p "$out"
 [ -x "$sys/uc2.bin" ] || { echo "no run tree $work/run/$tree (tools/dev/mkrun-uc2.sh build-native $tree)" >&2; exit 2; }
-# Turn per mouse count at FOV 90 with MouseLookSensitivity 2.5: 0.022 deg x 2.5 x 65536/360
-K=10.012444
+# Turn per mouse count at FOV 90 with MouseLookSensitivity 5: 0.022 deg x 5 x 65536/360
+K=20.024889
 
 # fresh inis (ours), DevUI unsuppressed (the GUI's and the page's log lines), no User.ini, no profiles
 prep() {
@@ -192,7 +192,7 @@ scen_menu() {
   menu_to_page
   cat <<'SCEN'
 probe k0
-check $P-slider-has-the-focus P['k0'].caption.strip() == 'MOUSE SENSITIVITY 2.5'
+check $P-slider-has-the-focus P['k0'].caption.strip() == 'MOUSE SENSITIVITY 5.0'
 keys k0 Escape Joy1 Joy2 Joy7 Joy8 Joy13 JoyX JoyY JoyU JoyV
 shot page
 # the slider by mouse: a click at three quarters of the bar, one on its plus end; CANCEL (Black: E) undoes them
@@ -209,13 +209,13 @@ key e
 expect $P-cancel-undoes KeyBinds: CHANGES UNDONE 10
 sleep 0.5
 probe s3
-check $P-cancel-restores-the-slider P['s3'].caption.strip() == 'MOUSE SENSITIVITY 2.5'
+check $P-cancel-restores-the-slider P['s3'].caption.strip() == 'MOUSE SENSITIVITY 5.0'
 SCEN
-  for i in $(seq 25); do echo "key Right"; echo "sleep 0.1"; done
+  for i in $(seq 50); do echo "key Right"; echo "sleep 0.1"; done
   cat <<'SCEN'
 sleep 0.5
 probe s4
-check $P-slider-by-keyboard-to-5 P['s4'].caption.strip() == 'MOUSE SENSITIVITY 5.0'
+check $P-slider-by-keyboard-to-10 P['s4'].caption.strip() == 'MOUSE SENSITIVITY 10.0'
 key Down
 sleep 0.5
 probe c0
@@ -328,7 +328,7 @@ mark
 key Escape
 expect $P-page-closes CloseMenu \[UC2Settings_Keys\] 10
 expect $P-leaving-saves KeyBinds: saved 10 key\(s\) to User.ini 10
-expect $P-saves-sensitivity KeyBinds: mouse sensitivity 5.00 saved 10
+expect $P-saves-sensitivity KeyBinds: mouse sensitivity 10.00 saved 10
 expect $P-saves-invert KeyBinds: mouse invert True saved 10
 sleep 2
 keys k1 J Space S W G Mouse4 V F9 Home Right Period
@@ -355,7 +355,7 @@ scen_match() {
 keys r0 J Space S W G Mouse4 V F9 Home
 check $P-restart-keeps-the-keys K['r0']['J'] == 'SmartJump 0' and K['r0']['Space'] == '' and K['r0']['S'] == 'MoveForward' and K['r0']['W'] == '' and K['r0']['Mouse4'] == 'Jump' and K['r0']['V'] == ''
 probe m0
-check $P-restart-keeps-the-mouse abs(float(P['m0'].sens) - 5.0) < 0.001 and P['m0'].invert == 'True'
+check $P-restart-keeps-the-mouse abs(float(P['m0'].sens) - 10.0) < 0.001 and P['m0'].invert == 'True'
 SCEN
   jumpcheck j-jumps "key j" 1
   jumpcheck space-does-not-jump "key space" 0
@@ -390,12 +390,12 @@ SCEN
   pause_to_page
   cat <<'SCEN'
 expect $P-page-shows-the-saved-keys KeyBinds: rows \(loaded\): .*JUMP / DODGE=J,; 15
-expect $P-page-shows-the-saved-mouse KeyBinds: mouse sensitivity 5.00 invert True 10
+expect $P-page-shows-the-saved-mouse KeyBinds: mouse sensitivity 10.00 invert True 10
 sleep 2
 shot ingame-page
 key q
 expect $P-defaults-load KeyBinds: rows \(defaults\): .*JUMP / DODGE=Space,; 10
-expect $P-defaults-mouse KeyBinds: mouse sensitivity 2.50 invert False 10
+expect $P-defaults-mouse KeyBinds: mouse sensitivity 5.00 invert False 10
 sleep 0.5
 key e
 expect $P-cancel-after-defaults KeyBinds: rows \(loaded\): .*JUMP / DODGE=J,; 10
@@ -430,7 +430,7 @@ scen_restart() {
 keys d0 J Space S W G Mouse4 V F9 Home
 check $P-defaults-persisted K['d0']['J'] == 'Taunt Taunt1' and K['d0']['Space'] == 'SmartJump 0' and K['d0']['S'] == 'MoveBackward' and K['d0']['W'] == 'MoveForward' and K['d0']['Mouse4'] == '' and K['d0']['V'] == 'WhiteButton | VoiceMenuNext' and K['d0']['F9'] == 'shot'
 probe m1
-check $P-mouse-defaults-persisted abs(float(P['m1'].sens) - 2.5) < 0.001 and P['m1'].invert == 'False'
+check $P-mouse-defaults-persisted abs(float(P['m1'].sens) - 5.0) < 0.001 and P['m1'].invert == 'False'
 SCEN
   turncheck mouse-turns-the-default 500 "$K"
 }
@@ -593,7 +593,7 @@ report('nothing-else-differs', set(diff) == set(k for k, v in want.items() if (d
        f'{len(diff)} keys differ from DefUser.ini: ' + ', '.join(f'{k}: {a!r} -> {b!r}' for k, (a, b) in sorted(diff.items())))
 pad = [k for k in du if re.fullmatch(r'joy(\d+|[xyuvzr]|slider\d)', k)]
 report('pad-keys-untouched', all(u.get(k) == du[k] for k in pad), f'{len(pad)} pad keys equal DefUser.ini')
-sens, inv = (5.0, 'True') if stage == 'menu' else (2.5, 'False')
+sens, inv = (10.0, 'True') if stage == 'menu' else (5.0, 'False')
 try:
     s = float(pu.get('mouselooksensitivity', pd.get('mouselooksensitivity', 'nan')))
 except ValueError:

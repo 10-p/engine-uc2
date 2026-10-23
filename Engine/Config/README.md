@@ -70,7 +70,7 @@ same.
 | `[Engine.Input] JoyX`, `JoyY`, `JoyU`, `JoyV` | (none on PC) | the Xbox's: `Axis aStrafe/aForward/aMouseX/aMouseY SpeedBase=100.0 DeadZone=0.3` (U/V `\| Count bXAxis/bYAxis`) | The engine scales the stick's walk on PC as the Xbox's PlayerMove does, so the Xbox binding works, also after a profile's swap-sticks rewrite. |
 | `[UCGameplay.UCPlayerInput] aTurn_FrictionRange`, `aLookUp_FrictionRange` | `(Min=1.0,Max=0.75)`, `(Min=1.0,Max=0.65)` | `(Min=1.0,Max=0.95)`, `(Min=1.0,Max=0.9)` | The retail disc's (Xbox) values: the section is the pad's, the mouse has its own channel. |
 | `[UCGameplay.UCPlayerController] LockSearchTimer` | `0.1` | `0.3` | The retail disc's pause between lock-target switches. |
-| new keys `[UCGameplay.UCPlayerInput] MouseLookSensitivity`, `bInvertMouseLook`, `bLazyMouseCamera`, `bDoubleTapDodge` | (none) | `2.5`, `False`, `False`, `False` | The mouse-look patch set's settings (the shipped package ignores them): linear mouse turn (0.022 degrees per count x sensitivity at FOV 90), its own invert, Epic's lazy third-person camera under the mouse when `True`, UT2004-style double-tap dodge. |
+| new keys `[UCGameplay.UCPlayerInput] MouseLookSensitivity`, `bInvertMouseLook`, `bLazyMouseCamera`, `bDoubleTapDodge` | (none) | `5`, `False`, `False`, `False` | The mouse-look patch set's settings (the shipped package ignores them): linear mouse turn (0.022 degrees per count x sensitivity at FOV 90), its own invert, Epic's lazy third-person camera under the mouse when `True`, UT2004-style double-tap dodge. |
 
 ## The editor's inis (`UnrealEd.exe`, BUILD.md "The editor")
 

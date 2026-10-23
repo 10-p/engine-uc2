@@ -340,8 +340,8 @@ rmove 200 0 20
 sleep 0.5
 probe l1
 check ms-mouse-right-turns-right yawdiff('l0','l1') > 0
-# D-6: 0.022 deg x MouseLookSensitivity 2.5 per count = 10.012 rotation units (XTEST counts reach SDL 1:1)
-check ms-mouse-turn-amount 0.98*200*10.012 < yawdiff('l0','l1') < 1.02*200*10.012
+# D-6: 0.022 deg x MouseLookSensitivity 5 per count = 20.025 rotation units (XTEST counts reach SDL 1:1)
+check ms-mouse-turn-amount 0.98*200*20.025 < yawdiff('l0','l1') < 1.02*200*20.025
 rmove -200 0 20
 sleep 0.5
 probe l2

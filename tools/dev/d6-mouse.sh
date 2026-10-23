@@ -52,8 +52,8 @@ mkdir -p "$out"
 for t in "$tree" "$ship"; do
   [ -x "$work/run/$t/System/uc2.bin" ] || { echo "no run tree $work/run/$t (tools/dev/mkrun-uc2.sh)" >&2; exit 2; }
 done
-# Turn per count at FOV 90 with the default MouseLookSensitivity 2.5: 0.022 deg x 2.5 x 65536/360
-K=10.012444
+# Turn per count at FOV 90 with the default MouseLookSensitivity 5: 0.022 deg x 5 x 65536/360
+K=20.024889
 
 # prep <tree> [defuser-file] [user-ini-file]: fresh inis (ours, or another DefUser.ini; a User.ini an earlier build
 # left, for the migration), DevUI unsuppressed, no profiles
@@ -143,7 +143,7 @@ scen_look() {
   start $p
   # 1. linearity and speed: three distances x three speeds (counts per tick); alternate directions
   local sign=1 d s n
-  for d in 100 500 2000; do
+  for d in 100 500 1000; do
     for s in fast medium slow; do
       case $s in fast) n=500;; medium) n=50;; slow) n=5;; esac
       local dd=$(( d / sc )) nn=$(( n / sc < 1 ? 1 : n / sc ))
@@ -155,16 +155,16 @@ scen_look() {
     done
   done
   if [ $p = look ]; then
-    for d in 100 500 2000; do
+    for d in 100 500 1000; do
       for s in fast medium slow; do
         echo "check $p-linear-$d-counts-$s abs(M['$d$s']/K-1) < 0.002"
       done
     done
   fi
-  for d in 100 500 2000; do
+  for d in 100 500 1000; do
     echo "check $p-same-turn-at-every-speed-$d max(M['${d}fast'],M['${d}medium'],M['${d}slow'])*$(( d / sc )) - min(M['${d}fast'],M['${d}medium'],M['${d}slow'])*$(( d / sc )) <= 2"
   done
-  echo "check $p-same-turn-at-every-distance max(M['100medium'],M['500medium'],M['2000medium'])/min(M['100medium'],M['500medium'],M['2000medium']) < 1.01"
+  echo "check $p-same-turn-at-every-distance max(M['100medium'],M['500medium'],M['1000medium'])/min(M['100medium'],M['500medium'],M['1000medium']) < 1.01"
   # 2. both axes: 500 counts up and back
   echo "probe Ya"
   mlines 0 $(( -500 / sc )) $(( 50 / sc ))
@@ -217,17 +217,17 @@ SCEN
   [ $p = before ] && return 0
   # 5. the settings: sensitivity (and saved to User.ini), FOV, mouse invert apart from the pad's (and saved to User.ini)
   cat <<SCEN
-check look-default-sensitivity abs(M['500medium'] - $K) < 0.02 and P['Db'].sens.startswith('2.5')
-chan exec MouseLookSens 1.25
-wait test: exec MouseLookSens 1.25 10
+check look-default-sensitivity abs(M['500medium'] - $K) < 0.02 and P['Db'].sens.startswith('5')
+chan exec MouseLookSens 2.5
+wait test: exec MouseLookSens 2.5 10
 probe Ea
 chan mouse 500 0
 probe Eb
 check look-sensitivity-setting abs(yawdiff('Ea','Eb') - 500*K/2) <= 2
 # saveconfig task: the console command also writes its key to User.ini now (SAVECONFIGKEYS; it was session-only before)
-check look-sensitivity-saved-to-user-ini 'MouseLookSensitivity=1.250000' in open(os.environ['D6_SYS']+'/User.ini',encoding='latin-1').read()
-chan exec MouseLookSens 2.5
-wait test: exec MouseLookSens 2.5 10
+check look-sensitivity-saved-to-user-ini 'MouseLookSensitivity=2.500000' in open(os.environ['D6_SYS']+'/User.ini',encoding='latin-1').read()
+chan exec MouseLookSens 5
+wait test: exec MouseLookSens 5 10
 chan exec FOV 45
 wait test: exec FOV 45 10
 sleep 0.3
@@ -410,7 +410,7 @@ wait test: exec PlayersOnly 10
 sleep 0.5
 pyexec chan('place 0 400 0'); chan('place 1 400 30')
 sleep 0.5
-tryseek 4 len(P['_'].others) >= 2 and P['_'].others[0]['los'] == 1 and P['_'].others[1]['los'] == 1 ;; pyexec chan('mouse 1636 0'); chan('place 0 400 0'); chan('place 1 400 30')
+tryseek 4 len(P['_'].others) >= 2 and P['_'].others[0]['los'] == 1 and P['_'].others[1]['los'] == 1 ;; pyexec chan('mouse 818 0'); chan('place 0 400 0'); chan('place 1 400 30')
 probe pa
 check lock-two-targets-in-sight len(P['pa'].others) >= 2 and P['pa'].others[0]['los'] == 1 and P['pa'].others[1]['los'] == 1
 chan aim 0
@@ -425,12 +425,12 @@ SCEN
   echo "probe lb"
   python3 -c "
 for i in range(12):
-    print('chan mouse %d 0' % (40 if i % 2 == 0 else -40))"
+    print('chan mouse %d 0' % (20 if i % 2 == 0 else -20))"
   cat <<SCEN
 sleep 0.5
 probe lc
 check lock-held-through-mouse-motion P['lc'].locked and P['lc'].enemy == P['la'].enemy
-chan mouse 300 0
+chan mouse 150 0
 probe ld0
 sleep 1.0
 probe ld
@@ -447,13 +447,13 @@ probe le
 check lock-switches-target-with-lock-and-d P['le'].locked and P['le'].enemy == P['pa'].others[1]['name']
 SCEN
   echo "probe lf"
-  mlines -450 0 30
+  mlines -225 0 15
   cat <<SCEN
 sleep 0.3
 probe lg
 check lock-kept-by-a-push-inside-the-clamp P['lg'].locked
 SCEN
-  mlines -2000 0 50
+  mlines -1000 0 25
   cat <<SCEN
 sleep 0.3
 probe lh
@@ -563,7 +563,7 @@ scen_ini() {
 probe Na
 chan mouse 500 0
 probe Nb
-check ini-sensitivity-from-user-ini abs(yawdiff('Na','Nb') - 500*K/2.5) <= 2 and P['Nb'].sens.startswith('1.0')
+check ini-sensitivity-from-user-ini abs(yawdiff('Na','Nb') - 500*K/5) <= 2 and P['Nb'].sens.startswith('1.0')
 probe Nc
 chan mouse 0 -100
 probe Nd
@@ -796,7 +796,7 @@ chan exec TELEPORT $spot
 sleep 1
 pyexec chan('place 0 400 0'); chan('place 1 400 30')
 sleep 0.5
-tryseek 4 len(P['_'].others) >= 2 and P['_'].others[0]['los'] == 1 and P['_'].others[1]['los'] == 1 ;; pyexec chan('mouse 1636 0'); chan('place 0 400 0'); chan('place 1 400 30')
+tryseek 4 len(P['_'].others) >= 2 and P['_'].others[0]['los'] == 1 and P['_'].others[1]['los'] == 1 ;; pyexec chan('mouse 818 0'); chan('place 0 400 0'); chan('place 1 400 30')
 probe pa
 check dodge-lock-two-targets-in-sight len(P['pa'].others) >= 2 and P['pa'].others[0]['los'] == 1 and P['pa'].others[1]['los'] == 1
 chan aim 0

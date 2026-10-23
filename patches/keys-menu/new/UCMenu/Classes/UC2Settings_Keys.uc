@@ -523,7 +523,7 @@ final function LoadMouse( bool bDefaults )
 		bLiveInvert = class'UCPlayerInput'.default.bInvertMouseLook;
 	}
 
-	DefaultSens = 2.5;
+	DefaultSens = 5.0;
 	bDefaultInvert = false;
 	if ( GetConfigValue("DefUser", "UCGameplay.UCPlayerInput", "MouseLookSensitivity", V) && float(V) > 0 )
 		DefaultSens = float(V);

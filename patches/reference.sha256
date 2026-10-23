@@ -6,8 +6,8 @@
 # the compiler) changes on purpose, regenerate it and commit it with the change:
 #   tools/scripts/uc-patches-proof.sh p2 --write-reference      (patches/README.md, "Changing a script")
 # UCGameplay.u 1589877 bytes
-fe3cf0be538a139ba7aed22647991b05552c57a37762e37d6e78a01276f58059  UCGameplay.u
+ea821ce61bdead2da38793033fc8c616a0157bef261d4d400fc8050d93d40786  UCGameplay.u
 # GUI.u 1772432 bytes
 39538dde1ee9b21169aa9aba5232b750f4640c7edadb7d061b6df32d4eb4ab60  GUI.u
 # UCMenu.u 2504340 bytes
-1f40454644058ae16cfec5a300c4251bbde135f3d823f7f26e51be0f2620d0e3  UCMenu.u
+8ea1734493af7b1612cde428a08a347afbeb1fccea1a88f65c2e4d64eb604d3b  UCMenu.u

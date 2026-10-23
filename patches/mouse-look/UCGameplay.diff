@@ -387,7 +387,7 @@
  	aTurn_AdhesionRange=(Min=0.0,Max=0.2)
  	aLookUp_AdhesionLimit=(Min=0.57,Max=1.0)
  	aLookUp_AdhesionRange=(Min=0.0,Max=0.4)
-+	MouseLookSensitivity=2.5
++	MouseLookSensitivity=5.0
  	MouseSmoothingMode=0
  	MouseSensitivity=0.0
  	MouseAccelThreshold=0.0
