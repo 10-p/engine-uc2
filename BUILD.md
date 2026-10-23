@@ -356,6 +356,17 @@ folder, `UC2_SCRIPTS=none` keeps the game folder's).
   `uc-build.sh` runs `ucc.exe` under MSYS2's bash and links the content folders into its work tree with `ln -s` (set
   `MSYS=winsymlinks:nativestrict` with Developer Mode, or it copies them). Not run on Windows yet.
 
+## The cook as a zip
+
+```bash
+cmake --build build-native --target cook-tool
+```
+
+`build-native/uc2-cook-<git describe>.zip`: `tools/cook.py`, the scripts it runs, the PC tables and a `README.txt`
+in one folder, for players who cook the game folder from their disc (`tools/dev/pack-cook-tool.py`,
+`tools/README.md`). Any preset's build directory has the target (`make cook-tool` there); it needs only Python 3 and
+is not part of ALL.
+
 ## Options
 
 | Option | Default | Meaning |

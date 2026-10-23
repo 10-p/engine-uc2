@@ -523,3 +523,19 @@ if(TARGET Editor AND TARGET UCC AND NOT WIN32 AND NOT EMSCRIPTEN AND NOT CMAKE_C
       VERBATIM)
   endif()
 endif()
+
+# `cmake --build <build> --target cook-tool` (`make cook-tool` in the build directory): the cook as a standalone zip
+# for players, <build>/uc2-cook-<git describe>.zip (tools/dev/pack-cook-tool.py: tools/cook.py, the scripts it runs,
+# the PC tables, a README.txt). Any preset; only Python is needed. Not part of ALL.
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+  add_custom_target(cook-tool
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/dev/pack-cook-tool.py --out ${CMAKE_BINARY_DIR}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    USES_TERMINAL VERBATIM)
+else()
+  add_custom_target(cook-tool
+    COMMAND ${CMAKE_COMMAND} -E echo "cook-tool: no Python 3 found (tools/dev/pack-cook-tool.py needs it)"
+    COMMAND ${CMAKE_COMMAND} -E false
+    VERBATIM)
+endif()

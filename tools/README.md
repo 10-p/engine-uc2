@@ -25,7 +25,11 @@ first on a new machine.
 
 The cook stands on its own: Python, the scripts beside `cook.py`, the PC tables and ffmpeg, nothing from the
 repository but with `--build`, and nothing kept between runs. `tools/dev/pack-cook-tool.py` packs it as a zip for
-players (`uc2-cook/`: the scripts, the tables, a `README.txt`).
+players (`uc2-cook/`: the scripts, the tables, a `README.txt`); the build's `cook-tool` target runs it:
+
+```bash
+cmake --build build-native --target cook-tool      # build-native/uc2-cook-<git describe>.zip
+```
 
 ## Steps
 
