@@ -2465,6 +2465,18 @@ void UCanvas::execDrawTextDualFont(FFrame& Stack, RESULT_DECL)
 
 	if (Style != STY_None)
 	{
+		DrawTextDualFont(*Text, SecondaryFont, ScaleX, ScaleY, XL, (*EOL)[0], 1);
+	}
+
+	unguardexec;
+}
+IMPLEMENT_FUNCTION(UCanvas,-1,execDrawTextDualFont);
+
+void UCanvas::DrawTextDualFont( const TCHAR* Text, UFont* SecondaryFont, FLOAT ScaleX, FLOAT ScaleY, FLOAT XL, TCHAR EOLChar, UBOOL bDraw )
+{
+	guard(UCanvas::DrawTextDualFont);
+
+	{
 		// if we don't have a primary font, load a default one
 		if (Font == NULL)
 		{
@@ -2477,8 +2489,7 @@ void UCanvas::execDrawTextDualFont(FFrame& Stack, RESULT_DECL)
 		}
 		FPlane DrawColor = Color.Plane();
 
-		const TCHAR* TextArray = *Text;
-		TCHAR EOLChar = (*EOL)[0];
+		const TCHAR* TextArray = Text;
 
 		FLOAT YLTest, XLTest;
 		Font->GetCharSize('A', XLTest, YLTest);
@@ -2574,7 +2585,10 @@ void UCanvas::execDrawTextDualFont(FFrame& Stack, RESULT_DECL)
 				CurY -= (FLOAT(MaxYL) * ScalingFactor - FLOAT(YL)) / 2.f;
 			}
 			// draw the word
-			DrawString(this, Font, FinalScaleX, FinalScaleY, CurX, CurY, *Word, DrawColor, false, false);
+			if (bDraw)
+			{
+				DrawString(this, Font, FinalScaleX, FinalScaleY, CurX, CurY, *Word, DrawColor, false, false);
+			}
 			CurX += CurrentXL;
 			CurY = OldCurY;
 		}
@@ -2583,9 +2597,8 @@ void UCanvas::execDrawTextDualFont(FFrame& Stack, RESULT_DECL)
 		Font = PrimaryFont;
 	}
 
-	unguardexec;
+	unguard;
 }
-IMPLEMENT_FUNCTION(UCanvas,-1,execDrawTextDualFont);
 
 IMPLEMENT_CLASS(UCanvas);
 

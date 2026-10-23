@@ -127,6 +127,8 @@ public:
 	//epic moelfke: draws text using two fonts. Words beginning with % are drawn using the secondary font.
 	//(for drawing button graphics, etc. in the middle of text)
 	DECLARE_FUNCTION(execDrawTextDualFont);
+	// The text of DrawTextDualFont from CurX/CurY, which it advances as the drawing does; bDraw 0 measures only
+	void DrawTextDualFont( const TCHAR* Text, UFont* SecondaryFont, FLOAT ScaleX, FLOAT ScaleY, FLOAT XL, TCHAR EOLChar, UBOOL bDraw );
 
     void eventReset()
     {
