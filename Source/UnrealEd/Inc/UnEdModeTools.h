@@ -28,7 +28,7 @@ public:
 
 	inline UEdMode* GetCurrentMode() { return &Modes(Mode); }
 	inline INT GetCurrentModeID() { return Mode; }
-	inline UBOOL HasMouseMoved();
+	UBOOL HasMouseMoved();
 
 	INT Mode;					// The current mode the editor is in (eMODE_) - also is an index into "Modes"
 	TArray<UEdMode> Modes;		// The list of available editor modes

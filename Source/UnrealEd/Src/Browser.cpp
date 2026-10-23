@@ -11,7 +11,7 @@
 
 #include "UnrealEd.h"
 
-INT CDECL ClassSortCompare( const void *elem1, const void *elem2 )
+static INT CDECL ClassSortCompare( const void *elem1, const void *elem2 )
 {
 	return appStricmp((*(UClass**)elem1)->GetName(),(*(UClass**)elem2)->GetName());
 }

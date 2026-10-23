@@ -14,18 +14,18 @@ Revision history:
 #include <shlobj.h>
 #include "UnrealEd.h"
 #include "UnRender.h"
-#include "..\..\Core\Inc\UnMsg.h"
+#include "../../Core/Inc/UnMsg.h"
 
 // Thread exchange.
 HANDLE			hEngineThreadStarted;
 HANDLE			hEngineThread;
 HWND			hWndEngine;
 DWORD			EngineThreadId;
-DLL_EXPORT FStringOutputDevice GetPropResult;
+UNREALED_API FStringOutputDevice GetPropResult;
 const TCHAR*	GTopic;
 const TCHAR*	GItem;
 const TCHAR*	GValue;
-TCHAR*			GCommand;
+static TCHAR*	GCommand;	// BottomBarStandard.h has an FString GCommand of its own
 
 extern int GLastScroll;
 extern FString GMapExt;

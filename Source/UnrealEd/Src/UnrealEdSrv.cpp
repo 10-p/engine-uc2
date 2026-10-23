@@ -9,10 +9,11 @@
 #include "UnrealEd.h"
 #include "UnPath.h"
 
-UModel* GBrush = NULL;
-const TCHAR* GStream = NULL;
-TCHAR TempStr[MAX_EDCMD], TempFname[MAX_EDCMD], TempName[MAX_EDCMD], Temp[MAX_EDCMD];
-_WORD Word1, Word2, Word4;
+// This file's own: Editor's UnEdSrv.cpp has globals of the same names, and both are linked into one program.
+static UModel* GBrush = NULL;
+static const TCHAR* GStream = NULL;
+static TCHAR TempStr[MAX_EDCMD], TempFname[MAX_EDCMD], TempName[MAX_EDCMD], Temp[MAX_EDCMD];
+static _WORD Word1, Word2, Word4;
 
 extern FVector GPivotLocation, GSnappedLocation, GGridBase;
 extern FString GMapExt;

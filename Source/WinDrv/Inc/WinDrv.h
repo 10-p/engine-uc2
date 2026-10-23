@@ -27,7 +27,7 @@ Revision history:
 #include <windows.h>
 #include <shlobj.h>
 #include <dinput.h>
-#include "Res\WinDrvRes.h"
+#include "../Src/Res/WinDrvRes.h"
 
 // Unreal includes.
 #include "Engine.h"
@@ -52,7 +52,7 @@ WINDRV_API void DirectInputError( const FString Error, HRESULT hr, UBOOL Fatal )
 //
 // Windows implementation of the client.
 //
-class DLL_EXPORT UWindowsClient : public UClient, public FNotifyHook
+class WINDRV_API UWindowsClient : public UClient, public FNotifyHook
 {
 	DECLARE_CLASS(UWindowsClient,UClient,CLASS_Transient|CLASS_Config,WinDrv)
 
@@ -113,7 +113,7 @@ enum EWinViewportStatus
 //
 // A Windows viewport.
 //
-class DLL_EXPORT UWindowsViewport : public UViewport
+class WINDRV_API UWindowsViewport : public UViewport
 {
 	DECLARE_CLASS(UWindowsViewport,UViewport,CLASS_Transient,WinDrv)
 	DECLARE_WITHIN(UWindowsClient)
@@ -191,7 +191,7 @@ class DLL_EXPORT UWindowsViewport : public UViewport
 //
 // A windows viewport window.
 //
-class DLL_EXPORT WWindowsViewportWindow : public WWindow
+class WINDRV_API WWindowsViewportWindow : public WWindow
 {
 	W_DECLARE_CLASS(WWindowsViewportWindow,WWindow,CLASS_Transient)
 	DECLARE_WINDOWCLASS(WWindowsViewportWindow,WWindow,Window)

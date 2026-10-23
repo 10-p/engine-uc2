@@ -147,9 +147,9 @@ void WDlgTexProp::RefreshViewports()
 	FLOAT Scale;
 
 	if( Material->MaterialUSize() > Material->MaterialVSize() )
-		Scale = min( 256, Material->MaterialUSize() ) / (FLOAT)Material->MaterialUSize();
+		Scale = Min( 256, Material->MaterialUSize() ) / (FLOAT)Material->MaterialUSize();
 	else
-		Scale = min( 256, Material->MaterialVSize() ) / (FLOAT)Material->MaterialVSize();
+		Scale = Min( 256, Material->MaterialVSize() ) / (FLOAT)Material->MaterialVSize();
 
 	Viewport->OpenWindow( (DWORD)hWnd, 0, Material->MaterialUSize()*Scale, Material->MaterialVSize()*Scale, pt.x, pt.y );
 
@@ -398,9 +398,9 @@ void WDlgTexProp::SizeTexViewport()
 
 		FLOAT Scale;
 		if( Material->MaterialUSize() > Material->MaterialVSize() )
-			Scale = min( 256, Material->MaterialUSize() ) / (FLOAT)Material->MaterialUSize();
+			Scale = Min( 256, Material->MaterialUSize() ) / (FLOAT)Material->MaterialUSize();
 		else
-			Scale = min( 256, Material->MaterialVSize() ) / (FLOAT)Material->MaterialVSize();
+			Scale = Min( 256, Material->MaterialVSize() ) / (FLOAT)Material->MaterialVSize();
 
 		::SetWindowPos( (HWND)Viewport->GetWindow(), HWND_TOP, 0, 0, Material->MaterialUSize()*Scale, Material->MaterialVSize()*Scale, SWP_NOMOVE );
 	}

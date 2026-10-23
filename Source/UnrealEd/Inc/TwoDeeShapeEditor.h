@@ -1543,7 +1543,7 @@ class W2DShapeEditor : public WWindow
 		HPEN l_penOriginLines, l_penMajorLines, l_penMinorLines, l_penOld;
 
 		FLOAT GGridSizeZoomSave = GGridSizeZoom;
-		GGridSizeZoom = max( (GGridSizeZoom * (Zoom <= 1 ? Zoom : 1)), 8.0f);
+		GGridSizeZoom = Max<FLOAT>( (GGridSizeZoom * (Zoom <= 1 ? Zoom : 1)), 8.0f);
 		
 		l_vecTopLeft.X = (m_camera.X * -1) - (m_rcWnd.right / 2);
 		l_vecTopLeft.Y = (m_camera.Y * -1) - (m_rcWnd.bottom / 2);

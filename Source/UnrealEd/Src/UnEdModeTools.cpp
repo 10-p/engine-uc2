@@ -48,7 +48,7 @@ void FEdModeTools::SetMode( INT InMode )
 }
 
 // Determines if the mouse has moved since the last click/unclick
-inline UBOOL FEdModeTools::HasMouseMoved()
+UBOOL FEdModeTools::HasMouseMoved()
 {
 	return bMouseHasMoved;
 }

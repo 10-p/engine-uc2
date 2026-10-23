@@ -22,7 +22,7 @@ class WDlgScaleLights : public WDialog
 	WDlgScaleLights( UObject* InContext, WWindow* InOwnerWindow )
 	:	WDialog			( TEXT("Scale Lights"), IDDIALOG_SCALE_LIGHTS, InOwnerWindow )
 	,	OKButton		( this, IDOK,			FDelegate(this,(TDelegate)OnOK) )
-	,	CloseButton		( this, IDPB_CLOSE,		FDelegate(this,(TDelegate)OnClose) )
+	,	CloseButton		( this, IDPB_CLOSE,		FDelegate(this,(TDelegate)&WDlgScaleLights::OnClose) )
 	,	LiteralCheck	( this, IDRB_LITERAL )
 	,	ValueEdit		( this, IDEC_VALUE )
 	{

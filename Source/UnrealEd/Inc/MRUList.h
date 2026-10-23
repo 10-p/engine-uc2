@@ -81,7 +81,7 @@ public:
 		if( Item.Len() )
 		{
 			NumItems++;
-			NumItems = min(NumItems, MRU_MAX_ITEMS);
+			NumItems = Min(NumItems, MRU_MAX_ITEMS);
 
 			for( INT mru = MRU_MAX_ITEMS - 1 ; mru > 0 ; --mru )
 				Items[mru] = Items[mru - 1];
