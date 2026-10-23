@@ -760,7 +760,7 @@ def sha256(path):
 def tool_version():
     """The repository's commit, or the VERSION file the tool's archive carries."""
     if in_repository('.git') and shutil.which('git'):
-        r = subprocess.run(['git', '-C', REPO, 'describe', '--always', '--dirty'], stdout=subprocess.PIPE,
+        r = subprocess.run(['git', '-C', REPO, 'describe', '--tags', '--always', '--dirty'], stdout=subprocess.PIPE,
                            stderr=subprocess.DEVNULL)
         if r.returncode == 0:
             return 'repository ' + r.stdout.decode().strip()

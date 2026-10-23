@@ -28,7 +28,7 @@ repository but with `--build`, and nothing kept between runs. `tools/dev/pack-co
 players (`uc2-cook/`: the scripts, the tables, a `README.txt`); the build's `cook-tool` target runs it:
 
 ```bash
-cmake --build build-native --target cook-tool      # build-native/uc2-cook-<git describe>.zip
+cmake --build build-native --target cook-tool      # build-native/uc2-cook-<git describe --tags>.zip
 ```
 
 ## Steps

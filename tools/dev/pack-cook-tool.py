@@ -61,7 +61,7 @@ def main():
     if lacking:
         sys.exit('missing: %s%s' % (', '.join(lacking), ' (tools/dev/make-pc-tables.py makes the tables)'
                                     if cook.TABLES in lacking else ''))
-    rev = subprocess.run(['git', '-C', tools, 'describe', '--always', '--dirty'], stdout=subprocess.PIPE,
+    rev = subprocess.run(['git', '-C', tools, 'describe', '--tags', '--always', '--dirty'], stdout=subprocess.PIPE,
                          check=True).stdout.decode().strip()
     version = 'uc2-cook %s' % rev
     path = os.path.join(a.out, 'uc2-cook-%s.zip' % rev)
