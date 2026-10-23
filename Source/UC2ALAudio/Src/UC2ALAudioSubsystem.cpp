@@ -7,8 +7,8 @@
 
 	Units: volumes in hundredths of a dB (mB), pitch in cents, times in ms in the
 	cooked data, seconds at run time. Distance attenuation is computed here with
-	DirectSound's rolloff formula and the sum of all volumes is clamped to 0 dB as
-	XACT/DirectSound did (they cannot amplify), so OpenAL's own distance model is
+	DirectSound's rolloff formula and volumes are clamped at 0 dB where XACT and
+	DirectSound clamp them (they cannot amplify), so OpenAL's own distance model is
 	off (AL_NONE) and positions only steer panning.
 =============================================================================*/
 
@@ -1112,8 +1112,8 @@ static UBOOL FindViewer( UViewport* Viewport, INT Index, APlayerController*& Out
 	return 1;
 }
 
-// Gain, pitch and position of one voice. Everything XACT summed into a voice's volume is summed here and
-// clamped at 0 dB (DirectSound volumes only attenuate).
+// Gain, pitch and position of one voice. As XACT: the sound's own volume (variation, events, Volume curve) is clamped
+// at 0 dB, the category added and clamped again (the voice's SetVolume); the headroom and the 3D distance come after.
 static void UpdateVoice( UUC2ALAudioSubsystem* Audio, FUC2AudioState* S, FUC2CueInst& Inst, INT TrackIndex, DOUBLE Now )
 {
 	FUC2TrackPlay& P = Inst.Tracks(TrackIndex);
@@ -1125,14 +1125,16 @@ static void UpdateVoice( UUC2ALAudioSubsystem* Audio, FUC2AudioState* S, FUC2Cue
 	FLOAT Elapsed = (FLOAT)(Now - Inst.StartTime);
 
 	FLOAT MB = Snd.Volume + P.VarVolume + EventsValue( T, P, EV_SetVolume, Elapsed, 0.f );
-	if( !Snd.bHeadroomBoost )
-		MB -= 600.f;	// XACT's per-voice headroom; "Headroom Boost" sounds play 6 dB louder
-	if( Snd.Category>=0 )
-		MB += CategoryMB( S->CategoryVolumes[Snd.Category] );
 	if( Inst.Rpc > 0.f )
 		for( INT i=0; i<Snd.Rpcs.Num(); i++ )
 			if( Snd.Rpcs(i).Name==TEXT("Volume") && Snd.Rpcs(i).Track==TrackIndex )
 				MB += Snd.Rpcs(i).Evaluate( Inst.Rpc );
+	MB = Min( MB, 0.f );
+	if( Snd.Category>=0 )
+		MB += CategoryMB( S->CategoryVolumes[Snd.Category] );
+	MB = Clamp( MB, -10000.f, 0.f );
+	if( !Snd.bHeadroomBoost )
+		MB -= 600.f;	// XACT's per-voice headroom; "Headroom Boost" sounds play 6 dB louder
 
 	FVector Pos(0,0,0);
 	if( !Inst.b2D && Inst.Emitter>=0 )

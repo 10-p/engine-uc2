@@ -9,8 +9,8 @@
 	say, computed here independently from XACT's rules:
 
 	  gain    total energy out / energy of the decoded wave = Pan * 10^(mB/1000) / PitchRatio,
-	          mB = Volume + group Volume + variation volume - 600 (headroom, unless boosted)
-	             + 1000*log10(clamp(category,0.1,1)) + Volume-parameter curve
+	          mB = min(Volume + group Volume + variation volume + Volume-parameter curve, 0)
+	             + 1000*log10(clamp(category,0.1,1)) - 600 (headroom, unless boosted)
 	             - 2000*log10(1 + Rolloff*(clamp(d,Min,Max)-Min)/Min)   (3D only), clamped at 0;
 	          Pan (OpenAL Soft's gain for a centred source) is measured once per kind (2D, 3D)
 	pan     a source on the listener's right is louder in the right channel
@@ -254,13 +254,13 @@ static FLOAT CurveMB( const FUC2Sound& S, FLOAT Value )
 	return 0.f;
 }
 
-// What the cue tables and the documented rules say the voice's volume is, in mB.
+// What the cue tables and XACT's rules say the voice's volume is, in mB.
 static DOUBLE ExpectedMB( const FUC2TestPlay& P, FLOAT Category, FLOAT Volume, UBOOL b3D, FLOAT Distance )
 {
 	const FUC2Sound& S = *P.Sound;
-	DOUBLE MB = S.Volume + P.VarVolume + (S.bHeadroomBoost ? 0 : -600);
+	DOUBLE MB = Min( (DOUBLE)(S.Volume + P.VarVolume + CurveMB( S, Volume )), 0.0 );
 	MB += Category < 1e-4f ? -10000.0 : 1000.0 * Log10( Clamp( Category, 0.1f, 1.f ) );
-	MB += CurveMB( S, Volume );
+	MB = Max( MB, -10000.0 ) + (S.bHeadroomBoost ? 0 : -600);
 	if( b3D )
 	{
 		DOUBLE Min = S.bIs3D ? S.MinDistance : 1.0, Max = S.bIs3D ? S.MaxDistance : 1e9, Roll = S.bIs3D ? S.Rolloff : 1.0;
@@ -317,8 +317,10 @@ INT UUC2AudioSelfTestCommandlet::Main( const TCHAR* Parms )
 		{ TEXT("A_Weapon.RL_Fire"),					0,   400.f, 0.05f, 0.f },	// below 0.1: held at 0.1 (XACT CalcVolume)
 		{ TEXT("A_Character.NK_Sobek_Death"),		0,  3000.f, 1.f,   0.f },	// Volume parameter not set
 		{ TEXT("A_Character.NK_Sobek_Death"),		0,  3000.f, 1.f,  0.25f },	// below the step: +0
-		{ TEXT("A_Character.NK_Sobek_Death"),		0, 60000.f, 1.f,   1.f },	// +40 dB, total stays below 0 dB
-		{ TEXT("A_Character.NK_Sobek_Death"),		0,  3000.f, 1.f,   1.f },	// +40 dB, clamped at 0 dB
+		{ TEXT("A_Character.NK_Sobek_Death"),		0, 60000.f, 1.f,   1.f },	// +40 dB on the sound's volume, clamped at 0 dB
+		{ TEXT("A_Character.NK_Sobek_Death"),		0,  3000.f, 1.f,   1.f },	// before the headroom and the distance
+		{ TEXT("A_Character.NK_Anubis_Pain"),		0,  3000.f, 1.f,   1.f },	// the hit heard by the attacker (+30 dB)
+		{ TEXT("A_Character.NK_Anubis_Pain"),		0,  3000.f, 1.f,   0.f },	// the same hit heard by anyone else
 	};
 	DOUBLE Pan3D = 0.0, Pan2D = 0.0;
 	for( INT i=0; i<ARRAY_COUNT(Cases); i++ )
