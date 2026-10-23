@@ -433,6 +433,16 @@ static FLOAT DrawString
 			Sharp = SharpFontFor( Font, Canvas->GetUIScale() * ScaleY, SharpStart );
 	}
 
+	// The clip region's left edge: the origin, or for the boxed UI's HUD, which is drawn over the whole viewport,
+	// the viewport's left edge where a window wider than the box puts it further left.
+	FLOAT ClipLeft = 0.f;
+	if( bClip && Canvas->IsUIBoxed() && Canvas->pCanvasUtil->UIContext == UICONTEXT_Game )
+	{
+		FLOAT X1, Y1, X2, Y2;
+		Canvas->GetTargetInDesign( X1, Y1, X2, Y2 );
+		ClipLeft = Min( 0.f, X1 - Canvas->OrgX );
+	}
+
 	for( i=0; Text[i]; i++ )
 	{
 		UBOOL bUnderlineNext = 0;
@@ -465,7 +475,7 @@ static FLOAT DrawString
 			if( Font == Canvas->XBoxButtonFont && !bHandleApersand && Ch != NULLCHARACTER && Char.USize > 0 && Char.VSize > 0 )
 			{
 				FLOAT KX = LineX + DrawX, KW = Char.USize * ScaleX, KH = Char.VSize * ScaleY;
-				if( (!bClip || (KX + KW > 0 && KX <= Canvas->ClipX && DrawY + KH > 0 && DrawY <= Canvas->ClipY))
+				if( (!bClip || (KX + KW > ClipLeft && KX <= Canvas->ClipX && DrawY + KH > 0 && DrawY <= Canvas->ClipY))
 				&&	GKeyGlyphs.DrawKey( Canvas, SourceChar, KX, DrawY, KW, KH, Color ) )
 				{
 					LineX += (Char.USize + Canvas->SpaceX + Font->Kerning) * ScaleX;
@@ -494,7 +504,7 @@ static FLOAT DrawString
 				// Draw if it passes clip test.
 				if
 				(	(!bClip)
-				||	(X+AdjustedCharUSize>0 && X<=Canvas->ClipX && Y+AdjustedCharVSize>0 && Y<=Canvas->ClipY) )
+				||	(X+AdjustedCharUSize>ClipLeft && X<=Canvas->ClipX && Y+AdjustedCharVSize>0 && Y<=Canvas->ClipY) )
 				{
 					if( bClip )
 					{
