@@ -336,18 +336,22 @@ void CMainLoop::RunLoop()
 		}
 		else if( MaxTickRate>0.0 )
 		{
+#ifdef __EMSCRIPTEN__
+			UC2WebWaitCapped( 1.0/MaxTickRate );
+#else
 			FLOAT Delta = (1.0/MaxTickRate) - (appSeconds()-OldTime);
 			appSleep( Max(0.f,Delta) );
+#endif
 			LimiterSlept = 1;
 		}
 	}
 	unguard;
 
 #ifdef __EMSCRIPTEN__
-	// Give the engine worker's event loop one turn per frame (input, host commands, the frame's present);
-	// the limiter above already did when it slept (appSleep is emscripten_sleep, the same kind of yield), so
-	// exactly one yield per frame. The test is whether the limiter slept, not the engine's own tick rate (the
-	// launcher's frame cap sleeps with an engine rate of 0). SDLLaunchWeb.cpp has the yield.
+	// Give the engine worker's event loop one turn per frame (input, host commands), until the display's next
+	// frame; the limiter above already did when it waited, so exactly one yield per frame. The test is whether
+	// the limiter waited, not the engine's own tick rate (the launcher's frame cap waits with an engine rate of
+	// 0). SDLLaunchWeb.cpp has the waits.
 	if( !LimiterSlept )
 		UC2WebYieldFrame();
 #else

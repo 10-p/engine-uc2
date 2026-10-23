@@ -71,7 +71,8 @@ cmake --build build-wasm-perf -j4               # inside bin/capped 6G (CLAUDE.m
 - The artifact names are fixed (`SDLLaunch.js`, `.wasm`, `.data`, `meta.json`): the frontend
   (`<repo>/../unreal-frontend-arch-private`, target `uc2`) consumes them (`yarn build --target uc2 --engine-artifact
   <dir>`). The page must be cross-origin isolated (SharedArrayBuffer) and support OffscreenCanvas: the engine runs on a
-  worker (`-sPROXY_TO_PTHREAD`), yields to the browser once per frame through Asyncify, reads game files through the
+  worker (`-sPROXY_TO_PTHREAD`), yields to the browser once per frame through Asyncify and starts each frame on a display
+  frame (`Source/SDLLaunch/Src/SDLLaunchWeb.cpp`), reads game files through the
   frontend's WasmFS backend (`vendor/glue/wasmfs-shim.js`), reaches the network through the glue's ABI v2 imports
   (`vendor/glue/ue_abi.h`, `net-shim.js`), renders on WebGL 2 with WebGL 1 as the fallback and has an explicit 2 GB
   memory ceiling. Every link flag and why: `Source/SDLLaunch/cmake/Web.cmake`.
