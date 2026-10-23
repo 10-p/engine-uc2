@@ -54,6 +54,7 @@ change: every other package stays the shipped one.
 | `players34` | players three and four join from the character page (a cursor each, a line of text, their own character and name in the match; a 2x2 armory for three or four) | GUI, UCMenu | on |
 | `key-glyphs` | player one's keys in place of the pad's button glyphs while they use the keyboard or the mouse (the engine draws them; the set switches it on) | GUI, UCMenu | on |
 | `keys-menu` | the KEYBOARD / MOUSE settings page | UCMenu | on |
+| `wide-hud` | the HUD on a window wider than 4:3: its left and right groups at the window's sides, at their 4:3 distance from them; the crosshair on the window's centre | UCGameplay | on |
 
 Each set's folder has a `README.md` (what it changes, its ini keys, what it depends on), one `<Pkg>.diff` per
 package it changes (paths `<Pkg>/Classes/<Class>.uc`; `patch -p1` reads them too) and whole new classes under

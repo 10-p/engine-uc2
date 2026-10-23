@@ -106,8 +106,38 @@ void AUCHUD::execDrawVitals(FFrame &Stack, RESULT_DECL)
 	P_GET_OBJECT(APawn, P);
 	P_FINISH;
 
+	DrawVitalsAt(C, P, 0, 0);
+
+	unguardexec;
+}
+
+// DrawVitals on a window wider than the UI box (GetSideShifts): the vitals and the active combos LeftShift design
+// pixels from their 4:3 place, the negative combos RightShift; the combo menu stays centred.
+void AUCHUD::execDrawVitalsWide(FFrame &Stack, RESULT_DECL)
+{
+	guard(AUCHUD::execDrawVitalsWide);
+
+	P_GET_OBJECT(UCanvas, C);
+	P_GET_OBJECT(APawn, P);
+	P_GET_INT(LeftShift);
+	P_GET_INT(RightShift);
+	P_FINISH;
+
+	DrawVitalsAt(C, P, LeftShift, RightShift);
+
+	unguardexec;
+}
+
+void AUCHUD::DrawVitalsAt( UCanvas* C, APawn* P, INT LeftShift, INT RightShift )
+{
+	guard(AUCHUD::DrawVitalsAt);
+
 	if (P)
 	{
+		// the vitals are drawn at SafeZoneOffsetX, moved by LeftShift for their part
+		INT OldOffsetX = SafeZoneOffsetX;
+		SafeZoneOffsetX += LeftShift;
+
 		DrawVitalsBackground(C, P);
 		DrawVitalsOutlines(C, P);
 
@@ -122,11 +152,38 @@ void AUCHUD::execDrawVitals(FFrame &Stack, RESULT_DECL)
 			DrawVitalsDebug(C, P);
 		}
 #endif
+		SafeZoneOffsetX = OldOffsetX;
+
 		AUCPawn* UCP = Cast<AUCPawn>(P);
 		if (UCP)
 		{
-			DrawCombos(C, UCP);
+			DrawCombos(C, UCP, LeftShift, RightShift);
 		}
+	}
+
+	unguard;
+}
+
+// The side groups' shifts on a window wider than the UI box: how far the window reaches past the 640-wide design
+// space on each side, in whole design pixels (LeftShift 0 or less, RightShift 0 or more); 0 and 0 when the UI is
+// not boxed.
+void AUCHUD::execGetSideShifts(FFrame &Stack, RESULT_DECL)
+{
+	guard(AUCHUD::execGetSideShifts);
+
+	P_GET_OBJECT(UCanvas, C);
+	P_GET_INT_REF(LeftShift);
+	P_GET_INT_REF(RightShift);
+	P_FINISH;
+
+	*LeftShift = 0;
+	*RightShift = 0;
+	if (C && C->IsUIBoxed())
+	{
+		FLOAT X1, Y1, X2, Y2;
+		C->GetTargetInDesign(X1, Y1, X2, Y2);
+		*LeftShift = -Max(0, appRound(-X1));
+		*RightShift = Max(0, appRound(X2 - C->SizeX));
 	}
 
 	unguardexec;
@@ -819,7 +876,7 @@ void AUCHUD::DrawCombo(UCanvas* C, UClass* ComboClass, AUCCombo* Combo, FIconPos
 *
 * =====================================================
 */
-void AUCHUD::DrawCombos(UCanvas* C, AUCPawn* P)
+void AUCHUD::DrawCombos(UCanvas* C, AUCPawn* P, INT LeftShift, INT RightShift)
 {
 	guard(AUCHUD::DrawCombos);
 
@@ -836,13 +893,18 @@ void AUCHUD::DrawCombos(UCanvas* C, AUCPawn* P)
 	{
 		if (!Combo->bNoDraw)
 		{
+			// the negative combos keep to the right side, the active ones to the left
 			if (Combo->bNegativeCombo || bDebugNegComboHUD)
 			{
-				DrawCombo(C, Combo->GetClass(), Combo, pos_NegCombo(NegComboCount++), GetColor(NAME_Combo_Neg), GetColor(NAME_Combo_Neg_Fill));
+				FIconPosn Posn = pos_NegCombo(NegComboCount++);
+				Posn.X += RightShift;
+				DrawCombo(C, Combo->GetClass(), Combo, Posn, GetColor(NAME_Combo_Neg), GetColor(NAME_Combo_Neg_Fill));
 			}
 			else
 			{
-				DrawCombo(C, Combo->GetClass(), Combo, pos_ActiveCombo(PosComboCount++), GetColor(NAME_Combo), GetColor(NAME_Combo_Fill));
+				FIconPosn Posn = pos_ActiveCombo(PosComboCount++);
+				Posn.X += LeftShift;
+				DrawCombo(C, Combo->GetClass(), Combo, Posn, GetColor(NAME_Combo), GetColor(NAME_Combo_Fill));
 			}
 
 			Combo->eventDrawCombo(C, this);

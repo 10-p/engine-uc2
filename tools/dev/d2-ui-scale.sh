@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# UI scaling verification: the menus and the HUD in a centred 4:3 box at every resolution, measured.
+# UI scaling verification: the menus and the HUD in a centred 4:3 box at every resolution (on a wider window the
+# HUD's side groups at the window's sides, patch set wide-hud), measured.
 #
 #   tools/dev/d2-ui-scale.sh                 run everything, then measure (one PASS/FAIL line per check)
 #   tools/dev/d2-ui-scale.sh run [res...]    only the game runs (default: every resolution below)

@@ -122,17 +122,28 @@ for res in resl:
         result(f'hud-box-{res}', False, 'no picture')
         continue
     # threshold 24: the level-off frame keeps a faint ghost of lit things (post-processing's lagged back-buffer
-    # copy; a glowing pickup reached 9-20 levels at 2560x1440); the HUD's own pixels are far above it
+    # copy; a glowing pickup reached 9-20 levels at 2560x1440); the HUD's own pixels are far above it.
+    # On a window wider than the box the HUD's side groups (patch set wide-hud: the vitals and the weapon selector
+    # left, the leaderboard right) move out by the window's room beside the box, in whole design pixels
+    # (UCHUD.GetSideShifts), so each keeps its 4:3 distance from its own side of the window.
+    lsh, rsh = -round(bx / s), round((W - bx - 640 * s) / s)
     bb, b0 = bbox(hud, 24), bbox(href, 24)
-    exp = (bx + b0[0] * s, by + b0[1] * s, bx + b0[2] * s, by + b0[3] * s)
+    exp = (bx + (b0[0] + lsh) * s, by + b0[1] * s, bx + (b0[2] + rsh) * s, by + b0[3] * s)
     tol = max(2, math.ceil(s))
-    inside = bb[0] >= want[0] - 1 and bb[1] >= want[1] - 1 and bb[2] <= want[2] + 1 and bb[3] <= want[3] + 1
+    inside = bb[0] >= 0 and bb[1] >= want[1] - 1 and bb[2] <= W and bb[3] <= want[3] + 1
     ok = inside and all(abs(a - b) <= tol for a, b in zip(bb, exp))
-    result(f'hud-box-{res}', ok, f'HUD bounding box {bb}, the 640x480 one {b0} scaled = ({exp[0]:.1f},{exp[1]:.1f},{exp[2]:.1f},{exp[3]:.1f}) '
-           f'(tolerance {tol}), inside the box {want}: {inside}')
-    m, dx, dy = align(hud, res, href, 0, 0, 640, 480, r=2)
-    result(f'hud-scale-{res}', m <= 3 and abs(dx) <= 1 and abs(dy) <= 1,
-           f'the box scaled back to 640x480 vs the 640x480 HUD: mean difference {m:.2f}, best offset ({dx},{dy}) px')
+    result(f'hud-box-{res}', ok, f'HUD bounding box {bb}, the 640x480 one {b0} scaled, the sides moved by ({lsh},{rsh}) design px = '
+           f'({exp[0]:.1f},{exp[1]:.1f},{exp[2]:.1f},{exp[3]:.1f}) (tolerance {tol}), inside the window and the box\'s rows: {inside}')
+    # the left part (vitals, weapon selector), the middle (the reticle) and the right part (leaderboard), each at its place
+    parts = []
+    for x0, x1, sh in ((0, 260, lsh), (260, 380, 0), (380, 640, rsh)):
+        m, dx, dy = align(hud, res, href, x0, 0, x1, 480, r=2) if sh == 0 else \
+            min((mad(design_crop(hud, res, x0, 0, x1, 480, sh * s + ddx, ddy), href.crop((x0, 0, x1, 480))), ddx, ddy)
+                for ddy in range(-2, 3) for ddx in range(-2, 3))
+        parts.append((m, dx, dy))
+    result(f'hud-scale-{res}', all(m <= 3 and abs(dx) <= 1 and abs(dy) <= 1 for m, dx, dy in parts),
+           'the left, middle and right parts, scaled back to 640x480 (the sides from their moved places) vs the 640x480 HUD: '
+           + ', '.join(f'mean difference {m:.2f} offset ({dx},{dy}) px' for m, dx, dy in parts))
     # the reticle: the drawn shape in a window around the centre. The crosshair's parts are laid out around
     # x=62.5 of a 128-wide element anchored at its centre (Crosshair_NakhtiRW: 28/96, 23.5/101.5), so the art
     # is off-centre by itself and the 640x480 picture has it too; the check is that the reticle is where the

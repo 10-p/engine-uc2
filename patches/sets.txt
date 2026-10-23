@@ -12,3 +12,4 @@ extra-maps     epic-fixes    on       ours
 players34      epic-fixes    on       ours
 key-glyphs     epic-fixes    on       ours
 keys-menu      mouse-look    on       ours
+wide-hud       epic-fixes    on       ours

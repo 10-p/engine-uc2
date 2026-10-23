@@ -948,6 +948,8 @@ public:
     FLOAT InstructionTextScaleY;
     FLOAT XboxInstructionScaleX;
     FLOAT XboxInstructionScaleY;
+    DECLARE_FUNCTION(execDrawVitalsWide);
+    DECLARE_FUNCTION(execGetSideShifts);
     DECLARE_FUNCTION(execDrawCompass);
     DECLARE_FUNCTION(execDrawFFALeaderboard);
     DECLARE_FUNCTION(execResetAdrenaline);
@@ -968,9 +970,10 @@ public:
 	void DrawAdrenalineMeter( class UCanvas* C, class APawn* P );
 
 	void DrawVitalsDebug( class UCanvas* C, class APawn* P );
+	void DrawVitalsAt( class UCanvas* C, class APawn* P, INT LeftShift, INT RightShift );
 
 	void DrawComboMenu(UCanvas* C, class AUCPawn* P);
-	void DrawCombos(UCanvas* C, class AUCPawn* P);
+	void DrawCombos(UCanvas* C, class AUCPawn* P, INT LeftShift, INT RightShift);
 	void DrawCombo(UCanvas* C, UClass* ComboClass, class AUCCombo* Combo, FIconPosn ComboPosn, const FColor& ComboColor, const FColor& ComboFillColor);
 
 	FLOAT GetLerpAmount( const FAdrenalineChunk& Block ) const;
@@ -2338,6 +2341,8 @@ public:
 
 #endif
 
+AUTOGENERATE_FUNCTION(AUCHUD,-1,execDrawVitalsWide);
+AUTOGENERATE_FUNCTION(AUCHUD,-1,execGetSideShifts);
 AUTOGENERATE_FUNCTION(AUCHUD,-1,execDrawCompass);
 AUTOGENERATE_FUNCTION(AUCHUD,-1,execDrawFFALeaderboard);
 AUTOGENERATE_FUNCTION(AUCHUD,-1,execResetAdrenaline);
@@ -2468,6 +2473,8 @@ VERIFY_CLASS_SIZE(UUCScreenTeleportOverlay);\
 #ifdef NATIVES_ONLY
 NATIVE_INFO(AUCHUD) GUCGameplayAUCHUDNatives[] = 
 { 
+	MAP_NATIVE(AUCHUD,execDrawVitalsWide)
+	MAP_NATIVE(AUCHUD,execGetSideShifts)
 	MAP_NATIVE(AUCHUD,execDrawCompass)
 	MAP_NATIVE(AUCHUD,execDrawFFALeaderboard)
 	MAP_NATIVE(AUCHUD,execResetAdrenaline)
