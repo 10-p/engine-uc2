@@ -125,7 +125,7 @@ endif()
 # Host: decompile, apply, build.
 #-----------------------------------------------------------------------------
 set(_help "Pass the game folder: -DUE_ASSETS_DIR=<dir> (its System/ holds the shipped .u and Epic's inis, beside it ")
-string(APPEND _help "the content folders Textures/, StaticMeshes/, ...: tools/dev/mkassets-uc2.sh makes one), or build ")
+string(APPEND _help "the content folders Textures/, StaticMeshes/, ...: tools/cook.py makes one, tools/README.md), or build ")
 string(APPEND _help "without the script patches: -DUE_SCRIPT_PATCHES=OFF.")
 
 # The game folder: the cache variable, else the environment variable the dev tools read (tools/dev/mkrun-uc2.sh),

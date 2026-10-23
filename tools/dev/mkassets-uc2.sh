@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Build the canonical UC2 asset tree from the pristine Epic tree.
+# (tools/cook.py makes the whole game folder, cooked sound and movies included, in one step: tools/README.md.)
 #
 #   tools/dev/mkassets-uc2.sh <epic-sources> <asset tree>      e.g. ../epic-sources/uc2-avaris-2226 <dir>
 #

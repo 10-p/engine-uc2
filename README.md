@@ -7,6 +7,7 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
 ([`patches/`](./patches/README.md)), which the build applies to scripts decompiled from your shipped `.u` files.
 
 - Building: [`BUILD.md`](./BUILD.md)
+- Cooking the game folder from Epic's tree or the Xbox disc: [`tools/README.md`](./tools/README.md)
 - Configuration defaults and why they differ from Epic's: [`Engine/Config/README.md`](./Engine/Config/README.md)
 - The script patch sets: [`patches/README.md`](./patches/README.md)
 - How the Epic tree was imported: [`docs/SOURCE-LAYOUT.md`](./docs/SOURCE-LAYOUT.md)
