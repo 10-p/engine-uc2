@@ -1221,8 +1221,9 @@ static UBOOL UC2GL_AsyncReadback( UUC2GLRenderDevice* RenDev )
 	return Can;
 }
 
-// The frame rate at which TransitionRate is the share of the way each frame moves: the Xbox's 60 Hz presentation.
-static const FLOAT GammaReferenceFrameRate = 60.f;
+// The frame rate at which TransitionRate is the share of the way each frame moves: 30, the Xbox game's pace (a time
+// constant of 0.65 s).
+static const FLOAT GammaReferenceFrameRate = 30.f;
 
 class FOpenGLDynamicGamma
 {
