@@ -1221,6 +1221,9 @@ static UBOOL UC2GL_AsyncReadback( UUC2GLRenderDevice* RenDev )
 	return Can;
 }
 
+// The frame rate at which TransitionRate is the share of the way each frame moves: the Xbox's 60 Hz presentation.
+static const FLOAT GammaReferenceFrameRate = 60.f;
+
 class FOpenGLDynamicGamma
 {
 public:
@@ -1235,7 +1238,8 @@ public:
 	INT						RampCount;		// Per instance (the log line every 200th ramp)
 	FLOAT					UpdateRate,
 							TransitionRate,
-							LastUpdateTime;
+							LastUpdateTime,
+							LastTransitionTime;	// The viewport's clock at the last UpdateDeviceGamma (-1: none yet)
 	INT						LuminanceSampleWidth,
 							LuminanceSampleHeight;
 	FAuxRenderTarget*		LuminanceTarget;
@@ -1256,6 +1260,7 @@ public:
 		UpdateRate(0.05f),
 		TransitionRate(0.05f),
 		LastUpdateTime(0),
+		LastTransitionTime(-1.f),
 		LuminanceSampleWidth(16),
 		LuminanceSampleHeight(16),
 		LuminanceTarget(NULL),
@@ -1522,6 +1527,13 @@ void FOpenGLDynamicGamma::UpdateDeviceGamma()
 	static const FLOAT UpdateThreshold=0.01f;
 	UBOOL DeviceUpdateRequired=0;
 
+	// UC2GLDrv: Epic moves TransitionRate of the way once a frame; the step here follows the time since the last
+	// call, so the adaptation takes as long at any frame rate as at GammaReferenceFrameRate (a frame counts 0.1 s at most).
+	FLOAT Now = RI->Viewport->CurrentTime;
+	FLOAT Delta = (LastTransitionTime >= 0.f && Now >= LastTransitionTime) ? Min( Now - LastTransitionTime, 0.1f ) : 1.f / GammaReferenceFrameRate;
+	LastTransitionTime = Now;
+	FLOAT Step = 1.f - appPow( 1.f - TransitionRate, Delta * GammaReferenceFrameRate );
+
 	// update current Min/Max/Avg luminosity values
 	// only update if the values change by more than UpdateThreshold
 	if( Abs(CurMinL-Histogram.MinL) > UpdateThreshold )
@@ -1529,17 +1541,17 @@ void FOpenGLDynamicGamma::UpdateDeviceGamma()
 		// interpolate between the current min luminosity and
 		// the new desired luminosity stored in the histogram
 		// this is done at a rate of TransitionRate
-		CurMinL = Lerp( CurMinL, Histogram.MinL, TransitionRate );
+		CurMinL = Lerp( CurMinL, Histogram.MinL, Step );
         DeviceUpdateRequired=1;
 	}
 	if( Abs(CurMaxL-Histogram.MaxL) > UpdateThreshold )
 	{
-		CurMaxL = Lerp( CurMaxL, Histogram.MaxL, TransitionRate );
+		CurMaxL = Lerp( CurMaxL, Histogram.MaxL, Step );
 		DeviceUpdateRequired=1;
 	}
 	if( Abs(CurAvgL-Histogram.AvgL) > UpdateThreshold )
 	{
-		CurAvgL = Lerp( CurAvgL, Histogram.AvgL, TransitionRate );
+		CurAvgL = Lerp( CurAvgL, Histogram.AvgL, Step );
 		DeviceUpdateRequired=1;
 	}
 
