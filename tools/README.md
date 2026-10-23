@@ -13,7 +13,7 @@ tools/cook.py --source epic --in ../uc2-avaris-2226 --out ../cooked/uc2-epic --b
 ```
 
 ```bash
-tools/cook.py --source xbox --in UC2.iso --pc-packages ../uc2-avaris-2226 --out ../cooked/uc2-retail --build build-native64
+tools/cook.py --source xbox --in UC2.iso --out ../cooked/uc2-retail --build build-native64
 ```
 
 ```bash
@@ -28,9 +28,11 @@ cd ../cooked/uc2-epic/System && ./uc2.bin
    game loads. Everything missing is listed with the command that installs it, and the cook stops.
 2. **Input.** The folder's layout is checked against `--source` (a disc given as `--source epic` is refused, and the
    other way round). A disc image is extracted once into the cache (`<cache>/disc/<image name>`: `System/`,
-   `Sounds/`, `Movies/`, `Textures/`) by `tools/xiso.py`; nothing else reads disc images.
+   `Sounds/`, `Movies/`, `Textures/` and the `Xbox*/` package folders) by `tools/xiso.py`; nothing else reads disc images.
 3. **System and packages.** Copied (a reflink where the file system can). Every package is checked to be PC format
    (licensee 0), and the 17 script packages against `patches/shipped.sha256` (a difference is noted in `COOK.txt`).
+   From a disc, the maps, textures, static meshes and animations are converted from the Xbox format by
+   `tools/cook-xbox-packages.py` (below), with the report `Maps/xbox-packages.txt`.
 4. **Audio** (`tools/cook-audio.py`). The XACT project (`Sounds/Avaris.xap`) becomes `Sounds/*.uc2wb` (wave bank
    index), `*.ogp` (the waves, Ogg Vorbis), `*.uc2cues` (cue tables) and `Music/*.ogg`. The waves come from the
    project's WAVs (`SoundData/`, `Music/`), or are decoded from the shipped `.xwb` where there is no WAV, which on a disc
@@ -53,20 +55,32 @@ The cooked formats are specified in `docs/porting/analysis/audio.md` and `video.
 | Output | `--source epic` | `--source xbox` |
 |---|---|---|
 | `System/*.u`, `*.ini`, `Localization/`, `Ladders/` | the tree's `System/` | the disc's `System/` (the final inis and localisation), plus `DefaultXbox.ini` and `DefUserXbox.ini` from `Engine/Config` (the script build reads them) |
-| `Maps/`, `Textures/*.utx`, `StaticMeshes/`, `Animations/` | the tree | `--pc-packages <dir>` (Epic's tree or a cooked game folder) |
+| `Maps/`, `Textures/*.utx`, `StaticMeshes/`, `Animations/` | the tree | converted from `XboxMaps/`, `XboxTextures/`, `XboxStaticMeshes/`, `XboxAnimations/` and `System/Script.lin` (the entry level); `--pc-packages <dir>` copies PC ones instead (Epic's tree or a cooked game folder) |
 | `Sounds/`, `Music/` | `Avaris.xap` with `SoundData/` and `Music/*.wav` | `Avaris.xap` with the shipped `.xwb` |
 | `Sounds/` with `--xbox-audio` | the shipped `.xsb`/`.xwb` | the same |
 | `Movies/`, `Textures/Movies/` | `Movies/*.xmv`, `Textures/Movies/*.xmv` | the same files |
 
-### Why the disc needs `--pc-packages`
+### The disc's packages
 
 The disc's maps, textures, static meshes and animations are Xbox-format packages (licensee 1, Epic's
-`XBOX_ASSET_FORMAT`). The maps are `.LIN` linear-load streams. The `.utx` hold only the texture headers: the pixels,
-with the static meshes' push buffers and vertex arrays, are in per-map bundles (`XboxTextures/<Map>.xpr`,
-`<Map>_pb.xpr`, `<Map>_uma.xpr`). The engine is built for PC-format packages (CLAUDE.md: `XBOX_ASSET_FORMAT` and
-`USE_LINEAR_LOADING` are never defined) and does not load these. Read in its place, a `.LIN` map stops on an
-assertion, and the Xbox static meshes and animations stop on bad export indices and reads past the end of the file.
-The same content in PC format is in Epic's tree, which `--pc-packages` names.
+`XBOX_ASSET_FORMAT`), which the engine does not load (CLAUDE.md: the Xbox macros are never defined).
+`tools/cook-xbox-packages.py` converts them:
+
+- **Maps** are `.LIN` linear-load streams: every byte the Xbox loader read, in its order. They are cut back into
+  their exports (`uc2xpkg.read_lin`); the entry level is in `System/Script.lin`. Their textures, static meshes and
+  animations are inside the map, renamed `cla<N>`.
+- **Bulk data** is in the `XboxTextures/*.xpr` bundles, by object name: texture pixels (`<Map>.xpr`, `Natives.xpr`,
+  per character and weapon), vertex, colour and UV arrays (`*_uma.xpr`), index push buffers (`*_pb.xpr`), animation
+  data (`*_a_uma.xpr`). The converters put it back into the PC layout: `uc2xbsp.py` (BSP models, with the light map
+  records the PC rebuilds the level from), `uc2xtex.py` (textures), `uc2xmesh.py` (static meshes), `uc2xskel.py`
+  (skeletal meshes, with the CPU-skinning data the Xbox left out, and animations), `uc2xterrain.py` (terrain, with
+  its heightmaps). Every other export is the same in both formats and is copied.
+- **What does not come back:** editor-only objects (brushes, cameras), static mesh `RawTriangles` and instance
+  `Lights` (editor data), the textures and texture-package static meshes the Xbox never shipped (placeholders and
+  meshes without geometry, listed in `Maps/xbox-packages.txt`), and `Maps/ComboMatinees/` (not on the disc). Vertex
+  positions and normals come back quantised as the Xbox stored them.
+
+The formats and the measured differences are in `docs/porting/analysis/xbox-packages.md`.
 
 ## What has to be installed
 
@@ -105,6 +119,10 @@ movie cook takes at most 4).
 | `cook.py` | the entry point above |
 | `cook-audio.py` | the audio step: the XACT project to `.uc2wb`, `.ogp`, `.uc2cues` and `Music/*.ogg`, with `Sounds/cook-report.txt` (everything it did not understand, the cross-check with the shipped banks) |
 | `cook-movies.py` | the movie step: XMV to Ogg Theora/Vorbis, with `Movies/movie-manifest.json` and `cook-report.txt` (frame and sample accounting, PSNR/SSIM against the decoded XMV) |
+| `cook-xbox-packages.py` | the package step of a disc: the Xbox-format maps, textures, static meshes and animations as PC packages, with `Maps/xbox-packages.txt` (per package what was converted, copied or left out, and every texture or mesh without data) |
+| `uc2xpkg.py` | reads and writes packages in both formats; cuts a `.LIN` back into its exports |
+| `uc2xpr.py` | reads the XPR bundles |
+| `uc2xbsp.py`, `uc2xtex.py`, `uc2xmesh.py`, `uc2xskel.py`, `uc2xterrain.py` | the converters of the classes whose native data differs (models, textures, static meshes, skeletal meshes and animations, terrain) |
 | `xiso.py` | lists and extracts an Xbox disc image (XDVDFS) |
 | `uc2xwb.py` | reads the shipped wave banks (`.xwb`) and decodes Xbox ADPCM and PCM waves |
 | `uc2xsb.py` | reads the shipped sound banks (`.xsb`) |

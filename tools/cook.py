@@ -2,8 +2,7 @@
 """cook.py: cook the game folder the engine runs from, out of Epic's source tree or the game's Xbox disc.
 
   tools/cook.py --source epic --in <uc2-avaris-2226> --out <dir> [--build <build-dir>]
-  tools/cook.py --source xbox --in <disc folder or image.iso> --pc-packages <dir> --out <dir>
-                [--xbox-audio] [--build <build-dir>]
+  tools/cook.py --source xbox --in <disc folder or image.iso> --out <dir> [--xbox-audio] [--build <build-dir>]
   tools/cook.py --check --source <epic|xbox> --in <...> [...]      the tools and the input only, nothing written
 
 Sources (--source)
@@ -12,15 +11,17 @@ Sources (--source)
         Music/) and the XMV movies (Movies/, Textures/Movies/).
   xbox  the game's Xbox disc, as a folder or a disc image (an xiso or a full dump, read by tools/xiso.py): System/
         (the same .u, the final inis and localisation), Sounds/ (the XACT banks and Avaris.xap), Movies/ and
-        Textures/Movies/. The disc's maps, textures, meshes and animations are Xbox-format packages (maps as .LIN
-        linear loads, texture and vertex data in per-map .xpr bundles) that the engine does not load, so
-        --pc-packages names a folder with the PC-format ones: Epic's tree or a cooked game folder.
+        Textures/Movies/, and the Xbox-format packages (XboxMaps/*.LIN linear loads, XboxTextures/,
+        XboxStaticMeshes/, XboxAnimations/ with the texture and vertex data in .xpr bundles), which
+        tools/cook-xbox-packages.py converts to the PC format. --pc-packages <dir> takes the PC-format packages
+        from a folder instead (Epic's tree or a cooked game folder).
 
 Steps
   1. tools: Python 3.8, ffmpeg and ffprobe with the codecs the cook needs (and, with --build, the libraries the game
      loads). Everything missing is listed with the packages that provide it, and the cook stops.
   2. input: its layout is checked against --source; a disc image is extracted once into <cache>/disc/<image>.
-  3. System/ and the packages: copied (a reflink where the file system can), each package checked to be PC format.
+  3. System/ and the packages: copied (a reflink where the file system can), each package checked to be PC format;
+     from a disc, converted by tools/cook-xbox-packages.py (report: Maps/xbox-packages.txt).
   4. audio (tools/cook-audio.py): Sounds/*.uc2wb, *.ogp, *.uc2cues, Music/*.ogg (Ogg Vorbis), from the project's WAVs or
      decoded from the disc's banks. --xbox-audio copies the disc's .xsb/.xwb instead, which the engine plays itself.
   5. movies (tools/cook-movies.py): Movies/*.ogv, *.oga and Textures/Movies/*.ogv (Ogg Theora/Vorbis).
@@ -57,7 +58,8 @@ SCRIPT_PACKAGES = ('Core', 'Engine', 'UCAnnouncements', 'Editor', 'UnrealEd', 'I
 PACKAGE_DIRS = (('Maps', '.unr'), ('Maps/ComboMatinees', '.unr'), ('Textures', '.utx'), ('StaticMeshes', '.usx'),
                 ('Animations', '.ukx'))
 # What the engine needs from the disc (an image is extracted only that far).
-DISC_DIRS = ('System', 'Sounds', 'Movies', 'Textures')
+DISC_DIRS = ('System', 'Sounds', 'Movies', 'Textures', 'XboxMaps', 'XboxTextures', 'XboxStaticMeshes',
+             'XboxAnimations')
 FICLONE = 0x40049409
 
 # ffmpeg features per step: (kind, name, why).
@@ -260,8 +262,13 @@ def check_input(args, src):
         problems.append('no Movies/*.xmv')
     pkgs = src if args.source == 'epic' else args.pc_packages
     if args.source == 'xbox' and not pkgs:
-        problems.append('--pc-packages is needed with --source xbox: the disc\'s maps, textures, static meshes and '
-                        'animations are Xbox-format packages the engine does not load')
+        for rel, ext in (('XboxMaps', '.lin'), ('XboxTextures', '.xpr'), ('XboxTextures', '.utx'),
+                         ('XboxStaticMeshes', '.usx'), ('XboxAnimations', '.ukx')):
+            if not files_in(src, rel, ext):
+                problems.append('no %s/*%s (the Xbox-format packages to convert; --pc-packages takes PC ones '
+                                'instead)' % (rel, ext))
+        if not find_ci(src, 'System/Script.lin'):
+            problems.append('no System/Script.lin (the entry level)')
     elif pkgs:
         for rel, ext in PACKAGE_DIRS[:1] + PACKAGE_DIRS[2:]:
             if not files_in(pkgs, rel, ext):
@@ -353,7 +360,8 @@ class Output:
 
 
 def copy_packages(args, src, out, log):
-    """System/ from the input, the PC-format packages from the input (epic) or --pc-packages (xbox)."""
+    """System/ from the input; the PC-format packages from the input (epic), --pc-packages (xbox) or converted
+    from the disc (xbox)."""
     n = 0
     sysdir = find_ci(src, 'System')
     for f in sorted(os.listdir(sysdir)):
@@ -382,6 +390,9 @@ def copy_packages(args, src, out, log):
             log.append('System/%s: not the shipped package (sha256 differs from patches/shipped.sha256)' % name)
     say('  System/: %d files written' % n)
 
+    if args.source == 'xbox' and not args.pc_packages:
+        convert_packages(args, src, out, log)
+        return
     root = src if args.source == 'epic' else os.path.abspath(args.pc_packages)
     xbox = []
     for rel, ext in PACKAGE_DIRS:
@@ -397,6 +408,29 @@ def copy_packages(args, src, out, log):
         log.append('%s/: %d packages from %s' % (rel, len(files), find_ci(root, rel)))
     if xbox:
         raise CookError('packages the engine cannot load:\n  ' + '\n  '.join(xbox))
+
+
+def convert_packages(args, src, out, log):
+    """The disc's Xbox-format maps, textures, static meshes and animations as PC packages
+    (tools/cook-xbox-packages.py), written straight into the output folder."""
+    logfile = os.path.join(args.cache, 'logs', os.path.basename(out.path) + '-packages.log')
+    cmd = [sys.executable, os.path.join(HERE, 'cook-xbox-packages.py'), '--in', src, '--out', out.path,
+           '--jobs', str(args.jobs)]
+    run_step(cmd, logfile, lambda l: l.startswith('FAILED'))
+    bad = []
+    for rel, ext in PACKAGE_DIRS:
+        files = files_in(out.path, rel, ext)
+        for p in files:
+            if package_licensee(p) != 0:
+                bad.append(p)
+            out.new.add('%s/%s' % (rel, os.path.basename(p)))
+        if files:
+            say('  %s/: %d packages converted' % (rel, len(files)))
+    out.new.add('Maps/xbox-packages.txt')
+    if bad:
+        raise CookError('converted packages not in PC format:\n  ' + '\n  '.join(bad))
+    log.append('Maps/, Textures/, StaticMeshes/, Animations/: converted from the disc by tools/cook-xbox-packages.py '
+               '(report: Maps/xbox-packages.txt)')
 
 
 def cook_audio(args, src, out, log):
@@ -542,7 +576,8 @@ def main():
     ap.add_argument('--source', required=True, choices=('epic', 'xbox'), help="Epic's source tree or the Xbox disc")
     ap.add_argument('--in', dest='input', required=True, help='the input folder, or a disc image (xbox)')
     ap.add_argument('--out', help='the game folder to write')
-    ap.add_argument('--pc-packages', default='', help='xbox: the folder with the PC-format packages')
+    ap.add_argument('--pc-packages', default='', help='xbox: take the PC-format packages from this folder instead '
+                                                      'of converting the disc\'s')
     ap.add_argument('--xbox-audio', action='store_true', help='the shipped .xsb/.xwb instead of cooked audio')
     ap.add_argument('--build', default='', help='a build directory whose binaries go into System/')
     ap.add_argument('--skip', default='', help='comma list of steps to leave out: audio, movies')
