@@ -3,34 +3,44 @@
 The engine runs from a game folder: `System/` (the script packages and inis, and the binaries), the PC-format packages
 (`Maps/`, `Textures/`, `StaticMeshes/`, `Animations/`), the sound in the engine's cooked format (`Sounds/`, `Music/`)
 and the movies as Ogg Theora (`Movies/`, `Textures/Movies/`). `tools/cook.py` makes one, in one command, from either
-source of the game's content:
+source of the game's content, which it recognises by itself (`--source epic|xbox` when it does not):
 
-- **Epic's source tree** (`--source epic`, e.g. `<repo>/../uc2-avaris-2226`): the original assets.
-- **The game's Xbox disc** (`--source xbox`): a folder with its files, or a disc image (`.iso`, an xiso or a full dump).
+- **The game's Xbox disc**: a disc image (`.iso`, an xiso or a full dump), or a folder with its files.
+- **Epic's source tree** (e.g. `<repo>/../uc2-avaris-2226`): the original assets.
 
 ```bash
-tools/cook.py --source epic --in ../uc2-avaris-2226 --out ../cooked/uc2-epic --build build-native64
+tools/cook.py --in UC2.iso --out ../cooked/uc2-retail --build build-native64
 ```
 
 ```bash
-tools/cook.py --source xbox --in UC2.iso --out ../cooked/uc2-retail --build build-native64
+tools/cook.py --in ../uc2-avaris-2226 --out ../cooked/uc2-epic --build build-native64
 ```
 
 ```bash
-cd ../cooked/uc2-epic/System && ./uc2.bin
+cd ../cooked/uc2-retail/System && ./uc2.bin
 ```
 
-`--check` runs only the first two steps (tools and input) and writes nothing. Run it first on a new machine.
+`--check` is a dry run of every tool the cook runs (and, with `--in`, the input's checks); it writes nothing. Run it
+first on a new machine.
+
+The cook stands on its own: Python, the scripts beside `cook.py`, the PC tables and ffmpeg, nothing from the
+repository but with `--build`, and nothing kept between runs. `tools/dev/pack-cook-tool.py` packs it as a zip for
+players (`uc2-cook/`: the scripts, the tables, a `README.txt`).
 
 ## Steps
 
-1. **Tools.** Python 3.8, `ffmpeg` and `ffprobe` with every codec the cook uses, and with `--build` the libraries the
-   game loads. Everything missing is listed with the command that installs it, and the cook stops.
-2. **Input.** The folder's layout is checked against `--source` (a disc given as `--source epic` is refused, and the
-   other way round). A disc image is extracted once into the cache (`<cache>/disc/<image name>`: `System/`,
-   `Sounds/`, `Movies/`, `Textures/` and the `Xbox*/` package folders) by `tools/xiso.py`; nothing else reads disc images.
+1. **Tools.** Python 3.8 and the standard modules the scripts use, the scripts beside `cook.py`, the PC tables (a
+   disc), `ffmpeg` and `ffprobe`: each encoder the cook uses tried on a generated sound or picture and read back by
+   ffprobe, each decoder and demuxer looked up; with `--build` the libraries the game loads. Everything missing is
+   listed with the command that installs it (for the distribution, macOS or Windows it runs on) and what the cook
+   does without it (`--skip audio,movies`, `--xbox-audio`), and the cook stops.
+2. **Input.** Recognised and its layout checked (a disc given as `--source epic` is refused, and the other way
+   round); ffmpeg decodes the first second of its smallest movie; the free space where the output goes is checked. A
+   disc image is extracted by `tools/xiso.py` into `<out>/.cook-work/` (`System/`, `Sounds/`, `Movies/`, `Textures/`
+   and the `Xbox*/` package folders), which is removed at the end; nothing else reads disc images.
 3. **System and packages.** Copied (a reflink where the file system can). Every package is checked to be PC format
-   (licensee 0), and the 17 script packages against `patches/shipped.sha256` (a difference is noted in `COOK.txt`).
+   (licensee 0), and, in the repository, the 17 script packages against `patches/shipped.sha256` (a difference is
+   noted in `COOK.txt`).
    From a disc, the maps, textures, static meshes and animations are converted from the Xbox format by
    `tools/cook-xbox-packages.py` (below), with the report `Maps/xbox-packages.txt`.
 4. **Audio** (`tools/cook-audio.py`). The XACT project (`Sounds/Avaris.xap`) becomes `Sounds/*.uc2wb` (wave bank
@@ -54,7 +64,7 @@ The cooked formats are specified in `docs/porting/analysis/audio.md` and `video.
 
 | Output | `--source epic` | `--source xbox` |
 |---|---|---|
-| `System/*.u`, `*.ini`, `Localization/`, `Ladders/` | the tree's `System/` | the disc's `System/` (the final inis and localisation), plus `DefaultXbox.ini` and `DefUserXbox.ini` from `Engine/Config` (the script build reads them) |
+| `System/*.u`, `*.ini`, `Localization/`, `Ladders/` | the tree's `System/` | the disc's `System/` (the final inis and localisation), plus, in the repository, `DefaultXbox.ini` and `DefUserXbox.ini` from `Engine/Config` (the script build reads them) |
 | `Maps/`, `Textures/*.utx`, `StaticMeshes/`, `Animations/` | the tree | converted from `XboxMaps/`, `XboxTextures/`, `XboxStaticMeshes/`, `XboxAnimations/` and `System/Script.lin` (the entry level); `--pc-packages <dir>` copies PC ones instead (Epic's tree or a cooked game folder) |
 | `Sounds/`, `Music/` | `Avaris.xap` with `SoundData/` and `Music/*.wav` | `Avaris.xap` with the shipped `.xwb` |
 | `Sounds/` with `--xbox-audio` | the shipped `.xsb`/`.xwb` | the same |
@@ -105,9 +115,9 @@ cook with Epic's PC packages and the `.LIN` cut with Epic's Xbox maps.
 | the X11 client libraries and `libGL` | running the game (`--build`) | `libx11-6 libxext6 libxcursor1 libxi6 libxfixes3 libxrandr2 libxss1 libgl1` |
 
 Disc images need nothing more: `tools/xiso.py` reads them. `cook.py` checks all of this first and prints the install
-command for the distribution it runs on.
+command for the system it runs on.
 
-## The output folder and the caches
+## The output folder
 
 `--out` is created, or has to be a folder `cook.py` made: it keeps the list of its files in `.cook-files`. A re-cook
 rewrites what changed, removes the files it wrote before and no longer writes (switching to `--xbox-audio` removes the
@@ -117,10 +127,9 @@ A folder cooked without `--build` is a game folder for the build (`-DUE_ASSETS_D
 patches"). With `--build`, its `System/` holds the build's patched script packages and the repository's inis, as a run
 tree does, so it is no longer the script build's input.
 
-The caches (`--cache`, default `$XDG_CACHE_HOME/uc2-cook` or `~/.cache/uc2-cook`) are shared by every cook: `audio/`
-(one encoded Ogg per source WAV and quality), `movies/` (the movie cook, skipped per file when the source and the
-settings are unchanged), `disc/` (extracted images) and `logs/` (each step's whole output). A second cook of the same
-content only copies. One cook runs at a time per cache (a lock).
+Nothing is cached: the steps work in `<out>/.cook-work/` (the extracted disc image, the decoded waves, the movie
+cook), which is removed at the end, and each sound and movie is encoded again on every cook. Each step's whole output
+is in `<out>/.cook-logs/<step>.log`.
 
 `--skip audio,movies` leaves those steps out (an earlier cook's audio or movies in the folder stay); `--jobs N` sets
 the parallel encoders (default: half the CPUs; the
@@ -131,6 +140,7 @@ movie cook takes at most 4).
 | Tool | What it does |
 |---|---|
 | `cook.py` | the entry point above |
+| `uc2-pc-tables.json.gz` | the PC packages' tables the disc's packages are written in (generated: `tools/dev/make-pc-tables.py`, never committed) |
 | `cook-audio.py` | the audio step: the XACT project to `.uc2wb`, `.ogp`, `.uc2cues` and `Music/*.ogg`, with `Sounds/cook-report.txt` (everything it did not understand, the cross-check with the shipped banks) |
 | `cook-movies.py` | the movie step: XMV to Ogg Theora/Vorbis, with `Movies/movie-manifest.json` and `cook-report.txt` (frame and sample accounting, PSNR/SSIM against the decoded XMV) |
 | `cook-xbox-packages.py` | the package step of a disc: the Xbox-format maps, textures, static meshes and animations as PC packages, with `Maps/xbox-packages.txt` (per package what was converted, copied or left out, and every texture or mesh without data) |
