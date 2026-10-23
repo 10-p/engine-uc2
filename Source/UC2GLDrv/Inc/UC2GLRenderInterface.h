@@ -373,6 +373,27 @@ public:
 	GLuint					WireIndexBuffer;			// GLES: wireframe passes drawn as lines (DrawWireframe)
 	UBOOL DrawWireframe( GLenum Type, INT FirstIndex, INT Count );
 
+	// Hit testing (the editor's clicks: a frame locked with hit data, never presented). As D3DDrv does it: PushHit
+	// fills the viewport's hit rectangle with a colour no material draws, PopHit reads the rectangle back and
+	// the proxy was hit when something else is there. A nested proxy's pixels do not count for its parent, so
+	// PopHit fills the rectangle again and the parent remembers what it had drawn before the nested push.
+	struct FHitFrame
+	{
+		INT		Count;			// bytes of the proxy on HitStack
+		UBOOL	DrewBefore;		// the proxy drew in the rectangle before a nested proxy was pushed
+		FColor	DrewColor;
+	};
+	BYTE*					HitData;
+	INT*					HitSize;
+	INT						HitCount;
+	TArray<BYTE>			HitStack;
+	TArray<FHitFrame>		HitFrames;
+	// The hit rectangle in the current render target's GL window coordinates; 0 when it is empty.
+	UBOOL GetHitRect( INT& X, INT& Y, INT& W, INT& H );
+	// The first pixel of the rectangle that is not the fill colour, if any.
+	UBOOL ReadHitRect( INT X, INT Y, INT W, INT H, FColor& Found );
+	void FillHitRect( INT X, INT Y, INT W, INT H );
+
 	FOpenGLRenderInterface(UUC2GLRenderDevice* InRenDev);
 	~FOpenGLRenderInterface();
 
