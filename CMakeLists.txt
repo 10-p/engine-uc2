@@ -466,6 +466,13 @@ if(UC2_PTR_BYTES EQUAL 8)
   list(REMOVE_ITEM UC2_PACKAGES Editor)
 endif()
 
+# The editor, UnrealEd.exe (Source/UnrealEd): Epic's Win32 user interface (Window, WinDrv) and the WGL binding of the GL
+# driver (UC2WGLDrv) around the Editor package. MinGW only, at 32-bit pointers like the Editor package.
+if(MINGW AND UC2_PTR_BYTES EQUAL 4)
+  include(UC2Win32Resources)
+  list(APPEND UC2_PACKAGES Window WinDrv UC2WGLDrv UnrealEd)
+endif()
+
 foreach(pkg IN LISTS UC2_PACKAGES)
   if(EMSCRIPTEN AND pkg IN_LIST UC2_NATIVE_ONLY_PACKAGES)
     continue()

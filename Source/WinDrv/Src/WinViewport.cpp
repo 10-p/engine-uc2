@@ -623,7 +623,7 @@ void UWindowsViewport::OpenWindow( DWORD InParentWindow, UBOOL IsTemporary, INT 
 	if( !RenDev && !appStrcmp( GetName(), TEXT("VisibiltyViewport") ) )
 		TryRenderDevice( TEXT("Editor.VisibilityRenderDevice"), NewX, NewY, 0 );
 	if( !RenDev && (BlitFlags & BLIT_Temporary) )
-		TryRenderDevice( TEXT("D3DDrv.D3DRenderDevice"), NewX, NewY, 0 );
+		TryRenderDevice( TEXT("ini:Engine.Engine.RenderDevice"), NewX, NewY, 0 );
 	if( !RenDev && !GIsEditor && ParseParam(appCmdLine(),TEXT("windowed")) )
 		TryRenderDevice( TEXT("ini:Engine.Engine.RenderDevice"), NewX, NewY, 0 );
 	if( !RenDev )

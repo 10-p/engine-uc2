@@ -18,9 +18,16 @@
 #include "WExportComboSceneManagerDlg.h"
 
 //jg -- Thread synchronization factory
+#ifdef _MSC_VER
 #include "UnThreadingWindows.h"
 FSynchronizeFactoryWin SynchFactory;
 FThreadFactoryWin ThreadFactory;
+#else
+// GCC: Core's portable platform layer (POSIX threads through winpthreads), as for ucc.exe and uc2.exe.
+#include "UnThreadingPosix.h"
+FSynchronizeFactoryPosix SynchFactory;
+FThreadFactoryPosix ThreadFactory;
+#endif
 
 /*-----------------------------------------------------------------------------
 	Globals.
@@ -125,7 +132,7 @@ const DWORD GShowFlags =
 #include "BrowserStaticMesh.h"
 #include "BrowserMesh.h"
 #include "BrowserPrefab.h"
-#include "..\..\core\inc\unmsg.h"
+#include "../../Core/Inc/UnMsg.h"
 
 // The last viewport to get the focus.  The main editor
 // app uses this to draw a white outline around the current viewport.
@@ -186,9 +193,12 @@ class WLevelFrame;
 #ifdef _DEBUG
 	#include "FMallocDebug.h"
 	FMallocDebug Malloc;
-#else
+#elif defined(_MSC_VER)
 	#include "FMallocWindows.h"
 	FMallocWindows Malloc;
+#else
+	#include "FMallocAnsi.h"
+	FMallocAnsi Malloc;
 #endif
 
 // Log file.
@@ -204,8 +214,24 @@ FOutputDeviceWindowsError Error;
 FFeedbackContextWindows Warn;
 
 // File manager.
+#ifdef _MSC_VER
 #include "FFileManagerWindows.h"
 FFileManagerWindows FileManager;
+#else
+// GCC: Core's portable file manager, which has the Windows branches (as for ucc.exe and uc2.exe).
+#include "FFileManagerUnix.h"
+FFileManagerUnix FileManager;
+#endif
+
+#if __STATIC_LINK && !defined(_MSC_VER)
+// Core's GPackage, the program's name (WinMain sets it from the executable's); under __STATIC_LINK
+// IMPLEMENT_PACKAGE(UnrealEd) defines GUnrealEdPackage instead. UC2UnrealEdStartup.cpp registers the linked packages.
+extern "C" {TCHAR GPackage[64]=TEXT("UnrealEd");}
+void UC2InitializeUnrealEdRegistrants();
+#endif
+#ifndef _MSC_VER
+void UC2SelectEditorDrivers();
+#endif
 
 // Config.
 #include "FConfigCacheIni.h"
@@ -853,7 +879,7 @@ class WLevelFrame : public WWindow
 				SizeY = pVC->ViewportFrame->Viewport->SizeY;
 
 				GConfig->GetString( l_chName, TEXT("Device"), Device, TEXT("UnrealEd.ini") );
-				if( !Device.Len() )		Device = TEXT("D3DDrv.D3DRenderDevice");
+				if( !Device.Len() )		Device = TEXT("ini:Engine.Engine.RenderDevice");
 
 				pVC->ViewportFrame->Viewport->TryRenderDevice( *Device, SizeX, SizeY, 0 );
 			}
@@ -4232,7 +4258,16 @@ INT WINAPI WinMain( HINSTANCE hInInstance, HINSTANCE hPrevInstance, char* InCmdL
 		GSynchronizeFactory = &SynchFactory;
 		GThreadFactory = &ThreadFactory;
 
+#ifdef _MSC_VER
 		appInit( TEXT("avaris"), GetCommandLine(), &Malloc, &Log, &Error, &Warn, &FileManager, FConfigCacheIni::Factory, 1 );
+#else
+		// The editor's own system ini (UC2Editor.ini): the game's Avaris.ini names the SDL client and device.
+		appInit( TEXT("UC2Editor"), GetCommandLine(), &Malloc, &Log, &Error, &Warn, &FileManager, FConfigCacheIni::Factory, 1 );
+		UC2SelectEditorDrivers();
+#endif
+#if __STATIC_LINK && !defined(_MSC_VER)
+		UC2InitializeUnrealEdRegistrants();
+#endif
 
 		// Init windowing.
 		InitWindowing();
@@ -4385,7 +4420,8 @@ INT WINAPI WinMain( HINSTANCE hInInstance, HINSTANCE hPrevInstance, char* InCmdL
 		WEditorFrame Frame;
 		Frame.OpenWindow();
 		UBOOL ShowLog = ParseParam(appCmdLine(),TEXT("log"));
-		if( !ShowLog && !ParseParam(appCmdLine(),TEXT("server")) )
+		// The splash picture is optional: a game folder without System/EdSplash.bmp starts without it.
+		if( !ShowLog && !ParseParam(appCmdLine(),TEXT("server")) && GFileManager->FileSize(TEXT("EdSplash.bmp")) > 0 )
 			InitSplash( TEXT("EdSplash.bmp") );
 
 		// Init.

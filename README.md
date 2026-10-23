@@ -36,6 +36,8 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   system's folder picker (or read in place from shared storage), a resolution scale up to supersampling, an exit prompt
   on Back, and an on-screen pad that is a virtual SDL controller (the mouse is off).
 - **Windows build**: MinGW-w64 cross builds (i686 and x86_64), statically linked, no runtime DLL but OpenAL's.
+- **The editor** (`UnrealEd.exe`, i686): Epic's UnrealEd, Window and WinDrv built with MinGW, its viewports drawn by the
+  OpenGL renderer through WGL (`UC2WGLDrv`) in place of D3DDrv, with viewport hit testing (click selection).
 - **GCC/Clang portability**: Epic's MSVC code builds with GCC, Clang (Emscripten) and MinGW unchanged in behaviour.
 - **Keyboard and mouse**: PC bindings, menus driven by keyboard and mouse, the console on the key left of 1, the
   PC mouse look of the mouse-look patch set.
@@ -62,7 +64,8 @@ The features of every engine of the frontend, with this one's, are listed in the
 
 Linux x86 (32-bit, the reference) and x86_64 play: every map loads, menus, matches with bots, effects, sound,
 movies, controls, split screen and network play. Windows builds run under wine here and have not been run on Windows
-itself. The web build boots and plays in the frontend's browser specs (target `uc2`). The arm64 cross build builds and
+itself; the editor, under wine, opens a map, selects surfaces, actors and wireframe lines by clicking, and browses
+textures and static meshes. The web build boots and plays in the frontend's browser specs (target `uc2`). The arm64 cross build builds and
 its `ucc-bin` runs under qemu; it has not been run on arm64 hardware. The Android build (arm64) boots to the menus
 and plays a match with bots on a Pixel 7 Pro (Android 17), from shared storage.
 
