@@ -54,11 +54,11 @@ END
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
-IDICON_Mainframe        ICON                    "..\\res\\Unreal.ico"
-IDICON_FolderClosed     ICON                    "..\\res\\idicon_f.ico"
-IDICON_FolderOpen       ICON                    "..\\res\\ico00001.ico"
-IDICON_Setup            ICON                    "..\\res\\idicon_s.ico"
-IDICON_Editor           ICON                    "..\\res\\idicon_m.ico"
+IDICON_Mainframe        ICON                    "../Res/Unreal.ico"
+IDICON_FolderClosed     ICON                    "../Res/idicon_f.ico"
+IDICON_FolderOpen       ICON                    "../Res/ico00001.ico"
+IDICON_Setup            ICON                    "../Res/idicon_s.ico"
+IDICON_Editor           ICON                    "../Res/idicon_m.ico"
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -593,22 +593,22 @@ END
 // Cursor
 //
 
-IDC_Add                 CURSOR                  "..\\res\\add.cur"
-IDC_DragItem            CURSOR                  "..\\res\\dragitem.cur"
-IDC_ZoomIn              CURSOR                  "..\\res\\zoomin.cur"
-IDC_Draw                CURSOR                  "..\\res\\draw.cur"
-IDC_Crosshair           CURSOR                  "..\\res\\crosshai.cur"
-IDC_ZoomOut             CURSOR                  "..\\res\\zoomout.cur"
-IDC_LittlePointer       CURSOR                  "..\\res\\littlepo.cur"
-IDC_LittleArrows        CURSOR                  "..\\res\\littlear.cur"
-IDC_Hand                CURSOR                  "..\\res\\hand.cur"
-IDC_NoDrop              CURSOR                  "..\\res\\nodrop.cur"
-IDC_SplitNS             CURSOR                  "..\\res\\splitns.cur"
-IDC_SplitWE             CURSOR                  "..\\res\\splitwe.cur"
-IDC_SplitWE1            CURSOR                  "..\\res\\splitall.cur"
-IDC_HandGrab            CURSOR                  "..\\res\\hand1.cur"
-IDC_UDN_Help            CURSOR                  "..\\res\\udn_help.cur"
-IDC_UDN_HelpBig         CURSOR                  "..\\res\\cur00001.cur"
+IDC_Add                 CURSOR                  "../Res/add.cur"
+IDC_DragItem            CURSOR                  "../Res/dragitem.cur"
+IDC_ZoomIn              CURSOR                  "../Res/zoomin.cur"
+IDC_Draw                CURSOR                  "../Res/draw.cur"
+IDC_Crosshair           CURSOR                  "../Res/crosshai.cur"
+IDC_ZoomOut             CURSOR                  "../Res/zoomout.cur"
+IDC_LittlePointer       CURSOR                  "../Res/littlepo.cur"
+IDC_LittleArrows        CURSOR                  "../Res/littlear.cur"
+IDC_Hand                CURSOR                  "../Res/hand.cur"
+IDC_NoDrop              CURSOR                  "../Res/nodrop.cur"
+IDC_SplitNS             CURSOR                  "../Res/splitns.cur"
+IDC_SplitWE             CURSOR                  "../Res/splitwe.cur"
+IDC_SplitWE1            CURSOR                  "../Res/splitall.cur"
+IDC_HandGrab            CURSOR                  "../Res/hand1.cur"
+IDC_UDN_Help            CURSOR                  "../Res/udn_help.cur"
+IDC_UDN_HelpBig         CURSOR                  "../Res/cur00001.cur"
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -640,12 +640,12 @@ END
 // Bitmap
 //
 
-IDBM_CHECKBOX_OFF       BITMAP                  "..\\res\\bmp00022.bmp"
-IDBM_CHECKBOX_ON        BITMAP                  "..\\res\\idbm_che.bmp"
-IDBM_TIME_THUMB         BITMAP                  "..\\res\\bmp00001.bmp"
-IDBM_TIME_LEFT          BITMAP                  "..\\res\\idbm_tim.bmp"
-IDBM_TIME_BODY          BITMAP                  "..\\res\\bmp00002.bmp"
-IDBM_TIME_RIGHT         BITMAP                  "..\\res\\bmp00003.bmp"
+IDBM_CHECKBOX_OFF       BITMAP                  "../Res/bmp00022.bmp"
+IDBM_CHECKBOX_ON        BITMAP                  "../Res/idbm_che.bmp"
+IDBM_TIME_THUMB         BITMAP                  "../Res/bmp00001.bmp"
+IDBM_TIME_LEFT          BITMAP                  "../Res/idbm_tim.bmp"
+IDBM_TIME_BODY          BITMAP                  "../Res/bmp00002.bmp"
+IDBM_TIME_RIGHT         BITMAP                  "../Res/bmp00003.bmp"
 #endif    // English (U.S.) resources
 /////////////////////////////////////////////////////////////////////////////
 

@@ -26,149 +26,149 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 // Bitmap
 //
 
-IDB_CodeFrame_TOOLBAR   BITMAP                  "..\\res\\toolbar1.bmp"
-IDB_2DSE_TOOLBAR        BITMAP                  "..\\res\\cf_toolb.bmp"
-IDBM_VIEWPORT_CFG0      BITMAP                  "..\\res\\idbm_vie.bmp"
-IDBM_VIEWPORT_CFG1      BITMAP                  "..\\res\\bmp00001.bmp"
-IDBM_VIEWPORT_CFG2      BITMAP                  "..\\res\\bmp00002.bmp"
-IDBM_VIEWPORT_CFG3      BITMAP                  "..\\res\\bmp00003.bmp"
-IDBM_VF_TOOLBAR         BITMAP                  "..\\res\\bmp00004.bmp"
-IDB_BB_LOG_WND          BITMAP                  "..\\res\\bb_log_w.bmp"
-IDB_BB_LOCK             BITMAP                  "..\\res\\bmp00005.bmp"
-IDB_BB_SNAP_VTX         BITMAP                  "..\\res\\bb_lock1.bmp"
-IDB_BB_GRID             BITMAP                  "..\\res\\bb_vtx_s.bmp"
-IDB_BB_ROTATE_GRID      BITMAP                  "..\\res\\bb_rotat.bmp"
-IDB_BB_ZOOMCENTER_ALL   BITMAP                  "..\\res\\bb_grid1.bmp"
-IDB_BB_ZOOMCENTER       BITMAP                  "..\\res\\bb_zoomc.bmp"
-IDB_BB_MAXIMIZE         BITMAP                  "..\\res\\bmp00006.bmp"
-IDB_BOTTOM_BAR          BITMAP                  "..\\res\\bmp00007.bmp"
-IDBM_2DSE               BITMAP                  "..\\res\\bmp00018.bmp"
-IDBM_ACTORBROWSER       BITMAP                  "..\\res\\idbm_tex.bmp"
-IDBM_ACTORPROPERTIES    BITMAP                  "..\\res\\idbm_unr.bmp"
-IDBM_BUILDGEOM          BITMAP                  "..\\res\\idbm_sur.bmp"
-IDBM_BUILDLIGHTING      BITMAP                  "..\\res\\idbm_bui.bmp"
-IDBM_BUILDOPTIONS       BITMAP                  "..\\res\\bmp00015.bmp"
-IDBM_BUILDPATHS         BITMAP                  "..\\res\\bmp00014.bmp"
-IDBM_EDITFIND           BITMAP                  "..\\res\\bmp00010.bmp"
-IDBM_FILENEW            BITMAP                  "..\\res\\idbm_fil.bmp"
-IDBM_FILEOPEN           BITMAP                  "..\\res\\bmp00008.bmp"
-IDBM_FILESAVE           BITMAP                  "..\\res\\bmp00009.bmp"
-IDBM_MESHVIEWER         BITMAP                  "..\\res\\idbm_2ds.bmp"
-IDBM_MUSICBROWSER       BITMAP                  "..\\res\\bmp00011.bmp"
-IDBM_PLAYMAP            BITMAP                  "..\\res\\bmp00016.bmp"
-IDBM_REDO               BITMAP                  "..\\res\\bmp00017.bmp"
-IDBM_SOUNDBROWSER       BITMAP                  "..\\res\\bmp00012.bmp"
-IDBM_SURFACEPROPERTIES  BITMAP                  "..\\res\\bmp00013.bmp"
-IDBM_TEXTUREBROWSER     BITMAP                  "..\\res\\idbm_edi.bmp"
-IDBM_UNDO               BITMAP                  "..\\res\\idbm_pla.bmp"
-IDBM_UNREALSCRIPT       BITMAP                  "..\\res\\idbm_mes.bmp"
-IDBM_DOWN_ARROW         BITMAP                  "..\\res\\idbm_dow.bmp"
-IDBM_UP_ARROW           BITMAP                  "..\\res\\bmp00019.bmp"
-IDBM_CAMSPEED1          BITMAP                  "..\\res\\bmp00020.bmp"
-IDBM_CAMSPEED2          BITMAP                  "..\\res\\idbm_cam.bmp"
-IDBM_CAMSPEED3          BITMAP                  "..\\res\\bmp00021.bmp"
-IDBM_GROUPBROWSER       BITMAP                  "..\\res\\idbm_mus.bmp"
-IDB_BrowserSound_TOOLBAR BITMAP                  "..\\res\\bmp00025.bmp"
-IDB_BrowserMusic_TOOLBAR BITMAP                  "..\\res\\browsers.bmp"
-IDB_BrowserTexture_TOOLBAR BITMAP                  "..\\res\\bmp00026.bmp"
-IDB_BrowserMesh_TOOLBAR BITMAP                  "..\\res\\browsert.bmp"
-IDB_BrowserActor_TOOLBAR BITMAP                  "..\\res\\bmp00027.bmp"
-IDB_BrowserGroup_TOOLBAR BITMAP                  "..\\res\\bmp00028.bmp"
-IDBM_BUILDALL           BITMAP                  "..\\res\\idbm_buildall.bmp"
-IDBM_MAP_ERRORS         BITMAP                  "..\\res\\idbm_map.bmp"
-IDB_BrowserPrefab_TOOLBAR BITMAP                  "..\\res\\browserm.bmp"
-IDBM_PREFABBROWSER      BITMAP                  "..\\res\\bmp00022.bmp"
-IDBM_FORWARD            BITMAP                  "..\\res\\bmp00023.bmp"
-IDBM_BACKWARD           BITMAP                  "..\\res\\idbm_for.bmp"
-IDBM_EXECUTE            BITMAP                  "..\\res\\idbm_exe.bmp"
-IDBM_STOP               BITMAP                  "..\\res\\idbm_bac.bmp"
-IDBM_NEW                BITMAP                  "..\\res\\bmp00024.bmp"
-IDBM_DELETE             BITMAP                  "..\\res\\idbm_new.bmp"
-IDBM_DUPLICATE          BITMAP                  "..\\res\\idbm_del.bmp"
-IDBM_MOVE_UP            BITMAP                  "..\\res\\idbm_up.bmp"
-IDBM_MOVE_DOWN          BITMAP                  "..\\res\\idbm_mov.bmp"
-IDBM_LOCK               BITMAP                  "..\\res\\idbm_dup.bmp"
-IDBM_GRID               BITMAP                  "..\\res\\bmp00029.bmp"
-IDBM_MAT_CONTROLS       BITMAP                  "..\\res\\PlayControls.bmp"
-IDBM_MATPATH_LEFT       BITMAP                  "..\\res\\bmp00030.bmp"
-IDBM_MATPATH_BODY       BITMAP                  "..\\res\\idbm_mat.bmp"
-IDBM_MATPATH_RIGHT      BITMAP                  "..\\res\\bmp00031.bmp"
-IDB_BrowserStaticMesh_TOOLBAR BITMAP                  "..\\res\\browserg.bmp"
-IDBM_STATICMESHBROWSER  BITMAP                  "..\\res\\idbm_pre.bmp"
-IDBM_SHOW_ON_TERRAIN    BITMAP                  "..\\res\\idbm_gri.bmp"
-IDB_BrowserAnimation_TOOLBAR BITMAP                  "..\\res\\bmp00032.bmp"
-IDBM_ANIMATIONVIEWER    BITMAP                  "..\\res\\bmp00033.bmp"
-IDBM_NEW_PLUS           BITMAP                  "..\\res\\bmp00034.bmp"
-IDBM_MAT_PREVIEW        BITMAP                  "..\\res\\bmp00035.bmp"
-IDBM_MAT_PATHS          BITMAP                  "..\\res\\idbm_ani.bmp"
-IDBM_MAT_VCR_FIRST      BITMAP                  "..\\res\\vcrfirst.bmp"
-IDBM_MAT_VCR_BACKWARD   BITMAP                  "..\\res\\vcrbackward.bmp"
-IDBM_MAT_VCR_PLAY       BITMAP                  "..\\res\\vcrplay.bmp"
-IDBM_MAT_VCR_STOP       BITMAP                  "..\\res\\vcrstop.bmp"
-IDBM_MAT_VCR_FORWARD    BITMAP                  "..\\res\\vcrforward.bmp"
-IDBM_MAT_VCR_LAST       BITMAP                  "..\\res\\vcrlast.bmp"
-IDBM_MAT_SHOW_PATH      BITMAP                  "..\\res\\MatShowPath.bmp"
-IDBM_MAT_SHOW_ROT       BITMAP                  "..\\res\\MatShowRotations.bmp"
-IDBM_MAT_TOGGLE_CINEMATIC_VIEW BITMAP                  "..\\res\\ToggleCinView.bmp"
-IDBM_MAT_EDIT_TOGGLE    BITMAP                  "..\\res\\MatPreviewEdit.bmp"
-IDBM_MAT_REFRESH        BITMAP                  "..\\res\\MatRefresh.bmp"
-IDBM_AN_PLAY            BITMAP                  "..\\res\\idbm_an_play.bmp"
-IDBM_DTP_PLANE          BITMAP                  "..\\res\\dtp_plane.bmp"
-IDBM_DTP_CUBE           BITMAP                  "..\\res\\dtp_cube.bmp"
-IDBM_DTP_SPHERE         BITMAP                  "..\\res\\dtp_sphere.bmp"
-IDBM_AN_BEGIN           BITMAP                  "..\\res\\idbm_an_begin.bmp"
-IDBM_AN_END             BITMAP                  "..\\res\\idbm_an_end.bmp"
-IDBM_AN_FORWARD         BITMAP                  "..\\res\\idbm_an_forward.bmp"
-IDBM_AN_BACKWARD        BITMAP                  "..\\res\\idbm_an_backward.bmp"
-IDBM_AN_LOOP            BITMAP                  "..\\res\\idbm_an_loop.bmp"
-IDBM_DTP_BACKDROP       BITMAP                  "..\\res\\dtp_backdrop.bmp"
-IDBM_DTP_TOPLEVEL       BITMAP                  "..\\res\\dtp_toplevel.bmp"
-IDBM_MAT_RESET          BITMAP                  "..\\res\\reset.bmp"
-7839                    BITMAP                  "..\\res\\bmp7839.bmp"
-IDBM_BUILDPATHS1        BITMAP                  "..\\res\\bmp00036.bmp"
-IDB_BuildChangedLighting BITMAP                  "..\\res\\BuildChangedLights.bmp"
-IDBM_TIPOFTHEDAY        BITMAP                  "..\\res\\totd.bmp"
-IDBM_UDN_HELP           BITMAP                  "..\\res\\UdnContextHelp.bmp"
-IDBM_AN_NOLOOP          BITMAP                  "..\\res\\idbm_an_noloop.bmp"
-IDBM_AN_PAUSE           BITMAP                  "..\\res\\idbm_an_pause.bmp"
-IDB_ParticleEditor_TOOLBAR BITMAP                  "..\\res\\particle.bmp"
-IDPS_UNLOCKED           BITMAP                  "..\\res\\separate.bmp"
-IDPS_LOCK_SAME          BITMAP                  "..\\res\\same.bmp"
-IDPS_LINK_12            BITMAP                  "..\\res\\12.bmp"
-IDPS_LINK_13            BITMAP                  "..\\res\\13.bmp"
-IDPS_LINK_23            BITMAP                  "..\\res\\23.bmp"
-IDPS_LINK_123           BITMAP                  "..\\res\\123.bmp"
-IDPS_UPDOWN             BITMAP                  "..\\res\\updownarrow.bmp"
-IDPS_LINK_2             BITMAP                  "..\\res\\2.bmp"
-IDPS_LINK_3             BITMAP                  "..\\res\\3.bmp"
-IDPS_LOCK_MIRROR        BITMAP                  "..\\res\\mirror.bmp"
-IDPS_LINK_1             BITMAP                  "..\\res\\1.bmp"
-IDPS_COLOR_PICK2        BITMAP                  "..\\res\\colorpick.bmp"
-IDPS_BEAM               BITMAP                  "..\\res\\Beam.bmp"
-IDPS_MESH               BITMAP                  "..\\res\\Mesh.bmp"
-IDPS_SPARK              BITMAP                  "..\\res\\Spark.bmp"
-IDPS_MOVE_PARALLEL      BITMAP                  "..\\res\\ParallelMove.bmp"
-IDPS_SHAPE_PLANE_HORIZ  BITMAP                  "..\\res\\PlaneHorizShape.bmp"
-IDPS_MOVE_SPREAD        BITMAP                  "..\\res\\SpreadMove.bmp"
-IDPS_MOVE_SPHERE        BITMAP                  "..\\res\\SphereMove.bmp"
-IDPS_SHAPE_SPHERE       BITMAP                  "..\\res\\SphereShape.bmp"
-IDPS_SHAPE_BOX          BITMAP                  "..\\res\\BoxShape.bmp"
-IDPS_SHAPE_POINT        BITMAP                  "..\\res\\PointShape.bmp"
-IDPS_SHAPE_PLANE_VERT   BITMAP                  "..\\res\\PlaneVertShape.bmp"
-IDPS_DIR_DOWN           BITMAP                  "..\\res\\DirDown.bmp"
-IDPS_DIR_HORIZ          BITMAP                  "..\\res\\DirHoriz.bmp"
-IDPS_DIR_UP             BITMAP                  "..\\res\\DirUp.bmp"
-IDPS_PSIZE_SMALL        BITMAP                  "..\\res\\PSizeSmall.bmp"
-IDPS_DENSE_DENSE        BITMAP                  "..\\res\\DenseDense.bmp"
-IDPS_DENSE_NORMAL       BITMAP                  "..\\res\\DenseNormal.bmp"
-IDPS_DENSE_SPARSE       BITMAP                  "..\\res\\DenseSparse.bmp"
-IDPS_PSIZE_LARGE        BITMAP                  "..\\res\\PSizeLarge.bmp"
-IDPS_PSIZE_MEDIUM       BITMAP                  "..\\res\\PSizeMedium.bmp"
-IDPS_SPRITE             BITMAP                  "..\\res\\Sprite.bmp"
-IDPS_BEAM_SMALL         BITMAP                  "..\\res\\BeamNoiseSmall.bmp"
-IDPS_BEAM_LARGE         BITMAP                  "..\\res\\BeamNoiseLarge.bmp"
-IDPS_BEAM_MED           BITMAP                  "..\\res\\BeamNoiseMed.bmp"
-IDPS_BEAM_NONE          BITMAP                  "..\\res\\BeamNoiseNone.bmp"
+IDB_CodeFrame_TOOLBAR   BITMAP                  "../res/toolbar1.bmp"
+IDB_2DSE_TOOLBAR        BITMAP                  "../res/cf_toolb.bmp"
+IDBM_VIEWPORT_CFG0      BITMAP                  "../res/idbm_vie.bmp"
+IDBM_VIEWPORT_CFG1      BITMAP                  "../res/bmp00001.bmp"
+IDBM_VIEWPORT_CFG2      BITMAP                  "../res/bmp00002.bmp"
+IDBM_VIEWPORT_CFG3      BITMAP                  "../res/bmp00003.bmp"
+IDBM_VF_TOOLBAR         BITMAP                  "../res/bmp00004.bmp"
+IDB_BB_LOG_WND          BITMAP                  "../res/bb_log_w.bmp"
+IDB_BB_LOCK             BITMAP                  "../res/bmp00005.bmp"
+IDB_BB_SNAP_VTX         BITMAP                  "../res/bb_lock1.bmp"
+IDB_BB_GRID             BITMAP                  "../res/bb_vtx_s.bmp"
+IDB_BB_ROTATE_GRID      BITMAP                  "../res/bb_rotat.bmp"
+IDB_BB_ZOOMCENTER_ALL   BITMAP                  "../res/bb_grid1.bmp"
+IDB_BB_ZOOMCENTER       BITMAP                  "../res/bb_zoomc.bmp"
+IDB_BB_MAXIMIZE         BITMAP                  "../res/bmp00006.bmp"
+IDB_BOTTOM_BAR          BITMAP                  "../res/bmp00007.bmp"
+IDBM_2DSE               BITMAP                  "../res/bmp00018.bmp"
+IDBM_ACTORBROWSER       BITMAP                  "../res/idbm_tex.bmp"
+IDBM_ACTORPROPERTIES    BITMAP                  "../res/idbm_unr.bmp"
+IDBM_BUILDGEOM          BITMAP                  "../res/idbm_sur.bmp"
+IDBM_BUILDLIGHTING      BITMAP                  "../res/idbm_bui.bmp"
+IDBM_BUILDOPTIONS       BITMAP                  "../res/bmp00015.bmp"
+IDBM_BUILDPATHS         BITMAP                  "../res/bmp00014.bmp"
+IDBM_EDITFIND           BITMAP                  "../res/bmp00010.bmp"
+IDBM_FILENEW            BITMAP                  "../res/idbm_fil.bmp"
+IDBM_FILEOPEN           BITMAP                  "../res/bmp00008.bmp"
+IDBM_FILESAVE           BITMAP                  "../res/bmp00009.bmp"
+IDBM_MESHVIEWER         BITMAP                  "../res/idbm_2ds.bmp"
+IDBM_MUSICBROWSER       BITMAP                  "../res/bmp00011.bmp"
+IDBM_PLAYMAP            BITMAP                  "../res/bmp00016.bmp"
+IDBM_REDO               BITMAP                  "../res/bmp00017.bmp"
+IDBM_SOUNDBROWSER       BITMAP                  "../res/bmp00012.bmp"
+IDBM_SURFACEPROPERTIES  BITMAP                  "../res/bmp00013.bmp"
+IDBM_TEXTUREBROWSER     BITMAP                  "../res/idbm_edi.bmp"
+IDBM_UNDO               BITMAP                  "../res/idbm_pla.bmp"
+IDBM_UNREALSCRIPT       BITMAP                  "../res/idbm_mes.bmp"
+IDBM_DOWN_ARROW         BITMAP                  "../res/idbm_dow.bmp"
+IDBM_UP_ARROW           BITMAP                  "../res/bmp00019.bmp"
+IDBM_CAMSPEED1          BITMAP                  "../res/bmp00020.bmp"
+IDBM_CAMSPEED2          BITMAP                  "../res/idbm_cam.bmp"
+IDBM_CAMSPEED3          BITMAP                  "../res/bmp00021.bmp"
+IDBM_GROUPBROWSER       BITMAP                  "../res/IDBM_MUS.BMP"
+IDB_BrowserSound_TOOLBAR BITMAP                  "../res/bmp00025.bmp"
+IDB_BrowserMusic_TOOLBAR BITMAP                  "../res/browsers.bmp"
+IDB_BrowserTexture_TOOLBAR BITMAP                  "../res/bmp00026.bmp"
+IDB_BrowserMesh_TOOLBAR BITMAP                  "../res/browsert.bmp"
+IDB_BrowserActor_TOOLBAR BITMAP                  "../res/bmp00027.bmp"
+IDB_BrowserGroup_TOOLBAR BITMAP                  "../res/bmp00028.bmp"
+IDBM_BUILDALL           BITMAP                  "../res/idbm_buildall.bmp"
+IDBM_MAP_ERRORS         BITMAP                  "../res/idbm_map.bmp"
+IDB_BrowserPrefab_TOOLBAR BITMAP                  "../res/browserm.bmp"
+IDBM_PREFABBROWSER      BITMAP                  "../res/bmp00022.bmp"
+IDBM_FORWARD            BITMAP                  "../res/bmp00023.bmp"
+IDBM_BACKWARD           BITMAP                  "../res/idbm_for.bmp"
+IDBM_EXECUTE            BITMAP                  "../res/idbm_exe.bmp"
+IDBM_STOP               BITMAP                  "../res/idbm_bac.bmp"
+IDBM_NEW                BITMAP                  "../res/bmp00024.bmp"
+IDBM_DELETE             BITMAP                  "../res/idbm_new.bmp"
+IDBM_DUPLICATE          BITMAP                  "../res/idbm_del.bmp"
+IDBM_MOVE_UP            BITMAP                  "../res/idbm_up.bmp"
+IDBM_MOVE_DOWN          BITMAP                  "../res/idbm_mov.bmp"
+IDBM_LOCK               BITMAP                  "../res/idbm_dup.bmp"
+IDBM_GRID               BITMAP                  "../res/bmp00029.bmp"
+IDBM_MAT_CONTROLS       BITMAP                  "../res/PlayControls.bmp"
+IDBM_MATPATH_LEFT       BITMAP                  "../res/bmp00030.bmp"
+IDBM_MATPATH_BODY       BITMAP                  "../res/idbm_mat.bmp"
+IDBM_MATPATH_RIGHT      BITMAP                  "../res/bmp00031.bmp"
+IDB_BrowserStaticMesh_TOOLBAR BITMAP                  "../res/browserg.bmp"
+IDBM_STATICMESHBROWSER  BITMAP                  "../res/idbm_pre.bmp"
+IDBM_SHOW_ON_TERRAIN    BITMAP                  "../res/idbm_gri.bmp"
+IDB_BrowserAnimation_TOOLBAR BITMAP                  "../res/bmp00032.bmp"
+IDBM_ANIMATIONVIEWER    BITMAP                  "../res/bmp00033.bmp"
+IDBM_NEW_PLUS           BITMAP                  "../res/bmp00034.bmp"
+IDBM_MAT_PREVIEW        BITMAP                  "../res/bmp00035.bmp"
+IDBM_MAT_PATHS          BITMAP                  "../res/idbm_ani.bmp"
+IDBM_MAT_VCR_FIRST      BITMAP                  "../res/vcrfirst.bmp"
+IDBM_MAT_VCR_BACKWARD   BITMAP                  "../res/vcrbackward.bmp"
+IDBM_MAT_VCR_PLAY       BITMAP                  "../res/vcrplay.bmp"
+IDBM_MAT_VCR_STOP       BITMAP                  "../res/vcrstop.bmp"
+IDBM_MAT_VCR_FORWARD    BITMAP                  "../res/vcrforward.bmp"
+IDBM_MAT_VCR_LAST       BITMAP                  "../res/vcrlast.bmp"
+IDBM_MAT_SHOW_PATH      BITMAP                  "../res/MatShowPath.bmp"
+IDBM_MAT_SHOW_ROT       BITMAP                  "../res/MatShowRotations.bmp"
+IDBM_MAT_TOGGLE_CINEMATIC_VIEW BITMAP                  "../res/ToggleCinView.bmp"
+IDBM_MAT_EDIT_TOGGLE    BITMAP                  "../res/MatPreviewEdit.bmp"
+IDBM_MAT_REFRESH        BITMAP                  "../res/MatRefresh.bmp"
+IDBM_AN_PLAY            BITMAP                  "../res/idbm_an_play.bmp"
+IDBM_DTP_PLANE          BITMAP                  "../res/dtp_plane.bmp"
+IDBM_DTP_CUBE           BITMAP                  "../res/dtp_cube.bmp"
+IDBM_DTP_SPHERE         BITMAP                  "../res/dtp_sphere.bmp"
+IDBM_AN_BEGIN           BITMAP                  "../res/idbm_an_begin.bmp"
+IDBM_AN_END             BITMAP                  "../res/idbm_an_end.bmp"
+IDBM_AN_FORWARD         BITMAP                  "../res/idbm_an_forward.bmp"
+IDBM_AN_BACKWARD        BITMAP                  "../res/idbm_an_backward.bmp"
+IDBM_AN_LOOP            BITMAP                  "../res/idbm_an_loop.bmp"
+IDBM_DTP_BACKDROP       BITMAP                  "../res/dtp_backdrop.bmp"
+IDBM_DTP_TOPLEVEL       BITMAP                  "../res/dtp_toplevel.bmp"
+IDBM_MAT_RESET          BITMAP                  "../res/reset.bmp"
+7839                    BITMAP                  "../res/bmp7839.bmp"
+IDBM_BUILDPATHS1        BITMAP                  "../res/bmp00036.bmp"
+IDB_BuildChangedLighting BITMAP                  "../res/BuildChangedLights.bmp"
+IDBM_TIPOFTHEDAY        BITMAP                  "../res/totd.bmp"
+IDBM_UDN_HELP           BITMAP                  "../res/UdnContextHelp.bmp"
+IDBM_AN_NOLOOP          BITMAP                  "../res/idbm_an_noloop.bmp"
+IDBM_AN_PAUSE           BITMAP                  "../res/idbm_an_pause.bmp"
+IDB_ParticleEditor_TOOLBAR BITMAP                  "../res/particle.bmp"
+IDPS_UNLOCKED           BITMAP                  "../res/separate.bmp"
+IDPS_LOCK_SAME          BITMAP                  "../res/same.bmp"
+IDPS_LINK_12            BITMAP                  "../res/12.bmp"
+IDPS_LINK_13            BITMAP                  "../res/13.bmp"
+IDPS_LINK_23            BITMAP                  "../res/23.bmp"
+IDPS_LINK_123           BITMAP                  "../res/123.bmp"
+IDPS_UPDOWN             BITMAP                  "../res/updownarrow.bmp"
+IDPS_LINK_2             BITMAP                  "../res/2.bmp"
+IDPS_LINK_3             BITMAP                  "../res/3.bmp"
+IDPS_LOCK_MIRROR        BITMAP                  "../res/mirror.bmp"
+IDPS_LINK_1             BITMAP                  "../res/1.bmp"
+IDPS_COLOR_PICK2        BITMAP                  "../res/colorpick.bmp"
+IDPS_BEAM               BITMAP                  "../res/Beam.bmp"
+IDPS_MESH               BITMAP                  "../res/Mesh.bmp"
+IDPS_SPARK              BITMAP                  "../res/Spark.bmp"
+IDPS_MOVE_PARALLEL      BITMAP                  "../res/ParallelMove.bmp"
+IDPS_SHAPE_PLANE_HORIZ  BITMAP                  "../res/PlaneHorizShape.bmp"
+IDPS_MOVE_SPREAD        BITMAP                  "../res/SpreadMove.bmp"
+IDPS_MOVE_SPHERE        BITMAP                  "../res/SphereMove.bmp"
+IDPS_SHAPE_SPHERE       BITMAP                  "../res/SphereShape.bmp"
+IDPS_SHAPE_BOX          BITMAP                  "../res/BoxShape.bmp"
+IDPS_SHAPE_POINT        BITMAP                  "../res/PointShape.bmp"
+IDPS_SHAPE_PLANE_VERT   BITMAP                  "../res/PlaneVertShape.bmp"
+IDPS_DIR_DOWN           BITMAP                  "../res/DirDown.bmp"
+IDPS_DIR_HORIZ          BITMAP                  "../res/DirHoriz.bmp"
+IDPS_DIR_UP             BITMAP                  "../res/DirUp.bmp"
+IDPS_PSIZE_SMALL        BITMAP                  "../res/PSizeSmall.bmp"
+IDPS_DENSE_DENSE        BITMAP                  "../res/DenseDense.bmp"
+IDPS_DENSE_NORMAL       BITMAP                  "../res/DenseNormal.bmp"
+IDPS_DENSE_SPARSE       BITMAP                  "../res/DenseSparse.bmp"
+IDPS_PSIZE_LARGE        BITMAP                  "../res/PSizeLarge.bmp"
+IDPS_PSIZE_MEDIUM       BITMAP                  "../res/PSizeMedium.bmp"
+IDPS_SPRITE             BITMAP                  "../res/Sprite.bmp"
+IDPS_BEAM_SMALL         BITMAP                  "../res/BeamNoiseSmall.bmp"
+IDPS_BEAM_LARGE         BITMAP                  "../res/BeamNoiseLarge.bmp"
+IDPS_BEAM_MED           BITMAP                  "../res/BeamNoiseMed.bmp"
+IDPS_BEAM_NONE          BITMAP                  "../res/BeamNoiseNone.bmp"
 IDB_BrowserLIPSinc_TOOLBAR BITMAP                  "LIPSincToolbar.bmp"
 IDB_LIPSINCFILEOPEN     BITMAP                  "LIPSincFileOpen.bmp"
 IDB_LIPSINCFILESAVE     BITMAP                  "LIPSincFileSave.bmp"
@@ -206,7 +206,7 @@ END
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
-IDICON_Mainframe1       ICON                    "..\\res\\Unreal.ico"
+IDICON_Mainframe1       ICON                    "../res/Unreal.ico"
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -3383,20 +3383,15 @@ IDR_ACCELERATOR1 ACCELERATORS
 BEGIN
     "A",            ID_BrushAdd,            VIRTKEY, CONTROL, NOINVERT
     "A",            ID_EditSelectAllActors, VIRTKEY, SHIFT, NOINVERT
-    "B",            ID_SurfPopupSelectMatchingBrush, VIRTKEY, SHIFT, 
-                                                    NOINVERT
+    "B",            ID_SurfPopupSelectMatchingBrush, VIRTKEY, SHIFT, NOINVERT
     "C",            ID_EditCopy,            VIRTKEY, CONTROL, NOINVERT
-    "C",            ID_SurfPopupSelectAdjacentCoplanars, VIRTKEY, SHIFT, 
-                                                    NOINVERT
+    "C",            ID_SurfPopupSelectAdjacentCoplanars, VIRTKEY, SHIFT, NOINVERT
     "D",            ID_BrushDeintersect,    VIRTKEY, CONTROL, NOINVERT
     "F",            ID_EditFind,            VIRTKEY, CONTROL, NOINVERT
-    "F",            ID_SurfPopupSelectAdjacentFloors, VIRTKEY, SHIFT, 
-                                                    NOINVERT
-    "G",            ID_SurfPopupSelectMatchingGroups, VIRTKEY, SHIFT, 
-                                                    NOINVERT
+    "F",            ID_SurfPopupSelectAdjacentFloors, VIRTKEY, SHIFT, NOINVERT
+    "G",            ID_SurfPopupSelectMatchingGroups, VIRTKEY, SHIFT, NOINVERT
     "H",            ID_EditReplace,         VIRTKEY, CONTROL, NOINVERT
-    "I",            ID_SurfPopupSelectMatchingItems, VIRTKEY, SHIFT, 
-                                                    NOINVERT
+    "I",            ID_SurfPopupSelectMatchingItems, VIRTKEY, SHIFT, NOINVERT
     "J",            ID_SurfPopupSelectAllAdjacents, VIRTKEY, SHIFT, NOINVERT
     "L",            ID_FileSave,            VIRTKEY, CONTROL, NOINVERT
     "M",            ID_SurfPopupMemorize,   VIRTKEY, CONTROL, NOINVERT
@@ -3409,10 +3404,8 @@ BEGIN
     "R",            ID_SurfPopupRecall,     VIRTKEY, SHIFT, NOINVERT
     "S",            ID_BrushSubtract,       VIRTKEY, CONTROL, NOINVERT
     "S",            ID_EditSelectAllSurfs,  VIRTKEY, SHIFT, NOINVERT
-    "S",            ID_SurfPopupSelectAdjacentSlants, VIRTKEY, SHIFT, 
-                                                    NOINVERT
-    "T",            ID_SurfPopupSelectMatchingTexture, VIRTKEY, SHIFT, 
-                                                    NOINVERT
+    "S",            ID_SurfPopupSelectAdjacentSlants, VIRTKEY, SHIFT, NOINVERT
+    "T",            ID_SurfPopupSelectMatchingTexture, VIRTKEY, SHIFT, NOINVERT
     "U",            ID_SurfPopupAnd,        VIRTKEY, SHIFT, NOINVERT
     "V",            ID_EditPaste,           VIRTKEY, CONTROL, NOINVERT
     VK_DELETE,      ID_EditDelete,          VIRTKEY, NOINVERT
@@ -3422,8 +3415,7 @@ BEGIN
     VK_F7,          ID_ViewPrefs,           VIRTKEY, NOINVERT
     VK_F9,          ID_BuildChanged,        VIRTKEY, NOINVERT
     "W",            ID_EditDuplicate,       VIRTKEY, CONTROL, NOINVERT
-    "W",            ID_SurfPopupSelectAdjacentWalls, VIRTKEY, SHIFT, 
-                                                    NOINVERT
+    "W",            ID_SurfPopupSelectAdjacentWalls, VIRTKEY, SHIFT, NOINVERT
     "X",            ID_EditCut,             VIRTKEY, CONTROL, NOINVERT
     "X",            ID_SurfPopupXor,        VIRTKEY, SHIFT, NOINVERT
     "Y",            ID_EditRedo,            VIRTKEY, CONTROL, NOINVERT
@@ -3437,12 +3429,15 @@ END
 // Dialog Info
 //
 
+// MFC dialog data; windres has no DLGINIT (the editor fills this combo box itself).
+#ifndef __GNUC__
 IDPS_ADD_EMITTER DLGINIT
 BEGIN
     IDPS_PICK_CLASS, 0x403, 1, 0
 "\000" 
     0
 END
+#endif
 
 
 /////////////////////////////////////////////////////////////////////////////
