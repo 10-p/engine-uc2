@@ -38,6 +38,15 @@ Scenario language, one command per line (# comments):
     padtrigger <axis> [hold]      virtual pad trigger fully in, hold (0.2 s), out
     chan <channel command>        any channel line (exec ..., log ...)
     probe <tag>                   ask the engine for a probe line and keep its fields as <tag>
+    place <x> <y> <z> <yaw> [pitch]   the pawn to that spot and view (the engine's TELEPORT), then wait until it
+                                  stands there still (M10_PLACE_TIMEOUT seconds, default 30); place [pitch]: the
+                                  spot M10_SPOT=<x> <y> <z> <yaw> with that pitch (default 0)
+    render cheap | render full    hide the world's geometry and the post-processing from the render (the pawn,
+                                  the HUD and the physics stay), or show them again
+    baseline begin / baseline end [fps]   the checks between count only if every second of frames between ran at
+                                  the baseline (default M10_BASELINE_FPS 30) with no frame longer than three
+                                  baseline frames; otherwise they are recorded as BELOW, "environment below the 30
+                                  fps baseline: <fps>", not as PASS or FAIL
     seek <max> <expr> ;; <cmd>    probe (as '_') until <expr> holds, running <cmd> in between, at most <max> times
     tryseek <max> <expr> ;; <cmd> the same, but the scenario goes on when <expr> is not reached (a later check says)
     shot <name>                   engine screenshot (SHOT); the shell renames it to <name>.png afterwards
@@ -407,8 +416,8 @@ probe_count = 0
 last_move = None
 
 
-def engine_mouse():
-    """The pointer position the engine has, from a probe that leaves the wait position where it is."""
+def engine_probe():
+    """A probe of the engine's state that leaves the wait position where it is (not kept in P)."""
     global probe_count
     probe_count += 1
     tag = f'_mv{probe_count}'
@@ -419,7 +428,51 @@ def engine_mouse():
     m = PROBE_RX.search(log_lines[i]) if i is not None else None
     if not m:
         raise RuntimeError(f'no probe line for {tag} within 20 s')
-    return Probe(m).mouse
+    return Probe(m)
+
+
+def engine_mouse():
+    """The pointer position the engine has."""
+    return engine_probe().mouse
+
+
+PLACE_TIMEOUT = float(os.environ.get('M10_PLACE_TIMEOUT', '30'))
+
+
+def place(args):
+    """The pawn to a spot and view through the engine's TELEPORT <x> <y> <z> <yaw> <pitch>, then wait until it stands
+    there still (two probes 0.3 s apart at the same place, the yaw it was given), so that a movement check starts
+    from the same place whatever spawn point the game chose."""
+    v = [float(a) for a in args.split()]
+    if len(v) <= 1:
+        spot = os.environ.get('M10_SPOT', '')
+        if len(spot.split()) != 4:
+            raise RuntimeError('place without a spot needs M10_SPOT=<x> <y> <z> <yaw>')
+        v = [float(a) for a in spot.split()] + v
+    x, y, z, yaw = v[:4]
+    pitch = v[4] if len(v) > 4 else 0.0
+    pump_log()
+    mark = len(log_lines)
+    chan(f'exec TELEPORT {x:g} {y:g} {z:g} {yaw:g} {pitch:g}')
+    i = line_after(re.compile(r'Cheat: TELEPORT'), mark, 20)
+    if i is None:
+        raise RuntimeError('timed out after 20 s waiting for the engine to log "Cheat: TELEPORT"')
+    if 'refused' in log_lines[i]:
+        raise RuntimeError('TELEPORT refused: ' + log_lines[i].strip())
+    end = time.time() + PLACE_TIMEOUT
+    last = None
+    while True:
+        p = engine_probe()
+        there = (p.pawn == 1 and math.hypot(p.loc[0] - x, p.loc[1] - y) < 64
+                 and abs((p.rot[1] - yaw + 32768) % 65536 - 32768) < 200)
+        if there and last is not None and max(abs(a - b) for a, b in zip(p.loc, last.loc)) < 1:
+            print(f'  placed at {p.loc} yaw {p.rot[1]}', flush=True)
+            return
+        if time.time() > end:
+            raise RuntimeError(f'timed out after {PLACE_TIMEOUT:g} s waiting for the pawn to stand still at '
+                               f'({x:g}, {y:g}, {z:g}) yaw {yaw:g} (last probe: loc {p.loc} yaw {p.rot[1]} pawn {p.pawn})')
+        last = p if there else None
+        time.sleep(0.3)
 
 
 def move_seen(px, py):
@@ -653,10 +706,85 @@ fail_fast = False
 
 
 def record(name, ok, detail=''):
-    results.append((name, ok, detail))
+    results.append([name, 'PASS' if ok else 'FAIL', detail])
     print(f"  {'PASS' if ok else 'FAIL'} {name} {detail}", flush=True)
-    if not ok and fail_fast:
+    if not ok and fail_fast and baseline_from is None:
         raise RuntimeError('fail_fast: ' + name)
+
+
+# ---------------------------------------------------------------- the frame-rate baseline
+# A movement, turn or rumble check means something only when the game ran at the baseline frame rate meanwhile
+# (30 fps: the frame rate every game is made to work at). 'baseline begin' starts the engine's frame-time log
+# (FPSLOG, one line a second); 'baseline end [fps]' reads it back and, when a second of it fell below the baseline
+# or held a frame longer than three baseline frames, turns the block's checks into BELOW with the frame rate,
+# instead of a PASS or FAIL the game could not earn.
+BASELINE_FPS = float(os.environ.get('M10_BASELINE_FPS', '30'))
+FPS_RX = re.compile(r'(\d+\.\d+) s (\d+) frames ([\d.]+) fps; frame ms avg [\d.]+ min [\d.]+ max ([\d.]+)')
+baseline_from = None     # (log line index, results index) of the open block
+
+
+def baseline_begin():
+    global baseline_from
+    pump_log()
+    chan('exec FPSLOG 1')
+    baseline_from = (len(log_lines), len(results))
+
+
+def baseline_end(fps):
+    global baseline_from
+    if baseline_from is None:
+        raise RuntimeError("'baseline end' without 'baseline begin'")
+    line0, res0 = baseline_from
+    baseline_from = None
+    windows = []
+    end = time.time() + 5
+    while True:
+        pump_log()
+        windows = [m for m in (FPS_RX.search(l) for l in log_lines[line0:]) if m]
+        if windows or time.time() > end:
+            break
+        time.sleep(0.1)
+    chan('exec FPSLOG 0')
+    if not windows:
+        raise RuntimeError('no frame-time line (FPSLOG) within 5 s of the baseline block')
+    low = min(float(m.group(3)) for m in windows)
+    longest = max(float(m.group(4)) for m in windows)
+    below = low < fps or longest > 3000.0 / fps
+    print(f'  baseline: {len(windows)} s of frames, lowest {low:g} fps, longest frame {longest:g} ms'
+          + (f': below the {fps:g} fps baseline' if below else ''), flush=True)
+    if below:
+        for r in results[res0:]:
+            r[2] = f'environment below the {fps:g} fps baseline: {low:g} fps (longest frame {longest:g} ms); ' \
+                   f'the check read {r[1]}: {r[2]}'
+            r[1] = 'BELOW'
+            print(f'  BELOW {r[0]} {r[2]}', flush=True)
+    elif fail_fast and any(r[1] == 'FAIL' for r in results[res0:]):
+        raise RuntimeError('fail_fast: ' + next(r[0] for r in results[res0:] if r[1] == 'FAIL'))
+
+
+# ---------------------------------------------------------------- a cheaper render for the timed checks
+# 'render cheap' leaves the pawn, the HUD and the effects but hides the world's geometry (BSP, static meshes,
+# terrain, sky) and switches the post-processing off, so that software GL keeps the baseline frame rate; the
+# physics and the input are the same. 'render full' shows everything again. The SHOW commands toggle, so the
+# runner keeps the state.
+cheap_render = False
+RENDER_TOGGLES = ['exec SHOW BSP', 'exec SHOW STATICMESHES', 'exec SHOW TERRAIN', 'exec SHOW SKY']
+
+
+def render(mode):
+    global cheap_render
+    want = {'cheap': True, 'full': False}[mode]
+    if want == cheap_render:
+        return
+    for c in RENDER_TOGGLES:
+        chan(c)
+    post = 'False' if want else 'True'
+    chan(f'exec set UC2GLRenderDevice UsePostProcess {post}')
+    chan(f'exec set UC2GL4ESRenderDevice UsePostProcess {post}')
+    cheap_render = want
+    # a probe answered after the switch: the frames of the change (a long one) are done before what follows
+    engine_probe()
+    engine_probe()
 
 
 def run():
@@ -765,6 +893,18 @@ def execute(line):
             chan(rest)
         elif cmd == 'probe':
             probe(rest)
+        elif cmd == 'place':
+            place(rest)
+        elif cmd == 'render':
+            render(rest.strip())
+        elif cmd == 'baseline':
+            word, _, fps = rest.partition(' ')
+            if word == 'begin':
+                baseline_begin()
+            elif word == 'end':
+                baseline_end(float(fps) if fps.strip() else BASELINE_FPS)
+            else:
+                raise RuntimeError('baseline begin | baseline end [fps]')
         elif cmd == 'vprobe':
             vprobe(rest)
         elif cmd == 'keys':
@@ -817,6 +957,6 @@ except Exception as e:
     record('scenario-complete', False, str(e))
     status = 1
 with open(result_path, 'w') as f:
-    for name, ok, detail in results:
-        f.write(f"{'PASS' if ok else 'FAIL'}\t{name}\t{detail}\n")
+    for name, state, detail in results:
+        f.write(f"{state}\t{name}\t{detail}\n")
 sys.exit(status)

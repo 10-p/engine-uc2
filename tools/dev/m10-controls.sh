@@ -34,6 +34,8 @@
 #                           e.g. UIScaleMode=Native640)
 #   M10_XVFB=2560x1080      Xvfb's screen at least this big (a scenario that changes the window size with
 #                           TEMPSETRES needs room for the biggest)
+#   M10_SPOT="<x> <y> <z> <yaw>"  where the match scenarios put the pawn before each movement and turn check
+#                           (m10-inject.py's place; default below)
 # The game is also given UC2_WINE_DISPLAY=$DISPLAY (Xvfb's), which tools/dev/m12-wine.sh needs.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -48,6 +50,10 @@ proc=${M10_PROC:-uc2.bin}
 capped=$work/bin/capped
 inject=$repo/tools/dev/m10-inject.py
 mkdir -p "$out"
+# The movement and turn checks start from one spot, so that no check depends on the player start the game picks:
+# DM-Deadbolt's start at (1977.8, 583.7), facing yaw 33000, has more than 600 units of open floor ahead and to both
+# sides. The match scenarios also remove the bots (KillBots), so none blocks the way or draws the pad's aim.
+export M10_SPOT=${M10_SPOT:-1977.8 583.7 -34.1 33000}
 [ -n "${M10_LAUNCH:-}" ] || [ -x "$sys/uc2.bin" ] || { echo "no run tree at $sys (tools/dev/mkrun-uc2.sh build-native m10)" >&2; exit 2; }
 
 # Fresh configuration for every run: our tracked inis, the derived ones and saved profiles removed. The test
@@ -123,14 +129,18 @@ INNER
     rm -f "$sys"/Shot*.bmp
   fi
   local crit; crit=$(grep -a -c "Critical" "$out/$name.out" 2>/dev/null || true)
-  local fails passes
+  local fails passes below
   fails=$(grep -c "^FAIL" "$out/$name.result" 2>/dev/null || true)
   passes=$(grep -c "^PASS" "$out/$name.result" 2>/dev/null || true)
+  below=$(grep -c "^BELOW" "$out/$name.result" 2>/dev/null || true)
   [ -f "$out/$name.result" ] || fails=1
-  if [ "${fails:-1}" = 0 ] && [ "${crit:-0}" = 0 ] && [ "${passes:-0}" -gt 0 ]; then
+  if [ "${fails:-1}" = 0 ] && [ "${crit:-0}" = 0 ] && [ "${passes:-0}" -gt 0 ] && [ "${below:-0}" = 0 ]; then
     echo "PASS $name ($passes checks, 0 Critical, capped exit $rc)"
+  elif [ "${fails:-1}" = 0 ] && [ "${crit:-0}" = 0 ] && [ "${below:-0}" -gt 0 ]; then
+    # Checks the game could not be judged on: it ran below the frame-rate baseline meanwhile (m10-inject.py).
+    echo "BELOW $name ($(grep -a -m1 "^BELOW" "$out/$name.result" | cut -f3 | cut -d';' -f1); $below checks not judged, $passes passed; see $out/$name.result)"
   else
-    echo "FAIL $name ($passes passed, $fails failed, $crit Critical, capped exit $rc; see $out/$name.result)"
+    echo "FAIL $name ($passes passed, $fails failed, $below below the frame-rate baseline, $crit Critical, capped exit $rc; see $out/$name.result)"
   fi
   for p in $(pgrep -x "$proc") $(pgrep -x Xvfb); do
     case "$(readlink /proc/$p/cwd 2>/dev/null)" in "$sys"|"$sys"/*) echo "WARNING: left running: $p";; esac
@@ -193,13 +203,21 @@ probe spawn
 check $p-match-started-pawn-spawned P['spawn'].pawn==1 and P['spawn'].level=='DM-Deadbolt'
 chan exec God
 wait test: exec God 10
+chan exec KillBots 0
+wait test: exec KillBots 0 10
+tryseek 20 len(P['_'].others) == 0 ;; sleep 0.5
+probe nobots
+check $p-bots-removed len(P['nobots'].others) == 0
 shot match
+render cheap
 SCEN
 }
 
 scen_keyboard() {
   menu_to_match kb "key Down" "key Return" "key Escape" "key Alt_L 1"
   cat <<'SCEN'
+place
+baseline begin
 probe f0
 keydown w
 sleep 1.5
@@ -207,6 +225,9 @@ keyup w
 sleep 0.5
 probe f1
 check kb-w-moves-forward fwd('f0','f1') > 150 and abs(side('f0','f1')) < 0.5*fwd('f0','f1')
+baseline end
+place
+baseline begin
 probe t0
 keydown Right
 sleep 1
@@ -216,6 +237,7 @@ probe t1
 # F-1 (owner, 2026-10-09): the arrows move and strafe as WASD (Epic's PC layout), they never turn (a key turn would be
 # ~16000 units in this second; with Epic's package the pad's aim adhesion may follow a bot by a few hundred)
 check kb-right-arrow-strafes-right side('t0','t1') > 100 and abs(yawdiff('t0','t1')) < 1500
+baseline end
 probe w0
 key e
 tryseek 20 P['_'].weapon.startswith('UCWeap_Melee') ;; sleep 0.5
@@ -403,6 +425,8 @@ expect pd-attach-sends-joyslider1 pad 0 JoySlider1 press 5
 SCEN
   menu_to_match pd "padpress dpdown" "padpress a" "padpress b" "padtrigger righttrigger 1" noboot
   cat <<'SCEN'
+place
+baseline begin
 probe f0
 pad axis lefty -32767
 sleep 1.5
@@ -419,6 +443,9 @@ pad axis lefty 0
 sleep 0.5
 probe h1
 check pd-stick-at-0.6-moves-backward fwd('h0','h1') < -100
+baseline end
+place
+baseline begin
 probe z0
 pad axis leftx 6554
 sleep 1.2
@@ -442,18 +469,25 @@ sleep 1.2
 pad axis leftx 0
 sleep 0.3
 probe z4
-# A wall may stop one direction (it did once, beside the spawn point); a wrong sign fails both.
+# One direction moving the right way proves the sign; a wrong sign fails both.
 check pd-left-stick-x-strafes-the-right-way side('z2','z3') > 100 or side('z3','z4') < -100
 check pd-left-stick-x-never-strafes-the-wrong-way side('z2','z3') > -20 and side('z3','z4') < 20
+baseline end
+place
+baseline begin
 probe t0
-# Half a second: a full stick turns about 26000 units a second (Linux), and a turn past 180 degrees (32768)
-# wraps and reads as a left turn. Under wine the release arrives a few frames later; 1 s once gave 34320.
+# Half a second: the full stick turns about 21000 units in it with no bot in view; a turn past 180 degrees (32768)
+# would wrap and read as a left turn.
 pad axis rightx 32767
 sleep 0.5
 pad axis rightx 0
 sleep 0.3
 probe t1
 check pd-right-stick-turns-right yawdiff('t0','t1') > 8000
+baseline end
+# The fire's rumble is a 0.25 s pulse: at the baseline frame rate it reaches the pad over several frames.
+place
+baseline begin
 probe a0
 pad axis righttrigger 3700
 sleep 0.4
@@ -471,6 +505,7 @@ expect pd-rumble-sent-to-sdl pad 0 rumble [1-9][0-9]* [0-9]+ -> SDL_GameControll
 tryseek 20 P['_'].shots != P['a1'].shots ;; sleep 0.4
 probe a2
 check pd-trigger-above-threshold-fires P['a2'].shots != P['a1'].shots
+baseline end
 probe w0
 padpress b
 tryseek 20 P['_'].weapon.startswith('UCWeap_Melee') ;; sleep 0.5
@@ -502,6 +537,8 @@ shot unplugged
 pad attach
 expect pd-replug-connects-player-one SDL2 pads: pad 0 connected: .*\(player one, with the keyboard and mouse\) 5
 sleep 3
+place
+baseline begin
 probe u2
 check pd-alive-after-replug P['u2'].level == 'DM-Deadbolt'
 pad axis lefty -32767
@@ -510,6 +547,7 @@ pad axis lefty 0
 sleep 0.7
 probe u3
 check pd-replugged-stick-walks-player-one dist('u2','u3') > 50 and P['u3'].menu == 'None' and P['u3'].paused == 0
+baseline end
 shot replugged
 SCEN
 }
@@ -551,6 +589,16 @@ wait Completed Dynamic Load 300
 tryseek 10 P['_'].pawn==1 ;; padtrigger righttrigger 1
 probe spawn
 check both-match-started P['spawn'].pawn==1
+chan exec God
+wait test: exec God 10
+chan exec KillBots 0
+wait test: exec KillBots 0 10
+tryseek 20 len(P['_'].others) == 0 ;; sleep 0.5
+probe nobots
+check both-bots-removed len(P['nobots'].others) == 0
+render cheap
+place
+baseline begin
 probe b0
 keydown w
 sleep 1.5
@@ -558,6 +606,9 @@ keyup w
 sleep 0.4
 probe b1
 check both-keyboard-moves-while-pad-idle fwd('b0','b1') > 150
+baseline end
+place
+baseline begin
 probe b2
 pad axis rightx 32767
 keydown w
@@ -568,6 +619,9 @@ keyup w
 sleep 0.4
 probe b3
 check both-keyboard-move-and-pad-turn-together dist('b2','b3') > 100 and yawdiff('b2','b3') > 4000
+baseline end
+place
+baseline begin
 probe b4
 pad axis lefty -32767
 rmove 150 0 15
@@ -579,6 +633,7 @@ probe b5
 check both-pad-stick-moves-during-mouse-and-keys dist('b4','b5') > 30
 check both-mouse-turns-during-pad-move yawdiff('b4','b5') > 1000
 check both-keyboard-fires-during-pad-move P['b5'].shots != P['b4'].shots
+baseline end
 key Escape
 expect both-escape-opens-pause-menu OpenMenu \[UCMenu.InGame_MainMenu\] 10
 # The pause menu closes with an animation counted in frames: probed until it is gone.
