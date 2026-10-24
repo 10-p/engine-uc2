@@ -5458,7 +5458,8 @@ void UObject::ProcessInternal( FFrame& Stack, RESULT_DECL )
 
 #ifndef _XBOX
 		//DEBUGGER: Necessary for the call stack. Grab an optional 'PREVSTACK' debug info.
-		if ( *Stack.Code == EX_DebugInfo )
+		// Without debug info the function's code ends with its return, so the look-ahead stops at the end.
+		if ( Stack.Code < &Stack.Node->Script(Stack.Node->Script.Num()) && *Stack.Code == EX_DebugInfo )
 			Stack.Step( Stack.Object, Result );
 #endif
 		

@@ -70,7 +70,9 @@ BYTE CORE_API GRegisterCast( INT CastCode, const Native& Func );
 #define P_GET_SKIP_OFFSET(var)        _WORD var; {checkSlow(*Stack.Code==EX_Skip); Stack.Code++; appMemcpy(&var, Stack.Code, sizeof(_WORD)); Stack.Code+=2; }
 #ifndef FINAL_RELEASE
 //DEBUGGER
-#define P_FINISH                      Stack.Code++; if ( *Stack.Code == EX_DebugInfo ) Stack.Step( Stack.Object, NULL );
+// A native function called as an event reads its parameters from its own code, which ends after them, so the
+// look-ahead for debug info stops at the end of the code.
+#define P_FINISH                      Stack.Code++; if ( Stack.Code < &Stack.Node->Script(Stack.Node->Script.Num()) && *Stack.Code == EX_DebugInfo ) Stack.Step( Stack.Object, NULL );
 #else
 #define P_FINISH                      Stack.Code++;
 #endif
