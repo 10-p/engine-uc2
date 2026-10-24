@@ -118,6 +118,10 @@ void USDL2Viewport::InitKeyMap()
 	#undef INIT_KEY_RANGE
 }
 
+// The Enter of Alt+Enter is held: it toggled the full screen, so the input reset that follows the mode change does
+// not press it again (the menus would take it as A) and its release goes nowhere.
+static UBOOL GToggleEnterHeld = 0;
+
 #if defined(__ANDROID__)
 // A Back press went to the exit question (its release goes nowhere either).
 static UBOOL GBackAskedExit = 0;
@@ -1020,8 +1024,20 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 				break;
 			if( Key==IK_Enter && (Ev.key.keysym.mod & KMOD_ALT) )
 			{
-				ToggleFullscreen();
+				// One toggle per press: the key's auto-repeat while it is held toggles nothing.
+				if( !Ev.key.repeat )
+				{
+					GToggleEnterHeld = 1;
+					ToggleFullscreen();
+				}
 				break;
+			}
+			if( Key==IK_Enter && GToggleEnterHeld )
+			{
+				// The toggle's Enter still held (Alt let go first) repeats nothing; a fresh press is a press.
+				if( Ev.key.repeat )
+					break;
+				GToggleEnterHeld = 0;
 			}
 #if defined(__ANDROID__)
 			// Back with nothing left to go back to (the menus' first page) asks whether to exit the game.
@@ -1059,6 +1075,11 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 			EInputKey Key = (EInputKey)KeyMap[Ev.key.keysym.scancode];
 			if( Key==IK_None )
 				break;
+			if( Key==IK_Enter && GToggleEnterHeld )
+			{
+				GToggleEnterHeld = 0;
+				break;
+			}
 			CauseInputEvent( Key, IST_Release );
 
 			// Capture the mouse again if the menu went away while a key was held (WM_KEYUP).
@@ -1307,6 +1328,8 @@ void USDL2Viewport::UpdateInput( UBOOL Reset, FLOAT DeltaSeconds )
 			Down[KeyMap[i]] = 1;
 
 	Reset = Reset && Focused;
+	if( GToggleEnterHeld && Focused && !Down[IK_Enter] )
+		GToggleEnterHeld = 0;	// up without a release reaching the window (let go while it had no focus)
 	for( INT i=0; i<SDL2DRV_MAX_SCANCODES; i++ )
 	{
 		BYTE Key = KeyMap[i];
@@ -1314,7 +1337,7 @@ void USDL2Viewport::UpdateInput( UBOOL Reset, FLOAT DeltaSeconds )
 			continue;
 		if( !Input->KeyDown(Key) )
 		{
-			if( Reset && Down[Key] )
+			if( Reset && Down[Key] && !(Key==IK_Enter && GToggleEnterHeld) )
 				CauseInputEvent( Key, IST_Press );
 		}
 		else if( !Down[Key] )
