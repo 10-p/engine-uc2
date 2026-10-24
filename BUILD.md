@@ -277,7 +277,9 @@ the running ABI (sizes, placeholders, and that no bytecode reads a placeholder);
 every class, script struct and event parameter struct with the binary's DWARF. Integer-to-pointer casts are errors at
 64 bits; `tools/dev/m13-cast-census.sh <build.log>` counts pointer-to-int narrowing (0). 32-bit stays the default and
 the reference (wasm32 has its layout). `native64` is a script host too: its `ucc-bin make` compiles the patched packages
-byte for byte as the 32-bit one does ("Scripts: `ucc-bin make`").
+byte for byte as the 32-bit one does ("Scripts: `ucc-bin make`"). On `windows64` a WinSock `SOCKET` is 8 bytes:
+`InternetLink`'s script `int Socket` holds it truncated and `AInternetLink::GetSocket()` reads it back sign-extended (a
+WinSock handle has 32 significant bits).
 
 ## CI
 
