@@ -524,11 +524,14 @@ static FLOAT DrawString
 							}
 						}
 
-						if( X < 0.f )
+						// The part left of the clip region's left edge is cut off: its texels and its drawn width.
+						if( X < ClipLeft )
 						{
-							CU-=X;
-							CUSize+=X;
-							X=0;
+							FLOAT Cut = ClipLeft - X;
+							CU += Cut / ScaleX;
+							CUSize -= Cut / ScaleX;
+							AdjustedCharUSize -= Cut;
+							X = ClipLeft;
 						}
 						if( Y < 0.f )
 						{
