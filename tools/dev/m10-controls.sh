@@ -27,8 +27,6 @@
 #   M10_SECS=1500          --file only: the run's time limit in seconds (default 240; a soak run takes longer)
 #   M10_KEEP=1              do not reset the tree first: keep the inis and saved profiles the last run left (default: reset)
 #   M10_URL=<url>           map URL given to the game as its first argument (default none: the menu)
-#   M10_SETTLE=12           seconds between "level up for play" and the Fire that starts the match (default 6;
-#                           under wine the first frames of the level come later and an early Fire is lost)
 #   M10_RES=1920x1080       window size: written to the tree's Default.ini after the reset, Xvfb's screen
 #                           made at least that big, and M10_UIMAP=<the same> given to m10-inject.py so the
 #                           scenarios' 640x480 positions land in the centred 4:3 UI box (M10_UIMAP=none: raw)
@@ -146,53 +144,51 @@ if [ "${1-}" = "--file" ]; then
 fi
 
 # ---------------------------------------------------------------------------------------------------------------
-# A GUIMessageBox ignores input while it animates in, and the animation counts FRAMES: the scenarios wait for its
-# 'Unblocking animation' line (as tools/dev/d5-text.sh does) instead of a fixed 1.5 s (late answers under load).
-# Scenarios. Names of checks are <scenario>-<what>; each check is a log line ('expect'), the absence of one
-# ('absent'), or a comparison of probe states ('check'); m10-inject.py documents the language.
+# Scenarios. No sleep stands in for readiness: m10-inject.py waits for each page to take input (its opening animation
+# counts frames), menu items are reached by caption and list rows by item (seek), a list that fills or a state that
+# follows a key is probed until it is there, and the match is entered once its level is loaded. The sleeps left are
+# hold times and the settling of a move before it is measured. Names of checks are <scenario>-<what>; each check is a
+# log line ('expect'), the absence of one ('absent'), or a comparison of probe states ('check'); m10-inject.py
+# documents the language.
 # ---------------------------------------------------------------------------------------------------------------
 
 # From the start screen to a deathmatch on DM-Deadbolt. $1 = check prefix; $2..$5 = the commands for
-# "down", "accept" (A), "back" (B) and "start the match" (Fire); $6 = noboot when the caller already waited
-# for the main menu.
+# "down", "accept" (A), "back" (B) and "start the match" (Fire, held long enough for a slow frame); $6 = noboot when
+# the caller already waited for the main menu. Every step waits for its log line (m10-inject.py waits for each page's
+# opening animation before a key); the lists and the spawn are probed until they are there.
 menu_to_match() {
   local p=$1 down=$2 accept=$3 back=$4 fire=$5
-  [ "${6-}" = noboot ] || printf '%s\n' 'wait OpenMenu \[UCMenu.UC2MainMenu\] 90' 'sleep 3' 'focus'
+  [ "${6-}" = noboot ] || printf '%s\n' 'wait OpenMenu \[UCMenu.UC2MainMenu\] 90' 'focus'
   cat <<SCEN
-$down
-sleep 0.5
+seek 8 P['_'].caption == 'INSTANT ACTION' ;; $down
 $accept
 expect $p-main-menu-opens-arena OpenMenu \[UCMenu.UC2Arena_Main\] 15
 wait OpenMenu \[GUI.GUIMessageBox\] 20
-wait GUIMessageBox Unblocking animation 30
-sleep 0.5
 $back
 expect $p-back-closes-dialog CloseMenu \[GUIMessageBox\] 10
-sleep 1.5
+seek 40 P['_'].menu == 'UC2Arena_Main' ;; sleep 0.5
 seek 10 P['_'].item.startswith('DeathMatch|') ;; $down
 $accept
-sleep 2
-$accept
-sleep 2
+seek 40 P['_'].item == '' ;; sleep 0.5
+seek 10 P['_'].item != '' ;; $accept
+seek 40 '|' in P['_'].item and P['_'].item != 'NOT SET' ;; sleep 0.5
 seek 40 'DM-Deadbolt' in P['_'].item ;; $down
 shot maplist
 $accept
 expect $p-map-chosen-opens-character OpenMenu \[UCMenu.UC2Arena_Character\] 15
-sleep 2
 $accept
 expect $p-character-opens-armory OpenMenu \[UCMenu.UC2Arena_Armory\] 15
-sleep 2
-$accept
-sleep 2
-$accept
-expect $p-armory-opens-launch-confirm OpenMenu \[UCMenu.ConfirmLaunchMenu\] 15
-sleep 1.5
+seek 40 '|' in P['_'].item ;; sleep 0.5
+probe armory0
+seek 10 P['_'].item != P['armory0'].item ;; $accept
+seek 40 '|' in P['_'].item ;; sleep 0.5
+seek 10 P['_'].menu == 'ConfirmLaunchMenu' ;; $accept
+check $p-armory-opens-launch-confirm P['_'].menu == 'ConfirmLaunchMenu'
 $accept
 expect $p-travel-to-deathmatch Game class is 'UCDeathmatch' 120
 expect $p-deadbolt-up Bringing Level DM-Deadbolt.MyLevel up for play 60
-sleep ${M10_SETTLE:-6}
-$fire
-sleep 4
+wait Completed Dynamic Load 300
+tryseek 10 P['_'].pawn==1 ;; $fire
 probe spawn
 check $p-match-started-pawn-spawned P['spawn'].pawn==1 and P['spawn'].level=='DM-Deadbolt'
 chan exec God
@@ -202,7 +198,7 @@ SCEN
 }
 
 scen_keyboard() {
-  menu_to_match kb "key Down" "key Return" "key Escape" "key Alt_L 0.2"
+  menu_to_match kb "key Down" "key Return" "key Escape" "key Alt_L 1"
   cat <<'SCEN'
 probe f0
 keydown w
@@ -222,30 +218,27 @@ probe t1
 check kb-right-arrow-strafes-right side('t0','t1') > 100 and abs(yawdiff('t0','t1')) < 1500
 probe w0
 key e
-sleep 2.5
+tryseek 20 P['_'].weapon.startswith('UCWeap_Melee') ;; sleep 0.5
 probe w1
 check kb-e-switches-to-melee P['w1'].weapon.startswith('UCWeap_Melee') and not P['w0'].weapon.startswith('UCWeap_Melee')
 shot melee
 key q
-sleep 2.5
+tryseek 20 P['_'].weapon == P['w0'].weapon ;; sleep 0.5
 probe w2
 check kb-q-switches-back-to-ranged P['w2'].weapon == P['w0'].weapon
 probe a0
 key Alt_L 0.3
-sleep 1.5
+tryseek 20 P['_'].shots != P['a0'].shots ;; sleep 0.5
 probe a1
 check kb-alt-fires P['a1'].shots != P['a0'].shots
 key Escape
 expect kb-escape-opens-pause-menu OpenMenu 10
-sleep 1.5
 probe p1
 check kb-pause-menu-up P['p1'].menu != 'None'
 shot pause
-# The pause menu closes with an animation counted in FRAMES (UC2PageBase: "Active blocking animation (N frames)"):
-# under software GL on a loaded machine that takes longer than 2 s, so wait for the menu to be gone (up to ~16 s).
+# The pause menu closes with an animation counted in frames: probed until it is gone.
 key Escape
-sleep 2
-tryseek 20 P['_'].menu == 'None' ;; sleep 0.5
+tryseek 40 P['_'].menu == 'None' ;; sleep 0.5
 probe p2
 check kb-escape-closes-pause-menu P['p2'].menu == 'None'
 SCEN
@@ -255,85 +248,78 @@ SCEN
 scen_mouse() {
   cat <<'SCEN'
 wait OpenMenu \[UCMenu.UC2MainMenu\] 90
-sleep 3
 focus
 move 140 146
-sleep 0.5
 move 140 299
-expect ms-hover-selects-item Mouse hover selects UC2MainMenu 5
-sleep 0.5
+expect ms-hover-selects-item Mouse hover selects UC2MainMenu 30
 key Return
 expect ms-hovered-item-is-the-one-enter-opens OpenMenu \[UCMenu.UC2Settings_Main\] 15
 wait OpenMenu \[GUI.GUIMessageBox\] 20
-wait GUIMessageBox Unblocking animation 30
-sleep 0.5
 click 3
 expect ms-right-click-answers-no CloseMenu \[GUIMessageBox\] 10
-sleep 1.5
+seek 40 P['_'].menu == 'UC2Settings_Main' ;; sleep 0.5
 click 3
 expect ms-right-click-is-back CloseMenu \[UC2Settings_Main\] 10
-sleep 3
+# the main menu comes back with an animation of its own
+wait UC2MainMenu Unblocking animation 60
 mark
 click 1 140 184
 expect ms-click-opens-item-under-cursor OpenMenu \[UCMenu.UC2Arena_Main\] 15
 absent ms-click-does-not-open-focused-item OpenMenu \[UCMenu.UC2Settings_Main\]
-sleep 3
+seek 40 P['_'].item.startswith('Capture') ;; sleep 0.5
 probe g0
 move 130 90
 sleep 0.3
 click 1 130 109
-expect ms-click-selects-list-row Mouse click selects the row under the cursor in UC2Arena_Main 5
-sleep 2
+expect ms-click-selects-list-row Mouse click selects the row under the cursor in UC2Arena_Main 30
+tryseek 40 P['_'].item == '' ;; sleep 0.5
 probe g1
 shot gametype-clicked
 key Escape
-sleep 1.5
+tryseek 40 P['_'].item.startswith('DeathMatch|') ;; sleep 0.5
 probe g2
 check ms-click-on-row-accepts-that-row P['g0'].item.startswith('Capture') and P['g1'].item == '' and P['g2'].item.startswith('DeathMatch|')
 shot gametype
 key Return
-sleep 2
-key Return
-sleep 2
+seek 40 P['_'].item == '' ;; sleep 0.5
+seek 10 P['_'].item != '' ;; key Return
+seek 40 '|' in P['_'].item and P['_'].item != 'NOT SET' ;; sleep 0.5
+# each wheel click waits for the list to move (two clicks in one slow frame count once)
 probe m0
 click 5
-sleep 0.5
+tryseek 20 P['_'].item != P['m0'].item ;; sleep 0.3
+probe m05
 click 5
-sleep 0.5
+tryseek 20 P['_'].item != P['m05'].item ;; sleep 0.3
 probe m1
 check ms-wheel-down-moves-list P['m1'].item != P['m0'].item and P['m0'].item != ''
 click 4
-sleep 0.5
+tryseek 20 P['_'].item != P['m1'].item ;; sleep 0.3
+probe m15
 click 4
-sleep 0.5
+tryseek 20 P['_'].item != P['m15'].item ;; sleep 0.3
 probe m2
 check ms-wheel-up-moves-back P['m2'].item == P['m0'].item
 seek 40 'DM-Deadbolt' in P['_'].item ;; click 5
 key Return
 wait OpenMenu \[UCMenu.UC2Arena_Character\] 15
-sleep 2
 key Return
 wait OpenMenu \[UCMenu.UC2Arena_Armory\] 15
-sleep 2
-key Return
-sleep 2
-key Return
-wait OpenMenu \[UCMenu.ConfirmLaunchMenu\] 15
-sleep 1.5
+seek 40 '|' in P['_'].item ;; sleep 0.5
+probe armory0
+seek 10 P['_'].item != P['armory0'].item ;; key Return
+seek 40 '|' in P['_'].item ;; sleep 0.5
+seek 10 P['_'].menu == 'ConfirmLaunchMenu' ;; key Return
 key Return
 expect ms-deadbolt-up Bringing Level DM-Deadbolt.MyLevel up for play 120
-sleep 6
-click 1
-sleep 4
+wait Completed Dynamic Load 300
+tryseek 10 P['_'].pawn==1 ;; click 1 1.0
 probe spawn
 check ms-left-click-starts-match P['spawn'].pawn==1
-# The button is held for 1 s: under software GL with post-processing a frame can take longer than a short
-# click, press and release then arrive in the same tick and the shot is sometimes not taken (seen 2 runs in 5
-# with a 0.3 s click, never with post-processing off). Not reachable at playable frame rates; recorded in
-# docs/porting/analysis/controls.md.
+# Fire is a click held 1 s: under software GL a frame can be longer than a short click, and a press and its release
+# in one tick fire nothing. A freshly spawned pawn cannot fire at once (spawn-in): clicked until the shot counter
+# moves, at most four times.
 probe s0
-# A freshly spawned pawn cannot fire at once (spawn-in), and on a loaded machine the 1 s hold above was not
-# always enough: click again, at most four times, until the shot counter moves.
 seek 4 P['_'].shots != P['s0'].shots ;; click 1 1.0
 sleep 0.5
 probe s1
@@ -370,40 +356,33 @@ SCEN
 scen_text() {
   cat <<'SCEN'
 wait OpenMenu \[UCMenu.UC2MainMenu\] 90
-sleep 3
 focus
-key Down
-key Down
-key Down
-sleep 0.5
+seek 8 P['_'].caption == 'PROFILES' ;; key Down
 key Return
 expect tx-profiles-opens OpenMenu \[UCMenu.UC2Profile\] 15
 wait OpenMenu \[GUI.GUIMessageBox\] 20
-wait GUIMessageBox Unblocking animation 30
-sleep 0.5
 key Return
 expect tx-on-screen-keyboard-opens OpenMenu \[UCMenu.UC2ProfileKeyboard\] 15
-sleep 3
 probe k0
 shot keyboard
 mark
 type WaSdKxYb
-sleep 1
+tryseek 20 len(P['_'].text) >= 8 ;; sleep 0.5
 probe k1
 check tx-typed-exactly-those-characters P['k1'].text == 'WaSdKxYb'
 absent tx-typing-does-not-navigate handled XC_
 key BackSpace
-sleep 0.5
+tryseek 20 len(P['_'].text) < 8 ;; sleep 0.3
 probe k2
 check tx-backspace-deletes-one P['k2'].text == 'WaSdKxY'
 key b
-sleep 0.5
+tryseek 20 len(P['_'].text) >= 8 ;; sleep 0.3
 probe k3
 check tx-typing-again P['k3'].text == 'WaSdKxYb'
 shot typed
 key Return
 expect tx-enter-finishes-entry CloseMenu \[UC2ProfileKeyboard\] 10
-sleep 3
+tryseek 20 P['_'].menu != 'UC2ProfileKeyboard' ;; sleep 0.5
 probe k4
 shot after
 SCEN
@@ -415,16 +394,14 @@ SCEN
 scen_pad() {
   cat <<'SCEN'
 wait OpenMenu \[UCMenu.UC2MainMenu\] 90
-sleep 2
 focus
 probe nopad
 check pd-no-pad-at-start P['nopad'].pads == 0
 pad attach
 expect pd-hotplug-attach-after-start SDL2 pads: pad 0 connected 10
 expect pd-attach-sends-joyslider1 pad 0 JoySlider1 press 5
-sleep 1
 SCEN
-  menu_to_match pd "padpress dpdown" "padpress a" "padpress b" "padtrigger righttrigger" noboot
+  menu_to_match pd "padpress dpdown" "padpress a" "padpress b" "padtrigger righttrigger 1" noboot
   cat <<'SCEN'
 probe f0
 pad axis lefty -32767
@@ -491,26 +468,23 @@ pad axis righttrigger 0
 expect pd-trigger-above-threshold-pressed pad 0 button 7 value 3[1-9] > 30 5
 expect pd-rumble-reaches-the-device virtual pad: rumble request reached the device: low [1-9] 5
 expect pd-rumble-sent-to-sdl pad 0 rumble [1-9][0-9]* [0-9]+ -> SDL_GameControllerRumble 0 5
-sleep 0.8
+tryseek 20 P['_'].shots != P['a1'].shots ;; sleep 0.4
 probe a2
 check pd-trigger-above-threshold-fires P['a2'].shots != P['a1'].shots
 probe w0
 padpress b
-sleep 2.5
+tryseek 20 P['_'].weapon.startswith('UCWeap_Melee') ;; sleep 0.5
 probe w1
 check pd-b-switches-to-melee P['w1'].weapon.startswith('UCWeap_Melee')
 padpress y
-sleep 2.5
+tryseek 20 P['_'].weapon == P['w0'].weapon ;; sleep 0.5
 probe w2
 check pd-y-switches-back-to-ranged P['w2'].weapon == P['w0'].weapon
 padpress start
 expect pd-start-opens-pause-menu OpenMenu \[UCMenu.InGame_MainMenu\] 10
-sleep 1.5
-# The pause menu closes with an animation counted in FRAMES (UC2PageBase: "Active blocking animation (N frames)"):
-# under software GL on a loaded machine that takes longer than 2 s, so wait for the menu to be gone (up to ~16 s).
+# The pause menu closes with an animation counted in frames: probed until it is gone.
 padpress b
-sleep 2
-tryseek 20 P['_'].menu == 'None' ;; sleep 0.5
+tryseek 40 P['_'].menu == 'None' ;; sleep 0.5
 probe p2
 check pd-b-closes-pause-menu P['p2'].menu == 'None'
 # G-11 (the owner's rule): the pad is player one's together with the keyboard and the mouse, so pulling it opens no
@@ -545,43 +519,36 @@ SCEN
 scen_both() {
   cat <<'SCEN'
 wait OpenMenu \[UCMenu.UC2MainMenu\] 90
-sleep 2
 focus
 pad attach
 wait SDL2 pads: pad 0 connected 10
-sleep 1
-key Down
-sleep 0.5
+seek 8 P['_'].caption == 'INSTANT ACTION' ;; key Down
 padpress a
 expect both-key-down-then-pad-a-opens-arena OpenMenu \[UCMenu.UC2Arena_Main\] 15
 wait OpenMenu \[GUI.GUIMessageBox\] 20
-wait GUIMessageBox Unblocking animation 30
-sleep 0.5
 key Escape
 expect both-escape-closes-dialog CloseMenu \[GUIMessageBox\] 10
-sleep 1.5
+seek 40 P['_'].menu == 'UC2Arena_Main' ;; sleep 0.5
 seek 10 P['_'].item.startswith('DeathMatch|') ;; padpress dpdown
 key Return
-sleep 2
-padpress a
-sleep 2
+seek 40 P['_'].item == '' ;; sleep 0.5
+seek 10 P['_'].item != '' ;; padpress a
+seek 40 '|' in P['_'].item and P['_'].item != 'NOT SET' ;; sleep 0.5
 seek 40 'DM-Deadbolt' in P['_'].item ;; key Down
 padpress a
 expect both-pad-a-opens-character OpenMenu \[UCMenu.UC2Arena_Character\] 15
-sleep 2
 key Return
 expect both-enter-opens-armory OpenMenu \[UCMenu.UC2Arena_Armory\] 15
-sleep 2
-padpress a
-sleep 2
-key Return
-expect both-launch-confirm OpenMenu \[UCMenu.ConfirmLaunchMenu\] 15
-sleep 1.5
+seek 40 '|' in P['_'].item ;; sleep 0.5
+probe armory0
+seek 10 P['_'].item != P['armory0'].item ;; padpress a
+seek 40 '|' in P['_'].item ;; sleep 0.5
+seek 10 P['_'].menu == 'ConfirmLaunchMenu' ;; key Return
+check both-launch-confirm P['_'].menu == 'ConfirmLaunchMenu'
 padpress a
 expect both-deadbolt-up Bringing Level DM-Deadbolt.MyLevel up for play 120
-sleep 6
-padtrigger righttrigger
-sleep 4
+wait Completed Dynamic Load 300
+tryseek 10 P['_'].pawn==1 ;; padtrigger righttrigger 1
 probe spawn
 check both-match-started P['spawn'].pawn==1
 probe b0
@@ -614,12 +581,9 @@ check both-mouse-turns-during-pad-move yawdiff('b4','b5') > 1000
 check both-keyboard-fires-during-pad-move P['b5'].shots != P['b4'].shots
 key Escape
 expect both-escape-opens-pause-menu OpenMenu \[UCMenu.InGame_MainMenu\] 10
-sleep 1.5
-# The pause menu closes with an animation counted in FRAMES (UC2PageBase: "Active blocking animation (N frames)"):
-# under software GL on a loaded machine that takes longer than 2 s, so wait for the menu to be gone (up to ~16 s).
+# The pause menu closes with an animation counted in frames: probed until it is gone.
 padpress b
-sleep 2
-tryseek 20 P['_'].menu == 'None' ;; sleep 0.5
+tryseek 40 P['_'].menu == 'None' ;; sleep 0.5
 probe p1
 check both-pad-b-closes-it P['p1'].menu == 'None'
 SCEN

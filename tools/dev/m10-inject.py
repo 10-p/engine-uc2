@@ -7,6 +7,19 @@ the engine log, and decides PASS/FAIL from log lines and probe state. Usage:
 
     m10-inject.py <scenario-file> <engine-log> <channel-file> <result-file>
 
+Every input waits for the menus to take it, from the log, so no scenario needs a sleep to stand in for readiness:
+    - a page takes no input from its OpenMenu line until its opening animation has ended ("<Page> Unblocking
+      animation"); its CloseMenu line or a level brought up for play closes it. Before every key, keydown, type,
+      click, move, padpress, padtrigger and raw pad button press, the runner waits for the page on top, the one that
+      takes the input (M10_READY_TIMEOUT seconds, default 180, then the scenario fails naming the page);
+    - key, padpress and padtrigger then wait for the engine's own log line of the press (SDL2Drv's "key ...
+      press", "pad ... press": M10_PRESS_TIMEOUT seconds, default 60, then the scenario fails naming the key); a press
+      the menus report swallowed by a blocking animation ("Swallowing input") is sent again once a page's
+      "Unblocking animation" line has come, at most three times;
+    - move, and click at a position, wait while a menu is open until the engine's probe has the pointer's new
+      position (M10_MOVE_TIMEOUT seconds, default 30, then the scenario fails naming the position).
+Waits on game state that has no log line of its own (a list filled, a weapon switched) are probes in a seek.
+
 Scenario language, one command per line (# comments):
     wait <regex> [timeout]        wait for a new log line matching <regex> (searched from the last match on)
     expect <name> <regex> [timeout]   like wait, but records check <name> PASS/FAIL and goes on
@@ -19,7 +32,7 @@ Scenario language, one command per line (# comments):
     move <x> <y>                  absolute pointer position in window coordinates (640x480 design pixels mapped
                                   into the UI box when M10_UIMAP=<W>x<H> is set)
     rmove <dx> <dy> [steps]       relative pointer motion, split in <steps> events 20 ms apart
-    click <button> [x y]          button 1 left, 2 middle, 3 right; 4/5 wheel up/down
+    click <button> [x y] [hold]   button 1 left, 2 middle, 3 right; 4/5 wheel up/down; also click <button> <hold>
     pad <channel command>         e.g. "pad button a 1" (written to the channel as is)
     padpress <button> [hold]      virtual pad button down, hold (0.15 s), up
     padtrigger <axis> [hold]      virtual pad trigger fully in, hold (0.2 s), out
@@ -85,37 +98,85 @@ if not d.value:
     print("m10-inject: no X display", file=sys.stderr)
     sys.exit(2)
 root = x.XDefaultRootWindow(d)
+
+
+# Windows come and go while the game starts (SDL and wine make and replace windows): an X error (most often a
+# window that has just gone) is printed and the call that met it fails, instead of Xlib's default handler ending
+# the runner.
+class XErrorEvent(ctypes.Structure):
+    _fields_ = [('type', ctypes.c_int), ('display', ctypes.c_void_p), ('resourceid', ctypes.c_ulong),
+                ('serial', ctypes.c_ulong), ('error_code', ctypes.c_ubyte), ('request_code', ctypes.c_ubyte),
+                ('minor_code', ctypes.c_ubyte)]
+
+
+@ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.POINTER(XErrorEvent))
+def x_error(display, event):
+    e = event.contents
+    print(f'  X error {e.error_code} (request {e.request_code}) on {e.resourceid:#x}', flush=True)
+    return 0
+
+
+x.XSetErrorHandler(x_error)
 win = None
 win_origin = (0, 0)
 
 
+class XWindowAttributes(ctypes.Structure):
+    _fields_ = [('x', ctypes.c_int), ('y', ctypes.c_int), ('width', ctypes.c_int), ('height', ctypes.c_int),
+                ('border_width', ctypes.c_int), ('depth', ctypes.c_int), ('visual', ctypes.c_void_p),
+                ('root', ctypes.c_ulong), ('c_class', ctypes.c_int), ('bit_gravity', ctypes.c_int),
+                ('win_gravity', ctypes.c_int), ('backing_store', ctypes.c_int), ('backing_planes', ctypes.c_ulong),
+                ('backing_pixel', ctypes.c_ulong), ('save_under', ctypes.c_int), ('colormap', ctypes.c_ulong),
+                ('map_installed', ctypes.c_int), ('map_state', ctypes.c_int), ('all_event_masks', ctypes.c_long),
+                ('your_event_mask', ctypes.c_long), ('do_not_propagate_mask', ctypes.c_long),
+                ('override_redirect', ctypes.c_int), ('screen', ctypes.c_void_p)]
+
+
+x.XGetWindowAttributes.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.POINTER(XWindowAttributes)]
+IS_VIEWABLE = 2
+WINDOW_TIMEOUT = 60.0
+
+
 def find_window():
-    """The game's top-level window: the named child of the root (Xvfb has no window manager)."""
+    """The game's top-level window: the biggest named, viewable child of the root (Xvfb has no window manager).
+    Wine also has small named windows ("Default IME") and named windows that are not mapped; focus on a window
+    that is not viewable is an X error."""
     r = ctypes.c_ulong(); p = ctypes.c_ulong(); ch = ctypes.POINTER(ctypes.c_ulong)(); n = ctypes.c_uint()
     x.XQueryTree(d, root, ctypes.byref(r), ctypes.byref(p), ctypes.byref(ch), ctypes.byref(n))
-    found = None
+    found, area = None, 0
     for i in range(n.value):
-        name = ctypes.c_char_p()
-        if x.XFetchName(d, ch[i], ctypes.byref(name)) and name.value:
-            found = ch[i]
+        name = ctypes.c_char_p(); attrs = XWindowAttributes()
+        if (x.XFetchName(d, ch[i], ctypes.byref(name)) and name.value
+                and x.XGetWindowAttributes(d, ch[i], ctypes.byref(attrs)) and attrs.map_state == IS_VIEWABLE
+                and attrs.width * attrs.height > area):
+            found, area = ch[i], attrs.width * attrs.height
     return found
 
 
 def focus():
+    """Raise and focus the game window once the page on top takes input: the window can be replaced after the
+    first menu has opened (under wine the renderer sets its mode after that)."""
     global win, win_origin
-    for _ in range(100):
+    wait_ready()
+    end = time.time() + WINDOW_TIMEOUT
+    while True:
         win = find_window()
-        if win:
+        if win or time.time() > end:
             break
         time.sleep(0.1)
     if not win:
-        raise RuntimeError("game window not found")
+        raise RuntimeError(f'timed out after {WINDOW_TIMEOUT:g} s waiting for the game window to be viewable')
     x.XRaiseWindow(d, win)
     x.XSetInputFocus(d, win, 2, 0)   # RevertToParent, CurrentTime
+    win_origin = window_origin()
+    print(f'  window at {win_origin}', flush=True)
+    x.XSync(d, 0)
+
+
+def window_origin():
     ox = ctypes.c_int(); oy = ctypes.c_int(); c = ctypes.c_ulong()
     x.XTranslateCoordinates(d, win, root, 0, 0, ctypes.byref(ox), ctypes.byref(oy), ctypes.byref(c))
-    win_origin = (ox.value, oy.value)
-    x.XSync(d, 0)
+    return (ox.value, oy.value)
 
 
 def keycode(name):
@@ -181,6 +242,16 @@ def ui_to_window(px, py):
 
 
 def move(px, py):
+    """Absolute pointer position; the game window and its place on the screen are read each time."""
+    global win, win_origin
+    w = find_window()
+    if w and w != win:
+        print(f'  the game window is now {w:#x} (was {win:#x})', flush=True)
+        win = w
+    o = window_origin()
+    if o != win_origin:
+        print(f'  window moved from {win_origin} to {o}', flush=True)
+        win_origin = o
     wx, wy = ui_to_window(px, py)
     xt.XTestFakeMotionEvent(d, -1, win_origin[0] + wx, win_origin[1] + wy, 0)
     x.XFlush(d)
@@ -240,6 +311,134 @@ def wait_for(regex, timeout):
         if time.time() > end:
             return None
         time.sleep(0.05)
+
+
+# ---------------------------------------------------------------- readiness of the menus
+READY_TIMEOUT = float(os.environ.get('M10_READY_TIMEOUT', '180'))
+PRESS_TIMEOUT = float(os.environ.get('M10_PRESS_TIMEOUT', '60'))
+OPEN_RX = re.compile(r'OpenMenu \[\w+\.(\w+)\]')
+CLOSE_RX = re.compile(r'CloseMenu \[(\w+)\]')
+UNBLOCK_RX = re.compile(r'(?:^|\s)(\w+) Unblocking animation')
+LEVEL_RX = re.compile(r'Bringing Level \S+ up for play')
+SWALLOW_RX = re.compile(r'Active blocking animation \(\d+ frames\) - Swallowing input')
+PRESS_RX = {'key': re.compile(r'\bkey \S+ press \(viewport'),
+            'pad': re.compile(r'\bpad \d+ (Joy\w+ press|button \d+ value \d+ >)')}
+pages = []       # the open pages, bottom to top: [name, opening animation ended]
+ready_scan = 0
+
+
+def ready_update():
+    global ready_scan
+    pump_log()
+    for i in range(ready_scan, len(log_lines)):
+        line = log_lines[i]
+        m = OPEN_RX.search(line)
+        if m:
+            pages.append([m.group(1), False])
+            continue
+        m = UNBLOCK_RX.search(line)
+        if m:
+            for p in pages:
+                if p[0] == m.group(1):
+                    p[1] = True
+            continue
+        m = CLOSE_RX.search(line)
+        if m:
+            pages[:] = [p for p in pages if p[0] != m.group(1)]
+        elif LEVEL_RX.search(line):
+            pages.clear()
+    ready_scan = len(log_lines)
+
+
+def wait_ready():
+    """Return once the page on top (the one that takes the input) has ended its opening animation; a page that never
+    does fails the scenario. A page under another one is not waited for: it does not take the input."""
+    end = time.time() + READY_TIMEOUT
+    while True:
+        ready_update()
+        if not pages or pages[-1][1]:
+            return
+        if time.time() > end:
+            raise RuntimeError(f'timed out after {READY_TIMEOUT:g} s waiting for {pages[-1][0]} to take input '
+                               f'(no "{pages[-1][0]} Unblocking animation" line after its OpenMenu)')
+        time.sleep(0.05)
+
+
+def line_after(rx, start, timeout):
+    """Index of the first log line at/after start matching rx within timeout seconds, or None (search_from stays)."""
+    end = time.time() + timeout
+    i = start
+    while True:
+        pump_log()
+        while i < len(log_lines):
+            if rx.search(log_lines[i]):
+                return i
+            i += 1
+        if time.time() > end:
+            return None
+        time.sleep(0.05)
+
+
+def press(send, kind, what):
+    """send() one press once the menus take input, then wait for the engine's log line of it. A press the menus
+    swallowed (their "Swallowing input" line right after it) goes again once an animation has ended."""
+    for attempt in range(3):
+        wait_ready()
+        pump_log()
+        mark = len(log_lines)
+        send()
+        i = line_after(PRESS_RX[kind], mark, PRESS_TIMEOUT)
+        if i is None:
+            raise RuntimeError(f'timed out after {PRESS_TIMEOUT:g} s waiting for the engine to log the press of {what}')
+        # the menus log the swallow in the same tick as the press, right after it
+        time.sleep(0.2)
+        pump_log()
+        swallowed = next((j for j in range(i + 1, min(len(log_lines), i + 6)) if SWALLOW_RX.search(log_lines[j])), None)
+        if swallowed is None:
+            return
+        print(f'  {what}: swallowed by a blocking animation; sent again once it has ended', flush=True)
+        if line_after(UNBLOCK_RX, swallowed + 1, READY_TIMEOUT) is None:
+            raise RuntimeError(f'timed out after {READY_TIMEOUT:g} s waiting for the animation that swallowed {what} to end')
+    raise RuntimeError(f'{what} was swallowed by blocking animations three times')
+
+
+MOVE_TIMEOUT = float(os.environ.get('M10_MOVE_TIMEOUT', '30'))
+probe_count = 0
+last_move = None
+
+
+def engine_mouse():
+    """The pointer position the engine has, from a probe that leaves the wait position where it is."""
+    global probe_count
+    probe_count += 1
+    tag = f'_mv{probe_count}'
+    pump_log()
+    mark = len(log_lines)
+    chan('probe ' + tag)
+    i = line_after(re.compile(r'probe ' + tag + ' level='), mark, 20)
+    m = PROBE_RX.search(log_lines[i]) if i is not None else None
+    if not m:
+        raise RuntimeError(f'no probe line for {tag} within 20 s')
+    return Probe(m).mouse
+
+
+def move_seen(px, py):
+    """move(), and while a menu is open wait until the engine has the new position: Windows (and so wine) hands
+    the game only the last of the moves that come in one frame, and the menus hover on the change between two."""
+    global last_move
+    if not pages or (px, py) == last_move:
+        move(px, py)
+        last_move = (px, py)
+        return
+    before = engine_mouse()
+    move(px, py)
+    last_move = (px, py)
+    end = time.time() + MOVE_TIMEOUT
+    while engine_mouse() == before:
+        if time.time() > end:
+            raise RuntimeError(f'timed out after {MOVE_TIMEOUT:g} s waiting for the engine to see the pointer move '
+                               f'to ({px}, {py})')
+        time.sleep(0.1)
 
 
 def chan(line):
@@ -503,13 +702,14 @@ def execute(line):
             parts = rest.rsplit(' ', 1)
             regex, timeout = (parts[0], float(parts[1])) if len(parts) == 2 and re.fullmatch(r'[\d.]+', parts[1]) else (rest, 30.0)
             if wait_for(regex, timeout) is None:
-                raise RuntimeError(f'timed out waiting for /{regex}/')
+                raise RuntimeError(f'timed out after {timeout:g} s waiting for /{regex}/')
         elif cmd == 'expect':
             name, _, rest2 = rest.partition(' ')
             parts = rest2.rsplit(' ', 1)
             regex, timeout = (parts[0], float(parts[1])) if len(parts) == 2 and re.fullmatch(r'[\d.]+', parts[1]) else (rest2, 30.0)
             i = wait_for(regex, timeout)
-            record(name, i is not None, f'/{regex}/' + ('' if i is None else f' -> {log_lines[i].strip()[:150]}'))
+            record(name, i is not None, f'/{regex}/' + (f' not logged within {timeout:g} s' if i is None else
+                                                        f' -> {log_lines[i].strip()[:150]}'))
         elif cmd == 'mark':
             pump_log(); mark_at = len(log_lines)
         elif cmd == 'absent':
@@ -521,32 +721,46 @@ def execute(line):
             focus()
         elif cmd == 'key':
             parts = rest.split()
-            key(parts[0], float(parts[1]) if len(parts) > 1 else None)
+            press(lambda: key(parts[0], float(parts[1]) if len(parts) > 1 else None), 'key', 'key ' + parts[0])
         elif cmd == 'keydown':
+            # a held key starts a timed hold (with a stick or another key): no wait for its log line in between
+            wait_ready()
             key_event(rest, True)
         elif cmd == 'keyup':
             key_event(rest, False)
         elif cmd == 'type':
+            wait_ready()
             type_text(rest)
         elif cmd == 'move':
-            a, b = rest.split(); move(int(a), int(b))
+            wait_ready()
+            a, b = rest.split(); move_seen(int(a), int(b))
         elif cmd == 'rmove':
             parts = rest.split(); rmove(int(parts[0]), int(parts[1]), int(parts[2]) if len(parts) > 2 else 1)
         elif cmd == 'click':
             parts = rest.split()
-            if len(parts) == 3:
-                move(int(parts[1]), int(parts[2])); time.sleep(0.15)
-            click(int(parts[0]))
+            wait_ready()
+            if len(parts) >= 3:
+                move_seen(int(parts[1]), int(parts[2]))
+            hold = float(parts[3]) if len(parts) == 4 else float(parts[1]) if len(parts) == 2 else 0.1
+            click(int(parts[0]), hold)
         elif cmd == 'pad':
+            if re.search(r'\bbutton \w+ 1$', rest):
+                wait_ready()
             chan('pad ' + rest)
         elif cmd == 'padpress':
             parts = rest.split()
-            chan(f'pad button {parts[0]} 1'); time.sleep(float(parts[1]) if len(parts) > 1 else 0.15)
-            chan(f'pad button {parts[0]} 0'); time.sleep(0.15)
+
+            def send():
+                chan(f'pad button {parts[0]} 1'); time.sleep(float(parts[1]) if len(parts) > 1 else 0.15)
+                chan(f'pad button {parts[0]} 0'); time.sleep(0.15)
+            press(send, 'pad', 'pad button ' + parts[0])
         elif cmd == 'padtrigger':
             parts = rest.split()
-            chan(f'pad axis {parts[0]} 32767'); time.sleep(float(parts[1]) if len(parts) > 1 else 0.2)
-            chan(f'pad axis {parts[0]} 0'); time.sleep(0.15)
+
+            def send():
+                chan(f'pad axis {parts[0]} 32767'); time.sleep(float(parts[1]) if len(parts) > 1 else 0.2)
+                chan(f'pad axis {parts[0]} 0'); time.sleep(0.15)
+            press(send, 'pad', 'pad trigger ' + parts[0])
         elif cmd == 'chan':
             chan(rest)
         elif cmd == 'probe':

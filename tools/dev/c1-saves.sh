@@ -53,72 +53,62 @@ listing "$out/before.tsv"
 # --- run 1: create a profile, play ----------------------------------------------------------------------------
 cat > "$out/run1.scen" <<SCEN
 wait OpenMenu \[UCMenu.UC2MainMenu\] 90
-sleep 3
 focus
-key Down
-key Down
-key Down
-sleep 0.5
+seek 8 P['_'].caption == 'PROFILES' ;; key Down
 key Return
 expect s1-profile-page-opens OpenMenu \[UCMenu.UC2Profile\] 15
 wait OpenMenu \[GUI.GUIMessageBox\] 20
-sleep 1.5
 key Return
 expect s1-keyboard-opens OpenMenu \[UCMenu.UC2ProfileKeyboard\] 15
-sleep 3
 type $name
-sleep 1
+tryseek 20 len(P['_'].text) >= len('$name') ;; sleep 0.5
 probe k1
 check s1-typed-the-name P['k1'].text == '$name'
 key Return
 expect s1-keyboard-closes CloseMenu \[UC2ProfileKeyboard\] 10
-sleep 3
+wait UC2Profile Unblocking animation 60
 shot created
 chan exec getall PlayerProfile ProfileName
 expect s1-new-profile-is-the-viewports-profile ProfileName = $name\s*$ 10
 key Escape
 expect s1-profile-page-closes CloseMenu \[UC2Profile\] 10
-sleep 3
-key Up
-key Up
-sleep 0.5
+wait UC2MainMenu Unblocking animation 60
+seek 8 P['_'].caption == 'INSTANT ACTION' ;; key Up
 key Return
 expect s1-main-menu-opens-arena OpenMenu \[UCMenu.UC2Arena_Main\] 15
-sleep 3
+wait UC2Arena_Main Unblocking animation 60
 seek 4 P['_'].menu != 'GUIMessageBox' ;; key Escape
-sleep 1
+seek 40 P['_'].menu == 'UC2Arena_Main' ;; sleep 0.5
 seek 10 P['_'].item.startswith('DeathMatch|') ;; key Down
 key Return
-sleep 2
-key Return
-sleep 2
+seek 40 P['_'].item == '' ;; sleep 0.5
+seek 10 P['_'].item != '' ;; key Return
+seek 40 '|' in P['_'].item and P['_'].item != 'NOT SET' ;; sleep 0.5
 seek 40 'DM-Deadbolt' in P['_'].item ;; key Down
 key Return
 expect s1-map-chosen-opens-character OpenMenu \[UCMenu.UC2Arena_Character\] 15
-sleep 2
 chan exec getall PlayerProfile CharacterClassName
-sleep 0.5
+wait CharacterClassName = \S 10
 key Right
-sleep 2
+wait handled XC_PadRight 30
 shot character
 key Return
 expect s1-character-opens-armory OpenMenu \[UCMenu.UC2Arena_Armory\] 15
-sleep 2
-key Return
-sleep 2
-key Return
-expect s1-armory-opens-launch-confirm OpenMenu \[UCMenu.ConfirmLaunchMenu\] 15
-sleep 1.5
+seek 40 '|' in P['_'].item ;; sleep 0.5
+probe armory0
+seek 10 P['_'].item != P['armory0'].item ;; key Return
+seek 40 '|' in P['_'].item ;; sleep 0.5
+seek 10 P['_'].menu == 'ConfirmLaunchMenu' ;; key Return
+check s1-armory-opens-launch-confirm P['_'].menu == 'ConfirmLaunchMenu'
 key Return
 expect s1-travel-to-deathmatch Game class is 'UCDeathmatch' 120
 expect s1-deadbolt-up Bringing Level DM-Deadbolt.MyLevel up for play 60
-sleep 6
-key Alt_L 0.2
-sleep 4
+wait Completed Dynamic Load 300
+tryseek 10 P['_'].pawn==1 ;; key Alt_L 1
 probe spawn
 check s1-match-started-pawn-spawned P['spawn'].pawn==1 and P['spawn'].level=='DM-Deadbolt'
 chan exec getall PlayerProfile CharacterClassName
-sleep 1
+wait CharacterClassName = \S 10
 keydown w
 sleep 2
 keyup w
@@ -143,30 +133,26 @@ profile_sum=$(md5sum < "$profile" 2>/dev/null)
 # --- run 2: the same tree, a new process ------------------------------------------------------------------------
 cat > "$out/run2.scen" <<SCEN
 wait OpenMenu \[UCMenu.UC2MainMenu\] 90
-sleep 3
 focus
 chan exec getall PlayerProfile ProfileName
 expect s2-at-start-the-viewport-profile-is-the-saved-one ProfileName = $name\s*$ 10
-key Down
-key Down
-key Down
-sleep 0.5
+seek 8 P['_'].caption == 'PROFILES' ;; key Down
 mark
 key Return
 expect s2-profile-page-opens OpenMenu \[UCMenu.UC2Profile\] 15
-sleep 4
+wait UC2Profile Unblocking animation 60
 absent s2-no-empty-list-dialog OpenMenu \[GUI.GUIMessageBox\]
 shot list
 key Return
-sleep 3
+wait handled XC_A 30
 shot selected
 key Escape
 expect s2-leaving-the-page-loads-the-profile CloseMenu \[UC2Profile\] 10
-sleep 2
+wait UC2MainMenu Unblocking animation 60
 chan exec getall PlayerProfile ProfileName
 expect s2-the-viewport-profile-is-the-saved-one ProfileName = $name\s*$ 10
 chan exec getall PlayerProfile CharacterClassName
-sleep 1
+wait CharacterClassName = \S 10
 SCEN
 echo "== run 2: the same tree after a restart (client, Xvfb)"
 M10_KEEP=1 M10_TREE=$tree M10_OUT=$out M10_SECS=240 "$m10" --file "$out/run2.scen" run2 | sed 's/^/    /'
