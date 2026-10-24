@@ -5,7 +5,8 @@ are drawn in the largest centred 4:3 box of the window, or of a split view's rec
 (`[SDL2Drv.SDL2Client] UIScaleMode=Fit43`); with this set the HUD's side groups move out of the box to the view's
 sides, each at the distance from its own side that it has at 4:3 (the health bar 40 of the 640 design pixels from the
 left edge, the leaderboard 40 from the right): every item keeps the side Epic placed it on, and the items Epic centred
-sit exactly on the view's centre. At 4:3 the HUD is Epic's but for that exact centring. Where a view
+sit exactly on the view's centre. At 4:3 the HUD is Epic's but for that exact centring and the announcement band
+(below). Where a view
 is no wider than 4:3 (a 4:3 window, the quarters of a 16:9 or 21:9 window) and with `UIScaleMode=Native640` the sides
 do not move.
 
@@ -26,7 +27,12 @@ do not move.
   the compass when it is centred (Epic's at 319), the combo menu. The scripted crosshairs (UCElements) are placed on
   the centre already; the art of some is not symmetric (the Nakhti crosshair's side pieces 1.5 design pixels left of
   its middle).
-- **Across the window**: the announcement's bar, the status bar (dead, spectating), Training's letterbox and dialog
+- **The announcement band** (a single view; split views have none): black, 53 design pixels high from 6 above the
+  announcement's line to the bottom, a gradient from alpha 0 at its top to 200 at its bottom in rows one design pixel
+  high (Epic's is opaque), its alpha kept while the announcement's text fades out. The critical announcement ("PLAY")
+  and the local message (in every view) are drawn over a black shadow one design pixel right and down at 0.6 times
+  their alpha. At every aspect, 4:3 included (`UCHUD.GradientBand`); the status bar keeps Epic's band.
+- **Across the window**: the announcement band, the status bar (dead, spectating), Training's letterbox and dialog
   bars, the console's typing line (Engine.Console: drawn once for the whole window, in split screen too; its bar from
   32 design pixels in from the window's left edge to its right edge, its text wrapped by words at that edge onto lines
   that start at the left edge; at 4:3 Epic's line).
@@ -40,7 +46,7 @@ do not move.
   (`UnCanvas.cpp` `DrawString`), the combo menu is centred from its icons' extent (`UCHUD.cpp` `DrawComboMenu`), the
   typing line is drawn with the canvas's origin on the viewport's left edge and its clip the viewport's width
   (`UnInteractionMaster.cpp` `MasterProcessPostRender`).
-- **Classes**: UCGameplay: UCHUD (20 hunks), UCHUD_Survival (5), UCHUD_TeamGame, UCHUD_CTF, UCHUD_Overflow,
+- **Classes**: UCGameplay: UCHUD (23 hunks), UCHUD_Survival (5), UCHUD_TeamGame, UCHUD_CTF, UCHUD_Overflow,
   UCHUD_Training, UCWeapon (2 each), Element_GameTimer (1); UCMutators: Element_KillerList (4), Element_WeaponMaster
   (2), Element_CampFireBombTimer, RetributionMarker, WeaponMasterReplicationInfo (1 each: the two give a HUD that
   replaces the player's, when a split screen starts or ends, their element again). The generated header
