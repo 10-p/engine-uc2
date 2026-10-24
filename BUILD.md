@@ -45,7 +45,6 @@ lists them). Emscripten 5.0.7 is private to the work folder: `source <repo>/../e
 | `native` | `build-native/` | Linux x86, 32-bit (`-m32`): the default, the host preset of the script build and the reference for wasm32 |
 | `native64` | `build-native64/` | Linux x86_64 (LP64) |
 | `native64-uchar` | `build-native64-uchar/` | x86_64 with `-funsigned-char` (arm's char; an audit build) |
-| `native64-asan` | `build-native64-asan/` | x86_64 with AddressSanitizer + UBSan (run with `ASAN_OPTIONS=detect_leaks=0`) |
 | `arm64` | `build-arm64/` | Linux aarch64, cross (`g++-aarch64-linux-gnu`; `ucc-bin` runs under `qemu-aarch64`) |
 | `wasm` | `build-wasm/` | Web, `-O2`, development |
 | `wasm-debug` | `build-wasm-debug/` | Web, `-O0` |
@@ -354,7 +353,7 @@ rebuilds from the apply on, and a new `ucc-bin` or shipped file from where it en
 Windows: MSYS2).
 
 Which preset compiles. The script compiler is `ucc` with the Editor package, and it runs on the build machine: the
-host presets are `native` and `native64` (with `native64-uchar` and `native64-asan`) on Linux and `windows` (MinGW
+host presets are `native` and `native64` (with `native64-uchar`) on Linux and `windows` (MinGW
 i686, `ucc.exe`) on a Windows host. At 64 bits the compiler writes the bytecode the shipped packages hold (4-byte object
 slots, and the 32-bit size of a skipped context's zero fill and of a switch value) and mip-maps imported textures in
 integers, so both widths compile the same bytes (`patches/reference.sha256`). Every other preset (`wasm*`,
@@ -405,7 +404,6 @@ is not part of ALL.
 |---|---|---|
 | `UE_ALLOW_64BIT` | OFF | build x86_64 instead of demoting to `-m32` |
 | `UE_UNSIGNED_CHAR_AUDIT` | OFF | `-funsigned-char` instead of `-fsigned-char` (audit build) |
-| `UE_SANITIZE` | empty | `-fsanitize=` list, e.g. `address,undefined` |
 | `UE_WEB_PERF`, `UE_WEB_DEBUG` | OFF | the three web build modes (see the presets) |
 | `UE_SCRIPT_PATCHES`, `UE_SCRIPT_PATCH_SETS`, `UE_ASSETS_DIR`, `UE_SCRIPT_PACKAGES_DIR`, `UE_SCRIPT_RETAIL_INIS_DIR`, `UE_SCRIPTS_DIR` | see "Script patches" | the patched script packages |
 | `UE_HEADERS_CLASSES_ROOT` | empty | `check-headers`' script sources (default: the build's `Scripts/tree`) |

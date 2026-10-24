@@ -127,14 +127,6 @@ add_definitions(-DSUPPORTS_PRAGMA_PACK=1)
 
 # char is signed on x86 and unsigned on arm, and the code assumes signed char. The audit build (preset
 # native64-uchar) inverts it to show the code does not depend on it.
-# Sanitizer builds (preset native64-asan). -fno-sanitize=vptr,alignment: UE's placement construction of
-# objects trips UBSan's vptr check at start-up, and the script mirrors are pack(4) on purpose (8-byte pointers on
-# 4-byte boundaries). The engine allocator is plain malloc on Linux (FMallocAnsi), so ASan sees every block.
-set(UE_SANITIZE "" CACHE STRING "-fsanitize= list for every target, e.g. address,undefined (empty: none)")
-if(UE_SANITIZE)
-  add_compile_options(-fsanitize=${UE_SANITIZE} -fno-sanitize=vptr,alignment -fno-omit-frame-pointer)
-  add_link_options(-fsanitize=${UE_SANITIZE} -fno-sanitize=vptr,alignment)
-endif()
 option(UE_UNSIGNED_CHAR_AUDIT "Build with -funsigned-char (arm64's char) instead of -fsigned-char" OFF)
 if(UE_UNSIGNED_CHAR_AUDIT)
   add_compile_options(-pipe -funsigned-char -fno-strict-aliasing)
