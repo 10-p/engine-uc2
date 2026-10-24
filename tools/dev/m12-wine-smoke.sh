@@ -143,7 +143,7 @@ PY
 # The controls runner, wine settings. $1 = scenario or --file ...
 m10_wine() {
   M10_TREE=$treename M10_OUT=$out/smoke-controls M10_LAUNCH="$wine $sys uc2.exe" M10_STOPSIG=USR1 M10_MEM=3G \
-    M10_PROC=uc2.exe M10_SETTLE=12 "$repo/tools/dev/m10-controls.sh" "$@"
+    M10_PROC=uc2.exe "$repo/tools/dev/m10-controls.sh" "$@"
 }
 
 check_pinned() {
