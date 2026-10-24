@@ -285,29 +285,31 @@ void UInteractionMaster::MasterProcessPostRender(UViewport* Viewport)
 			GlobalInteractions(i)->NativePostRender(Canvas);
 		}
 	}
-	// The global interactions (the console's typing line, the GUI) are UI: clipped to the UI's box as the
-	// Xbox's 640x480 screen clipped them; UnCanvas.cpp
-	Canvas->SetUIContext( UICONTEXT_Menu );
-	// The console's typing line (Engine.Console, state Typing) is a bar from ConsoleX as wide as the canvas's clip:
-	// drawn first, as the loop below draws the last interaction (the console, added after the GUI) first, with the
-	// clip ConsoleX short on the right too, so the bar is centred.
+	// The console's typing line (state Typing: a bar from ConsoleX as wide as the clip, text wrapped at the clip) spans
+	// the viewport, the whole window (split views draw no menus); drawn first, where the loop draws the console
 	UConsole* TypingConsole = Cast<UConsole>( Console );
 	UBOOL bTypingLine = TypingConsole && TypingConsole->bTyping && TypingConsole->bVisible && !TypingConsole->bNativeEvents
 		&& GlobalInteractions.Num() && GlobalInteractions.Last() == TypingConsole;
 	if( bTypingLine )
 	{
-		FLOAT OldClipX = Canvas->ClipX;
-		Canvas->ClipX = Max( 0.f, OldClipX - 2.f * TypingConsole->ConsoleX );
+		FLOAT X1, Y1, X2, Y2;
+		Canvas->GetTargetInDesign( X1, Y1, X2, Y2 );
+		FLOAT OldOrgX = Canvas->OrgX, OldClipX = Canvas->ClipX;
+		Canvas->OrgX  = X1;
+		Canvas->ClipX = X2 - X1;
 		static FName NAME_PostRender( TEXT("PostRender") );
 		struct { UCanvas* Canvas; } Parms = { Canvas };
 		TypingConsole->ProcessEvent( TypingConsole->FindFunctionChecked( NAME_PostRender ), &Parms );
+		Canvas->OrgX  = OldOrgX;
 		Canvas->ClipX = OldClipX;
 		TypingConsole->bVisible = 0;
 	}
+	// The other global interactions (the GUI) are UI: clipped to the UI's box as the Xbox's 640x480 screen clipped them
+	Canvas->SetUIContext( UICONTEXT_Menu );
 	eventProcess_PostRender( GlobalInteractions, Canvas );
+	Canvas->SetUIContext( UICONTEXT_Game );
 	if( bTypingLine )
 		TypingConsole->bVisible = 1;
-	Canvas->SetUIContext( UICONTEXT_Game );
 
 	// only need to process the currently active viewport 
 	eventProcess_PostRender( Viewport->LocalInteractions, Canvas  );

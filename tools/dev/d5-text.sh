@@ -262,8 +262,7 @@ cat > "$out/k5.scen" <<SCEN
 wait Bringing Level DM-Deadbolt.MyLevel up for play 120
 sleep 6
 focus
-key Alt_L 0.2
-sleep 4
+seek 4 P['_'].pawn==1 ;; pyexec import __main__ as MI; MI.key('Alt_L', 0.2); time.sleep(3)
 probe spawn
 check k5-match-started P['spawn'].pawn==1
 chan exec God

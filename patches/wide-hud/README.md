@@ -4,27 +4,32 @@ UCGameplay and UCMutators: the HUD on a window wider than 4:3 and in every split
 are drawn in the largest centred 4:3 box of the window, or of a split view's rectangle
 (`[SDL2Drv.SDL2Client] UIScaleMode=Fit43`); with this set the HUD's side groups move out of the box to the view's
 sides, each at the distance from its own side that it has at 4:3 (the health bar 40 of the 640 design pixels from the
-left edge, the leaderboard 40 from the right), and its centred items sit exactly on the view's centre. Where a view
+left edge, the leaderboard 40 from the right): every item keeps the side Epic placed it on, and the items Epic centred
+sit exactly on the view's centre. At 4:3 the HUD is Epic's but for that exact centring. Where a view
 is no wider than 4:3 (a 4:3 window, the quarters of a 16:9 or 21:9 window) and with `UIScaleMode=Native640` the sides
 do not move.
 
 - **Left**: the health and adrenaline bars and the active combos (top left), the weapon selector and its side bar
-  (bottom left), the voice menu, the Weapon Master mutator's counts.
+  (bottom left), the voice menu, the local message (bottom left, 48 design pixels above the bottom of the view), the
+  Weapon Master mutator's counts. While an announcement shows, the local message gives way to it as at 4:3: it is
+  hidden when the two would run into each other at their 4:3 places, at every width.
 - **Right**: the locked-on or aimed player's name and health, the leaderboard (the deathmatch list, the team scores,
-  CTF's flags, Survival's queue and its waiting text), the negative combos, the Retribution mutator's killer list,
+  CTF's flags, Survival's queue and its waiting text), the negative combos, the announcement and its reward panel
+  (bottom right), the console messages (right-justified, Epic's wrap width), the Retribution mutator's killer list,
   Overflow's radiation meter, Training's goal text.
 - **The compass** keeps to the side whose third of the design space holds it (the right in CTF and in the split
   HUDs); in the middle third it is centred.
 - **Centred exactly**, at every aspect ratio and at 4:3 too: the crosshair a weapon draws without a scripted one and
   the friendly-target crosshair (Epic's factors 0.503 and 0.504 put them right of and below the centre), the aimed
-  player's name, the pickup text (measured as it is drawn, its button glyph in the button font), each line of the
-  console messages, the announcement at the bottom with its reward panel (Epic's at the right), the local message
-  (48 design pixels above the bottom, above the announcement while one shows), the rank and spread boxes (their
-  divide on the centre; Epic's at 330.5), the game timer and the camp-fire bomb timer (Epic's at 319), the compass
-  when it is centred (Epic's at 319). The scripted crosshairs (UCElements) are placed on the centre already; the art
-  of some is not symmetric (the Nakhti crosshair's side pieces 1.5 design pixels left of its middle).
+  player's name, the pickup text (measured as it is drawn, its button glyph in the button font), the rank and spread
+  boxes (their divide on the centre; Epic's at 330.5), the game timer and the camp-fire bomb timer (Epic's at 319),
+  the compass when it is centred (Epic's at 319), the combo menu. The scripted crosshairs (UCElements) are placed on
+  the centre already; the art of some is not symmetric (the Nakhti crosshair's side pieces 1.5 design pixels left of
+  its middle).
 - **Across the window**: the announcement's bar, the status bar (dead, spectating), Training's letterbox and dialog
-  bars.
+  bars, the console's typing line (Engine.Console: drawn once for the whole window, in split screen too; its bar from
+  32 design pixels in from the window's left edge to its right edge, its text wrapped by words at that edge onto lines
+  that start at the left edge; at 4:3 Epic's line).
 - **How**: three natives of UCHUD (`Source/UCGameplay/Src/UCHUD.cpp`): `GetSideShifts` gives a view's room beside the
   640-wide design space in whole design pixels (0 when the UI is not boxed), `DrawVitalsWide` is `DrawVitals` with the
   vitals and active combos moved left and the negative combos right, `TextSizeDualFont` measures what
@@ -32,8 +37,9 @@ do not move.
   which move the clip region's right edge with a right group so its text is not wrapped or clipped at the box), an
   element with its shift as its relative X; the mutators' elements ask `GetSideShifts` themselves. The engine side,
   which the shipped packages get too: the HUD's clipped text is clipped at the viewport's left edge
-  (`UnCanvas.cpp` `DrawString`), the console's typing line is centred (`UnInteractionMaster.cpp`: its bar
-  `ConsoleX` short of both sides), the combo menu is centred from its icons' extent (`UCHUD.cpp` `DrawComboMenu`).
+  (`UnCanvas.cpp` `DrawString`), the combo menu is centred from its icons' extent (`UCHUD.cpp` `DrawComboMenu`), the
+  typing line is drawn with the canvas's origin on the viewport's left edge and its clip the viewport's width
+  (`UnInteractionMaster.cpp` `MasterProcessPostRender`).
 - **Classes**: UCGameplay: UCHUD (20 hunks), UCHUD_Survival (5), UCHUD_TeamGame, UCHUD_CTF, UCHUD_Overflow,
   UCHUD_Training, UCWeapon (2 each), Element_GameTimer (1); UCMutators: Element_KillerList (4), Element_WeaponMaster
   (2), Element_CampFireBombTimer, RetributionMarker, WeaponMasterReplicationInfo (1 each: the two give a HUD that
