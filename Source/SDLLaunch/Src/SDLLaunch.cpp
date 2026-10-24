@@ -750,7 +750,10 @@ int main( int argc, char** argv )
 			// XboxMovieThread.cpp:1049): full screen, skippable by a key or button. Nothing plays with the null
 			// renderer, on a dedicated server, or with
 			// [UC2Movie] StartupMovies=False (UnMovie.cpp, appCanPlayFullscreenMovie).
-			if( !GIsRequestingExit )
+			// Nor when the command line joins a server: its handshake is already running, and the logos would hold
+			// it past the server's connect time-out.
+			UGameEngine* GameEngine = Cast<UGameEngine>( Engine );
+			if( !GIsRequestingExit && !(GameEngine && GameEngine->GPendingLevel) )
 				appPlayMovieFullscreen( TEXT("..\\Movies\\UC2_Logos.xmv"), FSMOVIE_Startup, 1 );
 
 			// Start main engine loop.
