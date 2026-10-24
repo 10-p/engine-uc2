@@ -2370,11 +2370,10 @@ void UObject::BindPackage( UPackage* Pkg )
 	guard(UPackage::BindPackage);
 	if( !Pkg->DllHandle && !Pkg->GetOuter() && !Pkg->AttemptedBind )
 	{
-		TCHAR PathName[256];
-		appSprintf( PathName, TEXT("%s%s"), appBaseDir(), Pkg->GetName() );
+		FString PathName = FString(appBaseDir()) + Pkg->GetName();	// a path of any length
 		Pkg->AttemptedBind  = 1;
 		GObjNoRegister      = 0;
-		Pkg->DllHandle      = appGetDllHandle( PathName );
+		Pkg->DllHandle      = appGetDllHandle( *PathName );
 		GObjNoRegister      = 1;
 		if( Pkg->DllHandle )
 		{
