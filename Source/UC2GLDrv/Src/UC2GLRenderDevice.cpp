@@ -762,7 +762,8 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 		}
 		ValidContext = 1;
 
-		appSprintf( GMachineVideo, TEXT("%s"), appFromAnsi((ANSICHAR*)glGetString(GL_RENDERER)) );
+		// GMachineVideo holds 32 characters; longer renderer names are cut.
+		appStrncpy( GMachineVideo, appFromAnsi((ANSICHAR*)glGetString(GL_RENDERER)), ARRAY_COUNT(GMachineVideo) );
 
 		DetectCapabilities();
 		if( IsGLES )
