@@ -12,7 +12,7 @@
 #                     cinematic's sound track, a localised class default (GET UCDeathmatch GameDescription), Fire (the
 #                     match starts) and the announcer's wave pack (A_Ann_Female[_<lang>].ogp).
 #        <lang> = int, deu, fra, ita, spa (the languages the cooked assets carry).
-# Every run: <repo>/../bin/capped 2G, xvfb-run (software GL unless UC2_GPU), 1280x720, -log,
+# Every run: <repo>/../bin/capped 2G, xvfb-run (software GL unless UC2_GPU), 1280x720, -log, -UFRONTLOG,
 # -ini:System:[Engine.Engine]:Language=<lang>, -ini:System:[UC2Movie]:StartupMovies=False, the input test channel.
 # Output in <repo>/../logs/g4/native/: <case>[-gpu].out (console), .log (System/Avaris.log), .inject, .result, <case>[-gpu]-<shot>.png and one
 # summary line per case.
@@ -81,7 +81,7 @@ SCEN
   inner=$(mktemp)
   cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy $video ./uc2.bin $url -log -ini:System:[Engine.Engine]:Language=$lang -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" > "$out/$tag.out" 2>&1 &
+SDL_AUDIODRIVER=dummy $video ./uc2.bin $url -log -UFRONTLOG -ini:System:[Engine.Engine]:Language=$lang -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" > "$out/$tag.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$tag.out" "$chan" "$out/$tag.result" > "$out/$tag.inject" 2>&1
 kill -TERM \$pid 2>/dev/null

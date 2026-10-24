@@ -64,14 +64,15 @@ void UCanvas::DrawTile
 			UClient* Client = Viewport->GetOuterUClient();
 			UBOOL bMenu = pCanvasUtil->UIContext == UICONTEXT_Menu;
 			UBOOL bFill = !bMenu || (Client && Client->UIMenuBackground == UIMENUBG_Fill);
-			// Say once per material what happened to it (which layers these are).
+			// With -UFRONTLOG, say once per material what happened to it (which layers these are).
 			static TArray<UMaterial*> Reported;
 			if( Reported.FindItemIndex(Material) == INDEX_NONE && Reported.Num() < 256 )
 			{
 				Reported.AddItem( Material );
-				debugf( NAME_Log, TEXT("UIScale: full-screen tile %s (%s) %s"), Material->GetFullName(),
-					bMenu ? TEXT("menu") : TEXT("game"),
-					!bFill ? TEXT("stays in the box") : bMenu ? TEXT("covers the viewport, aspect kept") : TEXT("stretched to the viewport") );
+				if( GUfrontLog )
+					debugf( NAME_Log, TEXT("UIScale: full-screen tile %s (%s) %s"), Material->GetFullName(),
+						bMenu ? TEXT("menu") : TEXT("game"),
+						!bFill ? TEXT("stays in the box") : bMenu ? TEXT("covers the viewport, aspect kept") : TEXT("stretched to the viewport") );
 			}
 			if( bFill )
 			{
@@ -368,7 +369,8 @@ static FSharpFontFamily* SharpFontFor( UFont* Font, FLOAT Magnification, INT& St
 				Found += FString::Printf( TEXT(" %ipt(%i texels high, %i/95 characters, ink of %i read)"), F.Pts(j), F.Heights(j), Have, Ink );
 			}
 		}
-		debugf( NAME_Log, TEXT("UIScale: sharper text for %s (%i texels high):%s"), Font->GetPathName(), F.Height, Found.Len() ? *Found : TEXT(" (no taller size in its package)") );
+		if( GUfrontLog )
+			debugf( NAME_Log, TEXT("UIScale: sharper text for %s (%i texels high):%s"), Font->GetPathName(), F.Height, Found.Len() ? *Found : TEXT(" (no taller size in its package)") );
 	}
 	FSharpFontFamily& F = GSharpFonts(Index);
 	if( !F.Fonts.Num() )

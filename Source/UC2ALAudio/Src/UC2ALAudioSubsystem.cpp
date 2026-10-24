@@ -377,7 +377,7 @@ static ALuint EnsureBuffer( FUC2AudioState* S, FUC2WaveBank* Bank, FUC2Wave* W, 
 		DOUBLE ReadStart = appSeconds();
 		if( !appLoadFileToArray( Bank->Data, *(S->SoundsDir + Bank->DataFile) ) )
 			LogOnce( S, FString(TEXT("data:")) + Bank->DataFile, FString::Printf( TEXT("cannot read %s"), *(S->SoundsDir + Bank->DataFile) ) );
-		else
+		else if( GUfrontLog )
 			// One line per wave pack and run: what loading it cost (on the web: the fetch of the whole file on first use).
 			debugf( NAME_Log, TEXT("UC2Audio: [%7.2f] read wave pack %s (%i bytes) in %.0f ms"), (FLOAT)(NowOf(S) - S->T0), *Bank->DataFile,
 				Bank->Data.Num(), 1000.0 * (appSeconds() - ReadStart) );
@@ -1210,7 +1210,7 @@ static void StartTrack( UUC2ALAudioSubsystem* Audio, FUC2AudioState* S, FUC2CueI
 	{
 		// The first sound of the run: the time from the device's start to something audible.
 		static UBOOL bFirst = 1;
-		if( bFirst )
+		if( bFirst && GUfrontLog )
 			debugf( NAME_Log, TEXT("UC2Audio: [%7.2f] first sound: %s"), (FLOAT)(Now - S->T0), *Inst.Name );
 		bFirst = 0;
 	}
@@ -1912,7 +1912,7 @@ static void UpdateMusic( UUC2ALAudioSubsystem* Audio, FUC2AudioState* S, FLOAT D
 				DOUBLE T = appSeconds() - T0;
 				RefillTotal += T;
 				RefillMax = ::Max( RefillMax, T );
-				if( ++RefillCount == 8 )
+				if( ++RefillCount == 8 && GUfrontLog )
 					debugf( NAME_Log, TEXT("UC2Audio: music refill cost (first 8 buffers of %i frames, decoded on the game thread): %.2f ms on average, %.2f ms at most"),
 						(INT)UC2_MUSIC_BUFFER_FRAMES, 1000.0 * RefillTotal / 8, 1000.0 * RefillMax );
 			}

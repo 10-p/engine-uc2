@@ -436,8 +436,9 @@ UBOOL appPlayMovieFullscreen( const TCHAR* Name, EFullscreenMovieKind Kind, UBOO
 		INT Frame = Player->GetFrame();
 		if( Frame / 30 != LastLogged / 30 || LastLogged < 0 )
 		{
-			// One line a second: the movie clock, the frame on screen, real time since the start.
-			debugf( NAME_Log, TEXT("UC2Movie: t=%.3f frame %i, %.3f s after start"), Player->GetTime(), Frame, appSeconds() - Start );
+			// With -UFRONTLOG, one line a second: the movie clock, the frame on screen, real time since the start.
+			if( GUfrontLog )
+				debugf( NAME_Log, TEXT("UC2Movie: t=%.3f frame %i, %.3f s after start"), Player->GetTime(), Frame, appSeconds() - Start );
 			LastLogged = Frame;
 		}
 		if( GMovieShotTimes.Num() && Player->GetTime() >= GMovieShotTimes(0) )
@@ -565,15 +566,16 @@ FPortableMoviePlayer* appUpdateMovieMaterial( UMovieMaterial* M, UBOOL& bOutFall
 		return NoPicture( M, bOutFallback, TEXT("no picture decoded yet") );
 	M->USize = Player->GetWidth();
 	M->VSize = Player->GetHeight();
-	// Evidence for the logs: each material's frame, at most every 2 s.
+	// Evidence for the logs with -UFRONTLOG: each material's frame, at most every 2 s.
 	static TMap<INT,DOUBLE> LastLogged;
 	DOUBLE Now = appSeconds();
 	DOUBLE* Last = LastLogged.Find( M->GetIndex() );
 	if( !Last || Now - *Last >= 2.0 )
 	{
 		LastLogged.Set( M->GetIndex(), Now );
-		debugf( NAME_Log, TEXT("UC2Movie: MovieMaterial %s frame %i of %i (pass %s, revision %i)"), M->GetPathName(),
-			Player->GetFrame(), Player->GetFrameCount(), Player->HasEnded() ? TEXT("ended") : TEXT("playing"), Player->GetRevision() );
+		if( GUfrontLog )
+			debugf( NAME_Log, TEXT("UC2Movie: MovieMaterial %s frame %i of %i (pass %s, revision %i)"), M->GetPathName(),
+				Player->GetFrame(), Player->GetFrameCount(), Player->HasEnded() ? TEXT("ended") : TEXT("playing"), Player->GetRevision() );
 	}
 	// Test key MaterialShotTimes (above): the first material with a picture is the one whose clock counts.
 	ParseMovieShots();

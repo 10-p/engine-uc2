@@ -301,8 +301,9 @@ void UPackageMap::Compute()
 			MaxObjectIndex       += Info.ObjectCount;
 			MaxNameIndex         += Info.NameCount;
 			//debugf( TEXT("** Package %s: %i objs, %i names, gen %i-%i"), *Info.URL. Info.ObjectCount, Info.NameCount, Info.LocalGeneration, Info.RemoveGeneration );
-			// Epic's line above, under DevNet (a client and a server must print the same table).
-			debugf( NAME_DevNet, TEXT("PackageMap %i %s: base %i, %i objs (file %i), %i names (file %i), gen %i-%i"), i, Info.Parent ? Info.Parent->GetName() : TEXT("None"), Info.ObjectBase, Info.ObjectCount, Info.Linker->Summary.Generations.Num() ? Info.Linker->Summary.Generations.Last().ExportCount : -1, Info.NameCount, Info.Linker->Summary.Generations.Num() ? Info.Linker->Summary.Generations.Last().NameCount : -1, Info.LocalGeneration, Info.RemoteGeneration );
+			// Epic's line above, under DevNet and -UFRONTLOG (a client and a server must print the same table).
+			if( GUfrontLog )
+				debugf( NAME_DevNet, TEXT("PackageMap %i %s: base %i, %i objs (file %i), %i names (file %i), gen %i-%i"), i, Info.Parent ? Info.Parent->GetName() : TEXT("None"), Info.ObjectBase, Info.ObjectCount, Info.Linker->Summary.Generations.Num() ? Info.Linker->Summary.Generations.Last().ExportCount : -1, Info.NameCount, Info.Linker->Summary.Generations.Num() ? Info.Linker->Summary.Generations.Last().NameCount : -1, Info.LocalGeneration, Info.RemoteGeneration );
 			for( INT j=0; j<Min(Info.Linker->NameMap.Num(),Info.NameCount); j++ )
 				if( (*NameIndices)(Info.Linker->NameMap(j).GetIndex()) == -1 )
 					(*NameIndices)(Info.Linker->NameMap(j).GetIndex()) = Info.NameBase + j;

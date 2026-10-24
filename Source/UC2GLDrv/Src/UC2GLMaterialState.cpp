@@ -1414,7 +1414,8 @@ void FOpenGLRenderInterface::HandlePSVertexShader( UMaterial* InMaterial, FOpenG
 		if( DISTORTION_CULL_DISTANCE != LoggedCullDistance )
 		{
 			LoggedCullDistance = DISTORTION_CULL_DISTANCE;
-			debugf( NAME_Init, TEXT("UC2GLDrv: distortion fades out over %.0f units (DistortionCullDistance of %s; the Xbox's is 5000)"), DISTORTION_CULL_DISTANCE, RenDev->GetClass()->GetPathName() );
+			if( GUfrontLog )
+				debugf( NAME_Init, TEXT("UC2GLDrv: distortion fades out over %.0f units (DistortionCullDistance of %s; the Xbox's is 5000)"), DISTORTION_CULL_DISTANCE, RenDev->GetClass()->GetPathName() );
 		}
 		// UC2GLDrv: an ini without MaxDistortion reads as 0 until the device puts 35 there (its first
 		// frame, UC2GLRenderDevice.cpp); 0 would switch all distortion off and divide by zero below, so
@@ -3821,22 +3822,25 @@ UBOOL FOpenGLRenderInterface::SetProjectorMultiMaterial( UProjectorMultiMaterial
 	
 	CurrentState->NumMaterialPasses = NumProjPasses;
 
-	// UC2GLDrv: which projectors are drawn this way, once each (verification).
+	// UC2GLDrv: with -UFRONTLOG, which projectors are drawn this way, once each (verification).
 	{
 		static TMap<AProjector*,INT> Logged;
 		AProjector* First = ProjectorMultiMaterial->RenderEntries(0)->Projector;
 		if( First && !Logged.Find(First) && Logged.Num() < 4096 )
 		{
 			Logged.Set( First, 1 );
-			FString Planes;
-			if( bUseClipPlanes )
-				for( INT Plane=8; Plane<12; Plane++ )
-					Planes += FString::Printf( TEXT(" (%.3f,%.3f,%.3f,%.1f)"), ProjectorShaderConstants[Plane][0], ProjectorShaderConstants[Plane][1], ProjectorShaderConstants[Plane][2], ProjectorShaderConstants[Plane][3] );
-			debugf( NAME_Init, TEXT("UC2GLDrv: projector material %s: %i projector(s), %s, pixel shader %i, %i stages; origin (%.0f,%.0f,%.0f) direction (%.3f,%.3f,%.3f) 1/trace %.5f%s"), First->GetName(),
-				ProjectorMultiMaterial->RenderEntries.Num(), bUseClipPlanes ? TEXT("clipped per pixel") : TEXT("not clipped"),
-				(INT)CurrentState->MaterialPasses[0]->PixelShader, CurrentState->MaterialPasses[0]->StagesUsed,
-				ProjectorShaderConstants[3][0], ProjectorShaderConstants[3][1], ProjectorShaderConstants[3][2],
-				ProjectorShaderConstants[0][0], ProjectorShaderConstants[0][1], ProjectorShaderConstants[0][2], ProjectorShaderConstants[7][0], *Planes );
+			if( GUfrontLog )
+			{
+				FString Planes;
+				if( bUseClipPlanes )
+					for( INT Plane=8; Plane<12; Plane++ )
+						Planes += FString::Printf( TEXT(" (%.3f,%.3f,%.3f,%.1f)"), ProjectorShaderConstants[Plane][0], ProjectorShaderConstants[Plane][1], ProjectorShaderConstants[Plane][2], ProjectorShaderConstants[Plane][3] );
+				debugf( NAME_Init, TEXT("UC2GLDrv: projector material %s: %i projector(s), %s, pixel shader %i, %i stages; origin (%.0f,%.0f,%.0f) direction (%.3f,%.3f,%.3f) 1/trace %.5f%s"), First->GetName(),
+					ProjectorMultiMaterial->RenderEntries.Num(), bUseClipPlanes ? TEXT("clipped per pixel") : TEXT("not clipped"),
+					(INT)CurrentState->MaterialPasses[0]->PixelShader, CurrentState->MaterialPasses[0]->StagesUsed,
+					ProjectorShaderConstants[3][0], ProjectorShaderConstants[3][1], ProjectorShaderConstants[3][2],
+					ProjectorShaderConstants[0][0], ProjectorShaderConstants[0][1], ProjectorShaderConstants[0][2], ProjectorShaderConstants[7][0], *Planes );
+			}
 		}
 	}
 

@@ -97,13 +97,15 @@ fromresult() {
 # uccprep <sys>: our tracked inis, nothing derived, no logs
 uccprep() { cp -f "$repo"/Engine/Config/*.ini "$1/"; cp -f "${UC2_ASSETS_DIR:-$work/assets/uc2-assets}/System/Gametypes.ini" "$1/"; rm -f "$1/Avaris.ini" "$1/User.ini" "$1"/*.log "$1"/*.log.*; }
 # ucc <L> <mode> <args...>: one saveconfigtest run (<mode> static|instance|keys|get ...); L u = native in $sys, w = wasm in
-# $wsys. Output $out/<L>-<mode>.out, the engine's log $out/<L>-<mode>.log
+# $wsys. Output $out/<L>-<mode>.out, the engine's log $out/<L>-<mode>.log. -UFRONTLOG (the per-call SaveConfig
+# trace) goes last, and not to get: a fourth word would be get's <Value>.
 ucc() {
-  local L=$1 name=$2 s=$sys; shift 1
+  local L=$1 name=$2 s=$sys flog=-UFRONTLOG; shift 1
   [ "$L" = w ] && s=$wsys
+  [ "$name" = get ] && flog=
   rm -f "$s"/*.log
-  if [ "$L" = w ]; then ( cd "$s" && "$capped" 3G 600 -- node ucc-bin.js saveconfigtest "$@" > "$out/$L-$name.out" 2>&1 ); local rc=$?
-  else ( cd "$s" && "$capped" 3G 300 -- ./ucc-bin saveconfigtest "$@" > "$out/$L-$name.out" 2>&1 ); local rc=$?; fi
+  if [ "$L" = w ]; then ( cd "$s" && "$capped" 3G 600 -- node ucc-bin.js saveconfigtest "$@" $flog > "$out/$L-$name.out" 2>&1 ); local rc=$?
+  else ( cd "$s" && "$capped" 3G 300 -- ./ucc-bin saveconfigtest "$@" $flog > "$out/$L-$name.out" 2>&1 ); local rc=$?; fi
   cp -f "$s/ucc.log" "$out/$L-$name.log" 2>/dev/null
   return $rc
 }

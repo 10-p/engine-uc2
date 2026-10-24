@@ -153,7 +153,7 @@ echo "$CASES" | while IFS='|' read -r name map secs what; do
   inner=$(mktemp)
   cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy $video ./$bin "$map?Name=FxCam" -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" $fovarg ${FX_ARGS:-} > "$out/$tag.out" 2>&1 &
+SDL_AUDIODRIVER=dummy $video ./$bin "$map?Name=FxCam" -log -UFRONTLOG -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" $fovarg ${FX_ARGS:-} > "$out/$tag.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$tag.out" "$chan" "$out/$tag.result" > "$out/$tag.inject" 2>&1
 kill -TERM \$pid 2>/dev/null

@@ -424,8 +424,9 @@ static void UC2GL_UpdateReferenceCopy( UUC2GLRenderDevice* RenDev )
 		RenDev->ReferenceWidth	= W;
 		RenDev->ReferenceHeight	= H;
 		RenDev->ReferenceVersion = -1;
-		debugf( NAME_Init, TEXT("UC2GLDrv: reference copy %ix%i of the %ix%i back buffer (%ix%i samples per pixel)"), W, H, RenDev->MainWidth, RenDev->MainHeight,
-			Clamp( appCeil( (FLOAT)RenDev->MainHeight / H - 0.01f ), 1, 8 ), Clamp( appCeil( (FLOAT)RenDev->MainHeight / H - 0.01f ), 1, 8 ) );
+		if( GUfrontLog )
+			debugf( NAME_Init, TEXT("UC2GLDrv: reference copy %ix%i of the %ix%i back buffer (%ix%i samples per pixel)"), W, H, RenDev->MainWidth, RenDev->MainHeight,
+				Clamp( appCeil( (FLOAT)RenDev->MainHeight / H - 0.01f ), 1, 8 ), Clamp( appCeil( (FLOAT)RenDev->MainHeight / H - 0.01f ), 1, 8 ) );
 	}
 	if( RenDev->ReferenceVersion == RenDev->MainColorVersion )
 		return;
@@ -1216,8 +1217,9 @@ static UBOOL UC2GL_AsyncReadback( UUC2GLRenderDevice* RenDev )
 		&& D::Raw_glReadPixels && D::Raw_glBindFramebuffer && D::Raw_glGetIntegerv
 		&& D::Raw_glFenceSync && D::Raw_glClientWaitSync && D::Raw_glDeleteSync
 		&& GTestCapMask.InStr( TEXT(",ASYNCREADBACK,") ) < 0;
-	UC2GL_LOG_ONCE( TEXT("UC2GLDrv: dynamic gamma: the luminance target is read back %s"),
-		Can ? TEXT("asynchronously (pixel pack buffer and fence)") : TEXT("synchronously (glReadPixels waits for the GPU)") );
+	if( GUfrontLog )
+		UC2GL_LOG_ONCE( TEXT("UC2GLDrv: dynamic gamma: the luminance target is read back %s"),
+			Can ? TEXT("asynchronously (pixel pack buffer and fence)") : TEXT("synchronously (glReadPixels waits for the GPU)") );
 	return Can;
 }
 
@@ -1599,8 +1601,8 @@ void FOpenGLDynamicGamma::UpdateDeviceGamma()
 		RI->RenDev->SetGammaRamp( GammaRamp );
 	ForceUpdate = 0;
 
-	// UC2GLDrv: a log line every 200th ramp (of each viewport; "viewport" = its index).
-	if( (RampCount++ % 200) == 0 )
+	// UC2GLDrv: with -UFRONTLOG, a log line every 200th ramp (of each viewport; "viewport" = its index).
+	if( (RampCount++ % 200) == 0 && GUfrontLog )
 		debugf( NAME_Init, TEXT("UC2GLDrv: dynamic gamma ramp %i%s: luminance min %.3f max %.3f average %.3f (histogram %.3f %.3f %.3f), exponent %.3f, ramp[64,128,192] = %i %i %i"),
 			RampCount, Owner ? *FString::Printf( TEXT(" (viewport %i at %i,%i %ix%i)"), Owner->GetOuterUClient()->Viewports.FindItemIndex(Owner), Owner->OffsetX, Owner->OffsetY, Owner->SizeX, Owner->SizeY ) : TEXT(""),
 			CurMinL, CurMaxL, CurAvgL, Histogram.MinL, Histogram.MaxL, Histogram.AvgL, Power, GammaRamp[64], GammaRamp[128], GammaRamp[192] );

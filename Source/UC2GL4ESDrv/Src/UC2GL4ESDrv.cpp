@@ -126,7 +126,8 @@ UBOOL UUC2GL4ESRenderDevice::BindingCreateContext( UViewport* Viewport, UBOOL Fu
 					H		= (INT)(CssH * Ratio + 0.5);
 			if( W >= 320 && H >= 200 && (W != NewX || H != NewY) )
 			{
-				debugf( NAME_Init, TEXT("UC2GL4ESDrv: the canvas is %ix%i device pixels (CSS %.0fx%.0f, ratio %.2f): drawing at that size instead of %ix%i"), W, H, CssW, CssH, Ratio, NewX, NewY );
+				if( GUfrontLog )
+					debugf( NAME_Init, TEXT("UC2GL4ESDrv: the canvas is %ix%i device pixels (CSS %.0fx%.0f, ratio %.2f): drawing at that size instead of %ix%i"), W, H, CssW, CssH, Ratio, NewX, NewY );
 				NewX = W;
 				NewY = H;
 			}

@@ -83,7 +83,7 @@ run_game() {
   rm -rf "$sys/Profiles" "$work/run/$tree/Save"/*.pro 2>/dev/null; mkdir -p "$sys/Profiles"
   local chan=$out/$name.channel; : > "$chan"
   local video=""; [ "$gpu" = 1 ] && video="SDL_VIDEODRIVER=offscreen"
-  local args=(-log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan"
+  local args=(-log -UFRONTLOG -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan"
     "-ini:System:[SDL2Drv.SDL2Client]:WindowedViewportX=$W" "-ini:System:[SDL2Drv.SDL2Client]:WindowedViewportY=$H"
     "-ini:System:[SDL2Drv.SDL2Client]:FullscreenViewportX=$W" "-ini:System:[SDL2Drv.SDL2Client]:FullscreenViewportY=$H" "$@" ${G6_ARGS:-})
   local inner; inner=$(mktemp)

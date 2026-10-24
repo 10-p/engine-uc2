@@ -633,7 +633,8 @@ FOpenGLProgram* UUC2GLRenderDevice::GetProgram( INT PixelShader, DWORD Variant, 
 				glUniform1i( SceneDepthLoc, UC2GL_SCENEDEPTH_UNIT );
 			glUseProgram( 0 );
 			ProgramsLinked++;
-			debugf( NAME_Init, TEXT("UC2GLDrv: program %i: pixel shader %i (%s.psh) variant %i, vertex shader %s"), ProgramsLinked, PixelShader, GUC2GLPixelShaders[PixelShader].Name, Variant, appI64toa((SQWORD)VertexShaderEnum) );
+			if( GUfrontLog )
+				debugf( NAME_Init, TEXT("UC2GLDrv: program %i: pixel shader %i (%s.psh) variant %i, vertex shader %s"), ProgramsLinked, PixelShader, GUC2GLPixelShaders[PixelShader].Name, Variant, appI64toa((SQWORD)VertexShaderEnum) );
 		}
 		else
 		{

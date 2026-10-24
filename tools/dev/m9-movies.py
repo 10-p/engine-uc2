@@ -112,7 +112,8 @@ def run_game(tree, name, secs, args, inject='', binary='./uc2.bin', xvfb=True, a
         # UC2_GLARGS="-gl4es" runs every scenario on the GL4ES device
         # (a -nullrenderer on the command line still wins: the launcher takes the first switch of its table)
         args = args + os.environ.get('UC2_GLARGS', '').split()
-    cmd += ['python3', inner, log, inject, binary] + args
+    # -UFRONTLOG: the port's diagnostic and repeated log lines (the MovieMaterial frames) are written too
+    cmd += ['python3', inner, log, inject, binary] + args + ['-UFRONTLOG']
     env = dict(os.environ, ALSOFT_DRIVERS=alsoft)
     t0 = time.time()
     subprocess.run(cmd, cwd=sysdir, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

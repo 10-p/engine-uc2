@@ -60,6 +60,9 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   gamma, plus the Xbox shadows, projectors and three-layer terrain.
 - **Xbox Live content**: the alternate skins and the downloadable maps in the game folder are available.
 - **Portable platform layer**: Core's Unix layer (Linux, MinGW, Emscripten) with UC2's platform contract.
+- **Player log**: status lines, warnings, errors and console-command answers; the port's diagnostic and repeated lines
+  (AutoFOV, dynamic gamma, resize and framebuffer, GL capabilities and programs, movies, network statistics, audio
+  timing, SaveConfig traces, UI scale) only with `-UFRONTLOG` ([`BUILD.md`](./BUILD.md), "The log").
 
 The features of every engine of the frontend, with this one's, are listed in the frontend's change inventory
 (`<repo>/../unreal-frontend-arch-private/docs/14-change-inventory.md`).

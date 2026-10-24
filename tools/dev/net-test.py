@@ -99,7 +99,7 @@ class Proc:
         # NETPROBE/NETPLACE/NETPLACENEAR are cheats (Source/Engine/Src/UC2Cheats.cpp): a client and a
         # dedicated server refuse them unless the process's own ini allows them for tests (a listen host needs no
         # key). The players are lined up around the shooter's own view (line_up).
-        common = ["INI=Net%s.ini" % self.name, "USERINI=Net%sUser.ini" % self.name, "LOG=" + self.logname,
+        common = ["INI=Net%s.ini" % self.name, "USERINI=Net%sUser.ini" % self.name, "LOG=" + self.logname, "-UFRONTLOG",
                   "-ini:System:[UC2NetTest]:CommandFile=" + os.path.basename(self.netcmd)]
         common += ["-ini:System:[Engine.GameEngine]:AllowNetCheats=%s" % ("True" if self.cheatkey else "False")]
         if self.kind == "server" and self.wine:

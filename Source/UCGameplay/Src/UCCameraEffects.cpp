@@ -61,11 +61,11 @@ static FORCEINLINE INT UCPP_TargetSize( FLOAT Size )
 	return Max( (INT)Size, 1 );
 }
 
-// One log line whenever a blur target is (re)created: the evidence that the sizes follow the
-// reference picture (tools/dev/pp-scale.sh reads it).
+// With -UFRONTLOG, one log line whenever a blur target is (re)created: the evidence that the sizes
+// follow the reference picture (tools/dev/pp-scale.sh reads it).
 static void UCPP_LogTarget( const TCHAR* Effect, INT Index, FRenderTarget* Target, const FPostProcessReference& Reference, FRenderInterface* RI )
 {
-	if( !Target )
+	if( !Target || !GUfrontLog )
 		return;
 	debugf( NAME_Init, TEXT("UCCameraEffects: %s target %i: %ix%i (reference picture %.1fx%.1f, back buffer %ix%i)"),
 		Effect, Index, Target->GetWidth(), Target->GetHeight(), Reference.Width, Reference.Height,

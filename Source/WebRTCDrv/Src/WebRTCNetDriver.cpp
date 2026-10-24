@@ -244,7 +244,7 @@ void UWebRTCNetDriver::TickDispatch( FLOAT DeltaTime )
 }
 
 //
-// One line per connection every 10 s with the engine's own statistics of the last stat period (UnConn.cpp
+// With -UFRONTLOG, one line per connection every 10 s with the engine's own statistics of the last stat period (UnConn.cpp
 // UNetConnection::Tick): rates, packets, the loss each side detected from the acks, and the lag. A browser player
 // has no other way to see the link (UC2's stat display is a development feature), and it is the evidence of the
 // loss tests (PktLoss=/PktLag= on the URL arm the engine's own simulation, which the connection line reports).
@@ -270,9 +270,10 @@ void UWebRTCNetDriver::LogStats()
 			continue;
 		// AvgLag stays at UNetConnection's 9999 s until a round trip has been measured.
 		FString Lag = C->AvgLag < 1000.f ? FString::Printf( TEXT("%.0f ms"), C->AvgLag*1000.f ) : FString(TEXT("not measured yet"));
-		debugf( NAME_DevNet, TEXT("[WebRTC] stats %s connId=%i: in %.0f B/s %.0f pkt/s, out %.0f B/s %.0f pkt/s, loss in %.1f%% out %.1f%%, lag %s"),
-			C==ServerConnection ? TEXT("server") : TEXT("client"), C->WebRTCConnId,
-			C->InRate, C->InPackets, C->OutRate, C->OutPackets, C->InLoss, C->OutLoss, *Lag );
+		if( GUfrontLog )
+			debugf( NAME_DevNet, TEXT("[WebRTC] stats %s connId=%i: in %.0f B/s %.0f pkt/s, out %.0f B/s %.0f pkt/s, loss in %.1f%% out %.1f%%, lag %s"),
+				C==ServerConnection ? TEXT("server") : TEXT("client"), C->WebRTCConnId,
+				C->InRate, C->InPackets, C->OutRate, C->OutPackets, C->InLoss, C->OutLoss, *Lag );
 	}
 	unguard;
 }

@@ -2735,7 +2735,8 @@ static void ShowClasses( UClass* Class, FOutputDevice& Ar, int Indent )
 void UC2SaveConfigFromScript( UObject* Object, UBOOL bStatic )
 {
 	guard(UC2SaveConfigFromScript);
-	debugf( NAME_Log, TEXT("Script SaveConfig: %s on %s"), bStatic ? TEXT("StaticSaveConfig") : TEXT("SaveConfig"), Object->GetClass()->GetPathName() );
+	if( GUfrontLog )
+		debugf( NAME_Log, TEXT("Script SaveConfig: %s on %s"), bStatic ? TEXT("StaticSaveConfig") : TEXT("SaveConfig"), Object->GetClass()->GetPathName() );
 	GSaveConfigSkipSetByOther = 1;
 	GSaveConfigChangedOnly = Object->GetIndex()==INDEX_NONE;	// a class default: only what changed; an instance: all
 	GSaveConfigNotWritten = TEXT("");
@@ -2799,8 +2800,9 @@ UBOOL UC2SaveConfigKeys( const TCHAR* Args, FOutputDevice& Ar )
 		TCHAR Value[256]=TEXT("");
 		Only(i)->ExportText( 0, Value, SaveClass->GetDefaultsSafe(0), SaveClass->GetDefaultsSafe(0), 0 );
 		Ar.Logf( TEXT("SaveConfigKeys: %s.%s=%s written to %s.ini"), SaveClass->GetName(), Only(i)->GetName(), Value, *SaveClass->ClassConfigName );
-		// a script's ConsoleCommand() returns the reply to the script and logs nothing: leave a line for the log
-		debugf( NAME_Log, TEXT("SaveConfigKeys: %s.%s=%s written to %s.ini"), SaveClass->GetName(), Only(i)->GetName(), Value, *SaveClass->ClassConfigName );
+		// a script's ConsoleCommand() returns the reply to the script and logs nothing: with -UFRONTLOG, leave a line for the log
+		if( GUfrontLog )
+			debugf( NAME_Log, TEXT("SaveConfigKeys: %s.%s=%s written to %s.ini"), SaveClass->GetName(), Only(i)->GetName(), Value, *SaveClass->ClassConfigName );
 	}
 	return 1;
 	unguard;

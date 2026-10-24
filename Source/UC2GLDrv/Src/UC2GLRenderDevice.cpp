@@ -733,7 +733,8 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 	if( LockedViewport )
 		appErrorf( TEXT("Can't change resolution while render device is locked!") );
 
-	debugf( NAME_Init, TEXT("UC2GLDrv: SetRes %ix%i %s"), NewX, NewY, Fullscreen ? TEXT("fullscreen") : TEXT("windowed") );
+	if( GUfrontLog )
+		debugf( NAME_Init, TEXT("UC2GLDrv: SetRes %ix%i %s"), NewX, NewY, Fullscreen ? TEXT("fullscreen") : TEXT("windowed") );
 
 	BindingSetContextAttributes();
 	if( !BindingCreateContext( Viewport, Fullscreen, NewX, NewY, bSaveSize ) )
@@ -780,20 +781,22 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 		GLFixedFunctionUnits	= Clamp<INT>( Units, 2, MAX_STAGES );
 		GLProgramUnits			= IsGLES ? GLFixedFunctionUnits : Clamp<INT>( Min<INT>( Coords, ImageUnits ), GLFixedFunctionUnits, MAX_STAGES );
 		UpdateTextureCaps();
-		debugf( NAME_Init, TEXT("UC2GLDrv: texture units: %i in the texture environment (GL_MAX_TEXTURE_UNITS), %i for fragment programs (GL_MAX_TEXTURE_COORDS %i, GL_MAX_TEXTURE_IMAGE_UNITS %i); combine3 %s, combine4 %s"),
-			Units, GLProgramUnits, Coords, ImageUnits,
-			SUPPORTS_GL_ATI_texture_env_combine3 ? (MaskCombine3 ? TEXT("masked") : TEXT("yes")) : TEXT("no"),
-			SUPPORTS_GL_NV_texture_env_combine4 ? (MaskCombine4 ? TEXT("masked") : TEXT("yes")) : TEXT("no") );
+		if( GUfrontLog )
+			debugf( NAME_Init, TEXT("UC2GLDrv: texture units: %i in the texture environment (GL_MAX_TEXTURE_UNITS), %i for fragment programs (GL_MAX_TEXTURE_COORDS %i, GL_MAX_TEXTURE_IMAGE_UNITS %i); combine3 %s, combine4 %s"),
+				Units, GLProgramUnits, Coords, ImageUnits,
+				SUPPORTS_GL_ATI_texture_env_combine3 ? (MaskCombine3 ? TEXT("masked") : TEXT("yes")) : TEXT("no"),
+				SUPPORTS_GL_NV_texture_env_combine4 ? (MaskCombine4 ? TEXT("masked") : TEXT("yes")) : TEXT("no") );
 		DeviceCaps.MaxTextureSize			= MaxSize > 0 ? MaxSize : 2048;
 		if( SUPPORTS_GL_EXT_texture_filter_anisotropic )
 			glGetFloatv( GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &MaxAnisotropy );
 		LevelOfAnisotropy = Clamp<INT>( LevelOfAnisotropy, 1, Max<INT>(1,(INT)MaxAnisotropy) );
 
-		debugf( NAME_Init, TEXT("UC2GLDrv: %i texture units (GL reports %i), max texture %i, S3TC %s, combine3 %s, anisotropy %i of %i"),
-			NumTextureUnits, Units, DeviceCaps.MaxTextureSize,
-			SUPPORTS_GL_EXT_texture_compression_s3tc ? TEXT("yes") : TEXT("no"),
-			HasCombine3() ? TEXT("yes") : TEXT("no"),
-			LevelOfAnisotropy, (INT)MaxAnisotropy );
+		if( GUfrontLog )
+			debugf( NAME_Init, TEXT("UC2GLDrv: %i texture units (GL reports %i), max texture %i, S3TC %s, combine3 %s, anisotropy %i of %i"),
+				NumTextureUnits, Units, DeviceCaps.MaxTextureSize,
+				SUPPORTS_GL_EXT_texture_compression_s3tc ? TEXT("yes") : TEXT("no"),
+				HasCombine3() ? TEXT("yes") : TEXT("no"),
+				LevelOfAnisotropy, (INT)MaxAnisotropy );
 		if( !SUPPORTS_GL_EXT_texture_compression_s3tc )
 			debugf( NAME_Init, TEXT("UC2GLDrv: no S3TC; DXT textures are decompressed on upload") );
 		// Multisampling where the main framebuffer can be multisampled: desktop GL and
@@ -976,8 +979,9 @@ UBOOL UUC2GLRenderDevice::CreateMainFramebuffer( INT Width, INT Height )
 
 	MainWidth	= Width;
 	MainHeight	= Height;
-	debugf( NAME_Init, TEXT("UC2GLDrv: main framebuffer %ix%i (RGBA8 texture, depth 24 + stencil 8 %s%s)"), Width, Height, MainDepthStencil ? TEXT("texture") : TEXT("renderbuffer"),
-		MainSamples ? *FString::Printf( TEXT("; drawn %ix multisampled, resolved into them"), MainSamples ) : TEXT("") );
+	if( GUfrontLog )
+		debugf( NAME_Init, TEXT("UC2GLDrv: main framebuffer %ix%i (RGBA8 texture, depth 24 + stencil 8 %s%s)"), Width, Height, MainDepthStencil ? TEXT("texture") : TEXT("renderbuffer"),
+			MainSamples ? *FString::Printf( TEXT("; drawn %ix multisampled, resolved into them"), MainSamples ) : TEXT("") );
 	MainColorVersion++;
 	MainDepthVersion++;
 
@@ -1538,8 +1542,11 @@ void UUC2GLRenderDevice::DetectCapabilities()
 			Raw_glGetShaderPrecisionFormat( GL_FRAGMENT_SHADER, GL_HIGH_FLOAT, Range, &Precision );
 		CapFragmentHighp	= Precision >= 23;
 		debugf( NAME_Init, TEXT("UC2GLDrv: GLES hardware: %s / %s"), appFromAnsi((ANSICHAR*)Raw_glGetString(GL_RENDERER)), appFromAnsi((ANSICHAR*)Raw_glGetString(GL_VERSION)) );
-		debugf( NAME_Init, TEXT("UC2GLDrv: GLES extensions: %s"), appFromAnsi((ANSICHAR*)Raw_glGetString(GL_EXTENSIONS)) );
-		debugf( NAME_Init, TEXT("UC2GLDrv: GLES fragment highp float: %i bits of precision (range 2^-%i..2^%i)"), Precision, Range[0], Range[1] );
+		if( GUfrontLog )
+		{
+			debugf( NAME_Init, TEXT("UC2GLDrv: GLES extensions: %s"), appFromAnsi((ANSICHAR*)Raw_glGetString(GL_EXTENSIONS)) );
+			debugf( NAME_Init, TEXT("UC2GLDrv: GLES fragment highp float: %i bits of precision (range 2^-%i..2^%i)"), Precision, Range[0], Range[1] );
+		}
 	}
 	// Masks, to exercise each fallback where the capability exists (test key MaskCaps=..., read in Init).
 	if( GTestCapMask.InStr( TEXT(",DEPTHTEXTURE,") ) >= 0 )	CapDepthTexture = 0;

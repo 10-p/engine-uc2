@@ -1191,8 +1191,8 @@ ENGINE_API void ufrontAutoFovSize( UViewport* Viewport, INT& SizeX, INT& SizeY )
 // for a full-window viewport or with AutoFOV off (Epic's view, ReduceFOV and all).
 ENGINE_API UBOOL ufrontSplitFovScale( UViewport* Viewport, FLOAT Fov, FLOAT& OutScale );
 
-// One "[AutoFOV] shown viewport=<i> rect=X,Y WxH mode=M base=B effective=E scaleFOV=S horizontal=H vertical=V"
-// line per viewport whenever it changes: the field of view the picture shows (AutoFOV and the split-screen scale
+// With -UFRONTLOG, one "[AutoFOV] shown viewport=<i> rect=X,Y WxH mode=M base=B effective=E scaleFOV=S horizontal=H
+// vertical=V" line per viewport whenever it changes: the field of view the picture shows (AutoFOV and the split-screen scale
 // applied; also with AutoFOV off, Epic's ReduceFOV maths). Fov = the FOV drawn with, BaseFov = the player's own.
 ENGINE_API void ufrontLogShownFov( UViewport* Viewport, FLOAT Fov, FLOAT BaseFov );
 
@@ -1219,7 +1219,7 @@ ENGINE_API FLOAT ufrontBaseFov( FLOAT EffectiveFov, INT SizeX, INT SizeY );
 // place at any aspect).
 ENGINE_API FLOAT ufrontWeaponFov( FLOAT BaseFov, FLOAT EffectiveFov );
 
-// One "[AutoFOV] weapon viewport=WxH base=B drawFov=D" line when the inputs change.
+// With -UFRONTLOG, one "[AutoFOV] weapon viewport=WxH base=B drawFov=D" line when the inputs change.
 ENGINE_API void ufrontLogWeaponFov( INT SizeX, INT SizeY, FLOAT BaseFov, FLOAT DrawFov );
 
 // The frame being drawn: the player whose FovAngle is overridden (NULL outside UGameEngine::Draw), its

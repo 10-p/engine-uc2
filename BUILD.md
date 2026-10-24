@@ -428,3 +428,14 @@ access; later configures re-fetch the branch tips. Vendored in `Thirdparty/`: zl
 seconds: frames, fps, frame time avg/min/max/p99, the 1% low. `tools/dev/fps-bench.sh <tree> <map> <seconds> [WxH]`
 runs a fixed camera turn on this machine's GPU, headless, and prints one line. A standalone game is uncapped by default
 (`UseVSync=False`, `[Engine.Engine] FrameRateCap=0`); a network client keeps the engine's own tick limit.
+
+## The log
+
+Status lines (the renderer, the audio device, ini overrides and test keys), warnings, errors and the answers to console
+commands are always logged. `-UFRONTLOG` (the tests pass it) adds the port's diagnostic and repeated lines: the
+`[AutoFOV]` lines, the dynamic gamma ramps, the lines of each resize and framebuffer (`SetRes`, the main framebuffer,
+the post-process reference copy, the camera effects' targets, the web canvas size), the GL capability dumps and one
+line per linked program, the projector materials and the distortion distance, the movie clock and the MovieMaterial
+frames, the WebRTC link statistics and the package map table, the wave packs read, the first sound and the music
+refill cost, the script `SaveConfig` traces, and the UI scale's full-screen tiles and sharper fonts. Lines behind a
+switch of their own (`FPSLOG`, `LogInput`, the frame trace, the test keys) follow that switch.

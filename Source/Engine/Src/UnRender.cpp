@@ -1797,7 +1797,8 @@ static void ufrontParseAutoFov()
 	GAutoFovMode   = Clamp( Mode, (INT)AUTOFOV_Off, (INT)AUTOFOV_Adaptive );
 	GAutoFovRef    = (Ref > 0.01f) ? Ref : (4.0f / 3.0f);
 	GAutoFovWeapon = Clamp( Weap, 0.0f, 4.0f );
-	debugf( NAME_Log, TEXT("[AutoFOV] mode=%i referenceAspect=%f weaponScale=%f splitClampToFullScreen=%i"), GAutoFovMode, GAutoFovRef, GAutoFovWeapon, GAutoFovSplitClamp );
+	if( GUfrontLog )
+		debugf( NAME_Log, TEXT("[AutoFOV] mode=%i referenceAspect=%f weaponScale=%f splitClampToFullScreen=%i"), GAutoFovMode, GAutoFovRef, GAutoFovWeapon, GAutoFovSplitClamp );
 	unguard;
 }
 
@@ -1821,8 +1822,8 @@ ENGINE_API void ufrontAutoFovSize( UViewport* Viewport, INT& SizeX, INT& SizeY )
 	}
 }
 
-// The field of view a viewport's picture shows, after AutoFOV and the split-screen scale: one line per viewport
-// whenever it changes, "[AutoFOV] shown viewport=<index> rect=X,Y WxH mode=M base=B effective=E scaleFOV=S
+// The field of view a viewport's picture shows, after AutoFOV and the split-screen scale: with -UFRONTLOG, one line
+// per viewport whenever it changes, "[AutoFOV] shown viewport=<index> rect=X,Y WxH mode=M base=B effective=E scaleFOV=S
 // horizontal=H vertical=V". FCameraSceneNode::UpdateMatrices: camera x ScaleX/ScaleY, half-angle h x ScaleFOVX/Y,
 // aspect (W*ScaleX)/(H*ScaleY) of the viewport's own render target; so the edge of the view is
 // tan(h*ScaleFOVX)/ScaleX across and tan(h*ScaleFOVY)*H/(W*ScaleX) up.
@@ -1853,9 +1854,10 @@ ENGINE_API void ufrontLogShownFov( UViewport* Viewport, FLOAT Fov, FLOAT BaseFov
 	E->V = Viewport; E->X = Viewport->OffsetX; E->Y = Viewport->OffsetY; E->W = Viewport->SizeX; E->H = Viewport->SizeY;
 	E->Mode = GAutoFovMode; E->Fov = Fov; E->Scale = Viewport->ScaleFOVX;
 	UClient* Client = Viewport->GetOuterUClient();
-	debugf( NAME_Log, TEXT("[AutoFOV] shown viewport=%i rect=%i,%i %ix%i mode=%i base=%f effective=%f scaleFOV=%f horizontal=%f vertical=%f"),
-		Client ? Client->Viewports.FindItemIndex( Viewport ) : -1, (INT)Viewport->OffsetX, (INT)Viewport->OffsetY, Viewport->SizeX, Viewport->SizeY,
-		GAutoFovMode, BaseFov, Fov, Viewport->ScaleFOVX, (FLOAT)( 2.0 * appAtan( TX ) * 180.0 / PI ), (FLOAT)( 2.0 * appAtan( TY ) * 180.0 / PI ) );
+	if( GUfrontLog )
+		debugf( NAME_Log, TEXT("[AutoFOV] shown viewport=%i rect=%i,%i %ix%i mode=%i base=%f effective=%f scaleFOV=%f horizontal=%f vertical=%f"),
+			Client ? Client->Viewports.FindItemIndex( Viewport ) : -1, (INT)Viewport->OffsetX, (INT)Viewport->OffsetY, Viewport->SizeX, Viewport->SizeY,
+			GAutoFovMode, BaseFov, Fov, Viewport->ScaleFOVX, (FLOAT)( 2.0 * appAtan( TX ) * 180.0 / PI ), (FLOAT)( 2.0 * appAtan( TY ) * 180.0 / PI ) );
 	unguard;
 }
 
@@ -1923,16 +1925,16 @@ ENGINE_API FLOAT ufrontEffectiveFov( FLOAT BaseFov, INT SizeX, INT SizeY, UBOOL 
 		Eff = (FLOAT)( appAtan( appTan( Base * PI / 360.0 ) * K ) * 360.0 / PI );
 		Eff = Clamp( Eff, 1.0f, 170.0f );
 	}
-	// One line whenever the inputs change (viewport size, base FOV by more than half a degree, mode): the
-	// template's format, which the frontend's AutoFOV test reads. A zoom costs one line per frame of its
-	// interpolation, once.
+	// With -UFRONTLOG, one line whenever the inputs change (viewport size, base FOV by more than half a degree,
+	// mode): the template's format, which the frontend's AutoFOV test reads. A zoom costs one line per frame of
+	// its interpolation, once.
 	if( bLog && ( SizeX != GAutoFovLastX || SizeY != GAutoFovLastY || Abs(BaseFov - GAutoFovLastBase) > 0.5f || GAutoFovMode != GAutoFovLastMode ) )
 	{
 		GAutoFovLastX    = SizeX;
 		GAutoFovLastY    = SizeY;
 		GAutoFovLastBase = BaseFov;
 		GAutoFovLastMode = GAutoFovMode;
-		if( GAutoFovMode != AUTOFOV_Off )
+		if( GAutoFovMode != AUTOFOV_Off && GUfrontLog )
 			debugf( NAME_Log, TEXT("[AutoFOV] viewport=%ix%i aspect=%f base=%f effective=%f"),
 				SizeX, SizeY, SizeY > 0 ? (FLOAT)SizeX / (FLOAT)SizeY : 0.f, BaseFov, Eff );
 	}
@@ -1976,7 +1978,8 @@ ENGINE_API void ufrontLogWeaponFov( INT SizeX, INT SizeY, FLOAT BaseFov, FLOAT D
 		GAutoFovWeapLastX = SizeX;
 		GAutoFovWeapLastY = SizeY;
 		GAutoFovWeapLastBase = BaseFov;
-		debugf( NAME_Log, TEXT("[AutoFOV] weapon viewport=%ix%i base=%f drawFov=%f"), SizeX, SizeY, BaseFov, DrawFov );
+		if( GUfrontLog )
+			debugf( NAME_Log, TEXT("[AutoFOV] weapon viewport=%ix%i base=%f drawFov=%f"), SizeX, SizeY, BaseFov, DrawFov );
 	}
 }
 

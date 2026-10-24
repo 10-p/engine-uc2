@@ -2164,6 +2164,7 @@ CORE_API void appInit( const TCHAR* InPackage, const TCHAR* InCmdLine, FMalloc* 
 
 	// Parameters.
 	GIsStrict = ParseParam( appCmdLine(), TEXT("STRICT") );
+	GUfrontLog = ParseParam( appCmdLine(), TEXT("UFRONTLOG") );
 
 	// Ini.
 #ifndef _XBOX//jg -- Always use the INI name and always read the default
