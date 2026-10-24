@@ -414,13 +414,7 @@ void FTcpLink::Listen( INT LocalPort )
 void FTcpLink::WaitForConnections( INT WaitTime )
 {
 	guard(FTcpLink::WaitForConnections);
-	INT SelectStatus;
-	TIMEVAL SelectTime = {WaitTime, 0};
-	fd_set SocketSet;
-	FD_ZERO( &SocketSet );
-	FD_SET( SocketData.Socket, &SocketSet );
-
-	SelectStatus = select( SocketData.Socket + 1, &SocketSet, 0, 0, &SelectTime );
+	INT SelectStatus = SocketReady( SocketData.Socket, SOCKET_Readable, WaitTime * 1000 );
 	if ( SelectStatus == SOCKET_ERROR )
 	{
 		warnf( TEXT("!! Error checking socket status: %i"), WSAGetLastError());
@@ -475,19 +469,12 @@ UBOOL FTcpLink::Poll( INT WaitTime )
 		}
 	}
 
-	TIMEVAL SelectTime = {WaitTime, 0};
 	switch( LinkState )
 	{
 	case LINK_Connecting:
 		{
-			fd_set WritableSocketSet, ErrorSocketSet;
-			FD_ZERO( &WritableSocketSet );
-			FD_ZERO( &ErrorSocketSet );
-			FD_SET( SocketData.Socket, &WritableSocketSet );
-			FD_SET( SocketData.Socket, &ErrorSocketSet );
-
 	     	// Check connection status
-			INT SelectStatus = select( SocketData.Socket + 1, 0, &WritableSocketSet, &ErrorSocketSet, &SelectTime );
+			INT SelectStatus = SocketReady( SocketData.Socket, SOCKET_Writable | SOCKET_Exception, WaitTime * 1000 );
 			if ( SelectStatus == SOCKET_ERROR )
 			{
 				warnf( TEXT("!! Error checking socket status: %i"), WSAGetLastError());
@@ -496,7 +483,7 @@ UBOOL FTcpLink::Poll( INT WaitTime )
 			else
 			if ( SelectStatus != 0 )
 			{
-				if( FD_ISSET( SocketData.Socket, &WritableSocketSet ) )
+				if( SelectStatus & SOCKET_Writable )
 				{
 					// Connected!
 					LinkState = LINK_Connected;
@@ -504,7 +491,7 @@ UBOOL FTcpLink::Poll( INT WaitTime )
 					return 1;
 				}
 
-				if( FD_ISSET( SocketData.Socket, &ErrorSocketSet ) )
+				if( SelectStatus & SOCKET_Exception )
 				{
 					// Connection failed!
 					LinkState = LINK_Closed;
@@ -517,22 +504,13 @@ UBOOL FTcpLink::Poll( INT WaitTime )
 		break;
 	case LINK_Connected:
 		{
-			fd_set ReadableSocketSet, WritableSocketSet;
-			FD_ZERO( &ReadableSocketSet );
-			FD_ZERO( &WritableSocketSet );
-
 			UBOOL CheckReadable = HasBudgetToRecv();
 			UBOOL CheckWritable = HasSendPending();
-
-			if( CheckReadable )
-				FD_SET( SocketData.Socket, &ReadableSocketSet );
-			if( CheckWritable )
-				FD_SET( SocketData.Socket, &WritableSocketSet );
 
 			if( CheckReadable || CheckWritable )
 			{
 	     		// Check connection status
-				INT SelectStatus = select( SocketData.Socket + 1, CheckReadable ? &ReadableSocketSet : 0, CheckWritable ? &WritableSocketSet : 0, 0, &SelectTime );
+				INT SelectStatus = SocketReady( SocketData.Socket, (CheckReadable ? SOCKET_Readable : 0) | (CheckWritable ? SOCKET_Writable : 0), WaitTime * 1000 );
 				if ( SelectStatus == SOCKET_ERROR )
 				{
 					warnf( TEXT("!! Error checking socket status: %i"), WSAGetLastError());
@@ -554,12 +532,13 @@ UBOOL FTcpLink::Poll( INT WaitTime )
 					}
 					else
 					{
-						if( FD_ISSET( SocketData.Socket, &WritableSocketSet ) )
+						if( SelectStatus & SOCKET_Writable )
 						{
 //							warnf(TEXT("Socket is writable"));
 							SendPendingData();
 						}
-						if( FD_ISSET( SocketData.Socket, &ReadableSocketSet ) )
+						// Sending may have closed the socket.
+						if( (SelectStatus & SOCKET_Readable) && SocketData.Socket != INVALID_SOCKET )
 						{
 //							warnf(TEXT("Socket is readable"));
 							ReceivePendingData();
