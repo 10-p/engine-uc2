@@ -456,7 +456,8 @@ public:
 		if( !Sec )
 			return 0;
 		TCHAR* End = Result;
-		for( FConfigSection::TIterator It(*Sec); It && End-Result+appStrlen(*It.Key())+1<Size; ++It )
+		// Whole "key=value" entries while they fit, with the final terminator.
+		for( FConfigSection::TIterator It(*Sec); It && End-Result+appStrlen(*It.Key())+1+It.Value().Len()+1<Size; ++It )
 			End += appSprintf( End, TEXT("%s=%s"), *It.Key(), *It.Value() ) + 1;
 		*End++ = 0;
 		return 1;
