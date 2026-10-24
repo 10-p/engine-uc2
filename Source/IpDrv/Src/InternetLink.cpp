@@ -64,7 +64,7 @@ void AInternetLink::Destroy()
 	if (GetSocket() != INVALID_SOCKET)
     {
         closesocket(GetSocket());
-	    GetSocket()=INVALID_SOCKET;
+	    Socket=INVALID_SOCKET;
     }
 	Super::Destroy();
 	unguard;

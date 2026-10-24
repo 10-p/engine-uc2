@@ -117,7 +117,7 @@ void AUdpLink::execBindPort( FFrame& Stack, RESULT_DECL )
 			// INVALID_SOCKET, not 0: fd 0 is stdin, and every later test is `!= INVALID_SOCKET`, so with 0 the
 			// link would poll recvfrom(0) and PostScriptDestroyed would close stdin (under Node, ucc-bin.js, the
 			// socket emulation throws on the first such poll).
-			GetSocket()=INVALID_SOCKET;
+			Socket=INVALID_SOCKET;
 		}
 		else Stack.Logf( TEXT("BindPort: already bound") );
 	}
