@@ -118,7 +118,7 @@ class Proc:
             if self.render == "null":
                 argv += ["-nullrenderer"]
         argv += self.extra
-        env = dict(os.environ, SDL_AUDIODRIVER="dummy")
+        env = dict(os.environ, SDL_AUDIODRIVER="dummy", SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT="0x0000/0x0000")
         if OFFSCREEN and self.kind != "server":
             env["SDL_VIDEODRIVER"] = "offscreen"
         self.out = open(os.path.join(OUT, "%s-%s.out" % (self.check, self.name)), "w")

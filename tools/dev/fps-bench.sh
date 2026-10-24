@@ -79,7 +79,7 @@ args=(-log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[SDL2Drv.SDL2C
 inner=$(mktemp)
 cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy $video ./uc2.bin "$map?Name=FpsCam?NumBots=0" ${args[@]@Q} > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0x0000/0x0000 $video ./uc2.bin "$map?Name=FpsCam?NumBots=0" ${args[@]@Q} > "$out/$name.out" 2>&1 &
 pid=\$!
 python3 "$repo/tools/dev/m10-inject.py" "$scen" "$out/$name.out" "$chan" "$out/$name.result" > "$out/$name.inject" 2>&1
 kill -TERM \$pid 2>/dev/null

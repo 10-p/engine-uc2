@@ -11,6 +11,8 @@
 # controller driven through the engine's test channel (-ini:System:[SDL2Drv.SDL2Client]:InputTestFile=, Source/SDL2Drv/Src/SDL2InputTest.h), so
 # the path from SDL onwards is the real one. PASS/FAIL comes from engine log lines and probe state (location,
 # rotation, ammo, menu page, text-field contents), never from a picture; screenshots are taken for people.
+# SDL sees only the test channel's virtual pad (vendor/product 0/0): SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT hides
+# every pad of the host, real or virtual, so none takes pad 0. The other harnesses that drive the virtual pad set it too.
 #
 # Output in <repo>/../logs/m10/: <scenario>.out (engine log), <scenario>.result (every check),
 # <scenario>-<shot>.png, <scenario>.inject (runner transcript).
@@ -100,7 +102,7 @@ run_one() {
   inner=$(mktemp)
   cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy UC2_WINE_DISPLAY=\$DISPLAY $launch ${M10_URL:+"$M10_URL"} -log -UFRONTLOG -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0 -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" "\$@" > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0x0000/0x0000 UC2_WINE_DISPLAY=\$DISPLAY $launch ${M10_URL:+"$M10_URL"} -log -UFRONTLOG -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0 -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$name.out" "$chan" "$out/$name.result" > "$out/$name.inject" 2>&1
 kill -$stopsig \$pid 2>/dev/null

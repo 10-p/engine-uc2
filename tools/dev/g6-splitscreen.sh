@@ -89,7 +89,7 @@ run_game() {
   local inner; inner=$(mktemp)
   cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy $video ./uc2.bin ${url:+"$url"} ${args[@]@Q} > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0x0000/0x0000 $video ./uc2.bin ${url:+"$url"} ${args[@]@Q} > "$out/$name.out" 2>&1 &
 pid=\$!
 M10_UIMAP=${res} python3 "$inject" "$scen" "$out/$name.out" "$chan" "$out/$name.result" > "$out/$name.inject" 2>&1
 kill -TERM \$pid 2>/dev/null
