@@ -46,7 +46,7 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   and four on the character page (players34).
 - **Wide windows**: the 640x480 menus and HUD in the largest centred 4:3 box of the window or of a split view, the
   view Hor+; the HUD's left and right groups at the view's sides and its centred items on its centre, the console's
-  typing line across the window (wide-hud).
+  typing line across the window, the announcement band a gradient under shadowed texts (wide-hud).
 - **Custom maps and mutators**: maps dropped into the map paths appear in the game's lists; a mutator's package joins
   the server's package map.
 - **Script patch sets**: the build decompiles the shipped `.u`, applies `patches/` and compiles the packages they
