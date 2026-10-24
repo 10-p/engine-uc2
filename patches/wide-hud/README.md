@@ -25,9 +25,11 @@ do not move.
   boxes (their divide on the centre; Epic's at 330.5), the game timer and the camp-fire bomb timer (Epic's at 319),
   the compass when it is centred (Epic's at 319), the combo menu. The scripted crosshairs (UCElements) are placed on
   the centre already; the art of some is not symmetric (the Nakhti crosshair's side pieces 1.5 design pixels left of
-  its middle). The console's typing line (Engine.Console) stays as Epic draws it, in the UI box.
+  its middle).
 - **Across the window**: the announcement's bar, the status bar (dead, spectating), Training's letterbox and dialog
-  bars.
+  bars, the console's typing line (Engine.Console: drawn once for the whole window, in split screen too; its bar from
+  32 design pixels in from the window's left edge to its right edge, its text wrapped by words at that edge onto lines
+  that start at the left edge; at 4:3 Epic's line).
 - **How**: three natives of UCHUD (`Source/UCGameplay/Src/UCHUD.cpp`): `GetSideShifts` gives a view's room beside the
   640-wide design space in whole design pixels (0 when the UI is not boxed), `DrawVitalsWide` is `DrawVitals` with the
   vitals and active combos moved left and the negative combos right, `TextSizeDualFont` measures what
@@ -35,7 +37,9 @@ do not move.
   which move the clip region's right edge with a right group so its text is not wrapped or clipped at the box), an
   element with its shift as its relative X; the mutators' elements ask `GetSideShifts` themselves. The engine side,
   which the shipped packages get too: the HUD's clipped text is clipped at the viewport's left edge
-  (`UnCanvas.cpp` `DrawString`), the combo menu is centred from its icons' extent (`UCHUD.cpp` `DrawComboMenu`).
+  (`UnCanvas.cpp` `DrawString`), the combo menu is centred from its icons' extent (`UCHUD.cpp` `DrawComboMenu`), the
+  typing line is drawn with the canvas's origin on the viewport's left edge and its clip the viewport's width
+  (`UnInteractionMaster.cpp` `MasterProcessPostRender`).
 - **Classes**: UCGameplay: UCHUD (20 hunks), UCHUD_Survival (5), UCHUD_TeamGame, UCHUD_CTF, UCHUD_Overflow,
   UCHUD_Training, UCWeapon (2 each), Element_GameTimer (1); UCMutators: Element_KillerList (4), Element_WeaponMaster
   (2), Element_CampFireBombTimer, RetributionMarker, WeaponMasterReplicationInfo (1 each: the two give a HUD that
