@@ -4,10 +4,66 @@
 #
 #   cmake -DUE_CHECK=shipped -DDIR=<System> -DSUMS=<patches/shipped.sha256> -DPACKAGES=A;B;... -P UC2ScriptsCheck.cmake
 #       every <DIR>/<Pkg>.u of PACKAGES must be the shipped file (sha256 listed in SUMS)
-#   cmake -DUE_CHECK=copy -DSRC=<dir> -DDST=<dir> [-DSTAMP=<file>] [-DREQUIRE=1] -P UC2ScriptsCheck.cmake
+#   cmake -DUE_CHECK=inputs -DSOURCE=<repo> -DSETS=<a,b,...> -DOUT=<file> -P UC2ScriptsCheck.cmake
+#       write OUT, the record of what the host build's packages are built from (uc2_scripts_inputs)
+#   cmake -DUE_CHECK=copy -DSRC=<dir> -DDST=<dir> [-DSOURCE=<repo>] [-DSTAMP=<file>] [-DREQUIRE=1] -P UC2ScriptsCheck.cmake
 #       mirror SRC/*.u into DST (each must be an Unreal package; files of DST not in SRC are removed; a missing SRC
-#       empties DST unless REQUIRE); STAMP is touched only when something in DST changed
+#       empties DST unless REQUIRE); STAMP is touched only when something in DST changed. With SOURCE, SRC's
+#       record (SRC/../inputs.sha256) must match SOURCE's inputs, so packages built from other patches are refused
 cmake_minimum_required(VERSION 3.21)
+
+# uc2_scripts_inputs(<repo> <sets> <result-var>): the sets, then the sha256 of every input the packages are built
+# from: the pipeline's tools, sets.txt, shipped.sha256 and each set's files.
+function(uc2_scripts_inputs repo sets out)
+  set(_files tools/scripts/uc-patches.py tools/scripts/uc-decompile.py tools/scripts/ucpkg.py tools/scripts/uc-build.sh
+      patches/sets.txt patches/shipped.sha256)
+  string(REPLACE "," ";" _sets "${sets}")
+  foreach(_s IN LISTS _sets)
+    file(GLOB_RECURSE _sf RELATIVE "${repo}" "${repo}/patches/${_s}/*.diff" "${repo}/patches/${_s}/new/*")
+    list(SORT _sf)
+    list(APPEND _files ${_sf})
+  endforeach()
+  set(_text "sets=${sets}\n")
+  foreach(_f IN LISTS _files)
+    file(SHA256 "${repo}/${_f}" _h)
+    string(APPEND _text "${_h}  ${_f}\n")
+  endforeach()
+  set(${out} "${_text}" PARENT_SCOPE)
+endfunction()
+
+# uc2_scripts_check_inputs(<src> <repo> <error-var>): empty when the record beside the host build's Scripts/System
+# <src> matches <repo>'s inputs, else the message that names the inputs that differ.
+function(uc2_scripts_check_inputs src repo err)
+  get_filename_component(_host "${src}/../.." ABSOLUTE)
+  set(_rebuild "Build the host's packages first: cmake --build ${_host} --target scripts")
+  set(_rec "${src}/../inputs.sha256")
+  if(NOT EXISTS "${_rec}")
+    set(${err} "${src}: no record of what these packages are built from (${_rec}).\n${_rebuild}" PARENT_SCOPE)
+    return()
+  endif()
+  file(READ "${_rec}" _have)
+  string(REGEX MATCH "^sets=([^\n]*)" _m "${_have}")
+  uc2_scripts_inputs("${repo}" "${CMAKE_MATCH_1}" _want)
+  if(_have STREQUAL _want)
+    set(${err} "" PARENT_SCOPE)
+    return()
+  endif()
+  string(REPLACE "\n" ";" _a "${_have}")
+  string(REPLACE "\n" ";" _b "${_want}")
+  set(_diff "")
+  foreach(_l IN LISTS _b)
+    if(NOT _l IN_LIST _a)
+      string(REGEX REPLACE "^[0-9a-f]+  " "" _l "${_l}")
+      string(APPEND _diff "  ${_l}\n")
+    endif()
+  endforeach()
+  foreach(_l IN LISTS _a)
+    if(NOT _l IN_LIST _b AND _l MATCHES "^[0-9a-f]+  (.*)$" AND NOT EXISTS "${repo}/${CMAKE_MATCH_1}")
+      string(APPEND _diff "  ${CMAKE_MATCH_1} (gone)\n")
+    endif()
+  endforeach()
+  set(${err} "the packages in ${src} were built from other inputs than ${repo}'s:\n${_diff}${_rebuild}" PARENT_SCOPE)
+endfunction()
 
 # uc2_scripts_check_shipped(<dir> <sums-file> <packages> <result-var>): empty result when every package is the
 # shipped file, else the message that says which one is not and what to do.
@@ -107,11 +163,20 @@ if(CMAKE_SCRIPT_MODE_FILE AND UE_CHECK STREQUAL "shipped")
   if(_m)
     message(FATAL_ERROR "${_m}")
   endif()
+elseif(CMAKE_SCRIPT_MODE_FILE AND UE_CHECK STREQUAL "inputs")
+  uc2_scripts_inputs("${SOURCE}" "${SETS}" _text)
+  file(WRITE "${OUT}" "${_text}")
 elseif(CMAKE_SCRIPT_MODE_FILE AND UE_CHECK STREQUAL "copy")
   if(REQUIRE)
     set(_req 1)
   else()
     set(_req 0)
+  endif()
+  if(SOURCE)
+    uc2_scripts_check_inputs("${SRC}" "${SOURCE}" _e)
+    if(_e)
+      message(FATAL_ERROR "scripts: ${_e}")
+    endif()
   endif()
   uc2_scripts_mirror("${SRC}" "${DST}" ${_req} _ch _e)
   if(_e)

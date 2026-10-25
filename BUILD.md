@@ -359,7 +359,10 @@ slots, and the 32-bit size of a skipped context's zero fill and of a switch valu
 integers, so both widths compile the same bytes (`patches/reference.sha256`). Every other preset (`wasm*`,
 `windows`/`windows64` cross-built from Linux, `arm64`) copies the host build's `Scripts/System` into its own
 `build-*/Scripts/System` (checked: Unreal packages; the host build's sets are printed at configure), so build the host
-preset first. The web artifact carries them (`build-wasm*/Source/SDLLaunch/scripts/` and
+preset first. The host build records what its packages are built from in `Scripts/inputs.sha256` (the sets, and the
+sha256 of the pipeline's tools, `sets.txt`, `shipped.sha256` and every chosen set's files). A copy whose record does not
+match the checkout stops the build, names the inputs that changed and says to rebuild the host's `scripts` target, so
+a patch change never ships on the host's older packages. The web artifact carries them (`build-wasm*/Source/SDLLaunch/scripts/` and
 `meta.json` `scripts`, above). Run trees take them: `tools/dev/mkrun-uc2.sh <build-dir> <tree>` installs
 `<build-dir>/Scripts/System/*.u` over the game folder's and says which (`UC2_SCRIPTS=<dir>` takes them from another
 folder, `UC2_SCRIPTS=none` keeps the game folder's).

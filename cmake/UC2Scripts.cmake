@@ -111,10 +111,11 @@ if(NOT UC2_SCRIPTS_HOST)
   if(NOT EXISTS "${UC2_SCRIPTS_STAMP}")
     file(TOUCH "${UC2_SCRIPTS_STAMP}")
   endif()
-  # Always runs (the host build may have changed); the stamp moves only when the copy changed.
+  # Always runs (the host build may have changed); the stamp moves only when the copy changed. Packages the host built
+  # from other inputs than this checkout's (it was not rebuilt after a patch changed) are refused.
   add_custom_target(scripts ALL
     COMMAND ${CMAKE_COMMAND} -DUE_CHECK=copy -DSRC=${_dir} -DDST=${UC2_SCRIPTS_SYSTEM} -DSTAMP=${UC2_SCRIPTS_STAMP}
-            -DREQUIRE=1 -P ${CMAKE_SOURCE_DIR}/cmake/UC2ScriptsCheck.cmake
+            -DSOURCE=${CMAKE_SOURCE_DIR} -DREQUIRE=1 -P ${CMAKE_SOURCE_DIR}/cmake/UC2ScriptsCheck.cmake
     BYPRODUCTS ${UC2_SCRIPTS_STAMP}
     COMMENT "Script packages from the host build"
     VERBATIM)
@@ -315,6 +316,8 @@ add_custom_command(OUTPUT ${_stamps}/build.stamp ${_outputs}
           --ucc $<TARGET_FILE:UCC> --capped ${_capped}
   COMMAND ${CMAKE_COMMAND} -E make_directory ${UC2_SCRIPTS_SYSTEM}
   ${_copies}
+  COMMAND ${CMAKE_COMMAND} -DUE_CHECK=inputs -DSOURCE=${CMAKE_SOURCE_DIR} -DSETS=${_sets}
+          -DOUT=${UC2_SCRIPTS_OUT}/inputs.sha256 -P ${CMAKE_SOURCE_DIR}/cmake/UC2ScriptsCheck.cmake
   COMMAND ${CMAKE_COMMAND} -E touch ${_stamps}/build.stamp ${UC2_SCRIPTS_STAMP}
   DEPENDS ${_stamps}/tree.stamp ${_stamps}/shipped.stamp ${_tools}/uc-build.sh UCC ${_inis}
   COMMENT "Scripts: compiling ${_compile_c} (ucc make, stripsource) -> Scripts/System/{${_keep_c}}.u"
