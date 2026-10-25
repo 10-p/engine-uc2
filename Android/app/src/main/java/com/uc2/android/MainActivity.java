@@ -1,12 +1,15 @@
 package com.uc2.android;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Rect;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -61,6 +64,7 @@ public class MainActivity extends Activity {
     private static final String TAG = "UC2";
     private static final int COUNTDOWN_SECS = 10;
     private static final int REQ_PICK_FOLDER = 2;
+    private static final int REQ_STORAGE_PERMISSION = 3;
     private static final String PREFS = "launcher";
     private static final String PREF_EXTERNAL = "runFromExternal";
     private static final String PREF_FOLDER = "folderUri";
@@ -113,9 +117,9 @@ public class MainActivity extends Activity {
         } else {
             cancelCountdown(true);
             refreshStatusAsync();
-            if (startWhenAllowed) {
+            if (startWhenAllowed && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 startWhenAllowed = false;
-                if (Environment.isExternalStorageManager()) launchGame();
+                if (hasAllFilesAccess()) launchGame();
             }
         }
     }
@@ -315,7 +319,7 @@ public class MainActivity extends Activity {
         scaleUpdating = false;
 
         // The screen in landscape, the way the game holds it.
-        Rect b = getWindowManager().getMaximumWindowMetrics().getBounds();
+        Rect b = GameActivity.maximumWindowBounds(this);
         int sw = Math.max(b.width(), b.height()), sh = Math.min(b.width(), b.height());
         int fw = Math.round(sw * v), fh = Math.round(sh * v);
         scaleText.setText(String.format(Locale.US, "The game draws %d × %d for the %d × %d screen%s", fw, fh, sw, sh,
@@ -372,7 +376,7 @@ public class MainActivity extends Activity {
             File root = GameFolder.externalRoot(this);
             if (!GameFolder.isGameFolder(root)) {
                 cancelCountdown(true);
-                if (!Environment.isExternalStorageManager()) askAllFilesAccess();
+                if (!hasAllFilesAccess()) askAllFilesAccess();
                 else showMessage("No game folder at " + root + " (it needs System/Core.u).");
                 return;
             }
@@ -391,9 +395,43 @@ public class MainActivity extends Activity {
         // This activity stays: Back from the game comes here.
     }
 
+    /** All files access (Android 11 and later); the storage permission before that. */
+    private boolean hasAllFilesAccess() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) return Environment.isExternalStorageManager();
+        return checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    /** The system's All files access page for this app; the storage permission dialog before Android 11. */
+    private void requestAllFilesAccess() {
+        startWhenAllowed = true;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            requestPermissions(new String[] {
+                    Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE }, REQ_STORAGE_PERMISSION);
+            return;
+        }
+        try {
+            startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:" + getPackageName())));
+        } catch (Exception e) {
+            startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQ_STORAGE_PERMISSION) return;
+        refreshStatusAsync();
+        if (startWhenAllowed) {
+            startWhenAllowed = false;
+            if (hasAllFilesAccess()) launchGame();
+        }
+    }
+
     /**
      * Playing in place from the UC2 folder needs All files access; copying the game to internal storage does not.
-     * Allow access opens the system's page for it, and the game starts when the player comes back with it on.
+     * Allow access opens the system's page for it (the permission dialog before Android 11), and the game starts when the player comes back with it on.
      */
     private void askAllFilesAccess() {
         new AlertDialog.Builder(this)
@@ -405,13 +443,7 @@ public class MainActivity extends Activity {
                 })
                 .setPositiveButton("Allow access", new DialogInterface.OnClickListener() {
                     @Override public void onClick(DialogInterface d, int w) {
-                        startWhenAllowed = true;
-                        try {
-                            startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                                    Uri.parse("package:" + getPackageName())));
-                        } catch (Exception e) {
-                            startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
-                        }
+                        requestAllFilesAccess();
                     }
                 })
                 .setNegativeButton("Cancel", null)
@@ -644,7 +676,7 @@ public class MainActivity extends Activity {
                 String chosen = tree == null ? "none" : folderName(tree)
                         + (Storage.isGameTree(getContentResolver(), tree) ? "" : "  (no System/Core.u, or no access)");
                 String shared = extReady ? Storage.human(Storage.dirSize(external)) + "  " + external
-                        : Environment.isExternalStorageManager() ? "no game folder at " + external
+                        : hasAllFilesAccess() ? "no game folder at " + external
                         : "needs access to all files";
                 final String s = "Internal storage free: " + Storage.human(free) + '\n'
                         + "Internal copy: " + (intReady ? Storage.human(Storage.dirSize(internal)) + "  " + internal : "none") + '\n'

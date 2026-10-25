@@ -1,7 +1,11 @@
 package com.uc2.android;
 
+import android.app.Activity;
 import android.app.AlertDialog;
 import android.graphics.Color;
+import android.graphics.Point;
+import android.graphics.Rect;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.WindowManager;
@@ -91,8 +95,8 @@ public class GameActivity extends SDLActivity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
-        getWindow().setNavigationBarContrastEnforced(false);
-        getWindow().setDecorFitsSystemWindows(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) getWindow().setNavigationBarContrastEnforced(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) getWindow().setDecorFitsSystemWindows(false);
 
         try {
             addContentView(new PadOverlayView(this), new FrameLayout.LayoutParams(
@@ -167,5 +171,13 @@ public class GameActivity extends SDLActivity {
             Log.i(TAG, "the game ended: ending its process");
             android.os.Process.killProcess(android.os.Process.myPid());
         }
+    }
+
+    /** The largest window's bounds: WindowMetrics from Android 11, the display's real size before. */
+    static Rect maximumWindowBounds(Activity a) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) return a.getWindowManager().getMaximumWindowMetrics().getBounds();
+        Point p = new Point();
+        a.getWindowManager().getDefaultDisplay().getRealSize(p);
+        return new Rect(0, 0, p.x, p.y);
     }
 }
