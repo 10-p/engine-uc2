@@ -32,11 +32,13 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   from the cooked sound data or the shipped Xbox banks.
 - **64-bit and ARM**: LP64 builds (x86_64 Linux and Windows, arm64 cross, Android arm64 and x86_64) on the shipped
   32-bit script layout, with the C++/script layout checked at load on every pointer width.
-- **Android build**: a Gradle/NDK project (`Android/`): the engine as `libUC2.so` under SDL's activity, rendering through
+- **Android build**: a Gradle/NDK project (`Android/`) for Android 7.0 and later: the engine as `libUC2.so` under SDL's activity, rendering through
   GL4ES on OpenGL ES 3, sound on OpenSL ES, the game folder copied into internal storage from a folder chosen with the
   system's folder picker (or read in place from shared storage), a resolution scale up to supersampling, an exit prompt
   on Back, and an on-screen pad that is a virtual SDL controller (the mouse is off).
 - **Windows build**: MinGW-w64 cross builds (i686 and x86_64), statically linked, no runtime DLL but OpenAL's.
+- **UCC on every desktop build**: `ucc-bin` (Linux) and `ucc.exe` (Windows), 32- and 64-bit, beside the game: the
+  dedicated server and the commandlets.
 - **The editor** (`UnrealEd.exe`, i686): Epic's UnrealEd, Window and WinDrv built with MinGW, its viewports drawn by the
   OpenGL renderer through WGL (`UC2WGLDrv`) in place of D3DDrv, with viewport hit testing (click selection).
 - **GCC/Clang portability**: Epic's MSVC code builds with GCC, Clang (Emscripten) and MinGW unchanged in behaviour.
@@ -51,6 +53,10 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   the server's package map.
 - **Script patch sets**: the build decompiles the shipped `.u`, applies `patches/` and compiles the packages they
   change, proved equal to the shipped bytecode plus Epic's load-time patches.
+- **Game folder from the Xbox disc** (`tools/cook.py`): the game folder the engine runs from, made from the game's
+  Xbox disc (an image or its files) or Epic's tree: the maps, textures, meshes and animations as PC packages that
+  play with the PC game folder's, the sound and music as Ogg Vorbis, the movies as Ogg Theora; it needs Python 3.8
+  and ffmpeg and ships as a zip for players ([`tools/README.md`](./tools/README.md)).
 - **Native script compiler**: `ucc make` (Linux i386 and x86_64, MinGW i686) compiles packages equal to the shipped
   ones, the same bytes at both pointer widths.
 - **Theora movies** (`UC2Movie`): the XMV movies cooked to Ogg Theora/Vorbis and played full screen, on materials and
