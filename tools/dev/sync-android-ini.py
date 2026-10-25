@@ -23,9 +23,6 @@ DELTAS = [
     ('Default.ini', 'SDL2Drv.SDL2Client', 'StartupFullscreen', 'False', 'True'),
     ('Default.ini', 'SDL2Drv.SDL2Client', 'UseMouse', 'True', 'False'),
     ('Default.ini', 'GUI.GUIController', 'bHideMouseCursor', 'False', 'True'),
-    # The frame at half the screen's resolution in each direction (a phone's screen has three to four times the
-    # pixels of a 1080p one), scaled up by the present pass; 1.0 draws at the screen's own.
-    ('Default.ini', 'SDL2Drv.SDL2Client', 'RenderScale', '1.0', '0.5'),
     # No multisampled main framebuffer by default, and the frame paced by the display.
     ('Default.ini', 'UC2GL4ESDrv.UC2GL4ESRenderDevice', 'NumAASamples', '4', '0'),
     ('Default.ini', 'UC2GL4ESDrv.UC2GL4ESRenderDevice', 'UseVSync', 'False', 'True'),

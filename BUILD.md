@@ -247,8 +247,8 @@ adb install -r app/build/outputs/apk/release/app-release.apk
   ```
 
 The client on Android: the window is the whole screen (immersive, landscape either way up), the frame is the screen's
-size times `[SDL2Drv.SDL2Client] RenderScale` (0.5 in the Android ini, 0.1 to 4: above 1 it is supersampled down to
-the screen, each side at most 8192) and is scaled to it, the mouse is off (`UseMouse=False`: no events, no capture, no
+size times `[SDL2Drv.SDL2Client] RenderScale` (1.0, the screen's own resolution, by default; 0.1 to 4: above 1 it
+is supersampled down to the screen, each side at most 8192) and is scaled to it, the mouse is off (`UseMouse=False`: no events, no capture, no
 cursor), the system's Back is Escape except on the menus' first page, where it asks "Exit game?" (Cancel focused;
 Exit quits through SDL, so the engine saves and shuts down as usual), and the on-screen pad
 (`TouchPad=True`) is a virtual SDL controller fed from the app's overlay (`Source/SDL2Drv/Src/SDL2Android.cpp`,

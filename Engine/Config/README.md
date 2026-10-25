@@ -119,7 +119,6 @@ Android difference is an entry in the script's `DELTAS` and a row here.
 | `Default.ini` | `[Engine.Engine] RenderDevice` | `UC2GLDrv.UC2GLRenderDevice` | `UC2GL4ESDrv.UC2GL4ESRenderDevice` | OpenGL ES only: the same driver behind GL4ES. `uc2.bin` on Android also switches an `Avaris.ini` from a desktop build that names the desktop device. |
 | `Default.ini` | `[SDL2Drv.SDL2Client] StartupFullscreen` | `False` | `True` | The window is the whole screen anyway (the client makes it so on Android). |
 | `Default.ini` | `[SDL2Drv.SDL2Client] UseMouse` | `True` | `False` | A phone is played with pads and the on-screen pad: the mouse is left out (also the compiled default on Android). |
-| `Default.ini` | `[SDL2Drv.SDL2Client] RenderScale` | `1.0` | `0.5` | The frame at half the screen's resolution each way (a phone's screen has three to four times the pixels of a 1080p one), scaled up to the screen; `1.0` draws at the screen's own. |
 | `Default.ini` | `[GUI.GUIController] bHideMouseCursor` | `False` | `True` | No mouse, so the menus draw no cursor. |
 | `Default.ini` | `[UC2GL4ESDrv.UC2GL4ESRenderDevice] NumAASamples` | `4` | `0` | No multisampled main framebuffer by default on a phone's GPU. |
 | `Default.ini` | `[UC2GL4ESDrv.UC2GL4ESRenderDevice] UseVSync` | `False` | `True` | The frame paced by the display: no tearing, and no frames the screen never shows (heat, battery). |

@@ -68,8 +68,8 @@ public class MainActivity extends Activity {
     // The scale's slider: 0.25 to 1.00 in steps of 0.05; the field also takes values from 0.1 to 4.
     private static final float SCALE_MIN = 0.25f, SCALE_STEP = 0.05f, FIELD_MIN = 0.1f, FIELD_MAX = 4f;
     private static final int SCALE_STEPS = 15;
-    // The Android ini's [SDL2Drv.SDL2Client] RenderScale.
-    private static final float SCALE_DEFAULT = 0.5f;
+    // The Android ini's [SDL2Drv.SDL2Client] RenderScale: the screen's own resolution.
+    private static final float SCALE_DEFAULT = 1f;
 
     private boolean launcherShown = false;
     private boolean opRunning = false;
