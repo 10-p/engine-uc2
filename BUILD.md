@@ -237,6 +237,8 @@ adb install -r app/build/outputs/apk/release/app-release.apk
   It also clears the internal copy, and copies its settings and saves (`System/Avaris.ini`, `System/User.ini`,
   `Save/`, `Saves/`) back to the chosen folder (or the shared one). Its resolution scale (a slider from 0.25 to 1 and a
   field that takes 0.1 to 4, above 1 supersampling) reaches the engine as `-ini:System:[SDL2Drv.SDL2Client]:RenderScale=`.
+  The launcher's renderer selection, at the bottom of its page, is the game's choice (GL4ES, UC2's only GPU
+  renderer) or Null for debugging, which adds `-NULLRENDERER` after any command line the launcher was started with.
 - The log goes to logcat (tag `UC2`; stdout and stderr as `UC2-stdio`) and to `System/Avaris.log`:
   `adb logcat -s UC2 UC2-stdio UC2Bridge SDL`. `adb shell setprop debug.uc2.nofault 1` leaves crashes to Android's
   crash reporter (a tombstone with the backtrace, `adb logcat -s DEBUG`).
