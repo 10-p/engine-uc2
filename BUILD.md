@@ -4,9 +4,9 @@ Engine source only. Game content (maps, textures, sounds, movies, the compiled `
 game folder (`<repo>/../assets/uc2-assets` in the WorkUnreal folder) and is never tracked. One build step reads it: the
 script patches ("Script patches" below), which turn the game's shipped `.u` into our patched packages;
 `-DUE_SCRIPT_PATCHES=OFF` builds without them and reads nothing. `tools/cook.py` cooks the game folder from Epic's
-source tree or the game's Xbox disc, and with `--build <build-dir>` makes it a folder the build runs in
-([`tools/README.md`](./tools/README.md)); `tools/dev/mkrun-uc2.sh` assembles a run tree from a build and the game
-folder.
+source tree or the game's Xbox disc, and with `--uc2-binary-path` and `--ucc-binary-path` copies a build's or a
+release's binaries into it ([`tools/README.md`](./tools/README.md)); `tools/dev/mkrun-uc2.sh` assembles a run tree from
+a build and the game folder.
 
 ## Quick start
 
@@ -399,7 +399,7 @@ folder, `UC2_SCRIPTS=none` keeps the game folder's).
 cmake --build build-native --target cook-tool
 ```
 
-`build-native/uc2-cook-<git describe --tags>.zip`: `tools/cook.py`, the scripts it runs, the PC tables and a `README.txt`
+`build-native/uc2-cook-<git describe --tags>.zip`: `tools/cook.py`, the scripts it runs, the PC tables and `tools/README.md`
 in one folder, for players who cook the game folder from their disc (`tools/dev/pack-cook-tool.py`,
 `tools/README.md`). Any preset's build directory has the target (`make cook-tool` there); it needs only Python 3 and
 is not part of ALL.

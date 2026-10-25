@@ -2,6 +2,7 @@
 """cook.py: cook the game folder the engine runs from, out of the game's Xbox disc or Epic's source tree.
 
   cook.py --in <UC2.iso | disc folder | uc2-avaris-2226> --out <dir> [--xbox-audio] [--skip audio,movies]
+          [--uc2-binary-path <uc2.bin | uc2.exe>] [--ucc-binary-path <ucc-bin | ucc.exe>]
   cook.py --check [--in <...>]       a dry run of the tools (and the input's checks), nothing written
 
 Inputs (recognised by themselves; --source xbox|epic when one is not)
@@ -21,16 +22,17 @@ folder is removed at the end; every sound and movie is encoded again.
 
 Steps
   1. tools: Python and the modules the cook uses, the scripts beside this one, the PC tables, ffmpeg and ffprobe:
-     each encoder tried on a generated sound or picture, each decoder and demuxer looked up (and, with --build, the
-     libraries the game loads). What is missing is listed with how to install it and what the cook does without it.
+     each encoder tried on a generated sound or picture, each decoder and demuxer looked up (and, with
+     --uc2-binary-path, the libraries the game loads). What is missing is listed with how to install it and what the cook does without it.
   2. input: recognised and its layout checked; a disc image extracted; ffmpeg tried on the input's smallest movie.
   3. System/ and the packages: copied (a reflink where the file system can), each package checked to be PC format;
      from a disc, converted by cook-xbox-packages.py (report: Maps/xbox-packages.txt).
   4. audio (cook-audio.py): Sounds/*.uc2wb, *.ogp, *.uc2cues, Music/*.ogg (Ogg Vorbis), from the project's WAVs or
      decoded from the disc's banks. --xbox-audio copies the disc's .xsb/.xwb instead, which the engine plays itself.
   5. movies (cook-movies.py): Movies/*.ogv, *.oga and Textures/Movies/*.ogv (Ogg Theora/Vorbis).
-  6. --build <build-dir> (from the repository): the build's uc2.bin, ucc-bin and libopenal.so.1 (or the Windows .exe
-     and OpenAL32.dll), its patched script packages and the repository's inis (Engine/Config) go into System/.
+  6. binaries, when asked: --uc2-binary-path copies the game into System/ with the files it runs with (from a release
+     folder the inis and the OpenAL library beside it; from a CMake build that build's OpenAL library and patched
+     script packages and the repository's inis), --ucc-binary-path copies UCC. The cook itself runs neither.
   7. COOK.txt (what was cooked from what) and MANIFEST.sha256.
 
 The output folder is created, or must be one cook.py made (it keeps the list of its files in .cook-files): a re-cook
@@ -261,8 +263,8 @@ def check_tools(args):
                         if err:
                             problems.append(('ffmpeg %s %s: %s' % (kind, name, err), why,
                                              'an ffmpeg built with it: ' + ffmpeg_hint()))
-    if args.build:
-        game = os.path.join(args.build, 'Source', 'SDLLaunch', 'uc2.bin')
+    if args.uc2_binary_path and not args.uc2_binary_path.lower().endswith('.exe'):
+        game = args.uc2_binary_path
         if os.path.isfile(game) and shutil.which('ldd'):
             r = subprocess.run(['ldd', game], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             out = r.stdout.decode('latin-1')
@@ -695,46 +697,66 @@ def run_step(cmd, logfile, show):
         raise CookError('%s failed (exit %d): %s' % (os.path.basename(cmd[1]), rc, logfile))
 
 
-def install_build(args, out, log):
-    """The build's binaries, its patched script packages and the repository's inis into System/."""
-    if not in_repository('Engine', 'Config'):
-        raise CookError('--build takes the repository\'s inis (Engine/Config): run the cook from the repository')
-    b = os.path.abspath(args.build)
-    bins = []
-    for rel in ('Source/SDLLaunch/uc2.bin', 'Source/UCC/ucc-bin', 'Source/SDLLaunch/uc2.exe', 'Source/UCC/ucc.exe',
-                '_deps/openalsoft-build/OpenAL32.dll'):
-        p = os.path.join(b, rel)
-        if os.path.isfile(p):
-            bins.append((p, os.path.basename(p)))
-    lib = os.path.join(b, '_deps', 'openalsoft-build', 'libopenal.so.1')
-    if os.path.exists(lib):
-        bins.append((os.path.realpath(lib), 'libopenal.so.1'))
-    if not any(n in ('uc2.bin', 'uc2.exe') for _, n in bins):
-        raise CookError('--build %s: no Source/SDLLaunch/uc2.bin or uc2.exe (build it first)' % args.build)
-    for p, name in bins:
-        out.copy(p, 'System/' + name)
-    for ini in sorted(os.listdir(os.path.join(REPO, 'Engine', 'Config'))):
-        if ini.endswith('.ini'):
-            out.copy(os.path.join(REPO, 'Engine', 'Config', ini), 'System/' + ini)
+def build_root(path):
+    """The CMake build directory a binary was built in (a folder above it with a CMakeCache.txt), or ''."""
+    d = os.path.dirname(path)
+    for _ in range(4):
+        if os.path.isfile(os.path.join(d, 'CMakeCache.txt')):
+            return d
+        d = os.path.dirname(d)
+    return ''
+
+
+def install_binaries(args, out, log):
+    """--uc2-binary-path and --ucc-binary-path into System/. The game comes with the files it runs with: from a
+    release folder, the inis and the OpenAL library beside it; from a CMake build, the build's OpenAL library and
+    patched script packages and the repository's inis (Engine/Config)."""
+    copied = []
     scripts = []
-    sdir = os.path.join(b, 'Scripts', 'System')
-    for f in sorted(os.listdir(sdir)) if os.path.isdir(sdir) else []:
-        if f.endswith('.u') and os.path.isfile(out.abs('System/' + f)):
-            out.copy(os.path.join(sdir, f), 'System/' + f)
-            scripts.append(f)
-    for d in ('Save', 'Cache'):
-        os.makedirs(out.abs(d), exist_ok=True)
-    say('  System/: %s; the repository\'s inis; script packages from the build: %s' % (
-        ', '.join(n for _, n in bins), ', '.join(scripts) or 'none (the shipped ones)'))
-    log.append('build: %s: %s' % (b, ', '.join(n for _, n in bins)))
-    log.append('build: the repository\'s Engine/Config/*.ini in System/')
-    log.append('build: script packages %s' % (', '.join(scripts) if scripts else 'the shipped ones (the build has no '
-                                                                                  'Scripts/System)'))
+    build = ''
+    if args.uc2_binary_path:
+        game = os.path.abspath(args.uc2_binary_path)
+        if not os.path.isfile(game):
+            raise CookError('--uc2-binary-path %s: no such file' % args.uc2_binary_path)
+        files = [(game, os.path.basename(game))]
+        build = build_root(game)
+        if build:
+            if not in_repository('Engine', 'Config'):
+                raise CookError('--uc2-binary-path %s is in a build tree, whose inis are the repository\'s '
+                                '(Engine/Config): run the cook from the repository' % args.uc2_binary_path)
+            libdir = os.path.join(build, '_deps', 'openalsoft-build')
+            inidir = os.path.join(REPO, 'Engine', 'Config')
+        else:
+            libdir = inidir = os.path.dirname(game)
+        for name in ('libopenal.so.1', 'OpenAL32.dll'):
+            p = os.path.join(libdir, name)
+            if os.path.exists(p):
+                files.append((os.path.realpath(p), name))
+        files += [(os.path.join(inidir, f), f) for f in sorted(os.listdir(inidir)) if f.lower().endswith('.ini')]
+        for p, name in files:
+            out.copy(p, 'System/' + name)
+            copied.append(name)
+        sdir = os.path.join(build, 'Scripts', 'System') if build else ''
+        for f in sorted(os.listdir(sdir)) if sdir and os.path.isdir(sdir) else []:
+            if f.endswith('.u') and os.path.isfile(out.abs('System/' + f)):
+                out.copy(os.path.join(sdir, f), 'System/' + f)
+                scripts.append(f)
+        for d in ('Save', 'Cache'):
+            os.makedirs(out.abs(d), exist_ok=True)
+    if args.ucc_binary_path:
+        ucc = os.path.abspath(args.ucc_binary_path)
+        if not os.path.isfile(ucc):
+            raise CookError('--ucc-binary-path %s: no such file' % args.ucc_binary_path)
+        out.copy(ucc, 'System/' + os.path.basename(ucc))
+        copied.append(os.path.basename(ucc))
+    say('  System/: %s; script packages from the build: %s' % (', '.join(copied), ', '.join(scripts) or 'none'))
+    log.append('binaries: %s' % ', '.join(copied))
+    log.append('binaries: script packages %s' % (', '.join(scripts) if scripts else 'the shipped ones'))
     # The build strips its packages with its game folder's per-class inis (BUILD.md, "Script patches"): their config
     # defaults are that folder's where the inis differ from this one's.
     assets = ''
-    cache = os.path.join(b, 'CMakeCache.txt')
-    for line in open(cache) if scripts and os.path.isfile(cache) else ():
+    cache = os.path.join(build, 'CMakeCache.txt') if build else ''
+    for line in open(cache) if scripts and cache and os.path.isfile(cache) else ():
         if line.startswith('UE_ASSETS_DIR:'):
             assets = line.split('=', 1)[1].strip()
     if assets:
@@ -746,7 +768,7 @@ def install_build(args, out, log):
                     'their config defaults are that folder\'s (configure the build with -DUE_ASSETS_DIR=<a folder '
                     'cooked from this input> for this folder\'s)' % (assets, ', '.join(differ)))
             say('  note: ' + note)
-            log.append('build: note: ' + note)
+            log.append('binaries: note: ' + note)
 
 
 def sha256(path):
@@ -802,7 +824,10 @@ def main():
     ap.add_argument('--disc-tables', action='store_true', help="xbox: keep the disc's package tables (no network "
                                                                'play with the PC game folder)')
     ap.add_argument('--xbox-audio', action='store_true', help='the shipped .xsb/.xwb instead of cooked audio')
-    ap.add_argument('--build', default='', help='a build directory whose binaries go into System/')
+    ap.add_argument('--uc2-binary-path', default='', help='also copy the game (uc2.bin or uc2.exe) into System/, with '
+                                                          'the inis and OpenAL library it runs with; the cook itself '
+                                                          'does not run it')
+    ap.add_argument('--ucc-binary-path', default='', help='also copy UCC (ucc-bin or ucc.exe) into System/')
     ap.add_argument('--skip', default='', help='comma list of steps to leave out: audio, movies')
     ap.add_argument('--jobs', type=int, default=max(1, (os.cpu_count() or 2) // 2))
     ap.add_argument('--check', action='store_true', help='a dry run of the tools and the input\'s checks, write '
@@ -878,16 +903,18 @@ def main():
                 cook_movies(args, src, out, log)
             else:
                 out.keep(('Movies/', 'Textures/Movies/'))
-            say('6. build' + ('' if args.build else ' (none: the engine\'s files go into System/)'))
-            if args.build:
-                install_build(args, out, log)
+            binaries = args.uc2_binary_path or args.ucc_binary_path
+            say('6. binaries' + ('' if binaries else ' (none asked: put the game\'s binaries into System/)'))
+            if binaries:
+                install_binaries(args, out, log)
             say('7. COOK.txt, MANIFEST.sha256')
             write_record(args, src, out, log)
             out.finish()
         finally:
             out.close()
-        say('done: %s (%d files)%s' % (out.path, len(out.new),
-                                       '; run: cd %s/System && ./uc2.bin' % out.path if args.build else ''))
+        start = os.path.basename(args.uc2_binary_path)
+        say('done: %s (%d files)%s' % (out.path, len(out.new), '; run: cd %s/System && ./%s' % (out.path, start)
+                                       if start else ''))
         return 0
     except CookError as ex:
         say('cook.py: %s' % ex)
