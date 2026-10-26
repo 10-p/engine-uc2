@@ -8,6 +8,9 @@ import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.InputDevice;
+import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 
@@ -72,6 +75,8 @@ public class GameActivity extends SDLActivity {
     static native void nativeTouchPadAxis(int axis, float value);
     static native int nativeTouchPadState();
 
+    private PadOverlayView pad;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // Before super.onCreate, which starts the SDL thread and with it SDL_main.
@@ -99,7 +104,8 @@ public class GameActivity extends SDLActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) getWindow().setDecorFitsSystemWindows(false);
 
         try {
-            addContentView(new PadOverlayView(this), new FrameLayout.LayoutParams(
+            pad = new PadOverlayView(this);
+            addContentView(pad, new FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         } catch (Throwable t) {
             Log.e(TAG, "could not add the on-screen pad", t);
@@ -135,6 +141,39 @@ public class GameActivity extends SDLActivity {
         if (scale > 0f) args.add(String.format(Locale.US, "-ini:System:[SDL2Drv.SDL2Client]:RenderScale=%.2f", scale));
         Log.i(TAG, "engine arguments: " + args);
         return args.toArray(new String[0]);
+    }
+
+    // A real pad's input hides the on-screen pad (PadOverlayView.onRealPadInput); SDL still gets every event.
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (pad != null && isPadPress(event)) pad.onRealPadInput();
+        return super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    public boolean dispatchGenericMotionEvent(MotionEvent event) {
+        if (pad != null && isPadPush(event)) pad.onRealPadInput();
+        return super.dispatchGenericMotionEvent(event);
+    }
+
+    /** A game pad's button going down (a pad's own source, or a gamepad key code from any source). */
+    static boolean isPadPress(KeyEvent e) {
+        if (e.getAction() != KeyEvent.ACTION_DOWN || e.getRepeatCount() != 0) return false;
+        return e.isFromSource(InputDevice.SOURCE_GAMEPAD) || e.isFromSource(InputDevice.SOURCE_JOYSTICK)
+                || KeyEvent.isGamepadButton(e.getKeyCode());
+    }
+
+    private static final int[] PAD_AXES = {
+        MotionEvent.AXIS_X, MotionEvent.AXIS_Y, MotionEvent.AXIS_Z, MotionEvent.AXIS_RX, MotionEvent.AXIS_RY,
+        MotionEvent.AXIS_RZ, MotionEvent.AXIS_HAT_X, MotionEvent.AXIS_HAT_Y, MotionEvent.AXIS_LTRIGGER,
+        MotionEvent.AXIS_RTRIGGER, MotionEvent.AXIS_GAS, MotionEvent.AXIS_BRAKE,
+    };
+
+    /** A pad's stick, trigger or hat pushed at least half way (a resting stick's drift stays below). */
+    static boolean isPadPush(MotionEvent e) {
+        if (!e.isFromSource(InputDevice.SOURCE_JOYSTICK) || e.getActionMasked() != MotionEvent.ACTION_MOVE) return false;
+        for (int axis : PAD_AXES) if (Math.abs(e.getAxisValue(axis)) >= 0.5f) return true;
+        return false;
     }
 
     /**

@@ -258,7 +258,10 @@ Exit quits through SDL, so the engine saves and shuts down as usual), and the on
 `Android/app/src/main/java/com/uc2/android/PadOverlayView.java`): in the menus a D-pad, A B X Y, Start, Back and the
 shoulders and triggers; in a match a move stick (left half) and a look stick (right half) where the finger lands, the
 triggers, A B X Y, the shoulders, the stick clicks, a small D-pad, Start and Back. It is player one's pad unless a real
-pad was connected first (it then stays off and its overlay hides); the "pad" key at the bottom hides it.
+pad was connected first (it then stays off and its overlay hides); the "pad" key at the bottom hides it. A real pad's
+button, or a stick, trigger or hat pushed half way (Android's input events,
+`GameActivity.dispatchKeyEvent`/`dispatchGenericMotionEvent`), hides the whole overlay; a touch on the screen shows it
+again and does nothing else. Which pad has which port is the engine's alone.
 
 In the background (the home screen, the recent apps, another app on top) the game is suspended. SDL's activity
 pauses on `onStop`, and its event pump then blocks the game thread until the app returns, so nothing ticks;
