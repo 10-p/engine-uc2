@@ -750,6 +750,8 @@ UBOOL UUC2ALAudioSubsystem::Init()
 		return 1;
 	}
 	S->bDevice = 1;
+	if( !S->bTest )
+		UC2ALWatchAppBackground( S->Device, 1 );
 	S->T0 = NowOf( S );
 	GAL.alDistanceModel( AL_NONE );		// distance attenuation is XACT's, computed in UpdateVoice
 	GAL.alDopplerFactor( 0.f );			// XACT :500: no source ever dopplers
@@ -881,6 +883,7 @@ void UUC2ALAudioSubsystem::Destroy()
 			}
 			GAL.alcMakeContextCurrent( NULL );
 			GAL.alcDestroyContext( S->Context );
+			UC2ALWatchAppBackground( S->Device, 0 );
 			GAL.alcCloseDevice( S->Device );
 			UC2ALUnbind();
 		}
@@ -906,6 +909,7 @@ void UUC2ALAudioSubsystem::ShutdownAfterError()
 	{
 		GAL.alcMakeContextCurrent( NULL );
 		GAL.alcDestroyContext( State->Context );
+		UC2ALWatchAppBackground( State->Device, 0 );
 		GAL.alcCloseDevice( State->Device );
 		State->bDevice = 0;
 	}

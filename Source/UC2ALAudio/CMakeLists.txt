@@ -28,3 +28,7 @@ endif()
 target_compile_definitions(${PROJECT_NAME} PRIVATE GPackage=GUC2ALAudioPackage ThisPackage=UC2ALAudio)
 
 target_link_libraries(${PROJECT_NAME} PUBLIC Engine PRIVATE vorbis ogg)
+if(ANDROID)
+  # SDL's application events pause the output device while the app is in the background.
+  target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2-static)
+endif()

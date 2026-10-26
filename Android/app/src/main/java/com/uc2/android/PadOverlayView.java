@@ -22,6 +22,8 @@ import java.util.ArrayList;
  * shield), A B X Y, the shoulders, the stick clicks (R3 locks on), a small D-pad, Start (the menu) and
  * Back (the scores). Nothing is drawn and no touch is taken while the engine has no on-screen pad in use
  * (not started yet, or a real pad took player one's port). The "pad" key at the bottom hides and shows it.
+ *
+ * A real pad's input hides the whole overlay; a touch on the screen shows it again, and does nothing else.
  */
 final class PadOverlayView extends View {
     // SDL_GameControllerButton values.
@@ -68,6 +70,8 @@ final class PadOverlayView extends View {
 
     private int state = 0;
     private boolean hidden = false;
+    // Hidden by a real pad's input until the screen is touched; revealing: the touch that showed it, until it lifts.
+    private boolean padHidden = false, revealing = false;
 
     PadOverlayView(Context ctx) {
         super(ctx);
@@ -76,10 +80,17 @@ final class PadOverlayView extends View {
         stroke.setStyle(Paint.Style.STROKE);
         text.setTextAlign(Paint.Align.CENTER);
         text.setTypeface(Typeface.DEFAULT_BOLD);
-        postDelayed(poll, POLL_MS);
     }
 
     // ---- the engine's state ---------------------------------------------------------------------
+
+    /** The engine's state is read while the overlay can be seen; in the background nothing runs. */
+    @Override
+    public void onVisibilityAggregated(boolean isVisible) {
+        super.onVisibilityAggregated(isVisible);
+        removeCallbacks(poll);
+        if (isVisible) postDelayed(poll, POLL_MS);
+    }
 
     private final Runnable poll = new Runnable() {
         @Override public void run() {
@@ -96,6 +107,14 @@ final class PadOverlayView extends View {
     };
 
     private boolean active() { return (state & ST_ATTACHED) != 0 && (state & ST_IN_USE) != 0; }
+
+    /** A real pad's button or stick (GameActivity): the overlay hides until the screen is touched. */
+    void onRealPadInput() {
+        if (padHidden) return;
+        padHidden = true;
+        releaseAll();
+        invalidate();
+    }
     private boolean menu() { return (state & ST_MENU) != 0; }
     private ArrayList<Key> keys() { return menu() ? menuKeys : gameKeys; }
 
@@ -170,7 +189,7 @@ final class PadOverlayView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        if (!active()) return;
+        if (!active() || padHidden) return;
         drawKey(canvas, toggle, hidden ? 0x30 : 0x50);
         if (hidden) return;
         for (Key k : keys()) drawKey(canvas, k, 0xFF);
@@ -206,11 +225,23 @@ final class PadOverlayView extends View {
 
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
+        int action = ev.getActionMasked(), index = ev.getActionIndex();
+        if (revealing) {
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) revealing = false;
+            return true;
+        }
         if (!active()) {
             releaseAll();
             return false;
         }
-        int action = ev.getActionMasked(), index = ev.getActionIndex();
+        if (padHidden) {
+            if (action == MotionEvent.ACTION_DOWN) {
+                padHidden = false;
+                revealing = true;
+                invalidate();
+            }
+            return true;
+        }
         switch (action) {
             case MotionEvent.ACTION_DOWN:
             case MotionEvent.ACTION_POINTER_DOWN:
