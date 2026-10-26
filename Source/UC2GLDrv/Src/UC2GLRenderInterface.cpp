@@ -1575,9 +1575,9 @@ void FOpenGLRenderInterface::SetMaterialBlending( FOpenGLMaterialState* NewMater
 
 	// Texture stages.
 	FPlane TFactor = FColor(NewMaterialState->TFactorColor).Plane();
-	INT StagesUsed = Min<INT>( NewMaterialState->StagesUsed, RenDev->NumTextureUnits );
-	if( NewMaterialState->StagesUsed > RenDev->NumTextureUnits )
-		UC2GL_LOG_ONCE( TEXT("UC2GLDrv: pass uses %i stages, only %i texture units"), NewMaterialState->StagesUsed, RenDev->NumTextureUnits );
+	INT StagesUsed = Min<INT>( NewMaterialState->StagesUsed, RenDev->PassStages );
+	if( NewMaterialState->StagesUsed > RenDev->PassStages )
+		UC2GL_LOG_ONCE( TEXT("UC2GLDrv: pass uses %i stages, only %i texture units"), NewMaterialState->StagesUsed, RenDev->PassStages );
 
 	for( INT s=0; s<StagesUsed; s++ )
 	{
@@ -2154,9 +2154,9 @@ void FOpenGLRenderInterface::CommitTexCoords( INT Pass )
 	guard(FOpenGLRenderInterface::CommitTexCoords);
 
 	FOpenGLMaterialState*	MaterialState = CurrentState->MaterialPasses[Pass];
-	INT						StagesUsed = Min<INT>( MaterialState->StagesUsed, RenDev->NumTextureUnits );
+	INT						StagesUsed = Min<INT>( MaterialState->StagesUsed, RenDev->PassStages );
 
-	// (Every coordinate set the device may use: NumTextureUnits changes with FFPROGRAMS.)
+	// (Every coordinate set the device may use: PassStages changes with FFPROGRAMS.)
 	for( INT s=0; s<Min<INT>(RenDev->GLProgramUnits,MAX_STAGES); s++ )
 	{
 		RenDev->glActiveTexture( GL_TEXTURE0 + s );

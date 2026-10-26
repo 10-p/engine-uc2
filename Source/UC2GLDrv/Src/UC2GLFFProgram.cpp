@@ -312,7 +312,7 @@ UBOOL FOpenGLRenderInterface::BeginFixedFunctionProgram( FOpenGLMaterialState* M
 {
 	if( !RenDev->FFProgramsActive || MaterialState->UsePixelShaderProgram )
 		return 0;
-	INT StagesUsed = Min<INT>( MaterialState->StagesUsed, RenDev->NumTextureUnits );
+	INT StagesUsed = Min<INT>( MaterialState->StagesUsed, RenDev->PassStages );
 	FUC2GLFFKey Key;
 	FFMakeKey( RenDev, MaterialState, StagesUsed, ColorSum, Fog, Key );
 	FUC2GLFFProgram* P = FFGetProgram( RenDev, Key );

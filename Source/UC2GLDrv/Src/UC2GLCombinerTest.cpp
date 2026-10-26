@@ -675,7 +675,7 @@ struct FUC2GLCombinerTest
 		// What the path can do, not what the material compiler is told (MaterialStages, 4):
 		// the test draws its own passes.
 		INT CompilerStages = RenDev->NumTextureUnits;
-		RenDev->NumTextureUnits = Min<INT>( MAX_STAGES, Min<INT>( RenDev->MaxTextureUnits, RenDev->FFProgramsActive ? RenDev->GLProgramUnits : RenDev->GLFixedFunctionUnits ) );
+		RenDev->NumTextureUnits = RenDev->PassStages;
 		RI->PushState();
 		Setup();
 		for( INT i=0; i<ARRAY_COUNT(GCTCases); i++ )

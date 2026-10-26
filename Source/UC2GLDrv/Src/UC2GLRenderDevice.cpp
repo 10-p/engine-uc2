@@ -117,6 +117,7 @@ UUC2GLRenderDevice::UUC2GLRenderDevice()
 	LastViewport			= NULL;
 	FrameCounter			= 0;
 	NumTextureUnits			= 0;
+	PassStages				= 0;
 	GLFixedFunctionUnits	= 2;
 	GLProgramUnits			= 2;
 	FFProgramsActive		= 0;
@@ -342,6 +343,9 @@ void UUC2GLRenderDevice::UpdateTextureCaps()
 	FFProgramsActive = UseFixedFunctionPrograms && !IsGLES && SUPPORTS_GL2;
 	INT Units = FFProgramsActive ? GLProgramUnits : GLFixedFunctionUnits;
 	NumTextureUnits = Clamp<INT>( Min<INT>( Min<INT>( Units, MaxTextureUnits ), MaterialStages ), 2, MAX_STAGES );
+	// A pass may plan more stages than the compiler is told: Epic's terrain material blends two
+	// layers without a temp register in five (UC2GLMaterialState.cpp, SetTerrainMaterial).
+	PassStages = Clamp<INT>( Min<INT>( Units, MaxTextureUnits ), NumTextureUnits, MAX_STAGES );
 	DeviceCaps.MaxSimultaneousTextures	= NumTextureUnits;
 	DeviceCaps.MaxTextureBlendStages	= NumTextureUnits;
 	DeviceCaps.TextureOpCaps			= (FFProgramsActive || HasCombine3() || HasCombine4()) ? (D3DTEXOPCAPS_MODULATEALPHA_ADDCOLOR | D3DTEXOPCAPS_MULTIPLYADD) : 0;

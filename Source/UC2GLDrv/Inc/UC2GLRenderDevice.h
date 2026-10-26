@@ -105,7 +105,8 @@ public:
 	UViewport*						LockedViewport;
 	UViewport*						LastViewport;		// the viewport of the last frame (GLPROBE)
 	INT								FrameCounter;
-	INT								NumTextureUnits;
+	INT								NumTextureUnits;	// the stages the material compiler plans a pass with (DeviceCaps)
+	INT								PassStages;			// the stages a pass is drawn with: every unit of its path, up to MaxTextureUnits
 	FLOAT							MaxAnisotropy;
 	UBOOL							ValidContext;
 	INT								GLMajorVersion,

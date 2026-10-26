@@ -707,7 +707,7 @@ void FOpenGLRenderInterface::PrepareSampledTargets( FOpenGLMaterialState* Materi
 	}
 	if( RenDev->PostProcessActive() )
 	{
-		INT StagesUsed = Min<INT>( MaterialState->StagesUsed, RenDev->NumTextureUnits );
+		INT StagesUsed = Min<INT>( MaterialState->StagesUsed, RenDev->PassStages );
 		for( INT s=0; s<StagesUsed; s++ )
 		{
 			FOpenGLTexture* Texture = MaterialState->Stages[s].Texture;

@@ -370,7 +370,7 @@ struct FSelfTest
 		RenDev->glDisable( GL_CULL_FACE );
 		RenDev->glDisable( GL_LIGHTING );
 		RenDev->glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
-		for( INT s=0; s<RenDev->NumTextureUnits; s++ )
+		for( INT s=0; s<RenDev->PassStages; s++ )
 		{
 			RenDev->glActiveTexture( GL_TEXTURE0 + s );
 			RenDev->glClientActiveTexture( GL_TEXTURE0 + s );
