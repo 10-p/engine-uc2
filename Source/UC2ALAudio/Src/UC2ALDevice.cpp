@@ -10,6 +10,9 @@
 #ifdef __EMSCRIPTEN__
 #define UC2AL_WITH_PROTOTYPES 1		// the table is filled with the linked symbols (UC2ALAudioPrivate.h)
 #endif
+#if defined(__ANDROID__)
+#include "SDL.h"		// before the engine's headers, whose macros (clock) its system headers would meet
+#endif
 #include "UC2ALAudioPrivate.h"
 
 FUC2AL GAL;
@@ -83,6 +86,46 @@ ALenum UC2ALFormat( INT Channels )
 {
 	return Channels==2 ? AL_FORMAT_STEREO16 : AL_FORMAT_MONO16;
 }
+
+#if defined(__ANDROID__)
+// The app in the background: SDL's event pump blocks the game thread until it returns, and the output device is
+// paused (ALC_SOFT_pause_device), so nothing plays and openal-soft's mixer thread stops. SDL sends both events
+// from that pump, on the game thread: the first just before it blocks, the second right after it wakes.
+static LPALCDEVICEPAUSESOFT  AlcDevicePause  = NULL;
+static LPALCDEVICERESUMESOFT AlcDeviceResume = NULL;
+
+static int SDLCALL PauseInBackground( void* Device, SDL_Event* Event )
+{
+	if( Event->type == SDL_APP_DIDENTERBACKGROUND )
+	{
+		AlcDevicePause( (ALCdevice*)Device );
+		debugf( NAME_Log, TEXT("UC2ALAudio: output paused (the app is in the background)") );
+	}
+	else if( Event->type == SDL_APP_WILLENTERFOREGROUND )
+	{
+		AlcDeviceResume( (ALCdevice*)Device );
+		debugf( NAME_Log, TEXT("UC2ALAudio: output resumed") );
+	}
+	return 1;
+}
+
+void UC2ALWatchAppBackground( ALCdevice* Device, UBOOL bOn )
+{
+	if( !bOn )
+	{
+		SDL_DelEventWatch( PauseInBackground, Device );
+		return;
+	}
+	AlcDevicePause  = GAL.alcIsExtensionPresent( Device, "ALC_SOFT_pause_device" ) ? (LPALCDEVICEPAUSESOFT)GAL.alcGetProcAddress( Device, "alcDevicePauseSOFT" ) : NULL;
+	AlcDeviceResume = AlcDevicePause ? (LPALCDEVICERESUMESOFT)GAL.alcGetProcAddress( Device, "alcDeviceResumeSOFT" ) : NULL;
+	if( AlcDevicePause && AlcDeviceResume )
+		SDL_AddEventWatch( PauseInBackground, Device );
+	else
+		debugf( NAME_Warning, TEXT("UC2ALAudio: this OpenAL cannot pause its device (no ALC_SOFT_pause_device): sound plays on in the background") );
+}
+#else
+void UC2ALWatchAppBackground( ALCdevice* Device, UBOOL bOn ) {}
+#endif
 
 /*-----------------------------------------------------------------------------
 	OpenAL Soft's log while the device opens: which backend, and why not the others.

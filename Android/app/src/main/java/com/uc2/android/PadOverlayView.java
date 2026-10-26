@@ -76,10 +76,17 @@ final class PadOverlayView extends View {
         stroke.setStyle(Paint.Style.STROKE);
         text.setTextAlign(Paint.Align.CENTER);
         text.setTypeface(Typeface.DEFAULT_BOLD);
-        postDelayed(poll, POLL_MS);
     }
 
     // ---- the engine's state ---------------------------------------------------------------------
+
+    /** The engine's state is read while the overlay can be seen; in the background nothing runs. */
+    @Override
+    public void onVisibilityAggregated(boolean isVisible) {
+        super.onVisibilityAggregated(isVisible);
+        removeCallbacks(poll);
+        if (isVisible) postDelayed(poll, POLL_MS);
+    }
 
     private final Runnable poll = new Runnable() {
         @Override public void run() {

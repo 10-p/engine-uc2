@@ -295,6 +295,7 @@ UBOOL UC2ALBind( FString& Error );				// load libopenal and resolve the core ent
 void UC2ALUnbind();
 UBOOL UC2ALBindEFX();							// after a context is current
 ALenum UC2ALFormat( INT Channels );
+void UC2ALWatchAppBackground( ALCdevice* Device, UBOOL bOn );	// the device pauses while SDL reports the app in the background
 
 // OpenAL Soft's own log (alsoft_set_log_callback, when the library has it), captured while the device opens:
 // it is the only place that says which backend was chosen and why the others were not.

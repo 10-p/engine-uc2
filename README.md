@@ -35,7 +35,8 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
 - **Android build**: a Gradle/NDK project (`Android/`) for Android 7.0 and later: the engine as `libUC2.so` under SDL's activity, rendering through
   GL4ES on OpenGL ES 3, sound on OpenSL ES, the game folder copied into internal storage from a folder chosen with the
   system's folder picker (or read in place from shared storage), a resolution scale up to supersampling, an exit prompt
-  on Back, and an on-screen pad that is a virtual SDL controller (the mouse is off).
+  on Back, an on-screen pad that is a virtual SDL controller (the mouse is off), and a suspended game in the
+  background (no tick, the OpenAL device paused).
 - **Windows build**: MinGW-w64 cross builds (i686 and x86_64), statically linked, no runtime DLL but OpenAL's.
 - **UCC on every desktop build**: `ucc-bin` (Linux) and `ucc.exe` (Windows), 32- and 64-bit, beside the game: the
   dedicated server and the commandlets.

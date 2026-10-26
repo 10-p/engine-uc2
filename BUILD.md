@@ -260,6 +260,14 @@ shoulders and triggers; in a match a move stick (left half) and a look stick (ri
 triggers, A B X Y, the shoulders, the stick clicks, a small D-pad, Start and Back. It is player one's pad unless a real
 pad was connected first (it then stays off and its overlay hides); the "pad" key at the bottom hides it.
 
+In the background (the home screen, the recent apps, another app on top) the game is suspended. SDL's activity
+pauses on `onStop`, and its event pump then blocks the game thread until the app returns, so nothing ticks;
+UC2ALAudio pauses its OpenAL device (`alcDevicePauseSOFT`, ALC_SOFT_pause_device; `UC2ALWatchAppBackground`) on
+SDL's `SDL_APP_DIDENTERBACKGROUND`, just before the block, so openal-soft's mixer and the OpenSL ES output stop and
+no sound plays, and resumes it on `SDL_APP_WILLENTERFOREGROUND`; the overlay stops reading the engine's state while
+it cannot be seen. Back in the foreground SDL restores the GL context on the new surface and the game goes on where
+it was (`UC2ALAudio: output paused (the app is in the background)` / `output resumed` in the log).
+
 ## 64-bit
 
 ```
