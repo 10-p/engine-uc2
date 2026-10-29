@@ -1063,8 +1063,10 @@ void UCanvas::ApplyUIBox( UBOOL bWanted )
 	if( bWanted && W > 0.f && H > 0.f )
 	{
 		S  = Min( W / DW, H / DH );
-		BX = appFloor( (W - DW * S) * 0.5f );
-		BY = appFloor( (H - DH * S) * 0.5f );
+		// Never above or left of the viewport: S fits the design space in it, and where it fills a side exactly the
+		// rounding of DW * S or DH * S can leave that side's margin a hair below zero.
+		BX = Max( 0, appFloor( (W - DW * S) * 0.5f ) );
+		BY = Max( 0, appFloor( (H - DH * S) * 0.5f ) );
 	}
 	// The identity (a 640x480 window, or UIScaleMode=Native640): Epic's Update().
 	UBOOL bBoxed = bWanted && W > 0.f && H > 0.f && !( S == 1.f && BX == 0.f && BY == 0.f && DW == W && DH == H );
