@@ -18,6 +18,7 @@ same.
 | Setting | Epic | Ours | Why |
 |---|---|---|---|
 | `[URL] Port` | `1000` | `7777` | 1000 is the Xbox system-link port and privileged on Linux; 7777 is Unreal Engine 2's default. |
+| `[URL] EXEName` | `avaris.exe` | `uc2.exe` | The game program the editor's Play Level starts (only the editor reads it); this build's Windows game is `uc2.exe`. |
 | `[Engine.Engine] ViewportManager` | `WinDrv.WindowsClient` | `SDL2Drv.SDL2Client` | The portable client; WinDrv is Win32-only and not built (Epic's line stays as a comment). |
 | `[Engine.Engine] RenderDevice` | `D3DDrv.D3DRenderDevice` | `UC2GLDrv.UC2GLRenderDevice` | The OpenGL device; D3DDrv is not built. `Engine.NullRenderDevice` stays selectable (commented line, `-nullrenderer`). |
 | `[Engine.Engine] AudioDevice` | `Engine.NullAudioDevice` | `UC2ALAudio.UC2ALAudioSubsystem` | The OpenAL Soft device on the cooked sound data. Without libopenal, an output device or the data the game runs silent and says so once; `-nosound` selects the null device for one run. |

@@ -29,6 +29,7 @@
 #ifdef _WIN32
 #include <winsock2.h>
 #include <windows.h>
+#include <shellapi.h>	// ShellExecuteA (appLaunchURL)
 #include <exception>
 #include <signal.h>
 #include <process.h>	// _spawnv
@@ -2198,6 +2199,17 @@ void appLaunchURL( const TCHAR* URL, const TCHAR* Parms, FString* Error )
     GMacOSLaunchURLOnExit = new TCHAR[appStrlen(URL) + 1];
     appStrcpy(GMacOSLaunchURLOnExit, URL);
 
+#elif defined(_WIN32)
+
+	// The shell opens it now, as Epic's Windows layer does (a web address, or a program with its parameters: the
+	// editor's Play Level starts the game), and this program carries on.
+	debugf( NAME_Log, TEXT("Launching %s %s"), URL, Parms ? Parms : TEXT("") );
+	HINSTANCE Code = ShellExecuteA( NULL, "open", TCHAR_TO_ANSI(URL), Parms ? TCHAR_TO_ANSI(Parms) : "", TCHAR_TO_ANSI(appBaseDir()), SW_SHOWNORMAL );
+	if( (PTRINT)Code <= 32 )
+		debugf( NAME_Warning, TEXT("Could not launch %s (ShellExecute error %i)"), URL, (INT)(PTRINT)Code );
+	if( Error )
+		*Error = (PTRINT)Code <= 32 ? LocalizeError(TEXT("UrlFailed"),TEXT("Core")) : TEXT("");
+
 #else
 
     const char *_envr = getenv("BROWSER");
@@ -2276,7 +2288,10 @@ void appLaunchURL( const TCHAR* URL, const TCHAR* Parms, FString* Error )
 
 #endif
 
+#ifndef _WIN32
+	// The browser is started when this program exits (GUnixSpawnOnExit, GMacOSLaunchURLOnExit).
 	appRequestExit(0);
+#endif
 
 	unguard;
 }

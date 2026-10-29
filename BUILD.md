@@ -169,6 +169,9 @@ D3DDrv does it: the hit rectangle is read back around every hit proxy).
   `Editor.u` and `UnrealEd.u`; start it from `System/` (under wine: `wine ./UnrealEd.exe`). It reads its own
   system ini, `UC2Editor.ini` (made from `Default.ini` on the first start), where it sets `WinDrv.WindowsClient` and
   `UC2WGLDrv.UC2WGLRenderDevice`, so the game's `Avaris.ini` is untouched. The log is `Editor.log`.
+- Play Level saves `Maps/Autoplay.unr` and starts the game named by `Default.ini`'s `[URL] EXEName` (`uc2.exe`) with
+  `Autoplay.unr HWND=<the editor's window> <[Editor.EditorEngine] GameCommandLine>`; on Windows `appLaunchURL` hands a
+  program or a web address to the shell and the editor stays open.
 - `tools/dev/package-windows.sh` ships it and its files beside `uc2.exe` when the build has it.
 - Under wine, viewports are presented through GDI (`[UC2WGLDrv.UC2WGLRenderDevice] GDIPresent`, `Engine/Config/README.md`).
   In wine's virtual desktop the maximised editor frame (whose window rectangle starts at -4,-4) is drawn 4 pixels right
