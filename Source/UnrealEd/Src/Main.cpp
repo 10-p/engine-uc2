@@ -3153,6 +3153,10 @@ class WEditorFrame : public WMdiFrame, public FNotifyHook
 
 			case WM_EDC_MAPCHANGE:
 			{
+				// The message's lParam (below) is read now: the refreshes send this window messages of their own, and
+				// each one replaces LastlParam.
+				const UBOOL MajorChange = (LastlParam == 1);
+
 				GPrefabLevel = NULL;
 				GBrowserPrefab->RefreshLevel();
 				GBrowserPrefab->RefreshViewport();
@@ -3166,7 +3170,7 @@ class WEditorFrame : public WMdiFrame, public FNotifyHook
 				// Rebuild the collision hash if necessary
 				// A "1" will be in the lParam if this map change is something major ("new", "open", etc).  Minor things like 
 				// brush subtraction will set it to "0".
-				if( LastlParam == 1 )
+				if( MajorChange )
 				{
 					GUnrealEd->Level->SetActorCollision(0, 1);
 					GUnrealEd->Level->SetActorCollision(1);
