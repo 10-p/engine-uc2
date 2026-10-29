@@ -2747,7 +2747,9 @@ UBOOL UEditorEngine::Exec_Map( const TCHAR* Str, FOutputDevice& Ar )
 			{
 				if( Level->Actors.FindItemIndex(*It)==INDEX_NONE )
 				{
-					if( ExternalActors.FindItemIndex(*It)==INDEX_NONE )
+					// an actor of another level stays, also one made since the list above (the prefab browser's camera
+					// in its new level, from the map change)
+					if( ExternalActors.FindItemIndex(*It)==INDEX_NONE && (!It->XLevel || It->XLevel==Level) )
 						It->bDeleteMe=1;
 				}
 				else

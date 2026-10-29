@@ -3157,7 +3157,6 @@ class WEditorFrame : public WMdiFrame, public FNotifyHook
 				// each one replaces LastlParam.
 				const UBOOL MajorChange = (LastlParam == 1);
 
-				GPrefabLevel = NULL;
 				GBrowserPrefab->RefreshLevel();
 				GBrowserPrefab->RefreshViewport();
 
