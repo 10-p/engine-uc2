@@ -220,6 +220,27 @@ void AUCHUD::execGetSideShifts(FFrame &Stack, RESULT_DECL)
 	unguardexec;
 }
 
+// How far the view reaches below the design space, in design pixels (0 or more; 0 when the UI is not boxed): the
+// announcement band of a single view moves down by it, so that it ends on the view's bottom edge.
+void AUCHUD::execGetBottomShift(FFrame &Stack, RESULT_DECL)
+{
+	guard(AUCHUD::execGetBottomShift);
+
+	P_GET_OBJECT(UCanvas, C);
+	P_FINISH;
+
+	FLOAT Shift = 0.f;
+	if (C && C->IsUIBoxed())
+	{
+		FLOAT X1, Y1, X2, Y2;
+		C->GetTargetInDesign(X1, Y1, X2, Y2);
+		Shift = Max(0.f, Y2 - C->SizeY);
+	}
+	*(FLOAT*)Result = Shift;
+
+	unguardexec;
+}
+
 //	DRAW SHARED BACKGROUND
 void AUCHUD::DrawVitalsBackground( UCanvas* C, APawn* P )
 {

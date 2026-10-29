@@ -27,17 +27,23 @@ do not move.
   the compass when it is centred (Epic's at 319), the combo menu. The scripted crosshairs (UCElements) are placed on
   the centre already; the art of some is not symmetric (the Nakhti crosshair's side pieces 1.5 design pixels left of
   its middle).
-- **The announcement band** (a single view; split views have none): black, 53 design pixels high from 6 above the
-  announcement's line to the bottom, a gradient from alpha 0 at its top to 200 at its bottom in rows one design pixel
-  high (Epic's is opaque), its alpha kept while the announcement's text fades out. The critical announcement ("PLAY")
-  and the local message (in every view) are drawn over a black shadow one design pixel right and down at 0.6 times
-  their alpha. At every aspect, 4:3 included (`UCHUD.GradientBand`); the status bar keeps Epic's band.
+- **The announcement band** (a single view; split views have none): black, from 6 design pixels above the
+  announcement's line to the bottom edge of the view (Epic's is opaque and 53 high, one design pixel short of the
+  design space's bottom), a gradient from alpha 0 at its top to 200 at its bottom in rows one design pixel high, its
+  alpha kept while the announcement's text fades out. Where the view reaches below the UI box (a window taller than
+  4:3), the band, the announcement, its reward panel, the local message and the status bar (dead, spectating) move
+  down together by that room (`UCHUD.BandShift`), so the band and the status bar end on the view's bottom edge at every
+  aspect, stacked as at 4:3 (the status bar from its line, raised over the announcement while one shows, to the bottom
+  of the view); the rest of the HUD stays in the box. The critical announcement ("PLAY") and the local message (in
+  every view) are drawn over a black shadow one design pixel right and down at 0.6 times their alpha. At every aspect,
+  4:3 included (`UCHUD.GradientBand`); the status bar keeps Epic's band.
 - **Across the window**: the announcement band, the status bar (dead, spectating), Training's letterbox and dialog
   bars, the console's typing line (Engine.Console: drawn once for the whole window, in split screen too; its bar from
   32 design pixels in from the window's left edge to its right edge, its text wrapped by words at that edge onto lines
   that start at the left edge; at 4:3 Epic's line).
-- **How**: three natives of UCHUD (`Source/UCGameplay/Src/UCHUD.cpp`): `GetSideShifts` gives a view's room beside the
-  640-wide design space in whole design pixels (0 when the UI is not boxed), `DrawVitalsWide` is `DrawVitals` with the
+- **How**: four natives of UCHUD (`Source/UCGameplay/Src/UCHUD.cpp`): `GetSideShifts` gives a view's room beside the
+  640-wide design space in whole design pixels (0 when the UI is not boxed), `GetBottomShift` its room below the design
+  space in design pixels (0 when the UI is not boxed), `DrawVitalsWide` is `DrawVitals` with the
   vitals and active combos moved left and the negative combos right, `TextSizeDualFont` measures what
   `DrawTextDualFont` draws. A side group is drawn with `SafeZoneOffsetX` moved by its shift (`BeginSide`/`EndSide`,
   which move the clip region's right edge with a right group so its text is not wrapped or clipped at the box), an
@@ -50,7 +56,7 @@ do not move.
   UCHUD_Training, UCWeapon (2 each), Element_GameTimer (1); UCMutators: Element_KillerList (4), Element_WeaponMaster
   (2), Element_CampFireBombTimer, RetributionMarker, WeaponMasterReplicationInfo (1 each: the two give a HUD that
   replaces the player's, when a split screen starts or ends, their element again). The generated header
-  `Source/UCGameplay/Inc/UCGameplayClasses.h` declares the three natives; the shipped packages do not call them, so
+  `Source/UCGameplay/Inc/UCGameplayClasses.h` declares the four natives; the shipped packages do not call them, so
   without this set the HUD stays in the box.
 - **The mutators' items in a split view** sit at the full screen's share of its height; the Retribution list, which
   would cover the split HUD's compass on the right, goes beside it.
