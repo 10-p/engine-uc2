@@ -85,25 +85,42 @@ def moving_rows(tag):
     return (idx[0] - 1, idx[-1] + 1) if idx else (0, 0)
 
 
-def rate_curve(tag, marks=(0.1, 0.25, 0.5, 0.75, 1.0), axis='yaw'):
-    """A held stick: rotation (units) reached at each time mark after the view started to move, from a watch
-    trace (level time)."""
-    rows = W[tag]
-    vals = unwrap([r[axis] for r in rows])
-    start = next((i for i in range(1, len(rows)) if vals[i] != vals[0]), None)
-    if start is None:
-        return {}
+def curve_at_marks(rows, vals, start, marks):
+    """The value (from the last sample before `start`) reached at each time mark after that sample (level time),
+    interpolated linearly between the samples around the mark."""
     t0 = rows[start - 1]['t']
     v0 = vals[start - 1]
     out = {}
     for m in marks:
         j = next((i for i in range(start, len(rows)) if rows[i]['t'] - t0 >= m), None)
         if j is not None:
-            # linear interpolation between the samples around the mark
             ta, tb = rows[j - 1]['t'] - t0, rows[j]['t'] - t0
             va, vb = vals[j - 1] - v0, vals[j] - v0
             out[str(m)] = round(va + (vb - va) * ((m - ta) / (tb - ta) if tb > ta else 1.0), 1)
     return out
+
+
+def rate_curve(tag, marks=(0.1, 0.25, 0.5, 0.75, 1.0), axis='yaw'):
+    """A held stick: rotation (units) reached at each time mark after the view started to move, from a watch
+    trace (level time)."""
+    rows = W[tag]
+    vals = unwrap([r[axis] for r in rows])
+    start = next((i for i in range(1, len(rows)) if vals[i] != vals[0]), None)
+    return curve_at_marks(rows, vals, start, marks) if start is not None else {}
+
+
+def walk_curve(tag, marks=(0.25, 0.5, 0.75, 1.0)):
+    """A held move stick: the pawn's displacement along its first facing (backwards negative) reached at each time
+    mark after it started to move, from a watch trace (level time)."""
+    rows = W[tag]
+    if len(rows) < 2:
+        return {}
+    yaw = rows[0]['yaw'] * math.pi / 32768.0
+    x0, y0, _ = rows[0]['loc']
+    vals = [(r['loc'][0] - x0) * math.cos(yaw) + (r['loc'][1] - y0) * math.sin(yaw) for r in rows]
+    start = next((i for i in range(1, len(rows))
+                  if math.hypot(rows[i]['loc'][0] - x0, rows[i]['loc'][1] - y0) > 0.5), None)
+    return curve_at_marks(rows, vals, start, marks) if start is not None else {}
 
 
 def enemy_off(tag):
