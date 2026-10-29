@@ -8,6 +8,7 @@ taken back from the disc's XPR bundles. Used by the package converter next to to
     # ctx.xpr     uc2xpr.XprSet over the disc's XboxTextures
     # ctx.prefer  bundle basenames searched first ('dm-legacy_uma.xpr', 'dm-legacy_pb.xpr', 'natives_uma.xpr', ...)
     # ctx.warn    callable(msg); ctx.info, if present, hears which package meshes took a map copy's streams
+    # ctx.map_copies  optional uc2xtables.MapCopies: the maps' merged copies by the object they stand for
     data, lazy = out if isinstance(out, tuple) else (out, [])
     # lazy: offsets in data of the TLazyArray skip offsets (StaticMesh RawTriangles), written relative to the
     # export's start; the package writer adds the export's file offset to each (uc2xmesh.relocate)
@@ -43,9 +44,11 @@ package version 145; UBOOL is 4 bytes):
 Where the streams are: a mesh's own '<mesh>_VS' etc. in any bundle (ctx.prefer's first), each copy checked against
 the export (vertex count, BoundingBox extent, kDOP leaf bounds, section index ranges, collision triangles among the
 drawn ones). A map's merged meshes are renamed cla<N> with their streams in the map's bundles; a static mesh
-package's mesh used only by maps has no streams under its own name, so the maps' copies with the same native data
-stand in, provided no other package mesh has that native data (the disc's maps and packages are indexed once per
-XprSet, next to its XboxTextures folder). A mesh with no streams on the disc is written without geometry.
+package's mesh used only by maps has no streams under its own name, so the maps' copies that stand for it stand in
+(ctx.map_copies, uc2xtables.MapCopies, from the maps' PC tables), and else the copies with the same native data
+that stand for no other object, provided no other package mesh has that native data (the disc's maps and packages
+are indexed once per XprSet, next to its XboxTextures folder). A mesh with no streams on the disc is written
+without geometry.
 
 What the PC format gets: positions unpacked to within half a quantisation step (CompressionScale / 32767 per axis)
 plus single-precision rounding, normals to within an eighth of a degree (the middle of FVector::Pack's truncation
@@ -493,17 +496,24 @@ def _registry(ctx):
 
 def _vertex_sources(pkg, i, name, ctx):
     """Where the streams may be: (bundle basenames, the name they are filed under, whether it is the mesh's own).
-    '<name>_VS' in any bundle first; then the maps' merged copies with the same native data, when no other
-    package mesh has it."""
+    '<name>_VS' in any bundle first; then the maps' merged copies that stand for this mesh (ctx.map_copies,
+    uc2xtables.MapCopies); then the copies with the same native data that stand for no other object, when no
+    other package mesh has that native data."""
     for base in _ordered(ctx, ctx.xpr.holders(name + '_VS')):
         yield [base], name, True
+    named = getattr(ctx, 'map_copies', None)
+    path = '%s.%s' % (os.path.splitext(os.path.basename(pkg.path or ''))[0], pkg.export_path(i))
+    if named is not None:
+        for m, copy in named.find(path):
+            yield [m + '_uma.xpr', m + '_pb.xpr'], copy, False
     reg = _registry(ctx)
     k = native_key(pkg, i)
     owners = reg['meshes'].get(k, set()) | {_owner(pkg, i)}
     if len(owners) > 1:
         return
     for copy, bundles in reg['copies'].get(k, []):
-        yield bundles, copy, False
+        if named is None or named.stands_for(bundles[0][:-len('_uma.xpr')], copy) in (None, path.lower()):
+            yield bundles, copy, False
 
 
 def _streams(m, src, homes, count, ctx, own):

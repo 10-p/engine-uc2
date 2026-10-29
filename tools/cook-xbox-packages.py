@@ -31,9 +31,10 @@ by the converters (uc2xbsp.py: models, uc2xtex.py: textures, uc2xmesh.py: static
 meshes and animations, uc2xterrain.py: terrain); everything else is copied as it is. Left out: what the PC never
 loads (editor-only exports, which a .LIN does not hold) and Xbox-only data the PC builds itself (terrain sector
 blocks and layer weight maps, clipped static projectors). The maps are converted first: their merged copies of
-texture-package textures supply the pixels those packages lack. Each package is then rewritten into its PC
-package's tables, so that a server on these packages and a client on the PC ones agree. tools/cook.py runs it as one step of a whole cook
-(--source xbox).
+content-package assets supply the pixels and the geometry those packages lack, each copy taken for the object its
+map's PC tables say it stands for (uc2xtables.copy_identities). Each package is then rewritten into its PC
+package's tables, so that a server on these packages and a client on the PC ones agree. tools/cook.py runs it as one
+step of a whole cook (--source xbox).
 """
 
 import argparse
@@ -83,9 +84,10 @@ def converters():
 
 
 class Context:
-    def __init__(self, xpr, prefer, lin, map_textures=None):
+    def __init__(self, xpr, prefer, lin, map_textures=None, map_copies=None):
         self.xpr, self.prefer, self.lin = xpr, prefer, lin
         self.map_textures = map_textures
+        self.map_copies = map_copies
         self.warnings = []
 
     def warn(self, msg):
@@ -104,6 +106,18 @@ def _init(disc):
     _state['foreign'] = foreign
     _state['conv'] = converters()
     _state['types'] = uc2types.Types(uc2xpkg.files_in(disc, 'System', '.u'))
+    _state['content'] = {os.path.splitext(os.path.basename(p))[0].lower(): p
+                         for folder, ext, _, _ in FOLDERS[1:] for p in uc2xpkg.files_in(disc, folder, ext)}
+    _state['originals'] = {}
+
+
+def original(name):
+    """The disc's content package of that name (texture, static mesh or animation package), or None."""
+    key = name.lower()
+    if key not in _state['originals']:
+        path = _state['content'].get(key)
+        _state['originals'][key] = uc2xpkg.Package.load(path) if path else None
+    return _state['originals'][key]
 
 
 def prefer_for(name, is_map):
@@ -135,12 +149,16 @@ def load_xbox(src):
     return pkg
 
 
-def map_copies(pkg, name):
-    """What a map holds of the texture packages' textures (their merged cla<N> copies, with the pixels in the map's
-    bundle), for the texture packages whose own pixels the disc lacks."""
+def map_copies(pkg, name, tables):
+    """What a map holds of the content packages' assets (their merged cla<N> copies, with the pixels and the
+    geometry in the map's bundles), for the content packages whose own data the disc lacks: (the textures' copies
+    by key, the copies by the object they stand for, from the map's PC tables)."""
     copies = uc2xtex.MapTextures()
     copies.add(pkg, name.lower() + '.xpr')
-    return copies
+    named = uc2xtables.MapCopies()
+    if tables:
+        named.add(name, uc2xtables.copy_identities(pkg, tables, _state['types'], original))
+    return copies, named
 
 
 def static_projectors(pkg, counts):
@@ -174,14 +192,15 @@ def static_projectors(pkg, counts):
 
 def convert_package(src, dst, copies=None, write=True, tables=None):
     """Convert one package, into the PC package's tables when tables are given (uc2xtables.py); returns (dst,
-    counts, warnings, the map's copies of texture-package assets)."""
+    counts, warnings, the map's copies of content-package assets: map_copies()). copies: the maps' copies, for a
+    content package (map_copies() of every map, merged)."""
     name = os.path.splitext(os.path.basename(dst))[0]
     is_map = src.lower().endswith('.lin')
     pkg = load_xbox(src)
-    found = map_copies(pkg, name) if is_map else None
+    found = map_copies(pkg, name, tables) if is_map else None
     if not write:
         return dst, None, [], found
-    ctx = Context(_state['xpr'], prefer_for(name, is_map), is_map, copies)
+    ctx = Context(_state['xpr'], prefer_for(name, is_map), is_map, *(copies or (None, None)))
     counts = {'converted': 0, 'copied': 0, 'editor-only': 0, 'left out': 0, 'failed': 0}
     left_out = set()
     if is_map:
@@ -266,7 +285,8 @@ def with_tables(job, out, tables, disc_tables):
     rel, t = uc2xtables.find(tables, os.path.relpath(dst, out).replace(os.sep, '/'))
     if t is None:
         return src, dst, write, None
-    return src, os.path.join(out, rel), write, t if write else None
+    # a map not written still says what its merged copies stand for
+    return src, os.path.join(out, rel), write, t if write or src.lower().endswith('.lin') else None
 
 
 def plan(disc, out, only):
@@ -314,20 +334,17 @@ def main():
     rest = [j for j in jobs if not j[0].lower().endswith('.lin')]
     with concurrent.futures.ProcessPoolExecutor(max_workers=a.jobs, initializer=_init,
                                                 initargs=(a.disc,)) as pool:
-        copies = None
+        copies, named = uc2xtex.MapTextures(), uc2xtables.MapCopies()
         results = []
         for r in pool.map(_job, [(s, d, None, w, t) for s, d, w, t in maps]):
             results.append(r)
             if r[4] is not None:
-                if copies is None:
-                    copies = r[4]
-                else:
-                    copies.merge(r[4])
-        if copies is not None:
-            for src, _, _, _ in rest:
-                if src.lower().endswith('.utx'):
-                    copies.add_originals(uc2xpkg.Package.load(src))
-        results += list(pool.map(_job, [(s, d, copies, w, t) for s, d, w, t in rest]))
+                copies.merge(r[4][0])
+                named.merge(r[4][1])
+        for src, _, _, _ in rest:
+            if src.lower().endswith('.utx'):
+                copies.add_originals(uc2xpkg.Package.load(src))
+        results += list(pool.map(_job, [(s, d, (copies, named), w, t) for s, d, w, t in rest]))
         for src, dst, counts, warnings, _, secs, err in results:
             if counts is None and not err:
                 continue

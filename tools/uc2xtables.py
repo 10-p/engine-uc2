@@ -22,7 +22,9 @@ server.
 
 The merged copies are matched once, by make(), from the PC map and the disc's: both maps' common exports, walked
 side by side (their references and names aligned where the two differ), say which import each copy's references
-stand for.
+stand for. copy_identities() extends that to the copies only other copies refer to (a shader's texture), and
+MapCopies gathers what every map's copies stand for: the content packages take the pixels and the geometry the
+disc holds only in a map's copy from the copies of exactly that object.
 """
 import collections
 import difflib
@@ -32,7 +34,7 @@ import json
 import struct
 
 import uc2xrefs
-from uc2xpkg import Export, Package, RF_HasStack, RF_LoadRuntime
+from uc2xpkg import Export, FormatError, Package, RF_HasStack, RF_LoadRuntime
 
 FORMAT = 1
 
@@ -193,6 +195,85 @@ def make(pc, disc, types):
     if prefer:
         t['prefer'] = prefer
     return t, stats
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# What the maps' merged copies stand for
+# ---------------------------------------------------------------------------------------------------------------
+def copy_identities(disc, t, types, original):
+    """{merged copy name (lower case): path of the content package object it stands for} of the disc's map disc
+    (Xbox format): the copies the PC map imports, from its tables t; then each copy that identified copies refer
+    to, from the object their originals refer to at the same place, where a copy's tag stream and its original's
+    line up. original(package name) is the disc's content package of that name, or None. A copy two referrers
+    disagree on is left out."""
+    pc = package_of(t)
+    found = {cla: pc.ref_path(ref) for cla, ref in t.get('merged', {}).items()}
+    copies = {disc.name(disc.exports[i].name).lower(): i for i in range(len(disc.exports))
+              if _is_merged(disc, i) and disc.exports[i].data}
+    paths = {}
+    disputed = set()
+    queue = list(found)
+    while queue:
+        cla = queue.pop()
+        i = copies.get(cla)
+        pkg_name, _, rest = found[cla].partition('.')
+        orig = original(pkg_name) if i is not None else None
+        if orig is None:
+            continue
+        if orig.path not in paths:
+            paths[orig.path] = {orig.export_path(j).lower(): j for j in range(len(orig.exports))}
+        j = paths[orig.path].get(rest.lower())
+        if j is None or orig.export_class(j) != disc.export_class(i) or not orig.exports[j].data:
+            continue
+        try:
+            rd, ro = uc2xrefs.tag_references(disc, types, i), uc2xrefs.tag_references(orig, types, j)
+        except (FormatError, IndexError, KeyError, struct.error):
+            continue
+        dd, do = disc.exports[i].data, orig.exports[j].data
+        if _tokens(disc, dd, rd) != _tokens(orig, do, ro):
+            continue
+        for (ad, kind), (ao, _) in zip(rd, ro):
+            v, w = _i32(dd, ad), _i32(do, ao)
+            if kind != 'ref' or v <= 0 or not _is_merged(disc, v - 1) or w == 0:
+                continue
+            target = orig.ref_path(w) if w < 0 else '%s.%s' % (pkg_name, orig.export_path(w - 1))
+            name = disc.name(disc.exports[v - 1].name).lower()
+            if name not in found:
+                found[name] = target
+                queue.append(name)
+            elif found[name].lower() != target.lower():
+                disputed.add(name)
+    return {k: v for k, v in found.items() if k not in disputed}
+
+
+class MapCopies:
+    """The maps' merged copies by what they stand for (copy_identities), for the content packages whose own data
+    the disc holds only in a map's copy:
+
+        named = uc2xtables.MapCopies()
+        named.add('dm-legacy', uc2xtables.copy_identities(map_pkg, tables, types, original))
+        named.find('T_NK_Tech.Walls.Wall01')         # [('dm-legacy', 'cla12'), ...]
+        named.stands_for('dm-legacy', 'cla12')       # 'T_NK_Tech.Walls.Wall01' (lower case), or None
+    """
+
+    def __init__(self):
+        self.by_path = {}
+        self.by_copy = {}
+
+    def add(self, map_name, identities):
+        for cla, path in identities.items():
+            self.by_copy[(map_name.lower(), cla.lower())] = path.lower()
+            self.by_path.setdefault(path.lower(), []).append((map_name.lower(), cla.lower()))
+
+    def merge(self, other):
+        for (m, cla), path in other.by_copy.items():
+            self.add(m, {cla: path})
+
+    def find(self, path):
+        return self.by_path.get(path.lower(), [])
+
+    def stands_for(self, map_name, cla):
+        return self.by_copy.get((map_name.lower(), cla.lower()))
 
 
 # ---------------------------------------------------------------------------------------------------------------
