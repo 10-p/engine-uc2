@@ -37,7 +37,8 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   system's folder picker (or read in place from shared storage), a resolution scale up to supersampling, an exit prompt
   on Back, an on-screen pad that is a virtual SDL controller (the mouse is off), hidden while a real pad is used and
   back on a touch, and a suspended game in the background (no tick, the OpenAL device paused).
-- **Windows build**: MinGW-w64 cross builds (i686 and x86_64), statically linked, no runtime DLL but OpenAL's.
+- **Windows build**: MinGW-w64 cross builds (i686 and x86_64), statically linked, no runtime DLL but OpenAL's; the game
+  and the editor declare one DPI awareness for the whole process (per-monitor), so Windows never scales their windows.
 - **UCC on every desktop build**: `ucc-bin` (Linux) and `ucc.exe` (Windows), 32- and 64-bit, beside the game: the
   dedicated server and the commandlets.
 - **The editor** (`UnrealEd.exe`, i686): Epic's UnrealEd, Window and WinDrv built with MinGW, its viewports drawn by the

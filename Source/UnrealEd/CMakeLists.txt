@@ -39,6 +39,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   -Wl,--whole-archive ${LINK_PACKAGES} -Wl,--no-whole-archive
   SDL2::SDL2-static zlib ws2_32 winmm comctl32 comdlg32 shell32 ole32 dinput8 dxguid dxerr8 imm32 gdi32 opengl32)
 
-# The dialogs, menus, bitmaps and cursors of Window, WinDrv and UnrealEd, merged into one resource object.
+# The dialogs, menus, bitmaps and cursors of Window, WinDrv and UnrealEd and the application manifest, merged into one
+# resource object.
 uc2_win32_resources(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/Src/res/UnrealEd.rc)
-uc2_link_win32_resources(${PROJECT_NAME} Window WinDrv ${PROJECT_NAME})
+uc2_link_win32_resources(${PROJECT_NAME} Window WinDrv ${PROJECT_NAME} UC2Manifest)

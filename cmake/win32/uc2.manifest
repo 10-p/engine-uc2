@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <!-- The application manifest of the Windows programs with windows, uc2.exe and UnrealEd.exe (Manifest.rc).
+       One DPI awareness for the whole process, declared before any window exists: per-monitor aware (system aware
+       before Windows 8.1). Windows then never scales a window's pixels, so GDI, the dialogs and the OpenGL
+       viewports share one coordinate space; the programs draw at the display's pixel size. -->
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+    </windowsSettings>
+  </application>
+</assembly>
