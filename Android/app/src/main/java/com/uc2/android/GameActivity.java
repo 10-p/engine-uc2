@@ -74,8 +74,11 @@ public class GameActivity extends SDLActivity {
     static native void nativeTouchPadButton(int button, boolean down);
     static native void nativeTouchPadAxis(int axis, float value);
     static native int nativeTouchPadState();
+    // Gyro aiming (GyroAim): the view's turn in degrees, to the right and up, which the engine adds up and applies in play.
+    static native void nativeGyroLook(float yawDegrees, float pitchDegrees);
 
     private PadOverlayView pad;
+    private GyroAim gyro;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -110,6 +113,20 @@ public class GameActivity extends SDLActivity {
         } catch (Throwable t) {
             Log.e(TAG, "could not add the on-screen pad", t);
         }
+        gyro = GyroAim.fromIntent(this);
+    }
+
+    // The gyro is read while the game is in front.
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (gyro != null) gyro.start();
+    }
+
+    @Override
+    protected void onPause() {
+        if (gyro != null) gyro.stop();
+        super.onPause();
     }
 
     /**

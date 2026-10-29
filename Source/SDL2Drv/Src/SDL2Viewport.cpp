@@ -1314,9 +1314,10 @@ void USDL2Viewport::UpdateInput( UBOOL Reset, FLOAT DeltaSeconds )
 		Client->UpdateBoundPad( this, DeltaSeconds );
 
 	// The keyboard and the mouse belong to the window's viewport, player one; a split-screen
-	// viewport has its pad only.
+	// viewport has its pad only. So does gyro aiming (Android).
 	if( !Window )
 		return;
+	Client->ApplyGyro( this, DeltaSeconds );
 
 	BYTE Down[256];
 	appMemzero( Down, sizeof(Down) );

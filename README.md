@@ -36,7 +36,8 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   GL4ES on OpenGL ES 3, sound on OpenSL ES, the game folder copied into internal storage from a folder chosen with the
   system's folder picker (or read in place from shared storage), a resolution scale up to supersampling, an exit prompt
   on Back, an on-screen pad that is a virtual SDL controller (the mouse is off), hidden while a real pad is used and
-  back on a touch, and a suspended game in the background (no tick, the OpenAL device paused).
+  back on a touch, gyro aiming (a launcher switch, off by default, with horizontal and vertical sensitivities) that
+  turns the view linearly and leaves the pad's mode alone, and a suspended game in the background (no tick, the OpenAL device paused).
 - **Windows build**: MinGW-w64 cross builds (i686 and x86_64), statically linked, no runtime DLL but OpenAL's.
 - **UCC on every desktop build**: `ucc-bin` (Linux) and `ucc.exe` (Windows), 32- and 64-bit, beside the game: the
   dedicated server and the commandlets.

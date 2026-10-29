@@ -56,7 +56,8 @@ import java.util.Locale;
  * anywhere else on shared storage (/sdcard/UC2, an SD card's UC2) needs All files access: starting from there
  * without it asks to allow it or to copy the game to internal storage instead. "Clear internal storage" deletes the
  * internal copy; "Copy settings and saves" writes the internal copy's inis and saves back to the chosen
- * folder. The resolution scale is the frame's size against the screen's (above 1: supersampling).
+ * folder. The resolution scale is the frame's size against the screen's (above 1: supersampling). Gyro aiming (on or
+ * off, and its sensitivities: {@link GyroAim}) is the player's too.
  *
  * Start game launches {@link GameActivity} in its own process with these choices on the Intent; it also
  * starts by itself after a countdown that the first touch or key stops. The page is built in code (the app
@@ -71,6 +72,9 @@ public class MainActivity extends Activity {
     private static final String PREF_EXTERNAL = "runFromExternal";
     private static final String PREF_FOLDER = "folderUri";
     private static final String PREF_SCALE = "renderScale";
+    private static final String PREF_GYRO_AIM = "gyroAim";
+    private static final String PREF_GYRO_YAW = "gyroYawScale";
+    private static final String PREF_GYRO_PITCH = "gyroPitchScale";
     // The scale's slider: 0.25 to 1.00 in steps of 0.05; the field also takes values from 0.1 to 4.
     private static final float SCALE_MIN = 0.25f, SCALE_STEP = 0.05f, FIELD_MIN = 0.1f, FIELD_MAX = 4f;
     private static final int SCALE_STEPS = 15;
@@ -220,6 +224,7 @@ public class MainActivity extends Activity {
         });
 
         buildScaleRow(col);
+        buildGyroRows(col);
         buildRendererRow(col);
 
         label(col, "Choose the UC2 folder (on the device or an SD card) and copy it to internal storage for the fastest "
@@ -334,6 +339,130 @@ public class MainActivity extends Activity {
         return s.endsWith("0") ? s.substring(0, s.length() - 1) : s;
     }
 
+    // ---- gyro aiming ----------------------------------------------------------------------------
+
+    private Switch gyroSwitch;
+
+    private void buildGyroRows(LinearLayout col) {
+        label(col, "Gyro aiming", 14f, 0xFFB8BCC2, 20);
+        gyroSwitch = new Switch(this);
+        gyroSwitch.setTextColor(0xFFECEFF3);
+        gyroSwitch.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f);
+        gyroSwitch.setChecked(prefs().getBoolean(PREF_GYRO_AIM, false));
+        gyroSwitch.setText(gyroSwitch.isChecked() ? "On" : "Off");
+        gyroSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override public void onCheckedChanged(CompoundButton b, boolean checked) {
+                gyroSwitch.setText(checked ? "On" : "Off");
+                prefs().edit().putBoolean(PREF_GYRO_AIM, checked).apply();
+            }
+        });
+        col.addView(gyroSwitch);
+        label(col, "In play, turning or twisting the device turns the view, and tilting it looks up and down.", 12f, 0xFF9AA0A8, 2);
+        new NumberRow(col, "Horizontal sensitivity", PREF_GYRO_YAW, GyroAim.SCALE_MIN, GyroAim.SCALE_MAX, 0.05f, GyroAim.SCALE_DEFAULT) {
+            @Override String describe(float v) {
+                return String.format(Locale.US, "The view turns %.2f degrees for each degree the device turns", v);
+            }
+        };
+        new NumberRow(col, "Vertical sensitivity", PREF_GYRO_PITCH, GyroAim.SCALE_MIN, GyroAim.SCALE_MAX, 0.05f, GyroAim.SCALE_DEFAULT) {
+            @Override String describe(float v) {
+                return String.format(Locale.US, "The view tilts %.2f degrees for each degree the device tilts", v);
+            }
+        };
+    }
+
+    /**
+     * A number setting: a slider over its steps, a field for the exact value and a line on what it does, saved as it
+     * changes. limit() keeps a value inside bounds another setting sets; changed() tells the settings that depend on it.
+     */
+    private abstract class NumberRow {
+        private final String pref;
+        private final float min, max, step, def;
+        private final SeekBar bar;
+        private final EditText field;
+        private final TextView note;
+        private boolean updating = false;
+
+        NumberRow(LinearLayout col, String title, String pref, float min, float max, float step, float def) {
+            this.pref = pref;
+            this.min = min;
+            this.max = max;
+            this.step = step;
+            this.def = def;
+            label(col, title, 13f, 0xFFB8BCC2, 10);
+            LinearLayout row = new LinearLayout(MainActivity.this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            col.addView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            bar = new SeekBar(MainActivity.this);
+            bar.setMax(Math.round((max - min) / step));
+            row.addView(bar, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            field = new EditText(MainActivity.this);
+            field.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+            field.setImeOptions(EditorInfo.IME_ACTION_DONE);
+            field.setSingleLine(true);
+            field.setTextColor(0xFFECEFF3);
+            field.setGravity(Gravity.CENTER);
+            row.addView(field, new LinearLayout.LayoutParams(dp(88), ViewGroup.LayoutParams.WRAP_CONTENT));
+            note = label(col, "", 12f, 0xFF9AA0A8, 2);
+            show(value(), true, true);
+
+            bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override public void onProgressChanged(SeekBar b, int progress, boolean fromUser) {
+                    if (fromUser && !updating) set(NumberRow.this.min + progress * NumberRow.this.step, false, true);
+                }
+                @Override public void onStartTrackingTouch(SeekBar b) { cancelCountdown(true); }
+                @Override public void onStopTrackingTouch(SeekBar b) {}
+            });
+            field.addTextChangedListener(new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+                @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
+                @Override public void afterTextChanged(Editable s) {
+                    if (updating) return;
+                    float v;
+                    try { v = Float.parseFloat(s.toString().trim()); } catch (NumberFormatException e) { v = -1f; }
+                    if (v >= NumberRow.this.min && v <= NumberRow.this.max) set(v, true, false);
+                    else note.setText(String.format(Locale.US, "Enter a value from %s to %s.",
+                            format(NumberRow.this.min), format(NumberRow.this.max)));
+                }
+            });
+        }
+
+        float limit(float v) { return v; }
+        abstract String describe(float v);
+        void changed(float v) {}
+
+        /** The saved value, in its range and its limit. */
+        float value() { return limit(Math.max(min, Math.min(max, prefs().getFloat(pref, def)))); }
+
+        /** Takes the saved value through limit() again: a setting it depends on moved. */
+        void refit() {
+            float v = value();
+            prefs().edit().putFloat(pref, v).apply();
+            show(v, true, true);
+        }
+
+        private void set(float v, boolean moveBar, boolean writeField) {
+            float kept = limit(v);
+            prefs().edit().putFloat(pref, kept).apply();
+            show(kept, moveBar || kept != v, writeField || kept != v);
+            changed(kept);
+        }
+
+        private void show(float v, boolean moveBar, boolean writeField) {
+            updating = true;
+            if (moveBar) bar.setProgress(Math.round((v - min) / step));
+            if (writeField) field.setText(format(v));
+            updating = false;
+            note.setText(describe(v));
+        }
+    }
+
+    /** Up to two decimals, without trailing zeros. */
+    private static String format(float v) {
+        String s = String.format(Locale.US, "%.2f", v);
+        return s.replaceAll("0+$", "").replaceAll("\\.$", "");
+    }
+
     // ---- start and the countdown ----------------------------------------------------------------
 
     private void startCountdown() {
@@ -391,6 +520,9 @@ public class MainActivity extends Activity {
         Intent i = new Intent(this, GameActivity.class);
         i.putExtra(GameActivity.EXTRA_STORAGE_MODE, mode);
         i.putExtra(GameActivity.EXTRA_RENDER_SCALE, scale);
+        i.putExtra(GyroAim.EXTRA_GYRO_AIM, prefs().getBoolean(PREF_GYRO_AIM, false));
+        i.putExtra(GyroAim.EXTRA_GYRO_YAW_SCALE, GyroAim.scale(prefs().getFloat(PREF_GYRO_YAW, GyroAim.SCALE_DEFAULT)));
+        i.putExtra(GyroAim.EXTRA_GYRO_PITCH_SCALE, GyroAim.scale(prefs().getFloat(PREF_GYRO_PITCH, GyroAim.SCALE_DEFAULT)));
         // An engine command line this launcher was started with (adb: GameActivity is not exported).
         String extraArgs = getIntent() != null ? getIntent().getStringExtra(GameActivity.EXTRA_ARGS) : null;
         // The renderer chosen below goes after them (an adb command line's own -*RENDERER switch comes first).
