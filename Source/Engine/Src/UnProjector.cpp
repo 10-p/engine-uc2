@@ -1049,7 +1049,7 @@ public:
 				{
 					Indices[0] = Actor->StaticMesh->IndexBuffer.Indices(Section->FirstIndex + TriangleIndex * 3 + 0);
 					Indices[1] = Actor->StaticMesh->IndexBuffer.Indices(Section->FirstIndex + TriangleIndex * 3 + 1);
-					Indices[1] = Actor->StaticMesh->IndexBuffer.Indices(Section->FirstIndex + TriangleIndex * 3 + 2);
+					Indices[2] = Actor->StaticMesh->IndexBuffer.Indices(Section->FirstIndex + TriangleIndex * 3 + 2);
 				};
 
 				if(UnclippedVertices(Indices[0]).ClipCode & UnclippedVertices(Indices[1]).ClipCode & UnclippedVertices(Indices[2]).ClipCode)
