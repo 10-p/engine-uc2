@@ -3,7 +3,7 @@
 packages of the same content, and the disc's .LIN cut with Epic's Xbox maps. Prints one line per check.
 
     tools/dev/xbox-packages-check.py --game <cooked game folder> --epic <uc2-avaris-2226> [--disc <disc folder>]
-                                     [--only tables,lin,bsp,terrain,textures,meshes,anims]
+                                     [--only tables,lin,bsp,terrain,textures,meshes,anims,used]
                                      [--maps DM-Legacy,DM-Azure]
 
 Checks (docs/porting/analysis/xbox-packages.md has the numbers of a full run):
@@ -20,6 +20,9 @@ Checks (docs/porting/analysis/xbox-packages.md has the numbers of a full run):
   meshes    each static mesh of StaticMeshes/*.usx with a PC original of package version 151: colours, UVs,
             indices identical, the largest position error in quantisation steps
   anims     each animation of Animations/*.ukx with a PC original of version 151: motion block identical
+  used      the textures, static meshes and Fonts the cook wrote without data (its report's placeholders, meshes
+            without geometry, Fonts left out) that a map's runtime exports or a script package's imports reach,
+            directly or through other content, one line each with the maps and packages that reach it
 Reads only; about two minutes for everything.
 """
 import argparse
@@ -200,16 +203,107 @@ def check_terrain(game, epic, maps):
     say('terrain: %d terrains, heightmaps identical in %d, vertex colours identical in %d' % (n, heights, colors))
 
 
-def placeholders(game):
-    """(package file name, texture path) of every texture the cook's report says got a placeholder."""
+def placeholders(game, ending=', placeholder'):
+    """(package file name, export path) of every export the cook's report gives a warning with that ending:
+    the textures that got a placeholder (default), the meshes written without geometry ('without geometry'),
+    the Fonts left out ('Font left out')."""
     out, package = set(), None
     report = os.path.join(game, 'Maps', 'xbox-packages.txt')
-    for line in open(report) if os.path.isfile(report) else ():
+    for line in open(report, encoding='latin-1') if os.path.isfile(report) else ():
         if not line.startswith(' '):
             package = os.path.basename(line.split(':')[0]).lower()
-        elif line.rstrip().endswith(', placeholder'):
+        elif line.rstrip().endswith(ending):
             out.add((package, line.split(':')[0].strip().lower()))
     return out
+
+
+class _Reach:
+    """check_used's walk: content exports reached from a root (a map or a script package), and the ones the cook
+    wrote without data."""
+
+    def __init__(self, game, kinds, types):
+        content = (('Textures', '.utx'), ('StaticMeshes', '.usx'), ('Animations', '.ukx'))
+        self.files = {os.path.basename(p).lower(): p for folder, ext in content for p in files_in(game, folder, ext)}
+        self.by_name = {os.path.splitext(f)[0]: f for f in self.files}
+        self.kinds, self.types = kinds, types
+        self.loaded, self.seen, self.queue, self.found, self.cache = {}, set(), [], {}, {}
+
+    def package(self, f):
+        if f not in self.loaded:
+            p = self.loaded[f] = Package.load(self.files[f])
+            p.paths = {p.export_path(i).lower(): i for i in range(len(p.exports))}
+        return self.loaded[f]
+
+    def refs(self, pkg, i):
+        import uc2xrefs
+        try:
+            return [struct.unpack_from('<i', pkg.exports[i].data, at)[0]
+                    for at, kind in uc2xrefs.references(pkg, self.types, i) if kind == 'ref']
+        except (uc2xpkg.FormatError, IndexError, KeyError, struct.error):
+            return []
+
+    def visit(self, f, j, root):
+        if (f, j) in self.seen:
+            return
+        self.seen.add((f, j))
+        q = self.package(f)
+        self.queue.append((q, j))
+        kind = self.kinds.get((f, q.export_path(j).lower()))
+        if kind:
+            self.found.setdefault((kind, '%s.%s' % (os.path.splitext(f)[0], q.export_path(j))), set()).add(root)
+
+    def ref(self, pkg, v, root):
+        """Follow reference v of pkg: an import of a content package's export, or an export of a content package."""
+        if v > 0:
+            f = os.path.basename(pkg.path).lower()
+            if f in self.files:
+                self.visit(f, v - 1, root)
+        elif v < 0:
+            path = pkg.ref_path(v)
+            f = self.by_name.get(path.split('.')[0].lower())
+            if f is not None:
+                q = self.package(f)
+                j = q.paths.get(path.split('.', 1)[-1].lower())
+                # the engine resolves an import by path and class (ULinkerLoad::VerifyImport)
+                if j is not None and q.export_class(j).lower() == pkg.ref_class(v).lower():
+                    self.visit(f, j, root)
+
+    def run(self, root, pkg, refs):
+        for v in refs:
+            self.ref(pkg, v, root)
+        while self.queue:
+            q, j = self.queue.pop()
+            key = (q.path, j)
+            if key not in self.cache:
+                self.cache[key] = self.refs(q, j) if q.exports[j].data else []
+            for v in self.cache[key]:
+                self.ref(q, v, root)
+
+
+def check_used(game):
+    """The content the game reaches that the cook wrote without data: from every map's runtime exports and every
+    script package's imports, the references followed through the content packages."""
+    import uc2types
+    kinds = {k: 'placeholder' for k in placeholders(game)}
+    kinds.update({k: 'no geometry' for k in placeholders(game, 'without geometry')})
+    kinds.update({k: 'Font left out' for k in placeholders(game, 'Font left out')})
+    walk = _Reach(game, kinds, uc2types.Types(files_in(game, 'System', '.u')))
+    for path in files_in(game, 'Maps', '.unr'):
+        pkg = Package.load(path)
+        refs = [v for i, e in enumerate(pkg.exports) if e.data and e.runtime() for v in walk.refs(pkg, i)]
+        walk.seen = set()
+        walk.run(os.path.splitext(os.path.basename(path))[0], pkg, refs)
+    for path in files_in(game, 'System', '.u'):
+        pkg = Package.load(path)
+        walk.seen = set()
+        walk.run(os.path.basename(path), pkg, [-k - 1 for k in range(len(pkg.imports))])
+    counts = {}
+    for (kind, path), where in sorted(walk.found.items()):
+        counts[kind] = counts.get(kind, 0) + 1
+        say('used: %s %s, from %s' % (kind, path, ', '.join(sorted(where)[:6]) + (
+            ' and %d more' % (len(where) - 6) if len(where) > 6 else '')))
+    say('used: %d content exports that maps or script packages reach have no data from the disc (%s)' % (
+        len(walk.found), ', '.join('%s %d' % kv for kv in sorted(counts.items())) or 'none'))
 
 
 def check_textures(game, epic):
@@ -294,7 +388,7 @@ def main():
     ap.add_argument('--game', required=True, help='a game folder cooked from the disc')
     ap.add_argument('--epic', required=True, help="Epic's tree (uc2-avaris-2226)")
     ap.add_argument('--disc', default='', help="the disc's files, for the lin check")
-    ap.add_argument('--only', default='tables,lin,bsp,terrain,textures,meshes,anims')
+    ap.add_argument('--only', default='tables,lin,bsp,terrain,textures,meshes,anims,used')
     ap.add_argument('--maps', default='')
     a = ap.parse_args()
     only = set(a.only.split(','))
@@ -313,6 +407,8 @@ def main():
         check_meshes(a.game, a.epic)
     if 'anims' in only:
         check_anims(a.game, a.epic)
+    if 'used' in only:
+        check_used(a.game)
 
 
 if __name__ == '__main__':
