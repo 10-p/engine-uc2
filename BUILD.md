@@ -166,6 +166,10 @@ D3DDrv does it: the hit rectangle is read back around every hit proxy).
   and the editor's localisation. `tools/dev/unrealed-files.sh <build> <dest>` copies the list (`UC2_EPIC_SOURCES` for
   another drop); `bin/package-release.sh uc2 <version> unrealed` (the release's `unrealed-windows-x86` zip),
   `tools/dev/package-windows.sh` and `tools/dev/mkrun-uc2.sh` use it.
+- Maps cooked from the disc do not open in the editor: their brushes (the `Brush` actors with their `Model` and
+  `Polys`, and the editor's `Camera`s, exports that only the editor loads) are not on the disc, so the cook writes those
+  exports empty and loading one stops (`InPos<=Size`, `Bad import index`). The game plays these maps from their built
+  geometry. The cooked texture, static mesh and animation packages open in the browsers; PC-format maps open.
 - Run: `tools/dev/mkrun-uc2.sh build-windows <tree>` puts `UnrealEd.exe` and its files in `System/` beside the game's
   `Editor.u` and `UnrealEd.u`; start it from `System/` (under wine: `wine ./UnrealEd.exe`). It reads its own
   system ini, `UC2Editor.ini` (made from `Default.ini` on the first start), where it sets `WinDrv.WindowsClient` and
