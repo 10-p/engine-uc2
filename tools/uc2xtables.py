@@ -285,7 +285,7 @@ class _Rewrite:
         self.out = package_of(t)
         self.merged = t.get('merged', {})
         self.prefer = t.get('prefer', {})
-        self.stats = collections.Counter()
+        self.stats = collections.Counter(exports=0)  # a package with no export written still reports its tables
         out = self.out
         self.names = {}
         for k, (s, _) in enumerate(out.names):

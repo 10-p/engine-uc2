@@ -28,7 +28,9 @@ What the formats hold (Engine/Src/UnTex.cpp, XboxAssetConversion/Src/Launch.cpp,
             a map's textures are renamed cla<N> and bundled in <Map>.xpr.
   Cubemap   a Texture whose Mips are empty in both formats (the faces are Textures): copied.
   Palette   tags, TArray<FColor>: the same in both formats, copied.
-  Font      tags, Characters, Textures, Kerning, CharRemap, IsRemapped: the same in both formats, copied.
+  Font      tags, Characters, Textures, Kerning, CharRemap, IsRemapped: the same in both formats, copied; a Font
+            none of whose pages has pixels on the disc (fonts_without_pages) is left out by the package converter,
+            with the exports inside it (its glyphs would draw as placeholder blocks).
 How the bundler stored each PC format (UMaterialExporterRDF, CTexture2D):
   DXT1/3/5  the PC mips verbatim in block order ('Raw 1': D3DX loads the exported DDS with a full chain, so the
             data runs down to 1x1 whatever the header's level count). D3DX decodes and re-encodes the levels
@@ -572,6 +574,28 @@ def texture_report(pkg, i, ctx):
     note.update(kind='xpr', bundle=tex.bundle, resource=tex.name, candidates=candidates, split=split,
                 xbox_levels=tex.levels)
     return head, info, tex, mips, note
+
+
+def font_pages(pkg, i):
+    """The export indices of Font export i's page Textures (its native Textures array) in its own package."""
+    e = pkg.exports[i]
+    _, head = read_tags(pkg, e.data, e.flags)
+    r = Reader(e.data, head)
+    r.take(17 * r.count())                  # Characters: StartU, StartV, USize, VSize (i32), TextureIndex (u8)
+    refs = [r.i32() for _ in range(r.count())]
+    return [v - 1 for v in refs if v > 0 and pkg.export_class(v - 1) == 'Texture']
+
+
+def fonts_without_pages(pkg, ctx):
+    """(export index, page count) of the Fonts of an Xbox package none of whose pages has pixels on the disc: their
+    glyphs would draw as placeholder blocks. Before the conversion (the pages' data is the Xbox's)."""
+    out = []
+    for i in range(len(pkg.exports)):
+        if pkg.export_class(i) == 'Font' and pkg.exports[i].data:
+            pages = font_pages(pkg, i)
+            if pages and all(texture_report(pkg, j, ctx)[4]['kind'] == 'placeholder' for j in pages):
+                out.append((i, len(pages)))
+    return out
 
 
 def convert(pkg, i, ctx):

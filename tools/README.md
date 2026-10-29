@@ -73,4 +73,6 @@ In the repository the cook is `tools/cook.py`.
 - **Scripts, settings and translations** are copied as they are.
 
 `COOK.txt` in the game folder says what was made from what, and `Maps/xbox-packages.txt` lists what the disc does not
-have (a texture the disc never carried shows as a placeholder). If a step fails, its log is in `.cook-logs/`.
+have: a texture the disc never carried shows as a placeholder, a static mesh it never carried has no geometry, and a
+font none of whose pages it carried is left out (the editor then draws its text with the game's own font). If a step
+fails, its log is in `.cook-logs/`.

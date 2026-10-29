@@ -29,12 +29,12 @@ The formats and what the conversion keeps are in docs/porting/analysis/xbox-pack
 tagged properties are the same in both formats and are copied; the classes whose native data differs are rewritten
 by the converters (uc2xbsp.py: models, uc2xtex.py: textures, uc2xmesh.py: static meshes, uc2xskel.py: skeletal
 meshes and animations, uc2xterrain.py: terrain); everything else is copied as it is. Left out: what the PC never
-loads (editor-only exports, which a .LIN does not hold) and Xbox-only data the PC builds itself (terrain sector
-blocks and layer weight maps, clipped static projectors). The maps are converted first: their merged copies of
-content-package assets supply the pixels and the geometry those packages lack, each copy taken for the object its
-map's PC tables say it stands for (uc2xtables.copy_identities). Each package is then rewritten into its PC
-package's tables, so that a server on these packages and a client on the PC ones agree. tools/cook.py runs it as one
-step of a whole cook (--source xbox).
+loads (editor-only exports, which a .LIN does not hold), Xbox-only data the PC builds itself (terrain sector
+blocks and layer weight maps, clipped static projectors) and the Fonts none of whose pages is on the disc, with the
+exports inside them. The maps are converted first: their merged copies of content-package assets supply the pixels
+and the geometry those packages lack, each copy taken for the object its map's PC tables say it stands for
+(uc2xtables.copy_identities). Each package is then rewritten into its PC package's tables, so that a server on these
+packages and a client on the PC ones agree. tools/cook.py runs it as one step of a whole cook (--source xbox).
 """
 
 import argparse
@@ -134,6 +134,16 @@ def drop_export(e):
     e.flags &= ~(uc2xpkg.RF_LoadRuntime | uc2xpkg.RF_LoadForEdit)
 
 
+def inside(pkg, k, i):
+    """Is export k inside export i (i among its outers)?"""
+    ref = pkg.exports[k].pkg
+    while ref > 0:
+        if ref - 1 == i:
+            return True
+        ref = pkg.exports[ref - 1].pkg
+    return False
+
+
 def load_xbox(src):
     """An Xbox package: a .LIN cut back into its exports (the entry level out of System/Script.lin), or a file."""
     if src.lower().endswith('.lin'):
@@ -212,6 +222,16 @@ def convert_package(src, dst, copies=None, write=True, tables=None):
             drop_export(pkg.exports[i])
             left_out.add(i)
             counts['left out'] += 1
+    else:
+        # a Font with no page on the disc would draw blocks; what it holds cannot be created without it
+        for i, pages in uc2xtex.fonts_without_pages(pkg, ctx):
+            held = [k for k in range(len(pkg.exports)) if k != i and inside(pkg, k, i)]
+            for k in [i] + held:
+                drop_export(pkg.exports[k])
+                left_out.add(k)
+                counts['left out'] += 1
+            ctx.warn('%s: none of its %d pages is on the disc, %d exports inside it; Font left out' % (
+                pkg.export_path(i), pages, len(held)))
     conv = _state['conv']
     for i, e in enumerate(pkg.exports):
         if i in left_out:
@@ -355,7 +375,7 @@ def main():
                 print('FAILED %s: %s' % (rel, err), flush=True)
                 report.append('%s: FAILED: %s' % (rel, err))
                 continue
-            line = ('%s: %d converted, %d copied, %d editor-only and %d Xbox-only left out, %d failed, '
+            line = ('%s: %d converted, %d copied, %d editor-only and %d other exports left out, %d failed, '
                     '%d warnings' % (rel, counts['converted'], counts['copied'], counts['editor-only'],
                                      counts['left out'], counts['failed'], len(warnings)))
             if 'exports' in counts:
