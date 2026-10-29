@@ -53,9 +53,10 @@ without geometry.
 What the PC format gets: positions unpacked to within half a quantisation step (CompressionScale / 32767 per axis)
 plus single-precision rounding, normals to within an eighth of a degree (the middle of FVector::Pack's truncation
 interval, normalised), colours, UVs, indices and everything else exact; the wireframe rebuilt as UStaticMesh::Build
-does but from the stripped triangles (the same line segments, in another order and direction); RawTriangles empty
-(only UStaticMesh::Build and the editor read them; InternalVersion 14 keeps PostLoad from rebuilding); instance
-Lights empty (the baked ColorStream is drawn as is; the editor's incremental relighting reads them).
+does but from the stripped triangles (the same line segments, in another order and direction); RawTriangles, the
+editor's source triangles (only UStaticMesh::Build and the editor read them; InternalVersion 14 keeps PostLoad from
+rebuilding), rebuilt from the render data by tools/uc2xrawtri.py; instance Lights empty (the baked ColorStream is
+drawn as is; the editor's incremental relighting reads them).
 """
 import array
 import hashlib
@@ -63,6 +64,7 @@ import os
 import struct
 
 import uc2xpkg
+import uc2xrawtri
 from uc2xpkg import FormatError, Reader, object_head_end
 
 STATICMESH_VERSION = 14
@@ -305,8 +307,8 @@ def parse_mesh(data, start, licensee, export_offset=0, end=None):
 
 
 def write_mesh(m):
-    """PC (licensee 0) export data and the offset of RawTriangles' skip offset in it: the array is written empty,
-    the skip offset relative to the export's start."""
+    """PC (licensee 0) export data and the offset of RawTriangles' skip offset in it: the array is m.raw_triangles
+    (count, element bytes) or empty, the skip offset relative to the export's start."""
     out = bytearray(m.head)
     out += m.prim_bounds
     out += struct.pack('<i', len(m.sections))
@@ -325,7 +327,8 @@ def write_mesh(m):
     out += struct.pack('<i', len(m.nodes) // KDOP_NODE) + m.nodes
     out += struct.pack('<i', len(m.tris) // KDOP_TRIANGLE) + m.tris
     pos = len(out)
-    out += struct.pack('<ii', pos + 8, 0)
+    count, raw = m.raw_triangles or (0, b'')
+    out += struct.pack('<ii', pos + 8 + len(raw), count) + raw
     out += struct.pack('<iI', m.internal_version, m.auth_key)
     return bytes(out), [pos]
 
@@ -626,8 +629,15 @@ def convert_mesh(pkg, i, ctx):
     m.colors, m.alpha, m.indices = streams['colors'], streams['alpha'], streams['indices']
     for k, uv in enumerate(m.uvs):
         uv[0] = streams['uv%d' % k]
-    m.wire = build_wireframe(array.array('H', m.indices), m.sections)
+    idx = array.array('H', m.indices)
+    m.wire = build_wireframe(idx, m.sections)
     m.wire_rev = m.index_rev
+    tris = [(k, t) for k, s in enumerate(m.sections) if s[5] for t in strip_triangles(idx, s)]
+    count, raw, stats = uc2xrawtri.raw_triangles(m.vertices, m.colors, [uv[0] for uv in m.uvs], tris)
+    if stats['unresolved']:
+        ctx.warn('%s: smoothing of %d triangle pairs has no smoothing group bit left; written apart'
+                 % (pkg.export_path(i), stats['unresolved']))
+    m.raw_triangles = (count, raw)
     return write_mesh(m)
 
 

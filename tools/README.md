@@ -38,7 +38,7 @@ In the repository the cook is `tools/cook.py`.
 - **Python 3.8 or newer**: <https://www.python.org/downloads/> (Linux and macOS have it).
 - **ffmpeg**: Debian/Ubuntu `sudo apt install ffmpeg`, Fedora `sudo dnf install ffmpeg` (RPM Fusion), Arch
   `sudo pacman -S ffmpeg`, macOS `brew install ffmpeg`, Windows `winget install Gyan.FFmpeg`.
-- **About 2.2 GB free** for the game folder, and as much again while a disc image is unpacked.
+- **About 2.3 GB free** for the game folder, and as much again while a disc image is unpacked.
 
 `--check` names anything missing and how to install it.
 
@@ -68,6 +68,15 @@ In the repository the cook is `tools/cook.py`.
 - **Textures, meshes and animations.** The disc keeps their pictures and geometry apart from the packages, in `.xpr`
   bundles; the cook puts them back together. Much of it is in the bundles only as a map's copy of the asset; the cook
   gives each package asset the data of the copies that stand for it (`uc2-pc-tables.json.gz` says which).
+- **The editor's source triangles.** The editor builds a static mesh's render data from source triangles it keeps
+  beside it (`RawTriangles`); the Xbox never read them and the disc does not have them. The cook writes them back
+  from the render data: each triangle's positions, UVs, colours and material as drawn, and smoothing groups from the
+  normals (faces whose normals were summed into a vertex's are smoothed together). The editor then shows each mesh's
+  real triangle count, and rebuilding a mesh gives back the cooked vertices, triangles and sections, its normals to
+  within the disc's rounding. Some rebuilds still differ: two vertices whose normals differed by less than the
+  disc's rounding weld into one, a strip of triangles can come out in another order (the order the meshes were first
+  built in decides it), and on large meshes, where the disc rounds positions coarsely, a few normals move by more
+  than a degree.
 - **Packages for network play.** The packages come out the same as the PC game folder's, so a player who cooked the
   disc and a player with the PC folder can play together.
 - **Sound and music** become Ogg Vorbis, and **movies** Ogg Theora.
