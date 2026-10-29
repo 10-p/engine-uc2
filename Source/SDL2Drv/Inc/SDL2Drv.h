@@ -95,6 +95,8 @@ class USDL2Client : public UClient, public FNotifyHook
 	BITFIELD			StartupFullscreen;
 	FLOAT				MouseXMultiplier,
 						MouseYMultiplier;
+	// Native desktop fullscreen: the display's own mode at its size; off: a mode change to FullscreenViewportX/Y.
+	BITFIELD			BorderlessFullscreen;
 
 	// Pad configuration ([SDL2Drv.SDL2Client], Epic's Xbox values as defaults).
 	INT					PadButtonThreshold;		// XINPUT_GAMEPAD_MAX_CROSSTALK: pressed above this (0..255)

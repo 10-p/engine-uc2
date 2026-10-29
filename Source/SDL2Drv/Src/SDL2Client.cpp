@@ -42,6 +42,7 @@ void USDL2Client::StaticConstructor()
 	new(GetClass(),TEXT("StartupFullscreen"), RF_Public)UBoolProperty(CPP_PROPERTY(StartupFullscreen), TEXT("Display"),  CPF_Config );
 	new(GetClass(),TEXT("MouseXMultiplier"),  RF_Public)UFloatProperty(CPP_PROPERTY(MouseXMultiplier),  TEXT("Display"),  CPF_Config );
 	new(GetClass(),TEXT("MouseYMultiplier"),  RF_Public)UFloatProperty(CPP_PROPERTY(MouseYMultiplier),  TEXT("Display"),  CPF_Config );
+	new(GetClass(),TEXT("BorderlessFullscreen"),RF_Public)UBoolProperty(CPP_PROPERTY(BorderlessFullscreen),TEXT("Display"),CPF_Config );
 
 	// Pads: what the Xbox driver hard-codes, as settings (SDL2Pads.cpp).
 	new(GetClass(),TEXT("PadButtonThreshold"),RF_Public)UIntProperty  (CPP_PROPERTY(PadButtonThreshold),TEXT("Input"),    CPF_Config );
@@ -88,6 +89,7 @@ void USDL2Client::StaticConstructor()
 	StartupFullscreen	= 0;
 	MouseXMultiplier	= 1.0f;
 	MouseYMultiplier	= 1.0f;
+	BorderlessFullscreen	= 1;
 	PadButtonThreshold	= 30;		// XINPUT_GAMEPAD_MAX_CROSSTALK (XDK Xbox.h)
 	PadStickDeadZone	= 0.0f;		// the Xbox driver passes sticks raw; the bindings have DeadZone=
 	PadRepeatDelay		= 0.2f;		// XboxViewport.cpp:469

@@ -140,6 +140,22 @@ static void AndroidFrameSize( USDL2Client* Client, INT SurfaceX, INT SurfaceY, I
 }
 #endif
 
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+//
+// The size borderless fullscreen gives the window: the desktop mode of its display (the first display before the
+// window exists). X and Y stay as they are when SDL cannot tell.
+//
+static void BorderlessSize( SDL_Window* Window, INT& X, INT& Y )
+{
+	SDL_DisplayMode Desktop;
+	if( SDL_GetDesktopDisplayMode( Window ? SDL_GetWindowDisplayIndex( Window ) : 0, &Desktop ) == 0 )
+	{
+		X = Desktop.w;
+		Y = Desktop.h;
+	}
+}
+#endif
+
 //
 // SDL mouse button -> EInputKey.
 //
@@ -337,7 +353,27 @@ UBOOL USDL2Viewport::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		if( X && Y && RenDev )
 		{
 			INT NewColorBytes = BPP==16 ? 2 : (BPP==24 || BPP==32) ? 4 : 0;
-			if( !RenDev->SetRes( this, X, Y, Fullscreen || FullscreenOnly, NewColorBytes, !Temp ) )
+			UBOOL Apply = 1;
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+			// Borderless fullscreen keeps the display's size, and a window going borderless takes it.
+			if( Fullscreen && C->BorderlessFullscreen )
+			{
+				if( BlitFlags & BLIT_Fullscreen )
+				{
+					debugf( NAME_Log, TEXT("SETRES %ix%i not applied: borderless fullscreen stays at %ix%i"), X, Y, WindowSizeX, WindowSizeY );
+					Apply = 0;
+				}
+				else
+					BorderlessSize( Window, X, Y );
+			}
+			else if( (BlitFlags & BLIT_Fullscreen) && C->BorderlessFullscreen && X == WindowSizeX && Y == WindowSizeY )
+			{
+				// Leaving borderless fullscreen at its own size gives the window back its size, as Alt+Enter does.
+				X = C->WindowedViewportX;
+				Y = C->WindowedViewportY;
+			}
+#endif
+			if( Apply && !RenDev->SetRes( this, X, Y, Fullscreen || FullscreenOnly, NewColorBytes, !Temp ) )
 				EndFullscreen();
 		}
 		if( Temp )
@@ -630,6 +666,11 @@ void USDL2Viewport::TryRenderDevice( const TCHAR* ClassName, INT NewX, INT NewY,
 		NewX = (Fullscreen || FullscreenOnly) ? C->FullscreenViewportX : C->WindowedViewportX;
 	if( NewY==INDEX_NONE )
 		NewY = (Fullscreen || FullscreenOnly) ? C->FullscreenViewportY : C->WindowedViewportY;
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	// A borderless fullscreen device is made at the size the window will have.
+	if( Fullscreen && C->BorderlessFullscreen )
+		BorderlessSize( Window, NewX, NewY );
+#endif
 
 	// Find device driver.
 	UClass* RenderClass = UObject::StaticLoadClass( URenderDevice::StaticClass(), NULL, ClassName, NULL, 0, NULL );
@@ -778,13 +819,36 @@ UBOOL USDL2Viewport::ResizeViewport( DWORD NewBlitFlags, INT InNewX, INT InNewY,
 	if( !(NewBlitFlags & BLIT_Fullscreen) && (OldBlitFlags & BLIT_Fullscreen) && Captured )
 		SetMouseCapture( 0, 0, 0 );
 
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	// A GL window is made before it goes fullscreen, so leaving fullscreen gives back the window it was.
+	if( (NewBlitFlags & BLIT_OpenGL) && !(NewBlitFlags & BLIT_Temporary) && !EnsureGLContext() )
+		return 0;
+#endif
+
 #if !defined(__ANDROID__)	// (Android: full screen above; the surface has the screen's size.)
 	if( Window && !(NewBlitFlags & BLIT_Temporary) )
 	{
 		if( NewBlitFlags & BLIT_Fullscreen )
 		{
-			SDL_SetWindowSize( Window, NewX, NewY );
-			SDL_SetWindowFullscreen( Window, SDL_WINDOW_FULLSCREEN );
+#if !defined(__EMSCRIPTEN__)
+			if( Client->BorderlessFullscreen )
+			{
+				// Borderless: SDL's desktop fullscreen. The display keeps its mode and the viewport takes the
+				// window's size; the size asked for and the profile's fullscreen size are left as they are.
+				SDL_SetWindowFullscreen( Window, SDL_WINDOW_FULLSCREEN_DESKTOP );
+				SDL_GetWindowSize( Window, &NewX, &NewY );
+				SizeX = WindowSizeX = NewX;
+				SizeY = WindowSizeY = NewY;
+				bSaveSize = 0;
+				debugf( NAME_Log, TEXT("SDL2Viewport: borderless fullscreen at %ix%i"), NewX, NewY );
+			}
+			else
+#endif
+			{
+				// Exclusive: the display changes to the mode nearest the window's size.
+				SDL_SetWindowSize( Window, NewX, NewY );
+				SDL_SetWindowFullscreen( Window, SDL_WINDOW_FULLSCREEN );
+			}
 			SetDrag( 1 );
 			SetMouseCapture( 1, 1, 0 );
 		}
@@ -870,7 +934,7 @@ UBOOL USDL2Viewport::EnsureGLContext()
 		ANSICHAR Title[256];
 		strncpy( Title, SDL_GetWindowTitle(Window), ARRAY_COUNT(Title)-1 );
 		Title[ARRAY_COUNT(Title)-1] = 0;
-		Uint32 Flags = SDL_WINDOW_OPENGL | (SDL_GetWindowFlags(Window) & (SDL_WINDOW_RESIZABLE|SDL_WINDOW_FULLSCREEN|SDL_WINDOW_HIDDEN));
+		Uint32 Flags = SDL_WINDOW_OPENGL | (SDL_GetWindowFlags(Window) & (SDL_WINDOW_RESIZABLE|SDL_WINDOW_FULLSCREEN_DESKTOP|SDL_WINDOW_HIDDEN));
 #if defined(__ANDROID__)
 		Flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
 #endif
