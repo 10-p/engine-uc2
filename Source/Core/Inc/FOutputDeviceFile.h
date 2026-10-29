@@ -49,9 +49,9 @@ public:
 					// Make log filename.
 					if( !Filename[0] )
 					{
-                        // The base-dir prefix belongs to the Windows file manager; a MinGW build
-                        // uses FFileManagerUnix, which resolves relative paths itself.
-                        #if WIN32 && defined(_MSC_VER)
+                        // On Windows the log goes into the executable's folder (appBaseDir), which appInit changes
+                        // into only after the first lines are logged; elsewhere the base folder is the working one.
+                        #ifdef _WIN32
                         // Unix systems handle this in FFileManager* classes. --ryan.
 						appStrcpy( Filename, appBaseDir() );
                         #endif

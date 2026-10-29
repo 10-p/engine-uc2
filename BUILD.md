@@ -134,6 +134,9 @@ tools/dev/package-windows.sh build-windows                        # <repo>/../ru
   drawn. The editor's buttons, icons and fixed-size boxes keep their pixel sizes while its text follows the scale, so
   a label can be cut short. Nothing changes the awareness at run time: the engine calls no DPI function, and SDL2
   calls one only when its DPI hints are set.
+- Folders: on Windows the base folder (`appBaseDir`) is the executable's, as in Epic's Windows layer; `appInit`
+  changes into it and the log goes there, so the programs start from any working folder. Elsewhere it is the working
+  folder.
 - The platform layer is Core's GCC one (`UnGnuG.h`, `UnUnix.cpp` with its `_WIN32` branches, `FFileManagerUnix.h`,
   POSIX threads through winpthreads), not Epic's MSVC `UnVcWin32.*`.
 - Under wine: `tools/dev/m12-wine.sh <dir> <prog.exe> [args]` (inside `capped`) runs one program in a private prefix

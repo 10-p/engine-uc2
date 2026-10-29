@@ -2400,9 +2400,23 @@ CORE_API const TCHAR* appBaseDir()
 		if( AndroidBaseDir && AndroidBaseDir[0] && chdir( AndroidBaseDir ) != 0 )
 			fprintf( stderr, "appBaseDir: chdir(%s) failed: %s\n", AndroidBaseDir, strerror(errno) );
 #endif
+#ifdef _WIN32
+		// The executable's folder, as Epic's Windows layer has it: appInit changes into it, so the game folder's
+		// relative paths hold whichever folder the program was started from.
+		AnsiBaseDir[0] = 0;
+		GetModuleFileNameA( NULL, AnsiBaseDir, sizeof(AnsiBaseDir) );
+		AnsiBaseDir[sizeof(AnsiBaseDir)-1] = 0;
+		ANSICHAR* Slash = strrchr( AnsiBaseDir, '\\' );
+		ANSICHAR* ForwardSlash = strrchr( AnsiBaseDir, '/' );
+		if( ForwardSlash > Slash )
+			Slash = ForwardSlash;
+		if( Slash )
+			*Slash = 0;
+#else
 		// If the executable isn't launched from its own directory, then the
 		// dynamic linker won't be able to find the shared libraries.
 		getcwd( AnsiBaseDir, sizeof(AnsiBaseDir) );
+#endif
         appStrcpy( BaseDir, ANSI_TO_TCHAR(AnsiBaseDir));
 		appStrcat( BaseDir, TEXT("/") );
 	}
