@@ -68,6 +68,15 @@ In the repository the cook is `tools/cook.py`.
 - **Textures, meshes and animations.** The disc keeps their pictures and geometry apart from the packages, in `.xpr`
   bundles; the cook puts them back together. Much of it is in the bundles only as a map's copy of the asset; the cook
   gives each package asset the data of the copies that stand for it (`uc2-pc-tables.json.gz` says which).
+- **The editor's source triangles.** The editor builds a static mesh's render data from source triangles it keeps
+  beside it (`RawTriangles`); the Xbox never read them and the disc does not have them. The cook writes them back
+  from the render data: each triangle's positions, UVs, colours and material as drawn, and smoothing groups from the
+  normals (faces whose normals were summed into a vertex's are smoothed together). The editor then shows each mesh's
+  real triangle count, and rebuilding a mesh gives back the cooked vertices, triangles and sections, its normals to
+  within the disc's rounding. Some rebuilds still differ: two vertices whose normals differed by less than the
+  disc's rounding weld into one, a strip of triangles can come out in another order (the order the meshes were first
+  built in decides it), and on large meshes, where the disc rounds positions coarsely, a few normals move by more
+  than a degree.
 - **Packages for network play.** The packages come out the same as the PC game folder's, so a player who cooked the
   disc and a player with the PC folder can play together.
 - **Sound and music** become Ogg Vorbis, and **movies** Ogg Theora.
