@@ -139,7 +139,8 @@ tools/dev/package-windows.sh build-windows                        # <repo>/../ru
   changes into it and the log goes there, so the programs start from any working folder. Elsewhere it is the working
   folder.
 - The platform layer is Core's GCC one (`UnGnuG.h`, `UnUnix.cpp` with its `_WIN32` branches, `FFileManagerUnix.h`,
-  POSIX threads through winpthreads), not Epic's MSVC `UnVcWin32.*`.
+  POSIX threads through winpthreads), not Epic's MSVC `UnVcWin32.*`. Its `appMsgf` shows a Win32 message box with
+  Epic's buttons (Yes/No, OK/Cancel or OK) and returns the answer, as `UnVcWin32.cpp` does.
 - Under wine: `tools/dev/m12-wine.sh <dir> <prog.exe> [args]` (inside `capped`) runs one program in a private prefix
   (`$UC2_WINEPREFIX`, default `<repo>/../.cache/wine-m12`) and kills its wineserver afterwards.
 - `windows64` (x86_64): see "64-bit" below.

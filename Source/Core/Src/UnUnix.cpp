@@ -1091,6 +1091,20 @@ CORE_API const UBOOL appMsgf( INT Type, const TCHAR* Fmt, ... )
     appStrcpy(GMacOSAlertBoxOnExit, TempStr);
     appRequestExit(0);
     unguard;
+#elif defined(_WIN32)
+	// A message box with the buttons of Type, as Epic's Win32 layer: 1 Yes/No, 2 OK/Cancel (1 for Yes or OK), else OK.
+	guard(appMsgf);
+	switch( Type )
+	{
+		case 1:
+			return MessageBox( NULL, TempStr, TEXT("Message"), MB_YESNO ) == IDYES;
+		case 2:
+			return MessageBox( NULL, TempStr, TEXT("Message"), MB_OKCANCEL ) == IDOK;
+		default:
+			MessageBox( NULL, TempStr, TEXT("Message"), MB_OK );
+			break;
+	}
+	unguard;
 #else
     printf("appMsgf(): %s\n", TCHAR_TO_ANSI(TempStr));
     appDebugBreak();
