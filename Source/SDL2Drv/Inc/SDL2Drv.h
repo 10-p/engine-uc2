@@ -185,6 +185,9 @@ class USDL2Client : public UClient, public FNotifyHook
 	// Android's Back (SDL2Android.cpp; nothing off Android).
 	UBOOL BackLeavesGame();
 	void AskToExit();
+
+	// Gyro aiming into player one's view; whether the look is the gyro's (SDL2Android.cpp; 0 off Android).
+	UBOOL ApplyGyro( UViewport* Viewport, FLOAT DeltaSeconds );
 };
 
 /*-----------------------------------------------------------------------------

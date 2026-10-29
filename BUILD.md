@@ -300,6 +300,31 @@ button, or a stick, trigger or hat pushed half way (Android's input events,
 `GameActivity.dispatchKeyEvent`/`dispatchGenericMotionEvent`), hides the whole overlay; a touch on the screen shows it
 again and does nothing else. Which pad has which port is the engine's alone.
 
+Gyro aiming is the launcher's "Gyro aiming" switch (off by default) and its horizontal and vertical sensitivities (0.1
+to 5, 1 by default), saved with the other settings and handed to the game when it starts (`GyroAim.EXTRA_GYRO_AIM`,
+`EXTRA_GYRO_YAW_SCALE`, `EXTRA_GYRO_PITCH_SCALE`). A sensitivity is view degrees per device degree: at 1 the view
+turns as far as the device. `GyroAim.java` reads the gyroscope and gravity while the game is in front, in either
+landscape: tilting the device's top edge towards the player looks up; left and right is the turn about the world's
+vertical ("player space": turning the device, and twisting it like a wheel once it is tilted back), never more than
+the device's own turn and twist. The game tells the pad from the mouse by their input (the pad's stick curve, adhesion
+and auto-centring; the mouse's linear look of the `mouse-look` set and its key glyphs from SDL's mouse events), so the
+gyro takes neither path: `USDL2Client::ApplyGyro` (`SDL2Android.cpp`), from player one's input update in the player's
+tick, turns the controller's rotation by whole rotation units (65536 a turn, the rest carried to the next tick) just
+before `PlayerTick`, whose `UpdateRotation` starts from it and adds the sticks, adhesion and lock-on; the pitch stays
+within the camera's 16000 units up or down. The zoom slows it as it slows the pad's and the mouse's turns (their
+`DesiredFOV * 0.01111`): the turn is times `DesiredFOV / DefaultFOV` (the sniper rifle's zoom, 50 to 20 degrees; 1
+unzoomed, at any aspect ratio, since AutoFOV widens only the drawn view). The pad's own mode and bindings stay as they
+are. The pitch's auto-centring (`bAutoCenterPitch`, the controller settings' centring box: after
+`fAutoCenterBegin` seconds of moving with no look input, `UCPlayerController.UpdateRotation` levels the pitch) never
+pulls the gyro's aim back: from the gyro's turn of the view until the pad's look stick is pushed half way, the look is
+the gyro's, and `USDL2Viewport::UpdateInput` holds the centring's count (`fAutoCenterCount`) at zero before each
+player tick, as a look stick holds it; with the pad alone (gyro aiming off, or the device still) the centring is
+Epic's. Nothing in a menu, while paused, in a cut-scene or over a load (the game not ticking for half a second); no
+smoothing, acceleration or dead zone. With `-UFRONTLOG` the log has the totals once the gyro rests (`Gyro: <yaw>
+degrees right and <pitch> up in play in all, <n> yaw and <n> pitch units (zoom <z>)`: the degrees before the zoom, the
+units after it, the zoom of the last turn) and `SDL2: pitch auto-centring held: gyro aiming` (or `held: keyboard and
+mouse`, `with the pad`) when that changes.
+
 In the background (the home screen, the recent apps, another app on top) the game is suspended. SDL's activity
 pauses on `onStop`, and its event pump then blocks the game thread until the app returns, so nothing ticks;
 UC2ALAudio pauses its OpenAL device (`alcDevicePauseSOFT`, ALC_SOFT_pause_device; `UC2ALWatchAppBackground`) on

@@ -13,6 +13,9 @@
 	activity to confirm exiting the game (GameActivity.showExitDialog); everywhere else Back is
 	Escape (SDL2Viewport.cpp).
 
+	Gyro aiming (GyroAim.java, the launcher's switch and sensitivities) sends the view's turn in
+	degrees through nativeGyroLook; ApplyGyro turns player one's view by it in play.
+
 	Off Android the client's functions here do nothing.
 =============================================================================*/
 
@@ -40,6 +43,16 @@ enum
 };
 static std::atomic<INT>		GTouchState( 0 );
 
+// Gyro aiming's turn in view degrees, to the right and up: the UI thread adds, the engine's thread takes it.
+static std::atomic<FLOAT>	GGyroYaw( 0.f );
+static std::atomic<FLOAT>	GGyroPitch( 0.f );
+
+static void AtomicAdd( std::atomic<FLOAT>& Value, FLOAT Delta )
+{
+	FLOAT Old = Value.load();
+	while( !Value.compare_exchange_weak( Old, Old + Delta ) ) {}
+}
+
 extern "C"
 {
 
@@ -63,6 +76,12 @@ JNIEXPORT void JNICALL Java_com_uc2_android_GameActivity_nativeTouchPadAxis( JNI
 JNIEXPORT jint JNICALL Java_com_uc2_android_GameActivity_nativeTouchPadState( JNIEnv*, jclass )
 {
 	return GTouchState.load();
+}
+
+JNIEXPORT void JNICALL Java_com_uc2_android_GameActivity_nativeGyroLook( JNIEnv*, jclass, jfloat YawDegrees, jfloat PitchDegrees )
+{
+	AtomicAdd( GGyroYaw, YawDegrees );
+	AtomicAdd( GGyroPitch, PitchDegrees );
 }
 
 } // extern "C"
@@ -169,6 +188,101 @@ void USDL2Client::PublishTouchPadState()
 	GTouchState.store( State );
 }
 
+// Gyro aiming's degrees waiting for the player's tick and the fractions of a rotation unit not applied yet (yaw,
+// pitch), and with -UFRONTLOG its totals in play and the zoom of its last turn.
+static FLOAT	GGyroPending[2] = { 0.f, 0.f };
+static FLOAT	GGyroCarry[2] = { 0.f, 0.f };
+static DOUBLE	GGyroDegrees[2] = { 0.0, 0.0 };
+static INT		GGyroUnits[2] = { 0, 0 };
+static FLOAT	GGyroZoom = 1.f;
+static DOUBLE	GGyroLastTime = 0.0;
+static UBOOL	GGyroUnlogged = 0;
+// The last update's time: the turn sent while the game did not tick for half a second (a load) is not aim.
+static DOUBLE	GGyroTickTime = 0.0;
+// Player one's look is the gyro's: it turned the view since their pad's look stick was last pushed half way.
+static UBOOL	GGyroLook = 0;
+
+// Degrees as whole rotation units (65536 a turn, toward zero), the fraction carried to the next tick.
+static INT GyroUnits( FLOAT Degrees, FLOAT& Carry )
+{
+	const FLOAT Units = Degrees * ( 65536.f / 360.f ) + Carry;
+	const INT Whole = (INT)Units;
+	Carry = Units - (FLOAT)Whole;
+	return Whole;
+}
+
+//
+// Gyro aiming, at each input update of player one's viewport. The game tells the pad from the mouse by their axes
+// (the pad's stick curve, adhesion and auto-centring; the mouse's linear look in UCGameplay's mouse-look set) and by
+// SDL's mouse events (the key glyphs), so the gyro takes neither path: from the player's tick (DeltaSeconds > 0),
+// just before the controller's PlayerTick, it turns the controller's rotation by whole rotation units (65536 a turn).
+// UpdateRotation starts its view from that rotation and adds the sticks, adhesion and lock-on to it. The zoom slows
+// the turn as the pad's and the mouse's turns are slowed (their DesiredFOV * 0.01111): times DesiredFOV / DefaultFOV.
+// The pitch stays within the camera's limit, 16000 units up or down (LimitCameraPitch). Nothing in a menu, while the
+// game is paused or in a cut-scene, nor what came while the game did not tick for half a second (a load). With
+// -UFRONTLOG the totals are logged once the gyro has rested for a quarter of a second. The look is the gyro's from its
+// turn of the view until the pad's look stick is pushed half way.
+//
+UBOOL USDL2Client::ApplyGyro( UViewport* Viewport, FLOAT DeltaSeconds )
+{
+	guard(USDL2Client::ApplyGyro);
+	GGyroPending[0] += GGyroYaw.exchange( 0.f );
+	GGyroPending[1] += GGyroPitch.exchange( 0.f );
+	APlayerController* PC = Viewport ? Viewport->Actor : NULL;
+	ULevel* Level = PC ? PC->GetLevel() : NULL;
+	const INT Slot = Viewport ? Viewport->GetGamepadID() : INDEX_NONE;
+	if( Slot >= 0 && Slot < SDL2DRV_MAX_PADS && Pads[Slot].Controller && ( Abs(Pads[Slot].Axes[2]) > 0.5f || Abs(Pads[Slot].Axes[3]) > 0.5f ) )
+		GGyroLook = 0;
+	const DOUBLE Now = appSeconds();
+	const UBOOL Ticking = Now - GGyroTickTime < 0.5;
+	GGyroTickTime = Now;
+	const UBOOL InPlay = Ticking && PC && Level && !Level->IsPaused() && !MenuActive()
+		&& !PC->bInterpolating && !(PC->Pawn && PC->Pawn->bInterpolating);
+	if( !InPlay )
+	{
+		GGyroPending[0] = GGyroPending[1] = 0.f;
+		GGyroCarry[0] = GGyroCarry[1] = 0.f;
+	}
+	else if( DeltaSeconds > 0.f && ( GGyroPending[0] != 0.f || GGyroPending[1] != 0.f ) )
+	{
+		const FLOAT Zoom = PC->DefaultFOV > 0.f && PC->DesiredFOV > 0.f ? PC->DesiredFOV / PC->DefaultFOV : 1.f;
+		const INT YawUnits = GyroUnits( GGyroPending[0] * Zoom, GGyroCarry[0] );
+		const INT PitchUnits = GyroUnits( GGyroPending[1] * Zoom, GGyroCarry[1] );
+		if( YawUnits || PitchUnits )
+			GGyroLook = 1;
+		PC->Rotation.Yaw += YawUnits;
+		INT Pitch = PC->Rotation.Pitch & 65535;
+		if( Pitch >= 32768 )
+			Pitch -= 65536;
+		INT NewPitch = Pitch + PitchUnits;
+		if( PitchUnits > 0 && NewPitch > Max( Pitch, 16000 ) )
+			NewPitch = Max( Pitch, 16000 );
+		else if( PitchUnits < 0 && NewPitch < Min( Pitch, -16000 ) )
+			NewPitch = Min( Pitch, -16000 );
+		if( NewPitch != Pitch + PitchUnits )
+			GGyroCarry[1] = 0.f;
+		PC->Rotation.Pitch = NewPitch & 65535;
+		GGyroDegrees[0] += GGyroPending[0];
+		GGyroDegrees[1] += GGyroPending[1];
+		GGyroUnits[0] += YawUnits;
+		GGyroUnits[1] += PitchUnits;
+		GGyroZoom = Zoom;
+		GGyroPending[0] = GGyroPending[1] = 0.f;
+		GGyroLastTime = Now;
+		GGyroUnlogged = 1;
+		return GGyroLook;
+	}
+	if( GGyroUnlogged && Now - GGyroLastTime >= 0.25 )
+	{
+		GGyroUnlogged = 0;
+		if( GUfrontLog )
+			debugf( NAME_Log, TEXT("Gyro: %.3f degrees right and %.3f up in play in all, %i yaw and %i pitch units (zoom %.4f)"),
+				GGyroDegrees[0], GGyroDegrees[1], GGyroUnits[0], GGyroUnits[1], GGyroZoom );
+	}
+	return GGyroLook;
+	unguard;
+}
+
 //
 // Whether Back has nothing left to go back to: the menu level, with the GUI on its first page (its MenuStack, read
 // through the class's property: the GUI package is not this one's).
@@ -224,6 +338,7 @@ UBOOL USDL2Client::IsTouchPad( INT InstanceID ) { return 0; }
 void USDL2Client::PublishTouchPadState() {}
 UBOOL USDL2Client::BackLeavesGame() { return 0; }
 void USDL2Client::AskToExit() {}
+UBOOL USDL2Client::ApplyGyro( UViewport* Viewport, FLOAT DeltaSeconds ) { return 0; }
 
 #endif
 

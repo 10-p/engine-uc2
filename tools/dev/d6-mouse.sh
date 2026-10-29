@@ -7,7 +7,7 @@
 #   look    linear mouse look: N counts turn N x k at three speeds and three distances, the same k in both axes, a
 #           circle of mouse motion gives a circle of view directions, no camera motion after the mouse stops (a
 #           flick, the circle), the sensitivity, FOV and invert settings (mouse invert apart from the pad's, both
-#           applied), auto-centring only under the pad, the look keys, mouse after stick
+#           applied), auto-centring only with the pad (never on the keyboard and mouse), the look keys, mouse after stick
 #   ini     the mouse's settings read from User.ini as the launcher passes them (-ini:, which also writes them there)
 #   lazy    [UCGameplay.UCPlayerInput] bLazyMouseCamera=True: the mouse still turns linearly, the third-person
 #           camera is Epic's lazy one under the mouse too (it moves on after a flick, then rests)
@@ -31,7 +31,7 @@
 #           target; then the key off (the default): a double tap does not dodge, Space + A still does
 #   vanilla (on request) the D6_SHIP_TREE (Epic's shipped scripts) with this repo's DefUser.ini: the mouse turns the view
 #           through Epic's PC path (the stick's curve: capped, not linear), up looks up, the Right arrow strafes,
-#           PageUp looks up
+#           PageUp looks up; the pitch's auto-centring never on the keyboard (W), Epic's with the pad (its move stick)
 #
 # Trees (<repo>/../run/<name>, made by tools/dev/mkrun-uc2.sh): D6_TREE (rebuilt packages, default d6-run),
 # D6_SHIP_TREE (shipped packages, default d6-ship). Every game run is tools/dev/m10-controls.sh --file (Xvfb inside
@@ -272,7 +272,8 @@ check look-pad-invert-flips-the-stick pitchdiff('If','Ig') < 0
 chan exec SetMouseInvert False
 wait test: exec SetMouseInvert False 10
 SCEN
-  # 6. auto-centring: never under the mouse; under the pad as on the Xbox (target pitch -1400, third person)
+  # 6. auto-centring: never on the keyboard and mouse; with the pad as on the Xbox (target pitch -1400, third person):
+  # the look stick nudged, then the move stick pushed (the pad is player one's device again)
   echo "probe Aa"
   mlines 0 -300 50
   cat <<SCEN
@@ -288,9 +289,9 @@ sleep 0.05
 pad axis rightx 0
 sleep 0.3
 probe Ad
-keydown w
+pad axis lefty -32767
 sleep 1.5
-keyup w
+pad axis lefty 0
 sleep 0.3
 probe Ae
 pyexec save('look-auto-centre-under-the-pad', [P['Ad'].rot[0], P['Ae'].rot[0]])
@@ -737,6 +738,28 @@ keyup Prior
 sleep 0.3
 probe Kd
 check vanilla-pageup-looks-up pitchdiff('Kc','Kd') > 500
+SCEN
+  # Auto-centring on the shipped scripts: never on the keyboard and mouse (the pitch PageUp raised stays while W
+  # runs); with the pad (attached, its move stick pushed) Epic's, towards -1400
+  cat <<SCEN
+probe Ke
+keydown w
+sleep 1.5
+keyup w
+sleep 0.3
+probe Kf
+check vanilla-no-auto-centre-on-the-keyboard P['Kf'].rot[0] == P['Ke'].rot[0] and P['Kf'].autocenter == 'True'
+pad attach
+wait SDL2 pads: pad 0 connected 10
+sleep 1
+probe Kg
+pad axis lefty -32767
+sleep 1.5
+pad axis lefty 0
+sleep 0.3
+probe Kh
+pyexec save('vanilla-auto-centre-with-the-pad', [P['Kg'].rot[0], P['Kh'].rot[0]])
+check vanilla-auto-centre-with-the-pad abs(((P['Kh'].rot[0]+1400+32768)&65535)-32768) < abs(((P['Kg'].rot[0]+1400+32768)&65535)-32768) - 100
 SCEN
 }
 

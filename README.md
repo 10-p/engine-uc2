@@ -36,7 +36,9 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   GL4ES on OpenGL ES 3, sound on OpenSL ES, the game folder copied into internal storage from a folder chosen with the
   system's folder picker (or read in place from shared storage), a resolution scale up to supersampling, an exit prompt
   on Back, an on-screen pad that is a virtual SDL controller (the mouse is off), hidden while a real pad is used and
-  back on a touch, and a suspended game in the background (no tick, the OpenAL device paused).
+  back on a touch, gyro aiming (a launcher switch, off by default, with horizontal and vertical sensitivities) that
+  turns the view linearly, slowed by the zoom as the mouse is, leaves the pad's mode alone and is never pulled back by
+  the pitch's auto-centring, and a suspended game in the background (no tick, the OpenAL device paused).
 - **Windows build**: MinGW-w64 cross builds (i686 and x86_64), statically linked, no runtime DLL but OpenAL's; the game
   and the editor declare one DPI awareness for the whole process (per-monitor), so Windows never scales their windows.
 - **UCC on every desktop build**: `ucc-bin` (Linux) and `ucc.exe` (Windows), 32- and 64-bit, beside the game: the
@@ -49,7 +51,9 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   BSP geometry cannot be changed or rebuilt.
 - **GCC/Clang portability**: Epic's MSVC code builds with GCC, Clang (Emscripten) and MinGW unchanged in behaviour.
 - **Keyboard and mouse**: PC bindings, menus driven by keyboard and mouse, the console on the key left of 1, the
-  PC mouse look of the mouse-look patch set.
+  PC mouse look of the mouse-look patch set; while player one is on the keyboard and mouse (their last device, as the
+  key glyphs show it) the pitch's auto-centring waits, with the shipped scripts too (`USDL2Viewport::UpdateInput`
+  holds `UCPlayerController.fAutoCenterCount` at zero), and with the pad it is Epic's.
 - **Split screen and four pads**: up to four players in one window, joining from the menus or a match; players three
   and four on the character page (players34).
 - **Wide windows**: the 640x480 menus and HUD in the largest centred 4:3 box of the window or of a split view, the
