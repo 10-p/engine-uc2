@@ -178,6 +178,9 @@ D3DDrv does it: the hit rectangle is read back around every hit proxy).
   cannot be changed, and rebuilding the geometry (Build Geometry, Build All) leaves the level without BSP. The game
   plays these maps from their built geometry. The cooked texture, static mesh and animation packages open in the
   browsers.
+- Its viewports' and browsers' text is drawn with the canvas's default font, `WarfareFonts.DefaultFont`. The disc
+  holds none of that font's pages (the Xbox build's default font is `T_Fonts2.SuiGeneris_12pt`), so the cook leaves it
+  out and the editor draws with `T_Fonts2.SuiGeneris_12pt` (`UnCanvas.cpp`, `LoadDefaultFont`).
 - Run: `tools/dev/mkrun-uc2.sh build-windows <tree>` puts `UnrealEd.exe` and its files in `System/` beside the game's
   `Editor.u` and `UnrealEd.u`; start it from `System/` (under wine: `wine ./UnrealEd.exe`). It reads its own
   system ini, `UC2Editor.ini` (made from `Default.ini` on the first start), where it sets `WinDrv.WindowsClient` and

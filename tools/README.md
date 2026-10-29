@@ -66,11 +66,14 @@ In the repository the cook is `tools/cook.py`.
   and the editor opens it after a warning, with its actors editable but its geometry fixed as cooked (rebuilding the
   geometry removes it). The editor opens the cooked textures, meshes and animations.
 - **Textures, meshes and animations.** The disc keeps their pictures and geometry apart from the packages, in `.xpr`
-  bundles; the cook puts them back together.
+  bundles; the cook puts them back together. Much of it is in the bundles only as a map's copy of the asset; the cook
+  gives each package asset the data of the copies that stand for it (`uc2-pc-tables.json.gz` says which).
 - **Packages for network play.** The packages come out the same as the PC game folder's, so a player who cooked the
   disc and a player with the PC folder can play together.
 - **Sound and music** become Ogg Vorbis, and **movies** Ogg Theora.
 - **Scripts, settings and translations** are copied as they are.
 
 `COOK.txt` in the game folder says what was made from what, and `Maps/xbox-packages.txt` lists what the disc does not
-have (a texture the disc never carried shows as a placeholder). If a step fails, its log is in `.cook-logs/`.
+have: a texture the disc never carried shows as a placeholder, a static mesh it never carried has no geometry, and a
+font none of whose pages it carried is left out (the editor then draws its text with the game's own font). If a step
+fails, its log is in `.cook-logs/`.

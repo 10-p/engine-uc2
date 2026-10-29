@@ -20,6 +20,18 @@ Revision history:
 
 static UFont* FallbackFont=NULL;
 
+// The canvas's default font: DEFAULT_FONT where the game folder has it
+static UFont* LoadDefaultFont()
+{
+	UFont* DefaultFont = Cast<UFont>(UObject::StaticLoadObject(UFont::StaticClass(),NULL,DEFAULT_FONT,NULL,LOAD_NoWarn,NULL));
+#ifndef _XBOX
+	// A game folder cooked from the Xbox disc has no WarfareFonts.DefaultFont: the Xbox build's default font
+	if( !DefaultFont )
+		DefaultFont = Cast<UFont>(UObject::StaticLoadObject(UFont::StaticClass(),NULL,TEXT("T_Fonts2.SuiGeneris_12pt"),NULL,LOAD_NoWarn,NULL));
+#endif
+	return DefaultFont;
+}
+
 /*-----------------------------------------------------------------------------
 	UCanvas scaled sprites.
 -----------------------------------------------------------------------------*/
@@ -974,7 +986,7 @@ void UCanvas::Init( UViewport* InViewport )
 	Viewport = InViewport;
 
 	//scion rwd - load a default font
-	Font = Cast<UFont>(StaticLoadObject(UFont::StaticClass(),NULL,DEFAULT_FONT,NULL,LOAD_NoWarn,NULL));
+	Font = LoadDefaultFont();
 	FallbackFont = Font;
 	checkSlow(Font);
 
@@ -1219,7 +1231,7 @@ void UCanvas::execDrawText( FFrame& Stack, RESULT_DECL )
 		Font = FallbackFont;
 		if ( Font == NULL )
 		{
-			Font = FallbackFont = Cast<UFont>(StaticLoadObject(UFont::StaticClass(),NULL,DEFAULT_FONT,NULL,LOAD_NoWarn,NULL));
+			Font = FallbackFont = LoadDefaultFont();
 		}
 
 		checkSlow(Font);
@@ -1601,7 +1613,7 @@ void UCanvas::execTextSize( FFrame& Stack, RESULT_DECL )
 		Font = FallbackFont;
 		if ( Font == NULL )
 		{
-			FallbackFont = Font = Cast<UFont>(StaticLoadObject(UFont::StaticClass(),NULL,DEFAULT_FONT,NULL,LOAD_NoWarn,NULL));
+			FallbackFont = Font = LoadDefaultFont();
 		}
 		checkSlow(Font);
 	}
@@ -2490,7 +2502,7 @@ void UCanvas::DrawTextDualFont( const TCHAR* Text, UFont* SecondaryFont, FLOAT S
 			Font = FallbackFont;
 			if ( Font == NULL )
 			{
-                FallbackFont = Font = Cast<UFont>(StaticLoadObject(UFont::StaticClass(),NULL,DEFAULT_FONT,NULL,LOAD_NoWarn,NULL));
+                FallbackFont = Font = LoadDefaultFont();
 			}
 			checkSlow(Font);
 		}

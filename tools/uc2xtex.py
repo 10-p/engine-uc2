@@ -13,8 +13,10 @@ ctx carries
                 the native code, no texture pixels)
   prefer        bundle basenames searched first: a map's own and the natives (['dm-legacy.xpr', 'natives.xpr'])
   warn(msg)     told about every texture without pixels and every choice between differing copies
-  map_textures  optional MapTextures: the maps' copies of the texture packages' textures, for the many texture
+  map_copies    optional uc2xtables.MapCopies: the maps' copies by the object they stand for, for the many texture
                 package Textures the bundles hold only under a map's cla<N> name
+  map_textures  optional MapTextures: the maps' copies of the texture packages' textures by key, for the copies
+                map_copies does not place
   pixels        optional {export path (lower case): top mip bytes in the texture's own format}, for pixels other
                 converters rebuild (G16 terrain heightmaps); the texture gets that one mip
   placeholder   optional 'image' (default) or 'empty': what a texture without pixels gets (placeholder_mips)
@@ -26,7 +28,9 @@ What the formats hold (Engine/Src/UnTex.cpp, XboxAssetConversion/Src/Launch.cpp,
             a map's textures are renamed cla<N> and bundled in <Map>.xpr.
   Cubemap   a Texture whose Mips are empty in both formats (the faces are Textures): copied.
   Palette   tags, TArray<FColor>: the same in both formats, copied.
-  Font      tags, Characters, Textures, Kerning, CharRemap, IsRemapped: the same in both formats, copied.
+  Font      tags, Characters, Textures, Kerning, CharRemap, IsRemapped: the same in both formats, copied; a Font
+            none of whose pages has pixels on the disc (fonts_without_pages) is left out by the package converter,
+            with the exports inside it (its glyphs would draw as placeholder blocks).
 How the bundler stored each PC format (UMaterialExporterRDF, CTexture2D):
   DXT1/3/5  the PC mips verbatim in block order ('Raw 1': D3DX loads the exported DDS with a full chain, so the
             data runs down to 1x1 whatever the header's level count). D3DX decodes and re-encodes the levels
@@ -37,6 +41,7 @@ How the bundler stored each PC format (UMaterialExporterRDF, CTexture2D):
             character or the natives loaded at conversion time, get a placeholder.
 """
 import array
+import os
 import re
 import struct
 
@@ -289,11 +294,12 @@ def _majority(ctx, fits):
     return fits[best], len(set(tops))
 
 
-def find_texture(ctx, name, info, key=None):
+def find_texture(ctx, name, info, key=None, path=None):
     """The XPR resource holding a texture's pixels, how many resources fit and how many different top levels
     they have: by the texture's name, from the first of ctx.prefer's bundles that holds it; merged map textures
-    (cla<N>, numbered per map) only from those. Elsewhere, or from the maps' copies of the texture
-    (ctx.map_textures, by key), the content most of them agree on."""
+    (cla<N>, numbered per map) only from those. Elsewhere, from the maps' copies of the texture at path
+    (ctx.map_copies, uc2xtables.MapCopies) or from the copies with its key (ctx.map_textures) that stand for no
+    other object, the content most of them agree on."""
     prefer = [p.lower() for p in getattr(ctx, 'prefer', ())]
     fits = _fits(ctx, name, info)
     preferred = sorted((t for t in fits if t.bundle in prefer), key=lambda t: prefer.index(t.bundle))
@@ -302,9 +308,17 @@ def find_texture(ctx, name, info, key=None):
     if fits and not MAP_TEXTURE.match(name):
         tex, split = _majority(ctx, fits)
         return tex, len(fits), split
+    named = getattr(ctx, 'map_copies', None)
+    if named is not None and path is not None:
+        found = [t for m, copy in named.find(path) for t in _fits(ctx, copy, info, m + '.xpr')]
+        if found:
+            tex, split = _majority(ctx, found)
+            return tex, len(found), split
     copies = getattr(ctx, 'map_textures', None)
     if key is not None and copies is not None:
-        found = [t for bundle, copy in copies.find(key) for t in _fits(ctx, copy, info, bundle)]
+        found = [t for bundle, copy in copies.find(key)
+                 if named is None or named.stands_for(bundle[:-len('.xpr')], copy) in (None, (path or '').lower())
+                 for t in _fits(ctx, copy, info, bundle)]
         if found:
             tex, split = _majority(ctx, found)
             return tex, len(found), split
@@ -549,7 +563,8 @@ def texture_report(pkg, i, ctx):
         return head, info, None, [(info.usize, info.vsize, bytes(top))], {'kind': 'supplied'}
     tex, candidates, split = None, 0, 0
     if info.format in FROM_XBOX and info.usize > 0 and info.vsize > 0:
-        tex, candidates, split = find_texture(ctx, name, info, texture_key(info, props))
+        path = '%s.%s' % (os.path.splitext(os.path.basename(pkg.path or ''))[0], pkg.export_path(i))
+        tex, candidates, split = find_texture(ctx, name, info, texture_key(info, props), path)
     if tex is None:
         why = 'never bundled (%s)' % FORMAT_NAMES.get(info.format, info.format) \
             if info.format not in FROM_XBOX else 'not in the preferred bundles' if candidates else 'not in any bundle'
@@ -559,6 +574,28 @@ def texture_report(pkg, i, ctx):
     note.update(kind='xpr', bundle=tex.bundle, resource=tex.name, candidates=candidates, split=split,
                 xbox_levels=tex.levels)
     return head, info, tex, mips, note
+
+
+def font_pages(pkg, i):
+    """The export indices of Font export i's page Textures (its native Textures array) in its own package."""
+    e = pkg.exports[i]
+    _, head = read_tags(pkg, e.data, e.flags)
+    r = Reader(e.data, head)
+    r.take(17 * r.count())                  # Characters: StartU, StartV, USize, VSize (i32), TextureIndex (u8)
+    refs = [r.i32() for _ in range(r.count())]
+    return [v - 1 for v in refs if v > 0 and pkg.export_class(v - 1) == 'Texture']
+
+
+def fonts_without_pages(pkg, ctx):
+    """(export index, page count) of the Fonts of an Xbox package none of whose pages has pixels on the disc: their
+    glyphs would draw as placeholder blocks. Before the conversion (the pages' data is the Xbox's)."""
+    out = []
+    for i in range(len(pkg.exports)):
+        if pkg.export_class(i) == 'Font' and pkg.exports[i].data:
+            pages = font_pages(pkg, i)
+            if pages and all(texture_report(pkg, j, ctx)[4]['kind'] == 'placeholder' for j in pages):
+                out.append((i, len(pages)))
+    return out
 
 
 def convert(pkg, i, ctx):

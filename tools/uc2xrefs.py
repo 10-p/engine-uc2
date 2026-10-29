@@ -6,6 +6,7 @@ same packages). PC format (licensee 0), package version 151.
     from uc2xrefs import references
     for offset, kind in references(pkg, types, i):     # kind 'ref' (i32 object index) or 'name' (i32 name index)
         ...
+    tag_references(pkg, types, i)                      # the state frame and the tags only (Xbox format too)
 
 Covered: the state frame, the tagged properties (UnClass.cpp FPropertyTag<<: the key, a struct tag's ItemName, the
 values; struct values are tagged too from version 118, but Vector, Rotator and Color, which are binary; array
@@ -135,10 +136,10 @@ class Walker:
             raise FormatError('%s.%s: array ends at %d of %d' % (owner, pname, r.p - pos, end - pos))
 
     # -- an export
-    def export(self, i, owner):
-        e = self.pkg.exports[i]
+    def frame(self, i):
+        """The state frame of export i: where its tags start."""
         r = Reader(self.d)
-        if e.flags & RF_HasStack:
+        if self.pkg.exports[i].flags & RF_HasStack:
             self.ref(r.p)
             node = r.i32()
             self.ref(r.p)
@@ -146,7 +147,10 @@ class Walker:
             r.take(10)
             if node:
                 r.i32()
-        end = self.tags(r.p, owner)
+        return r.p
+
+    def export(self, i, owner):
+        end = self.tags(self.frame(i), owner)
         cls = self.pkg.export_class(i)
         native = NATIVE.get(cls)
         if native is not None:
@@ -169,6 +173,17 @@ def references(pkg, types, i):
     if not e.data:
         return []
     return Walker(pkg, types, e.data).export(i, class_path(pkg, i))
+
+
+def tag_references(pkg, types, i):
+    """references() of the state frame and the tagged properties only: what the Xbox format and the PC's write
+    alike, so it also walks the disc's own packages."""
+    e = pkg.exports[i]
+    if not e.data:
+        return []
+    w = Walker(pkg, types, e.data)
+    w.tags(w.frame(i), class_path(pkg, i))
+    return w.out
 
 
 # ---------------------------------------------------------------------------------------------------------------
