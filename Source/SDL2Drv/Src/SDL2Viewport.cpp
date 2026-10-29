@@ -1283,6 +1283,29 @@ void USDL2Viewport::UpdateMousePosition()
 }
 
 //
+// UCPlayerController's pitch auto-centring (UpdateRotation) levels the view once the player has moved for
+// fAutoCenterBegin seconds with no look input. Its count held at zero just before the player's tick, it waits, as under
+// the look stick. Read by name: the class is the game's (the shipped and the patched UCGameplay alike).
+//
+static void HoldAutoCenter( APlayerController* PC )
+{
+	static UClass* Class = NULL;
+	static UFloatProperty* Count = NULL;
+	if( !PC )
+		return;
+	if( PC->GetClass() != Class )
+	{
+		Class = PC->GetClass();
+		Count = FindField<UFloatProperty>( Class, TEXT("fAutoCenterCount") );
+	}
+	if( Count )
+		*(FLOAT*)( (BYTE*)PC + Count->Offset ) = 0.f;
+}
+
+// What holds player one's auto-centring: 0 nothing (the pad's), 1 the keyboard and mouse, 2 gyro aiming.
+static INT GAutoCenterHold = 0;
+
+//
 // Pump the event queue, then release every key the engine still holds that is up
 // (and, on Reset, press every key that is down), as UWindowsViewport::UpdateInput does
 // with GetKeyState.
@@ -1317,7 +1340,20 @@ void USDL2Viewport::UpdateInput( UBOOL Reset, FLOAT DeltaSeconds )
 	// viewport has its pad only. So does gyro aiming (Android).
 	if( !Window )
 		return;
-	Client->ApplyGyro( this, DeltaSeconds );
+	const UBOOL GyroLook = Client->ApplyGyro( this, DeltaSeconds );
+
+	// The pitch's auto-centring is the pad's: while player one is on the keyboard and mouse (their last device, as the
+	// key glyphs show it) or looks with gyro aiming, it waits.
+	if( DeltaSeconds > 0.f )
+	{
+		const INT Hold = GKeyGlyphs.KeysActive() ? 1 : GyroLook ? 2 : 0;
+		if( Hold )
+			HoldAutoCenter( Actor );
+		if( Hold != GAutoCenterHold && GUfrontLog )
+			debugf( NAME_Log, TEXT("SDL2: pitch auto-centring %s"),
+				Hold == 1 ? TEXT("held: keyboard and mouse") : Hold == 2 ? TEXT("held: gyro aiming") : TEXT("with the pad") );
+		GAutoCenterHold = Hold;
+	}
 
 	BYTE Down[256];
 	appMemzero( Down, sizeof(Down) );

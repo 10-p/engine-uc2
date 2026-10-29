@@ -199,6 +199,8 @@ static DOUBLE	GGyroLastTime = 0.0;
 static UBOOL	GGyroUnlogged = 0;
 // The last update's time: the turn sent while the game did not tick for half a second (a load) is not aim.
 static DOUBLE	GGyroTickTime = 0.0;
+// Player one's look is the gyro's: it turned the view since their pad's look stick was last pushed half way.
+static UBOOL	GGyroLook = 0;
 
 // Degrees as whole rotation units (65536 a turn, toward zero), the fraction carried to the next tick.
 static INT GyroUnits( FLOAT Degrees, FLOAT& Carry )
@@ -218,15 +220,19 @@ static INT GyroUnits( FLOAT Degrees, FLOAT& Carry )
 // the turn as the pad's and the mouse's turns are slowed (their DesiredFOV * 0.01111): times DesiredFOV / DefaultFOV.
 // The pitch stays within the camera's limit, 16000 units up or down (LimitCameraPitch). Nothing in a menu, while the
 // game is paused or in a cut-scene, nor what came while the game did not tick for half a second (a load). With
-// -UFRONTLOG the totals are logged once the gyro has rested for a quarter of a second.
+// -UFRONTLOG the totals are logged once the gyro has rested for a quarter of a second. The look is the gyro's from its
+// turn of the view until the pad's look stick is pushed half way.
 //
-void USDL2Client::ApplyGyro( UViewport* Viewport, FLOAT DeltaSeconds )
+UBOOL USDL2Client::ApplyGyro( UViewport* Viewport, FLOAT DeltaSeconds )
 {
 	guard(USDL2Client::ApplyGyro);
 	GGyroPending[0] += GGyroYaw.exchange( 0.f );
 	GGyroPending[1] += GGyroPitch.exchange( 0.f );
 	APlayerController* PC = Viewport ? Viewport->Actor : NULL;
 	ULevel* Level = PC ? PC->GetLevel() : NULL;
+	const INT Slot = Viewport ? Viewport->GetGamepadID() : INDEX_NONE;
+	if( Slot >= 0 && Slot < SDL2DRV_MAX_PADS && Pads[Slot].Controller && ( Abs(Pads[Slot].Axes[2]) > 0.5f || Abs(Pads[Slot].Axes[3]) > 0.5f ) )
+		GGyroLook = 0;
 	const DOUBLE Now = appSeconds();
 	const UBOOL Ticking = Now - GGyroTickTime < 0.5;
 	GGyroTickTime = Now;
@@ -242,6 +248,8 @@ void USDL2Client::ApplyGyro( UViewport* Viewport, FLOAT DeltaSeconds )
 		const FLOAT Zoom = PC->DefaultFOV > 0.f && PC->DesiredFOV > 0.f ? PC->DesiredFOV / PC->DefaultFOV : 1.f;
 		const INT YawUnits = GyroUnits( GGyroPending[0] * Zoom, GGyroCarry[0] );
 		const INT PitchUnits = GyroUnits( GGyroPending[1] * Zoom, GGyroCarry[1] );
+		if( YawUnits || PitchUnits )
+			GGyroLook = 1;
 		PC->Rotation.Yaw += YawUnits;
 		INT Pitch = PC->Rotation.Pitch & 65535;
 		if( Pitch >= 32768 )
@@ -262,7 +270,7 @@ void USDL2Client::ApplyGyro( UViewport* Viewport, FLOAT DeltaSeconds )
 		GGyroPending[0] = GGyroPending[1] = 0.f;
 		GGyroLastTime = Now;
 		GGyroUnlogged = 1;
-		return;
+		return GGyroLook;
 	}
 	if( GGyroUnlogged && Now - GGyroLastTime >= 0.25 )
 	{
@@ -271,6 +279,7 @@ void USDL2Client::ApplyGyro( UViewport* Viewport, FLOAT DeltaSeconds )
 			debugf( NAME_Log, TEXT("Gyro: %.3f degrees right and %.3f up in play in all, %i yaw and %i pitch units (zoom %.4f)"),
 				GGyroDegrees[0], GGyroDegrees[1], GGyroUnits[0], GGyroUnits[1], GGyroZoom );
 	}
+	return GGyroLook;
 	unguard;
 }
 
@@ -329,7 +338,7 @@ UBOOL USDL2Client::IsTouchPad( INT InstanceID ) { return 0; }
 void USDL2Client::PublishTouchPadState() {}
 UBOOL USDL2Client::BackLeavesGame() { return 0; }
 void USDL2Client::AskToExit() {}
-void USDL2Client::ApplyGyro( UViewport* Viewport, FLOAT DeltaSeconds ) {}
+UBOOL USDL2Client::ApplyGyro( UViewport* Viewport, FLOAT DeltaSeconds ) { return 0; }
 
 #endif
 
