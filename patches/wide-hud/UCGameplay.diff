@@ -11,7 +11,7 @@
  	DrawH=18.0
 --- a/UCGameplay/Classes/UCHUD.uc
 +++ b/UCGameplay/Classes/UCHUD.uc
-@@ -270,6 +270,70 @@
+@@ -270,6 +270,73 @@
  native final simulated function DrawFFALeaderboard(Canvas C);
  
  native simulated function DrawCompass(Canvas Canvas, UCPawn P);
@@ -19,6 +19,9 @@
 +// On a window wider than the 4:3 UI box: the design pixels the left groups move by (LeftShift, 0 or less) and the
 +// right groups (RightShift, 0 or more) to keep their 4:3 distance from their own side of the window; else 0 and 0.
 +native final simulated function GetSideShifts(Canvas C, out int LeftShift, out int RightShift);
++
++// How far the view reaches below the design space, in design pixels: 0 or more; 0 when the UI is not boxed.
++native final simulated function float GetBottomShift(Canvas C);
 +
 +// DrawVitals with the vitals and the active combos moved by LeftShift and the negative combos by RightShift.
 +native final function DrawVitalsWide(Canvas Canvas, Pawn P, int LeftShift, int RightShift);
@@ -82,7 +85,7 @@
  
  final simulated function SetColor(name NewColorName, Color NewColor)
  {
-@@ -764,15 +828,12 @@
+@@ -764,15 +831,12 @@
  			{
  				DisplayProgressMessage(Canvas);
  			}
@@ -101,7 +104,7 @@
  		}
  	}
  	if (((AnnDuration > 0.0) && (AnnText != "")))
-@@ -860,6 +921,48 @@
+@@ -860,6 +924,59 @@
  	return True;
  }
  
@@ -110,6 +113,17 @@
 +final simulated function bool GradientBand(int LeftShift, int RightShift)
 +{
 +	return True;
++}
++
++// How far the announcement band and what is drawn in it (the announcement, its reward panel, the local message) move
++// down: to the bottom of a single view; a split view has no band, and they stay where they are.
++final simulated function float BandShift(Canvas C)
++{
++	if (IsSplitScreen())
++	{
++		return 0.0;
++	}
++	return GetBottomShift(C);
 +}
 +
 +// A band of black rows one design pixel high, alpha 0 at its top to MaxAlpha at its bottom.
@@ -150,44 +164,49 @@
  final simulated function DrawAnnouncement(Canvas C)
  {
  	local float X;
-@@ -871,7 +974,10 @@
+@@ -871,7 +988,13 @@
  	local float UL;
  	local float VL;
  	local bool bSplitScreen;
 +	local int LeftShift, RightShift;
++	local float BottomShift;
  	C.Style = 5;
 +	GetSideShifts(C, LeftShift, RightShift);
++	BottomShift = BandShift(C);
 +	C.ClipX += float(RightShift);
++	C.ClipY += BottomShift;
  	Alpha = 220.0;
  	if ((AnnDuration < 1.0))
  	{
-@@ -880,13 +986,21 @@
+@@ -880,13 +1003,22 @@
  	bSplitScreen = IsSplitScreen();
  	X = (bAnnGameCritical ? CriticalAnnounceX : AnnPositionX);
  	Y = (bAnnGameCritical ? CriticalAnnounceY : AnnPositionY);
 -	(X += float(SafeZoneOffsetX));
+-	(Y += float(SafeZoneOffsetY));
 +	(X += float(SafeZoneOffsetX + RightShift));
- 	(Y += float(SafeZoneOffsetY));
++	(Y += (float(SafeZoneOffsetY) + BottomShift));
  	if (!(bSplitScreen))
  	{
 -		C.DrawColor = cHUDBlack;
 -		C.SetPos(float(SafeZoneOffsetX), (Y - float(6)));
 -		C.DrawTileStretched(Texture't_ui_2.Main.UI_Main_WhiteBlock', (ScreenWidth + float((SafeZoneOffsetX * 2))), 53.0);
++		// from 6 above the announcement's line to the bottom of the view, the design space's 480 moved by BottomShift
 +		if (GradientBand(LeftShift, RightShift))
 +		{
 +			// its alpha stays while the text fades out (200.0 * Alpha / 220.0 would fade it with the text)
-+			DrawGradientBand(C, float(SafeZoneOffsetX + LeftShift), (Y - float(6)), (ScreenWidth + float((SafeZoneOffsetX * 2) - LeftShift + RightShift)), 53.0, 200.0);
++			DrawGradientBand(C, float(SafeZoneOffsetX + LeftShift), (Y - float(6)), (ScreenWidth + float((SafeZoneOffsetX * 2) - LeftShift + RightShift)), ((480.0 + BottomShift) - (Y - float(6))), 200.0);
 +		}
 +		else
 +		{
 +			C.DrawColor = cHUDBlack;
 +			C.SetPos(float(SafeZoneOffsetX + LeftShift), (Y - float(6)));
-+			C.DrawTileStretched(Texture't_ui_2.Main.UI_Main_WhiteBlock', (ScreenWidth + float((SafeZoneOffsetX * 2) - LeftShift + RightShift)), 53.0);
++			C.DrawTileStretched(Texture't_ui_2.Main.UI_Main_WhiteBlock', (ScreenWidth + float((SafeZoneOffsetX * 2) - LeftShift + RightShift)), ((480.0 + BottomShift) - (Y - float(6))));
 +		}
  	}
  	if (bAnnGameCritical)
  	{
-@@ -903,8 +1017,7 @@
+@@ -903,8 +1035,7 @@
  		}
  		if (!(bSplitScreen))
  		{
@@ -197,7 +216,7 @@
  		}
  		else if (((AnnClass == None) || !(ClassIsChildOf(AnnClass, Class'UCAnnouncements.Ann_MatchBegin'))))
  		{
-@@ -923,7 +1036,7 @@
+@@ -923,7 +1054,7 @@
  				C.DrawColor = C.MakeColor(byte(255), byte(255), byte(255), byte(255));
  				UL = float(RewardAnnZapMaterial.MaterialUSize());
  				VL = float(RewardAnnZapMaterial.MaterialVSize());
@@ -206,25 +225,25 @@
  				C.DrawTile(RewardAnnZapMaterial, UL, VL, 0.0, 0.0, UL, VL);
  			}
  			else
-@@ -931,13 +1044,13 @@
+@@ -931,13 +1062,13 @@
  				C.DrawColor = C.MakeColor(byte(Alpha), byte(Alpha), byte(Alpha), byte(Alpha));
  				if ((TimePassed < 0.25))
  				{
 -					C.SetPos(Lerp(((TimePassed - 0.15) / 0.1), (640.0 - float(RewardAnnZapMaterial.MaterialUSize())), ((600.0 - XL) - ((45.0 * (40.0 + XL)) / float(RewardAnnBackMaterial.MaterialUSize())))), Lerp(((TimePassed - 0.15) / 0.1), 430.0, 360.0));
 -					C.DrawTile(RewardAnnBackMaterial, (float(C.SizeX) - C.CurX), Lerp(((TimePassed - 0.15) / 0.1), float(RewardAnnZapMaterial.MaterialVSize()), 120.0), 0.0, 0.0, float(RewardAnnBackMaterial.MaterialUSize()), float(RewardAnnBackMaterial.MaterialVSize()));
-+					C.SetPos((Lerp(((TimePassed - 0.15) / 0.1), (640.0 - float(RewardAnnZapMaterial.MaterialUSize())), ((600.0 - XL) - ((45.0 * (40.0 + XL)) / float(RewardAnnBackMaterial.MaterialUSize())))) + float(RightShift)), Lerp(((TimePassed - 0.15) / 0.1), 430.0, 360.0));
++					C.SetPos((Lerp(((TimePassed - 0.15) / 0.1), (640.0 - float(RewardAnnZapMaterial.MaterialUSize())), ((600.0 - XL) - ((45.0 * (40.0 + XL)) / float(RewardAnnBackMaterial.MaterialUSize())))) + float(RightShift)), (Lerp(((TimePassed - 0.15) / 0.1), 430.0, 360.0) + BottomShift));
 +					C.DrawTile(RewardAnnBackMaterial, (float(C.SizeX + RightShift) - C.CurX), Lerp(((TimePassed - 0.15) / 0.1), float(RewardAnnZapMaterial.MaterialVSize()), 120.0), 0.0, 0.0, float(RewardAnnBackMaterial.MaterialUSize()), float(RewardAnnBackMaterial.MaterialVSize()));
  				}
  				else
  				{
 -					C.SetPos(((600.0 - XL) - ((45.0 * (40.0 + XL)) / float(RewardAnnBackMaterial.MaterialUSize()))), 360.0);
 -					C.DrawTile(RewardAnnBackMaterial, (float(C.SizeX) - C.CurX), 120.0, 0.0, 0.0, float(RewardAnnBackMaterial.MaterialUSize()), float(RewardAnnBackMaterial.MaterialVSize()));
-+					C.SetPos((((600.0 - XL) - ((45.0 * (40.0 + XL)) / float(RewardAnnBackMaterial.MaterialUSize()))) + float(RightShift)), 360.0);
++					C.SetPos((((600.0 - XL) - ((45.0 * (40.0 + XL)) / float(RewardAnnBackMaterial.MaterialUSize()))) + float(RightShift)), (360.0 + BottomShift));
 +					C.DrawTile(RewardAnnBackMaterial, (float(C.SizeX + RightShift) - C.CurX), 120.0, 0.0, 0.0, float(RewardAnnBackMaterial.MaterialUSize()), float(RewardAnnBackMaterial.MaterialVSize()));
  				}
  			}
  		}
-@@ -948,7 +1061,7 @@
+@@ -948,7 +1079,7 @@
  		{
  			if ((TimePassed < 0.35))
  			{
@@ -233,15 +252,16 @@
  			}
  			else if ((TimePassed < 0.45))
  			{
-@@ -962,6 +1075,7 @@
+@@ -962,6 +1093,8 @@
  			C.DrawTextClipped(AnnText);
  		}
  	}
 +	C.ClipX -= float(RightShift);
++	C.ClipY -= BottomShift;
  }
  
  final simulated function DrawCompassArrow(Canvas Canvas, Actor Source, Actor Target, Color DrawColor, float MaxDist)
-@@ -1157,6 +1271,7 @@
+@@ -1157,6 +1290,7 @@
  	local UCPlayerController UPC;
  	local Color oldColor;
  	local byte oldstyle;
@@ -249,7 +269,7 @@
  	Super.DrawHUD(Canvas);
  	P = UCPawn(PlayerOwner.Pawn);
  	UPC = UCPlayerController(PlayerOwner);
-@@ -1184,13 +1299,20 @@
+@@ -1184,13 +1318,20 @@
  	oldstyle = Canvas.Style;
  	Canvas.Style = 5;
  	Canvas.Font = StaticGetAvarisFont(0);
@@ -271,7 +291,7 @@
  	DrawGameHUD(Canvas);
  	DrawPlayerInfo(Canvas);
  	if ((P.PickupNotifier != None))
-@@ -1224,19 +1346,23 @@
+@@ -1224,19 +1365,23 @@
  	weapText = (PickupText @ Caps(P.PickupNotifier.Pickup.InventoryType.default.ItemName));
  	C.Font = StaticGetAvarisFont(0);
  	C.TextSize(weapText, XL, YL);
@@ -299,7 +319,7 @@
  }
  
  final function DrawBasicLeaderBoard(Canvas Canv)
-@@ -2067,7 +2193,7 @@
+@@ -2067,7 +2212,7 @@
  	}
  	if (ScoreBoard.bDisplayMessages)
  	{
@@ -308,7 +328,7 @@
  	}
  }
  
-@@ -2097,7 +2223,7 @@
+@@ -2097,7 +2242,7 @@
  	{
  		C.Font = StaticGetAvarisFont(1);
  		C.TextSize(NamedPlayerInfo.PlayerName, XL, YL, 1.0, 1.0);
@@ -317,7 +337,7 @@
  		C.Style = 5;
  		if ((NamedPlayerInfo.Team != None))
  		{
-@@ -2142,32 +2268,28 @@
+@@ -2142,32 +2287,28 @@
  		Text = UCScoreboard(ScoreBoard).GetPressFireText(PlayerOwner.PlayerReplicationInfo, True);
  		DrawStatusBarText(Canvas, Text);
  	}
@@ -355,7 +375,7 @@
  }
  
  final simulated function DrawSpectatingText(Canvas C, UCPawn ViewTarget)
-@@ -2208,7 +2330,9 @@
+@@ -2208,7 +2349,9 @@
  	local float Buffer;
  	local float LargestXL;
  	local float TextScale;
@@ -365,7 +385,7 @@
  	C.TextSize(StatusText, XL, YL);
  	Buffer = 6.0;
  	if (IsSplitScreen())
-@@ -2229,8 +2353,8 @@
+@@ -2229,8 +2372,8 @@
  	C.DrawColor = cHUDBlack;
  	C.DrawColor.A = 200;
  	C.Style = 5;
@@ -376,30 +396,33 @@
  	C.DrawColor = cHUDWhite;
  	LargestXL = ((ScreenWidth + float(SafeZoneOffsetX)) - float((46 * 2)));
  	TextScale = 1.0;
-@@ -2367,6 +2491,7 @@
+@@ -2367,6 +2510,8 @@
  	local float AnnouncementYL;
  	local float MessageXL;
  	local float MessageYL;
 +	local int LeftShift, RightShift;
++	local float BottomShift;
  	if ((LocalMessage.Message != None))
  	{
  		C.Font = LocalMessage.StringFont;
-@@ -2381,9 +2506,12 @@
+@@ -2381,9 +2526,14 @@
  			FadeValue = (LocalMessage.EndOfLife - Level.TimeSeconds);
  			C.DrawColor.A = byte((float(C.DrawColor.A) * (FadeValue / LocalMessage.Lifetime)));
  		}
 +		GetSideShifts(C, LeftShift, RightShift);
++		BottomShift = BandShift(C);
  		MessageX = 47.0;
 -		MessageY = 432.0;
 -		C.SetPos(MessageX, MessageY);
-+		// 48 above the canvas's bottom (432 on the full screen; a split view's design space is 240 high)
-+		MessageY = (float(C.SizeY) - 48.0);
++		// 48 above the canvas's bottom (432 on the full screen; a split view's design space is 240 high), moved down with the band
++		MessageY = ((float(C.SizeY) - 48.0) + BottomShift);
++		C.ClipY += BottomShift;
 +		// at the left side; whether it gives way to the announcement is decided at the 4:3 positions of both
 +		C.SetPos((MessageX + float(LeftShift)), MessageY);
  		if (((AnnDuration > 0.0) && (AnnText != "")))
  		{
  			C.TextSize(AnnText, AnnouncementXL, AnnouncementYL);
-@@ -2394,12 +2522,12 @@
+@@ -2394,13 +2544,14 @@
  			}
  			else
  			{
@@ -412,9 +435,11 @@
 -			C.DrawTextClipped(LocalMessage.StringMessage, False);
 +			DrawBandText(C, LocalMessage.StringMessage, (MessageX + float(LeftShift)), MessageY, LeftShift, RightShift);
  		}
++		C.ClipY -= BottomShift;
  		DX = (LocalMessage.DX / float(C.SizeX));
  		DY = (LocalMessage.DY / float(C.SizeY));
-@@ -2468,14 +2596,27 @@
+ 		LocalMessage.Drawn = True;
+@@ -2468,14 +2619,27 @@
  final simulated function DrawElements(Canvas C)
  {
  	local int i;
@@ -443,7 +468,7 @@
  			}
  			(i)++;
  		}
-@@ -2853,10 +2994,10 @@
+@@ -2853,10 +3017,10 @@
  	pos_LeaderBoardName(1)=(X=588.0,Y=69.0,W=0.0,H=0.0)
  	pos_LeaderBoardName(2)=(X=588.0,Y=82.0,W=0.0,H=0.0)
  	pos_LeaderBoardName(3)=(X=588.0,Y=96.0,W=0.0,H=0.0)

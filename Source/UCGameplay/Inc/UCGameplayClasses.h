@@ -950,6 +950,7 @@ public:
     FLOAT XboxInstructionScaleY;
     DECLARE_FUNCTION(execTextSizeDualFont);
     DECLARE_FUNCTION(execDrawVitalsWide);
+    DECLARE_FUNCTION(execGetBottomShift);
     DECLARE_FUNCTION(execGetSideShifts);
     DECLARE_FUNCTION(execDrawCompass);
     DECLARE_FUNCTION(execDrawFFALeaderboard);
@@ -2344,6 +2345,7 @@ public:
 
 AUTOGENERATE_FUNCTION(AUCHUD,-1,execTextSizeDualFont);
 AUTOGENERATE_FUNCTION(AUCHUD,-1,execDrawVitalsWide);
+AUTOGENERATE_FUNCTION(AUCHUD,-1,execGetBottomShift);
 AUTOGENERATE_FUNCTION(AUCHUD,-1,execGetSideShifts);
 AUTOGENERATE_FUNCTION(AUCHUD,-1,execDrawCompass);
 AUTOGENERATE_FUNCTION(AUCHUD,-1,execDrawFFALeaderboard);
@@ -2477,6 +2479,7 @@ NATIVE_INFO(AUCHUD) GUCGameplayAUCHUDNatives[] =
 { 
 	MAP_NATIVE(AUCHUD,execTextSizeDualFont)
 	MAP_NATIVE(AUCHUD,execDrawVitalsWide)
+	MAP_NATIVE(AUCHUD,execGetBottomShift)
 	MAP_NATIVE(AUCHUD,execGetSideShifts)
 	MAP_NATIVE(AUCHUD,execDrawCompass)
 	MAP_NATIVE(AUCHUD,execDrawFFALeaderboard)
