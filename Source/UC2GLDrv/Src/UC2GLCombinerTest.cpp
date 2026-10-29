@@ -190,14 +190,7 @@ struct FUC2GLCombinerTest
 		// Three mip levels of one colour each: which one a lookup takes shows its LOD.
 		Mip = NewTexture( 0, 3 );
 		RenDev->glBindTexture( GL_TEXTURE_2D, Mip->TextureID );
-		if( RenDev->IsGLES )
-		{
-			// GL4ES' record of the texture first, as FOpenGLTexture::PrepareStorage gives every engine
-			// texture: one texel, mipmaps "taken care of"; the levels themselves go around it below.
-			static const BYTE Texel[4] = { 255, 255, 255, 255 };
-			RenDev->glTexParameteri( GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE );
-			RenDev->glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, Texel );
-		}
+		RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 2 );
 		for( INT l=0; l<3; l++ )
 		{
 			INT		Size = 4 >> l;
@@ -209,12 +202,9 @@ struct FUC2GLCombinerTest
 				Level[i*4+2] = (BYTE)(l == 2 ? 255 : 0);
 				Level[i*4+3] = 255;
 			}
-			// (Through the driver's storage helper, as engine textures: on GLES it goes around GL4ES,
-			// which would replace levels 1 and 2 by a chain generated from level 0.)
-			RenDev->TexImage2D( GL_TEXTURE_2D, Mip->TextureID, GL_TEXTURE_2D, l, GL_RGBA, Size, Size, GL_RGBA, GL_UNSIGNED_BYTE, Level );
+			// (As engine textures are uploaded: the levels must stay as given.)
+			RenDev->TexImage2D( GL_TEXTURE_2D, l, GL_RGBA, Size, Size, GL_RGBA, GL_UNSIGNED_BYTE, Level );
 		}
-		if( !RenDev->IsGLES )
-			RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 2 );
 		RenDev->glBindTexture( GL_TEXTURE_2D, 0 );
 
 		static const BYTE D[3][4] = { { 204, 128, 51, 153 }, { 255, 255, 255, 255 }, { 32, 200, 100, 30 } },

@@ -23,9 +23,9 @@
 #   effects    tools/dev/m7-effects.sh on both; the desktop's B pictures are the twin's fx-<effect>-b.ref.png
 #   m6         the pixel-shader pictures (pixel shaders on / off) on both
 #   fallbacks  the twin with each capability masked (test key MaskCaps, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:
-#              MaskCaps=<cap>): s3tc (engine decodes DXT), maxlevel on the desktop (mip chains completed by the
-#              driver), fragdepth (depth test in the distortion passes' shaders), uintindex (32-bit indices stored
-#              as 16-bit); fragdepth and uintindex are WebGL 1 cases (core in WebGL 2), masked on the ES 3 twin.
+#              MaskCaps=<cap>): s3tc (engine decodes DXT), fragdepth (depth test in the distortion passes'
+#              shaders), uintindex (32-bit indices stored as 16-bit); fragdepth and uintindex are WebGL 1 cases (core
+#              in WebGL 2), masked on the ES 3 twin.
 #              depthtexture: a WebGL 1 context without WEBGL_depth_texture (core in WebGL 2), whose fallback is
 #              not implemented: run on the OpenGL ES 2 path and reported as an INFO line (what happens instead);
 #              only a browser without WebGL 2 can be in that case
@@ -222,13 +222,13 @@ check_fallbacks() {
   UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $D fb-ref 110 34 DM-Deadbolt -opengl -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=50:POSTSELFTEST@100:exit > "$LD/fb-ref.report" 2>&1
   [ -z "$pid" ] || wait $pid
   local spec sw tree arg fails=0 st s e L
-  for spec in "glnos3tc|$T|-gl4es" "glnomaxlevel|$D|-opengl" "glnofragdepth|$T|-gl4es" "glnouintindex|$T|-gl4es"; do
+  for spec in "glnos3tc|$T|-gl4es" "glnofragdepth|$T|-gl4es" "glnouintindex|$T|-gl4es"; do
     IFS='|' read -r sw tree arg <<<"$spec"; L=$work/logs/$tree
     UC2_RES=1280x720 UC2_PRECMD="$PIN" "$shot" $tree fb-$sw 110 34 DM-Deadbolt $arg -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=${sw#glno} -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=44 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=50:POSTSELFTEST@100:exit > "$L/fb-$sw.report" 2>&1
     st=$("$imgdiff" "$L/fb-ref-0.png" "$L/fb-$sw-0.png" --box 760,0,1280,720 --diff "$L/fb-$sw-diff.png" 2>&1)
     s=$(grep -a -o "selftest summary: [0-9]* passed, [0-9]* failed" "$L/fb-$sw.out"); e=$(glerr "$L/fb-$sw.out")
     # Threshold: the static part within a mean of 1 of 255 of the same binding with the capability (another
-    # DXT decoder rounds differently; completed mip levels are only seen at extreme minification).
+    # DXT decoder rounds differently).
     # The self-test: every check passes (-ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=fragdepth replaces depth-copy by the check of its fallback,
     # -ini:System:[UC2GLDrv.UC2GLRenderDevice]:MaskCaps=uintindex adds index-narrow: 15 or 16 checks with pp-scale's four).
     if le "$(num mean "$st")" 1 && [[ "$s" =~ ^selftest\ summary:\ 1[56]\ passed,\ 0\ failed$ ]] && [ "$e" = 0 ] && [ "$(crit "$L/fb-$sw.out")" = 0 ]; then
@@ -246,7 +246,7 @@ check_fallbacks() {
     s=$(grep -a -o "selftest summary: [0-9]* passed, [0-9]* failed" "$LT/fb-$sw.out"); e=$(glerr "$LT/fb-$sw.out")
     echo "INFO m11-fallback-$sw: WebGL 1 without WEBGL_depth_texture only (core in WebGL 2); FALLBACK NOT IMPLEMENTED. With the capability masked on the OpenGL ES 2 path: critical $(crit "$LT/fb-$sw.out"), GL errors ${e:-?}, ${s:-no selftest summary}, static part vs the ES 3 twin with the capability: $st; $(grep -a -o 'UC2GLDrv: no [a-zA-Z_ ]* on this context: [^(]*' "$LT/fb-$sw.out" | head -2 | tr '\n' ' ')" | tee -a "$summary"
   done
-  [ $fails = 0 ] && result PASS fallbacks "4 masks with a working fallback (S3TC, texture max level, gl_FragDepth, 32-bit indices); depth textures: WebGL 1 only, INFO line above" || result FAIL fallbacks "$fails of 4 masks failed (lines above)"
+  [ $fails = 0 ] && result PASS fallbacks "3 masks with a working fallback (S3TC, gl_FragDepth, 32-bit indices); depth textures: WebGL 1 only, INFO line above" || result FAIL fallbacks "$fails of 3 masks failed (lines above)"
 }
 
 check_es2() {

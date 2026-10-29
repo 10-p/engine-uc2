@@ -251,10 +251,10 @@ adb install -r app/build/outputs/apk/release/app-release.apk
   Java classes (`SDLActivity`, compiled from its `android-project` sources), so the two always match; the build clones
   `release-2.32.x` once into `Android/build/SDL2`. GL4ES and OpenAL Soft are fetched by the CMake configure as for
   the other targets.
-- DXT textures go to the GPU compressed, around gl4es like every engine texture, in the format gl4es picks for the
-  hardware (`gl4estranscode.h`): as they are where it has S3TC, else transcoded at upload to ASTC 4x4 (decoded at 8-bit
-  precision where the GPU offers it) or ETC2; with none of them UC2GLDrv decodes them to RGBA8. The log says which
-  (`UC2GLDrv: capabilities: S3TC ...`).
+- Engine textures are uploaded through gl4es, DXT ones compressed (`glCompressedTexImage2D`): gl4es hands them to the
+  GPU as they are where it has S3TC, else transcodes them at upload to ASTC 4x4 (decoded at 8-bit precision where the
+  GPU offers it) or ETC2, else decodes them to RGBA8, and derives the mip levels below the engine's last one. The log
+  says which (`UC2GL4ESDrv: DXT ...`).
 - The engine is built `RelWithDebInfo` in every Gradle variant, without the script patches
   (`-DUE_SCRIPT_PATCHES=OFF`): the game runs the game folder's packages. A native host build's
   `build-native/Scripts/System/*.u` copied into the game folder's `System/` gives it the patched ones.

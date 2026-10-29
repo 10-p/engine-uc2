@@ -31,18 +31,6 @@ D3DTEXTUREOP DUMMY_MODULATE2X = D3DTOP_MODULATE2X;
 #include "UC2GLRawFuncs.h"
 #undef GL_RAW
 
-#include <stdlib.h>
-
-#ifndef GL_COMPRESSED_RGBA_ASTC_4x4_KHR
-#define GL_COMPRESSED_RGBA_ASTC_4x4_KHR 0x93B0
-#endif
-#ifndef GL_TEXTURE_ASTC_DECODE_PRECISION_EXT
-#define GL_TEXTURE_ASTC_DECODE_PRECISION_EXT 0x8F69
-#endif
-#ifndef GL_RGBA8
-#define GL_RGBA8 0x8058
-#endif
-
 // Test key ShotTimes=<seconds>[,<seconds>...]: run the engine's SHOT exec at those times after the
 // first frame (verification; the files are System/ShotNNNNN.bmp). The test keys are read in Init.
 static TArray<FLOAT>	GShotTimes;
@@ -177,7 +165,7 @@ UUC2GLRenderDevice::UUC2GLRenderDevice()
 	appMemzero( &DeviceCaps, sizeof(DeviceCaps) );
 	IsGLES					= 0;
 	GLESMajor				= 0;
-	CapDepthTexture = CapFragDepth = CapUIntIndex = CapTextureMaxLevel = CapFragmentHighp = 1;
+	CapDepthTexture = CapFragDepth = CapUIntIndex = CapFragmentHighp = 1;
 	MainDepthRenderbuffer	= 0;
 	QuadBuffer				= 0;
 
@@ -472,16 +460,6 @@ void* UUC2GLRenderDevice::BindingGetRawProcAddress( const char* Name )
 	return BindingGetProcAddress( Name );
 }
 
-GLenum UUC2GLRenderDevice::BindingDXTUploadFormat( GLenum Format )
-{
-	return 0;
-}
-
-void* UUC2GLRenderDevice::BindingTranscodeDXT( GLenum Format, GLenum UploadFormat, INT Width, INT Height, const BYTE* Data, INT& Size )
-{
-	return NULL;
-}
-
 UBOOL UUC2GLRenderDevice::BindingContextAlive()
 {
 	return SDL_GL_GetCurrentContext() != NULL;
@@ -602,7 +580,7 @@ UBOOL UUC2GLRenderDevice::Init()
 	//   Stats=True                      a frame-statistics line every 300 frames
 	//   NoLODBias=True                  texture LOD bias not applied
 	//   MaskCaps=<cap>,...              behave as if a capability were missing: combine3, combine4, depthtexture,
-	//                                   fragdepth, uintindex, maxlevel, s3tc, asyncreadback
+	//                                   fragdepth, uintindex, s3tc, asyncreadback
 	//   DualDiffuse=<n>                 the dual-diffuse test material state (UC2GLMaterialState.cpp)
 	//   MaterialTime=<s>                materials see this time, not the level's (moving materials such as
 	//                                   the Liandri overlay's panned noise picture the same in every run)
@@ -1304,102 +1282,11 @@ UBOOL UUC2GLRenderDevice::UploadMainDepth( const DWORD* Rows, INT Width, INT Hei
 #endif
 }
 
-void UUC2GLRenderDevice::CompressedTexImage2D( GLenum BindTarget, GLuint Texture, GLenum Target, INT Level, GLenum Format, INT Width, INT Height, INT Size, const BYTE* Data, UBOOL FirstStorage )
+void UUC2GLRenderDevice::TexImage2D( GLenum Target, INT Level, GLint Internal, INT Width, INT Height, GLenum Format, GLenum Type, const BYTE* Data )
 {
-	if( !IsGLES )
-	{
-		glCompressedTexImage2D( Target, Level, Format, Width, Height, 0, Size, Data );
-		return;
-	}
-	if( !CapDXTUpload )
-	{
-		// gl4es decodes to RGBA8 (and makes the smaller mip levels itself).
-		glCompressedTexImage2D( Target, Level, Format, Width, Height, 0, Size, Data );
-		return;
-	}
-	// Around gl4es, restoring the raw binding it believes in (see the depth-stencil helpers).
-	// (gl4es has seen a one-texel storage of this texture: FOpenGLTexture::PrepareStorage.)
-	GLenum	Query = BindTarget == GL_TEXTURE_CUBE_MAP ? GL_TEXTURE_BINDING_CUBE_MAP : GL_TEXTURE_BINDING_2D;
-	GLint	Bound = 0;
-	Raw_glGetIntegerv( Query, &Bound );
-	// Without S3TC the binding transcodes DXT to a format the hardware has (ASTC, ETC2).
-	GLenum	UploadFormat	= BindingDXTUploadFormat( Format );
-	void*	Transcoded		= NULL;
-	if( UploadFormat != Format )
-	{
-		Transcoded = BindingTranscodeDXT( Format, UploadFormat, Width, Height, Data, Size );
-		if( !Transcoded )
-		{
-			debugf( NAME_Warning, TEXT("UC2GLDrv: transcoding a %ix%i DXT image (format 0x%04x) to 0x%04x failed"), Width, Height, Format, UploadFormat );
-			return;
-		}
-		Data	= (const BYTE*)Transcoded;
-		Format	= UploadFormat;
-	}
-	Raw_glBindTexture( BindTarget, Texture );
-	Raw_glCompressedTexImage2D( Target, Level, Format, Width, Height, 0, Size, Data );
-	free( Transcoded );
-	// DXT data loses nothing at ASTC's 8-bit decode precision, which samples faster than the default 16-bit.
-	if( Level == 0 && CapASTCDecodeMode && BindTarget == GL_TEXTURE_2D && Format == GL_COMPRESSED_RGBA_ASTC_4x4_KHR )
-		Raw_glTexParameteri( BindTarget, GL_TEXTURE_ASTC_DECODE_PRECISION_EXT, GL_RGBA8 );
-	if( CheckGLErrors )
-	{
-		GLenum Error = Raw_glGetError();
-		if( Error != GL_NO_ERROR )
-		{
-			GLErrorCount++;
-			debugf( NAME_Warning, TEXT("UC2GLDrv: GL error 0x%04x from a compressed upload: texture %i target 0x%04x level %i format 0x%04x %ix%i, %i bytes (frame %i)"), (INT)Error, Texture, Target, Level, Format, Width, Height, Size, FrameCounter );
-		}
-	}
-	Raw_glBindTexture( BindTarget, Bound );
-}
-
-//
-// Storage of engine textures on GLES goes to the library under gl4es, compressed or
-// not. gl4es keeps its own idea of a texture's mip chain: at the first draw with a mipmap
-// filter it calls glGenerateMipmap on any texture whose levels it has not seen arrive down
-// to 1x1, which would replace the engine's mip levels (and fails on compressed ones). What
-// gl4es is given instead is a one-texel "automatic mipmap" storage per texture
-// (FOpenGLTexture::PrepareStorage): valid for its fixed-function emulation, nothing for it
-// to generate or convert. Render targets, the movie texture and the small device textures
-// stay with gl4es.
-//
-void UUC2GLRenderDevice::TexImage2D( GLenum BindTarget, GLuint Texture, GLenum Target, INT Level, GLint Internal, INT Width, INT Height, GLenum Format, GLenum Type, const BYTE* Data )
-{
-	if( !IsGLES )
-	{
-		glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
-		glTexImage2D( Target, Level, Internal, Width, Height, 0, Format, Type, Data );
-		glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
-		return;
-	}
-	// OpenGL ES 2: the internal format is the format; BGRA only as an extension WebGL does
-	// not have, so the D3DCOLOR bytes are reordered here (one path for native ES and the web).
-	if( Format == GL_BGRA )
-	{
-		INT Bytes = Width * Height * 4;
-		if( ScratchBuffer.Num() < Bytes )
-			ScratchBuffer.Add( Bytes - ScratchBuffer.Num() );
-		BYTE* Dest = &ScratchBuffer(0);
-		for( INT i=0; i<Bytes; i+=4 )
-		{
-			Dest[i]		= Data[i+2];
-			Dest[i+1]	= Data[i+1];
-			Dest[i+2]	= Data[i];
-			Dest[i+3]	= Data[i+3];
-		}
-		Data	= Dest;
-		Format	= GL_RGBA;
-	}
-	GLenum	Query = BindTarget == GL_TEXTURE_CUBE_MAP ? GL_TEXTURE_BINDING_CUBE_MAP : GL_TEXTURE_BINDING_2D;
-	GLint	Bound = 0, Alignment = 4;
-	Raw_glGetIntegerv( Query, &Bound );
-	Raw_glGetIntegerv( GL_UNPACK_ALIGNMENT, &Alignment );
-	Raw_glBindTexture( BindTarget, Texture );
-	Raw_glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
-	Raw_glTexImage2D( Target, Level, Format, Width, Height, 0, Format, Type, Data );
-	Raw_glPixelStorei( GL_UNPACK_ALIGNMENT, Alignment );
-	Raw_glBindTexture( BindTarget, Bound );
+	glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
+	glTexImage2D( Target, Level, Internal, Width, Height, 0, Format, Type, Data );
+	glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
 }
 
 //
@@ -1468,19 +1355,13 @@ void UUC2GLRenderDevice::BindQuadBuffer()
 // GLES: gl4es' "texture 0".
 //
 // gl4es treats texture 0 as an object with parameters, as desktop GL and OpenGL ES 2 do (they
-// have a default texture); WebGL has none. Two consequences:
-// - The first time gl4es realises a unit with texture 0 bound, it sets that texture's filter
-//   and wrap parameters with nothing bound under it, and WebGL answers GL_INVALID_OPERATION
-//   (inside the first glFramebufferTexture2D: gl4es realize_textures -> realize_1texture).
-// - Its texture 0 has the default minifying filter NEAREST_MIPMAP_LINEAR and no mipmaps, so at
-//   a draw gl4es calls glGenerateMipmap for it (realize_textures, drawing) without making that
-//   unit active: on whatever texture the active unit has, which can be an engine texture with
-//   DXT storage (Mesa with an ES 2.0 context: "GL_INVALID_OPERATION in generate mipmaps on
-//   compressed texture"; gl4es' own glGetError calls hide it from CheckGLErrors).
+// have a default texture); WebGL has none. The first time gl4es realises a unit with texture 0
+// bound, it sets that texture's filter and wrap parameters with nothing bound under it, and WebGL
+// answers GL_INVALID_OPERATION (inside the first glFramebufferTexture2D: gl4es realize_textures ->
+// realize_1texture).
 // So: every unit starts with a texture of our own under gl4es' "texture 0" (1x1 opaque black,
 // which is what WebGL samples for no texture; gl4es binds a real 0 once it has bound anything
-// else on a unit, and by then has nothing left to set), and texture 0 gets a filter that needs
-// no mipmaps.
+// else on a unit, and by then has nothing left to set), and texture 0's parameters are set now.
 //
 void UUC2GLRenderDevice::PrepareGL4ESTextureZero()
 {
@@ -1522,13 +1403,9 @@ void UUC2GLRenderDevice::PrepareGL4ESTextureZero()
 //
 void UUC2GLRenderDevice::DetectCapabilities()
 {
-	CapDepthTexture = CapFragDepth = CapUIntIndex = CapTextureMaxLevel = CapFragmentHighp = 1;
-	CapDXTUpload = CapASTCDecodeMode = 0;
+	CapDepthTexture = CapFragDepth = CapUIntIndex = CapFragmentHighp = 1;
 	if( IsGLES )
 	{
-		CapASTCDecodeMode	= FindRawExt("GL_EXT_texture_compression_astc_decode_mode");
-		// The binding decides from the hardware's formats: DXT as it is (S3TC), else transcoded (ASTC, ETC2).
-		CapDXTUpload		= Raw_glCompressedTexImage2D != NULL && BindingDXTUploadFormat( GL_COMPRESSED_RGBA_S3TC_DXT5_EXT ) != 0;
 		CapDepthTexture		= ( FindRawExt("GL_OES_depth_texture") || FindRawExt("WEBGL_depth_texture") || FindRawExt("GL_WEBGL_depth_texture") )
 #ifndef __EMSCRIPTEN__
 							&& FindRawExt("GL_OES_packed_depth_stencil")
@@ -1541,7 +1418,6 @@ void UUC2GLRenderDevice::DetectCapabilities()
 		// none of the extension names above.
 		if( GLESMajor >= 3 )
 			CapDepthTexture = CapFragDepth = CapUIntIndex = 1;
-		CapTextureMaxLevel	= 0;
 		GLint Range[2] = { 0, 0 }, Precision = 0;
 		if( Raw_glGetShaderPrecisionFormat )
 			Raw_glGetShaderPrecisionFormat( GL_FRAGMENT_SHADER, GL_HIGH_FLOAT, Range, &Precision );
@@ -1557,23 +1433,13 @@ void UUC2GLRenderDevice::DetectCapabilities()
 	if( GTestCapMask.InStr( TEXT(",DEPTHTEXTURE,") ) >= 0 )	CapDepthTexture = 0;
 	if( GTestCapMask.InStr( TEXT(",FRAGDEPTH,") ) >= 0 )		CapFragDepth = 0;
 	if( GTestCapMask.InStr( TEXT(",UINTINDEX,") ) >= 0 )		CapUIntIndex = 0;
-	if( GTestCapMask.InStr( TEXT(",MAXLEVEL,") ) >= 0 )		CapTextureMaxLevel = 0;
-	if( GTestCapMask.InStr( TEXT(",S3TC,") ) >= 0 )
-	{
-		// GLES: the engine's decoder. Desktop: the engine's decoder.
-		CapDXTUpload = 0;
-		if( !IsGLES )
-			SUPPORTS_GL_EXT_texture_compression_s3tc = 0;
-	}
-	debugf( NAME_Init, TEXT("UC2GLDrv: capabilities: S3TC %s, depth texture %s, gl_FragDepth %s, 32-bit indices %s, texture max level %s, fragment highp %s"),
-		!UseHardwareS3TC() ? TEXT("NO (fallback: the driver decodes DXT to RGBA8)")
-		: !IsGLES || BindingDXTUploadFormat( GL_COMPRESSED_RGBA_S3TC_DXT5_EXT ) == GL_COMPRESSED_RGBA_S3TC_DXT5_EXT ? TEXT("yes")
-		: BindingDXTUploadFormat( GL_COMPRESSED_RGBA_S3TC_DXT5_EXT ) == GL_COMPRESSED_RGBA_ASTC_4x4_KHR ? TEXT("no, DXT is transcoded to ASTC 4x4")
-		: TEXT("no, DXT is transcoded to ETC2"),
+	if( GTestCapMask.InStr( TEXT(",S3TC,") ) >= 0 )		SUPPORTS_GL_EXT_texture_compression_s3tc = 0;
+	// (GLES: S3TC is gl4es's, which takes DXT on every context; UC2GL4ESDrv logs what the hardware gets.)
+	debugf( NAME_Init, TEXT("UC2GLDrv: capabilities: S3TC %s, depth texture %s, gl_FragDepth %s, 32-bit indices %s, fragment highp %s"),
+		SUPPORTS_GL_EXT_texture_compression_s3tc ? TEXT("yes") : TEXT("NO (fallback: the driver decodes DXT to RGBA8)"),
 		CapDepthTexture ? TEXT("yes") : TEXT("NO (no fallback: the depth of field and the hiding of distortion behind nearer geometry are lost)"),
 		CapFragDepth ? TEXT("yes") : TEXT("NO (fallback: the distortion passes test the scene's depth in the shader)"),
 		CapUIntIndex ? TEXT("yes") : TEXT("NO (fallback: 32-bit index data stored as 16-bit)"),
-		CapTextureMaxLevel ? TEXT("yes") : TEXT("no (mip chains are completed to 1x1)"),
 		CapFragmentHighp ? TEXT("yes") : TEXT("NO (mediump)") );
 }
 
