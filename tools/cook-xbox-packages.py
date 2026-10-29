@@ -127,10 +127,11 @@ def prefer_for(name, is_map):
 
 
 def drop_export(e):
-    """An export the conversion could not write: flagged for neither client nor server, so the engine never
-    creates it and references to it load as None (a size-0 export would be read from the file's start)."""
+    """An export the conversion could not write: flagged for no load context (client, server or editor), so the
+    engine never creates it and references to it load as None (a size-0 export would be read from the file's
+    start)."""
     e.data, e.lazy, e.lin = b'', (), None
-    e.flags &= ~uc2xpkg.RF_LoadRuntime
+    e.flags &= ~(uc2xpkg.RF_LoadRuntime | uc2xpkg.RF_LoadForEdit)
 
 
 def load_xbox(src):

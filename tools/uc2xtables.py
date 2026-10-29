@@ -34,7 +34,7 @@ import json
 import struct
 
 import uc2xrefs
-from uc2xpkg import Export, FormatError, Package, RF_HasStack, RF_LoadRuntime
+from uc2xpkg import Export, FormatError, Package, RF_HasStack, RF_LoadForEdit, RF_LoadRuntime
 
 FORMAT = 1
 
@@ -385,6 +385,9 @@ class _Rewrite:
                 if x.flags & RF_LoadRuntime and e.runtime():
                     self.warn('%s (%s): no data' % (d.export_path(i), d.export_class(i)))
                 x.flags &= ~RF_LoadRuntime
+                if not e.flags & (RF_LoadRuntime | RF_LoadForEdit):
+                    # left out by the conversion: not for the editor either
+                    x.flags &= ~RF_LoadForEdit
                 continue
             x.data, x.lazy = self.data(i), e.lazy
             x.flags = (x.flags & ~RF_HasStack) | (e.flags & RF_HasStack)
