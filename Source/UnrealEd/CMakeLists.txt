@@ -1,7 +1,8 @@
 #=============================================================================
 # UnrealEd - the level editor, UnrealEd.exe (Windows subsystem): Epic's UnrealEd sources on the Editor package,
 # with Window and WinDrv for its user interface and UC2WGLDrv (the GL driver through WGL) for its viewports.
-# MinGW only, 32-bit (root CMakeLists.txt). The game folder's UnrealEd.u, Editor.u and DefUnrealEd.ini go with it.
+# MinGW only, 32-bit (root CMakeLists.txt). It runs on the game folder's UnrealEd.u and Editor.u; the files it needs
+# beyond the game folder's are listed in release-files.txt.
 #=============================================================================
 
 project(UnrealEd CXX)

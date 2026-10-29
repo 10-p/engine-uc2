@@ -154,11 +154,19 @@ D3DDrv does it: the hit rectangle is read back around every hit proxy).
   `windres` and merged into one object (`cmake/UC2Win32Resources.cmake`, `tools/merge-res.py`: their DLL-era numbers
   clash in one program; a clash keeps the later package's resource, so the editor's dialogs win over Window's
   installer pages).
-- Run: `tools/dev/mkrun-uc2.sh build-windows <tree>` puts `UnrealEd.exe` in `System/` with the game's `Editor.u`,
-  `UnrealEd.u` and our `DefUnrealEd.ini`; start it from `System/` (under wine: `wine ./UnrealEd.exe`). It reads its own
+- Its files: what the editor needs in a game folder beyond the game's (a folder cooked from the retail disc, with the
+  Windows release in `System/`) is listed in `Source/UnrealEd/release-files.txt`: `UnrealEd.exe`, our
+  `DefUnrealEd.ini` (it names the WGL device; the disc's names D3DDrv), and from Epic's drop the bitmaps of the left
+  button bar (`System/EditorRes/<name>.bmp`, read from the working folder when the bar is made) and the splash
+  (`System/EdSplash.bmp`). The disc has the rest: `Editor.u`, `UnrealEd.u`, `UnrealEdTips.ini`, `UDNHelpTopics.ini`
+  and the editor's localisation. `tools/dev/unrealed-files.sh <build> <dest>` copies the list (`UC2_EPIC_SOURCES` for
+  another drop); `bin/package-release.sh uc2 <version> unrealed` (the release's `unrealed-windows-x86` zip),
+  `tools/dev/package-windows.sh` and `tools/dev/mkrun-uc2.sh` use it.
+- Run: `tools/dev/mkrun-uc2.sh build-windows <tree>` puts `UnrealEd.exe` and its files in `System/` beside the game's
+  `Editor.u` and `UnrealEd.u`; start it from `System/` (under wine: `wine ./UnrealEd.exe`). It reads its own
   system ini, `UC2Editor.ini` (made from `Default.ini` on the first start), where it sets `WinDrv.WindowsClient` and
   `UC2WGLDrv.UC2WGLRenderDevice`, so the game's `Avaris.ini` is untouched. The log is `Editor.log`.
-- `tools/dev/package-windows.sh` ships it beside `uc2.exe` when the build has it.
+- `tools/dev/package-windows.sh` ships it and its files beside `uc2.exe` when the build has it.
 - Under wine, viewports are presented through GDI (`[UC2WGLDrv.UC2WGLRenderDevice] GDIPresent`, `Engine/Config/README.md`).
   In wine's virtual desktop the maximised editor frame (whose window rectangle starts at -4,-4) is drawn 4 pixels right
   of and below where wine puts the pointer: clicks hit what is under the pointer in the editor's own coordinates, so a

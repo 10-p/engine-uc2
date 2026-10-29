@@ -10,7 +10,8 @@
 #   UC2_PACKAGE_STRIP=1     strip the debug information from the copies (uc2.exe 81 MB -> about 15 MB); the crash
 #                           report's addresses are then resolved with the unstripped exe from the build directory
 #
-# The folder: <dest>/System (uc2.exe, ucc.exe, the editor UnrealEd.exe when the build has it (the 32-bit preset),
+# The folder: <dest>/System (uc2.exe, ucc.exe, the editor UnrealEd.exe with its EditorRes/ bitmaps and splash when the
+# build has it (the 32-bit preset; Source/UnrealEd/release-files.txt),
 # OpenAL32.dll, our inis over the asset tree's System/, README-Windows.txt,
 # DLLS.txt) and, unless UC2_PACKAGE_CONTENT=0, the content folders of the asset tree (<repo>/../assets/uc2-assets,
 # UC2_ASSETS_DIR) with its cooked Sounds/Music (UC2_COOKED_DIR for another folder), hard-linked (a copy of the folder to another disk copies the data).
@@ -44,7 +45,8 @@ chmod -R u+w "$dest/System"
 rm -f "$dest/System"/*.bin "$dest/System"/ucc-bin* "$dest/System"/*.so* "$dest/System"/*.log
 cp -f "$repo"/Engine/Config/*.ini "$dest/System/"
 cp -f "$exe_uc2" "$exe_ucc" "$dll_al" "$dest/System/"
-[ -f "$exe_ed" ] && cp -f "$exe_ed" "$dest/System/"
+# The editor with its own files (Source/UnrealEd/release-files.txt).
+[ -f "$exe_ed" ] && "$repo/tools/dev/unrealed-files.sh" "$build" "$dest"
 if [ "${UC2_PACKAGE_STRIP:-0}" = 1 ]; then
   for f in $programs; do i686-w64-mingw32-strip --strip-debug "$dest/System/$f"; done
 fi

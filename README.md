@@ -42,7 +42,9 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
 - **UCC on every desktop build**: `ucc-bin` (Linux) and `ucc.exe` (Windows), 32- and 64-bit, beside the game: the
   dedicated server and the commandlets.
 - **The editor** (`UnrealEd.exe`, i686): Epic's UnrealEd, Window and WinDrv built with MinGW, its viewports drawn by the
-  OpenGL renderer through WGL (`UC2WGLDrv`) in place of D3DDrv, with viewport hit testing (click selection).
+  OpenGL renderer through WGL (`UC2WGLDrv`) in place of D3DDrv, with viewport hit testing (click selection); it ships
+  with what it needs beyond a game folder cooked from the retail disc (its button bar's bitmaps and splash, from
+  Epic's drop).
 - **GCC/Clang portability**: Epic's MSVC code builds with GCC, Clang (Emscripten) and MinGW unchanged in behaviour.
 - **Keyboard and mouse**: PC bindings, menus driven by keyboard and mouse, the console on the key left of 1, the
   PC mouse look of the mouse-look patch set.
