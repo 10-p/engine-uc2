@@ -322,6 +322,9 @@ class EDITOR_API UEditorEngine : public UEngine
 	UBOOL Exec_BSP( const TCHAR* Str, FOutputDevice& Ar );
 	UBOOL Exec_Light( const TCHAR* Str, FOutputDevice& Ar );
 	UBOOL Exec_Map( const TCHAR* Str, FOutputDevice& Ar );
+	UBOOL MapHasEmptyExports( const TCHAR* Filename );
+	UBOOL ConfirmMapLoad( const TCHAR* Filename );
+	void AddMissingBuilderBrush();
 	UBOOL Exec_Select( const TCHAR* Str, FOutputDevice& Ar );
 	UBOOL Exec_Poly( const TCHAR* Str, FOutputDevice& Ar );
 	UBOOL Exec_Texture( const TCHAR* Str, FOutputDevice& Ar );

@@ -62,8 +62,9 @@ In the repository the cook is `tools/cook.py`.
 - **Maps.** On the disc each map is a `.LIN` file: a linear-load stream, everything the Xbox read to load the level,
   in reading order, from the map and from the packages it uses. It is not a package and does not load on its own, so
   the cook turns each one back into a map package. The Xbox never read a level's brushes (the shapes its geometry was
-  built from, which only the level editor uses), so the disc has none and the editor cannot open a cooked map; the
-  game plays it as the Xbox did. The editor opens the cooked textures, meshes and animations.
+  built from, which only the level editor uses), so the disc has none: the game plays a cooked map as the Xbox did,
+  and the editor opens it after a warning, with its actors editable but its geometry fixed as cooked (rebuilding the
+  geometry removes it). The editor opens the cooked textures, meshes and animations.
 - **Textures, meshes and animations.** The disc keeps their pictures and geometry apart from the packages, in `.xpr`
   bundles; the cook puts them back together.
 - **Packages for network play.** The packages come out the same as the PC game folder's, so a player who cooked the

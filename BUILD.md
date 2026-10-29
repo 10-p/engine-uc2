@@ -166,10 +166,17 @@ D3DDrv does it: the hit rectangle is read back around every hit proxy).
   and the editor's localisation. `tools/dev/unrealed-files.sh <build> <dest>` copies the list (`UC2_EPIC_SOURCES` for
   another drop); `bin/package-release.sh uc2 <version> unrealed` (the release's `unrealed-windows-x86` zip),
   `tools/dev/package-windows.sh` and `tools/dev/mkrun-uc2.sh` use it.
-- Maps cooked from the disc do not open in the editor: their brushes (the `Brush` actors with their `Model` and
-  `Polys`, and the editor's `Camera`s, exports that only the editor loads) are not on the disc, so the cook writes those
-  exports empty and loading one stops (`InPos<=Size`, `Bad import index`). The game plays these maps from their built
-  geometry. The cooked texture, static mesh and animation packages open in the browsers; PC-format maps open.
+- Maps cooked from the disc open after a warning. Their brushes (the `Brush` actors with their `Model` and `Polys`)
+  and the editor's `Camera`s, exports that only the editor loads, are not on the disc, so the cook writes those exports
+  empty. Before it loads a map the editor reads the file's export table (`UEditorEngine::MapHasEmptyExports`; a
+  PC-format or editor-saved map has no empty export) and asks whether to open it (`ConfirmMapLoad`: the command bar's
+  `MAP LOAD`, File > Open, the recent files, `MAPS`); No keeps the current map. The linker loads no export that has no
+  data in the file, so references to one load as None (`ULinkerLoad`), and the editor gives the level a new builder
+  brush (`AddMissingBuilderBrush`) and its view cameras. The level draws as cooked (BSP, static meshes, actors,
+  lights); actors and their properties can be edited and the map saved, but the BSP has no brushes behind it: it
+  cannot be changed, and rebuilding the geometry (Build Geometry, Build All) leaves the level without BSP. The game
+  plays these maps from their built geometry. The cooked texture, static mesh and animation packages open in the
+  browsers.
 - Run: `tools/dev/mkrun-uc2.sh build-windows <tree>` puts `UnrealEd.exe` and its files in `System/` beside the game's
   `Editor.u` and `UnrealEd.u`; start it from `System/` (under wine: `wine ./UnrealEd.exe`). It reads its own
   system ini, `UC2Editor.ini` (made from `Default.ini` on the first start), where it sets `WinDrv.WindowsClient` and

@@ -1648,13 +1648,13 @@ class WEditorFrame : public WMdiFrame, public FNotifyHook
 					GMRUList->RemoveItem( Filename );
 					GMRUList->AddToMenu( GEditorFrame->hWnd, GMainMenu, 1 );
 				}
-				else
+				else if( GUnrealEd->ConfirmMapLoad( *Filename ) )
 				{
 					FileSaveChanges( hWnd );
 
 					GBottomBar->Reset();
 					GLevelFrame->SetMapFilename( (TCHAR*)(*(GMRUList->Items[Command - IDMN_MRU1] ) ) );
-					GUnrealEd->Exec( *FString::Printf(TEXT("MAP LOAD FILE=\"%s\""), *GMRUList->Items[Command - IDMN_MRU1] ));
+					GUnrealEd->Exec( *FString::Printf(TEXT("MAP LOAD FILE=\"%s\" CONFIRMED=1"), *GMRUList->Items[Command - IDMN_MRU1] ));
 					RefreshEditor( ERefreshEditor_Misc | ERefreshEditor_AllBrowsers | ERefreshEditor_ActorBrowser );
 					GButtonBar->RefreshBuilders();
 
@@ -4161,7 +4161,7 @@ void FileOpen( HWND hWnd )
 	ofn.Flags = OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
 
 	// Display the Open dialog box. 
-	if( GetOpenFileNameA(&ofn) )
+	if( GetOpenFileNameA(&ofn) && GUnrealEd->ConfirmMapLoad( appFromAnsi(File) ) )
 	{
 		// Make sure there's a level frame open.
 		GEditorFrame->OpenLevelView();
@@ -4170,7 +4170,7 @@ void FileOpen( HWND hWnd )
 
 		// Convert the ANSI filename to UNICODE, and tell the editor to open it.
 		GLevelFrame->SetMapFilename( (TCHAR*)appFromAnsi(File) );
-		GUnrealEd->Exec( *FString::Printf(TEXT("MAP LOAD FILE=\"%s\""), GLevelFrame->GetMapFilename() ) );
+		GUnrealEd->Exec( *FString::Printf(TEXT("MAP LOAD FILE=\"%s\" CONFIRMED=1"), GLevelFrame->GetMapFilename() ) );
 
 		FString S = GLevelFrame->GetMapFilename();
 		GMRUList->AddItem( GLevelFrame->GetMapFilename() );

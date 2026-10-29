@@ -422,12 +422,22 @@ ULinkerLoad::ULinkerLoad( UObject* InParent, const TCHAR* InFilename, DWORD InLo
 	if( Summary.ExportCount > 0 )
 	{
 		Seek( Summary.ExportOffset );
+		INT NoData = 0;
 		for( INT i=0; i<Summary.ExportCount; i++ )
 		{
 			FObjectExport*	Export = new(ExportMap)FObjectExport;
 
 			*this << *Export;
+
+			// An export with no data in the file cannot be loaded: no context creates it, references to it load as None.
+			if( Export->SerialSize==0 && (Export->ObjectFlags & _ContextFlags) )
+			{
+				Export->ObjectFlags &= ~RF_LoadContextFlags;
+				NoData++;
+			}
 		}
+		if( NoData )
+			debugf( NAME_Log, TEXT("%s: %i exports have no data in the file and are not loaded"), *Filename, NoData );
 	}
 	unguard;
 
