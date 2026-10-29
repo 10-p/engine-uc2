@@ -253,6 +253,20 @@ void CMainLoop::RunLoop()
 	DOUBLE NewTime   = appSeconds();
 	FLOAT  DeltaTime = NewTime - OldTime;
 
+	// [SDLLaunch] FixedFrameRate=<fps>, a test key (appReadTestKey): every frame moves the world on by exactly 1/<fps> s
+	// however long it took, so game time counts frames whatever the load; the limiter below caps the frames at that rate.
+	static FLOAT FixedDelta = -1.f;
+	if( FixedDelta < 0.f )
+	{
+		FixedDelta = 0.f;
+		FString Spec;
+		if( appReadTestKey( TEXT("FixedFrameRate"), Spec, TEXT("SDLLaunch") ) && appAtof(*Spec) > 0.f )
+		{
+			FixedDelta = 1.f / appAtof( *Spec );
+			debugf( NAME_Init, TEXT("FixedFrameRate: every frame ticks the world by %.4f s"), FixedDelta );
+		}
+	}
+
 	guard(UpdateWorld);
 	if( GIsBenchmarking || RecordingMovie )
 	{
@@ -265,9 +279,10 @@ void CMainLoop::RunLoop()
 	}
 	else
 	{
-		Engine->Tick( DeltaTime );
+		const FLOAT TickDelta = FixedDelta > 0.f ? FixedDelta : DeltaTime;
+		Engine->Tick( TickDelta );
 		if( GWindowManager )
-			GWindowManager->Tick( DeltaTime );
+			GWindowManager->Tick( TickDelta );
 	}
 	TickCount++;
 	OldTime = NewTime;
@@ -300,6 +315,8 @@ void CMainLoop::RunLoop()
 		}
 		if( MaxFps > 0.f && (MaxTickRate <= 0.f || MaxFps < MaxTickRate) )
 			MaxTickRate = MaxFps;
+		if( FixedDelta > 0.f && (MaxTickRate <= 0.f || 1.f / FixedDelta < MaxTickRate) )
+			MaxTickRate = 1.f / FixedDelta;
 		// [SDLLaunch] FramePattern=<ms>:<ms>:... gives the frames
 		// these lengths in turn (a game without a cap of its own only; it takes the place of FrameRateCap): uneven
 		// frame pacing, as a browser has it, made repeatable for the frame trace (FRAMETRACE, UC2FrameTrace.cpp).
