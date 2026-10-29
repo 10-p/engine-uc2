@@ -274,11 +274,14 @@ and auto-centring; the mouse's linear look of the `mouse-look` set and its key g
 gyro takes neither path: `USDL2Client::ApplyGyro` (`SDL2Android.cpp`), from player one's input update in the player's
 tick, turns the controller's rotation by whole rotation units (65536 a turn, the rest carried to the next tick) just
 before `PlayerTick`, whose `UpdateRotation` starts from it and adds the sticks, adhesion and lock-on; the pitch stays
-within the camera's 16000 units up or down. The pad's own mode and bindings stay as they are; with the pad, its
-auto-centring (`bAutoCenterPitch`, the controller settings' centring box) still levels the pitch while the player
-moves and the look stick rests. Nothing in a menu, while paused, in a cut-scene or over a load (the game not ticking
-for half a second); no smoothing, acceleration or dead zone. With `-UFRONTLOG` the log has the totals once the gyro
-rests (`Gyro: <yaw> degrees right and <pitch> up in play in all, <n> yaw and <n> pitch units`).
+within the camera's 16000 units up or down. The zoom slows it as it slows the pad's and the mouse's turns (their
+`DesiredFOV * 0.01111`): the turn is times `DesiredFOV / DefaultFOV` (the sniper rifle's zoom, 50 to 20 degrees; 1
+unzoomed, at any aspect ratio, since AutoFOV widens only the drawn view). The pad's own mode and bindings stay as they
+are; with the pad, its auto-centring (`bAutoCenterPitch`, the controller settings' centring box) still levels the
+pitch while the player moves and the look stick rests. Nothing in a menu, while paused, in a cut-scene or over a load
+(the game not ticking for half a second); no smoothing, acceleration or dead zone. With `-UFRONTLOG` the log has the
+totals once the gyro rests (`Gyro: <yaw> degrees right and <pitch> up in play in all, <n> yaw and <n> pitch units
+(zoom <z>)`: the degrees before the zoom, the units after it, the zoom of the last turn).
 
 In the background (the home screen, the recent apps, another app on top) the game is suspended. SDL's activity
 pauses on `onStop`, and its event pump then blocks the game thread until the app returns, so nothing ticks;

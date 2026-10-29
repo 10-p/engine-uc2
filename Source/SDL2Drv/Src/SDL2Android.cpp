@@ -189,11 +189,12 @@ void USDL2Client::PublishTouchPadState()
 }
 
 // Gyro aiming's degrees waiting for the player's tick and the fractions of a rotation unit not applied yet (yaw,
-// pitch), and with -UFRONTLOG its totals in play.
+// pitch), and with -UFRONTLOG its totals in play and the zoom of its last turn.
 static FLOAT	GGyroPending[2] = { 0.f, 0.f };
 static FLOAT	GGyroCarry[2] = { 0.f, 0.f };
 static DOUBLE	GGyroDegrees[2] = { 0.0, 0.0 };
 static INT		GGyroUnits[2] = { 0, 0 };
+static FLOAT	GGyroZoom = 1.f;
 static DOUBLE	GGyroLastTime = 0.0;
 static UBOOL	GGyroUnlogged = 0;
 // The last update's time: the turn sent while the game did not tick for half a second (a load) is not aim.
@@ -213,9 +214,11 @@ static INT GyroUnits( FLOAT Degrees, FLOAT& Carry )
 // (the pad's stick curve, adhesion and auto-centring; the mouse's linear look in UCGameplay's mouse-look set) and by
 // SDL's mouse events (the key glyphs), so the gyro takes neither path: from the player's tick (DeltaSeconds > 0),
 // just before the controller's PlayerTick, it turns the controller's rotation by whole rotation units (65536 a turn).
-// UpdateRotation starts its view from that rotation and adds the sticks, adhesion and lock-on to it. The pitch stays
-// within the camera's limit, 16000 units up or down (LimitCameraPitch). Nothing in a menu, while the game is paused
-// or in a cut-scene, nor what came while the game did not tick for half a second (a load). With -UFRONTLOG the totals are logged once the gyro has rested for a quarter of a second.
+// UpdateRotation starts its view from that rotation and adds the sticks, adhesion and lock-on to it. The zoom slows
+// the turn as the pad's and the mouse's turns are slowed (their DesiredFOV * 0.01111): times DesiredFOV / DefaultFOV.
+// The pitch stays within the camera's limit, 16000 units up or down (LimitCameraPitch). Nothing in a menu, while the
+// game is paused or in a cut-scene, nor what came while the game did not tick for half a second (a load). With
+// -UFRONTLOG the totals are logged once the gyro has rested for a quarter of a second.
 //
 void USDL2Client::ApplyGyro( UViewport* Viewport, FLOAT DeltaSeconds )
 {
@@ -236,8 +239,9 @@ void USDL2Client::ApplyGyro( UViewport* Viewport, FLOAT DeltaSeconds )
 	}
 	else if( DeltaSeconds > 0.f && ( GGyroPending[0] != 0.f || GGyroPending[1] != 0.f ) )
 	{
-		const INT YawUnits = GyroUnits( GGyroPending[0], GGyroCarry[0] );
-		const INT PitchUnits = GyroUnits( GGyroPending[1], GGyroCarry[1] );
+		const FLOAT Zoom = PC->DefaultFOV > 0.f && PC->DesiredFOV > 0.f ? PC->DesiredFOV / PC->DefaultFOV : 1.f;
+		const INT YawUnits = GyroUnits( GGyroPending[0] * Zoom, GGyroCarry[0] );
+		const INT PitchUnits = GyroUnits( GGyroPending[1] * Zoom, GGyroCarry[1] );
 		PC->Rotation.Yaw += YawUnits;
 		INT Pitch = PC->Rotation.Pitch & 65535;
 		if( Pitch >= 32768 )
@@ -254,6 +258,7 @@ void USDL2Client::ApplyGyro( UViewport* Viewport, FLOAT DeltaSeconds )
 		GGyroDegrees[1] += GGyroPending[1];
 		GGyroUnits[0] += YawUnits;
 		GGyroUnits[1] += PitchUnits;
+		GGyroZoom = Zoom;
 		GGyroPending[0] = GGyroPending[1] = 0.f;
 		GGyroLastTime = Now;
 		GGyroUnlogged = 1;
@@ -263,8 +268,8 @@ void USDL2Client::ApplyGyro( UViewport* Viewport, FLOAT DeltaSeconds )
 	{
 		GGyroUnlogged = 0;
 		if( GUfrontLog )
-			debugf( NAME_Log, TEXT("Gyro: %.3f degrees right and %.3f up in play in all, %i yaw and %i pitch units"),
-				GGyroDegrees[0], GGyroDegrees[1], GGyroUnits[0], GGyroUnits[1] );
+			debugf( NAME_Log, TEXT("Gyro: %.3f degrees right and %.3f up in play in all, %i yaw and %i pitch units (zoom %.4f)"),
+				GGyroDegrees[0], GGyroDegrees[1], GGyroUnits[0], GGyroUnits[1], GGyroZoom );
 	}
 	unguard;
 }
