@@ -458,7 +458,8 @@ if(UC2_PTR_BYTES EQUAL 8 AND CMAKE_CROSSCOMPILING)
   list(REMOVE_ITEM UC2_PACKAGES Editor)
 endif()
 
-# The Win32 resources of the Windows programs: the editor's, and the application manifest of uc2.exe and UnrealEd.exe.
+# The Win32 resources of the Windows programs: the editor's, and the application manifest of uc2.exe, UnrealEd.exe and
+# ucc.exe.
 if(MINGW)
   include(UC2Win32Resources)
 endif()

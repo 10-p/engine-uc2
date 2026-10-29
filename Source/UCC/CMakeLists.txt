@@ -44,6 +44,8 @@ if(MINGW)
   target_link_libraries(${PROJECT_NAME} PRIVATE
     -Wl,--whole-archive ${LINK_PACKAGES} -Wl,--no-whole-archive
     zlib ws2_32 winmm)
+  # The application manifest of the Windows programs (cmake/win32/uc2.manifest).
+  uc2_link_win32_resources(${PROJECT_NAME} UC2Manifest)
 else()
 target_link_libraries(${PROJECT_NAME} PRIVATE
   -Wl,--whole-archive ${LINK_PACKAGES} -Wl,--no-whole-archive

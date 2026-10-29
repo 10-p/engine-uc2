@@ -127,13 +127,14 @@ tools/dev/package-windows.sh build-windows                        # <repo>/../ru
   (console), `-static`: no MinGW runtime DLL. OpenAL Soft is fetched and built as `OpenAL32.dll` and loaded at run
   time (absent: no sound). SDL2 is static. The imports of both exes are Windows system DLLs only (`objdump -p ... |
   grep 'DLL Name'`; `tools/dev/package-windows.sh` checks it).
-- DPI: the programs that open windows, `uc2.exe` and `UnrealEd.exe`, carry an application manifest
-  (`cmake/win32/uc2.manifest`, linked through `cmake/UC2Win32Resources.cmake`) that declares the whole process
-  per-monitor DPI aware (system aware before Windows 8.1). Windows then never scales a window's pixels: at a display
-  scale above 100 % every window, dialog and viewport is drawn in the display's pixels and takes clicks where it is
-  drawn. The editor's buttons, icons and fixed-size boxes keep their pixel sizes while its text follows the scale, so
-  a label can be cut short. Nothing changes the awareness at run time: the engine calls no DPI function, and SDL2
-  calls one only when its DPI hints are set.
+- Manifest: `uc2.exe`, `UnrealEd.exe` and `ucc.exe` carry one application manifest (`cmake/win32/uc2.manifest`,
+  linked through `cmake/UC2Win32Resources.cmake`). DPI: the whole process is per-monitor DPI aware (system aware
+  before Windows 8.1), so Windows never scales a window's pixels: at a display scale above 100 % every window, dialog
+  and viewport is drawn in the display's pixels and takes clicks where it is drawn. The editor's buttons, icons and
+  fixed-size boxes keep their pixel sizes while its text follows the scale, so a label can be cut short. Nothing
+  changes the awareness at run time: the engine calls no DPI function, and SDL2 calls one only when its DPI hints are
+  set. Execution level `asInvoker`: no UAC file or registry virtualisation, so the game folder must be writable by
+  the user who runs the programs (not under `Program Files`).
 - Folders: on Windows the base folder (`appBaseDir`) is the executable's, as in Epic's Windows layer; `appInit`
   changes into it and the log goes there, so the programs start from any working folder. Elsewhere it is the working
   folder.

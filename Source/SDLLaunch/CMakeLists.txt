@@ -57,7 +57,7 @@ if(MINGW)
   target_link_libraries(${PROJECT_NAME} PRIVATE
     -Wl,--whole-archive ${LINK_PACKAGES} -Wl,--no-whole-archive
     SDL2::SDL2-static zlib ws2_32 winmm)
-  # The application manifest (cmake/win32/uc2.manifest): the process's DPI awareness.
+  # The application manifest (cmake/win32/uc2.manifest): the process's DPI awareness and execution level.
   uc2_link_win32_resources(${PROJECT_NAME} UC2Manifest)
 elseif(ANDROID)
   # bionic has pthread and libm in libc. libopenal.so is packaged beside it but not linked: UC2ALAudio dlopens it

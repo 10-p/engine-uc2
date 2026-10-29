@@ -5,8 +5,8 @@
 # uc2_link_win32_resources(<executable> <target>...): merges the .res of those targets into one object for the
 #   executable (tools/merge-res.py: each script was written for its own DLL, so their numbers clash in one module)
 #   and links it.
-# UC2Manifest: the application manifest of the programs that open windows (win32/uc2.manifest: the process's DPI
-#   awareness), a target that uc2_link_win32_resources takes like a package's resources.
+# UC2Manifest: the application manifest of the Windows programs (win32/uc2.manifest: the process's DPI awareness and
+#   execution level), a target that uc2_link_win32_resources takes like a package's resources.
 
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
