@@ -203,8 +203,8 @@ def make(pc, disc, types):
 def copy_identities(disc, t, types, original):
     """{merged copy name (lower case): path of the content package object it stands for} of the disc's map disc
     (Xbox format): the copies the PC map imports, from its tables t; then each copy that identified copies refer
-    to, from the object their originals refer to at the same place, where a copy's tag stream and its original's
-    line up. original(package name) is the disc's content package of that name, or None. A copy two referrers
+    to, from the object their originals (the content package's export of the same path and class) refer to at the
+    same place, where a copy's tag stream and its original's line up. original(package name) is the disc's content package of that name, or None. A copy two referrers
     disagree on is left out."""
     pc = package_of(t)
     found = {cla: pc.ref_path(ref) for cla, ref in t.get('merged', {}).items()}
@@ -221,8 +221,9 @@ def copy_identities(disc, t, types, original):
         if orig is None:
             continue
         if orig.path not in paths:
-            paths[orig.path] = {orig.export_path(j).lower(): j for j in range(len(orig.exports))}
-        j = paths[orig.path].get(rest.lower())
+            paths[orig.path] = {(orig.export_path(j).lower(), orig.export_class(j)): j
+                                for j in range(len(orig.exports))}
+        j = paths[orig.path].get((rest.lower(), disc.export_class(i)))
         if j is None or orig.export_class(j) != disc.export_class(i) or not orig.exports[j].data:
             continue
         try:
