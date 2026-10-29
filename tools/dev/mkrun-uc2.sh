@@ -133,11 +133,15 @@ copy_bins() {
   if [ -f "$1"/_deps/openalsoft-build/libopenal.so.1 ]; then
     cp -fL "$1"/_deps/openalsoft-build/libopenal.so.1 "$run/System/libopenal.so.1"
   fi
-  # A Windows (MinGW) build: ucc.exe, uc2.exe, the editor UnrealEd.exe and the OpenAL32.dll the build compiled
-  # (LoadLibrary'd from beside the exe). Run under wine from System/ (tools/dev/m12-wine-smoke.sh).
-  for bin in "$1"/Source/UCC/ucc.exe "$1"/Source/SDLLaunch/uc2.exe "$1"/Source/UnrealEd/UnrealEd.exe "$1"/_deps/openalsoft-build/OpenAL32.dll; do
+  # A Windows (MinGW) build: ucc.exe, uc2.exe and the OpenAL32.dll the build compiled (LoadLibrary'd from beside the
+  # exe), and the editor UnrealEd.exe with its own files (Source/UnrealEd/release-files.txt). Run under wine from
+  # System/ (tools/dev/m12-wine-smoke.sh).
+  for bin in "$1"/Source/UCC/ucc.exe "$1"/Source/SDLLaunch/uc2.exe "$1"/_deps/openalsoft-build/OpenAL32.dll; do
     [ -f "$bin" ] && cp -f "$bin" "$run/System/"
   done
+  if [ -f "$1"/Source/UnrealEd/UnrealEd.exe ]; then
+    "$repo"/tools/dev/unrealed-files.sh "$1" "$run"
+  fi
   # An Emscripten build: ucc-bin.js/.wasm run under Node from System/ (the browser build's SDLLaunch.* is
   # served from the build directory, not from here).
   for bin in "$1"/Source/UCC/ucc-bin.js "$1"/Source/UCC/ucc-bin.wasm; do

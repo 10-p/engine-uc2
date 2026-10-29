@@ -268,7 +268,7 @@ class WButtonGroup : public WWindow
 			FString Filename = *FString::Printf(TEXT("editorres\\%s.bmp"), *BMPFilename);
 			pWBButton->hbm = (HBITMAP)LoadImageA( hInstance, appToAnsi( *Filename ), IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE );
 			if(!pWBButton->hbm)
-				pWBButton->hbm = (HBITMAP)LoadImageA( hInstance, "BBGeneric", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE );
+				pWBButton->hbm = (HBITMAP)LoadImageA( hInstance, "editorres\\BBGeneric.bmp", IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE );
 		}
 		else
 			pWBButton->hbm = NULL;

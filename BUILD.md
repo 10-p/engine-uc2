@@ -127,8 +127,20 @@ tools/dev/package-windows.sh build-windows                        # <repo>/../ru
   (console), `-static`: no MinGW runtime DLL. OpenAL Soft is fetched and built as `OpenAL32.dll` and loaded at run
   time (absent: no sound). SDL2 is static. The imports of both exes are Windows system DLLs only (`objdump -p ... |
   grep 'DLL Name'`; `tools/dev/package-windows.sh` checks it).
+- Manifest: `uc2.exe`, `UnrealEd.exe` and `ucc.exe` carry one application manifest (`cmake/win32/uc2.manifest`,
+  linked through `cmake/UC2Win32Resources.cmake`). DPI: the whole process is per-monitor DPI aware (system aware
+  before Windows 8.1), so Windows never scales a window's pixels: at a display scale above 100 % every window, dialog
+  and viewport is drawn in the display's pixels and takes clicks where it is drawn. The editor's buttons, icons and
+  fixed-size boxes keep their pixel sizes while its text follows the scale, so a label can be cut short. Nothing
+  changes the awareness at run time: the engine calls no DPI function, and SDL2 calls one only when its DPI hints are
+  set. Execution level `asInvoker`: no UAC file or registry virtualisation, so the game folder must be writable by
+  the user who runs the programs (not under `Program Files`).
+- Folders: on Windows the base folder (`appBaseDir`) is the executable's, as in Epic's Windows layer; `appInit`
+  changes into it and the log goes there, so the programs start from any working folder. Elsewhere it is the working
+  folder.
 - The platform layer is Core's GCC one (`UnGnuG.h`, `UnUnix.cpp` with its `_WIN32` branches, `FFileManagerUnix.h`,
-  POSIX threads through winpthreads), not Epic's MSVC `UnVcWin32.*`.
+  POSIX threads through winpthreads), not Epic's MSVC `UnVcWin32.*`. Its `appMsgf` shows a Win32 message box with
+  Epic's buttons (Yes/No, OK/Cancel or OK) and returns the answer, as `UnVcWin32.cpp` does.
 - Under wine: `tools/dev/m12-wine.sh <dir> <prog.exe> [args]` (inside `capped`) runs one program in a private prefix
   (`$UC2_WINEPREFIX`, default `<repo>/../.cache/wine-m12`) and kills its wineserver afterwards.
 - `windows64` (x86_64): see "64-bit" below.
@@ -147,11 +159,33 @@ D3DDrv does it: the hit rectangle is read back around every hit proxy).
   `windres` and merged into one object (`cmake/UC2Win32Resources.cmake`, `tools/merge-res.py`: their DLL-era numbers
   clash in one program; a clash keeps the later package's resource, so the editor's dialogs win over Window's
   installer pages).
-- Run: `tools/dev/mkrun-uc2.sh build-windows <tree>` puts `UnrealEd.exe` in `System/` with the game's `Editor.u`,
-  `UnrealEd.u` and our `DefUnrealEd.ini`; start it from `System/` (under wine: `wine ./UnrealEd.exe`). It reads its own
+- Its files: what the editor needs in a game folder beyond the game's (a folder cooked from the retail disc, with the
+  Windows release in `System/`) is listed in `Source/UnrealEd/release-files.txt`: `UnrealEd.exe`, our
+  `DefUnrealEd.ini` (it names the WGL device; the disc's names D3DDrv), and from Epic's drop the bitmaps of the left
+  button bar (`System/EditorRes/<name>.bmp`, read from the working folder when the bar is made) and the splash
+  (`System/EdSplash.bmp`). The disc has the rest: `Editor.u`, `UnrealEd.u`, `UnrealEdTips.ini`, `UDNHelpTopics.ini`
+  and the editor's localisation. `tools/dev/unrealed-files.sh <build> <dest>` copies the list (`UC2_EPIC_SOURCES` for
+  another drop); `bin/package-release.sh uc2 <version> unrealed` (the release's `unrealed-windows-x86` zip),
+  `tools/dev/package-windows.sh` and `tools/dev/mkrun-uc2.sh` use it.
+- Maps cooked from the disc open after a warning. Their brushes (the `Brush` actors with their `Model` and `Polys`)
+  and the editor's `Camera`s, exports that only the editor loads, are not on the disc, so the cook writes those exports
+  empty. Before it loads a map the editor reads the file's export table (`UEditorEngine::MapHasEmptyExports`; a
+  PC-format or editor-saved map has no empty export) and asks whether to open it (`ConfirmMapLoad`: the command bar's
+  `MAP LOAD`, File > Open, the recent files, `MAPS`); No keeps the current map. The linker loads no export that has no
+  data in the file, so references to one load as None (`ULinkerLoad`), and the editor gives the level a new builder
+  brush (`AddMissingBuilderBrush`) and its view cameras. The level draws as cooked (BSP, static meshes, actors,
+  lights); actors and their properties can be edited and the map saved, but the BSP has no brushes behind it: it
+  cannot be changed, and rebuilding the geometry (Build Geometry, Build All) leaves the level without BSP. The game
+  plays these maps from their built geometry. The cooked texture, static mesh and animation packages open in the
+  browsers.
+- Run: `tools/dev/mkrun-uc2.sh build-windows <tree>` puts `UnrealEd.exe` and its files in `System/` beside the game's
+  `Editor.u` and `UnrealEd.u`; start it from `System/` (under wine: `wine ./UnrealEd.exe`). It reads its own
   system ini, `UC2Editor.ini` (made from `Default.ini` on the first start), where it sets `WinDrv.WindowsClient` and
   `UC2WGLDrv.UC2WGLRenderDevice`, so the game's `Avaris.ini` is untouched. The log is `Editor.log`.
-- `tools/dev/package-windows.sh` ships it beside `uc2.exe` when the build has it.
+- Play Level saves `Maps/Autoplay.unr` and starts the game named by `Default.ini`'s `[URL] EXEName` (`uc2.exe`) with
+  `Autoplay.unr HWND=<the editor's window> <[Editor.EditorEngine] GameCommandLine>`; on Windows `appLaunchURL` hands a
+  program or a web address to the shell and the editor stays open.
+- `tools/dev/package-windows.sh` ships it and its files beside `uc2.exe` when the build has it.
 - Under wine, viewports are presented through GDI (`[UC2WGLDrv.UC2WGLRenderDevice] GDIPresent`, `Engine/Config/README.md`).
   In wine's virtual desktop the maximised editor frame (whose window rectangle starts at -4,-4) is drawn 4 pixels right
   of and below where wine puts the pointer: clicks hit what is under the pointer in the editor's own coordinates, so a

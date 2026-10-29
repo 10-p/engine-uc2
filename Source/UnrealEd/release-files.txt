@@ -1,0 +1,62 @@
+# The editor's files: what UnrealEd.exe needs in the game folder beyond a folder cooked from the retail Xbox disc
+# (tools/cook.py) with the Windows release in its System/. The disc already has the editor's script packages
+# (Editor.u, UnrealEd.u), its tips and help topics (UnrealEdTips.ini, UDNHelpTopics.ini) and the localisation of
+# Editor, UnrealEd, Window and WinDrv; its DefUnrealEd.ini names Epic's D3DDrv, which this build has not, so ours
+# replaces it. The bitmaps of the editor's left button bar are read from System/EditorRes/<name>.bmp when the bar is
+# made (the modes, the brush builders' BitmapFilename, the [UserDefinedGroup] buttons of UnrealEd.ini, and BBGeneric
+# for a button whose own bitmap is missing), the splash from System/EdSplash.bmp; the disc has neither, Epic's drop
+# has both.
+#
+# tools/dev/unrealed-files.sh copies them. One file per line: <source> <path in the source> <path in the game folder>
+#   build  the windows build directory
+#   repo   this repository
+#   epic   Epic's drop (UC2_EPIC_SOURCES, default <repo>/../epic-sources/uc2-avaris-2226)
+build  Source/UnrealEd/UnrealEd.exe           System/UnrealEd.exe
+repo   Engine/Config/DefUnrealEd.ini          System/DefUnrealEd.ini
+epic   System/EdSplash.bmp                    System/EdSplash.bmp
+epic   System/EditorRes/AddAntiPortal.bmp     System/EditorRes/AddAntiPortal.bmp
+epic   System/EditorRes/AddMover.bmp          System/EditorRes/AddMover.bmp
+epic   System/EditorRes/AddSpecial.bmp        System/EditorRes/AddSpecial.bmp
+epic   System/EditorRes/BBCone.bmp            System/EditorRes/BBCone.bmp
+epic   System/EditorRes/BBCube.bmp            System/EditorRes/BBCube.bmp
+epic   System/EditorRes/BBCurvedStair.bmp     System/EditorRes/BBCurvedStair.bmp
+epic   System/EditorRes/BBCylinder.bmp        System/EditorRes/BBCylinder.bmp
+epic   System/EditorRes/BBGeneric.bmp         System/EditorRes/BBGeneric.bmp
+epic   System/EditorRes/BBLinearStair.bmp     System/EditorRes/BBLinearStair.bmp
+epic   System/EditorRes/BBSheet.bmp           System/EditorRes/BBSheet.bmp
+epic   System/EditorRes/BBSphere.bmp          System/EditorRes/BBSphere.bmp
+epic   System/EditorRes/BBSpiralStair.bmp     System/EditorRes/BBSpiralStair.bmp
+epic   System/EditorRes/BBTerrain.bmp         System/EditorRes/BBTerrain.bmp
+epic   System/EditorRes/BBVolumetric.bmp      System/EditorRes/BBVolumetric.bmp
+epic   System/EditorRes/BrushClip.bmp         System/EditorRes/BrushClip.bmp
+epic   System/EditorRes/BrushClipDelete.bmp   System/EditorRes/BrushClipDelete.bmp
+epic   System/EditorRes/BrushClipFlip.bmp     System/EditorRes/BrushClipFlip.bmp
+epic   System/EditorRes/BrushClipSplit.bmp    System/EditorRes/BrushClipSplit.bmp
+epic   System/EditorRes/CameraAlign.bmp       System/EditorRes/CameraAlign.bmp
+epic   System/EditorRes/ClipZ.bmp             System/EditorRes/ClipZ.bmp
+epic   System/EditorRes/HideSelected.bmp      System/EditorRes/HideSelected.bmp
+epic   System/EditorRes/InvertSelections.bmp  System/EditorRes/InvertSelections.bmp
+epic   System/EditorRes/MirrorX.bmp           System/EditorRes/MirrorX.bmp
+epic   System/EditorRes/MirrorY.bmp           System/EditorRes/MirrorY.bmp
+epic   System/EditorRes/MirrorZ.bmp           System/EditorRes/MirrorZ.bmp
+epic   System/EditorRes/ModeAdd.bmp           System/EditorRes/ModeAdd.bmp
+epic   System/EditorRes/ModeAddStaticMesh.bmp System/EditorRes/ModeAddStaticMesh.bmp
+epic   System/EditorRes/ModeAddVolume.bmp     System/EditorRes/ModeAddVolume.bmp
+epic   System/EditorRes/ModeBrushClip.bmp     System/EditorRes/ModeBrushClip.bmp
+epic   System/EditorRes/ModeCamera.bmp        System/EditorRes/ModeCamera.bmp
+epic   System/EditorRes/ModeDeintersect.bmp   System/EditorRes/ModeDeintersect.bmp
+epic   System/EditorRes/ModeFaceDrag.bmp      System/EditorRes/ModeFaceDrag.bmp
+epic   System/EditorRes/ModeGeometry.bmp      System/EditorRes/ModeGeometry.bmp
+epic   System/EditorRes/ModeIntersect.bmp     System/EditorRes/ModeIntersect.bmp
+epic   System/EditorRes/ModeMatinee.bmp       System/EditorRes/ModeMatinee.bmp
+epic   System/EditorRes/ModePolygon.bmp       System/EditorRes/ModePolygon.bmp
+epic   System/EditorRes/ModeRotate.bmp        System/EditorRes/ModeRotate.bmp
+epic   System/EditorRes/ModeScale.bmp         System/EditorRes/ModeScale.bmp
+epic   System/EditorRes/ModeSubtract.bmp      System/EditorRes/ModeSubtract.bmp
+epic   System/EditorRes/ModeTerrainEdit.bmp   System/EditorRes/ModeTerrainEdit.bmp
+epic   System/EditorRes/ModeVertex.bmp        System/EditorRes/ModeVertex.bmp
+epic   System/EditorRes/SelectInside.bmp      System/EditorRes/SelectInside.bmp
+epic   System/EditorRes/ShowAll.bmp           System/EditorRes/ShowAll.bmp
+epic   System/EditorRes/ShowSelected.bmp      System/EditorRes/ShowSelected.bmp
+epic   System/EditorRes/TexturePan.bmp        System/EditorRes/TexturePan.bmp
+epic   System/EditorRes/TextureRotate.bmp     System/EditorRes/TextureRotate.bmp

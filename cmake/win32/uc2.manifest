@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <!-- The application manifest of the Windows programs, uc2.exe, UnrealEd.exe and ucc.exe (Manifest.rc).
+       DPI: one awareness for the whole process, declared before any window exists: per-monitor aware (system aware
+       before Windows 8.1). Windows then never scales a window's pixels, so GDI, the dialogs and the OpenGL viewports
+       share one coordinate space; the programs draw at the display's pixel size.
+       Execution level: as the user who starts it, with no file or registry virtualisation, so the game folder is
+       the one the programs read and write. -->
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+    </windowsSettings>
+  </application>
+</assembly>

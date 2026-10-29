@@ -1648,13 +1648,13 @@ class WEditorFrame : public WMdiFrame, public FNotifyHook
 					GMRUList->RemoveItem( Filename );
 					GMRUList->AddToMenu( GEditorFrame->hWnd, GMainMenu, 1 );
 				}
-				else
+				else if( GUnrealEd->ConfirmMapLoad( *Filename ) )
 				{
 					FileSaveChanges( hWnd );
 
 					GBottomBar->Reset();
 					GLevelFrame->SetMapFilename( (TCHAR*)(*(GMRUList->Items[Command - IDMN_MRU1] ) ) );
-					GUnrealEd->Exec( *FString::Printf(TEXT("MAP LOAD FILE=\"%s\""), *GMRUList->Items[Command - IDMN_MRU1] ));
+					GUnrealEd->Exec( *FString::Printf(TEXT("MAP LOAD FILE=\"%s\" CONFIRMED=1"), *GMRUList->Items[Command - IDMN_MRU1] ));
 					RefreshEditor( ERefreshEditor_Misc | ERefreshEditor_AllBrowsers | ERefreshEditor_ActorBrowser );
 					GButtonBar->RefreshBuilders();
 
@@ -3153,7 +3153,10 @@ class WEditorFrame : public WMdiFrame, public FNotifyHook
 
 			case WM_EDC_MAPCHANGE:
 			{
-				GPrefabLevel = NULL;
+				// The message's lParam (below) is read now: the refreshes send this window messages of their own, and
+				// each one replaces LastlParam.
+				const UBOOL MajorChange = (LastlParam == 1);
+
 				GBrowserPrefab->RefreshLevel();
 				GBrowserPrefab->RefreshViewport();
 
@@ -3166,7 +3169,7 @@ class WEditorFrame : public WMdiFrame, public FNotifyHook
 				// Rebuild the collision hash if necessary
 				// A "1" will be in the lParam if this map change is something major ("new", "open", etc).  Minor things like 
 				// brush subtraction will set it to "0".
-				if( LastlParam == 1 )
+				if( MajorChange )
 				{
 					GUnrealEd->Level->SetActorCollision(0, 1);
 					GUnrealEd->Level->SetActorCollision(1);
@@ -4157,7 +4160,7 @@ void FileOpen( HWND hWnd )
 	ofn.Flags = OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
 
 	// Display the Open dialog box. 
-	if( GetOpenFileNameA(&ofn) )
+	if( GetOpenFileNameA(&ofn) && GUnrealEd->ConfirmMapLoad( appFromAnsi(File) ) )
 	{
 		// Make sure there's a level frame open.
 		GEditorFrame->OpenLevelView();
@@ -4166,7 +4169,7 @@ void FileOpen( HWND hWnd )
 
 		// Convert the ANSI filename to UNICODE, and tell the editor to open it.
 		GLevelFrame->SetMapFilename( (TCHAR*)appFromAnsi(File) );
-		GUnrealEd->Exec( *FString::Printf(TEXT("MAP LOAD FILE=\"%s\""), GLevelFrame->GetMapFilename() ) );
+		GUnrealEd->Exec( *FString::Printf(TEXT("MAP LOAD FILE=\"%s\" CONFIRMED=1"), GLevelFrame->GetMapFilename() ) );
 
 		FString S = GLevelFrame->GetMapFilename();
 		GMRUList->AddItem( GLevelFrame->GetMapFilename() );

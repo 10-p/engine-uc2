@@ -461,6 +461,8 @@ class WBrowserPrefab : public WBrowser
 		//if( GPrefabLevel )
 		//	GPrefabLevel->Destroy();
 		//delete GPrefabLevel;
+		if( GPrefabLevel )
+			GPrefabLevel->RemoveFromRoot();
 		GPrefabLevel = NULL;
 
 		WBrowser::OnDestroy();
@@ -1070,16 +1072,19 @@ class WBrowserPrefab : public WBrowser
 
 		if( GPrefabLevel )
 		{
+			GPrefabLevel->RemoveFromRoot();
 			GPrefabLevel->Destroy();
 			delete GPrefabLevel;
 		}
 
 		GPrefabLevel = new( UObject::GetTransientPackage(), TEXT("PrefabLevel") )ULevel( GUnrealEd, 0 );
+		// Only this browser refers to the prefab level and its camera: in the root set the garbage collector keeps them.
+		GPrefabLevel->AddToRoot();
 
 		if( Viewport )
 		{
-			// The viewport's camera was an actor of the previous prefab level, deleted above or taken by the garbage
-			// collector with a map change (WM_EDC_MAPCHANGE): the viewport gets a new camera in the new level.
+			// The viewport's camera was an actor of the previous prefab level, deleted above: the viewport gets a new
+			// camera in the new level.
 			Viewport->Actor = NULL;
 			GPrefabLevel->SpawnViewActor( Viewport );
 			Viewport->Actor->ShowFlags	= GShowFlags;

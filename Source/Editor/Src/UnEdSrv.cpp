@@ -9,6 +9,7 @@
 #include "EditorPrivate.h"
 #include "UnPath.h"
 #include "UnEdLevelStat.h"
+#include "UnLinker.h"	// A map file's summary and export table (MapHasEmptyExports)
 
 //
 // FMemoryReader and FMemoryWriter are needed for texture duplication code
@@ -2423,6 +2424,123 @@ UBOOL UEditorEngine::Exec_Light( const TCHAR* Str, FOutputDevice& Ar )
 	unguard;
 }
 
+// A package file's tables read with the engine's own serialisers, a name as its index alone; nothing is loaded.
+class FPackageTablesReader : public FArchive
+{
+public:
+	FPackageTablesReader( FArchive* InFile )
+	:	File( InFile )
+	{
+		ArIsLoading = ArIsPersistent = 1;
+	}
+	void Serialize( void* V, INT Length )
+	{
+		File->Serialize( V, Length );
+		if( File->GetError() )
+			ArIsError = 1;
+	}
+	void Seek( INT InPos )
+	{
+		File->Seek( InPos );
+	}
+	INT Tell()
+	{
+		return File->Tell();
+	}
+	INT TotalSize()
+	{
+		return File->TotalSize();
+	}
+	FArchive& operator<<( FName& Name )
+	{
+		NAME_INDEX NameIndex;
+		*this << AR_INDEX(NameIndex);
+		Name = NAME_None;
+		return *this;
+	}
+private:
+	FArchive* File;
+};
+
+// Whether the map file has exports that a load would create but that hold no data: a map cooked from the Xbox disc,
+// which never had the level's brushes (with their models and polys) or the editor's cameras.
+UBOOL UEditorEngine::MapHasEmptyExports( const TCHAR* Filename )
+{
+	guard(UEditorEngine::MapHasEmptyExports);
+
+	FArchive* File = GFileManager->CreateFileReader( Filename, 0, GNull );
+	if( !File )
+		return 0;
+	FPackageTablesReader Reader( File );
+	INT Tag = 0, Empty = 0;
+	Reader << Tag;
+	if( Tag==PACKAGE_FILE_TAG && !Reader.GetError() )
+	{
+		FPackageFileSummary Summary;
+		Reader.Seek( 0 );
+		Reader << Summary;
+		if( !Reader.GetError() && Summary.ExportOffset>0 && Summary.ExportOffset<Reader.TotalSize() )
+		{
+			Reader.SetVer( Summary.GetFileVersion() );
+			Reader.SetLicenseeVer( Summary.GetFileVersionLicensee() );
+			Reader.Seek( Summary.ExportOffset );
+			for( INT i=0; i<Summary.ExportCount && !Reader.GetError(); i++ )
+			{
+				FObjectExport Export;
+				Reader << Export;
+				if( !Reader.GetError() && Export.SerialSize==0 && (Export.ObjectFlags & RF_LoadContextFlags) )
+					Empty++;
+			}
+		}
+	}
+	delete File;
+	return Empty>0;
+
+	unguard;
+}
+
+// Before a map with empty exports (MapHasEmptyExports) is opened, the user is told what the editor cannot do with it
+// and chooses; 1: open the map.
+UBOOL UEditorEngine::ConfirmMapLoad( const TCHAR* Filename )
+{
+	guard(UEditorEngine::ConfirmMapLoad);
+
+	if( !MapHasEmptyExports( Filename ) )
+		return 1;
+	debugf( NAME_Warning, TEXT("%s: a map cooked from the Xbox disc, without the brushes its BSP geometry was built from"), Filename );
+	UBOOL Open = GWarn->YesNof
+	(
+		TEXT("%s is a map of the retail game, cooked from the Xbox disc.\n\n")
+		TEXT("The disc does not hold the level's brushes, the shapes its BSP geometry was built from. The map opens as it ")
+		TEXT("was cooked: its actors, static meshes and lights can be selected, moved and edited, and the map can be ")
+		TEXT("saved, but its BSP geometry cannot be changed, and rebuilding the geometry (Build Geometry, Build All) ")
+		TEXT("removes it from the level.\n\nOpen the map?"),
+		Filename
+	);
+	debugf( NAME_Log, TEXT("%s: %s"), Filename, Open ? TEXT("opened after the warning") : TEXT("not opened, the current map stays") );
+	return Open;
+
+	unguard;
+}
+
+// A loaded level whose builder brush the file does not hold (a map cooked from the Xbox disc) gets an empty one in its
+// place, as a new level has.
+void UEditorEngine::AddMissingBuilderBrush()
+{
+	guard(UEditorEngine::AddMissingBuilderBrush);
+
+	if( Level->Actors.Num()<2 || Level->Actors(1) )
+		return;
+	ABrush* Builder = Level->SpawnBrush();
+	Level->Actors.Remove( Level->Actors.Num()-1 );
+	Level->Actors(1) = Builder;
+	Builder->Brush = new( Level->GetOuter() )UModel( Builder, 1 );
+	Builder->SetFlags( RF_NotForClient | RF_NotForServer | RF_Transactional );
+	Builder->Brush->SetFlags( RF_NotForClient | RF_NotForServer | RF_Transactional );
+
+	unguard;
+}
+
 UBOOL UEditorEngine::Exec_Map( const TCHAR* Str, FOutputDevice& Ar )
 {
 	guard(UEditorEngine::Exec_Map);
@@ -2587,6 +2705,12 @@ UBOOL UEditorEngine::Exec_Map( const TCHAR* Str, FOutputDevice& Ar )
 	{
 		if( Parse( Str, TEXT("FILE="), TempFname, 256 ) )
 		{
+			// CONFIRMED=1: the caller has asked ConfirmMapLoad already
+			UBOOL Confirmed = 0;
+			ParseUBOOL( Str, TEXT("CONFIRMED="), Confirmed );
+			if( !Confirmed && !ConfirmMapLoad( TempFname ) )
+				return 1;
+
 			// Make a list of actors in other levels
 			// so we don't clean these up after level change.
 			TArray<AActor*> ExternalActors;
@@ -2602,6 +2726,7 @@ UBOOL UEditorEngine::Exec_Map( const TCHAR* Str, FOutputDevice& Ar )
 			Flush(0);
 			LoadPackage( Level->GetOuter(), TempFname, 0 );
 			Level->Engine = this;
+			AddMissingBuilderBrush();
 			Level->ReconcileActors();
 			//GTerrainTools.Init();
 			ResetSound();
@@ -2622,7 +2747,9 @@ UBOOL UEditorEngine::Exec_Map( const TCHAR* Str, FOutputDevice& Ar )
 			{
 				if( Level->Actors.FindItemIndex(*It)==INDEX_NONE )
 				{
-					if( ExternalActors.FindItemIndex(*It)==INDEX_NONE )
+					// an actor of another level stays, also one made since the list above (the prefab browser's camera
+					// in its new level, from the map change)
+					if( ExternalActors.FindItemIndex(*It)==INDEX_NONE && (!It->XLevel || It->XLevel==Level) )
 						It->bDeleteMe=1;
 				}
 				else
@@ -5505,9 +5632,9 @@ UBOOL UEditorEngine::Exec( const TCHAR* Stream, FOutputDevice& Ar )
 					for (INT i=0; i<FilesFound.Num(); i++)
 					{
 						FString Pkg = FilesFound(i);
-						if (appStrstr(*Pkg, TEXT(".unr")))
+						if (appStrstr(*Pkg, TEXT(".unr")) && ConfirmMapLoad( *FString::Printf(TEXT("%s%s"), *Dir, *Pkg) ))
 						{
-							Exec( *FString::Printf(TEXT("MAP LOAD FILE=\"%s%s\""), *Dir, *Pkg), Ar );
+							Exec( *FString::Printf(TEXT("MAP LOAD FILE=\"%s%s\" CONFIRMED=1"), *Dir, *Pkg), Ar );
 							UObject* Package = CastChecked<UPackage>(GEditor->Level->GetOuter());
 							if (Package != NULL)
 							{

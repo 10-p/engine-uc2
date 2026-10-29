@@ -29,6 +29,7 @@
 #ifdef _WIN32
 #include <winsock2.h>
 #include <windows.h>
+#include <shellapi.h>	// ShellExecuteA (appLaunchURL)
 #include <exception>
 #include <signal.h>
 #include <process.h>	// _spawnv
@@ -1090,6 +1091,20 @@ CORE_API const UBOOL appMsgf( INT Type, const TCHAR* Fmt, ... )
     appStrcpy(GMacOSAlertBoxOnExit, TempStr);
     appRequestExit(0);
     unguard;
+#elif defined(_WIN32)
+	// A message box with the buttons of Type, as Epic's Win32 layer: 1 Yes/No, 2 OK/Cancel (1 for Yes or OK), else OK.
+	guard(appMsgf);
+	switch( Type )
+	{
+		case 1:
+			return MessageBox( NULL, TempStr, TEXT("Message"), MB_YESNO ) == IDYES;
+		case 2:
+			return MessageBox( NULL, TempStr, TEXT("Message"), MB_OKCANCEL ) == IDOK;
+		default:
+			MessageBox( NULL, TempStr, TEXT("Message"), MB_OK );
+			break;
+	}
+	unguard;
 #else
     printf("appMsgf(): %s\n", TCHAR_TO_ANSI(TempStr));
     appDebugBreak();
@@ -2198,6 +2213,17 @@ void appLaunchURL( const TCHAR* URL, const TCHAR* Parms, FString* Error )
     GMacOSLaunchURLOnExit = new TCHAR[appStrlen(URL) + 1];
     appStrcpy(GMacOSLaunchURLOnExit, URL);
 
+#elif defined(_WIN32)
+
+	// The shell opens it now, as Epic's Windows layer does (a web address, or a program with its parameters: the
+	// editor's Play Level starts the game), and this program carries on.
+	debugf( NAME_Log, TEXT("Launching %s %s"), URL, Parms ? Parms : TEXT("") );
+	HINSTANCE Code = ShellExecuteA( NULL, "open", TCHAR_TO_ANSI(URL), Parms ? TCHAR_TO_ANSI(Parms) : "", TCHAR_TO_ANSI(appBaseDir()), SW_SHOWNORMAL );
+	if( (PTRINT)Code <= 32 )
+		debugf( NAME_Warning, TEXT("Could not launch %s (ShellExecute error %i)"), URL, (INT)(PTRINT)Code );
+	if( Error )
+		*Error = (PTRINT)Code <= 32 ? LocalizeError(TEXT("UrlFailed"),TEXT("Core")) : TEXT("");
+
 #else
 
     const char *_envr = getenv("BROWSER");
@@ -2276,7 +2302,10 @@ void appLaunchURL( const TCHAR* URL, const TCHAR* Parms, FString* Error )
 
 #endif
 
+#ifndef _WIN32
+	// The browser is started when this program exits (GUnixSpawnOnExit, GMacOSLaunchURLOnExit).
 	appRequestExit(0);
+#endif
 
 	unguard;
 }
@@ -2400,9 +2429,23 @@ CORE_API const TCHAR* appBaseDir()
 		if( AndroidBaseDir && AndroidBaseDir[0] && chdir( AndroidBaseDir ) != 0 )
 			fprintf( stderr, "appBaseDir: chdir(%s) failed: %s\n", AndroidBaseDir, strerror(errno) );
 #endif
+#ifdef _WIN32
+		// The executable's folder, as Epic's Windows layer has it: appInit changes into it, so the game folder's
+		// relative paths hold whichever folder the program was started from.
+		AnsiBaseDir[0] = 0;
+		GetModuleFileNameA( NULL, AnsiBaseDir, sizeof(AnsiBaseDir) );
+		AnsiBaseDir[sizeof(AnsiBaseDir)-1] = 0;
+		ANSICHAR* Slash = strrchr( AnsiBaseDir, '\\' );
+		ANSICHAR* ForwardSlash = strrchr( AnsiBaseDir, '/' );
+		if( ForwardSlash > Slash )
+			Slash = ForwardSlash;
+		if( Slash )
+			*Slash = 0;
+#else
 		// If the executable isn't launched from its own directory, then the
 		// dynamic linker won't be able to find the shared libraries.
 		getcwd( AnsiBaseDir, sizeof(AnsiBaseDir) );
+#endif
         appStrcpy( BaseDir, ANSI_TO_TCHAR(AnsiBaseDir));
 		appStrcat( BaseDir, TEXT("/") );
 	}
