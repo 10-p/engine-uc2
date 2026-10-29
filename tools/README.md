@@ -38,7 +38,7 @@ In the repository the cook is `tools/cook.py`.
 - **Python 3.8 or newer**: <https://www.python.org/downloads/> (Linux and macOS have it).
 - **ffmpeg**: Debian/Ubuntu `sudo apt install ffmpeg`, Fedora `sudo dnf install ffmpeg` (RPM Fusion), Arch
   `sudo pacman -S ffmpeg`, macOS `brew install ffmpeg`, Windows `winget install Gyan.FFmpeg`.
-- **About 2.2 GB free** for the game folder, and as much again while a disc image is unpacked.
+- **About 2.3 GB free** for the game folder, and as much again while a disc image is unpacked.
 
 `--check` names anything missing and how to install it.
 
