@@ -115,8 +115,8 @@
 +	return True;
 +}
 +
-+// How far the announcement band and what is drawn in it (the announcement, its reward panel, the local message) move
-+// down: to the bottom of a single view; a split view has no band, and they stay where they are.
++// How far the announcement band, what is drawn in it (the announcement, its reward panel, the local message) and the
++// status bar move down: to the bottom of a single view; a split view has no band, and they stay where they are.
 +final simulated function float BandShift(Canvas C)
 +{
 +	if (IsSplitScreen())
@@ -375,28 +375,35 @@
  }
  
  final simulated function DrawSpectatingText(Canvas C, UCPawn ViewTarget)
-@@ -2208,7 +2349,9 @@
+@@ -2208,7 +2349,11 @@
  	local float Buffer;
  	local float LargestXL;
  	local float TextScale;
 +	local int LeftShift, RightShift;
++	local float BottomShift;
  	C.Font = LoadFont(4);
 +	GetSideShifts(C, LeftShift, RightShift);
++	BottomShift = BandShift(C);
  	C.TextSize(StatusText, XL, YL);
  	Buffer = 6.0;
  	if (IsSplitScreen())
-@@ -2229,8 +2372,8 @@
+@@ -2226,11 +2371,13 @@
+ 			(Y -= CriticalAnnounceOffset);
+ 		}
+ 	}
++	// down with the announcement band, so the bar runs from its line to the bottom of the view
++	(Y += BottomShift);
  	C.DrawColor = cHUDBlack;
  	C.DrawColor.A = 200;
  	C.Style = 5;
 -	C.SetPos((0.0 + float(SafeZoneOffsetX)), Y);
 -	C.DrawTileStretched(Texture't_ui_2.Main.UI_Main_WhiteBlock', (ScreenWidth + float((SafeZoneOffsetX * 2))), (float(C.SizeY) - Y));
 +	C.SetPos((0.0 + float(SafeZoneOffsetX + LeftShift)), Y);
-+	C.DrawTileStretched(Texture't_ui_2.Main.UI_Main_WhiteBlock', (ScreenWidth + float((SafeZoneOffsetX * 2) - LeftShift + RightShift)), (float(C.SizeY) - Y));
++	C.DrawTileStretched(Texture't_ui_2.Main.UI_Main_WhiteBlock', (ScreenWidth + float((SafeZoneOffsetX * 2) - LeftShift + RightShift)), ((float(C.SizeY) + BottomShift) - Y));
  	C.DrawColor = cHUDWhite;
  	LargestXL = ((ScreenWidth + float(SafeZoneOffsetX)) - float((46 * 2)));
  	TextScale = 1.0;
-@@ -2367,6 +2510,8 @@
+@@ -2367,6 +2514,8 @@
  	local float AnnouncementYL;
  	local float MessageXL;
  	local float MessageYL;
@@ -405,7 +412,7 @@
  	if ((LocalMessage.Message != None))
  	{
  		C.Font = LocalMessage.StringFont;
-@@ -2381,9 +2526,14 @@
+@@ -2381,9 +2530,14 @@
  			FadeValue = (LocalMessage.EndOfLife - Level.TimeSeconds);
  			C.DrawColor.A = byte((float(C.DrawColor.A) * (FadeValue / LocalMessage.Lifetime)));
  		}
@@ -422,7 +429,7 @@
  		if (((AnnDuration > 0.0) && (AnnText != "")))
  		{
  			C.TextSize(AnnText, AnnouncementXL, AnnouncementYL);
-@@ -2394,13 +2544,14 @@
+@@ -2394,13 +2548,14 @@
  			}
  			else
  			{
@@ -439,7 +446,7 @@
  		DX = (LocalMessage.DX / float(C.SizeX));
  		DY = (LocalMessage.DY / float(C.SizeY));
  		LocalMessage.Drawn = True;
-@@ -2468,14 +2619,27 @@
+@@ -2468,14 +2623,27 @@
  final simulated function DrawElements(Canvas C)
  {
  	local int i;
@@ -468,7 +475,7 @@
  			}
  			(i)++;
  		}
-@@ -2853,10 +3017,10 @@
+@@ -2853,10 +3021,10 @@
  	pos_LeaderBoardName(1)=(X=588.0,Y=69.0,W=0.0,H=0.0)
  	pos_LeaderBoardName(2)=(X=588.0,Y=82.0,W=0.0,H=0.0)
  	pos_LeaderBoardName(3)=(X=588.0,Y=96.0,W=0.0,H=0.0)

@@ -31,11 +31,12 @@ do not move.
   announcement's line to the bottom edge of the view (Epic's is opaque and 53 high, one design pixel short of the
   design space's bottom), a gradient from alpha 0 at its top to 200 at its bottom in rows one design pixel high, its
   alpha kept while the announcement's text fades out. Where the view reaches below the UI box (a window taller than
-  4:3), the band, the announcement, its reward panel and the local message move down together by that room
-  (`UCHUD.BandShift`), so the band ends on the view's bottom edge at every aspect; the rest of the HUD stays in the box.
-  The critical announcement ("PLAY") and the local message (in every view) are drawn over a black shadow one design
-  pixel right and down at 0.6 times their alpha. At every aspect, 4:3 included (`UCHUD.GradientBand`); the status bar
-  keeps Epic's band, in the box.
+  4:3), the band, the announcement, its reward panel, the local message and the status bar (dead, spectating) move
+  down together by that room (`UCHUD.BandShift`), so the band and the status bar end on the view's bottom edge at every
+  aspect, stacked as at 4:3 (the status bar from its line, raised over the announcement while one shows, to the bottom
+  of the view); the rest of the HUD stays in the box. The critical announcement ("PLAY") and the local message (in
+  every view) are drawn over a black shadow one design pixel right and down at 0.6 times their alpha. At every aspect,
+  4:3 included (`UCHUD.GradientBand`); the status bar keeps Epic's band.
 - **Across the window**: the announcement band, the status bar (dead, spectating), Training's letterbox and dialog
   bars, the console's typing line (Engine.Console: drawn once for the whole window, in split screen too; its bar from
   32 design pixels in from the window's left edge to its right edge, its text wrapped by words at that edge onto lines
