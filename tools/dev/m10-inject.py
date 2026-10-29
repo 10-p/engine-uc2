@@ -51,6 +51,10 @@ Scenario language, one command per line (# comments):
     tryseek <max> <expr> ;; <cmd> the same, but the scenario goes on when <expr> is not reached (a later check says)
     shot <name>                   engine screenshot (SHOT); the shell renames it to <name>.png afterwards
     sleep <seconds>
+    gsleep <seconds>              wait until the game's level time has moved on that much, read from the watch lines
+                                  (a 'chan watch' must be running): a hold that lasts the same number of game frames
+                                  however fast the machine runs them (M10_GSLEEP_TIMEOUT wall seconds, default 60,
+                                  plus 20 per second asked for, then the scenario fails)
     check <name> <python expr>    record PASS/FAIL; the expression sees P (probes by tag), yawdiff(a,b),
                                   pitchdiff(a,b), dist(a,b), fwd(a,b), side(a,b) (displacement along/right of a's facing)
     fail_fast                     stop at the first failed check (default: keep going)
@@ -658,6 +662,26 @@ def probe(tag):
                                         if pr.cam is not None else ''), flush=True)
 
 
+WATCH_T_RX = re.compile(r'\bwatch \S+ \d+ t=([-\d.]+) ')
+GSLEEP_TIMEOUT = float(os.environ.get('M10_GSLEEP_TIMEOUT', '60'))
+
+
+def gsleep(seconds):
+    """Wait until the level time of the watch lines has moved on by `seconds` from the next one logged."""
+    pump_log()
+    i = line_after(WATCH_T_RX, len(log_lines), 10)
+    if i is None:
+        raise RuntimeError('gsleep: no watch line within 10 s (gsleep needs a running chan watch)')
+    t = float(WATCH_T_RX.search(log_lines[i]).group(1))
+    target = t + seconds
+    end = time.time() + GSLEEP_TIMEOUT + 20 * seconds
+    while t < target:
+        i = line_after(WATCH_T_RX, i + 1, max(0.0, end - time.time()))
+        if i is None:
+            raise RuntimeError(f'gsleep: the level time did not reach {target:.4f} (last watch line t={t:.4f})')
+        t = float(WATCH_T_RX.search(log_lines[i]).group(1))
+
+
 def collect_watch(tag):
     pump_log()
     rows = []
@@ -923,6 +947,8 @@ def execute(line):
             time.sleep(0.5)
         elif cmd == 'sleep':
             time.sleep(float(rest) * SLOW)
+        elif cmd == 'gsleep':
+            gsleep(float(rest))
         elif cmd == 'check':
             name, _, expr = rest.partition(' ')
             try:

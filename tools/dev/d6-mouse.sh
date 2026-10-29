@@ -12,8 +12,10 @@
 #   lazy    [UCGameplay.UCPlayerInput] bLazyMouseCamera=True: the mouse still turns linearly, the third-person
 #           camera is Epic's lazy one under the mouse too (it moves on after a flick, then rests)
 #   pad     the right stick's turn and look-up curves (rotation reached 0.1-1.0 s after the stick is pushed to
-#           0.35/0.5/0.75/1.0) on our scripts and on the SHIPPED scripts with the same ini: must match; the stick
-#           dead zone 0.3; the left stick walks
+#           0.35/0.5/0.75/1.0) and the left stick's walk curves (distance reached 0.25-1.0 s after the pawn starts
+#           to move, full and half stick) on our scripts and on the SHIPPED scripts with the same ini: must match;
+#           the stick dead zone 0.3. Game time in fixed 1/30 s frames, holds in game time, so the load cannot move
+#           a curve; each run's wall-clock frame rate is noted
 #   lock    lock-on with a mouse (two bots frozen by PlayersOnly and placed in front): acquire, hold through mouse
 #           motion, switch target with Lock + D, break away by mouse motion past the clamp (degrees), not by a
 #           smaller one; the stick's break-away still works; aim adhesion follows a target under the pad, not under
@@ -35,7 +37,8 @@
 #
 # Trees (<repo>/../run/<name>, made by tools/dev/mkrun-uc2.sh): D6_TREE (rebuilt packages, default d6-run),
 # D6_SHIP_TREE (shipped packages, default d6-ship). Every game run is tools/dev/m10-controls.sh --file (Xvfb inside
-# <repo>/../bin/capped 2G), -nullrenderer with [Engine.Engine] FrameRateCap=60 (30 for the pad curves, the Xbox's rate): the camera's lag
+# <repo>/../bin/capped 2G), -nullrenderer with [Engine.Engine] FrameRateCap=60 (30 for the pad curves, the Xbox's rate, with
+# [SDLLaunch] FixedFrameRate=30: every frame 1/30 s of game time): the camera's lag
 # shows at real frame rates, and software GL runs at a few frames a second here, where a lazy camera arrives in one
 # frame; FrameRateCap, set with -ini:, caps the null renderer's thousand), mouse motion as exact counts through the engine's test
 # channel (`mouse <dx> <dy>`: an SDL motion event; Source/SDL2Drv/Src/SDL2InputTest.h). Output: D6_OUT (default
@@ -327,22 +330,24 @@ check look-mouse-after-stick-is-linear abs(yawdiff('Ma','Mb') + 500*K) <= 2 and 
 SCEN
 }
 
-# pad [shipped]: the right stick's curves (rotation reached after the stick is pushed), dead zone, left stick
+# pad [shipped]: the right stick's curves (rotation reached after the stick is pushed), dead zone, the left stick's walk
+# curves; every hold is game time (gsleep), in the fixed 1/30 s frames the pad runs get (FixedFrameRate, below).
 scen_pad() {
   start pad
   cat <<SCEN
 pad attach
 wait SDL2 pads: pad 0 connected 10
-sleep 1
+chan watch 20000 settle
+gsleep 1
 SCEN
   local v
   for v in 0.35 0.5 0.75 1.0; do
     cat <<SCEN
 chan watch 20000 pad$v
 pad axis rightx $(python3 -c "print(round($v*32767))")
-sleep 1.25
+gsleep 1.25
 pad axis rightx 0
-sleep 0.3
+gsleep 0.3
 chan log PAD-$v-END
 watch pad$v test: log PAD-$v-END 30
 pyexec save('pad-yaw-$v', rate_curve('pad$v'))
@@ -351,51 +356,44 @@ SCEN
   cat <<SCEN
 chan watch 20000 padup
 pad axis righty -16384
-sleep 0.5
+gsleep 0.5
 pad axis righty 0
-sleep 0.3
+gsleep 0.3
 chan log PAD-UP-END
 watch padup test: log PAD-UP-END 30
 pyexec save('pad-pitch-0.5', rate_curve('padup', marks=(0.1, 0.25, 0.4), axis='pitch'))
 probe za
 pad axis rightx 9175
-sleep 0.5
+gsleep 0.5
 pad axis rightx 0
-sleep 0.3
+gsleep 0.3
 probe zb
 check pad-right-stick-dead-zone-0.3 yawdiff('za','zb') == 0
-chan exec NETPLACE LocalPlayer 1977.8 583.7 -34.1 33000
-sleep 1
-chan exec NETPLACE LocalPlayer 1977.8 583.7 -34.1 33000
-sleep 1.5
-probe la
-pad axis lefty 32767
-sleep 1.0
-pad axis lefty 0
-sleep 0.5
-probe lb
-pad axis lefty -32767
-sleep 1.0
-pad axis lefty 0
-sleep 0.5
-probe lb2
-pad axis lefty 16384
-sleep 1.0
-pad axis lefty 0
-sleep 0.5
-probe lb3
-pyexec save('pad-left-stick-walk', {'full-1s-a': round(fwd('la','lb'),1), 'full-1s-b': round(fwd('lb','lb2'),1), 'half-1s': round(fwd('lb2','lb3'),1)})
+place 1977.8 583.7 -34.1 33000 0
 SCEN
-  # From a fixed open spot (jit-trace.sh's): back, forward, then half forward. The shipped scripts scale the stick
-  # for walking on the Xbox only (PlayerMove); the engine does it on PC (UnIn.cpp), for both packages:
-  # checked on both, and the distances compared below.
-  echo "check pad-left-stick-walks (fwd('la','lb') < -150 or fwd('lb','lb2') > 150) and fwd('la','lb') < 20 and fwd('lb','lb2') > -20"
+  # From the open spot (jit-trace.sh's): full forward, full back, half forward, 1.1 s of game time each. The engine
+  # scales the stick for walking on PC (UnIn.cpp) for both packages; the shipped scripts on the Xbox only (PlayerMove).
+  local w
+  for w in full-forward:-32767 full-back:32767 half-forward:-16384; do
+    cat <<SCEN
+probe l-${w%%:*}
+chan watch 20000 walk-${w%%:*}
+pad axis lefty ${w#*:}
+gsleep 1.1
+pad axis lefty 0
+gsleep 0.5
+chan log WALK-${w%%:*}-END
+watch walk-${w%%:*} test: log WALK-${w%%:*}-END 30
+pyexec save('pad-walk-${w%%:*}', walk_curve('walk-${w%%:*}'))
+SCEN
+  done
   cat <<SCEN
 probe lc
+check pad-left-stick-walks fwd('l-full-forward','l-full-back') > 150 and fwd('l-full-back','l-half-forward') < -150 and fwd('l-half-forward','lc') > 100
 pad axis lefty 9175
-sleep 1.0
+gsleep 1.0
 pad axis lefty 0
-sleep 0.5
+gsleep 0.5
 probe ld
 check pad-left-stick-dead-zone-0.3 dist('lc','ld') < 5
 SCEN
@@ -896,25 +894,41 @@ for s in ${@:-look ini lazy pad lock before}; do
     pad)
       echo "== pad ($tree, ours) and pad-shipped ($ship, the shipped scripts; same DefUser.ini)"
       scen_pad > "$out/pad.scen"; scen_pad shipped > "$out/pad-shipped.scen"
-      # at 30 frames a second (the Xbox's): Epic's view rotation is whole units per tick, so the slow end of the
-      # curve depends on the frame rate; both runs at the same rate
-      prep "$tree"; run pad "$tree" 0 300 "-ini:System:[Engine.Engine]:FrameRateCap=30"; count "$out/pad.result"
-      prep "$ship"; run pad-shipped "$ship" 0 300 "-ini:System:[Engine.Engine]:FrameRateCap=30" | sed 's/^/(shipped) /'
-      python3 - "$out/pad.json" "$out/pad-shipped.json" <<'PY' | tee "$out/pad-compare.result" | sed 's/\t/ /g'
-import json, sys
+      # 30 frames a second (the Xbox's), each exactly 1/30 s of game time (FixedFrameRate): Epic's rotation is whole
+      # units per frame and the stick's turn speeds up over the frames it is held, so both runs must tick alike.
+      fixed=("-ini:System:[Engine.Engine]:FrameRateCap=30" "-ini:System:[SDLLaunch]:FixedFrameRate=30"
+             "-ini:System:[Engine.GameEngine]:FpsLogSeconds=1")
+      prep "$tree"; run pad "$tree" 0 300 "${fixed[@]}"; count "$out/pad.result"
+      prep "$ship"; run pad-shipped "$ship" 0 300 "${fixed[@]}" | sed 's/^/(shipped) /'
+      python3 - "$out/pad.json" "$out/pad-shipped.json" "$out/pad.out" "$out/pad-shipped.out" <<'PY' | tee "$out/pad-compare.result" | sed 's/\t/ /g'
+import json, re, sys
 def load(p):
     try:
         return {r['key']: r['value'] for r in map(json.loads, open(p))}
     except FileNotFoundError:
         return {}
 ours, ship = load(sys.argv[1]), load(sys.argv[2])
+# Each run ticked in fixed frames (an engine without the key ticks by the wall clock); its wall clock is said plainly:
+# below the baseline when a second ran a whole frame short of 30 or a frame took over three baseline frames.
+FPS_RX = re.compile(r'(\d+\.\d+) s (\d+) frames ([\d.]+) fps; frame ms avg [\d.]+ min [\d.]+ max ([\d.]+)')
+for run, path in (('pad', sys.argv[3]), ('pad-shipped', sys.argv[4])):
+    try:
+        lines = open(path, encoding='latin-1').read().splitlines()
+    except FileNotFoundError:
+        lines = []
+    fixed = any('FixedFrameRate: every frame ticks the world by 0.0333 s' in l for l in lines)
+    print(f"{'PASS' if fixed else 'FAIL'}\t{run}-fixed-game-frames\t"
+          + ('every frame ticked the world by 1/30 s' if fixed else 'no FixedFrameRate line: the game ticked by the wall clock'))
+    first = next((i for i, l in enumerate(lines) if l.startswith('watch ')), len(lines))
+    fps = [m for m in (FPS_RX.search(l) for l in lines[first:]) if m]
+    if fps:
+        low, longest = min(float(m.group(3)) for m in fps), max(float(m.group(4)) for m in fps)
+        state = 'below' if low < 29 or longest > 100 else 'at'
+        print(f"NOTE\t{run}-wall-clock\t{state} the 30 fps baseline on the wall clock: lowest {low:g} fps, longest frame "
+              f"{longest:g} ms; the game frames are 1/30 s each all the same")
 keys = [k for k in ship if k.startswith('pad-') and isinstance(ship[k], dict)]
 if not keys:
     print('FAIL\tpad-curves-match-shipped\tno shipped measurements'); sys.exit()
-# The walk is a distance after the stick is held for 1.0 s of wall clock: 30 or 31 frames at 30 fps, so the measure's
-# resolution is one frame of running, 430/30 = 14.3 units (12.2 backwards), 3.5% of the 341-unit half-stick segment
-# (D-4: 353.0 vs 340.9 on two runs of the same build). A walk passes within 3% or one frame, whichever is larger.
-FRAME_MOVE = 430.0 / 30
 for k in sorted(keys):
     a, b = ours.get(k, {}), ship[k]
     worst = 0.0; ok = True
@@ -924,10 +938,8 @@ for k in sorted(keys):
             worst = 1.0; ok = False; continue
         d = abs(va - vb)
         worst = max(worst, d / max(abs(vb), 300.0))
-        lim = max(0.03 * max(abs(vb), 300.0), FRAME_MOVE + 0.5) if k == 'pad-left-stick-walk' else 0.03 * max(abs(vb), 300.0)
-        ok = ok and d < lim
-    note = 'limit 3% or one frame of running' if k == 'pad-left-stick-walk' else 'limit 3%'
-    print(f"{'PASS' if ok else 'FAIL'}\tpad-matches-shipped-{k[4:]}\tworst {worst*100:.2f}% of the shipped value ({note}); ours {a} shipped {b}")
+        ok = ok and d < 0.03 * max(abs(vb), 300.0)
+    print(f"{'PASS' if ok else 'FAIL'}\tpad-matches-shipped-{k[4:]}\tworst {worst*100:.2f}% of the shipped value (limit 3%); ours {a} shipped {b}")
 PY
       count "$out/pad-compare.result";;
     ini)
