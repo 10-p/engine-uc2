@@ -1229,8 +1229,8 @@ UBOOL USystem::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		debugf( TEXT("Relaunch: %s"), Cmd );
 		GConfig->Flush( 0 );
 
-		// The game again: the running executable, by its own path in quotes, with the command's arguments, started
-		// on exit (GUnixSpawnOnExit, run by appPlatformExit). A dedicated server ("-server") goes to the UCC below.
+		// The game again: the running executable, by its own path in quotes, with the command's arguments. A
+		// dedicated server ("-server") goes to the UCC below.
 		if( GIsClient && !ParseParam( Cmd, TEXT("server") ) )
 		{
 			const FString Self = RunningExecutablePath();
@@ -1261,14 +1261,15 @@ UBOOL USystem::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		Arg0[RELAUNCH_ARRAY - 1] = 0;  // just in case.
 
 		INT arraylen = RELAUNCH_ARRAY + 128;
+		FString xterm(TEXT(""));
+
 #ifdef _WIN32
 		// The console UCC beside the game; Windows gives it a console window of its own.
 		GUnixSpawnOnExit = new TCHAR[arraylen];
 		appStrcpy(GUnixSpawnOnExit, TEXT("ucc.exe server "));
 		appStrcat(GUnixSpawnOnExit, Arg0);
 #else
-		// `./ucc-bin server <url>`, in an xterm when there is one.
-		FString xterm(TEXT("xterm"));
+		xterm = TEXT("xterm");
 		if (FindBinaryInPath(xterm))
 		{
 			arraylen += xterm.Len();
@@ -3430,18 +3431,20 @@ void appPlatformExit()
     	    new(args)FString( fstrcmd.Mid(startstr) );
 
 
+        // Each argument is copied out of the string appToAnsi returns.
         char *cmd = new char[args(0).Len() + 1];
-        appToAnsi(*(args(0)), cmd);
+        strcpy(cmd, appToAnsi(*(args(0))));
         char **ansiargs = new char *[args.Num() + 1];
         for (int i = 0; i < args.Num(); i++)
         {
             ansiargs[i] = new char[args(i).Len() + 1];
-            appToAnsi(*args(i), ansiargs[i]);
+            strcpy(ansiargs[i], appToAnsi(*args(i)));
         }
         ansiargs[args.Num()] = NULL;
 
 #ifdef _WIN32
-        // The "respawn after exit" path (GUnixSpawnOnExit): fork-then-execv is one _spawnv, then the parent exits.
+        // The "respawn the game after exit" path (GUnixSpawnOnExit): fork-then-execv is one _spawnv, and the
+        // parent then exits.
         // _spawnv joins the arguments with spaces as they are, so one holding a space (a path) goes in quotes.
         for (int i = 0; i < args.Num(); i++)
             if (strchr(ansiargs[i], ' '))
