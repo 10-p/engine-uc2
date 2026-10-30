@@ -9,9 +9,10 @@
 #                       against the desktop's of the tree M7B_REF (default m7b; run that first)
 #   M7B_SECS=240        time limit of each game run (default 150; the twin under load needs more)
 #
-# Every game run is tools/dev/fx-owner.sh's "custom" case (bin/capped 2G, Xvfb, Mesa llvmpipe, 1280x720, -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0
-# via the engine defaults of that runner, AutoFOV off, unscaled UI), the pawn placed with NETPLACE, time frozen
-# (TimeDilation 0.0001) before any picture. Pictures and logs: <repo>/../logs/<tree>/fx-m7b-<case>*.
+# Every game run is tools/dev/fx-owner.sh's "custom" case (bin/capped 2G, Xvfb, Mesa llvmpipe, 1280x720, the native
+# ini's 4x multisampling, which that runner leaves as it is, AutoFOV off, unscaled UI, screenshots of the frame before
+# the present pass), the pawn placed with NETPLACE, time frozen (TimeDilation 0.0001) before any picture. Pictures and
+# logs: <repo>/../logs/<tree>/fx-m7b-<case>*.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(cd "$repo/.." && pwd)
