@@ -1182,6 +1182,25 @@ void USystem::StaticConstructor()
 
 static bool FindBinaryInPath(FString &cmd);
 
+// The running executable's full path; empty where a process cannot start itself again (Android, the web).
+static FString RunningExecutablePath()
+{
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
+	return FString();
+#elif defined(_WIN32)
+	ANSICHAR Path[MAXPATHLEN];
+	const DWORD Len = GetModuleFileNameA( NULL, Path, ARRAY_COUNT(Path) );
+	return Len > 0 && Len < ARRAY_COUNT(Path) ? FString( appFromAnsi(Path) ) : FString();
+#else
+	ANSICHAR Path[MAXPATHLEN];
+	const ssize_t Len = readlink( "/proc/self/exe", Path, ARRAY_COUNT(Path) - 1 );
+	if( Len <= 0 )
+		return FString();
+	Path[Len] = 0;
+	return FString( appFromAnsi(Path) );
+#endif
+}
+
 UBOOL USystem::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	if( ParseCommand(&Cmd,TEXT("MEMSTAT")) )
@@ -1210,8 +1229,26 @@ UBOOL USystem::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		debugf( TEXT("Relaunch: %s"), Cmd );
 		GConfig->Flush( 0 );
 
-		// Respawn as a dedicated server on exit (`./ucc-bin server <url>`, in an xterm when there is one;
-		// GUnixSpawnOnExit, run by appPlatformExit).
+		// The game again: the running executable, by its own path in quotes, with the command's arguments, started
+		// on exit (GUnixSpawnOnExit, run by appPlatformExit). A dedicated server ("-server") goes to the UCC below.
+		if( GIsClient && !ParseParam( Cmd, TEXT("server") ) )
+		{
+			const FString Self = RunningExecutablePath();
+			if( Self.Len() )
+			{
+				const FString Line = FString::Printf( TEXT("\"%s\" %s"), *Self, Cmd );
+				GUnixSpawnOnExit = new TCHAR[Line.Len() + 1];
+				appStrcpy( GUnixSpawnOnExit, *Line );
+			}
+			appRequestExit( 0 );
+			return 1;
+		}
+
+#ifdef __EMSCRIPTEN__
+		// A page cannot start a dedicated server: a fatal error that names the command's arguments.
+		appErrorf( TEXT("Failed to launch process. Relaunch: %s"), Cmd );
+#else
+		// Respawn as a dedicated server on exit: the UCC with the command's first argument, the URL.
 		TCHAR* EndArg0 = appStrstr( Cmd, TEXT(" ") );
 		INT CmdLen = appStrlen( Cmd );
 		INT RestLen = ((EndArg0 != NULL) ? appStrlen( EndArg0 ) : 0);
@@ -1224,6 +1261,13 @@ UBOOL USystem::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		Arg0[RELAUNCH_ARRAY - 1] = 0;  // just in case.
 
 		INT arraylen = RELAUNCH_ARRAY + 128;
+#ifdef _WIN32
+		// The console UCC beside the game; Windows gives it a console window of its own.
+		GUnixSpawnOnExit = new TCHAR[arraylen];
+		appStrcpy(GUnixSpawnOnExit, TEXT("ucc.exe server "));
+		appStrcat(GUnixSpawnOnExit, Arg0);
+#else
+		// `./ucc-bin server <url>`, in an xterm when there is one.
 		FString xterm(TEXT("xterm"));
 		if (FindBinaryInPath(xterm))
 		{
@@ -1239,8 +1283,10 @@ UBOOL USystem::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		appStrcpy(GUnixSpawnOnExit, *xterm);
 		appStrcat(GUnixSpawnOnExit, TEXT("./ucc-bin server "));
 		appStrcat(GUnixSpawnOnExit, Arg0);
+#endif
 
 		appRequestExit( 0 );
+#endif
 		return 1;
 	}
 	else if( ParseCommand( &Cmd, TEXT("DEBUG") ) )
@@ -3396,6 +3442,14 @@ void appPlatformExit()
 
 #ifdef _WIN32
         // The "respawn after exit" path (GUnixSpawnOnExit): fork-then-execv is one _spawnv, then the parent exits.
+        // _spawnv joins the arguments with spaces as they are, so one holding a space (a path) goes in quotes.
+        for (int i = 0; i < args.Num(); i++)
+            if (strchr(ansiargs[i], ' '))
+            {
+                char *quoted = new char[strlen(ansiargs[i]) + 3];
+                sprintf(quoted, "\"%s\"", ansiargs[i]);
+                ansiargs[i] = quoted;
+            }
         _spawnv( _P_NOWAIT, cmd, ansiargs );
         _exit(0);
 #else
