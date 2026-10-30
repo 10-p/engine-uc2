@@ -52,6 +52,9 @@ sed -i -E "s/^(WindowedViewportX|FullscreenViewportX)=.*/\\1=$W/; s/^(WindowedVi
 rm -f "$sys/Avaris.ini" "$sys/User.ini" "$sys"/Shot*.bmp "$out/$tag"-*.png "$out/$tag".result*
 chan=$out/$tag.channel; : > "$chan"
 glargs=$("$repo/tools/dev/glini" NumAASamples=$aa CheckGLErrors=True | tr '\n' ' ')
+# The frame before the present pass (ShotRamp=False, the desktop section, which the GL4ES device reads after its own):
+# the luminance measured here is the frame's, not bent by the dynamic gamma ramp that adapts to it.
+glargs="$glargs -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=False"
 inner=$(mktemp)
 cat > "$inner" <<INNER
 cd "$sys" || exit 1

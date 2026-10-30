@@ -109,6 +109,9 @@ def run_game(tree, name, secs, args, inject='', binary='./uc2.bin', xvfb=True, a
     if xvfb:
         cmd += ['xvfb-run', '-a', '-s', '-screen 0 1280x720x24']
     if binary == './uc2.bin':
+        # The frame before the present pass (ShotRamp=False), as the cooked frames the shots are matched with are:
+        # the desktop section, which the GL4ES device reads after its own.
+        args = ['-ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=False'] + args
         # UC2_GLARGS="-gl4es" runs every scenario on the GL4ES device
         # (a -nullrenderer on the command line still wins: the launcher takes the first switch of its table)
         args = args + os.environ.get('UC2_GLARGS', '').split()

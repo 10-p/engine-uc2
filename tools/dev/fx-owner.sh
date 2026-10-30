@@ -37,6 +37,10 @@ fovarg="-ini:System:[ufront.AutoFOV]:AutoFOV=0"; [ -n "${UC2_AUTOFOV:-}" ] && fo
 # wine oracle's DM-Praxis view, made by the original PC binary) have the old HUD. tools/dev/d2-ui-scale.sh
 # measures the UI box itself and does not use this runner.
 [ -z "${UC2_UIBOX:-}" ] && fovarg="$fovarg -ini:System:[SDL2Drv.SDL2Client]:UIScaleMode=Native640"
+# And the frame before the present pass unless UC2_SHOTRAMP is set (ShotRamp=False, the desktop section, which the
+# GL4ES device reads after its own): the measuring callers (m7b, h1-radii, h1-phase, o9-nvidia) compare with older
+# builds' pictures and take differences the adaptive dynamic gamma ramp would bend.
+[ -z "${UC2_SHOTRAMP:-}" ] && fovarg="$fovarg -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=False"
 suffix=""; [ "$bin" != uc2.bin ] && suffix="-${bin%.bin}"; suffix=${suffix/-uc2-/-}
 video=""; [ -n "${UC2_GPU:-}" ] && { video="SDL_VIDEODRIVER=offscreen"; suffix="$suffix-gpu"; }
 inject=$repo/tools/dev/m10-inject.py
