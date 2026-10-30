@@ -38,8 +38,6 @@ extern "C"
 	void* gl4es_GetProcAddress( const char* Name );
 	// include/gl4estranscode.h
 	unsigned int gl4es_dxt_upload_format( unsigned int DXTFormat );
-	int gl4es_dxt_upload_size( unsigned int Format, int Width, int Height );
-	void* gl4es_dxt_transcode( unsigned int DXTFormat, unsigned int Format, int Width, int Height, const void* Data );
 }
 
 /*-----------------------------------------------------------------------------
@@ -327,6 +325,13 @@ UBOOL UUC2GL4ESRenderDevice::BindingInit()
 	initialize_gl4es();
 	Initialized = 1;
 	debugf( NAME_Init, TEXT("UC2GL4ESDrv: gl4es initialised (GLES%i back end, real buffer objects, no batching, highp everywhere)"), GLESMajor >= 3 ? 3 : 2 );
+	// The engine's DXT textures go through gl4es (glCompressedTexImage2D): what the hardware gets.
+	unsigned int DXT = gl4es_dxt_upload_format( GL_COMPRESSED_RGBA_S3TC_DXT5_EXT );
+	debugf( NAME_Init, TEXT("UC2GL4ESDrv: %s"),
+		DXT == GL_COMPRESSED_RGBA_S3TC_DXT5_EXT ? TEXT("DXT goes to the GPU as it is (S3TC)")
+		: DXT == 0x93B0 /* GL_COMPRESSED_RGBA_ASTC_4x4_KHR */ ? TEXT("DXT is transcoded to ASTC 4x4 by gl4es")
+		: DXT ? TEXT("DXT is transcoded to ETC2 by gl4es")
+		: TEXT("DXT is decoded to RGBA8 by gl4es (the GPU has no S3TC, ASTC or ETC2)") );
 	return 1;
 }
 
@@ -338,18 +343,6 @@ void* UUC2GL4ESRenderDevice::BindingGetProcAddress( const char* Name )
 void* UUC2GL4ESRenderDevice::BindingGetRawProcAddress( const char* Name )
 {
 	return UC2GL4ES_RawGetProcAddress( Name );
-}
-
-// gl4es' choice for DXT: as it is where the hardware has S3TC, else ASTC 4x4 or ETC2, else none.
-GLenum UUC2GL4ESRenderDevice::BindingDXTUploadFormat( GLenum Format )
-{
-	return gl4es_dxt_upload_format( Format );
-}
-
-void* UUC2GL4ESRenderDevice::BindingTranscodeDXT( GLenum Format, GLenum UploadFormat, INT Width, INT Height, const BYTE* Data, INT& Size )
-{
-	Size = gl4es_dxt_upload_size( UploadFormat, Width, Height );
-	return gl4es_dxt_transcode( Format, UploadFormat, Width, Height, Data );
 }
 
 /*-----------------------------------------------------------------------------

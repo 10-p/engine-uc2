@@ -311,21 +311,14 @@ public:
 	UBOOL DepthStencilThroughBinding() { return !IsGLES || GLESMajor >= 3; }
 	// What the context can do; all true on desktop GL. Each has its fallback, and a switch
 	// that masks it so the fallback can be tested where the capability exists
-	// (test key MaskCaps=depthtexture,fragdepth,s3tc,uintindex,maxlevel).
+	// (test key MaskCaps=depthtexture,fragdepth,s3tc,uintindex).
 	UBOOL							CapDepthTexture,	// a depth-stencil texture can be a framebuffer attachment and be sampled
 									CapFragDepth,		// a fragment shader can write gl_FragDepth
 									CapUIntIndex,		// 32-bit index buffers
-									CapTextureMaxLevel,	// GL_TEXTURE_MAX_LEVEL: a mip chain may stop before 1x1
-									CapFragmentHighp,	// highp float in fragment shaders
-									CapDXTUpload,		// GLES: DXT goes to the hardware compressed, in BindingDXTUploadFormat's format
-									CapASTCDecodeMode;	// GLES: ASTC can be decoded at 8-bit precision (EXT_texture_compression_astc_decode_mode)
-	// A compressed image for a texture, handed to the library under the binding (GLES: gl4es
-	// would decode it to RGBA8 on the CPU). BindTarget is GL_TEXTURE_2D or GL_TEXTURE_CUBE_MAP.
-	void CompressedTexImage2D( GLenum BindTarget, GLuint Texture, GLenum Target, INT Level, GLenum Format, INT Width, INT Height, INT Size, const BYTE* Data, UBOOL FirstStorage );
-	UBOOL UseHardwareS3TC() { return IsGLES ? CapDXTUpload : SUPPORTS_GL_EXT_texture_compression_s3tc; }
-	// The same for uncompressed data of an engine texture (Format GL_BGRA, GL_LUMINANCE,
+									CapFragmentHighp;	// highp float in fragment shaders
+	// Uncompressed data of an engine texture into the bound texture (Format GL_BGRA, GL_LUMINANCE,
 	// GL_ALPHA or GL_RGB with 5-6-5; tightly packed rows).
-	void TexImage2D( GLenum BindTarget, GLuint Texture, GLenum Target, INT Level, GLint Internal, INT Width, INT Height, GLenum Format, GLenum Type, const BYTE* Data );
+	void TexImage2D( GLenum Target, INT Level, GLint Internal, INT Width, INT Height, GLenum Format, GLenum Type, const BYTE* Data );
 	virtual const TCHAR* BindingName();
 	// SDL_GL_SetAttribute for the context this binding wants; before the window is (re)created.
 	virtual void BindingSetContextAttributes();
@@ -335,11 +328,6 @@ public:
 	virtual UBOOL BindingInit();
 	virtual void* BindingGetProcAddress( const char* Name );
 	virtual void* BindingGetRawProcAddress( const char* Name );
-	// GLES: the format the hardware takes a DXT image in (the DXT format itself where it has S3TC, else one the
-	// binding transcodes it to, with BindingTranscodeDXT), 0 where it takes none; the transcode, a block image of
-	// Size bytes released with free(), NULL on failure.
-	virtual GLenum BindingDXTUploadFormat( GLenum Format );
-	virtual void* BindingTranscodeDXT( GLenum Format, GLenum UploadFormat, INT Width, INT Height, const BYTE* Data, INT& Size );
 	virtual UBOOL BindingContextAlive();
 	virtual void BindingGetDrawableSize( UViewport* Viewport, INT& Width, INT& Height );
 	virtual void BindingSetSwapInterval( INT Interval );

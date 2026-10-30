@@ -64,8 +64,6 @@ FOpenGLTexture::FOpenGLTexture(UUC2GLRenderDevice* InRenDev,FRenderResource* InR
 	TextureID		= 0;
 	FramebufferID	= 0;
 	DepthStencilID	= 0;
-	UploadBindTarget= GL_TEXTURE_2D;
-	StorageSeenID	= 0;
 	OwnsTexture		= 1;
 	IsCubemap		= 0;
 	IsRenderTarget	= 0;
@@ -103,7 +101,6 @@ void FOpenGLTexture::DeleteGLObjects()
 	if( TextureID && OwnsTexture )
 		RenDev->glDeleteTextures( 1, &TextureID );
 	TextureID = 0;
-	StorageSeenID = 0;
 }
 
 INT FOpenGLTexture::CalculateFootprint()
@@ -121,11 +118,11 @@ INT FOpenGLTexture::CalculateFootprint()
 //
 //
 // DXT1/3/5 decoded by the driver, from the texture's compressed data (GetTextureData), into
-// B,G,R,A bytes (what GL_BGRA uploads). Used where the hardware takes no S3TC (MaskCaps=s3tc, WebGL 1
-// without WEBGL_compressed_texture_s3tc). It replaces UTexture::ConvertDXT, which only exists for
-// textures that are UTextures: the BSP lightmaps (DXT1 FTextures of the engine) have none. Standard S3TC:
-// DXT1 with its
-// three-colour + transparent mode when c0 <= c1, DXT3 explicit 4-bit alpha, DXT5 interpolated alpha.
+// B,G,R,A bytes (what GL_BGRA uploads). Used where the context has no S3TC (desktop GL without
+// EXT_texture_compression_s3tc, or MaskCaps=s3tc; gl4es takes DXT on every GLES context). It replaces
+// UTexture::ConvertDXT, which only exists for textures that are UTextures: the BSP lightmaps (DXT1 FTextures of
+// the engine) have none. Standard S3TC: DXT1 with its three-colour + transparent mode when c0 <= c1, DXT3 explicit
+// 4-bit alpha, DXT5 interpolated alpha.
 //
 static void UC2GL_Expand565( _WORD C, INT* RGB )
 {
@@ -234,7 +231,7 @@ static BYTE* UC2GL_DecodeDXTMip( FTexture* Texture, INT MipIndex, ETextureFormat
 // exist, so the cube stays usable; GL needs every face for a complete cube map (an incomplete
 // one disables texturing: DM-Azure's pool drew its vertex colour instead of
 // T_Liquid_Decay_Water_C_CM, which has no -Z face). The missing face gets zeroed blocks/texels,
-// as in D3D's freshly allocated memory; on GLES its mip chain is completed from those zeros.
+// as in D3D's freshly allocated memory.
 //
 void FOpenGLTexture::UploadMip( GLenum Target, FTexture* Texture, ETextureFormat ActualFormat, INT MipIndex, INT FirstMip, INT Width, INT Height )
 {
@@ -249,8 +246,9 @@ void FOpenGLTexture::UploadMip( GLenum Target, FTexture* Texture, ETextureFormat
 				RowBytes	= GetBytesPerPixel( ActualFormat, BlockWidth ) * 4,
 				Size		= RowBytes * (BlockHeight / 4);
 
-		if( RenDev->UseHardwareS3TC() )
+		if( RenDev->SUPPORTS_GL_EXT_texture_compression_s3tc )
 		{
+			// (GLES: gl4es hands the image to the hardware as it is, transcoded to ASTC or ETC2, or decoded.)
 			BYTE* Data = new BYTE[Size];
 			appMemzero( Data, Size );
 			if( Texture )
@@ -258,7 +256,7 @@ void FOpenGLTexture::UploadMip( GLenum Target, FTexture* Texture, ETextureFormat
 			GLenum Format	= ActualFormat == TEXF_DXT1 ? GL_COMPRESSED_RGBA_S3TC_DXT1_EXT :
 							  ActualFormat == TEXF_DXT3 ? GL_COMPRESSED_RGBA_S3TC_DXT3_EXT :
 														  GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
-			RenDev->CompressedTexImage2D( UploadBindTarget, TextureID, Target, Level, Format, MipWidth, MipHeight, Size, Data, 0 );
+			RenDev->glCompressedTexImage2D( Target, Level, Format, MipWidth, MipHeight, 0, Size, Data );
 			if( Level == 0 )
 				CachedGLFormat = Format;
 			delete [] Data;
@@ -267,7 +265,7 @@ void FOpenGLTexture::UploadMip( GLenum Target, FTexture* Texture, ETextureFormat
 		{
 			// No S3TC: decompress (the driver's own decoder; see UC2GL_DecodeDXT).
 			BYTE* Data = UC2GL_DecodeDXTMip( Texture, MipIndex, ActualFormat, MipWidth, MipHeight );
-			RenDev->TexImage2D( UploadBindTarget, TextureID, Target, Level, GL_RGBA, MipWidth, MipHeight, GL_BGRA, GL_UNSIGNED_BYTE, Data );
+			RenDev->TexImage2D( Target, Level, GL_RGBA, MipWidth, MipHeight, GL_BGRA, GL_UNSIGNED_BYTE, Data );
 			if( Level == 0 )
 				CachedGLFormat = GL_RGBA;
 			delete [] Data;
@@ -303,250 +301,10 @@ void FOpenGLTexture::UploadMip( GLenum Target, FTexture* Texture, ETextureFormat
 	else
 		appMemzero( Data, Pitch * MipHeight );
 
-	RenDev->TexImage2D( UploadBindTarget, TextureID, Target, Level, Internal, MipWidth, MipHeight, Format, Type, Data );
+	RenDev->TexImage2D( Target, Level, Internal, MipWidth, MipHeight, Format, Type, Data );
 	if( Level == 0 )
 		CachedGLFormat = Internal;
 	delete [] Data;
-}
-
-//
-// The levels the engine does not have, down to 1x1, for a context without
-// GL_TEXTURE_MAX_LEVEL (OpenGL ES 2, WebGL 1: a mip chain that stops early makes the texture
-// incomplete, i.e. black). The engine keeps log2 of the SMALLER side levels, so every
-// non-square mipmapped texture is short by one or more. Each missing level is the box
-// filter of the one before it, starting from the engine's last level.
-//
-void FOpenGLTexture::CompleteChain( GLenum Target, FTexture* Texture, ETextureFormat ActualFormat, INT LastMipIndex, INT FirstMip, INT Width, INT Height )
-{
-	if( RenDev->CapTextureMaxLevel )
-		return;
-	if( IsDXTC(ActualFormat) && RenDev->UseHardwareS3TC() )
-	{
-		CompleteCompressedChain( Target, Texture, ActualFormat, LastMipIndex, FirstMip, Width, Height );
-		return;
-	}
-	INT	MipWidth	= Max( Width >> LastMipIndex, 1 ),
-		MipHeight	= Max( Height >> LastMipIndex, 1 );
-	if( MipWidth == 1 && MipHeight == 1 )
-		return;
-
-	// The last level as the device uploaded it.
-	GLint	Internal	= GL_RGBA;
-	GLenum	Format		= GL_BGRA, Type = GL_UNSIGNED_BYTE;
-	INT		Channels	= 4;
-	TArray<BYTE> Pixels;
-	if( IsDXTC(ActualFormat) )
-	{
-		BYTE* Data = UC2GL_DecodeDXTMip( Texture, LastMipIndex, ActualFormat, MipWidth, MipHeight );
-		Pixels.Add( MipWidth * MipHeight * 4 );
-		appMemcpy( &Pixels(0), Data, MipWidth * MipHeight * 4 );
-		delete [] Data;
-	}
-	else if( ActualFormat == TEXF_L8 || ActualFormat == TEXF_A8 )
-	{
-		Internal = Format = ActualFormat == TEXF_L8 ? GL_LUMINANCE : GL_ALPHA;
-		Channels = 1;
-		Pixels.AddZeroed( MipWidth * MipHeight );
-		if( Texture ) Texture->GetTextureData( LastMipIndex, &Pixels(0), MipWidth, ActualFormat, 0 );
-	}
-	else if( ActualFormat == TEXF_RGBA8 )
-	{
-		Pixels.AddZeroed( MipWidth * MipHeight * 4 );
-		if( Texture ) Texture->GetTextureData( LastMipIndex, &Pixels(0), MipWidth * 4, ActualFormat, 0 );
-	}
-	else if( ActualFormat == TEXF_R5G6B5 )
-	{
-		// Averaged as three 8-bit channels, stored again as 5-6-5.
-		TArray<_WORD> Packed;
-		Packed.AddZeroed( MipWidth * MipHeight );
-		if( Texture ) Texture->GetTextureData( LastMipIndex, &Packed(0), MipWidth * 2, ActualFormat, 0 );
-		Channels = 3;
-		Pixels.Add( MipWidth * MipHeight * 3 );
-		for( INT i=0; i<MipWidth*MipHeight; i++ )
-		{
-			Pixels(i*3)		= ((Packed(i) >> 11) & 31) * 255 / 31;
-			Pixels(i*3+1)	= ((Packed(i) >> 5) & 63) * 255 / 63;
-			Pixels(i*3+2)	= (Packed(i) & 31) * 255 / 31;
-		}
-		Internal = Format = GL_RGB;
-		Type = GL_UNSIGNED_SHORT_5_6_5;
-	}
-	else
-	{
-		// The bump formats are uploaded as opaque black (UploadMip).
-		Pixels.Add( MipWidth * MipHeight * 4 );
-		for( INT i=0; i<MipWidth*MipHeight; i++ )
-			*(DWORD*)&Pixels(i*4) = 0xFF000000;
-	}
-
-	INT Level = LastMipIndex - FirstMip;
-	while( MipWidth > 1 || MipHeight > 1 )
-	{
-		INT	NewWidth	= Max( MipWidth >> 1, 1 ),
-			NewHeight	= Max( MipHeight >> 1, 1 ),
-			StepX		= MipWidth > 1 ? 2 : 1,
-			StepY		= MipHeight > 1 ? 2 : 1;
-		TArray<BYTE> Smaller;
-		Smaller.Add( NewWidth * NewHeight * Channels );
-		for( INT y=0; y<NewHeight; y++ )
-			for( INT x=0; x<NewWidth; x++ )
-				for( INT c=0; c<Channels; c++ )
-				{
-					INT Sum = 0;
-					for( INT j=0; j<StepY; j++ )
-						for( INT i=0; i<StepX; i++ )
-							Sum += Pixels( ((y*StepY+j) * MipWidth + x*StepX+i) * Channels + c );
-					Smaller( (y*NewWidth+x) * Channels + c ) = (Sum + StepX*StepY/2) / (StepX*StepY);
-				}
-		Pixels		= Smaller;
-		MipWidth	= NewWidth;
-		MipHeight	= NewHeight;
-		Level++;
-		if( Channels == 3 )
-		{
-			TArray<_WORD> Packed;
-			Packed.Add( MipWidth * MipHeight );
-			for( INT i=0; i<MipWidth*MipHeight; i++ )
-				Packed(i) = ((Pixels(i*3) * 31 + 127) / 255 << 11) | ((Pixels(i*3+1) * 63 + 127) / 255 << 5) | ((Pixels(i*3+2) * 31 + 127) / 255);
-			RenDev->TexImage2D( UploadBindTarget, TextureID, Target, Level, Internal, MipWidth, MipHeight, Format, Type, (BYTE*)&Packed(0) );
-		}
-		else
-			RenDev->TexImage2D( UploadBindTarget, TextureID, Target, Level, Internal, MipWidth, MipHeight, Format, Type, &Pixels(0) );
-	}
-}
-
-//
-// A DXT mip chain that the engine ends before 1x1 (it has log2 of the smaller side
-// levels, so every non-square texture), completed for a context without
-// GL_TEXTURE_MAX_LEVEL when the data goes to the hardware compressed (CompleteChain does
-// the same for uncompressed data). Each missing level is one 4x4 block of a
-// single colour: the average of the level before it (the last real level is at most a few
-// blocks, the rest are 2x1 or 1x1 texels of it).
-//
-static void UC2GL_DecodeDXTBlockAverage( const BYTE* Block, ETextureFormat Format, INT& R, INT& G, INT& B, INT& A, INT& Count )
-{
-	const BYTE* ColorBlock = Format == TEXF_DXT1 ? Block : Block + 8;
-	_WORD	C0 = ColorBlock[0] | (ColorBlock[1] << 8),
-			C1 = ColorBlock[2] | (ColorBlock[3] << 8);
-	INT		Colors[4][3];
-	for( INT i=0; i<2; i++ )
-	{
-		_WORD C = i ? C1 : C0;
-		Colors[i][0] = ((C >> 11) & 31) * 255 / 31;
-		Colors[i][1] = ((C >> 5) & 63) * 255 / 63;
-		Colors[i][2] = (C & 31) * 255 / 31;
-	}
-	UBOOL ThreeColor = Format == TEXF_DXT1 && C0 <= C1;
-	for( INT c=0; c<3; c++ )
-	{
-		Colors[2][c] = ThreeColor ? (Colors[0][c] + Colors[1][c]) / 2 : (2 * Colors[0][c] + Colors[1][c]) / 3;
-		Colors[3][c] = ThreeColor ? 0 : (Colors[0][c] + 2 * Colors[1][c]) / 3;
-	}
-	INT Alphas[8];
-	if( Format == TEXF_DXT5 )
-	{
-		Alphas[0] = Block[0];
-		Alphas[1] = Block[1];
-		for( INT i=2; i<8; i++ )
-			Alphas[i] = Alphas[0] > Alphas[1] ? ((8-i) * Alphas[0] + (i-1) * Alphas[1]) / 7 : (i < 6 ? ((6-i) * Alphas[0] + (i-1) * Alphas[1]) / 5 : (i == 6 ? 0 : 255));
-	}
-	for( INT t=0; t<16; t++ )
-	{
-		INT Index = (ColorBlock[4 + t/4] >> ((t%4)*2)) & 3;
-		INT Alpha = 255;
-		if( Format == TEXF_DXT1 )
-			Alpha = (ThreeColor && Index == 3) ? 0 : 255;
-		else if( Format == TEXF_DXT3 )
-			Alpha = ((Block[t/2] >> ((t%2)*4)) & 15) * 17;
-		else
-		{
-			DWORD Low = Block[2] | (Block[3] << 8) | (Block[4] << 16), High = Block[5] | (Block[6] << 8) | (Block[7] << 16);
-			INT Code = t < 8 ? (Low >> (t*3)) & 7 : (High >> ((t-8)*3)) & 7;
-			Alpha = Alphas[Code];
-		}
-		R += Colors[Index][0]; G += Colors[Index][1]; B += Colors[Index][2]; A += Alpha;
-		Count++;
-	}
-}
-
-void FOpenGLTexture::CompleteCompressedChain( GLenum Target, FTexture* Texture, ETextureFormat ActualFormat, INT LastMipIndex, INT FirstMip, INT Width, INT Height )
-{
-	if( RenDev->CapTextureMaxLevel || !IsDXTC(ActualFormat) || !RenDev->UseHardwareS3TC() )
-		return;
-	INT	MipWidth	= Max( Width >> LastMipIndex, 1 ),
-		MipHeight	= Max( Height >> LastMipIndex, 1 );
-	if( MipWidth == 1 && MipHeight == 1 )
-		return;
-
-	INT	BlocksX		= (Max( MipWidth, 4 ) + 3) / 4,
-		BlocksY		= (Max( MipHeight, 4 ) + 3) / 4,
-		BlockBytes	= ActualFormat == TEXF_DXT1 ? 8 : 16,
-		RowBytes	= BlocksX * BlockBytes;
-	TArray<BYTE> Data;
-	Data.AddZeroed( RowBytes * BlocksY );
-	if( Texture )
-		Texture->GetTextureData( LastMipIndex, &Data(0), RowBytes, ActualFormat, 0 );
-	INT R = 0, G = 0, B = 0, A = 0, Count = 0;
-	for( INT i=0; i<BlocksX*BlocksY; i++ )
-		UC2GL_DecodeDXTBlockAverage( &Data(i*BlockBytes), ActualFormat, R, G, B, A, Count );
-	R /= Count; G /= Count; B /= Count; A /= Count;
-
-	BYTE	Block[16];
-	appMemzero( Block, sizeof(Block) );
-	BYTE*	ColorBlock	= ActualFormat == TEXF_DXT1 ? Block : Block + 8;
-	_WORD	Color		= ((R * 31 + 127) / 255 << 11) | ((G * 63 + 127) / 255 << 5) | ((B * 31 + 127) / 255);
-	ColorBlock[0] = ColorBlock[2] = Color & 255;
-	ColorBlock[1] = ColorBlock[3] = Color >> 8;
-	if( ActualFormat == TEXF_DXT1 && A < 128 )
-		ColorBlock[4] = ColorBlock[5] = ColorBlock[6] = ColorBlock[7] = 0xff;	// c0 <= c1: index 3 is transparent
-	else if( ActualFormat == TEXF_DXT3 )
-		for( INT i=0; i<8; i++ )
-			Block[i] = (A >> 4) * 17;
-	else if( ActualFormat == TEXF_DXT5 )
-		Block[0] = Block[1] = A;
-
-	GLenum Format	= ActualFormat == TEXF_DXT1 ? GL_COMPRESSED_RGBA_S3TC_DXT1_EXT :
-					  ActualFormat == TEXF_DXT3 ? GL_COMPRESSED_RGBA_S3TC_DXT3_EXT :
-												  GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
-	// Every completed level is that block repeated: a level of a non-square chain can be more than
-	// one block in one direction (e.g. 1x16 = 1x4 blocks), and the size of the data must be exactly
-	// its number of blocks (WebGL: GL_INVALID_VALUE otherwise; seen on the first browser match).
-	INT		MaxBlocks	= ((Max( MipWidth >> 1, 1 ) + 3) / 4) * ((Max( MipHeight >> 1, 1 ) + 3) / 4);
-	TArray<BYTE> Repeated;
-	Repeated.Add( MaxBlocks * BlockBytes );
-	for( INT i=0; i<MaxBlocks; i++ )
-		appMemcpy( &Repeated(i * BlockBytes), Block, BlockBytes );
-	INT Level = LastMipIndex - FirstMip;
-	while( MipWidth > 1 || MipHeight > 1 )
-	{
-		MipWidth	= Max( MipWidth >> 1, 1 );
-		MipHeight	= Max( MipHeight >> 1, 1 );
-		Level++;
-		INT Blocks = ((MipWidth + 3) / 4) * ((MipHeight + 3) / 4);
-		RenDev->CompressedTexImage2D( UploadBindTarget, TextureID, Target, Level, Format, MipWidth, MipHeight, Blocks * BlockBytes, &Repeated(0), 0 );
-	}
-}
-
-//
-// The storage of an engine texture goes to GLES around gl4es (UUC2GLRenderDevice::
-// TexImage2D, CompressedTexImage2D), but gl4es' fixed-function emulation only samples a
-// texture whose storage it has seen itself, and gl4es generates mipmaps for a texture it
-// believes to lack them. So a new texture is first defined through gl4es, once per texture
-// name: one RGBA texel (per face), flagged GL_GENERATE_MIPMAP so that gl4es considers its
-// mipmaps taken care of.
-//
-void FOpenGLTexture::PrepareStorage()
-{
-	if( !RenDev->IsGLES || StorageSeenID == TextureID )
-		return;
-	static const BYTE Texel[4] = { 255, 255, 255, 255 };
-	RenDev->glTexParameteri( UploadBindTarget, GL_GENERATE_MIPMAP, GL_TRUE );
-	if( UploadBindTarget == GL_TEXTURE_CUBE_MAP )
-		for( INT Face=0; Face<6; Face++ )
-			RenDev->glTexImage2D( GL_TEXTURE_CUBE_MAP_POSITIVE_X + Face, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, Texel );
-	else
-		RenDev->glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, Texel );
-	StorageSeenID = TextureID;
 }
 
 UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
@@ -625,12 +383,9 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 			DeleteGLObjects();
 			RenDev->glGenTextures( 1, &TextureID );
 			RenDev->glBindTexture( GL_TEXTURE_2D, TextureID );
-			UploadBindTarget = GL_TEXTURE_2D;
-			PrepareStorage();
 			RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
 			RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-			if( !RenDev->IsGLES )
-				RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0 );
+			RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0 );
 			CachedChildRevision.Empty(NumChildren);
 		}
 		RenDev->glBindTexture( GL_TEXTURE_2D, TextureID );
@@ -651,8 +406,7 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 			CachedChildRevision.Empty(NumChildren);
 			CachedChildRevision.AddZeroed(NumChildren);
 
-			UBOOL	Compressed	= IsDXTC(ActualFormat) && RenDev->UseHardwareS3TC();
-			UploadBindTarget = GL_TEXTURE_2D;
+			UBOOL	Compressed	= IsDXTC(ActualFormat) && RenDev->SUPPORTS_GL_EXT_texture_compression_s3tc;
 			ETextureFormat ChildFormat = Compressed || !IsDXTC(ActualFormat) ? ActualFormat : TEXF_RGBA8;
 			INT		Pitch		= IsDXTC(ChildFormat) ? GetBytesPerPixel(ChildFormat,USize) * 4 : GetBytesPerPixel(ChildFormat,USize),
 					Rows		= IsDXTC(ChildFormat) ? VSize / 4 : VSize,
@@ -675,12 +429,12 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 				GLenum Format	= ChildFormat == TEXF_DXT1 ? GL_COMPRESSED_RGBA_S3TC_DXT1_EXT :
 								  ChildFormat == TEXF_DXT3 ? GL_COMPRESSED_RGBA_S3TC_DXT3_EXT :
 															 GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
-				RenDev->CompressedTexImage2D( GL_TEXTURE_2D, TextureID, GL_TEXTURE_2D, 0, Format, USize, VSize, Size, Data, 0 );
+				RenDev->glCompressedTexImage2D( GL_TEXTURE_2D, 0, Format, USize, VSize, 0, Size, Data );
 				CachedGLFormat = Format;
 			}
 			else
 			{
-				RenDev->TexImage2D( GL_TEXTURE_2D, TextureID, GL_TEXTURE_2D, 0, GL_RGBA, USize, VSize, GL_BGRA, GL_UNSIGNED_BYTE, Data );
+				RenDev->TexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, USize, VSize, GL_BGRA, GL_UNSIGNED_BYTE, Data );
 				CachedGLFormat = GL_RGBA;
 			}
 			delete [] Data;
@@ -777,21 +531,13 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 			RenDev->glGenTextures( 1, &TextureID );
 		}
 		RenDev->glBindTexture( GL_TEXTURE_2D, TextureID );
-		UploadBindTarget = GL_TEXTURE_2D;
-		PrepareStorage();
-		// The last level the engine has (desktop GL; where there is no max level the chain is
-		// completed below).
-		if( !RenDev->IsGLES )
-			RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, Max(0,NumMips-FirstMip-1) );
+		// The last level the engine has. OpenGL ES has no maximum level: gl4es derives the levels below it, down to 1x1.
+		RenDev->glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, Max(0,NumMips-FirstMip-1) );
 
-		INT Levels = 0;
 		for( INT MipIndex=FirstMip; MipIndex<NumMips; MipIndex++ )
 		{
 			UploadMip( GL_TEXTURE_2D, Texture, ActualFormat, MipIndex, FirstMip, Width, Height );
-			if( MipIndex == NumMips-1 && Levels > 0 )
-				CompleteChain( GL_TEXTURE_2D, Texture, ActualFormat, MipIndex, FirstMip, Width, Height );
 			Texture->UnloadRawTextureData( MipIndex );
-			Levels++;
 		}
 	}
 	//
@@ -806,12 +552,8 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 			RenDev->glGenTextures( 1, &TextureID );
 		}
 		RenDev->glBindTexture( GL_TEXTURE_CUBE_MAP, TextureID );
-		UploadBindTarget = GL_TEXTURE_CUBE_MAP;
-		PrepareStorage();
-		if( !RenDev->IsGLES )
-			RenDev->glTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, Max(0,NumMips-FirstMip-1) );
+		RenDev->glTexParameteri( GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, Max(0,NumMips-FirstMip-1) );
 
-		INT Levels = 0;
 		for( INT MipIndex=FirstMip; MipIndex<NumMips; MipIndex++ )
 		{
 			for( INT FaceIndex=0; FaceIndex<6; FaceIndex++ )
@@ -820,12 +562,9 @@ UBOOL FOpenGLTexture::Cache(FBaseTexture* SourceTexture)
 				// map is incomplete and the stage samples nothing.
 				FTexture* Face = Cubemap->GetFace( FaceIndex );
 				UploadMip( GL_TEXTURE_CUBE_MAP_POSITIVE_X + FaceIndex, Face, ActualFormat, MipIndex, FirstMip, Width, Height );
-				if( MipIndex == NumMips-1 && Levels > 0 )
-					CompleteChain( GL_TEXTURE_CUBE_MAP_POSITIVE_X + FaceIndex, Face, ActualFormat, MipIndex, FirstMip, Width, Height );
 				if( Face )
 					Face->UnloadRawTextureData( MipIndex );
 			}
-			Levels++;
 		}
 		RenDev->glBindTexture( GL_TEXTURE_CUBE_MAP, 0 );
 	}

@@ -34,8 +34,6 @@ public:
 	virtual UBOOL BindingInit();
 	virtual void* BindingGetProcAddress( const char* Name );
 	virtual void* BindingGetRawProcAddress( const char* Name );
-	virtual GLenum BindingDXTUploadFormat( GLenum Format );
-	virtual void* BindingTranscodeDXT( GLenum Format, GLenum UploadFormat, INT Width, INT Height, const BYTE* Data, INT& Size );
 	virtual UBOOL BindingContextAlive();
 	virtual void BindingGetDrawableSize( UViewport* Viewport, INT& Width, INT& Height );
 	virtual void BindingSetSwapInterval( INT Interval );
