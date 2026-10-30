@@ -564,8 +564,6 @@ void UUC2GLRenderDevice::SetGammaRamp( const BYTE* Ramp )
 		glBindTexture( GL_TEXTURE_2D, GammaRampTexture );
 	glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
 	glTexImage2D( GL_TEXTURE_2D, 0, GL_LUMINANCE, 256, 1, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, Ramp );
-	extern void UC2GL_RememberGammaRamp( const BYTE* Ramp );
-	UC2GL_RememberGammaRamp( Ramp );
 	GammaRampActive = 1;
 	RenderInterface.InvalidateHardwareState();
 }
@@ -604,7 +602,6 @@ void UUC2GLRenderDevice::SetViewportGammaRamp( UViewport* Viewport, const BYTE* 
 	Entry->Frame	= FrameCounter;
 	if( Ramp )
 	{
-		appMemcpy( Entry->Ramp, Ramp, 256 );
 		glBindTexture( GL_TEXTURE_2D, Entry->Texture );
 		glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
 		glTexImage2D( GL_TEXTURE_2D, 0, GL_LUMINANCE, 256, 1, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, Ramp );

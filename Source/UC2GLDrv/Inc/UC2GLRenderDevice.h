@@ -228,7 +228,6 @@ public:
 		GLuint		Texture;
 		INT			X, Y, W, H;
 		DWORD		Frame;
-		BYTE		Ramp[256];
 	};
 	TArray<FViewportRamp>			ViewportRamps;
 	void SetViewportGammaRamp( UViewport* Viewport, const BYTE* Ramp );
@@ -344,6 +343,8 @@ public:
 	virtual void BindingGetDrawableSize( UViewport* Viewport, INT& Width, INT& Height );
 	virtual void BindingSetSwapInterval( INT Interval );
 	virtual void BindingSwap( UViewport* Viewport );
+	// Whether the window shows the present pass's picture (the frame drawn through it), so a shot does too.
+	virtual UBOOL BindingShowsPresentPass() { return 1; }
 	// The hardware's extension string (GLES: not gl4es' emulated one), space separated.
 	UBOOL FindRawExt( const char* Name );
 	// The first lines of every GLSL source this driver compiles.
@@ -417,7 +418,8 @@ public:
 	static void GetFrameSize( UViewport* Viewport, INT& Width, INT& Height );	// The window, not the viewport
 	void DestroyMainFramebuffer();
 	UBOOL CreatePresentProgram();
-	void DrawPresentPass( UViewport* Viewport );
+	// Into the default framebuffer at the drawable's size, or into Target at TargetX x TargetY (a shot).
+	void DrawPresentPass( UViewport* Viewport, GLuint Target = 0, INT TargetX = 0, INT TargetY = 0 );
 	void InitGLState();
 
 	// Post-processing (UC2GLPostProcess.cpp).

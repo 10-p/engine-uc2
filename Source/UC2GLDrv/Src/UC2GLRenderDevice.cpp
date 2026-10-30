@@ -59,19 +59,17 @@ static INT				GShadowCheckPending = 0;	// GLSHADOWCHECK (UC2GLShadowCheck.cpp)
 // (verification: "Exec=40:BlurMe@50:set+UCScreenBerserk+Enabled+1"). Times ascending.
 static TArray<FLOAT>	GExecTimes;
 static TArray<FString>	GExecCommands;
-// Test key ShotRamp: screenshots show the dynamic gamma ramp the present pass applies (they are
-// read before it otherwise, as D3D's are).
 // POSTSELFTEST / test key SelfTest: the numeric checks of UC2GLSelfTest.cpp, run at the start of a
 // frame (0 = no, 1 = at the next frame with a player, n = n frames from now).
 static INT				GSelfTestPending = 0;
-static UBOOL			GShotRamp = 0;
-// Test key ShotPresented: ShotTimes pictures are what the present pass put on the screen (the gamma
-// applied), read from the default framebuffer before the swap, instead of the main framebuffer.
+// Screenshots are the picture the present pass puts on the screen; test key ShotRamp=False reads them before
+// it, as D3D's are.
+static UBOOL			GShotRamp = 1;
+// Test key ShotPresented: ShotTimes pictures are read from the window's framebuffer after the present pass,
+// before the swap, at the drawable's size.
 static UBOOL			GShotPresented = 0;
 static TArray<FColor>	GPresentedPixels;
 static INT				GPresentedWidth = 0, GPresentedHeight = 0;
-static BYTE				GLastGammaRamp[256];
-void UC2GL_RememberGammaRamp( const BYTE* Ramp ) { appMemcpy( GLastGammaRamp, Ramp, 256 ); }
 static DOUBLE			GFirstFrameTime = 0.0;
 // Test keys read by other files of the driver.
 UBOOL					GTestMatCensus = 0;		// MatCensus=True (UC2GLPixelTrace.cpp)
@@ -591,8 +589,9 @@ UBOOL UUC2GLRenderDevice::Init()
 	// UseXboxShadows, UseXboxProjectors, UseTerrain3Layer, NumAASamples, MaxTextureUnits, MaterialStages,
 	// FixedFunctionPrograms) are config properties of the class's own section, set with -ini: like any setting.
 	//   ShotTimes=<s>,<s>...            the engine's SHOT exec at those times after the first frame
-	//   ShotRamp=True                   screenshots show the dynamic gamma ramp of the present pass
-	//   ShotPresented=True              screenshots are what the present pass put on the screen
+	//   ShotRamp=False                  screenshots are the frame before the present pass (its gamma, contrast,
+	//                                   brightness and dynamic gamma ramps), as D3D's are
+	//   ShotPresented=True              ShotTimes pictures are read from the window after the present pass
 	//   Exec=<s>:<cmd>[@<s>:<cmd>...]   console commands at those times; '+' stands for a space
 	//   PixelShaderToggleTimes=<s>,...  flip UsePixelShaders at those times (one run, both pictures)
 	//   PostProcessToggleTimes=<s>,...  flip UsePostProcess at those times
@@ -637,7 +636,11 @@ UBOOL UUC2GLRenderDevice::Init()
 	if( UC2GL_TESTFLAG( "CombinerTest" ) )
 		GCombinerTestPending = 10;
 	GTestMatCensus	= UC2GL_TESTFLAG( "MatCensus" );
-	GShotRamp		= UC2GL_TESTFLAG( "ShotRamp" );
+	TestValue = TEXT("");
+	GShotRamp		= 1;
+	if( UC2GL_TESTKEY( "ShotRamp", TestValue ) )
+		GShotRamp = appStricmp( *TestValue, TEXT("False") ) && appStricmp( *TestValue, TEXT("0") ) && appStricmp( *TestValue, TEXT("No") )
+			&& appStricmp( *TestValue, TEXT("Off") );
 	GShotPresented	= UC2GL_TESTFLAG( "ShotPresented" );
 	NoLODBias		= UC2GL_TESTFLAG( "NoLODBias" );
 	GTestDualDiffuse = -1;
@@ -1668,15 +1671,21 @@ UBOOL UUC2GLRenderDevice::CreatePresentProgram()
 	unguard;
 }
 
-void UUC2GLRenderDevice::DrawPresentPass( UViewport* Viewport )
+void UUC2GLRenderDevice::DrawPresentPass( UViewport* Viewport, GLuint Target, INT TargetX, INT TargetY )
 {
 	guard(UUC2GLRenderDevice::DrawPresentPass);
 
 	INT DrawableX = MainWidth, DrawableY = MainHeight;
-	BindingGetDrawableSize( Viewport, DrawableX, DrawableY );
+	if( Target )
+	{
+		DrawableX = TargetX;
+		DrawableY = TargetY;
+	}
+	else
+		BindingGetDrawableSize( Viewport, DrawableX, DrawableY );
 
 	ResolveMain( 1, 0 );
-	glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+	glBindFramebuffer( GL_FRAMEBUFFER, Target );
 	glViewport( 0, 0, DrawableX, DrawableY );
 	glDisable( GL_SCISSOR_TEST );
 	glDisable( GL_DEPTH_TEST );
@@ -2430,8 +2439,33 @@ void UUC2GLRenderDevice::ReadPixels( UViewport* Viewport, FColor* Pixels )
 		return;
 	}
 
-	ResolveMain( 1, 0 );
-	glBindFramebuffer( GL_FRAMEBUFFER, MainTextureFramebuffer() );
+	// The picture the screen gets: the present pass (gamma, contrast, brightness, the dynamic gamma ramps) drawn
+	// into a framebuffer of the frame's own size, then read. With ShotRamp=False, or in a window that shows the
+	// frame without the present pass, the shot is the frame before it.
+	GLuint ShotTexture = 0, ShotFramebuffer = 0;
+	if( GShotRamp && BindingShowsPresentPass() )
+	{
+		glGenTextures( 1, &ShotTexture );
+		glBindTexture( GL_TEXTURE_2D, ShotTexture );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+		glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8, MainWidth, MainHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL );
+		glGenFramebuffers( 1, &ShotFramebuffer );
+		glBindFramebuffer( GL_FRAMEBUFFER, ShotFramebuffer );
+		AttachColorTexture( ShotTexture );
+		GLenum Status = glCheckFramebufferStatus( GL_FRAMEBUFFER );
+		if( Status == GL_FRAMEBUFFER_COMPLETE )
+			DrawPresentPass( Viewport, ShotFramebuffer, MainWidth, MainHeight );
+		else
+		{
+			debugf( NAME_Warning, TEXT("UC2GLDrv: shot target %ix%i incomplete (0x%04x): the shot is the frame before the present pass"), MainWidth, MainHeight, Status );
+			glDeleteFramebuffers( 1, &ShotFramebuffer );
+			ShotFramebuffer = 0;
+		}
+	}
+	if( !ShotFramebuffer )
+		ResolveMain( 1, 0 );
+	glBindFramebuffer( GL_FRAMEBUFFER, ShotFramebuffer ? ShotFramebuffer : MainTextureFramebuffer() );
 	glPixelStorei( GL_PACK_ALIGNMENT, 1 );
 	TArray<FColor> Rows( Max( Width * Height, 1 ) );
 	glReadPixels( X0, MainHeight - Y0 - Height, Width, Height, GL_BGRA, GL_UNSIGNED_BYTE, &Rows(0) );
@@ -2440,26 +2474,14 @@ void UUC2GLRenderDevice::ReadPixels( UViewport* Viewport, FColor* Pixels )
 		{
 			FColor C = Rows( (Height - 1 - y) * Width + x );
 			C.A = 255;
-			if( GShotRamp && PostProcessActive() )
-			{
-				// The ramp of the split-screen viewport the pixel is in, as the present pass applies it.
-				const BYTE* Ramp = GammaRampActive ? GLastGammaRamp : NULL;
-				for( INT r=0; r<ViewportRamps.Num(); r++ )
-				{
-					const FViewportRamp& R = ViewportRamps(r);
-					if( R.Frame + 16 >= FrameCounter && X0+x >= R.X && X0+x < R.X+R.W && Y0+y >= R.Y && Y0+y < R.Y+R.H )
-						Ramp = R.Ramp;
-				}
-				if( Ramp )
-				{
-					C.R = Ramp[C.R];
-					C.G = Ramp[C.G];
-					C.B = Ramp[C.B];
-				}
-			}
 			Pixels[ y * Viewport->SizeX + x ] = C;
 		}
 	glBindFramebuffer( GL_FRAMEBUFFER, RenderInterface.SavedRenderTargetState.GetCurrentState()->Framebuffer ? RenderInterface.SavedRenderTargetState.GetCurrentState()->Framebuffer : MainFramebuffer );
+	if( ShotFramebuffer )
+		glDeleteFramebuffers( 1, &ShotFramebuffer );
+	if( ShotTexture )
+		glDeleteTextures( 1, &ShotTexture );
+	RenderInterface.InvalidateHardwareState();
 
 	unguard;
 }
