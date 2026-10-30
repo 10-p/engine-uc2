@@ -55,14 +55,17 @@ plus single-precision rounding, normals to within an eighth of a degree (the mid
 interval, normalised), colours, UVs, indices and everything else exact; the wireframe rebuilt as UStaticMesh::Build
 does but from the stripped triangles (the same line segments, in another order and direction); RawTriangles, the
 editor's source triangles (only UStaticMesh::Build and the editor read them; InternalVersion 14 keeps PostLoad from
-rebuilding), rebuilt from the render data by tools/uc2xrawtri.py; instance Lights empty (the baked ColorStream is
-drawn as is; the editor's incremental relighting reads them).
+rebuilding), rebuilt from the render data by tools/uc2xrawtri.py, in an order under which a rebuild draws the
+triangles of a section whose material shows draw order (tools/uc2xmat.py) as the disc does, where tools/uc2xorder.py
+finds one; instance Lights empty (the baked ColorStream is drawn as is; the editor's incremental relighting reads
+them).
 """
 import array
 import hashlib
 import os
 import struct
 
+import uc2xmat
 import uc2xpkg
 import uc2xrawtri
 from uc2xpkg import FormatError, Reader, object_head_end
@@ -633,7 +636,16 @@ def convert_mesh(pkg, i, ctx):
     m.wire = build_wireframe(idx, m.sections)
     m.wire_rev = m.index_rev
     tris = [(k, t) for k, s in enumerate(m.sections) if s[5] for t in strip_triangles(idx, s)]
-    count, raw, stats = uc2xrawtri.raw_triangles(m.vertices, m.colors, [uv[0] for uv in m.uvs], tris)
+    shows = None
+    if name.lower() not in getattr(ctx, 'imported_copies', ()):
+        # a merged copy the PC map imports is replaced by its original, which gets its own order
+        shows = [k in uc2xmat.ORDER_SHOWS for k in uc2xmat.section_kinds(pkg, i, getattr(ctx, 'content', None))]
+    count, raw, stats = uc2xrawtri.raw_triangles(m.vertices, m.colors, [uv[0] for uv in m.uvs], tris, shows,
+                                                 bool(m.use_strips))
+    for k, how in sorted(stats['draw order'].items()):
+        if how.startswith('not found'):
+            ctx.warn('%s: an editor rebuild draws the blended triangles of section %d in another order than the '
+                     'disc (%s)' % (pkg.export_path(i), k, how))
     if stats['unresolved']:
         ctx.warn('%s: smoothing of %d triangle pairs has no smoothing group bit left; written apart'
                  % (pkg.export_path(i), stats['unresolved']))

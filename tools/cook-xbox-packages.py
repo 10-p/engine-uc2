@@ -212,6 +212,10 @@ def convert_package(src, dst, copies=None, write=True, tables=None):
     if not write:
         return dst, None, [], found
     ctx = Context(_state['xpr'], prefer_for(name, is_map), is_map, *(copies or (None, None)))
+    # the content packages, for the materials a static mesh's sections draw with (uc2xmat.py)
+    ctx.content = original
+    # a map's merged copies its PC tables import: the content package's object is written, not the copy
+    ctx.imported_copies = {k.lower() for k in (tables or {}).get('merged', {})} if is_map else set()
     counts = {'converted': 0, 'copied': 0, 'editor-only': 0, 'left out': 0, 'failed': 0}
     left_out = set()
     if is_map:

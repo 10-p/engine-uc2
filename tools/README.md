@@ -73,10 +73,13 @@ In the repository the cook is `tools/cook.py`.
   from the render data: each triangle's positions, UVs, colours and material as drawn, and smoothing groups from the
   normals (faces whose normals were summed into a vertex's are smoothed together). The editor then shows each mesh's
   real triangle count, and rebuilding a mesh gives back the cooked vertices, triangles and sections, its normals to
-  within the disc's rounding. Some rebuilds still differ: two vertices whose normals differed by less than the
-  disc's rounding weld into one, a strip of triangles can come out in another order (the order the meshes were first
-  built in decides it), and on large meshes, where the disc rounds positions coarsely, a few normals move by more
-  than a degree.
+  within the disc's rounding. Where a section's material blends (alpha blending, or additive or multiplicative
+  blending that writes depth), the order its triangles are drawn in shows where they overlap: the cook writes those
+  triangles in an order under which a rebuild draws them as the disc does, where its search finds one (the search
+  adds a few minutes to the cook; `Maps/xbox-packages.txt` names the blended sections it found no order for). Some
+  rebuilds still differ: two vertices whose normals differed by less than the disc's rounding weld into one, a
+  strip of triangles can come out in another order (the order the meshes were first built in decides it), and on
+  large meshes, where the disc rounds positions coarsely, a few normals move by more than a degree.
 - **Packages for network play.** The packages come out the same as the PC game folder's, so a player who cooked the
   disc and a player with the PC folder can play together.
 - **Sound and music** become Ogg Vorbis, and **movies** Ogg Theora.
