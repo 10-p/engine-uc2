@@ -109,10 +109,12 @@ dev=""; [ -n "${F5_GL4ES:-}" ] && dev="-gl4es"
 # F5_SOFT=1: Mesa llvmpipe on the Xvfb display instead of the GPU (the GL4ES device runs there with an ES 2.0
 # context, as tools/dev/m11-twin.sh: MESA_GLES_VERSION_OVERRIDE=2.0)
 video="SDL_VIDEODRIVER=offscreen"; [ -n "${F5_SOFT:-}" ] && video="MESA_GLES_VERSION_OVERRIDE=2.0"
+# The frames before the present pass (ShotRamp=False, the desktop section, which the GL4ES device reads after its
+# own; F5_ARGS still wins): the dynamic gamma ramp adapts from frame to frame and would show as a flicker of its own.
 inner=$(mktemp)
 cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0x0000/0x0000 $video ./${F5_BIN:-uc2.bin} "$map?Name=FxCam" -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True $dev -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" ${F5_ARGS:-} > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0x0000/0x0000 $video ./${F5_BIN:-uc2.bin} "$map?Name=FxCam" -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True $dev -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=False ${F5_ARGS:-} > "$out/$name.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$name.out" "$chan" "$out/$name.result" > "$out/$name.inject" 2>&1
 kill -TERM \$pid 2>/dev/null

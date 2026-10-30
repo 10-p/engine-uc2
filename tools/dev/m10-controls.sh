@@ -36,6 +36,10 @@
 #                           TEMPSETRES needs room for the biggest)
 #   M10_SPOT="<x> <y> <z> <yaw>"  where the match scenarios put the pawn before each movement and turn check
 #                           (m10-inject.py's place; default below)
+#   M10_SHOTRAMP=1          screenshots as the screen shows them (the present pass's gamma, contrast, brightness and
+#                           dynamic gamma ramps); default ShotRamp=False, the frame before the present pass, which the
+#                           measuring callers (d2, d78, check-64bit, h5-glyphs) compare with older builds' pictures and
+#                           with thresholds made on that frame
 # The game is also given UC2_WINE_DISPLAY=$DISPLAY (Xvfb's), which tools/dev/m12-wine.sh needs.
 set -u
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -95,7 +99,10 @@ set_res() {
 # -ini:System:[UC2Movie]:StartupMovies=False: the logos play first and a full-screen movie owns the input.
 # -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0:
 # the key and button timings here are calibrated without the native ini's anti-aliasing; with its 4x multisampling
-# the software rasteriser's frames are slower and the menu steps come late on a loaded machine.)
+# the software rasteriser's frames are slower and the menu steps come late on a loaded machine.
+# -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=False unless M10_SHOTRAMP: the desktop section, which the GL4ES
+# device reads after its own, before the caller's arguments, so a caller's ShotRamp=True still wins.)
+rampar="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=False"; [ -n "${M10_SHOTRAMP:-}" ] && rampar=""
 run_one() {
   local name=$1 scen=$2 secs=$3; shift 3
   prep_tree
@@ -106,7 +113,7 @@ run_one() {
   inner=$(mktemp)
   cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0x0000/0x0000 UC2_WINE_DISPLAY=\$DISPLAY $launch ${M10_URL:+"$M10_URL"} -log -UFRONTLOG -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0 -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" "\$@" > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0x0000/0x0000 UC2_WINE_DISPLAY=\$DISPLAY $launch ${M10_URL:+"$M10_URL"} -log -UFRONTLOG -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0 -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" $rampar "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$name.out" "$chan" "$out/$name.result" > "$out/$name.inject" 2>&1
 kill -$stopsig \$pid 2>/dev/null

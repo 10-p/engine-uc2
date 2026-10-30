@@ -46,6 +46,7 @@ public:
 	virtual void BindingGetDrawableSize( UViewport* Viewport, INT& Width, INT& Height );
 	virtual void BindingSetSwapInterval( INT Interval );
 	virtual void BindingSwap( UViewport* Viewport );
+	virtual UBOOL BindingShowsPresentPass() { return !GDIPresent; }
 
 private:
 	// The context current on the viewport's window (or, without one, on the binding's own hidden window).

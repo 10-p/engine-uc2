@@ -22,6 +22,9 @@
 #
 #   UC2_AA=1             keep the device's anti-aliasing (on in the native ini); without it every run gets
 #                        NumAASamples=0 (-ini:), so pictures compare with the references made before anti-aliasing existed
+#   UC2_SHOTRAMP=1       screenshots as the screen shows them (the present pass's gamma, contrast, brightness and
+#                        dynamic gamma ramps); without it every run gets ShotRamp=False: the frame before the present
+#                        pass, as the references are (D3D's pictures, older builds' and the accepted ones)
 #
 # Everything runs inside <repo>/../bin/capped 2G (CLAUDE.md, "Running anything: memory ceiling, always");
 #   UC2_CAP=3G           another ceiling (pp-scale: 3G for 2880x2160 and larger windows)
@@ -60,13 +63,16 @@ fovarg="-ini:System:[ufront.AutoFOV]:AutoFOV=0"; [ -n "${UC2_AUTOFOV:-}" ] && fo
 # wine oracle's DM-Praxis view, made by the original PC binary) have the old HUD. tools/dev/d2-ui-scale.sh
 # measures the UI box itself and does not use this runner.
 [ -z "${UC2_UIBOX:-}" ] && fovarg="$fovarg -ini:System:[SDL2Drv.SDL2Client]:UIScaleMode=Native640"
+# The desktop section only, before the caller's arguments: the GL4ES device reads it after its own section, so a
+# caller's ShotRamp=True in the desktop section or in both (glini) still wins.
+rampar="-ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=False"; [ -n "${UC2_SHOTRAMP:-}" ] && rampar=""
 inner=$(mktemp)
 cat > "$inner" <<INNER
 cd "$sys" || exit 1
 echo "\$DISPLAY" > "$out/$name.display"
 # M8: OpenAL Soft renders to its null backend unless ALSOFT_DRIVERS says otherwise (headless runs stay quiet).
 # M9: no logos (the fire-at times assume none)
-SDL_AUDIODRIVER=dummy ALSOFT_DRIVERS=${ALSOFT_DRIVERS:-null} ./${UC2_BIN:-uc2.bin} $map -log -UFRONTLOG -ini:System:[UC2Movie]:StartupMovies=False $aaarg $fovarg "\$@" > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy ALSOFT_DRIVERS=${ALSOFT_DRIVERS:-null} ./${UC2_BIN:-uc2.bin} $map -log -UFRONTLOG -ini:System:[UC2Movie]:StartupMovies=False $aaarg $fovarg $rampar "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
 if [ "$fire" != 0 ]; then
   sleep \$(( $fire - 4 ))

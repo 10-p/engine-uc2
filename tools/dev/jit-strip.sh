@@ -69,10 +69,11 @@ sed -i -E "s/^(WindowedViewportX|FullscreenViewportX)=.*/\\1=1280/; s/^(Windowed
 rm -f "$sys/Avaris.ini" "$sys/User.ini" "$sys"/Shot*.bmp "$out/$name"-*.png "$out/$name".result*
 rm -rf "$sys/Profiles"; mkdir -p "$sys/Profiles"
 chan=$out/$name.channel; : > "$chan"
+# ShotRamp=False: a shot reads the frame as it is, with no present pass of its own drawn in the frame being timed.
 inner=$(mktemp)
 cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0x0000/0x0000 SDL_VIDEODRIVER=offscreen ./uc2.bin "DM-Deadbolt?NumBots=0" -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True "-ini:System:[SDLLaunch]:FramePattern=$pattern" -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0x0000/0x0000 SDL_VIDEODRIVER=offscreen ./uc2.bin "DM-Deadbolt?NumBots=0" -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True "-ini:System:[SDLLaunch]:FramePattern=$pattern" -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=False > "$out/$name.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$name.out" "$chan" "$out/$name.result" > "$out/$name.inject" 2>&1
 kill -TERM \$pid 2>/dev/null
