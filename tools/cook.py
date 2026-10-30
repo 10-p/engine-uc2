@@ -79,8 +79,9 @@ FICLONE = 0x40049409
 TABLES = 'uc2-pc-tables.json.gz'
 # The scripts the cook runs and imports, beside this one.
 SCRIPTS = ('cook-xbox-packages.py', 'cook-audio.py', 'cook-movies.py', 'xiso.py', 'uc2xpkg.py', 'uc2xpr.py',
-           'uc2xbsp.py', 'uc2xtex.py', 'uc2xmesh.py', 'uc2xrawtri.py', 'uc2xskel.py', 'uc2xterrain.py',
-           'uc2xtables.py', 'uc2xrefs.py', 'uc2types.py', 'scripts/ucpkg.py', 'uc2xwb.py', 'uc2xsb.py')
+           'uc2xbsp.py', 'uc2xtex.py', 'uc2xmesh.py', 'uc2xrawtri.py', 'uc2xorder.py', 'uc2xstrip.py', 'uc2xmat.py',
+           'uc2xskel.py', 'uc2xterrain.py', 'uc2xtables.py', 'uc2xrefs.py', 'uc2types.py', 'scripts/ucpkg.py',
+           'uc2xwb.py', 'uc2xsb.py')
 # Standard modules the cook's scripts import that a Python build can lack.
 MODULES = ('zlib', 'gzip', 'json', 'hashlib', 'concurrent.futures', 'multiprocessing', 'difflib', 'array')
 

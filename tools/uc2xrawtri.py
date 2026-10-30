@@ -3,11 +3,12 @@
 the disc cook writes. Used by tools/uc2xmesh.py.
 
     import uc2xrawtri
-    count, blob, stats = uc2xrawtri.raw_triangles(vertices, colors, uvs, triangles)
+    count, blob, stats = uc2xrawtri.raw_triangles(vertices, colors, uvs, triangles, shows, use_strips)
     # vertices   PC vertex records (FVector Position, FVector Normal; 24 bytes each)
     # colors     ColorStream elements (4 bytes each, serialised order)
     # uvs        one bytes per UV stream (FStaticMeshUV, 8 bytes per vertex)
     # triangles  [(section, (a, b, c))]: the drawn triangles, strips unrolled as UStaticMesh::Build reads them
+    # shows      per section, whether its material shows draw order (tools/uc2xmat.py); use_strips: UseTriStrips
     # blob       count FStaticMeshTriangle records (UnStaticMesh.cpp operator<<, version 112 on); stats: a dict
 
 UStaticMesh::Build (Engine/Src/UnStaticMeshBuild.cpp) makes the render data from RawTriangles: a vertex per
@@ -29,24 +30,29 @@ the source is written back from it:
                             reused where triangles do not touch); a triangle smoothed with none gets 0
   order and corners         the vertices come back in the cooked order: Build numbers them as it first meets them,
                             so a triangle that brings new vertices comes when they are the next numbers, its
-                            corners turned to meet them in order; otherwise the triangles keep their drawn order
+                            corners turned to meet them in order; otherwise the triangles keep their drawn order.
+                            A section whose material shows draw order gets an order under which Build draws its
+                            triangles as the disc does, where one is found (tools/uc2xorder.py)
 
 Build then gives back the cooked vertex buffer (positions, UVs, colours, order), the same triangles in each section
 and normals that differ from the cooked ones by their packing on the disc. It cannot where the disc lost what told
 two vertices apart (normals that differed by less than their packing weld into one vertex) or where the rounding of
 positions turned a face (on large meshes a face normal moves by up to a few degrees). The index order of each
 section's strip is xbstrip's (Engine/Src/xbstrip.cpp), whose tie-breaks follow the triangle order the meshes were
-first built from; the disc does not keep that order.
+first built from; the disc does not keep that order. Where the material shows draw order, the rebuild draws the
+triangles in the disc's order in the sections tools/uc2xorder.py finds an order for.
 
 stats: unexplained (corners no set of triangles there explains: their own face normals are kept), undecided
 (positions whose triangles found no agreeing sets), conflicts (pairs one position joins and another parts),
 unresolved (pairs smoothed together that no free bit could join), unplaced (triangles left after the numbering
-order: only an unused vertex leaves any).
+order: only an unused vertex leaves any), draw order ({section: uc2xorder's result} for the sections that show it).
 """
 import heapq
 import itertools
 import math
 import struct
+
+import uc2xorder
 
 # PointsEqual's THRESH_POINTS_ARE_SAME * 4.0f, FindVertexIndex's UV tolerance, SafeNormal's SMALL_NUMBER
 PT = struct.unpack('<f', struct.pack('<f', struct.unpack('<f', struct.pack('<f', 0.002))[0] * 4.0))[0]
@@ -418,7 +424,7 @@ def _order(tris):
     return out, len(rest)
 
 
-def raw_triangles(vertices, colors, uvs, tris):
+def raw_triangles(vertices, colors, uvs, tris, shows=None, use_strips=True):
     """(count, FStaticMeshTriangle records, stats) for a mesh's render data (see the module's header)."""
     nv = len(vertices) // 24
     recs = [vertices[24 * k:24 * k + 24] for k in range(nv)]
@@ -435,6 +441,9 @@ def raw_triangles(vertices, colors, uvs, tris):
     stats = {'unresolved': 0, 'unexplained': 0, 'conflicts': 0, 'undecided': 0}
     bits = _smoothing(pos, nrm, weldable, tris, stats)
     order, left = _order(tris)
+    stats['draw order'] = {}
+    if shows:
+        order, stats['draw order'] = uc2xorder.solve(pos, uv, colors, tris, bits, order, shows, use_strips)
     out = bytearray()
     for t, tv in order:
         for v in tv:
