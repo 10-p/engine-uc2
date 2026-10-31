@@ -77,6 +77,9 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
 - **Xbox post-processing on PC**: distortion, emissive glow, bloom, depth of field, the camera effects and dynamic
   gamma, plus the Xbox shadows, projectors and three-layer terrain.
 - **Xbox Live content**: the alternate skins and the downloadable maps in the game folder are available.
+- **The Xbox's level unload**: `UGameEngine::UnloadMap` collects the old level before the next map loads, on every
+  platform (`WITH_LEVEL_PURGE_ON_UNLOAD`; the unloading of the Xbox texture files stays the Xbox's), so a map loaded
+  again (RESTART MATCH, `?Restart`) never replaces the objects of a live copy of itself.
 - **Portable platform layer**: Core's Unix layer (Linux, MinGW, Emscripten) with UC2's platform contract.
 - **Player log**: status lines, warnings, errors and console-command answers; the port's diagnostic and repeated lines
   (AutoFOV, dynamic gamma, resize and framebuffer, GL capabilities and programs, movies, network statistics, audio
