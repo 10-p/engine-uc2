@@ -508,6 +508,13 @@ seconds: frames, fps, frame time avg/min/max/p99, the 1% low. `tools/dev/fps-ben
 runs a fixed camera turn on this machine's GPU, headless, and prints one line. A standalone game is uncapped by default
 (`UseVSync=False`, `[Engine.Engine] FrameRateCap=0`); a network client keeps the engine's own tick limit.
 
+## Relaunch
+
+`RELAUNCH [<arguments>]` (Epic's console command; no UC2 menu sends it): the game exits and its running executable
+starts again with the arguments on Linux and Windows; an Android app and a page only exit. With `-server` the UCC takes
+over instead: `./ucc-bin server <url>` on Linux (in an `xterm` when one is installed), `ucc.exe server <url>` on
+Windows; on the web it is a fatal error, `Failed to launch process. Relaunch: <arguments>`.
+
 ## The log
 
 Status lines (the renderer, the audio device, ini overrides and test keys), warnings, errors and the answers to console
