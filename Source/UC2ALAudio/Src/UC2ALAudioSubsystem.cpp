@@ -1686,6 +1686,15 @@ void UUC2ALAudioSubsystem::NoteDestroy( AActor* Actor )
 	FUC2AudioState* S = State;
 	if( !S || !Actor )
 		return;
+	// A listed static ambient sound (one deleted in the editor): the list is made again at the next ambient update.
+	if( S->StaticAmbients.FindItemIndex( (AAmbientSound*)Actor )!=INDEX_NONE )
+	{
+		for( INT i=0; i<S->ActiveAmbients.Num(); i++ )
+			StopAmbient( S, S->StaticAmbients(S->ActiveAmbients(i)) );
+		S->ActiveAmbients.Empty();
+		S->StaticAmbients.Empty();
+		S->bAmbientsListed = 0;
+	}
 	INT E;
 	while( (E = FindEmitter( S, Actor ))>=0 )
 	{
@@ -1968,7 +1977,7 @@ static void UpdateAmbientCues( UUC2ALAudioSubsystem* Audio, FUC2AudioState* S )
 		for( INT i=0; i<Level->Actors.Num(); i++ )
 		{
 			AAmbientSound* Amb = Cast<AAmbientSound>( Level->Actors(i) );
-			if( Amb && Amb->bStatic )
+			if( Amb && Amb->bStatic && !Amb->bDeleteMe )
 				S->StaticAmbients.AddItem( Amb );
 			AZoneInfo* Zone = Cast<AZoneInfo>( Level->Actors(i) );
 			if( Zone && Zone->ZoneAudioEffect < UC2_NUM_ZONE_PRESETS )

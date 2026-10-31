@@ -183,9 +183,14 @@ void UEditorEngine::ResetSound()
 	guard(UEditorEngine::ResetSound);
 
 	if( Audio )
+	{
+		// A level change, as the game reports it (UGameEngine::NotifyLevelChange): the audio subsystem lets go of the
+		// old level's actors (static ambient sounds, emitters, cues) before garbage collection frees them.
+		Audio->NotifyLevelChange();
 		for( int i=0; i<Client->Viewports.Num(); i++ )
 			if( !Client->Viewports(i)->IsOrtho() )
 				Audio->SetViewport( Client->Viewports(i) );
+	}
 
 	unguard;
 }
@@ -218,12 +223,26 @@ void UEditorEngine::Tick( float DeltaSeconds )
 	if( Level )
 		Level->Tick( RealtimeViewport ? LEVELTICK_ViewportsOnly : LEVELTICK_TimeOnly, DeltaSeconds );
 
-	// Update audio.
-	if (Audio && Audio->GetViewport())
+	// Update audio: heard through a perspective viewport of this level with Realtime Preview on (the current one
+	// first); with none, its cues are paused.
+	if( Audio )
 	{
-		FUNC_CLOCK(AudCyc,GStats.DWORDStats(GEngineStats.STATS_Game_AudioTickCycles));
+		UViewport* AudioViewport = NULL;
+		for( INT i=0; i<Client->Viewports.Num(); i++ )
+		{
+			UViewport* Viewport = Client->Viewports(i);
+			if( Viewport->IsRealtime() && Viewport->IsPerspective() && Viewport->Actor->XLevel==Level && (!AudioViewport || Viewport->Current) )
+				AudioViewport = Viewport;
+		}
+		Audio->NotifyPauseChange( AudioViewport==NULL );
+		if( AudioViewport )
+		{
+			if( Audio->GetViewport()!=AudioViewport )
+				Audio->SetViewport( AudioViewport );
+			FUNC_CLOCK(AudCyc,GStats.DWORDStats(GEngineStats.STATS_Game_AudioTickCycles));
 
-		Audio->Update();
+			Audio->Update();
+		}
 	}
 
 	// Render everything.

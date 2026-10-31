@@ -188,6 +188,9 @@ D3DDrv does it: the hit rectangle is read back around every hit proxy).
 - Play Level saves `Maps/Autoplay.unr` and starts the game named by `Default.ini`'s `[URL] EXEName` (`uc2.exe`) with
   `Autoplay.unr HWND=<the editor's window> <[Editor.EditorEngine] GameCommandLine>`; on Windows `appLaunchURL` hands a
   program or a web address to the shell and the editor stays open.
+- Sound: the level is heard through a perspective viewport of it with Realtime Preview on (the current one first);
+  with none, its sounds are paused (`UEditorEngine::Tick`). Loading a map tells the audio subsystem of the level
+  change (`ResetSound`), as the game does, so it lets go of the old level's ambient sounds before they are freed.
 - `tools/dev/package-windows.sh` ships it and its files beside `uc2.exe` when the build has it.
 - Under wine, viewports are presented through GDI (`[UC2WGLDrv.UC2WGLRenderDevice] GDIPresent`, `Engine/Config/README.md`).
   In wine's virtual desktop the maximised editor frame (whose window rectangle starts at -4,-4) is drawn 4 pixels right
