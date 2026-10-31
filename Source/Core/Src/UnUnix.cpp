@@ -2218,7 +2218,14 @@ void appLaunchURL( const TCHAR* URL, const TCHAR* Parms, FString* Error )
 	// The shell opens it now, as Epic's Windows layer does (a web address, or a program with its parameters: the
 	// editor's Play Level starts the game), and this program carries on.
 	debugf( NAME_Log, TEXT("Launching %s %s"), URL, Parms ? Parms : TEXT("") );
-	HINSTANCE Code = ShellExecuteA( NULL, "open", TCHAR_TO_ANSI(URL), Parms ? TCHAR_TO_ANSI(Parms) : "", TCHAR_TO_ANSI(appBaseDir()), SW_SHOWNORMAL );
+	// The working folder in Windows' own form: ShellExecute does not find a bare program name ("uc2.exe") in a folder
+	// written with '/', and appBaseDir() ends in one.
+	ANSICHAR Dir[MAX_PATH] = "";
+	strncpy( Dir, TCHAR_TO_ANSI(appBaseDir()), ARRAY_COUNT(Dir) - 1 );
+	for( ANSICHAR* C = Dir; *C; C++ )
+		if( *C == '/' )
+			*C = '\\';
+	HINSTANCE Code = ShellExecuteA( NULL, "open", TCHAR_TO_ANSI(URL), Parms ? TCHAR_TO_ANSI(Parms) : "", Dir, SW_SHOWNORMAL );
 	if( (PTRINT)Code <= 32 )
 		debugf( NAME_Warning, TEXT("Could not launch %s (ShellExecute error %i)"), URL, (INT)(PTRINT)Code );
 	if( Error )
