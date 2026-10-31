@@ -14,6 +14,9 @@ void RegisterExtraMaps();	// UnExtraMaps.cpp
 #include "FContentManager.h"
 
 #define UNLOADMAP_DEBUG_LOG 0
+// UnloadMap collects the old level before the next map loads, on every platform: a map loaded while its old level is
+// alive replaces that level's objects in place, outside garbage collection, and their teardown reads deleted lights.
+#define WITH_LEVEL_PURGE_ON_UNLOAD 1
 #if UNLOADMAP_DEBUG_LOG
 #include "FOutputDeviceFile.h"
 #endif
@@ -1779,7 +1782,7 @@ void UGameEngine::UnloadMap()
 	Flush(NULL);		
 	unguard;
 
-#ifdef _XBOX
+#if defined(_XBOX) || WITH_LEVEL_PURGE_ON_UNLOAD
 	guard(UnloadLevel);
 
 #if UNLOADMAP_DEBUG_LOG
@@ -1849,7 +1852,7 @@ void UGameEngine::UnloadMap()
 //	Exec(TEXT("OBJ LIST CLASS=Class AlphaSort=true"));
 //	Exec(TEXT("OBJ LIST AlphaSort=true"));
 	unguard;
-#endif //_XBOX
+#endif // _XBOX || WITH_LEVEL_PURGE_ON_UNLOAD
 
 	unguard;
 }
