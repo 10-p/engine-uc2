@@ -7,7 +7,28 @@ the game:
 - **the game's Xbox disc**: a disc image (`.iso`) or a folder with the disc's files;
 - **Epic's source tree** (`uc2-avaris-2226`).
 
-## Quick steps
+## Quick steps on Windows
+
+1. Install Python 3.8 or newer and ffmpeg yourself, on PATH ("What you need" below).
+2. Unpack the zip: right-click it, **Extract All...** (`cook.cmd` does not run from inside the zip). Windows may ask
+   whether to run `cook.cmd`, a file from the internet: **Run**.
+3. Double-click `cook.cmd`, or drop your disc image (`.iso`) onto it. It checks Python and ffmpeg first and names what
+   is missing, then asks for the disc image (drag it into the window) and the game folder (Enter: `UC2` beside the
+   cook's folder), and cooks (about half an hour, most of it the movies).
+4. Unpack the game's Windows release into the game folder: `uc2-<version>-windows-x86.zip`, then
+   `uc2-<version>-patched-scripts.zip`, and for the editor `uc2-<version>-unrealed-windows-x86.zip`. The release is
+   the game's programs and its PC settings; the cook does not make them. Unpack it after the cook: some of its files
+   replace ones the cook copies from the disc (the disc's `Default.ini`, `DefUser.ini` and `DefUnrealEd.ini` name the
+   Xbox's drivers; `GUI.u`, `UCGameplay.u`, `UCMenu.u`, `UCMutators.u` are the patched script packages). A cook
+   overwrites the files it writes, these among them: to cook again, use a new folder and repeat the steps.
+5. Start `uc2.exe` (or `UnrealEd.exe`) in the game folder's `System\`.
+
+In a Command Prompt or PowerShell opened in the cook's folder, `.\cook.cmd` takes the options below, for example
+`.\cook.cmd --check --in "C:\Games\Unreal Championship 2.iso"` (PowerShell runs a file of the current folder only with
+the `.\` in front). `py cook.py` and `python cook.py` do the same; `python3` is often the Microsoft Store's
+placeholder, not Python.
+
+## Quick steps on Linux and macOS
 
 1. Install Python 3.8 or newer and ffmpeg (below).
 2. Check that everything is in place; this writes nothing:
@@ -35,9 +56,14 @@ In the repository the cook is `tools/cook.py`.
 
 ## What you need
 
-- **Python 3.8 or newer**: <https://www.python.org/downloads/> (Linux and macOS have it).
-- **ffmpeg**: Debian/Ubuntu `sudo apt install ffmpeg`, Fedora `sudo dnf install ffmpeg` (RPM Fusion), Arch
-  `sudo pacman -S ffmpeg`, macOS `brew install ffmpeg`, Windows `winget install Gyan.FFmpeg`.
+- **Python 3.8 or newer**: Linux and macOS have it. Windows: <https://www.python.org/downloads/> (in the installer,
+  tick **Add python.exe to PATH** when it offers it), or Python 3 from the Microsoft Store.
+- **ffmpeg** with ffprobe: Debian/Ubuntu `sudo apt install ffmpeg`, Fedora `sudo dnf install ffmpeg` (RPM Fusion),
+  Arch `sudo pacman -S ffmpeg`, macOS `brew install ffmpeg`. Windows: `winget install Gyan.FFmpeg`, or a build from
+  <https://ffmpeg.org/download.html> whose `bin` folder (the one with `ffmpeg.exe` and `ffprobe.exe`) you add to PATH.
+  Without ffmpeg, `--skip audio,movies` cooks everything but the sound, the music and the movies.
+- Both on PATH: a new Command Prompt answers `python --version` (or `py -3 --version`) and `ffmpeg -version`. A window
+  opened before the install does not see them; open a new one.
 - **About 2.3 GB free** for the game folder, and as much again while a disc image is unpacked.
 
 `--check` names anything missing and how to install it.
@@ -54,8 +80,35 @@ In the repository the cook is `tools/cook.py`.
 | `--skip audio,movies` | leaves the sound and music, or the movies, out (for a machine without ffmpeg) |
 | `--xbox-audio` | keeps the disc's own sound banks, which the game plays as they are, instead of converting them |
 | `--jobs <n>` | how many sounds and movies are converted at once (default: half the processors) |
+| `--ask` | checks the tools, then asks for the disc image and the game folder when they are not given (`cook.cmd` without options) |
 
-`python3 cook.py --help` lists the rest.
+`python3 cook.py --help` (Windows: `.\cook.cmd --help`) lists the rest.
+
+## When something goes wrong on Windows
+
+The cook prints the message Windows gave, the file it was about, and what usually helps:
+
+- **Python was not found; run without arguments to install from the Microsoft Store**, or **cook.cmd: the cook needs
+  Python 3.8 or newer on PATH**: Python is not installed or not on PATH (without it, `python` and `python3` are the
+  Microsoft Store's placeholder). Install it ("What you need"), then open a new window.
+- **missing: ffmpeg** (or ffprobe) although it is installed: the window was opened before the install, or the folder
+  on PATH is not the one with `ffmpeg.exe` (a build's `bin` folder). Open a new window; `where ffmpeg` shows what it
+  finds.
+- **cook.cmd: cook.py is not beside it**, or the window closes at once: `cook.cmd` was started from inside the zip.
+  Extract All first.
+- **Access is denied** (`WinError 5`, `PermissionError`): the game folder has to be one you can write to, so not under
+  `C:\Program Files` or `C:\Windows` (`C:\Games\UC2` works); close the game, UnrealEd and any Explorer window showing
+  the folder, since Windows does not let a program replace a file another one has open; Windows Security's
+  **Controlled folder access** keeps programs out of Documents, Pictures and the Desktop (choose another folder, or
+  allow `python.exe` under Virus & threat protection > Ransomware protection); an antivirus that is scanning a new
+  file holds it for a moment, so run the cook again.
+- **The process cannot access the file because it is being used by another process** (`WinError 32`): close the
+  program that has it open (the game, UnrealEd, an Explorer preview).
+- **There is not enough space on the disk**: the game folder takes about 2.3 GB, and a disc image as much again while
+  the cook runs.
+- **The filename or extension is too long**: use a short folder such as `C:\UC2`.
+- **A step failed**: the cook shows the end of the step's log, and the whole log is in `.cook-logs\` in the game
+  folder.
 
 ## What the cook does
 

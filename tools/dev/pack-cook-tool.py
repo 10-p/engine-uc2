@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""pack-cook-tool.py: the cook as a standalone archive for players: tools/cook.py, the scripts it runs and imports
-(cook.SCRIPTS), the PC tables (tools/uc2-pc-tables.json.gz, which tools/dev/make-pc-tables.py makes), a VERSION and
-tools/README.md, in one folder uc2-cook/ of a zip.
+"""pack-cook-tool.py: the cook as a standalone archive for players: tools/cook.py, its Windows launcher tools/cook.cmd,
+the scripts it runs and imports (cook.SCRIPTS), the PC tables (tools/uc2-pc-tables.json.gz, which
+tools/dev/make-pc-tables.py makes), a VERSION and tools/README.md, in one folder uc2-cook/ of a zip.
 
     tools/dev/pack-cook-tool.py [--out <dir>]          writes <dir>/uc2-cook-<version>.zip (default: the current dir)
 
@@ -25,7 +25,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--out', default='.')
     a = ap.parse_args()
-    files = ['cook.py'] + list(cook.SCRIPTS) + [cook.TABLES]
+    files = ['cook.py', 'cook.cmd'] + list(cook.SCRIPTS) + [cook.TABLES]
     lacking = [f for f in files if not os.path.isfile(os.path.join(tools, *f.split('/')))]
     if lacking:
         sys.exit('missing: %s%s' % (', '.join(lacking), ' (tools/dev/make-pc-tables.py makes the tables)'

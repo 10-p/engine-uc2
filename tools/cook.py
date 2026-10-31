@@ -4,6 +4,9 @@
   cook.py --in <UC2.iso | disc folder | uc2-avaris-2226> --out <dir> [--xbox-audio] [--skip audio,movies]
           [--uc2-binary-path <uc2.bin | uc2.exe>] [--ucc-binary-path <ucc-bin | ucc.exe>]
   cook.py --check [--in <...>]       a dry run of the tools (and the input's checks), nothing written
+  cook.py --ask [--in <...>]         checks the tools, then asks for the input and the game folder not given
+  cook.cmd [<options> | <disc image>]  Windows: runs cook.py with Python 3.8+ from PATH, with the options, or with
+                                     --ask (and the disc image dropped on it)
 
 Inputs (recognised by themselves; --source xbox|epic when one is not)
   a disc image   the game's Xbox disc as an .iso: an xiso or a full dump (read by xiso.py)
@@ -45,6 +48,7 @@ User.ini, logs, Save/) alone. Each step's full log is in <out>/.cook-logs/.
 
 import argparse
 import datetime
+import errno
 import hashlib
 import importlib
 import os
@@ -54,6 +58,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 
 try:
     import fcntl        # reflink copies (Linux)
@@ -121,6 +126,60 @@ def say(msg=''):
     print(msg, flush=True)
 
 
+def access_tips():
+    """What usually helps when the system refuses the cook a file."""
+    if distro() == 'windows':
+        return ['the game folder has to be one you can write to: not under C:\\Program Files or C:\\Windows '
+                '(a folder such as C:\\Games\\UC2 works)',
+                'close the game, UnrealEd and any Explorer window showing the folder: Windows does not let a program '
+                'replace a file another one has open',
+                'Windows Security\'s Controlled folder access keeps programs out of Documents, Pictures and the '
+                'Desktop: choose another folder, or allow python.exe (Windows Security > Virus & threat protection > '
+                'Ransomware protection)',
+                'an antivirus can hold a file it is scanning: run the cook again']
+    return ['the game folder has to be one you can write to (its owner and permissions)',
+            'a file the cook replaces must not be read-only']
+
+
+def os_error_help(ex):
+    """An OSError as the system reported it, the file it was about, and what usually helps."""
+    msg = str(ex.strerror or ex)
+    if ex.filename2:
+        msg += ': %s -> %s' % (ex.filename, ex.filename2)
+    elif ex.filename:
+        msg += ': %s' % ex.filename
+    win = getattr(ex, 'winerror', None)
+    in_use = ('another program has %s open: close the game, UnrealEd and any Explorer window showing the folder, '
+              'then run the cook again' % (ex.filename2 or 'the file'))
+    if win in (32, 33):
+        tips = [in_use]
+    elif isinstance(ex, PermissionError) and ex.filename2 and os.path.exists(ex.filename2):
+        # Windows refuses to replace a file another program has open, and says only "Access is denied".
+        tips = [in_use] + access_tips()[2:]
+    elif isinstance(ex, PermissionError):
+        tips = access_tips()
+    elif ex.errno == errno.ENOSPC or win in (39, 112):
+        tips = ['the disk is full: the game folder takes about 2.3 GB, and a disc image as much again while the cook '
+                'runs']
+    elif ex.errno == errno.ENAMETOOLONG or win == 206 or (win == 3 and len(str(ex.filename or '')) > 240):
+        tips = ['the path is too long for Windows: use a short folder such as C:\\UC2']
+    else:
+        tips = []
+    return msg + ''.join('\n  - ' + t for t in tips)
+
+
+def replace(src, dst):
+    """os.replace, tried again for two seconds while Windows refuses it (an antivirus scanning the new file)."""
+    for attempt in range(5):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == 4 or distro() != 'windows':
+                raise
+            time.sleep(0.5)
+
+
 # ------------------------------------------------------------------------------------------------------------
 # Tools
 # ------------------------------------------------------------------------------------------------------------
@@ -158,8 +217,8 @@ def install_hint(debian=(), fedora=(), arch=(), suse=(), macos=(), windows=''):
 
 def ffmpeg_hint():
     return install_hint(['ffmpeg'], ['ffmpeg (RPM Fusion)'], ['ffmpeg'], ['ffmpeg-7 (Packman)'], ['ffmpeg'],
-                        'winget install Gyan.FFmpeg, or an ffmpeg build from https://ffmpeg.org/download.html '
-                        'with ffmpeg.exe and ffprobe.exe on PATH')
+                        'winget install Gyan.FFmpeg, or an ffmpeg build from https://ffmpeg.org/download.html with '
+                        'ffmpeg.exe and ffprobe.exe on PATH; then open a new window')
 
 
 def ffmpeg_features(kind):
@@ -211,7 +270,7 @@ def check_tools(args):
     if sys.version_info < (3, 8):
         problems.append(('Python 3.8 or newer (this is %s)' % platform.python_version(), 'every step',
                          install_hint(['python3'], ['python3'], ['python'], ['python3'], ['python'],
-                                      'https://www.python.org/downloads/')))
+                                      'https://www.python.org/downloads/ (tick "Add python.exe to PATH")')))
     for m in MODULES:
         try:
             importlib.import_module(m)
@@ -276,6 +335,48 @@ def check_tools(args):
             for soname, deb, fed, arc in libs:
                 problems.append((soname, 'the game (uc2.bin)', install_hint([deb], [fed], [arc])))
     return problems
+
+
+def output_problem(path):
+    """Why the cook cannot make its game folder at path (tried: the folder made and a file written), or None."""
+    p = os.path.abspath(path)
+    if os.path.isdir(p) and os.listdir(p) and not os.path.isfile(os.path.join(p, '.cook-files')):
+        return '%s holds other files: give a new or empty folder, or one the cook made before' % p
+    try:
+        os.makedirs(p, exist_ok=True)
+        test = os.path.join(p, '.cook-write-test')
+        with open(test, 'w') as f:
+            f.write('cook')
+        os.remove(test)
+    except OSError as ex:
+        return os_error_help(ex)
+    return None
+
+
+def ask(args):
+    """--ask (cook.cmd without arguments, or with a disc image dropped on it): asks for what the command line did
+    not give, the disc image and the game folder. False: the player quit."""
+    while not args.input:
+        say()
+        p = input('Drag the disc image (.iso) or the disc\'s folder into this window and press Enter '
+                  '(Enter alone quits): ').strip().strip('"')
+        if not p:
+            return False
+        if os.path.exists(p):
+            args.input = p
+        else:
+            say('  there is no file or folder %s' % p)
+    default = os.path.join(os.path.dirname(HERE), 'UC2')
+    while not args.out and not args.check:
+        say()
+        p = input('The game folder to make (Enter: %s): ' % default).strip().strip('"') or default
+        err = output_problem(p)
+        if err:
+            say('  ' + err)
+        else:
+            args.out = p
+    say()
+    return True
 
 
 # ------------------------------------------------------------------------------------------------------------
@@ -523,7 +624,7 @@ class Output:
                 shutil.copyfileobj(f, g, 1 << 22)
         os.utime(tmp, (st.st_atime, st.st_mtime))
         os.chmod(tmp, 0o755 if st.st_mode & 0o111 else 0o644)
-        os.replace(tmp, dst)
+        replace(tmp, dst)
         return True
 
     def move(self, src, rel):
@@ -531,7 +632,7 @@ class Output:
         dst = self.abs(rel)
         self.new.add(rel)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
-        os.replace(src, dst)
+        replace(src, dst)
 
     def adopt(self, rel_dir):
         """Counts every file below rel_dir (written by a step's own tool) as the cook's."""
@@ -557,7 +658,7 @@ class Output:
                 os.remove(p)
         with open(self.list_path + '.part', 'w', newline='\n') as f:
             f.write(''.join(r + '\n' for r in sorted(self.new | {'MANIFEST.sha256', 'COOK.txt'})))
-        os.replace(self.list_path + '.part', self.list_path)
+        replace(self.list_path + '.part', self.list_path)
 
 
 def in_repository(*rel):
@@ -695,6 +796,14 @@ def run_step(cmd, logfile, show):
                 say('    ' + line.rstrip())
         rc = p.wait()
     if rc:
+        # The end of the step's log, where its error is, and the hints for a file the system refused it.
+        with open(logfile, errors='replace') as lf:
+            tail = [l.rstrip() for l in lf.read().splitlines() if l.strip()][-5:]
+        for l in tail:
+            say('    | ' + l)
+        if any('PermissionError' in l or 'Access is denied' in l for l in tail):
+            for t in access_tips():
+                say('  - ' + t)
         raise CookError('%s failed (exit %d): %s' % (os.path.basename(cmd[1]), rc, logfile))
 
 
@@ -795,9 +904,22 @@ def tool_version():
 
 
 def write_record(args, src, out, log):
-    ff = subprocess.run(['ffmpeg', '-version'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).stdout.decode(
-        'latin-1').split('\n')[0] if shutil.which('ffmpeg') else 'no ffmpeg'
-    lines = ['cook.py %s' % ' '.join(sys.argv[1:]),
+    ff = (subprocess.run(['ffmpeg', '-version'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).stdout.decode(
+        'latin-1').splitlines() or ['ffmpeg'])[0] if shutil.which('ffmpeg') else 'no ffmpeg'
+    # --ask's answers stand in the command as if they had been given on it.
+    cmd = sys.argv[1:]
+    if args.ask:
+        rest, skip = [], False
+        for a in cmd:
+            if skip or a == '--ask' or a.startswith(('--in=', '--out=', '--skip=')):
+                skip = False
+                continue
+            skip = a in ('--in', '--out', '--skip')
+            if not skip:
+                rest.append(a)
+        cmd = ['--in', args.input, '--out', args.out] + (['--skip', ','.join(sorted(args.skip))] if args.skip
+                                                         else []) + rest + ['(asked)']
+    lines = ['cook.py %s' % ' '.join('"%s"' % a if ' ' in a else a for a in cmd),
              'date: %s' % datetime.datetime.now().isoformat(timespec='seconds'),
              'source: %s, %s' % (args.source, os.path.abspath(args.input)),
              'tools: %s, %s, Python %s' % (tool_version(), ff, sys.version.split()[0]), ''] + log
@@ -813,6 +935,17 @@ def write_record(args, src, out, log):
 def report(problems):
     for what, why, how in problems:
         say('  missing: %s\n    for: %s\n    install: %s' % (what, why, how))
+
+
+def check_tools_step(args):
+    say('1. tools')
+    problems = check_tools(args)
+    report(problems)
+    if problems:
+        raise CookError('%d tool(s) missing: install them and run again' % len(problems))
+    say('  Python %s, the scripts%s%s: ok' % (
+        platform.python_version(), ', the PC tables' if args.source != 'epic' and not args.disc_tables else '',
+        ', ffmpeg and ffprobe' if ffmpeg_steps(args) else ''))
 
 
 def main():
@@ -833,17 +966,28 @@ def main():
     ap.add_argument('--jobs', type=int, default=max(1, (os.cpu_count() or 2) // 2))
     ap.add_argument('--check', action='store_true', help='a dry run of the tools and the input\'s checks, write '
                                                          'nothing')
+    ap.add_argument('--ask', action='store_true', help='check the tools, then ask for the input and the game folder '
+                                                       'when they are not given (cook.cmd does this)')
     args = ap.parse_args()
     args.skip = {s for s in args.skip.split(',') if s}
     if args.skip - {'audio', 'movies'}:
         ap.error('--skip takes audio and movies')
-    if not args.check and not (args.out and args.input):
-        ap.error('--in and --out are needed (or --check)')
+    if not args.check and not args.ask and not (args.out and args.input):
+        ap.error('--in and --out are needed (or --check, or --ask)')
+    # A path the console cannot show comes out with '?' in it instead of stopping the cook.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(errors='replace')
     if args.pc_packages and args.source == 'epic':
         ap.error('--pc-packages is for a disc (Epic\'s tree has its own)')
 
     img = None
     try:
+        if args.ask:
+            # The tools a disc needs (Epic's tree needs fewer) are checked before the questions.
+            check_tools_step(args)
+            if not ask(args):
+                return 0
         listing = None
         if args.input:
             listing, img = open_input(args)
@@ -855,14 +999,8 @@ def main():
             if not args.source:
                 raise CookError('%s is neither an Xbox disc nor Epic\'s tree (--source says which)' % args.input)
 
-        say('1. tools')
-        problems = check_tools(args)
-        report(problems)
-        if problems:
-            raise CookError('%d tool(s) missing: install them and run again' % len(problems))
-        say('  Python %s, the scripts%s%s: ok' % (
-            platform.python_version(), ', the PC tables' if args.source != 'epic' and not args.disc_tables else '',
-            ', ffmpeg and ffprobe' if ffmpeg_steps(args) else ''))
+        if not args.ask:
+            check_tools_step(args)
         if not args.input:
             say('check: ok (--in <input> checks the input too)')
             return 0
@@ -914,11 +1052,23 @@ def main():
         finally:
             out.close()
         start = os.path.basename(args.uc2_binary_path)
-        say('done: %s (%d files)%s' % (out.path, len(out.new), '; run: cd %s/System && ./%s' % (out.path, start)
-                                       if start else ''))
+        if not start:
+            run = '; next: the game\'s release into it (README.md, "Quick steps")'
+        elif distro() == 'windows':
+            run = '; start %s' % os.path.join(out.path, 'System', start)
+        else:
+            run = '; run: cd %s/System && ./%s' % (out.path, start)
+        say('done: %s (%d files)%s' % (out.path, len(out.new), run))
         return 0
     except CookError as ex:
         say('cook.py: %s' % ex)
+        return 1
+    except OSError as ex:
+        say('cook.py: ' + os_error_help(ex))
+        return 1
+    except (KeyboardInterrupt, EOFError):
+        say()
+        say('cook.py: stopped')
         return 1
     finally:
         if img is not None:
