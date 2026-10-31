@@ -423,7 +423,8 @@ def ranged(attacker, aname, tag):
 # A client's view cannot be turned from outside (no such command ships), so the players are lined up around the
 # client's own view instead: the shooter's view (its own SDL2 test-channel
 # probe: loc and rot of the local player) and the server's NETPLACE (allowed on the server with the test key, and for
-# a listen host). P0 is an open, flat spot of DM-Deadbolt with room around it (jit-trace.sh's spot).
+# a listen host); the shooter then pitches its own view at the victim (aim_at). P0 is an open, flat spot of
+# DM-Deadbolt with room around it (jit-trace.sh's spot).
 P0 = (1977.8, 583.7, -34.1)
 
 
@@ -441,28 +442,36 @@ def view_of(c, tag):
     return loc, int(rot[1]) & 65535, pitch - 65536 if pitch >= 32768 else pitch
 
 
-def camera_height(c, tag):
-    """How far the camera is above the local pawn (SDL2 probe + probe2 lines), or None."""
+def camera_of(c, tag):
+    """The local pawn's location and the camera's (SDL2 probe + probe2 lines), or (None, None)."""
     c.input("probe " + tag)
     m = c.wait(r"probe %s (.*)$" % re.escape(tag), 10)
     m2 = c.wait(r"probe2 %s (.*)$" % re.escape(tag), 5)
     if not m or not m2:
-        return None
+        return None, None
     loc, cam = parse_kv(m.group(1)).get("loc"), parse_kv(m2.group(1)).get("cam")
-    return cam[2] - loc[2] if isinstance(loc, tuple) and isinstance(cam, tuple) else None
+    return (loc, cam) if isinstance(loc, tuple) and isinstance(cam, tuple) else (None, None)
+
+
+def camera_offset(c, tag):
+    """How far the camera is from the local pawn's location, in three dimensions, or None."""
+    loc, cam = camera_of(c, tag)
+    return dist(cam, loc) if loc else None
 
 
 def first_person(c, tag="FP"):
     """The shooter aims with its own view: in UC2's third person the shot leaves the camera, ~90 units above the
     pawn, so a level view passes over a pawn standing on the same floor; in first person it leaves the eyes. The
-    player's own console command ToggleThirdCam (the C key), until the camera is at eye height."""
+    player's own console command ToggleThirdCam (the C key), until the camera is at the eyes. The distance counts in
+    three dimensions: after a NETPLACE the third-person camera can be left far from the pawn at about eye height
+    above it."""
     for k in range(3):
-        h = camera_height(c, "%s%d" % (tag, k))
+        h = camera_offset(c, "%s%d" % (tag, k))
         if h is not None and h < 70:
             return True
         c.input("exec ToggleThirdCam")
         time.sleep(1.0)
-    h = camera_height(c, tag + "x")
+    h = camera_offset(c, tag + "x")
     return h is not None and h < 70
 
 
@@ -474,8 +483,8 @@ def place(srv, name, x, y, z, yaw):
 
 def line_up(srv, shooter, aname, vname, d=300, tag="LU"):
     """Put <vname> at P0 and the shooter <aname> d units behind it along the shooter's own view yaw: the shooter
-    then looks straight at the victim (pitch as it is: level after a spawn; first_person first, see there). Returns
-    the shooter's (yaw, pitch) or None."""
+    then looks straight at the victim (pitch as it is: level after a spawn; first_person first, and aim_at for the
+    pitch, see there). Returns the shooter's (yaw, pitch) or None."""
     v = view_of(shooter, tag)
     if not v:
         return None
@@ -485,6 +494,48 @@ def line_up(srv, shooter, aname, vname, d=300, tag="LU"):
     ok2 = place(srv, aname, P0[0] - d * math.cos(a), P0[1] - d * math.sin(a), P0[2], yaw)
     time.sleep(1.0)
     return (yaw, pitch) if ok1 and ok2 else None
+
+
+def aim_at(srv, shooter, aname, vname, tag="AIM"):
+    """Pitch the shooter's view from its eyes (its camera, first_person first) at the centre of <vname>'s pawn, as the
+    server sees it. A level view from the eyes can pass over a pawn standing on the same floor. A listen host turns
+    its own view with TELEPORT to where it stands (its yaw, that pitch); a network client, which TELEPORT does not
+    move, with mouse motion on its test channel, step by step until the pitch is within 100. Returns the pitch the
+    view reached, or None."""
+    v = view_of(shooter, tag)
+    loc, cam = camera_of(shooter, tag + "c")
+    sp = srv.probe(tag + "s")
+    it = pawn_of(sp, vname)
+    if not v or not cam or not it or not pawn_of(sp, aname):
+        return None
+    _, yaw, _ = v
+    flat = math.hypot(it["loc"][0] - loc[0], it["loc"][1] - loc[1])
+    want = -int(round(math.atan2(cam[2] - it["loc"][2], flat) * 32768.0 / math.pi))
+    if shooter.kind == "listen":
+        shooter.send("exec teleport %.1f %.1f %.1f %d %d" % (loc[0], loc[1], loc[2], yaw, want))
+        m = shooter.wait(r"Cheat: TELEPORT (ok|failed|refused).*$", 10)
+        time.sleep(0.3)
+        return want if m and m.group(1) == "ok" else None
+    # The mouse's gain on the pitch (sign included) is read from a first small step, then the error is closed.
+    shooter.input("mouse 0 4")
+    time.sleep(0.4)
+    nv = view_of(shooter, tag + "m0")
+    if not nv or nv[2] == v[2]:
+        return None
+    gain, now = (nv[2] - v[2]) / 4.0, nv[2]
+    for k in range(1, 7):
+        if abs(want - now) < 100:
+            break
+        dy = max(-60, min(60, int(round((want - now) / gain))))
+        if dy == 0:
+            break
+        shooter.input("mouse 0 %d" % dy)
+        time.sleep(0.4)
+        nv = view_of(shooter, "%sm%d" % (tag, k))
+        if not nv:
+            return None
+        now = nv[2]
+    return now if abs(want - now) < 100 else None
 
 
 def walk_toward(walker, wname, srv, target_name, secs=1.2, tag="WT"):
@@ -523,6 +574,7 @@ def fight(ck, srvproc, attacker, victim, aname, vname, max_shots=40):
     for i in range(max_shots):
         if i % 5 == 0:   # the victim in front of the shooter's own view (it may have been knocked back)
             line_up(srvproc, attacker, aname, vname, tag="LU%d" % i)
+            aim_at(srvproc, attacker, aname, vname, tag="AM%d" % i)
         time.sleep(0.2)
         attacker.fire(0.3)
         time.sleep(0.6)
@@ -601,6 +653,7 @@ def check_dedicated2(ck="dedicated2", srv_extra=(), cli_extra=()):
             for i in range(20):
                 if i % 5 == 0:
                     line_up(s, a, "NetA", "NetB", tag="LH%d" % i)
+                    aim_at(s, a, "NetA", "NetB", tag="AH%d" % i)
                 a.fire(0.3)
                 time.sleep(1.0)
                 sv, av, bv = s.probe("H%d" % (i + 1)), a.probe("H%d" % (i + 1)), b.probe("H%d" % (i + 1))
