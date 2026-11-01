@@ -97,8 +97,9 @@ if [ ! -d "$run/Textures/Movies" ] && [ -d "$cooked/Textures/Movies" ]; then
   cp -al "$cooked/Textures/Movies" "$run/Textures/Movies"
 fi
 
-# Our tracked configuration wins over the asset tree's (identical until we start changing defaults).
-cp -f "$repo"/Engine/Config/*.ini "$run/System/"
+# The release's inis over the asset tree's (the editor's DefUnrealEd.ini comes with the editor, below); the asset
+# tree keeps every other ini (KeyBinds.ini, the per-class inis).
+cp -f "$repo"/Engine/Config/Default.ini "$repo"/Engine/Config/DefUser.ini "$run/System/"
 
 # Script packages built from source over the asset tree's:
 # - the build's own, <build-dir>/Scripts/System/*.u (the `scripts` target: the shipped .u decompiled, patches/

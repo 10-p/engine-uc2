@@ -2,9 +2,12 @@
 
 `Default.ini`, `DefUser.ini`, `DefaultXbox.ini`, `DefUserXbox.ini` and `KeyBinds.ini` are Epic's `System/` files of the
 PC tree; `Default.ini` and `DefUser.ini` carry our defaults, the other three stay Epic's bytes (`DefaultXbox.ini` and
-`DefUserXbox.ini` are reference copies nothing reads; `KeyBinds.ini` holds the pad layouts `UC2Settings_Controller`
-offers). `DefUnrealEd.ini` is the editor's (below). `tools/dev/mkrun-uc2.sh` copies them over the game folder's when it
-assembles a run tree; the web and Android
+`DefUserXbox.ini` are reference copies the game never reads, which the script build reads from its game folder;
+`KeyBinds.ini` holds the pad layouts `UC2Settings_Controller` offers, which a game folder has from the disc).
+`DefUnrealEd.ini` is the editor's (below). The release ships `Default.ini` and `DefUser.ini` in its `System/` folder,
+and `DefUnrealEd.ini` with the editor; the tools that put a build into a game folder copy that set and no other ini
+(`tools/cook.py --uc2-binary-path`, `tools/dev/mkrun-uc2.sh`, `tools/dev/package-windows.sh`, the editor's through
+`tools/dev/unrealed-files.sh`). The web and Android
 builds carry generated variants of `Default.ini` and `DefUser.ini` (`web/`, `android/`, below). `Default.ini`,
 `DefUser.ini` and `web/*.ini` are LF; the three Epic copies keep Epic's CRLF (`tools/dev/sync-web-ini.py --check`
 compares them with the Epic drop). The engine reads both endings. Against Epic's files:
@@ -56,7 +59,10 @@ same.
 
 `uc2.bin` replaces, for the run and in the derived `Avaris.ini`, a driver the ini names that this build lacks
 (`WinDrv.WindowsClient`, `D3DDrv.D3DRenderDevice`, `XboxDrv.XboxClient`, ...) with `SDL2Drv.SDL2Client`,
-`Engine.NullRenderDevice` or `Engine.NullAudioDevice`, and logs it, so an ini of the PC or Xbox release still boots.
+`Engine.NullRenderDevice` or `Engine.NullAudioDevice`, and logs it, so an ini of the PC release still boots. It does
+not replace `[Engine.Engine] LoadSaveManagerClass`: an `Avaris.ini` derived from the disc's `Default.ini` names
+`XboxDrv.XboxLoadSaveManager`, a class this build lacks, and the game stops at startup until that `Avaris.ini` is
+deleted.
 
 ## `DefUser.ini`
 

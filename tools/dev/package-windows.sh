@@ -12,7 +12,7 @@
 #
 # The folder: <dest>/System (uc2.exe, ucc.exe, the editor UnrealEd.exe with its EditorRes/ bitmaps and splash when the
 # build has it (the 32-bit preset; Source/UnrealEd/release-files.txt),
-# OpenAL32.dll, our inis over the asset tree's System/, README-Windows.txt,
+# OpenAL32.dll, the release's Default.ini and DefUser.ini over the asset tree's System/, README-Windows.txt,
 # DLLS.txt) and, unless UC2_PACKAGE_CONTENT=0, the content folders of the asset tree (<repo>/../assets/uc2-assets,
 # UC2_ASSETS_DIR) with its cooked Sounds/Music (UC2_COOKED_DIR for another folder), hard-linked (a copy of the folder to another disk copies the data).
 # Nothing in the asset tree is written. Re-running replaces <dest>, which must be under <repo>/../run.
@@ -43,7 +43,7 @@ mkdir -p "$dest"
 cp -a "$assets/System" "$dest/System"
 chmod -R u+w "$dest/System"
 rm -f "$dest/System"/*.bin "$dest/System"/ucc-bin* "$dest/System"/*.so* "$dest/System"/*.log
-cp -f "$repo"/Engine/Config/*.ini "$dest/System/"
+cp -f "$repo"/Engine/Config/Default.ini "$repo"/Engine/Config/DefUser.ini "$dest/System/"
 cp -f "$exe_uc2" "$exe_ucc" "$dll_al" "$dest/System/"
 # The editor with its own files (Source/UnrealEd/release-files.txt).
 [ -f "$exe_ed" ] && "$repo/tools/dev/unrealed-files.sh" "$build" "$dest"

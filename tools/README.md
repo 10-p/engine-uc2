@@ -75,7 +75,7 @@ In the repository the cook is `tools/cook.py`.
 | `--in <path>` | your disc image, disc folder or Epic's tree |
 | `--out <folder>` | the game folder: a new one, or one the cook made before (a second cook updates it and keeps your settings and saves) |
 | `--check` | checks the tools and the input, and writes nothing |
-| `--uc2-binary-path <file>` | also copies the game (`uc2.bin` or `uc2.exe`) into `System/`, with the settings and the OpenAL library it runs with |
+| `--uc2-binary-path <file>` | also copies the game (`uc2.bin` or `uc2.exe`) into `System/`, with the OpenAL library and the settings it runs with: the release's `Default.ini`, `DefUser.ini` and `DefUnrealEd.ini` beside it (a warning when `Default.ini` is not there); every other ini stays the disc's |
 | `--ucc-binary-path <file>` | also copies UCC (`ucc-bin` or `ucc.exe`: the dedicated server and the command-line tools) into `System/` |
 | `--skip audio,movies` | leaves the sound and music, or the movies, out (for a machine without ffmpeg) |
 | `--xbox-audio` | keeps the disc's own sound banks, which the game plays as they are, instead of converting them |
