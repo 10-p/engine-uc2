@@ -961,13 +961,10 @@ void FOpenGLRenderInterface::SetTransform(ETransformType Type,const FMatrix& Mat
 // -0.25 x ZBias and D3DRS_POLYGONOFFSETZOFFSET to -ZBias, the NV2A's form of glPolygonOffset(factor,
 // units). The slope term is what keeps a second pass
 // over the same surface (the projectors, ZBias 1) in front of it where the surface is seen at a grazing
-// angle: there the two passes' depths differ by many depth units, in proportion to the depth slope
-// (rasterisation, and the two transform paths of this driver: the fixed-function stage loads modelview
-// and projection, the vertex shaders get their product, UC2GLShaders.cpp); with a constant offset alone
-// whole triangles of a terrain (CTF-Aqueduct's) lose their tree shadows as the view turns. The slope
-// scale is the Xbox's; the constant is 5 units per ZBias (the Xbox's is 1), a margin for the
-// non-invariant transforms on surfaces seen face on (5 units at 5000 world units from the camera are
-// 0.7 world units).
+// angle: there the two passes' depths differ by many depth units, in proportion to the depth slope;
+// with a constant offset alone whole triangles of a terrain (CTF-Aqueduct's) lose their tree shadows as
+// the view turns. The slope scale is the Xbox's; the constant is 5 units per ZBias (the Xbox's is 1;
+// 5 units at 5000 world units from the camera are 0.7 world units).
 //
 void FOpenGLRenderInterface::ApplyZBias( INT ZBias )
 {

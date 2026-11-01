@@ -483,9 +483,11 @@ void UUC2GLRenderDevice::BindingSwap( UViewport* Viewport )
 //
 // The first lines of every GLSL source the driver compiles. All of them are written in the
 // common subset of GLSL 1.20 and GLSL ES 1.00 (explicit attributes, varyings and uniforms, no
-// fixed-function built-ins). On GLES the default precision is highp where the hardware has
-// it in fragment shaders, because the post-process shaders rebuild 24-bit depth values and
-// address 1280-texel targets; gl4es replaces these lines by the same choice of its own.
+// fixed-function built-ins), except the desktop position of the materials' vertex shaders
+// (gl_Vertex, ftransform(); BuildVertexShaderSource). On GLES the default precision is highp
+// where the hardware has it in fragment shaders, because the post-process shaders rebuild
+// 24-bit depth values and address 1280-texel targets; gl4es replaces these lines by the same
+// choice of its own.
 //
 const ANSICHAR* UUC2GLRenderDevice::ShaderPrologue( UBOOL Fragment )
 {

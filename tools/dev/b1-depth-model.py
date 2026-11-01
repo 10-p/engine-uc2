@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""CPU model of the depth of one point drawn by two passes (projected shadows over terrain).
+"""CPU model of the depth of one point transformed two ways, as by two passes whose vertex stages differ.
 
-The terrain is drawn by GL's fixed-function vertex stage: modelview and projection are loaded separately
-(FOpenGLRenderInterface::CommitMatrices), the GPU computes eye = MV v, clip = P eye. The projector batch drawn
-over it (ProjectorAtten.vsh) gets u_clip = MV x P multiplied on the CPU (UC2GLShaders.cpp, GetGLMatrices) and
-computes clip = u_clip v. Same vertex, same matrices, two float32 roundings. This script emulates both in float32
-(every product and sum rounded, no fused multiply-add) for a camera on CTF-Aqueduct and prints, per screen
-row of a plane under the camera (a ramp), the depth difference of the two paths in 24-bit depth units, against:
-the port's polygon offset (5 units, no slope), the Xbox's ZBIAS 1 (slope scale 0.25 + 1 unit; XDK d3d8.lib
-D3DDevice_SetRenderState_ZBias) and UT2004's OpenGL driver (slope 1 + 1 unit).
+One way is GL's fixed-function order, modelview and projection loaded separately: eye = MV v, clip = P eye. The
+other is one product multiplied on the CPU: clip = (MV x P) v. Same vertex, same matrices, two float32 roundings.
+This script emulates both in float32 (every product and sum rounded, no fused multiply-add) for a camera on
+CTF-Aqueduct and prints, per screen row of a plane under the camera (a ramp), the depth difference of the two
+paths in 24-bit depth units, against: a constant polygon offset of 5 units, the Xbox's ZBIAS 1 (slope scale 0.25
++ 1 unit; XDK d3d8.lib D3DDevice_SetRenderState_ZBias) and UT2004's OpenGL driver (slope 1 + 1 unit).
 
   b1-depth-model.py [--yaw-steps N]   (also turns the camera by 8 yaw units N times: the error changes sign)
 
@@ -72,7 +70,7 @@ def main():
     px, py, pz, yaw0, pitch = 5284.9, 858.1, -104.6, 30811, 418
     eye = (px, py, pz + 60.0)
     t = math.tan(math.radians(fov) / 2)
-    print('row  dist  |A-B| max/mean (depth units)  slope/pixel  port(0,5)  xbox(0.25,1)  ut2004(1,1)   [yaw %d + 8k]' % yaw0)
+    print('row  dist  |A-B| max/mean (depth units)  slope/pixel  const(0,5) xbox(0.25,1)  ut2004(1,1)   [yaw %d + 8k]' % yaw0)
     for k in range(a.yaw_steps + 1):
         MV, Proj, Clip, (fwd, right, up) = camera(*eye, yaw0 + 8 * k, pitch, W, H, fov)
         # the ramp: a plane through the feet, rising 12 degrees along the horizontal view direction

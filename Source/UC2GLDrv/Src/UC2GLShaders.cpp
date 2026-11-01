@@ -263,8 +263,11 @@ FString UUC2GLRenderDevice::BuildVertexShaderSource( QWORD Enum )
 	FString S;
 	S += TEXT("// VertexShaderEnum ");
 	S += appI64toa( (SQWORD)Enum );
-	S += TEXT("\n")
-		TEXT("attribute vec4 a_position;\n")		// POSITION
+	S += TEXT("\n");
+	// POSITION: on desktop GL the conventional vertex array, which ftransform() reads (below).
+	if( IsGLES )
+		S += TEXT("attribute vec4 a_position;\n");
+	S +=
 		TEXT("attribute vec3 a_normal;\n")			// NORMAL
 		TEXT("attribute vec4 a_diffuse;\n")			// DIFFUSE
 		TEXT("attribute vec4 a_specular;\n")		// SPECULAR
@@ -314,12 +317,15 @@ FString UUC2GLRenderDevice::BuildVertexShaderSource( QWORD Enum )
 
 	// VS_UnpackPosition (UnpackPosition.vsh) unpacks FPackedPosition, which only exists with
 	// XBOX_ASSET_FORMAT: PC streams carry plain positions, so DefaultPosition.vsh always.
-	S +=	TEXT("\t// DefaultPosition.vsh\n")
-			TEXT("\tlocalPosition = a_position;\n")
-			TEXT("\tlocalNormal = a_normal;\n")
-			TEXT("\t// NotBoned.vsh (Screenspace.vsh is GL's own viewport transform)\n")
-			TEXT("\tgl_Position = u_clip * localPosition;\n")
-			TEXT("\t// InitRGB.vsh\n")
+	// Desktop GL: ftransform(), equal by definition to the fixed-function stage's position, so a
+	// program pass and a fixed-function pass over one surface have one depth (a terrain's later
+	// layers are added where z is less or equal). GL ES: gl4es transforms with the same product.
+	S +=	TEXT("\t// DefaultPosition.vsh\n");
+	S +=	IsGLES ? TEXT("\tlocalPosition = a_position;\n") : TEXT("\tlocalPosition = gl_Vertex;\n");
+	S +=	TEXT("\tlocalNormal = a_normal;\n")
+			TEXT("\t// NotBoned.vsh (Screenspace.vsh is GL's own viewport transform)\n");
+	S +=	IsGLES ? TEXT("\tgl_Position = u_clip * localPosition;\n") : TEXT("\tgl_Position = ftransform();\n");
+	S +=	TEXT("\t// InitRGB.vsh\n")
 			TEXT("\tfinalColor = vec4(0.0);\n")
 			TEXT("\t// LightAmbient.vsh\n")
 			TEXT("\tfinalColor += u_ambient;\n");
@@ -940,7 +946,13 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 			case FVF_TexCoord3:	Attrib = VA_TexCoord0 + (Component.Function - FVF_TexCoord0); break;
 			default:			break;
 			}
-			if( Attrib >= 0 && NumCoords )
+			if( Attrib == VA_Position && NumCoords && !RenDev->IsGLES )
+			{
+				// The conventional vertex array: ftransform() reads gl_Vertex (BuildVertexShaderSource).
+				RenDev->glVertexPointer( NumCoords, GL_FLOAT, Stride, Pointer );
+				Has[Attrib] = 1;
+			}
+			else if( Attrib >= 0 && NumCoords )
 			{
 				if( Component.Type == CT_Color )
 					RenDev->glVertexAttribPointer( Attrib, 4, GL_UNSIGNED_BYTE, GL_TRUE, Stride, Pointer );
@@ -998,10 +1010,13 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 		RenDev->glDisableClientState( GL_TEXTURE_COORD_ARRAY );
 	}
 	RenDev->glClientActiveTexture( GL_TEXTURE0 );
+	UBOOL ConventionalPosition = !RenDev->IsGLES;
+	if( ConventionalPosition )
+		RenDev->glEnableClientState( GL_VERTEX_ARRAY );
 
 	for( INT Attrib=0; Attrib<VA_MAX; Attrib++ )
 	{
-		if( Has[Attrib] )
+		if( Has[Attrib] && !(Attrib == VA_Position && ConventionalPosition) )
 			RenDev->glEnableVertexAttribArray( Attrib );
 		else
 			RenDev->glDisableVertexAttribArray( Attrib );
@@ -1248,6 +1263,14 @@ void UC2GL_RunProgramTest( UUC2GLRenderDevice* RenDev )
 	RenDev->glDisable( GL_CULL_FACE );
 	RenDev->glDepthMask( GL_FALSE );
 	RenDev->glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+	// Desktop programs take GL's matrices (ftransform()): the identity, as u_clip below.
+	if( !RenDev->IsGLES )
+	{
+		RenDev->glMatrixMode( GL_PROJECTION );
+		RenDev->glLoadIdentity();
+		RenDev->glMatrixMode( GL_MODELVIEW );
+		RenDev->glLoadIdentity();
+	}
 
 	INT Shaders = 0, Lines = 0, NoProgram = 0;
 	for( INT Type=0; Type<PS_MAX; Type++ )
@@ -1336,8 +1359,17 @@ void UC2GL_RunProgramTest( UUC2GLRenderDevice* RenDev )
 				RenDev->glActiveTexture( GL_TEXTURE0 );
 
 				RenDev->BindQuadBuffer();
-				RenDev->glVertexAttribPointer( VA_Position, 2, GL_FLOAT, GL_FALSE, 0, NULL );
-				RenDev->glEnableVertexAttribArray( VA_Position );
+				if( RenDev->IsGLES )
+				{
+					RenDev->glVertexAttribPointer( VA_Position, 2, GL_FLOAT, GL_FALSE, 0, NULL );
+					RenDev->glEnableVertexAttribArray( VA_Position );
+				}
+				else
+				{
+					RenDev->glVertexPointer( 2, GL_FLOAT, 0, NULL );
+					RenDev->glEnableClientState( GL_VERTEX_ARRAY );
+					RenDev->glDisableVertexAttribArray( VA_Position );
+				}
 				for( INT a=1; a<VA_MAX; a++ )
 					RenDev->glDisableVertexAttribArray( a );
 				RenDev->glVertexAttrib4f( VA_Normal, 0.f, 0.f, 1.f, 0.f );
@@ -1367,6 +1399,7 @@ void UC2GL_RunProgramTest( UUC2GLRenderDevice* RenDev )
 	RenDev->glDeleteTextures( 1, &Target );
 	RenDev->glDeleteTextures( 4, Textures );
 	RenDev->glEnable( GL_SCISSOR_TEST );
+	RenDev->RenderInterface.MatricesDirty = 1;
 	RenDev->RenderInterface.RestoreAfterDeviceDraw();
 
 	unguard;
