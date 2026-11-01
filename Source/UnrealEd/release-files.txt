@@ -7,7 +7,9 @@
 # for a button whose own bitmap is missing), the splash from System/EdSplash.bmp; the disc has neither, Epic's drop
 # has both.
 #
-# tools/dev/unrealed-files.sh copies them. One file per line: <source> <path in the source> <path in the game folder>
+# tools/dev/unrealed-files.sh copies them; the release packer (release/release.json) packs the build and repo lines as
+# the unrealed-windows-x86 archive and the epic lines as unrealed-bitmaps, checked against epic-files.sha256.
+# One file per line: <source> <path in the source> <path in the game folder>
 #   build  the windows build directory
 #   repo   this repository
 #   epic   Epic's drop (UC2_EPIC_SOURCES, default <repo>/../epic-sources/uc2-avaris-2226)

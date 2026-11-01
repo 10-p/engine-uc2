@@ -3,8 +3,9 @@
 `Default.ini`, `DefUser.ini`, `DefaultXbox.ini`, `DefUserXbox.ini` and `KeyBinds.ini` are Epic's `System/` files of the
 PC tree; `Default.ini` and `DefUser.ini` carry our defaults, the other three stay Epic's bytes (`DefaultXbox.ini` and
 `DefUserXbox.ini` are reference copies nothing reads; `KeyBinds.ini` holds the pad layouts `UC2Settings_Controller`
-offers). `DefUnrealEd.ini` is the editor's (below). `tools/dev/mkrun-uc2.sh` copies them over the game folder's when it
-assembles a run tree; the web and Android
+offers). `DefUnrealEd.ini` is the editor's (below). The release archives ship `Default.ini` and `DefUser.ini` in
+`System/` (`release/release.json`), and the editor's archive `DefUnrealEd.ini`. `tools/dev/mkrun-uc2.sh` copies the inis
+over the game folder's when it assembles a run tree; the web and Android
 builds carry generated variants of `Default.ini` and `DefUser.ini` (`web/`, `android/`, below). `Default.ini`,
 `DefUser.ini` and `web/*.ini` are LF; the three Epic copies keep Epic's CRLF (`tools/dev/sync-web-ini.py --check`
 compares them with the Epic drop). The engine reads both endings. Against Epic's files:
