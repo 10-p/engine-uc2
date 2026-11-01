@@ -475,7 +475,7 @@ folder, `UC2_SCRIPTS=none` keeps the game folder's).
 cmake --build build-native --target cook-tool
 ```
 
-`build-native/uc2-cook-<git describe --tags>.zip`: `tools/cook.py`, the scripts it runs, the PC tables and `tools/README.md`
+`build-native/uc2-cook-<git describe --tags --match 'v[0-9]*'>.zip`: `tools/cook.py`, the scripts it runs, the PC tables and `tools/README.md`
 in one folder, for players who cook the game folder from their disc (`tools/dev/pack-cook-tool.py`,
 `tools/README.md`). Any preset's build directory has the target (`make cook-tool` there); it needs only Python 3 and
 is not part of ALL.
