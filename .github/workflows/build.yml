@@ -152,8 +152,10 @@ jobs:
       matrix:
         # SDL2 and openal-soft are fetched and built from source (CMakeLists.txt), so the development files
         # they configure against (X11, GL, ALSA, PulseAudio, udev, D-Bus) have to be the target's architecture.
+        # `multiarch` is the foreign architecture dpkg enables for the 32-bit build's :i386 packages; none for 64-bit.
         include:
           - preset: native
+            multiarch: i386
             platform: linux-x86
             elf: ELF 32-bit
             packages: >-
@@ -162,6 +164,7 @@ jobs:
               libxinerama-dev:i386 libxss-dev:i386 libxxf86vm-dev:i386 libgl-dev:i386
               libasound2-dev:i386 libpulse-dev:i386 libudev-dev:i386 libdbus-1-dev:i386
           - preset: native64
+            multiarch: ''
             platform: linux-x86_64
             elf: ELF 64-bit
             packages: >-
@@ -171,15 +174,17 @@ jobs:
     steps:
       - name: Base tools
         run: |
-          apt-get update
+          # Three tries, 30 s apart: a mirror in the middle of a sync fails an index fetch for a while.
+          for i in 1 2 3; do apt-get update && break; [ "$i" -lt 3 ] || exit 1; echo "apt-get update failed: again in 30 s"; sleep 30; done
           apt-get install -y --no-install-recommends git ca-certificates cmake make g++ pkg-config python3 file
 
       - uses: actions/checkout@v4
 
       - name: Install the build dependencies
         run: |
-          dpkg --add-architecture i386
-          apt-get update
+          if [ -n "${{ matrix.multiarch }}" ]; then dpkg --add-architecture ${{ matrix.multiarch }}; fi
+          # Three tries, 30 s apart: a mirror in the middle of a sync fails an index fetch for a while.
+          for i in 1 2 3; do apt-get update && break; [ "$i" -lt 3 ] || exit 1; echo "apt-get update failed: again in 30 s"; sleep 30; done
           apt-get install -y --no-install-recommends ${{ matrix.packages }}
 
       # FetchContent clones SDL2, openal-soft and gl4es into the build directory; the key changes when the files
