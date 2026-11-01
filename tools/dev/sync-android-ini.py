@@ -23,8 +23,7 @@ DELTAS = [
     ('Default.ini', 'SDL2Drv.SDL2Client', 'StartupFullscreen', 'False', 'True'),
     ('Default.ini', 'SDL2Drv.SDL2Client', 'UseMouse', 'True', 'False'),
     ('Default.ini', 'GUI.GUIController', 'bHideMouseCursor', 'False', 'True'),
-    # No multisampled main framebuffer by default, and the frame paced by the display.
-    ('Default.ini', 'UC2GL4ESDrv.UC2GL4ESRenderDevice', 'NumAASamples', '4', '0'),
+    # The frame paced by the display.
     ('Default.ini', 'UC2GL4ESDrv.UC2GL4ESRenderDevice', 'UseVSync', 'False', 'True'),
 ]
 
