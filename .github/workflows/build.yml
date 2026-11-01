@@ -78,9 +78,10 @@ jobs:
           set -uo pipefail
           absent=""
           for e in patched-scripts unrealed-bitmaps; do
+            # The shell stops at a failing command (bash -e): catch the exit code (3: absent) instead.
+            rc=0
             python3 vendor/release/package.py copy-release "$e" --version "$VERSION" --out out \
-              --github-repo "$GITHUB_REPOSITORY"
-            rc=$?
+              --github-repo "$GITHUB_REPOSITORY" || rc=$?
             if [ $rc -eq 3 ]; then
               absent="$absent $e"
               echo "::warning::$e is not in this build (the reason is above)"
