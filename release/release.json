@@ -1,0 +1,129 @@
+{
+  "games": [
+    {
+      "id": "uc2",
+      "title": "Unreal Championship 2: The Liandri Conflict",
+      "gameFiles": "a UC2 game folder made from your copy of the game (System with its 17 script packages and inis, Maps, Textures, Sounds and the rest)",
+      "androidFolder": "UC2",
+      "androidVersion": "7.0",
+      "linuxLibraries": "OpenGL",
+      "linuxPackages32": "libgl1:i386",
+      "server": "DM-Deadbolt",
+      "inis": ["Engine/Config/Default.ini", "Engine/Config/DefUser.ini"],
+      "liveInis": ["Avaris.ini", "User.ini"],
+      "settingsNotes": [
+        "A game folder started before this release was extracted into it keeps the Xbox save manager in Avaris.ini, and the game then exits at start: delete Avaris.ini."
+      ],
+      "apk": "Android/app/build/outputs/apk/release",
+      "platforms": {
+        "linux-x86": {
+          "build": "build-native",
+          "client": "Source/SDLLaunch/uc2.bin",
+          "ucc": "Source/UCC/ucc-bin",
+          "files": ["_deps/openalsoft-build/libopenal.so.1"]
+        },
+        "linux-x86_64": {
+          "build": "build-native64",
+          "client": "Source/SDLLaunch/uc2.bin",
+          "ucc": "Source/UCC/ucc-bin",
+          "files": ["_deps/openalsoft-build/libopenal.so.1"]
+        },
+        "windows-x86": {
+          "build": "build-windows",
+          "client": "Source/SDLLaunch/uc2.exe",
+          "ucc": "Source/UCC/ucc.exe",
+          "files": ["_deps/openalsoft-build/OpenAL32.dll"]
+        },
+        "windows-x86_64": {
+          "build": "build-windows64",
+          "client": "Source/SDLLaunch/uc2.exe",
+          "ucc": "Source/UCC/ucc.exe",
+          "files": ["_deps/openalsoft-build/OpenAL32.dll"]
+        }
+      },
+      "extras": [
+        {
+          "name": "patched-scripts",
+          "build": "build-native",
+          "files": [{"from": "build", "glob": "Scripts/System/*.u", "to": "System/"}],
+          "sha256": "patches/reference.sha256",
+          "fromRelease": ["*-patched-scripts.zip"]
+        },
+        {
+          "name": "cooker",
+          "command": ["{python}", "tools/dev/pack-cook-tool.py", "--out", "{out}"],
+          "output": "uc2-cook-*.zip"
+        },
+        {
+          "name": "unrealed-windows-x86",
+          "build": "build-windows",
+          "list": "Source/UnrealEd/release-files.txt",
+          "listSources": ["build", "repo"]
+        },
+        {
+          "name": "unrealed-bitmaps",
+          "list": "Source/UnrealEd/release-files.txt",
+          "listSources": ["epic"],
+          "roots": {"epic": {"env": "UC2_EPIC_SOURCES", "path": "../epic-sources/uc2-avaris-2226"}},
+          "sha256": "Source/UnrealEd/epic-files.sha256",
+          "fromRelease": ["*-unrealed-bitmaps.zip", "*-unrealed-windows-x86.zip"]
+        }
+      ],
+      "sections": [
+        {
+          "when": ["patched-scripts"],
+          "lines": [
+            "## The patched script packages",
+            "",
+            "{archive:patched-scripts} holds our patched GUI.u, UCGameplay.u, UCMenu.u and UCMutators.u:",
+            "mouse look, a keys menu with keyboard glyphs, your player name, extra maps, players three and four, the",
+            "wide-screen HUD, and fixes taken from Epic's own source. Extract it into the game folder too, keeping a",
+            "copy of the game's own four files; without them the game runs its shipped scripts unchanged. The Android",
+            "app reads them from the game folder."
+          ]
+        },
+        {
+          "unless": ["patched-scripts"],
+          "lines": [
+            "## The patched script packages",
+            "",
+            "This build has no patched script packages: its scripts differ from the newest release's, and only a game",
+            "folder can build them. Without them the game runs its shipped scripts unchanged."
+          ]
+        },
+        {
+          "when": ["cooker"],
+          "lines": [
+            "## Making the game folder from your Xbox disc",
+            "",
+            "{archive:cooker} holds the tool that makes the game folder from your Xbox disc (or Epic's",
+            "source tree). It needs Python 3.8 or newer and ffmpeg; its README.md has the steps."
+          ]
+        },
+        {
+          "platforms": ["windows-x86", "windows-x86_64"],
+          "when": ["unrealed-windows-x86", "unrealed-bitmaps"],
+          "lines": [
+            "## The level editor",
+            "",
+            "{archive:unrealed-windows-x86} holds UnrealEd, the level editor (Windows, 32-bit), and",
+            "{archive:unrealed-bitmaps} its splash and button-bar bitmaps (Epic's files). Extract both into the",
+            "game folder after the windows-x86 archive and start UnrealEd.exe from System."
+          ]
+        },
+        {
+          "platforms": ["windows-x86", "windows-x86_64"],
+          "when": ["unrealed-windows-x86"],
+          "unless": ["unrealed-bitmaps"],
+          "lines": [
+            "## The level editor",
+            "",
+            "{archive:unrealed-windows-x86} holds UnrealEd, the level editor (Windows, 32-bit). This build has no",
+            "editor bitmaps (Epic's splash and button-bar files): extract the newest release's UnrealEd archive into",
+            "the game folder first, then the windows-x86 archive and this one, and start UnrealEd.exe from System."
+          ]
+        }
+      ]
+    }
+  ]
+}

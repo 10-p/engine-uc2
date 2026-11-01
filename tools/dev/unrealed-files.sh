@@ -8,7 +8,8 @@
 #
 #   UC2_EPIC_SOURCES=<dir>   Epic's drop (default <repo>/../epic-sources/uc2-avaris-2226)
 #
-# bin/package-release.sh (uc2 <version> unrealed), tools/dev/package-windows.sh and tools/dev/mkrun-uc2.sh call it.
+# tools/dev/package-windows.sh and tools/dev/mkrun-uc2.sh call it; the release packer reads the same list
+# (release/release.json).
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 list=$repo/Source/UnrealEd/release-files.txt

@@ -16,12 +16,14 @@ the game:
    is missing, then asks for the disc image (drag it into the window) and the game folder (Enter: `UC2` beside the
    cook's folder), and cooks (about half an hour, most of it the movies).
 4. Unpack the game's Windows release into the game folder: `uc2-<version>-windows-x86.zip`, then
-   `uc2-<version>-patched-scripts.zip`, and for the editor `uc2-<version>-unrealed-windows-x86.zip`. The release is
+   `uc2-<version>-patched-scripts.zip`, and for the editor `uc2-<version>-unrealed-windows-x86.zip` and
+   `uc2-<version>-unrealed-bitmaps.zip`. The release is
    the game's programs and its PC settings; the cook does not make them. Unpack it after the cook: some of its files
    replace ones the cook copies from the disc (the disc's `Default.ini`, `DefUser.ini` and `DefUnrealEd.ini` name the
    Xbox's drivers; `GUI.u`, `UCGameplay.u`, `UCMenu.u`, `UCMutators.u` are the patched script packages). A cook
    overwrites the files it writes, these among them: to cook again, use a new folder and repeat the steps.
-5. Start `uc2.exe` (or `UnrealEd.exe`) in the game folder's `System\`.
+5. Start `uc2.exe` (or `UnrealEd.exe`) in the game folder's `System\`. A game folder started before the release was
+   in keeps the Xbox save manager in `System\Avaris.ini`, and the game exits at start: delete `Avaris.ini`.
 
 In a Command Prompt or PowerShell opened in the cook's folder, `.\cook.cmd` takes the options below, for example
 `.\cook.cmd --check --in "C:\Games\Unreal Championship 2.iso"` (PowerShell runs a file of the current folder only with

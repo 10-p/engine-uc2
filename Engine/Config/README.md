@@ -4,10 +4,10 @@
 PC tree; `Default.ini` and `DefUser.ini` carry our defaults, the other three stay Epic's bytes (`DefaultXbox.ini` and
 `DefUserXbox.ini` are reference copies the game never reads, which the script build reads from its game folder;
 `KeyBinds.ini` holds the pad layouts `UC2Settings_Controller` offers, which a game folder has from the disc).
-`DefUnrealEd.ini` is the editor's (below). The release ships `Default.ini` and `DefUser.ini` in its `System/` folder,
-and `DefUnrealEd.ini` with the editor; the tools that put a build into a game folder copy that set and no other ini
-(`tools/cook.py --uc2-binary-path`, `tools/dev/mkrun-uc2.sh`, `tools/dev/package-windows.sh`, the editor's through
-`tools/dev/unrealed-files.sh`). The web and Android
+`DefUnrealEd.ini` is the editor's (below). The release archives ship `Default.ini` and `DefUser.ini` in `System/`
+(`release/release.json`), and the editor's archive `DefUnrealEd.ini`; the tools that put a build into a game folder copy
+that set and no other ini (`tools/cook.py --uc2-binary-path`, `tools/dev/mkrun-uc2.sh`, `tools/dev/package-windows.sh`,
+the editor's through `tools/dev/unrealed-files.sh`). The web and Android
 builds carry generated variants of `Default.ini` and `DefUser.ini` (`web/`, `android/`, below). `Default.ini`,
 `DefUser.ini` and `web/*.ini` are LF; the three Epic copies keep Epic's CRLF (`tools/dev/sync-web-ini.py --check`
 compares them with the Epic drop). The engine reads both endings. Against Epic's files:

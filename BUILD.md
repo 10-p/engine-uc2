@@ -165,8 +165,9 @@ D3DDrv does it: the hit rectangle is read back around every hit proxy).
   button bar (`System/EditorRes/<name>.bmp`, read from the working folder when the bar is made) and the splash
   (`System/EdSplash.bmp`). The disc has the rest: `Editor.u`, `UnrealEd.u`, `UnrealEdTips.ini`, `UDNHelpTopics.ini`
   and the editor's localisation. `tools/dev/unrealed-files.sh <build> <dest>` copies the list (`UC2_EPIC_SOURCES` for
-  another drop); `bin/package-release.sh uc2 <version> unrealed` (the release's `unrealed-windows-x86` zip),
-  `tools/dev/package-windows.sh` and `tools/dev/mkrun-uc2.sh` use it.
+  another drop); `tools/dev/package-windows.sh` and `tools/dev/mkrun-uc2.sh` use it. The release packer reads the
+  same list ("Release archives"): its `build` and `repo` lines are the `unrealed-windows-x86` archive, its `epic` lines
+  the `unrealed-bitmaps` archive, checked against `Source/UnrealEd/epic-files.sha256`.
 - Maps cooked from the disc open after a warning. Their brushes (the `Brush` actors with their `Model` and `Polys`)
   and the editor's `Camera`s, exports that only the editor loads, are not on the disc, so the cook writes those exports
   empty. Before it loads a map the editor reads the file's export table (`UEditorEngine::MapHasEmptyExports`; a
@@ -359,12 +360,52 @@ byte for byte as the 32-bit one does ("Scripts: `ucc-bin make`"). On `windows64`
 `InternetLink`'s script `int Socket` holds it truncated and `AInternetLink::GetSocket()` reads it back sign-extended (a
 WinSock handle has 32 significant bits).
 
+## Release archives
+
+`vendor/release/package.py` makes the release archives, the same way in CI and for a versioned release. It is
+vendored from the frontend (`packages/build/engine-release/package.py`, written and checked by its
+`packages/build/bin/vendor-release.mjs`): re-vendor it, never edit it here. This game's data is
+`release/release.json`: each platform's files in its build tree, the default inis the archives ship, the extra
+archives and the text of their `README.txt`.
+
+```bash
+python3 vendor/release/package.py check                     # release.json names files that exist
+python3 vendor/release/package.py version                   # 1.2.0 at a release tag, else git describe
+python3 vendor/release/package.py archive linux-x86_64 --version 1.2.0 --out <dir> --kind release
+python3 vendor/release/package.py notes --version 1.2.0 --kind release   # the release text's install part
+```
+
+`archive <archive>` writes `uc2-<version>-<archive>`:
+
+| Archive | From | Holds |
+|---|---|---|
+| `linux-x86`, `linux-x86_64` (`.tar.gz`) | `build-native`, `build-native64` | `System/`: `uc2.bin`, `ucc-bin`, `libopenal.so.1`, `Default.ini`, `DefUser.ini`; `README.txt` |
+| `windows-x86`, `windows-x86_64` (`.zip`) | `build-windows`, `build-windows64` | `System/`: `uc2.exe`, `ucc.exe`, `OpenAL32.dll`, `Default.ini`, `DefUser.ini`; `README.txt` |
+| `patched-scripts` | `build-native/Scripts/System/*.u` | the four patched script packages, which must be the ones `patches/reference.sha256` lists |
+| `cooker` | `tools/dev/pack-cook-tool.py` | the cook ("The cook as a zip") |
+| `unrealed-windows-x86` | `build-windows`, this repository | `System/UnrealEd.exe`, `System/DefUnrealEd.ini` |
+| `unrealed-bitmaps` | Epic's drop (`UC2_EPIC_SOURCES`, default `<repo>/../epic-sources/uc2-avaris-2226`) | `System/EdSplash.bmp` and `System/EditorRes/*.bmp`, which must be the ones `Source/UnrealEd/epic-files.sha256` lists |
+
+The inis are `Engine/Config/Default.ini` and `DefUser.ini`, never Epic's reference copies. Each desktop archive's
+`README.txt` is the notes of its platform. `copy-release patched-scripts` and `copy-release unrealed-bitmaps` write
+the same archives from the newest versioned GitHub release (`gh`) when its files match the lists, and exit 3
+otherwise. `archive android` copies the APK Gradle's `assembleRelease` wrote as `uc2-<version>-android-test.apk`, or
+`-android-release.apk` with `--kind release`.
+
 ## CI
 
-`.github/workflows/build.yml` builds `native` and `native64` (Linux), `windows` and `windows64` (MinGW-w64),
-`wasm-perf` and the Android APK (armeabi-v7a, arm64-v8a and x86_64) on every push and pull request with `-DUE_SCRIPT_PATCHES=OFF`
-(no game folder in CI: the binaries run the shipped script packages and the web artifact's `scripts/` is empty),
-uploads the binaries, and a push to `main` replaces the rolling `latest` release.
+`.github/workflows/build.yml` runs on every push and pull request, every configure with `-DUE_SCRIPT_PATCHES=OFF`
+(no game folder in CI: the binaries run the shipped script packages and the web artifact's `scripts/` is empty). It
+checks the generated inis (`tools/dev/sync-android-ini.py --check`, `tools/dev/sync-web-ini.py --check`) and
+`release/release.json`; builds `native` and `native64` (Linux), `windows` and `windows64` (MinGW-w64, the 32-bit one
+with the editor), `wasm-perf` and the Android APK; checks the binaries' class and imports, that `meta.json` names the
+commit built and that the APK packages armeabi-v7a, arm64-v8a and x86_64 and is signed with the key the job made; and
+uploads for 7 days each platform's release archive, `unrealed-windows-x86`, the cook tool, the APK
+(`uc2-<version>-android-test.apk`, `assembleRelease` signed with that throwaway key: it cannot update an installed
+release) and the web build. Its `extras` job copies `patched-scripts` and `unrealed-bitmaps` from the newest
+versioned release (`package.py copy-release`); one whose files do not match is left out, and every archive's notes
+say so. The version is `package.py version`'s. A push to `main` also replaces the rolling `latest` release with those
+files and the packer's notes. CI makes no versioned release.
 
 ## Scripts: `ucc-bin make`
 
@@ -475,7 +516,7 @@ folder, `UC2_SCRIPTS=none` keeps the game folder's).
 cmake --build build-native --target cook-tool
 ```
 
-`build-native/uc2-cook-<git describe --tags>.zip`: `tools/cook.py`, the scripts it runs, the PC tables and `tools/README.md`
+`build-native/uc2-cook-<git describe --tags --match 'v[0-9]*'>.zip`: `tools/cook.py`, the scripts it runs, the PC tables and `tools/README.md`
 in one folder, for players who cook the game folder from their disc (`tools/dev/pack-cook-tool.py`,
 `tools/README.md`). Any preset's build directory has the target (`make cook-tool` there); it needs only Python 3 and
 is not part of ALL.

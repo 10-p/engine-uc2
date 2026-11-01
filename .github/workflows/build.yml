@@ -1,9 +1,16 @@
 name: build
 
-# Builds the presets on every push and pull request and uploads the binaries as workflow artifacts; the newest
-# build of main is also kept as the rolling "latest" release. Nothing here runs the game (no GPU, no game
-# folder): every configure passes -DUE_SCRIPT_PATCHES=OFF, so the build reads nothing of the game folder and
-# the binaries run the shipped script packages (BUILD.md, "Script patches").
+# Builds every release platform (Linux x86 and x86_64, Windows x86 and x86_64, Android), the level editor and the
+# web artifact, and checks the generated inis, on every push and pull request. Each desktop job packs its build into
+# the release's own archive with the vendored packer (vendor/release/package.py, the game's data in
+# release/release.json): System/ with the client, the UCC, the OpenAL library and the default inis, and README.txt,
+# named <game>-<version>-<platform>, exactly as the versioned releases name theirs; the release's extra archives
+# (the cook tool, the patched script packages, the editor and its bitmaps) come from the `extras` and `windows`
+# jobs. The archives are workflow artifacts; the newest build of main is also kept as the rolling "latest" release.
+# The versioned releases are made outside CI.
+#
+# Nothing here runs the game (no GPU, no game folder): every configure passes -DUE_SCRIPT_PATCHES=OFF, so the build
+# reads nothing of the game folder and the binaries run the shipped script packages (BUILD.md, "Script patches").
 
 on:
   push:
@@ -14,8 +21,125 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The version every archive of the run is named with: X.Y.Z on a release tag, else `git describe` from the newest
+  # release tag (1.2.0-14-g54485b0). The describe needs the tags: the whole history, blobless.
+  version:
+    name: version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      game: ${{ steps.v.outputs.game }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Version and game
+        id: v
+        run: |
+          set -euo pipefail
+          version=$(python3 vendor/release/package.py version)
+          game=$(python3 vendor/release/package.py game)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "game=$game" >> "$GITHUB_OUTPUT"
+          echo "$game $version"
+
+  # The extra archives the desktop jobs do not make. The cook tool is packed from the repository (it names itself
+  # with `git describe`, hence the whole history). The patched script packages and the editor's bitmaps come from
+  # the newest versioned release, and only when they are the files this commit names: patches/reference.sha256
+  # (the packages the default build makes, which need a game folder to build) and Source/UnrealEd/epic-files.sha256
+  # (Epic's files, never committed). One that cannot be copied is left out; `absent` names it, and every archive's
+  # notes say so.
+  extras:
+    name: extra archives
+    needs: version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      absent: ${{ steps.copy.outputs.absent }}
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Pack the cook tool
+        run: python3 vendor/release/package.py archive cooker --version "$VERSION" --out out
+
+      - name: Copy the patched script packages and the editor's bitmaps from the newest release
+        id: copy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          absent=""
+          for e in patched-scripts unrealed-bitmaps; do
+            # The shell stops at a failing command (bash -e): catch the exit code (3: absent) instead.
+            rc=0
+            python3 vendor/release/package.py copy-release "$e" --version "$VERSION" --out out \
+              --github-repo "$GITHUB_REPOSITORY" || rc=$?
+            if [ $rc -eq 3 ]; then
+              absent="$absent $e"
+              echo "::warning::$e is not in this build (the reason is above)"
+            elif [ $rc -ne 0 ]; then
+              exit $rc
+            fi
+          done
+          echo "absent=${absent# }" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.version.outputs.game }}-${{ env.VERSION }}-cooker
+          path: out/*-cooker.zip
+          if-no-files-found: error
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !contains(steps.copy.outputs.absent, 'patched-scripts') }}
+        with:
+          name: ${{ needs.version.outputs.game }}-${{ env.VERSION }}-patched-scripts
+          path: out/*-patched-scripts.zip
+          if-no-files-found: error
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !contains(steps.copy.outputs.absent, 'unrealed-bitmaps') }}
+        with:
+          name: ${{ needs.version.outputs.game }}-${{ env.VERSION }}-unrealed-bitmaps
+          path: out/*-unrealed-bitmaps.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  # The generated inis are what their generators write, and the release data names files that exist.
+  inis:
+    name: inis and release data
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the generated inis
+        run: |
+          set -uo pipefail
+          shopt -s nullglob
+          rc=0; n=0
+          for s in tools/dev/sync-*ini.py; do
+            echo "== $s --check"
+            python3 "$s" --check || rc=1
+            n=$((n + 1))
+          done
+          [ "$n" -gt 0 ] || { echo "::error::no tools/dev/sync-*ini.py to run"; exit 1; }
+          exit $rc
+
+      - name: Check the release data
+        run: python3 vendor/release/package.py check
+
   linux:
     name: linux (${{ matrix.preset }})
+    needs: [version, extras]
     runs-on: ubuntu-24.04
     # A stock ubuntu:24.04 container: the runner image's preinstalled amd64 -dev packages block the :i386 ones.
     container: ubuntu:24.04
@@ -30,6 +154,7 @@ jobs:
         # they configure against (X11, GL, ALSA, PulseAudio, udev, D-Bus) have to be the target's architecture.
         include:
           - preset: native
+            platform: linux-x86
             elf: ELF 32-bit
             packages: >-
               gcc-multilib g++-multilib
@@ -37,6 +162,7 @@ jobs:
               libxinerama-dev:i386 libxss-dev:i386 libxxf86vm-dev:i386 libgl-dev:i386
               libasound2-dev:i386 libpulse-dev:i386 libudev-dev:i386 libdbus-1-dev:i386
           - preset: native64
+            platform: linux-x86_64
             elf: ELF 64-bit
             packages: >-
               libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev
@@ -87,33 +213,39 @@ jobs:
             echo "::error::uc2.bin needs a library it should carry or dlopen: $needed"; exit 1
           fi
 
-      # The three files a run tree puts side by side in System/ (tools/dev/mkrun-uc2.sh); libopenal.so.1 is a
-      # symlink in the build tree, so it is copied dereferenced.
-      - name: Stage the run files
+      # The release archive: System/ (uc2.bin, ucc-bin, libopenal.so.1 copied from its symlink, Default.ini and
+      # DefUser.ini) and README.txt, whose notes name the extra archives this build has.
+      - name: Pack the release archive
+        env:
+          ABSENT: ${{ needs.extras.outputs.absent }}
         run: |
           set -euo pipefail
-          b=build-${{ matrix.preset }}
-          mkdir -p dist
-          cp -L $b/Source/SDLLaunch/uc2.bin $b/Source/UCC/ucc-bin $b/_deps/openalsoft-build/libopenal.so.1 dist/
+          args=()
+          for a in $ABSENT; do args+=(--absent "$a"); done
+          python3 vendor/release/package.py archive ${{ matrix.platform }} \
+            --version "${{ needs.version.outputs.version }}" --out out "${args[@]}"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: uc2-${{ matrix.preset }}
-          path: dist/
+          name: ${{ needs.version.outputs.game }}-${{ needs.version.outputs.version }}-${{ matrix.platform }}
+          path: out/
           if-no-files-found: error
           # Short retention keeps the artifact quota free; the `latest` job keeps the newest build.
           retention-days: 7
 
   windows:
     name: windows (${{ matrix.preset }})
+    needs: [version, extras]
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         include:
           - preset: windows
+            platform: windows-x86
             objdump: i686-w64-mingw32-objdump
           - preset: windows64
+            platform: windows-x86_64
             objdump: x86_64-w64-mingw32-objdump
     steps:
       - uses: actions/checkout@v4
@@ -146,27 +278,57 @@ jobs:
           for f in $b/Source/SDLLaunch/uc2.exe $b/Source/UCC/ucc.exe $b/_deps/openalsoft-build/OpenAL32.dll; do
             imports=$(${{ matrix.objdump }} -p "$f" | sed -n 's/^\tDLL Name: //p' | sort -u)
             echo "$f: $(echo $imports)"
-            bad=$(echo "$imports" | grep -viE '^(ADVAPI32|AVRT|GDI32|IMM32|KERNEL32|msvcrt|ole32|OLEAUT32|OpenAL32|SETUPAPI|SHELL32|USER32|VERSION|WINMM|WS2_32)\.dll$' || true)
+            bad=$(echo "$imports" | grep -viE '^(ADVAPI32|AVRT|GDI32|IMM32|KERNEL32|msvcrt|ole32|OLEAUT32|SETUPAPI|SHELL32|USER32|VERSION|WINMM|WS2_32)\.dll$' || true)
             if [ -n "$bad" ]; then echo "::error::$f: non-system DLL imports: $bad"; exit 1; fi
           done
 
-      # The three files a Windows folder puts side by side in System/ (tools/dev/package-windows.sh).
-      - name: Stage the run files
+      # The level editor, built by the 32-bit preset only: the game's system DLLs plus the editor's own (the common
+      # controls and dialogs, DirectInput, OpenGL), the list of tools/dev/package-windows.sh.
+      - name: Check the editor imports only system DLLs
+        if: matrix.preset == 'windows'
         run: |
           set -euo pipefail
-          b=build-${{ matrix.preset }}
-          mkdir -p dist
-          cp $b/Source/SDLLaunch/uc2.exe $b/Source/UCC/ucc.exe $b/_deps/openalsoft-build/OpenAL32.dll dist/
+          f=build-windows/Source/UnrealEd/UnrealEd.exe
+          imports=$(${{ matrix.objdump }} -p "$f" | sed -n 's/^\tDLL Name: //p' | sort -u)
+          echo "$f: $(echo $imports)"
+          bad=$(echo "$imports" | grep -viE '^(ADVAPI32|COMCTL32|COMDLG32|DINPUT8|GDI32|IMM32|KERNEL32|msvcrt|ole32|OLEAUT32|OPENGL32|SETUPAPI|SHELL32|USER32|VERSION|WINMM|WS2_32)\.dll$' || true)
+          if [ -n "$bad" ]; then echo "::error::$f: non-system DLL imports: $bad"; exit 1; fi
+
+      # The release archive: System/ (uc2.exe, ucc.exe, OpenAL32.dll, Default.ini and DefUser.ini) and README.txt,
+      # whose notes name the extra archives this build has. The 32-bit preset also packs the editor:
+      # UnrealEd.exe and DefUnrealEd.ini (Source/UnrealEd/release-files.txt's lines from this build and repository).
+      - name: Pack the release archives
+        env:
+          ABSENT: ${{ needs.extras.outputs.absent }}
+        run: |
+          set -euo pipefail
+          args=()
+          for a in $ABSENT; do args+=(--absent "$a"); done
+          python3 vendor/release/package.py archive ${{ matrix.platform }} \
+            --version "${{ needs.version.outputs.version }}" --out out "${args[@]}"
+          if [ "${{ matrix.preset }}" = windows ]; then
+            python3 vendor/release/package.py archive unrealed-windows-x86 \
+              --version "${{ needs.version.outputs.version }}" --out out-editor
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
-          name: uc2-${{ matrix.preset }}
-          path: dist/
+          name: ${{ needs.version.outputs.game }}-${{ needs.version.outputs.version }}-${{ matrix.platform }}
+          path: out/
+          if-no-files-found: error
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.preset == 'windows'
+        with:
+          name: ${{ needs.version.outputs.game }}-${{ needs.version.outputs.version }}-unrealed-windows-x86
+          path: out-editor/
           if-no-files-found: error
           retention-days: 7
 
   web:
     name: web (wasm-perf)
+    needs: version
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -208,7 +370,7 @@ jobs:
       # side file and never ships.
       - uses: actions/upload-artifact@v4
         with:
-          name: uc2-web
+          name: ${{ needs.version.outputs.game }}-${{ needs.version.outputs.version }}-web
           path: |
             build-wasm-perf/Source/SDLLaunch/SDLLaunch.js
             build-wasm-perf/Source/SDLLaunch/SDLLaunch.wasm
@@ -219,7 +381,8 @@ jobs:
           retention-days: 7
 
   android:
-    name: android (arm64 + arm32 APK)
+    name: android (release APK, test key)
+    needs: version
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -244,25 +407,46 @@ jobs:
           sdkmanager --install "ndk;28.2.13676358" "cmake;4.1.2" >/dev/null
           printf 'sdk.dir=%s\nndk.dir=%s/ndk/28.2.13676358\n' "$ANDROID_HOME" "$ANDROID_HOME" > Android/local.properties
 
+      # The release variant, signed with a key made here and dropped with the runner (UE_ANDROID_SIGNING, as
+      # app/build.gradle reads it): a test APK that cannot update an installed release, which our release key
+      # signs outside CI.
+      - name: Make a throwaway signing key
+        run: |
+          set -euo pipefail
+          pw=$(openssl rand -hex 16)
+          echo "::add-mask::$pw"
+          keytool -genkeypair -keystore "$RUNNER_TEMP/test.jks" -storepass "$pw" -keypass "$pw" -alias test \
+            -keyalg RSA -keysize 2048 -validity 3650 -dname "CN=Test build" >/dev/null
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=test\nkeyPassword=%s\n' "$RUNNER_TEMP/test.jks" "$pw" "$pw" \
+            > "$RUNNER_TEMP/test-signing.properties"
+          echo "UE_ANDROID_SIGNING=$RUNNER_TEMP/test-signing.properties" >> "$GITHUB_ENV"
+
       # The engine without the script patches (no game folder on the runner): the game runs the game folder's
       # packages, as BUILD.md "Android" says every Android build does.
       - name: Build the APK
-        run: ./gradlew assembleDebug --console=plain
+        run: ./gradlew assembleRelease --console=plain
         working-directory: Android
 
-      # Both ABIs must be in there: a silent drop to one still installs and fails only on the device not tested.
-      - name: Assert every ABI is packaged
+      # Every ABI must be in there: a silent drop to one still installs and fails only on the device not tested.
+      # The signature must be the test key's, not the debug key's.
+      - name: Assert every ABI is packaged and the test key signs it
         run: |
           set -euo pipefail
-          apk=Android/app/build/outputs/apk/debug/app-debug.apk
-          for abi in armeabi-v7a arm64-v8a; do
+          apk=$(ls Android/app/build/outputs/apk/release/*.apk)
+          for abi in armeabi-v7a arm64-v8a x86_64; do
             unzip -l "$apk" | grep -q "lib/$abi/libUC2.so" || { echo "::error::missing $abi"; exit 1; }
           done
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$apksigner" verify --print-certs "$apk" | tee "$RUNNER_TEMP/certs.txt"
+          grep -q 'CN=Test build' "$RUNNER_TEMP/certs.txt" || { echo "::error::the APK is not signed with the test key"; exit 1; }
+
+      - name: Name the APK
+        run: python3 vendor/release/package.py archive android --version "${{ needs.version.outputs.version }}" --out out
 
       - uses: actions/upload-artifact@v4
         with:
-          name: uc2-android
-          path: Android/app/build/outputs/apk/debug/app-debug.apk
+          name: ${{ needs.version.outputs.game }}-${{ needs.version.outputs.version }}-android-test
+          path: out/
           if-no-files-found: error
           retention-days: 7
 
@@ -270,7 +454,7 @@ jobs:
   # deleted and recreated so its tag moves to the new commit and retired builds drop out.
   latest:
     name: rolling "latest" release
-    needs: [linux, windows, web, android]
+    needs: [version, extras, inis, linux, windows, web, android]
     if: github.event_name == 'push' && github.ref_name == 'main'
     runs-on: ubuntu-24.04
     # The default workflow token is read-only.
@@ -279,38 +463,54 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # This run's archives, each artifact in its own directory named after it.
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+          pattern: ${{ needs.version.outputs.game }}-${{ needs.version.outputs.version }}-*
 
-      - name: Pack one zip per build
+      # An archive artifact holds its one file, published as it is; the web artifact is a folder, published as
+      # <name>.zip.
+      - name: Collect the release assets
         run: |
           set -euo pipefail
           mkdir -p out
           shopt -s nullglob
-          n=0
           for d in artifacts/*/; do
             name=$(basename "$d")
-            ( cd "$d" && zip -qr "$GITHUB_WORKSPACE/out/$name.zip" . )
-            n=$((n + 1))
+            files=("$d"*)
+            if [ ${#files[@]} -eq 1 ] && [ -f "${files[0]}" ] && [[ $(basename "${files[0]}") == "$name".* ]]; then
+              mv "${files[0]}" out/
+            else
+              ( cd "$d" && zip -qr "$GITHUB_WORKSPACE/out/$name.zip" . )
+            fi
           done
-          [ "$n" -gt 0 ] || { echo "::error::no artifacts were downloaded: nothing to publish"; exit 1; }
+          [ -n "$(ls out)" ] || { echo "::error::no artifacts were downloaded: nothing to publish"; exit 1; }
           ls -la out/
 
       - name: Publish (replacing the previous one)
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+          ABSENT: ${{ needs.extras.outputs.absent }}
         run: |
           set -euo pipefail
+          args=()
+          for a in $ABSENT; do args+=(--absent "$a"); done
+          {
+            printf '%s\n' \
+              "The newest build of \`main\`, $VERSION, replaced on every push: a development build, not a release." \
+              "" \
+              "Built with the script patches off (\`-DUE_SCRIPT_PATCHES=OFF\`: no game folder in CI): the binaries run the shipped script packages, and the web artifact's \`scripts/\` is empty. The patched script packages and the editor's bitmaps are the newest release's, when they are the ones this commit names." \
+              "" \
+              "Commit: \`$GITHUB_SHA\`" \
+              "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+              ""
+            python3 vendor/release/package.py notes --version "$VERSION" --glibc-from out/*.tar.gz "${args[@]}"
+          } > "$RUNNER_TEMP/notes.md"
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest out/*.zip \
+          gh release create latest out/* \
             --target "$GITHUB_SHA" \
             --prerelease \
             --title "latest — $(git log -1 --format=%s | cut -c1-72)" \
-            --notes "$(printf '%s\n' \
-              "The newest UC2 engine build of \`main\`, replaced on every push." \
-              "" \
-              "Built with the script patches off (\`-DUE_SCRIPT_PATCHES=OFF\`: no game folder in CI): the binaries run the shipped script packages, and the web artifact's \`scripts/\` is empty." \
-              "" \
-              "Commit: \`$GITHUB_SHA\`" \
-              "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID")"
+            --notes-file "$RUNNER_TEMP/notes.md"

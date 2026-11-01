@@ -529,7 +529,7 @@ if(TARGET Editor AND TARGET UCC AND NOT WIN32 AND NOT EMSCRIPTEN AND NOT CMAKE_C
 endif()
 
 # `cmake --build <build> --target cook-tool` (`make cook-tool` in the build directory): the cook as a standalone zip
-# for players, <build>/uc2-cook-<git describe --tags>.zip (tools/dev/pack-cook-tool.py: tools/cook.py, the scripts it runs,
+# for players, <build>/uc2-cook-<git describe --tags --match v[0-9]*>.zip (tools/dev/pack-cook-tool.py: tools/cook.py, the scripts it runs,
 # the PC tables, tools/README.md). Any preset; only Python is needed. Not part of ALL.
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)

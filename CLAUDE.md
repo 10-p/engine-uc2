@@ -18,7 +18,9 @@ Linux, Windows (MinGW-w64), the Web (Emscripten) and Android. Private: proprieta
 | `run/`, `logs/` | run trees (`tools/dev/mkrun-uc2.sh`) and tool logs | scratch |
 
 The repo: `Source/` (Epic's packages and ours), `Engine/Config/` (the inis, [`README.md`](./Engine/Config/README.md)),
-`patches/` (the script patch sets), `cmake/`, `vendor/glue/` (the frontend's ABI files, vendored), `Thirdparty/`,
+`patches/` (the script patch sets), `cmake/`, `vendor/glue/` (the frontend's ABI files, vendored), `vendor/release/`
+(the frontend's release packer, vendored: re-vendor, never edit) and `release/release.json` (the release archives'
+data, BUILD.md "Release archives"), `Thirdparty/`,
 `Android/` (the Gradle/NDK project of the Android app, BUILD.md "Android"),
 `tools/` (the cookers and format readers; `tools/cook.py` is the one entry point, [`tools/README.md`](./tools/README.md)),
 `tools/scripts/` (the script patch pipeline), `tools/dev/` (checks and measurements: each script's header says what it
