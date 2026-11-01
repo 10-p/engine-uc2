@@ -36,7 +36,7 @@ void UUC2WGLRenderDevice::StaticConstructor()
 	GDIPresent		= RunningUnderWine();
 
 	// UUC2GLRenderDevice::StaticConstructor declared the properties on its class and set the game's compiled
-	// defaults, which this class's default object starts from. The editor's differ: its viewports show the
+	// defaults, which this class's default object starts from. The editor sets its own: its viewports show the
 	// level as PC's D3DDrv drew it (no Xbox post-processing), and one context draws many windows, so no
 	// multisampled framebuffer per viewport.
 	UsePostProcess	= 0;

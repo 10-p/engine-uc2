@@ -230,10 +230,10 @@ void UUC2GLRenderDevice::StaticConstructor()
 	// The blur targets at twice the Xbox's texel count per axis (finer at today's resolutions); 1 = the Xbox's
 	// count, 4 accepted. A missing ini entry gets this default.
 	PostProcessTargetScale = 2;
-	// 16x anisotropic filtering and 4x anti-aliasing for an ini without the keys (the shipped native ini
-	// says the same; the web ini sets NumAASamples=0).
+	// 16x anisotropic filtering and no anti-aliasing for an ini without the keys, as the shipped inis have
+	// it; a player sets NumAASamples to a sample count to turn anti-aliasing on.
 	LevelOfAnisotropy		= 16;
-	NumAASamples			= 4;
+	NumAASamples			= 0;
 	MaxTextureUnits			= 8;
 	// UC2's D3DDrv clamps MaxSimultaneousTextures and MaxTextureBlendStages to 4 and
 	// refuses any card that has fewer (D3DRenderDevice.cpp, CheckDeviceCaps; Xbox and PC), so

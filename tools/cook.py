@@ -817,10 +817,15 @@ def build_root(path):
     return ''
 
 
+# The inis a release ships in System/: the game's two (the disc's own name the Xbox drivers) and the editor's, which
+# the editor's archive adds. Every other ini of the game folder is the input's (KeyBinds.ini, the per-class inis).
+RELEASE_INIS = ('Default.ini', 'DefUser.ini', 'DefUnrealEd.ini')
+
+
 def install_binaries(args, out, log):
     """--uc2-binary-path and --ucc-binary-path into System/. The game comes with the files it runs with: from a
-    release folder, the inis and the OpenAL library beside it; from a CMake build, the build's OpenAL library and
-    patched script packages and the repository's inis (Engine/Config)."""
+    release folder, the release's inis (RELEASE_INIS) and the OpenAL library beside it; from a CMake build, the
+    build's OpenAL library and patched script packages and the repository's copies of those inis (Engine/Config)."""
     copied = []
     scripts = []
     build = ''
@@ -842,7 +847,13 @@ def install_binaries(args, out, log):
             p = os.path.join(libdir, name)
             if os.path.exists(p):
                 files.append((os.path.realpath(p), name))
-        files += [(os.path.join(inidir, f), f) for f in sorted(os.listdir(inidir)) if f.lower().endswith('.ini')]
+        inis = [(find_ci(inidir, f), f) for f in RELEASE_INIS]
+        files += [(p, f) for p, f in inis if p and os.path.isfile(p)]
+        if not any(f == 'Default.ini' for _, f in files):
+            note = ('no Default.ini beside %s: System/ keeps the input\'s, whose drivers this build may lack (unpack '
+                    'the whole release folder)' % args.uc2_binary_path)
+            say('  warning: ' + note)
+            log.append('binaries: warning: ' + note)
         for p, name in files:
             out.copy(p, 'System/' + name)
             copied.append(name)

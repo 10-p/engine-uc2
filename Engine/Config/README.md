@@ -2,9 +2,12 @@
 
 `Default.ini`, `DefUser.ini`, `DefaultXbox.ini`, `DefUserXbox.ini` and `KeyBinds.ini` are Epic's `System/` files of the
 PC tree; `Default.ini` and `DefUser.ini` carry our defaults, the other three stay Epic's bytes (`DefaultXbox.ini` and
-`DefUserXbox.ini` are reference copies nothing reads; `KeyBinds.ini` holds the pad layouts `UC2Settings_Controller`
-offers). `DefUnrealEd.ini` is the editor's (below). `tools/dev/mkrun-uc2.sh` copies them over the game folder's when it
-assembles a run tree; the web and Android
+`DefUserXbox.ini` are reference copies the game never reads, which the script build reads from its game folder;
+`KeyBinds.ini` holds the pad layouts `UC2Settings_Controller` offers, which a game folder has from the disc).
+`DefUnrealEd.ini` is the editor's (below). The release ships `Default.ini` and `DefUser.ini` in its `System/` folder,
+and `DefUnrealEd.ini` with the editor; the tools that put a build into a game folder copy that set and no other ini
+(`tools/cook.py --uc2-binary-path`, `tools/dev/mkrun-uc2.sh`, `tools/dev/package-windows.sh`, the editor's through
+`tools/dev/unrealed-files.sh`). The web and Android
 builds carry generated variants of `Default.ini` and `DefUser.ini` (`web/`, `android/`, below). `Default.ini`,
 `DefUser.ini` and `web/*.ini` are LF; the three Epic copies keep Epic's CRLF (`tools/dev/sync-web-ini.py --check`
 compares them with the Epic drop). The engine reads both endings. Against Epic's files:
@@ -39,7 +42,7 @@ same.
 | `[SDL2Drv.SDL2Client] SplitScreenJoinInMatch`, `SplitScreenFullDetail`, `PadsStartAtPlayerTwo` | (none) | `True`, `False`, `False` | Start on an unbound pad joins a match in progress (standalone or listen); `SplitScreenFullDetail=False` keeps the Xbox's detail reductions per split-screen player (`SplitScreenMgr.uc` `SSDetailLevels`), `True` gives every player the single player's detail; `PadsStartAtPlayerTwo=True` leaves player one to the keyboard and mouse and puts the first pad on player two. |
 | new section `[SDL2Drv.PadMap]` | (none: hard-coded in the Xbox driver) | SDL control = `Joy1`..`Joy16` / `JoyX` `JoyY` `JoyU` `JoyV` [`Invert`] | The SDL controller to Xbox control table (Black = right shoulder, White = left shoulder); the same table is compiled in for controls the section does not name. |
 | new section `[UC2GLDrv.UC2GLRenderDevice]` | (none) | the device's settings; where Epic's `[D3DDrv.D3DRenderDevice]` has the setting, its value, plus the keys below | The device reads its own class section. |
-| `LevelOfAnisotropy`, `NumAASamples` (both device sections) | `LevelOfAnisotropy=1` (D3DDrv), no anti-aliasing | `16`, `4` | Anisotropy on every stage's minifying filter, clamped to the hardware's maximum. `NumAASamples` is the sample count of the multisampled main framebuffer (0 = off; desktop GL and OpenGL ES 3 / WebGL 2; none on ES 2 / WebGL 1). An ini with the older `AntiAliasing` key and no `NumAASamples` has it read once. |
+| `LevelOfAnisotropy`, `NumAASamples` (both device sections) | `LevelOfAnisotropy=1` (D3DDrv), no anti-aliasing | `16`, `0` | Anisotropy on every stage's minifying filter, clamped to the hardware's maximum. `NumAASamples` is the sample count of the multisampled main framebuffer (0 = off; desktop GL and OpenGL ES 3 / WebGL 2; none on ES 2 / WebGL 1). An ini with the older `AntiAliasing` key and no `NumAASamples` has it read once. |
 | `MaterialStages`, `FixedFunctionPrograms` (both) | (none: Epic's D3DDrv clamps the stages to 4 and refuses cards with fewer) | `4`, `True` | The stage count the material compiler splits passes for, as Epic's compiler always ran (a pass is drawn with every stage it has, up to `MaxTextureUnits`: Epic's two-layer terrain pass has five); the fixed-function stages drawn by generated GLSL programs with D3D8 semantics (`False`: the GL texture environment, with combine3/combine4). |
 | `UsePixelShaders`, `PrecompileVertexShaders` (both) | (none) | `True`, `True` | Pixel-shader materials drawn with GLSL translated from Epic's Xbox shaders (`False`: their first texture stage); the vertex shaders of `VertexShaderConfigs.ini` compiled at start. Console `PIXELSHADERS [0\|1]`. |
 | `UsePostProcess`, `DOFShippedBlurAlpha` (both) | (none) | `True`, `True` | What the Xbox does with render targets and Epic's PC code left out: distortion, emissive glow and bloom, depth of field, the blur and colour-remap camera effects, dynamic gamma (needs `UsePixelShaders`). The device then reports `XboxPostProcess`. Console `POSTPROCESS [0\|1]`. `DOFShippedBlurAlpha`: the always-on depth of field uses the blur alpha the shipped binary reads (65 in every camera mode) instead of script's (100 in third person); console `DOFSHIPPEDALPHA [0\|1]`. |
@@ -56,7 +59,10 @@ same.
 
 `uc2.bin` replaces, for the run and in the derived `Avaris.ini`, a driver the ini names that this build lacks
 (`WinDrv.WindowsClient`, `D3DDrv.D3DRenderDevice`, `XboxDrv.XboxClient`, ...) with `SDL2Drv.SDL2Client`,
-`Engine.NullRenderDevice` or `Engine.NullAudioDevice`, and logs it, so an ini of the PC or Xbox release still boots.
+`Engine.NullRenderDevice` or `Engine.NullAudioDevice`, and logs it, so an ini of the PC release still boots. It does
+not replace `[Engine.Engine] LoadSaveManagerClass`: an `Avaris.ini` derived from the disc's `Default.ini` names
+`XboxDrv.XboxLoadSaveManager`, a class this build lacks, and the game stops at startup until that `Avaris.ini` is
+deleted.
 
 ## `DefUser.ini`
 
@@ -103,7 +109,6 @@ the web file has it) and a row here.
 |---|---|---|---|---|
 | `Default.ini` | `[Engine.Engine] RenderDevice` | `UC2GLDrv.UC2GLRenderDevice` | `UC2GL4ESDrv.UC2GL4ESRenderDevice` | The same driver behind GL4ES on WebGL 2 (WebGL 1 as the fallback). |
 | `Default.ini` | `[Engine.Engine] NetworkDevice` | `IpDrv.TcpNetDriver` | `WebRTCDrv.WebRTCNetDriver` | A browser has no sockets: the WebRTC driver sends the engine's packets over the frontend's data channels. `uc2.bin` on the web also switches a saved `Avaris.ini` that names the TCP driver. |
-| `Default.ini` | `NumAASamples` (both device sections) | `4` | `0` | Anti-aliasing off by default in the browser (heavy on a laptop); a player sets `NumAASamples=4` in the GL4ES device's section of the browser's `Avaris.ini`, or `-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=4`. |
 | `Default.ini` | `[Engine.Engine] AudioDevice` | `UC2ALAudio.UC2ALAudioSubsystem` | kept as the web file has it (`WEB_KEYS`) | The same device, on openal-soft's Web Audio backend (the context starts on the page's first click or key; without Web Audio, AudioWorklet or cross-origin isolation the game runs silent and says why). |
 | `Default.ini` | sections `[UC2ALAudio.UC2ALAudioSubsystem]`, `[UC2Movie]` | the native section, or none | kept as the web file has them (`WEB_SECTIONS`) | The web audio and movie settings, written out (`Backends=` empty: the web build has one backend; movies on). |
 | `Default.ini` | new section `[WebRTCDrv.WebRTCNetDriver]` | none | the `[IpDrv.TcpNetDriver]` values except `ConnectionTimeout=60.0`, `InitialConnectTimeout=300.0` and `DownloadManagers=Engine.ChannelDownload` only (`WEB_SECTIONS`) | The driver reads its own class section; the timeouts are longer because a browser streams a map's files on demand and a guest sends nothing while it loads. |
@@ -122,5 +127,4 @@ Android difference is an entry in the script's `DELTAS` and a row here.
 | `Default.ini` | `[SDL2Drv.SDL2Client] StartupFullscreen` | `False` | `True` | The window is the whole screen anyway (the client makes it so on Android). |
 | `Default.ini` | `[SDL2Drv.SDL2Client] UseMouse` | `True` | `False` | A phone is played with pads and the on-screen pad: the mouse is left out (also the compiled default on Android). |
 | `Default.ini` | `[GUI.GUIController] bHideMouseCursor` | `False` | `True` | No mouse, so the menus draw no cursor. |
-| `Default.ini` | `[UC2GL4ESDrv.UC2GL4ESRenderDevice] NumAASamples` | `4` | `0` | No multisampled main framebuffer by default on a phone's GPU. |
 | `Default.ini` | `[UC2GL4ESDrv.UC2GL4ESRenderDevice] UseVSync` | `False` | `True` | The frame paced by the display: no tearing, and no frames the screen never shows (heat, battery). |
