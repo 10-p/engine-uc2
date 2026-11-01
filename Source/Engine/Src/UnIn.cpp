@@ -212,6 +212,23 @@ void UInput::Init( UViewport* InViewport )
 	Command line.
 -----------------------------------------------------------------------------*/
 
+#if !defined(_XBOX)
+//
+// Whether the controller is in a state of Engine's BaseSpectating (PlayerWaiting, Spectating), as
+// IsInState('BaseSpectating').
+//
+static UBOOL UC2_IsSpectating( APlayerController* PC )
+{
+	static FName NAME_BaseSpectating( TEXT("BaseSpectating") );
+	FStateFrame* Frame = PC->GetStateFrame();
+	if( Frame )
+		for( UState* Test=Frame->StateNode; Test; Test=Test->GetSuperState() )
+			if( Test->GetFName()==NAME_BaseSpectating )
+				return 1;
+	return 0;
+}
+#endif
+
 //
 // Execute a command.
 //
@@ -327,11 +344,17 @@ UBOOL UInput::Exec( const TCHAR* Str, FOutputDevice& Ar )
 						// it (Ctrl_Move_*_Pct: dodges, lock-target search), then adds the keyboard's aBaseY/aBaseX.
 						// The stick's walk, x 24000 after that division, goes into the keyboard's variable as well:
 						// the direction stays the stick's own, the walk is the Xbox's (24000 + 1 times d).
+						// Not while spectating (the pre-match camera): BaseSpectating.PlayerMove scales values above
+						// 1000 (the keyboard's) by 0.0001 and moves by the Xbox's stick (0..1) as it is, so a fed
+						// stick below 1000 would move the camera 10000 times too far.
 						APlayerController* PC = Viewport->Actor;
-						if( Axis == &PC->aForward )
-							PC->aBaseY += 240.f * SpeedBase * Speed * Invert * GetInputDelta() / 20.f;
-						else if( Axis == &PC->aStrafe )
-							PC->aBaseX += 240.f * SpeedBase * Speed * Invert * GetInputDelta() / 20.f;
+						if( !UC2_IsSpectating( PC ) )
+						{
+							if( Axis == &PC->aForward )
+								PC->aBaseY += 240.f * SpeedBase * Speed * Invert * GetInputDelta() / 20.f;
+							else if( Axis == &PC->aStrafe )
+								PC->aBaseX += 240.f * SpeedBase * Speed * Invert * GetInputDelta() / 20.f;
+						}
 					}
 					else
 #endif
