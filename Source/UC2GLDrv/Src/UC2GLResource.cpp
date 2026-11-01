@@ -68,6 +68,7 @@ FOpenGLTexture::FOpenGLTexture(UUC2GLRenderDevice* InRenDev,FRenderResource* InR
 	IsCubemap		= 0;
 	IsRenderTarget	= 0;
 	IsDefaultTarget	= 0;
+	IsLightmap		= 0;
 	DefaultUsage	= FRenderTarget::RT_MATERIAL_USE_BACKBUFFER;
 	CachedWidth		= 0;
 	CachedHeight	= 0;

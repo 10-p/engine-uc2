@@ -111,6 +111,8 @@ UUC2GLRenderDevice::UUC2GLRenderDevice()
 	MaskCombine3			= 0;
 	MaskCombine4			= 0;
 	FFProgramsLinked = FFProgramsFailed = FFProgramDraws = FFFallbackDraws = 0;
+	BicubicLightmapsActive	= 0;
+	BicubicLightmapDraws = BilinearLightmapDraws = 0;
 	MaxAnisotropy			= 1.f;
 	ValidContext			= 0;
 	GLMajorVersion			= 0;
@@ -189,6 +191,7 @@ void UUC2GLRenderDevice::StaticConstructor()
 	new(GetClass(),TEXT("UseXboxShadows"),		RF_Public)UBoolProperty	( CPP_PROPERTY(UseXboxShadows		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("UseTerrain3Layer"),	RF_Public)UBoolProperty	( CPP_PROPERTY(UseTerrain3Layer		), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("UseXboxProjectors"),	RF_Public)UBoolProperty	( CPP_PROPERTY(UseXboxProjectors	), TEXT("Options"), CPF_Config );
+	new(GetClass(),TEXT("UseBicubicLightmaps"),	RF_Public)UBoolProperty	( CPP_PROPERTY(UseBicubicLightmaps	), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("PostProcessReferenceHeight"),RF_Public)UIntProperty( CPP_PROPERTY(PostProcessReferenceHeight), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("PostProcessTargetScale"),RF_Public)UIntProperty( CPP_PROPERTY(PostProcessTargetScale), TEXT("Options"), CPF_Config );
 	new(GetClass(),TEXT("LevelOfAnisotropy"),	RF_Public)UIntProperty	( CPP_PROPERTY(LevelOfAnisotropy	), TEXT("Options"), CPF_Config );
@@ -224,6 +227,8 @@ void UUC2GLRenderDevice::StaticConstructor()
 	// drawn as the Xbox draws them, which differs from PC's path on some maps. Dynamic projectors,
 	// including those on skeletal meshes, keep PC's path either way.
 	UseXboxProjectors		= 1;
+	// BSP lightmaps through the bicubic B-spline filter, also for an ini without the key.
+	UseBicubicLightmaps		= 1;
 	// The blurs cover the share of the picture they cover on the Xbox's 640x480, also for an ini
 	// without the key.
 	PostProcessReferenceHeight = 480;
@@ -340,6 +345,27 @@ void UUC2GLRenderDevice::UpdateTextureCaps()
 		FFProgramsActive ? TEXT("fragment programs (FixedFunctionPrograms=True)") : IsGLES ? TEXT("texture environment (GL4ES generates its shaders)") : TEXT("texture environment (FixedFunctionPrograms=False)"),
 		NumTextureUnits, MaterialStages, Min<INT>( Units, MaxTextureUnits ),
 		FFProgramsActive ? TEXT("exact") : HasCombine3() ? TEXT("through combine3") : HasCombine4() ? TEXT("through combine4") : TEXT("NOT available (approximated)") );
+}
+
+//
+// The bicubic lightmap filter needs highp texture coordinates (the fraction of a texel of a 512-texel
+// atlas) and, on GL ES, a fragment stage of GLSL ES 3.00, where gl_FragCoord is highp (the fog of the
+// fixed-function programs is computed from its depth).
+//
+void UUC2GLRenderDevice::UpdateBicubicLightmaps()
+{
+	BicubicLightmapsActive = UseBicubicLightmaps && (!IsGLES || (GLESMajor >= 3 && CapFragmentHighp));
+}
+
+const TCHAR* UUC2GLRenderDevice::LightmapFilterName()
+{
+	if( !UseBicubicLightmaps )
+		return TEXT("bilinear (UseBicubicLightmaps=False)");
+	if( !BicubicLightmapsActive )
+		return TEXT("bilinear (UseBicubicLightmaps=True, but the bicubic filter needs OpenGL ES 3 / WebGL 2 with highp fragment floats)");
+	if( !IsGLES && !FFProgramsActive )
+		return TEXT("bicubic B-spline in the pixel shaders, bilinear in the texture environment (FixedFunctionPrograms=False)");
+	return TEXT("bicubic B-spline from four bilinear reads (UseBicubicLightmaps=True)");
 }
 
 void UUC2GLRenderDevice::FindProcs()
@@ -769,6 +795,8 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 		GLFixedFunctionUnits	= Clamp<INT>( Units, 2, MAX_STAGES );
 		GLProgramUnits			= IsGLES ? GLFixedFunctionUnits : Clamp<INT>( Min<INT>( Coords, ImageUnits ), GLFixedFunctionUnits, MAX_STAGES );
 		UpdateTextureCaps();
+		UpdateBicubicLightmaps();
+		debugf( NAME_Init, TEXT("UC2GLDrv: lightmap filter: %s"), LightmapFilterName() );
 		if( GUfrontLog )
 			debugf( NAME_Init, TEXT("UC2GLDrv: texture units: %i in the texture environment (GL_MAX_TEXTURE_UNITS), %i for fragment programs (GL_MAX_TEXTURE_COORDS %i, GL_MAX_TEXTURE_IMAGE_UNITS %i); combine3 %s, combine4 %s"),
 				Units, GLProgramUnits, Coords, ImageUnits,
@@ -2047,6 +2075,15 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		// terrain of the current level is updated the same way again.
 		UseTerrain3Layer = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !UseTerrain3Layer;
 		RefreshTerrainPasses();
+		return 1;
+	}
+	else if( ParseCommand(&Cmd,TEXT("BICUBICLIGHTMAPS")) )
+	{
+		// BICUBICLIGHTMAPS [0|1] (no argument: toggle): the lightmap filter of the next draw on.
+		UseBicubicLightmaps = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !UseBicubicLightmaps;
+		if( ValidContext )
+			UpdateBicubicLightmaps();
+		Ar.Logf( TEXT("UC2GLDrv: lightmap filter: %s (frame %i)"), LightmapFilterName(), FrameCounter );
 		return 1;
 	}
 	else if( ParseCommand(&Cmd,TEXT("GLSHADOWCHECK")) )
