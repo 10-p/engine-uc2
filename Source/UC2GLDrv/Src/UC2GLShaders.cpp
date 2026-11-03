@@ -1205,13 +1205,11 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 		RenDev->glUniform4f( Program->FillStepLoc, 1.f / W, 1.f / H, 0.f, 0.f );
 	}
 	for( INT s=0; s<4; s++ )
-		if( Variant & (PSV_Bicubic0 << s) )
+		if( (Variant & (PSV_Bicubic0 << s)) && Program->TexSizeLoc[s] >= 0 )
 		{
 			FOpenGLTexture* Lightmap = MaterialState->Stages[s].Texture;
 			FLOAT W = Max( Lightmap->CachedWidth, 1 ), H = Max( Lightmap->CachedHeight, 1 );
-			if( Program->TexSizeLoc[s] >= 0 )
-				RenDev->glUniform4f( Program->TexSizeLoc[s], W, H, 1.f / W, 1.f / H );
-			RenDev->BicubicLightmapDraws++;
+			RenDev->glUniform4f( Program->TexSizeLoc[s], W, H, 1.f / W, 1.f / H );
 		}
 
 	// Pixel shader constants (D3D's SetPixelShaderConstant; the shader clamps them to [0,1]).

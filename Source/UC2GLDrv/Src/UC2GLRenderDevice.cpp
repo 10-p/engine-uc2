@@ -112,7 +112,6 @@ UUC2GLRenderDevice::UUC2GLRenderDevice()
 	MaskCombine4			= 0;
 	FFProgramsLinked = FFProgramsFailed = FFProgramDraws = FFFallbackDraws = 0;
 	BicubicLightmapsActive	= 0;
-	BicubicLightmapDraws = BilinearLightmapDraws = 0;
 	MaxAnisotropy			= 1.f;
 	ValidContext			= 0;
 	GLMajorVersion			= 0;
@@ -2075,15 +2074,6 @@ UBOOL UUC2GLRenderDevice::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		// terrain of the current level is updated the same way again.
 		UseTerrain3Layer = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !UseTerrain3Layer;
 		RefreshTerrainPasses();
-		return 1;
-	}
-	else if( ParseCommand(&Cmd,TEXT("BICUBICLIGHTMAPS")) )
-	{
-		// BICUBICLIGHTMAPS [0|1] (no argument: toggle): the lightmap filter of the next draw on.
-		UseBicubicLightmaps = appStrlen(Cmd) ? (appAtoi(Cmd) != 0) : !UseBicubicLightmaps;
-		if( ValidContext )
-			UpdateBicubicLightmaps();
-		Ar.Logf( TEXT("UC2GLDrv: lightmap filter: %s (frame %i)"), LightmapFilterName(), FrameCounter );
 		return 1;
 	}
 	else if( ParseCommand(&Cmd,TEXT("GLSHADOWCHECK")) )

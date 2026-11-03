@@ -277,14 +277,12 @@ public:
 	void UpdateTextureCaps();
 
 	// BSP lightmaps (the lightmap atlases) through a cubic B-spline of four bilinear reads instead of one
-	// bilinear read: UseBicubicLightmaps (ini; console BICUBICLIGHTMAPS [0|1]). BicubicLightmapsActive says
+	// bilinear read: UseBicubicLightmaps (ini, read when the device starts). BicubicLightmapsActive says
 	// whether this context does it (GL ES: OpenGL ES 3 / WebGL 2 with highp fragment floats). Desktop GL filters
 	// the lightmap stages of the fixed-function programs and of the pixel shaders; GL ES draws a fixed-function
 	// pass that has a lightmap stage with a fixed-function program too (UC2GLFFProgram.cpp).
 	UBOOL							UseBicubicLightmaps,
 									BicubicLightmapsActive;
-	INT								BicubicLightmapDraws,	// passes drawn with a lightmap stage through the filter
-									BilinearLightmapDraws;	// passes with a lightmap stage the filter could not take
 	void UpdateBicubicLightmaps();
 	const TCHAR* LightmapFilterName();
 	UBOOL HasCombine3() { return SUPPORTS_GL_ATI_texture_env_combine3 && !MaskCombine3; }

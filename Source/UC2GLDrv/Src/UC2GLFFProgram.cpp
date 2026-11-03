@@ -495,23 +495,15 @@ UBOOL FOpenGLRenderInterface::BeginFixedFunctionProgram( FOpenGLMaterialState* M
 	UBOOL OwnVertex = RenDev->IsGLES;
 	UBOOL Program = RenDev->FFProgramsActive || (RenDev->IsGLES && Lightmap && !CurrentState->UseDynamicLighting);
 	if( !Program )
-	{
-		if( Lightmap )
-			RenDev->BilinearLightmapDraws++;
 		return 0;
-	}
 	FUC2GLFFKey Key;
 	FFMakeKey( RenDev, MaterialState, StagesUsed, ColorSum, Fog, OwnVertex, Key );
 	FUC2GLFFProgram* P = FFGetProgram( RenDev, Key );
 	if( !P->Program )
 	{
 		RenDev->FFFallbackDraws++;
-		if( Lightmap )
-			RenDev->BilinearLightmapDraws++;
 		return 0;
 	}
-	if( Lightmap )
-		RenDev->BicubicLightmapDraws++;
 	RenDev->glUseProgram( P->Program );
 	FPlane TFactor = FColor(MaterialState->TFactorColor).Plane();
 	if( P->TFactorLoc >= 0 )
@@ -552,9 +544,6 @@ INT UC2GL_NumFixedFunctionPrograms()
 
 void UC2GL_LogFFStats( UUC2GLRenderDevice* RenDev )
 {
-	if( RenDev->BicubicLightmapDraws || RenDev->BilinearLightmapDraws )
-		debugf( NAME_Init, TEXT("UC2GLDrv: draws with a lightmap stage while the bicubic filter was on: %i filtered, %i bilinear (texture environment)"),
-			RenDev->BicubicLightmapDraws, RenDev->BilinearLightmapDraws );
 	if( !RenDev->FFProgramsActive && !RenDev->FFProgramDraws )
 		return;
 	debugf( NAME_Init, TEXT("UC2GLDrv: fixed-function programs: %i linked, %i failed; %i program draws, %i draws kept the texture environment (program missing)"),
