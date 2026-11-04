@@ -3823,12 +3823,9 @@ void __cdecl FTraceLog::operator()(const TCHAR* pszFmt, ...) const
 	{
 		va_list ptr;
 		va_start(ptr, pszFmt);
-		TCHAR TempStr[4096];
-		// Build the string in the temp buffer
-		appLogva(TempStr,ARRAY_COUNT(TempStr),pszFmt,ptr);
+		// Build the string and write it out whole, at any length
+		SerializeLogf(pDev,NAME_Log,pszFmt,ptr);
 		va_end(ptr);
-		// Now that the string is built write it out
-		pDev->Serialize(TempStr,NAME_Log);
 	}
 }
 
@@ -3839,12 +3836,9 @@ void __cdecl FTraceLog::operator()(enum EName Type,const TCHAR* pszFmt, ...) con
 	{
 		va_list ptr;
 		va_start(ptr, pszFmt);
-		TCHAR TempStr[4096];
-		// Build the string in the temp buffer
-		appLogva(TempStr,ARRAY_COUNT(TempStr),pszFmt,ptr);
+		// Build the string and write it out whole, at any length
+		SerializeLogf(pDev,Type,pszFmt,ptr);
 		va_end(ptr);
-		// Now that the string is built write it out
-		pDev->Serialize(TempStr,Type);
 	}
 }
 #endif

@@ -80,8 +80,31 @@ public:
 	void Serialize( const TCHAR* Data, enum EName Event )
 	{
 		if( Event != NAME_Title && !FName::SafeSuppressed(Event) )
-			__android_log_print( ANDROID_LOG_INFO, "UC2", "%s: %s", appToAnsi(FName::SafeString(Event)), appToAnsi(Data) );
+			WriteLogcat( FName::SafeString(Event), Data );
 		AuxOut->Serialize( Data, Event );
+	}
+	// "Event: Data" as one entry; a line longer than an entry's buffer continues in the entries that follow, so
+	// none of it is lost.
+	static void WriteLogcat( const TCHAR* Event, const TCHAR* Data )
+	{
+		ANSICHAR Entry[1024];
+		INT Len = 0;
+		const TCHAR* Parts[] = { Event, TEXT(": "), Data };
+		for( INT p=0; p<ARRAY_COUNT(Parts); p++ )
+		{
+			for( const TCHAR* C=Parts[p]; *C; C++ )
+			{
+				if( Len == ARRAY_COUNT(Entry)-1 )
+				{
+					Entry[Len] = 0;
+					__android_log_write( ANDROID_LOG_INFO, "UC2", Entry );
+					Len = 0;
+				}
+				Entry[Len++] = *C;
+			}
+		}
+		Entry[Len] = 0;
+		__android_log_write( ANDROID_LOG_INFO, "UC2", Entry );
 	}
 	void Flush()
 	{

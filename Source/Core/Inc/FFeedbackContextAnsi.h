@@ -42,34 +42,33 @@ public:
 	void Serialize( const TCHAR* V, EName Event )
 	{
 		guard(FFeedbackContextAnsi::Serialize);
-		TCHAR Temp[1024]=TEXT("");
+		// The decorated line is built in an FString, so a message of any length is printed whole.
+		FString Temp;
 		if( Event==NAME_Title )
 		{
 			return;
 		}
 		else if( Event==NAME_Heading )
 		{
-			appSprintf( Temp, TEXT("--------------------%s--------------------"), (TCHAR*)V );
-			V = Temp;
+			Temp = FString(TEXT("--------------------")) + V + TEXT("--------------------");
+			V = *Temp;
 		}
 		else if( Event==NAME_SubHeading )
 		{
-			appSprintf( Temp, TEXT("%s..."), (TCHAR*)V );
-			V = Temp;
+			Temp = FString(V) + TEXT("...");
+			V = *Temp;
 		}
 		else if( Event==NAME_Error || Event==NAME_Warning || Event==NAME_ExecWarning || Event==NAME_ScriptWarning )
 		{
 			if( Context )
 			{
-				appSprintf( Temp, TEXT("%s : %s, %s"), *Context->GetContext(), *FName(Event), (TCHAR*)V );
-				V = Temp;
+				Temp = Context->GetContext() + TEXT(" : ") + *FName(Event) + TEXT(", ") + V;
+				V = *Temp;
 			}
 			WarningCount++;
 		}
 		else if( Event==NAME_Progress )
 		{
-			appSprintf( Temp, TEXT("%s"), (TCHAR*)V );
-			V = Temp;
 			LocalPrint( V );
 			LocalPrint( TEXT("\r") );
 			fflush( stdout );
