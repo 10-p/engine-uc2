@@ -79,7 +79,8 @@ cmake --build build-wasm-perf -j4               # inside bin/capped 6G (CLAUDE.m
   (`vendor/glue/ue_abi.h`, `net-shim.js`), renders on WebGL 2 with WebGL 1 as the fallback and has an explicit 2 GB
   memory ceiling. Every link flag and why: `Source/SDLLaunch/cmake/Web.cmake`.
 - C++ exception catching is off for the engine's code: package loads, a failed map and a failed Listen fail soft with
-  a logged reason instead of throwing; openal-soft alone is compiled with `-fexceptions` (`cmake/UC2Web.cmake`).
+  a logged reason instead of throwing. A start-up map that does not load brings up the menus with Epic's failure
+  dialog naming it. openal-soft alone is compiled with `-fexceptions` (`cmake/UC2Web.cmake`).
 - Boot configuration: `Engine/Config/web/{Default,DefUser}.ini`, generated from the native files by
   `tools/dev/sync-web-ini.py` and preloaded as `/System/Default.ini`, `/System/DefUser.ini`.
 - `ucc-bin.js` under Node is the wasm32 test vehicle (`cd <run>/System && node ucc-bin.js verifyclasses`;

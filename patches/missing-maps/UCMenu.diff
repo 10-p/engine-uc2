@@ -106,3 +106,21 @@
  	if ( CurrentList != None && GetAllMaps(AllMaps, true) )
  	{
  
+--- a/UCMenu/Classes/ConnectionFailureMenu.uc
++++ b/UCMenu/Classes/ConnectionFailureMenu.uc
+@@ -100,6 +100,15 @@
+ 	local string msg;
+ 
+ 	OnButtonClick=MessageBoxClicked;
++
++	// ufront: the engine's reason for a map that failed to load (UGameEngine::LoadMap) comes in words, with no URL,
++	// and is shown as it is.
++	if ( str2 == "" && InStr(str1, " ") != -1 )
++	{
++		SetupQuestion(str1, class'Localizer'.default.sOk);
++		return;
++	}
++
+ 	pos = InStr(str1, ".");
+ 
+ 	if ( pos != -1 )

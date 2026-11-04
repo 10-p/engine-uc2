@@ -41,6 +41,29 @@ ENGINE_API void UC2FrameTraceDraw( UViewport* Viewport, const FVector& CamLoc, c
 ENGINE_API void UC2FpsLogTick( UEngine* Engine );
 ENGINE_API UBOOL UC2FpsLogExec( const TCHAR* Cmd, FOutputDevice& Ar );
 
+// A map as the player knows it: "../Maps/DM-Apex.unr" -> "DM-Apex".
+static FString MapBaseName( const FString& Map )
+{
+	FString Name = Map;
+	INT Slash = Max( Name.InStr( TEXT("/"), 1 ), Name.InStr( TEXT("\\"), 1 ) );
+	if( Slash>=0 )
+		Name = Name.Mid( Slash+1 );
+	INT Dot = Name.InStr( TEXT("."), 1 );
+	if( Dot>0 )
+		Name = Name.Left( Dot );
+	return Name;
+}
+
+// Epic's failure dialog (UCMenu.ConnectionFailureMenu, whose OK goes back to the menus) over the first player's level,
+// with Epic's "Failed to enter <map>: <reason>". The text comes with no URL, and patch set missing-maps shows it as it is.
+static void ShowMapFailure( UClient* Client, const FString& Map, const FString& Reason )
+{
+	if( !Client || !Client->Viewports.Num() || !Client->Viewports(0) || !Client->Viewports(0)->Actor )
+		return;
+	FString Text = FString::Printf( LocalizeError(TEXT("FailedBrowse"),TEXT("Engine")), *Map, *Reason );
+	Client->Viewports(0)->Actor->eventClientOpenMenu( TEXT("UCMenu.ConnectionFailureMenu"), 0, Text, TEXT("") );
+}
+
 /*-----------------------------------------------------------------------------
 	Object class implementation.
 -----------------------------------------------------------------------------*/
@@ -369,10 +392,14 @@ void UGameEngine::Init()
 	if( !Success )
 #ifdef __EMSCRIPTEN__
 	{
-		// On the web a bad start-up map is not fatal (appErrorf is a throw, and
-		// catching is compiled out there). Entry is loaded: stay there and let the player pick from the menus.
-		debugf( NAME_Warning, TEXT("Startup map '%s' failed to load (%s): staying in the entry level"), Parm, *Error );
-		if( !GLevel )
+		// On the web a bad start-up map is not fatal (appErrorf is a throw, and catching is compiled out there): the
+		// menus come up with Epic's failure dialog, which names the map and says why. Without the menus, Entry stays.
+		debugf( NAME_Warning, TEXT("Startup map '%s' failed to load (%s): falling back to the menu"), Parm, *Error );
+		FString MenuError;
+		if( appStricmp( *URL.Map, *FURL::DefaultLocalMap )!=0
+		&&	Browse( FURL(&DefaultURL,*FURL::DefaultLocalMap,TRAVEL_Partial), NULL, MenuError ) )
+			ShowMapFailure( Client, MapBaseName( URL.Map ), Error );
+		else if( !GLevel )
 			GLevel = GEntry;
 	}
 #else
@@ -1895,6 +1922,30 @@ ULevel* UGameEngine::LoadMap( const FURL& URL, UPendingLevel* Pending, const TMa
 #endif
 #if !defined(LIN_SAVE) && (defined(_XBOX) || WITH_PORTABLE_MOVIES)
 	UBOOL bWasMenu = appStrnicmp(*LastURL.Map,TEXT("menu"),4) == 0;
+#endif
+
+#if !USE_LINEAR_LOADING
+	// A local map whose package file is missing fails here, before the loading screen and before anything of the
+	// current level is let go, the way the verify below fails (UrlFailed, NULL): the player stays in that level and
+	// Epic's failure dialog names the map. At start-up there is no level yet: UGameEngine::Init decides.
+	if( !Pending && !bIsEntry )
+	{
+		TCHAR Found[256];
+		if( !appFindPackageFile( *URL.Map, NULL, Found ) )
+		{
+			FString Map = MapBaseName( URL.Map );
+			Error = FString::Printf( LocalizeError(TEXT("PackageNotFound"),TEXT("Core")), *Map );
+			debugf( NAME_Log, TEXT("LoadMap: %s"), *URL.String() );
+			debugf( NAME_Warning, LocalizeError(TEXT("FailedBrowse"),TEXT("Engine")), *Map, *Error );
+			if( !bQuiet )
+			{
+				SetProgress( LocalizeError(TEXT("UrlFailed"),TEXT("Core")), *Error, 6.f );
+				if( GLevel && GLevel!=GEntry )
+					ShowMapFailure( Client, Map, Error );
+			}
+			return NULL;
+		}
+	}
 #endif
 
 #if (defined(_XBOX) || WITH_PORTABLE_MOVIES) && !defined(_DEBUG) && !defined(LIN_SAVE)

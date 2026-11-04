@@ -51,7 +51,7 @@ change: every other package stays the shipped one.
 | `mouse-look` | the PC mouse: mouse look apart from the pad, the rigid/lazy third-person camera, double-tap dodge | UCGameplay | on |
 | `player-name` | the launcher's player name and server name when there is no profile (the player's name, the hosted session's name) | GUI, UCMenu | on |
 | `extra-maps` | the maps a player added, in an Extra tab next to Custom (the engine makes the lists at boot: `UnExtraMaps.cpp`); a still for their preview, never a movie | UCMenu | on |
-| `missing-maps` | no map called None from a custom map list (the editor saves no row without a map; a saved list is repaired when the Arena reads it) | UCMenu | on |
+| `missing-maps` | no map called None from a custom map list (the editor saves no row without a map; a saved list is repaired when the Arena reads it), and Epic's failure dialog shows the engine's reason for a map that failed to load | UCMenu | on |
 | `players34` | players three and four join from the character page (a cursor each, a line of text, their own character and name in the match; a 2x2 armory for three or four) | GUI, UCMenu | on |
 | `key-glyphs` | player one's keys in place of the pad's button glyphs while they use the keyboard or the mouse (the engine draws them; the set switches it on) | GUI, UCMenu | on |
 | `keys-menu` | the KEYBOARD / MOUSE settings page | UCMenu | on |

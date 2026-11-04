@@ -62,6 +62,12 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   view's bottom edge (wide-hud).
 - **Custom maps and mutators**: maps dropped into the map paths appear in the game's lists; a mutator's package joins
   the server's package map.
+- **A missing map**:
+  - `UGameEngine::LoadMap` stops at a local map whose package file is missing, before it lets go of the current level.
+  - Epic's failure dialog then names the map: "Failed to enter <map>: Can't find file for package '<map>'". OK goes
+    back to the menus.
+  - At start-up the native game ends with that message, and the web build brings up the menus with the dialog.
+  - The custom map lists never offer a map with no name (missing-maps).
 - **Script patch sets**: the build decompiles the shipped `.u`, applies `patches/` and compiles the packages they
   change, proved equal to the shipped bytecode plus Epic's load-time patches.
 - **Game folder from the Xbox disc** (`tools/cook.py`): the game folder the engine runs from, made from the game's
