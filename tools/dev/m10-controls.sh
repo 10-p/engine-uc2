@@ -3,6 +3,9 @@
 #
 #   tools/dev/m10-controls.sh                    every scenario, one PASS/FAIL line each
 #   tools/dev/m10-controls.sh keyboard pad       only these scenarios
+#   tools/dev/m10-controls.sh standby            opt-in: the listen host's "waiting for players" box (StandbyWaitMenu)
+#                                                with a second game as its client (tools/dev/m10-peer.py), frozen for
+#                                                a moment; UDP M10_NET_PORT (default 7880) to M10_NET_PORT+2
 #   tools/dev/m10-controls.sh --file <scenario> <name> [uc2.bin arguments...]   one ad-hoc scenario file
 #
 # Needs the run tree <repo>/../run/m10 (tools/dev/mkrun-uc2.sh build-native m10). Each scenario is one game
@@ -674,12 +677,69 @@ check both-pad-b-closes-it P['p1'].menu == 'None'
 SCEN
 }
 
+# The listen host's StandbyWaitMenu: this game hosts DM-Deadbolt, the peer joins, both spawn; the pause menu, then the
+# peer frozen: the box comes over the pause menu (a dialog). A click outside it takes nothing (its cancel, Forfeit, is
+# all it offers), Escape asks to forfeit and a click outside that question is its Back; thawed, the box closes. Again:
+# a click on the box's Forfeit hint asks to forfeit. (640x480: y 60 is above the box, the Forfeit hint at 500, 301.)
+scen_standby() {
+  printf '%s\n' 'wait Bringing Level DM-Deadbolt.MyLevel up for play 180' 'wait Completed Dynamic Load 300' 'focus' \
+    "pyfile $repo/tools/dev/m10-peer.py"
+  cat <<'SCEN'
+pyexec import __main__ as M
+pyexec peer_start('Cli')
+expect sb-client-joins Join succeeded: Cli 120
+tryseek 12 P['_'].pawn==1 ;; pyexec spawn_both()
+probe s0
+check sb-host-spawned P['s0'].pawn == 1
+key Escape
+expect sb-pause-menu-opens OpenMenu \[UCMenu.InGame_MainMenu\] 15
+sleep 3
+pyexec peer_freeze()
+expect sb-standby-box-opens OpenMenu \[UCMenu.StandbyWaitMenu\] 20
+sleep 2
+mark
+click 1 320 60
+sleep 2
+probe s1
+absent sb-outside-click-opens-no-forfeit-question OpenMenu \[GUI.GUIMessageBox\]
+check sb-outside-click-takes-nothing P['s1'].menu == 'StandbyWaitMenu' and any('Mouse click outside the dialog' in l and 'StandbyWaitMenu: nothing' in l for l in M.log_lines[M.mark_at:])
+key Escape
+sleep 2
+probe s2
+check sb-escape-asks-to-forfeit P['s2'].menu == 'GUIMessageBox'
+mark
+click 1 320 60
+sleep 2
+probe s3
+check sb-outside-click-on-the-question-is-back P['s3'].menu == 'StandbyWaitMenu' and P['s3'].level == 'DM-Deadbolt' and any('Mouse click outside the dialog' in l and 'GUIMessageBox: B' in l for l in M.log_lines[M.mark_at:])
+pyexec peer_thaw()
+expect sb-thawed-client-closes-the-box CloseMenu \[StandbyWaitMenu\] 30
+sleep 3
+pyexec peer_freeze()
+expect sb-standby-box-opens-again OpenMenu \[UCMenu.StandbyWaitMenu\] 20
+sleep 2
+mark
+click 1 500 301
+sleep 2
+probe s4
+check sb-click-on-the-forfeit-hint-asks-to-forfeit P['s4'].menu == 'GUIMessageBox' and any("Mouse click on the dialog's hint" in l and 'XC_B' in l for l in M.log_lines[M.mark_at:])
+key Escape
+sleep 2
+probe s5
+check sb-escape-on-the-question-is-back P['s5'].menu == 'StandbyWaitMenu' and P['s5'].level == 'DM-Deadbolt'
+pyexec peer_thaw()
+expect sb-thawed-client-closes-the-box-again CloseMenu \[StandbyWaitMenu\] 30
+pyexec peer_stop()
+SCEN
+}
+
 run_scenario() {
   local name=$1 secs=$2 f
+  shift 2
   f=$(mktemp)
   "scen_$name" > "$f"
   cp "$f" "$out/$name.scenario"
-  run_one "$name" "$f" "$secs"
+  run_one "$name" "$f" "$secs" "$@"
   rm -f "$f"
 }
 
@@ -691,6 +751,11 @@ for s in ${@:-$all}; do
     text) run_scenario text 180 ;;
     pad) run_scenario pad 360 ;;
     both) run_scenario both 300 ;;
-    *) echo "unknown scenario $s (known: $all)" >&2 ;;
+    standby) (
+      mem=3G M10_URL="DM-Deadbolt?Listen?Name=Host"
+      export M10_NET_PORT=${M10_NET_PORT:-7880}
+      run_scenario standby 600 PORT=$M10_NET_PORT "-ini:System:[IpDrv.UdpBeacon]:ServerBeaconPort=$((M10_NET_PORT+1))" \
+        "-ini:System:[IpDrv.UdpBeacon]:BeaconPort=$((M10_NET_PORT+2))" ) ;;
+    *) echo "unknown scenario $s (known: $all; opt-in: standby)" >&2 ;;
   esac
 done

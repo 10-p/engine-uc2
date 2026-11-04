@@ -2683,9 +2683,9 @@ static UBOOL MouseIsOver( UGUIController* C, UGUIComponent* Comp )
 // boxes, the overlays), drawn over the pages below it, which take no press and no release while it
 // is up. Its own area is what it draws, its visible parts; a click outside them, press and release,
 // is the dialog's way out: its B (a cancel, the overlays' back), or its OK when OK is all a message
-// box offers; a dialog that offers neither (a progress or a mandatory message) takes nothing. A
-// click on one of its button hints (the glyph and caption of a pad button, ControllerButton) is
-// that pad button.
+// box offers; a dialog that offers neither (a progress or a mandatory message), or a message box
+// whose cancel is all it offers, takes nothing. A click on one of its button hints (the glyph and
+// caption of a pad button, ControllerButton) is that pad button.
 static UGUIPage*      GDialogOutsidePress = NULL;	// the dialog a press outside it was made on
 static UGUIComponent* GDialogHintPress = NULL;		// the button hint a press was made on
 
@@ -2739,14 +2739,16 @@ static UGUIComponent* MouseDialogHint( UGUIController* C, BYTE& Code )
 }
 
 // A message box (GUIMessageBox: SetupQuestion's accept and cancel, or its own buttons) goes out by B when
-// it can be cancelled and by A when OK is all it offers; any other dialog by B.
+// it offers a cancel beside something else, and by A when OK is all it offers. A box that offers its
+// cancel alone waits on something and its cancel gives that up (StandbyWaitMenu waits on the players or
+// the connection, and its cancel asks to forfeit the match): no click is its way out. Any other dialog
+// goes out by B.
 static BYTE DialogWayOut( UGUIPage* Page )
 {
 	UBoolProperty* AllowCancel = FindField<UBoolProperty>( Page->GetClass(), TEXT("bAllowCancel") );
 	if ( !AllowCancel )
 		return XC_B;
-	if ( *(BITFIELD*)((BYTE*)Page + AllowCancel->Offset) & AllowCancel->BitMask )
-		return XC_B;
+	UBOOL Cancel = (*(BITFIELD*)((BYTE*)Page + AllowCancel->Offset) & AllowCancel->BitMask) != 0;
 	INT Accepts = 0;
 	UArrayProperty* Buttons = FindField<UArrayProperty>( Page->GetClass(), TEXT("Buttons") );
 	if ( Buttons )
@@ -2758,13 +2760,16 @@ static BYTE DialogWayOut( UGUIPage* Page )
 			if ( !Button )
 				continue;
 			if ( Button->Tag & (2 | 32 | 64) )		// Cancel, No, Abort (GUIMessageBox.IsCancelButton)
-				return XC_B;
-			Accepts++;
+				Cancel = 1;
+			else
+				Accepts++;
 		}
 	}
 	UObjectProperty* Select = FindField<UObjectProperty>( Page->GetClass(), TEXT("btn_Select") );
 	if ( Select && *(UObject**)((BYTE*)Page + Select->Offset) )
 		Accepts++;
+	if ( Cancel )
+		return Accepts ? (BYTE)XC_B : (BYTE)255;
 	return Accepts == 1 ? (BYTE)XC_A : (BYTE)255;	// 255: no way out
 }
 
