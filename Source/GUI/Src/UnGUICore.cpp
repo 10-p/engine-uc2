@@ -1022,6 +1022,10 @@ static void MouseClickRelease( UGUIController* C );
 static UBOOL IsMouseMenuItem( UGUIController* C, UGUIComponent* Item );
 static UBOOL MouseReleaseClicks( UGUIController* C, UGUIComponent* Comp );
 static UBOOL MouseIsOver( UGUIController* C, UGUIComponent* Comp );
+static UBOOL MouseDialogPress( UGUIController* C );
+static UBOOL MouseDialogRelease( UGUIController* C );
+static UBOOL MouseOutsideDialog( UGUIController* C );
+static UGUIPage* MouseDialog( UGUIController* C );
 
 // A character key whose press acted as a pad button while no text field was up (X on the host page's
 // session name, which opens UC2Keyboard at once): SDL delivers that key's character after the press, by
@@ -2483,9 +2487,19 @@ UBOOL UGUIController::MousePressed(UBOOL IsRepeat)
 		return true;
 	}
 
+#ifndef _XBOX
+	if ( MouseDialogPress( this ) )
+		return true;
+#endif
+
 	UGUIPage* page = ActivePage;
 	if ( page && page->MousePressed(IsRepeat) )
 		return true;
+
+#ifndef _XBOX
+	if ( MouseDialog( this ) )
+		return true;
+#endif
 
 	for ( INT i = MenuStack.Num() - 1; i >= 0; i-- )
 	{
@@ -2514,6 +2528,11 @@ UBOOL UGUIController::MouseReleased()
 		return true;
 #endif
 
+#ifndef _XBOX
+	if ( MouseDialogRelease( this ) )
+		return true;
+#endif
+
 	if ( ActiveControl && ActiveControl->MenuState == MSAT_Pressed && /*ActiveControl->bCaptureMouse*/ ActiveControl->PageOwner == ActivePage )
 	{
 		UGUIComponent* C = ActiveControl;
@@ -2524,6 +2543,11 @@ UBOOL UGUIController::MouseReleased()
 	UGUIPage* page = ActivePage;
 	if ( page && (page->MouseReleased()) )
 		return true;
+
+#ifndef _XBOX
+	if ( MouseDialog( this ) )
+		return true;
+#endif
 
 	for ( INT i = MenuStack.Num() - 1; i >= 0; i-- )
 	{
@@ -2652,6 +2676,138 @@ static UBOOL MouseIsOver( UGUIController* C, UGUIComponent* Comp )
 		if ( Part == Comp )
 			return 1;
 	debugf( NAME_DevUI, TEXT("Mouse is not over %s"), Comp->GetMenuPath() );
+	return 0;
+}
+
+// A dialog: the active page when it is smaller than the page at the bottom of the stack (the message
+// boxes, the overlays), drawn over the pages below it, which take no press and no release while it
+// is up. Its own area is what it draws, its visible parts; a click outside them, press and release,
+// is the dialog's way out: its B (a cancel, the overlays' back), or its OK when OK is all a message
+// box offers; a dialog that offers neither (a progress or a mandatory message) takes nothing. A
+// click on one of its button hints (the glyph and caption of a pad button, ControllerButton) is
+// that pad button.
+static UGUIPage*      GDialogOutsidePress = NULL;	// the dialog a press outside it was made on
+static UGUIComponent* GDialogHintPress = NULL;		// the button hint a press was made on
+
+static UGUIPage* MouseDialog( UGUIController* C )
+{
+	UGUIPage* Page = C->ActivePage;
+	if ( !C->bEmulatedJoypad || !Page || C->MenuStack.Num() < 2 || !C->MenuStack(0) || C->MenuStack(0) == Page )
+		return NULL;
+	const FLOAT* Full = C->MenuStack(0)->Bounds;
+	FLOAT Area = (Page->Bounds[2] - Page->Bounds[0]) * (Page->Bounds[3] - Page->Bounds[1]);
+	FLOAT FullArea = (Full[2] - Full[0]) * (Full[3] - Full[1]);
+	return Area > 0.f && Area < FullArea ? Page : NULL;
+}
+
+static UBOOL MouseOutsideDialog( UGUIController* C )
+{
+	UGUIPage* Page = MouseDialog( C );
+	if ( !Page )
+		return 0;
+	UBOOL Drawn = 0;
+	for ( INT i = 0; i < Page->Controls.Num(); i++ )
+	{
+		UGUIComponent* Part = Page->Controls(i);
+		if ( !Part || !Part->bVisible || Part->Bounds[2] <= Part->Bounds[0] || Part->Bounds[3] <= Part->Bounds[1] )
+			continue;
+		Drawn = 1;
+		if ( Part->WithinBounds( C->MouseX, C->MouseY ) )
+			return 0;
+	}
+	return Drawn || !Page->WithinBounds( C->MouseX, C->MouseY );
+}
+
+// The dialog's button hint under the cursor, and the pad button it shows.
+static UGUIComponent* MouseDialogHint( UGUIController* C, BYTE& Code )
+{
+	UGUIPage* Page = MouseDialog( C );
+	static UClass* HintClass = FindObject<UClass>( ANY_PACKAGE, TEXT("ControllerButton") );
+	if ( !Page || !HintClass )
+		return NULL;
+	UByteProperty* CodeProp = FindField<UByteProperty>( HintClass, TEXT("ButtonCode") );
+	for ( INT i = 0; i < Page->Controls.Num() && CodeProp; i++ )
+	{
+		UGUIComponent* Part = Page->Controls(i);
+		if ( Part && Part->bVisible && Part->IsA(HintClass) && Part->WithinBounds( C->MouseX, C->MouseY ) )
+		{
+			Code = *((BYTE*)Part + CodeProp->Offset);
+			return Part;
+		}
+	}
+	return NULL;
+}
+
+// A message box (GUIMessageBox: SetupQuestion's accept and cancel, or its own buttons) goes out by B when
+// it can be cancelled and by A when OK is all it offers; any other dialog by B.
+static BYTE DialogWayOut( UGUIPage* Page )
+{
+	UBoolProperty* AllowCancel = FindField<UBoolProperty>( Page->GetClass(), TEXT("bAllowCancel") );
+	if ( !AllowCancel )
+		return XC_B;
+	if ( *(BITFIELD*)((BYTE*)Page + AllowCancel->Offset) & AllowCancel->BitMask )
+		return XC_B;
+	INT Accepts = 0;
+	UArrayProperty* Buttons = FindField<UArrayProperty>( Page->GetClass(), TEXT("Buttons") );
+	if ( Buttons )
+	{
+		FArray* List = (FArray*)((BYTE*)Page + Buttons->Offset);
+		for ( INT i = 0; i < List->Num(); i++ )
+		{
+			UGUIComponent* Button = ((UGUIComponent**)List->GetData())[i];
+			if ( !Button )
+				continue;
+			if ( Button->Tag & (2 | 32 | 64) )		// Cancel, No, Abort (GUIMessageBox.IsCancelButton)
+				return XC_B;
+			Accepts++;
+		}
+	}
+	UObjectProperty* Select = FindField<UObjectProperty>( Page->GetClass(), TEXT("btn_Select") );
+	if ( Select && *(UObject**)((BYTE*)Page + Select->Offset) )
+		Accepts++;
+	return Accepts == 1 ? (BYTE)XC_A : (BYTE)255;	// 255: no way out
+}
+
+static UBOOL MouseDialogPress( UGUIController* C )
+{
+	GDialogOutsidePress = NULL;
+	GDialogHintPress = NULL;
+	BYTE Code;
+	if ( MouseOutsideDialog( C ) )
+		GDialogOutsidePress = C->ActivePage;
+	else
+		GDialogHintPress = MouseDialogHint( C, Code );
+	return GDialogOutsidePress || GDialogHintPress;
+}
+
+static UBOOL MouseDialogRelease( UGUIController* C )
+{
+	UGUIPage* Outside = GDialogOutsidePress;
+	UGUIComponent* Hint = GDialogHintPress;
+	GDialogOutsidePress = NULL;
+	GDialogHintPress = NULL;
+	if ( Outside )
+	{
+		if ( Outside == C->ActivePage && MouseOutsideDialog( C ) )
+		{
+			BYTE Code = DialogWayOut( Outside );
+			debugf( NAME_DevUI, TEXT("Mouse click outside the dialog %s: %s"), Outside->GetMenuPath(),
+				Code == XC_B ? TEXT("B") : Code == XC_A ? TEXT("A") : TEXT("nothing") );
+			if ( Code != 255 )
+				C->DistributeXControllerEvent( C->ControllerId, (eXControllerCodes)Code );
+		}
+		return 1;
+	}
+	if ( Hint )
+	{
+		BYTE Code = 0;
+		if ( IsValidObject(Hint) && MouseDialogHint( C, Code ) == Hint )
+		{
+			debugf( NAME_DevUI, TEXT("Mouse click on the dialog's hint %s: %s"), Hint->GetMenuPath(), GetXCodeName(Code) );
+			C->DistributeXControllerEvent( C->ControllerId, (eXControllerCodes)Code );
+		}
+		return 1;
+	}
 	return 0;
 }
 

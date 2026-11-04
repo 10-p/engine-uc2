@@ -1,0 +1,121 @@
+--- a/UCMenu/Classes/ArenaListPanel.uc
++++ b/UCMenu/Classes/ArenaListPanel.uc
+@@ -105,6 +105,18 @@
+ }
+ 
+ delegate ModifyDrawState( int Item, out EMenuState ItemDrawState );
++
++// menu-mouse: a mouse click on the collapsed panel (its selected row alone); the page opens it
++delegate OnCollapsedClick( ArenaListPanel Sender );
++
++// menu-mouse: a collapsed panel takes a mouse click on its row as a request to open it, with no row selected
++final function bool MouseRowClicked( GUIComponent Sender )
++{
++	if ( IsOpen() )
++		return false;
++	OnCollapsedClick(Self);
++	return true;
++}
+ 
+ final function Reset()
+ {
+@@ -582,6 +594,7 @@
+ 
+ 	
+ 	lb_Items.OnChange = OnChange;
++	li_Items.OnMouseRow = MouseRowClicked;
+ 
+ 	if ( bEnableAnimation )
+ 		li_Items.bLinkable = false;
+--- a/UCMenu/Classes/Arena_PanelMain.uc
++++ b/UCMenu/Classes/Arena_PanelMain.uc
+@@ -2461,6 +2461,53 @@
+ 	return BClicked();
+ }
+ 
++// menu-mouse: a mouse click on a collapsed panel opens it the way the keys step to it, its selection kept: a panel
++// before the open one as B goes back, the panel after it as A on the open panel's list; nothing for a panel two
++// steps on, while the mutators are up or while the panels move
++final function CollapsedPanelClicked( ArenaListPanel Panel )
++{
++	local int To, From;
++	local ArenaListPanel Open;
++
++	if ( bAnimating || pnl_Game.bAnimating || pnl_Rules.bAnimating || pnl_Maps.bAnimating || pnl_Mutators.bAnimating )
++		return;
++	if ( pnl_Mutators.IsOpen() )
++	{
++		PlayAction(CS_Error);
++		return;
++	}
++
++	To = -1;
++	if ( Panel == pnl_Game )		To = 0;
++	else if ( Panel == pnl_Rules )	To = 1;
++	else if ( Panel == pnl_Maps )	To = 2;
++
++	if ( pnl_Game.IsOpen() )		{ From = 0; Open = pnl_Game; }
++	else if ( pnl_Rules.IsOpen() )	{ From = 1; Open = pnl_Rules; }
++	else if ( pnl_Maps.IsOpen() )	{ From = 2; Open = pnl_Maps; }
++	else return;
++
++	if ( To < 0 || To == From )
++		return;
++	if ( To < From )
++	{
++		if ( Open == pnl_Maps )
++			Controller.LastSelectedMaplistName = GetCurrentMaplistName();
++		Panel.BecomeActive(Open);
++		PlayAction(CS_Cancel);
++	}
++	else if ( To == From + 1 )
++	{
++		if ( Open == pnl_Game )
++			InternalOnClick(li_Games);
++		else
++			InternalOnClick(li_Rules);
++	}
++	else
++		PlayAction(CS_Error);
++	Log("menu-mouse: a click on a collapsed panel" @ Panel.PanelCaption @ "with" @ Open.PanelCaption @ "open", 'DevUI');
++}
++
+ function bool BClicked()
+ {
+ 	if ( bAnimating )
+@@ -2673,6 +2720,10 @@
+ 	li_Rules.OnClick = InternalOnClick;
+ 	li_Maps.OnClick = InternalOnClick;
+ 	li_Mutators.OnClick = InternalOnClick;
++
++	pnl_Game.OnCollapsedClick = CollapsedPanelClicked;
++	pnl_Rules.OnCollapsedClick = CollapsedPanelClicked;
++	pnl_Maps.OnCollapsedClick = CollapsedPanelClicked;
+ 
+ 	li_Games.OnChange = InternalOnChange;
+ 	li_Rules.OnChange = InternalOnChange;
+--- a/UCMenu/Classes/AvarisVertList.uc
++++ b/UCMenu/Classes/AvarisVertList.uc
+@@ -67,6 +67,22 @@
+ var()				array<string>				theHintStrings;		
+ 
+ delegate bool isLocked(string item);
++
++// menu-mouse: what a mouse click on the list does before it selects the row under the pointer; true when the list's
++// owner has taken the click (a collapsed panel opening), and then no row is selected
++delegate bool OnMouseRow(GUIComponent Sender)
++{
++	return false;
++}
++
++// menu-mouse: the row under the pointer, which the mouse's press asks for (Epic's GUIVertList), unless the owner
++// takes the click
++function bool InternalOnClick(GUIComponent Sender)
++{
++	if ( OnMouseRow(Self) )
++		return false;
++	return Super.InternalOnClick(Sender);
++}
+ 
+ final function bool internalOnPreDraw(Canvas Canvas)
+ {
