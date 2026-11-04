@@ -52,10 +52,12 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
 - **GCC/Clang portability**: Epic's MSVC code builds with GCC, Clang (Emscripten) and MinGW unchanged in behaviour.
 - **Keyboard and mouse**: PC bindings, menus driven by keyboard and mouse (the pointer selects the menu item under
   it and a click acts on that item alone: a click on a panel's background, a caption, a disabled item or a list's
-  empty space does nothing), the console on the key left of 1, the PC mouse look of the mouse-look patch set; while
-  player one is on the keyboard and mouse (their last device, as the key glyphs show it) the pitch's auto-centring
-  waits, with the shipped scripts too (`USDL2Viewport::UpdateInput` holds `UCPlayerController.fAutoCenterCount` at
-  zero), and with the pad it is Epic's.
+  empty space does nothing; a click outside a dialog is its way out, B or its OK, never a click on the page below,
+  and a dialog's button hints take clicks; a click on a collapsed Arena panel opens it, patch set menu-mouse), the
+  console on the key left of 1, the PC mouse look of the mouse-look patch set; while player one is on the keyboard
+  and mouse (their last device, as the key glyphs show it) the pitch's auto-centring waits, with the shipped scripts
+  too (`USDL2Viewport::UpdateInput` holds `UCPlayerController.fAutoCenterCount` at zero), and with the pad it is
+  Epic's.
 - **Split screen and four pads**: up to four players in one window, joining from the menus or a match; players three
   and four on the character page (players34).
 - **Wide windows**: the 640x480 menus and HUD in the largest centred 4:3 box of the window or of a split view, the

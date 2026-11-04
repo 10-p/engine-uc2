@@ -273,7 +273,7 @@ check kb-escape-closes-pause-menu P['p2'].menu == 'None'
 SCEN
 }
 
-# Mouse in the menus (window 640x480: main menu items at x 140, y 146 Story, 184 Instant Action, 299 Options; Arena gametype rows y 90 CTF, 109 DeathMatch; the Arena's preview picture at 500, 200) and mouse look in the match.
+# Mouse in the menus (window 640x480: main menu items at x 140, y 146 Story, 184 Instant Action, 299 Options; Arena gametype rows y 90 CTF, 109 DeathMatch, the collapsed GAMETYPE row at 89 in the rules view; the Arena's preview picture at 500, 200; above the launch confirmation at 320, 60) and mouse look in the match.
 scen_mouse() {
   cat <<'SCEN'
 wait OpenMenu \[UCMenu.UC2MainMenu\] 90
@@ -296,6 +296,7 @@ click 1 140 184
 expect ms-click-opens-item-under-cursor OpenMenu \[UCMenu.UC2Arena_Main\] 15
 absent ms-click-does-not-open-focused-item OpenMenu \[UCMenu.UC2Settings_Main\]
 seek 40 P['_'].item.startswith('Capture') ;; sleep 0.5
+pyexec import __main__ as M
 probe g0
 move 130 90
 sleep 0.3
@@ -311,7 +312,13 @@ sleep 2
 probe g15
 absent ms-click-off-controls-is-no-a Mouse click is A
 check ms-click-off-controls-accepts-nothing P['g1'].item == '' and P['g15'].item == ''
-key Escape
+# a click on the collapsed GAMETYPE panel opens it with DeathMatch still selected (patch set menu-mouse)
+mark
+click 1 130 89
+sleep 2
+probe g16
+check ms-collapsed-panel-click-opens-it P['g16'].item.startswith('DeathMatch|') and any('menu-mouse: a click on a collapsed panel GAMETYPE' in l for l in M.log_lines[M.mark_at:])
+tryseek 0 P['_'].item.startswith('DeathMatch|') ;; key Escape
 tryseek 40 P['_'].item.startswith('DeathMatch|') ;; sleep 0.5
 probe g2
 check ms-click-on-row-accepts-that-row P['g0'].item.startswith('Capture') and P['g1'].item == '' and P['g2'].item.startswith('DeathMatch|')
@@ -345,6 +352,15 @@ seek 40 '|' in P['_'].item ;; sleep 0.5
 probe armory0
 seek 10 P['_'].item != P['armory0'].item ;; key Return
 seek 40 '|' in P['_'].item ;; sleep 0.5
+seek 10 P['_'].menu == 'ConfirmLaunchMenu' ;; key Return
+# a click outside the yes/no dialog answers no: no match, the page below takes nothing; Return then confirms
+sleep 2
+mark
+click 1 320 60
+sleep 3
+probe cl1
+absent ms-click-outside-a-dialog-starts-no-match Bringing Level DM-Deadbolt
+check ms-click-outside-a-dialog-answers-no P['cl1'].menu != 'ConfirmLaunchMenu' and any('Mouse click outside the dialog' in l and ': B' in l for l in M.log_lines[M.mark_at:])
 seek 10 P['_'].menu == 'ConfirmLaunchMenu' ;; key Return
 key Return
 expect ms-deadbolt-up Bringing Level DM-Deadbolt.MyLevel up for play 120
