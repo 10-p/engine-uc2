@@ -76,7 +76,8 @@ cmake --build build-wasm-perf -j4               # inside bin/capped 6G (CLAUDE.m
   worker (`-sPROXY_TO_PTHREAD`), yields to the browser once per frame through Asyncify and starts each frame on a display
   frame (`Source/SDLLaunch/Src/SDLLaunchWeb.cpp`), reads game files through the
   frontend's WasmFS backend (`vendor/glue/wasmfs-shim.js`), reaches the network through the glue's ABI v2 imports
-  (`vendor/glue/ue_abi.h`, `net-shim.js`), renders on WebGL 2 with WebGL 1 as the fallback and has an explicit 2 GB
+  (`vendor/glue/ue_abi.h`, `net-shim.js`), renders on WebGL 2 with WebGL 1 as the fallback (Emscripten's canvas
+  resize replaced by `vendor/glue/webgl-shim.js`, which survives a lost WebGL context) and has an explicit 2 GB
   memory ceiling. Every link flag and why: `Source/SDLLaunch/cmake/Web.cmake`.
 - C++ exception catching is off for the engine's code: package loads, a failed map and a failed Listen fail soft with
   a logged reason instead of throwing. A start-up map that does not load brings up the menus with Epic's failure
