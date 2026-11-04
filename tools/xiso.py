@@ -95,18 +95,20 @@ class Image:
 
     def extract(self, dest, only=(), progress=None):
         """Writes the files (all, or those at or below the paths in only, case-insensitive) below dest.
-        A file whose size already matches is kept, so a stopped extraction resumes. Returns (files, bytes)."""
+        A file whose size already matches is kept, so a stopped extraction resumes. progress(path, length, number,
+        count) is called before each file is written. Returns (files, bytes)."""
         wanted = [p.strip('/').lower() for p in only]
+        todo = [(path, length, offset) for path, length, offset in self.walk()
+                if not wanted or any(path.lower() == w or path.lower().startswith(w + '/') for w in wanted)]
         files = total = 0
-        for path, length, offset in self.walk():
-            low = path.lower()
-            if wanted and not any(low == w or low.startswith(w + '/') for w in wanted):
-                continue
+        for path, length, offset in todo:
             out = os.path.join(dest, *path.split('/'))
             if os.path.isfile(out) and os.path.getsize(out) == length:
                 files += 1
                 total += length
                 continue
+            if progress:
+                progress(path, length, files + 1, len(todo))
             os.makedirs(os.path.dirname(out), exist_ok=True)
             self.f.seek(offset)
             left = length
@@ -120,8 +122,6 @@ class Image:
             os.replace(out + '.part', out)
             files += 1
             total += length
-            if progress:
-                progress(path, length)
         return files, total
 
 

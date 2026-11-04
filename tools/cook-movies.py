@@ -20,8 +20,10 @@ The format (ours) is specified in docs/porting/analysis/video.md ("Cooked format
                       [--video-quality 7] [--keyint 150] [--audio-quality 4] [--pcm-audio-quality 5]
                       [--no-measure] [--force]
 
-Every ffmpeg/ffprobe process runs inside <repo>/../bin/capped 2G when that exists, else with a one-hour time limit
-(at most --jobs of them at once, default 4). tools/cook.py runs it as one step of a whole cook.
+--jobs movies are cooked at once (default 4), each by one ffmpeg or ffprobe process at a time on one thread, so a cook
+uses --jobs processors. Every process runs inside <repo>/../bin/capped 2G when that exists, else with a one-hour time
+limit. tools/cook.py runs it as one step of a whole cook, with its --jobs. Each movie's start, steps and end are
+progress lines (cookprogress.py).
 """
 
 import argparse
@@ -34,6 +36,10 @@ import struct
 import subprocess
 import sys
 import threading
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import cookprogress  # noqa: E402
 
 FORMAT_VERSION = 1
 # Audio stream index -> language, from the Xbox player: XMVHelper.cpp:160-189 (GetLocalizedAudioStream):
@@ -53,9 +59,23 @@ def log(msg):
         print(msg, flush=True)
 
 
+def one_thread(cmd):
+    """An ffmpeg command line that decodes, filters and encodes on one thread: every input and the output get
+    -threads 1 and the filter graphs one thread, so --jobs movies at once use --jobs processors."""
+    if cmd[0] != 'ffmpeg':
+        return cmd
+    out = [cmd[0], '-filter_threads', '1', '-filter_complex_threads', '1']
+    for k, a in enumerate(cmd[1:], 1):
+        if a == '-i' or k == len(cmd) - 1:
+            out += ['-threads', '1']
+        out.append(a)
+    return out
+
+
 def run(cmd, timeout=3600, mem='2G', binary=False):
-    """Run cmd under the memory ceiling (or only the time limit without bin/capped). Returns (rc, stdout, stderr
-    lines)."""
+    """Run cmd on one thread (one_thread) under the memory ceiling (or only the time limit without bin/capped).
+    Returns (rc, stdout, stderr lines)."""
+    cmd = one_thread(cmd)
     if os.access(capped, os.X_OK):
         r = subprocess.run([capped, mem, str(timeout), '--'] + cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     else:
@@ -130,7 +150,7 @@ def pcm_stats(src, stream, warnings, wav=None):
     """Decode one audio stream to s16le: sample frames and SHA-1 of the PCM. With wav, also write the PCM
     there as a WAV file (the encoder's input: see the note on PCM timestamps in cook_one)."""
     full = ([capped, '2G', '3600', '--'] if os.access(capped, os.X_OK) else []) + \
-        ['ffmpeg', '-v', 'warning', '-i', src, '-map', '0:a:%d' % stream, '-f', 's16le', '-']
+        one_thread(['ffmpeg', '-v', 'warning', '-i', src, '-map', '0:a:%d' % stream, '-f', 's16le', '-'])
     p = subprocess.Popen(full, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     h = hashlib.sha1()
     n = 0
@@ -216,7 +236,8 @@ def ogg_summary(path):
 def count_frames(path, warnings, what):
     # Packets, not decoded frames: libtheora writes a held (repeated) picture as a zero-byte packet, which
     # ffmpeg's decoder does not turn into a frame.
-    rc, out, err = run(['ffprobe', '-v', 'warning', '-count_frames', '-count_packets', '-select_streams', 'v:0',
+    rc, out, err = run(['ffprobe', '-v', 'warning', '-threads', '1', '-count_frames', '-count_packets',
+                        '-select_streams', 'v:0',
                         '-show_entries', 'stream=nb_read_frames,nb_read_packets,width,height,pix_fmt,r_frame_rate',
                         '-of', 'json', path])
     warnings.extend((what, t, e) for t, e in classify(err))
@@ -224,30 +245,35 @@ def count_frames(path, warnings, what):
 
 
 def measure(src, fps, out, warnings):
-    """PSNR and SSIM of the cooked video against the XMV decoded through the same frame-rate filter."""
+    """PSNR and SSIM of the cooked video against the XMV decoded through the same frame-rate filter, both in one pass
+    over the two videos."""
     res = {}
-    for metric in ('psnr', 'ssim'):
-        # -threads 1 for the Theora side: ffmpeg's frame-threaded Theora decoder is not deterministic
-        # (TVDisplaySelket2 decoded differently in two runs; single-threaded it agrees with libtheora).
-        rc, _, err = run(['ffmpeg', '-v', 'info', '-nostats', '-i', src, '-threads', '1', '-i', out, '-lavfi',
-                          '[0:v]fps=%d[r];[r][1:v]%s' % (fps, metric), '-f', 'null', '-'])
-        line = [l for l in err if ('PSNR y:' in l or 'SSIM Y:' in l)]
-        if line:
-            l = line[-1]
-            if metric == 'psnr':
-                m = re.search(r'y:([\d.inf]+) u:([\d.inf]+) v:([\d.inf]+) average:([\d.inf]+) min:([\d.inf]+)', l)
-                res['psnr_y'], res['psnr_u'], res['psnr_v'], res['psnr_avg'], res['psnr_min'] = m.groups()
-            else:
-                m = re.search(r'Y:([\d.]+) .*U:([\d.]+) .*V:([\d.]+) .*All:([\d.]+)', l)
-                res['ssim_y'], res['ssim_u'], res['ssim_v'], res['ssim_all'] = m.groups()
-        warnings.extend(('measure %s' % metric, t, e) for t, e in classify(
-            [l for l in err if ('rror' in l or 'arning' in l) and 'Parsed_' not in l]))
+    # One thread (run): ffmpeg's frame-threaded Theora decoder is not deterministic; on one thread it agrees with
+    # libtheora.
+    rc, _, err = run(['ffmpeg', '-v', 'info', '-nostats', '-i', src, '-i', out, '-lavfi',
+                      '[0:v]fps=%d,split[r1][r2];[1:v]split[o1][o2];[r1][o1]psnr;[r2][o2]ssim' % fps, '-f', 'null',
+                      '-'])
+    psnr = [l for l in err if 'PSNR y:' in l]
+    if psnr:
+        m = re.search(r'y:([\d.inf]+) u:([\d.inf]+) v:([\d.inf]+) average:([\d.inf]+) min:([\d.inf]+)', psnr[-1])
+        res['psnr_y'], res['psnr_u'], res['psnr_v'], res['psnr_avg'], res['psnr_min'] = m.groups()
+    ssim = [l for l in err if 'SSIM Y:' in l]
+    if ssim:
+        m = re.search(r'Y:([\d.]+) .*U:([\d.]+) .*V:([\d.]+) .*All:([\d.]+)', ssim[-1])
+        res['ssim_y'], res['ssim_u'], res['ssim_v'], res['ssim_all'] = m.groups()
+    warnings.extend(('measure', t, e) for t, e in classify(
+        [l for l in err if ('rror' in l or 'arning' in l) and 'Parsed_' not in l]))
     return res
 
 
-def cook_one(src, kind, outdir, args):
+def cook_one(src, kind, outdir, args, items):
     name = os.path.splitext(os.path.basename(src))[0]
     rel = 'Movies' if kind == 'movie' else os.path.join('Textures', 'Movies')
+    items.start(cookprogress.rel(src, args.src))
+    t0 = time.time()
+
+    def progress_step(what):
+        cookprogress.line('movie %s: %s (at %s)' % (name, what, cookprogress.duration(time.time() - t0)))
     dst = os.path.join(outdir, rel)
     state_dir = os.path.join(outdir, 'Movies', '.cook')
     os.makedirs(dst, exist_ok=True)
@@ -261,7 +287,7 @@ def cook_one(src, kind, outdir, args):
         if old.get('source_sha1') == src_sha1 and old.get('settings') == settings and \
                 all(os.path.exists(os.path.join(outdir, o['file'])) for o in old['outputs']):
             log('%-28s unchanged' % name)
-            return old
+            return old, True, time.time() - t0
 
     warnings = []
     streams, pts = probe(src)
@@ -284,6 +310,7 @@ def cook_one(src, kind, outdir, args):
     os.makedirs(tmp, exist_ok=True)
     tracks = []
     for i, s in enumerate(a):
+        progress_step('decoding audio track %d of %d' % (i + 1, len(a)))
         wav = os.path.join(tmp, 'a%d.wav' % i)
         n, h = pcm_stats(src, i, warnings, wav)
         write_wav(wav + '.pcm', wav, int(s['sample_rate']), 2)
@@ -305,6 +332,7 @@ def cook_one(src, kind, outdir, args):
         cmd += ['-map', '1:a:0', '-c:a', 'libvorbis', '-q:a', str(aq)]
     cmd += ['-vf', 'fps=%d' % fps, '-pix_fmt', 'yuv420p', '-c:v', 'libtheora', '-q:v', str(args.video_quality),
             '-g', str(args.keyint)] + common + [ogv]
+    progress_step('encoding the video, %d frames%s' % (slots, ' and the first audio track' if tracks else ''))
     rc, _, err = run(cmd)
     warnings.extend(('encode video', t, e) for t, e in classify(err))
     if rc:
@@ -315,6 +343,7 @@ def cook_one(src, kind, outdir, args):
         if t['same_as_int'] or t['lang'] is None:
             continue
         oga = os.path.join(dst, '%s_%s.oga' % (name, t['lang']))
+        progress_step('encoding the %s audio track' % t['lang'])
         aq = args.pcm_audio_quality if t['codec'].startswith('pcm') else args.audio_quality
         rc, _, err = run(['ffmpeg', '-v', 'warning', '-nostats', '-y', '-i', t['wav'], '-map', '0:a:0',
                           '-c:a', 'libvorbis', '-q:a', str(aq)] + common + [oga])
@@ -325,6 +354,7 @@ def cook_one(src, kind, outdir, args):
                         'track': t['index']})
 
     # Verify what was written.
+    progress_step('checking the %d file(s) written' % len(outputs))
     for o in outputs:
         path = os.path.join(outdir, o['file'])
         o['bytes'] = os.path.getsize(path)
@@ -347,6 +377,8 @@ def cook_one(src, kind, outdir, args):
             n, _ = pcm_stats(path, 0, warnings)
             o['samples_decoded_ffmpeg'] = n
             o['samples_in'] = tracks[o['track']]['samples_in']
+    if not args.no_measure:
+        progress_step('measuring PSNR and SSIM against the XMV')
     quality = measure(src, fps, ogv, warnings) if not args.no_measure else {}
     for t in tracks:
         os.remove(t.pop('wav'))
@@ -376,7 +408,7 @@ def cook_one(src, kind, outdir, args):
                                    len(tracks), len(outputs) - 1, 'OK' if res['checks']['frames'] and
                                    res['checks']['samples'] else 'MISMATCH', quality.get('psnr_y'),
                                    quality.get('ssim_all')))
-    return res
+    return res, False, time.time() - t0
 
 
 def report(results, outdir, args):
@@ -465,7 +497,7 @@ def main():
     ap.add_argument('--no-measure', action='store_true')
     ap.add_argument('--force', action='store_true')
     args = ap.parse_args()
-    args.jobs = max(1, min(args.jobs, 4))
+    args.jobs = max(1, args.jobs)
 
     srcs = []
     for kind, sub in (('movie', 'Movies'), ('texture', os.path.join('Textures', 'Movies'))):
@@ -476,17 +508,25 @@ def main():
     only = set(x for x in args.only.split(',') if x)
     if only:
         srcs = [s for s in srcs if os.path.splitext(os.path.basename(s[0]))[0] in only]
-    # Longest first, so the four workers finish together.
+    # Longest first, so the workers finish together.
     srcs.sort(key=lambda s: -os.path.getsize(s[0]))
     results, failed = [], []
+    items = cookprogress.Count('movie', len(srcs))
     with concurrent.futures.ThreadPoolExecutor(args.jobs) as ex:
-        futs = {ex.submit(cook_one, s, k, args.out, args): s for s, k in srcs}
+        futs = {ex.submit(cook_one, s, k, args.out, args, items): (s, k) for s, k in srcs}
         for f in concurrent.futures.as_completed(futs):
+            src, kind = futs[f]
+            name = os.path.splitext(os.path.basename(src))[0]
+            out = '%s/%s.ogv' % ('Movies' if kind == 'movie' else 'Textures/Movies', name)
             try:
-                results.append(f.result())
+                r, unchanged, secs = f.result()
+                results.append(r)
+                items.end(out, secs, 'unchanged' if unchanged else '%d file(s)' % len(r['outputs']))
             except Exception as e:
-                failed.append((futs[f][0], str(e)))
-                log('FAILED %s: %s' % (futs[f][0], e))
+                failed.append((src, str(e)))
+                log('FAILED %s: %s' % (src, e))
+                items.end(out, None, 'FAILED')
+    items.done()
     if not only:
         report(results, args.out, args)
     else:
