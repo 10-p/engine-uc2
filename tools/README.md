@@ -14,7 +14,7 @@ the game:
    whether to run `cook.cmd`, a file from the internet: **Run**.
 3. Double-click `cook.cmd`, or drop your disc image (`.iso`) onto it. It checks Python and ffmpeg first and names what
    is missing, then asks for the disc image (drag it into the window) and the game folder (Enter: `UC2` beside the
-   cook's folder), and cooks (about half an hour, most of it the movies).
+   cook's folder), and cooks (about a quarter of an hour with 14 processors, longer with fewer).
 4. Unpack the game's Windows release into the game folder: `uc2-<version>-windows-x86.zip`, then
    `uc2-<version>-patched-scripts.zip`, and for the editor `uc2-<version>-unrealed-windows-x86.zip` and
    `uc2-<version>-unrealed-bitmaps.zip`. The release is
@@ -39,7 +39,7 @@ placeholder, not Python.
    python3 cook.py --check --in "Unreal Championship 2.iso"
    ```
 
-3. Cook the game folder (about half an hour, most of it the movies):
+3. Cook the game folder (about a quarter of an hour with 14 processors, longer with fewer):
 
    ```bash
    python3 cook.py --in "Unreal Championship 2.iso" --out UC2
