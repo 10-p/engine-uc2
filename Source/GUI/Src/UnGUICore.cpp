@@ -1022,6 +1022,7 @@ static void MouseClickRelease( UGUIController* C );
 static UBOOL IsMouseMenuItem( UGUIController* C, UGUIComponent* Item );
 static UBOOL MouseReleaseClicks( UGUIController* C, UGUIComponent* Comp );
 static UBOOL MouseIsOver( UGUIController* C, UGUIComponent* Comp );
+static UGUIComponent* MouseInertOwner( UGUIComponent* Comp );
 static UBOOL MouseDialogPress( UGUIController* C );
 static UBOOL MouseDialogRelease( UGUIController* C );
 static UBOOL MouseOutsideDialog( UGUIController* C );
@@ -2650,17 +2651,19 @@ void UGUIController::LookUnderCursor(FLOAT dX, FLOAT dY)
 // release only when that press found a row; on release over the same item, a menu item that has
 // no OnClick but an XControllerEvent handler gets XC_A. A click on a page's or a panel's
 // background, a caption or a disabled item (UnderCursor passes those for the component behind
-// them) does nothing: A goes to the focused control, which there is not the one clicked.
+// them) does nothing: A goes to the focused control, which there is not the one clicked. A press
+// on a part that is inert to the mouse (MouseInertOwner) is its inert owner's MouseInertClick alone.
 //
 static UGUIComponent* GClickTarget = NULL;
 static UGUIComponent* GClickRowList = NULL;	// the list whose row under the cursor the press selected
 
-// What the mouse selects and clicks: a control that takes the focus and input, on the active page;
-// never the page itself.
+// What the mouse selects and clicks: a control that takes the focus and input, on the active page,
+// and is not inert to the mouse; never the page itself.
 static UBOOL IsMouseMenuItem( UGUIController* C, UGUIComponent* Item )
 {
 	return Item && Item->bTabStop && Item->bAcceptsInput && Item->MenuState != MSAT_Disabled &&
-		Item->PageOwner == C->ActivePage && !Item->IsA(UGUIPage::StaticClass()) && Item->eventCanAcceptFocus(0);
+		Item->PageOwner == C->ActivePage && !Item->IsA(UGUIPage::StaticClass()) && Item->eventCanAcceptFocus(0) &&
+		!MouseInertOwner( Item );
 }
 
 // The component under the cursor by the GUI's own hit test (UnderCursor) and the components it is
@@ -2679,13 +2682,46 @@ static UBOOL MouseIsOver( UGUIController* C, UGUIComponent* Comp )
 	return 0;
 }
 
+// A part of a menu that is inert to the mouse while its script says so: the component or one of its
+// owners answers true to its MouseInert() (UCMenu's collapsed Arena panels). The mouse gives nothing in
+// it the focus, by hover or by press, and clicks nothing in it; a press on it calls the inert owner's
+// MouseInertClick() alone. The keys and the pads reach it as they do.
+static UGUIComponent* MouseInertOwner( UGUIComponent* Comp )
+{
+	static FName NAME_MouseInert( TEXT("MouseInert") );
+	for ( UGUIComponent* Part = Comp; Part; Part = Part->MenuOwner )
+	{
+		UFunction* Inert = Part->FindFunction( NAME_MouseInert );
+		BYTE Parms[16];
+		if ( !Inert || Inert->ReturnValueOffset == MAXWORD || Inert->ParmsSize > (INT)sizeof(Parms) )
+			continue;
+		appMemzero( Parms, sizeof(Parms) );
+		Part->ProcessEvent( Inert, Parms );
+		if ( *(UBOOL*)(Parms + Inert->ReturnValueOffset) )
+			return Part;
+	}
+	return NULL;
+}
+
+static void MouseInertClick( UGUIComponent* Inert )
+{
+	static FName NAME_MouseInertClick( TEXT("MouseInertClick") );
+	UFunction* Click = Inert->FindFunction( NAME_MouseInertClick );
+	BYTE Parms[16];
+	if ( !Click || Click->ParmsSize > (INT)sizeof(Parms) )
+		return;
+	appMemzero( Parms, sizeof(Parms) );
+	debugf( NAME_DevUI, TEXT("Mouse click on %s, inert to the mouse"), Inert->GetMenuPath() );
+	Inert->ProcessEvent( Click, Parms );
+}
+
 // A dialog: the active page when it is smaller than the page at the bottom of the stack (the message
 // boxes, the overlays), drawn over the pages below it, which take no press and no release while it
 // is up. Its own area is what it draws, its visible parts; a click outside them, press and release,
 // is the dialog's way out: its B (a cancel, the overlays' back), or its OK when OK is all a message
-// box offers; a dialog that offers neither (a progress or a mandatory message) takes nothing. A
-// click on one of its button hints (the glyph and caption of a pad button, ControllerButton) is
-// that pad button.
+// box offers; a dialog that offers neither (a progress or a mandatory message), or a message box
+// whose cancel is all it offers, takes nothing. A click on one of its button hints (the glyph and
+// caption of a pad button, ControllerButton) is that pad button.
 static UGUIPage*      GDialogOutsidePress = NULL;	// the dialog a press outside it was made on
 static UGUIComponent* GDialogHintPress = NULL;		// the button hint a press was made on
 
@@ -2739,14 +2775,16 @@ static UGUIComponent* MouseDialogHint( UGUIController* C, BYTE& Code )
 }
 
 // A message box (GUIMessageBox: SetupQuestion's accept and cancel, or its own buttons) goes out by B when
-// it can be cancelled and by A when OK is all it offers; any other dialog by B.
+// it offers a cancel beside something else, and by A when OK is all it offers. A box that offers its
+// cancel alone waits on something and its cancel gives that up (StandbyWaitMenu waits on the players or
+// the connection, and its cancel asks to forfeit the match): no click is its way out. Any other dialog
+// goes out by B.
 static BYTE DialogWayOut( UGUIPage* Page )
 {
 	UBoolProperty* AllowCancel = FindField<UBoolProperty>( Page->GetClass(), TEXT("bAllowCancel") );
 	if ( !AllowCancel )
 		return XC_B;
-	if ( *(BITFIELD*)((BYTE*)Page + AllowCancel->Offset) & AllowCancel->BitMask )
-		return XC_B;
+	UBOOL Cancel = (*(BITFIELD*)((BYTE*)Page + AllowCancel->Offset) & AllowCancel->BitMask) != 0;
 	INT Accepts = 0;
 	UArrayProperty* Buttons = FindField<UArrayProperty>( Page->GetClass(), TEXT("Buttons") );
 	if ( Buttons )
@@ -2758,13 +2796,16 @@ static BYTE DialogWayOut( UGUIPage* Page )
 			if ( !Button )
 				continue;
 			if ( Button->Tag & (2 | 32 | 64) )		// Cancel, No, Abort (GUIMessageBox.IsCancelButton)
-				return XC_B;
-			Accepts++;
+				Cancel = 1;
+			else
+				Accepts++;
 		}
 	}
 	UObjectProperty* Select = FindField<UObjectProperty>( Page->GetClass(), TEXT("btn_Select") );
 	if ( Select && *(UObject**)((BYTE*)Page + Select->Offset) )
 		Accepts++;
+	if ( Cancel )
+		return Accepts ? (BYTE)XC_B : (BYTE)255;
 	return Accepts == 1 ? (BYTE)XC_A : (BYTE)255;	// 255: no way out
 }
 
@@ -2831,6 +2872,12 @@ static void MouseClickPress( UGUIController* C )
 	UGUIComponent* Under = C->UnderCursor( C->MouseX, C->MouseY );
 	if ( !Under || Under->PageOwner != C->ActivePage )
 		return;
+	UGUIComponent* Inert = MouseInertOwner( Under );
+	if ( Inert )
+	{
+		MouseInertClick( Inert );
+		return;
+	}
 	GClickTarget = Under;
 	if ( Under->IsA(UGUIListBase::StaticClass()) )
 	{
@@ -3873,6 +3920,8 @@ UBOOL UGUIComponent::MousePressed(UBOOL IsRepeat)
 #ifndef _XBOX
 	if ( !MouseIsOver( C, this ) )
 		return false;
+	if ( MouseInertOwner( this ) )
+		return true;
 #endif
 
 	eventSetFocus(NULL);
@@ -3922,7 +3971,7 @@ UBOOL UGUIComponent::MouseReleased()
 #ifndef _XBOX
 	if ( !MouseIsOver( C, this ) )
 		return false;
-	if ( !MouseReleaseClicks( C, this ) )
+	if ( MouseInertOwner( this ) || !MouseReleaseClicks( C, this ) )
 		return true;
 #endif
 

@@ -1,32 +1,27 @@
 --- a/UCMenu/Classes/ArenaListPanel.uc
 +++ b/UCMenu/Classes/ArenaListPanel.uc
-@@ -105,6 +105,18 @@
+@@ -105,6 +105,21 @@
  }
  
  delegate ModifyDrawState( int Item, out EMenuState ItemDrawState );
 +
-+// menu-mouse: a mouse click on the collapsed panel (its selected row alone); the page opens it
++// menu-mouse: a mouse click on the collapsed panel; the page opens it
 +delegate OnCollapsedClick( ArenaListPanel Sender );
 +
-+// menu-mouse: a collapsed panel takes a mouse click on its row as a request to open it, with no row selected
-+final function bool MouseRowClicked( GUIComponent Sender )
++// menu-mouse: the engine's PC mouse asks the panels under the pointer: a collapsed panel is inert to the mouse (no
++// hover, no focus, no row, none of its parts takes a click), and a click on it is the page's OnCollapsedClick
++final function bool MouseInert()
 +{
-+	if ( IsOpen() )
-+		return false;
++	return !IsOpen();
++}
++
++final function MouseInertClick()
++{
 +	OnCollapsedClick(Self);
-+	return true;
 +}
  
  final function Reset()
  {
-@@ -582,6 +594,7 @@
- 
- 	
- 	lb_Items.OnChange = OnChange;
-+	li_Items.OnMouseRow = MouseRowClicked;
- 
- 	if ( bEnableAnimation )
- 		li_Items.bLinkable = false;
 --- a/UCMenu/Classes/Arena_PanelMain.uc
 +++ b/UCMenu/Classes/Arena_PanelMain.uc
 @@ -2461,6 +2461,53 @@
@@ -34,8 +29,8 @@
  }
  
 +// menu-mouse: a mouse click on a collapsed panel opens it the way the keys step to it, its selection kept: a panel
-+// before the open one as B goes back, the panel after it as A on the open panel's list; nothing for a panel two
-+// steps on, while the mutators are up or while the panels move
++// before the open one as B goes back, the panel after it as A on the open panel's list; the error sound for a panel
++// two steps on or while the mutators are up; nothing while the panels move
 +final function CollapsedPanelClicked( ArenaListPanel Panel )
 +{
 +	local int To, From;
@@ -94,28 +89,3 @@
  
  	li_Games.OnChange = InternalOnChange;
  	li_Rules.OnChange = InternalOnChange;
---- a/UCMenu/Classes/AvarisVertList.uc
-+++ b/UCMenu/Classes/AvarisVertList.uc
-@@ -67,6 +67,22 @@
- var()				array<string>				theHintStrings;		
- 
- delegate bool isLocked(string item);
-+
-+// menu-mouse: what a mouse click on the list does before it selects the row under the pointer; true when the list's
-+// owner has taken the click (a collapsed panel opening), and then no row is selected
-+delegate bool OnMouseRow(GUIComponent Sender)
-+{
-+	return false;
-+}
-+
-+// menu-mouse: the row under the pointer, which the mouse's press asks for (Epic's GUIVertList), unless the owner
-+// takes the click
-+function bool InternalOnClick(GUIComponent Sender)
-+{
-+	if ( OnMouseRow(Self) )
-+		return false;
-+	return Super.InternalOnClick(Sender);
-+}
- 
- final function bool internalOnPreDraw(Canvas Canvas)
- {
