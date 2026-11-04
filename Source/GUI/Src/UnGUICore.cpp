@@ -1019,6 +1019,9 @@ static UBOOL IsTypingKey( BYTE iKey )
 
 static void MouseClickPress( UGUIController* C );
 static void MouseClickRelease( UGUIController* C );
+static UBOOL IsMouseMenuItem( UGUIController* C, UGUIComponent* Item );
+static UBOOL MouseReleaseClicks( UGUIController* C, UGUIComponent* Comp );
+static UBOOL MouseIsOver( UGUIController* C, UGUIComponent* Comp );
 
 // A character key whose press acted as a pad button while no text field was up (X on the host page's
 // session name, which opens UC2Keyboard at once): SDL delivers that key's character after the press, by
@@ -2603,9 +2606,8 @@ void UGUIController::LookUnderCursor(FLOAT dX, FLOAT dY)
 #ifndef _XBOX
 	// Moving the mouse over a menu item selects it, as the D-pad would (only on real
 	// motion, so a resting cursor never takes the focus back from keyboard or pad navigation).
-	if ( (dX != 0.f || dY != 0.f) && ActiveControl && ActiveControl->bTabStop && ActiveControl->bAcceptsInput &&
-		ActiveControl->MenuState == MSAT_Blurry && ActiveControl->PageOwner == ActivePage &&
-		ActiveControl != eventGetFocusedControl() && ActiveControl->eventCanAcceptFocus(0) )
+	if ( (dX != 0.f || dY != 0.f) && IsMouseMenuItem( this, ActiveControl ) &&
+		ActiveControl->MenuState == MSAT_Blurry && ActiveControl != eventGetFocusedControl() )
 	{
 		debugf( NAME_DevUI, TEXT("Mouse hover selects %s"), ActiveControl->GetMenuPath() );
 		ActiveControl->eventSetFocus( NULL );
@@ -2616,18 +2618,58 @@ void UGUIController::LookUnderCursor(FLOAT dX, FLOAT dY)
 
 #ifndef _XBOX
 //
-// A left click is A on the item under the cursor. Epic's MousePressed/MouseReleased give the
-// item the focus and call its OnClick; UC2's pad-driven items have no OnClick (they act on
-// XControllerEvent), and its lists act on their selected row, not the row under the cursor.
-// So: on press, a list selects the row under the cursor (its own InternalOnClick, which Epic
-// binds to OnClick but UC2 pages replace); on release over the same item, an item that has no
-// OnClick but an XControllerEvent handler gets XC_A.
+// A left click is A on the menu item under the cursor, and on nothing else. Epic's MousePressed/
+// MouseReleased give the item the focus and call its OnClick; UC2's pad-driven items have no
+// OnClick (they act on XControllerEvent), and its lists act on their selected row, not the row
+// under the cursor. So: on press, a list selects the row under the cursor (its own
+// InternalOnClick, which Epic binds to OnClick but UC2 pages replace), and its OnClick runs on
+// release only when that press found a row; on release over the same item, a menu item that has
+// no OnClick but an XControllerEvent handler gets XC_A. A click on a page's or a panel's
+// background, a caption or a disabled item (UnderCursor passes those for the component behind
+// them) does nothing: A goes to the focused control, which there is not the one clicked.
 //
 static UGUIComponent* GClickTarget = NULL;
+static UGUIComponent* GClickRowList = NULL;	// the list whose row under the cursor the press selected
+
+// What the mouse selects and clicks: a control that takes the focus and input, on the active page;
+// never the page itself.
+static UBOOL IsMouseMenuItem( UGUIController* C, UGUIComponent* Item )
+{
+	return Item && Item->bTabStop && Item->bAcceptsInput && Item->MenuState != MSAT_Disabled &&
+		Item->PageOwner == C->ActivePage && !Item->IsA(UGUIPage::StaticClass()) && Item->eventCanAcceptFocus(0);
+}
+
+// The component under the cursor by the GUI's own hit test (UnderCursor) and the components it is
+// part of: on the active page, the only ones a press or a release acts on. Epic's dispatch goes on
+// past a panel that is hit but takes no input, to sibling components the pointer is not over for
+// the player (the Arena's map-list editor lies, transparent, under its main panel until it is
+// first opened).
+static UBOOL MouseIsOver( UGUIController* C, UGUIComponent* Comp )
+{
+	if ( !C->bEmulatedJoypad || Comp->PageOwner != C->ActivePage )
+		return 1;
+	for ( UGUIComponent* Part = C->UnderCursor( C->MouseX, C->MouseY ); Part; Part = Part->MenuOwner )
+		if ( Part == Comp )
+			return 1;
+	debugf( NAME_DevUI, TEXT("Mouse is not over %s"), Comp->GetMenuPath() );
+	return 0;
+}
+
+// False for a list whose OnClick a release would call without the press having selected a row of
+// that list under the cursor (a click on its empty space, a press on another control): the list's
+// OnClick acts on its selected row, which the pointer is not on.
+static UBOOL MouseReleaseClicks( UGUIController* C, UGUIComponent* Comp )
+{
+	if ( !C->bEmulatedJoypad || !Comp->IsA(UGUIListBase::StaticClass()) || Comp == GClickRowList )
+		return 1;
+	debugf( NAME_DevUI, TEXT("Mouse click is on no row of %s"), Comp->GetMenuPath() );
+	return 0;
+}
 
 static void MouseClickPress( UGUIController* C )
 {
 	GClickTarget = NULL;
+	GClickRowList = NULL;
 	if ( !C->bEmulatedJoypad )
 		return;
 	UGUIComponent* Under = C->UnderCursor( C->MouseX, C->MouseY );
@@ -2643,7 +2685,12 @@ static void MouseClickPress( UGUIController* C )
 			appMemzero( Parms, Select->ParmsSize );
 			*(UGUIComponent**)Parms = Under;
 			Under->ProcessEvent( Select, Parms );
-			debugf( NAME_DevUI, TEXT("Mouse click selects the row under the cursor in %s"), Under->GetMenuPath() );
+			// Epic's lists return true when a row under the cursor was selected
+			if ( Select->ReturnValueOffset != MAXWORD && *(UBOOL*)(Parms + Select->ReturnValueOffset) )
+			{
+				GClickRowList = Under;
+				debugf( NAME_DevUI, TEXT("Mouse click selects the row under the cursor in %s"), Under->GetMenuPath() );
+			}
 		}
 	}
 }
@@ -2652,14 +2699,31 @@ static void MouseClickRelease( UGUIController* C )
 {
 	UGUIComponent* Target = GClickTarget;
 	GClickTarget = NULL;
+	GClickRowList = NULL;
 	if ( !C->bEmulatedJoypad || !Target || !IsValidObject(Target) || Target->PageOwner != C->ActivePage )
 		return;
 	if ( C->UnderCursor( C->MouseX, C->MouseY ) != Target )
 		return;
 	if ( OBJ_DELEGATE_IS_SET(Target,OnClick) || !OBJ_DELEGATE_IS_SET(Target,OnXControllerEvent) )
 		return;		// Epic's OnClick did it, or nothing would react to A either
+	if ( !IsMouseMenuItem( C, Target ) )
+	{
+		debugf( NAME_DevUI, TEXT("Mouse click is on no menu item (%s)"), Target->GetMenuPath() );
+		return;
+	}
 	if ( Target != C->eventGetFocusedControl() )
 		Target->eventSetFocus( NULL );
+	// A goes to the focused control: only once that is the item clicked or a part of it
+	UGUIComponent* Focused = C->eventGetFocusedControl();
+	UGUIComponent* Part = Focused;
+	while ( Part && Part != Target )
+		Part = Part->MenuOwner;
+	if ( !Part )
+	{
+		debugf( NAME_DevUI, TEXT("Mouse click on %s left the focus on %s: no A"), Target->GetMenuPath(),
+			Focused ? Focused->GetMenuPath() : TEXT("None") );
+		return;
+	}
 	debugf( NAME_DevUI, TEXT("Mouse click is A on %s"), Target->GetMenuPath() );
 	C->DistributeXControllerEvent( C->ControllerId, XC_A );
 }
@@ -3650,6 +3714,11 @@ UBOOL UGUIComponent::MousePressed(UBOOL IsRepeat)
 	if ( MenuState == MSAT_Disabled || !PerformHitTest(C->MouseX, C->MouseY) )
 		return false;
 
+#ifndef _XBOX
+	if ( !MouseIsOver( C, this ) )
+		return false;
+#endif
+
 	eventSetFocus(NULL);
 	eventMenuStateChange(MSAT_Pressed);
 
@@ -3693,6 +3762,13 @@ UBOOL UGUIComponent::MouseReleased()
 
 	if ( !PerformHitTest(C->MouseX, C->MouseY) )
 		return false;
+
+#ifndef _XBOX
+	if ( !MouseIsOver( C, this ) )
+		return false;
+	if ( !MouseReleaseClicks( C, this ) )
+		return true;
+#endif
 
 	if (!bRepeatClick)
 	{

@@ -273,7 +273,7 @@ check kb-escape-closes-pause-menu P['p2'].menu == 'None'
 SCEN
 }
 
-# Mouse in the menus (window 640x480: main menu items at x 140, y 146 Story, 184 Instant Action, 299 Options; Arena gametype rows y 90 CTF, 109 DeathMatch) and mouse look in the match.
+# Mouse in the menus (window 640x480: main menu items at x 140, y 146 Story, 184 Instant Action, 299 Options; Arena gametype rows y 90 CTF, 109 DeathMatch; the Arena's preview picture at 500, 200) and mouse look in the match.
 scen_mouse() {
   cat <<'SCEN'
 wait OpenMenu \[UCMenu.UC2MainMenu\] 90
@@ -304,6 +304,13 @@ expect ms-click-selects-list-row Mouse click selects the row under the cursor in
 tryseek 40 P['_'].item == '' ;; sleep 0.5
 probe g1
 shot gametype-clicked
+# a click where no control is (the preview picture) while a rule has the focus does nothing: the rule is not accepted
+mark
+click 1 500 200
+sleep 2
+probe g15
+absent ms-click-off-controls-is-no-a Mouse click is A
+check ms-click-off-controls-accepts-nothing P['g1'].item == '' and P['g15'].item == ''
 key Escape
 tryseek 40 P['_'].item.startswith('DeathMatch|') ;; sleep 0.5
 probe g2
