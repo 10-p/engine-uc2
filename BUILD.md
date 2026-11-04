@@ -81,7 +81,10 @@ cmake --build build-wasm-perf -j4               # inside bin/capped 6G (CLAUDE.m
   memory ceiling. Every link flag and why: `Source/SDLLaunch/cmake/Web.cmake`.
 - C++ exception catching is off for the engine's code: package loads, a failed map and a failed Listen fail soft with
   a logged reason instead of throwing. A start-up map that does not load brings up the menus with Epic's failure
-  dialog naming it. openal-soft alone is compiled with `-fexceptions` (`cmake/UC2Web.cmake`).
+  dialog naming it. openal-soft alone is compiled with `-fexceptions` (`cmake/UC2Web.cmake`). An `appError` logs its
+  `Critical:` lines (the page's crash reason) and throws; the module is linked with `-sEXCEPTION_STACK_TRACES`, so a
+  throw nothing catches reaches the page as an Error named after the thrown type (`int` for appError's), with
+  `what()` as its message and the stack from the throw site.
 - Boot configuration: `Engine/Config/web/{Default,DefUser}.ini`, generated from the native files by
   `tools/dev/sync-web-ini.py` and preloaded as `/System/Default.ini`, `/System/DefUser.ini`.
 - `ucc-bin.js` under Node is the wasm32 test vehicle (`cd <run>/System && node ucc-bin.js verifyclasses`;
@@ -564,7 +567,8 @@ Windows; on the web it is a fatal error, `Failed to launch process. Relaunch: <a
 ## The log
 
 Status lines (the renderer, the audio device, ini overrides and test keys), warnings, errors and the answers to console
-commands are always logged. `-UFRONTLOG` (the tests pass it) adds the port's diagnostic and repeated lines: the
+commands are always logged. The console (`-log`) prints each line without its event name, except on the web a
+critical line, `Critical: <line>`, the form the page takes the crash reason from. `-UFRONTLOG` (the tests pass it) adds the port's diagnostic and repeated lines: the
 `[AutoFOV]` lines, the dynamic gamma ramps, the lines of each resize and framebuffer (`SetRes`, the main framebuffer,
 the post-process reference copy, the camera effects' targets, the web canvas size), the GL capability dumps and one
 line per linked program, the projector materials and the distortion distance, the movie clock and the MovieMaterial
