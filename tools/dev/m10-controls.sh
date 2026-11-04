@@ -276,7 +276,7 @@ check kb-escape-closes-pause-menu P['p2'].menu == 'None'
 SCEN
 }
 
-# Mouse in the menus (window 640x480: main menu items at x 140, y 146 Story, 184 Instant Action, 299 Options; Arena gametype rows y 90 CTF, 109 DeathMatch, the collapsed GAMETYPE row at 89 in the rules view; the Arena's preview picture at 500, 200; above the launch confirmation at 320, 60) and mouse look in the match.
+# Mouse in the menus (window 640x480: main menu items at x 140, y 146 Story, 184 Instant Action, 299 Options; Arena gametype rows y 90 CTF, 109 DeathMatch, the collapsed ARENA row at 291 in the game-type view, the collapsed GAMETYPE row at 89 in the rules and maps views, the collapsed RULES row at 139 in the maps view; the Arena's preview picture at 500, 200; above the launch confirmation at 320, 60) and mouse look in the match.
 scen_mouse() {
   cat <<'SCEN'
 wait OpenMenu \[UCMenu.UC2MainMenu\] 90
@@ -321,6 +321,12 @@ click 1 130 89
 sleep 2
 probe g16
 check ms-collapsed-panel-click-opens-it P['g16'].item.startswith('DeathMatch|') and any('menu-mouse: a click on a collapsed panel GAMETYPE' in l for l in M.log_lines[M.mark_at:])
+# a click on the collapsed ARENA panel, two steps on, is the error sound alone: the focus stays on the open GAMETYPE
+mark
+click 1 130 291
+sleep 1.5
+probe g17
+check ms-click-two-steps-on-takes-no-focus P['g17'].item.startswith('DeathMatch|') and any('menu-mouse: a click on a collapsed panel ARENA with GAMETYPE open' in l for l in M.log_lines[M.mark_at:])
 tryseek 0 P['_'].item.startswith('DeathMatch|') ;; key Escape
 tryseek 40 P['_'].item.startswith('DeathMatch|') ;; sleep 0.5
 probe g2
@@ -328,6 +334,18 @@ check ms-click-on-row-accepts-that-row P['g0'].item.startswith('Capture') and P[
 shot gametype
 key Return
 seek 40 P['_'].item == '' ;; sleep 0.5
+# the pointer over the collapsed GAMETYPE gives it no focus: Down and the wheel stay on the open RULES (patch set
+# menu-mouse; with CUSTOMIZE off they move nothing there)
+move 130 60
+move 130 89
+sleep 0.8
+probe hv1
+key Down
+sleep 1
+click 5
+sleep 1
+probe hv2
+check ms-hover-on-collapsed-panel-takes-no-focus P['hv1'].item == '' and P['hv2'].item == ''
 seek 10 P['_'].item != '' ;; key Return
 seek 40 '|' in P['_'].item and P['_'].item != 'NOT SET' ;; sleep 0.5
 # each wheel click waits for the list to move (two clicks in one slow frame count once)
@@ -346,6 +364,14 @@ click 4
 tryseek 20 P['_'].item != P['m15'].item ;; sleep 0.3
 probe m2
 check ms-wheel-up-moves-back P['m2'].item == P['m0'].item
+# a click on the collapsed RULES row (a rule drawn on it) opens RULES, as B would; Return steps on to the maps again
+mark
+click 1 130 139
+sleep 3
+probe cr1
+check ms-collapsed-rules-click-opens-it P['cr1'].item == '' and any('menu-mouse: a click on a collapsed panel RULES with ARENA open' in l for l in M.log_lines[M.mark_at:])
+key Return
+seek 40 '|' in P['_'].item and P['_'].item != 'NOT SET' ;; sleep 0.5
 seek 40 'DM-Deadbolt' in P['_'].item ;; click 5
 key Return
 wait OpenMenu \[UCMenu.UC2Arena_Character\] 15
