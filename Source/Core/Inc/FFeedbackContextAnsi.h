@@ -74,6 +74,12 @@ public:
 			fflush( stdout );
 			return;
 		}
+#ifdef __EMSCRIPTEN__
+		// The page takes the crash reason from this console by its "Critical: " lines, so a critical line carries
+		// its event name.
+		if( Event==NAME_Critical )
+			LocalPrint( TEXT("Critical: ") );
+#endif
 		LocalPrint( V );
 		LocalPrint( TEXT("\n") );
 		if( GLog != this )

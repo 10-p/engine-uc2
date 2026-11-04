@@ -29,6 +29,9 @@ target_link_options(${PROJECT_NAME} PRIVATE
   # (openal-soft's, root CMakeLists.txt) carry landing pads; the engine's own code is compiled without catching
   # and gains no invoke_ calls (cmake/UC2Web.cmake).
   -sNO_DISABLE_EXCEPTION_CATCHING
+  # A C++ exception nothing catches (appError's throw) reaches the page as an Error named after the thrown type,
+  # with what() as its message and the stack from the throw site, so the crash report says what was thrown where.
+  -sEXCEPTION_STACK_TRACES
   -sENVIRONMENT=web,worker
   # The engine runs on a worker; its blocking main loop yields once per frame through Asyncify
   # (SDLLaunchWeb.cpp). appSleep's emscripten_sleep is the other suspension point.
