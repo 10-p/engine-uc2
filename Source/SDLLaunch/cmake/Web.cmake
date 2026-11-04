@@ -58,6 +58,8 @@ target_link_options(${PROJECT_NAME} PRIVATE
   # The worker-side bootstrap of the shim hangs off a __postset that is only emitted when referenced.
   "-sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=['$ueWorkerBoot']"
   "SHELL:--js-library ${CMAKE_SOURCE_DIR}/vendor/glue/wasmfs-shim.js"
+  # Emscripten's canvas resize with the viewport read guarded: a lost WebGL context answers it with null.
+  "SHELL:--js-library ${CMAKE_SOURCE_DIR}/vendor/glue/webgl-shim.js"
   # Boot configuration, from the tracked web set (Engine/Config/web), never from the asset tree. appInit
   # derives Avaris.ini / User.ini from these two in /System.
   "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/Engine/Config/web/Default.ini@/System/Default.ini"
@@ -68,6 +70,7 @@ set_property(TARGET ${PROJECT_NAME} APPEND PROPERTY LINK_DEPENDS
   "${CMAKE_SOURCE_DIR}/Engine/Config/web/Default.ini"
   "${CMAKE_SOURCE_DIR}/Engine/Config/web/DefUser.ini"
   "${CMAKE_SOURCE_DIR}/vendor/glue/wasmfs-shim.js"
+  "${CMAKE_SOURCE_DIR}/vendor/glue/webgl-shim.js"
   "${CMAKE_CURRENT_SOURCE_DIR}/cmake/emit-artifact-meta.mjs")
 
 # meta.json, after the .js is final, so its checksum is of the served file.
