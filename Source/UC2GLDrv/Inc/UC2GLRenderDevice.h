@@ -59,7 +59,8 @@ struct FOpenGLProgram
 					ColorRemapLoc,			// VSC_COLOR_REMAP
 					ProjectorLoc,			// VSC_PROJ_* (u_proj[13])
 					SceneDepthRectLoc,		// The scene depth test in the shader (PSV_SceneDepthTest)
-					FillStepLoc;			// One texel of the source of PS_Blur's fill variant (u_fillStep)
+					FillStepLoc,			// One texel of the source of PS_Blur's fill variant (u_fillStep)
+					TexSizeLoc[4];			// The size of a stage's lightmap read through the bicubic filter (u_texSizeN)
 };
 
 //
@@ -274,6 +275,16 @@ public:
 									GLProgramUnits;			// min(GL_MAX_TEXTURE_COORDS, GL_MAX_TEXTURE_IMAGE_UNITS): units a fragment shader can sample with fixed-function texture coordinates
 	INT								FFProgramsLinked, FFProgramsFailed, FFProgramDraws, FFFallbackDraws;
 	void UpdateTextureCaps();
+
+	// BSP lightmaps (the lightmap atlases) through a cubic B-spline of four bilinear reads instead of one
+	// bilinear read: UseBicubicLightmaps (ini, read when the device starts). BicubicLightmapsActive says
+	// whether this context does it (GL ES: OpenGL ES 3 / WebGL 2 with highp fragment floats). Desktop GL filters
+	// the lightmap stages of the fixed-function programs and of the pixel shaders; GL ES draws a fixed-function
+	// pass that has a lightmap stage with a fixed-function program too (UC2GLFFProgram.cpp).
+	UBOOL							UseBicubicLightmaps,
+									BicubicLightmapsActive;
+	void UpdateBicubicLightmaps();
+	const TCHAR* LightmapFilterName();
 	UBOOL HasCombine3() { return SUPPORTS_GL_ATI_texture_env_combine3 && !MaskCombine3; }
 	UBOOL HasCombine4() { return SUPPORTS_GL_NV_texture_env_combine4 && !MaskCombine4; }
 

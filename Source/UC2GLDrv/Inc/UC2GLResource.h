@@ -152,7 +152,8 @@ public:
 	UBOOL					OwnsTexture,
 							IsCubemap,
 							IsRenderTarget,
-							IsDefaultTarget;	// wraps the device's main framebuffer
+							IsDefaultTarget,	// wraps the device's main framebuffer
+							IsLightmap;			// a BSP lightmap atlas (EnableLighting)
 	INT						DefaultUsage;		// IsDefaultTarget: the FRenderTarget::RT_MATERIAL_USE_* it was cached for
 
 	INT						CachedWidth,

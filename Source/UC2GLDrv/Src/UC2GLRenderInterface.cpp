@@ -727,6 +727,10 @@ void FOpenGLRenderInterface::EnableLighting(UBOOL UseDynamic, UBOOL UseStatic, U
 	FOpenGLTexture* Lightmap = NULL;
 	if( LightmapTexture )
 		Lightmap = CacheTexture( LightmapTexture );
+	// The BSP's lightmap atlas (or its compressed copy) comes without vertex lighting; the attenuation
+	// textures of its dynamic-light passes come with UseStatic (UnRenderBSP.cpp).
+	if( Lightmap && !UseDynamic && !UseStatic )
+		Lightmap->IsLightmap = 1;
 
 	CurrentState->Lightmap				= Lightmap;
 	CurrentState->LightingOnly			= LightingOnly;

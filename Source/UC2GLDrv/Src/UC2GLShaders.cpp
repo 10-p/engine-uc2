@@ -43,7 +43,32 @@ enum
 	PSV_FillX			= 0x40,	// Every texture read is the mean of reads 2 texels apart along x (UC2GL_WithFill)
 	PSV_FillY			= 0x80,	//      ... along y
 	PSV_Fill4			= 0x100,//      four reads per axis (else two)
+	PSV_Bicubic0		= 0x200,// stage n (PSV_Bicubic0 << n) reads a lightmap atlas through the bicubic filter (UC2GL_WithBicubic)
+	PSV_BicubicMask		= 0x1e00,
 };
+
+//
+// The bicubic variant of a pixel shader: the generated body's read of each stage asked for,
+// texture2DProj(u_texN, (tc)), becomes uc2_bicubicN((tc)) (UC2GL_BicubicLookup, UC2GLFFProgram.cpp), declared
+// before main().
+//
+static FString UC2GL_WithBicubic( const FString& Body, DWORD Variant )
+{
+	extern FString UC2GL_BicubicLookup( INT Stage );
+	FString Out = Body, Lookups;
+	for( INT s=0; s<4; s++ )
+		if( Variant & (PSV_Bicubic0 << s) )
+		{
+			Out = Out.Replace( *FString::Printf( TEXT("texture2DProj(u_tex%i, (tc))"), s ), *FString::Printf( TEXT("uc2_bicubic%i((tc))"), s ) );
+			Lookups += UC2GL_BicubicLookup( s );
+		}
+	INT Main = Out.InStr( TEXT("void uc2_main()") );
+	if( Main < 0 )
+		Main = Out.InStr( TEXT("void main()") );
+	if( Main < 0 )
+		return Out;
+	return Out.Left( Main ) + Lookups + Out.Mid( Main );
+}
 
 //
 // The fill variant of a pixel shader, for FilterCopyRenderTarget's
@@ -552,6 +577,8 @@ GLuint UUC2GLRenderDevice::GetFragmentShaderObject( INT PixelShader, DWORD Varia
 		FString Body = (Variant & PSV_SceneDepthTest) ? UC2GL_WithSceneDepthTest( Source.Source ) : FString( appFromAnsi( Source.Source ) );
 		if( Variant & (PSV_FillX | PSV_FillY) )
 			Body = UC2GL_WithFill( Body, Variant );
+		if( Variant & PSV_BicubicMask )
+			Body = UC2GL_WithBicubic( Body, Variant );
 		Shader = UC2GL_CompileShader( this, GL_FRAGMENT_SHADER, Header, TCHAR_TO_ANSI(*Body), *FString::Printf(TEXT("pixel shader %i (%s.psh, variant %i)"),PixelShader,Source.Name,Variant) );
 		if( Shader )
 			FragmentShadersCompiled++;
@@ -625,6 +652,11 @@ FOpenGLProgram* UUC2GLRenderDevice::GetProgram( INT PixelShader, DWORD Variant, 
 			P->ProjectorLoc			= glGetUniformLocation( Program, "u_proj" );
 			P->SceneDepthRectLoc	= glGetUniformLocation( Program, "u_sceneDepthRect" );
 			P->FillStepLoc			= glGetUniformLocation( Program, "u_fillStep" );
+			for( INT i=0; i<4; i++ )
+			{
+				appSprintf( Name, "u_texSize%i", i );
+				P->TexSizeLoc[i] = glGetUniformLocation( Program, Name );
+			}
 			// Samplers never change: stage n is texture unit n.
 			glUseProgram( Program );
 			for( INT i=0; i<4; i++ )
@@ -985,6 +1017,14 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 	if( MaterialState->BlurFill & UC2_BLUR_FILL_X )	Variant |= PSV_FillX;
 	if( MaterialState->BlurFill & UC2_BLUR_FILL_Y )	Variant |= PSV_FillY;
 	if( MaterialState->BlurFill & UC2_BLUR_FILL_4 )	Variant |= PSV_Fill4;
+	// A lightmap atlas the shader reads with tex (the team BSP shaders' stage 2) through the bicubic filter.
+	if( RenDev->BicubicLightmapsActive )
+		for( INT s=0; s<Min<INT>(MaterialState->StagesUsed,4); s++ )
+		{
+			FOpenGLTexture* Texture = MaterialState->Stages[s].Texture;
+			if( Source.TexOp[s] == 1 && Texture && Texture->TextureID && Texture->IsLightmap && !Texture->IsCubemap )
+				Variant |= PSV_Bicubic0 << s;
+		}
 
 	FOpenGLProgram* Program = RenDev->GetProgram( PixelShader, Variant, Enum );
 	if( !Program->Program )
@@ -1164,6 +1204,13 @@ UBOOL FOpenGLRenderInterface::BeginProgramPass( INT Pass, INT FirstIndex )
 		FLOAT W = Source ? Max( Source->CachedWidth, 1 ) : 1.f, H = Source ? Max( Source->CachedHeight, 1 ) : 1.f;
 		RenDev->glUniform4f( Program->FillStepLoc, 1.f / W, 1.f / H, 0.f, 0.f );
 	}
+	for( INT s=0; s<4; s++ )
+		if( (Variant & (PSV_Bicubic0 << s)) && Program->TexSizeLoc[s] >= 0 )
+		{
+			FOpenGLTexture* Lightmap = MaterialState->Stages[s].Texture;
+			FLOAT W = Max( Lightmap->CachedWidth, 1 ), H = Max( Lightmap->CachedHeight, 1 );
+			RenDev->glUniform4f( Program->TexSizeLoc[s], W, H, 1.f / W, 1.f / H );
+		}
 
 	// Pixel shader constants (D3D's SetPixelShaderConstant; the shader clamps them to [0,1]).
 	for( INT i=0; i<8; i++ )

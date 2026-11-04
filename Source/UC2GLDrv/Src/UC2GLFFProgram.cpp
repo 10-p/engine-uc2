@@ -34,17 +34,26 @@
 	SetMaterialBlending) applies to these lookups as it does to the combiners; units the
 	fixed-function stage does not have (NVIDIA: 4 and up) get the stage's bias in the lookup.
 
-	Desktop GL only: under GL4ES (WebGL) gl4es already generates a shader of the same kind
-	from the fixed-function state, combine3 and combine4 included, with 8 units.
-	Switch: [UC2GLDrv.UC2GLRenderDevice] FixedFunctionPrograms (default True),
-	ini FixedFunctionPrograms, console FFPROGRAMS [0|1].
+	A stage that samples a BSP lightmap atlas reads it through a cubic B-spline of four
+	bilinear reads (UseBicubicLightmaps; UC2GL_BicubicLookup) where the device has the filter on.
+
+	Desktop GL: every fixed-function pass. Switch: [UC2GLDrv.UC2GLRenderDevice]
+	FixedFunctionPrograms (default True), console FFPROGRAMS [0|1].
+	GL ES (GL4ES): gl4es generates a shader of the same kind from the fixed-function state,
+	combine3 and combine4 included, with 8 units, and draws every pass that way, except a pass
+	with a lightmap stage while the bicubic filter is on: that pass takes its program here, with a
+	vertex stage of its own (FFBuildVertexSource) that computes what gl4es' vertex stage computes
+	for the pass; the position is the same product as in gl4es' shaders, so later passes keep
+	their depth test, and a reflection is computed per fragment, as gl4es does. Without a
+	texture-unit LOD bias on GL ES every sampled stage takes its bias in the lookup.
 =============================================================================*/
 
 #include "UC2GLDrv.h"
 
 // What a pass's program depends on: per stage the two operations, their arguments (only
-// those the operation reads; the rest zeroed so equal passes share a program) and the
-// texture target; the colour sum and fog; which stages take their LOD bias in the lookup.
+// those the operation reads; the rest zeroed so equal passes share a program), the
+// texture target and whether it is a lightmap read through the bicubic filter; the colour
+// sum and fog; which stages take their LOD bias in the lookup.
 struct FUC2GLFFKey
 {
 	DWORD	Words[MAX_STAGES * 3 + 1];
@@ -56,9 +65,49 @@ struct FUC2GLFFProgram
 	DWORD		Hash;
 	GLuint		Program;
 	GLint		TFactorLoc,
-				BiasLoc;
+				BiasLoc[MAX_STAGES],
+				TexSizeLoc[MAX_STAGES];
 	UBOOL		Reported;
 };
+
+//
+// The bicubic lightmap read of stage s: uc2_bicubic<s>( vec4 tc ) in place of texture2DProj( u_tex<s>, tc ),
+// for a source that declares the sampler u_tex<s>; it declares u_texSize<s> (width, height, 1/width,
+// 1/height). The cubic B-spline (GPU Gems 2, ch. 20): the 4x4 texel footprint as four bilinear reads, each
+// placed between two texel centres by the weights; the reads are clamped to the texture's outer texel
+// centres. The weights are never negative, so the result stays within the texels' range. Every read is of
+// the first level (bias -16): the reads' own level would jump where their positions jump, at texel
+// boundaries, and the B-spline is a low-pass filter of its own. It ends with an empty line: gl4es inserts
+// declarations of its own (alpha test) above the line before main(), which must not be inside a function.
+//
+FString UC2GL_BicubicLookup( INT s )
+{
+	return FString::Printf(
+		TEXT("uniform vec4 u_texSize%i;\n")
+		TEXT("vec4 uc2_bicubic%i( vec4 tc )\n")
+		TEXT("{\n")
+		TEXT("\tvec2 st = tc.xy / tc.w * u_texSize%i.xy - 0.5;\n")
+		TEXT("\tvec2 i = floor( st );\n")
+		TEXT("\tvec2 f = st - i;\n")
+		TEXT("\tvec2 w0 = (1.0 - f) * (1.0 - f) * (1.0 - f) / 6.0;\n")
+		TEXT("\tvec2 w1 = (4.0 - 6.0 * f * f + 3.0 * f * f * f) / 6.0;\n")
+		TEXT("\tvec2 w3 = f * f * f / 6.0;\n")
+		TEXT("\tvec2 g0 = w0 + w1;\n")
+		TEXT("\tvec2 g1 = 1.0 - g0;\n")
+		TEXT("\tvec2 p0 = clamp( i - 0.5 + w1 / g0, vec2( 0.5 ), u_texSize%i.xy - 0.5 ) * u_texSize%i.zw;\n")
+		TEXT("\tvec2 p1 = clamp( i + 1.5 + w3 / g1, vec2( 0.5 ), u_texSize%i.xy - 0.5 ) * u_texSize%i.zw;\n")
+		TEXT("\treturn g0.y * (g0.x * texture2D( u_tex%i, p0, -16.0 ) + g1.x * texture2D( u_tex%i, vec2( p1.x, p0.y ), -16.0 ))\n")
+		TEXT("\t\t+ g1.y * (g0.x * texture2D( u_tex%i, vec2( p0.x, p1.y ), -16.0 ) + g1.x * texture2D( u_tex%i, p1, -16.0 ));\n")
+		TEXT("}\n")
+		TEXT("\n"),
+		s, s, s, s, s, s, s, s, s, s, s );
+}
+
+// Whether the stage reads a lightmap atlas the bicubic filter takes (filter on).
+static UBOOL FFStageBicubic( UUC2GLRenderDevice* RenDev, const FOpenGLMaterialStateStage& Stage )
+{
+	return RenDev->BicubicLightmapsActive && Stage.Texture && Stage.Texture->TextureID && Stage.Texture->IsLightmap && !Stage.Texture->IsCubemap;
+}
 
 static TArray<FUC2GLFFProgram>	GFFPrograms;
 
@@ -95,7 +144,28 @@ static UBOOL FFStageSamples( const FOpenGLMaterialStateStage& Stage )
 	return 0;
 }
 
-static void FFMakeKey( UUC2GLRenderDevice* RenDev, FOpenGLMaterialState* MS, INT StagesUsed, UBOOL ColorSum, UBOOL Fog, FUC2GLFFKey& Key )
+// The texture coordinates of a stage in a program with a vertex stage of its own.
+enum EFFGeneration
+{
+	FFG_Vertices	= 0,	// a vertex set (D3DTSS_TCI_PASSTHRU)
+	FFG_Position	= 1,	// the camera-space position
+	FFG_Normal		= 2,	// the camera-space normal
+	FFG_Reflection	= 3,	// the camera-space reflection vector, per fragment
+};
+
+static DWORD FFGeneration( const FOpenGLMaterialStateStage& Stage )
+{
+	switch( Stage.TexCoordIndex & 0xFFFF0000 )
+	{
+	case D3DTSS_TCI_CAMERASPACEPOSITION:			return FFG_Position;
+	case D3DTSS_TCI_CAMERASPACENORMAL:				return FFG_Normal;
+	case D3DTSS_TCI_CAMERASPACEREFLECTIONVECTOR:	return FFG_Reflection;
+	default:										return FFG_Vertices;
+	}
+}
+
+// OwnVertex: the program has a vertex stage of its own (GL ES), which needs each stage's coordinate generation.
+static void FFMakeKey( UUC2GLRenderDevice* RenDev, FOpenGLMaterialState* MS, INT StagesUsed, UBOOL ColorSum, UBOOL Fog, UBOOL OwnVertex, FUC2GLFFKey& Key )
 {
 	appMemzero( &Key, sizeof(Key) );
 	DWORD BiasMask = 0;
@@ -103,20 +173,22 @@ static void FFMakeKey( UUC2GLRenderDevice* RenDev, FOpenGLMaterialState* MS, INT
 	{
 		FOpenGLMaterialStateStage& Stage = MS->Stages[s];
 		DWORD	CUsed = FFOpArgs( Stage.ColorOp ), AUsed = Stage.ColorOp == D3DTOP_DISABLE ? 0 : FFOpArgs( Stage.AlphaOp );
-		DWORD	Target = 0;
+		DWORD	Target = 0, Bicubic = 0, Generation = 0;
 		if( FFStageSamples( Stage ) )
 		{
 			Target = (Stage.Texture && Stage.Texture->TextureID && Stage.Texture->IsCubemap) ? 2 : 1;
-			if( s >= RenDev->GLFixedFunctionUnits )
+			Bicubic = FFStageBicubic( RenDev, Stage );
+			Generation = OwnVertex ? FFGeneration( Stage ) : FFG_Vertices;
+			if( !Bicubic && (s >= RenDev->GLFixedFunctionUnits || RenDev->IsGLES) )
 				BiasMask |= 1 << s;
 		}
-		Key.Words[s*3+0] = (DWORD)Stage.ColorOp | ((DWORD)Stage.AlphaOp << 8) | (Target << 16);
+		Key.Words[s*3+0] = (DWORD)Stage.ColorOp | ((DWORD)Stage.AlphaOp << 8) | (Target << 16) | (Bicubic << 18) | (Generation << 19);
 		Key.Words[s*3+1] = ((CUsed & 1) ? (Stage.ColorArg0 & 0xff) : 0) | ((CUsed & 2) ? (Stage.ColorArg1 & 0xff) << 8 : 0) | ((CUsed & 4) ? (Stage.ColorArg2 & 0xff) << 16 : 0);
 		Key.Words[s*3+2] = ((AUsed & 1) ? (Stage.AlphaArg0 & 0xff) : 0) | ((AUsed & 2) ? (Stage.AlphaArg1 & 0xff) << 8 : 0) | ((AUsed & 4) ? (Stage.AlphaArg2 & 0xff) << 16 : 0);
 		if( Stage.ColorOp == D3DTOP_DISABLE )
 			break;
 	}
-	Key.Words[MAX_STAGES*3] = (DWORD)StagesUsed | (ColorSum ? 0x10 : 0) | (Fog ? 0x20 : 0) | (BiasMask << 8);
+	Key.Words[MAX_STAGES*3] = (DWORD)StagesUsed | (ColorSum ? 0x10 : 0) | (Fog ? 0x20 : 0) | (OwnVertex ? 0x40 : 0) | (BiasMask << 8);
 }
 
 static DWORD FFHash( const FUC2GLFFKey& Key )
@@ -184,6 +256,15 @@ static FString FFOp( D3DTEXTUREOP Op, const FString& A0, const FString& A1, cons
 	}
 }
 
+// Whether a sampled stage of the key takes the reflection (per fragment).
+static UBOOL FFHasReflection( const FUC2GLFFKey& Key )
+{
+	for( INT s=0; s<(INT)(Key.Words[MAX_STAGES*3] & 0xf) && (Key.Words[s*3] & 0xff) != D3DTOP_DISABLE; s++ )
+		if( ((Key.Words[s*3] >> 16) & 3) && ((Key.Words[s*3] >> 19) & 3) == FFG_Reflection )
+			return 1;
+	return 0;
+}
+
 static FString FFBuildSource( const FUC2GLFFKey& Key )
 {
 	INT		StagesUsed	= Key.Words[MAX_STAGES*3] & 0xf;
@@ -193,21 +274,42 @@ static FString FFBuildSource( const FUC2GLFFKey& Key )
 	FString	Decl, Body;
 
 	Decl += TEXT("// UC2GLDrv: D3D texture stages (UC2GLFFProgram.cpp)\nuniform vec4 u_tfactor;\n");
-	if( BiasMask )
-		Decl += FString::Printf( TEXT("uniform float u_bias[%i];\n"), MAX_STAGES );
+	if( FFHasReflection( Key ) )
+		Decl += TEXT("varying vec3 v_reflEye;\nvarying vec3 v_reflNormal;\n");
 	Body += TEXT("void main()\n{\n\tvec4 cur = gl_Color;\n");
 	for( INT s=0; s<StagesUsed; s++ )
 	{
 		D3DTEXTUREOP	ColorOp	= (D3DTEXTUREOP)(Key.Words[s*3] & 0xff),
 						AlphaOp	= (D3DTEXTUREOP)((Key.Words[s*3] >> 8) & 0xff);
-		DWORD			Target	= (Key.Words[s*3] >> 16) & 3;
+		DWORD			Target	= (Key.Words[s*3] >> 16) & 3,
+						Bicubic	= (Key.Words[s*3] >> 18) & 1;
+		UBOOL			Reflect	= ((Key.Words[s*3] >> 19) & 3) == FFG_Reflection;
 		if( ColorOp == D3DTOP_DISABLE )
 			break;
 		if( Target )
 		{
 			Decl += FString::Printf( TEXT("uniform %s u_tex%i;\n"), Target == 2 ? TEXT("samplerCube") : TEXT("sampler2D"), s );
-			FString Bias = (BiasMask & (1 << s)) ? FString::Printf( TEXT(", u_bias[%i]"), s ) : FString();
-			if( Target == 2 )
+			// One uniform per stage, not an array: drivers keep an array only up to its last element read, and
+			// gl4es refuses an upload longer than that.
+			if( BiasMask & (1 << s) )
+				Decl += FString::Printf( TEXT("uniform float u_bias%i;\n"), s );
+			FString Bias = (BiasMask & (1 << s)) ? FString::Printf( TEXT(", u_bias%i"), s ) : FString();
+			if( Bicubic )
+			{
+				Decl += UC2GL_BicubicLookup( s );
+				Body += FString::Printf( TEXT("\tvec4 t%i = uc2_bicubic%i( gl_TexCoord[%i] );\n"), s, s, s );
+			}
+			else if( Reflect )
+			{
+				// The reflection per fragment, then the stage's texture matrix, as gl4es' own shaders
+				// reflect (a 2D map is read without a divide: a reflection is a direction).
+				Body += FString::Printf( TEXT("\tvec4 r%i = gl_TextureMatrix[%i] * vec4( reflect( normalize( v_reflEye ), normalize( v_reflNormal ) ), 1.0 );\n"), s, s );
+				if( Target == 2 )
+					Body += FString::Printf( TEXT("\tvec4 t%i = textureCube( u_tex%i, r%i.stp%s );\n"), s, s, s, *Bias );
+				else
+					Body += FString::Printf( TEXT("\tvec4 t%i = texture2D( u_tex%i, r%i.st%s );\n"), s, s, s, *Bias );
+			}
+			else if( Target == 2 )
 				Body += FString::Printf( TEXT("\tvec4 t%i = textureCube( u_tex%i, gl_TexCoord[%i].xyz%s );\n"), s, s, s, *Bias );
 			else
 				Body += FString::Printf( TEXT("\tvec4 t%i = texture2DProj( u_tex%i, gl_TexCoord[%i]%s );\n"), s, s, s, *Bias );
@@ -242,6 +344,50 @@ static FString FFBuildSource( const FUC2GLFFKey& Key )
 	return Decl + Body;
 }
 
+//
+// The vertex stage of a program with OwnVertex: what gl4es' own vertex stage computes for the pass (unlit; the
+// normals normalised, as GL_NORMALIZE asks; the texture generation's eye planes are the identity, and a coordinate
+// it does not generate is the vertex's), each stage's coordinates through its texture matrix; for a reflection the
+// eye-space position and normal. ftransform() is the product gl4es' own shaders take, so the depth is theirs. The
+// empty line before main(): gl4es inserts declarations of its own (clip planes) above the line before it.
+//
+static FString FFBuildVertexSource( const FUC2GLFFKey& Key )
+{
+	INT		StagesUsed	= Key.Words[MAX_STAGES*3] & 0xf;
+	UBOOL	ColorSum	= (Key.Words[MAX_STAGES*3] & 0x10) != 0,
+			Reflection	= FFHasReflection( Key );
+	FString	S = TEXT("// UC2GLDrv: the vertex stage of a fixed-function pass (UC2GLFFProgram.cpp)\n");
+	if( Reflection )
+		S += TEXT("varying vec3 v_reflEye;\nvarying vec3 v_reflNormal;\n");
+	S +=	TEXT("\n")
+			TEXT("void main()\n{\n")
+			TEXT("\tgl_Position = ftransform();\n")
+			TEXT("\tgl_FrontColor = gl_Color;\n")
+			TEXT("\tvec4 eye = gl_ModelViewMatrix * gl_Vertex;\n")
+			TEXT("\tvec3 normal = normalize( gl_NormalMatrix * gl_Normal );\n");
+	if( ColorSum )
+		S += TEXT("\tgl_FrontSecondaryColor = gl_SecondaryColor;\n");
+	if( Reflection )
+		S += TEXT("\tv_reflEye = eye.xyz;\n\tv_reflNormal = normal;\n");
+	for( INT s=0; s<StagesUsed; s++ )
+	{
+		DWORD Word = Key.Words[s*3];
+		if( (Word & 0xff) == D3DTOP_DISABLE )
+			break;
+		if( !((Word >> 16) & 3) )
+			continue;
+		switch( (Word >> 19) & 3 )
+		{
+		case FFG_Vertices:	S += FString::Printf( TEXT("\tgl_TexCoord[%i] = gl_TextureMatrix[%i] * gl_MultiTexCoord%i;\n"), s, s, s );						break;
+		case FFG_Position:	S += FString::Printf( TEXT("\tgl_TexCoord[%i] = gl_TextureMatrix[%i] * vec4( eye.xyz, gl_MultiTexCoord%i.q );\n"), s, s, s );	break;
+		case FFG_Normal:	S += FString::Printf( TEXT("\tgl_TexCoord[%i] = gl_TextureMatrix[%i] * vec4( normal, gl_MultiTexCoord%i.q );\n"), s, s, s );	break;
+		default:			break;	// FFG_Reflection: per fragment
+		}
+	}
+	S += TEXT("}\n");
+	return S;
+}
+
 static FUC2GLFFProgram* FFGetProgram( UUC2GLRenderDevice* RenDev, const FUC2GLFFKey& Key )
 {
 	DWORD Hash = FFHash( Key );
@@ -262,10 +408,32 @@ static FUC2GLFFProgram* FFGetProgram( UUC2GLRenderDevice* RenDev, const FUC2GLFF
 	RenDev->glCompileShader( Shader );
 	GLint Status = 0;
 	RenDev->glGetShaderiv( Shader, GL_COMPILE_STATUS, &Status );
+	// Without OwnVertex (desktop GL) the program has no vertex shader: the fixed-function vertex stage feeds it.
+	GLuint VertexShader = 0;
+	if( Status && (Key.Words[MAX_STAGES*3] & 0x40) )
+	{
+		FString VertexSource = FFBuildVertexSource( Key );
+		Source += TEXT("// vertex stage:\n") + VertexSource;
+		ANSICHAR VertexText[4096];
+		appStrncpy( VertexText, TCHAR_TO_ANSI(*VertexSource), ARRAY_COUNT(VertexText) );
+		const GLchar* VertexSources[2] = { RenDev->ShaderPrologue( 0 ), VertexText };
+		VertexShader = RenDev->glCreateShader( GL_VERTEX_SHADER );
+		RenDev->glShaderSource( VertexShader, 2, VertexSources, NULL );
+		RenDev->glCompileShader( VertexShader );
+		RenDev->glGetShaderiv( VertexShader, GL_COMPILE_STATUS, &Status );
+		if( !Status )
+		{
+			RenDev->glDeleteShader( Shader );
+			Shader = VertexShader;
+			VertexShader = 0;
+		}
+	}
 	if( Status )
 	{
 		P.Program = RenDev->glCreateProgram();
 		RenDev->glAttachShader( P.Program, Shader );
+		if( VertexShader )
+			RenDev->glAttachShader( P.Program, VertexShader );
 		RenDev->glLinkProgram( P.Program );
 		RenDev->glGetProgramiv( P.Program, GL_LINK_STATUS, &Status );
 	}
@@ -283,11 +451,12 @@ static FUC2GLFFProgram* FFGetProgram( UUC2GLRenderDevice* RenDev, const FUC2GLFF
 		RenDev->FFProgramsFailed++;
 	}
 	RenDev->glDeleteShader( Shader );
+	if( VertexShader )
+		RenDev->glDeleteShader( VertexShader );
 	if( P.Program )
 	{
 		RenDev->FFProgramsLinked++;
 		P.TFactorLoc	= RenDev->glGetUniformLocation( P.Program, "u_tfactor" );
-		P.BiasLoc		= RenDev->glGetUniformLocation( P.Program, "u_bias" );
 		RenDev->glUseProgram( P.Program );
 		for( INT s=0; s<MAX_STAGES; s++ )
 		{
@@ -296,6 +465,10 @@ static FUC2GLFFProgram* FFGetProgram( UUC2GLRenderDevice* RenDev, const FUC2GLFF
 			GLint Loc = RenDev->glGetUniformLocation( P.Program, Name );
 			if( Loc >= 0 )
 				RenDev->glUniform1i( Loc, s );
+			appSprintf( Name, "u_bias%i", s );
+			P.BiasLoc[s] = RenDev->glGetUniformLocation( P.Program, Name );
+			appSprintf( Name, "u_texSize%i", s );
+			P.TexSizeLoc[s] = RenDev->glGetUniformLocation( P.Program, Name );
 		}
 		RenDev->glUseProgram( 0 );
 		if( RenDev->LogFFPrograms )
@@ -310,11 +483,21 @@ static FUC2GLFFProgram* FFGetProgram( UUC2GLRenderDevice* RenDev, const FUC2GLFF
 //
 UBOOL FOpenGLRenderInterface::BeginFixedFunctionProgram( FOpenGLMaterialState* MaterialState, UBOOL ColorSum, UBOOL Fog )
 {
-	if( !RenDev->FFProgramsActive || MaterialState->UsePixelShaderProgram )
+	if( MaterialState->UsePixelShaderProgram )
 		return 0;
 	INT StagesUsed = Min<INT>( MaterialState->StagesUsed, RenDev->PassStages );
+	UBOOL Lightmap = 0;
+	for( INT s=0; s<StagesUsed && MaterialState->Stages[s].ColorOp != D3DTOP_DISABLE; s++ )
+		if( FFStageSamples( MaterialState->Stages[s] ) )
+			Lightmap |= FFStageBicubic( RenDev, MaterialState->Stages[s] );
+	// GL ES: only an unlit pass with a lightmap for the filter (the lightmapped BSP), with a vertex stage of its
+	// own (FFBuildVertexSource); every other pass keeps gl4es' shader.
+	UBOOL OwnVertex = RenDev->IsGLES;
+	UBOOL Program = RenDev->FFProgramsActive || (RenDev->IsGLES && Lightmap && !CurrentState->UseDynamicLighting);
+	if( !Program )
+		return 0;
 	FUC2GLFFKey Key;
-	FFMakeKey( RenDev, MaterialState, StagesUsed, ColorSum, Fog, Key );
+	FFMakeKey( RenDev, MaterialState, StagesUsed, ColorSum, Fog, OwnVertex, Key );
 	FUC2GLFFProgram* P = FFGetProgram( RenDev, Key );
 	if( !P->Program )
 	{
@@ -325,12 +508,16 @@ UBOOL FOpenGLRenderInterface::BeginFixedFunctionProgram( FOpenGLMaterialState* M
 	FPlane TFactor = FColor(MaterialState->TFactorColor).Plane();
 	if( P->TFactorLoc >= 0 )
 		RenDev->glUniform4f( P->TFactorLoc, TFactor.X, TFactor.Y, TFactor.Z, TFactor.W );
-	if( P->BiasLoc >= 0 )
+	for( INT s=0; s<StagesUsed; s++ )
 	{
-		FLOAT Bias[MAX_STAGES];
-		for( INT s=0; s<MAX_STAGES; s++ )
-			Bias[s] = (s < StagesUsed && !RenDev->NoLODBias) ? MaterialState->Stages[s].TextureMipLODBias : 0.f;
-		RenDev->glUniform1fv( P->BiasLoc, MAX_STAGES, Bias );
+		if( P->BiasLoc[s] >= 0 )
+			RenDev->glUniform1f( P->BiasLoc[s], RenDev->NoLODBias ? 0.f : MaterialState->Stages[s].TextureMipLODBias );
+		if( P->TexSizeLoc[s] >= 0 )
+		{
+			FOpenGLTexture* Texture = MaterialState->Stages[s].Texture;
+			FLOAT W = Max( Texture->CachedWidth, 1 ), H = Max( Texture->CachedHeight, 1 );
+			RenDev->glUniform4f( P->TexSizeLoc[s], W, H, 1.f / W, 1.f / H );
+		}
 	}
 	RenDev->FFProgramDraws++;
 	return 1;
