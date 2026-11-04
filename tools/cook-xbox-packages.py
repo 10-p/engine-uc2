@@ -31,9 +31,10 @@ by the converters (uc2xbsp.py: models, uc2xtex.py: textures, uc2xmesh.py: static
 meshes and animations, uc2xterrain.py: terrain); everything else is copied as it is. Left out: what the PC never
 loads (editor-only exports, which a .LIN does not hold), Xbox-only data the PC builds itself (terrain sector
 blocks and layer weight maps, clipped static projectors) and the Fonts none of whose pages is on the disc, with the
-exports inside them. The maps are converted first: their merged copies of content-package assets supply the pixels
-and the geometry those packages lack, each copy taken for the object its map's PC tables say it stands for
-(uc2xtables.copy_identities). Each package is then rewritten into its PC package's tables, so that a server on these
+exports inside them. The maps are read first: their merged copies of content-package assets supply the pixels and
+the geometry those packages lack, each copy taken for the object its map's PC tables say it stands for
+(uc2xtables.copy_identities). Then every package is converted, --jobs at a time, each by one worker process; every
+start and end is a progress line (cookprogress.py). Each package is then rewritten into its PC package's tables, so that a server on these
 packages and a client on the PC ones agree. tools/cook.py runs it as one step of a whole cook (--source xbox).
 """
 
@@ -46,6 +47,7 @@ import time
 here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, here)
 
+import cookprogress  # noqa: E402
 import uc2xbsp      # noqa: E402
 import uc2xmesh     # noqa: E402
 import uc2xpkg      # noqa: E402
@@ -99,6 +101,7 @@ _state = {}
 
 def _init(disc):
     """Per worker: the bundles' index, the script packages the maps' streams read from, the converters."""
+    _state['disc'] = disc
     _state['xpr'] = uc2xpr.XprSet(uc2xpkg.find_ci(disc, 'XboxTextures'))
     foreign = uc2xpkg.ForeignIndex()
     for path in uc2xpkg.files_in(disc, 'System', '.u'):
@@ -293,13 +296,35 @@ def convert_package(src, dst, copies=None, write=True, tables=None):
 
 
 def _job(args):
-    src, dst, copies, write, tables = args
+    number, total, what, src, dst, copies, write, tables = args
+    cookprogress.line('processing %s %d of %d: %s' % (what, number, total, cookprogress.rel(src, _state['disc'])))
     t = time.time()
     try:
         dst, counts, warnings, found = convert_package(src, dst, copies, write, tables)
         return src, dst, counts, warnings, found, time.time() - t, None
     except Exception as ex:
         return src, dst, None, [], None, time.time() - t, '%s: %s' % (type(ex).__name__, ex)
+
+
+def run_jobs(pool, jobs, items, out):
+    """The jobs on the pool in their order; each start and end is a progress line. The results come back in the
+    jobs' order, so what is merged and reported does not depend on which worker finishes first."""
+    futs = {}
+    for k, job in enumerate(jobs):
+        futs[pool.submit(_job, (k + 1, items.total, items.what) + job)] = k
+    results = [None] * len(jobs)
+    for fut in concurrent.futures.as_completed(futs):
+        r = results[futs[fut]] = fut.result()
+        src, dst, counts, _, _, secs, err = r
+        if err:
+            note = 'FAILED'
+        elif counts is None:
+            note = 'copies read'
+        else:
+            note = '%d exports converted' % counts['converted']
+        items.end(os.path.relpath(dst, out).replace(os.sep, '/'), secs, note)
+    items.done()
+    return results
 
 
 def with_tables(job, out, tables, disc_tables):
@@ -316,7 +341,7 @@ def with_tables(job, out, tables, disc_tables):
 
 def plan(disc, out, only):
     """(source, destination, written) for every package: the maps first (read even when not written, for the
-    texture packages' copies), then the content packages."""
+    content packages' copies), then the content packages."""
     jobs = []
     script = uc2xpkg.find_ci(disc, 'System/Script.lin')
     if script:
@@ -357,19 +382,28 @@ def main():
     failed = 0
     maps = [j for j in jobs if j[0].lower().endswith('.lin')]
     rest = [j for j in jobs if not j[0].lower().endswith('.lin')]
+    convert = [j for j in maps if j[2]] + rest
     with concurrent.futures.ProcessPoolExecutor(max_workers=a.jobs, initializer=_init,
                                                 initargs=(a.disc,)) as pool:
+        # The content packages take the data the disc lacks from the maps' merged copies, so every map is read for
+        # its copies first; then every conversion, the maps' and the content packages', runs in one queue.
+        cookprogress.line('part 1 of 2: reading the %d maps for their copies of content-package assets' % len(maps))
+        reads = run_jobs(pool, [(s, d, None, False, t) for s, d, w, t in maps], cookprogress.Count('map', len(maps)),
+                         a.out)
         copies, named = uc2xtex.MapTextures(), uc2xtables.MapCopies()
-        results = []
-        for r in pool.map(_job, [(s, d, None, w, t) for s, d, w, t in maps]):
-            results.append(r)
+        for r in reads:
             if r[4] is not None:
                 copies.merge(r[4][0])
                 named.merge(r[4][1])
         for src, _, _, _ in rest:
             if src.lower().endswith('.utx'):
                 copies.add_originals(uc2xpkg.Package.load(src))
-        results += list(pool.map(_job, [(s, d, (copies, named), w, t) for s, d, w, t in rest]))
+        cookprogress.line('part 2 of 2: converting the %d packages' % len(convert))
+        done = run_jobs(pool, [(s, d, None if s.lower().endswith('.lin') else (copies, named), w, t)
+                               for s, d, w, t in convert], cookprogress.Count('package', len(convert)), a.out)
+        # the maps in their order (a map not written gives its read), then the content packages
+        converted = iter(done)
+        results = [next(converted) if j[2] else r for j, r in zip(maps, reads)] + list(converted)
         for src, dst, counts, warnings, _, secs, err in results:
             if counts is None and not err:
                 continue

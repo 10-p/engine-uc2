@@ -21,7 +21,9 @@ The formats are specified in docs/porting/analysis/audio.md ("Cooked format"). U
   tools/cook-audio.py [--src <epic-sources or disc>] --out <dir> [--cache <dir>] [--jobs 6]
                       [--banks A_Music,A_Weapon] [--no-encode] [--quality 4] [--music-quality 5] [--no-xwb-sources]
 
-tools/cook.py runs it as one step of a whole cook.
+The waves taken from the shipped banks are decoded first, one bank per worker process, --jobs banks at a time; then
+--jobs ffmpeg processes encode the sources. Every wave, sound, bank and cue table is a progress line
+(cookprogress.py). tools/cook.py runs it as one step of a whole cook, with its --jobs.
 
 Run it under the memory ceiling: <repo>/../bin/capped 4G 3600 -- tools/cook-audio.py
 """
@@ -38,7 +40,9 @@ import struct
 import subprocess
 import sys
 import threading
+import time
 
+import cookprogress  # tools/cookprogress.py, beside this script
 import uc2xsb    # tools/uc2xsb.py and uc2xwb.py, beside this script
 import uc2xwb
 
@@ -615,29 +619,34 @@ def read_xwb_cached(path):
 def source_from_xwb(xwb_path, wb, e, cache_dir):
     """Decodes entry e of the shipped bank to <cache>/xwb/<bank>.<index>.wav, cut to the project's play region
     (the source's length; ADPCM pads to 64 frames). Returns (path, note) or (None, reason)."""
+    return shipped_wave(xwb_path, wb.stem, e.index, e.channels, e.rate, e.play_length, cache_dir)
+
+
+def shipped_wave(xwb_path, stem, index, channels, rate_want, play_length, cache_dir):
+    """source_from_xwb on the entry's fields."""
     try:
         bank = read_xwb_cached(xwb_path)
     except uc2xwb.XwbError as ex:
         return None, str(ex)
-    if e.index >= len(bank['entries']):
-        return None, 'entry %d not in the shipped bank (%d entries)' % (e.index, len(bank['entries']))
-    xe = bank['entries'][e.index]
-    if xe['channels'] != e.channels or xe['rate'] != e.rate:
+    if index >= len(bank['entries']):
+        return None, 'entry %d not in the shipped bank (%d entries)' % (index, len(bank['entries']))
+    xe = bank['entries'][index]
+    if xe['channels'] != channels or xe['rate'] != rate_want:
         return None, 'shipped entry is %d ch %d Hz, the project says %d ch %d Hz' % (
-            xe['channels'], xe['rate'], e.channels, e.rate)
+            xe['channels'], xe['rate'], channels, rate_want)
     try:
-        rate, ch, samples = uc2xwb.decode_entry(bank, e.index)
+        rate, ch, samples = uc2xwb.decode_entry(bank, index)
     except uc2xwb.XwbError as ex:
         return None, str(ex)
     decoded = len(samples) // ch
     frames = decoded
-    if e.play_length:
-        want = e.play_length // (2 * ch)        # the project's play region: 16-bit source bytes
+    if play_length:
+        want = play_length // (2 * ch)        # the project's play region: 16-bit source bytes
         if want > decoded:
             return None, 'the project says %d frames, the shipped entry has %d' % (want, decoded)
         frames = want
     samples = samples[:frames * ch]
-    out = os.path.join(cache_dir, 'xwb', '%s.%d.wav' % (wb.stem, e.index))
+    out = os.path.join(cache_dir, 'xwb', '%s.%d.wav' % (stem, index))
     os.makedirs(os.path.dirname(out), exist_ok=True)
     uc2xwb.write_wav(out + '.part', rate, ch, samples)
     os.replace(out + '.part', out)
@@ -742,18 +751,23 @@ def music_from_xwb(xwb_path, wb, e, cache_dir):
     """A music track from its shipped bank (M_<Song>.xwb, one entry): Xbox ADPCM is decoded like any wave; WMA is
     stored as a whole ASF stream, which is taken out and decoded by ffmpeg to <cache>/xwb/<bank>.<index>.wav.
     Returns (path, note) or (None, reason)."""
+    return shipped_music(xwb_path, wb.stem, e.index, e.channels, e.rate, e.play_length, cache_dir)
+
+
+def shipped_music(xwb_path, stem, index, channels, rate, play_length, cache_dir):
+    """music_from_xwb on the entry's fields."""
     try:
         bank = read_xwb_cached(xwb_path)
     except uc2xwb.XwbError as ex:
         return None, str(ex)
-    if e.index >= len(bank['entries']):
-        return None, 'entry %d not in the shipped bank (%d entries)' % (e.index, len(bank['entries']))
-    xe = bank['entries'][e.index]
+    if index >= len(bank['entries']):
+        return None, 'entry %d not in the shipped bank (%d entries)' % (index, len(bank['entries']))
+    xe = bank['entries'][index]
     if xe['tag'] != uc2xwb.TAG_WMA:
-        return source_from_xwb(xwb_path, wb, e, cache_dir)
-    out = os.path.join(cache_dir, 'xwb', '%s.%d.wav' % (wb.stem, e.index))
+        return shipped_wave(xwb_path, stem, index, channels, rate, play_length, cache_dir)
+    out = os.path.join(cache_dir, 'xwb', '%s.%d.wav' % (stem, index))
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    asf = os.path.join(cache_dir, 'xwb', '%s.%d.wma' % (wb.stem, e.index))
+    asf = os.path.join(cache_dir, 'xwb', '%s.%d.wma' % (stem, index))
     with open(asf, 'wb') as f:
         f.write(bank['data'][xe['offset']:xe['offset'] + xe['length']])
     cmd = ['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-i', asf, '-map_metadata', '-1',
@@ -764,6 +778,41 @@ def music_from_xwb(xwb_path, wb, e, cache_dir):
         return None, 'WMA not decoded: %s' % (r.stderr.decode('latin-1', 'replace').strip() or r.returncode)
     os.replace(out + '.part', out)
     return out, 'WMA %d ch %d Hz, %d bytes, decoded by ffmpeg' % (xe['channels'], xe['rate'], xe['length'])
+
+
+def _decode_bank(job):
+    """The waves of one shipped bank, in a worker process: [(index, (path, note))]."""
+    xwb_path, stem, waves, cache_dir = job
+    out = []
+    for kind, number, total, label, index, channels, rate, play_length in waves:
+        cookprogress.line('processing wave %d of %d: %s' % (number, total, label))
+        decode = shipped_music if kind == 'music' else shipped_wave
+        out.append((index, decode(xwb_path, stem, index, channels, rate, play_length, cache_dir)))
+    return out
+
+
+def decode_shipped(plan, xwb_files, cache_dir, jobs):
+    """The waves the plan names decoded from their shipped banks, one bank per job, --jobs banks at a time:
+    {(stem, index): (path, note)}."""
+    total = sum(len(w) for w in plan.values())
+    banks = cookprogress.Count('shipped bank', len(plan))
+    out = {}
+    number = 0
+    with concurrent.futures.ProcessPoolExecutor(max_workers=jobs) as pool:
+        futs = {}
+        for stem, waves in plan.items():
+            spec = []
+            for kind, label, index, channels, rate, play_length in waves:
+                number += 1
+                spec.append((kind, number, total, label, index, channels, rate, play_length))
+            futs[pool.submit(_decode_bank, (xwb_files[stem], stem, spec, cache_dir))] = (stem, time.time())
+        for fut in concurrent.futures.as_completed(futs):
+            stem, t0 = futs[fut]
+            for index, result in fut.result():
+                out[(stem, index)] = result
+            banks.end('Sounds/%s.xwb' % stem, time.time() - t0, '%d waves' % len(plan[stem]))
+    banks.done()
+    return out
 
 
 def check_against_xwb(xwb_path, wb, e, cache_dir):
@@ -998,26 +1047,54 @@ def main():
                  if f.lower().endswith('.xwb')}
     missing = []
     from_xwb = []
+
+    def tree_source(wb, e):
+        """The entry's source in the tree, or None, and whether it is the demo tree's file found below this tree."""
+        rel = os.path.normpath(os.path.join('Sounds', e.file.replace('\\', '/'))).replace(os.sep, '/')
+        path = src_index.find(rel)
+        outside = False
+        if path is None and rel.startswith('../'):
+            # "..\..\UC2Demo\SoundData\A_Liquid\X.wav": a file of the demo tree. The same relative path
+            # below this tree's SoundData is tried (and reported) before calling it missing.
+            m = re.search(r'(?i)/(SoundData/.*)$', rel)
+            if m:
+                path = src_index.find(m.group(1))
+                outside = path is not None
+        return path, outside
+
+    def music_source(wb, e):
+        # Music entries name ..\Music\<Track>.wma or .wav; the cook uses Music/<Track>.wav (the source),
+        # else the shipped bank's track.
+        e.track = os.path.splitext(os.path.basename(e.file.replace('\\', '/')))[0]
+        return src_index.find('Music/%s.wav' % e.track)
+
+    # The waves taken from the shipped banks (where the tree has no WAV, or one that is not the shipped wave),
+    # decoded first, one bank per job.
+    plan = collections.OrderedDict()
+    if not args.no_xwb_sources:
+        for wb in wavebanks:
+            if wb.stem not in xwb_files:
+                continue
+            for e in wb.entries:
+                path, _ = tree_source(wb, e)
+                if wb.music:
+                    kind = 'music' if music_source(wb, e) is None else None
+                else:
+                    kind = 'wave' if path is None or (wb.stem, e.index) in XWB_PREFERRED else None
+                if kind:
+                    plan.setdefault(wb.stem, []).append((kind, '%s entry %d (%s)' % (wb.bank_file, e.index, e.name),
+                                                         e.index, e.channels, e.rate, e.play_length))
+    shipped = decode_shipped(plan, xwb_files, cache, args.jobs) if plan else {}
     for wb in wavebanks:
         for e in wb.entries:
-            rel = os.path.normpath(os.path.join('Sounds', e.file.replace('\\', '/'))).replace(os.sep, '/')
-            path = src_index.find(rel)
-            if path is None and rel.startswith('../'):
-                # "..\..\UC2Demo\SoundData\A_Liquid\X.wav": a file of the demo tree. The same relative path
-                # below this tree's SoundData is tried (and reported) before calling it missing.
-                m = re.search(r'(?i)/(SoundData/.*)$', rel)
-                if m:
-                    path = src_index.find(m.group(1))
-                    if path:
-                        say('SOURCE %s\\%s: %s is outside the tree; using %s' % (
-                            wb.bank_file, e.name, e.file, os.path.relpath(path, args.src)))
+            path, outside = tree_source(wb, e)
+            if outside:
+                say('SOURCE %s\\%s: %s is outside the tree; using %s' % (
+                    wb.bank_file, e.name, e.file, os.path.relpath(path, args.src)))
             if wb.music:
-                # Music entries name ..\Music\<Track>.wma or .wav; the cook uses Music/<Track>.wav (the source),
-                # else the shipped bank's track.
-                e.track = os.path.splitext(os.path.basename(e.file.replace('\\', '/')))[0]
-                path = src_index.find('Music/%s.wav' % e.track)
+                path = music_source(wb, e)
                 if path is None and not args.no_xwb_sources and wb.stem in xwb_files:
-                    path, note = music_from_xwb(xwb_files[wb.stem], wb, e, cache)
+                    path, note = shipped[(wb.stem, e.index)]
                     if path:
                         e.src_label = 'xwb:%s.xwb:%d' % (wb.stem, e.index)
                         from_xwb.append((wb.bank_file, e.index, e.name, note))
@@ -1028,7 +1105,7 @@ def main():
             if (path is None or preferred) and not wb.music and not args.no_xwb_sources and wb.stem in xwb_files:
                 # No WAV in the project (or one that is not the shipped wave): the Xbox's own copy of the wave,
                 # decoded from the shipped bank.
-                xpath, note = source_from_xwb(xwb_files[wb.stem], wb, e, cache)
+                xpath, note = shipped[(wb.stem, e.index)]
                 if xpath:
                     path = xpath
                     e.src_label = 'xwb:%s.xwb:%d' % (wb.stem, e.index)
@@ -1283,19 +1360,26 @@ def main():
             if e.source:
                 jobs[(e.source, q)] = None
     print('encoding %d distinct sources with %d encoders...' % (len(jobs), args.jobs))
-    done = fresh = 0
+    fresh = 0
     failures = []
+    sounds = cookprogress.Count('sound', len(jobs))
+
+    def label(path):
+        return cookprogress.rel(path, cache if os.path.abspath(path).startswith(os.path.abspath(cache)) else args.src)
+
+    def encode_one(job):
+        sounds.start(label(job[0]))
+        return cached_encode(job)
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as ex:
-        futs = {ex.submit(cached_encode, (src, cache, q)): (src, q) for (src, q) in jobs}
+        futs = {ex.submit(encode_one, (src, cache, q)): (src, q) for (src, q) in jobs}
         for fut in concurrent.futures.as_completed(futs):
             src, dst, err, hit = fut.result()
             jobs[futs[fut]] = dst
-            done += 1
             fresh += 0 if hit else 1
             if err:
                 failures.append((src, err))
-            if done % 500 == 0:
-                print('  %d/%d (%d encoded now, the rest from the cache)' % (done, len(jobs), fresh))
+            sounds.end(label(src), note='FAILED' if err else 'from the cache' if hit else 'encoded')
+    sounds.done()
     say('encoded: %d sources (%d now, %d from the cache), %d failures' % (len(jobs), fresh, len(jobs) - fresh,
                                                                          len(failures)))
     for src, err in failures:
@@ -1304,7 +1388,9 @@ def main():
     # --- pack + write ---------------------------------------------------------------------------------------
     music_rel = {}
     total_sound_bytes = total_music_bytes = 0
+    banks = cookprogress.Count('wave bank', len(cook_wbs))
     for wb in cook_wbs:
+        banks.start('Sounds/%s' % wb.bank_file)
         q = args.music_quality if wb.music else args.quality
         for e in wb.entries:
             if e.source and not jobs.get((e.source, q)):
@@ -1351,8 +1437,12 @@ def main():
         total_music_bytes += os.path.getsize(dst)
         say('MUSIC %s: not used by any wave bank of the project; cooked anyway' % fn)
 
+    banks.done()
+    cue_tables = cookprogress.Count('cue table', len(soundbanks))
     for sb in soundbanks:
+        cue_tables.start('Sounds/%s' % sb.bank_file)
         write_cues(sb, out_sounds, base_by_name, groups)
+    cue_tables.done()
 
     xbox = sum(os.path.getsize(os.path.join(sounds_dir, f)) for f in os.listdir(sounds_dir)
                if f.lower().endswith(('.xwb', '.xsb')))

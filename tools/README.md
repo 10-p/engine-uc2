@@ -81,10 +81,20 @@ In the repository the cook is `tools/cook.py`.
 | `--ucc-binary-path <file>` | also copies UCC (`ucc-bin` or `ucc.exe`: the dedicated server and the command-line tools) into `System/` |
 | `--skip audio,movies` | leaves the sound and music, or the movies, out (for a machine without ffmpeg) |
 | `--xbox-audio` | keeps the disc's own sound banks, which the game plays as they are, instead of converting them |
-| `--jobs <n>` | how many sounds and movies are converted at once (default: half the processors) |
+| `--jobs <n>` | how many packages, sounds and movies are converted at once (default: half the processors); each one is converted on one processor |
 | `--ask` | checks the tools, then asks for the disc image and the game folder when they are not given (`cook.cmd` without options) |
 
 `python3 cook.py --help` (Windows: `.\cook.cmd --help`) lists the rest.
+
+## What the cook prints
+
+The cook says which of its seven stages it is in (`stage 3 of 7: System/ and the packages`) and how long each took.
+Every file it extracts, copies, converts, encodes or hashes gets a line with its number and the count, when it starts
+and when it is done, for example `processing package 12 of 180: XboxMaps/DM-Azure.LIN` and
+`processed package 9 of 180: Maps/DM-Azure.unr (410 exports converted, 2.0 s)`. Files done at the same time by
+different workers finish in any order: the second line counts the files done so far. Each movie also says which step it is
+on (decoding its audio tracks, encoding the video, checking, measuring). The same lines are in the step's log in
+`.cook-logs/`.
 
 ## When something goes wrong on Windows
 

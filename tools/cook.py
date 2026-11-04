@@ -40,10 +40,12 @@ Steps
 
 The output folder is created, or must be one cook.py made (it keeps the list of its files in .cook-files): a re-cook
 replaces its files and removes the ones it no longer writes, and leaves everything else (the engine's Avaris.ini,
-User.ini, logs, Save/) alone. Each step's full log is in <out>/.cook-logs/.
+User.ini, logs, Save/) alone. Each step's full log is in <out>/.cook-logs/. The console shows each stage ('stage 3 of
+7: ...', and its time) and every file the stages work on, numbered ('processing package 12 of 180: ...'; cookprogress.py).
 
   --skip audio,movies   leave those steps out (an earlier cook's files stay)
-  --jobs N              parallel workers (default: half the CPUs)
+  --jobs N              how many packages, sounds and movies are converted at once, each on one processor
+                        (default: half the CPUs)
 """
 
 import argparse
@@ -69,6 +71,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
+try:
+    import cookprogress
+except ImportError:
+    sys.exit('cook.py: cookprogress.py is not beside it: unpack every file of the tool\'s archive into one folder')
+
 PACKAGE_TAG = 0x9E2A83C1
 SCRIPT_PACKAGES = ('Core', 'Engine', 'UCAnnouncements', 'Editor', 'UnrealEd', 'IpDrv', 'UWeb', 'GamePlay', 'UnrealGame',
                    'UCElements', 'UCGameplay', 'UCEffects', 'UCCharacters', 'UCInventory', 'UCMutators', 'GUI', 'UCMenu')
@@ -83,7 +90,8 @@ READ_DIRS = {d.lower() for d in DISC_DIRS + ('Maps', 'StaticMeshes', 'Animations
 FICLONE = 0x40049409
 TABLES = 'uc2-pc-tables.json.gz'
 # The scripts the cook runs and imports, beside this one.
-SCRIPTS = ('cook-xbox-packages.py', 'cook-audio.py', 'cook-movies.py', 'xiso.py', 'uc2xpkg.py', 'uc2xpr.py',
+SCRIPTS = ('cook-xbox-packages.py', 'cook-audio.py', 'cook-movies.py', 'cookprogress.py', 'xiso.py', 'uc2xpkg.py',
+           'uc2xpr.py',
            'uc2xbsp.py', 'uc2xtex.py', 'uc2xmesh.py', 'uc2xrawtri.py', 'uc2xorder.py', 'uc2xstrip.py', 'uc2xmat.py',
            'uc2xskel.py', 'uc2xterrain.py', 'uc2xtables.py', 'uc2xrefs.py', 'uc2types.py', 'scripts/ucpkg.py',
            'uc2xwb.py', 'uc2xsb.py')
@@ -124,6 +132,35 @@ class CookError(Exception):
 
 def say(msg=''):
     print(msg, flush=True)
+
+
+class Stages:
+    """The cook's stages, each announced as 'stage N of 7: <title>' and closed with its time."""
+
+    TITLES = ('tools', 'input', 'System/ and the packages', 'audio', 'movies', 'binaries',
+              'COOK.txt, MANIFEST.sha256')
+
+    def __init__(self):
+        self.n = 0
+        self.since = None
+        self.t0 = time.time()
+
+    def start(self, n, note=''):
+        self.end()
+        self.n, self.since = n, time.time()
+        say('stage %d of %d: %s%s' % (n, len(self.TITLES), self.TITLES[n - 1], note))
+
+    def end(self):
+        if self.since is not None:
+            say('  stage %d of %d done in %s' % (self.n, len(self.TITLES), cookprogress.duration(time.time() -
+                                                                                               self.since)))
+            self.since = None
+
+    def total(self):
+        return cookprogress.duration(time.time() - self.t0)
+
+
+STAGES = Stages()
 
 
 def access_tips():
@@ -478,8 +515,11 @@ def extract(args, img, work):
     import xiso
     dest = os.path.join(work, 'disc')
     say('  extracting %s of the image into %s' % (', '.join(DISC_DIRS), dest))
+
+    def progress(path, length, number, count):
+        say('    extracting file %d of %d: %s (%.1f MB)' % (number, count, path, length / 1e6))
     try:
-        n, total = img.extract(dest, DISC_DIRS)
+        n, total = img.extract(dest, DISC_DIRS, progress)
     except xiso.XisoError as ex:
         raise CookError(str(ex))
     if n == 0:
@@ -672,16 +712,20 @@ def copy_packages(args, src, out, log):
     from the disc (xbox)."""
     n = 0
     sysdir = find_ci(src, 'System')
+    todo = []
     for f in sorted(os.listdir(sysdir)):
         p = os.path.join(sysdir, f)
         if os.path.isfile(p) and (f.lower().endswith(('.u', '.ini')) or f.lower() == 'packages.md5'):
-            n += out.copy(p, 'System/' + f)
+            todo.append((p, 'System/' + f))
     for sub in ('Ladders', 'Localization'):
         d = find_ci(sysdir, sub)
         for dirpath, _, files in os.walk(d) if d else ():
             for fn in sorted(files):
                 rel = os.path.relpath(os.path.join(dirpath, fn), sysdir).replace(os.sep, '/')
-                n += out.copy(os.path.join(dirpath, fn), 'System/' + rel)
+                todo.append((os.path.join(dirpath, fn), 'System/' + rel))
+    for k, (p, rel) in enumerate(todo):
+        say('    copying file %d of %d: %s' % (k + 1, len(todo), rel))
+        n += out.copy(p, rel)
     # The script build reads Epic's Xbox inis from the game folder; a disc has none, the repository has Epic's.
     for ini in ('DefaultXbox.ini', 'DefUserXbox.ini'):
         if not find_ci(sysdir, ini):
@@ -705,10 +749,14 @@ def copy_packages(args, src, out, log):
         return
     root = src if args.source == 'epic' else os.path.abspath(args.pc_packages)
     xbox = []
+    count = sum(len(files_in(root, rel, ext)) for rel, ext in PACKAGE_DIRS)
+    number = 0
     for rel, ext in PACKAGE_DIRS:
         files = files_in(root, rel, ext)
         written = 0
         for p in files:
+            number += 1
+            say('    copying package %d of %d: %s/%s' % (number, count, rel, os.path.basename(p)))
             lic = package_licensee(p)
             if lic != 0:
                 xbox.append('%s (%s)' % (p, 'not a package' if lic is None else 'licensee %d: Xbox format' % lic))
@@ -766,7 +814,7 @@ def cook_audio(args, src, out, log):
 def cook_movies(args, src, out, log):
     cooked = os.path.join(out.work, 'movies')
     cmd = [sys.executable, os.path.join(HERE, 'cook-movies.py'), '--src', src, '--out', cooked,
-           '--jobs', str(min(4, args.jobs))]
+           '--jobs', str(args.jobs)]
     run_step(cmd, out.log('movies'), lambda l: 'unchanged' not in l)
     import json
     manifest = json.load(open(os.path.join(cooked, 'Movies', 'movie-manifest.json')))
@@ -784,15 +832,18 @@ def cook_movies(args, src, out, log):
 
 
 def run_step(cmd, logfile, show):
-    """Runs a step's tool, its whole output into logfile and the lines show() picks onto the console."""
-    say('  %s (log: %s)' % (' '.join(os.path.relpath(c, HERE) if c.startswith(HERE) else c for c in cmd[1:3]),
-                            logfile))
+    """Runs a step's tool, its whole output into logfile; its progress lines (cookprogress.py) and the lines show()
+    picks go onto the console."""
+    say('  running %s (log: %s)' % (os.path.basename(cmd[1]), logfile))
     with open(logfile, 'w') as lf:
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=HERE)
         for raw in p.stdout:
             line = raw.decode('utf-8', 'replace')
             lf.write(line)
-            if show(line):
+            lf.flush()
+            if line.startswith(cookprogress.PREFIX):
+                say('    ' + line[len(cookprogress.PREFIX):].rstrip())
+            elif show(line):
                 say('    ' + line.rstrip())
         rc = p.wait()
     if rc:
@@ -937,9 +988,17 @@ def write_record(args, src, out, log):
     with open(out.abs('COOK.txt'), 'w', newline='\n') as f:
         f.write('\n'.join(lines) + '\n')
     rels = sorted(r for r in out.new if r not in ('MANIFEST.sha256', 'COOK.txt'))
+    # hashlib lets other threads run while it hashes, so the files are hashed --jobs at a time
+    import concurrent.futures
+    hashes = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
+        futs = {pool.submit(sha256, out.abs(rel)): rel for rel in rels}
+        for k, fut in enumerate(concurrent.futures.as_completed(futs)):
+            hashes[futs[fut]] = fut.result()
+            say('    hashed file %d of %d: %s' % (k + 1, len(rels), futs[fut]))
     with open(out.abs('MANIFEST.sha256'), 'w', newline='\n') as f:
         for rel in rels:
-            f.write('%s  ./%s\n' % (sha256(out.abs(rel)), rel))
+            f.write('%s  ./%s\n' % (hashes[rel], rel))
     out.new |= {'COOK.txt', 'MANIFEST.sha256'}
 
 
@@ -949,7 +1008,7 @@ def report(problems):
 
 
 def check_tools_step(args):
-    say('1. tools')
+    STAGES.start(1)
     problems = check_tools(args)
     report(problems)
     if problems:
@@ -1016,7 +1075,7 @@ def main():
             say('check: ok (--in <input> checks the input too)')
             return 0
 
-        say('2. input')
+        STAGES.start(2)
         problems = check_input(args, listing)
         err = try_movie(args, listing, img) if not problems else None
         if err:
@@ -1041,25 +1100,26 @@ def main():
                 img.close()
                 img = None
             log = []
-            say('3. System/ and the packages')
+            STAGES.start(3)
             copy_packages(args, src, out, log)
-            say('4. audio' + (' (skipped: an earlier cook\'s audio stays)' if 'audio' in args.skip else ''))
+            STAGES.start(4, ' (skipped: an earlier cook\'s audio stays)' if 'audio' in args.skip else '')
             if 'audio' not in args.skip:
                 cook_audio(args, src, out, log)
             else:
                 out.keep(('Sounds/', 'Music/'))
-            say('5. movies' + (' (skipped: an earlier cook\'s movies stay)' if 'movies' in args.skip else ''))
+            STAGES.start(5, ' (skipped: an earlier cook\'s movies stay)' if 'movies' in args.skip else '')
             if 'movies' not in args.skip:
                 cook_movies(args, src, out, log)
             else:
                 out.keep(('Movies/', 'Textures/Movies/'))
             binaries = args.uc2_binary_path or args.ucc_binary_path
-            say('6. binaries' + ('' if binaries else ' (none asked: put the game\'s binaries into System/)'))
+            STAGES.start(6, '' if binaries else ' (none asked: put the game\'s binaries into System/)')
             if binaries:
                 install_binaries(args, out, log)
-            say('7. COOK.txt, MANIFEST.sha256')
+            STAGES.start(7)
             write_record(args, src, out, log)
             out.finish()
+            STAGES.end()
         finally:
             out.close()
         start = os.path.basename(args.uc2_binary_path)
@@ -1069,7 +1129,7 @@ def main():
             run = '; start %s' % os.path.join(out.path, 'System', start)
         else:
             run = '; run: cd %s/System && ./%s' % (out.path, start)
-        say('done: %s (%d files)%s' % (out.path, len(out.new), run))
+        say('done in %s: %s (%d files)%s' % (STAGES.total(), out.path, len(out.new), run))
         return 0
     except CookError as ex:
         say('cook.py: %s' % ex)
