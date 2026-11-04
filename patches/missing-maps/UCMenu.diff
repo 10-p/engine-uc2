@@ -1,0 +1,108 @@
+--- a/UCMenu/Classes/Arena_PanelBase.uc
++++ b/UCMenu/Classes/Arena_PanelBase.uc
+@@ -245,6 +245,45 @@
+ 		MapName = Mid(MapName, pos+1);
+ }
+ 
++// ufront: a custom list entry with no map is the name None in the profile (PlayerProfile.SetMaplist), which the menus
++// would offer as a map. Drops those entries from the list and from the profile's copy of it (in the profile's order); a
++// list left empty gets the game's full list, as a new profile does. True when the list changed.
++final function bool DropUnnamedMaps( Maplist List )
++{
++	local array<string> Saved;
++	local int Current;
++
++	if ( List == None || !RemoveUnnamedMaps(List.Maps) )
++		return false;
++
++	if ( List.Maps.Length == 0 )
++		GetAllMaps(List.Maps);
++	if ( CurrentProfile != None && GameClass != None )
++	{
++		CurrentProfile.GetMaps(GameClass.default.Acronym, Current, Saved);
++		RemoveUnnamedMaps(Saved);
++		if ( Saved.Length == 0 )
++			GetAllMaps(Saved);
++		CurrentProfile.SetMaplist(GameClass.default.Acronym, Current, Saved);
++	}
++	return true;
++}
++
++// ufront: removes the entries that name no map ("" or None); true when there were any.
++static final function bool RemoveUnnamedMaps( out array<string> Maps )
++{
++	local int i;
++	local bool bRemoved;
++
++	for ( i = Maps.Length - 1; i >= 0; i-- )
++		if ( Maps[i] == "" || Maps[i] ~= "None" )
++		{
++			Maps.Remove(i, 1);
++			bRemoved = true;
++		}
++	return bRemoved;
++}
++
+ 
+ 
+ 
+--- a/UCMenu/Classes/Arena_PanelMain.uc
++++ b/UCMenu/Classes/Arena_PanelMain.uc
+@@ -379,6 +379,8 @@
+ 		
+ 		
+ 		m = PC.Level.Game.GetMaplist(str);
++		if ( MaplistIndex == MAPLIST_Custom )
++			DropUnnamedMaps(m);		// ufront: no map None in the custom list
+ 		if ( m != None )
+ 		{
+ 			if ( (m.Label != "" && m.Maps.Length > 0) || MaplistIndex == MAPLIST_Random )
+@@ -431,7 +433,10 @@
+ 	{
+ 		List = Maplist(li_Maplists.GetObjectAtIndex(FindMaplistIndexStackPosition(MAPLIST_Custom)));
+ 		if ( List != None )
++		{
+ 			CurrentProfile.GetMaps(GameClass.default.Acronym,List.MapNum,List.Maps);
++			DropUnnamedMaps(List);		// ufront: no map None in the custom list
++		}
+ 
+ 		List = None;
+ 	}
+--- a/UCMenu/Classes/Arena_PanelMaplist.uc
++++ b/UCMenu/Classes/Arena_PanelMaplist.uc
+@@ -171,7 +171,13 @@
+ 
+ final function bool Done()
+ {
+-	if ( li_Active.Elements.Length == 0 )
++	local int i, Named;
++
++	// ufront: SaveMaplist saves only the rows that name a map, so those are the ones a list needs.
++	for ( i = 0; i < li_Active.Elements.Length; i++ )
++		if ( li_Active.Elements[i].ExtraStrData != "" )
++			Named++;
++	if ( Named == 0 )
+ 	{
+ 		ShowMessage(sEmptyMaplist);
+ 		return false;
+@@ -297,9 +303,10 @@
+ 	local int i;
+ 	local array<string> Maps;
+ 
+-	Maps.Length = li_Active.Elements.Length;
++	// ufront: a row with no map is not saved (the profile would hold the map None)
+ 	for ( i = 0; i < li_Active.Elements.Length; i++ )
+-		Maps[i] = li_Active.Elements[i].ExtraStrData;
++		if ( li_Active.Elements[i].ExtraStrData != "" )
++			Maps[Maps.Length] = li_Active.Elements[i].ExtraStrData;
+ 
+ 	CurrentProfile.SetMaplist(GameClass.default.Acronym, 0, Maps);
+ }
+@@ -467,6 +474,7 @@
+ 
+ 	
+ 	CurrentList = PlayerOwner().Level.Game.GetMapList(MaplistName);
++	DropUnnamedMaps(CurrentList);		// ufront: no map None in the custom list
+ 	if ( CurrentList != None && GetAllMaps(AllMaps, true) )
+ 	{
+ 
