@@ -22,6 +22,9 @@ extern UBOOL GNoGC;
 extern UBOOL GCheckConflicts;
 extern UBOOL GExitPurge;
 
+// Formats a log line and serializes it to Out whole, at any length.
+extern void SerializeLogf( FOutputDevice* Out, EName Event, const TCHAR* Fmt, va_list Args );
+
 /*-----------------------------------------------------------------------------
 	Includes.
 -----------------------------------------------------------------------------*/

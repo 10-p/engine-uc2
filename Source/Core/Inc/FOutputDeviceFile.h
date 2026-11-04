@@ -95,22 +95,14 @@ public:
                     if (!GUnicodeOS) {
                     #endif
 
-					TCHAR Ch[1024];
-					ANSICHAR ACh[1024];
 					//scion rwd - quiet mode, kills extra noise
-					if (bQuietMode)
+					if (!bQuietMode)
 					{
-						appSprintf( Ch, TEXT("%s%s"), Data, LINE_TERMINATOR );
+						WriteAnsi( FName::SafeString(Event) );
+						WriteAnsi( TEXT(": ") );
 					}
-					else
-					{
-						appSprintf( Ch, TEXT("%s: %s%s"), FName::SafeString(Event), Data, LINE_TERMINATOR );
-					}
-					INT i;
-					for( i=0; Ch[i]; i++ )
-						ACh[i] = ToAnsi(Ch[i] );
-					ACh[i] = 0;
-					LogAr->Serialize( ACh, i );
+					WriteAnsi( Data );
+					WriteAnsi( LINE_TERMINATOR );
 
                     #if __LINUX__
                     } else {
@@ -172,6 +164,20 @@ private:
 	void WriteRaw( const TCHAR* C )
 	{
 		LogAr->Serialize( const_cast<TCHAR*>(C), appStrlen(C)*sizeof(TCHAR) );
+	}
+	// Writes C to the log file as ANSI text, converted through a fixed buffer a piece at a time, so text of
+	// any length is written whole.
+	void WriteAnsi( const TCHAR* C )
+	{
+		ANSICHAR ACh[1024];
+		while( *C )
+		{
+			INT i;
+			for( i=0; i<ARRAY_COUNT(ACh) && C[i]; i++ )
+				ACh[i] = ToAnsi( C[i] );
+			LogAr->Serialize( ACh, i );
+			C += i;
+		}
 	}
 };
 
