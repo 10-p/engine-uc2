@@ -60,7 +60,11 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   hover focus, no row, no wheel and no hint, and a click on it opens it; while the Arena's mutators are up, the rest of
   the page (its other panels, its header) but the footer's hints is inert the same way and a click there closes the
   mutators as the pad's B does, patch set menu-mouse), the console on the key left of 1, the PC mouse look of the
-  mouse-look patch set; while player one is on the keyboard and mouse (their last device, as the key glyphs show it) the
+  mouse-look patch set; in the coup de grace's button prompts (the timed sequences of
+  `UCPlayerController.InputRequests`) a held key or mouse button counts as a pad button when the two bindings start
+  with the same command, the rule by which the key glyphs pick the key they show (`USDL2Viewport::GetAnalogButtonAmount`:
+  Space for A, the mouse buttons for the triggers), and the movement keys give the left stick's directions (the
+  mouse-look set); while player one is on the keyboard and mouse (their last device, as the key glyphs show it) the
   pitch's auto-centring waits, with the shipped scripts too (`USDL2Viewport::UpdateInput` holds
   `UCPlayerController.fAutoCenterCount` at zero), and with the pad it is Epic's.
 - **Split screen and four pads**: up to four players in one window, joining from the menus or a match; players three

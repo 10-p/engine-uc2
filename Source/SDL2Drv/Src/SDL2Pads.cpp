@@ -808,10 +808,10 @@ UBOOL USDL2Client::PadExec( const TCHAR* Cmd, FOutputDevice& Ar )
 
 //
 // UPlayer::GetAnalogButtonAmount returns 255 on every non-Xbox viewport, so UCPlayerInput's
-// timed input sequences (UCPlayerController.uc InputRequests: triggers, A, X) saw those
+// timed input sequences (UCPlayerController.uc InputRequests: triggers, A, X) would see those
 // buttons held all the time. Here: the bound pad's analog value (XGB_* index), or 255 while
-// a keyboard or mouse key is down whose binding is the same command as that pad button's
-// (the key that does what the button does counts as the button).
+// a keyboard or mouse key is down that does what that pad button does: the two bindings start with
+// the same command (KeyGlyphButtonScore), so the key the button's glyph shows counts.
 //
 BYTE USDL2Viewport::GetAnalogButtonAmount( INT ButtonIndex )
 {
@@ -819,13 +819,9 @@ BYTE USDL2Viewport::GetAnalogButtonAmount( INT ButtonIndex )
 	USDL2Client* Client = GetOuterUSDL2Client();
 	BYTE Amount = Client->GetPadAnalogButton( GamepadID, ButtonIndex );
 	if( Amount < 255 && Input && ButtonIndex>=0 && ButtonIndex<SDL2DRV_PAD_BUTTONS )
-	{
-		const FString& PadBinding = Input->Bindings[IK_Joy1+ButtonIndex];
-		if( PadBinding.Len() )
-			for( INT k=1; k<IK_Joy1; k++ )
-				if( Input->KeyDown(k) && Input->Bindings[k].Len() && appStricmp(*Input->Bindings[k], *PadBinding)==0 )
-					return 255;
-	}
+		for( INT k=1; k<IK_Joy1; k++ )
+			if( Input->KeyDown(k) && KeyGlyphButtonScore( Input, k, ButtonIndex ) > 0 )
+				return 255;
 	return Amount;
 	unguard;
 }
