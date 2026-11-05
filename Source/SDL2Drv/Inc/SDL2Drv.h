@@ -151,6 +151,7 @@ class USDL2Client : public UClient, public FNotifyHook
 	// USDL2Client interface.
 	void PumpEvents();
 	USDL2Viewport* FindViewport( DWORD WindowID );
+	USDL2Viewport* KeyboardViewport();
 	void PollGamepads( FLOAT DeltaSeconds );
 
 	// Pads (SDL2Pads.cpp).
@@ -251,6 +252,7 @@ class USDL2Viewport : public UViewport
 	void ToggleFullscreen();
 	void EndFullscreen();
 	UBOOL CauseInputEvent( INT iKey, EInputAction Action, FLOAT Delta=0.0 );
+	void Paste( const char* Utf8, const TCHAR* From );
 #ifndef SDL2DRV_REGISTRATION_ONLY
 	void HandleEvent( const SDL_Event& Ev );
 #endif

@@ -29,6 +29,8 @@ Scenario language, one command per line (# comments):
     key <keysym> [hold-seconds]   press and release a key (X keysym names: Return, Down, w, F1 ...)
     keydown <keysym> / keyup <keysym>
     type <text>                   type characters (Shift for capitals)
+    clip <text>                   the X clipboard (CLIPBOARD) holds <text> from now on (\\n \\t \\r \\\\ \\xHH \\uHHHH
+                                  escapes), served by a child process of the runner until the next clip or the end
     move <x> <y>                  absolute pointer position in window coordinates (640x480 design pixels mapped
                                   into the UI box when M10_UIMAP=<W>x<H> is set)
     rmove <dx> <dy> [steps]       relative pointer motion, split in <steps> events 20 ms apart
@@ -79,9 +81,12 @@ Menus and bindings:
     keys <tag> <Key> [<Key>...]   the first viewport's bindings of those keys (engine key names: J, Space, LeftMouse)
                                   into K[tag] (dict key name -> binding text)
 """
-import ctypes, re, sys, time, os, math
+import ctypes, re, sys, time, os, math, subprocess
 
-scen_path, log_path, chan_path, result_path = sys.argv[1:5]
+# m10-inject.py --clipboard-owner: the child that 'clip' starts (own_clipboard below), the text on its stdin.
+CLIPBOARD_OWNER = sys.argv[1:2] == ['--clipboard-owner']
+if not CLIPBOARD_OWNER:
+    scen_path, log_path, chan_path, result_path = sys.argv[1:5]
 
 # ---------------------------------------------------------------- X / XTEST
 x = ctypes.CDLL("libX11.so.6")
@@ -130,6 +135,118 @@ def x_error(display, event):
 
 
 x.XSetErrorHandler(x_error)
+
+
+# The X clipboard (the CLIPBOARD selection), for 'clip': a selection lives only while its owner answers the requests
+# for it, so a child process of the runner owns it and serves it until the runner ends it or another client takes it.
+class XSelectionRequestEvent(ctypes.Structure):
+    _fields_ = [('type', ctypes.c_int), ('serial', ctypes.c_ulong), ('send_event', ctypes.c_int),
+                ('display', ctypes.c_void_p), ('owner', ctypes.c_ulong), ('requestor', ctypes.c_ulong),
+                ('selection', ctypes.c_ulong), ('target', ctypes.c_ulong), ('property', ctypes.c_ulong),
+                ('time', ctypes.c_ulong)]
+
+
+class XSelectionEvent(ctypes.Structure):
+    _fields_ = [('type', ctypes.c_int), ('serial', ctypes.c_ulong), ('send_event', ctypes.c_int),
+                ('display', ctypes.c_void_p), ('requestor', ctypes.c_ulong), ('selection', ctypes.c_ulong),
+                ('target', ctypes.c_ulong), ('property', ctypes.c_ulong), ('time', ctypes.c_ulong)]
+
+
+class XEvent(ctypes.Union):
+    _fields_ = [('type', ctypes.c_int), ('xselectionrequest', XSelectionRequestEvent),
+                ('xselection', XSelectionEvent), ('pad', ctypes.c_long * 24)]
+
+
+SELECTION_CLEAR, SELECTION_REQUEST, SELECTION_NOTIFY, XA_ATOM, XA_STRING = 29, 30, 31, 4, 31
+
+
+def own_clipboard(text):
+    """Own CLIPBOARD with `text`: UTF8_STRING (what SDL asks for) and TEXT as UTF-8, STRING as Latin-1, and the
+    TARGETS list; prints 'clipboard owned' once it holds the selection, returns when another client takes it."""
+    x.XInternAtom.restype = ctypes.c_ulong
+    x.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+    x.XCreateSimpleWindow.restype = ctypes.c_ulong
+    x.XCreateSimpleWindow.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_int, ctypes.c_uint,
+                                      ctypes.c_uint, ctypes.c_uint, ctypes.c_ulong, ctypes.c_ulong]
+    x.XSetSelectionOwner.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong]
+    x.XGetSelectionOwner.restype = ctypes.c_ulong
+    x.XGetSelectionOwner.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+    x.XNextEvent.argtypes = [ctypes.c_void_p, ctypes.POINTER(XEvent)]
+    x.XChangeProperty.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_int,
+                                  ctypes.c_int, ctypes.c_void_p, ctypes.c_int]
+    x.XSendEvent.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_long, ctypes.POINTER(XEvent)]
+    atom = lambda name: x.XInternAtom(d, name, 0)
+    clipboard, targets, utf8, text_atom = atom(b'CLIPBOARD'), atom(b'TARGETS'), atom(b'UTF8_STRING'), atom(b'TEXT')
+    data = {utf8: text.encode('utf-8'), text_atom: text.encode('utf-8'), XA_STRING: text.encode('latin-1', 'replace')}
+    owner = x.XCreateSimpleWindow(d, root, 0, 0, 1, 1, 0, 0, 0)
+    x.XSetSelectionOwner(d, clipboard, owner, 0)
+    x.XSync(d, 0)
+    if x.XGetSelectionOwner(d, clipboard) != owner:
+        print('clipboard not taken', flush=True)
+        return
+    print('clipboard owned', flush=True)
+    ev = XEvent()
+    while True:
+        x.XNextEvent(d, ctypes.byref(ev))
+        if ev.type == SELECTION_CLEAR:
+            return
+        if ev.type != SELECTION_REQUEST:
+            continue
+        req = ev.xselectionrequest
+        prop = req.property or req.target   # a client of the old protocol names no property
+        if req.target == targets:
+            have = (ctypes.c_ulong * 4)(targets, utf8, XA_STRING, text_atom)
+            x.XChangeProperty(d, req.requestor, prop, XA_ATOM, 32, 0, have, 4)
+        elif req.target in data:
+            b = data[req.target]
+            x.XChangeProperty(d, req.requestor, prop, req.target, 8, 0, b, len(b))
+        else:
+            prop = 0
+        note = XEvent()
+        n = note.xselection
+        n.type, n.display, n.requestor, n.selection = SELECTION_NOTIFY, d.value, req.requestor, req.selection
+        n.target, n.property, n.time = req.target, prop, req.time
+        x.XSendEvent(d, req.requestor, 0, 0, ctypes.byref(note))
+        x.XFlush(d)
+
+
+if CLIPBOARD_OWNER:
+    own_clipboard(sys.stdin.buffer.read().decode('utf-8'))
+    sys.exit(0)
+
+clip_owner = None
+
+
+def clip_unescape(text):
+    """The text of a 'clip' line: \\n \\t \\r \\\\ \\xHH \\uHHHH stand for those characters."""
+    simple = {'n': '\n', 't': '\t', 'r': '\r', '\\': '\\'}
+    return re.sub(r'\\(u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|[ntr\\])',
+                  lambda m: simple.get(m.group(1)) or chr(int(m.group(1)[1:], 16)), text)
+
+
+def clip(text):
+    """The X clipboard holds `text` from now on, owned by a child of this runner (clip_end stops it)."""
+    global clip_owner
+    clip_end()
+    p = subprocess.Popen([sys.executable, os.path.abspath(__file__), '--clipboard-owner'],
+                         stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    p.stdin.write(text.encode('utf-8'))
+    p.stdin.close()
+    if b'clipboard owned' not in p.stdout.readline():
+        p.kill()
+        raise RuntimeError('could not take the X clipboard')
+    clip_owner = p
+    print(f'  clipboard holds {text!r}', flush=True)
+
+
+def clip_end():
+    global clip_owner
+    if clip_owner:
+        clip_owner.terminate()
+        clip_owner.wait()
+        clip_owner = None
+
+
 win = None
 win_origin = (0, 0)
 
@@ -883,6 +1000,8 @@ def execute(line):
         elif cmd == 'type':
             wait_ready()
             type_text(rest)
+        elif cmd == 'clip':
+            clip(clip_unescape(rest))
         elif cmd == 'move':
             wait_ready()
             a, b = rest.split(); move_seen(int(a), int(b))
@@ -982,6 +1101,8 @@ try:
 except Exception as e:
     record('scenario-complete', False, str(e))
     status = 1
+finally:
+    clip_end()
 with open(result_path, 'w') as f:
     for name, state, detail in results:
         f.write(f"{state}\t{name}\t{detail}\n")

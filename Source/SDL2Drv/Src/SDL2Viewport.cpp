@@ -10,6 +10,9 @@
 	    sends further IST_Press, as WM_KEYDOWN does;
 	  - typed characters are Engine->Key(Key, Char) (WM_CHAR), including Backspace, Tab and
 	    Escape, never Enter;
+	  - Ctrl+V and Shift+Insert paste the system clipboard as typed characters into the text
+	    field that has the keyboard, and only there (Paste, Engine/Inc/UnPaste.h); on the web the
+	    page's paste event does (USDL2Client::PumpEvents);
 	  - mouse motion is relative IK_MouseX/IK_MouseY axis input at all times (DirectInput),
 	    buttons and wheel likewise; the absolute cursor is read on demand through
 	    UpdateMousePosition (GetCursorPos), which is what the GUI uses in a window;
@@ -20,6 +23,7 @@
 =============================================================================*/
 
 #include "SDL2Drv.h"
+#include "UnPaste.h"
 
 // The frame trace's count of the mouse motion each frame received (UC2FrameTrace.cpp).
 ENGINE_API void UC2FrameTraceMouse( INT DX, INT DY );
@@ -1026,6 +1030,52 @@ static DWORD DecodeUTF8( const char*& P )
 	return C;
 }
 
+// A character WM_CHAR delivers: TCHAR is Latin-1, so code points above 255 cannot be typed, nor control characters.
+static UBOOL IsTypedCharacter( DWORD C )
+{
+	return C>=32 && C<256 && C!=127;
+}
+
+#if !defined(__EMSCRIPTEN__)
+// The keys that paste: Ctrl+V (Ctrl+Shift+V too) and Shift+Insert, with neither Alt nor the system key.
+static UBOOL IsPasteKey( const SDL_Keysym& K )
+{
+	UBOOL Ctrl = (K.mod & KMOD_CTRL)!=0, Shift = (K.mod & KMOD_SHIFT)!=0;
+	if( K.mod & (KMOD_ALT|KMOD_GUI) )
+		return 0;
+	return (K.sym==SDLK_v && Ctrl) || (K.sym==SDLK_INSERT && Shift && !Ctrl);
+}
+#endif
+
+//
+// A paste of UTF-8 text (NULL: none read): the characters typing gives of it, at most PASTE_MAX_CHARACTERS, typed into
+// the text field that has the keyboard (PasteText). From names the paste in the input log; the text is never logged.
+//
+void USDL2Viewport::Paste( const char* Utf8, const TCHAR* From )
+{
+	guard(USDL2Viewport::Paste);
+	FString Text;
+	for( const char* P = Utf8 ? Utf8 : ""; *P && Text.Len()<PASTE_MAX_CHARACTERS; )
+	{
+		DWORD C = DecodeUTF8( P );
+		if( IsTypedCharacter( C ) )
+		{
+			TCHAR Ch[2] = { (TCHAR)C, 0 };
+			Text += Ch;
+		}
+	}
+	EPasteTarget Target = PasteText( this, *Text );
+	if( GetOuterUSDL2Client()->LoggingInput() )
+	{
+		if( Target==PASTE_None )
+			debugf( SDL2INPUT, TEXT("paste: no text field takes typing (%s)"), From );
+		else
+			debugf( SDL2INPUT, TEXT("paste: %i characters into %s (%s)"), Text.Len(),
+				Target==PASTE_Console ? TEXT("the console's line") : TEXT("the menus' text field"), From );
+	}
+	unguard;
+}
+
 //
 // One SDL event for this viewport's window (the WndProc of the PC build).
 //
@@ -1122,6 +1172,16 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 			// The control characters WM_CHAR delivers for these keys (never Enter).
 			if( Key==IK_Backspace || Key==IK_Tab || Key==IK_Escape )
 				Client->Engine->Key( this, Key, (TCHAR)Key );
+#if !defined(__EMSCRIPTEN__)
+			// The paste keys type the system clipboard after their press, which goes on as every press does; the
+			// clipboard is read only when a text field takes typing.
+			if( IsPasteKey( Ev.key.keysym ) )
+			{
+				char* Clip = PasteTarget( this )!=PASTE_None ? SDL_GetClipboardText() : NULL;
+				Paste( Clip, Ev.key.keysym.sym==SDLK_INSERT ? TEXT("Shift+Insert") : TEXT("Ctrl+V") );
+				SDL_free( Clip );
+			}
+#endif
 			break;
 		}
 		case SDL_KEYUP:
@@ -1153,11 +1213,11 @@ void USDL2Viewport::HandleEvent( const SDL_Event& Ev )
 		}
 		case SDL_TEXTINPUT:
 		{
-			// WM_CHAR: TCHAR is Latin-1, so code points above 255 cannot be typed.
+			// WM_CHAR.
 			for( const char* P = Ev.text.text; *P; )
 			{
 				DWORD C = DecodeUTF8( P );
-				if( C>=32 && C<256 && C!=127 )
+				if( IsTypedCharacter( C ) )
 					Client->Engine->Key( this, (EInputKey)C, (TCHAR)C );
 			}
 			break;

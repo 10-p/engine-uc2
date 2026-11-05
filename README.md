@@ -66,7 +66,11 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   Space for A, the mouse buttons for the triggers), and the movement keys give the left stick's directions (the
   mouse-look set); while player one is on the keyboard and mouse (their last device, as the key glyphs show it) the
   pitch's auto-centring waits, with the shipped scripts too (`USDL2Viewport::UpdateInput` holds
-  `UCPlayerController.fAutoCenterCount` at zero), and with the pad it is Epic's.
+  `UCPlayerController.fAutoCenterCount` at zero), and with the pad it is Epic's. Ctrl+V and Shift+Insert paste the
+  clipboard's text (natively the system's, on the web the page's paste event) into the text field that has the
+  keyboard and nowhere else: the console's line, which is also the in-game chat, or the menus' field of the on-screen
+  keyboard pages, as the keys type it (Latin-1 without control characters, up to the field's length;
+  `Engine/Inc/UnPaste.h`).
 - **Split screen and four pads**: up to four players in one window, joining from the menus or a match; players three
   and four on the character page (players34).
 - **Wide windows**: the 640x480 menus and HUD in the largest centred 4:3 box of the window or of a split view, the
