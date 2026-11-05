@@ -48,6 +48,11 @@ Revision history:
 #endif
 #include "UnMovie.h"	// AppPlayMovieFullscreen (Engine)
 
+// The pace trace's record of each frame's start, tick and limiter (PACETRACE, UC2PaceTrace.cpp).
+ENGINE_API void UC2PaceFrameStart( DOUBLE Now, FLOAT DeltaTime, FLOAT TickDelta );
+ENGINE_API void UC2PaceTickEnd( DOUBLE Now );
+ENGINE_API void UC2PaceLimiter( FLOAT Want, FLOAT Slept );
+
 /*-----------------------------------------------------------------------------
 	Global variables.
 -----------------------------------------------------------------------------*/
@@ -272,6 +277,25 @@ void CMainLoop::RunLoop()
 			appRequestExit( 0 );
 	}
 
+	// [SDLLaunch] PaceJitter=<frames>:<ms>, a test key: every <frames>-th frame starts <ms> late, so its step and the
+	// next one's are uneven by a known amount while the display's are not (with vsync) for the pace trace (PACETRACE).
+	static INT   JitterEvery = -1;
+	static FLOAT JitterSeconds = 0.f;
+	static INT   JitterFrame = 0;
+	if( JitterEvery < 0 )
+	{
+		JitterEvery = 0;
+		FString Spec;
+		if( appReadTestKey( TEXT("PaceJitter"), Spec, TEXT("SDLLaunch") ) && Spec.InStr( TEXT(":") ) > 0 )
+		{
+			JitterEvery   = Max( 0, appAtoi( *Spec ) );
+			JitterSeconds = Max( 0.f, appAtof( *Spec.Mid( Spec.InStr( TEXT(":") ) + 1 ) ) / 1000.f );
+			debugf( NAME_Init, TEXT("PaceJitter: every %i frames one starts %.1f ms late"), JitterEvery, 1000.f * JitterSeconds );
+		}
+	}
+	if( JitterEvery > 0 && ++JitterFrame % JitterEvery == 0 )
+		appSleep( JitterSeconds );
+
 	// Update the world.
 	DOUBLE NewTime   = appSeconds();
 	FLOAT  DeltaTime = NewTime - OldTime;
@@ -289,6 +313,8 @@ void CMainLoop::RunLoop()
 			debugf( NAME_Init, TEXT("FixedFrameRate: every frame ticks the world by %.4f s"), FixedDelta );
 		}
 	}
+
+	UC2PaceFrameStart( NewTime, DeltaTime, GIsBenchmarking || RecordingMovie ? 1.0f / 30.0f : FixedDelta > 0.f ? FixedDelta : DeltaTime );
 
 	guard(UpdateWorld);
 	if( GIsBenchmarking || RecordingMovie )
@@ -316,9 +342,12 @@ void CMainLoop::RunLoop()
 		TickCount = 0;
 	}
 	unguard;
+	UC2PaceTickEnd( appSeconds() );
 
 	// Enforce optional maximum tick rate.
 	UBOOL LimiterSlept = 0;	// the web yields only when the limiter did not sleep
+	const DOUBLE LimiterStart = appSeconds();
+	FLOAT LimiterWant = -1.f;	// the sleep asked for, for the pace trace (-1: none)
 	guard(EnforceTickRate);
 	if( !GIsBenchmarking && IncludeMessaging )
 	{
@@ -371,21 +400,26 @@ void CMainLoop::RunLoop()
 		if( PatternNum > 0 && Engine->GetMaxTickRate() <= 0.f )
 		{
 			FLOAT Delta = Pattern[PatternIndex++ % PatternNum] - (appSeconds()-OldTime);
-			appSleep( Max(0.f,Delta) );
+			LimiterWant = Max(0.f,Delta);
+			appSleep( LimiterWant );
 			LimiterSlept = 1;
 		}
 		else if( MaxTickRate>0.0 )
 		{
 #ifdef __EMSCRIPTEN__
+			LimiterWant = Max( 0.f, (FLOAT)(1.0/MaxTickRate - (LimiterStart-OldTime)) );
 			UC2WebWaitCapped( 1.0/MaxTickRate );
 #else
 			FLOAT Delta = (1.0/MaxTickRate) - (appSeconds()-OldTime);
-			appSleep( Max(0.f,Delta) );
+			LimiterWant = Max(0.f,Delta);
+			appSleep( LimiterWant );
 #endif
 			LimiterSlept = 1;
 		}
 	}
 	unguard;
+	if( LimiterWant >= 0.f )
+		UC2PaceLimiter( LimiterWant, appSeconds() - LimiterStart );
 
 #ifdef __EMSCRIPTEN__
 	// Give the engine worker's event loop one turn per frame (input, host commands), until the display's next

@@ -555,7 +555,19 @@ access; later configures re-fetch the branch tips. Vendored in `Thirdparty/`: zl
 `[Engine.GameEngine] FpsLogSeconds=<s>` (default 0 = off; console `FPSLOG <s>`) logs one `FPS:` line every `<s>`
 seconds: frames, fps, frame time avg/min/max/p99, the 1% low. `tools/dev/fps-bench.sh <tree> <map> <seconds> [WxH]`
 runs a fixed camera turn on this machine's GPU, headless, and prints one line. A standalone game is uncapped by default
-(`UseVSync=False`, `[Engine.Engine] FrameRateCap=0`); a network client keeps the engine's own tick limit.
+(`UseVSync=False`, `[Engine.Engine] FrameRateCap=0`); a network client keeps the engine's own tick limit. The GL
+device logs the swap interval the context reports when it changes (`UC2GLDrv: UseVSync=True, swap interval 1`).
+
+Frame pacing: the console command `PACETRACE <frames> [tag]` (also a key binding, `-ini:User:[Engine.Input]:F10=PACETRACE
+900 t`) records the next `<frames>` frames in memory and then logs them, one `PaceTrace:` line each: the frame's start
+and its DeltaTime (where the launcher measures it), the step the engine ticked with, the swap's call and return, when
+`UEngine::Tick` returned, the frame limiter's requested sleep and how long it took; then a summary line
+(`Source/Engine/Src/UC2PaceTrace.cpp`). `tools/dev/pace-analyze.py <log>` reads them: the game-time steps against the
+time each frame was on the display (the swaps placed on the refresh grid), repeated and skipped frames, the limiter's
+oversleep. `tools/dev/pace-run.sh <name> <tree> [frames]` runs a match in a window on this machine's screen at a fixed
+spot (TELEPORT) with `PACE_VSYNC`, `PACE_CAP`, `PACE_FULLSCREEN` and `PACE_VIDEO` (x11 or wayland), traces it and
+prints the analysis's verdict. The test key `[SDLLaunch] PaceJitter=<frames>:<ms>` starts every `<frames>`-th frame
+`<ms>` late, a known unevenness of the game-time steps for the trace to show; `FramePattern` gives frames set lengths.
 
 ## Relaunch
 
@@ -574,4 +586,4 @@ the post-process reference copy, the camera effects' targets, the web canvas siz
 line per linked program, the projector materials and the distortion distance, the movie clock and the MovieMaterial
 frames, the WebRTC link statistics and the package map table, the wave packs read, the first sound and the music
 refill cost, the script `SaveConfig` traces, and the UI scale's full-screen tiles and sharper fonts. Lines behind a
-switch of their own (`FPSLOG`, `LogInput`, the frame trace, the test keys) follow that switch.
+switch of their own (`FPSLOG`, `LogInput`, the frame trace, the pace trace, the test keys) follow that switch.

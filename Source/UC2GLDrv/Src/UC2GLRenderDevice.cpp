@@ -13,6 +13,9 @@
 #include "UnMovie.h"
 #include "SDL.h"
 
+// The pace trace's record of each buffer swap (PACETRACE, UC2PaceTrace.cpp).
+ENGINE_API void UC2PaceSwap( DOUBLE Before, DOUBLE After );
+
 /*-----------------------------------------------------------------------------
 	Globals.
 -----------------------------------------------------------------------------*/
@@ -864,6 +867,17 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 
 
 	BindingSetSwapInterval( UseVSync ? 1 : 0 );
+#if !defined(__EMSCRIPTEN__)
+	// The swap interval the context reports (1 vsync, 0 none), logged when it changes; a driver setting can still
+	// force vsync or a frame cap of its own.
+	static INT LoggedInterval = -2;
+	const INT Interval = SDL_GL_GetSwapInterval();
+	if( Interval != LoggedInterval )
+	{
+		debugf( NAME_Init, TEXT("UC2GLDrv: UseVSync=%s, swap interval %i"), UseVSync ? TEXT("True") : TEXT("False"), Interval );
+		LoggedInterval = Interval;
+	}
+#endif
 
 	ResetRenderStates();
 	UpdateGamma( Viewport );
@@ -2252,7 +2266,9 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 		}
 	}
 
+	const DOUBLE SwapBegin = appSeconds();
 	BindingSwap( Viewport );
+	UC2PaceSwap( SwapBegin, appSeconds() );
 
 	if( LogStats && (FrameCounter - StatFrame0 >= 300 || StatTime0 == 0.0) )
 		LogFrameStats();
