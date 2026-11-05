@@ -1023,6 +1023,7 @@ static UBOOL IsMouseMenuItem( UGUIController* C, UGUIComponent* Item );
 static UBOOL MouseReleaseClicks( UGUIController* C, UGUIComponent* Comp );
 static UBOOL MouseIsOver( UGUIController* C, UGUIComponent* Comp );
 static UGUIComponent* MouseInertOwner( UGUIComponent* Comp );
+static UGUIComponent* MouseInertUnder( UGUIController* C );
 static UBOOL MouseDialogPress( UGUIController* C );
 static UBOOL MouseDialogRelease( UGUIController* C );
 static UBOOL MouseOutsideDialog( UGUIController* C );
@@ -1292,6 +1293,15 @@ UBOOL UGUIController::NativeKeyEvent(BYTE& iKey, BYTE& State, FLOAT Delta )
 			Code = EJP_Type;	// a key that makes a character types it while there is a text field
 		if ( State == IST_Press || (State == IST_Release && iKey == GPadKeyHeld) )
 			GPadKeyHeld = 0;
+		// The mouse wheel over a part that is inert to the mouse does nothing, whatever key it stands for.
+		UBOOL Wheel = iKey == IK_MouseWheelUp || iKey == IK_MouseWheelDown || iKey == IK_MouseW;
+		UGUIComponent* InertUnder = Wheel ? MouseInertUnder( this ) : NULL;
+		if ( InertUnder )
+		{
+			if ( State == IST_Press )
+				debugf( NAME_DevUI, TEXT("Mouse wheel over %s, inert to the mouse: nothing"), InertUnder->GetMenuPath() );
+			return true;
+		}
 		if ( Code >= XBC_A && Code <= XBC_RightThumb )
 		{
 			if ( State == IST_Press && !TextBox && IsTypingKey(iKey) )
@@ -2684,8 +2694,8 @@ static UBOOL MouseIsOver( UGUIController* C, UGUIComponent* Comp )
 
 // A part of a menu that is inert to the mouse while its script says so: the component or one of its
 // owners answers true to its MouseInert() (UCMenu's collapsed Arena panels). The mouse gives nothing in
-// it the focus, by hover or by press, and clicks nothing in it; a press on it calls the inert owner's
-// MouseInertClick() alone. The keys and the pads reach it as they do.
+// it the focus, by hover or by press, clicks nothing in it and its wheel does nothing over it; a press on
+// it calls the inert owner's MouseInertClick() alone. The keys and the pads reach it as they do.
 static UGUIComponent* MouseInertOwner( UGUIComponent* Comp )
 {
 	static FName NAME_MouseInert( TEXT("MouseInert") );
@@ -2701,6 +2711,13 @@ static UGUIComponent* MouseInertOwner( UGUIComponent* Comp )
 			return Part;
 	}
 	return NULL;
+}
+
+// The inert owner of the component under the pointer on the active page, if it is inert to the mouse.
+static UGUIComponent* MouseInertUnder( UGUIController* C )
+{
+	UGUIComponent* Under = C->UnderCursor( C->MouseX, C->MouseY );
+	return Under && Under->PageOwner == C->ActivePage ? MouseInertOwner( Under ) : NULL;
 }
 
 static void MouseInertClick( UGUIComponent* Inert )

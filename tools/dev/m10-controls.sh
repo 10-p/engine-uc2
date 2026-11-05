@@ -334,8 +334,8 @@ check ms-click-on-row-accepts-that-row P['g0'].item.startswith('Capture') and P[
 shot gametype
 key Return
 seek 40 P['_'].item == '' ;; sleep 0.5
-# the pointer over the collapsed GAMETYPE gives it no focus: Down and the wheel stay on the open RULES (patch set
-# menu-mouse; with CUSTOMIZE off they move nothing there)
+# the pointer over the collapsed GAMETYPE gives it no focus: Down stays on the open RULES (with CUSTOMIZE off it moves
+# nothing there) and the wheel does nothing (patch set menu-mouse)
 move 130 60
 move 130 89
 sleep 0.8
@@ -348,7 +348,23 @@ probe hv2
 check ms-hover-on-collapsed-panel-takes-no-focus P['hv1'].item == '' and P['hv2'].item == ''
 seek 10 P['_'].item != '' ;; key Return
 seek 40 '|' in P['_'].item and P['_'].item != 'NOT SET' ;; sleep 0.5
-# each wheel click waits for the list to move (two clicks in one slow frame count once)
+# the maps open, the pointer still over the collapsed GAMETYPE: the wheel there moves nothing, Down moves the maps
+probe mw0
+mark
+click 5
+sleep 1.5
+probe mw1
+check ms-wheel-over-collapsed-panel-moves-nothing P['mw1'].item == P['mw0'].item and any('Mouse wheel over' in l and 'inert to the mouse: nothing' in l for l in M.log_lines[M.mark_at:]) and not any('handled XC_PadDown' in l for l in M.log_lines[M.mark_at:])
+key Down
+tryseek 20 P['_'].item != P['mw1'].item ;; sleep 0.3
+probe mw2
+check ms-down-over-collapsed-panel-moves-the-open-list P['mw2'].item != P['mw1'].item
+key Up
+tryseek 20 P['_'].item == P['mw1'].item ;; sleep 0.3
+# the wheel with the pointer over the preview picture (no control) moves the open list; each wheel click waits for
+# the list to move (two clicks in one slow frame count once)
+move 500 200
+sleep 0.5
 probe m0
 click 5
 tryseek 20 P['_'].item != P['m0'].item ;; sleep 0.3
@@ -364,7 +380,10 @@ click 4
 tryseek 20 P['_'].item != P['m15'].item ;; sleep 0.3
 probe m2
 check ms-wheel-up-moves-back P['m2'].item == P['m0'].item
-# a click on the collapsed RULES row (a rule drawn on it) opens RULES, as B would; Return steps on to the maps again
+# a click on the collapsed RULES row (a rule drawn on it) opens RULES, as B would; Return steps on to the maps again.
+# The pointer goes back over the preview and the collapsed GAMETYPE, so that on its way it gives no open list the focus.
+move 500 89
+move 130 89
 mark
 click 1 130 139
 sleep 3
@@ -372,6 +391,9 @@ probe cr1
 check ms-collapsed-rules-click-opens-it P['cr1'].item == '' and any('menu-mouse: a click on a collapsed panel RULES with ARENA open' in l for l in M.log_lines[M.mark_at:])
 key Return
 seek 40 '|' in P['_'].item and P['_'].item != 'NOT SET' ;; sleep 0.5
+move 500 89
+move 500 200
+sleep 0.5
 seek 40 'DM-Deadbolt' in P['_'].item ;; click 5
 key Return
 wait OpenMenu \[UCMenu.UC2Arena_Character\] 15

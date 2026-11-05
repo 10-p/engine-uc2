@@ -3,10 +3,10 @@
 UCMenu: the mouse on the Arena's collapsed panels.
 
 The Arena shows one panel open at a time: GAMETYPE, RULES or ARENA (the maps), with MUTATORS beside RULES. The others
-are collapsed to their selected row. A collapsed panel is inert to the mouse: the pointer over it gives it no focus, so
-the keys, the wheel and the pads go on acting on the open panel, and a click on any part of it (its row, or the rule
-drawn on RULES' row) selects nothing there. A click on a collapsed panel opens it the way the keys step to it, and
-keeps its selection:
+are collapsed to their selected row. A collapsed panel is inert to the mouse: the pointer over it gives it no focus and
+the wheel there does nothing, so the keys and the pads go on acting on the open panel, and a click on any part of it
+(its row, or the rule drawn on RULES' row) selects nothing there. A click on a collapsed panel opens it the way the keys
+step to it, and keeps its selection:
 - **a panel before the open one:** it opens as B goes back;
 - **the panel right after the open one:** it opens as A on the open panel's list does (the game type accepted, then
   the rules);
