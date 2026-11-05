@@ -305,6 +305,59 @@ click 1 550 437
 expect ms-back-hint-is-b CloseMenu \[UC2Settings_Main\] 10
 check ms-the-clicks-were-the-hints any('Mouse click on the button hint' in l and 'XC_A' in l for l in M.log_lines[M.mark_at:]) and any('Mouse click on the button hint' in l and 'XC_B' in l for l in M.log_lines[M.mark_at:])
 wait UC2MainMenu Unblocking animation 60
+# the profiles page's middle bar is a hint bar too. A profile is made through the page's own box (in this run tree),
+# then NEW (the pad's Black), COPY (White: a copy named Spare), DELETE (X: its question; No keeps the copy, Yes
+# deletes it); the page's BACK hint leaves. 640x480: NEW (95, 260), COPY (205, 260), DELETE (330, 260); the
+# question's Yes (135, 296), No (520, 296)
+pyexec import os
+seek 8 P['_'].caption == 'PROFILES' ;; key Up
+key Return
+wait OpenMenu \[UCMenu.UC2Profile\] 15
+wait OpenMenu \[GUI.GUIMessageBox\] 20
+key Return
+wait OpenMenu \[UCMenu.UC2ProfileKeyboard\] 15
+type Tester
+tryseek 20 len(P['_'].text) >= 6 ;; sleep 0.5
+key Return
+wait CloseMenu \[UC2ProfileKeyboard\] 10
+seek 40 P['_'].menu == 'UC2Profile' ;; sleep 0.5
+mark
+click 1 95 260
+expect ms-new-hint-opens-the-new-profile-keyboard OpenMenu \[UCMenu.UC2ProfileKeyboard\] 15
+probe pn
+check ms-new-hint-is-black P['pn'].text == 'Player' and any('UC2Profile handled XC_Black' in l for l in M.log_lines[M.mark_at:])
+key Escape
+wait CloseMenu \[UC2ProfileKeyboard\] 10
+seek 40 P['_'].menu == 'UC2Profile' ;; sleep 0.5
+mark
+click 1 205 260
+expect ms-copy-hint-opens-the-copy-keyboard OpenMenu \[UCMenu.UC2ProfileKeyboard\] 15
+probe pc
+check ms-copy-hint-is-white P['pc'].text == 'Tester' and any('UC2Profile handled XC_White' in l for l in M.log_lines[M.mark_at:])
+type Spare
+tryseek 20 P['_'].text == 'Spare' ;; sleep 0.5
+key Return
+wait CloseMenu \[UC2ProfileKeyboard\] 10
+seek 40 P['_'].menu == 'UC2Profile' ;; sleep 2
+check ms-copy-made sorted(os.listdir('Profiles')) == ['Spare', 'Tester']
+mark
+click 1 330 260
+expect ms-delete-hint-asks OpenMenu \[GUI.GUIMessageBox\] 15
+click 1 520 296
+wait CloseMenu \[GUIMessageBox\] 10
+sleep 2
+check ms-delete-question-no-keeps-it any('UC2Profile handled XC_X' in l for l in M.log_lines[M.mark_at:]) and sorted(os.listdir('Profiles')) == ['Spare', 'Tester']
+seek 40 P['_'].menu == 'UC2Profile' ;; sleep 0.5
+click 1 330 260
+wait OpenMenu \[GUI.GUIMessageBox\] 15
+click 1 135 296
+wait CloseMenu \[GUIMessageBox\] 10
+sleep 3
+check ms-delete-question-yes-deletes-the-copy sorted(os.listdir('Profiles')) == ['Tester']
+seek 40 P['_'].menu == 'UC2Profile' ;; sleep 0.5
+click 1 550 437
+expect ms-profiles-back-hint-is-b CloseMenu \[UC2Profile\] 10
+wait UC2MainMenu Unblocking animation 60
 mark
 click 1 140 184
 expect ms-click-opens-item-under-cursor OpenMenu \[UCMenu.UC2Arena_Main\] 15
