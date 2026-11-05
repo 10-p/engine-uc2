@@ -395,16 +395,6 @@ void FBspDrawList::AddNode(INT NodeIndex,FDynamicLight** InDynamicLights,INT Num
 	unguard;
 }
 
-// Whether any light map of a light map texture has light bitmaps to compose the texture from. A map cooked from the
-// Xbox disc has none: its static texture is all the lighting it carries.
-static UBOOL HasLightBitmaps(UModel* Model,FLightMapTexture* Texture)
-{
-	for(INT LightMapIndex = 0;LightMapIndex < Texture->LightMaps.Num();LightMapIndex++)
-		if(Model->LightMaps(Texture->LightMaps(LightMapIndex)).Bitmaps.Num())
-			return 1;
-	return 0;
-}
-
 //
 //  FBspIndexBuffer
 //
@@ -487,7 +477,7 @@ void FBspDrawList::Render(FLevelSceneNode* SceneNode,FRenderInterface* RI,FProje
 			{
 				FLightMapTexture* LightMapTexture = &Model->LightMapTextures(Section.iLightMapTexture);
 
-				if( (SceneNode->Viewport->RenDev->UseCompressedLightmaps || !HasLightBitmaps(Model,LightMapTexture)) && (LightMapTexture->StaticTexture.Revision == LightMapTexture->Revision) )
+				if( SceneNode->Viewport->RenDev->UseCompressedLightmaps && (LightMapTexture->StaticTexture.Revision == LightMapTexture->Revision) )
 					LightMap = &LightMapTexture->StaticTexture;
 				else
 					LightMap = LightMapTexture;
