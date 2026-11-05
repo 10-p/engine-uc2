@@ -116,6 +116,16 @@ static INT MatchScore( const TArray<FString>& Pad, const TArray<FString>& Key )
 	return Score;
 }
 
+ENGINE_API INT KeyGlyphButtonScore( UInput* Input, INT Key, INT Pad )
+{
+	if( !Input || Key <= 0 || Key >= IK_MAX || Pad < KGP_A || Pad > KGP_RightThumb || !Input->Bindings[Key].Len() )
+		return 0;
+	TArray<FString> P, K;
+	SplitCommands( Input->Bindings[IK_Joy1 + Pad], P );
+	SplitCommands( Input->Bindings[Key], K );
+	return MatchScore( P, K );
+}
+
 // The best key bound to a binding whose first command is Command (lower case), or KGS_None.
 static INT KeyForFirstCommand( UInput* Input, const TCHAR* Command )
 {

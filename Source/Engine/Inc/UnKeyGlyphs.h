@@ -89,6 +89,9 @@ ENGINE_API extern FKeyGlyphs GKeyGlyphs;
 ENGINE_API INT KeyGlyphRank( INT Key );
 // A key the keyboard or the mouse can press (not a pad key, not an axis).
 ENGINE_API UBOOL KeyGlyphIsKey( INT Key );
+// How well Key's binding does what pad button Pad (KGP_A..KGP_RightThumb) is bound to do: 1000 the same commands, 500
+// and up the same first command, 0 another. The game's glyph of the button shows the best key above 0.
+ENGINE_API INT KeyGlyphButtonScore( UInput* Input, INT Key, INT Pad );
 // UnCanvas.cpp's DrawString (no clipping, no ampersands), for the labels.
 ENGINE_API FLOAT KeyGlyphDrawString( UCanvas* Canvas, UFont* Font, FLOAT ScaleX, FLOAT ScaleY, FLOAT X, FLOAT Y, const TCHAR* Text, FPlane Color );
 
