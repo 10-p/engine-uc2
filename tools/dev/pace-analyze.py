@@ -99,7 +99,11 @@ def analyse(tag, frames, begin, hz):
     print('refresh grid: %s at phase %.3f ms, spread %.3f ms (%s)' % (
         ref, phase, spread, 'locked to the refresh' if locked else 'not locked: nothing in the frame waits for the display'))
     idx = {}
-    if all(x['vbl'] >= 0 for x in sw):
+    vbl = [x['vbl'] for x in sw]
+    counting = all(v >= 0 for v in vbl) and all(b >= a for a, b in zip(vbl, vbl[1:])) and vbl[-1] - vbl[0] >= len(vbl) // 2
+    if any(v >= 0 for v in vbl) and not counting:
+        print('refresh count: given but not counting the refreshes (a stub, e.g. under wine): the estimated grid')
+    if counting:
         # The platform's own count of the display's refreshes at each swap's return (Windows: the compositor's);
         # with vsync on, the frames are on the display's refreshes whether or not the timestamps show it.
         ref = 'swap1'
