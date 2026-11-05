@@ -2662,10 +2662,12 @@ void UGUIController::LookUnderCursor(FLOAT dX, FLOAT dY)
 // no OnClick but an XControllerEvent handler gets XC_A. A click on a page's or a panel's
 // background, a caption or a disabled item (UnderCursor passes those for the component behind
 // them) does nothing: A goes to the focused control, which there is not the one clicked. A press
-// on a part that is inert to the mouse (MouseInertOwner) is its inert owner's MouseInertClick alone.
+// on a part that is inert to the mouse (MouseInertOwner) is its inert owner's MouseInertClick alone,
+// and that whole click, press and release, acts on nothing else.
 //
 static UGUIComponent* GClickTarget = NULL;
 static UGUIComponent* GClickRowList = NULL;	// the list whose row under the cursor the press selected
+static UBOOL GClickInert = 0;				// the press was on a part inert to the mouse
 
 // What the mouse selects and clicks: a control that takes the focus and input, on the active page,
 // and is not inert to the mouse; never the page itself.
@@ -2693,9 +2695,11 @@ static UBOOL MouseIsOver( UGUIController* C, UGUIComponent* Comp )
 }
 
 // A part of a menu that is inert to the mouse while its script says so: the component or one of its
-// owners answers true to its MouseInert() (UCMenu's collapsed Arena panels). The mouse gives nothing in
-// it the focus, by hover or by press, clicks nothing in it and its wheel does nothing over it; a press on
-// it calls the inert owner's MouseInertClick() alone. The keys and the pads reach it as they do.
+// owners answers true to its MouseInert() (UCMenu's collapsed Arena panels, and the rest of the Arena
+// while its mutators are up), which gets the component as its object parameter when it has one. The
+// mouse gives nothing in it the focus, by hover or by press, clicks nothing in it and its wheel does
+// nothing over it; a press on it calls the inert owner's MouseInertClick() alone. The keys and the
+// pads reach it as they do.
 static UGUIComponent* MouseInertOwner( UGUIComponent* Comp )
 {
 	static FName NAME_MouseInert( TEXT("MouseInert") );
@@ -2706,6 +2710,12 @@ static UGUIComponent* MouseInertOwner( UGUIComponent* Comp )
 		if ( !Inert || Inert->ReturnValueOffset == MAXWORD || Inert->ParmsSize > (INT)sizeof(Parms) )
 			continue;
 		appMemzero( Parms, sizeof(Parms) );
+		for ( TFieldIterator<UProperty,CLASS_IsAUProperty> It(Inert); It && (It->PropertyFlags & CPF_Parm); ++It )
+			if ( !(It->PropertyFlags & CPF_ReturnParm) && It->IsA(UObjectProperty::StaticClass()) )
+			{
+				*(UObject**)(Parms + It->Offset) = Comp;
+				break;
+			}
 		Part->ProcessEvent( Inert, Parms );
 		if ( *(UBOOL*)(Parms + Inert->ReturnValueOffset) )
 			return Part;
@@ -2884,6 +2894,7 @@ static void MouseClickPress( UGUIController* C )
 {
 	GClickTarget = NULL;
 	GClickRowList = NULL;
+	GClickInert = 0;
 	if ( !C->bEmulatedJoypad )
 		return;
 	UGUIComponent* Under = C->UnderCursor( C->MouseX, C->MouseY );
@@ -2892,6 +2903,7 @@ static void MouseClickPress( UGUIController* C )
 	UGUIComponent* Inert = MouseInertOwner( Under );
 	if ( Inert )
 	{
+		GClickInert = 1;
 		MouseInertClick( Inert );
 		return;
 	}
@@ -2920,6 +2932,7 @@ static void MouseClickRelease( UGUIController* C )
 	UGUIComponent* Target = GClickTarget;
 	GClickTarget = NULL;
 	GClickRowList = NULL;
+	GClickInert = 0;
 	if ( !C->bEmulatedJoypad || !Target || !IsValidObject(Target) || Target->PageOwner != C->ActivePage )
 		return;
 	if ( C->UnderCursor( C->MouseX, C->MouseY ) != Target )
@@ -3937,7 +3950,7 @@ UBOOL UGUIComponent::MousePressed(UBOOL IsRepeat)
 #ifndef _XBOX
 	if ( !MouseIsOver( C, this ) )
 		return false;
-	if ( MouseInertOwner( this ) )
+	if ( GClickInert || MouseInertOwner( this ) )
 		return true;
 #endif
 
@@ -3988,7 +4001,7 @@ UBOOL UGUIComponent::MouseReleased()
 #ifndef _XBOX
 	if ( !MouseIsOver( C, this ) )
 		return false;
-	if ( MouseInertOwner( this ) || !MouseReleaseClicks( C, this ) )
+	if ( GClickInert || MouseInertOwner( this ) || !MouseReleaseClicks( C, this ) )
 		return true;
 #endif
 

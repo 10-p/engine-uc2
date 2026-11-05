@@ -9,7 +9,7 @@
 +delegate OnCollapsedClick( ArenaListPanel Sender );
 +
 +// menu-mouse: the engine's PC mouse asks the panels under the pointer: a collapsed panel is inert to the mouse (no
-+// hover, no focus, no row, none of its parts takes a click), and a click on it is the page's OnCollapsedClick
++// hover, no focus, no row, no wheel, none of its parts takes a click), and a click on it is the page's OnCollapsedClick
 +final function bool MouseInert()
 +{
 +	return !IsOpen();
@@ -24,13 +24,13 @@
  {
 --- a/UCMenu/Classes/Arena_PanelMain.uc
 +++ b/UCMenu/Classes/Arena_PanelMain.uc
-@@ -2461,6 +2461,53 @@
+@@ -2461,6 +2461,82 @@
  	return BClicked();
  }
  
 +// menu-mouse: a mouse click on a collapsed panel opens it the way the keys step to it, its selection kept: a panel
 +// before the open one as B goes back, the panel after it as A on the open panel's list; the error sound for a panel
-+// two steps on or while the mutators are up; nothing while the panels move
++// two steps on; while the mutators are up, a click outside them (MouseInertClick); nothing while the panels move
 +final function CollapsedPanelClicked( ArenaListPanel Panel )
 +{
 +	local int To, From;
@@ -38,9 +38,9 @@
 +
 +	if ( bAnimating || pnl_Game.bAnimating || pnl_Rules.bAnimating || pnl_Maps.bAnimating || pnl_Mutators.bAnimating )
 +		return;
-+	if ( pnl_Mutators.IsOpen() )
++	if ( pnl_Mutators.bVisible )
 +	{
-+		PlayAction(CS_Error);
++		MouseInertClick();
 +		return;
 +	}
 +
@@ -75,10 +75,39 @@
 +	Log("menu-mouse: a click on a collapsed panel" @ Panel.PanelCaption @ "with" @ Open.PanelCaption @ "open", 'DevUI');
 +}
 +
++// menu-mouse: while the mutators are up, sliding in and out included, every other part of this panel is outside them
++// and inert to the engine's PC mouse, as a collapsed panel is; Under is the component under the pointer
++final function bool MouseInert( GUIComponent Under )
++{
++	local GUIComponent Part;
++
++	if ( !pnl_Mutators.bVisible )
++		return false;
++	for ( Part = Under; Part != None; Part = Part.MenuOwner )
++		if ( Part == pnl_Mutators )
++			return false;
++	return true;
++}
++
++// menu-mouse: a mouse click outside the open mutators is the pad's B on the page, which closes them; nothing while
++// the panels move
++final function MouseInertClick()
++{
++	local eXControllerCodes B;
++
++	if ( bAnimating || pnl_Game.bAnimating || pnl_Rules.bAnimating || pnl_Maps.bAnimating || pnl_Mutators.bAnimating )
++		return;
++	if ( !pnl_Mutators.IsOpen() )
++		return;
++	Log("menu-mouse: a click outside the mutators is B", 'DevUI');
++	B = XC_B;
++	Controller.ClientXControllerEvent(Controller.ControllerId, B);
++}
++
  function bool BClicked()
  {
  	if ( bAnimating )
-@@ -2673,6 +2720,10 @@
+@@ -2673,6 +2749,10 @@
  	li_Rules.OnClick = InternalOnClick;
  	li_Maps.OnClick = InternalOnClick;
  	li_Mutators.OnClick = InternalOnClick;

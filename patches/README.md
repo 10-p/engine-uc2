@@ -56,7 +56,7 @@ change: every other package stays the shipped one.
 | `key-glyphs` | player one's keys in place of the pad's button glyphs while they use the keyboard or the mouse (the engine draws them; the set switches it on) | GUI, UCMenu | on |
 | `keys-menu` | the KEYBOARD / MOUSE settings page | UCMenu | on |
 | `wide-hud` | the HUD on a window wider than 4:3, and in each split-screen view: its left and right groups (the mutators' too) at the sides, at their 4:3 distance from them; its centred items exactly centred | UCGameplay, UCMutators | on |
-| `menu-mouse` | a collapsed Arena panel is inert to the mouse (the pointer gives it no focus, the wheel over it does nothing, a click selects nothing in it), and a click on it opens it the way the keys step to it, its selection kept | UCMenu | on |
+| `menu-mouse` | a collapsed Arena panel is inert to the mouse (the pointer gives it no focus, the wheel over it does nothing, a click selects nothing in it), and a click on it opens it the way the keys step to it, its selection kept; while the mutators are up, the Arena's other panels are inert the same way and a click on one closes the mutators as the pad's B does | UCMenu | on |
 
 Each set's folder has a `README.md` (what it changes, its ini keys, what it depends on), one `<Pkg>.diff` per
 package it changes (paths `<Pkg>/Classes/<Class>.uc`; `patch -p1` reads them too) and whole new classes under

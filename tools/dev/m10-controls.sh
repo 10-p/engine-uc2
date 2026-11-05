@@ -389,6 +389,38 @@ click 1 130 139
 sleep 3
 probe cr1
 check ms-collapsed-rules-click-opens-it P['cr1'].item == '' and any('menu-mouse: a click on a collapsed panel RULES with ARENA open' in l for l in M.log_lines[M.mark_at:])
+# the mutators up (CUSTOMIZE yes, MUTATORS, X): every other panel is outside them to the mouse; over a RULES row the
+# pointer takes no focus and the wheel moves nothing, a click there or on the collapsed GAMETYPE closes the mutators
+# as B does and does nothing else (patch set menu-mouse); then CUSTOMIZE back to no
+key Right
+sleep 1
+key Down
+sleep 1
+key x
+seek 10 P['_'].item == 'NOT SET' ;; sleep 0.5
+mark
+move 130 177
+sleep 0.8
+click 5
+sleep 1.5
+probe mu1
+check ms-mutators-up-rules-take-no-hover-and-no-wheel P['mu1'].item == 'NOT SET' and not any('Mouse hover selects' in l or 'handled XC_PadDown' in l for l in M.log_lines[M.mark_at:])
+mark
+click 1 130 177
+sleep 3
+probe mu2
+check ms-mutators-up-click-on-rules-closes-them P['mu2'].item == '' and any('menu-mouse: a click outside the mutators is B' in l for l in M.log_lines[M.mark_at:]) and not any('handled XC_A' in l or 'Mouse click is A' in l for l in M.log_lines[M.mark_at:])
+key x
+seek 10 P['_'].item == 'NOT SET' ;; sleep 0.5
+mark
+click 1 130 89
+sleep 3
+probe mu3
+check ms-mutators-up-click-on-collapsed-panel-closes-them P['mu3'].item == '' and any('menu-mouse: a click outside the mutators is B' in l for l in M.log_lines[M.mark_at:]) and not any('menu-mouse: a click on a collapsed panel' in l for l in M.log_lines[M.mark_at:])
+key Up
+sleep 1
+key Left
+sleep 1
 key Return
 seek 40 '|' in P['_'].item and P['_'].item != 'NOT SET' ;; sleep 0.5
 move 500 89
