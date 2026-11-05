@@ -2706,7 +2706,9 @@ static UBOOL MouseIsOver( UGUIController* C, UGUIComponent* Comp )
 // pads reach it as they do.
 static UGUIComponent* MouseInertOwner( UGUIComponent* Comp )
 {
-	static FName NAME_MouseInert( TEXT("MouseInert") );
+	// Intrinsic: a name only script uses is purged at a level change while no package holds it, and made
+	// again under another index when the menus' package comes back.
+	static FName NAME_MouseInert( TEXT("MouseInert"), FNAME_Intrinsic );
 	for ( UGUIComponent* Part = Comp; Part; Part = Part->MenuOwner )
 	{
 		UFunction* Inert = Part->FindFunction( NAME_MouseInert );
@@ -2740,7 +2742,7 @@ static UGUIComponent* MouseInertUnder( UGUIController* C )
 
 static void MouseInertClick( UGUIComponent* Inert )
 {
-	static FName NAME_MouseInertClick( TEXT("MouseInertClick") );
+	static FName NAME_MouseInertClick( TEXT("MouseInertClick"), FNAME_Intrinsic );
 	UFunction* Click = Inert->FindFunction( NAME_MouseInertClick );
 	BYTE Parms[16];
 	if ( !Click || Click->ParmsSize > (INT)sizeof(Parms) )
