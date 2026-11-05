@@ -557,6 +557,11 @@ seconds: frames, fps, frame time avg/min/max/p99, the 1% low. `tools/dev/fps-ben
 runs a fixed camera turn on this machine's GPU, headless, and prints one line. A standalone game is uncapped by default
 (`UseVSync=False`, `[Engine.Engine] FrameRateCap=0`); a network client keeps the engine's own tick limit.
 
+The launcher's frame limiter (`FrameRateCap`, a network client's tick limit, `Source/SDLLaunch/Src/SDLLaunch.cpp`)
+gives each frame a due time one period after the one before and waits for it with `appSleepUntil` (the system's sleep,
+then a yield for the last fraction of a millisecond; on Windows a high-resolution waitable timer where there is one), so
+a cap holds its rate exactly; a frame more than a period late starts the schedule again from itself.
+
 ## Relaunch
 
 `RELAUNCH [<arguments>]` (Epic's console command; no UC2 menu sends it): the game exits and its running executable

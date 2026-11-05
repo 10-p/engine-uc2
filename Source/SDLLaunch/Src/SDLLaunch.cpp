@@ -379,8 +379,15 @@ void CMainLoop::RunLoop()
 #ifdef __EMSCRIPTEN__
 			UC2WebWaitCapped( 1.0/MaxTickRate );
 #else
-			FLOAT Delta = (1.0/MaxTickRate) - (appSeconds()-OldTime);
-			appSleep( Max(0.f,Delta) );
+			// Each frame is due one period after the one before, so the cap holds its rate whatever a wake-up's error;
+			// a frame that ends more than a period late starts the schedule again from itself.
+			static DOUBLE Due = 0.0;
+			const DOUBLE Period = 1.0 / MaxTickRate;
+			const DOUBLE Now = appSeconds();
+			Due = Due > 0.0 ? Due + Period : OldTime + Period;
+			if( Now - Due > Period )
+				Due = Now;
+			appSleepUntil( Due );
 #endif
 			LimiterSlept = 1;
 		}
