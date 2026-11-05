@@ -13,9 +13,9 @@
 #include "UnMovie.h"
 #include "SDL.h"
 
-// When each buffer swap returns and whether the swaps wait for the display's refresh, for the launcher's game-time
-// step (UC2PresentClock.cpp).
-ENGINE_API void UC2FramePresented( DOUBLE When );
+// When each buffer swap returns and how long it waited, and whether the swaps wait for the display's refresh, for the
+// launcher's game-time step (UC2PresentClock.cpp).
+ENGINE_API void UC2FramePresented( DOUBLE When, DOUBLE Waited );
 ENGINE_API void UC2SetPresentVSync( UBOOL VSync );
 
 /*-----------------------------------------------------------------------------
@@ -2269,8 +2269,10 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 		}
 	}
 
+	const DOUBLE SwapBegin = appSeconds();
 	BindingSwap( Viewport );
-	UC2FramePresented( appSeconds() );
+	const DOUBLE SwapEnd = appSeconds();
+	UC2FramePresented( SwapEnd, SwapEnd - SwapBegin );
 
 	if( LogStats && (FrameCounter - StatFrame0 >= 300 || StatTime0 == 0.0) )
 		LogFrameStats();
