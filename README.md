@@ -29,7 +29,8 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
 - **WebRTC net driver** (`WebRTCDrv`, web only): engine packets over the frontend's data channels; the System Link
   page lists the broker's servers.
 - **OpenAL Soft audio** (`UC2ALAudio`): the Xbox XACT device (cues, music, zone reverb, voice pool) on OpenAL Soft,
-  from the cooked sound data or the shipped Xbox banks.
+  from the cooked sound data or the shipped Xbox banks; a pause holds the cues playing when the game pauses (music
+  plays on, a cue started meanwhile plays as usual) until the game resumes or the level changes.
 - **64-bit and ARM**: LP64 builds (x86_64 Linux and Windows, arm64 cross, Android arm64 and x86_64) on the shipped
   32-bit script layout, with the C++/script layout checked at load on every pointer width.
 - **Android build**: a Gradle/NDK project (`Android/`) for Android 7.0 and later: the engine as `libUC2.so` under SDL's activity, rendering through

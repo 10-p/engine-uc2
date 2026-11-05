@@ -58,6 +58,8 @@
 	X(alSourcei, LPALSOURCEI) \
 	X(alSource3i, LPALSOURCE3I) \
 	X(alGetSourcei, LPALGETSOURCEI) \
+	X(alGetSourcef, LPALGETSOURCEF) \
+	X(alGetSource3f, LPALGETSOURCE3F) \
 	X(alSourcePlay, LPALSOURCEPLAY) \
 	X(alSourceStop, LPALSOURCESTOP) \
 	X(alSourcePause, LPALSOURCEPAUSE) \
