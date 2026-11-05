@@ -15,7 +15,9 @@ step to it, and keeps its selection:
 
 While the mutators are up (from the moment they start to slide in until they have slid out), every other part of the
 Arena's main panel is outside them and inert to the mouse in the same way: RULES beside them, the collapsed panels, the
-description and the panel's background. A click there is the pad's B on the page, which closes the mutators, and does
+description and the panel's background. The main panel covers the whole page and the page's hit test reaches it
+first, so the page's header (the profile, the ARENA title), its status line and the footer's button hints are the
+panel's background here: outside too. A click there is the pad's B on the page, which closes the mutators, and does
 nothing else: the clicked row is not chosen and the clicked panel does not open; while the panels move it does
 nothing. Inside the mutators the mouse works as before.
 
