@@ -294,6 +294,17 @@ click 3
 expect ms-right-click-is-back CloseMenu \[UC2Settings_Main\] 10
 # the main menu comes back with an animation of its own
 wait UC2MainMenu Unblocking animation 60
+# a footer hint is its pad button: the main menu's SELECT is A on its focused item (OPTIONS again), the options
+# page's BACK is B (the profile question came the first time only)
+pyexec import __main__ as M
+mark
+click 1 105 437
+expect ms-select-hint-is-a-on-the-focused-item OpenMenu \[UCMenu.UC2Settings_Main\] 15
+seek 40 P['_'].menu == 'UC2Settings_Main' ;; sleep 0.5
+click 1 550 437
+expect ms-back-hint-is-b CloseMenu \[UC2Settings_Main\] 10
+check ms-the-clicks-were-the-hints any('Mouse click on the button hint' in l and 'XC_A' in l for l in M.log_lines[M.mark_at:]) and any('Mouse click on the button hint' in l and 'XC_B' in l for l in M.log_lines[M.mark_at:])
+wait UC2MainMenu Unblocking animation 60
 mark
 click 1 140 184
 expect ms-click-opens-item-under-cursor OpenMenu \[UCMenu.UC2Arena_Main\] 15
@@ -332,8 +343,12 @@ tryseek 40 P['_'].item.startswith('DeathMatch|') ;; sleep 0.5
 probe g2
 check ms-click-on-row-accepts-that-row P['g0'].item.startswith('Capture') and P['g1'].item == '' and P['g2'].item.startswith('DeathMatch|')
 shot gametype
-key Return
+# the Arena's SELECT hint is A: DeathMatch accepted, RULES open
+mark
+click 1 105 437
 seek 40 P['_'].item == '' ;; sleep 0.5
+check ms-arena-select-hint-is-a any('Mouse click on the button hint' in l and 'XC_A' in l for l in M.log_lines[M.mark_at:])
+move 560 40
 # the pointer over the collapsed GAMETYPE gives it no focus: Down stays on the open RULES (with CUSTOMIZE off it moves
 # nothing there) and the wheel does nothing (patch set menu-mouse)
 move 130 60
@@ -433,6 +448,14 @@ click 1 540 55
 sleep 3
 probe mu5
 check ms-mutators-up-click-on-the-header-closes-them P['mu5'].item == '' and any('menu-mouse: a click outside the mutators is B' in l for l in M.log_lines[M.mark_at:]) and not any('handled XC_A' in l or 'Mouse click is A' in l for l in M.log_lines[M.mark_at:])
+# the footer's hints are no part of the outside: the BACK hint is the pad's B, which closes them
+key x
+seek 10 P['_'].item == 'NOT SET' ;; sleep 0.5
+mark
+click 1 550 437
+sleep 3
+probe mu6
+check ms-mutators-up-back-hint-is-b P['mu6'].item == '' and any('Mouse click on the button hint' in l and 'XC_B' in l for l in M.log_lines[M.mark_at:]) and not any('a click outside the mutators' in l for l in M.log_lines[M.mark_at:])
 key Up
 sleep 1
 key Left

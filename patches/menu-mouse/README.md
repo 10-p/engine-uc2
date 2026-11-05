@@ -16,10 +16,11 @@ step to it, and keeps its selection:
 While the mutators are up (from the moment they start to slide in until they have slid out), every other part of the
 Arena's main panel is outside them and inert to the mouse in the same way: RULES beside them, the collapsed panels, the
 description and the panel's background. The main panel covers the whole page and the page's hit test reaches it
-first, so the page's header (the profile, the ARENA title), its status line and the footer's button hints are the
-panel's background here: outside too. A click there is the pad's B on the page, which closes the mutators, and does
-nothing else: the clicked row is not chosen and the clicked panel does not open; while the panels move it does
-nothing. Inside the mutators the mouse works as before.
+first, so the page's header (the profile, the ARENA title) and its status line are the panel's background here:
+outside too. A click there is the pad's B on the page, which closes the mutators, and does nothing else: the clicked
+row is not chosen and the clicked panel does not open; while the panels move it does nothing. The footer's button
+hints are no part of the outside: the engine finds them by their bounds, and a click on one is its pad button, as on
+every page (SELECT is A on the focused mutator, BACK is B). Inside the mutators the mouse works as before.
 
 Once a panel is open, its rows take the mouse as before. The keys and the pads are unchanged: only the engine's PC
 mouse (`UnGUICore.cpp`) asks the panels whether they are inert to it.
