@@ -619,6 +619,50 @@ click 5
 sleep 1.5
 probe pw1
 check ms-after-a-match-the-wheel-over-a-collapsed-panel-moves-nothing P['pw1'].item == P['pw0'].item and not any('handled XC_PadDown' in l for l in M.log_lines[M.mark_at:])
+# another player's hint takes no click: the Character page again, where player two joins on a virtual pad (pad 0 is
+# player one's, pad 1's Start joins); a click on player two's alternate-character hint does nothing, player one's is
+# X, and the pads' X is each player's own. 640x480 with two players: player one's hint at (135, 354), player two's
+# at (510, 354)
+pad 0 attach
+sleep 1
+pad 1 attach
+sleep 1
+move 560 40
+seek 10 P['_'].item.startswith('DeathMatch|') ;; key Down
+key Return
+seek 40 P['_'].item == '' ;; sleep 0.5
+key Return
+seek 40 '|' in P['_'].item and P['_'].item != 'NOT SET' ;; sleep 0.5
+seek 40 'DM-Deadbolt' in P['_'].item ;; key Down
+key Return
+wait OpenMenu \[UCMenu.UC2Arena_Character\] 15
+sleep 2
+pad 1 button start 1
+sleep 0.3
+pad 1 button start 0
+expect ms-pad-two-joins-on-the-character-page Split screen: pad 1 Start in the menus: joined 15
+sleep 2
+tryseek 6 P['_'].menu == 'UC2Arena_Character' ;; pyexec (M.chan('pad 1 button b 1'), M.time.sleep(0.3), M.chan('pad 1 button b 0'), M.time.sleep(2.5))
+mark
+click 1 510 354
+sleep 3
+probe pp1
+check ms-other-players-hint-takes-no-click P['pp1'].menu == 'UC2Arena_Character' and not any('handled XC_X' in l or 'Mouse click on the button hint' in l for l in M.log_lines[M.mark_at:])
+mark
+click 1 135 354
+sleep 3
+probe pp2
+check ms-player-ones-hint-is-x any('Mouse click on the button hint' in l and 'XC_X' in l for l in M.log_lines[M.mark_at:]) and any('UC2Arena_Character handled XC_X for id 0' in l for l in M.log_lines[M.mark_at:])
+# the pads are unchanged: pad 1's X is player two's, pad 0's X player one's
+mark
+pyexec (M.chan('pad 1 button x 1'), M.time.sleep(0.3), M.chan('pad 1 button x 0'), M.time.sleep(2))
+probe pp3
+check ms-pad-two-x-is-player-twos any('UC2Arena_Character handled XC_X for id 1' in l for l in M.log_lines[M.mark_at:])
+mark
+pyexec (M.chan('pad 0 button x 1'), M.time.sleep(0.3), M.chan('pad 0 button x 0'), M.time.sleep(2))
+probe pp4
+check ms-pad-one-x-is-player-ones any('UC2Arena_Character handled XC_X for id 0' in l for l in M.log_lines[M.mark_at:])
+shot two-players
 SCEN
 }
 

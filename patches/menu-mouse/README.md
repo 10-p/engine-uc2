@@ -1,6 +1,7 @@
 # menu-mouse
 
-UCMenu: the mouse on the Arena's collapsed panels, and on the panels outside its mutators.
+UCMenu: the mouse on the Arena's collapsed panels, on the panels outside its mutators, and on the Character page's
+other players' hints.
 
 The Arena shows one panel open at a time: GAMETYPE, RULES or ARENA (the maps), with MUTATORS beside RULES. The others
 are collapsed to their selected row. A collapsed panel is inert to the mouse: the pointer over it gives it no focus and
@@ -29,6 +30,8 @@ mouse (`UnGUICore.cpp`) asks the panels whether they are inert to it.
 - `ArenaListPanel`: `MouseInert` (true while the panel is not open), which the engine's mouse asks of the components
   under the pointer and their owners; `MouseInertClick`, the engine's call for a click on an inert panel; and
   `OnCollapsedClick`, which its page sets.
+- `UC2Arena_Character`: `MouseInert` (true over another player's alternate-character hint, `btn_AltChar` past player
+  one's): the mouse is player one's, so a click on such a hint does nothing; the pads press them as before.
 - `Arena_PanelMain`: `CollapsedPanelClicked`, bound to `pnl_Game`, `pnl_Rules` and `pnl_Maps`; `MouseInert` (true while
   the mutators are up and the component under the pointer is not part of them) and `MouseInertClick` (the page's B
   through `GUIController.ClientXControllerEvent`, as the pad's B arrives). `CollapsedPanelClicked` and

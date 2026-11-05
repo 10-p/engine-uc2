@@ -118,3 +118,26 @@
  
  	li_Games.OnChange = InternalOnChange;
  	li_Rules.OnChange = InternalOnChange;
+--- a/UCMenu/Classes/UC2Arena_Character.uc
++++ b/UCMenu/Classes/UC2Arena_Character.uc
+@@ -1947,6 +1947,20 @@
+ 
+ 
+ 
++// menu-mouse: the engine's PC mouse is player one's: the other players' alternate-character hints are inert to it, so
++// a click on one does nothing; the pads press them as before
++final function bool MouseInert( GUIComponent Under )
++{
++	local GUIComponent Part;
++	local int i;
++
++	for ( Part = Under; Part != None; Part = Part.MenuOwner )
++		for ( i = 1; i < MAX_VIEWPORTS; i++ )
++			if ( Part == btn_AltChar[i] )
++				return true;
++	return false;
++}
++
+ event NotifyRemoveViewport( Viewport InViewport )
+ {
+ 	local int i, j;
