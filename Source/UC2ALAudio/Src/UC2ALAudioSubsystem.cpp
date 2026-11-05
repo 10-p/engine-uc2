@@ -2268,6 +2268,50 @@ UBOOL UUC2ALAudioSubsystem::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 				S->DecodedBytes>>10, S->DecodedPeak>>10, UC2_DECODED_BUDGET>>20, S->DecodedWaves, S->Evicted, Packs>>10 );
 			return 1;
 		}
+		if( ParseCommand( &Str, TEXT("VOICES") ) )
+		{
+			// The voice pool as OpenAL has it: each busy voice's cue, source state, gain and listener-relative
+			// distance (its position), beside the distance its emitter is at now; then the pause and the listener.
+			static const TCHAR* StateNames[] = { TEXT("initial"), TEXT("playing"), TEXT("paused"), TEXT("stopped") };
+			INT Busy = 0, Count[4] = { 0, 0, 0, 0 };
+			for( INT i=0; i<S->Voices.Num() && S->bDevice; i++ )
+			{
+				FUC2Voice& V = S->Voices(i);
+				if( !V.Inst )
+					continue;
+				Busy++;
+				ALint St = AL_INITIAL;
+				ALfloat Gain = 0.f, X = 0.f, Y = 0.f, Z = 0.f;
+				GAL.alGetSourcei( V.Source, AL_SOURCE_STATE, &St );
+				GAL.alGetSourcef( V.Source, AL_GAIN, &Gain );
+				GAL.alGetSource3f( V.Source, AL_POSITION, &X, &Y, &Z );
+				INT K = Clamp<INT>( St - AL_INITIAL, 0, 3 );
+				Count[K]++;
+				FUC2CueInst* Inst = FindInst( S, V.Inst );
+				FString Where = TEXT("2D");
+				if( Inst && !Inst->b2D && Inst->Emitter>=0 && Inst->Emitter<S->Emitters.Num() )
+				{
+					FUC2Emitter& E = S->Emitters(Inst->Emitter);
+					APlayerController* Viewer = NULL;
+					Where = FindViewer( S->Viewport, E.ListenerViewport, Viewer )
+						? FString::Printf( TEXT("3D at %.0f, emitter now at %.0f"), appSqrt( X*X + Y*Y + Z*Z ), (E.Location - Viewer->ViewTarget->Location).Size() )
+						: FString::Printf( TEXT("3D at %.0f, no listener"), appSqrt( X*X + Y*Y + Z*Z ) );
+				}
+				Ar.Logf( TEXT("UC2Audio:   voice %d: %s track %d, %s, gain %.1f dB, %s, %.2f s old"), i,
+					Inst ? *Inst->Name : TEXT("(no cue)"), V.Track, StateNames[K],
+					Gain>0.f ? 20.f * appLoge( Gain ) / appLoge( 10.f ) : -100.f, *Where, (FLOAT)(NowOf(S) - V.StartTime) );
+			}
+			Ar.Logf( TEXT("UC2Audio: voices: %d of %d busy (%d playing, %d paused, %d stopped, %d initial); %d cue instances; pause %s"),
+				Busy, S->Voices.Num(), Count[1], Count[2], Count[3], Count[0], S->Insts.Num(), S->bPaused ? TEXT("on") : TEXT("off") );
+			APlayerController* PC = S->Viewport ? S->Viewport->Actor : NULL;
+			if( PC && PC->ViewTarget )
+				Ar.Logf( TEXT("UC2Audio: listener: %s viewing %s at (%.0f,%.0f,%.0f), level %s, level paused %s"), PC->GetName(),
+					PC->ViewTarget->GetName(), PC->ViewTarget->Location.X, PC->ViewTarget->Location.Y, PC->ViewTarget->Location.Z,
+					PC->GetLevel()->GetOuter()->GetName(), PC->Level->Pauser ? TEXT("yes") : TEXT("no") );
+			else
+				Ar.Logf( TEXT("UC2Audio: listener: none") );
+			return 1;
+		}
 		if( ParseCommand( &Str, TEXT("ZONE") ) )
 		{
 			// UC2AUDIO ZONE <n>: force a reverb preset (testing)
