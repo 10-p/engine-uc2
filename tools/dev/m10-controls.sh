@@ -597,6 +597,28 @@ probe l4
 check ms-invert-option-flips-pitch pitchdiff('l3','l4') < 0
 chan exec MouseLookInvert False
 shot look
+# after a match (a level change: back to the Arena by the pause menu's FORFEIT GAME) the inert rules still hold:
+# the wheel over the collapsed RULES moves nothing
+key Escape
+wait OpenMenu \[UCMenu.InGame_MainMenu\] 15
+seek 8 P['_'].caption == 'FORFEIT GAME' ;; key Down
+key Return
+wait OpenMenu \[GUI.GUIMessageBox\] 20
+wait GUIMessageBox Unblocking animation 30
+sleep 0.5
+tryseek 4 P['_'].caption.upper() in ('YES', 'OK', 'ACCEPT', 'FORFEIT') ;; key Up
+key Return
+wait RestoreMenu \[UCMenu.UC2Arena_Main\] 90
+move 560 40
+seek 40 '|' in P['_'].item ;; sleep 0.5
+move 131 239
+sleep 0.8
+probe pw0
+mark
+click 5
+sleep 1.5
+probe pw1
+check ms-after-a-match-the-wheel-over-a-collapsed-panel-moves-nothing P['pw1'].item == P['pw0'].item and not any('handled XC_PadDown' in l for l in M.log_lines[M.mark_at:])
 SCEN
 }
 
