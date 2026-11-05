@@ -204,25 +204,28 @@ static void ExitSplash() {}
 	The world's step under vsync.
 -----------------------------------------------------------------------------*/
 
-// When the buffer swaps return and whether they wait for the display's refresh (UC2PresentClock.cpp).
-ENGINE_API UBOOL UC2PresentClock( DOUBLE& Time, INT& Count );
+// When the buffer swaps return, how long they waited and whether they wait for the display's refresh
+// (UC2PresentClock.cpp).
+ENGINE_API UBOOL UC2PresentClock( DOUBLE& Time, INT& Count, DOUBLE& Waited );
 
 //
 // The display shows each picture for a whole number of refreshes, while the clock read at the top of the loop wanders
 // around them: the swap that waits for the refresh returns early or late as the driver and the compositor hand the
 // frame back, and UGameEngine::Draw presents the last frame before it renders the next, so the top of the loop comes a
-// render's time after that wait. Once the swaps keep to the refresh (nine in ten of the last 60 within a quarter
-// refresh of a whole number of refreshes, at a period within 3 % of the display's), the world moves on by the whole
-// refreshes between the last two swaps' returns, at the period the swaps keep, with a correction of at most a fiftieth
-// of a refresh a frame that holds the game clock on the swaps'. Otherwise by the measured time: no vsync, a frame
-// without exactly one swap, a display whose swaps keep no steady period (a variable refresh rate).
+// render's time after that wait. Once the swaps keep to the refresh (nine in ten of the last 60 intervals between two
+// swaps that each waited at least a tenth of a refresh, within a quarter refresh of a whole number of refreshes, at a
+// period within 3 % of the display's), the world moves on by the whole refreshes between the last two swaps' returns,
+// at the period the swaps keep, with a correction of at most a fiftieth of a refresh a frame that holds the game clock
+// on the swaps'. Otherwise by the measured time: no vsync, a frame without exactly one swap, swaps that return without
+// waiting (frames slower than the display), a display whose swaps keep no steady period (a variable refresh rate), a
+// game clock that strays a refresh from the swaps'.
 //
 class FVSyncStep
 {
 public:
 	FVSyncStep()
-	:	Nominal(0.0), NominalTime(0.0), SumIntervals(0.0), SumRefreshes(0.0), LastPresent(0.0), LastCount(-1)
-	,	Clock(0.0), Fits(0), FitIndex(0), Locked(0), LoggedLock(0)
+	:	Nominal(0.0), NominalTime(0.0), SumIntervals(0.0), SumRefreshes(0.0), LastPresent(0.0), LastWaited(0.0)
+	,	LastCount(-1), Clock(0.0), Fits(0), FitIndex(0), Locked(0), LoggedLock(0)
 	{
 		appMemzero( FitHistory, sizeof(FitHistory) );
 	}
@@ -234,14 +237,16 @@ private:
 	DOUBLE	NominalTime;		// when it was read
 	DOUBLE	SumIntervals;		// the swaps' intervals and their refreshes, decaying: their ratio is the period kept
 	DOUBLE	SumRefreshes;
-	DOUBLE	LastPresent;		// the last swap's return the previous frame saw
+	DOUBLE	LastPresent;		// the last swap's return the previous frame saw, and how long that swap waited
+	DOUBLE	LastWaited;
 	INT		LastCount;
 	DOUBLE	Clock;				// the game clock on the swaps' timeline
-	BYTE	FitHistory[60];		// whether each of the last 60 intervals was near a whole number of refreshes
+	BYTE	FitHistory[60];		// whether each of the last 60 intervals kept to the refresh
 	INT		Fits, FitIndex;
 	UBOOL	Locked;
 	UBOOL	LoggedLock;
 	void ReadNominal( UEngine* Engine );
+	FLOAT Unlock( FLOAT Measured );
 };
 
 //
@@ -277,37 +282,47 @@ void FVSyncStep::ReadNominal( UEngine* Engine )
 
 DOUBLE FVSyncStep::RefreshPeriod( UEngine* Engine )
 {
-	DOUBLE Present;
+	DOUBLE Present, Waited;
 	INT Count;
-	if( !UC2PresentClock( Present, Count ) )
+	if( !UC2PresentClock( Present, Count, Waited ) )
 		return 0.0;
 	ReadNominal( Engine );
 	return Nominal > 0.0 ? SumIntervals / SumRefreshes : 0.0;
 }
 
+FLOAT FVSyncStep::Unlock( FLOAT Measured )
+{
+	if( Locked && GUfrontLog )
+		debugf( NAME_Init, TEXT("Frame steps: the measured time (the swaps left the refresh)") );
+	Locked = 0;
+	return Measured;
+}
+
 FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 {
-	DOUBLE Present;
+	DOUBLE Present, Waited;
 	INT Count;
-	const UBOOL VSync = UC2PresentClock( Present, Count );
+	const UBOOL VSync = UC2PresentClock( Present, Count, Waited );
 	const UBOOL OneSwap = LastCount >= 0 && Count == LastCount + 1;
 	const DOUBLE Interval = Present - LastPresent;
+	const DOUBLE WaitedBefore = LastWaited;
 	LastPresent = Present;
+	LastWaited = Waited;
 	LastCount = Count;
 	if( VSync )
 		ReadNominal( Engine );
 	if( !VSync || !OneSwap || Nominal <= 0.0 )
-	{
-		Locked = 0;
-		return Measured;
-	}
+		return Unlock( Measured );
 	DOUBLE Period = SumIntervals / SumRefreshes;
 	const INT Refreshes = Max( 1, appRound( (FLOAT)(Interval / Period) ) );
-	const BYTE Fit = Refreshes <= 8 && Abs( Interval - Refreshes * Period ) < 0.25 * Period;
+	const DOUBLE Off = Abs( Interval - Refreshes * Period );
+	// Only a swap that waited returns on a refresh: one that found nothing queued before it returns at once.
+	const DOUBLE MinWait = Max( 0.001, 0.1 * Period );
+	const BYTE Fit = WaitedBefore >= MinWait && Waited >= MinWait && Refreshes <= 8 && Off < 0.25 * Period;
 	Fits += Fit - FitHistory[FitIndex];
 	FitHistory[FitIndex] = Fit;
 	FitIndex = (FitIndex + 1) % ARRAY_COUNT(FitHistory);
-	if( Fit )
+	if( Fit && Off < 0.1 * Period )
 	{
 		SumIntervals = SumIntervals * 0.998 + Interval;
 		SumRefreshes = SumRefreshes * 0.998 + Refreshes;
@@ -315,16 +330,19 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 	}
 	const UBOOL Steady = Abs( Period - Nominal ) < 0.03 * Nominal;
 	if( !Steady || Fits < (Locked ? 42 : 54) )
-	{
-		if( Locked && GUfrontLog )
-			debugf( NAME_Init, TEXT("Frame steps: the measured time (the swaps left the refresh)") );
-		Locked = 0;
-		return Measured;
-	}
+		return Unlock( Measured );
 	const DOUBLE Ideal = Refreshes * Period;
-	if( !Locked || Abs( Present - (Clock + Ideal) ) > Period )
+	if( !Locked )
 		Clock = Present - Ideal;
-	const DOUBLE Correction = Clamp( (Present - (Clock + Ideal)) / 30.0, -Period / 50.0, Period / 50.0 );
+	// A game clock a refresh away from the swaps': they no longer keep to the refresh, and the history starts again.
+	const DOUBLE Error = Present - (Clock + Ideal);
+	if( Abs( Error ) > Period )
+	{
+		Fits = 0;
+		appMemzero( FitHistory, sizeof(FitHistory) );
+		return Unlock( Measured );
+	}
+	const DOUBLE Correction = Clamp( Error / 30.0, -Period / 50.0, Period / 50.0 );
 	Clock += Ideal + Correction;
 	if( !Locked && (!LoggedLock || GUfrontLog) )
 		debugf( NAME_Init, TEXT("Frame steps: whole refreshes of %.3f ms (vsync)"), 1000.0 * Period );
