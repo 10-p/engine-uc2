@@ -30,6 +30,7 @@
 #include <winsock2.h>
 #include <windows.h>
 #include <shellapi.h>	// ShellExecuteA (appLaunchURL)
+#include <dwmapi.h>		// DWM_TIMING_INFO (appDisplayVBlank; the function is looked up at run time)
 #include <exception>
 #include <signal.h>
 #include <process.h>	// _spawnv
@@ -2174,6 +2175,93 @@ CORE_API void appSleep( FLOAT Seconds )
 #endif
 
 	unguard;
+}
+
+//
+// Sleep until appSeconds() reaches Seconds: the system's sleep for all but the last stretch, whose wake-up can be late,
+// then the processor yielded in turn until the time has come.
+//
+CORE_API void appSleepUntil( DOUBLE Seconds )
+{
+	guard(appSleepUntil);
+#ifdef __EMSCRIPTEN__
+	appSleep( (FLOAT)Max( 0.0, Seconds - appSeconds() ) );
+#else
+#ifdef _WIN32
+	// A high-resolution waitable timer (Windows 10 1803 on) wakes within a fraction of a millisecond. Sleep() takes
+	// whole milliseconds and wakes on the system timer's tick, 1 ms with the period SDL sets.
+	static HANDLE Timer = INVALID_HANDLE_VALUE;
+	if( Timer == INVALID_HANDLE_VALUE )
+		Timer = CreateWaitableTimerExW( NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS );
+	const DOUBLE Margin = Timer ? 0.0007 : 0.0015;
+#else
+	const DOUBLE Margin = 0.0002;
+#endif
+	for( ;; )
+	{
+		const DOUBLE Left = Seconds - appSeconds();
+		if( Left <= 0.0 )
+			break;
+		if( Left > Margin )
+		{
+#ifdef _WIN32
+			LARGE_INTEGER Due;
+			Due.QuadPart = -(LONGLONG)((Left - Margin) * 10000000.0);	// relative, in 100 ns units
+			if( !Timer || !SetWaitableTimer( Timer, &Due, 0, NULL, NULL, FALSE ) || WaitForSingleObject( Timer, INFINITE ) != WAIT_OBJECT_0 )
+				Sleep( (DWORD)((Left - Margin) * 1000.0) );
+#else
+			usleep( (useconds_t)((Left - Margin) * 1000000.0) );
+#endif
+		}
+		else
+		{
+#ifdef _WIN32
+			SwitchToThread();
+#else
+			sched_yield();
+#endif
+		}
+	}
+#endif
+	unguard;
+}
+
+//
+// The display's last vertical blank: its count, its time on appSeconds' clock and the refresh period, as the desktop
+// compositor keeps them. 0 where no such clock is known.
+//
+CORE_API UBOOL appDisplayVBlank( QWORD& Refresh, DOUBLE& Time, DOUBLE& Period )
+{
+#ifdef _WIN32
+	typedef HRESULT (WINAPI *FGetTiming)( HWND, DWM_TIMING_INFO* );
+	static FGetTiming GetTiming = NULL;
+	static UBOOL Looked = 0;
+	if( !Looked )
+	{
+		Looked = 1;
+		HMODULE Dwm = LoadLibraryA( "dwmapi.dll" );
+		if( Dwm )
+			GetTiming = (FGetTiming)GetProcAddress( Dwm, "DwmGetCompositionTimingInfo" );
+	}
+	if( !GetTiming )
+		return 0;
+	DWM_TIMING_INFO Info;
+	appMemzero( &Info, sizeof(Info) );
+	Info.cbSize = sizeof(Info);
+	if( FAILED( GetTiming( NULL, &Info ) ) || !Info.rateRefresh.uiNumerator || !Info.rateRefresh.uiDenominator )
+		return 0;
+	// qpcVBlank is a QueryPerformanceCounter reading, the counter appSeconds() runs on.
+	LARGE_INTEGER Freq, Now;
+	QueryPerformanceFrequency( &Freq );
+	QueryPerformanceCounter( &Now );
+	const DOUBLE AppNow = appSeconds();
+	Refresh	= Info.cRefresh;
+	Time	= AppNow - (DOUBLE)((LONGLONG)Now.QuadPart - (LONGLONG)Info.qpcVBlank) / (DOUBLE)Freq.QuadPart;
+	Period	= (DOUBLE)Info.rateRefresh.uiDenominator / (DOUBLE)Info.rateRefresh.uiNumerator;
+	return 1;
+#else
+	return 0;
+#endif
 }
 
 /*-----------------------------------------------------------------------------
