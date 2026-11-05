@@ -347,6 +347,8 @@ CORE_API SQWORD appSystemTime64();
 CORE_API const TCHAR* appTimestamp();
 CORE_API DOUBLE appSecondsSlow();
 CORE_API void appSleep( FLOAT Seconds );
+CORE_API void appSleepUntil( DOUBLE Seconds );	// until appSeconds() reaches Seconds, to a fraction of a millisecond
+CORE_API UBOOL appDisplayVBlank( QWORD& Refresh, DOUBLE& Time, DOUBLE& Period );	// the last vertical blank, where known
 
 /*-----------------------------------------------------------------------------
 	Character type functions.

@@ -47,6 +47,7 @@ Revision history:
 #endif
 #endif
 #include "UnMovie.h"	// AppPlayMovieFullscreen (Engine)
+#include "SDL_video.h"	// the display's refresh rate (FVSyncStep); not SDL.h, whose SDL_main.h would rename main
 
 /*-----------------------------------------------------------------------------
 	Global variables.
@@ -195,6 +196,157 @@ static void InitSplash( const TCHAR* Filename ) {}
 static void ExitSplash() {}
 
 /*-----------------------------------------------------------------------------
+	The world's step under vsync.
+-----------------------------------------------------------------------------*/
+
+// When the buffer swaps return, how long they waited and whether they wait for the display's refresh
+// (UC2PresentClock.cpp).
+ENGINE_API UBOOL UC2PresentClock( DOUBLE& Time, INT& Count, DOUBLE& Waited );
+
+//
+// The display shows each picture for a whole number of refreshes, while the clock read at the top of the loop wanders
+// around them: the swap that waits for the refresh returns early or late as the driver and the compositor hand the
+// frame back, and UGameEngine::Draw presents the last frame before it renders the next, so the top of the loop comes a
+// render's time after that wait. Once the swaps keep to the refresh (nine in ten of the last 60 intervals between two
+// swaps that each waited at least a tenth of a refresh, within a quarter refresh of a whole number of refreshes, at a
+// period within 3 % of the display's), the world moves on by the whole refreshes between the last two swaps' returns,
+// at the period the swaps keep, with a correction of at most a fiftieth of a refresh a frame that holds the game clock
+// on the swaps'. Otherwise by the measured time: no vsync, a frame without exactly one swap, swaps that return without
+// waiting (frames slower than the display), a display whose swaps keep no steady period (a variable refresh rate), a
+// game clock that strays a refresh from the swaps'.
+//
+class FVSyncStep
+{
+public:
+	FVSyncStep()
+	:	Nominal(0.0), NominalTime(0.0), SumIntervals(0.0), SumRefreshes(0.0), LastPresent(0.0), LastWaited(0.0)
+	,	LastCount(-1), Clock(0.0), Fits(0), FitIndex(0), Locked(0), LoggedLock(0)
+	{
+		appMemzero( FitHistory, sizeof(FitHistory) );
+	}
+	FLOAT Step( UEngine* Engine, FLOAT Measured );
+	DOUBLE RefreshPeriod( UEngine* Engine );	// the display's refresh period while the swaps wait for it, else 0
+
+private:
+	DOUBLE	Nominal;			// the display's refresh period as the platform gives it (0: unknown)
+	DOUBLE	NominalTime;		// when it was read
+	DOUBLE	SumIntervals;		// the swaps' intervals and their refreshes, decaying: their ratio is the period kept
+	DOUBLE	SumRefreshes;
+	DOUBLE	LastPresent;		// the last swap's return the previous frame saw, and how long that swap waited
+	DOUBLE	LastWaited;
+	INT		LastCount;
+	DOUBLE	Clock;				// the game clock on the swaps' timeline
+	BYTE	FitHistory[60];		// whether each of the last 60 intervals kept to the refresh
+	INT		Fits, FitIndex;
+	UBOOL	Locked;
+	UBOOL	LoggedLock;
+	void ReadNominal( UEngine* Engine );
+	FLOAT Unlock( FLOAT Measured );
+};
+
+//
+// The refresh period of the display the first viewport is on, read again every two seconds: the desktop compositor's
+// where the platform has one (appDisplayVBlank), else the display mode's, in whole hertz. A change starts the period
+// the swaps keep again from it.
+//
+void FVSyncStep::ReadNominal( UEngine* Engine )
+{
+	const DOUBLE Now = appSeconds();
+	if( Nominal > 0.0 && Now - NominalTime < 2.0 )
+		return;
+	NominalTime = Now;
+	DOUBLE Period = 0.0;
+	QWORD Refresh;
+	DOUBLE VBlank;
+	if( !appDisplayVBlank( Refresh, VBlank, Period ) || Period <= 0.0 )
+	{
+		Period = 0.0;
+		SDL_Window* Window = Engine->Client && Engine->Client->Viewports.Num() && Engine->Client->Viewports(0)
+			? (SDL_Window*)Engine->Client->Viewports(0)->GetWindow() : NULL;
+		SDL_DisplayMode Mode;
+		if( Window && SDL_GetCurrentDisplayMode( Max( 0, SDL_GetWindowDisplayIndex( Window ) ), &Mode ) == 0 && Mode.refresh_rate > 0 )
+			Period = 1.0 / Mode.refresh_rate;
+	}
+	if( Period > 0.0 && Abs( Period - Nominal ) > 0.01 * Period )
+	{
+		SumIntervals = 20.0 * Period;
+		SumRefreshes = 20.0;
+	}
+	Nominal = Period;
+}
+
+DOUBLE FVSyncStep::RefreshPeriod( UEngine* Engine )
+{
+	DOUBLE Present, Waited;
+	INT Count;
+	if( !UC2PresentClock( Present, Count, Waited ) )
+		return 0.0;
+	ReadNominal( Engine );
+	return Nominal > 0.0 ? SumIntervals / SumRefreshes : 0.0;
+}
+
+FLOAT FVSyncStep::Unlock( FLOAT Measured )
+{
+	if( Locked && GUfrontLog )
+		debugf( NAME_Init, TEXT("Frame steps: the measured time (the swaps left the refresh)") );
+	Locked = 0;
+	return Measured;
+}
+
+FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
+{
+	DOUBLE Present, Waited;
+	INT Count;
+	const UBOOL VSync = UC2PresentClock( Present, Count, Waited );
+	const UBOOL OneSwap = LastCount >= 0 && Count == LastCount + 1;
+	const DOUBLE Interval = Present - LastPresent;
+	const DOUBLE WaitedBefore = LastWaited;
+	LastPresent = Present;
+	LastWaited = Waited;
+	LastCount = Count;
+	if( VSync )
+		ReadNominal( Engine );
+	if( !VSync || !OneSwap || Nominal <= 0.0 )
+		return Unlock( Measured );
+	DOUBLE Period = SumIntervals / SumRefreshes;
+	const INT Refreshes = Max( 1, appRound( (FLOAT)(Interval / Period) ) );
+	const DOUBLE Off = Abs( Interval - Refreshes * Period );
+	// Only a swap that waited returns on a refresh: one that found nothing queued before it returns at once.
+	const DOUBLE MinWait = Max( 0.001, 0.1 * Period );
+	const BYTE Fit = WaitedBefore >= MinWait && Waited >= MinWait && Refreshes <= 8 && Off < 0.25 * Period;
+	Fits += Fit - FitHistory[FitIndex];
+	FitHistory[FitIndex] = Fit;
+	FitIndex = (FitIndex + 1) % ARRAY_COUNT(FitHistory);
+	if( Fit && Off < 0.1 * Period )
+	{
+		SumIntervals = SumIntervals * 0.998 + Interval;
+		SumRefreshes = SumRefreshes * 0.998 + Refreshes;
+		Period = SumIntervals / SumRefreshes;
+	}
+	const UBOOL Steady = Abs( Period - Nominal ) < 0.03 * Nominal;
+	if( !Steady || Fits < (Locked ? 42 : 54) )
+		return Unlock( Measured );
+	const DOUBLE Ideal = Refreshes * Period;
+	if( !Locked )
+		Clock = Present - Ideal;
+	// A game clock a refresh away from the swaps': they no longer keep to the refresh, and the history starts again.
+	const DOUBLE Error = Present - (Clock + Ideal);
+	if( Abs( Error ) > Period )
+	{
+		Fits = 0;
+		appMemzero( FitHistory, sizeof(FitHistory) );
+		return Unlock( Measured );
+	}
+	const DOUBLE Correction = Clamp( Error / 30.0, -Period / 50.0, Period / 50.0 );
+	Clock += Ideal + Correction;
+	if( !Locked && (!LoggedLock || GUfrontLog) )
+		debugf( NAME_Init, TEXT("Frame steps: whole refreshes of %.3f ms (vsync)"), 1000.0 * Period );
+	LoggedLock = 1;
+	Locked = 1;
+	return (FLOAT)(Ideal + Correction);
+}
+
+/*-----------------------------------------------------------------------------
 	Main loop (UnEngineWin.h's CMainLoop; the Windows message pump is the viewport's
 	UpdateInput, which pumps the SDL event queue).
 -----------------------------------------------------------------------------*/
@@ -215,6 +367,7 @@ private:
 	DOUBLE		SecondStartTime;
 	INT			TickCount;
 	DWORD		LastFrameCycles;
+	FVSyncStep	VSyncStep;
 
 	// Benchmarking (-BENCHMARK -SECONDS=n): fixed 30 Hz steps, average logged at the end.
 	INT			BMFrames;
@@ -302,7 +455,7 @@ void CMainLoop::RunLoop()
 	}
 	else
 	{
-		const FLOAT TickDelta = FixedDelta > 0.f ? FixedDelta : DeltaTime;
+		const FLOAT TickDelta = FixedDelta > 0.f ? FixedDelta : VSyncStep.Step( Engine, DeltaTime );
 		Engine->Tick( TickDelta );
 		if( GWindowManager )
 			GWindowManager->Tick( TickDelta );
@@ -379,8 +532,26 @@ void CMainLoop::RunLoop()
 #ifdef __EMSCRIPTEN__
 			UC2WebWaitCapped( 1.0/MaxTickRate );
 #else
-			FLOAT Delta = (1.0/MaxTickRate) - (appSeconds()-OldTime);
-			appSleep( Max(0.f,Delta) );
+			// Each frame is due one period after the one before, so the cap holds its rate whatever a wake-up's error;
+			// a frame that ends more than a period late starts the schedule again from itself.
+			static DOUBLE Due = 0.0;
+			DOUBLE Period = 1.0 / MaxTickRate;
+			// Under vsync the display paces the frames: a cap at or near its rate would only make frames miss refreshes,
+			// so it sits just above the display's rate, where it stops only a swap that does not wait.
+			const DOUBLE Refresh = VSyncStep.RefreshPeriod( Engine );
+			if( Refresh > 0.0 && Period < 1.02 * Refresh )
+			{
+				static UBOOL Logged = 0;
+				if( !Logged )
+					debugf( NAME_Init, TEXT("ufront: under vsync the frame rate cap of %.0f fps is left to the display (%.2f Hz)"), MaxTickRate, 1.0 / Refresh );
+				Logged = 1;
+				Period = 0.98 * Refresh;
+			}
+			const DOUBLE Now = appSeconds();
+			Due = Due > 0.0 ? Due + Period : OldTime + Period;
+			if( Now - Due > Period )
+				Due = Now;
+			appSleepUntil( Due );
 #endif
 			LimiterSlept = 1;
 		}

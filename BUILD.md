@@ -557,6 +557,26 @@ seconds: frames, fps, frame time avg/min/max/p99, the 1% low. `tools/dev/fps-ben
 runs a fixed camera turn on this machine's GPU, headless, and prints one line. A standalone game is uncapped by default
 (`UseVSync=False`, `[Engine.Engine] FrameRateCap=0`); a network client keeps the engine's own tick limit.
 
+The launcher's frame limiter (`FrameRateCap`, a network client's tick limit, `Source/SDLLaunch/Src/SDLLaunch.cpp`)
+gives each frame a due time one period after the one before and waits for it with `appSleepUntil` (the system's sleep,
+then a yield for the last fraction of a millisecond; on Windows a high-resolution waitable timer where there is one), so
+a cap holds its rate exactly; a frame more than a period late starts the schedule again from itself.
+
+VSync (`[UC2GLDrv.UC2GLRenderDevice] UseVSync`, the swap interval set at every `SetRes`; the device logs the interval the
+context reports when it changes, `UC2GLDrv: UseVSync=True, swap interval 1`): the display shows each picture for a
+whole number of refreshes, so once the buffer swaps wait for the refresh and keep to it (nine in ten of the last 60
+intervals between two swaps that each waited at least a tenth of a refresh, within a quarter refresh of a whole number,
+at a period within 3 % of the display's) the launcher moves the world on by the whole refreshes between the last two
+swaps' returns instead of the time read at the top of its loop (`FVSyncStep`, `Source/Engine/Src/UC2PresentClock.cpp`;
+logged once, `Frame steps: whole refreshes of 16.667 ms (vsync)`). The period is the one the swaps keep (learnt from
+the intervals within a tenth of a refresh of a whole number), started from the display's (the desktop compositor's on
+Windows, the display mode's whole hertz elsewhere), with a correction of at most a fiftieth of a refresh a frame that
+keeps the game clock on the swaps'. The measured time otherwise: no vsync, a frame without exactly one swap, swaps that
+return without waiting (frames slower than the display), a display whose swaps keep no steady period (a variable
+refresh rate), or a game clock a refresh away from the swaps' (the lock then starts again). Under vsync a frame cap at or within 2 % of the display's rate is set just above
+it, so the display paces the frames and the cap stops only a swap that does not wait (logged once). A driver's forced
+vsync or frame cap is not seen by the engine: the measured time.
+
 ## Relaunch
 
 `RELAUNCH [<arguments>]` (Epic's console command; no UC2 menu sends it): the game exits and its running executable
