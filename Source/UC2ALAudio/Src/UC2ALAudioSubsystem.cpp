@@ -78,6 +78,7 @@ struct FUC2CueInst
 	INT						Bank, Sound, Cue;
 	INT						Emitter;	// -1: fire and forget (2D, no actor)
 	UBOOL					bAmbient, b2D;
+	UBOOL					bHeld;		// paused with the game: not advanced (nor released) until it resumes
 	DOUBLE					StartTime;
 	FLOAT					Rpc;		// the "Volume" parameter, 0..1 (0 = not set)
 	FString					Name;		// as requested, for the log
@@ -1396,6 +1397,7 @@ static INT StartInst( UUC2ALAudioSubsystem* Audio, FUC2AudioState* S, INT Packed
 	Inst->Emitter	= Emitter;
 	Inst->b2D		= b2D;
 	Inst->bAmbient	= bAmbient;
+	Inst->bHeld		= 0;
 	Inst->StartTime	= Now;
 	Inst->Rpc		= Volume;
 	Inst->Name		= Name;
@@ -2103,10 +2105,9 @@ void UUC2ALAudioSubsystem::Update()
 	while( S->Emitters.Num() && !S->Emitters.Last().bValid )
 		S->Emitters.Pop();
 
-	if( !S->bPaused )
-		for( INT i=0; i<S->Insts.Num(); i++ )
-			if( !UpdateInst( this, S, S->Insts(i), Now ) )
-				RemoveInst( S, i-- );
+	for( INT i=0; i<S->Insts.Num(); i++ )
+		if( !S->Insts(i).bHeld && !UpdateInst( this, S, S->Insts(i), Now ) )
+			RemoveInst( S, i-- );
 
 	FLOAT LevelTime = S->Viewport->Actor->Level->TimeSeconds;
 	if( LevelTime - S->LastAmbientUpdate > 1.f || LevelTime < S->LastAmbientUpdate )
@@ -2138,6 +2139,8 @@ void UUC2ALAudioSubsystem::NotifyLevelChange()
 		RemoveInst( S, S->Insts.Num()-1 );
 	S->Emitters.Empty();
 	S->CueMap.Empty();
+	// The pause belongs to the level: the next one starts unpaused, with no unpause notification.
+	S->bPaused = 0;
 	for( INT i=S->SoundBanks.Num()-1; i>=0; i-- )
 		if( !S->SoundBanks(i)->bPersist )
 		{
@@ -2202,7 +2205,8 @@ void UUC2ALAudioSubsystem::NotifyZoneChange( AZoneInfo* NewZone )
 	unguard;
 }
 
-// XACT :338-351: every cue instance pauses; music plays on.
+// XACT :338-351: the cues playing when the game pauses are held, music plays on; a cue started during the pause
+// plays and ends as usual (XACT pauses only the cues it has).
 void UUC2ALAudioSubsystem::NotifyPauseChange( UBOOL bNowPaused )
 {
 	guard(UUC2ALAudioSubsystem::NotifyPauseChange);
@@ -2214,24 +2218,35 @@ void UUC2ALAudioSubsystem::NotifyPauseChange( UBOOL bNowPaused )
 	if( bNowPaused )
 		S->PauseStart = Now;
 	FLOAT Shift = bNowPaused ? 0.f : (FLOAT)(Now - S->PauseStart);
+	INT Changed = 0;
 	for( INT i=0; i<S->Insts.Num(); i++ )
 	{
 		FUC2CueInst& Inst = S->Insts(i);
+		if( !bNowPaused && !Inst.bHeld )
+			continue;
+		Inst.bHeld = bNowPaused;
 		Inst.StartTime += Shift;
+		Changed++;
 		for( INT t=0; t<Inst.Tracks.Num(); t++ )
 		{
 			FUC2TrackPlay& P = Inst.Tracks(t);
 			P.StartAt += Shift;
-			if( P.Voice>=0 )
+			if( P.Voice<0 )
+				continue;
+			ALuint Source = S->Voices(P.Voice).Source;
+			if( bNowPaused )
+				GAL.alSourcePause( Source );
+			else
 			{
-				if( bNowPaused )
-					GAL.alSourcePause( S->Voices(P.Voice).Source );
-				else
-					GAL.alSourcePlay( S->Voices(P.Voice).Source );
+				// Only what the pause stopped: a sound that had ended stays ended (the next update frees its voice).
+				ALint St = AL_STOPPED;
+				GAL.alGetSourcei( Source, AL_SOURCE_STATE, &St );
+				if( St==AL_PAUSED )
+					GAL.alSourcePlay( Source );
 			}
 		}
 	}
-	debugf( NAME_DevSound, TEXT("UC2Audio: %s %d cues"), bNowPaused ? TEXT("paused") : TEXT("resumed"), S->Insts.Num() );
+	debugf( NAME_DevSound, TEXT("UC2Audio: %s %d cues"), bNowPaused ? TEXT("paused") : TEXT("resumed"), Changed );
 	unguard;
 }
 
@@ -2297,12 +2312,15 @@ UBOOL UUC2ALAudioSubsystem::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 						? FString::Printf( TEXT("3D at %.0f, emitter now at %.0f"), appSqrt( X*X + Y*Y + Z*Z ), (E.Location - Viewer->ViewTarget->Location).Size() )
 						: FString::Printf( TEXT("3D at %.0f, no listener"), appSqrt( X*X + Y*Y + Z*Z ) );
 				}
-				Ar.Logf( TEXT("UC2Audio:   voice %d: %s track %d, %s, gain %.1f dB, %s, %.2f s old"), i,
-					Inst ? *Inst->Name : TEXT("(no cue)"), V.Track, StateNames[K],
+				Ar.Logf( TEXT("UC2Audio:   voice %d: %s track %d, %s%s, gain %.1f dB, %s, %.2f s old"), i,
+					Inst ? *Inst->Name : TEXT("(no cue)"), V.Track, StateNames[K], Inst && Inst->bHeld ? TEXT(" (held by the pause)") : TEXT(""),
 					Gain>0.f ? 20.f * appLoge( Gain ) / appLoge( 10.f ) : -100.f, *Where, (FLOAT)(NowOf(S) - V.StartTime) );
 			}
-			Ar.Logf( TEXT("UC2Audio: voices: %d of %d busy (%d playing, %d paused, %d stopped, %d initial); %d cue instances; pause %s"),
-				Busy, S->Voices.Num(), Count[1], Count[2], Count[3], Count[0], S->Insts.Num(), S->bPaused ? TEXT("on") : TEXT("off") );
+			INT Held = 0;
+			for( INT i=0; i<S->Insts.Num(); i++ )
+				Held += S->Insts(i).bHeld ? 1 : 0;
+			Ar.Logf( TEXT("UC2Audio: voices: %d of %d busy (%d playing, %d paused, %d stopped, %d initial); %d cue instances, %d held by the pause; pause %s"),
+				Busy, S->Voices.Num(), Count[1], Count[2], Count[3], Count[0], S->Insts.Num(), Held, S->bPaused ? TEXT("on") : TEXT("off") );
 			APlayerController* PC = S->Viewport ? S->Viewport->Actor : NULL;
 			if( PC && PC->ViewTarget )
 				Ar.Logf( TEXT("UC2Audio: listener: %s viewing %s at (%.0f,%.0f,%.0f), level %s, level paused %s"), PC->GetName(),
