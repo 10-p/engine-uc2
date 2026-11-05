@@ -519,7 +519,7 @@ UBOOL UGameEngine::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 		return 1;
 	if( UC2FpsLogExec( Cmd, Ar ) )			// FPSLOG [seconds]
 		return 1;
-	if( UC2PaceTraceExec( this, Cmd, Ar ) )	// PACETRACE <frames> [tag]
+	if( UC2PaceTraceExec( this, Cmd, Ar ) )	// PACETRACE [<frames> [tag]]
 		return 1;
 	const TCHAR* Str=Cmd;
 #if WITH_PORTABLE_MOVIES

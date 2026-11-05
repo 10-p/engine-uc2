@@ -7,19 +7,22 @@
 	it is on the screen, so both are recorded for every frame.
 
 	Console command (also a key binding, the SDL2 test channel's "exec ...", the web's ue_exec_command):
-	  PACETRACE <frames> [tag]   record the next <frames> frames (at most 100000), then log them (0 stops it)
+	  PACETRACE [<frames> [tag]]   record the next <frames> frames (1200 when not given, at most 100000;
+	                               tag p), then log them (0 stops it)
 
 	The frames are kept in memory and logged together after the last one, so the recording
 	writes nothing while it runs. Lines, logged under the name PaceTrace (all times ms):
-	  pacetrace <tag> begin <frames> frames device=<class> vsync=<UseVSync> cap=<FrameRateCap> view=<W>x<H>
-	  pacetrace <tag> <i> start=<t> dt=<d> tick=<d> swap0=<t> swap1=<t> end=<t> want=<d> slept=<d> swaps=<n>
+	  pacetrace <tag> begin <frames> frames device=<class> vsync=<UseVSync> cap=<FrameRateCap> view=<W>x<H> hz=<rate>
+	  pacetrace <tag> <i> start=<t> dt=<d> tick=<d> swap0=<t> swap1=<t> end=<t> want=<d> slept=<d> swaps=<n> vbl=<r>
 	  pacetrace <tag> summary <n> frames <s> s <fps> fps; dt ...; step ...; swap wait ...; limiter ...; mismatch ...
 	start: the frame's start, where the launcher measures DeltaTime (ms since the first recorded start);
 	dt: that DeltaTime; tick: the step the engine was ticked with (dt unless a test key fixes it);
 	swap0 / swap1: the call and the return of the buffer swap made in this frame (-1: none), which shows
 	the previous frame's picture (UGameEngine::Draw presents the last frame before it draws the next);
 	end: UEngine::Tick returned; want: the sleep the frame limiter asked for (-1: no limiter); slept: how
-	long it took. Summary: dt and step (from the picture before to this frame's picture on the display:
+	long it took; vbl: the display's refresh the swap returned in, counted from the trace's first, and hz
+	its rate, where the platform keeps a clock of the display's vertical blanks (appDisplayVBlank: the
+	desktop compositor's on Windows; -1 and 0 elsewhere). Summary: dt and step (from the picture before to this frame's picture on the display:
 	the next frame's swap1 minus this one's) as avg p50 p1 p99 max sd; the swap's wait; the limiter's request and its
 	oversleep (slept minus want); mismatch = a frame's tick minus its step, as rms and the frames where it
 	exceeds 2 ms; long steps = steps above 1.5 times the median step (a repeated picture at a steady rate).
@@ -51,6 +54,7 @@ struct FPaceFrame
 	FLOAT	Want;			// the limiter's requested sleep (-1: none)
 	FLOAT	Slept;
 	INT		Swaps;
+	SQWORD	Refresh;		// the display's refresh count at the last swap's return (-1: no display clock)
 };
 
 static TArray<FPaceFrame>	GPaceFrames;
@@ -89,12 +93,16 @@ static void PaceTraceDump()
 	const DOUBLE T0 = GPaceFrames(0).Start;
 	#define PACE_MS(t) ((t) > 0.0 ? 1000.0 * ((t) - T0) : -1.0)
 	debugf( PACETRACE, TEXT("%s"), *GPaceBegin );
+	SQWORD Refresh0 = -1;	// refresh counts are logged from the first one known
+	for( INT i=0; i<N && Refresh0<0; i++ )
+		Refresh0 = GPaceFrames(i).Refresh;
 	for( INT i=0; i<N; i++ )
 	{
 		const FPaceFrame& F = GPaceFrames(i);
-		debugf( PACETRACE, TEXT("pacetrace %s %i start=%.3f dt=%.3f tick=%.3f swap0=%.3f swap1=%.3f end=%.3f want=%.3f slept=%.3f swaps=%i"),
+		debugf( PACETRACE, TEXT("pacetrace %s %i start=%.3f dt=%.3f tick=%.3f swap0=%.3f swap1=%.3f end=%.3f want=%.3f slept=%.3f swaps=%i vbl=%i"),
 			*GPaceTag, i, PACE_MS(F.Start), 1000.f * F.Delta, 1000.f * F.TickDelta, PACE_MS(F.Swap0), PACE_MS(F.Swap1),
-			PACE_MS(F.TickEnd), F.Want >= 0.f ? 1000.f * F.Want : -1.f, F.Want >= 0.f ? 1000.f * F.Slept : -1.f, F.Swaps );
+			PACE_MS(F.TickEnd), F.Want >= 0.f ? 1000.f * F.Want : -1.f, F.Want >= 0.f ? 1000.f * F.Slept : -1.f, F.Swaps,
+			F.Refresh >= 0 ? (INT)(F.Refresh - Refresh0) : -1 );
 	}
 	#undef PACE_MS
 
@@ -156,6 +164,7 @@ ENGINE_API void UC2PaceFrameStart( DOUBLE Now, FLOAT DeltaTime, FLOAT TickDelta 
 	F.Delta			= DeltaTime;
 	F.TickDelta		= TickDelta;
 	F.Want			= -1.f;
+	F.Refresh		= -1;
 }
 
 // The launcher, when UEngine::Tick returned.
@@ -185,9 +194,14 @@ ENGINE_API void UC2PaceSwap( DOUBLE Before, DOUBLE After )
 		F.Swap0 = Before;
 	F.Swap1 = After;
 	F.Swaps++;
+	// The refresh the swap returned in, where the platform knows the display's vertical blanks.
+	QWORD Refresh;
+	DOUBLE VBlank, Period;
+	if( appDisplayVBlank( Refresh, VBlank, Period ) && Period > 0.0 )
+		F.Refresh = (SQWORD)Refresh + (SQWORD)appFloor( (FLOAT)((After - VBlank) / Period) );
 }
 
-// PACETRACE <frames> [tag]
+// PACETRACE [<frames> [tag]]
 ENGINE_API UBOOL UC2PaceTraceExec( UEngine* Engine, const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UC2PaceTraceExec);
@@ -197,7 +211,7 @@ ENGINE_API UBOOL UC2PaceTraceExec( UEngine* Engine, const TCHAR* Cmd, FOutputDev
 	ParseToken( Cmd, Frames, 0 );
 	if( !ParseToken( Cmd, Tag, 0 ) )
 		Tag = TEXT("p");
-	GPaceWanted = Clamp( appAtoi(*Frames), 0, 100000 );
+	GPaceWanted = Frames.Len() ? Clamp( appAtoi(*Frames), 0, 100000 ) : 1200;
 	GPaceTag    = Tag;
 	GPaceFrames.Empty( GPaceWanted );
 
@@ -212,10 +226,14 @@ ENGINE_API UBOOL UC2PaceTraceExec( UEngine* Engine, const TCHAR* Cmd, FOutputDev
 		SizeX = Engine->Client->Viewports(0)->SizeX;
 		SizeY = Engine->Client->Viewports(0)->SizeY;
 	}
-	GPaceBegin = FString::Printf( TEXT("pacetrace %s begin %i frames device=%s vsync=%s cap=%g view=%ix%i"),
+	// The display's refresh rate where the platform has a clock of the display's vertical blanks (0: none).
+	QWORD Refresh;
+	DOUBLE VBlank, Period = 0.0;
+	const DOUBLE Hz = appDisplayVBlank( Refresh, VBlank, Period ) && Period > 0.0 ? 1.0 / Period : 0.0;
+	GPaceBegin = FString::Printf( TEXT("pacetrace %s begin %i frames device=%s vsync=%s cap=%g view=%ix%i hz=%.3f"),
 		*GPaceTag, GPaceWanted, RenDev ? RenDev->GetClass()->GetPathName() : TEXT("none"),
 		VSync ? ((*(BITFIELD*)((BYTE*)RenDev + VSync->Offset) & VSync->BitMask) ? TEXT("True") : TEXT("False")) : TEXT("-"),
-		Cap, SizeX, SizeY );
+		Cap, SizeX, SizeY, Hz );
 	Ar.Logf( TEXT("PACETRACE: %s armed for %i frames"), *GPaceTag, GPaceWanted );
 	return 1;
 	unguard;

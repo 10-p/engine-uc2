@@ -558,16 +558,19 @@ runs a fixed camera turn on this machine's GPU, headless, and prints one line. A
 (`UseVSync=False`, `[Engine.Engine] FrameRateCap=0`); a network client keeps the engine's own tick limit. The GL
 device logs the swap interval the context reports when it changes (`UC2GLDrv: UseVSync=True, swap interval 1`).
 
-Frame pacing: the console command `PACETRACE <frames> [tag]` (also a key binding, `-ini:User:[Engine.Input]:F10=PACETRACE
-900 t`) records the next `<frames>` frames in memory and then logs them, one `PaceTrace:` line each: the frame's start
-and its DeltaTime (where the launcher measures it), the step the engine ticked with, the swap's call and return, when
-`UEngine::Tick` returned, the frame limiter's requested sleep and how long it took; then a summary line
-(`Source/Engine/Src/UC2PaceTrace.cpp`). `tools/dev/pace-analyze.py <log>` reads them: the game-time steps against the
-time each frame was on the display (the swaps placed on the refresh grid), repeated and skipped frames, the limiter's
-oversleep. `tools/dev/pace-run.sh <name> <tree> [frames]` runs a match in a window on this machine's screen at a fixed
-spot (TELEPORT) with `PACE_VSYNC`, `PACE_CAP`, `PACE_FULLSCREEN` and `PACE_VIDEO` (x11 or wayland), traces it and
-prints the analysis's verdict. The test key `[SDLLaunch] PaceJitter=<frames>:<ms>` starts every `<frames>`-th frame
-`<ms>` late, a known unevenness of the game-time steps for the trace to show; `FramePattern` gives frames set lengths.
+Frame pacing: the console command `PACETRACE [<frames> [tag]]` (1200 frames by default; also a key binding,
+`-ini:User:[Engine.Input]:F10=PACETRACE`) records the next frames in memory and then logs them, one `PaceTrace:` line
+each: the frame's start and its DeltaTime (where the launcher measures it), the step the engine ticked with, the swap's
+call and return, when `UEngine::Tick` returned, the frame limiter's requested sleep and how long it took and, on
+Windows, the display's refresh count at the swap's return (the desktop compositor's clock of the vertical blanks,
+`appDisplayVBlank`); then a summary line (`Source/Engine/Src/UC2PaceTrace.cpp`). `tools/dev/pace-analyze.py <log>`
+reads them: the game-time steps against the time between pictures on the display (the swaps on the refresh grid, a
+frame's picture going out with the next frame's swap), repeated and skipped frames, the limiter's oversleep.
+`tools/dev/pace-run.sh <name> <tree> [frames]` runs a match in a window on this machine's screen at a fixed spot
+(TELEPORT) with `PACE_VSYNC`, `PACE_CAP`, `PACE_FULLSCREEN`, `PACE_VIDEO` (x11 or offscreen) and `PACE_RENDER`
+(cheap hides the world's geometry), traces it and prints the verdict with the GPU's clock during the trace. The test
+key `[SDLLaunch] PaceJitter=<frames>:<ms>` starts every `<frames>`-th frame `<ms>` late, a known unevenness of the
+game-time steps for the trace to show; `FramePattern` gives frames set lengths.
 
 ## Relaunch
 

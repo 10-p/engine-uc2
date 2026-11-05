@@ -26,8 +26,8 @@ import re
 import sys
 
 FRAME = re.compile(r'pacetrace (\S+) (\d+) start=(\S+) dt=(\S+) tick=(\S+) swap0=(\S+) swap1=(\S+) end=(\S+) '
-                   r'want=(\S+) slept=(\S+) swaps=(\d+)')
-BEGIN = re.compile(r'pacetrace (\S+) begin (\d+) frames device=(\S+) vsync=(\S+) cap=(\S+) view=(\S+)')
+                   r'want=(\S+) slept=(\S+) swaps=(\d+)(?: vbl=(-?\d+))?')
+BEGIN = re.compile(r'pacetrace (\S+) begin (\d+) frames device=(\S+) vsync=(\S+) cap=(\S+) view=(\S+)(?: hz=(\S+))?')
 
 
 def stats(v):
@@ -99,9 +99,19 @@ def analyse(tag, frames, begin, hz):
     print('refresh grid: %s at phase %.3f ms, spread %.3f ms (%s)' % (
         ref, phase, spread, 'locked to the refresh' if locked else 'not locked: nothing in the frame waits for the display'))
     idx = {}
-    for i, x in enumerate(f):
-        if x['swaps']:
-            idx[i] = int(math.floor((x[ref] - phase) / P + 0.5))
+    if all(x['vbl'] >= 0 for x in sw):
+        # The platform's own count of the display's refreshes at each swap's return (Windows: the compositor's);
+        # with vsync on, the frames are on the display's refreshes whether or not the timestamps show it.
+        ref = 'swap1'
+        locked = locked or bool(begin and 'vsync=True' in begin)
+        print('refresh count: the display clock of the platform (vbl), at the swap returns')
+        for i, x in enumerate(f):
+            if x['swaps']:
+                idx[i] = x['vbl']
+    else:
+        for i, x in enumerate(f):
+            if x['swaps']:
+                idx[i] = int(math.floor((x[ref] - phase) / P + 0.5))
     d = [idx[i] - idx[i - 1] for i in range(1, n) if i in idx and i - 1 in idx]
     dh = {}
     for k in d:
@@ -148,13 +158,15 @@ def main():
     ap.add_argument('--tag')
     ap.add_argument('logs', nargs='+')
     a = ap.parse_args()
-    traces, begins, order = {}, {}, []
+    traces, begins, rates, order = {}, {}, {}, []
     for path in a.logs:
         with open(path, errors='replace') as fh:
             for line in fh:
                 m = BEGIN.search(line)
                 if m:
                     begins[m.group(1)] = 'vsync=%s cap=%s view=%s device=%s' % (m.group(4), m.group(5), m.group(6), m.group(3))
+                    if m.group(7) and float(m.group(7)) > 0:
+                        rates[m.group(1)] = float(m.group(7))
                     continue
                 m = FRAME.search(line)
                 if not m:
@@ -167,12 +179,13 @@ def main():
                     order.append(t)
                 v = [float(x) for x in m.groups()[2:10]]
                 traces[t].append(dict(i=int(m.group(2)), start=v[0], dt=v[1], tick=v[2], swap0=v[3], swap1=v[4],
-                                      end=v[5], want=v[6], slept=v[7], swaps=int(m.group(11))))
+                                      end=v[5], want=v[6], slept=v[7], swaps=int(m.group(11)),
+                                      vbl=int(m.group(12)) if m.group(12) is not None else -1))
     if not order:
         print('verdict: no pace trace in ' + ' '.join(a.logs))
         return 1
     for t in order:
-        analyse(t, traces[t], begins.get(t), a.hz)
+        analyse(t, traces[t], begins.get(t), a.hz or rates.get(t))
     return 0
 
 
