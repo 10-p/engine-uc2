@@ -19,6 +19,7 @@ Revision history:
 #include "UCGameplay.h"
 #include "ULoadSaveManager.h"
 #include "FContentManager.h"
+#include "UnPaste.h"
 
 const FLOAT BIGFLOAT = 99999.f;
 
@@ -1008,6 +1009,38 @@ static UGUIEditBox* TextEntryTarget( UGUIController* C )
 {
 	return C->ActivePage ? FindEditBox( C->ActivePage, 0 ) : NULL;
 }
+
+#ifndef _XBOX
+//
+// A paste in the menus (UnPaste.h): it goes to the text field typed characters reach (NativeKeyType's, while the
+// menus are up and read the keyboard as a pad), each character typed into it as UEngine::Key types one. A full
+// field turns down the first character that does not fit (its error sound, as a key too many) and gets no more.
+//
+static UBOOL MenuPaste( UViewport* Viewport, const TCHAR* Text )
+{
+	guard(MenuPaste);
+	UClient* Client = Viewport ? Viewport->GetOuterUClient() : NULL;
+	UGUIController* C = Client && Client->InteractionMaster
+		? Cast<UGUIController>( Client->InteractionMaster->GetGUIController( Viewport ) ) : NULL;
+	if( !C || !C->bActive || !C->bEmulatedJoypad )
+		return 0;
+	UGUIEditBox* Box = TextEntryTarget( C );
+	if( !Box || !Text )
+		return Box != NULL;
+	for( const TCHAR* P = Text; *P; P++ )
+	{
+		UBOOL Full = Box->MaxWidth > 0 && !Box->bAllSelected && Box->TextStr.Len() >= Box->MaxWidth;
+		Client->Engine->Key( Viewport, (EInputKey)(BYTE)*P, *P );
+		if( Full )
+			break;
+	}
+	return 1;
+	unguard;
+}
+
+// UnPaste.h's hook, set when this module loads.
+static struct FMenuPasteHook { FMenuPasteHook() { GMenuPaste = MenuPaste; } } GMenuPasteHook;
+#endif
 
 static UBOOL IsTypingKey( BYTE iKey )
 {

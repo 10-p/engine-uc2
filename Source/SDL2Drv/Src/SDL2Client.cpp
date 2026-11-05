@@ -10,6 +10,26 @@
 #include "SDL2Drv.h"
 #include "SDL2InputTest.h"
 
+#ifdef __EMSCRIPTEN__
+#include <pthread.h>
+#include "UnPaste.h"
+
+// SDL2Paste.js: the page's paste events go to Callback on Thread with the pasted text (UTF-8, NUL-terminated), cut to
+// what MaxChars typed characters can need.
+extern "C" void uc2_web_listen_paste( bool (*Callback)( int EventType, void* Text, void* UserData ), pthread_t Thread,
+	int MaxChars );
+
+// The UTF-8 text of each paste the page handed over since the last PumpEvents. Only this thread touches it: the page's
+// pastes arrive on it through Emscripten's proxying queue, as its key events do.
+static TArray<FString> GWebPastes;
+
+static bool WebPasteArrived( int EventType, void* Text, void* UserData )
+{
+	new(GWebPastes) FString( (const TCHAR*)Text );
+	return 0;
+}
+#endif
+
 /*-----------------------------------------------------------------------------
 	Class implementation.
 -----------------------------------------------------------------------------*/
@@ -169,6 +189,11 @@ void USDL2Client::Init( UEngine* InEngine )
 
 	// Text input (WM_CHAR's role). SDL enables it on desktop by default; say so explicitly.
 	SDL_StartTextInput();
+#ifdef __EMSCRIPTEN__
+	// A paste on the page (Ctrl+V, Shift+Insert, the browser's menu) comes as the page's paste event, whose text the
+	// page gives without asking for permission: PumpEvents types it.
+	uc2_web_listen_paste( WebPasteArrived, pthread_self(), PASTE_MAX_CHARACTERS );
+#endif
 
 	USDL2Viewport::InitKeyMap();
 
@@ -310,8 +335,33 @@ void USDL2Client::PumpEvents()
 		if( Viewport && Viewport->Actor )
 			Viewport->HandleEvent( Ev );
 	}
+#ifdef __EMSCRIPTEN__
+	// The page's pastes, after the key events that came before them (the Ctrl+V of a paste among them).
+	for( INT i=0; i<GWebPastes.Num(); i++ )
+	{
+		USDL2Viewport* Viewport = KeyboardViewport();
+		if( Viewport && Viewport->Actor )
+			Viewport->Paste( (const char*)*GWebPastes(i), TEXT("the page's paste") );
+	}
+	GWebPastes.Empty();
+#endif
 	// What the on-screen pad draws (menus or match), for its UI thread; also while a full-screen movie pumps.
 	PublishTouchPadState();
+	unguard;
+}
+
+//
+// The viewport whose window has the keyboard (the one its key events name), else the current one, as PumpEvents
+// chooses for an event.
+//
+USDL2Viewport* USDL2Client::KeyboardViewport()
+{
+	guard(USDL2Client::KeyboardViewport);
+	SDL_Window* Focus = SDL_GetKeyboardFocus();
+	USDL2Viewport* Viewport = FindViewport( Focus ? SDL_GetWindowID( Focus ) : 0 );
+	if( !Viewport && LastCurrent && Viewports.FindItemIndex(LastCurrent)!=INDEX_NONE )
+		Viewport = (USDL2Viewport*)LastCurrent;
+	return Viewport;
 	unguard;
 }
 

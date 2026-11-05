@@ -273,6 +273,19 @@ key Escape
 tryseek 40 P['_'].menu == 'None' ;; sleep 0.5
 probe p2
 check kb-escape-closes-pause-menu P['p2'].menu == 'None'
+# in-game chat (T: Epic's Talk, the console's line with "Say ") takes the clipboard after its "Say "
+clip gg all
+key t
+tryseek 20 P['_'].console == 1 ;; sleep 0.3
+keydown Control_L
+key v
+keyup Control_L
+tryseek 20 len(P['_'].typed) > 4 ;; sleep 0.3
+probe ch
+check kb-ctrl-v-pastes-into-the-chat-line P['ch'].typed == 'Say gg all'
+key Escape
+key Escape
+tryseek 20 P['_'].console == 0 ;; sleep 0.3
 SCEN
 }
 
@@ -666,12 +679,38 @@ shot two-players
 SCEN
 }
 
-# Text entry: a new profile's name on the on-screen keyboard page (UC2ProfileKeyboard), typed on the real keyboard.
-# The letters are the ones the menus otherwise use as pad keys (W A S D) or Epic's table used (K X Y B).
+# Text entry: a new profile's name on the on-screen keyboard page (UC2ProfileKeyboard), typed on the real keyboard,
+# and the X clipboard pasted (Ctrl+V, Shift+Insert) into it and into the console's line; on the main menu, which has
+# no text field, Ctrl+V reads no clipboard and types nothing. The letters are the ones the menus otherwise use as pad
+# keys (W A S D) or Epic's table used (K X Y B).
 scen_text() {
   cat <<'SCEN'
 wait OpenMenu \[UCMenu.UC2MainMenu\] 90
 focus
+clip Nowhere
+probe m0
+mark
+keydown Control_L
+key v
+keyup Control_L
+expect tx-ctrl-v-without-a-text-field-pastes-nothing paste: no text field takes typing 10
+sleep 0.5
+probe m1
+absent tx-ctrl-v-without-a-text-field-types-nothing Typed '
+check tx-ctrl-v-without-a-text-field-moves-nothing P['m1'].menu == P['m0'].menu and P['m1'].caption == P['m0'].caption
+# the console (the key left of 1) takes the clipboard into its line
+clip say from the clipboard
+key grave
+tryseek 20 P['_'].console == 1 ;; sleep 0.3
+keydown Control_L
+key v
+keyup Control_L
+tryseek 20 P['_'].typed != '' ;; sleep 0.3
+probe c1
+check tx-ctrl-v-pastes-into-the-console P['c1'].console == 1 and P['c1'].typed == 'say from the clipboard'
+key Escape
+key Escape
+tryseek 20 P['_'].console == 0 ;; sleep 0.3
 seek 8 P['_'].caption == 'PROFILES' ;; key Down
 key Return
 expect tx-profiles-opens OpenMenu \[UCMenu.UC2Profile\] 15
@@ -695,6 +734,26 @@ tryseek 20 len(P['_'].text) >= 8 ;; sleep 0.3
 probe k3
 check tx-typing-again P['k3'].text == 'WaSdKxYb'
 shot typed
+# Ctrl+V types the clipboard at the caret as the keys type: no tab or line break, nothing outside Latin-1 (the euro
+# sign), at most the field's 15 characters; Shift+Insert too, here at the start (Home)
+clip Ab\tc\r\nd\u20ac\u00e9
+mark
+keydown Control_L
+key v
+keyup Control_L
+tryseek 20 len(P['_'].text) > 8 ;; sleep 0.3
+probe k5
+check tx-ctrl-v-pastes-at-the-caret P['k5'].text == 'WaSdKxYbAbcd\xe9'
+absent tx-pasting-does-not-navigate handled XC_
+key Home
+clip Zz9
+keydown Shift_L
+key Insert
+keyup Shift_L
+tryseek 20 P['_'].text.startswith('Zz') ;; sleep 0.3
+probe k6
+check tx-shift-insert-pastes-up-to-the-fields-length P['k6'].text == 'ZzWaSdKxYbAbcd\xe9'
+shot pasted
 key Return
 expect tx-enter-finishes-entry CloseMenu \[UC2ProfileKeyboard\] 10
 tryseek 20 P['_'].menu != 'UC2ProfileKeyboard' ;; sleep 0.5
@@ -1008,7 +1067,7 @@ for s in ${@:-$all}; do
   case "$s" in
     keyboard) run_scenario keyboard 300 ;;
     mouse) run_scenario mouse 360 ;;
-    text) run_scenario text 180 ;;
+    text) run_scenario text 300 ;;
     pad) run_scenario pad 360 ;;
     both) run_scenario both 300 ;;
     standby) (
