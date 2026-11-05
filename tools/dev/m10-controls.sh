@@ -417,6 +417,22 @@ click 1 130 89
 sleep 3
 probe mu3
 check ms-mutators-up-click-on-collapsed-panel-closes-them P['mu3'].item == '' and any('menu-mouse: a click outside the mutators is B' in l for l in M.log_lines[M.mark_at:]) and not any('menu-mouse: a click on a collapsed panel' in l for l in M.log_lines[M.mark_at:])
+# the page's header is outside them too (the main panel covers the page): over the ARENA title the wheel moves nothing,
+# a click there closes them
+key x
+seek 10 P['_'].item == 'NOT SET' ;; sleep 0.5
+move 540 55
+sleep 0.8
+mark
+click 5
+sleep 1.5
+probe mu4
+check ms-mutators-up-wheel-over-the-header-moves-nothing P['mu4'].item == 'NOT SET' and not any('handled XC_PadDown' in l for l in M.log_lines[M.mark_at:])
+mark
+click 1 540 55
+sleep 3
+probe mu5
+check ms-mutators-up-click-on-the-header-closes-them P['mu5'].item == '' and any('menu-mouse: a click outside the mutators is B' in l for l in M.log_lines[M.mark_at:]) and not any('handled XC_A' in l or 'Mouse click is A' in l for l in M.log_lines[M.mark_at:])
 key Up
 sleep 1
 key Left
