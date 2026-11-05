@@ -521,8 +521,30 @@ sleep 0.5
 seek 40 'DM-Deadbolt' in P['_'].item ;; click 5
 key Return
 wait OpenMenu \[UCMenu.UC2Arena_Character\] 15
+# a hint inside a panel is its pad button too: the Character page's MORE INFO (Q, the pad's White) at (480, 413)
+# opens the character's info, as White does; Escape closes it
+move 560 40
+sleep 0.5
+mark
+click 1 480 413
+expect ms-character-more-info-hint-is-white OpenMenu \[UCMenu.UC2CharacterInfoPage\] 15
+key Escape
+wait CloseMenu \[UC2CharacterInfoPage\] 10
+check ms-character-more-info-was-the-hint any('Mouse click on the button hint' in l and 'XC_White' in l for l in M.log_lines[M.mark_at:])
+move 560 40
+sleep 0.5
 key Return
 wait OpenMenu \[UCMenu.UC2Arena_Armory\] 15
+seek 40 '|' in P['_'].item ;; sleep 0.5
+# the Armory's loadout MORE INFO (Q, White) at (390, 389) opens the weapon's details; Escape closes them
+mark
+click 1 390 389
+expect ms-armory-more-info-hint-is-white OpenMenu \[UCMenu.UC2OverlayInfo\] 15
+key Escape
+wait CloseMenu \[UC2OverlayInfo\] 10
+check ms-armory-more-info-was-the-hint any('Mouse click on the button hint' in l and 'XC_White' in l for l in M.log_lines[M.mark_at:])
+move 560 40
+sleep 0.5
 seek 40 '|' in P['_'].item ;; sleep 0.5
 probe armory0
 seek 10 P['_'].item != P['armory0'].item ;; key Return

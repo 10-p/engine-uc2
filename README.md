@@ -54,9 +54,9 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   and a click acts on that item alone: a click on a panel's background, a caption, a disabled item or a list's empty
   space does nothing; a click outside a dialog is its way out, B or its OK, never a click on the page below, and nothing
   on a box whose cancel is all it offers (the network's waiting box, whose cancel asks to forfeit); a click on a button
-  hint, a dialog's or one in a page's hint bar (the footer), is that hint's pad button, and the pointer over a hint
-  selects nothing; a collapsed Arena panel is inert to the mouse, no hover focus, no row and no wheel, and a click on it
-  opens it; while the Arena's mutators are up, the rest of the page (its other panels, its header) but the footer's
+  hint (a dialog's, the footer's, one in a panel) is that hint's pad button, and the pointer over a hint selects
+  nothing; a collapsed Arena panel is inert to the mouse, no hover focus, no row, no wheel and no hint, and a click on
+  it opens it; while the Arena's mutators are up, the rest of the page (its other panels, its header) but the footer's
   hints is inert the same way and a click there closes the mutators as the pad's B does, patch set menu-mouse), the
   console on the key left of 1, the PC mouse look of the mouse-look patch set; while player one is on the keyboard and
   mouse (their last device, as the key glyphs show it) the pitch's auto-centring waits, with the shipped scripts too

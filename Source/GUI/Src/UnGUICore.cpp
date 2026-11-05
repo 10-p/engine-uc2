@@ -2755,8 +2755,8 @@ static void MouseInertClick( UGUIComponent* Inert )
 // is up. Its own area is what it draws, its visible parts; a click outside them, press and release,
 // is the dialog's way out: its B (a cancel, the overlays' back), or its OK when OK is all a message
 // box offers; a dialog that offers neither (a progress or a mandatory message), or a message box
-// whose cancel is all it offers, takes nothing. A click on a button hint (MouseHint), a dialog's own
-// or one in a page's hint bar, is that pad button.
+// whose cancel is all it offers, takes nothing. A click on a button hint (MouseHint) is that pad
+// button.
 static UGUIPage*      GDialogOutsidePress = NULL;	// the dialog a press outside it was made on
 static UGUIComponent* GHintPress = NULL;			// the button hint a press was made on
 
@@ -2789,21 +2789,8 @@ static UBOOL MouseOutsideDialog( UGUIController* C )
 	return Drawn || !Page->WithinBounds( C->MouseX, C->MouseY );
 }
 
-// A visible button hint among Comp's own controls under (X, Y).
-static UGUIComponent* HintIn( UGUIComponent* Comp, UClass* HintClass, FLOAT X, FLOAT Y )
-{
-	UGUIMultiComponent* Multi = Cast<UGUIMultiComponent>( Comp );
-	for ( INT i = 0; Multi && i < Multi->Controls.Num(); i++ )
-	{
-		UGUIComponent* Part = Multi->Controls(i);
-		if ( Part && Part->bVisible && Part->IsA(HintClass) && Part->WithinBounds( X, Y ) )
-			return Part;
-	}
-	return NULL;
-}
-
-// A visible button hint under (X, Y) in one of the visible hint bars (BarClass) in Comp.
-static UGUIComponent* BarHint( UGUIComponent* Comp, UClass* HintClass, UClass* BarClass, FLOAT X, FLOAT Y )
+// A visible button hint under (X, Y) among Comp's visible parts, at any depth.
+static UGUIComponent* HintUnder( UGUIComponent* Comp, UClass* HintClass, FLOAT X, FLOAT Y )
 {
 	UGUIMultiComponent* Multi = Cast<UGUIMultiComponent>( Comp );
 	for ( INT i = 0; Multi && i < Multi->Controls.Num(); i++ )
@@ -2811,7 +2798,7 @@ static UGUIComponent* BarHint( UGUIComponent* Comp, UClass* HintClass, UClass* B
 		UGUIComponent* Part = Multi->Controls(i);
 		if ( !Part || !Part->bVisible )
 			continue;
-		UGUIComponent* Hint = Part->IsA(BarClass) ? HintIn( Part, HintClass, X, Y ) : BarHint( Part, HintClass, BarClass, X, Y );
+		UGUIComponent* Hint = Part->IsA(HintClass) ? (Part->WithinBounds( X, Y ) ? Part : NULL) : HintUnder( Part, HintClass, X, Y );
 		if ( Hint )
 			return Hint;
 	}
@@ -2819,26 +2806,21 @@ static UGUIComponent* BarHint( UGUIComponent* Comp, UClass* HintClass, UClass* B
 }
 
 // The button hint under the cursor on the active page (the glyph and caption of a pad button,
-// ControllerButton), and the pad button it shows: one of a dialog's own hints, or one in a hint bar of
-// the page (UCMenu's ButtonPanel: the footer's, the profiles page's). The hit test does not reach the
-// footer's hints where a panel covers the page (the Arena's main panel), so they are found by bounds.
+// ControllerButton), and the pad button it shows: a dialog's, one in a hint bar (the footer) or one in
+// a panel. The hit test does not reach the footer's hints where a panel covers the page (the Arena's
+// main panel), so hints are found by their bounds. A hint in a part that is inert to the mouse is
+// none: it is inert with that part.
 static UGUIComponent* MouseHint( UGUIController* C, BYTE& Code )
 {
 	static UClass* HintClass = NULL;
-	static UClass* BarClass = NULL;
 	if ( !HintClass )
 		HintClass = FindObject<UClass>( ANY_PACKAGE, TEXT("ControllerButton") );
-	if ( !BarClass )
-		BarClass = FindObject<UClass>( ANY_PACKAGE, TEXT("ButtonPanel") );
 	UGUIPage* Page = C->bEmulatedJoypad ? C->ActivePage : NULL;
 	UByteProperty* CodeProp = HintClass ? FindField<UByteProperty>( HintClass, TEXT("ButtonCode") ) : NULL;
-	if ( !Page || !CodeProp )
+	UGUIComponent* Hint = Page && CodeProp ? HintUnder( Page, HintClass, C->MouseX, C->MouseY ) : NULL;
+	if ( !Hint || MouseInertOwner( Hint ) )
 		return NULL;
-	UGUIComponent* Hint = MouseDialog( C ) ? HintIn( Page, HintClass, C->MouseX, C->MouseY ) : NULL;
-	if ( !Hint && BarClass )
-		Hint = BarHint( Page, HintClass, BarClass, C->MouseX, C->MouseY );
-	if ( Hint )
-		Code = *((BYTE*)Hint + CodeProp->Offset);
+	Code = *((BYTE*)Hint + CodeProp->Offset);
 	return Hint;
 }
 
