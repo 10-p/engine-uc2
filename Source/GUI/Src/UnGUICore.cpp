@@ -1024,8 +1024,9 @@ static UBOOL MouseReleaseClicks( UGUIController* C, UGUIComponent* Comp );
 static UBOOL MouseIsOver( UGUIController* C, UGUIComponent* Comp );
 static UGUIComponent* MouseInertOwner( UGUIComponent* Comp );
 static UGUIComponent* MouseInertUnder( UGUIController* C );
-static UBOOL MouseDialogPress( UGUIController* C );
-static UBOOL MouseDialogRelease( UGUIController* C );
+static UGUIComponent* MouseHint( UGUIController* C, BYTE& Code );
+static UBOOL MouseOutsideOrHintPress( UGUIController* C );
+static UBOOL MouseOutsideOrHintRelease( UGUIController* C );
 static UBOOL MouseOutsideDialog( UGUIController* C );
 static UGUIPage* MouseDialog( UGUIController* C );
 
@@ -2499,7 +2500,7 @@ UBOOL UGUIController::MousePressed(UBOOL IsRepeat)
 	}
 
 #ifndef _XBOX
-	if ( MouseDialogPress( this ) )
+	if ( MouseOutsideOrHintPress( this ) )
 		return true;
 #endif
 
@@ -2540,7 +2541,7 @@ UBOOL UGUIController::MouseReleased()
 #endif
 
 #ifndef _XBOX
-	if ( MouseDialogRelease( this ) )
+	if ( MouseOutsideOrHintRelease( this ) )
 		return true;
 #endif
 
@@ -2640,9 +2641,12 @@ void UGUIController::LookUnderCursor(FLOAT dX, FLOAT dY)
 
 #ifndef _XBOX
 	// Moving the mouse over a menu item selects it, as the D-pad would (only on real
-	// motion, so a resting cursor never takes the focus back from keyboard or pad navigation).
+	// motion, so a resting cursor never takes the focus back from keyboard or pad navigation);
+	// over a button hint it selects nothing.
+	BYTE HintCode;
 	if ( (dX != 0.f || dY != 0.f) && IsMouseMenuItem( this, ActiveControl ) &&
-		ActiveControl->MenuState == MSAT_Blurry && ActiveControl != eventGetFocusedControl() )
+		ActiveControl->MenuState == MSAT_Blurry && ActiveControl != eventGetFocusedControl() &&
+		!MouseHint( this, HintCode ) )
 	{
 		debugf( NAME_DevUI, TEXT("Mouse hover selects %s"), ActiveControl->GetMenuPath() );
 		ActiveControl->eventSetFocus( NULL );
@@ -2723,9 +2727,13 @@ static UGUIComponent* MouseInertOwner( UGUIComponent* Comp )
 	return NULL;
 }
 
-// The inert owner of the component under the pointer on the active page, if it is inert to the mouse.
+// The inert owner of the component under the pointer on the active page, if it is inert to the mouse; a
+// button hint under the pointer is not.
 static UGUIComponent* MouseInertUnder( UGUIController* C )
 {
+	BYTE Code;
+	if ( MouseHint( C, Code ) )
+		return NULL;
 	UGUIComponent* Under = C->UnderCursor( C->MouseX, C->MouseY );
 	return Under && Under->PageOwner == C->ActivePage ? MouseInertOwner( Under ) : NULL;
 }
@@ -2747,10 +2755,10 @@ static void MouseInertClick( UGUIComponent* Inert )
 // is up. Its own area is what it draws, its visible parts; a click outside them, press and release,
 // is the dialog's way out: its B (a cancel, the overlays' back), or its OK when OK is all a message
 // box offers; a dialog that offers neither (a progress or a mandatory message), or a message box
-// whose cancel is all it offers, takes nothing. A click on one of its button hints (the glyph and
-// caption of a pad button, ControllerButton) is that pad button.
+// whose cancel is all it offers, takes nothing. A click on a button hint (MouseHint) is that pad
+// button.
 static UGUIPage*      GDialogOutsidePress = NULL;	// the dialog a press outside it was made on
-static UGUIComponent* GDialogHintPress = NULL;		// the button hint a press was made on
+static UGUIComponent* GHintPress = NULL;			// the button hint a press was made on
 
 static UGUIPage* MouseDialog( UGUIController* C )
 {
@@ -2781,24 +2789,39 @@ static UBOOL MouseOutsideDialog( UGUIController* C )
 	return Drawn || !Page->WithinBounds( C->MouseX, C->MouseY );
 }
 
-// The dialog's button hint under the cursor, and the pad button it shows.
-static UGUIComponent* MouseDialogHint( UGUIController* C, BYTE& Code )
+// A visible button hint under (X, Y) among Comp's visible parts, at any depth.
+static UGUIComponent* HintUnder( UGUIComponent* Comp, UClass* HintClass, FLOAT X, FLOAT Y )
 {
-	UGUIPage* Page = MouseDialog( C );
-	static UClass* HintClass = FindObject<UClass>( ANY_PACKAGE, TEXT("ControllerButton") );
-	if ( !Page || !HintClass )
-		return NULL;
-	UByteProperty* CodeProp = FindField<UByteProperty>( HintClass, TEXT("ButtonCode") );
-	for ( INT i = 0; i < Page->Controls.Num() && CodeProp; i++ )
+	UGUIMultiComponent* Multi = Cast<UGUIMultiComponent>( Comp );
+	for ( INT i = 0; Multi && i < Multi->Controls.Num(); i++ )
 	{
-		UGUIComponent* Part = Page->Controls(i);
-		if ( Part && Part->bVisible && Part->IsA(HintClass) && Part->WithinBounds( C->MouseX, C->MouseY ) )
-		{
-			Code = *((BYTE*)Part + CodeProp->Offset);
-			return Part;
-		}
+		UGUIComponent* Part = Multi->Controls(i);
+		if ( !Part || !Part->bVisible )
+			continue;
+		UGUIComponent* Hint = Part->IsA(HintClass) ? (Part->WithinBounds( X, Y ) ? Part : NULL) : HintUnder( Part, HintClass, X, Y );
+		if ( Hint )
+			return Hint;
 	}
 	return NULL;
+}
+
+// The button hint under the cursor on the active page (the glyph and caption of a pad button,
+// ControllerButton), and the pad button it shows: a dialog's, one in a hint bar (the footer) or one in
+// a panel. The hit test does not reach the footer's hints where a panel covers the page (the Arena's
+// main panel), so hints are found by their bounds. A hint in a part that is inert to the mouse is
+// none: it is inert with that part.
+static UGUIComponent* MouseHint( UGUIController* C, BYTE& Code )
+{
+	static UClass* HintClass = NULL;
+	if ( !HintClass )
+		HintClass = FindObject<UClass>( ANY_PACKAGE, TEXT("ControllerButton") );
+	UGUIPage* Page = C->bEmulatedJoypad ? C->ActivePage : NULL;
+	UByteProperty* CodeProp = HintClass ? FindField<UByteProperty>( HintClass, TEXT("ButtonCode") ) : NULL;
+	UGUIComponent* Hint = Page && CodeProp ? HintUnder( Page, HintClass, C->MouseX, C->MouseY ) : NULL;
+	if ( !Hint || MouseInertOwner( Hint ) )
+		return NULL;
+	Code = *((BYTE*)Hint + CodeProp->Offset);
+	return Hint;
 }
 
 // A message box (GUIMessageBox: SetupQuestion's accept and cancel, or its own buttons) goes out by B when
@@ -2836,24 +2859,24 @@ static BYTE DialogWayOut( UGUIPage* Page )
 	return Accepts == 1 ? (BYTE)XC_A : (BYTE)255;	// 255: no way out
 }
 
-static UBOOL MouseDialogPress( UGUIController* C )
+static UBOOL MouseOutsideOrHintPress( UGUIController* C )
 {
 	GDialogOutsidePress = NULL;
-	GDialogHintPress = NULL;
+	GHintPress = NULL;
 	BYTE Code;
 	if ( MouseOutsideDialog( C ) )
 		GDialogOutsidePress = C->ActivePage;
 	else
-		GDialogHintPress = MouseDialogHint( C, Code );
-	return GDialogOutsidePress || GDialogHintPress;
+		GHintPress = MouseHint( C, Code );
+	return GDialogOutsidePress || GHintPress;
 }
 
-static UBOOL MouseDialogRelease( UGUIController* C )
+static UBOOL MouseOutsideOrHintRelease( UGUIController* C )
 {
 	UGUIPage* Outside = GDialogOutsidePress;
-	UGUIComponent* Hint = GDialogHintPress;
+	UGUIComponent* Hint = GHintPress;
 	GDialogOutsidePress = NULL;
-	GDialogHintPress = NULL;
+	GHintPress = NULL;
 	if ( Outside )
 	{
 		if ( Outside == C->ActivePage && MouseOutsideDialog( C ) )
@@ -2869,9 +2892,10 @@ static UBOOL MouseDialogRelease( UGUIController* C )
 	if ( Hint )
 	{
 		BYTE Code = 0;
-		if ( IsValidObject(Hint) && MouseDialogHint( C, Code ) == Hint )
+		if ( IsValidObject(Hint) && MouseHint( C, Code ) == Hint )
 		{
-			debugf( NAME_DevUI, TEXT("Mouse click on the dialog's hint %s: %s"), Hint->GetMenuPath(), GetXCodeName(Code) );
+			debugf( NAME_DevUI, TEXT("Mouse click on the %s hint %s: %s"), MouseDialog( C ) ? TEXT("dialog's") : TEXT("button"),
+				Hint->GetMenuPath(), GetXCodeName(Code) );
 			C->DistributeXControllerEvent( C->ControllerId, (eXControllerCodes)Code );
 		}
 		return 1;
@@ -2895,8 +2919,9 @@ static void MouseClickPress( UGUIController* C )
 	GClickTarget = NULL;
 	GClickRowList = NULL;
 	GClickInert = 0;
-	if ( !C->bEmulatedJoypad )
-		return;
+	BYTE Code;
+	if ( !C->bEmulatedJoypad || MouseHint( C, Code ) )
+		return;		// a press on a button hint is the hint's alone (MouseOutsideOrHintPress)
 	UGUIComponent* Under = C->UnderCursor( C->MouseX, C->MouseY );
 	if ( !Under || Under->PageOwner != C->ActivePage )
 		return;

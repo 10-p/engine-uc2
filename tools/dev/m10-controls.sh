@@ -294,6 +294,70 @@ click 3
 expect ms-right-click-is-back CloseMenu \[UC2Settings_Main\] 10
 # the main menu comes back with an animation of its own
 wait UC2MainMenu Unblocking animation 60
+# a footer hint is its pad button: the main menu's SELECT is A on its focused item (OPTIONS again), the options
+# page's BACK is B (the profile question came the first time only)
+pyexec import __main__ as M
+mark
+click 1 105 437
+expect ms-select-hint-is-a-on-the-focused-item OpenMenu \[UCMenu.UC2Settings_Main\] 15
+seek 40 P['_'].menu == 'UC2Settings_Main' ;; sleep 0.5
+click 1 550 437
+expect ms-back-hint-is-b CloseMenu \[UC2Settings_Main\] 10
+check ms-the-clicks-were-the-hints any('Mouse click on the button hint' in l and 'XC_A' in l for l in M.log_lines[M.mark_at:]) and any('Mouse click on the button hint' in l and 'XC_B' in l for l in M.log_lines[M.mark_at:])
+wait UC2MainMenu Unblocking animation 60
+# the profiles page's middle bar is a hint bar too. A profile is made through the page's own box (in this run tree),
+# then NEW (the pad's Black), COPY (White: a copy named Spare), DELETE (X: its question; No keeps the copy, Yes
+# deletes it); the page's BACK hint leaves. 640x480: NEW (95, 260), COPY (205, 260), DELETE (330, 260); the
+# question's Yes (135, 296), No (520, 296)
+pyexec import os
+seek 8 P['_'].caption == 'PROFILES' ;; key Up
+key Return
+wait OpenMenu \[UCMenu.UC2Profile\] 15
+wait OpenMenu \[GUI.GUIMessageBox\] 20
+key Return
+wait OpenMenu \[UCMenu.UC2ProfileKeyboard\] 15
+type Tester
+tryseek 20 len(P['_'].text) >= 6 ;; sleep 0.5
+key Return
+wait CloseMenu \[UC2ProfileKeyboard\] 10
+seek 40 P['_'].menu == 'UC2Profile' ;; sleep 0.5
+mark
+click 1 95 260
+expect ms-new-hint-opens-the-new-profile-keyboard OpenMenu \[UCMenu.UC2ProfileKeyboard\] 15
+probe pn
+check ms-new-hint-is-black P['pn'].text == 'Player' and any('UC2Profile handled XC_Black' in l for l in M.log_lines[M.mark_at:])
+key Escape
+wait CloseMenu \[UC2ProfileKeyboard\] 10
+seek 40 P['_'].menu == 'UC2Profile' ;; sleep 0.5
+mark
+click 1 205 260
+expect ms-copy-hint-opens-the-copy-keyboard OpenMenu \[UCMenu.UC2ProfileKeyboard\] 15
+probe pc
+check ms-copy-hint-is-white P['pc'].text == 'Tester' and any('UC2Profile handled XC_White' in l for l in M.log_lines[M.mark_at:])
+type Spare
+tryseek 20 P['_'].text == 'Spare' ;; sleep 0.5
+key Return
+wait CloseMenu \[UC2ProfileKeyboard\] 10
+seek 40 P['_'].menu == 'UC2Profile' ;; sleep 2
+check ms-copy-made sorted(os.listdir('Profiles')) == ['Spare', 'Tester']
+mark
+click 1 330 260
+expect ms-delete-hint-asks OpenMenu \[GUI.GUIMessageBox\] 15
+click 1 520 296
+wait CloseMenu \[GUIMessageBox\] 10
+sleep 2
+check ms-delete-question-no-keeps-it any('UC2Profile handled XC_X' in l for l in M.log_lines[M.mark_at:]) and sorted(os.listdir('Profiles')) == ['Spare', 'Tester']
+seek 40 P['_'].menu == 'UC2Profile' ;; sleep 0.5
+click 1 330 260
+wait OpenMenu \[GUI.GUIMessageBox\] 15
+click 1 135 296
+wait CloseMenu \[GUIMessageBox\] 10
+sleep 3
+check ms-delete-question-yes-deletes-the-copy sorted(os.listdir('Profiles')) == ['Tester']
+seek 40 P['_'].menu == 'UC2Profile' ;; sleep 0.5
+click 1 550 437
+expect ms-profiles-back-hint-is-b CloseMenu \[UC2Profile\] 10
+wait UC2MainMenu Unblocking animation 60
 mark
 click 1 140 184
 expect ms-click-opens-item-under-cursor OpenMenu \[UCMenu.UC2Arena_Main\] 15
@@ -332,8 +396,12 @@ tryseek 40 P['_'].item.startswith('DeathMatch|') ;; sleep 0.5
 probe g2
 check ms-click-on-row-accepts-that-row P['g0'].item.startswith('Capture') and P['g1'].item == '' and P['g2'].item.startswith('DeathMatch|')
 shot gametype
-key Return
+# the Arena's SELECT hint is A: DeathMatch accepted, RULES open
+mark
+click 1 105 437
 seek 40 P['_'].item == '' ;; sleep 0.5
+check ms-arena-select-hint-is-a any('Mouse click on the button hint' in l and 'XC_A' in l for l in M.log_lines[M.mark_at:])
+move 560 40
 # the pointer over the collapsed GAMETYPE gives it no focus: Down stays on the open RULES (with CUSTOMIZE off it moves
 # nothing there) and the wheel does nothing (patch set menu-mouse)
 move 130 60
@@ -433,6 +501,14 @@ click 1 540 55
 sleep 3
 probe mu5
 check ms-mutators-up-click-on-the-header-closes-them P['mu5'].item == '' and any('menu-mouse: a click outside the mutators is B' in l for l in M.log_lines[M.mark_at:]) and not any('handled XC_A' in l or 'Mouse click is A' in l for l in M.log_lines[M.mark_at:])
+# the footer's hints are no part of the outside: the BACK hint is the pad's B, which closes them
+key x
+seek 10 P['_'].item == 'NOT SET' ;; sleep 0.5
+mark
+click 1 550 437
+sleep 3
+probe mu6
+check ms-mutators-up-back-hint-is-b P['mu6'].item == '' and any('Mouse click on the button hint' in l and 'XC_B' in l for l in M.log_lines[M.mark_at:]) and not any('a click outside the mutators' in l for l in M.log_lines[M.mark_at:])
 key Up
 sleep 1
 key Left
@@ -445,8 +521,30 @@ sleep 0.5
 seek 40 'DM-Deadbolt' in P['_'].item ;; click 5
 key Return
 wait OpenMenu \[UCMenu.UC2Arena_Character\] 15
+# a hint inside a panel is its pad button too: the Character page's MORE INFO (Q, the pad's White) at (480, 413)
+# opens the character's info, as White does; Escape closes it
+move 560 40
+sleep 0.5
+mark
+click 1 480 413
+expect ms-character-more-info-hint-is-white OpenMenu \[UCMenu.UC2CharacterInfoPage\] 15
+key Escape
+wait CloseMenu \[UC2CharacterInfoPage\] 10
+check ms-character-more-info-was-the-hint any('Mouse click on the button hint' in l and 'XC_White' in l for l in M.log_lines[M.mark_at:])
+move 560 40
+sleep 0.5
 key Return
 wait OpenMenu \[UCMenu.UC2Arena_Armory\] 15
+seek 40 '|' in P['_'].item ;; sleep 0.5
+# the Armory's loadout MORE INFO (Q, White) at (390, 389) opens the weapon's details; Escape closes them
+mark
+click 1 390 389
+expect ms-armory-more-info-hint-is-white OpenMenu \[UCMenu.UC2OverlayInfo\] 15
+key Escape
+wait CloseMenu \[UC2OverlayInfo\] 10
+check ms-armory-more-info-was-the-hint any('Mouse click on the button hint' in l and 'XC_White' in l for l in M.log_lines[M.mark_at:])
+move 560 40
+sleep 0.5
 seek 40 '|' in P['_'].item ;; sleep 0.5
 probe armory0
 seek 10 P['_'].item != P['armory0'].item ;; key Return
