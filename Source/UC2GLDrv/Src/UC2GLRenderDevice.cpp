@@ -13,6 +13,11 @@
 #include "UnMovie.h"
 #include "SDL.h"
 
+// When each buffer swap returns and whether the swaps wait for the display's refresh, for the launcher's game-time
+// step (UC2PresentClock.cpp).
+ENGINE_API void UC2FramePresented( DOUBLE When );
+ENGINE_API void UC2SetPresentVSync( UBOOL VSync );
+
 /*-----------------------------------------------------------------------------
 	Globals.
 -----------------------------------------------------------------------------*/
@@ -864,6 +869,18 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 
 
 	BindingSetSwapInterval( UseVSync ? 1 : 0 );
+#if !defined(__EMSCRIPTEN__)
+	// The swap interval the context reports (1 vsync, 0 none), logged when it changes; a driver setting can still
+	// force vsync or a frame cap of its own.
+	static INT LoggedInterval = -2;
+	const INT Interval = SDL_GL_GetSwapInterval();
+	if( Interval != LoggedInterval )
+	{
+		debugf( NAME_Init, TEXT("UC2GLDrv: UseVSync=%s, swap interval %i"), UseVSync ? TEXT("True") : TEXT("False"), Interval );
+		LoggedInterval = Interval;
+	}
+	UC2SetPresentVSync( UseVSync && Interval != 0 );
+#endif
 
 	ResetRenderStates();
 	UpdateGamma( Viewport );
@@ -2253,6 +2270,7 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 	}
 
 	BindingSwap( Viewport );
+	UC2FramePresented( appSeconds() );
 
 	if( LogStats && (FrameCounter - StatFrame0 >= 300 || StatTime0 == 0.0) )
 		LogFrameStats();
