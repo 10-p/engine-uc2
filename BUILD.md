@@ -560,7 +560,13 @@ runs a fixed camera turn on this machine's GPU, headless, and prints one line. A
 The launcher's frame limiter (`FrameRateCap`, a network client's tick limit, `Source/SDLLaunch/Src/SDLLaunch.cpp`)
 gives each frame a due time one period after the one before and waits for it with `appSleepUntil` (the system's sleep,
 then a yield for the last fraction of a millisecond; on Windows a high-resolution waitable timer where there is one), so
-a cap holds its rate exactly; a frame more than a period late starts the schedule again from itself.
+a cap holds its rate exactly; a frame more than a period late starts the schedule again from itself. Without vsync on
+the desktop builds the cap times the swaps, so the GPU finishes each frame before the cap's wait and its present pass
+before the swap (`glFinish` in `UUC2GLRenderDevice::Unlock` and `Present` while the launcher reports the cap waiting
+with no vsync, `UC2SetCapPaces` in `Source/Engine/Src/UC2PresentClock.cpp`; logged once, `UC2GLDrv: the frame rate cap
+times the swaps: each frame finishes on the GPU before the cap's wait`): the swap at the frame's due time shows a
+whole frame even where the driver starts a frame's GPU work only at the swap. CPU and GPU then take turns within a
+frame. Uncapped, under vsync, on the web and on Android the frames are not finished.
 
 VSync (`[UC2GLDrv.UC2GLRenderDevice] UseVSync`, the swap interval set at every `SetRes`; the device logs the interval the
 context reports when it changes, `UC2GLDrv: UseVSync=True, swap interval 1`): the display shows each picture for a

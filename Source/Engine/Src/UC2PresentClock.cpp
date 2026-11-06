@@ -5,7 +5,9 @@
 	The render device reports each buffer swap's return and how long the swap waited
 	(UC2FramePresented), and whether its swaps wait for the display's refresh (UC2SetPresentVSync);
 	the launcher reads them (UC2PresentClock) to move the world on by whole refreshes under vsync
-	(SDLLaunch.cpp, FVSyncStep).
+	(SDLLaunch.cpp, FVSyncStep). On desktop builds the launcher reports whether its frame cap times
+	the swaps (UC2SetCapPaces); the render device reads it (UC2CapPaces) to have each frame drawn
+	before the cap's wait, so that the swap at the frame's due time shows a finished frame.
 =============================================================================*/
 
 #include "EnginePrivate.h"
@@ -38,6 +40,23 @@ ENGINE_API UBOOL UC2PresentClock( DOUBLE& Time, INT& Count, DOUBLE& Waited )
 	Count  = GPresentCount;
 	return GPresentVSync;
 }
+
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+// Desktop builds: the browser and Android's compositor take each frame whole when it is done.
+static UBOOL	GCapPaces      = 0;		// the launcher's frame cap times the swaps (it waits for each frame's due time)
+
+// The launcher, each frame: whether its frame cap waited for this frame's due time, the display not pacing the swaps.
+ENGINE_API void UC2SetCapPaces( UBOOL Paces )
+{
+	GCapPaces = Paces;
+}
+
+// The render device: whether the launcher's frame cap times the swaps.
+ENGINE_API UBOOL UC2CapPaces()
+{
+	return GCapPaces;
+}
+#endif
 
 /*-----------------------------------------------------------------------------
 	The End.

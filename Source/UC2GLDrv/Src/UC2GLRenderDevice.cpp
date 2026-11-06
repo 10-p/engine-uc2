@@ -18,6 +18,26 @@
 ENGINE_API void UC2FramePresented( DOUBLE When, DOUBLE Waited );
 ENGINE_API void UC2SetPresentVSync( UBOOL VSync );
 
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+ENGINE_API UBOOL UC2CapPaces();	// whether the launcher's frame cap times the swaps (UC2PresentClock.cpp)
+
+// While the launcher's frame cap times the swaps, the GPU finishes each frame before the cap's wait and its present
+// pass before the swap, so the swap at the frame's due time shows the whole frame at once.
+static UBOOL FinishForCap()
+{
+	static UBOOL Last = 0, Logged = 0;
+	const UBOOL Finish = UC2CapPaces();
+	if( Finish != Last && (!Logged || GUfrontLog) )
+	{
+		debugf( NAME_Init, TEXT("UC2GLDrv: %s"), Finish ? TEXT("the frame rate cap times the swaps: each frame finishes on the GPU before the cap's wait")
+			: TEXT("the frame rate cap does not time the swaps") );
+		Logged = 1;
+	}
+	Last = Finish;
+	return Finish;
+}
+#endif
+
 /*-----------------------------------------------------------------------------
 	Globals.
 -----------------------------------------------------------------------------*/
@@ -2230,6 +2250,10 @@ void UUC2GLRenderDevice::Unlock( FRenderInterface* RI )
 	guard(UUC2GLRenderDevice::Unlock);
 	RenderInterface.Unlocked();
 	LockedViewport = NULL;
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	if( ValidContext && FinishForCap() )
+		glFinish();
+#endif
 	unguard;
 }
 
@@ -2269,6 +2293,10 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 		}
 	}
 
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	if( FinishForCap() )
+		glFinish();
+#endif
 	const DOUBLE SwapBegin = appSeconds();
 	BindingSwap( Viewport );
 	const DOUBLE SwapEnd = appSeconds();
