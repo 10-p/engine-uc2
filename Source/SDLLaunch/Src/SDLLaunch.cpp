@@ -202,6 +202,9 @@ static void ExitSplash() {}
 // When the buffer swaps return, how long they waited and whether they wait for the display's refresh
 // (UC2PresentClock.cpp).
 ENGINE_API UBOOL UC2PresentClock( DOUBLE& Time, INT& Count, DOUBLE& Waited );
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+ENGINE_API void UC2SetCapPaces( UBOOL Paces );	// whether the frame cap times the swaps
+#endif
 
 //
 // The display shows each picture for a whole number of refreshes, while the clock read at the top of the loop wanders
@@ -472,6 +475,9 @@ void CMainLoop::RunLoop()
 
 	// Enforce optional maximum tick rate.
 	UBOOL LimiterSlept = 0;	// the web yields only when the limiter did not sleep
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	UBOOL CapPaces = 0;		// the cap times this frame's swap: it waits for the due time, the display does not
+#endif
 	guard(EnforceTickRate);
 	if( !GIsBenchmarking && IncludeMessaging )
 	{
@@ -552,11 +558,21 @@ void CMainLoop::RunLoop()
 			if( Now - Due > Period )
 				Due = Now;
 			appSleepUntil( Due );
+#ifndef __ANDROID__
+			// Without vsync the swap at the due time shows the frame as far as the GPU has drawn it, so the render
+			// device has each frame finished before this wait (UC2CapPaces).
+			DOUBLE PresentTime, PresentWaited;
+			INT PresentCount;
+			CapPaces = !UC2PresentClock( PresentTime, PresentCount, PresentWaited );
+#endif
 #endif
 			LimiterSlept = 1;
 		}
 	}
 	unguard;
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	UC2SetCapPaces( CapPaces );
+#endif
 
 #ifdef __EMSCRIPTEN__
 	// Give the engine worker's event loop one turn per frame (input, host commands), until the display's next
