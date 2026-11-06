@@ -143,12 +143,16 @@ Version=1
 ```
 
 `appInit` makes a player's `Avaris.ini` and `User.ini` as byte copies of `Default.ini` and `DefUser.ini` when they are
-absent and never refreshes them, so the `Version` they keep says which defaults they were copied from; a live ini
-without the section was made before the number and is version 0. No class owns the section, so no `SaveConfig` or
-`ResetConfig` touches it and the config cache writes it back as it is. Nothing reads the number to change anything: a
-player's ini is never migrated. All six files carry the same number; `tools/dev/sync-web-ini.py` and
-`tools/dev/sync-android-ini.py` keep the section first. Epic's reference copies (`DefaultXbox.ini`, `DefUserXbox.ini`,
-`KeyBinds.ini`) and the editor's `DefUnrealEd.ini` have none.
+absent and never refreshes them, so the `Version` they keep says which defaults they were copied from. A live ini
+without the section was made before the number. Right after the config cache starts, before the `-ini:` overrides,
+`appInit` adds `Version=0` to each live ini (`Avaris.ini` and `User.ini`, or the files `INI=` and `USERINI=` name) when
+it has no `[ConfigVersion] Version` key and writes that file alone, as any save writes it (comment lines left out),
+logging `Config: <file> has no [ConfigVersion]: Version=0 added`; the section then comes last in the file, and a
+`Version` that is there is never changed. That marker is the only thing the engine writes into a player's ini for the
+config version: nothing reads the number to change anything, and a player's ini is never migrated. No class owns the
+section, so no `SaveConfig` or `ResetConfig` touches it and the config cache writes it back as it is. All six files
+carry the same number; `tools/dev/sync-web-ini.py` and `tools/dev/sync-android-ini.py` keep the section first. Epic's
+reference copies (`DefaultXbox.ini`, `DefUserXbox.ini`, `KeyBinds.ini`) and the editor's `DefUnrealEd.ini` have none.
 
 The rule: a commit that adds a default, changes a default value or removes a key in one of these inis, or adds or
 changes a compiled or script default of a setting the engine saves to the ini (a patch set's config default
