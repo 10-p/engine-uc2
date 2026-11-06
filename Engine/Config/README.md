@@ -20,6 +20,7 @@ same.
 
 | Setting | Epic | Ours | Why |
 |---|---|---|---|
+| new section `[ConfigVersion]`, the file's first | (none) | `Version=1` | The config version (below); no class reads it. |
 | `[URL] Port` | `1000` | `7777` | 1000 is the Xbox system-link port and privileged on Linux; 7777 is Unreal Engine 2's default. |
 | `[URL] EXEName` | `avaris.exe` | `uc2.exe` | The game program the editor's Play Level starts (only the editor reads it); this build's Windows game is `uc2.exe`. |
 | `[Engine.Engine] ViewportManager` | `WinDrv.WindowsClient` | `SDL2Drv.SDL2Client` | The portable client; WinDrv is Win32-only and not built (Epic's line stays as a comment). |
@@ -69,6 +70,7 @@ deleted.
 
 | Setting | Epic | Ours | Why |
 |---|---|---|---|
+| new section `[ConfigVersion]`, the file's first | (none) | `Version=1` | The config version (below); no class reads it. |
 | `[Engine.Input] RightMouse` | `AltFire` | `AltFire \| Shield 1 \| onrelease Shield 0` | The pad's left-trigger command: block and reflect. |
 | `[Engine.Input] MiddleMouse` | `Zoom` | `Lock 1 \| onrelease Lock 0` | Lock-on (the pad's right-stick click); `Zoom` does nothing in UC2. |
 | `[Engine.Input] E`, `Q`, `C`, `V`, `Ctrl`, `Tab` | empty, `AllAmmo`, empty, `CallForHelp`, `Jump`, `Type` | melee (pad B), back to ranged (pad Y), view 1P/3P (pad Black), taunt/voice (pad White), `SmartJump 1`, `ShowScores` | The pad's actions on keys around WASD; `Q=AllAmmo` was a cheat beside the movement keys. |
@@ -130,3 +132,34 @@ Android difference is an entry in the script's `DELTAS` and a row here.
 | `Default.ini` | `[SDL2Drv.SDL2Client] UseMouse` | `True` | `False` | A phone is played with pads and the on-screen pad: the mouse is left out (also the compiled default on Android). |
 | `Default.ini` | `[GUI.GUIController] bHideMouseCursor` | `False` | `True` | No mouse, so the menus draw no cursor. |
 | `Default.ini` | `[UC2GL4ESDrv.UC2GL4ESRenderDevice] UseVSync` | `False` | `True` | The frame paced by the display: no tearing, and no frames the screen never shows (heat, battery). |
+
+## Config version
+
+`Default.ini` and `DefUser.ini` and their `web/` and `android/` variants open with a section of their own:
+
+```ini
+[ConfigVersion]
+Version=1
+```
+
+`appInit` makes a player's `Avaris.ini` and `User.ini` as byte copies of `Default.ini` and `DefUser.ini` when they are
+absent and never refreshes them, so the `Version` they keep says which defaults they were copied from. A live ini
+without the section was made before the number. Right after the config cache starts, before the `-ini:` overrides,
+`appInit` adds `Version=0` to each live ini (`Avaris.ini` and `User.ini`, or the files `INI=` and `USERINI=` name) when
+it has no `[ConfigVersion] Version` key and writes that file alone, as any save writes it (comment lines left out),
+logging `Config: <file> has no [ConfigVersion]: Version=0 added`; the section then comes last in the file, and a
+`Version` that is there is never changed. That marker is the only thing the engine writes into a player's ini for the
+config version: nothing reads the number to change anything, and a player's ini is never migrated. No class owns the
+section, so no `SaveConfig` or `ResetConfig` touches it and the config cache writes it back as it is. All six files
+carry the same number; `tools/dev/sync-web-ini.py` and `tools/dev/sync-android-ini.py` keep the section first. Epic's
+reference copies (`DefaultXbox.ini`, `DefUserXbox.ini`, `KeyBinds.ini`) and the editor's `DefUnrealEd.ini` have none.
+
+The rule: a commit that adds a default, changes a default value or removes a key in one of these inis, or adds or
+changes a compiled or script default of a setting the engine saves to the ini (a patch set's config default
+included), bumps `Version` by one in all of them and adds the new number's row below, saying what a player on the
+version before lacks. Comment-only and whitespace-only changes do not bump. The frontend's `ini-config-version`
+pre-commit gate checks the inis; its `docs/CONVENTIONS.md`, section "Ini config version", has the rule in full.
+
+| Version | What a player on the version before lacks |
+|---|---|
+| `1` | The defaults when the number was introduced: a live ini without the section may lack any of them. |

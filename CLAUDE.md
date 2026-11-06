@@ -47,6 +47,8 @@ does and how to run it), `docs/` (the Epic import notes and the port's notebooks
   `Engine/Config/{Default,DefUser}.ini` and `Engine/Config/web/*.ini` are LF (`tools/dev/sync-web-ini.py` generates
   the web ones and refuses a CR); Epic's reference copies `DefaultXbox.ini`, `DefUserXbox.ini`, `KeyBinds.ini` stay
   Epic's bytes. Windows project files keep CRLF.
+- Ini config version: a commit that adds, changes or removes a default the engine keeps in the ini bumps
+  `[ConfigVersion] Version` in every default ini and adds its row (`Engine/Config/README.md`, "Config version").
 - Vendored libraries live in `Thirdparty/`, never under `Source/`. Fetched ones (SDL2, GL4ES, OpenAL Soft) stay
   fetched.
 - Never commit assets, `build-*/` or anything from the work folder's asset and reference trees.
