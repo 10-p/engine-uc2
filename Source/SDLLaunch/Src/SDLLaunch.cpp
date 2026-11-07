@@ -227,7 +227,7 @@ public:
 	,	LastCount(-1), Clock(0.0), Fits(0), FitIndex(0), Locked(0), LoggedLock(0)
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	,	LastFromVBlank(0), VBlankTime(0.0), VBlankWaited(0.0), VBlankCount(0), StepVBlankCount(0), VBlankUnlocked(0)
-	,	VBlankFailed(0), VBlankRetry(0.0), VBlankOff(0)
+	,	VBlankLate(0), VBlankFailed(0), VBlankRetry(0.0), VBlankOff(0)
 #endif
 	{
 		appMemzero( FitHistory, sizeof(FitHistory) );
@@ -257,7 +257,8 @@ private:
 	DOUBLE	VBlankWaited;
 	INT		VBlankCount;
 	INT		StepVBlankCount;	// the waits the last step saw
-	INT		VBlankUnlocked;		// frames in a row ended by a wait without the lock
+	UBOOL	VBlankLate;			// the last frame ran past its refresh: no wait, its time is the refresh it missed
+	INT		VBlankUnlocked;		// frames ended by a wait without the lock, since the last with it
 	INT		VBlankFailed;		// waits in a row the platform could not make
 	DOUBLE	VBlankRetry;		// after 120 of those, when to try again
 	UBOOL	VBlankOff;			// no more waits: the vertical blanks keep no steady period
@@ -314,7 +315,7 @@ FLOAT FVSyncStep::Unlock( FLOAT Measured )
 	Locked = 0;
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	// Vertical blanks that do not keep to the refresh (a variable refresh rate waits for the frame) end the waits.
-	if( LastFromVBlank && ++VBlankUnlocked >= 120 && !VBlankOff )
+	if( LastFromVBlank && !VBlankLate && ++VBlankUnlocked >= 120 && !VBlankOff )
 	{
 		VBlankOff = 1;
 		debugf( NAME_Init, TEXT("Frame pacing: the display's vertical blanks keep no steady period, frames end at the swaps") );
@@ -346,6 +347,7 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 	{
 		VBlankTime += appFloor( (Start - VBlankTime) / Period ) * Period;
 		VBlankWaited = 0.0;
+		VBlankLate = 1;
 		VBlankCount++;
 		return;
 	}
@@ -372,6 +374,7 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 	VBlankFailed = 0;
 	VBlankTime = appSeconds();
 	VBlankWaited = VBlankTime - Start;
+	VBlankLate = 0;
 	VBlankCount++;
 }
 #endif
@@ -381,7 +384,7 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 	DOUBLE Present, Waited;
 	INT Count;
 	const UBOOL VSync = UC2PresentClock( Present, Count, Waited );
-	UBOOL FromVBlank = 0;
+	UBOOL FromVBlank = 0, Late = 0;
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	// A frame that ended with a vertical blank wait takes that wait as its clock, the others the swap's; a change of
 	// clock starts the intervals again.
@@ -392,6 +395,7 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 		Present = VBlankTime;
 		Waited = VBlankWaited;
 		Count = VBlankCount;
+		Late = VBlankLate;
 	}
 	if( FromVBlank != LastFromVBlank )
 		LastCount = -1;
@@ -411,9 +415,10 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 	const INT Refreshes = Max( 1, appRound( (FLOAT)(Interval / Period) ) );
 	const DOUBLE Off = Abs( Interval - Refreshes * Period );
 	// Only a swap that waited returns on a refresh: one that found nothing queued before it returns at once. A vertical
-	// blank wait always returns on one.
+	// blank wait always returns on one; the refresh a late frame missed is not where it showed on a variable refresh
+	// rate, which shows it when it comes.
 	const DOUBLE MinWait = Max( 0.001, 0.1 * Period );
-	const UBOOL OnRefresh = FromVBlank || (WaitedBefore >= MinWait && Waited >= MinWait);
+	const UBOOL OnRefresh = FromVBlank ? !Late : (WaitedBefore >= MinWait && Waited >= MinWait);
 	const BYTE Fit = OnRefresh && Refreshes <= 8 && Off < 0.25 * Period;
 	Fits += Fit - FitHistory[FitIndex];
 	FitHistory[FitIndex] = Fit;

@@ -592,9 +592,11 @@ and moves the world on at a refresh, and the steps count the refreshes between t
 a swap that waits for the refresh can return milliseconds before or after it, and unevenly from frame to frame, where
 the driver queues frames ahead. The swap then finds a free buffer and the picture shows at the next refresh. A frame
 that runs past its refresh (by less than 8 refreshes) does not wait: the next starts at once and counts from the
-refresh it missed, so a frame slower than the display costs no further refresh. Waits
-that keep no steady period for 120 frames in a row (a variable refresh rate, where the display waits for the frame) end
-the waits for the session (logged), and the swaps' returns step the world as elsewhere. After 120 waits in a row that
+refresh it missed, so a frame slower than the display costs no further refresh. That refresh does not count as one the
+frame kept to (a variable refresh rate shows a late frame when it comes): the steps keep the lock through a late frame
+among frames on time, and frames that are all late step by the measured time. 120 frames ended by a wait without the
+lock (waits that keep no steady period: a variable refresh rate, where the display waits for the frame; late frames do
+not count) end the waits for the session (logged), and the swaps' returns step the world as elsewhere. After 120 waits in a row that
 the graphics kernel refuses (a display being set up or reset; the first refusal is logged with its status,
 `Display vertical blank: ... failed (status 0x...)`) the frames end at the swaps, logged as `Frame pacing: no vertical
 blank wait for the display, frames end at the swaps`, and the wait is tried again every two seconds; when it works
