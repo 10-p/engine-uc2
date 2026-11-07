@@ -433,6 +433,17 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 		return;
 	if( Mode == 2 && !VBlankWanted )
 		UC2WantPresentDone( 1 );	// the fences the measurement would have asked for
+	// [SDLLaunch] VSyncGPUFence=0, a test key: no fences after the swaps, so the GPU's side of the queue goes unseen.
+	static INT Fences = -1;
+	if( Fences < 0 )
+	{
+		FString Value;
+		Fences = appReadTestKey( TEXT("VSyncGPUFence"), Value, TEXT("SDLLaunch") ) ? appAtoi( *Value ) != 0 : 1;
+		if( !Fences )
+			debugf( NAME_Init, TEXT("VSyncGPUFence=0: no fences after the swaps") );
+	}
+	if( !Fences )
+		UC2WantPresentDone( 0 );
 	SDL_Window* Window = Engine->Client && Engine->Client->Viewports.Num() && Engine->Client->Viewports(0)
 		? (SDL_Window*)Engine->Client->Viewports(0)->GetWindow() : NULL;
 	SDL_Rect Bounds;
