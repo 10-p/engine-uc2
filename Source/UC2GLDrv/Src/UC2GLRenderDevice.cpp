@@ -58,6 +58,51 @@ static INT VSyncFinishMode()
 	}
 	return Mode;
 }
+
+ENGINE_API UBOOL UC2PresentClock( DOUBLE& Time, INT& Count, DOUBLE& Waited );
+
+// [UC2GLDrv.UC2GLRenderDevice] VSyncFence=<n>, a test key: under vsync a fence follows each swap, and the swap waits
+// for the GPU to pass the fence of the swap n before it, so the CPU runs at most n frames ahead of the GPU. 0, the
+// default, waits for none.
+static INT VSyncFenceDepth()
+{
+	static INT Depth = -1;
+	if( Depth < 0 )
+	{
+		Depth = 0;
+		FString Value;
+		if( appReadTestKey( TEXT("VSyncFence"), Value, TEXT("UC2GLDrv.UC2GLRenderDevice") ) )
+			Depth = Clamp( appAtoi( *Value ), 0, 3 );
+		if( Depth )
+			debugf( NAME_Init, TEXT("UC2GLDrv: VSyncFence=%i: under vsync each swap waits for the GPU to pass the swap %i before it"), Depth, Depth );
+	}
+	return Depth;
+}
+
+static void VSyncFenceWait()
+{
+	typedef UUC2GLRenderDevice D;
+	static GLsync Fences[4] = { NULL, NULL, NULL, NULL };
+	static INT Swaps = 0;
+	const INT Depth = VSyncFenceDepth();
+	DOUBLE Time, Waited;
+	INT Count;
+	if( !Depth || !D::Raw_glFenceSync || !D::Raw_glClientWaitSync || !D::Raw_glDeleteSync || !UC2PresentClock( Time, Count, Waited ) )
+		return;
+	const INT Slots = Depth + 1;
+	GLsync& Mine = Fences[Swaps % Slots];
+	if( Mine )
+		D::Raw_glDeleteSync( Mine );
+	Mine = D::Raw_glFenceSync( GL_SYNC_GPU_COMMANDS_COMPLETE, 0 );
+	GLsync& Old = Fences[(Swaps + 1) % Slots];
+	if( Old )
+	{
+		D::Raw_glClientWaitSync( Old, GL_SYNC_FLUSH_COMMANDS_BIT, 100000000ull );
+		D::Raw_glDeleteSync( Old );
+		Old = NULL;
+	}
+	Swaps++;
+}
 #endif
 
 /*-----------------------------------------------------------------------------
@@ -2324,6 +2369,7 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	if( VSyncFinishMode() & 2 )
 		glFinish();
+	VSyncFenceWait();
 #endif
 	const DOUBLE SwapEnd = appSeconds();
 	UC2FramePresented( SwapEnd, SwapEnd - SwapBegin );
