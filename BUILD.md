@@ -594,7 +594,12 @@ the driver queues frames ahead. The swap then finds a free buffer and the pictur
 that runs past its refresh (by less than 8 refreshes) does not wait: the next starts at once and counts from the
 refresh it missed, so a frame slower than the display costs no further refresh. That refresh does not count as one the
 frame kept to (a variable refresh rate shows a late frame when it comes): the steps keep the lock through a late frame
-among frames on time, and frames that are all late step by the measured time. 120 frames ended by a wait without the
+among frames on time, and frames that are all late step by the measured time. Two swaps that return within one
+refresh (the frame after a late one, started at once, can hand its picture over in the refresh the late one's picture
+went in) leave one more picture in the driver's queue, a refresh more from every swap to the screen from then on: the
+next frame then waits until a refresh has gone by without a new picture, the queued one shows in it, and the queue is
+back to one. Frames slower than the display never hand two pictures over in one refresh, and keep their rate.
+120 frames ended by a wait without the
 lock (waits that keep no steady period: a variable refresh rate, where the display waits for the frame; late frames do
 not count) end the waits for the session (logged), and the swaps' returns step the world as elsewhere. After 120 waits in a row that
 the graphics kernel refuses (a display being set up or reset; the first refusal is logged with its status,

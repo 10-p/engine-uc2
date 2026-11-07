@@ -227,7 +227,8 @@ public:
 	,	LastCount(-1), Clock(0.0), Fits(0), FitIndex(0), Locked(0), LoggedLock(0)
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	,	LastFromVBlank(0), VBlankTime(0.0), VBlankWaited(0.0), VBlankCount(0), StepVBlankCount(0), VBlankUnlocked(0)
-	,	VBlankLate(0), VBlankFailed(0), VBlankRetry(0.0), VBlankOff(0)
+	,	VBlankLate(0), VBlankSwapCount(-1), LastSwapReturn(0.0), DrainUntil(0.0), VBlankFailed(0), VBlankRetry(0.0)
+	,	VBlankOff(0)
 #endif
 	{
 		appMemzero( FitHistory, sizeof(FitHistory) );
@@ -258,6 +259,9 @@ private:
 	INT		VBlankCount;
 	INT		StepVBlankCount;	// the waits the last step saw
 	UBOOL	VBlankLate;			// the last frame ran past its refresh: no wait, its time is the refresh it missed
+	INT		VBlankSwapCount;	// the swaps the last wait saw, and when the last of them returned
+	DOUBLE	LastSwapReturn;
+	DOUBLE	DrainUntil;			// no frame starts before this vertical blank: the driver's queue loses a picture
 	INT		VBlankUnlocked;		// frames ended by a wait without the lock, since the last with it
 	INT		VBlankFailed;		// waits in a row the platform could not make
 	DOUBLE	VBlankRetry;		// after 120 of those, when to try again
@@ -341,9 +345,21 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 	if( !Window || SDL_GetDisplayBounds( Max( 0, SDL_GetWindowDisplayIndex( Window ) ), &Bounds ) != 0 )
 		return;
 	const DOUBLE Start = appSeconds();
-	// A frame that ran past its refresh starts the next at once, on the refresh it missed: a wait would lose another.
 	const DOUBLE Period = Nominal > 0.0 ? SumIntervals / SumRefreshes : 0.0;
-	if( VBlankCount && Period > 0.0 && Start - VBlankTime > Period && Start - VBlankTime < 8.0 * Period )
+	// Two swaps that return within one refresh (a frame that started at once after a late one) leave one more picture
+	// in the driver's queue, a refresh more from every swap to the screen from then on. The next frame then waits until
+	// a refresh has gone by without a new picture: the queued one shows in it, and the queue is back to one.
+	if( Count != VBlankSwapCount )
+	{
+		if( VBlankSwapCount >= 0 && VBlankCount && Period > 0.0
+		&&	appFloor( (Present - VBlankTime) / Period ) == appFloor( (LastSwapReturn - VBlankTime) / Period ) )
+			DrainUntil = VBlankTime + (appFloor( (Present - VBlankTime) / Period ) + 2.0) * Period;
+		LastSwapReturn = Present;
+		VBlankSwapCount = Count;
+	}
+	const UBOOL Draining = Start < DrainUntil - 0.25 * Period;
+	// A frame that ran past its refresh starts the next at once, on the refresh it missed: a wait would lose another.
+	if( VBlankCount && Period > 0.0 && !Draining && Start - VBlankTime > Period && Start - VBlankTime < 8.0 * Period )
 	{
 		VBlankTime += appFloor( (Start - VBlankTime) / Period ) * Period;
 		VBlankWaited = 0.0;
@@ -371,6 +387,8 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 		for( INT i=0; i<3; i++ )
 			appWaitDisplayVBlank( Bounds.x + Bounds.w / 2, Bounds.y + Bounds.h / 2 );
 	}
+	for( INT i=0; i<2 && Draining && appSeconds() < DrainUntil - 0.25 * Period; i++ )
+		appWaitDisplayVBlank( Bounds.x + Bounds.w / 2, Bounds.y + Bounds.h / 2 );
 	VBlankFailed = 0;
 	VBlankTime = appSeconds();
 	VBlankWaited = VBlankTime - Start;
