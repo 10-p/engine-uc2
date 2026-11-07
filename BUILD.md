@@ -583,6 +583,16 @@ refresh rate), or a game clock a refresh away from the swaps' (the lock then sta
 it, so the display paces the frames and the cap stops only a swap that does not wait (logged once). A driver's forced
 vsync or frame cap is not seen by the engine: the measured time.
 
+On Windows each frame under vsync ends by waiting for the next vertical blank of the window's display, after the frame
+cap's wait (`FVSyncStep::WaitVBlank`; `appWaitDisplayVBlank`, the graphics kernel's vertical blank event; logged once,
+`Frame pacing: under vsync each frame ends at the display's vertical blank`). The next frame then starts, reads its input
+and moves the world on at a refresh, and the steps count the refreshes between those waits in place of the swaps':
+a swap that waits for the refresh can return milliseconds before or after it, and unevenly from frame to frame, where
+the driver queues frames ahead. The swap then finds a free buffer and the picture shows at the next refresh. Waits
+that keep no steady period for 120 frames in a row (a variable refresh rate, where the display waits for the frame) end
+the waits for the session (logged), and the swaps' returns step the world as elsewhere. Linux, the web and Android have
+no such wait.
+
 ## Relaunch
 
 `RELAUNCH [<arguments>]` (Epic's console command; no UC2 menu sends it): the game exits and its running executable

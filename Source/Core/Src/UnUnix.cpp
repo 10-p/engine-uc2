@@ -2264,6 +2264,83 @@ CORE_API UBOOL appDisplayVBlank( QWORD& Refresh, DOUBLE& Time, DOUBLE& Period )
 #endif
 }
 
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+//
+// Waits for the next vertical blank of the display at desktop point (X,Y), on the display's own clock. 0 at once where
+// the platform has no such wait.
+//
+CORE_API UBOOL appWaitDisplayVBlank( INT X, INT Y )
+{
+#ifdef _WIN32
+	// The graphics kernel's vertical blank event (gdi32, looked up at run time): d3dkmthk.h's D3DKMT_OPENADAPTERFROMHDC,
+	// D3DKMT_WAITFORVERTICALBLANKEVENT and D3DKMT_CLOSEADAPTER.
+	struct FOpenAdapter { HDC hDc; UINT hAdapter; LUID AdapterLuid; UINT VidPnSourceId; };
+	struct FWaitVBlank { UINT hAdapter; UINT hDevice; UINT VidPnSourceId; };
+	struct FCloseAdapter { UINT hAdapter; };
+	typedef LONG (APIENTRY *FOpen)( FOpenAdapter* );
+	typedef LONG (APIENTRY *FWait)( const FWaitVBlank* );
+	typedef LONG (APIENTRY *FClose)( const FCloseAdapter* );
+	static FOpen Open = NULL;
+	static FWait Wait = NULL;
+	static FClose Close = NULL;
+	static UBOOL Looked = 0;
+	static HMONITOR Monitor = NULL;
+	static FWaitVBlank Args = { 0, 0, 0 };
+	if( !Looked )
+	{
+		Looked = 1;
+		HMODULE Gdi = LoadLibraryA( "gdi32.dll" );
+		if( Gdi )
+		{
+			Open	= (FOpen)GetProcAddress( Gdi, "D3DKMTOpenAdapterFromHdc" );
+			Wait	= (FWait)GetProcAddress( Gdi, "D3DKMTWaitForVerticalBlankEvent" );
+			Close	= (FClose)GetProcAddress( Gdi, "D3DKMTCloseAdapter" );
+		}
+	}
+	if( !Open || !Wait )
+		return 0;
+	POINT At = { X, Y };
+	HMONITOR Here = MonitorFromPoint( At, MONITOR_DEFAULTTOPRIMARY );
+	if( Here != Monitor )
+	{
+		if( Args.hAdapter && Close )
+		{
+			FCloseAdapter Closing = { Args.hAdapter };
+			Close( &Closing );
+		}
+		Args.hAdapter = 0;
+		Monitor = Here;
+		MONITORINFOEXA Info;
+		appMemzero( &Info, sizeof(Info) );
+		Info.cbSize = sizeof(Info);
+		if( GetMonitorInfoA( Here, &Info ) )
+		{
+			HDC Dc = CreateDCA( NULL, Info.szDevice, NULL, NULL );
+			if( Dc )
+			{
+				FOpenAdapter Opening;
+				appMemzero( &Opening, sizeof(Opening) );
+				Opening.hDc = Dc;
+				if( Open( &Opening ) >= 0 )
+				{
+					Args.hAdapter		= Opening.hAdapter;
+					Args.hDevice		= 0;
+					Args.VidPnSourceId	= Opening.VidPnSourceId;
+				}
+				DeleteDC( Dc );
+			}
+		}
+	}
+	if( Args.hAdapter && Wait( &Args ) >= 0 )
+		return 1;
+	Monitor = NULL;		// the adapter is opened again on the next wait
+	return 0;
+#else
+	return 0;
+#endif
+}
+#endif
+
 /*-----------------------------------------------------------------------------
 	Link functions.
 -----------------------------------------------------------------------------*/

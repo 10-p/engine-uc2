@@ -216,7 +216,8 @@ ENGINE_API void UC2SetCapPaces( UBOOL Paces );	// whether the frame cap times th
 // at the period the swaps keep, with a correction of at most a fiftieth of a refresh a frame that holds the game clock
 // on the swaps'. Otherwise by the measured time: no vsync, a frame without exactly one swap, swaps that return without
 // waiting (frames slower than the display), a display whose swaps keep no steady period (a variable refresh rate), a
-// game clock that strays a refresh from the swaps'.
+// game clock that strays a refresh from the swaps'. Where the platform has a wait for the display's vertical blank, each
+// frame under vsync ends with it (WaitVBlank), and those waits' returns take the place of the swaps'.
 //
 class FVSyncStep
 {
@@ -224,11 +225,18 @@ public:
 	FVSyncStep()
 	:	Nominal(0.0), NominalTime(0.0), SumIntervals(0.0), SumRefreshes(0.0), LastPresent(0.0), LastWaited(0.0)
 	,	LastCount(-1), Clock(0.0), Fits(0), FitIndex(0), Locked(0), LoggedLock(0)
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	,	LastFromVBlank(0), VBlankTime(0.0), VBlankWaited(0.0), VBlankCount(0), StepVBlankCount(0), VBlankUnlocked(0)
+	,	VBlankFailed(0), VBlankOff(0)
+#endif
 	{
 		appMemzero( FitHistory, sizeof(FitHistory) );
 	}
 	FLOAT Step( UEngine* Engine, FLOAT Measured );
 	DOUBLE RefreshPeriod( UEngine* Engine );	// the display's refresh period while the swaps wait for it, else 0
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	void WaitVBlank( UEngine* Engine );
+#endif
 
 private:
 	DOUBLE	Nominal;			// the display's refresh period as the platform gives it (0: unknown)
@@ -243,6 +251,16 @@ private:
 	INT		Fits, FitIndex;
 	UBOOL	Locked;
 	UBOOL	LoggedLock;
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	UBOOL	LastFromVBlank;		// whether the last step's clock was a vertical blank wait's
+	DOUBLE	VBlankTime;			// the last vertical blank wait's return, how long it waited, and the waits so far
+	DOUBLE	VBlankWaited;
+	INT		VBlankCount;
+	INT		StepVBlankCount;	// the waits the last step saw
+	INT		VBlankUnlocked;		// frames in a row ended by a wait without the lock
+	INT		VBlankFailed;		// waits in a row the platform could not make
+	UBOOL	VBlankOff;			// no more waits: the platform has none, or the vertical blanks keep no steady period
+#endif
 	void ReadNominal( UEngine* Engine );
 	FLOAT Unlock( FLOAT Measured );
 };
@@ -293,14 +311,70 @@ FLOAT FVSyncStep::Unlock( FLOAT Measured )
 	if( Locked && GUfrontLog )
 		debugf( NAME_Init, TEXT("Frame steps: the measured time (the swaps left the refresh)") );
 	Locked = 0;
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	// Vertical blanks that do not keep to the refresh (a variable refresh rate waits for the frame) end the waits.
+	if( LastFromVBlank && ++VBlankUnlocked >= 120 && !VBlankOff )
+	{
+		VBlankOff = 1;
+		debugf( NAME_Init, TEXT("Frame pacing: the display's vertical blanks keep no steady period, frames end at the swaps") );
+	}
+#endif
 	return Measured;
 }
+
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+//
+// Under vsync each frame ends at the next vertical blank of the window's display, so the next frame starts, reads its
+// input and steps the world on the display's clock: a swap that waits for the refresh can return milliseconds off it.
+//
+void FVSyncStep::WaitVBlank( UEngine* Engine )
+{
+	DOUBLE Present, Waited;
+	INT Count;
+	if( VBlankOff || !UC2PresentClock( Present, Count, Waited ) )
+		return;
+	SDL_Window* Window = Engine->Client && Engine->Client->Viewports.Num() && Engine->Client->Viewports(0)
+		? (SDL_Window*)Engine->Client->Viewports(0)->GetWindow() : NULL;
+	SDL_Rect Bounds;
+	if( !Window || SDL_GetDisplayBounds( Max( 0, SDL_GetWindowDisplayIndex( Window ) ), &Bounds ) != 0 )
+		return;
+	const DOUBLE Start = appSeconds();
+	if( !appWaitDisplayVBlank( Bounds.x + Bounds.w / 2, Bounds.y + Bounds.h / 2 ) )
+	{
+		// A platform without the wait fails every time; a display being reset, for a moment.
+		VBlankOff = ++VBlankFailed >= 120;
+		return;
+	}
+	VBlankFailed = 0;
+	if( !VBlankCount )
+		debugf( NAME_Init, TEXT("Frame pacing: under vsync each frame ends at the display's vertical blank") );
+	VBlankTime = appSeconds();
+	VBlankWaited = VBlankTime - Start;
+	VBlankCount++;
+}
+#endif
 
 FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 {
 	DOUBLE Present, Waited;
 	INT Count;
 	const UBOOL VSync = UC2PresentClock( Present, Count, Waited );
+	UBOOL FromVBlank = 0;
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	// A frame that ended with a vertical blank wait takes that wait as its clock, the others the swap's; a change of
+	// clock starts the intervals again.
+	FromVBlank = VSync && VBlankCount != StepVBlankCount;
+	StepVBlankCount = VBlankCount;
+	if( FromVBlank )
+	{
+		Present = VBlankTime;
+		Waited = VBlankWaited;
+		Count = VBlankCount;
+	}
+	if( FromVBlank != LastFromVBlank )
+		LastCount = -1;
+	LastFromVBlank = FromVBlank;
+#endif
 	const UBOOL OneSwap = LastCount >= 0 && Count == LastCount + 1;
 	const DOUBLE Interval = Present - LastPresent;
 	const DOUBLE WaitedBefore = LastWaited;
@@ -314,9 +388,11 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 	DOUBLE Period = SumIntervals / SumRefreshes;
 	const INT Refreshes = Max( 1, appRound( (FLOAT)(Interval / Period) ) );
 	const DOUBLE Off = Abs( Interval - Refreshes * Period );
-	// Only a swap that waited returns on a refresh: one that found nothing queued before it returns at once.
+	// Only a swap that waited returns on a refresh: one that found nothing queued before it returns at once. A vertical
+	// blank wait always returns on one.
 	const DOUBLE MinWait = Max( 0.001, 0.1 * Period );
-	const BYTE Fit = WaitedBefore >= MinWait && Waited >= MinWait && Refreshes <= 8 && Off < 0.25 * Period;
+	const UBOOL OnRefresh = FromVBlank || (WaitedBefore >= MinWait && Waited >= MinWait);
+	const BYTE Fit = OnRefresh && Refreshes <= 8 && Off < 0.25 * Period;
 	Fits += Fit - FitHistory[FitIndex];
 	FitHistory[FitIndex] = Fit;
 	FitIndex = (FitIndex + 1) % ARRAY_COUNT(FitHistory);
@@ -346,6 +422,9 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 		debugf( NAME_Init, TEXT("Frame steps: whole refreshes of %.3f ms (vsync)"), 1000.0 * Period );
 	LoggedLock = 1;
 	Locked = 1;
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	VBlankUnlocked = 0;
+#endif
 	return (FLOAT)(Ideal + Correction);
 }
 
@@ -571,6 +650,8 @@ void CMainLoop::RunLoop()
 	}
 	unguard;
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	if( !GIsBenchmarking && IncludeMessaging )
+		VSyncStep.WaitVBlank( Engine );
 	UC2SetCapPaces( CapPaces );
 #endif
 
