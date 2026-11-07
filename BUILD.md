@@ -624,10 +624,16 @@ run, the render device puts a fence after each swap (`UC2PresentDone`, `Source/E
 a picture the GPU has not finished by the vertical blank after its swap (the fence looked at, without waiting, once
 that vertical blank has passed) shows a refresh late: the next picture, handed over before that, queues behind it,
 the same frame of slack, given back the same way. Nothing is waited on for the GPU, and nothing is given back while
-it stays late, so a game the GPU holds back keeps its rate.
-120 frames ended by a wait without the
-lock (waits that keep no steady period: a variable refresh rate, where the display waits for the frame; late frames do
-not count) end the waits for the session (logged), and the swaps' returns step the world as elsewhere. After 120 waits in a row that
+it stays late, so a game the GPU holds back keeps its rate. A queue that fills up (the GPU fell further behind, then
+caught up) makes the driver hold each swap for room in it, every frame then runs late and the held swaps pace the
+frames: two swaps in a row held half a refresh or more while the GPU keeps up start the waits again, three refreshes
+on, as at first (logged once, `Frame pacing: the driver's queue filled, the waits start again`). A driver that holds
+each swap until its picture shows would do that at once again; after three restarts each within four swaps of the
+last, the waits end for the session (logged).
+On a fixed refresh every vertical blank wait returns a whole number of refreshes after the frame's clock before it,
+late frames or not; a variable refresh rate waits for the frame. Past half of about the last hundred waits off a whole
+number by a quarter refresh or more, the waits end for the session (logged), and the swaps' returns step the world as
+elsewhere. After 120 waits in a row that
 the graphics kernel refuses (a display being set up or reset; the first refusal is logged with its status,
 `Display vertical blank: ... failed (status 0x...)`) the frames end at the swaps, logged as `Frame pacing: no vertical
 blank wait for the display, frames end at the swaps`, and the wait is tried again every two seconds; when it works
