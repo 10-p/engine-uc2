@@ -604,7 +604,12 @@ refresh (the frame after a late one, started at once, can hand its picture over 
 went in) leave one more picture in the driver's queue, a refresh more from every swap to the screen. That frame of
 slack takes up the next late frames without a repeat; after 120 frames ended by a wait without a late one, a frame
 waits one refresh more, which the queued picture fills, and the queue is back to one. Frames slower than the display
-never hand two pictures over in one refresh, and keep their rate.
+never hand two pictures over in one refresh, and keep their rate. The same holds on the GPU's side: while the waits
+run, the render device puts a fence after each swap (`UC2PresentDone`, `Source/Engine/Src/UC2PresentClock.cpp`), and
+a picture the GPU has not finished by the vertical blank after its swap (the fence looked at, without waiting, once
+that vertical blank has passed) shows a refresh late: the next picture, handed over before that, queues behind it,
+the same frame of slack, given back the same way. Nothing is waited on for the GPU, and nothing is given back while
+it stays late, so a game the GPU holds back keeps its rate.
 120 frames ended by a wait without the
 lock (waits that keep no steady period: a variable refresh rate, where the display waits for the frame; late frames do
 not count) end the waits for the session (logged), and the swaps' returns step the world as elsewhere. After 120 waits in a row that
