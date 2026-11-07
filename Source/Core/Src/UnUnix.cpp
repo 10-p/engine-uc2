@@ -2301,6 +2301,8 @@ CORE_API UBOOL appWaitDisplayVBlank( INT X, INT Y )
 		return 0;
 	POINT At = { X, Y };
 	HMONITOR Here = MonitorFromPoint( At, MONITOR_DEFAULTTOPRIMARY );
+	// The first failure of each step is logged with its status.
+	static UBOOL LoggedOpen = 0, LoggedWait = 0;
 	if( Here != Monitor )
 	{
 		if( Args.hAdapter && Close )
@@ -2313,6 +2315,7 @@ CORE_API UBOOL appWaitDisplayVBlank( INT X, INT Y )
 		MONITORINFOEXA Info;
 		appMemzero( &Info, sizeof(Info) );
 		Info.cbSize = sizeof(Info);
+		LONG Status = -1;
 		if( GetMonitorInfoA( Here, &Info ) )
 		{
 			HDC Dc = CreateDCA( NULL, Info.szDevice, NULL, NULL );
@@ -2321,7 +2324,8 @@ CORE_API UBOOL appWaitDisplayVBlank( INT X, INT Y )
 				FOpenAdapter Opening;
 				appMemzero( &Opening, sizeof(Opening) );
 				Opening.hDc = Dc;
-				if( Open( &Opening ) >= 0 )
+				Status = Open( &Opening );
+				if( Status >= 0 )
 				{
 					Args.hAdapter		= Opening.hAdapter;
 					Args.hDevice		= 0;
@@ -2330,9 +2334,24 @@ CORE_API UBOOL appWaitDisplayVBlank( INT X, INT Y )
 				DeleteDC( Dc );
 			}
 		}
+		if( !Args.hAdapter && !LoggedOpen )
+		{
+			LoggedOpen = 1;
+			debugf( NAME_Init, TEXT("Display vertical blank: D3DKMTOpenAdapterFromHdc for display %s failed (status 0x%08X)"),
+				ANSI_TO_TCHAR( Info.szDevice ), (DWORD)Status );
+		}
 	}
-	if( Args.hAdapter && Wait( &Args ) >= 0 )
-		return 1;
+	if( Args.hAdapter )
+	{
+		const LONG Status = Wait( &Args );
+		if( Status >= 0 )
+			return 1;
+		if( !LoggedWait )
+		{
+			LoggedWait = 1;
+			debugf( NAME_Init, TEXT("Display vertical blank: D3DKMTWaitForVerticalBlankEvent failed (status 0x%08X)"), (DWORD)Status );
+		}
+	}
 	Monitor = NULL;		// the adapter is opened again on the next wait
 	return 0;
 #else
