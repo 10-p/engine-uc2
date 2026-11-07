@@ -38,6 +38,26 @@ static UBOOL FinishForCap()
 	Last = Finish;
 	return Finish;
 }
+
+// [UC2GLDrv.UC2GLRenderDevice] VSyncFinish=<bits>, a test key: 1 finishes each frame on the GPU when its drawing ends
+// and its present pass before the swap, as the cap does without vsync; 2 waits for the GPU right after the swap, so the
+// swap's return is the flip and the driver queues no frame ahead. 0, the default, does neither.
+static INT VSyncFinishMode()
+{
+	static INT Mode = -1;
+	if( Mode < 0 )
+	{
+		Mode = 0;
+		FString Value;
+		if( appReadTestKey( TEXT("VSyncFinish"), Value, TEXT("UC2GLDrv.UC2GLRenderDevice") ) )
+			Mode = Clamp( appAtoi( *Value ), 0, 3 );
+		if( Mode )
+			debugf( NAME_Init, TEXT("UC2GLDrv: VSyncFinish=%i:%s%s"), Mode,
+				(Mode & 1) ? TEXT(" glFinish at the end of each frame's drawing and before the swap;") : TEXT(""),
+				(Mode & 2) ? TEXT(" glFinish after the swap") : TEXT("") );
+	}
+	return Mode;
+}
 #endif
 
 /*-----------------------------------------------------------------------------
@@ -2253,7 +2273,7 @@ void UUC2GLRenderDevice::Unlock( FRenderInterface* RI )
 	RenderInterface.Unlocked();
 	LockedViewport = NULL;
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
-	if( ValidContext && FinishForCap() )
+	if( ValidContext && (FinishForCap() || (VSyncFinishMode() & 1)) )
 		glFinish();
 #endif
 	unguard;
@@ -2296,11 +2316,15 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 	}
 
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
-	if( FinishForCap() )
+	if( FinishForCap() || (VSyncFinishMode() & 1) )
 		glFinish();
 #endif
 	const DOUBLE SwapBegin = appSeconds();
 	BindingSwap( Viewport );
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	if( VSyncFinishMode() & 2 )
+		glFinish();
+#endif
 	const DOUBLE SwapEnd = appSeconds();
 	UC2FramePresented( SwapEnd, SwapEnd - SwapBegin );
 	UC2PaceSwap( SwapBegin, SwapEnd );

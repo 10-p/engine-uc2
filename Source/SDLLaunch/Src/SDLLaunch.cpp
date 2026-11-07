@@ -211,6 +211,42 @@ ENGINE_API UBOOL UC2PresentClock( DOUBLE& Time, INT& Count, DOUBLE& Waited );
 ENGINE_API void UC2SetCapPaces( UBOOL Paces );	// whether the frame cap times the swaps
 #endif
 
+// [SDLLaunch] VSyncStep=<n>, a test key: under vsync 0 moves the world on by the measured time (as under a driver's
+// forced vsync), 1 (the default) by the whole refreshes between the swaps once they keep to the refresh (FVSyncStep),
+// 2 by exactly one refresh period every frame.
+static INT VSyncStepMode()
+{
+	static INT Mode = -1;
+	if( Mode < 0 )
+	{
+		Mode = 1;
+		FString Value;
+		if( appReadTestKey( TEXT("VSyncStep"), Value, TEXT("SDLLaunch") ) )
+			Mode = Clamp( appAtoi( *Value ), 0, 2 );
+		if( Mode != 1 )
+			debugf( NAME_Init, TEXT("VSyncStep=%i: under vsync the world moves on by %s"), Mode,
+				Mode == 0 ? TEXT("the measured time") : TEXT("one refresh period every frame") );
+	}
+	return Mode;
+}
+
+// [SDLLaunch] VSyncCapRule=0, a test key: under vsync the frame rate cap keeps its own rate (as under a driver's forced
+// vsync) instead of sitting just above the display's.
+static UBOOL VSyncCapRule()
+{
+	static INT On = -1;
+	if( On < 0 )
+	{
+		On = 1;
+		FString Value;
+		if( appReadTestKey( TEXT("VSyncCapRule"), Value, TEXT("SDLLaunch") ) )
+			On = appAtoi( *Value ) != 0;
+		if( !On )
+			debugf( NAME_Init, TEXT("VSyncCapRule=0: under vsync the frame rate cap keeps its own rate") );
+	}
+	return On;
+}
+
 //
 // The display shows each picture for a whole number of refreshes, while the clock read at the top of the loop wanders
 // around them: the swap that waits for the refresh returns early or late as the driver and the compositor hand the
@@ -314,7 +350,11 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 	LastCount = Count;
 	if( VSync )
 		ReadNominal( Engine );
-	if( !VSync || !OneSwap || Nominal <= 0.0 )
+	const INT Mode = VSyncStepMode();
+	VSyncCapRule();		// read on the first frame, as every test key, so it is never kept in the ini
+	if( VSync && Mode == 2 && Nominal > 0.0 )
+		return (FLOAT)Nominal;
+	if( !VSync || !OneSwap || Nominal <= 0.0 || Mode == 0 )
 		return Unlock( Measured );
 	DOUBLE Period = SumIntervals / SumRefreshes;
 	const INT Refreshes = Max( 1, appRound( (FLOAT)(Interval / Period) ) );
@@ -576,7 +616,7 @@ void CMainLoop::RunLoop()
 			// Under vsync the display paces the frames: a cap at or near its rate would only make frames miss refreshes,
 			// so it sits just above the display's rate, where it stops only a swap that does not wait.
 			const DOUBLE Refresh = VSyncStep.RefreshPeriod( Engine );
-			if( Refresh > 0.0 && Period < 1.02 * Refresh )
+			if( Refresh > 0.0 && Period < 1.02 * Refresh && VSyncCapRule() )
 			{
 				static UBOOL Logged = 0;
 				if( !Logged )
