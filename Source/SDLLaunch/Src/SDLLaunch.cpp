@@ -209,6 +209,8 @@ static void ExitSplash() {}
 ENGINE_API UBOOL UC2PresentClock( DOUBLE& Time, INT& Count, DOUBLE& Waited );
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 ENGINE_API void UC2SetCapPaces( UBOOL Paces );	// whether the frame cap times the swaps
+ENGINE_API void UC2WantPresentDone( UBOOL Want );	// whether the GPU has finished the last swap's picture
+ENGINE_API INT UC2PresentDone();
 #endif
 
 // [SDLLaunch] VSyncStep=<n>, a test key: under vsync 0 moves the world on by the measured time (as under a driver's
@@ -269,7 +271,8 @@ public:
 	,	LastCount(-1), Clock(0.0), Fits(0), FitIndex(0), Locked(0), LoggedLock(0)
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	,	LastFromVBlank(0), VBlankTime(0.0), VBlankWaited(0.0), VBlankCount(0), StepVBlankCount(0), VBlankUnlocked(0)
-	,	VBlankLate(0), VBlankSwapCount(-1), LastSwapReturn(0.0), DrainUntil(0.0), VBlankFailed(0), VBlankRetry(0.0)
+	,	VBlankLate(0), VBlankSwapCount(-1), LastSwapReturn(0.0), GPULateDue(0.0), QueueExtra(0), Calm(0), VBlankFailed(0)
+	,	VBlankRetry(0.0)
 	,	VBlankOff(0), VBlankWanted(0), LoggedSwapFar(0), SwapFar(0.0), SwapSeen(0.0)
 #endif
 	{
@@ -282,6 +285,9 @@ public:
 #endif
 
 private:
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	void GPUMissed( DOUBLE Due );
+#endif
 	DOUBLE	Nominal;			// the display's refresh period as the platform gives it (0: unknown)
 	DOUBLE	NominalTime;		// when it was read
 	DOUBLE	SumIntervals;		// the swaps' intervals and their refreshes, decaying: their ratio is the period kept
@@ -303,7 +309,9 @@ private:
 	UBOOL	VBlankLate;			// the last frame ran past its refresh: no wait, its time is the refresh it missed
 	INT		VBlankSwapCount;	// the swaps the last wait saw, and when the last of them returned
 	DOUBLE	LastSwapReturn;
-	DOUBLE	DrainUntil;			// no frame starts before this vertical blank: the driver's queue loses a picture
+	DOUBLE	GPULateDue;			// the vertical blank the last swap's picture missed, the GPU not done with it (0: none)
+	UBOOL	QueueExtra;			// the driver's queue holds a picture more than the one in hand
+	INT		Calm;				// frames ended by a wait since the last late frame
 	INT		VBlankUnlocked;		// frames ended by a wait without the lock, since the last with it
 	INT		VBlankFailed;		// waits in a row the platform could not make
 	DOUBLE	VBlankRetry;		// after 120 of those, when to try again
@@ -368,6 +376,7 @@ FLOAT FVSyncStep::Unlock( FLOAT Measured )
 	if( LastFromVBlank && !VBlankLate && ++VBlankUnlocked >= 120 && !VBlankOff )
 	{
 		VBlankOff = 1;
+		UC2WantPresentDone( 0 );
 		debugf( NAME_Init, TEXT("Frame pacing: the display's vertical blanks keep no steady period, frames end at the swaps") );
 	}
 #endif
@@ -422,6 +431,8 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 	const INT Mode = VSyncVBlankMode();
 	if( VBlankOff || !Mode || !(VBlankWanted || Mode == 2) || !UC2PresentClock( Present, Count, Waited ) )
 		return;
+	if( Mode == 2 && !VBlankWanted )
+		UC2WantPresentDone( 1 );	// the fences the measurement would have asked for
 	SDL_Window* Window = Engine->Client && Engine->Client->Viewports.Num() && Engine->Client->Viewports(0)
 		? (SDL_Window*)Engine->Client->Viewports(0)->GetWindow() : NULL;
 	SDL_Rect Bounds;
@@ -430,24 +441,40 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 	const DOUBLE Start = appSeconds();
 	const DOUBLE Period = Nominal > 0.0 ? SumIntervals / SumRefreshes : 0.0;
 	// Two swaps that return within one refresh (a frame that started at once after a late one) leave one more picture
-	// in the driver's queue, a refresh more from every swap to the screen from then on. The next frame then waits until
-	// a refresh has gone by without a new picture: the queued one shows in it, and the queue is back to one.
-	if( Count != VBlankSwapCount )
+	// in the driver's queue, a refresh more from every swap to the screen. That frame of slack takes up the next late
+	// frames; after 120 frames without one, a frame waits one refresh more, which the queued picture fills, and the
+	// queue is back to one.
+	const UBOOL NewSwap = Count != VBlankSwapCount;
+	if( NewSwap )
 	{
 		if( VBlankSwapCount >= 0 && VBlankCount && Period > 0.0
 		&&	appFloor( (Present - VBlankTime) / Period ) == appFloor( (LastSwapReturn - VBlankTime) / Period ) )
-			DrainUntil = VBlankTime + (appFloor( (Present - VBlankTime) / Period ) + 2.0) * Period;
+			QueueExtra = 1;
 		LastSwapReturn = Present;
 		VBlankSwapCount = Count;
 	}
-	const UBOOL Draining = Start < DrainUntil - 0.25 * Period;
-	// A frame that ran past its refresh starts the next at once, on the refresh it missed: a wait would lose another.
-	if( VBlankCount && Period > 0.0 && !Draining && Start - VBlankTime > Period && Start - VBlankTime < 8.0 * Period )
+	// The same on the GPU's side: a picture the GPU has not finished by the vertical blank after its swap shows a
+	// refresh late, and the next one, handed over before that, queues behind it. A fence after each swap tells
+	// (UC2PresentDone, looked at without waiting once that vertical blank has passed: after the wait for it, or by a
+	// late frame).
+	const UBOOL GPUCheck = NewSwap && VBlankCount && Period > 0.0;
+	const DOUBLE Due = GPUCheck ? VBlankTime + (appFloor( (Present - VBlankTime) / Period ) + 1.0) * Period : 0.0;
+	if( GPUCheck )
 	{
+		if( GPULateDue > 0.0 && Present < GPULateDue + Period )
+			QueueExtra = 1;
+		GPULateDue = 0.0;
+	}
+	// A frame that ran past its refresh starts the next at once, on the refresh it missed: a wait would lose another.
+	if( VBlankCount && Period > 0.0 && Start - VBlankTime > Period && Start - VBlankTime < 8.0 * Period )
+	{
+		if( GPUCheck )
+			GPUMissed( Due );
 		VBlankTime += appFloor( (Start - VBlankTime) / Period ) * Period;
 		VBlankWaited = 0.0;
 		VBlankLate = 1;
 		VBlankCount++;
+		Calm = 0;
 		return;
 	}
 	// A platform without the wait fails every time, a display being set up or reset for a while: after 120 failures in
@@ -462,6 +489,8 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 			VBlankRetry = Start + 2.0;
 		return;
 	}
+	if( GPUCheck )
+		GPUMissed( Due );
 	if( !VBlankCount || VBlankFailed >= 120 )
 	{
 		debugf( NAME_Init, TEXT("Frame pacing: under vsync each frame ends at the display's vertical blank") );
@@ -469,14 +498,30 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 		// at the display's rate nothing drains a queue later.
 		for( INT i=0; i<3; i++ )
 			appWaitDisplayVBlank( Bounds.x + Bounds.w / 2, Bounds.y + Bounds.h / 2 );
+		QueueExtra = 0;
+		GPULateDue = 0.0;
+		Calm = 0;
 	}
-	for( INT i=0; i<2 && Draining && appSeconds() < DrainUntil - 0.25 * Period; i++ )
+	else if( (Calm = Min( Calm + 1, 1000 )) >= 120 && QueueExtra )
+	{
 		appWaitDisplayVBlank( Bounds.x + Bounds.w / 2, Bounds.y + Bounds.h / 2 );
+		QueueExtra = 0;
+	}
 	VBlankFailed = 0;
 	VBlankTime = appSeconds();
 	VBlankWaited = VBlankTime - Start;
 	VBlankLate = 0;
 	VBlankCount++;
+}
+
+// Whether the GPU had not finished the last swap's picture by the vertical blank it was due at (Due, passed by now).
+void FVSyncStep::GPUMissed( DOUBLE Due )
+{
+	if( appSeconds() >= Due - 0.0005 && UC2PresentDone() == 0 )
+	{
+		GPULateDue = Due;
+		Calm = 0;
+	}
 }
 #endif
 
@@ -566,6 +611,7 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 		if( SwapSeen >= 150.0 && (SwapFar > 0.25 * SwapSeen || !LoggedSwapFar) )
 		{
 			VBlankWanted = SwapFar > 0.25 * SwapSeen;
+			UC2WantPresentDone( VBlankWanted );
 			LoggedSwapFar = 1;
 			debugf( NAME_Init, TEXT("Frame pacing: %.0f %% of the swaps return over %.2f ms off the refresh, frames under vsync end at %s"),
 				100.0 * SwapFar / SwapSeen, 1000.0 * 0.06 * Period,

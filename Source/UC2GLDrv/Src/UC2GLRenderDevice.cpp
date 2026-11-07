@@ -103,6 +103,46 @@ static void VSyncFenceWait()
 	}
 	Swaps++;
 }
+
+ENGINE_API UBOOL UC2PresentDoneWanted();
+ENGINE_API void UC2SetPresentDoneQuery( INT (*Query)() );
+
+// While the launcher asks for it, a fence after each swap tells it whether the GPU has finished the picture that swap
+// handed over (UC2PresentClock.cpp). The fence belongs to the context it was made in.
+static GLsync	GPresentFence = 0;
+static void*	GPresentFenceContext = NULL;
+
+static INT PresentFenceDone()
+{
+	if( !GPresentFence || SDL_GL_GetCurrentContext() != GPresentFenceContext )
+		return -1;
+	const GLenum State = UUC2GLRenderDevice::Raw_glClientWaitSync( GPresentFence, 0, 0 );	// no wait: a look
+	return State == GL_ALREADY_SIGNALED || State == GL_CONDITION_SATISFIED ? 1 : State == GL_TIMEOUT_EXPIRED ? 0 : -1;
+}
+
+static void DeletePresentFence( UBOOL ContextAlive )
+{
+	if( GPresentFence && ContextAlive && SDL_GL_GetCurrentContext() == GPresentFenceContext )
+		UUC2GLRenderDevice::Raw_glDeleteSync( GPresentFence );
+	GPresentFence = 0;
+	GPresentFenceContext = NULL;
+	UC2SetPresentDoneQuery( NULL );
+}
+
+static void PresentFence()
+{
+	DeletePresentFence( 1 );
+	if( !UC2PresentDoneWanted() || !UUC2GLRenderDevice::Raw_glFenceSync || !UUC2GLRenderDevice::Raw_glClientWaitSync
+	||	!UUC2GLRenderDevice::Raw_glDeleteSync )
+		return;
+	GPresentFence = UUC2GLRenderDevice::Raw_glFenceSync( GL_SYNC_GPU_COMMANDS_COMPLETE, 0 );
+	if( !GPresentFence )
+		return;
+	GPresentFenceContext = SDL_GL_GetCurrentContext();
+	// A flush, so the fence goes to the GPU now and not with the next frame's commands.
+	UUC2GLRenderDevice::Raw_glClientWaitSync( GPresentFence, GL_SYNC_FLUSH_COMMANDS_BIT, 0 );
+	UC2SetPresentDoneQuery( PresentFenceDone );
+}
 #endif
 
 /*-----------------------------------------------------------------------------
@@ -825,6 +865,9 @@ void UUC2GLRenderDevice::Exit( UViewport* Viewport )
 			glDeleteBuffers( 1, &QuadBuffer );
 		QuadBuffer = 0;
 	}
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	DeletePresentFence( ContextAlive() );
+#endif
 	ValidContext = 0;
 
 	unguard;
@@ -2374,6 +2417,9 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 	const DOUBLE SwapEnd = appSeconds();
 	UC2FramePresented( SwapEnd, SwapEnd - SwapBegin );
 	UC2PaceSwap( SwapBegin, SwapEnd );
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	PresentFence();
+#endif
 
 	if( LogStats && (FrameCounter - StatFrame0 >= 300 || StatTime0 == 0.0) )
 		LogFrameStats();
