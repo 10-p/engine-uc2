@@ -2375,6 +2375,27 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 		return;
 
 	DrawPresentPass( Viewport );
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	// [UC2GLDrv.UC2GLRenderDevice] GPUBurn=<frames>:<passes>, a test key: every <frames>-th frame draws its present pass
+	// <passes> times more, the same picture with that much more work for the GPU (a hitch on the GPU's side alone).
+	{
+		static INT Every = -1, Passes = 0;
+		if( Every < 0 )
+		{
+			Every = 0;
+			FString Value;
+			if( appReadTestKey( TEXT("GPUBurn"), Value, TEXT("UC2GLDrv.UC2GLRenderDevice") ) && Value.InStr( TEXT(":") ) > 0 )
+			{
+				Every	= Max( 0, appAtoi( *Value ) );
+				Passes	= Clamp( appAtoi( *Value.Mid( Value.InStr( TEXT(":") ) + 1 ) ), 0, 1000 );
+				debugf( NAME_Init, TEXT("UC2GLDrv: GPUBurn: every %i frames the present pass %i times more"), Every, Passes );
+			}
+		}
+		if( Every && Passes && FrameCounter % Every == 0 )
+			for( INT i=0; i<Passes; i++ )
+				DrawPresentPass( Viewport );
+	}
+#endif
 
 	if( GShotPresented && GShotTimes.Num() && GFirstFrameTime != 0.0 && appSeconds() - GFirstFrameTime >= GShotTimes(0) )
 	{
