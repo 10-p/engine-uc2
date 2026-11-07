@@ -583,8 +583,13 @@ refresh rate), or a game clock a refresh away from the swaps' (the lock then sta
 it, so the display paces the frames and the cap stops only a swap that does not wait (logged once). A driver's forced
 vsync or frame cap is not seen by the engine: the measured time.
 
-On Windows each frame under vsync ends by waiting for the next vertical blank of the window's display, after the frame
-cap's wait (`FVSyncStep::WaitVBlank`; `appWaitDisplayVBlank`, the graphics kernel's vertical blank event; logged once,
+Swaps that keep to the refresh but return at uneven times within it make the frames start, and read their input,
+unevenly while the pictures come evenly. The launcher measures that on every driver alike, while the steps are locked:
+the share of the swaps that return more than 6 % of a refresh (1 ms at 60 Hz) off a whole number of refreshes, over
+about the last 200 (logged once, `Frame pacing: 1 % of the swaps return over 1.00 ms off the refresh, frames under
+vsync end at the swaps`). Up to a quarter the frames keep the swaps' pacing above. Past it, on Windows, each frame
+under vsync from then on ends by waiting for the next vertical blank of the window's display, after the frame cap's
+wait (`FVSyncStep::WaitVBlank`; `appWaitDisplayVBlank`, the graphics kernel's vertical blank event; logged once,
 `Frame pacing: under vsync each frame ends at the display's vertical blank`; that first frame waits for three more,
 so the frames the driver queued before are shown and the waits start on an empty queue: at the display's rate nothing
 drains it later). The next frame then starts, reads its input
@@ -605,8 +610,8 @@ not count) end the waits for the session (logged), and the swaps' returns step t
 the graphics kernel refuses (a display being set up or reset; the first refusal is logged with its status,
 `Display vertical blank: ... failed (status 0x...)`) the frames end at the swaps, logged as `Frame pacing: no vertical
 blank wait for the display, frames end at the swaps`, and the wait is tried again every two seconds; when it works
-again the waits start as at first, three refreshes on, logged. Linux, the web and
-Android have no such wait (the same line, once).
+again the waits start as at first, three refreshes on, logged. Linux has no such wait (past the quarter, the same
+line, once); the web and Android build none of it.
 
 ## Relaunch
 
