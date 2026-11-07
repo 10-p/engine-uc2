@@ -385,6 +385,24 @@ static UBOOL VSyncVBlankOn()
 	return On;
 }
 
+// [SDLLaunch] VSyncVBlankRefuse=<seconds>, a test key: the vertical blank waits count as refused by the platform for
+// that long after the first one.
+static UBOOL VSyncVBlankRefused( DOUBLE Now )
+{
+	static DOUBLE Until = -1.0;
+	if( Until < 0.0 )
+	{
+		Until = 0.0;
+		FString Value;
+		if( appReadTestKey( TEXT("VSyncVBlankRefuse"), Value, TEXT("SDLLaunch") ) )
+		{
+			Until = Now + appAtof( *Value );
+			debugf( NAME_Init, TEXT("VSyncVBlankRefuse: the vertical blank waits count as refused for %.1f s"), appAtof( *Value ) );
+		}
+	}
+	return Now < Until;
+}
+
 void FVSyncStep::WaitVBlank( UEngine* Engine )
 {
 	DOUBLE Present, Waited;
@@ -412,7 +430,7 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 	// a row the frames end at the swaps, with one more try every two seconds.
 	if( VBlankFailed >= 120 && Start < VBlankRetry )
 		return;
-	if( !appWaitDisplayVBlank( Bounds.x + Bounds.w / 2, Bounds.y + Bounds.h / 2 ) )
+	if( VSyncVBlankRefused( Start ) || !appWaitDisplayVBlank( Bounds.x + Bounds.w / 2, Bounds.y + Bounds.h / 2 ) )
 	{
 		if( ++VBlankFailed == 120 )
 			debugf( NAME_Init, TEXT("Frame pacing: no vertical blank wait for the display, frames end at the swaps") );
