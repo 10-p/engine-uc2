@@ -230,8 +230,8 @@ public:
 	,	LastCount(-1), Clock(0.0), Fits(0), FitIndex(0), Locked(0), LoggedLock(0)
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	,	LastFromVBlank(0), VBlankTime(0.0), VBlankWaited(0.0), VBlankCount(0), StepVBlankCount(0), VBlankUnlocked(0)
-	,	VBlankLate(0), VBlankSwapCount(-1), LastSwapReturn(0.0), GPULateDue(0.0), QueueExtra(0), Calm(0), VBlankFailed(0)
-	,	VBlankRetry(0.0)
+	,	VBlankLate(0), VBlankSwapCount(-1), LastSwapReturn(0.0), GPULateDue(0.0), QueueExtra(0), Calm(0), HeldRun(0)
+	,	SinceRestart(1000), RestartsSoon(0), VBlankFailed(0), VBlankRetry(0.0)
 	,	VBlankOff(0), VBlankWanted(0), LoggedSwapFar(0), SwapFar(0.0), SwapSeen(0.0)
 #endif
 	{
@@ -271,6 +271,9 @@ private:
 	DOUBLE	GPULateDue;			// the vertical blank the last swap's picture missed, the GPU not done with it (0: none)
 	UBOOL	QueueExtra;			// the driver's queue holds a picture more than the one in hand
 	INT		Calm;				// frames ended by a wait since the last late frame
+	INT		HeldRun;			// swaps in a row the driver held half a refresh or more, the GPU keeping up
+	INT		SinceRestart;		// swaps since the waits last started again, and restarts in a row soon after one
+	INT		RestartsSoon;
 	INT		VBlankUnlocked;		// frames ended by a wait without the lock, since the last with it
 	INT		VBlankFailed;		// waits in a row the platform could not make
 	DOUBLE	VBlankRetry;		// after 120 of those, when to try again
@@ -379,14 +382,38 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 	// late frame).
 	const UBOOL GPUCheck = NewSwap && VBlankCount && Period > 0.0;
 	const DOUBLE Due = GPUCheck ? VBlankTime + (appFloor( (Present - VBlankTime) / Period ) + 1.0) * Period : 0.0;
+	const UBOOL GPUBehind = GPULateDue > 0.0;
 	if( GPUCheck )
 	{
-		if( GPULateDue > 0.0 && Present < GPULateDue + Period )
+		if( GPUBehind && Present < GPULateDue + Period )
 			QueueExtra = 1;
 		GPULateDue = 0.0;
 	}
+	// Swaps the driver holds half a refresh or more, two in a row while the GPU keeps up, wait for room in a full queue:
+	// every frame then runs late and the held swaps pace the frames. The waits start again, three refreshes on, as at
+	// first. A driver that holds each swap until its picture shows does that again at once: after three restarts each
+	// within four swaps of the last, the waits end for the session.
+	UBOOL Restart = 0;
+	if( NewSwap )
+	{
+		SinceRestart = Min( SinceRestart + 1, 1000 );
+		HeldRun = (VBlankCount && Period > 0.0 && Waited >= 0.5 * Period && !GPUBehind) ? HeldRun + 1 : 0;
+	}
+	if( HeldRun >= 2 )
+	{
+		RestartsSoon = SinceRestart <= 4 ? RestartsSoon + 1 : 0;
+		if( RestartsSoon >= 3 )
+		{
+			VBlankOff = 1;
+			UC2WantPresentDone( 0 );
+			debugf( NAME_Init, TEXT("Frame pacing: the driver holds each swap, frames end at the swaps") );
+			return;
+		}
+		Restart = 1;
+		HeldRun = 0;
+	}
 	// A frame that ran past its refresh starts the next at once, on the refresh it missed: a wait would lose another.
-	if( VBlankCount && Period > 0.0 && Start - VBlankTime > Period && Start - VBlankTime < 8.0 * Period )
+	if( !Restart && VBlankCount && Period > 0.0 && Start - VBlankTime > Period && Start - VBlankTime < 8.0 * Period )
 	{
 		if( GPUCheck )
 			GPUMissed( Due );
@@ -411,9 +438,14 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 	}
 	if( GPUCheck )
 		GPUMissed( Due );
-	if( !VBlankCount || VBlankFailed >= 120 )
+	if( !VBlankCount || VBlankFailed >= 120 || Restart )
 	{
-		debugf( NAME_Init, TEXT("Frame pacing: under vsync each frame ends at the display's vertical blank") );
+		static UBOOL LoggedRestart = 0;
+		if( !Restart )
+			debugf( NAME_Init, TEXT("Frame pacing: under vsync each frame ends at the display's vertical blank") );
+		else if( !LoggedRestart || GUfrontLog )
+			debugf( NAME_Init, TEXT("Frame pacing: the driver's queue filled, the waits start again") );
+		LoggedRestart |= Restart;
 		// The frames the driver queued while the swaps paced them are shown first, three refreshes without a new one:
 		// at the display's rate nothing drains a queue later.
 		for( INT i=0; i<3; i++ )
@@ -421,6 +453,7 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 		QueueExtra = 0;
 		GPULateDue = 0.0;
 		Calm = 0;
+		SinceRestart = 0;
 	}
 	else if( (Calm = Min( Calm + 1, 1000 )) >= 120 && QueueExtra )
 	{
