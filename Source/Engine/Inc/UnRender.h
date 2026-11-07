@@ -597,7 +597,7 @@ public:
 	}
 
 	// scion sz - remove a deleted light from this dyn actor's light list
-	FORCEINLINE void RemoveVolatileLight(class FVolatileDynamicLight* pDynLight );
+	void RemoveVolatileLight(class FVolatileDynamicLight* pDynLight );
 
 	// Render
 	void Render(FLevelSceneNode* SceneNode,TList<FDynamicLight*>* Lights,TList<FProjectorRenderInfo*>* Projectors,FRenderInterface* RI);
