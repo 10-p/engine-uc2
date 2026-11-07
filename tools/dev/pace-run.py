@@ -18,7 +18,9 @@ Options:
   --map <map>               default DM-Apex
   --teleport "x y z yaw pitch"   default the DM-Apex spot of every earlier run
   --turn <value>            the look stick during the trace, -32768..32767 (default 6000; 0: stand still)
-  --presentmon <exe>        PresentMon 2.x console build: records System/pm-<name>.csv
+  --presentmon <exe>        PresentMon 2.x console build: records System/pm-<name>.csv, and the run prints the
+                            buffers its trace session lost after the trace
+  --presentmon-arg=<arg>    one more PresentMon argument, e.g. --presentmon-arg=--qpc_time_ms (repeatable)
   --timeout <seconds>       the whole run's limit (default 420); the game is ended when it is reached
   --wrapper <program>       start the exe through it (wine, to try a Windows build on Linux)
 Writes, beside the exe: pace-<name>.log (the game's log with the trace, tag p), pace-<name>.channel (the commands
@@ -87,6 +89,18 @@ def bring_to_foreground(pid, timeout=15.0):
     return False
 
 
+def etw_lost():
+    """Windows: the buffers PresentMon's trace session lost so far (logman's count), as text. Presents in a lost buffer
+    are missing from the CSV, and the screen seems to hold the picture before them."""
+    try:
+        out = subprocess.run(['logman', 'query', 'PresentMon', '-ets'], capture_output=True, text=True,
+                             timeout=20).stdout
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return f'trace session not queried: {e}'
+    m = re.search(r'Buffers Lost:\s*(\d+)', out)
+    return f'trace session buffers lost: {m.group(1)}' if m else 'trace session buffers lost: unknown'
+
+
 class Run:
     def __init__(self, game, log_path, chan_path, deadline):
         self.game = game
@@ -145,6 +159,7 @@ def main():
     ap.add_argument('--teleport', default=DEFAULT_SPOT)
     ap.add_argument('--turn', type=int, default=6000)
     ap.add_argument('--presentmon', default='')
+    ap.add_argument('--presentmon-arg', action='append', default=[])
     ap.add_argument('--timeout', type=float, default=420.0)
     ap.add_argument('--wrapper', default='', help='a program to start the exe with, e.g. wine on Linux')
     a = ap.parse_args()
@@ -179,7 +194,7 @@ def main():
     if a.presentmon:
         pm_csv = os.path.join(sysdir, f'pm-{a.name}.csv')
         pm = subprocess.Popen([a.presentmon, '--stop_existing_session', '--terminate_on_proc_exit',
-                               '--process_name', os.path.basename(exe), '--output_file', pm_csv])
+                               '--process_name', os.path.basename(exe), '--output_file', pm_csv] + a.presentmon_arg)
         time.sleep(2)
         if pm.poll() is not None:
             raise SystemExit(f'PresentMon exited at once (code {pm.returncode}): it needs an elevated shell')
@@ -220,6 +235,8 @@ def main():
         summary = run.wait(r'pacetrace p summary', a.frames / 20.0 + 60)
         run.wait(r'pacetrace p done after', 30)
         focus_after = is_foreground(game.pid)
+        if pm is not None:
+            print(f'{time.strftime("%H:%M:%S")} = PresentMon {etw_lost()}', flush=True)
         print(f'{time.strftime("%H:%M:%S")} = foreground at the trace start {focus_before}, at its end {focus_after}',
               flush=True)
         if not (focus_before and focus_after):
