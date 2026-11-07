@@ -257,8 +257,9 @@ static UBOOL VSyncCapRule()
 // at the period the swaps keep, with a correction of at most a fiftieth of a refresh a frame that holds the game clock
 // on the swaps'. Otherwise by the measured time: no vsync, a frame without exactly one swap, swaps that return without
 // waiting (frames slower than the display), a display whose swaps keep no steady period (a variable refresh rate), a
-// game clock that strays a refresh from the swaps'. Where the platform has a wait for the display's vertical blank, each
-// frame under vsync ends with it (WaitVBlank), and those waits' returns take the place of the swaps'.
+// game clock that strays a refresh from the swaps'. Where the platform has a wait for the display's vertical blank and
+// the locked swaps return unevenly within the refresh, each frame under vsync ends with it (WaitVBlank), and those
+// waits' returns take the place of the swaps'.
 //
 class FVSyncStep
 {
@@ -268,7 +269,8 @@ public:
 	,	LastCount(-1), Clock(0.0), Fits(0), FitIndex(0), Locked(0), LoggedLock(0)
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	,	LastFromVBlank(0), VBlankTime(0.0), VBlankWaited(0.0), VBlankCount(0), StepVBlankCount(0), VBlankUnlocked(0)
-	,	VBlankFailed(0), VBlankRetry(0.0), VBlankOff(0)
+	,	VBlankLate(0), VBlankSwapCount(-1), LastSwapReturn(0.0), DrainUntil(0.0), VBlankFailed(0), VBlankRetry(0.0)
+	,	VBlankOff(0), VBlankWanted(0), LoggedSwapFar(0), SwapFar(0.0), SwapSeen(0.0)
 #endif
 	{
 		appMemzero( FitHistory, sizeof(FitHistory) );
@@ -298,10 +300,18 @@ private:
 	DOUBLE	VBlankWaited;
 	INT		VBlankCount;
 	INT		StepVBlankCount;	// the waits the last step saw
-	INT		VBlankUnlocked;		// frames in a row ended by a wait without the lock
+	UBOOL	VBlankLate;			// the last frame ran past its refresh: no wait, its time is the refresh it missed
+	INT		VBlankSwapCount;	// the swaps the last wait saw, and when the last of them returned
+	DOUBLE	LastSwapReturn;
+	DOUBLE	DrainUntil;			// no frame starts before this vertical blank: the driver's queue loses a picture
+	INT		VBlankUnlocked;		// frames ended by a wait without the lock, since the last with it
 	INT		VBlankFailed;		// waits in a row the platform could not make
 	DOUBLE	VBlankRetry;		// after 120 of those, when to try again
 	UBOOL	VBlankOff;			// no more waits: the vertical blanks keep no steady period
+	UBOOL	VBlankWanted;		// the locked swaps return unevenly within the refresh: the frames end at the vertical blank
+	UBOOL	LoggedSwapFar;
+	DOUBLE	SwapFar;			// the locked swaps over 6 % of a refresh off a whole number of refreshes, and all, decaying
+	DOUBLE	SwapSeen;
 #endif
 	void ReadNominal( UEngine* Engine );
 	FLOAT Unlock( FLOAT Measured );
@@ -355,7 +365,7 @@ FLOAT FVSyncStep::Unlock( FLOAT Measured )
 	Locked = 0;
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	// Vertical blanks that do not keep to the refresh (a variable refresh rate waits for the frame) end the waits.
-	if( LastFromVBlank && ++VBlankUnlocked >= 120 && !VBlankOff )
+	if( LastFromVBlank && !VBlankLate && ++VBlankUnlocked >= 120 && !VBlankOff )
 	{
 		VBlankOff = 1;
 		debugf( NAME_Init, TEXT("Frame pacing: the display's vertical blanks keep no steady period, frames end at the swaps") );
@@ -407,7 +417,7 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 {
 	DOUBLE Present, Waited;
 	INT Count;
-	if( VBlankOff || !VSyncVBlankOn() || !UC2PresentClock( Present, Count, Waited ) )
+	if( VBlankOff || !VSyncVBlankOn() || !VBlankWanted || !UC2PresentClock( Present, Count, Waited ) )
 		return;
 	SDL_Window* Window = Engine->Client && Engine->Client->Viewports.Num() && Engine->Client->Viewports(0)
 		? (SDL_Window*)Engine->Client->Viewports(0)->GetWindow() : NULL;
@@ -415,12 +425,25 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 	if( !Window || SDL_GetDisplayBounds( Max( 0, SDL_GetWindowDisplayIndex( Window ) ), &Bounds ) != 0 )
 		return;
 	const DOUBLE Start = appSeconds();
-	// A frame that ran past its refresh starts the next at once, on the refresh it missed: a wait would lose another.
 	const DOUBLE Period = Nominal > 0.0 ? SumIntervals / SumRefreshes : 0.0;
-	if( VBlankCount && Period > 0.0 && Start - VBlankTime > Period && Start - VBlankTime < 8.0 * Period )
+	// Two swaps that return within one refresh (a frame that started at once after a late one) leave one more picture
+	// in the driver's queue, a refresh more from every swap to the screen from then on. The next frame then waits until
+	// a refresh has gone by without a new picture: the queued one shows in it, and the queue is back to one.
+	if( Count != VBlankSwapCount )
+	{
+		if( VBlankSwapCount >= 0 && VBlankCount && Period > 0.0
+		&&	appFloor( (Present - VBlankTime) / Period ) == appFloor( (LastSwapReturn - VBlankTime) / Period ) )
+			DrainUntil = VBlankTime + (appFloor( (Present - VBlankTime) / Period ) + 2.0) * Period;
+		LastSwapReturn = Present;
+		VBlankSwapCount = Count;
+	}
+	const UBOOL Draining = Start < DrainUntil - 0.25 * Period;
+	// A frame that ran past its refresh starts the next at once, on the refresh it missed: a wait would lose another.
+	if( VBlankCount && Period > 0.0 && !Draining && Start - VBlankTime > Period && Start - VBlankTime < 8.0 * Period )
 	{
 		VBlankTime += appFloor( (Start - VBlankTime) / Period ) * Period;
 		VBlankWaited = 0.0;
+		VBlankLate = 1;
 		VBlankCount++;
 		return;
 	}
@@ -444,9 +467,12 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 		for( INT i=0; i<3; i++ )
 			appWaitDisplayVBlank( Bounds.x + Bounds.w / 2, Bounds.y + Bounds.h / 2 );
 	}
+	for( INT i=0; i<2 && Draining && appSeconds() < DrainUntil - 0.25 * Period; i++ )
+		appWaitDisplayVBlank( Bounds.x + Bounds.w / 2, Bounds.y + Bounds.h / 2 );
 	VBlankFailed = 0;
 	VBlankTime = appSeconds();
 	VBlankWaited = VBlankTime - Start;
+	VBlankLate = 0;
 	VBlankCount++;
 }
 #endif
@@ -456,7 +482,7 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 	DOUBLE Present, Waited;
 	INT Count;
 	const UBOOL VSync = UC2PresentClock( Present, Count, Waited );
-	UBOOL FromVBlank = 0;
+	UBOOL FromVBlank = 0, Late = 0;
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	// A frame that ended with a vertical blank wait takes that wait as its clock, the others the swap's; a change of
 	// clock starts the intervals again.
@@ -467,6 +493,7 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 		Present = VBlankTime;
 		Waited = VBlankWaited;
 		Count = VBlankCount;
+		Late = VBlankLate;
 	}
 	if( FromVBlank != LastFromVBlank )
 		LastCount = -1;
@@ -490,9 +517,10 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 	const INT Refreshes = Max( 1, appRound( (FLOAT)(Interval / Period) ) );
 	const DOUBLE Off = Abs( Interval - Refreshes * Period );
 	// Only a swap that waited returns on a refresh: one that found nothing queued before it returns at once. A vertical
-	// blank wait always returns on one.
+	// blank wait always returns on one; the refresh a late frame missed is not where it showed on a variable refresh
+	// rate, which shows it when it comes.
 	const DOUBLE MinWait = Max( 0.001, 0.1 * Period );
-	const UBOOL OnRefresh = FromVBlank || (WaitedBefore >= MinWait && Waited >= MinWait);
+	const UBOOL OnRefresh = FromVBlank ? !Late : (WaitedBefore >= MinWait && Waited >= MinWait);
 	const BYTE Fit = OnRefresh && Refreshes <= 8 && Off < 0.25 * Period;
 	Fits += Fit - FitHistory[FitIndex];
 	FitHistory[FitIndex] = Fit;
@@ -525,6 +553,22 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 	Locked = 1;
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	VBlankUnlocked = 0;
+	// Locked swaps that return more than 6 % of a refresh off a whole number of refreshes, in more than a quarter of the
+	// last 200 or so, start the frames unevenly: from then on each frame ends at the vertical blank (WaitVBlank). Swaps
+	// that keep closer keep their pacing. The share is logged once either way.
+	if( !FromVBlank && !VBlankWanted && Fit )
+	{
+		SwapFar = SwapFar * 0.995 + (Off > 0.06 * Period ? 1.0 : 0.0);
+		SwapSeen = SwapSeen * 0.995 + 1.0;
+		if( SwapSeen >= 150.0 && (SwapFar > 0.25 * SwapSeen || !LoggedSwapFar) )
+		{
+			VBlankWanted = SwapFar > 0.25 * SwapSeen;
+			LoggedSwapFar = 1;
+			debugf( NAME_Init, TEXT("Frame pacing: %.0f %% of the swaps return over %.2f ms off the refresh, frames under vsync end at %s"),
+				100.0 * SwapFar / SwapSeen, 1000.0 * 0.06 * Period,
+				VBlankWanted ? TEXT("the display's vertical blank") : TEXT("the swaps") );
+		}
+	}
 #endif
 	return (FLOAT)(Ideal + Correction);
 }

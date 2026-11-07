@@ -598,8 +598,13 @@ refresh rate), or a game clock a refresh away from the swaps' (the lock then sta
 it, so the display paces the frames and the cap stops only a swap that does not wait (logged once). A driver's forced
 vsync or frame cap is not seen by the engine: the measured time.
 
-On Windows each frame under vsync ends by waiting for the next vertical blank of the window's display, after the frame
-cap's wait (`FVSyncStep::WaitVBlank`; `appWaitDisplayVBlank`, the graphics kernel's vertical blank event; logged once,
+Swaps that keep to the refresh but return at uneven times within it make the frames start, and read their input,
+unevenly while the pictures come evenly. The launcher measures that on every driver alike, while the steps are locked:
+the share of the swaps that return more than 6 % of a refresh (1 ms at 60 Hz) off a whole number of refreshes, over
+about the last 200 (logged once, `Frame pacing: 1 % of the swaps return over 1.00 ms off the refresh, frames under
+vsync end at the swaps`). Up to a quarter the frames keep the swaps' pacing above. Past it, on Windows, each frame
+under vsync from then on ends by waiting for the next vertical blank of the window's display, after the frame cap's
+wait (`FVSyncStep::WaitVBlank`; `appWaitDisplayVBlank`, the graphics kernel's vertical blank event; logged once,
 `Frame pacing: under vsync each frame ends at the display's vertical blank`; that first frame waits for three more,
 so the frames the driver queued before are shown and the waits start on an empty queue: at the display's rate nothing
 drains it later). The next frame then starts, reads its input
@@ -607,14 +612,21 @@ and moves the world on at a refresh, and the steps count the refreshes between t
 a swap that waits for the refresh can return milliseconds before or after it, and unevenly from frame to frame, where
 the driver queues frames ahead. The swap then finds a free buffer and the picture shows at the next refresh. A frame
 that runs past its refresh (by less than 8 refreshes) does not wait: the next starts at once and counts from the
-refresh it missed, so a frame slower than the display costs no further refresh. Waits
-that keep no steady period for 120 frames in a row (a variable refresh rate, where the display waits for the frame) end
-the waits for the session (logged), and the swaps' returns step the world as elsewhere. After 120 waits in a row that
+refresh it missed, so a frame slower than the display costs no further refresh. That refresh does not count as one the
+frame kept to (a variable refresh rate shows a late frame when it comes): the steps keep the lock through a late frame
+among frames on time, and frames that are all late step by the measured time. Two swaps that return within one
+refresh (the frame after a late one, started at once, can hand its picture over in the refresh the late one's picture
+went in) leave one more picture in the driver's queue, a refresh more from every swap to the screen from then on: the
+next frame then waits until a refresh has gone by without a new picture, the queued one shows in it, and the queue is
+back to one. Frames slower than the display never hand two pictures over in one refresh, and keep their rate.
+120 frames ended by a wait without the
+lock (waits that keep no steady period: a variable refresh rate, where the display waits for the frame; late frames do
+not count) end the waits for the session (logged), and the swaps' returns step the world as elsewhere. After 120 waits in a row that
 the graphics kernel refuses (a display being set up or reset; the first refusal is logged with its status,
 `Display vertical blank: ... failed (status 0x...)`) the frames end at the swaps, logged as `Frame pacing: no vertical
 blank wait for the display, frames end at the swaps`, and the wait is tried again every two seconds; when it works
-again the waits start as at first, three refreshes on, logged. Linux, the web and
-Android have no such wait (the same line, once).
+again the waits start as at first, three refreshes on, logged. Linux has no such wait (past the quarter, the same
+line, once); the web and Android build none of it.
 
 ## Relaunch
 
