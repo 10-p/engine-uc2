@@ -17,6 +17,8 @@
 // launcher's game-time step (UC2PresentClock.cpp).
 ENGINE_API void UC2FramePresented( DOUBLE When, DOUBLE Waited );
 ENGINE_API void UC2SetPresentVSync( UBOOL VSync );
+// The pace trace's record of each buffer swap (PACETRACE, UC2PaceTrace.cpp).
+ENGINE_API void UC2PaceSwap( DOUBLE Before, DOUBLE After );
 
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 ENGINE_API UBOOL UC2CapPaces();	// whether the launcher's frame cap times the swaps (UC2PresentClock.cpp)
@@ -2301,6 +2303,7 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 	BindingSwap( Viewport );
 	const DOUBLE SwapEnd = appSeconds();
 	UC2FramePresented( SwapEnd, SwapEnd - SwapBegin );
+	UC2PaceSwap( SwapBegin, SwapEnd );
 
 	if( LogStats && (FrameCounter - StatFrame0 >= 300 || StatTime0 == 0.0) )
 		LogFrameStats();

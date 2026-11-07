@@ -49,6 +49,11 @@ Revision history:
 #include "UnMovie.h"	// AppPlayMovieFullscreen (Engine)
 #include "SDL_video.h"	// the display's refresh rate (FVSyncStep); not SDL.h, whose SDL_main.h would rename main
 
+// The pace trace's record of each frame's start, tick and limiter (PACETRACE, UC2PaceTrace.cpp).
+ENGINE_API void UC2PaceFrameStart( DOUBLE Now, FLOAT DeltaTime, FLOAT TickDelta );
+ENGINE_API void UC2PaceTickEnd( DOUBLE Now );
+ENGINE_API void UC2PaceLimiter( FLOAT Want, FLOAT Slept );
+
 /*-----------------------------------------------------------------------------
 	Global variables.
 -----------------------------------------------------------------------------*/
@@ -428,6 +433,25 @@ void CMainLoop::RunLoop()
 			appRequestExit( 0 );
 	}
 
+	// [SDLLaunch] PaceJitter=<frames>:<ms>, a test key: every <frames>-th frame starts <ms> late, so its step and the
+	// next one's are uneven by a known amount while the display's are not (with vsync) for the pace trace (PACETRACE).
+	static INT   JitterEvery = -1;
+	static FLOAT JitterSeconds = 0.f;
+	static INT   JitterFrame = 0;
+	if( JitterEvery < 0 )
+	{
+		JitterEvery = 0;
+		FString Spec;
+		if( appReadTestKey( TEXT("PaceJitter"), Spec, TEXT("SDLLaunch") ) && Spec.InStr( TEXT(":") ) > 0 )
+		{
+			JitterEvery   = Max( 0, appAtoi( *Spec ) );
+			JitterSeconds = Max( 0.f, appAtof( *Spec.Mid( Spec.InStr( TEXT(":") ) + 1 ) ) / 1000.f );
+			debugf( NAME_Init, TEXT("PaceJitter: every %i frames one starts %.1f ms late"), JitterEvery, 1000.f * JitterSeconds );
+		}
+	}
+	if( JitterEvery > 0 && ++JitterFrame % JitterEvery == 0 )
+		appSleep( JitterSeconds );
+
 	// Update the world.
 	DOUBLE NewTime   = appSeconds();
 	FLOAT  DeltaTime = NewTime - OldTime;
@@ -446,6 +470,9 @@ void CMainLoop::RunLoop()
 		}
 	}
 
+	const FLOAT TickDelta = GIsBenchmarking || RecordingMovie ? 1.0f / 30.0f : FixedDelta > 0.f ? FixedDelta : VSyncStep.Step( Engine, DeltaTime );
+	UC2PaceFrameStart( NewTime, DeltaTime, TickDelta );
+
 	guard(UpdateWorld);
 	if( GIsBenchmarking || RecordingMovie )
 	{
@@ -458,7 +485,6 @@ void CMainLoop::RunLoop()
 	}
 	else
 	{
-		const FLOAT TickDelta = FixedDelta > 0.f ? FixedDelta : VSyncStep.Step( Engine, DeltaTime );
 		Engine->Tick( TickDelta );
 		if( GWindowManager )
 			GWindowManager->Tick( TickDelta );
@@ -472,12 +498,15 @@ void CMainLoop::RunLoop()
 		TickCount = 0;
 	}
 	unguard;
+	UC2PaceTickEnd( appSeconds() );
 
 	// Enforce optional maximum tick rate.
 	UBOOL LimiterSlept = 0;	// the web yields only when the limiter did not sleep
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	UBOOL CapPaces = 0;		// the cap times this frame's swap: it waits for the due time, the display does not
 #endif
+	const DOUBLE LimiterStart = appSeconds();
+	FLOAT LimiterWant = -1.f;	// the sleep asked for, for the pace trace (-1: none)
 	guard(EnforceTickRate);
 	if( !GIsBenchmarking && IncludeMessaging )
 	{
@@ -530,12 +559,14 @@ void CMainLoop::RunLoop()
 		if( PatternNum > 0 && Engine->GetMaxTickRate() <= 0.f )
 		{
 			FLOAT Delta = Pattern[PatternIndex++ % PatternNum] - (appSeconds()-OldTime);
-			appSleep( Max(0.f,Delta) );
+			LimiterWant = Max(0.f,Delta);
+			appSleep( LimiterWant );
 			LimiterSlept = 1;
 		}
 		else if( MaxTickRate>0.0 )
 		{
 #ifdef __EMSCRIPTEN__
+			LimiterWant = Max( 0.f, (FLOAT)(1.0/MaxTickRate - (LimiterStart-OldTime)) );
 			UC2WebWaitCapped( 1.0/MaxTickRate );
 #else
 			// Each frame is due one period after the one before, so the cap holds its rate whatever a wake-up's error;
@@ -557,6 +588,7 @@ void CMainLoop::RunLoop()
 			Due = Due > 0.0 ? Due + Period : OldTime + Period;
 			if( Now - Due > Period )
 				Due = Now;
+			LimiterWant = Max( 0.f, (FLOAT)(Due - Now) );
 			appSleepUntil( Due );
 #ifndef __ANDROID__
 			// Without vsync the swap at the due time shows the frame as far as the GPU has drawn it, so the render
@@ -573,6 +605,8 @@ void CMainLoop::RunLoop()
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	UC2SetCapPaces( CapPaces );
 #endif
+	if( LimiterWant >= 0.f )
+		UC2PaceLimiter( LimiterWant, appSeconds() - LimiterStart );
 
 #ifdef __EMSCRIPTEN__
 	// Give the engine worker's event loop one turn per frame (input, host commands), until the display's next

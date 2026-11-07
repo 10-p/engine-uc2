@@ -40,6 +40,8 @@ ENGINE_API void UC2FrameTraceDraw( UViewport* Viewport, const FVector& CamLoc, c
 // The frame rate in the log, [Engine.GameEngine] FpsLogSeconds / FPSLOG (UC2FpsLog.cpp); quiet by default.
 ENGINE_API void UC2FpsLogTick( UEngine* Engine );
 ENGINE_API UBOOL UC2FpsLogExec( const TCHAR* Cmd, FOutputDevice& Ar );
+// PACETRACE, the frame pacing of each frame (UC2PaceTrace.cpp); quiet unless asked for.
+ENGINE_API UBOOL UC2PaceTraceExec( UEngine* Engine, const TCHAR* Cmd, FOutputDevice& Ar );
 
 // A map as the player knows it: "../Maps/DM-Apex.unr" -> "DM-Apex".
 static FString MapBaseName( const FString& Map )
@@ -516,6 +518,8 @@ UBOOL UGameEngine::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 	if( UC2FrameTraceExec( Cmd, Ar ) )		// FRAMETRACE <frames> [tag]
 		return 1;
 	if( UC2FpsLogExec( Cmd, Ar ) )			// FPSLOG [seconds]
+		return 1;
+	if( UC2PaceTraceExec( this, Cmd, Ar ) )	// PACETRACE [<frames> [tag]]
 		return 1;
 	const TCHAR* Str=Cmd;
 #if WITH_PORTABLE_MOVIES

@@ -557,6 +557,20 @@ seconds: frames, fps, frame time avg/min/max/p99, the 1% low. `tools/dev/fps-ben
 runs a fixed camera turn on this machine's GPU, headless, and prints one line. A standalone game is uncapped by default
 (`UseVSync=False`, `[Engine.Engine] FrameRateCap=0`); a network client keeps the engine's own tick limit.
 
+Frame pacing: the console command `PACETRACE [<frames> [tag]]` (1200 frames by default; also a key binding,
+`-ini:User:[Engine.Input]:F10=PACETRACE`) records the next frames in memory and then logs them, one `PaceTrace:` line
+each: the frame's start and its DeltaTime (where the launcher measures it), the step the engine ticked with, the swap's
+call and return, when `UEngine::Tick` returned, the frame limiter's requested sleep and how long it took and, on
+Windows, the display's refresh count at the swap's return (the desktop compositor's clock of the vertical blanks,
+`appDisplayVBlank`); then a summary line (`Source/Engine/Src/UC2PaceTrace.cpp`). `tools/dev/pace-analyze.py <log>`
+reads them: the game-time steps against the time between pictures on the display (the swaps on the refresh grid, a
+frame's picture going out with the next frame's swap), repeated and skipped frames, the limiter's oversleep.
+`tools/dev/pace-run.sh <name> <tree> [frames]` runs a match in a window on this machine's screen at a fixed spot
+(TELEPORT) with `PACE_VSYNC`, `PACE_CAP`, `PACE_FULLSCREEN`, `PACE_VIDEO` (x11 or offscreen) and `PACE_RENDER`
+(cheap hides the world's geometry), traces it and prints the verdict with the GPU's clock during the trace. The test
+key `[SDLLaunch] PaceJitter=<frames>:<ms>` starts every `<frames>`-th frame `<ms>` late, a known unevenness of the
+game-time steps for the trace to show; `FramePattern` gives frames set lengths.
+
 The launcher's frame limiter (`FrameRateCap`, a network client's tick limit, `Source/SDLLaunch/Src/SDLLaunch.cpp`)
 gives each frame a due time one period after the one before and waits for it with `appSleepUntil` (the system's sleep,
 then a yield for the last fraction of a millisecond; on Windows a high-resolution waitable timer where there is one), so
@@ -600,4 +614,4 @@ the post-process reference copy, the camera effects' targets, the web canvas siz
 line per linked program, the projector materials and the distortion distance, the movie clock and the MovieMaterial
 frames, the WebRTC link statistics and the package map table, the wave packs read, the first sound and the music
 refill cost, the script `SaveConfig` traces, and the UI scale's full-screen tiles and sharper fonts. Lines behind a
-switch of their own (`FPSLOG`, `LogInput`, the frame trace, the test keys) follow that switch.
+switch of their own (`FPSLOG`, `LogInput`, the frame trace, the pace trace, the test keys) follow that switch.
