@@ -368,11 +368,27 @@ FLOAT FVSyncStep::Unlock( FLOAT Measured )
 // Under vsync each frame ends at the next vertical blank of the window's display, so the next frame starts, reads its
 // input and steps the world on the display's clock: a swap that waits for the refresh can return milliseconds off it.
 //
+// [SDLLaunch] VSyncVBlank=0, a test key: under vsync frames end at the swaps, without the vertical blank wait.
+static UBOOL VSyncVBlankOn()
+{
+	static INT On = -1;
+	if( On < 0 )
+	{
+		On = 1;
+		FString Value;
+		if( appReadTestKey( TEXT("VSyncVBlank"), Value, TEXT("SDLLaunch") ) )
+			On = appAtoi( *Value ) != 0;
+		if( !On )
+			debugf( NAME_Init, TEXT("VSyncVBlank=0: under vsync frames end at the swaps") );
+	}
+	return On;
+}
+
 void FVSyncStep::WaitVBlank( UEngine* Engine )
 {
 	DOUBLE Present, Waited;
 	INT Count;
-	if( VBlankOff || !UC2PresentClock( Present, Count, Waited ) )
+	if( VBlankOff || !VSyncVBlankOn() || !UC2PresentClock( Present, Count, Waited ) )
 		return;
 	SDL_Window* Window = Engine->Client && Engine->Client->Viewports.Num() && Engine->Client->Viewports(0)
 		? (SDL_Window*)Engine->Client->Viewports(0)->GetWindow() : NULL;
