@@ -590,7 +590,8 @@ and moves the world on at a refresh, and the steps count the refreshes between t
 a swap that waits for the refresh can return milliseconds before or after it, and unevenly from frame to frame, where
 the driver queues frames ahead. The swap then finds a free buffer and the picture shows at the next refresh. A frame
 that runs past its refresh (by less than 8 refreshes) does not wait: the next starts at once and counts from the
-refresh it missed, so a frame slower than the display costs no further refresh. Waits
+refresh it missed, so a frame slower than the display costs no further refresh; but after a swap that waited a
+quarter refresh or more for room in the driver's queue it waits, so that queue drains to one frame. Waits
 that keep no steady period for 120 frames in a row (a variable refresh rate, where the display waits for the frame) end
 the waits for the session (logged), and the swaps' returns step the world as elsewhere. Linux, the web and Android have
 no such wait.
