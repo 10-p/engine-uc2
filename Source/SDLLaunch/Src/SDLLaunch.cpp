@@ -381,8 +381,10 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 		return;
 	const DOUBLE Start = appSeconds();
 	// A frame that ran past its refresh starts the next at once, on the refresh it missed: a wait would lose another.
+	// Not after a swap that waited for room in the driver's queue: waiting then lets that queue drain.
 	const DOUBLE Period = Nominal > 0.0 ? SumIntervals / SumRefreshes : 0.0;
-	if( VBlankCount && Period > 0.0 && Start - VBlankTime > Period && Start - VBlankTime < 8.0 * Period )
+	if( VBlankCount && Period > 0.0 && Start - VBlankTime > Period && Start - VBlankTime < 8.0 * Period
+	&&	Waited < 0.25 * Period )
 	{
 		VBlankTime += appFloor( (Start - VBlankTime) / Period ) * Period;
 		VBlankWaited = 0.0;
