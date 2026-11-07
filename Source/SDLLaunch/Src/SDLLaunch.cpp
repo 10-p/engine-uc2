@@ -416,10 +416,8 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 		return;
 	const DOUBLE Start = appSeconds();
 	// A frame that ran past its refresh starts the next at once, on the refresh it missed: a wait would lose another.
-	// Not after a swap that waited for room in the driver's queue: waiting then lets that queue drain.
 	const DOUBLE Period = Nominal > 0.0 ? SumIntervals / SumRefreshes : 0.0;
-	if( VBlankCount && Period > 0.0 && Start - VBlankTime > Period && Start - VBlankTime < 8.0 * Period
-	&&	Waited < 0.25 * Period )
+	if( VBlankCount && Period > 0.0 && Start - VBlankTime > Period && Start - VBlankTime < 8.0 * Period )
 	{
 		VBlankTime += appFloor( (Start - VBlankTime) / Period ) * Period;
 		VBlankWaited = 0.0;
@@ -439,7 +437,13 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 		return;
 	}
 	if( !VBlankCount || VBlankFailed >= 120 )
+	{
 		debugf( NAME_Init, TEXT("Frame pacing: under vsync each frame ends at the display's vertical blank") );
+		// The frames the driver queued while the swaps paced them are shown first, three refreshes without a new one:
+		// at the display's rate nothing drains a queue later.
+		for( INT i=0; i<3; i++ )
+			appWaitDisplayVBlank( Bounds.x + Bounds.w / 2, Bounds.y + Bounds.h / 2 );
+	}
 	VBlankFailed = 0;
 	VBlankTime = appSeconds();
 	VBlankWaited = VBlankTime - Start;
