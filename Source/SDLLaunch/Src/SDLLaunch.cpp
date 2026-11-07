@@ -339,6 +339,15 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 	if( !Window || SDL_GetDisplayBounds( Max( 0, SDL_GetWindowDisplayIndex( Window ) ), &Bounds ) != 0 )
 		return;
 	const DOUBLE Start = appSeconds();
+	// A frame that ran past its refresh starts the next at once, on the refresh it missed: a wait would lose another.
+	const DOUBLE Period = Nominal > 0.0 ? SumIntervals / SumRefreshes : 0.0;
+	if( VBlankCount && Period > 0.0 && Start - VBlankTime > Period && Start - VBlankTime < 8.0 * Period )
+	{
+		VBlankTime += appFloor( (Start - VBlankTime) / Period ) * Period;
+		VBlankWaited = 0.0;
+		VBlankCount++;
+		return;
+	}
 	if( !appWaitDisplayVBlank( Bounds.x + Bounds.w / 2, Bounds.y + Bounds.h / 2 ) )
 	{
 		// A platform without the wait fails every time; a display being reset, for a moment.
