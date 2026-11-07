@@ -35,6 +35,58 @@ import time
 DEFAULT_SPOT = '1218 952 117.9 38972 0'
 
 
+def game_window(pid):
+    """Windows: the game's visible SDL window, or None."""
+    import ctypes
+    from ctypes import wintypes
+    user32 = ctypes.WinDLL('user32')
+    found = []
+    proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    def each(hwnd, _):
+        owner = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        name = ctypes.create_unicode_buffer(64)
+        user32.GetClassNameW(hwnd, name, 64)
+        if owner.value == pid and user32.IsWindowVisible(hwnd) and name.value == 'SDL_app':
+            found.append(hwnd)
+        return True
+    user32.EnumWindows(proc(each), 0)
+    return found[0] if found else None
+
+
+def is_foreground(pid):
+    """Whether the game's window has the foreground (always true off Windows)."""
+    if os.name != 'nt':
+        return True
+    import ctypes
+    hwnd = game_window(pid)
+    return bool(hwnd) and ctypes.WinDLL('user32').GetForegroundWindow() == hwnd
+
+
+def bring_to_foreground(pid, timeout=15.0):
+    """Windows: gives the game's window the foreground, as a click on it would. A program started from a background
+    process opens behind the foreground one, and then SDL drops the pad's events and a fullscreen window is composed.
+    Windows lets a process take the foreground once a key it sent went through, so an Alt press and release goes
+    first. Returns whether the window has the foreground."""
+    if os.name != 'nt':
+        return True
+    import ctypes
+    user32 = ctypes.WinDLL('user32')
+    end = time.time() + timeout
+    while time.time() < end:
+        hwnd = game_window(pid)
+        if hwnd:
+            user32.keybd_event(0x12, 0, 0, 0)          # VK_MENU down
+            user32.keybd_event(0x12, 0, 2, 0)          # KEYEVENTF_KEYUP
+            user32.SetForegroundWindow(hwnd)
+            time.sleep(0.5)
+            if user32.GetForegroundWindow() == hwnd:
+                return True
+        time.sleep(0.5)
+    return False
+
+
 class Run:
     def __init__(self, game, log_path, chan_path, deadline):
         self.game = game
@@ -141,6 +193,9 @@ def main():
     try:
         run.wait(r'Bringing Level ' + re.escape(a.map) + r'\.MyLevel up for play', 180)
         time.sleep(6)
+        if not bring_to_foreground(game.pid):
+            raise SystemExit('the game window did not get the foreground')
+        print(f'{time.strftime("%H:%M:%S")} = the game window has the foreground', flush=True)
         run.chan('pad attach')
         time.sleep(1)
         for _ in range(3):  # UC2 spawns the player on Fire some seconds into the match
@@ -159,9 +214,16 @@ def main():
         if a.turn:
             run.chan(f'pad axis rightx {a.turn}')
             time.sleep(1)
+        run.wait(r'Cheat: TELEPORT ok', 10)
+        focus_before = is_foreground(game.pid)
         run.chan(f'exec PACETRACE {a.frames} p')
         summary = run.wait(r'pacetrace p summary', a.frames / 20.0 + 60)
         run.wait(r'pacetrace p done after', 30)
+        focus_after = is_foreground(game.pid)
+        print(f'{time.strftime("%H:%M:%S")} = foreground at the trace start {focus_before}, at its end {focus_after}',
+              flush=True)
+        if not (focus_before and focus_after):
+            print(f'run {a.name}: the game window lost the foreground during the trace', file=sys.stderr)
         traced = True
         run.chan('pad axis rightx 0')
         time.sleep(0.5)
