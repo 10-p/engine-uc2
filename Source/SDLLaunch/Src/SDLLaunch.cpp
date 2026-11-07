@@ -229,7 +229,8 @@ public:
 	:	Nominal(0.0), NominalTime(0.0), SumIntervals(0.0), SumRefreshes(0.0), LastPresent(0.0), LastWaited(0.0)
 	,	LastCount(-1), Clock(0.0), Fits(0), FitIndex(0), Locked(0), LoggedLock(0)
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
-	,	LastFromVBlank(0), VBlankTime(0.0), VBlankWaited(0.0), VBlankCount(0), StepVBlankCount(0), VBlankUnlocked(0)
+	,	LastFromVBlank(0), VBlankTime(0.0), VBlankWaited(0.0), VBlankCount(0), StepVBlankCount(0), VBlankFar(0.0)
+	,	VBlankSeen(0.0)
 	,	VBlankLate(0), VBlankSwapCount(-1), LastSwapReturn(0.0), GPULateDue(0.0), QueueExtra(0), Calm(0), HeldRun(0)
 	,	SinceRestart(1000), RestartsSoon(0), VBlankFailed(0), VBlankRetry(0.0)
 	,	VBlankOff(0), VBlankWanted(0), LoggedSwapFar(0), SwapFar(0.0), SwapSeen(0.0)
@@ -274,7 +275,8 @@ private:
 	INT		HeldRun;			// swaps in a row the driver held half a refresh or more, the GPU keeping up
 	INT		SinceRestart;		// swaps since the waits last started again, and restarts in a row soon after one
 	INT		RestartsSoon;
-	INT		VBlankUnlocked;		// frames ended by a wait without the lock, since the last with it
+	DOUBLE	VBlankFar;			// the waits off a whole number of refreshes from the clock before, and all, decaying
+	DOUBLE	VBlankSeen;
 	INT		VBlankFailed;		// waits in a row the platform could not make
 	DOUBLE	VBlankRetry;		// after 120 of those, when to try again
 	UBOOL	VBlankOff;			// no more waits: the vertical blanks keep no steady period
@@ -333,15 +335,6 @@ FLOAT FVSyncStep::Unlock( FLOAT Measured )
 	if( Locked && GUfrontLog )
 		debugf( NAME_Init, TEXT("Frame steps: the measured time (the swaps left the refresh)") );
 	Locked = 0;
-#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
-	// Vertical blanks that do not keep to the refresh (a variable refresh rate waits for the frame) end the waits.
-	if( LastFromVBlank && !VBlankLate && ++VBlankUnlocked >= 120 && !VBlankOff )
-	{
-		VBlankOff = 1;
-		UC2WantPresentDone( 0 );
-		debugf( NAME_Init, TEXT("Frame pacing: the display's vertical blanks keep no steady period, frames end at the swaps") );
-	}
-#endif
 	return Measured;
 }
 
@@ -519,6 +512,22 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 	const DOUBLE MinWait = Max( 0.001, 0.1 * Period );
 	const UBOOL OnRefresh = FromVBlank ? !Late : (WaitedBefore >= MinWait && Waited >= MinWait);
 	const BYTE Fit = OnRefresh && Refreshes <= 8 && Off < 0.25 * Period;
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	// On a fixed refresh every vertical blank wait returns a whole number of refreshes after the clock before it, late
+	// frames or not. A variable refresh rate waits for the frame: past half of the last hundred or so off by a quarter
+	// refresh or more, the waits end for the session.
+	if( FromVBlank && !Late && Refreshes <= 8 && !VBlankOff )
+	{
+		VBlankFar = VBlankFar * 0.99 + (Off >= 0.25 * Period ? 1.0 : 0.0);
+		VBlankSeen = VBlankSeen * 0.99 + 1.0;
+		if( VBlankSeen >= 60.0 && VBlankFar > 0.5 * VBlankSeen )
+		{
+			VBlankOff = 1;
+			UC2WantPresentDone( 0 );
+			debugf( NAME_Init, TEXT("Frame pacing: the display's vertical blanks keep no steady period, frames end at the swaps") );
+		}
+	}
+#endif
 	Fits += Fit - FitHistory[FitIndex];
 	FitHistory[FitIndex] = Fit;
 	FitIndex = (FitIndex + 1) % ARRAY_COUNT(FitHistory);
@@ -549,7 +558,6 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 	LoggedLock = 1;
 	Locked = 1;
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
-	VBlankUnlocked = 0;
 	// Locked swaps that return more than 6 % of a refresh off a whole number of refreshes, in more than a quarter of the
 	// last 200 or so, start the frames unevenly: from then on each frame ends at the vertical blank (WaitVBlank). Swaps
 	// that keep closer keep their pacing. The share is logged once either way.
