@@ -232,7 +232,7 @@ public:
 	,	LastFromVBlank(0), VBlankTime(0.0), VBlankWaited(0.0), VBlankCount(0), StepVBlankCount(0), VBlankFar(0.0)
 	,	VBlankSeen(0.0)
 	,	VBlankLate(0), VBlankSwapCount(-1), LastSwapReturn(0.0), GPULateDue(0.0), QueueExtra(0), Calm(0), HeldRun(0)
-	,	SinceRestart(1000), RestartsSoon(0), VBlankFailed(0), VBlankRetry(0.0)
+	,	SinceDrain(1000), DrainPending(0), DrainBackoff(0.0), NextDrain(0.0), VBlankFailed(0), VBlankRetry(0.0)
 	,	VBlankOff(0), VBlankWanted(0), LoggedSwapFar(0), SwapFar(0.0), SwapSeen(0.0)
 #endif
 	{
@@ -247,6 +247,7 @@ public:
 private:
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	void GPUMissed( DOUBLE Due );
+	void DrainFailed();
 #endif
 	DOUBLE	Nominal;			// the display's refresh period as the platform gives it (0: unknown)
 	DOUBLE	NominalTime;		// when it was read
@@ -272,9 +273,11 @@ private:
 	DOUBLE	GPULateDue;			// the vertical blank the last swap's picture missed, the GPU not done with it (0: none)
 	UBOOL	QueueExtra;			// the driver's queue holds a picture more than the one in hand
 	INT		Calm;				// frames ended by a wait since the last late frame
-	INT		HeldRun;			// swaps in a row the driver held half a refresh or more, the GPU keeping up
-	INT		SinceRestart;		// swaps since the waits last started again, and restarts in a row soon after one
-	INT		RestartsSoon;
+	INT		HeldRun;			// swaps in a row the driver held half a refresh or more
+	INT		SinceDrain;			// swaps since the last drain of the driver's queue, and whether it is being checked
+	UBOOL	DrainPending;
+	DOUBLE	DrainBackoff;		// how long a drain that did not take holds off the next (seconds), and until when
+	DOUBLE	NextDrain;
 	DOUBLE	VBlankFar;			// the waits off a whole number of refreshes from the clock before, and all, decaying
 	DOUBLE	VBlankSeen;
 	INT		VBlankFailed;		// waits in a row the platform could not make
@@ -382,29 +385,27 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 			QueueExtra = 1;
 		GPULateDue = 0.0;
 	}
-	// Swaps the driver holds half a refresh or more, two in a row while the GPU keeps up, wait for room in a full queue:
-	// every frame then runs late and the held swaps pace the frames. The waits start again, three refreshes on, as at
-	// first. A driver that holds each swap until its picture shows does that again at once: after three restarts each
-	// within four swaps of the last, the waits end for the session.
-	UBOOL Restart = 0;
+	// Swaps the driver holds half a refresh or more, two in a row, wait for room in a full queue: every frame then runs
+	// late and the held swaps pace the frames. The waits start again, three refreshes on, as at first.
 	if( NewSwap )
 	{
-		SinceRestart = Min( SinceRestart + 1, 1000 );
-		HeldRun = (VBlankCount && Period > 0.0 && Waited >= 0.5 * Period && !GPUBehind) ? HeldRun + 1 : 0;
+		SinceDrain = Min( SinceDrain + 1, 1000 );
+		HeldRun = (VBlankCount && Period > 0.0 && Waited >= 0.5 * Period) ? HeldRun + 1 : 0;
 	}
-	if( HeldRun >= 2 )
+	// Each drain of the queue (that restart, or one refresh more for a frame of slack) is checked: a full queue or a
+	// picture the GPU has not done in time again two to six swaps after it, and it did not take (a game the GPU holds
+	// back, a driver that holds each swap until its picture shows). The next waits twice as long as the last, from 2 s
+	// up to a minute; one that takes clears that.
+	if( DrainPending && NewSwap && SinceDrain > 6 )
 	{
-		RestartsSoon = SinceRestart <= 4 ? RestartsSoon + 1 : 0;
-		if( RestartsSoon >= 3 )
-		{
-			VBlankOff = 1;
-			UC2WantPresentDone( 0 );
-			debugf( NAME_Init, TEXT("Frame pacing: the driver holds each swap, frames end at the swaps") );
-			return;
-		}
-		Restart = 1;
-		HeldRun = 0;
+		DrainPending = 0;
+		DrainBackoff = 0.0;
 	}
+	if( DrainPending && SinceDrain >= 2 && HeldRun >= 2 )
+		DrainFailed();
+	const UBOOL Restart = HeldRun >= 2 && Start >= NextDrain;
+	if( Restart )
+		HeldRun = 0;
 	// A frame that ran past its refresh starts the next at once, on the refresh it missed: a wait would lose another.
 	if( !Restart && VBlankCount && Period > 0.0 && Start - VBlankTime > Period && Start - VBlankTime < 8.0 * Period )
 	{
@@ -446,12 +447,15 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 		QueueExtra = 0;
 		GPULateDue = 0.0;
 		Calm = 0;
-		SinceRestart = 0;
+		SinceDrain = 0;
+		DrainPending = Restart;
 	}
-	else if( (Calm = Min( Calm + 1, 1000 )) >= 120 && QueueExtra )
+	else if( (Calm = Min( Calm + 1, 1000 )) >= 120 && QueueExtra && Start >= NextDrain )
 	{
 		appWaitDisplayVBlank( Bounds.x + Bounds.w / 2, Bounds.y + Bounds.h / 2 );
 		QueueExtra = 0;
+		SinceDrain = 0;
+		DrainPending = 1;
 	}
 	VBlankFailed = 0;
 	VBlankTime = appSeconds();
@@ -466,8 +470,16 @@ void FVSyncStep::GPUMissed( DOUBLE Due )
 	if( appSeconds() >= Due - 0.0005 && UC2PresentDone() == 0 )
 	{
 		GPULateDue = Due;
-		Calm = 0;
+		if( DrainPending && SinceDrain >= 2 )
+			DrainFailed();
 	}
+}
+
+void FVSyncStep::DrainFailed()
+{
+	DrainPending = 0;
+	DrainBackoff = Clamp( DrainBackoff * 2.0, 2.0, 64.0 );
+	NextDrain = appSeconds() + DrainBackoff;
 }
 #endif
 
