@@ -601,9 +601,10 @@ refresh it missed, so a frame slower than the display costs no further refresh. 
 frame kept to (a variable refresh rate shows a late frame when it comes): the steps keep the lock through a late frame
 among frames on time, and frames that are all late step by the measured time. Two swaps that return within one
 refresh (the frame after a late one, started at once, can hand its picture over in the refresh the late one's picture
-went in) leave one more picture in the driver's queue, a refresh more from every swap to the screen from then on: the
-next frame then waits until a refresh has gone by without a new picture, the queued one shows in it, and the queue is
-back to one. Frames slower than the display never hand two pictures over in one refresh, and keep their rate.
+went in) leave one more picture in the driver's queue, a refresh more from every swap to the screen. That frame of
+slack takes up the next late frames without a repeat; after 120 frames ended by a wait without a late one, a frame
+waits one refresh more, which the queued picture fills, and the queue is back to one. Frames slower than the display
+never hand two pictures over in one refresh, and keep their rate.
 120 frames ended by a wait without the
 lock (waits that keep no steady period: a variable refresh rate, where the display waits for the frame; late frames do
 not count) end the waits for the session (logged), and the swaps' returns step the world as elsewhere. After 120 waits in a row that

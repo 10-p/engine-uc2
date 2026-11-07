@@ -228,7 +228,7 @@ public:
 	,	LastCount(-1), Clock(0.0), Fits(0), FitIndex(0), Locked(0), LoggedLock(0)
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	,	LastFromVBlank(0), VBlankTime(0.0), VBlankWaited(0.0), VBlankCount(0), StepVBlankCount(0), VBlankUnlocked(0)
-	,	VBlankLate(0), VBlankSwapCount(-1), LastSwapReturn(0.0), DrainUntil(0.0), VBlankFailed(0), VBlankRetry(0.0)
+	,	VBlankLate(0), VBlankSwapCount(-1), LastSwapReturn(0.0), QueueExtra(0), Calm(0), VBlankFailed(0), VBlankRetry(0.0)
 	,	VBlankOff(0), VBlankWanted(0), LoggedSwapFar(0), SwapFar(0.0), SwapSeen(0.0)
 #endif
 	{
@@ -262,7 +262,8 @@ private:
 	UBOOL	VBlankLate;			// the last frame ran past its refresh: no wait, its time is the refresh it missed
 	INT		VBlankSwapCount;	// the swaps the last wait saw, and when the last of them returned
 	DOUBLE	LastSwapReturn;
-	DOUBLE	DrainUntil;			// no frame starts before this vertical blank: the driver's queue loses a picture
+	UBOOL	QueueExtra;			// the driver's queue holds a picture more than the one in hand
+	INT		Calm;				// frames ended by a wait since the last late frame
 	INT		VBlankUnlocked;		// frames ended by a wait without the lock, since the last with it
 	INT		VBlankFailed;		// waits in a row the platform could not make
 	DOUBLE	VBlankRetry;		// after 120 of those, when to try again
@@ -352,24 +353,25 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 	const DOUBLE Start = appSeconds();
 	const DOUBLE Period = Nominal > 0.0 ? SumIntervals / SumRefreshes : 0.0;
 	// Two swaps that return within one refresh (a frame that started at once after a late one) leave one more picture
-	// in the driver's queue, a refresh more from every swap to the screen from then on. The next frame then waits until
-	// a refresh has gone by without a new picture: the queued one shows in it, and the queue is back to one.
+	// in the driver's queue, a refresh more from every swap to the screen. That frame of slack takes up the next late
+	// frames; after 120 frames without one, a frame waits one refresh more, which the queued picture fills, and the
+	// queue is back to one.
 	if( Count != VBlankSwapCount )
 	{
 		if( VBlankSwapCount >= 0 && VBlankCount && Period > 0.0
 		&&	appFloor( (Present - VBlankTime) / Period ) == appFloor( (LastSwapReturn - VBlankTime) / Period ) )
-			DrainUntil = VBlankTime + (appFloor( (Present - VBlankTime) / Period ) + 2.0) * Period;
+			QueueExtra = 1;
 		LastSwapReturn = Present;
 		VBlankSwapCount = Count;
 	}
-	const UBOOL Draining = Start < DrainUntil - 0.25 * Period;
 	// A frame that ran past its refresh starts the next at once, on the refresh it missed: a wait would lose another.
-	if( VBlankCount && Period > 0.0 && !Draining && Start - VBlankTime > Period && Start - VBlankTime < 8.0 * Period )
+	if( VBlankCount && Period > 0.0 && Start - VBlankTime > Period && Start - VBlankTime < 8.0 * Period )
 	{
 		VBlankTime += appFloor( (Start - VBlankTime) / Period ) * Period;
 		VBlankWaited = 0.0;
 		VBlankLate = 1;
 		VBlankCount++;
+		Calm = 0;
 		return;
 	}
 	// A platform without the wait fails every time, a display being set up or reset for a while: after 120 failures in
@@ -391,9 +393,14 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 		// at the display's rate nothing drains a queue later.
 		for( INT i=0; i<3; i++ )
 			appWaitDisplayVBlank( Bounds.x + Bounds.w / 2, Bounds.y + Bounds.h / 2 );
+		QueueExtra = 0;
+		Calm = 0;
 	}
-	for( INT i=0; i<2 && Draining && appSeconds() < DrainUntil - 0.25 * Period; i++ )
+	else if( (Calm = Min( Calm + 1, 1000 )) >= 120 && QueueExtra )
+	{
 		appWaitDisplayVBlank( Bounds.x + Bounds.w / 2, Bounds.y + Bounds.h / 2 );
+		QueueExtra = 0;
+	}
 	VBlankFailed = 0;
 	VBlankTime = appSeconds();
 	VBlankWaited = VBlankTime - Start;
