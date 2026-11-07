@@ -268,7 +268,7 @@ public:
 	,	LastCount(-1), Clock(0.0), Fits(0), FitIndex(0), Locked(0), LoggedLock(0)
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	,	LastFromVBlank(0), VBlankTime(0.0), VBlankWaited(0.0), VBlankCount(0), StepVBlankCount(0), VBlankUnlocked(0)
-	,	VBlankFailed(0), VBlankOff(0)
+	,	VBlankFailed(0), VBlankRetry(0.0), VBlankOff(0)
 #endif
 	{
 		appMemzero( FitHistory, sizeof(FitHistory) );
@@ -300,7 +300,8 @@ private:
 	INT		StepVBlankCount;	// the waits the last step saw
 	INT		VBlankUnlocked;		// frames in a row ended by a wait without the lock
 	INT		VBlankFailed;		// waits in a row the platform could not make
-	UBOOL	VBlankOff;			// no more waits: the platform has none, or the vertical blanks keep no steady period
+	DOUBLE	VBlankRetry;		// after 120 of those, when to try again
+	UBOOL	VBlankOff;			// no more waits: the vertical blanks keep no steady period
 #endif
 	void ReadNominal( UEngine* Engine );
 	FLOAT Unlock( FLOAT Measured );
@@ -407,15 +408,21 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 		VBlankCount++;
 		return;
 	}
+	// A platform without the wait fails every time, a display being set up or reset for a while: after 120 failures in
+	// a row the frames end at the swaps, with one more try every two seconds.
+	if( VBlankFailed >= 120 && Start < VBlankRetry )
+		return;
 	if( !appWaitDisplayVBlank( Bounds.x + Bounds.w / 2, Bounds.y + Bounds.h / 2 ) )
 	{
-		// A platform without the wait fails every time; a display being reset, for a moment.
-		VBlankOff = ++VBlankFailed >= 120;
+		if( ++VBlankFailed == 120 )
+			debugf( NAME_Init, TEXT("Frame pacing: no vertical blank wait for the display, frames end at the swaps") );
+		if( VBlankFailed >= 120 )
+			VBlankRetry = Start + 2.0;
 		return;
 	}
-	VBlankFailed = 0;
-	if( !VBlankCount )
+	if( !VBlankCount || VBlankFailed >= 120 )
 		debugf( NAME_Init, TEXT("Frame pacing: under vsync each frame ends at the display's vertical blank") );
+	VBlankFailed = 0;
 	VBlankTime = appSeconds();
 	VBlankWaited = VBlankTime - Start;
 	VBlankCount++;

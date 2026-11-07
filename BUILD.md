@@ -608,8 +608,11 @@ that runs past its refresh (by less than 8 refreshes) does not wait: the next st
 refresh it missed, so a frame slower than the display costs no further refresh; but after a swap that waited a
 quarter refresh or more for room in the driver's queue it waits, so that queue drains to one frame. Waits
 that keep no steady period for 120 frames in a row (a variable refresh rate, where the display waits for the frame) end
-the waits for the session (logged), and the swaps' returns step the world as elsewhere. Linux, the web and Android have
-no such wait.
+the waits for the session (logged), and the swaps' returns step the world as elsewhere. After 120 waits in a row that
+the graphics kernel refuses (a display being set up or reset; the first refusal is logged with its status,
+`Display vertical blank: ... failed (status 0x...)`) the frames end at the swaps, logged as `Frame pacing: no vertical
+blank wait for the display, frames end at the swaps`, and the wait is tried again every two seconds. Linux, the web and
+Android have no such wait (the same line, once).
 
 ## Relaunch
 
