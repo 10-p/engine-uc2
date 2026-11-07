@@ -13,6 +13,7 @@
 	The frames are kept in memory and logged together after the last one, so the recording
 	writes nothing while it runs. Lines, logged under the name PaceTrace (all times ms):
 	  pacetrace <tag> begin <frames> frames device=<class> vsync=<UseVSync> cap=<FrameRateCap> view=<W>x<H> hz=<rate>
+  pacetrace <tag> clock qpc=<ms>   (Windows: start=0 on QueryPerformanceCounter's clock, PresentMon's --qpc_time_ms)
 	  pacetrace <tag> <i> start=<t> dt=<d> tick=<d> swap0=<t> swap1=<t> end=<t> want=<d> slept=<d> swaps=<n> vbl=<r>
 	  pacetrace <tag> summary <n> frames <s> s <fps> fps; dt ...; step ...; swap wait ...; limiter ...; mismatch ...
 	start: the frame's start, where the launcher measures DeltaTime (ms since the first recorded start);
@@ -30,6 +31,12 @@
 =============================================================================*/
 
 #include "EnginePrivate.h"
+
+#ifdef _WIN32
+// kernel32's, declared here as in winbase.h: this file does not include windows.h.
+extern "C" __declspec(dllimport) int __stdcall QueryPerformanceCounter( union _LARGE_INTEGER* Count );
+extern "C" __declspec(dllimport) int __stdcall QueryPerformanceFrequency( union _LARGE_INTEGER* Frequency );
+#endif
 
 static FName PaceTraceLogName()
 {
@@ -93,6 +100,19 @@ static void PaceTraceDump()
 	const DOUBLE T0 = GPaceFrames(0).Start;
 	#define PACE_MS(t) ((t) > 0.0 ? 1000.0 * ((t) - T0) : -1.0)
 	debugf( PACETRACE, TEXT("%s"), *GPaceBegin );
+#ifdef _WIN32
+	// The trace's zero on QueryPerformanceCounter's clock (the one appSeconds() runs on), in ms: PresentMon's
+	// --qpc_time_ms times.
+	{
+		SQWORD Frequency = 0, Count = 0;
+		QueryPerformanceFrequency( (union _LARGE_INTEGER*)&Frequency );
+		QueryPerformanceCounter( (union _LARGE_INTEGER*)&Count );
+		const DOUBLE Now = appSeconds();
+		if( Frequency > 0 )
+			debugf( PACETRACE, TEXT("pacetrace %s clock qpc=%.4f"), *GPaceTag,
+				1000.0 * ((DOUBLE)Count / (DOUBLE)Frequency - (Now - T0)) );
+	}
+#endif
 	SQWORD Refresh0 = -1;	// refresh counts are logged from the first one known
 	for( INT i=0; i<N && Refresh0<0; i++ )
 		Refresh0 = GPaceFrames(i).Refresh;

@@ -562,7 +562,8 @@ Frame pacing: the console command `PACETRACE [<frames> [tag]]` (1200 frames by d
 each: the frame's start and its DeltaTime (where the launcher measures it), the step the engine ticked with, the swap's
 call and return, when `UEngine::Tick` returned, the frame limiter's requested sleep and how long it took and, on
 Windows, the display's refresh count at the swap's return (the desktop compositor's clock of the vertical blanks,
-`appDisplayVBlank`); then a summary line (`Source/Engine/Src/UC2PaceTrace.cpp`). `tools/dev/pace-analyze.py <log>`
+`appDisplayVBlank`); then a summary line (`Source/Engine/Src/UC2PaceTrace.cpp`). On Windows a `clock qpc=` line gives
+the trace's zero on the performance counter's clock, the one of PresentMon's `--qpc_time_ms` times. `tools/dev/pace-analyze.py <log>`
 reads them: the game-time steps against the time between pictures on the display (the swaps on the refresh grid, a
 frame's picture going out with the next frame's swap), repeated and skipped frames, the limiter's oversleep.
 `tools/dev/pace-run.sh <name> <tree> [frames]` runs a match in a window on this machine's screen at a fixed spot
