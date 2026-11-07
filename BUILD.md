@@ -585,18 +585,20 @@ vsync or frame cap is not seen by the engine: the measured time.
 
 On Windows each frame under vsync ends by waiting for the next vertical blank of the window's display, after the frame
 cap's wait (`FVSyncStep::WaitVBlank`; `appWaitDisplayVBlank`, the graphics kernel's vertical blank event; logged once,
-`Frame pacing: under vsync each frame ends at the display's vertical blank`). The next frame then starts, reads its input
+`Frame pacing: under vsync each frame ends at the display's vertical blank`; that first frame waits for three more,
+so the frames the driver queued before are shown and the waits start on an empty queue: at the display's rate nothing
+drains it later). The next frame then starts, reads its input
 and moves the world on at a refresh, and the steps count the refreshes between those waits in place of the swaps':
 a swap that waits for the refresh can return milliseconds before or after it, and unevenly from frame to frame, where
 the driver queues frames ahead. The swap then finds a free buffer and the picture shows at the next refresh. A frame
 that runs past its refresh (by less than 8 refreshes) does not wait: the next starts at once and counts from the
-refresh it missed, so a frame slower than the display costs no further refresh; but after a swap that waited a
-quarter refresh or more for room in the driver's queue it waits, so that queue drains to one frame. Waits
+refresh it missed, so a frame slower than the display costs no further refresh. Waits
 that keep no steady period for 120 frames in a row (a variable refresh rate, where the display waits for the frame) end
 the waits for the session (logged), and the swaps' returns step the world as elsewhere. After 120 waits in a row that
 the graphics kernel refuses (a display being set up or reset; the first refusal is logged with its status,
 `Display vertical blank: ... failed (status 0x...)`) the frames end at the swaps, logged as `Frame pacing: no vertical
-blank wait for the display, frames end at the swaps`, and the wait is tried again every two seconds. Linux, the web and
+blank wait for the display, frames end at the swaps`, and the wait is tried again every two seconds; when it works
+again the waits start as at first, three refreshes on, logged. Linux, the web and
 Android have no such wait (the same line, once).
 
 ## Relaunch
