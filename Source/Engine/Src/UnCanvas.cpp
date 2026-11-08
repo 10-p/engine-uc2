@@ -12,24 +12,21 @@ Revision history:
 #include "UnLinker.h"	// A font's package export table (sharper text)
 #include "wordwrap.h"
 
-#ifdef _XBOX
-#define DEFAULT_FONT TEXT("T_Fonts2.SuiGeneris_12pt")
-#else
-#define DEFAULT_FONT TEXT("WarfareFonts.DefaultFont")
-#endif
-
 static UFont* FallbackFont=NULL;
 
-// The canvas's default font: DEFAULT_FONT where the game folder has it
+static UFont* LoadFontNoWarn( const TCHAR* Name )
+{
+	return Cast<UFont>(UObject::StaticLoadObject(UFont::StaticClass(),NULL,Name,NULL,LOAD_NoWarn,NULL));
+}
+
+// The canvas's default font, where script sets none (the console's typing line): the Xbox build's in the game, the PC's
+// small font in the editor. A game folder cooked from the Xbox disc has no WarfareFonts.DefaultFont.
 static UFont* LoadDefaultFont()
 {
-	UFont* DefaultFont = Cast<UFont>(UObject::StaticLoadObject(UFont::StaticClass(),NULL,DEFAULT_FONT,NULL,LOAD_NoWarn,NULL));
-#ifndef _XBOX
-	// A game folder cooked from the Xbox disc has no WarfareFonts.DefaultFont: the Xbox build's default font
-	if( !DefaultFont )
-		DefaultFont = Cast<UFont>(UObject::StaticLoadObject(UFont::StaticClass(),NULL,TEXT("T_Fonts2.SuiGeneris_12pt"),NULL,LOAD_NoWarn,NULL));
-#endif
-	return DefaultFont;
+	const TCHAR* GameFont = TEXT("T_Fonts2.SuiGeneris_12pt");
+	const TCHAR* EditorFont = TEXT("WarfareFonts.DefaultFont");
+	UFont* DefaultFont = LoadFontNoWarn( GIsEditor ? EditorFont : GameFont );
+	return DefaultFont ? DefaultFont : LoadFontNoWarn( GIsEditor ? GameFont : EditorFont );
 }
 
 /*-----------------------------------------------------------------------------
