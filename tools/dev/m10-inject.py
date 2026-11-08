@@ -453,6 +453,7 @@ LEVEL_RX = re.compile(r'Bringing Level \S+ up for play')
 SWALLOW_RX = re.compile(r'Active blocking animation \(\d+ frames\) - Swallowing input')
 PRESS_RX = {'key': re.compile(r'\bkey \S+ press \(viewport'),
             'pad': re.compile(r'\bpad \d+ (Joy\w+ press|button \d+ value \d+ >)')}
+NO_OPENING_BLOCK = {'StartMenu'}    # pages whose opening animation takes input all along: no Unblocking line
 pages = []       # the open pages, bottom to top: [name, opening animation ended]
 ready_scan = 0
 
@@ -464,7 +465,7 @@ def ready_update():
         line = log_lines[i]
         m = OPEN_RX.search(line)
         if m:
-            pages.append([m.group(1), False])
+            pages.append([m.group(1), m.group(1) in NO_OPENING_BLOCK])
             continue
         m = UNBLOCK_RX.search(line)
         if m:

@@ -413,7 +413,7 @@ ALLOW
   cat > "$gout/allow-avaris.txt" <<'ALLOW'
 ^\[engine\.engine\]\.scriptsaveconfig=	this task: the setting itself (m2: the -ini: override is written back, C-1)
 ^\[sdl2drv\.sdl2client\]\.	the viewport/window settings the client writes when it opens its window (SDL2Viewport.cpp SaveConfig)
-^\[uc2movie\]\.	the runner's -ini:System:[UC2Movie]:StartupMovies=False is written back like any -ini: value (C-1)
+^\[uc2movie\]\.	the runner's -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[Engine.GameEngine]:MainMenuClass=UCMenu.UC2MainMenu is written back like any -ini: value (C-1)
 ALLOW
   # the derived files of a first start: a run to the main menu only, then compared with the finished session
   echo "== m0: the files a first start derives (main menu only), the baseline for the allow-list"

@@ -45,7 +45,7 @@ inner=$(mktemp)
 cat > "$inner" <<INNER
 cd "$sys" || exit 1
 # M9: -ini:System:[UC2Movie]:StartupMovies=False keeps the captures as they were (the logos would add 20 s of their own sound first)
-env ${UC2_AUDIO_ENV:-} ./uc2.bin "$url" -log -ini:System:[UC2Movie]:StartupMovies=False "-ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=$out/$name.wav" "\$@" > "$out/$name.out" 2>&1 &
+env ${UC2_AUDIO_ENV:-} ./uc2.bin "$url" -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[Engine.GameEngine]:MainMenuClass=UCMenu.UC2MainMenu "-ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=$out/$name.wav" "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
 # M16: the game's peak resident memory (VmHWM), sampled every second (the run is killed at the end, not shut down).
 ( while kill -0 \$pid 2>/dev/null; do grep VmHWM /proc/\$pid/status > "$out/$name.hwm.tmp" 2>/dev/null && mv -f "$out/$name.hwm.tmp" "$out/$name.hwm"; sleep 1; done ) &

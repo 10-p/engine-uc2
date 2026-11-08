@@ -29,7 +29,7 @@ def peer_start(name):
     open(os.path.join(sysdir, chan), 'w').close()
     argv = ['./uc2.bin', '127.0.0.1:%d?Name=%s' % (PORT, name), '-log', 'INI=Peer%s.ini' % name,
             'USERINI=Peer%sUser.ini' % name, 'LOG=' + log, '-UFRONTLOG', '-nullrenderer',
-            '-ini:System:[UC2Movie]:StartupMovies=False', '-ini:System:[SDL2Drv.SDL2Client]:InputTestFile=' + chan,
+            '-ini:System:[UC2Movie]:StartupMovies=False -ini:System:[Engine.GameEngine]:MainMenuClass=UCMenu.UC2MainMenu', '-ini:System:[SDL2Drv.SDL2Client]:InputTestFile=' + chan,
             '-ini:System:[IpDrv.UdpBeacon]:ServerBeaconPort=%d' % (PORT + 1),
             '-ini:System:[IpDrv.UdpBeacon]:BeaconPort=%d' % (PORT + 2)]
     env = dict(os.environ, SDL_VIDEODRIVER='offscreen', SDL_AUDIODRIVER='dummy',

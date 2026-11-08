@@ -1,0 +1,79 @@
+--- a/UCMenu/Classes/StartMenu.uc
++++ b/UCMenu/Classes/StartMenu.uc
+@@ -108,6 +108,9 @@
+ var()			Material			LogoMovie[3];
+ 
+ var() transient	bool				bStartedLoad;
++
++// start-menu: the shipped caption, for a pad; ANYKEYPROMPT says what to show instead on the keyboard or the mouse.
++var transient	string				PadPrompt;
+ 
+ 
+ 
+@@ -390,7 +393,7 @@
+ 	local UIXInteraction UIX;
+ 	local bool bOldStartMenuShown;
+ 
+-	if ( iCode == XC_Start )
++	if ( iCode == XC_Start || KeysPrompt() != "" )
+ 	{
+ 		UIX = UIXInteraction(class'UIXInteraction'.static.GetUIXInteraction());
+ 
+@@ -436,6 +439,40 @@
+ 
+ 
+ 
++// start-menu: what to ask player one for while they use the keyboard or the mouse; empty on a pad.
++final function string KeysPrompt()
++{
++	return PlayerOwner().ConsoleCommand("ANYKEYPROMPT");
++}
++
++// start-menu: the prompt follows player one's device.
++final function bool PreDrawPrompt( Canvas C )
++{
++	local string Prompt;
++
++	Prompt = KeysPrompt();
++	lbl_PressStart.Caption = Prompt != "" ? Prompt : PadPrompt;
++	return false;
++}
++
++// start-menu: a key the menus do not map to a pad button, on the keyboard. Modifiers, locks, function and system keys are
++// not an answer: they mean something else to the window, the browser or the desktop. The console key opens the console.
++final function bool InternalOnKeyEvent( out byte Key, out byte State, float Delta )
++{
++	if ( State != 1 || KeysPrompt() == "" )
++		return false;
++	if ( Key == 0x10 || Key == 0x11 || Key == 0x12 || Key == 0x13 || Key == 0x14 || Key == 0x2C
++		|| (Key >= 0x5B && Key <= 0x5D) || (Key >= 0x70 && Key <= 0x91) || (Key >= 0xA0 && Key <= 0xA5) || Key == 0xC0 )
++		return false;
++	return InternalOnXControllerEvent(Self, 0, XC_Start);
++}
++
++// start-menu: the left mouse button.
++final function bool InternalOnClick( GUIComponent Sender )
++{
++	return InternalOnXControllerEvent(Self, 0, XC_Start);
++}
++
+ event EMenuInputMode GetMenuInputMode()
+ {
+ 	return MIM_Unbound;
+@@ -470,6 +507,7 @@
+ 
+ 	
+ 	img_Movie.Image = LogoMovie[Rand(3)];
++	PadPrompt = lbl_PressStart.Caption;
+ }
+ 
+ event Opened(GUIComponent Sender)
+@@ -774,4 +812,8 @@
+ 	Background=Texture't_ui_2.Main.XX_Background'
+ 	BackgroundRStyle=MSTY_Alpha
+ 	OnXControllerEvent=InternalOnXControllerEvent
++	OnPreDraw=PreDrawPrompt
++	OnKeyEvent=InternalOnKeyEvent
++	OnClick=InternalOnClick
++	bAcceptsInput=True
+ }

@@ -257,7 +257,7 @@ def scen_menu(a, tmp):
     # 640x480 whatever the tree's Default.ini says (run-uc2-shot.sh's UC2_RES leaves a tree at 1280x720, and the
     # regions below are measured on a 640x480 picture). The game ends itself at 100 s after its
     # first frame (its last line gives the GL error count); the limit of 150 s only stops a hang.
-    text, shots, dt, left = run_game(a.tree, 'menu-movie', 150, ['-log', '-ini:System:[UC2Movie]:StartupMovies=False', '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True', '-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True',
+    text, shots, dt, left = run_game(a.tree, 'menu-movie', 150, ['-log', '-ini:System:[UC2Movie]:StartupMovies=False -ini:System:[Engine.GameEngine]:MainMenuClass=UCMenu.UC2MainMenu', '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True', '-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True',
                                      '-ini:System:[SDL2Drv.SDL2Client]:WindowedViewportX=640', '-ini:System:[SDL2Drv.SDL2Client]:WindowedViewportY=480',
                                      '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=100:exit'] + a.menu_args,
                                      inject=a.menu_inject)
@@ -308,7 +308,7 @@ def cine_exec(tree):
 def scen_cinematic(a, tmp):
     out = os.path.join(work, 'logs', a.tree)
     wav = os.path.join(out, 'm9-cinematic.wav')
-    text, shots, dt, left = run_game(a.tree, 'cinematic', 150, [cine_exec(a.tree), '-log', '-ini:System:[UC2Movie]:StartupMovies=False', '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True', '-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True',
+    text, shots, dt, left = run_game(a.tree, 'cinematic', 150, [cine_exec(a.tree), '-log', '-ini:System:[UC2Movie]:StartupMovies=False -ini:System:[Engine.GameEngine]:MainMenuClass=UCMenu.UC2MainMenu', '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True', '-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True',
                                      '-ini:System:[UC2Movie]:ShotTimes=5,14', '-ini:System:[UC2ALAudio.UC2ALAudioSubsystem]:WaveFile=%s' % wav], alsoft='wave')
     ls = re.search(r'UC2Movie: loading screen for DM-Deadbolt[^\n]*', text)
     result('cinematic-loading-screen', bool(ls), ls.group(0) if ls else 'no loading screen line')
@@ -347,7 +347,7 @@ def scen_cinematic(a, tmp):
 def scen_cinematic_skip(a, tmp):
     # ShotTimes=60: with CheckGLErrors the driver logs its frame counter at the picture, so "the level renders
     # afterwards" does not depend on reaching the periodic 600-frame line (missed on a loaded machine).
-    text, shots, dt, left = run_game(a.tree, 'cinematic-skip', 120, [cine_exec(a.tree), '-log', '-ini:System:[UC2Movie]:StartupMovies=False', '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True', '-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True', '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=60'],
+    text, shots, dt, left = run_game(a.tree, 'cinematic-skip', 120, [cine_exec(a.tree), '-log', '-ini:System:[UC2Movie]:StartupMovies=False -ini:System:[Engine.GameEngine]:MainMenuClass=UCMenu.UC2MainMenu', '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True', '-ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True', '-ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotTimes=60'],
                                      inject='UC2Movie: full-screen D:|3.0|Return')
     s = re.search(r'UC2Movie: D:\\Movies\\%s\.xmv skipped by a key or button at movie time ([\d.]+) s[^\n]*' % CINE, text)
     after = text[s.end():] if s else ''

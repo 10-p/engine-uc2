@@ -305,6 +305,25 @@ UBOOL UEngine::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
 	guard(UEngine::Exec);
 
+	// ANYKEYPROMPT: what the start screen (script set start-menu) asks player one to press while they use the keyboard
+	// or the mouse, in the game's language; nothing on a pad, where the screen keeps its own PRESS START.
+	{
+		const TCHAR* PromptStr = Cmd;
+		if( ParseCommand(&PromptStr,TEXT("ANYKEYPROMPT")) )
+		{
+			if( GKeyGlyphs.KeysActive() )
+			{
+				const TCHAR* Language = UObject::GetLanguage();
+				Ar.Log( !appStricmp(Language,TEXT("deu")) ? TEXT("TASTE DR\xDC" "CKEN")
+					: !appStricmp(Language,TEXT("fra")) ? TEXT("APPUYEZ SUR UNE TOUCHE")
+					: !appStricmp(Language,TEXT("ita")) ? TEXT("PREMI UN TASTO")
+					: !appStricmp(Language,TEXT("spa")) ? TEXT("PULSA UNA TECLA")
+					: TEXT("PRESS ANY KEY") );
+			}
+			return 1;
+		}
+	}
+
 	// FLUSHCONFIG: write the config cache to the file system now (the web host calls it through ue_exec_command,
 	// SDLLaunchWeb.cpp, before it reads the inis to keep them). A browser tab is closed, never shut down, so
 	// nothing may wait for appExit's flush; and a

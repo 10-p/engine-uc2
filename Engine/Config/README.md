@@ -30,6 +30,7 @@ same.
 | `[Engine.Engine] ScriptSaveConfig` | (none: `SaveConfig()` / `StaticSaveConfig()` compiled to no-ops on PC and Xbox) | `True` | Script's `SaveConfig()` writes the object's config properties to its ini (a globalconfig property another class sets is left out and logged); `False` is Epic's no-op. |
 | `[Engine.Engine] OverlayCameraClass` | (none; `DefaultXbox.ini` has it) | `UCGameplay.UCOverlayCamera` | The Xbox's value: the overlay camera of the split-screen views. |
 | `[Core.System] Suppress` | Epic's list | `+KeyGlyphs` | The key glyphs' log lines stay out of the log unless asked for. |
+| `[Engine.GameEngine] MainMenuClass` | (none; `DefaultXbox.ini` has it) | `UCMenu.StartMenu` | The game opens on the start screen, as on the Xbox; patch set `start-menu` fits it to a PC. A saved ini without the key opens the main menu (`UCMenu.UC2MainMenu`, the class default). |
 | `[Engine.GameEngine] FpsLogSeconds` | (none) | `0` (off) | `>0` logs one `FPS:` line every that many seconds (frames, fps, frame time avg/min/max/p99, 1% low); console `FPSLOG <s>`. |
 | `[Engine.GameReplicationInfo] ServerName` | `Another Unreal Server` | `Liandri Corporation` | The Xbox's session name (the profile default), also for a host without a profile. |
 | new section `[UC2ALAudio.UC2ALAudioSubsystem]` | (none) | `OutputDevice=`, `MaxVoices=64`, `ZoneReverb=True`, `UseEFX=True`, `MusicFades=True`, `CueLog=True`, `UseHRTF=False` | The audio device's settings. `Backends` (not written) is OpenAL Soft's backend order, compiled `pipewire,pulse,alsa,oss`, passed as `ALSOFT_DRIVERS` unless the environment sets it; `WaveFile=<file>` renders to a WAV through OpenAL Soft's wave writer (tests). `ZoneReverb` and `MusicFades` differ from the Xbox code (zone reverb was compiled out, fades ignored): `False` gives its behaviour. `CueLog` writes a `DevSound` line per cue (DevSound stays suppressed). `UseHRTF` asks OpenAL Soft for headphone virtualisation (its embedded data set), the key and default engine-ut2004 uses. |
@@ -163,3 +164,4 @@ pre-commit gate checks the inis; its `docs/CONVENTIONS.md`, section "Ini config 
 | Version | What a player on the version before lacks |
 |---|---|
 | `1` | The defaults when the number was introduced: a live ini without the section may lack any of them. |
+| `2` | `[Engine.GameEngine] MainMenuClass=UCMenu.StartMenu`: the game opens on the start screen before the main menu. |

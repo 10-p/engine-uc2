@@ -112,7 +112,7 @@ class Proc:
             argv = ([] if OFFSCREEN else ["xvfb-run", "-a", "-s", "-screen 0 1024x768x24"]) + ["./uc2.bin"] + ([self.url] if self.url else []) + ["-log"] + common
             # StartupMovies=False: with the GL device the logos would play first and own the input.
             # (The virtual pad is player one here: the default, [SDL2Drv.SDL2Client] PadsStartAtPlayerTwo=False.)
-            argv += ["-ini:System:[SDL2Drv.SDL2Client]:InputTestFile=" + os.path.basename(self.inputcmd), "-ini:System:[UC2Movie]:StartupMovies=False"]
+            argv += ["-ini:System:[SDL2Drv.SDL2Client]:InputTestFile=" + os.path.basename(self.inputcmd), "-ini:System:[UC2Movie]:StartupMovies=False -ini:System:[Engine.GameEngine]:MainMenuClass=UCMenu.UC2MainMenu"]
             if self.kind == "listen":
                 argv += ["PORT=%d" % PORT]
             if self.render == "null":

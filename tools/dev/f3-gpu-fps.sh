@@ -24,7 +24,7 @@ NOAA=$("$glini" NumAASamples=0)
 FXNOAA="-glnoaa"   # the FXAA binary predates the test keys
 one() {  # one <name> <binary> <args...>
   local name=$1 bin=$2; shift 2
-  ( cd "$sys" && SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy "$work/bin/capped" 2G 75 -- ./$bin DM-Deadbolt -log -ini:System:[UC2Movie]:StartupMovies=False $("$glini" Stats=True CheckGLErrors=True) "$@" > "$out/gpu-fps-$name.out" 2>&1 )
+  ( cd "$sys" && SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy "$work/bin/capped" 2G 75 -- ./$bin DM-Deadbolt -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[Engine.GameEngine]:MainMenuClass=UCMenu.UC2MainMenu $("$glini" Stats=True CheckGLErrors=True) "$@" > "$out/gpu-fps-$name.out" 2>&1 )
   local ms; ms=$(grep -a -o "stats: frames [0-9]*-[0-9]*: [0-9.]* ms/frame" "$out/gpu-fps-$name.out" | tail -n +2 | sed -E 's/.*: ([0-9.]+) ms.*/\1/' | awk '{s+=$1;n++} END{if(n) printf "%.2f ms/frame (%.1f frames/s) over %d stats lines", s/n, 1000*n/s, n; else print "no stats line"}')
   echo "$name: $ms; $(grep -a -o 'GLES hardware: [^/]*/ [^(]*\|GL_RENDERER *: .*' "$out/gpu-fps-$name.out" | head -1); $(grep -a -o 'anti-aliasing: .*' "$out/gpu-fps-$name.out" | head -1); $(grep -a -o '[0-9]* GL errors so far' "$out/gpu-fps-$name.out" | tail -1)"
 }

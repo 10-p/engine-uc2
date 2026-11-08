@@ -59,7 +59,7 @@ ctrun() {
   # and would otherwise carry over to the next run.
   rm -f "$sys/Avaris.ini"
   "$capped" 2G 180 -- xvfb-run -a -s "-screen 0 1280x720x24" bash -c \
-    "cd '$sys' && $env ./uc2.bin -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CombinerTest=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=50:exit $* > '$out/ct-$name.out' 2>&1"
+    "cd '$sys' && $env ./uc2.bin -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[Engine.GameEngine]:MainMenuClass=UCMenu.UC2MainMenu -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0 -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CheckGLErrors=True -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:CheckGLErrors=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:CombinerTest=True -ini:System:[UC2GLDrv.UC2GLRenderDevice]:Exec=50:exit $* > '$out/ct-$name.out' 2>&1"
 }
 # Judge one run: expect "all" (0 failed) or "three" (exactly the three-operand cases fail). ctcheck <check> <name> <expect> <what>
 ctcheck() {

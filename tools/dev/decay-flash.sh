@@ -58,7 +58,7 @@ glargs="$glargs -ini:System:[UC2GLDrv.UC2GLRenderDevice]:ShotRamp=False"
 inner=$(mktemp)
 cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0x0000/0x0000 $video ./$bin "$map$url" -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" $glargs "\$@" > "$out/$tag.out" 2>&1 &
+SDL_AUDIODRIVER=dummy SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0x0000/0x0000 $video ./$bin "$map$url" -log -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[Engine.GameEngine]:MainMenuClass=UCMenu.UC2MainMenu -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" $glargs "\$@" > "$out/$tag.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$tag.out" "$chan" "$out/$tag.result" > "$out/$tag.inject" 2>&1
 kill -TERM \$pid 2>/dev/null

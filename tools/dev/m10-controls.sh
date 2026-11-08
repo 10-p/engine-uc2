@@ -6,6 +6,8 @@
 #   tools/dev/m10-controls.sh standby            opt-in: the listen host's "waiting for players" box (StandbyWaitMenu)
 #                                                with a second game as its client (tools/dev/m10-peer.py), frozen for
 #                                                a moment; UDP M10_NET_PORT (default 7880) to M10_NET_PORT+2
+#   tools/dev/m10-controls.sh start              opt-in: the start screen (UCMenu.StartMenu) on the keyboard, the mouse and
+#                                                a pad; every other scenario opens the main menu directly
 #   tools/dev/m10-controls.sh --file <scenario> <name> [uc2.bin arguments...]   one ad-hoc scenario file
 #
 # Needs the run tree <repo>/../run/m10 (tools/dev/mkrun-uc2.sh build-native m10). Each scenario is one game
@@ -116,7 +118,7 @@ run_one() {
   inner=$(mktemp)
   cat > "$inner" <<INNER
 cd "$sys" || exit 1
-SDL_AUDIODRIVER=dummy SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0x0000/0x0000 UC2_WINE_DISPLAY=\$DISPLAY $launch ${M10_URL:+"$M10_URL"} -log -UFRONTLOG -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0 -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" $rampar "\$@" > "$out/$name.out" 2>&1 &
+SDL_AUDIODRIVER=dummy SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0x0000/0x0000 UC2_WINE_DISPLAY=\$DISPLAY $launch ${M10_URL:+"$M10_URL"} -log -UFRONTLOG -ini:System:[UC2Movie]:StartupMovies=False -ini:System:[Engine.GameEngine]:MainMenuClass=UCMenu.UC2MainMenu -ini:System:[UC2GLDrv.UC2GLRenderDevice]:NumAASamples=0 -ini:System:[UC2GL4ESDrv.UC2GL4ESRenderDevice]:NumAASamples=0 -ini:System:[SDL2Drv.SDL2Client]:InputTestFile="$chan" $rampar "\$@" > "$out/$name.out" 2>&1 &
 pid=\$!
 python3 "$inject" "$scen" "$out/$name.out" "$chan" "$out/$name.result" > "$out/$name.inject" 2>&1
 kill -$stopsig \$pid 2>/dev/null
@@ -1062,6 +1064,51 @@ run_scenario() {
   rm -f "$f"
 }
 
+# The start screen (patch set start-menu). The harness opens the main menu directly; these three open what a player gets.
+scen_start_keys() { cat <<'SCEN'
+expect start-menu-opens OpenMenu.*UCMenu.StartMenu 150
+focus
+sleep 2
+shot start-keys
+mark
+key Shift_L
+key Control_L
+key F5
+sleep 2
+absent modifiers-and-function-keys-stay UC2MainMenu
+key p
+expect a-letter-goes-on ReplaceMenu.*UC2MainMenu 30
+SCEN
+}
+scen_start_mouse() { cat <<'SCEN'
+expect start-menu-opens OpenMenu.*UCMenu.StartMenu 150
+focus
+sleep 2
+mark
+move 200 150
+sleep 1
+absent moving-the-mouse-stays UC2MainMenu
+click 1 200 150
+expect a-click-goes-on ReplaceMenu.*UC2MainMenu 30
+SCEN
+}
+scen_start_pad() { cat <<'SCEN'
+expect start-menu-opens OpenMenu.*UCMenu.StartMenu 150
+pad attach
+sleep 2
+shot start-pad
+mark
+padpress a
+padpress b
+padpress x
+padpress y
+sleep 2
+absent other-pad-buttons-stay UC2MainMenu
+padpress start
+expect pad-start-goes-on ReplaceMenu.*UC2MainMenu 30
+SCEN
+}
+
 all="keyboard mouse text pad both"
 for s in ${@:-$all}; do
   case "$s" in
@@ -1075,6 +1122,9 @@ for s in ${@:-$all}; do
       export M10_NET_PORT=${M10_NET_PORT:-7880}
       run_scenario standby 600 PORT=$M10_NET_PORT "-ini:System:[IpDrv.UdpBeacon]:ServerBeaconPort=$((M10_NET_PORT+1))" \
         "-ini:System:[IpDrv.UdpBeacon]:BeaconPort=$((M10_NET_PORT+2))" ) ;;
-    *) echo "unknown scenario $s (known: $all; opt-in: standby)" >&2 ;;
+    start) for k in start_keys start_mouse start_pad; do
+        run_scenario $k 300 "-ini:System:[Engine.GameEngine]:MainMenuClass=UCMenu.StartMenu"
+      done ;;
+    *) echo "unknown scenario $s (known: $all; opt-in: standby, start)" >&2 ;;
   esac
 done
