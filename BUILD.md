@@ -600,9 +600,10 @@ vsync or frame cap is not seen by the engine: the measured time.
 
 Swaps that keep to the refresh but return at uneven times within it make the frames start, and read their input,
 unevenly while the pictures come evenly. The launcher measures that on every driver alike, while the steps are locked:
-the share of the swaps that return more than 6 % of a refresh (1 ms at 60 Hz) off a whole number of refreshes, over
-about the last 200 (logged once, `Frame pacing: 1 % of the swaps return over 1.00 ms off the refresh, frames under
-vsync end at the swaps`). Up to a quarter the frames keep the swaps' pacing above. Past it, on Windows, each frame
+the share of the swaps that return more than 6 % of a refresh, and at least 1 ms, off a whole number of refreshes,
+over about the last 200 (logged once, `Frame pacing: 1 % of the swaps return over 1.00 ms off the refresh, frames under
+vsync end at the swaps`). A frame the frame cap started, having waited for its due time, does not count: the cap, not
+the swap, timed its input (a cap below the display's rate). Up to a quarter the frames keep the swaps' pacing above. Past it, on Windows, each frame
 under vsync from then on ends by waiting for the next vertical blank of the window's display, after the frame cap's
 wait (`FVSyncStep::WaitVBlank`; `appWaitDisplayVBlank`, the graphics kernel's vertical blank event; logged once,
 `Frame pacing: under vsync each frame ends at the display's vertical blank`; that first frame waits for three more,
@@ -625,7 +626,8 @@ a picture the GPU has not finished by the vertical blank after its swap (the fen
 that vertical blank has passed) shows a refresh late: the next picture, handed over before that, queues behind it,
 the same frame of slack, given back the same way (nothing waits for the GPU). A queue that fills up (the GPU fell
 further behind, then caught up) makes the driver hold each swap for room in it, every frame then runs late and the
-held swaps pace the frames: two swaps in a row held half a refresh or more start the waits again, three refreshes
+held swaps pace the frames: two swaps in a row held half a refresh or more beyond the driver's usual swap (a present
+that waits for the GPU inside the swap waits that long every frame) start the waits again, three refreshes
 on, as at first (logged once, `Frame pacing: the driver's queue filled, the waits start again`). The fences cannot
 tell a GPU that holds the frames back from one waiting behind a queued picture, and a driver that holds each swap
 until its picture shows looks like a full queue, so each of those drains is checked: the queue full again, or a
