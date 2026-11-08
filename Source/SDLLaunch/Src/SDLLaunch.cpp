@@ -233,7 +233,7 @@ public:
 	,	VBlankSeen(0.0)
 	,	VBlankLate(0), VBlankSwapCount(-1), LastSwapReturn(0.0), GPULateDue(0.0), QueueExtra(0), Calm(0), HeldRun(0)
 	,	SinceDrain(1000), DrainPending(0), DrainBackoff(0.0), NextDrain(0.0), VBlankFailed(0), VBlankRetry(0.0)
-	,	VBlankOff(0), VBlankWanted(0), LoggedSwapFar(0), SwapFar(0.0), SwapSeen(0.0)
+	,	VBlankOff(0), VBlankWanted(0), LoggedSwapFar(0), SwapFar(0.0), SwapSeen(0.0), LastCapWait(0.0)
 #endif
 	{
 		appMemzero( FitHistory, sizeof(FitHistory) );
@@ -242,6 +242,7 @@ public:
 	DOUBLE RefreshPeriod( UEngine* Engine );	// the display's refresh period while the swaps wait for it, else 0
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	void WaitVBlank( UEngine* Engine );
+	void CapWaited( DOUBLE Seconds ) { LastCapWait = Seconds; }	// how long the frame cap waited this frame
 #endif
 
 private:
@@ -287,6 +288,7 @@ private:
 	UBOOL	LoggedSwapFar;
 	DOUBLE	SwapFar;			// the locked swaps over 6 % of a refresh off a whole number of refreshes, and all, decaying
 	DOUBLE	SwapSeen;
+	DOUBLE	LastCapWait;		// how long the frame cap waited for the last frame's due time (seconds)
 #endif
 	void ReadNominal( UEngine* Engine );
 	FLOAT Unlock( FLOAT Measured );
@@ -570,12 +572,14 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 	LoggedLock = 1;
 	Locked = 1;
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
-	// Locked swaps that return more than 6 % of a refresh off a whole number of refreshes, in more than a quarter of the
-	// last 200 or so, start the frames unevenly: from then on each frame ends at the vertical blank (WaitVBlank). Swaps
-	// that keep closer keep their pacing. The share is logged once either way.
-	if( !FromVBlank && !VBlankWanted && Fit )
+	// Locked swaps that return more than 6 % of a refresh (at least 1 ms) off a whole number of refreshes, in more than a
+	// quarter of the last 200 or so, start the frames unevenly: from then on each frame ends at the vertical blank
+	// (WaitVBlank). Swaps that keep closer keep their pacing. A frame the frame cap started (it waited for the due time)
+	// does not count: the cap, not the swap, timed its input. The share is logged once either way.
+	const DOUBLE Far = Max( 0.06 * Period, 0.001 );
+	if( !FromVBlank && !VBlankWanted && Fit && LastCapWait < 0.001 )
 	{
-		SwapFar = SwapFar * 0.995 + (Off > 0.06 * Period ? 1.0 : 0.0);
+		SwapFar = SwapFar * 0.995 + (Off > Far ? 1.0 : 0.0);
 		SwapSeen = SwapSeen * 0.995 + 1.0;
 		if( SwapSeen >= 150.0 && (SwapFar > 0.25 * SwapSeen || !LoggedSwapFar) )
 		{
@@ -583,7 +587,7 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 			UC2WantPresentDone( VBlankWanted );
 			LoggedSwapFar = 1;
 			debugf( NAME_Init, TEXT("Frame pacing: %.0f %% of the swaps return over %.2f ms off the refresh, frames under vsync end at %s"),
-				100.0 * SwapFar / SwapSeen, 1000.0 * 0.06 * Period,
+				100.0 * SwapFar / SwapSeen, 1000.0 * Far,
 				VBlankWanted ? TEXT("the display's vertical blank") : TEXT("the swaps") );
 		}
 	}
@@ -719,6 +723,7 @@ void CMainLoop::RunLoop()
 	UBOOL LimiterSlept = 0;	// the web yields only when the limiter did not sleep
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	UBOOL CapPaces = 0;		// the cap times this frame's swap: it waits for the due time, the display does not
+	VSyncStep.CapWaited( 0.0 );
 #endif
 	guard(EnforceTickRate);
 	if( !GIsBenchmarking && IncludeMessaging )
@@ -799,6 +804,9 @@ void CMainLoop::RunLoop()
 			Due = Due > 0.0 ? Due + Period : OldTime + Period;
 			if( Now - Due > Period )
 				Due = Now;
+#ifndef __ANDROID__
+			VSyncStep.CapWaited( Max( 0.0, Due - Now ) );
+#endif
 			appSleepUntil( Due );
 #ifndef __ANDROID__
 			// Without vsync the swap at the due time shows the frame as far as the GPU has drawn it, so the render
