@@ -260,8 +260,8 @@ static UBOOL VSyncCapRule()
 // on the swaps'. Otherwise by the measured time: no vsync, a frame without exactly one swap, swaps that return without
 // waiting (frames slower than the display), a display whose swaps keep no steady period (a variable refresh rate), a
 // game clock that strays a refresh from the swaps'. Where the platform has a wait for the display's vertical blank and
-// the locked swaps return unevenly within the refresh, each frame under vsync ends with it (WaitVBlank), and those
-// waits' returns take the place of the swaps'.
+// the swaps, a picture each refresh, return unevenly within the refresh, each frame under vsync ends with it
+// (WaitVBlank), and those waits' returns take the place of the swaps'.
 //
 class FVSyncStep
 {
@@ -276,9 +276,13 @@ public:
 	,	UsualWait(0.0), SinceDrain(1000), DrainPending(0), DrainBackoff(0.0), NextDrain(0.0), VBlankFailed(0)
 	,	VBlankRetry(0.0)
 	,	VBlankOff(0), VBlankWanted(0), LoggedSwapFar(0), SwapFar(0.0), SwapSeen(0.0), LastCapWait(0.0)
+	,	SwapReturnIndex(0), SwapReturnRun(0), LastLateCall(0)
 #endif
 	{
 		appMemzero( FitHistory, sizeof(FitHistory) );
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+		appMemzero( SwapReturns, sizeof(SwapReturns) );
+#endif
 	}
 	FLOAT Step( UEngine* Engine, FLOAT Measured );
 	DOUBLE RefreshPeriod( UEngine* Engine );	// the display's refresh period while the swaps wait for it, else 0
@@ -327,11 +331,14 @@ private:
 	INT		VBlankFailed;		// waits in a row the platform could not make
 	DOUBLE	VBlankRetry;		// after 120 of those, when to try again
 	UBOOL	VBlankOff;			// no more waits: the vertical blanks keep no steady period
-	UBOOL	VBlankWanted;		// the locked swaps return unevenly within the refresh: the frames end at the vertical blank
+	UBOOL	VBlankWanted;		// the swaps return unevenly within the refresh: the frames end at the vertical blank
 	UBOOL	LoggedSwapFar;
-	DOUBLE	SwapFar;			// the locked swaps over 6 % of a refresh off a whole number of refreshes, and all, decaying
+	DOUBLE	SwapFar;			// the swaps measured over 6 % of a refresh off a whole number of refreshes, and all, decaying
 	DOUBLE	SwapSeen;
 	DOUBLE	LastCapWait;		// how long the frame cap waited for the last frame's due time (seconds)
+	DOUBLE	SwapReturns[64];	// the last swaps' returns, and how many of them in a row came one swap a frame
+	INT		SwapReturnIndex, SwapReturnRun;
+	UBOOL	LastLateCall;		// the last swap was called over a refresh after the one before it returned
 #endif
 	void ReadNominal( UEngine* Engine );
 	FLOAT Unlock( FLOAT Measured );
@@ -610,6 +617,12 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 	LastPresent = Present;
 	LastWaited = Waited;
 	LastCount = Count;
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	const DOUBLE OldestReturn = SwapReturns[SwapReturnIndex];
+	SwapReturns[SwapReturnIndex] = Present;
+	SwapReturnIndex = (SwapReturnIndex + 1) % ARRAY_COUNT(SwapReturns);
+	SwapReturnRun = VSync && OneSwap && !FromVBlank ? Min( SwapReturnRun + 1, 1000 ) : 0;
+#endif
 	if( VSync )
 		ReadNominal( Engine );
 	const INT Mode = VSyncStepMode();
@@ -653,6 +666,34 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 		Period = SumIntervals / SumRefreshes;
 	}
 	const UBOOL Steady = Abs( Period - Nominal ) < 0.03 * Nominal;
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	// While the swaps bring a picture each refresh (the last 64 returned 64 refreshes apart in all, within 1.5 %), those
+	// that return more than 6 % of a refresh (at least 1 ms) off a whole number of refreshes, in more than a fifth of the
+	// last 200 or so, start the frames unevenly: from then on each frame ends at the vertical blank (WaitVBlank). Swaps
+	// that keep closer keep their pacing. A swap called over a refresh after the last one returned (a frame that ran
+	// late) returns late for that, and the next one back on its phase: neither counts. Nor does a frame the frame cap
+	// started (it waited for the due time): the cap, not the swap, timed its input. The share is logged once either way.
+	const INT Span = ARRAY_COUNT(SwapReturns);
+	const UBOOL EachRefresh = SwapReturnRun >= Span
+		&&	Abs( Present - OldestReturn - Span * Period ) < 0.015 * Span * Period;
+	const UBOOL LateCall = Interval - Waited > Period, AfterLateCall = LastLateCall;
+	LastLateCall = LateCall;
+	const DOUBLE Far = Max( 0.06 * Period, 0.001 );
+	if( EachRefresh && Steady && !LateCall && !AfterLateCall && !VBlankWanted && LastCapWait < 0.001 )
+	{
+		SwapFar = SwapFar * 0.995 + (Off > Far ? 1.0 : 0.0);
+		SwapSeen = SwapSeen * 0.995 + 1.0;
+		if( SwapSeen >= 150.0 && (SwapFar > 0.2 * SwapSeen || !LoggedSwapFar) )
+		{
+			VBlankWanted = SwapFar > 0.2 * SwapSeen;
+			UC2WantPresentDone( VBlankWanted );
+			LoggedSwapFar = 1;
+			debugf( NAME_Init, TEXT("Frame pacing: %.0f %% of the swaps return over %.2f ms off the refresh, frames under vsync end at %s"),
+				100.0 * SwapFar / SwapSeen, 1000.0 * Far,
+				VBlankWanted ? TEXT("the display's vertical blank") : TEXT("the swaps") );
+		}
+	}
+#endif
 	if( !Steady || Fits < (Locked ? 42 : 54) )
 		return Unlock( Measured );
 	const DOUBLE Ideal = Refreshes * Period;
@@ -672,27 +713,6 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 		debugf( NAME_Init, TEXT("Frame steps: whole refreshes of %.3f ms (vsync)"), 1000.0 * Period );
 	LoggedLock = 1;
 	Locked = 1;
-#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
-	// Locked swaps that return more than 6 % of a refresh (at least 1 ms) off a whole number of refreshes, in more than a
-	// quarter of the last 200 or so, start the frames unevenly: from then on each frame ends at the vertical blank
-	// (WaitVBlank). Swaps that keep closer keep their pacing. A frame the frame cap started (it waited for the due time)
-	// does not count: the cap, not the swap, timed its input. The share is logged once either way.
-	const DOUBLE Far = Max( 0.06 * Period, 0.001 );
-	if( !FromVBlank && !VBlankWanted && Fit && LastCapWait < 0.001 )
-	{
-		SwapFar = SwapFar * 0.995 + (Off > Far ? 1.0 : 0.0);
-		SwapSeen = SwapSeen * 0.995 + 1.0;
-		if( SwapSeen >= 150.0 && (SwapFar > 0.25 * SwapSeen || !LoggedSwapFar) )
-		{
-			VBlankWanted = SwapFar > 0.25 * SwapSeen;
-			UC2WantPresentDone( VBlankWanted );
-			LoggedSwapFar = 1;
-			debugf( NAME_Init, TEXT("Frame pacing: %.0f %% of the swaps return over %.2f ms off the refresh, frames under vsync end at %s"),
-				100.0 * SwapFar / SwapSeen, 1000.0 * Far,
-				VBlankWanted ? TEXT("the display's vertical blank") : TEXT("the swaps") );
-		}
-	}
-#endif
 	return (FLOAT)(Ideal + Correction);
 }
 

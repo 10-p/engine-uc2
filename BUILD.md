@@ -599,11 +599,14 @@ it, so the display paces the frames and the cap stops only a swap that does not 
 vsync or frame cap is not seen by the engine: the measured time.
 
 Swaps that keep to the refresh but return at uneven times within it make the frames start, and read their input,
-unevenly while the pictures come evenly. The launcher measures that on every driver alike, while the steps are locked:
-the share of the swaps that return more than 6 % of a refresh, and at least 1 ms, off a whole number of refreshes,
-over about the last 200 (logged once, `Frame pacing: 1 % of the swaps return over 1.00 ms off the refresh, frames under
-vsync end at the swaps`). A frame the frame cap started, having waited for its due time, does not count: the cap, not
-the swap, timed its input (a cap below the display's rate). Up to a quarter the frames keep the swaps' pacing above. Past it, on Windows, each frame
+unevenly while the pictures come evenly. The launcher measures that on every driver alike, while the swaps bring a
+picture each refresh (the last 64 returned 64 refreshes apart in all, within 1.5 %), whether or not the steps lock: the
+share of the swaps that return more than 6 % of a refresh, and at least 1 ms, off a whole number of refreshes, over
+about the last 200 (logged once, `Frame pacing: 1 % of the swaps return over 1.00 ms off the refresh, frames under
+vsync end at the swaps`). A swap called more than a refresh after the last one returned (a frame that ran late)
+returns late for that reason, and the next one back on its phase: neither counts. Nor does a frame the frame cap
+started, having waited for its due time: the cap, not the swap, timed its input (a cap below the display's rate). Up
+to a fifth the frames keep the swaps' pacing above. Past it, on Windows, each frame
 under vsync from then on ends by waiting for the next vertical blank of the window's display, after the frame cap's
 wait (`FVSyncStep::WaitVBlank`; `appWaitDisplayVBlank`, the graphics kernel's vertical blank event; logged once,
 `Frame pacing: under vsync each frame ends at the display's vertical blank`; that first frame waits for three more,
@@ -640,7 +643,7 @@ elsewhere. After 120 waits in a row that
 the graphics kernel refuses (a display being set up or reset; the first refusal is logged with its status,
 `Display vertical blank: ... failed (status 0x...)`) the frames end at the swaps, logged as `Frame pacing: no vertical
 blank wait for the display, frames end at the swaps`, and the wait is tried again every two seconds; when it works
-again the waits start as at first, three refreshes on, logged. Linux has no such wait (past the quarter, the same
+again the waits start as at first, three refreshes on, logged. Linux has no such wait (past the fifth, the same
 line, once); the web and Android build none of it.
 
 ## Relaunch
