@@ -23,6 +23,12 @@ Options:
   --presentmon-arg=<arg>    one more PresentMon argument, e.g. --presentmon-arg=--qpc_time_ms (repeatable)
   --timeout <seconds>       the whole run's limit (default 420); the game is ended when it is reached
   --wrapper <program>       start the exe through it (wine, to try a Windows build on Linux)
+  --step "<step>"           after the spawn, before the trace (repeatable, in order): "exec <console command>",
+                            "sleep <s>", "away <s>" (the desktop gets the foreground for that long, as an Alt+Tab
+                            away), "respawn" (after a map change: wait for the map, spawn and teleport again)
+  --no-trace --seconds <s>  no pace trace (a build without PACETRACE): the run waits that long instead and prints the
+                            window on QueryPerformanceCounter's clock (pacewindow qpc=<from>..<to> ms), for
+                            PresentMon's --qpc_time_ms rows
 Writes, beside the exe: pace-<name>.log (the game's log with the trace, tag p), pace-<name>.channel (the commands
 sent) and pm-<name>.csv; files of the same name are replaced. Prints the trace's summary line, then the analysis by
 pace-analyze.py when it is beside this script. Exit 0 with a trace, 1 without one.
@@ -87,6 +93,35 @@ def bring_to_foreground(pid, timeout=15.0):
                 return True
         time.sleep(0.5)
     return False
+
+
+def away_from(pid, seconds):
+    """Windows: gives the foreground to the desktop for that long (as an Alt+Tab away would), then back to the game."""
+    if os.name != 'nt':
+        time.sleep(seconds)
+        return
+    import ctypes
+    user32 = ctypes.WinDLL('user32')
+    user32.keybd_event(0x12, 0, 0, 0)          # VK_MENU down: lets this process move the foreground
+    user32.keybd_event(0x12, 0, 2, 0)
+    user32.SetForegroundWindow(user32.GetShellWindow())
+    time.sleep(0.5)
+    print(f'{time.strftime("%H:%M:%S")} = away: the game has the foreground {is_foreground(pid)}', flush=True)
+    time.sleep(max(0.0, seconds - 0.5))
+    if not bring_to_foreground(pid):
+        raise SystemExit('the game window did not get the foreground back')
+
+
+def qpc_ms():
+    """QueryPerformanceCounter's clock in ms (Windows), PresentMon's --qpc_time_ms times; time.perf_counter elsewhere."""
+    if os.name != 'nt':
+        return time.perf_counter() * 1000.0
+    import ctypes
+    k = ctypes.WinDLL('kernel32')
+    c, f = ctypes.c_int64(), ctypes.c_int64()
+    k.QueryPerformanceCounter(ctypes.byref(c))
+    k.QueryPerformanceFrequency(ctypes.byref(f))
+    return c.value * 1000.0 / f.value
 
 
 def etw_lost():
@@ -162,6 +197,9 @@ def main():
     ap.add_argument('--presentmon-arg', action='append', default=[])
     ap.add_argument('--timeout', type=float, default=420.0)
     ap.add_argument('--wrapper', default='', help='a program to start the exe with, e.g. wine on Linux')
+    ap.add_argument('--step', action='append', default=[])
+    ap.add_argument('--no-trace', action='store_true')
+    ap.add_argument('--seconds', type=float, default=20.0)
     a = ap.parse_args()
 
     exe = os.path.abspath(a.exe)
@@ -205,14 +243,17 @@ def main():
     game = subprocess.Popen(args, cwd=sysdir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     run = Run(game, log_path, chan_path, time.time() + a.timeout)
     traced = False
-    try:
+    summary = ''
+
+    def spawn(attach):
         run.wait(r'Bringing Level ' + re.escape(a.map) + r'\.MyLevel up for play', 180)
         time.sleep(6)
         if not bring_to_foreground(game.pid):
             raise SystemExit('the game window did not get the foreground')
         print(f'{time.strftime("%H:%M:%S")} = the game window has the foreground', flush=True)
-        run.chan('pad attach')
-        time.sleep(1)
+        if attach:
+            run.chan('pad attach')
+            time.sleep(1)
         for _ in range(3):  # UC2 spawns the player on Fire some seconds into the match
             run.chan('pad axis righttrigger 32767')
             time.sleep(0.2)
@@ -230,10 +271,32 @@ def main():
             run.chan(f'pad axis rightx {a.turn}')
             time.sleep(1)
         run.wait(r'Cheat: TELEPORT ok', 10)
+
+    try:
+        spawn(True)
+        for step in a.step:
+            word, _, rest = step.partition(' ')
+            print(f'{time.strftime("%H:%M:%S")} = step: {step}', flush=True)
+            if word == 'exec':
+                run.chan(step)
+            elif word == 'sleep':
+                time.sleep(float(rest))
+            elif word == 'away':
+                away_from(game.pid, float(rest))
+            elif word == 'respawn':
+                spawn(False)
+            else:
+                raise SystemExit(f'unknown step: {step}')
         focus_before = is_foreground(game.pid)
-        run.chan(f'exec PACETRACE {a.frames} p')
-        summary = run.wait(r'pacetrace p summary', a.frames / 20.0 + 60)
-        run.wait(r'pacetrace p done after', 30)
+        if a.no_trace:
+            q0 = qpc_ms()
+            time.sleep(a.seconds)
+            q1 = qpc_ms()
+            summary = f'pacewindow qpc={q0:.3f}..{q1:.3f} ms ({a.seconds:g} s, no trace)'
+        else:
+            run.chan(f'exec PACETRACE {a.frames} p')
+            summary = run.wait(r'pacetrace p summary', a.frames / 20.0 + 60)
+            run.wait(r'pacetrace p done after', 30)
         focus_after = is_foreground(game.pid)
         if pm is not None:
             print(f'{time.strftime("%H:%M:%S")} = PresentMon {etw_lost()}', flush=True)
@@ -266,7 +329,7 @@ def main():
         return 1
     print(summary.strip())
     analyze = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pace-analyze.py')
-    if os.path.exists(analyze):
+    if os.path.exists(analyze) and not a.no_trace:
         subprocess.call([sys.executable, analyze, log_path])
     return 0
 
