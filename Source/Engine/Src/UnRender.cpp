@@ -2859,6 +2859,15 @@ public:
 };
 
 //
+// A light that only affects the world lights no actor drawn here. The world's own lighting still reads it, so it
+// stays in the level; ALight::PostLoad's _XBOX branch destroys the same lights at load.
+//
+static UBOOL OnlyLightsTheWorld( AActor* LightActor )
+{
+	return LightActor->AffectType == AT_AffectWorld && !LightActor->bCorona && LightActor->IsA(ALight::StaticClass());
+}
+
+//
 //	FActorSceneNode::Render
 //
 void FActorSceneNode::Render(FRenderInterface* RI)
@@ -2935,6 +2944,9 @@ void FActorSceneNode::Render(FRenderInterface* RI)
 					if(DynamicLight->Actor->bSpecialLit != RenderActor->bSpecialLit)
 						continue;
 
+					if(OnlyLightsTheWorld(LightActor))
+						continue;
+
 					FLOAT	DistanceSquared = (DynamicLight->Position - DynamicActor->BoundingSphere).SizeSquared();
 
 					if(LightActor->LightEffect != LE_Sunlight && DistanceSquared > Square(DynamicLight->Radius + DynamicActor->BoundingSphere.W))
@@ -2969,7 +2981,8 @@ void FActorSceneNode::Render(FRenderInterface* RI)
 				!LightActor->bDeleteMe && 
 				!LightActor->bStatic &&
 				LightActor->LightType != LT_None &&
-				LightActor->bDynamicLight )
+				LightActor->bDynamicLight &&
+				!OnlyLightsTheWorld(LightActor) )
 			{
 				FDynamicLight*	DynamicLight = LightActor->GetLightRenderData();
 
