@@ -5482,6 +5482,16 @@ static void UC2LodTraceDraw( USkeletalMeshInstance* Inst, FVertexPool* Pool, INT
 }
 
 //
+// PopState resets the lights: the sections drawn after a section's projector passes need them set again.
+//
+static void SetSectionLights( FRenderInterface* RI, TList<FDynamicLight*>* Lights )
+{
+	INT LightIndex = 0;
+	for( TList<FDynamicLight*>* LightList = Lights; LightList; LightList = LightList->Next )
+		RI->SetLight( LightIndex++, LightList->Element );
+}
+
+//
 //	USkeletalMeshInstance::Render
 //
 
@@ -6386,6 +6396,8 @@ void USkeletalMeshInstance::Render( FDynamicActor* Owner, FLevelSceneNode* Scene
 								);
 						}
 						RI->PopState();
+						if( NumHardwareLights )
+							SetSectionLights( RI, Lights );
 					}
 
 					BaseIdxIndex += Section.TotalFaces * 3;		
@@ -6576,6 +6588,8 @@ void USkeletalMeshInstance::Render( FDynamicActor* Owner, FLevelSceneNode* Scene
 						);
 					}
 					RI->PopState();				
+					if( NumHardwareLights )
+						SetSectionLights( RI, Lights );
 				}
 				// end of section.
 			}		
