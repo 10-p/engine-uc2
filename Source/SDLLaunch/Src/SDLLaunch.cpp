@@ -232,7 +232,8 @@ public:
 	,	LastFromVBlank(0), VBlankTime(0.0), VBlankWaited(0.0), VBlankCount(0), StepVBlankCount(0), VBlankFar(0.0)
 	,	VBlankSeen(0.0)
 	,	VBlankLate(0), VBlankSwapCount(-1), LastSwapReturn(0.0), GPULateDue(0.0), QueueExtra(0), Calm(0), HeldRun(0)
-	,	SinceDrain(1000), DrainPending(0), DrainBackoff(0.0), NextDrain(0.0), VBlankFailed(0), VBlankRetry(0.0)
+	,	UsualWait(0.0), SinceDrain(1000), DrainPending(0), DrainBackoff(0.0), NextDrain(0.0), VBlankFailed(0)
+	,	VBlankRetry(0.0)
 	,	VBlankOff(0), VBlankWanted(0), LoggedSwapFar(0), SwapFar(0.0), SwapSeen(0.0), LastCapWait(0.0)
 #endif
 	{
@@ -274,7 +275,8 @@ private:
 	DOUBLE	GPULateDue;			// the vertical blank the last swap's picture missed, the GPU not done with it (0: none)
 	UBOOL	QueueExtra;			// the driver's queue holds a picture more than the one in hand
 	INT		Calm;				// frames ended by a wait since the last late frame
-	INT		HeldRun;			// swaps in a row the driver held half a refresh or more
+	INT		HeldRun;			// swaps in a row the driver held half a refresh or more beyond its usual swap
+	DOUBLE	UsualWait;			// how long the swaps not held wait, decaying
 	INT		SinceDrain;			// swaps since the last drain of the driver's queue, and whether it is being checked
 	UBOOL	DrainPending;
 	DOUBLE	DrainBackoff;		// how long a drain that did not take holds off the next (seconds), and until when
@@ -387,12 +389,16 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 			QueueExtra = 1;
 		GPULateDue = 0.0;
 	}
-	// Swaps the driver holds half a refresh or more, two in a row, wait for room in a full queue: every frame then runs
-	// late and the held swaps pace the frames. The waits start again, three refreshes on, as at first.
+	// Swaps the driver holds half a refresh or more beyond its usual swap (one that waits for the GPU inside it waits
+	// that long every frame), two in a row, wait for room in a full queue: every frame then runs late and the held
+	// swaps pace the frames. The waits start again, three refreshes on, as at first.
 	if( NewSwap )
 	{
 		SinceDrain = Min( SinceDrain + 1, 1000 );
-		HeldRun = (VBlankCount && Period > 0.0 && Waited >= 0.5 * Period) ? HeldRun + 1 : 0;
+		const UBOOL Held = VBlankCount && Period > 0.0 && Waited >= UsualWait + 0.5 * Period;
+		HeldRun = Held ? HeldRun + 1 : 0;
+		if( !Held )
+			UsualWait = UsualWait * 0.95 + Waited * 0.05;
 	}
 	// Each drain of the queue (that restart, or one refresh more for a frame of slack) is checked: a full queue or a
 	// picture the GPU has not done in time again two to six swaps after it, and it did not take (a game the GPU holds

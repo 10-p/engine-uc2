@@ -611,7 +611,8 @@ a picture the GPU has not finished by the vertical blank after its swap (the fen
 that vertical blank has passed) shows a refresh late: the next picture, handed over before that, queues behind it,
 the same frame of slack, given back the same way (nothing waits for the GPU). A queue that fills up (the GPU fell
 further behind, then caught up) makes the driver hold each swap for room in it, every frame then runs late and the
-held swaps pace the frames: two swaps in a row held half a refresh or more start the waits again, three refreshes
+held swaps pace the frames: two swaps in a row held half a refresh or more beyond the driver's usual swap (a present
+that waits for the GPU inside the swap waits that long every frame) start the waits again, three refreshes
 on, as at first (logged once, `Frame pacing: the driver's queue filled, the waits start again`). The fences cannot
 tell a GPU that holds the frames back from one waiting behind a queued picture, and a driver that holds each swap
 until its picture shows looks like a full queue, so each of those drains is checked: the queue full again, or a
