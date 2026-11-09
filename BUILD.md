@@ -585,18 +585,19 @@ refresh rate), or a game clock a refresh away from the swaps' (the lock then sta
 it, so the display paces the frames and the cap stops only a swap that does not wait (logged once). A driver's forced
 vsync or frame cap is not seen by the engine: the measured time.
 
-Swaps that keep to the refresh but return at uneven times within it make the frames start, and read their input,
-unevenly while the pictures come evenly. The launcher measures that on every driver alike, while the swaps bring a
-picture each refresh (the last 64 returned 64 refreshes apart in all, within 1.5 %), whether or not the steps lock: the
-share of the swaps that return more than 6 % of a refresh, and at least 1 ms, off a whole number of refreshes, over
-about the last 200 (logged once, `Frame pacing: 1 % of the swaps return over 1.00 ms off the refresh, frames under
-vsync end at the swaps`). A swap called more than a refresh after the last one returned (a frame that ran late)
-returns late for that reason, and the next one back on its phase: neither counts. Nor does a frame the frame cap
-started, having waited for its due time: the cap, not the swap, timed its input (a cap below the display's rate). Nor
-does a frame of a window that does not fill its display (fullscreen, borderless or in a mode of its own): the
-desktop's compositor, not the display, times its swaps, and such a window ends its frames at the swaps for as long as
-it is smaller (`FillsDisplay`). Up to a fifth the frames keep the swaps' pacing above. Past it, on Windows, each frame
-under vsync from then on ends by waiting for the next vertical blank of the window's display, after the frame cap's
+Swaps that keep to the refresh can still return at uneven times within it, and a frame's draw after its swap can take
+uneven time, so the frames start, and read their input, unevenly while the pictures come evenly; and a driver that
+queues pictures ahead shows each one refreshes after its swap. So once the swaps of a window that fills its display
+(fullscreen, borderless or in a mode of its own) have brought a picture each refresh (the last 64 returned 64
+refreshes apart in all, within 1.5 %) for about 150 frames, whether or not the steps lock, the frames end at the
+display's vertical blank instead. The share of those swaps that returned more than 6 % of a refresh, and at least
+1 ms, off a whole number of refreshes is logged then, on every driver alike (`Frame pacing: 1 % of the swaps return
+over 1.00 ms off the refresh, frames under vsync end at the display's vertical blank`). A swap called more than a
+refresh after the last one returned (a frame that ran late) returns late for that reason, and the next one back on its
+phase: neither counts. Nor does a frame the frame cap started, having waited for its due time (a cap below the
+display's rate). A window that does not fill its display is shown through the desktop's compositor, which times its
+swaps: it ends its frames at the swaps for as long as it is smaller (`FillsDisplay`). On Windows each frame under
+vsync from then on ends by waiting for the next vertical blank of the window's display, after the frame cap's
 wait (`FVSyncStep::WaitVBlank`; `appWaitDisplayVBlank`, the graphics kernel's vertical blank event; logged once,
 `Frame pacing: under vsync each frame ends at the display's vertical blank`; that first frame waits for three more,
 so the frames the driver queued before are shown and the waits start on an empty queue: at the display's rate nothing

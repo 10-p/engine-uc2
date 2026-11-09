@@ -218,9 +218,9 @@ ENGINE_API INT UC2PresentDone();
 // at the period the swaps keep, with a correction of at most a fiftieth of a refresh a frame that holds the game clock
 // on the swaps'. Otherwise by the measured time: no vsync, a frame without exactly one swap, swaps that return without
 // waiting (frames slower than the display), a display whose swaps keep no steady period (a variable refresh rate), a
-// game clock that strays a refresh from the swaps'. Where the platform has a wait for the display's vertical blank and
-// the swaps of a window that fills its display, a picture each refresh, return unevenly within the refresh, each frame
-// under vsync ends with it (WaitVBlank), and those waits' returns take the place of the swaps'.
+// game clock that strays a refresh from the swaps'. Where the platform has a wait for the display's vertical blank,
+// once the swaps of a window that fills its display bring a picture each refresh, each frame under vsync ends with it
+// (WaitVBlank), and those waits' returns take the place of the swaps'.
 //
 class FVSyncStep
 {
@@ -234,7 +234,7 @@ public:
 	,	VBlankLate(0), VBlankSwapCount(-1), LastSwapReturn(0.0), GPULateDue(0.0), QueueExtra(0), Calm(0), HeldRun(0)
 	,	UsualWait(0.0), SinceDrain(1000), DrainPending(0), DrainBackoff(0.0), NextDrain(0.0), VBlankFailed(0)
 	,	VBlankRetry(0.0)
-	,	VBlankOff(0), VBlankWanted(0), LoggedSwapFar(0), SwapFar(0.0), SwapSeen(0.0), LastCapWait(0.0)
+	,	VBlankOff(0), VBlankWanted(0), SwapFar(0.0), SwapSeen(0.0), LastCapWait(0.0)
 	,	SwapReturnIndex(0), SwapReturnRun(0), LastLateCall(0)
 #endif
 	{
@@ -290,8 +290,7 @@ private:
 	INT		VBlankFailed;		// waits in a row the platform could not make
 	DOUBLE	VBlankRetry;		// after 120 of those, when to try again
 	UBOOL	VBlankOff;			// no more waits: the vertical blanks keep no steady period
-	UBOOL	VBlankWanted;		// the swaps return unevenly within the refresh: the frames end at the vertical blank
-	UBOOL	LoggedSwapFar;
+	UBOOL	VBlankWanted;		// the swaps have brought a picture each refresh: the frames end at the vertical blank
 	DOUBLE	SwapFar;			// the swaps measured over 6 % of a refresh off a whole number of refreshes, and all, decaying
 	DOUBLE	SwapSeen;
 	DOUBLE	LastCapWait;		// how long the frame cap waited for the last frame's due time (seconds)
@@ -585,14 +584,13 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 	}
 	const UBOOL Steady = Abs( Period - Nominal ) < 0.03 * Nominal;
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
-	// While the swaps bring a picture each refresh (the last 64 returned 64 refreshes apart in all, within 1.5 %), those
-	// that return more than 6 % of a refresh (at least 1 ms) off a whole number of refreshes, in more than a fifth of the
-	// last 200 or so, start the frames unevenly: from then on each frame ends at the vertical blank (WaitVBlank). Swaps
-	// that keep closer keep their pacing. A swap called over a refresh after the last one returned (a frame that ran
-	// late) returns late for that, and the next one back on its phase: neither counts. Nor does a frame the frame cap
-	// started (it waited for the due time): the cap, not the swap, timed its input. Nor a frame of a window that does not
-	// fill its display (FillsDisplay): the compositor, not the display, times its swaps. The share is logged once either
-	// way.
+	// Once the swaps of a window that fills its display (FillsDisplay) have brought a picture each refresh (the last 64
+	// returned 64 refreshes apart in all, within 1.5 %) for about 150 frames, each frame from then on ends at the vertical
+	// blank (WaitVBlank): it starts, reads its input and moves the world on at a refresh, with no picture queued ahead.
+	// The share of those swaps that returned more than 6 % of a refresh (at least 1 ms) off a whole number of refreshes is
+	// logged then. A swap called over a refresh after the last one returned (a frame that ran late) returns late for
+	// that, and the next one back on its phase: neither counts. Nor does a frame the frame cap started (it waited for the
+	// due time): the cap, not the display, timed it.
 	const INT Span = ARRAY_COUNT(SwapReturns);
 	const UBOOL EachRefresh = SwapReturnRun >= Span
 		&&	Abs( Present - OldestReturn - Span * Period ) < 0.015 * Span * Period;
@@ -604,14 +602,12 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 	{
 		SwapFar = SwapFar * 0.995 + (Off > Far ? 1.0 : 0.0);
 		SwapSeen = SwapSeen * 0.995 + 1.0;
-		if( SwapSeen >= 150.0 && (SwapFar > 0.2 * SwapSeen || !LoggedSwapFar) )
+		if( SwapSeen >= 150.0 )
 		{
-			VBlankWanted = SwapFar > 0.2 * SwapSeen;
-			UC2WantPresentDone( VBlankWanted );
-			LoggedSwapFar = 1;
-			debugf( NAME_Init, TEXT("Frame pacing: %.0f %% of the swaps return over %.2f ms off the refresh, frames under vsync end at %s"),
-				100.0 * SwapFar / SwapSeen, 1000.0 * Far,
-				VBlankWanted ? TEXT("the display's vertical blank") : TEXT("the swaps") );
+			VBlankWanted = 1;
+			UC2WantPresentDone( 1 );
+			debugf( NAME_Init, TEXT("Frame pacing: %.0f %% of the swaps return over %.2f ms off the refresh, frames under vsync end at the display's vertical blank"),
+				100.0 * SwapFar / SwapSeen, 1000.0 * Far );
 		}
 	}
 #endif
