@@ -219,8 +219,8 @@ ENGINE_API INT UC2PresentDone();
 // on the swaps'. Otherwise by the measured time: no vsync, a frame without exactly one swap, swaps that return without
 // waiting (frames slower than the display), a display whose swaps keep no steady period (a variable refresh rate), a
 // game clock that strays a refresh from the swaps'. Where the platform has a wait for the display's vertical blank and
-// the swaps, a picture each refresh, return unevenly within the refresh, each frame under vsync ends with it
-// (WaitVBlank), and those waits' returns take the place of the swaps'.
+// the swaps of a window that fills its display, a picture each refresh, return unevenly within the refresh, each frame
+// under vsync ends with it (WaitVBlank), and those waits' returns take the place of the swaps'.
 //
 class FVSyncStep
 {
@@ -354,14 +354,26 @@ FLOAT FVSyncStep::Unlock( FLOAT Measured )
 
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 //
+// Whether the first viewport's window fills its display: fullscreen, borderless or in a mode of its own. A smaller
+// window is shown through the desktop's compositor where there is one, which times its swaps' returns and its pictures.
+//
+static UBOOL FillsDisplay( UEngine* Engine )
+{
+	SDL_Window* Window = Engine->Client && Engine->Client->Viewports.Num() && Engine->Client->Viewports(0)
+		? (SDL_Window*)Engine->Client->Viewports(0)->GetWindow() : NULL;
+	return Window && (SDL_GetWindowFlags( Window ) & SDL_WINDOW_FULLSCREEN);
+}
+
+//
 // Under vsync each frame ends at the next vertical blank of the window's display, so the next frame starts, reads its
 // input and steps the world on the display's clock: a swap that waits for the refresh can return milliseconds off it.
+// A window that does not fill its display ends its frames at the swaps.
 //
 void FVSyncStep::WaitVBlank( UEngine* Engine )
 {
 	DOUBLE Present, Waited;
 	INT Count;
-	if( VBlankOff || !VBlankWanted || !UC2PresentClock( Present, Count, Waited ) )
+	if( VBlankOff || !VBlankWanted || !FillsDisplay( Engine ) || !UC2PresentClock( Present, Count, Waited ) )
 		return;
 	SDL_Window* Window = Engine->Client && Engine->Client->Viewports.Num() && Engine->Client->Viewports(0)
 		? (SDL_Window*)Engine->Client->Viewports(0)->GetWindow() : NULL;
@@ -577,14 +589,17 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 	// last 200 or so, start the frames unevenly: from then on each frame ends at the vertical blank (WaitVBlank). Swaps
 	// that keep closer keep their pacing. A swap called over a refresh after the last one returned (a frame that ran
 	// late) returns late for that, and the next one back on its phase: neither counts. Nor does a frame the frame cap
-	// started (it waited for the due time): the cap, not the swap, timed its input. The share is logged once either way.
+	// started (it waited for the due time): the cap, not the swap, timed its input. Nor a frame of a window that does not
+	// fill its display (FillsDisplay): the compositor, not the display, times its swaps. The share is logged once either
+	// way.
 	const INT Span = ARRAY_COUNT(SwapReturns);
 	const UBOOL EachRefresh = SwapReturnRun >= Span
 		&&	Abs( Present - OldestReturn - Span * Period ) < 0.015 * Span * Period;
 	const UBOOL LateCall = Interval - Waited > Period, AfterLateCall = LastLateCall;
 	LastLateCall = LateCall;
 	const DOUBLE Far = Max( 0.06 * Period, 0.001 );
-	if( EachRefresh && Steady && !LateCall && !AfterLateCall && !VBlankWanted && LastCapWait < 0.001 )
+	if( EachRefresh && Steady && !LateCall && !AfterLateCall && !VBlankWanted && LastCapWait < 0.001
+	&&	FillsDisplay( Engine ) )
 	{
 		SwapFar = SwapFar * 0.995 + (Off > Far ? 1.0 : 0.0);
 		SwapSeen = SwapSeen * 0.995 + 1.0;

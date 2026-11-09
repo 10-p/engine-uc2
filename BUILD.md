@@ -590,8 +590,10 @@ share of the swaps that return more than 6 % of a refresh, and at least 1 ms, of
 about the last 200 (logged once, `Frame pacing: 1 % of the swaps return over 1.00 ms off the refresh, frames under
 vsync end at the swaps`). A swap called more than a refresh after the last one returned (a frame that ran late)
 returns late for that reason, and the next one back on its phase: neither counts. Nor does a frame the frame cap
-started, having waited for its due time: the cap, not the swap, timed its input (a cap below the display's rate). Up
-to a fifth the frames keep the swaps' pacing above. Past it, on Windows, each frame
+started, having waited for its due time: the cap, not the swap, timed its input (a cap below the display's rate). Nor
+does a frame of a window that does not fill its display (fullscreen, borderless or in a mode of its own): the
+desktop's compositor, not the display, times its swaps, and such a window ends its frames at the swaps for as long as
+it is smaller (`FillsDisplay`). Up to a fifth the frames keep the swaps' pacing above. Past it, on Windows, each frame
 under vsync from then on ends by waiting for the next vertical blank of the window's display, after the frame cap's
 wait (`FVSyncStep::WaitVBlank`; `appWaitDisplayVBlank`, the graphics kernel's vertical blank event; logged once,
 `Frame pacing: under vsync each frame ends at the display's vertical blank`; that first frame waits for three more,
