@@ -597,8 +597,10 @@ public:
 	{
 		_WORD* VBIndex = (_WORD*)Data;
 
+		// NumParticles counts the active particles of slots 0..ActiveParticles-1 (RenderParticles), and dead ones may
+		// lie between them: every one of those slots is read, so that each of the NumParticles gets its indices.
 		INT RenderedParticles = 0;
-		for(INT ParticleIndex = 0;ParticleIndex < NumParticles;ParticleIndex++)
+		for(INT ParticleIndex = 0;ParticleIndex < Emitter->ActiveParticles && RenderedParticles < NumParticles;ParticleIndex++)
 		{
 			FParticle*	Particle = (FParticle*)Emitter->Particles(ParticleIndex);
 
@@ -770,8 +772,10 @@ INT UBeamEmitter::FillVertexBuffer( class FBeamVertex** pVertices, INT NumPartic
 	FBeamVertex* Vertex = (FBeamVertex*) *pVertices;
 
 	// Render all active particles.
+	// NumParticles counts the active particles of slots 0..ActiveParticles-1 (RenderParticles), and dead ones may
+	// lie between them: every one of those slots is read, so that the stream is written to its full size.
 	INT RenderedParticles = 0;
-	for (INT Index=0; Index<NumParticles; Index++)
+	for (INT Index=0; Index<ActiveParticles && RenderedParticles<NumParticles; Index++)
 	{	
 		FParticle* Particle = (FParticle*)Particles(Index);
 		if (Particle == NULL || !(Particle->Flags & PTF_Active))
