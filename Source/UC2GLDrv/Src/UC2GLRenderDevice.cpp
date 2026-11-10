@@ -135,7 +135,7 @@ UUC2GLRenderDevice::UUC2GLRenderDevice()
 	LogFFPrograms			= 0;
 	MaskCombine3			= 0;
 	MaskCombine4			= 0;
-	FFProgramsLinked = FFProgramsFailed = FFProgramDraws = FFFallbackDraws = 0;
+	FFProgramsLinked = FFProgramsFailed = FFProgramDraws = FFFallbackDraws = FFMeshColorDraws = 0;
 	BicubicLightmapsActive	= 0;
 	MaxAnisotropy			= 1.f;
 	ValidContext			= 0;
@@ -1693,7 +1693,9 @@ void UUC2GLRenderDevice::InitGLState()
 	glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
 	glPixelStorei( GL_PACK_ALIGNMENT, 1 );
 
-	// D3D material: ambient and diffuse white, specular 0, power 0; emissive from COLOR1.
+	// D3D material: ambient and diffuse white, specular 0, power 0; emissive from COLOR1. D3DDrv takes the
+	// ambient and diffuse from COLOR2 where the vertices have it: those lit passes with COLORVERTEX light in
+	// their program (UC2GLFFProgram.cpp).
 	static const FLOAT One[4]	= { 1.f, 1.f, 1.f, 1.f };
 	static const FLOAT Zero[4]	= { 0.f, 0.f, 0.f, 1.f };
 	glMaterialfv( GL_FRONT_AND_BACK, GL_AMBIENT, One );

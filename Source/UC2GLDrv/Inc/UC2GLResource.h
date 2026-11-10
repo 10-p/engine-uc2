@@ -287,6 +287,7 @@ class FOpenGLVertexStream : public FOpenGLResource
 public:
 	GLuint		BufferID;
 	INT			CachedSize;
+	UBOOL		ColorsOpaqueWhite;	// every colour of the cached stream is (255,255,255,255); never set for a dynamic stream
 
 	FOpenGLVertexStream(UUC2GLRenderDevice* InRenDev,FRenderResource* InRes);
 	virtual ~FOpenGLVertexStream();
