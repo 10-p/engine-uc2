@@ -553,7 +553,7 @@ access; later configures re-fetch the branch tips. Vendored in `Thirdparty/`: zl
 ## Frame rate
 
 `[Engine.GameEngine] FpsLogSeconds=<s>` (default 0 = off; console `FPSLOG <s>`) logs one `FPS:` line every `<s>`
-seconds: frames, fps, frame time avg/min/max/p99, the 1% low. `tools/dev/fps-bench.sh <tree> <map> <seconds> [WxH]`
+seconds, at least one: frames, fps, frame time avg/min/max/p99, the 1% low and the 0.1% low (`UC2FpsLog.cpp`). `tools/dev/fps-bench.sh <tree> <map> <seconds> [WxH]`
 runs a fixed camera turn on this machine's GPU, headless, and prints one line. A standalone game is uncapped by default
 (`UseVSync=False`, `[Engine.Engine] FrameRateCap=0`); a network client keeps the engine's own tick limit.
 
