@@ -25,16 +25,7 @@ ENGINE_API UBOOL UC2CapPaces();	// whether the launcher's frame cap times the sw
 // pass before the swap, so the swap at the frame's due time shows the whole frame at once.
 static UBOOL FinishForCap()
 {
-	static UBOOL Last = 0, Logged = 0;
-	const UBOOL Finish = UC2CapPaces();
-	if( Finish != Last && (!Logged || GUfrontLog) )
-	{
-		debugf( NAME_Init, TEXT("UC2GLDrv: %s"), Finish ? TEXT("the frame rate cap times the swaps: each frame finishes on the GPU before the cap's wait")
-			: TEXT("the frame rate cap does not time the swaps") );
-		Logged = 1;
-	}
-	Last = Finish;
-	return Finish;
+	return UC2CapPaces();
 }
 
 ENGINE_API UBOOL UC2PresentDoneWanted();
@@ -933,16 +924,9 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 
 	BindingSetSwapInterval( UseVSync ? 1 : 0 );
 #if !defined(__EMSCRIPTEN__)
-	// The swap interval the context reports (1 vsync, 0 none), logged when it changes; a driver setting can still
-	// force vsync or a frame cap of its own.
-	static INT LoggedInterval = -2;
-	const INT Interval = SDL_GL_GetSwapInterval();
-	if( Interval != LoggedInterval )
-	{
-		debugf( NAME_Init, TEXT("UC2GLDrv: UseVSync=%s, swap interval %i"), UseVSync ? TEXT("True") : TEXT("False"), Interval );
-		LoggedInterval = Interval;
-	}
-	UC2SetPresentVSync( UseVSync && Interval != 0 );
+	// Whether the swaps wait for the refresh, from the swap interval the context reports (1 vsync, 0 none); a driver
+	// setting can still force vsync or a frame cap of its own.
+	UC2SetPresentVSync( UseVSync && SDL_GL_GetSwapInterval() != 0 );
 #endif
 
 	ResetRenderStates();

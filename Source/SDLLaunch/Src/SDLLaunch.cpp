@@ -227,14 +227,14 @@ class FVSyncStep
 public:
 	FVSyncStep()
 	:	Nominal(0.0), NominalTime(0.0), SumIntervals(0.0), SumRefreshes(0.0), LastPresent(0.0), LastWaited(0.0)
-	,	LastCount(-1), Clock(0.0), Fits(0), FitIndex(0), Locked(0), LoggedLock(0)
+	,	LastCount(-1), Clock(0.0), Fits(0), FitIndex(0), Locked(0)
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	,	LastFromVBlank(0), VBlankTime(0.0), VBlankWaited(0.0), VBlankCount(0), StepVBlankCount(0), VBlankFar(0.0)
 	,	VBlankSeen(0.0)
 	,	VBlankLate(0), VBlankSwapCount(-1), LastSwapReturn(0.0), GPULateDue(0.0), QueueExtra(0), Calm(0), HeldRun(0)
 	,	UsualWait(0.0), SinceDrain(1000), DrainPending(0), DrainBackoff(0.0), NextDrain(0.0), VBlankFailed(0)
 	,	VBlankRetry(0.0)
-	,	VBlankOff(0), VBlankWanted(0), SwapFar(0.0), SwapSeen(0.0), LastCapWait(0.0)
+	,	VBlankOff(0), VBlankWanted(0), SwapSeen(0.0), LastCapWait(0.0)
 	,	SwapReturnIndex(0), SwapReturnRun(0), LastLateCall(0)
 #endif
 	{
@@ -266,7 +266,6 @@ private:
 	BYTE	FitHistory[60];		// whether each of the last 60 intervals kept to the refresh
 	INT		Fits, FitIndex;
 	UBOOL	Locked;
-	UBOOL	LoggedLock;
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
 	UBOOL	LastFromVBlank;		// whether the last step's clock was a vertical blank wait's
 	DOUBLE	VBlankTime;			// the last vertical blank wait's return, how long it waited, and the waits so far
@@ -291,8 +290,7 @@ private:
 	DOUBLE	VBlankRetry;		// after 120 of those, when to try again
 	UBOOL	VBlankOff;			// no more waits: the vertical blanks keep no steady period
 	UBOOL	VBlankWanted;		// the swaps have brought a picture each refresh: the frames end at the vertical blank
-	DOUBLE	SwapFar;			// the swaps measured over 6 % of a refresh off a whole number of refreshes, and all, decaying
-	DOUBLE	SwapSeen;
+	DOUBLE	SwapSeen;			// the swaps that brought a picture each refresh, decaying
 	DOUBLE	LastCapWait;		// how long the frame cap waited for the last frame's due time (seconds)
 	DOUBLE	SwapReturns[64];	// the last swaps' returns, and how many of them in a row came one swap a frame
 	INT		SwapReturnIndex, SwapReturnRun;
@@ -346,8 +344,6 @@ DOUBLE FVSyncStep::RefreshPeriod( UEngine* Engine )
 
 FLOAT FVSyncStep::Unlock( FLOAT Measured )
 {
-	if( Locked && GUfrontLog )
-		debugf( NAME_Init, TEXT("Frame steps: the measured time (the swaps left the refresh)") );
 	Locked = 0;
 	return Measured;
 }
@@ -451,9 +447,7 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 		return;
 	if( !appWaitDisplayVBlank( Bounds.x + Bounds.w / 2, Bounds.y + Bounds.h / 2 ) )
 	{
-		if( ++VBlankFailed == 120 )
-			debugf( NAME_Init, TEXT("Frame pacing: no vertical blank wait for the display, frames end at the swaps") );
-		if( VBlankFailed >= 120 )
+		if( ++VBlankFailed >= 120 )
 			VBlankRetry = Start + 2.0;
 		return;
 	}
@@ -461,12 +455,6 @@ void FVSyncStep::WaitVBlank( UEngine* Engine )
 		GPUMissed( Due );
 	if( !VBlankCount || VBlankFailed >= 120 || Restart )
 	{
-		static UBOOL LoggedRestart = 0;
-		if( !Restart )
-			debugf( NAME_Init, TEXT("Frame pacing: under vsync each frame ends at the display's vertical blank") );
-		else if( !LoggedRestart || GUfrontLog )
-			debugf( NAME_Init, TEXT("Frame pacing: the driver's queue filled, the waits start again") );
-		LoggedRestart |= Restart;
 		// The frames the driver queued while the swaps paced them are shown first, three refreshes without a new one:
 		// at the display's rate nothing drains a queue later.
 		for( INT i=0; i<3; i++ )
@@ -569,7 +557,6 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 		{
 			VBlankOff = 1;
 			UC2WantPresentDone( 0 );
-			debugf( NAME_Init, TEXT("Frame pacing: the display's vertical blanks keep no steady period, frames end at the swaps") );
 		}
 	}
 #endif
@@ -587,27 +574,22 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 	// Once the swaps of a window that fills its display (FillsDisplay) have brought a picture each refresh (the last 64
 	// returned 64 refreshes apart in all, within 1.5 %) for about 150 frames, each frame from then on ends at the vertical
 	// blank (WaitVBlank): it starts, reads its input and moves the world on at a refresh, with no picture queued ahead.
-	// The share of those swaps that returned more than 6 % of a refresh (at least 1 ms) off a whole number of refreshes is
-	// logged then. A swap called over a refresh after the last one returned (a frame that ran late) returns late for
-	// that, and the next one back on its phase: neither counts. Nor does a frame the frame cap started (it waited for the
-	// due time): the cap, not the display, timed it.
+	// A swap called over a refresh after the last one returned (a frame that ran late) returns late for that, and the
+	// next one back on its phase: neither counts. Nor does a frame the frame cap started (it waited for the due time):
+	// the cap, not the display, timed it.
 	const INT Span = ARRAY_COUNT(SwapReturns);
 	const UBOOL EachRefresh = SwapReturnRun >= Span
 		&&	Abs( Present - OldestReturn - Span * Period ) < 0.015 * Span * Period;
 	const UBOOL LateCall = Interval - Waited > Period, AfterLateCall = LastLateCall;
 	LastLateCall = LateCall;
-	const DOUBLE Far = Max( 0.06 * Period, 0.001 );
 	if( EachRefresh && Steady && !LateCall && !AfterLateCall && !VBlankWanted && LastCapWait < 0.001
 	&&	FillsDisplay( Engine ) )
 	{
-		SwapFar = SwapFar * 0.995 + (Off > Far ? 1.0 : 0.0);
 		SwapSeen = SwapSeen * 0.995 + 1.0;
 		if( SwapSeen >= 150.0 )
 		{
 			VBlankWanted = 1;
 			UC2WantPresentDone( 1 );
-			debugf( NAME_Init, TEXT("Frame pacing: %.0f %% of the swaps return over %.2f ms off the refresh, frames under vsync end at the display's vertical blank"),
-				100.0 * SwapFar / SwapSeen, 1000.0 * Far );
 		}
 	}
 #endif
@@ -626,9 +608,6 @@ FLOAT FVSyncStep::Step( UEngine* Engine, FLOAT Measured )
 	}
 	const DOUBLE Correction = Clamp( Error / 30.0, -Period / 50.0, Period / 50.0 );
 	Clock += Ideal + Correction;
-	if( !Locked && (!LoggedLock || GUfrontLog) )
-		debugf( NAME_Init, TEXT("Frame steps: whole refreshes of %.3f ms (vsync)"), 1000.0 * Period );
-	LoggedLock = 1;
 	Locked = 1;
 	return (FLOAT)(Ideal + Correction);
 }
