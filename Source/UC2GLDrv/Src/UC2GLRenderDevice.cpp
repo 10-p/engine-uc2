@@ -25,16 +25,47 @@ ENGINE_API UBOOL UC2CapPaces();	// whether the launcher's frame cap times the sw
 // pass before the swap, so the swap at the frame's due time shows the whole frame at once.
 static UBOOL FinishForCap()
 {
-	static UBOOL Last = 0, Logged = 0;
-	const UBOOL Finish = UC2CapPaces();
-	if( Finish != Last && (!Logged || GUfrontLog) )
-	{
-		debugf( NAME_Init, TEXT("UC2GLDrv: %s"), Finish ? TEXT("the frame rate cap times the swaps: each frame finishes on the GPU before the cap's wait")
-			: TEXT("the frame rate cap does not time the swaps") );
-		Logged = 1;
-	}
-	Last = Finish;
-	return Finish;
+	return UC2CapPaces();
+}
+
+ENGINE_API UBOOL UC2PresentDoneWanted();
+ENGINE_API void UC2SetPresentDoneQuery( INT (*Query)() );
+
+// While the launcher asks for it, a fence after each swap tells it whether the GPU has finished the picture that swap
+// handed over (UC2PresentClock.cpp). The fence belongs to the context it was made in.
+static GLsync	GPresentFence = 0;
+static void*	GPresentFenceContext = NULL;
+
+static INT PresentFenceDone()
+{
+	if( !GPresentFence || SDL_GL_GetCurrentContext() != GPresentFenceContext )
+		return -1;
+	const GLenum State = UUC2GLRenderDevice::Raw_glClientWaitSync( GPresentFence, 0, 0 );	// no wait: a look
+	return State == GL_ALREADY_SIGNALED || State == GL_CONDITION_SATISFIED ? 1 : State == GL_TIMEOUT_EXPIRED ? 0 : -1;
+}
+
+static void DeletePresentFence( UBOOL ContextAlive )
+{
+	if( GPresentFence && ContextAlive && SDL_GL_GetCurrentContext() == GPresentFenceContext )
+		UUC2GLRenderDevice::Raw_glDeleteSync( GPresentFence );
+	GPresentFence = 0;
+	GPresentFenceContext = NULL;
+	UC2SetPresentDoneQuery( NULL );
+}
+
+static void PresentFence()
+{
+	DeletePresentFence( 1 );
+	if( !UC2PresentDoneWanted() || !UUC2GLRenderDevice::Raw_glFenceSync || !UUC2GLRenderDevice::Raw_glClientWaitSync
+	||	!UUC2GLRenderDevice::Raw_glDeleteSync )
+		return;
+	GPresentFence = UUC2GLRenderDevice::Raw_glFenceSync( GL_SYNC_GPU_COMMANDS_COMPLETE, 0 );
+	if( !GPresentFence )
+		return;
+	GPresentFenceContext = SDL_GL_GetCurrentContext();
+	// A flush, so the fence goes to the GPU now and not with the next frame's commands.
+	UUC2GLRenderDevice::Raw_glClientWaitSync( GPresentFence, GL_SYNC_FLUSH_COMMANDS_BIT, 0 );
+	UC2SetPresentDoneQuery( PresentFenceDone );
 }
 #endif
 
@@ -758,6 +789,9 @@ void UUC2GLRenderDevice::Exit( UViewport* Viewport )
 			glDeleteBuffers( 1, &QuadBuffer );
 		QuadBuffer = 0;
 	}
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	DeletePresentFence( ContextAlive() );
+#endif
 	ValidContext = 0;
 
 	unguard;
@@ -890,16 +924,9 @@ UBOOL UUC2GLRenderDevice::SetRes( UViewport* Viewport, INT NewX, INT NewY, UBOOL
 
 	BindingSetSwapInterval( UseVSync ? 1 : 0 );
 #if !defined(__EMSCRIPTEN__)
-	// The swap interval the context reports (1 vsync, 0 none), logged when it changes; a driver setting can still
-	// force vsync or a frame cap of its own.
-	static INT LoggedInterval = -2;
-	const INT Interval = SDL_GL_GetSwapInterval();
-	if( Interval != LoggedInterval )
-	{
-		debugf( NAME_Init, TEXT("UC2GLDrv: UseVSync=%s, swap interval %i"), UseVSync ? TEXT("True") : TEXT("False"), Interval );
-		LoggedInterval = Interval;
-	}
-	UC2SetPresentVSync( UseVSync && Interval != 0 );
+	// Whether the swaps wait for the refresh, from the swap interval the context reports (1 vsync, 0 none); a driver
+	// setting can still force vsync or a frame cap of its own.
+	UC2SetPresentVSync( UseVSync && SDL_GL_GetSwapInterval() != 0 );
 #endif
 
 	ResetRenderStates();
@@ -2303,6 +2330,9 @@ void UUC2GLRenderDevice::Present( UViewport* Viewport )
 	BindingSwap( Viewport );
 	const DOUBLE SwapEnd = appSeconds();
 	UC2FramePresented( SwapEnd, SwapEnd - SwapBegin );
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+	PresentFence();
+#endif
 
 	if( LogStats && (FrameCounter - StatFrame0 >= 300 || StatTime0 == 0.0) )
 		LogFrameStats();

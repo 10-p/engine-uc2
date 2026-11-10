@@ -7,7 +7,10 @@
 	the launcher reads them (UC2PresentClock) to move the world on by whole refreshes under vsync
 	(SDLLaunch.cpp, FVSyncStep). On desktop builds the launcher reports whether its frame cap times
 	the swaps (UC2SetCapPaces); the render device reads it (UC2CapPaces) to have each frame drawn
-	before the cap's wait, so that the swap at the frame's due time shows a finished frame.
+	before the cap's wait, so that the swap at the frame's due time shows a finished frame. While the
+	launcher ends the frames at the display's vertical blank it asks whether the GPU has finished the
+	picture the last swap handed over (UC2WantPresentDone, UC2PresentDone); the render device answers
+	with a fence after each swap (UC2PresentDoneWanted, UC2SetPresentDoneQuery).
 =============================================================================*/
 
 #include "EnginePrivate.h"
@@ -55,6 +58,36 @@ ENGINE_API void UC2SetCapPaces( UBOOL Paces )
 ENGINE_API UBOOL UC2CapPaces()
 {
 	return GCapPaces;
+}
+
+// Whether the GPU has finished the picture the last swap handed over: the launcher asks for it while it ends the frames
+// at the display's vertical blank, and the render device then puts a fence after each swap and sets the query.
+static UBOOL	GPresentDoneWanted = 0;
+static INT		(*GPresentDoneQuery)() = NULL;
+
+// The launcher: whether it wants to know.
+ENGINE_API void UC2WantPresentDone( UBOOL Want )
+{
+	GPresentDoneWanted = Want;
+}
+
+// The render device: whether to put the fences.
+ENGINE_API UBOOL UC2PresentDoneWanted()
+{
+	return GPresentDoneWanted;
+}
+
+// The render device: the query, or NULL when it has none (no fence, no context).
+ENGINE_API void UC2SetPresentDoneQuery( INT (*Query)() )
+{
+	GPresentDoneQuery = Query;
+}
+
+// The launcher: 1 when the GPU has finished the picture the last swap handed over, 0 when not yet, -1 when not known.
+// It does not wait.
+ENGINE_API INT UC2PresentDone()
+{
+	return GPresentDoneWanted && GPresentDoneQuery ? GPresentDoneQuery() : -1;
 }
 #endif
 

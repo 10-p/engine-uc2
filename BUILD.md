@@ -553,7 +553,7 @@ access; later configures re-fetch the branch tips. Vendored in `Thirdparty/`: zl
 ## Frame rate
 
 `[Engine.GameEngine] FpsLogSeconds=<s>` (default 0 = off; console `FPSLOG <s>`) logs one `FPS:` line every `<s>`
-seconds: frames, fps, frame time avg/min/max/p99, the 1% low. `tools/dev/fps-bench.sh <tree> <map> <seconds> [WxH]`
+seconds, at least one: frames, fps, frame time avg/min/max/p99, the 1% low and the 0.1% low (`UC2FpsLog.cpp`). `tools/dev/fps-bench.sh <tree> <map> <seconds> [WxH]`
 runs a fixed camera turn on this machine's GPU, headless, and prints one line. A standalone game is uncapped by default
 (`UseVSync=False`, `[Engine.Engine] FrameRateCap=0`); a network client keeps the engine's own tick limit.
 
@@ -563,25 +563,71 @@ then a yield for the last fraction of a millisecond; on Windows a high-resolutio
 a cap holds its rate exactly; a frame more than a period late starts the schedule again from itself. Without vsync on
 the desktop builds the cap times the swaps, so the GPU finishes each frame before the cap's wait and its present pass
 before the swap (`glFinish` in `UUC2GLRenderDevice::Unlock` and `Present` while the launcher reports the cap waiting
-with no vsync, `UC2SetCapPaces` in `Source/Engine/Src/UC2PresentClock.cpp`; logged once, `UC2GLDrv: the frame rate cap
-times the swaps: each frame finishes on the GPU before the cap's wait`): the swap at the frame's due time shows a
+with no vsync, `UC2SetCapPaces` in `Source/Engine/Src/UC2PresentClock.cpp`): the swap at the frame's due time shows a
 whole frame even where the driver starts a frame's GPU work only at the swap. CPU and GPU then take turns within a
 frame. Uncapped, under vsync, on the web and on Android the frames are not finished.
 
-VSync (`[UC2GLDrv.UC2GLRenderDevice] UseVSync`, the swap interval set at every `SetRes`; the device logs the interval the
-context reports when it changes, `UC2GLDrv: UseVSync=True, swap interval 1`): the display shows each picture for a
+VSync (`[UC2GLDrv.UC2GLRenderDevice] UseVSync`, the swap interval set at every `SetRes`): the display shows each picture for a
 whole number of refreshes, so once the buffer swaps wait for the refresh and keep to it (nine in ten of the last 60
 intervals between two swaps that each waited at least a tenth of a refresh, within a quarter refresh of a whole number,
 at a period within 3 % of the display's) the launcher moves the world on by the whole refreshes between the last two
-swaps' returns instead of the time read at the top of its loop (`FVSyncStep`, `Source/Engine/Src/UC2PresentClock.cpp`;
-logged once, `Frame steps: whole refreshes of 16.667 ms (vsync)`). The period is the one the swaps keep (learnt from
-the intervals within a tenth of a refresh of a whole number), started from the display's (the desktop compositor's on
-Windows, the display mode's whole hertz elsewhere), with a correction of at most a fiftieth of a refresh a frame that
+swaps' returns instead of the time read at the top of its loop (`FVSyncStep`, `Source/Engine/Src/UC2PresentClock.cpp`).
+The period is the one the swaps keep (learnt from
+the intervals within a tenth of a refresh of a whole number), started from the display's (on Windows the desktop
+compositor's where it is within 5 % of the window display's mode: the compositor's timing is one display's, so a
+display at another rate takes its mode's; the display mode's whole hertz there and elsewhere), with a correction of
+at most a fiftieth of a refresh a frame that
 keeps the game clock on the swaps'. The measured time otherwise: no vsync, a frame without exactly one swap, swaps that
 return without waiting (frames slower than the display), a display whose swaps keep no steady period (a variable
 refresh rate), or a game clock a refresh away from the swaps' (the lock then starts again). Under vsync a frame cap at or within 2 % of the display's rate is set just above
 it, so the display paces the frames and the cap stops only a swap that does not wait (logged once). A driver's forced
 vsync or frame cap is not seen by the engine: the measured time.
+
+Swaps that keep to the refresh can still return at uneven times within it, and a frame's draw after its swap can take
+uneven time, so the frames start, and read their input, unevenly while the pictures come evenly; and a driver that
+queues pictures ahead shows each one refreshes after its swap. So once the swaps of a window that fills its display
+(fullscreen, borderless or in a mode of its own) have brought a picture each refresh (the last 64 returned 64
+refreshes apart in all, within 1.5 %) for about 150 frames, whether or not the steps lock, the frames end at the
+display's vertical blank instead, on every driver alike. A swap called more than a
+refresh after the last one returned (a frame that ran late) returns late for that reason, and the next one back on its
+phase: neither counts. Nor does a frame the frame cap started, having waited for its due time (a cap below the
+display's rate). A window that does not fill its display is shown through the desktop's compositor, which times its
+swaps: it ends its frames at the swaps for as long as it is smaller (`FillsDisplay`). On Windows each frame under
+vsync from then on ends by waiting for the next vertical blank of the window's display, after the frame cap's
+wait (`FVSyncStep::WaitVBlank`; `appWaitDisplayVBlank`, the graphics kernel's vertical blank event; that first frame
+waits for three more,
+so the frames the driver queued before are shown and the waits start on an empty queue: at the display's rate nothing
+drains it later). The next frame then starts, reads its input
+and moves the world on at a refresh, and the steps count the refreshes between those waits in place of the swaps':
+a swap that waits for the refresh can return milliseconds before or after it, and unevenly from frame to frame, where
+the driver queues frames ahead. The swap then finds a free buffer and the picture shows at the next refresh. A frame
+that runs past its refresh (by less than 8 refreshes) does not wait: the next starts at once and counts from the
+refresh it missed, so a frame slower than the display costs no further refresh. That refresh does not count as one the
+frame kept to (a variable refresh rate shows a late frame when it comes): the steps keep the lock through a late frame
+among frames on time, and frames that are all late step by the measured time. Two swaps that return within one
+refresh (the frame after a late one, started at once, can hand its picture over in the refresh the late one's picture
+went in) leave one more picture in the driver's queue, a refresh more from every swap to the screen. That frame of
+slack takes up the next late frames without a repeat; after 120 frames ended by a wait without a late one, a frame
+waits one refresh more, which the queued picture fills, and the queue is back to one. Frames slower than the display
+never hand two pictures over in one refresh, and keep their rate. The same holds on the GPU's side: while the waits
+run, the render device puts a fence after each swap (`UC2PresentDone`, `Source/Engine/Src/UC2PresentClock.cpp`), and
+a picture the GPU has not finished by the vertical blank after its swap (the fence looked at, without waiting, once
+that vertical blank has passed) shows a refresh late: the next picture, handed over before that, queues behind it,
+the same frame of slack, given back the same way (nothing waits for the GPU). A queue that fills up (the GPU fell
+further behind, then caught up) makes the driver hold each swap for room in it, every frame then runs late and the
+held swaps pace the frames: two swaps in a row held half a refresh or more beyond the driver's usual swap (a present
+that waits for the GPU inside the swap waits that long every frame) start the waits again, three refreshes
+on, as at first. The fences cannot
+tell a GPU that holds the frames back from one waiting behind a queued picture, and a driver that holds each swap
+until its picture shows looks like a full queue, so each of those drains is checked: the queue full again, or a
+picture the GPU has not done in time, two to six swaps after it, and it did not take; the next waits twice as long
+as the last, from 2 s up to a minute, and one that takes clears that.
+On a fixed refresh every vertical blank wait returns a whole number of refreshes after the frame's clock before it,
+late frames or not; a variable refresh rate waits for the frame. Past half of about the last hundred waits off a whole
+number by a quarter refresh or more, the waits end for the session, and the swaps' returns step the world as
+elsewhere. After 120 waits in a row that the graphics kernel refuses (a display being set up or reset) the frames end
+at the swaps, and the wait is tried again every two seconds; when it works again the waits start as at first, three
+refreshes on. Linux has no such wait: its frames end at the swaps; the web and Android build none of it.
 
 ## Relaunch
 

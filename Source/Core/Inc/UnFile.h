@@ -349,6 +349,9 @@ CORE_API DOUBLE appSecondsSlow();
 CORE_API void appSleep( FLOAT Seconds );
 CORE_API void appSleepUntil( DOUBLE Seconds );	// until appSeconds() reaches Seconds, to a fraction of a millisecond
 CORE_API UBOOL appDisplayVBlank( QWORD& Refresh, DOUBLE& Time, DOUBLE& Period );	// the last vertical blank, where known
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+CORE_API UBOOL appWaitDisplayVBlank( INT X, INT Y );	// waits for the next vertical blank of the display at a desktop point, where known
+#endif
 
 /*-----------------------------------------------------------------------------
 	Character type functions.
