@@ -66,8 +66,8 @@ android {
         // Android 7: All files access is asked for from Android 11, the storage permission before.
         minSdk = 24
         targetSdk = 34
-        versionCode = 10302
-        versionName = '1.3.2'
+        versionCode = 10400
+        versionName = '1.4.0'
         ndk { abiFilters.addAll(uc2Abis) }
         externalNativeBuild {
             cmake {
