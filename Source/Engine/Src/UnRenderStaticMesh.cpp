@@ -302,6 +302,30 @@ void DrawSection(UStaticMesh* StaticMesh,INT SectionIndex,UMaterial* Material,FR
 		Section->NumTriangles * NumPasses);
 }
 
+//
+//	SortAlphaBlended
+//
+// [Engine.GameEngine] SortAlphaBlended, read once at the first translucent draw: alpha-blended static mesh sections draw
+// their separate objects back to front (DrawSortedSection) and alpha-blended decoration layers draw back to front
+// (ATerrainInfo::RenderDecorations). Compiled default True, False under _XBOX, whose draw paths have no such sort: the
+// setting does nothing there.
+//
+UBOOL SortAlphaBlended()
+{
+	static INT	Value = -1;
+	if(Value < 0)
+	{
+#ifdef _XBOX
+		UBOOL	Setting = 0;
+#else
+		UBOOL	Setting = 1;
+#endif
+		GConfig->GetBool(TEXT("Engine.GameEngine"),TEXT("SortAlphaBlended"),Setting,GIni);
+		Value = Setting ? 1 : 0;
+	}
+	return Value;
+}
+
 #ifdef _XBOX
 
 #define D3DCULLMODE 147
@@ -681,9 +705,9 @@ void DrawSortedSection(FLevelSceneNode* SceneNode,FDynamicActor* Owner,UStaticMe
 {
 	FStaticMeshSection*	Section = &StaticMesh->Sections(SectionIndex);
 
-	// An alpha-blended section does not write depth: its separate objects are drawn back to front from the eye, so
-	// that a nearer canopy covers a farther one of the same mesh.
-	if(Section->NumPrimitives > 0 && IsAlphaBlended(Material))
+	// An alpha-blended section does not write depth: with SortAlphaBlended its separate objects are drawn back to front
+	// from the eye, so that a nearer canopy covers a farther one of the same mesh.
+	if(Section->NumPrimitives > 0 && SortAlphaBlended() && IsAlphaBlended(Material))
 	{
 		INT					NumPasses = RI->SetMaterial(Material);
 		FMemMark			MemMark(GSceneMem);

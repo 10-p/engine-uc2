@@ -759,6 +759,13 @@ extern void CalculateStaticMeshLighting(UStaticMesh* StaticMesh,UStaticMeshInsta
 
 extern void RenderStaticMesh(FDynamicActor* Owner,FLevelSceneNode* SceneNode,TList<FDynamicLight*>* Lights,TList<FProjectorRenderInfo*>* Projectors,FRenderInterface* RI);
 
+//
+//	SortAlphaBlended: [Engine.GameEngine] SortAlphaBlended, alpha-blended static mesh objects and decoration layers
+//	drawn back to front (compiled default True; False under _XBOX, whose draw paths have no such sort).
+//
+
+extern UBOOL SortAlphaBlended();
+
 #ifndef _XBOX
 //
 //	IsAlphaBlended: the material blends by its alpha, so the order it is drawn in shows.
