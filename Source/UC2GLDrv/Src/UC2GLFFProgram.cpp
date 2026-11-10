@@ -46,6 +46,22 @@
 	for the pass; the position is the same product as in gl4es' shaders, so later passes keep
 	their depth test, and a reflection is computed per fragment, as gl4es does. Without a
 	texture-unit LOD bias on GL ES every sampled stage takes its bias in the lookup.
+
+	A lit pass with static lighting (COLORVERTEX) over vertices with COLOR2 (FVF_Specular: a
+	static mesh's colour or alpha stream) takes its program here on both, switch or not, with
+	a vertex stage of its own that lights as the Xbox's static mesh vertex shader does (VS_StaticMeshVertexColor: InitRGB, LightAmbient
+	with the constant's alpha 1, the lights, MulVertexSpec, AddVertexRGB with
+	VS_StaticMeshVertexColorDiffuse, the pixel-shader materials' vertex stage in
+	UC2GLShaders.cpp): (ambient + the lights' diffuse, alpha 1) * COLOR2 + COLOR1, clamped. Its
+	colour is D3DDrv's (D3DRenderDevice.cpp: the diffuse and ambient material from COLOR2, the
+	emissive from COLOR1). GL's colour material tracks one array, and its lit alpha is the
+	material's: the vertex alpha a material reads as its opacity or as a combiner's mask would
+	be 1. Every light the device enables is directional (SetLight; VS_Lights_Point_MAX is 0).
+	COLOR1 is the primary colour CommitStreams binds; COLOR2 is the generic attribute
+	FF_VA_Color2, as glSecondaryColorPointer takes no alpha. On desktop GL this vertex stage
+	generates a reflection per vertex, as the fixed-function stage does. Where every colour of
+	COLOR2's stream is opaque white (FOpenGLVertexStream::ColorsOpaqueWhite: most meshes' alpha
+	stream) both lightings give one result, and the pass keeps the fixed-function vertex stage.
 =============================================================================*/
 
 #include "UC2GLDrv.h"
@@ -53,11 +69,29 @@
 // What a pass's program depends on: per stage the two operations, their arguments (only
 // those the operation reads; the rest zeroed so equal passes share a program), the
 // texture target and whether it is a lightmap read through the bicubic filter; the colour
-// sum and fog; which stages take their LOD bias in the lookup.
+// sum and fog; which stages take their LOD bias in the lookup; for a pass lit with COLOR2,
+// which lights are on and whether COLOR1 is there.
 struct FUC2GLFFKey
 {
 	DWORD	Words[MAX_STAGES * 3 + 1];
 };
+
+// The last word of the key, above the stage count (bits 0-3) and the bias mask (bits 8-15).
+enum
+{
+	FFK_ColorSum		= 0x10,
+	FFK_Fog				= 0x20,
+	FFK_OwnVertex		= 0x40,		// a vertex stage of its own (FFBuildVertexSource)
+	FFK_MeshColors		= 0x80,		// lit as the Xbox static mesh vertex shader, with COLOR2 (the file header)
+	FFK_LightShift		= 16,		// bits 16-23: the lights that are on (MeshColors)
+	FFK_Color1			= 1 << 24,	// COLOR1 is there, the emissive term (MeshColors)
+	FFK_VertexReflect	= 1 << 25,	// a reflection per vertex (desktop GL), not per fragment
+};
+
+// The generic attribute that carries COLOR2 (MeshColors): a location no built-in attribute the vertex stage reads
+// takes, neither desktop GL's conventional ones (1 is the vertex weight where drivers alias them) nor gl4es' (its
+// unused weight, or its fog coordinate on a context with 8 attributes; no draw has a fog coordinate array).
+#define FF_VA_Color2 1
 
 struct FUC2GLFFProgram
 {
@@ -164,8 +198,9 @@ static DWORD FFGeneration( const FOpenGLMaterialStateStage& Stage )
 	}
 }
 
-// OwnVertex: the program has a vertex stage of its own (GL ES), which needs each stage's coordinate generation.
-static void FFMakeKey( UUC2GLRenderDevice* RenDev, FOpenGLMaterialState* MS, INT StagesUsed, UBOOL ColorSum, UBOOL Fog, UBOOL OwnVertex, FUC2GLFFKey& Key )
+// OwnVertex: the program has a vertex stage of its own, which needs each stage's coordinate generation. Vertex:
+// the vertex stage's lighting and reflection flags (FFK_MeshColors, the lights, FFK_Color1, FFK_VertexReflect).
+static void FFMakeKey( UUC2GLRenderDevice* RenDev, FOpenGLMaterialState* MS, INT StagesUsed, UBOOL ColorSum, UBOOL Fog, UBOOL OwnVertex, DWORD Vertex, FUC2GLFFKey& Key )
 {
 	appMemzero( &Key, sizeof(Key) );
 	DWORD BiasMask = 0;
@@ -188,7 +223,7 @@ static void FFMakeKey( UUC2GLRenderDevice* RenDev, FOpenGLMaterialState* MS, INT
 		if( Stage.ColorOp == D3DTOP_DISABLE )
 			break;
 	}
-	Key.Words[MAX_STAGES*3] = (DWORD)StagesUsed | (ColorSum ? 0x10 : 0) | (Fog ? 0x20 : 0) | (OwnVertex ? 0x40 : 0) | (BiasMask << 8);
+	Key.Words[MAX_STAGES*3] = (DWORD)StagesUsed | (ColorSum ? FFK_ColorSum : 0) | (Fog ? FFK_Fog : 0) | (OwnVertex ? FFK_OwnVertex | Vertex : 0) | (BiasMask << 8);
 }
 
 static DWORD FFHash( const FUC2GLFFKey& Key )
@@ -256,9 +291,11 @@ static FString FFOp( D3DTEXTUREOP Op, const FString& A0, const FString& A1, cons
 	}
 }
 
-// Whether a sampled stage of the key takes the reflection (per fragment).
+// Whether a sampled stage of the key takes the reflection per fragment.
 static UBOOL FFHasReflection( const FUC2GLFFKey& Key )
 {
+	if( Key.Words[MAX_STAGES*3] & FFK_VertexReflect )
+		return 0;
 	for( INT s=0; s<(INT)(Key.Words[MAX_STAGES*3] & 0xf) && (Key.Words[s*3] & 0xff) != D3DTOP_DISABLE; s++ )
 		if( ((Key.Words[s*3] >> 16) & 3) && ((Key.Words[s*3] >> 19) & 3) == FFG_Reflection )
 			return 1;
@@ -268,9 +305,10 @@ static UBOOL FFHasReflection( const FUC2GLFFKey& Key )
 static FString FFBuildSource( const FUC2GLFFKey& Key )
 {
 	INT		StagesUsed	= Key.Words[MAX_STAGES*3] & 0xf;
-	UBOOL	ColorSum	= (Key.Words[MAX_STAGES*3] & 0x10) != 0,
-			Fog			= (Key.Words[MAX_STAGES*3] & 0x20) != 0;
-	DWORD	BiasMask	= Key.Words[MAX_STAGES*3] >> 8;
+	UBOOL	ColorSum	= (Key.Words[MAX_STAGES*3] & FFK_ColorSum) != 0,
+			Fog			= (Key.Words[MAX_STAGES*3] & FFK_Fog) != 0,
+			FragReflect	= (Key.Words[MAX_STAGES*3] & FFK_VertexReflect) == 0;
+	DWORD	BiasMask	= (Key.Words[MAX_STAGES*3] >> 8) & 0xff;
 	FString	Decl, Body;
 
 	Decl += TEXT("// UC2GLDrv: D3D texture stages (UC2GLFFProgram.cpp)\nuniform vec4 u_tfactor;\n");
@@ -283,7 +321,7 @@ static FString FFBuildSource( const FUC2GLFFKey& Key )
 						AlphaOp	= (D3DTEXTUREOP)((Key.Words[s*3] >> 8) & 0xff);
 		DWORD			Target	= (Key.Words[s*3] >> 16) & 3,
 						Bicubic	= (Key.Words[s*3] >> 18) & 1;
-		UBOOL			Reflect	= ((Key.Words[s*3] >> 19) & 3) == FFG_Reflection;
+		UBOOL			Reflect	= FragReflect && ((Key.Words[s*3] >> 19) & 3) == FFG_Reflection;
 		if( ColorOp == D3DTOP_DISABLE )
 			break;
 		if( Target )
@@ -350,21 +388,38 @@ static FString FFBuildSource( const FUC2GLFFKey& Key )
 // it does not generate is the vertex's), each stage's coordinates through its texture matrix; for a reflection the
 // eye-space position and normal. ftransform() is the product gl4es' own shaders take, so the depth is theirs. The
 // empty line before main(): gl4es inserts declarations of its own (clip planes) above the line before it.
+// FFK_MeshColors: lit as the Xbox's static mesh vertex shader lights (the file header), COLOR1 in gl_Color and COLOR2
+// in a_color2; the lights are GL's own (CommitLights), directional, the ambient GL's light model ambient.
 //
 static FString FFBuildVertexSource( const FUC2GLFFKey& Key )
 {
 	INT		StagesUsed	= Key.Words[MAX_STAGES*3] & 0xf;
-	UBOOL	ColorSum	= (Key.Words[MAX_STAGES*3] & 0x10) != 0,
+	DWORD	Flags		= Key.Words[MAX_STAGES*3];
+	UBOOL	ColorSum	= (Flags & FFK_ColorSum) != 0,
+			MeshColors	= (Flags & FFK_MeshColors) != 0,
 			Reflection	= FFHasReflection( Key );
 	FString	S = TEXT("// UC2GLDrv: the vertex stage of a fixed-function pass (UC2GLFFProgram.cpp)\n");
 	if( Reflection )
 		S += TEXT("varying vec3 v_reflEye;\nvarying vec3 v_reflNormal;\n");
+	if( MeshColors )
+		S += TEXT("attribute vec4 a_color2;\n");
 	S +=	TEXT("\n")
 			TEXT("void main()\n{\n")
 			TEXT("\tgl_Position = ftransform();\n")
-			TEXT("\tgl_FrontColor = gl_Color;\n")
 			TEXT("\tvec4 eye = gl_ModelViewMatrix * gl_Vertex;\n")
 			TEXT("\tvec3 normal = normalize( gl_NormalMatrix * gl_Normal );\n");
+	if( MeshColors )
+	{
+		S += TEXT("\tvec4 light = vec4( gl_LightModel.ambient.rgb, 1.0 );\n");
+		for( INT i=0; i<8; i++ )
+			if( Flags & (1 << (FFK_LightShift + i)) )
+				S += FString::Printf( TEXT("\tlight.rgb += gl_LightSource[%i].diffuse.rgb * max( dot( normal, normalize( gl_LightSource[%i].position.xyz ) ), 0.0 );\n"), i, i );
+		S += (Flags & FFK_Color1)
+			? TEXT("\tgl_FrontColor = clamp( light * a_color2 + gl_Color, 0.0, 1.0 );\n")
+			: TEXT("\tgl_FrontColor = clamp( light * a_color2, 0.0, 1.0 );\n");
+	}
+	else
+		S += TEXT("\tgl_FrontColor = gl_Color;\n");
 	if( ColorSum )
 		S += TEXT("\tgl_FrontSecondaryColor = gl_SecondaryColor;\n");
 	if( Reflection )
@@ -381,7 +436,11 @@ static FString FFBuildVertexSource( const FUC2GLFFKey& Key )
 		case FFG_Vertices:	S += FString::Printf( TEXT("\tgl_TexCoord[%i] = gl_TextureMatrix[%i] * gl_MultiTexCoord%i;\n"), s, s, s );						break;
 		case FFG_Position:	S += FString::Printf( TEXT("\tgl_TexCoord[%i] = gl_TextureMatrix[%i] * vec4( eye.xyz, gl_MultiTexCoord%i.q );\n"), s, s, s );	break;
 		case FFG_Normal:	S += FString::Printf( TEXT("\tgl_TexCoord[%i] = gl_TextureMatrix[%i] * vec4( normal, gl_MultiTexCoord%i.q );\n"), s, s, s );	break;
-		default:			break;	// FFG_Reflection: per fragment
+		default:
+			// FFG_Reflection: per fragment, or here as GL_REFLECTION_MAP does
+			if( Flags & FFK_VertexReflect )
+				S += FString::Printf( TEXT("\tgl_TexCoord[%i] = gl_TextureMatrix[%i] * vec4( reflect( normalize( eye.xyz ), normal ), gl_MultiTexCoord%i.q );\n"), s, s, s );
+			break;
 		}
 	}
 	S += TEXT("}\n");
@@ -408,9 +467,9 @@ static FUC2GLFFProgram* FFGetProgram( UUC2GLRenderDevice* RenDev, const FUC2GLFF
 	RenDev->glCompileShader( Shader );
 	GLint Status = 0;
 	RenDev->glGetShaderiv( Shader, GL_COMPILE_STATUS, &Status );
-	// Without OwnVertex (desktop GL) the program has no vertex shader: the fixed-function vertex stage feeds it.
+	// Without OwnVertex the program has no vertex shader: the fixed-function vertex stage feeds it.
 	GLuint VertexShader = 0;
-	if( Status && (Key.Words[MAX_STAGES*3] & 0x40) )
+	if( Status && (Key.Words[MAX_STAGES*3] & FFK_OwnVertex) )
 	{
 		FString VertexSource = FFBuildVertexSource( Key );
 		Source += TEXT("// vertex stage:\n") + VertexSource;
@@ -434,6 +493,8 @@ static FUC2GLFFProgram* FFGetProgram( UUC2GLRenderDevice* RenDev, const FUC2GLFF
 		RenDev->glAttachShader( P.Program, Shader );
 		if( VertexShader )
 			RenDev->glAttachShader( P.Program, VertexShader );
+		if( VertexShader && (Key.Words[MAX_STAGES*3] & FFK_MeshColors) )
+			RenDev->glBindAttribLocation( P.Program, FF_VA_Color2, "a_color2" );
 		RenDev->glLinkProgram( P.Program );
 		RenDev->glGetProgramiv( P.Program, GL_LINK_STATUS, &Status );
 	}
@@ -490,14 +551,27 @@ UBOOL FOpenGLRenderInterface::BeginFixedFunctionProgram( FOpenGLMaterialState* M
 	for( INT s=0; s<StagesUsed && MaterialState->Stages[s].ColorOp != D3DTOP_DISABLE; s++ )
 		if( FFStageSamples( MaterialState->Stages[s] ) )
 			Lightmap |= FFStageBicubic( RenDev, MaterialState->Stages[s] );
-	// GL ES: only an unlit pass with a lightmap for the filter (the lightmapped BSP), with a vertex stage of its
-	// own (FFBuildVertexSource); every other pass keeps gl4es' shader.
-	UBOOL OwnVertex = RenDev->IsGLES;
-	UBOOL Program = RenDev->FFProgramsActive || (RenDev->IsGLES && Lightmap && !CurrentState->UseDynamicLighting);
+	// A lit pass with static lighting over COLOR2 lights in its own vertex stage, on both (the file header);
+	// over a COLOR2 of opaque white the fixed-function lighting is the same.
+	UBOOL MeshColors = CurrentState->UseDynamicLighting && CurrentState->UseStaticLighting && StreamColor2.Present && !StreamColor2.OpaqueWhite;
+	// GL ES: else only an unlit pass with a lightmap for the filter (the lightmapped BSP), with a vertex stage of
+	// its own (FFBuildVertexSource); every other pass keeps gl4es' shader.
+	UBOOL OwnVertex = RenDev->IsGLES || MeshColors;
+	UBOOL Program = RenDev->FFProgramsActive || MeshColors || (RenDev->IsGLES && Lightmap && !CurrentState->UseDynamicLighting);
 	if( !Program )
 		return 0;
+	DWORD Vertex = 0;
+	if( MeshColors )
+	{
+		Vertex |= FFK_MeshColors | (StreamHasColor1 ? FFK_Color1 : 0);
+		for( INT i=0; i<8; i++ )
+			if( Lights[i].Enabled )
+				Vertex |= 1 << (FFK_LightShift + i);
+	}
+	if( !RenDev->IsGLES )
+		Vertex |= FFK_VertexReflect;
 	FUC2GLFFKey Key;
-	FFMakeKey( RenDev, MaterialState, StagesUsed, ColorSum, Fog, OwnVertex, Key );
+	FFMakeKey( RenDev, MaterialState, StagesUsed, ColorSum, Fog, OwnVertex, Vertex, Key );
 	FUC2GLFFProgram* P = FFGetProgram( RenDev, Key );
 	if( !P->Program )
 	{
@@ -505,6 +579,17 @@ UBOOL FOpenGLRenderInterface::BeginFixedFunctionProgram( FOpenGLMaterialState* M
 		return 0;
 	}
 	RenDev->glUseProgram( P->Program );
+	if( MeshColors )
+	{
+		// COLOR2 as a_color2; no colour material while the program draws (the colour array would leave GL's
+		// material undefined for the next lit pass).
+		RenDev->glDisable( GL_COLOR_MATERIAL );
+		RenDev->glBindBuffer( GL_ARRAY_BUFFER, StreamColor2.Buffer );
+		RenDev->glVertexAttribPointer( FF_VA_Color2, 4, GL_UNSIGNED_BYTE, GL_TRUE, StreamColor2.Stride, (const BYTE*)(PTRINT)StreamColor2.Offset );
+		RenDev->glEnableVertexAttribArray( FF_VA_Color2 );
+		FFColor2Array = 1;
+		RenDev->FFMeshColorDraws++;
+	}
 	FPlane TFactor = FColor(MaterialState->TFactorColor).Plane();
 	if( P->TFactorLoc >= 0 )
 		RenDev->glUniform4f( P->TFactorLoc, TFactor.X, TFactor.Y, TFactor.Z, TFactor.W );
@@ -526,6 +611,9 @@ UBOOL FOpenGLRenderInterface::BeginFixedFunctionProgram( FOpenGLMaterialState* M
 void FOpenGLRenderInterface::EndFixedFunctionProgram()
 {
 	RenDev->glUseProgram( 0 );
+	if( FFColor2Array )
+		RenDev->glDisableVertexAttribArray( FF_VA_Color2 );
+	FFColor2Array = 0;
 }
 
 void UC2GL_FlushFixedFunctionPrograms( UUC2GLRenderDevice* RenDev )
@@ -546,8 +634,8 @@ void UC2GL_LogFFStats( UUC2GLRenderDevice* RenDev )
 {
 	if( !RenDev->FFProgramsActive && !RenDev->FFProgramDraws )
 		return;
-	debugf( NAME_Init, TEXT("UC2GLDrv: fixed-function programs: %i linked, %i failed; %i program draws, %i draws kept the texture environment (program missing)"),
-		RenDev->FFProgramsLinked, RenDev->FFProgramsFailed, RenDev->FFProgramDraws, RenDev->FFFallbackDraws );
+	debugf( NAME_Init, TEXT("UC2GLDrv: fixed-function programs: %i linked, %i failed; %i program draws (%i lit with COLOR2 as the material), %i draws kept the texture environment (program missing)"),
+		RenDev->FFProgramsLinked, RenDev->FFProgramsFailed, RenDev->FFProgramDraws, RenDev->FFMeshColorDraws, RenDev->FFFallbackDraws );
 }
 
 /*-----------------------------------------------------------------------------

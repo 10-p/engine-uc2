@@ -107,6 +107,9 @@ FOpenGLRenderInterface::FOpenGLRenderInterface(UUC2GLRenderDevice* InRenDev)
 	appMemzero( ColorRemapConstant, sizeof(ColorRemapConstant) );
 	PointSampleNudge		= 0;
 	ColorSumEnabled			= 0;
+	StreamHasColor1			= 0;
+	appMemzero( &StreamColor2, sizeof(StreamColor2) );
+	FFColor2Array			= 0;
 	InOcclusionQuery		= 0;
 	SceneDepthTestFramebuffer	= 0;
 	WireIndexBuffer			= 0;
@@ -2021,6 +2024,7 @@ void FOpenGLRenderInterface::CommitStreams( INT FirstIndex )
 	UBOOL	HasNormals = 0, HasDiffuse = 0, HasSpecular = 0, HasPosition = 0;
 
 	appMemzero( GTexCoordSets, sizeof(GTexCoordSets) );
+	appMemzero( &StreamColor2, sizeof(StreamColor2) );
 
 	FOpenGLVertexShader* Shader = CurrentState->VertexShader;
 	for( INT StreamIndex=0; Shader && StreamIndex<CurrentState->NumStreams && StreamIndex<Shader->Declaration.NumStreams; StreamIndex++ )
@@ -2067,6 +2071,11 @@ void FOpenGLRenderInterface::CommitStreams( INT FirstIndex )
 			case FVF_Specular:
 				RenDev->glSecondaryColorPointer( 3, GL_UNSIGNED_BYTE, Stride, Pointer );
 				HasSpecular = 1;
+				StreamColor2.Present	= 1;
+				StreamColor2.OpaqueWhite = Stream->ColorsOpaqueWhite;
+				StreamColor2.Buffer		= CurrentState->StreamBuffers[StreamIndex];
+				StreamColor2.Stride		= Stride;
+				StreamColor2.Offset		= Offset;
 				break;
 			case FVF_TexCoord0:
 			case FVF_TexCoord1:
@@ -2091,6 +2100,8 @@ void FOpenGLRenderInterface::CommitStreams( INT FirstIndex )
 		}
 	}
 
+	StreamHasColor1 = HasDiffuse;
+
 	if( HasPosition )
 		RenDev->glEnableClientState( GL_VERTEX_ARRAY );
 	else
@@ -2105,6 +2116,10 @@ void FOpenGLRenderInterface::CommitStreams( INT FirstIndex )
 	// Vertex colours (D3D: COLOR1). Unlit: passed through, white when absent. Lit: they are
 	// the emissive term when COLORVERTEX (UseStaticLighting) is on, as D3DDrv sets
 	// EMISSIVEMATERIALSOURCE = COLOR1; with no colour or COLORVERTEX off the emissive is 0.
+	// D3DDrv also takes the diffuse and ambient material from COLOR2: a lit pass with
+	// COLORVERTEX over a stream with COLOR2 (a static mesh) is drawn by a program that does
+	// (UC2GLFFProgram.cpp), COLOR2 a generic attribute there; without COLOR2 the material's
+	// white stands, as here.
 	if( HasDiffuse )
 		RenDev->glEnableClientState( GL_COLOR_ARRAY );
 	else

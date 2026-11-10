@@ -682,6 +682,7 @@ FOpenGLVertexStream::FOpenGLVertexStream(UUC2GLRenderDevice* InRenDev,FRenderRes
 {
 	BufferID	= 0;
 	CachedSize	= 0;
+	ColorsOpaqueWhite = 0;
 }
 
 FOpenGLVertexStream::~FOpenGLVertexStream()
@@ -715,6 +716,20 @@ void FOpenGLVertexStream::Cache(FVertexStream* SourceStream)
 	FVertexComponent	Components[MAX_VERTEX_COMPONENTS];
 	INT					NumComponents = SourceStream->GetComponents( Components );
 	UC2GL_CopyVertices( Swizzled, Raw, Size, SourceStream->GetStride(), Components, NumComponents );
+
+	// Whether the colours change nothing where a lit pass takes them as its material (UC2GLFFProgram.cpp).
+	INT Stride = SourceStream->GetStride(), Offset = 0, Colors = 0, White = 0;
+	for( INT i=0; i<NumComponents; i++ )
+	{
+		if( Components[i].Type == CT_Color && Stride > 0 )
+			for( INT At = Offset; At + 4 <= Size; At += Stride )
+			{
+				Colors++;
+				White += (Raw[At] & Raw[At+1] & Raw[At+2] & Raw[At+3]) == 0xFF;
+			}
+		Offset += ComponentSize( Components[i].Type );
+	}
+	ColorsOpaqueWhite = Colors > 0 && White == Colors;
 
 	RenDev->glBindBuffer( GL_ARRAY_BUFFER, BufferID );
 	RenDev->glBufferData( GL_ARRAY_BUFFER, Size, Swizzled, GL_STATIC_DRAW );

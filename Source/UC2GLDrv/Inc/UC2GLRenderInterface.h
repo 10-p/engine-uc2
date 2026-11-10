@@ -519,6 +519,20 @@ private:
 	UBOOL BeginFixedFunctionProgram( FOpenGLMaterialState* MaterialState, UBOOL ColorSum, UBOOL Fog );
 	void EndFixedFunctionProgram();
 	UBOOL					ColorSumEnabled;			// CommitStreams turned GL_COLOR_SUM on for this pass
+	// What CommitStreams found of the current draw's vertex colours: whether it has D3D's COLOR1
+	// (FVF_Diffuse), and where COLOR2 (FVF_Specular) is: buffer, stride and offset of the first vertex,
+	// and whether its stream's colours are all opaque white.
+	struct FOpenGLColorArray
+	{
+		UBOOL	Present,
+				OpaqueWhite;
+		GLuint	Buffer;
+		INT		Stride,
+				Offset;
+	};
+	UBOOL					StreamHasColor1;
+	FOpenGLColorArray		StreamColor2;
+	UBOOL					FFColor2Array;				// BeginFixedFunctionProgram enabled COLOR2's generic attribute
 
 	// Various material handlers (UC2GLMaterialState.cpp; UC2's D3DMaterialState.cpp).
 	UBOOL SetMultiPassMaterial( UMultiPassMaterial* MultiPassMaterial, FOpenGLModifierInfo BaseModifierInfo, FString* ErrorString, UMaterial** ErrorMaterial );

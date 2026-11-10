@@ -273,7 +273,8 @@ public:
 									MaskCombine4;			// test key MaskCaps=combine4: as if GL_NV_texture_env_combine4 were missing
 	INT								GLFixedFunctionUnits,	// GL_MAX_TEXTURE_UNITS: units of the texture environment
 									GLProgramUnits;			// min(GL_MAX_TEXTURE_COORDS, GL_MAX_TEXTURE_IMAGE_UNITS): units a fragment shader can sample with fixed-function texture coordinates
-	INT								FFProgramsLinked, FFProgramsFailed, FFProgramDraws, FFFallbackDraws;
+	INT								FFProgramsLinked, FFProgramsFailed, FFProgramDraws, FFFallbackDraws,
+									FFMeshColorDraws;		// program draws lit with COLOR2 as the material (UC2GLFFProgram.cpp)
 	void UpdateTextureCaps();
 
 	// BSP lightmaps (the lightmap atlases) through a cubic B-spline of four bilinear reads instead of one
