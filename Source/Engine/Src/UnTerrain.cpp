@@ -4029,9 +4029,9 @@ static INT Compare(FDecoInfo& A, FDecoInfo& B)
 static BYTE DecoLayerDrawOrder( FDecorationLayer& DecoLayer )
 {
 #ifndef _XBOX
-	// An alpha-blended layer does not write depth, so it is drawn back to front whatever its DrawOrder: a nearer
-	// instance drawn first would be covered by a farther one. Opaque and masked layers keep their DrawOrder.
-	if( DecoLayer.StaticMesh )
+	// An alpha-blended layer does not write depth, so with SortAlphaBlended it is drawn back to front whatever its
+	// DrawOrder: a nearer instance drawn first would be covered by a farther one. Opaque and masked layers keep theirs.
+	if( DecoLayer.StaticMesh && SortAlphaBlended() )
 		for( INT MaterialIndex=0; MaterialIndex<DecoLayer.StaticMesh->Materials.Num(); MaterialIndex++ )
 			if( IsAlphaBlended( DecoLayer.StaticMesh->Materials(MaterialIndex).Material ) )
 				return SORT_BackToFront;
