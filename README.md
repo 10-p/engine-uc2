@@ -60,7 +60,10 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   hover focus, no row, no wheel and no hint, and a click on it opens it; while the Arena's mutators are up, the rest of
   the page (its other panels, its header) but the footer's hints is inert the same way and a click there closes the
   mutators as the pad's B does, patch set menu-mouse), the console on the key left of 1, the PC mouse look of the
-  mouse-look patch set; in the coup de grace's button prompts (the timed sequences of
+  mouse-look patch set; while player one uses the keyboard or the mouse the pad's button glyphs show the keys that do
+  the same, the scoreboards' White and Black hints (textures of their own, `Canvas.DrawTile`) too, whose keys (V and
+  C by default) turn the scoreboard's pages as the pad's White and Black do (`UnKeyGlyphs.cpp`, patch set key-glyphs);
+  in the coup de grace's button prompts (the timed sequences of
   `UCPlayerController.InputRequests`) a held key or mouse button counts as a pad button when the two bindings start
   with the same command, the rule by which the key glyphs pick the key they show (`USDL2Viewport::GetAnalogButtonAmount`:
   Space for A, the mouse buttons for the triggers), and the movement keys give the left stick's directions (the
@@ -75,7 +78,8 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   and four on the character page (players34).
 - **Wide windows**: the 640x480 menus and HUD in the largest centred 4:3 box of the window or of a split view, the
   view Hor+; the HUD's left and right groups at the view's sides and its centred items on its centre, the console's
-  typing line across the window, the announcement band a gradient under shadowed texts, it and the status bar on the
+  typing line across the window, the announcement band a gradient under shadowed texts (the status bar's text, which
+  Epic's opaque band covers, left out while the band shows the match-begin countdown), it and the status bar on the
   view's bottom edge (wide-hud).
 - **Custom maps and mutators**: maps dropped into the map paths appear in the game's lists; a mutator's package joins
   the server's package map.

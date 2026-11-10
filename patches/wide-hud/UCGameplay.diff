@@ -403,7 +403,20 @@
  	C.DrawColor = cHUDWhite;
  	LargestXL = ((ScreenWidth + float(SafeZoneOffsetX)) - float((46 * 2)));
  	TextScale = 1.0;
-@@ -2367,6 +2514,8 @@
+@@ -2240,7 +2387,11 @@
+ 		C.TextSize(StatusText, XL, YL, TextScale, TextScale);
+ 	}
+ 	C.SetPos(((ScreenWidth * 0.5) - (XL * 0.5)), (Y + Buffer));
+-	C.DrawTextDualFont(StatusText, ButtonFont, TextScale, TextScale);
++	// the text, unless this view's announcement band shows the match-begin countdown (the same words), as under Epic's opaque band
++	if (((((AnnDuration <= float(0)) || (AnnText == "")) || IsSplitScreen()) || (AnnClass == None)) || !(ClassIsChildOf(AnnClass, Class'UCAnnouncements.Ann_MatchBegin')))
++	{
++		C.DrawTextDualFont(StatusText, ButtonFont, TextScale, TextScale);
++	}
+ }
+ 
+ simulated function Message(PlayerReplicationInfo PRI, coerce string Msg, name MsgType)
+@@ -2367,6 +2518,8 @@
  	local float AnnouncementYL;
  	local float MessageXL;
  	local float MessageYL;
@@ -412,7 +425,7 @@
  	if ((LocalMessage.Message != None))
  	{
  		C.Font = LocalMessage.StringFont;
-@@ -2381,9 +2530,14 @@
+@@ -2381,9 +2534,14 @@
  			FadeValue = (LocalMessage.EndOfLife - Level.TimeSeconds);
  			C.DrawColor.A = byte((float(C.DrawColor.A) * (FadeValue / LocalMessage.Lifetime)));
  		}
@@ -429,7 +442,7 @@
  		if (((AnnDuration > 0.0) && (AnnText != "")))
  		{
  			C.TextSize(AnnText, AnnouncementXL, AnnouncementYL);
-@@ -2394,13 +2548,14 @@
+@@ -2394,13 +2552,14 @@
  			}
  			else
  			{
@@ -446,7 +459,7 @@
  		DX = (LocalMessage.DX / float(C.SizeX));
  		DY = (LocalMessage.DY / float(C.SizeY));
  		LocalMessage.Drawn = True;
-@@ -2468,14 +2623,27 @@
+@@ -2468,14 +2627,27 @@
  final simulated function DrawElements(Canvas C)
  {
  	local int i;
@@ -475,7 +488,7 @@
  			}
  			(i)++;
  		}
-@@ -2853,10 +3021,10 @@
+@@ -2853,10 +3025,10 @@
  	pos_LeaderBoardName(1)=(X=588.0,Y=69.0,W=0.0,H=0.0)
  	pos_LeaderBoardName(2)=(X=588.0,Y=82.0,W=0.0,H=0.0)
  	pos_LeaderBoardName(3)=(X=588.0,Y=96.0,W=0.0,H=0.0)

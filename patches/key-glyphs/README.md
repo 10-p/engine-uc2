@@ -1,8 +1,10 @@
 # key-glyphs
 
 GUI + UCMenu: player one's keys in place of the pad's button glyphs while they use the keyboard or the mouse.
-The work is the engine's (`Source/Engine/Src/UnKeyGlyphs.cpp`: which key, when, the drawing); this set switches it on
-and marks what it cannot know by itself:
+The work is the engine's (`Source/Engine/Src/UnKeyGlyphs.cpp`: which key, when, the drawing), for the button font's
+glyphs and for the two pad buttons a script draws as textures of their own, the scoreboards' White and Black hints
+(`UCScoreboard.IconWhite`, `IconBlack`: the keys that do what White and Black do, V and C by default); this set
+switches it on and marks what it cannot know by itself:
 
 - `new/GUI/Classes/KeyGlyphs.uc` (our own text): the engine shows keys only when the class `GUI.KeyGlyphs` exists, so
   a shipped GUI.u keeps the Xbox glyphs. `KeyGlyphs.InGame(S)` marks the button glyphs of a text as the game's buttons

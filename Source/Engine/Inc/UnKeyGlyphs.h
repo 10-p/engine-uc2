@@ -13,6 +13,10 @@
 	    (UInput::Bindings of player one's viewport, so a rebinding is followed at once).
 	The glyph's cell is kept (the same advance width and height): no layout moves. Phase 1 draws the key's
 	name in the UI font; phase 2 a key cap from the sheet GUI.KeyGlyphSheet when the script set has one.
+	Two pad buttons are drawn by script as textures of their own, not as glyphs of the button font: the
+	scoreboards' footer hints (UCScoreboard.IconWhite and IconBlack, t_ui_2.Main.UI_Button_White and
+	UI_Button_Black, through Canvas.DrawTile). The key takes such a tile in the same way, in the context
+	its canvas has (the HUD's: the game's key).
 	It exists only with the script set key-glyphs (the class GUI.KeyGlyphs): a shipped GUI.u keeps the
 	Xbox glyphs. [GUI.KeyGlyphs] ShowKeys=False turns it off.
 =============================================================================*/
@@ -59,9 +63,16 @@ public:
 	// DrawString: draw player one's key in the cell of button glyph Ch (canvas pixels X,Y,W,H). False: draw
 	// the glyph.
 	UBOOL DrawKey( UCanvas* Canvas, TCHAR Ch, FLOAT X, FLOAT Y, FLOAT W, FLOAT H, FPlane Color );
+	// Canvas.DrawTile: draw player one's key in place of a pad button's own texture drawn whole (U,V,UL,VL its
+	// full size) on the tile X,Y,W,H (canvas pixels). False: draw the texture.
+	UBOOL DrawTextureKey( UCanvas* Canvas, UMaterial* Material, FLOAT X, FLOAT Y, FLOAT W, FLOAT H,
+		FLOAT U, FLOAT V, FLOAT UL, FLOAT VL, FPlane Color );
 
 	// What glyph Ch shows for this canvas (KGS_None: the pad glyph); MoveLabel gets KGS_Move's text.
 	INT Resolve( UCanvas* Canvas, TCHAR Ch, FString* MoveLabel=NULL );
+	// What pad button Pad (KGP_*) shows for this canvas: the game's key when bGame or outside a menu, else the
+	// menus' key.
+	INT ResolvePad( UCanvas* Canvas, INT Pad, UBOOL bGame, FString* MoveLabel=NULL );
 	// The text of a key (phase 1).
 	FString Label( INT Key, UViewport* Viewport ) const;
 
@@ -80,6 +91,7 @@ private:
 	UBOOL Available();
 	INT GameKey( UViewport* Viewport, INT Pad );
 	INT MoveKeys( UViewport* Viewport );
+	UBOOL DrawResolved( UCanvas* Canvas, INT Key, const FString& Move, FLOAT X, FLOAT Y, FLOAT W, FLOAT H, FPlane Color );
 };
 
 ENGINE_API extern FKeyGlyphs GKeyGlyphs;
