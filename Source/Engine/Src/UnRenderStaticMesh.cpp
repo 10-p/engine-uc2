@@ -367,12 +367,347 @@ void DrawSortedSection(FLevelSceneNode* SceneNode,FDynamicActor* Owner,
 }
 #else
 //
+//	IsAlphaBlended
+//
+// Whether a material blends over what is behind it by its alpha (FB_AlphaBlend, its premultiplied form, a Shader's
+// OB_Normal with an opacity, an alpha texture): the blends whose result depends on the draw order. Additive,
+// modulating, brightening and darkening blends do not, nor do masked or opaque materials. As in the render device's
+// CheckMaterial, the innermost FinalBlend of the modifier chain sets the framebuffer blending.
+//
+UBOOL IsAlphaBlended(UMaterial* Material)
+{
+	UFinalBlend* FinalBlend = NULL;
+	for( INT Depth = 0; Depth < 32 && Material && Material->IsA(UModifier::StaticClass()); Depth++ )
+	{
+		if( Material->IsA(UFinalBlend::StaticClass()) )
+			FinalBlend = (UFinalBlend*)Material;
+		Material = ((UModifier*)Material)->Material;
+	}
+	if( FinalBlend )
+		return FinalBlend->FrameBufferBlending == FB_AlphaBlend || FinalBlend->FrameBufferBlending == FB_AlphaModulate_MightNotFogCorrectly;
+	if( UShader* Shader = Cast<UShader>(Material) )
+		return Shader->OutputBlending == OB_Normal && Shader->Opacity;
+	if( UTexture* Texture = Cast<UTexture>(Material) )
+		return Texture->bAlphaTexture && !Texture->bMasked;
+	return 0;
+}
+
+//
+//	FSectionObjects
+//
+// The separate objects of a static mesh section, which the section's translucent draw orders back to front as the
+// translucent list orders actors. An object is the triangles joined by shared vertices together with every such part
+// whose bounding box meets theirs: parts that touch or overlap (a canopy's leaf cards, a decal over its model) are one
+// object, which keeps its triangles in the section's order, the order its artist layered them in. They do not depend
+// on the view, so they are worked out once per section and kept while the level is.
+//
+struct FSectionObjects
+{
+	UStaticMesh*	StaticMesh;
+	INT				SectionIndex;
+	INT				FirstIndex,
+					NumPrimitives,
+					NumTriangles;
+	TArray<INT>		Objects;	// each triangle's object, in the section's order
+	TArray<FBox>	Boxes;		// each object's bounding box
+};
+
+struct FSectionPartBox
+{
+	FBox	Box;
+	INT		Part;
+
+	friend INT Compare(FSectionPartBox& A,FSectionPartBox& B)
+	{
+		return A.Box.Min.X < B.Box.Min.X ? -1 : (A.Box.Min.X > B.Box.Min.X ? 1 : 0);
+	}
+};
+
+static INT FindObjectRoot(INT* Parent,INT Index)
+{
+	while(Parent[Index] != Index)
+	{
+		Parent[Index] = Parent[Parent[Index]];
+		Index = Parent[Index];
+	}
+	return Index;
+}
+
+static void JoinObjects(INT* Parent,INT A,INT B)
+{
+	A = FindObjectRoot(Parent,A);
+	B = FindObjectRoot(Parent,B);
+	if(A != B)
+		Parent[Max(A,B)] = Min(A,B);
+}
+
+//
+// A stripped section unrolled into a list: its degenerate joining triangles dropped, its odd triangles turned back to
+// the strip's winding. Returns the triangle count; Triangles (three indices each) lives in GSceneMem.
+//
+static INT UnrollSectionTriangles(UStaticMesh* StaticMesh,FStaticMeshSection* Section,_WORD*& Triangles)
+{
+	_WORD*	Indices = &StaticMesh->IndexBuffer.Indices(Section->FirstIndex);
+	INT		NumTriangles = 0;
+
+	Triangles = New<_WORD>(GSceneMem,Section->NumPrimitives * 3);
+	for(INT PrimitiveIndex = 0;PrimitiveIndex < Section->NumPrimitives;PrimitiveIndex++)
+	{
+		_WORD	A, B, C;
+		if(Section->IsStrip)
+		{
+			A = Indices[PrimitiveIndex];
+			B = Indices[PrimitiveIndex + 1];
+			C = Indices[PrimitiveIndex + 2];
+			if(A == B || B == C || A == C)
+				continue;
+			if(PrimitiveIndex & 1)
+				Exchange(A,B);
+		}
+		else
+		{
+			A = Indices[PrimitiveIndex * 3 + 0];
+			B = Indices[PrimitiveIndex * 3 + 1];
+			C = Indices[PrimitiveIndex * 3 + 2];
+		}
+		Triangles[NumTriangles * 3 + 0] = A;
+		Triangles[NumTriangles * 3 + 1] = B;
+		Triangles[NumTriangles * 3 + 2] = C;
+		NumTriangles++;
+	}
+	return NumTriangles;
+}
+
+static TArray<FSectionObjects*>	GSectionObjects;
+static ULevel*					GSectionObjectsLevel = NULL;
+
+static FSectionObjects* GetSectionObjects(ULevel* Level,UStaticMesh* StaticMesh,INT SectionIndex,_WORD* Triangles,INT NumTriangles)
+{
+	FStaticMeshSection*	Section = &StaticMesh->Sections(SectionIndex);
+
+	if(Level != GSectionObjectsLevel)
+	{
+		for(INT EntryIndex = 0;EntryIndex < GSectionObjects.Num();EntryIndex++)
+			delete GSectionObjects(EntryIndex);
+		GSectionObjects.Empty();
+		GSectionObjectsLevel = Level;
+	}
+
+	FSectionObjects*	Entry = NULL;
+	for(INT EntryIndex = 0;EntryIndex < GSectionObjects.Num();EntryIndex++)
+	{
+		FSectionObjects*	Other = GSectionObjects(EntryIndex);
+		if(Other->StaticMesh == StaticMesh && Other->SectionIndex == SectionIndex)
+		{
+			if(Other->FirstIndex == Section->FirstIndex && Other->NumPrimitives == Section->NumPrimitives && Other->NumTriangles == NumTriangles)
+				return Other;
+			Entry = Other;
+			break;
+		}
+	}
+	if(!Entry)
+	{
+		Entry = new FSectionObjects;
+		GSectionObjects.AddItem(Entry);
+	}
+	Entry->StaticMesh = StaticMesh;
+	Entry->SectionIndex = SectionIndex;
+	Entry->FirstIndex = Section->FirstIndex;
+	Entry->NumPrimitives = Section->NumPrimitives;
+	Entry->NumTriangles = NumTriangles;
+	Entry->Objects.Empty(NumTriangles);
+	Entry->Objects.Add(NumTriangles);
+	Entry->Boxes.Empty();
+
+	FStaticMeshVertex*	Vertices = &StaticMesh->VertexStream.Vertices(0);
+	INT					MinVertex = Section->MinVertexIndex,
+						NumVertices = Section->MaxVertexIndex - Section->MinVertexIndex + 1;
+	FMemMark			MemMark(GSceneMem);
+
+	// The parts: vertices joined by the triangles, and each part's bounding box.
+
+	INT*	Parent = New<INT>(GSceneMem,NumVertices);
+	for(INT VertexIndex = 0;VertexIndex < NumVertices;VertexIndex++)
+		Parent[VertexIndex] = VertexIndex;
+	for(INT TriangleIndex = 0;TriangleIndex < NumTriangles;TriangleIndex++)
+	{
+		JoinObjects(Parent,Triangles[TriangleIndex * 3 + 0] - MinVertex,Triangles[TriangleIndex * 3 + 1] - MinVertex);
+		JoinObjects(Parent,Triangles[TriangleIndex * 3 + 1] - MinVertex,Triangles[TriangleIndex * 3 + 2] - MinVertex);
+	}
+
+	FBox*	Boxes = New<FBox>(GSceneMem,NumVertices);
+	INT		NumParts = 0;
+	for(INT VertexIndex = 0;VertexIndex < NumVertices;VertexIndex++)
+		Boxes[VertexIndex] = FBox(0);
+	for(INT TriangleIndex = 0;TriangleIndex < NumTriangles;TriangleIndex++)
+	{
+		FBox&	Box = Boxes[FindObjectRoot(Parent,Triangles[TriangleIndex * 3] - MinVertex)];
+		if(!Box.IsValid())
+			NumParts++;
+		for(INT Corner = 0;Corner < 3;Corner++)
+			Box += Vertices[Triangles[TriangleIndex * 3 + Corner]].Position;
+	}
+
+	// The objects: parts whose boxes meet, found by a sweep along X.
+
+	FSectionPartBox*	PartBoxes = New<FSectionPartBox>(GSceneMem,Max(NumParts,1));
+	INT					NumPartBoxes = 0;
+	for(INT VertexIndex = 0;VertexIndex < NumVertices;VertexIndex++)
+		if(Boxes[VertexIndex].IsValid())
+		{
+			PartBoxes[NumPartBoxes].Box = Boxes[VertexIndex];
+			PartBoxes[NumPartBoxes].Part = VertexIndex;
+			NumPartBoxes++;
+		}
+	Sort(PartBoxes,NumPartBoxes);
+	for(INT First = 0;First < NumPartBoxes;First++)
+	{
+		FBox&	A = PartBoxes[First].Box;
+		for(INT Second = First + 1;Second < NumPartBoxes && PartBoxes[Second].Box.Min.X <= A.Max.X;Second++)
+		{
+			FBox&	B = PartBoxes[Second].Box;
+			if(B.Min.Y <= A.Max.Y && B.Max.Y >= A.Min.Y && B.Min.Z <= A.Max.Z && B.Max.Z >= A.Min.Z)
+				JoinObjects(Parent,PartBoxes[First].Part,PartBoxes[Second].Part);
+		}
+	}
+
+	// Number the objects, each triangle's object and each object's box.
+
+	INT*	Numbers = New<INT>(GSceneMem,NumVertices);
+	for(INT VertexIndex = 0;VertexIndex < NumVertices;VertexIndex++)
+		Numbers[VertexIndex] = INDEX_NONE;
+	for(INT PartIndex = 0;PartIndex < NumPartBoxes;PartIndex++)
+	{
+		INT	Root = FindObjectRoot(Parent,PartBoxes[PartIndex].Part);
+		if(Numbers[Root] == INDEX_NONE)
+		{
+			Numbers[Root] = Entry->Boxes.Num();
+			Entry->Boxes.AddItem(FBox(0));
+		}
+		Entry->Boxes(Numbers[Root]) += PartBoxes[PartIndex].Box;
+	}
+	for(INT TriangleIndex = 0;TriangleIndex < NumTriangles;TriangleIndex++)
+		Entry->Objects(TriangleIndex) = Numbers[FindObjectRoot(Parent,Triangles[TriangleIndex * 3] - MinVertex)];
+
+	MemMark.Pop();
+	return Entry;
+}
+
+//
+//	FSortedSectionIndexBuffer
+//
+// A section's triangles (unrolled) with its objects back to front from a point in the mesh's space, by the distance
+// of their box's centre, each object's triangles in the section's order.
+//
+class FSortedSectionIndexBuffer : public FIndexBuffer
+{
+public:
+
+	struct FObjectKey
+	{
+		FLOAT	Key;
+		INT		Object;
+
+		friend INT Compare(FObjectKey& A,FObjectKey& B)
+		{
+			if(A.Key != B.Key)
+				return A.Key < B.Key ? 1 : -1;
+			return A.Object - B.Object;
+		}
+	};
+
+	_WORD*	Triangles;
+	INT*	Order;
+	INT		NumTriangles;
+
+	// Constructor: the order lives in GSceneMem.
+
+	FSortedSectionIndexBuffer(FSectionObjects* Objects,_WORD* InTriangles,INT InNumTriangles,FVector ViewOrigin)
+	{
+		Triangles = InTriangles;
+		NumTriangles = InNumTriangles;
+		Order = New<INT>(GSceneMem,Max(NumTriangles,1));
+
+		INT			NumObjects = Objects->Boxes.Num();
+		FObjectKey*	Keys = New<FObjectKey>(GSceneMem,Max(NumObjects,1));
+		INT*		Starts = NewZeroed<INT>(GSceneMem,NumObjects + 1);
+		for(INT ObjectIndex = 0;ObjectIndex < NumObjects;ObjectIndex++)
+		{
+			Keys[ObjectIndex].Key = (Objects->Boxes(ObjectIndex).GetCenter() - ViewOrigin).SizeSquared();
+			Keys[ObjectIndex].Object = ObjectIndex;
+		}
+		Sort(Keys,NumObjects);
+
+		// The objects' places in the order, then their triangles counted into them.
+
+		INT*	Ranks = New<INT>(GSceneMem,Max(NumObjects,1));
+		for(INT Rank = 0;Rank < NumObjects;Rank++)
+			Ranks[Keys[Rank].Object] = Rank;
+		for(INT TriangleIndex = 0;TriangleIndex < NumTriangles;TriangleIndex++)
+			Starts[Ranks[Objects->Objects(TriangleIndex)] + 1]++;
+		for(INT Rank = 0;Rank < NumObjects;Rank++)
+			Starts[Rank + 1] += Starts[Rank];
+		for(INT TriangleIndex = 0;TriangleIndex < NumTriangles;TriangleIndex++)
+			Order[Starts[Ranks[Objects->Objects(TriangleIndex)]]++] = TriangleIndex;
+	}
+
+	// FRenderResource interface.
+
+	virtual INT GetRevision() { return 1; }
+
+	// FIndexBuffer interface.
+
+	virtual INT GetSize() { return NumTriangles * 3 * sizeof(_WORD); }
+	virtual INT GetIndexSize() { return sizeof(_WORD); }
+
+	virtual void GetContents(void* VoidDest)
+	{
+		_WORD* Dest = (_WORD*)VoidDest;
+		for(INT Index = 0;Index < NumTriangles;Index++)
+		{
+			_WORD* Triangle = &Triangles[Order[Index] * 3];
+			*Dest++ = Triangle[0];
+			*Dest++ = Triangle[1];
+			*Dest++ = Triangle[2];
+		}
+	}
+};
+
+//
 //	DrawSortedSection
 //
 
 void DrawSortedSection(FLevelSceneNode* SceneNode,FDynamicActor* Owner,UStaticMesh* StaticMesh,INT SectionIndex,UMaterial* Material,FRenderInterface* RI)
 {
 	FStaticMeshSection*	Section = &StaticMesh->Sections(SectionIndex);
+
+	// An alpha-blended section does not write depth: its separate objects are drawn back to front from the eye, so
+	// that a nearer canopy covers a farther one of the same mesh.
+	if(Section->NumPrimitives > 0 && IsAlphaBlended(Material))
+	{
+		INT					NumPasses = RI->SetMaterial(Material);
+		FMemMark			MemMark(GSceneMem);
+		_WORD*				Triangles;
+		INT					NumTriangles = UnrollSectionTriangles(StaticMesh,Section,Triangles);
+		FSectionObjects*	Objects = GetSectionObjects(SceneNode->Level,StaticMesh,SectionIndex,Triangles,NumTriangles);
+
+		if(NumTriangles > 0)
+		{
+			FSortedSectionIndexBuffer	IndexBuffer(Objects,Triangles,NumTriangles,Owner->LocalToWorld.Inverse().TransformFVector(SceneNode->ViewOrigin));
+			INT							BaseIndex = RI->SetDynamicIndexBuffer(&IndexBuffer,0);
+			RI->DrawPrimitive(PT_TriangleList,BaseIndex,NumTriangles,Section->MinVertexIndex,Section->MaxVertexIndex);
+			RI->SetIndexBuffer(&StaticMesh->IndexBuffer,0);
+		}
+		MemMark.Pop();
+
+		STAT_INC(GStats.DWORDStats(GEngineStats.STATS_StaticMesh_UnbatchedSortedSections));
+		STAT_INC_BY(GStats.DWORDStats(GEngineStats.STATS_StaticMesh_UnbatchedSortedTriangles),
+			Section->NumTriangles * NumPasses);
+		STAT_INC_BY(GStats.DWORDStats(GEngineStats.STATS_StaticMesh_Triangles),
+			Section->NumTriangles * NumPasses);
+		return;
+	}
+
 	if(Section->NumPrimitives > 0)
 	{
 		// Commit the material
