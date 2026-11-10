@@ -305,8 +305,9 @@ private:
 
 //
 // The refresh period of the display the first viewport is on, read again every two seconds: the desktop compositor's
-// where the platform has one (appDisplayVBlank), else the display mode's, in whole hertz. A change starts the period
-// the swaps keep again from it.
+// where the platform has one (appDisplayVBlank) and it is within 5 % of the display mode's, else the display mode's, in
+// whole hertz. The compositor's timing is one display's, so a display that runs at another rate is told apart by its
+// mode. A change starts the period the swaps keep again from it.
 //
 void FVSyncStep::ReadNominal( UEngine* Engine )
 {
@@ -314,18 +315,18 @@ void FVSyncStep::ReadNominal( UEngine* Engine )
 	if( Nominal > 0.0 && Now - NominalTime < 2.0 )
 		return;
 	NominalTime = Now;
+	DOUBLE ModePeriod = 0.0;
+	SDL_Window* Window = Engine->Client && Engine->Client->Viewports.Num() && Engine->Client->Viewports(0)
+		? (SDL_Window*)Engine->Client->Viewports(0)->GetWindow() : NULL;
+	SDL_DisplayMode Mode;
+	if( Window && SDL_GetCurrentDisplayMode( Max( 0, SDL_GetWindowDisplayIndex( Window ) ), &Mode ) == 0 && Mode.refresh_rate > 0 )
+		ModePeriod = 1.0 / Mode.refresh_rate;
 	DOUBLE Period = 0.0;
 	QWORD Refresh;
 	DOUBLE VBlank;
-	if( !appDisplayVBlank( Refresh, VBlank, Period ) || Period <= 0.0 )
-	{
-		Period = 0.0;
-		SDL_Window* Window = Engine->Client && Engine->Client->Viewports.Num() && Engine->Client->Viewports(0)
-			? (SDL_Window*)Engine->Client->Viewports(0)->GetWindow() : NULL;
-		SDL_DisplayMode Mode;
-		if( Window && SDL_GetCurrentDisplayMode( Max( 0, SDL_GetWindowDisplayIndex( Window ) ), &Mode ) == 0 && Mode.refresh_rate > 0 )
-			Period = 1.0 / Mode.refresh_rate;
-	}
+	if( !appDisplayVBlank( Refresh, VBlank, Period ) || Period <= 0.0
+	||	(ModePeriod > 0.0 && Abs( Period - ModePeriod ) > 0.05 * ModePeriod) )
+		Period = ModePeriod;
 	if( Period > 0.0 && Abs( Period - Nominal ) > 0.01 * Period )
 	{
 		SumIntervals = 20.0 * Period;

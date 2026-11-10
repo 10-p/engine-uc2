@@ -575,8 +575,10 @@ intervals between two swaps that each waited at least a tenth of a refresh, with
 at a period within 3 % of the display's) the launcher moves the world on by the whole refreshes between the last two
 swaps' returns instead of the time read at the top of its loop (`FVSyncStep`, `Source/Engine/Src/UC2PresentClock.cpp`;
 logged once, `Frame steps: whole refreshes of 16.667 ms (vsync)`). The period is the one the swaps keep (learnt from
-the intervals within a tenth of a refresh of a whole number), started from the display's (the desktop compositor's on
-Windows, the display mode's whole hertz elsewhere), with a correction of at most a fiftieth of a refresh a frame that
+the intervals within a tenth of a refresh of a whole number), started from the display's (on Windows the desktop
+compositor's where it is within 5 % of the window display's mode: the compositor's timing is one display's, so a
+display at another rate takes its mode's; the display mode's whole hertz there and elsewhere), with a correction of
+at most a fiftieth of a refresh a frame that
 keeps the game clock on the swaps'. The measured time otherwise: no vsync, a frame without exactly one swap, swaps that
 return without waiting (frames slower than the display), a display whose swaps keep no steady period (a variable
 refresh rate), or a game clock a refresh away from the swaps' (the lock then starts again). Under vsync a frame cap at or within 2 % of the display's rate is set just above
