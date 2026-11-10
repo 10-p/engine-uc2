@@ -308,7 +308,13 @@ INT FKeyGlyphs::MoveKeys( UViewport* Viewport )
 
 INT FKeyGlyphs::Resolve( UCanvas* Canvas, TCHAR Ch, FString* MoveLabel )
 {
-	guard(FKeyGlyphs::Resolve);
+	BYTE C = (BYTE)Ch;
+	return ResolvePad( Canvas, (INT)CharPad[C & 0x7f] - 1, (C & 0x80) != 0, MoveLabel );
+}
+
+INT FKeyGlyphs::ResolvePad( UCanvas* Canvas, INT Pad, UBOOL bGame, FString* MoveLabel )
+{
+	guard(FKeyGlyphs::ResolvePad);
 	if( !bKeys || !Canvas || !Canvas->Viewport || !Canvas->pCanvasUtil )
 		return KGS_None;
 	UViewport* Viewport = Canvas->Viewport;
@@ -318,10 +324,8 @@ INT FKeyGlyphs::Resolve( UCanvas* Canvas, TCHAR Ch, FString* MoveLabel )
 		return KGS_None;
 	if( !Available() )
 		return KGS_None;
-	BYTE C = (BYTE)Ch;
-	INT Game = (C & 0x80) || Canvas->pCanvasUtil->UIContext != UICONTEXT_Menu;
-	INT Pad = (INT)CharPad[C & 0x7f] - 1;
-	if( Pad < 0 )
+	INT Game = bGame || Canvas->pCanvasUtil->UIContext != UICONTEXT_Menu;
+	if( Pad < 0 || Pad >= KGP_MAX )
 		return KGS_None;
 	if( CachedFrame[Game][Pad] != CacheFrame )
 	{
@@ -398,14 +402,51 @@ UBOOL FKeyGlyphs::DrawKey( UCanvas* Canvas, TCHAR Ch, FLOAT X, FLOAT Y, FLOAT W,
 	guard(FKeyGlyphs::DrawKey);
 	FString Move;
 	INT Key = Resolve( Canvas, Ch, &Move );
+	return DrawResolved( Canvas, Key, Move, X, Y, W, H, Color );
+	unguard;
+}
+
+// The pad buttons a script draws as a texture of their own and not as a glyph of the button font: the scoreboards'
+// footer hints (UCScoreboard.IconWhite, IconBlack). The name first (an index compare), the path only when it matches.
+static INT TexturePad( UMaterial* Material )
+{
+	static FName White( TEXT("UI_Button_White"), FNAME_Intrinsic );
+	static FName Black( TEXT("UI_Button_Black"), FNAME_Intrinsic );
+	FName Name = Material->GetFName();
+	if( Name == White )
+		return appStricmp( Material->GetPathName(), TEXT("t_ui_2.Main.UI_Button_White") ) ? -1 : (INT)KGP_White;
+	if( Name == Black )
+		return appStricmp( Material->GetPathName(), TEXT("t_ui_2.Main.UI_Button_Black") ) ? -1 : (INT)KGP_Black;
+	return -1;
+}
+
+UBOOL FKeyGlyphs::DrawTextureKey( UCanvas* Canvas, UMaterial* Material, FLOAT X, FLOAT Y, FLOAT W, FLOAT H,
+	FLOAT U, FLOAT V, FLOAT UL, FLOAT VL, FPlane Color )
+{
+	guard(FKeyGlyphs::DrawTextureKey);
+	if( !bKeys || !Material )
+		return 0;
+	INT Pad = TexturePad( Material );
+	if( Pad < 0 || U != 0.f || V != 0.f || UL != (FLOAT)Material->MaterialUSize() || VL != (FLOAT)Material->MaterialVSize() )
+		return 0;
+	FString Move;
+	INT Key = ResolvePad( Canvas, Pad, 0, &Move );
+	return DrawResolved( Canvas, Key, Move, X, Y, W, H, Color );
+	unguard;
+}
+
+// Key (a resolution, KGS_Move with its text Move) in the cell X,Y,W,H. False: nothing drawn (KGS_None, no text).
+UBOOL FKeyGlyphs::DrawResolved( UCanvas* Canvas, INT Key, const FString& Move, FLOAT X, FLOAT Y, FLOAT W, FLOAT H, FPlane Color )
+{
+	guard(FKeyGlyphs::DrawResolved);
 	if( Key == KGS_None || W <= 0.f || H <= 0.f )
 		return 0;
 	FString Text = Key == KGS_Move ? Move : Label( Key, Canvas->Viewport );
 	if( !Text.Len() || !LabelFont )
 		return 0;
 
-	// Phase 2: the key's cap from the sheet, square, as big as fits the glyph's cell, centred. A key with no cap of its
-	// own: the blank cap with the name on it.
+	// Phase 2: the key's cap from the sheet, square, as big as fits the glyph's cell (or the texture's tile), centred. A
+	// key with no cap of its own: the blank cap with the name on it.
 	if( Sheet )
 	{
 		INT Cell = KEYGLYPH_BLANK;
@@ -417,7 +458,7 @@ UBOOL FKeyGlyphs::DrawKey( UCanvas* Canvas, TCHAR Ch, FLOAT X, FLOAT Y, FLOAT W,
 			}
 		FLOAT Q = Min( W, H );
 		FLOAT QX = X + (W - Q) * 0.5f, QY = Y + (H - Q) * 0.5f;
-		// (X, Y are DrawString's, relative to the canvas origin; DrawTile takes the origin added, as DrawString does)
+		// (X, Y are relative to the canvas origin, as DrawString's and Canvas.DrawTile's; DrawTile takes the origin added)
 		Canvas->DrawTile( Sheet, Canvas->OrgX + QX, Canvas->OrgY + QY, Q, Q,
 			(Cell % KEYGLYPH_COLUMNS) * KEYGLYPH_STRIDE + 1, (Cell / KEYGLYPH_COLUMNS) * KEYGLYPH_STRIDE + 1,
 			KEYGLYPH_SIZE, KEYGLYPH_SIZE, 0.f, Color );

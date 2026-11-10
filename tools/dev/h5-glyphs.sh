@@ -2,7 +2,7 @@
 # Key glyphs check (native): player one's keys in place of the pad's button glyphs (Source/Engine/Src/UnKeyGlyphs.cpp, script
 # set key-glyphs). One PASS/FAIL line per check on stdout, then a summary.
 #
-#   tools/dev/h5-glyphs.sh [scenario...]        (default: menu info game travel vanilla; look on request)
+#   tools/dev/h5-glyphs.sh [scenario...]        (default: menu info game score travel vanilla; look on request)
 #
 #   menu     fresh inis, no profile, software GL 640x480: main menu, INSTANT ACTION, the "no profile" box declined,
 #            three accepts -> the character page. Keyboard from the start: the menus' keys (A Enter, B Escape, Y Y,
@@ -15,6 +15,11 @@
 #            SmartJump 0, Fire); the pad's combo menu shows the Xbox glyphs; the pause menu's keys; then the KEYBOARD /
 #            MOUSE page from the pause menu: JUMP / DODGE := J, and the combo menu's A shows J. Pictures combo-keys,
 #            combo-pad, pause-keys, combo-rebound; pixel check on the combo menu's green A.
+#   score    DM-Deadbolt (no bots), the scoreboard before joining: the footer's STATS hints, which the scoreboard draws as
+#            the White and Black buttons' own textures, show C (Black: BlackButton) and V (White: WhiteButton); C opens
+#            the stats page and V goes back; with the pad the Xbox buttons, and the pad's Black opens the stats page.
+#            Pictures score-keys, score-stats-keys, score-pad, score-stats-pad; a key cap's rim at both hints' top edges
+#            with the keyboard only.
 #   look     pictures only (no checks of their own but the scenario's): the character page and the combo menu at
 #            1920x1080 (the UI box, the key caps at 2.25x), keys and pad: look-char-keys, look-char-pad, look-combo-*.
 #   travel   the menu path on into a match (the character page, the armory, the launch): after the level change the
@@ -40,12 +45,12 @@ mkdir -p "$out"
 fails=0 passes=0
 result() { echo "$1 $2: $3"; if [ "$1" = PASS ]; then passes=$((passes+1)); else fails=$((fails+1)); fi; }
 
-# fresh inis (ours), DevUI and KeyGlyphs unsuppressed, no User.ini, no profiles
+# fresh inis (ours), DevUI, KeyGlyphs and DevStats unsuppressed, no User.ini, no profiles
 prep() {
   local sys=$work/run/$1/System
   [ -x "$sys/uc2.bin" ] || { echo "no run tree $work/run/$1 (tools/dev/mkrun-uc2.sh build-native $1)" >&2; exit 2; }
   cp -f "$repo"/Engine/Config/*.ini "$sys/"
-  sed -i '/^Suppress=DevUI\r\?$/d; /^Suppress=DevGUI\r\?$/d; /^Suppress=KeyGlyphs\r\?$/d' "$sys/Default.ini"
+  sed -i '/^Suppress=DevUI\r\?$/d; /^Suppress=DevGUI\r\?$/d; /^Suppress=KeyGlyphs\r\?$/d; /^Suppress=DevStats\r\?$/d' "$sys/Default.ini"
   rm -f "$sys/Avaris.ini" "$sys/User.ini" "$sys"/Shot*.bmp
   rm -rf "$sys/Profiles" "$work/run/$1/Save"/*.pro 2>/dev/null
   mkdir -p "$sys/Profiles"
@@ -113,6 +118,24 @@ PY
 )
   if [ "$c" "-$op" "$lim" ]; then result PASS "$n" "$c key cap rim pixels at the glyph's top edge (want -$op $lim)"
   else result FAIL "$n" "$c key cap rim pixels at the glyph's top edge (want -$op $lim)"; fi
+}
+
+# toprim <name> <png> <ge|le> <count> <box...>: light pixels (every channel 100+) in the box, a row over the top edge of a
+# scoreboard hint: a key cap's rim lies there (16 pixels high, dimmer than the caps check wants), the pad's round White
+# and Black buttons start below it
+toprim() {
+  local n=$1 png=$out/$2.png op=$3 lim=$4; shift 4
+  [ -f "$png" ] || { result FAIL "$n" "no picture $png"; return; }
+  local c; c=$(python3 - "$png" "$@" <<'PY'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert('RGB').crop(tuple(int(v) for v in sys.argv[2:6]))
+px = im.get_flattened_data() if hasattr(im, 'get_flattened_data') else im.getdata()
+print(sum(1 for p in px if min(p) >= 100))
+PY
+)
+  if [ "$c" "-$op" "$lim" ]; then result PASS "$n" "$c light pixels at the hint's top edge (want -$op $lim)"
+  else result FAIL "$n" "$c light pixels at the hint's top edge (want -$op $lim)"; fi
 }
 
 # main menu -> INSTANT ACTION -> "no profile" box declined -> three accepts -> the character page
@@ -251,6 +274,34 @@ shot combo-rebound
 SCEN
 }
 
+# the scoreboard before joining, with its press-fire prompt: the footer's hints are the White and Black buttons'
+# textures; the scoreboard draws Black first
+scen_score() {
+  cat <<'SCEN'
+wait Bringing Level DM-Deadbolt.MyLevel up for play 120
+sleep 6
+focus
+expect $P-black-is-c \[KeyGlyphs\] game Black -> C 10
+expect $P-white-is-v \[KeyGlyphs\] game White -> V 10
+sleep 1
+shot keys
+key c
+expect $P-c-opens-the-stats-page ::SetCurrentPlayer PRI: 10
+sleep 1.5
+shot stats-keys
+key v
+sleep 1.5
+pad attach
+expect $P-pad-plugged-in-is-pad \[KeyGlyphs\] player one: pad \(pad connected\) 10
+sleep 2
+shot pad
+padpress rightshoulder
+expect $P-pad-black-opens-the-stats-page ::SetCurrentPlayer PRI: 10
+sleep 1.5
+shot stats-pad
+SCEN
+}
+
 scen_look() {
   to_character
   cat <<'SCEN'
@@ -328,7 +379,7 @@ SCEN
 
 # ---------------------------------------------------------------------------------------------------------------
 scenarios=("$@")
-[ ${#scenarios[@]} -eq 0 ] && scenarios=(menu info game travel vanilla)
+[ ${#scenarios[@]} -eq 0 ] && scenarios=(menu info game score travel vanilla)
 for s in "${scenarios[@]}"; do
   echo "== $s"
   case $s in
@@ -376,6 +427,22 @@ for s in "${scenarios[@]}"; do
       caps game-combo-keys-a-is-a-key-cap game-combo-keys ge 10 305 118 340 121
       caps game-combo-pad-a-is-no-key-cap game-combo-pad le 2 305 118 340 121
       nolog game-no-critical game 'Critical error|appError|Assertion failed|General protection fault|Unhandled signal|Signal: SIG(SEGV|ABRT|BUS|FPE|ILL)|Developer Backtrace'
+      ;;
+    score)
+      prep "$tree"
+      scen_score | sed 's/\$P/score/g' > "$out/score.scen"
+      run "$tree" score 300 M10_URL="DM-Deadbolt?NumBots=0"
+      # the hints' 16x16 cells at 640x480: White at (63,401), Black at (546,401); the middle twelve pixels of their
+      # second row
+      for p in score-keys score-stats-keys; do
+        toprim $p-white-is-a-key-cap $p ge 10 65 402 77 403
+        toprim $p-black-is-a-key-cap $p ge 10 548 402 560 403
+      done
+      for p in score-pad score-stats-pad; do
+        toprim $p-white-is-no-key-cap $p le 1 65 402 77 403
+        toprim $p-black-is-no-key-cap $p le 1 548 402 560 403
+      done
+      nolog score-no-critical score 'Critical error|appError|Assertion failed|General protection fault|Unhandled signal|Signal: SIG(SEGV|ABRT|BUS|FPE|ILL)|Developer Backtrace'
       ;;
     look)
       prep "$tree"

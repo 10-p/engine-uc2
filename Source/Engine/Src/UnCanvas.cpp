@@ -1275,7 +1275,11 @@ void UCanvas::execDrawTile( FFrame& Stack, RESULT_DECL )
 	}
 //	unclock(GScriptCycles);
 //	clock(GStats.DWORDStats(GEngineStats.STATS_Game_CanvasCycles));
-	if( Style!=STY_None )
+	// A pad button's own texture (the scoreboards' White and Black hints): player one's key in its tile while they use
+	// the keyboard or the mouse (UnKeyGlyphs.h).
+	UBOOL bKey = Style!=STY_None && Transform.IsZero() && !bFlipUVsHoriz && !bFlipUVsVert
+		&&	GKeyGlyphs.DrawTextureKey( this, Mat, CurX, CurY, XL, YL, U, V, UL, VL, Color.Plane() );
+	if( Style!=STY_None && !bKey )
 	{
 		if (Transform.IsZero())
 		{
