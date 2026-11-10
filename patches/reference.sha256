@@ -5,11 +5,11 @@
 # `sha256sum -c` in build-native/Scripts/System checks a build by hand. When a set (or the decompiler, or
 # the compiler) changes on purpose, regenerate it and commit it with the change:
 #   tools/scripts/uc-patches-proof.sh p2 --write-reference      (patches/README.md, "Changing a script")
-# UCGameplay.u 1597729 bytes
-1b6ed1ce6b91ed87293991675286231e8fd81e0c6a66beb2b57d3450ddb8ee5a  UCGameplay.u
+# UCGameplay.u 1597800 bytes
+2e79b43d800d4f3184d4786156bca9b4f41d4426429c56b5f84d2a0f4dc8685b  UCGameplay.u
 # UCMutators.u 103039 bytes
-02ed1670191689eed313f222b67e115ba6fa58bdd01fe72fe9ff0c05fa74e9fc  UCMutators.u
+1b1d9e93548083a5abf96eb676eeaa129618e7e6570746c594cc24fa5acef6d6  UCMutators.u
 # GUI.u 1772432 bytes
 7f05b2ad437447ad3688c01483b095c89716a866edadc3d6e55a56236197aa2a  GUI.u
 # UCMenu.u 2514995 bytes
-3bda20ecd2c3f8ca69428c6840106a18043d7b8205c49e7236269549a7ee8170  UCMenu.u
+e68000a5a8adf6ca95f407a6b8b84f4ed627b44c2efdf6fa554347fee8b31874  UCMenu.u

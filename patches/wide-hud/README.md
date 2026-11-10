@@ -36,7 +36,10 @@ do not move.
   aspect, stacked as at 4:3 (the status bar from its line, raised over the announcement while one shows, to the bottom
   of the view); the rest of the HUD stays in the box. The critical announcement ("PLAY") and the local message (in
   every view) are drawn over a black shadow one design pixel right and down at 0.6 times their alpha. At every aspect,
-  4:3 included (`UCHUD.GradientBand`); the status bar keeps Epic's band.
+  4:3 included (`UCHUD.GradientBand`); the status bar keeps Epic's band. While the band shows the match-begin
+  countdown, the status bar stays on its line, as Epic's does, and draws its bar without its text: spectating before
+  the match that text is the countdown's own words, and Epic's opaque band covers it. A split view has no band and
+  draws no countdown, and its status bar keeps its text.
 - **Across the window**: the announcement band, the status bar (dead, spectating), Training's letterbox and dialog
   bars, the console's typing line (Engine.Console: drawn once for the whole window, in split screen too; its bar from
   32 design pixels in from the window's left edge to its right edge, its text wrapped by words at that edge onto lines
@@ -52,7 +55,7 @@ do not move.
   (`UnCanvas.cpp` `DrawString`), the combo menu is centred from its icons' extent (`UCHUD.cpp` `DrawComboMenu`), the
   typing line is drawn with the canvas's origin on the viewport's left edge and its clip the viewport's width
   (`UnInteractionMaster.cpp` `MasterProcessPostRender`).
-- **Classes**: UCGameplay: UCHUD (23 hunks), UCHUD_Survival (5), UCHUD_TeamGame, UCHUD_CTF, UCHUD_Overflow,
+- **Classes**: UCGameplay: UCHUD (24 hunks), UCHUD_Survival (5), UCHUD_TeamGame, UCHUD_CTF, UCHUD_Overflow,
   UCHUD_Training, UCWeapon (2 each), Element_GameTimer (1); UCMutators: Element_KillerList (4), Element_WeaponMaster
   (2), Element_CampFireBombTimer, RetributionMarker, WeaponMasterReplicationInfo (1 each: the two give a HUD that
   replaces the player's, when a split screen starts or ends, their element again). The generated header
