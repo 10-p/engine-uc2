@@ -4023,6 +4023,22 @@ static INT Compare(FDecoInfo& A, FDecoInfo& B)
 	return (A.Distance - B.Distance) * DecoSortOrder;
 }
 
+//
+// The order a decoration layer's instances and sectors are drawn in: the layer's DrawOrder.
+//
+static BYTE DecoLayerDrawOrder( FDecorationLayer& DecoLayer )
+{
+#ifndef _XBOX
+	// An alpha-blended layer does not write depth, so it is drawn back to front whatever its DrawOrder: a nearer
+	// instance drawn first would be covered by a farther one. Opaque and masked layers keep their DrawOrder.
+	if( DecoLayer.StaticMesh )
+		for( INT MaterialIndex=0; MaterialIndex<DecoLayer.StaticMesh->Materials.Num(); MaterialIndex++ )
+			if( IsAlphaBlended( DecoLayer.StaticMesh->Materials(MaterialIndex).Material ) )
+				return SORT_BackToFront;
+#endif
+	return DecoLayer.DrawOrder;
+}
+
 void ATerrainInfo::RenderDecorations(FLevelSceneNode* SceneNode,FRenderInterface* RI,FVisibilityInterface* VI)
 {
 	guard(ATerrainInfo::RenderDecorations);
@@ -4065,14 +4081,18 @@ void ATerrainInfo::RenderDecorations(FLevelSceneNode* SceneNode,FRenderInterface
 
 	FVector& Origin = SceneNode->ViewOrigin;
 
+	TArray<BYTE> DrawOrders( DecoLayers.Num() );
+	for( INT LayerIndex=0; LayerIndex<DecoLayers.Num(); LayerIndex++ )
+		DrawOrders(LayerIndex) = DecoLayerDrawOrder( DecoLayers(LayerIndex) );
+
 	INT* SectorIndices = new INT[Sectors.Num()];
 	guard(RenderDecorations::check2);
 	// Roughly sort sectors by distance. (decolayer 0 is dominant)	
 	for( INT s=Sectors.Num()-1; s>=0; s-- )
 		SectorIndices[s] = s + (((INT) FDist( Origin, DecoLayerData(0).Sectors(s).Location )) << 16);
-	if( DecoLayers(0).DrawOrder != SORT_NoSort )
+	if( DrawOrders(0) != SORT_NoSort )
 	{
-		IntSortOrder = (DecoLayers(0).DrawOrder == SORT_FrontToBack) ? -1 : 1;
+		IntSortOrder = (DrawOrders(0) == SORT_FrontToBack) ? -1 : 1;
 		Sort( SectorIndices, Sectors.Num() );
 	}
 	for( INT s=Sectors.Num()-1; s>=0; s-- )
@@ -4237,9 +4257,9 @@ void ATerrainInfo::RenderDecorations(FLevelSceneNode* SceneNode,FRenderInterface
 				DecoInfo = &DecoSector.DecoInfo(0);
 				check(DecoInfo);
 
-				if( DecoLayer.DrawOrder != SORT_NoSort )
+				if( DrawOrders(LayerIndex) != SORT_NoSort )
 				{
-					DecoSortOrder = (DecoLayer.DrawOrder == SORT_FrontToBack) ? 1 : -1;
+					DecoSortOrder = (DrawOrders(LayerIndex) == SORT_FrontToBack) ? 1 : -1;
 					Sort( DecoInfo, DecoSector.DecoInfo.Num() );
 				}
 

@@ -759,6 +759,14 @@ extern void CalculateStaticMeshLighting(UStaticMesh* StaticMesh,UStaticMeshInsta
 
 extern void RenderStaticMesh(FDynamicActor* Owner,FLevelSceneNode* SceneNode,TList<FDynamicLight*>* Lights,TList<FProjectorRenderInfo*>* Projectors,FRenderInterface* RI);
 
+#ifndef _XBOX
+//
+//	IsAlphaBlended: the material blends by its alpha, so the order it is drawn in shows.
+//
+
+extern UBOOL IsAlphaBlended(UMaterial* Material);
+#endif
+
 //
 //	FStaticMeshBatchList
 //

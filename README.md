@@ -103,6 +103,13 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
 - **Languages**: every cooked language from `[Engine.Engine] Language` (menus, voices, movie tracks).
 - **Xbox post-processing on PC**: distortion, emissive glow, bloom, depth of field, the camera effects and dynamic
   gamma, plus the Xbox shadows, projectors and three-layer terrain.
+- **Translucent foliage in depth order** (every build but the Xbox's): an alpha-blended static mesh section, which
+  writes no depth, draws its separate objects (its triangles joined by shared vertices and by meeting bounding boxes:
+  a canopy, a tree, a pane) back to front from the eye, as the translucent list orders actors, each object's
+  triangles in their stored order, the order its artist layered them in (the Xbox draws the whole section in the stored order,
+  and DM-Remnant holds all its tree tops in one mesh); an alpha-blended terrain decoration layer draws back to front
+  whatever its `DrawOrder` (CTF-Downfall's grass is set to front to back), and opaque and masked layers keep theirs
+  (`DrawSortedSection`, `ATerrainInfo::RenderDecorations`).
 - **Xbox Live content**: the alternate skins and the downloadable maps in the game folder are available.
 - **The Xbox's level unload**: `UGameEngine::UnloadMap` collects the old level before the next map loads, on every
   platform (`WITH_LEVEL_PURGE_ON_UNLOAD`; the unloading of the Xbox texture files stays the Xbox's), so a map loaded
