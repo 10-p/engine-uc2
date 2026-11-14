@@ -87,7 +87,9 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   view Hor+; the HUD's left and right groups at the view's sides and its centred items on its centre, the console's
   typing line across the window, the announcement band a gradient under shadowed texts (the status bar's text, which
   Epic's opaque band covers, left out while the band shows the match-begin countdown), it and the status bar on the
-  view's bottom edge (wide-hud).
+  view's bottom edge (wide-hud). In the scaled box the text drawn in Epic's Normal style from the font's one-bit pages
+  (the HUD's message lines, the console's typing line) is blended as the Alpha style's text is, not alpha tested into
+  stepped edges (`UnCanvas.cpp`).
 - **Custom maps and mutators**: maps dropped into the map paths appear in the game's lists; a mutator's package joins
   the server's package map.
 - **A missing map**:
