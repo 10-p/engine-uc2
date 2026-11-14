@@ -76,6 +76,11 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   `Engine/Inc/UnPaste.h`).
 - **Split screen and four pads**: up to four players in one window, joining from the menus or a match; players three
   and four on the character page (players34).
+- **The roster's bots on the character page**: the eight fighters of `UCCharacters.u` without a slot of their own
+  (Corrosion, Korig, Mirage, Hyena, Nepthys, Ra, Memphis, Darius), each the bot of a slot of its weight class: the pad's
+  Back there (F1, a click on its hint) switches the slot between its own character and its bot once the bot is
+  unlocked, X stays the switch to the X variant; the match plays the bot (alone, in split screen, over the network), the
+  profile and User.ini keep the slot's own character (bot-variants).
 - **Wide windows**: the 640x480 menus and HUD in the largest centred 4:3 box of the window or of a split view, the
   view Hor+; the HUD's left and right groups at the view's sides and its centred items on its centre, the console's
   typing line across the window, the announcement band a gradient under shadowed texts (the status bar's text, which
