@@ -1,0 +1,738 @@
+--- a/UCMenu/Classes/Armory_PanelBase.uc
++++ b/UCMenu/Classes/Armory_PanelBase.uc
+@@ -150,6 +150,18 @@
+ 	CharIndex = CharInfo.GetCharacterIndex(CharacterClass);
+ }
+ 
++// bot-variants: the bot the player chose on the character page (its BotClass, UC2Arena_Character.SetBotChoice; an
++// index of BotVariants.Bots), or -1: the profile holds the slot's own character
++final function int ChosenBot()
++{
++	local GameStartInfoBase GSI;
++
++	GSI = Controller.GetGameStart();
++	if ( GSI == None || !GSI.HasURLKeyValue(PlayerIndex, "BotClass") )
++		return -1;
++	return class'BotVariants'.static.FindClass(GSI.GetURLKeyValue(PlayerIndex, "BotClass"));
++}
++
+ function Load()
+ {
+ 	local PlayerProfile Profile;
+@@ -160,6 +172,11 @@
+ 	Profile = PlayerOwner(PlayerIndex).GetProfile();
+ 	pnl_Loadout.SetRaceIcon(CharInfo.GetCharacterRaceIndex(CharIndex,Profile.UsingVariant()));
+ 	pnl_Loadout.SetMeleeIcon(CharInfo.GetCharacterMeleeIndex(CharIndex,Profile.UsingVariant()));
++	if ( ChosenBot() != -1 )	// bot-variants: the bot's weapons
++	{
++		pnl_Loadout.SetRaceIcon(class'BotVariants'.default.Bots[ChosenBot()].RaceWeaponIdx);
++		pnl_Loadout.SetMeleeIcon(class'BotVariants'.default.Bots[ChosenBot()].MeleeWeaponIdx);
++	}
+ 
+ 	pnl_Loadout.HighlightEnergy(false);
+ 	pnl_Loadout.ActivateEnergy(false);
+--- a/UCMenu/Classes/Armory_PanelSingle.uc
++++ b/UCMenu/Classes/Armory_PanelSingle.uc
+@@ -124,6 +124,8 @@
+ 	Profile = PlayerOwner(PlayerIndex).GetProfile();
+ 
+ 	img_Character.Image = CharInfo.GetCharacterStaticPortrait(CharIndex, PlayerIndex, Profile.UsingVariant());
++	if ( ChosenBot() != -1 )	// bot-variants: a bot has no portrait
++		img_Character.Image = None;
+ 	if ( GetFocusedControl() == pnl_Energy )
+ 		pnl_Preview.SetMovie( GetEnergyPreview() );
+ 	else
+--- a/UCMenu/Classes/CharacterStatsPanel.uc
++++ b/UCMenu/Classes/CharacterStatsPanel.uc
+@@ -105,6 +105,7 @@
+ var()	transient	string		LockedCaption;
+ var()	transient	int			CharacterIndex;
+ var()	transient	bool		bValid, bVariant, bInitialized;
++var()	transient	int			Bot;			// bot-variants: the bot shown (an index of BotVariants.Bots), or -1
+ 
+ var()	transient	float		CurrentHealth, CurrentAgility;
+ 
+@@ -136,13 +137,15 @@
+ }
+ 
+ 
+-final function string Update( int CharIndex, bool bValidCharacter, optional bool bUseVariant )
++// bot-variants: BotClassName, a slot's bot (BotVariants): its weapons and combos, the slot's health and agility bars
++final function string Update( int CharIndex, bool bValidCharacter, optional bool bUseVariant, optional string BotClassName )
+ {
+ 	local string HintString;
+ 
+ 	bValid = bValidCharacter;
+ 	bVariant = bUseVariant;
+ 	CharacterIndex = CharIndex;
++	Bot = class'BotVariants'.static.FindClass(BotClassName);
+ 
+ 	if ( CharIndex == RANDOM_IDX )
+ 	{
+@@ -186,6 +189,11 @@
+ 		
+ 		i = CharInfo.GetDefensiveComboIndex(CharacterIndex,bVariant);
+ 		j = CharInfo.GetOffensiveComboIndex(CharacterIndex,bVariant);
++		if ( Bot != -1 )	// bot-variants: the first and third of the seven, as CharacterInformation picks them
++		{
++			i = class'BotVariants'.default.Bots[Bot].Combos[0];
++			j = class'BotVariants'.default.Bots[Bot].Combos[2];
++		}
+ 
+ 		CharInfo.GetComboData( i, Icon, IconU, IconV, ComboName, ComboCost );
+ 		SetComboA(Icon, IconU, IconV, ComboName, ComboCost);
+@@ -195,6 +203,11 @@
+ 
+ 		i = CharInfo.GetCharacterRaceIndex(CharacterIndex,bVariant);
+ 		j = CharInfo.GetCharacterMeleeIndex(CharacterIndex,bVariant);
++		if ( Bot != -1 )	// bot-variants
++		{
++			i = class'BotVariants'.default.Bots[Bot].RaceWeaponIdx;
++			j = class'BotVariants'.default.Bots[Bot].MeleeWeaponIdx;
++		}
+ 		SetWeapons( CharInfo.RaceWeaponName[i], CharInfo.MeleeWeaponName[j] );
+ 	}
+ 	else
+@@ -1102,5 +1115,6 @@
+ 	img_Unlock=GUIImage'UnlockSeperator'
+ 	lbl_Locked=GUILabel'LockedLabel'
+ 	lb_Unlock=GUIScrollTextBox'UnlockDescriptionTextBox'
++	Bot=-1
+ 	bBindSubcomponentsToPanel=True
+ }
+--- a/UCMenu/Classes/PreviewScreen.uc
++++ b/UCMenu/Classes/PreviewScreen.uc
+@@ -96,6 +96,16 @@
+ 	}
+ }
+ 
++// bot-variants: no movie (a character without one): the static stays up, looping (LoopStatic)
++final function ClearMovie()
++{
++	if ( img_Movie.Image != None || CurrentMovie != None || img_Static.LoopAnimation[2] == ANIMATIONLOOP_None )
++	{
++		CurrentMovie = None;
++		bSwitchMovie = true;
++	}
++}
++
+ final function bool CheckForNewMovie( Canvas C, GUIComponent Sender )
+ {
+ 	if ( bSwitchMovie )
+@@ -122,12 +132,23 @@
+ 		
+ 		img_Static.OnArrival = None;
+ 		img_Static.OnEndAnimation = None;
++		img_Static.LoopAnimation[2] = ANIMATIONLOOP_None;	// bot-variants
+ 		img_Static.KillAnimation();
+ 
+ 		img_Static.ComponentColor = cWhite;
+ 
+ 		
+ 		img_Static.Pulse( cWhite, Interval * 0.5, true );
++
++		// bot-variants: no movie: the static stays, looping, and the movie it covers goes
++		if ( img_Movie.Image == None )
++		{
++			if ( bAutoDispose && MovieMaterial(PreviousMovie) != None )
++				MovieMaterial(PreviousMovie).Dispose();
++			PreviousMovie = None;
++			LoopStatic();
++			return false;
++		}
+ 
+ 		
+ 		img_Static.Pulse( cTrans, Interval * 0.5, true );
+@@ -145,6 +166,23 @@
+ 
+ 
+ 
++
++// bot-variants: the static flickers in a loop, between full strength and two thirds of it, never gone
++// (GUIComponent's looping colour frames: the frames pulsed while LoopAnimation is set repeat until KillAnimation)
++final function LoopStatic()
++{
++	local Color Dim;
++
++	img_Static.LoopAnimation[2] = ANIMATIONLOOP_Continuous;
++	Dim = cWhite;
++	Dim.A = 190;
++	img_Static.Pulse( Dim, Interval * 0.2, true );
++	Dim.A = 245;
++	img_Static.Pulse( Dim, Interval * 0.1, true );
++	Dim.A = 170;
++	img_Static.Pulse( Dim, Interval * 0.25, true );
++	img_Static.Pulse( cWhite, Interval * 0.15, true );
++}
+ 
+ final function bool SwallowDraw( Canvas C )
+ {
+--- a/UCMenu/Classes/ScoreboardGroup_General.uc
++++ b/UCMenu/Classes/ScoreboardGroup_General.uc
+@@ -154,6 +154,7 @@
+ final function Material GetCharIcon( PlayerReplicationInfo PRI )
+ {
+ 	local string CharacterText;
++	local array<string> BotParts;
+ 
+ 	
+ 	if (PRI.CharacterIcon == None)
+@@ -161,6 +162,15 @@
+ 		
+ 		CharacterText = PRI.bBot ? PRI.PlayerName : string(PRI.PawnClass);
+ 		PRI.CharacterIcon = class'CharacterInformation'.static.GetCharacterIcon(CharacterText, true);
++
++		// bot-variants: a player in a bot's class (UC2Arena_Character's second switch) gets the bot's icon, by the
++		// bot's name: the last part of the class name (UCPawn_Nakhti_Ra: Ra)
++		if ( PRI.CharacterIcon == None && PRI.PawnClass != None )
++		{
++			Split(string(PRI.PawnClass.Name), BotParts, "_");
++			if ( BotParts.Length > 0 )
++				PRI.CharacterIcon = class'CharacterInformation'.static.GetCharacterIcon(BotParts[BotParts.Length - 1], true);
++		}
+ 	}
+ 
+ 	return PRI.CharacterIcon;
+--- a/UCMenu/Classes/UC2Arena_Character.uc
++++ b/UCMenu/Classes/UC2Arena_Character.uc
+@@ -145,6 +145,12 @@
+ var	automated	GUIImage					img_Cursor34[2];	// 3P, 4P
+ var automated	GUILabel					lbl_Players34[2];	// under the honeycomb
+ var() transient	int							PendingLeave34;		// pads (a bit per port) whose player leaves at the next Timer
++
++// bot-variants: a slot's second switch (the pad's Back), between its own character and its bot (class BotVariants)
++// The hint, above btn_AltChar: its RenderWeight draws it over the preview, which it overlaps in split screen.
++var	automated	ControllerButton			btn_BotChar[MAX_VIEWPORTS];
++var()			int							BotMask;			// the slots whose bot is unlocked (a bit per slot)
++var() transient	int							BotSlotMask;		// the slots that show their bot
+ 
+ 
+ final function SetRandomMovie()
+@@ -347,6 +353,7 @@
+ 		}
+ 	}
+ 
++	UpdateBotMask();	// bot-variants
+ 	RemapComponents();
+ 	MapControls();
+ }
+@@ -527,7 +534,30 @@
+ 		}
+ 	}
+ 
++	PlaceBotHints();	// bot-variants
+ 	return false;
++}
++
++// bot-variants: each player's bot hint above their X hint (centred on it in split screen, as the X hints are on the
++// player's line), or in its place while the slot has no X hint
++final function PlaceBotHints()
++{
++	local int i;
++	local float X, Y;
++
++	for ( i = 0; i < MAX_VIEWPORTS; i++ )
++	{
++		Y = btn_AltChar[i].ActualTop();
++		if ( btn_AltChar[i].bVisible )
++			Y -= btn_BotChar[i].ActualHeight() + 3;
++
++		X = btn_AltChar[i].ActualLeft();
++		if ( SecondPlayerActive() )
++			X += (btn_AltChar[i].ActualWidth() - btn_BotChar[i].ActualWidth()) * 0.5;
++
++		btn_BotChar[i].WinLeft = btn_BotChar[i].RelativeLeft(X);
++		btn_BotChar[i].WinTop = btn_BotChar[i].RelativeTop(Y);
++	}
+ }
+ 
+ final function CalculateButtonPosition( int ButtonIndex, out float ButtonX, out float ButtonY )
+@@ -582,6 +612,7 @@
+ 			CharIndex[PlayerIndex] -= CHARACTER_COUNT;
+ 			ToggleAltSkin(CharIndex[PlayerIndex], true);
+ 		}
++		BotSlotMask = BotSlotMask & ~(1 << CharIndex[PlayerIndex]);	// bot-variants: the random pick is never a bot
+ 
+ 		
+ 		JoyInput[PlayerIndex].LastAnnouncerCue = '';
+@@ -600,6 +631,8 @@
+ 	
+ 
+ 	AnnouncerCue = CharInfo.GetCharacterAnnouncer(CharIndex[PlayerIndex], GetProfile(PlayerIndex).UsingVariant());
++	if ( ShouldUseBot(PlayerIndex, CharIndex[PlayerIndex]) )
++		AnnouncerCue = 'None';		// bot-variants: the announcer has no call of a bot's name
+ 	if ( AnnouncerCue != 'None' && AnnouncerCue != '' && AnnouncerCue != JoyInput[PlayerIndex].LastAnnouncerCue )
+ 	{
+ 		JoyInput[PlayerIndex].LastAnnouncerCue = AnnouncerCue;
+@@ -665,6 +698,12 @@
+ 		NewColor.A = 0;
+ 		btn_AltChar[PlayerIndex].Pulse(NewColor, HandicapAnimationSeconds + ZipDelay + ZipSeconds);
+ 		btn_AltChar[PlayerIndex].OnEndAnimation = HandicapFadeEnded;
++
++		btn_BotChar[PlayerIndex].KillAnimation(KillMask);	// bot-variants: as the X hint
++		NewColor = btn_BotChar[PlayerIndex].GetComponentColor(true);
++		NewColor.A = 0;
++		btn_BotChar[PlayerIndex].Pulse(NewColor, HandicapAnimationSeconds + ZipDelay + ZipSeconds);
++		btn_BotChar[PlayerIndex].OnEndAnimation = HandicapFadeEnded;
+ 
+ 		pnl_Handicap[PlayerIndex].bAcceptsInput=true;
+ 		if ( bHandicapAllowed )
+@@ -761,6 +800,15 @@
+ 		NewColor.A = 255;
+ 		btn_AltChar[PlayerIndex].Pulse(NewColor, HandicapAnimationSeconds);
+ 		btn_AltChar[PlayerIndex].OnEndAnimation = HandicapFadeEnded;
++
++		if ( BotAvailable(CharIndex[PlayerIndex]) )		// bot-variants: as the X hint
++			btn_BotChar[PlayerIndex].Show();
++
++		btn_BotChar[PlayerIndex].KillAnimation(KillMask);
++		NewColor = btn_BotChar[PlayerIndex].GetComponentColor(true);
++		NewColor.A = 255;
++		btn_BotChar[PlayerIndex].Pulse(NewColor, HandicapAnimationSeconds);
++		btn_BotChar[PlayerIndex].OnEndAnimation = HandicapFadeEnded;
+ 	}
+ 
+ 	return true;
+@@ -954,7 +1002,33 @@
+ 
+ 	bUseVariant = ShouldUseVariant(PlayerIndex, CharIndex[PlayerIndex]);
+ 	SetCharacterIndex(PlayerIndex, CharIndex[PlayerIndex], bUseVariant);
++	SetBotChoice(PlayerIndex, ShouldUseBot(PlayerIndex, CharIndex[PlayerIndex]));	// bot-variants
+ 	bDirty = IsFinished();
++}
++
++// bot-variants: the player's bot (or none) goes into their URL as BotClass, the class UCDeathmatch.GetPlayerClassName
++// logs them in with; the profile, and the URL's Class with it, keep the slot's own character, so nothing the game saves
++// (the profile, User.ini [DefaultPlayer]) ever holds a bot
++final function SetBotChoice( int PlayerIndex, bool bBot )
++{
++	local PlayerController PC;
++	local string BotClass;
++
++	if ( bBot )
++		BotClass = class'BotVariants'.static.BotClass(class'BotVariants'.static.Find(CharIndex[PlayerIndex]));
++
++	PC = PlayerOwner(PlayerIndex);
++	if ( BotClass != "" )
++		GameStart.SetURLKeyValue(PlayerIndex, "BotClass", BotClass);
++	else
++	{
++		GameStart.RemoveURLKeyValue(PlayerIndex, "BotClass");
++		if ( PC != None )
++			PC.ClearURL("BotClass");
++	}
++
++	log("bot-variants: player" @ PlayerIndex + 1 @ "chose" @ (BotClass != "" ? "the bot" @ BotClass : "no bot")
++		$ "; the profile's character" @ GetProfile(PlayerIndex).GetCharacterClass(), 'DevUI');
+ }
+ 
+ 
+@@ -1025,7 +1099,7 @@
+ 	PlayerIndex = GetPlayerIndex();
+ 
+ 	bVariant = ShouldUseVariant(PlayerIndex, b.Tag);
+-	Icon = CharInfo.GetCharacterIconAtIndex(b.Tag,true,bVariant);
++	Icon = SlotIcon(PlayerIndex, b.Tag, true, bVariant);
+ 	Diff = float(Highlightsize - IconSize) / 2;
+ 	CalculateButtonPosition(b.Tag, X, Y);
+ 	btn_CharIcon[b.Tag].SetBounds( X - Diff, Y - Diff, Highlightsize, HighlightSize );
+@@ -1048,7 +1122,7 @@
+ 			b.SetBounds(X, Y, IconSize, IconSize);
+ 
+ 			PlayerIndex = GetPlayerIndex();
+-			b.Graphic = CharInfo.GetCharacterIconAtIndex(b.Tag,false,ShouldUseVariant(PlayerIndex, b.Tag));
++			b.Graphic = SlotIcon(PlayerIndex, b.Tag, false, ShouldUseVariant(PlayerIndex, b.Tag));
+ 		}
+ 	}
+ }
+@@ -1112,6 +1186,13 @@
+ 	local bool bValidCharacter;
+ 	local Material NewCharacterMovie;
+ 
++	// bot-variants: a bot has no movie: the preview shows the static, looping
++	if ( ShouldUseBot(PlayerIndex, CharIndex[PlayerIndex]) )
++	{
++		pnl_Preview[PlayerIndex].ClearMovie();
++		return;
++	}
++
+ 	bValidCharacter = bool(ValidCharMask & (1 << CharIndex[PlayerIndex]));
+ 	NewCharacterMovie = CharInfo.GetCharacterMovie(CharIndex[PlayerIndex], PlayerIndex, !bValidCharacter, ShouldUseVariant(PlayerIndex, CharIndex[PlayerIndex]));
+ 
+@@ -1167,11 +1248,46 @@
+ 		}
+ 		else if ( !AltSkinActive(CharIdx) )
+ 		{
+-			
++
+ 			btn_AltChar[PlayerIndex].SetCaption(VariantCaption);
+ 			btn_AltChar[PlayerIndex].DisableComponent();
+ 		}
+ 	}
++
++	UpdateBotHint(PlayerIndex);	// bot-variants
++}
++
++// bot-variants: the bot hint is there while the slot's bot is unlocked, as the X hint is (usable on a slot the player
++// has, shown unusable on a locked one); it names the bot, or the slot's own character while the bot is shown, and the
++// name over the preview is then the bot's
++final function UpdateBotHint( int PlayerIndex )
++{
++	local int CharIdx;
++	local string BotName;
++
++	CharIdx = CharIndex[PlayerIndex];
++	BotName = class'BotVariants'.static.BotName(class'BotVariants'.static.Find(CharIdx));
++	if ( CharIdx < 0 || CharIdx == RANDOM_IDX || !BotAvailable(CharIdx) )
++		btn_BotChar[PlayerIndex].Hide();
++	else if ( !bool(ValidCharMask & (1 << CharIdx)) )
++	{
++		btn_BotChar[PlayerIndex].Show();
++		btn_BotChar[PlayerIndex].SetCaption(BotName);
++		btn_BotChar[PlayerIndex].DisableComponent();
++	}
++	else
++	{
++		btn_BotChar[PlayerIndex].Show();
++		if ( ShouldUseBot(PlayerIndex, CharIdx) )
++		{
++			btn_BotChar[PlayerIndex].SetCaption(GetProfile(PlayerIndex).GetCharacterName(CharIdx, false));
++			lbl_CharacterName[PlayerIndex].Caption = BotName;
++		}
++		else btn_BotChar[PlayerIndex].SetCaption(BotName);
++		btn_BotChar[PlayerIndex].EnableComponent();
++	}
++
++	PlaceBotHints();
+ }
+ 
+ 
+@@ -1257,6 +1373,8 @@
+ 
+ function UpdateControlVisibility()
+ {
++	local int i;
++
+ 	if ( bVisible )
+ 	{
+ 		if ( IsDisplayingHandicap(0) )
+@@ -1316,6 +1434,15 @@
+ 		}
+ 
+ 		UpdateControlVisibility34();	// players34
++
++		// bot-variants: the bot hints as the X hints: none while the player's handicap panel is up or for a player
++		// not there
++		for ( i = 0; i < MAX_VIEWPORTS; i++ )
++		{
++			if ( (i > 0 && !SecondPlayerActive()) || IsDisplayingHandicap(i) || CharIndex[i] < 0 || !BotAvailable(CharIndex[i]) )
++				btn_BotChar[i].Hide();
++			else btn_BotChar[i].Show();
++		}
+ 	}
+ }
+ 
+@@ -1328,7 +1455,10 @@
+ 
+ 	bValidCharacter = ValidCharacterIndex(CharIndex[0]);
+ 	bUseVariant = ShouldUseVariant(0, CharIndex[0]);
+-	pnl_Stats.Update(CharIndex[0], bValidCharacter, bUseVariant);
++	if ( ShouldUseBot(0, CharIndex[0]) )	// bot-variants: the bot's weapons and combos, the slot's bars
++		pnl_Stats.Update(CharIndex[0], bValidCharacter, false, class'BotVariants'.static.BotClass(class'BotVariants'.static.Find(CharIndex[0])));
++	else
++		pnl_Stats.Update(CharIndex[0], bValidCharacter, bUseVariant);
+ }
+ 
+ 
+@@ -1481,6 +1611,68 @@
+ 	return bool(AltSkinMask&(1<<CharIdx));
+ }
+ 
++// bot-variants: a slot shows its own character, its X variant or its bot, one at a time; the bot (as the X variant,
++// ToggleAltSkin) is a state of the slot, which both players see
++final function ToggleBot( int CharIdx, bool bDisplayBot )
++{
++	if ( bDisplayBot && AltSkinActive(CharIdx) )
++		ToggleAltSkin(CharIdx, false);
++	else PlayAction(CS_Modify);
++
++	if ( bDisplayBot )
++		BotSlotMask = BotSlotMask | (1 << CharIdx);
++	else BotSlotMask = BotSlotMask & ~(1 << CharIdx);
++}
++
++final function bool BotActive( int CharIdx )
++{
++	return CharIdx >= 0 && bool(BotSlotMask & (1 << CharIdx));
++}
++
++// The player plays the slot's bot when chosen now (players three and four never do: no switch of theirs).
++final function bool ShouldUseBot( int PlayerIndex, int CharIdx )
++{
++	if ( PlayerIndex >= JoyInput.Length || PlayerIndex >= MAX_VIEWPORTS )
++		return false;
++
++	return BotActive(CharIdx) && CanUseBot(CharIdx);
++}
++
++// The slot is the player's and so is its bot.
++final function bool CanUseBot( int CharIdx )
++{
++	return BotAvailable(CharIdx) && bool(ValidCharMask & (1 << CharIdx));
++}
++
++// The slot has a bot and the bot is unlocked.
++final function bool BotAvailable( int CharIdx )
++{
++	return CharIdx >= 0 && bool(BotMask & (1 << CharIdx));
++}
++
++// The slots whose bot is unlocked: the game's own unlock (the bot's bit in a profile's character mask, the bot lists'
++// rule) or the Unlock-all-content flag, as UC2PageBase.ValidCharacterIndex answers for every character.
++final function UpdateBotMask()
++{
++	local int i, Unlock;
++
++	BotMask = 0;
++	for ( i = 0; i < CHARACTER_COUNT; i++ )
++	{
++		Unlock = class'BotVariants'.static.UnlockIndex(class'BotVariants'.static.Find(i));
++		if ( Unlock != -1 && ValidCharacterIndex(Unlock) )
++			BotMask = BotMask | (1 << i);
++	}
++}
++
++// A slot's icon: its bot's while it shows the bot.
++final function Material SlotIcon( int PlayerIndex, int CharIdx, bool bColor, bool bVariant )
++{
++	if ( ShouldUseBot(PlayerIndex, CharIdx) )
++		return class'BotVariants'.static.Icon(class'BotVariants'.static.Find(CharIdx), bColor);
++	return CharInfo.GetCharacterIconAtIndex(CharIdx, bColor, bVariant);
++}
++
+ 
+ 
+ 
+@@ -1504,6 +1696,7 @@
+ 	{
+ 		PlayerIndex = GetPlayerIndex();
+ 		ValidCharMask = 0;
++		UpdateBotMask();	// bot-variants
+ 		for ( i = 0; i < btn_CharIcon.Length; i++ )
+ 		{
+ 			CharacterMask = 1 << i;
+@@ -1523,7 +1716,7 @@
+ 				bVariant = ShouldUseVariant(PlayerIndex, i);
+ 				btn_CharIcon[i].StyleName = CharPortraitStyleName;
+ 				btn_CharIcon[i].Style = Controller.GetStyle(CharPortraitStyleName);
+-				btn_CharIcon[i].Graphic = CharInfo.GetCharacterIconAtIndex(i, btn_CharIcon[i].MenuState == MSAT_Focused, bVariant);
++				btn_CharIcon[i].Graphic = SlotIcon(PlayerIndex, i, btn_CharIcon[i].MenuState == MSAT_Focused, bVariant);
+ 			}
+ 			else
+ 			{
+@@ -1632,6 +1825,40 @@
+ 	}
+ 
+ 	ToggleAltSkin(CharIndex[PlayerIndex], !AltSkinActive(CharIndex[PlayerIndex]));
++	if ( AltSkinActive(CharIndex[PlayerIndex]) )		// bot-variants: from the bot to the X variant
++		BotSlotMask = BotSlotMask & ~(1 << CharIndex[PlayerIndex]);
++
++	Refresh(false);
++	UpdateCharacterData(PlayerIndex);
++
++	return true;
++}
++
++// bot-variants: the pad's Back (the keyboard's C in [GUI.EmulatedJoypad], a click on the bot hint) switches the slot
++// between its own character and its bot, from the X variant too. It never leaves the page (B does); with no bot to
++// switch to it does nothing, and with the handicap panel up it is refused as X is. Players three and four's Back
++// never comes here (UC2Arena_DualBase.InternalOnXControllerEvent: Players34XControl, where it leaves).
++function bool BackClicked()
++{
++	local int PlayerIndex, CharIdx;
++
++	PlayerIndex = GetPlayerIndex();
++	if ( PlayerIndex >= MAX_VIEWPORTS || PlayerIndex >= JoyInput.Length )
++		return true;
++
++	CharIdx = CharIndex[PlayerIndex];
++	if ( !CanUseBot(CharIdx) )
++		return true;
++
++	if ( IsDisplayingHandicap(PlayerIndex) )
++	{
++		PlayAction(CS_Error);
++		return true;
++	}
++
++	ToggleBot(CharIdx, !BotActive(CharIdx));
++	log("bot-variants: player" @ PlayerIndex + 1 @ "switched slot" @ CharIdx @ "to" @
++		(BotActive(CharIdx) ? "its bot" @ class'BotVariants'.static.BotName(class'BotVariants'.static.Find(CharIdx)) : "its own character"), 'DevUI');
+ 
+ 	Refresh(false);
+ 	UpdateCharacterData(PlayerIndex);
+@@ -1653,7 +1880,10 @@
+ 	CharIdx = CharIndex[PlayerIndex];
+ 
+ 	bIgnoreActivation = true;
+-	Controller.OpenMenu( "UCMenu.UC2CharacterInfoPage", string(CharIdx), string(ShouldUseVariant(PlayerIndex, CharIdx)) );
++	if ( ShouldUseBot(PlayerIndex, CharIdx) )	// bot-variants: the page takes the bot's class for the variant flag
++		Controller.OpenMenu( "UCMenu.UC2CharacterInfoPage", string(CharIdx), class'BotVariants'.static.BotClass(class'BotVariants'.static.Find(CharIdx)) );
++	else
++		Controller.OpenMenu( "UCMenu.UC2CharacterInfoPage", string(CharIdx), string(ShouldUseVariant(PlayerIndex, CharIdx)) );
+ 	return true;
+ }
+ 
+@@ -1956,7 +2186,7 @@
+ 
+ 	for ( Part = Under; Part != None; Part = Part.MenuOwner )
+ 		for ( i = 1; i < MAX_VIEWPORTS; i++ )
+-			if ( Part == btn_AltChar[i] )
++			if ( Part == btn_AltChar[i] || Part == btn_BotChar[i] )		// bot-variants: their bot hints too
+ 				return true;
+ 	return false;
+ }
+@@ -2199,6 +2429,8 @@
+ 
+ 	btn_AltChar[0].Setup(XC_X);
+ 	btn_AltChar[1].Setup(XC_X);
++	btn_BotChar[0].Setup(XC_Back);	// bot-variants
++	btn_BotChar[1].Setup(XC_Back);
+ 
+ 
+ 
+@@ -2262,6 +2494,7 @@
+ 		FadeOut(lbl_CharacterName[i]);
+ 		FadeOut(pnl_Handicap[i]);
+ 		FadeOut(btn_AltChar[i]);
++		FadeOut(btn_BotChar[i]);	// bot-variants
+ 		FadeOut(img_Cursor34[i]);	// players34
+ 		FadeOut(lbl_Players34[i]);
+ 	}
+@@ -2297,6 +2530,7 @@
+ 		FadeIn(lbl_CharacterName[i]);
+ 		FadeIn(pnl_Handicap[i]);
+ 		FadeIn(btn_AltChar[i]);
++		FadeIn(btn_BotChar[i]);	// bot-variants
+ 		FadeIn(img_Cursor34[i]);	// players34
+ 		FadeIn(lbl_Players34[i]);
+ 	}
+@@ -2368,6 +2602,7 @@
+ 	{
+ 		Prepare(img_Cursor[i]);
+ 		Prepare(btn_AltChar[i]);
++		Prepare(btn_BotChar[i]);	// bot-variants
+ 		Prepare(lbl_CharacterName[i]);
+ 		Prepare(lbl_PlayerText[i]);
+ 		Prepare(lbl_JoinText[i]);
+@@ -2574,6 +2809,8 @@
+ 	PulseColor.A = 255;
+ 	btn_AltChar[0].Pulse(PulseColor, AnimTime);
+ 	btn_AltChar[1].Pulse(PulseColor, AnimTime);
++	btn_BotChar[0].Pulse(PulseColor, AnimTime);	// bot-variants
++	btn_BotChar[1].Pulse(PulseColor, AnimTime);
+ 
+ 	FadeIn(btn_Info);
+ 
+@@ -3206,6 +3443,20 @@
+ 		WinWidth=0.15625
+ 		WinHeight=0.052083
+ 	End Object
++	Begin Object Class=ControllerButton Name=PlayerOneBotButton
++		RenderWeight=0.51
++		WinTop=0.145417
++		WinLeft=0.640625
++		WinWidth=0.15625
++		WinHeight=0.052083
++	End Object
++	Begin Object Class=ControllerButton Name=PlayerTwoBotButton
++		RenderWeight=0.51
++		WinTop=0.6475
++		WinLeft=0.640625
++		WinWidth=0.15625
++		WinHeight=0.052083
++	End Object
+ 	Begin Object Class=GUIImage Name=PlayerOneCursor
+ 		Image=Texture't_ui_2.Characters.UI_Char_1PSelector'
+ 		ImageStyle=ISTY_Scaled
+@@ -3363,6 +3614,8 @@
+ 	btn_Info=ControllerButton'CharacterInfoButton'
+ 	btn_AltChar(0)=ControllerButton'PlayerOneAltButton'
+ 	btn_AltChar(1)=ControllerButton'PlayerTwoAltButton'
++	btn_BotChar(0)=ControllerButton'PlayerOneBotButton'
++	btn_BotChar(1)=ControllerButton'PlayerTwoBotButton'
+ 	HoneyCombLeft=226
+ 	HoneyCombBottom=335
+ 	HoneyCombDX=53.25
+--- a/UCMenu/Classes/UC2CharacterInfoPage.uc
++++ b/UCMenu/Classes/UC2CharacterInfoPage.uc
+@@ -20,6 +20,8 @@
+ var	const	localized	string				sMeleeWeaponDescription;
+ var	const	localized	string				sEnergyWeaponDescription;
+ var	const	localized	string				sExplosiveWeaponDescription;
++
++var() transient	int						Bot;		// bot-variants: the bot shown (an index of BotVariants.Bots), or -1
+ 
+ 
+ 
+@@ -49,11 +51,19 @@
+ 	local string Text;
+ 
+ 	Text = CharInfo.GetCharacterBio(SelectedCharIdx, bAltVersion);
++	if ( Bot != -1 )	// bot-variants: a bot has no bio
++		Text = "";
+ 
+ 	i = CharInfo.GetCharacterRaceIndex(SelectedCharIdx, bAltVersion);
+-	Text = Text $ "||" $ ParseInfo(sRaceWeaponDescription, CharInfo.RaceWeaponName[i], CharInfo.RaceWeaponInfo[i]);
++	if ( Bot != -1 )
++		i = class'BotVariants'.default.Bots[Bot].RaceWeaponIdx;
++	if ( Text != "" )
++		Text = Text $ "||";
++	Text = Text $ ParseInfo(sRaceWeaponDescription, CharInfo.RaceWeaponName[i], CharInfo.RaceWeaponInfo[i]);
+ 
+ 	i = CharInfo.GetCharacterMeleeIndex(SelectedCharIdx, bAltVersion);
++	if ( Bot != -1 )
++		i = class'BotVariants'.default.Bots[Bot].MeleeWeaponIdx;
+ 	Text = Text $ "||" $ ParseInfo(sMeleeWeaponDescription,CharInfo.MeleeWeaponName[i], CharInfo.MeleeWeaponInfo[i]);
+ 
+ 	li_Info.SetContent(Text);
+@@ -81,6 +91,8 @@
+ 	Y += 20;
+ 	NewY = Y;
+ 	Combos = CharInfo.GetCharacterComboListAt(SelectedCharIdx, bAltVersion);
++	if ( Bot != -1 )	// bot-variants
++		Combos = class'BotVariants'.default.Bots[Bot].Combos;
+ 	for ( i = 0; i < Combos.Length - 1; i++ )  
+ 	{
+ 		pnl_Combos[i].RenderWeight = 0.5 + 0.1 * i;
+@@ -130,8 +142,11 @@
+ 
+ 	SelectedCharIdx = int(CharIndex);
+ 	bAltVersion = bool(AltVersionString);
++	Bot = class'BotVariants'.static.FindClass(AltVersionString);	// bot-variants: a bot's class in place of the flag
+ 
+ 	lbl_Subtitle.Caption = CurrentProfile.GetCharacterName(SelectedCharIdx, bAltVersion);
++	if ( Bot != -1 )
++		lbl_Subtitle.Caption = class'BotVariants'.static.BotName(Bot);
+ 
+ 	SetupInfoText(bAltVersion);
+ 
+--- a/UCMenu/Classes/UC2MidGame_Character.uc
++++ b/UCMenu/Classes/UC2MidGame_Character.uc
+@@ -395,6 +395,16 @@
+ 	local string CharacterClass;
+ 	local float PlayerHandicap;
+ 	local GUIPage Page;
++	local PlayerController PC;
++
++	// bot-variants: a character chosen here replaces a bot chosen on the character page (the player's BotClass)
++	PC = CurrentProfile.PlayerOwner();
++	if ( CharacterDirty() && PC != None )
++	{
++		PC.ClearURL("BotClass");
++		if ( GameStart != None )
++			GameStart.RemoveURLKeyValue(Controller.FindControllerPortIndex(PC.GamepadID), "BotClass");
++	}
+ 
+ 	CurrentProfile.SetVariant(bAltVersion);
+ 	CharacterClass = CharInfo.GetCharacterClass(CharIndex, bAltVersion);

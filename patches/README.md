@@ -58,6 +58,7 @@ change: every other package stays the shipped one.
 | `keys-menu` | the KEYBOARD / MOUSE settings page | UCMenu | on |
 | `wide-hud` | the HUD on a window wider than 4:3, and in each split-screen view: its left and right groups (the mutators' too) at the sides, at their 4:3 distance from them; its centred items exactly centred | UCGameplay, UCMutators | on |
 | `menu-mouse` | a collapsed Arena panel is inert to the mouse (the pointer gives it no focus, the wheel over it does nothing, a click selects nothing in it), and a click on it opens it the way the keys step to it, its selection kept; while the mutators are up, the rest of the Arena page (its other panels, its header) but the footer's hints is inert the same way and a click there closes the mutators as the pad's B does; another player's hint on the Character page takes no click | UCMenu | on |
+| `bot-variants` | the character page's second switch, the pad's Back (C on the keyboard, a click on its hint): a slot's own character or its bot, the eight roster fighters without a slot (Corrosion, Korig, Mirage, Hyena, Nepthys, Ra, Memphis, Darius), each in a slot of its weight class, once unlocked; the match plays the bot, the profile keeps the slot's own character | UCMenu, UCGameplay | on |
 
 Each set's folder has a `README.md` (what it changes, its ini keys, what it depends on), one `<Pkg>.diff` per
 package it changes (paths `<Pkg>/Classes/<Class>.uc`; `patch -p1` reads them too) and whole new classes under

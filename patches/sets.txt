@@ -16,3 +16,4 @@ start-menu     epic-fixes    on       ours
 keys-menu      mouse-look    on       ours
 wide-hud       epic-fixes    on       ours
 menu-mouse     epic-fixes    on       ours
+bot-variants   players34,menu-mouse on      ours

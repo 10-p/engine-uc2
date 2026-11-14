@@ -1,0 +1,98 @@
+--- a/UCGameplay/Classes/ScoreboardPanelBase.uc
++++ b/UCGameplay/Classes/ScoreboardPanelBase.uc
+@@ -129,11 +129,22 @@
+ 	local int i;
+ 	local Material Icon;
+ 	local GameStartInfoBase GSI;
++	local array<string> BotParts;
+ 	Y = ((Top + RowTop) + (float(Item) * RowSpacing));
+ 	if ((Outer.GRI.PRIArray[priIdx].CharacterIcon == None))
+ 	{
+ 		CharacterText = (Outer.GRI.PRIArray[priIdx].bBot ? Outer.GRI.PRIArray[priIdx].PlayerName : string(Outer.GRI.PRIArray[priIdx].PawnClass));
+ 		Outer.GRI.PRIArray[priIdx].CharacterIcon = Class'Engine.CharacterInformation'.static.GetCharacterIcon(CharacterText, True);
++		// bot-variants: a player in a bot's class (UCMenu's character page) gets the bot's icon, by the bot's name: the
++		// last part of the class name (UCPawn_Nakhti_Ra: Ra)
++		if (((Outer.GRI.PRIArray[priIdx].CharacterIcon == None) && (Outer.GRI.PRIArray[priIdx].PawnClass != None)))
++		{
++			Split(string(Outer.GRI.PRIArray[priIdx].PawnClass.Name), BotParts, "_");
++			if ((BotParts.Length > 0))
++			{
++				Outer.GRI.PRIArray[priIdx].CharacterIcon = Class'Engine.CharacterInformation'.static.GetCharacterIcon(BotParts[(BotParts.Length - 1)], True);
++			}
++		}
+ 	}
+ 	Icon = Outer.GRI.PRIArray[priIdx].CharacterIcon;
+ 	SetPlayerIcon(Icon);
+--- a/UCGameplay/Classes/ScoreboardPanelSurvival.uc
++++ b/UCGameplay/Classes/ScoreboardPanelSurvival.uc
+@@ -56,12 +56,23 @@
+ 	local Material Icon;
+ 	local GameStartInfoBase GSI;
+ 	local SurvivalPlayerReplicationInfo PRI;
++	local array<string> BotParts;
+ 	PRI = SurvivalPlayerReplicationInfo(Outer.GRI.PRIArray[priIdx]);
+ 	Y = ((Top + SpecRowTop) + (float((Item - FirstSpecItem)) * SpecRowSpacing));
+ 	if ((PRI.CharacterIcon == None))
+ 	{
+ 		CharacterText = (PRI.bBot ? PRI.PlayerName : string(PRI.PawnClass));
+ 		PRI.CharacterIcon = Class'Engine.CharacterInformation'.static.GetCharacterIcon(CharacterText, True);
++		// bot-variants: a player in a bot's class (UCMenu's character page) gets the bot's icon, by the bot's name: the
++		// last part of the class name (UCPawn_Nakhti_Ra: Ra)
++		if (((PRI.CharacterIcon == None) && (PRI.PawnClass != None)))
++		{
++			Split(string(PRI.PawnClass.Name), BotParts, "_");
++			if ((BotParts.Length > 0))
++			{
++				PRI.CharacterIcon = Class'Engine.CharacterInformation'.static.GetCharacterIcon(BotParts[(BotParts.Length - 1)], True);
++			}
++		}
+ 	}
+ 	Icon = PRI.CharacterIcon;
+ 	SetPlayerIcon(Icon);
+--- a/UCGameplay/Classes/UCDeathmatch.uc
++++ b/UCGameplay/Classes/UCDeathmatch.uc
+@@ -1005,9 +1005,17 @@
+ 
+ function string GetPlayerClassName(optional string Options)
+ {
++	local string BotClass;
+ 	if (((theRung != None) && (theRung.CharacterClassName != "")))
+ 	{
+ 		return theRung.CharacterClassName;
++	}
++	// bot-variants: the bot a player chose with the character page's second switch (UCMenu.UC2Arena_Character
++	// .SetBotChoice); their Class is the slot's own character, which their profile keeps
++	BotClass = ParseOption(Options, "BotClass");
++	if ((BotClass != "") && (class<UCPawn>(DynamicLoadObject(BotClass, Class'Core.Class', True)) != None))
++	{
++		return BotClass;
+ 	}
+ 	return Super.GetPlayerClassName(Options);
+ }
+--- a/UCGameplay/Classes/UCHUD_Survival.uc
++++ b/UCGameplay/Classes/UCHUD_Survival.uc
+@@ -77,6 +77,7 @@
+ 	local Material Icon;
+ 	local string CharacterText;
+ 	local Font TextDrawFont;
++	local array<string> BotParts;
+ 	local Color TextDrawColor;
+ 	local int LeftShift, RightShift;
+ 	if (((C == None) || (PlayerOwner == None)))
+@@ -123,6 +124,16 @@
+ 			{
+ 				CharacterText = (GRI.PRIArray[i].bBot ? GRI.PRIArray[i].PlayerName : string(GRI.PRIArray[i].PawnClass));
+ 				GRI.PRIArray[i].CharacterIcon = Class'Engine.CharacterInformation'.static.GetCharacterIcon(CharacterText, True);
++				// bot-variants: a player in a bot's class (UCMenu's character page) gets the bot's icon, by the bot's name: the
++				// last part of the class name (UCPawn_Nakhti_Ra: Ra)
++				if (((GRI.PRIArray[i].CharacterIcon == None) && (GRI.PRIArray[i].PawnClass != None)))
++				{
++					Split(string(GRI.PRIArray[i].PawnClass.Name), BotParts, "_");
++					if ((BotParts.Length > 0))
++					{
++						GRI.PRIArray[i].CharacterIcon = Class'Engine.CharacterInformation'.static.GetCharacterIcon(BotParts[(BotParts.Length - 1)], True);
++					}
++				}
+ 			}
+ 			Icon = GRI.PRIArray[i].CharacterIcon;
+ 			C.SetPos((pos_CharIcon[Idx].X + float(SafeZoneOffsetX)), (pos_CharIcon[Idx].Y + float(SafeZoneOffsetY)));
