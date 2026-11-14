@@ -195,19 +195,20 @@
  	return PRI.CharacterIcon;
 --- a/UCMenu/Classes/UC2Arena_Character.uc
 +++ b/UCMenu/Classes/UC2Arena_Character.uc
-@@ -145,6 +145,11 @@
+@@ -145,6 +145,12 @@
  var	automated	GUIImage					img_Cursor34[2];	// 3P, 4P
  var automated	GUILabel					lbl_Players34[2];	// under the honeycomb
  var() transient	int							PendingLeave34;		// pads (a bit per port) whose player leaves at the next Timer
 +
 +// bot-variants: a slot's second switch (the pad's Back), between its own character and its bot (class BotVariants)
-+var	automated	ControllerButton			btn_BotChar[MAX_VIEWPORTS];	// its hint, above btn_AltChar
++// The hint, above btn_AltChar: its RenderWeight draws it over the preview, which it overlaps in split screen.
++var	automated	ControllerButton			btn_BotChar[MAX_VIEWPORTS];
 +var()			int							BotMask;			// the slots whose bot is unlocked (a bit per slot)
 +var() transient	int							BotSlotMask;		// the slots that show their bot
  
  
  final function SetRandomMovie()
-@@ -347,6 +352,7 @@
+@@ -347,6 +353,7 @@
  		}
  	}
  
@@ -215,7 +216,7 @@
  	RemapComponents();
  	MapControls();
  }
-@@ -527,7 +533,30 @@
+@@ -527,7 +534,30 @@
  		}
  	}
  
@@ -246,7 +247,7 @@
  }
  
  final function CalculateButtonPosition( int ButtonIndex, out float ButtonX, out float ButtonY )
-@@ -582,6 +611,7 @@
+@@ -582,6 +612,7 @@
  			CharIndex[PlayerIndex] -= CHARACTER_COUNT;
  			ToggleAltSkin(CharIndex[PlayerIndex], true);
  		}
@@ -254,7 +255,7 @@
  
  		
  		JoyInput[PlayerIndex].LastAnnouncerCue = '';
-@@ -600,6 +630,8 @@
+@@ -600,6 +631,8 @@
  	
  
  	AnnouncerCue = CharInfo.GetCharacterAnnouncer(CharIndex[PlayerIndex], GetProfile(PlayerIndex).UsingVariant());
@@ -263,7 +264,7 @@
  	if ( AnnouncerCue != 'None' && AnnouncerCue != '' && AnnouncerCue != JoyInput[PlayerIndex].LastAnnouncerCue )
  	{
  		JoyInput[PlayerIndex].LastAnnouncerCue = AnnouncerCue;
-@@ -665,6 +697,12 @@
+@@ -665,6 +698,12 @@
  		NewColor.A = 0;
  		btn_AltChar[PlayerIndex].Pulse(NewColor, HandicapAnimationSeconds + ZipDelay + ZipSeconds);
  		btn_AltChar[PlayerIndex].OnEndAnimation = HandicapFadeEnded;
@@ -276,7 +277,7 @@
  
  		pnl_Handicap[PlayerIndex].bAcceptsInput=true;
  		if ( bHandicapAllowed )
-@@ -761,6 +799,15 @@
+@@ -761,6 +800,15 @@
  		NewColor.A = 255;
  		btn_AltChar[PlayerIndex].Pulse(NewColor, HandicapAnimationSeconds);
  		btn_AltChar[PlayerIndex].OnEndAnimation = HandicapFadeEnded;
@@ -292,7 +293,7 @@
  	}
  
  	return true;
-@@ -954,7 +1001,33 @@
+@@ -954,7 +1002,33 @@
  
  	bUseVariant = ShouldUseVariant(PlayerIndex, CharIndex[PlayerIndex]);
  	SetCharacterIndex(PlayerIndex, CharIndex[PlayerIndex], bUseVariant);
@@ -326,7 +327,7 @@
  }
  
  
-@@ -1025,7 +1098,7 @@
+@@ -1025,7 +1099,7 @@
  	PlayerIndex = GetPlayerIndex();
  
  	bVariant = ShouldUseVariant(PlayerIndex, b.Tag);
@@ -335,7 +336,7 @@
  	Diff = float(Highlightsize - IconSize) / 2;
  	CalculateButtonPosition(b.Tag, X, Y);
  	btn_CharIcon[b.Tag].SetBounds( X - Diff, Y - Diff, Highlightsize, HighlightSize );
-@@ -1048,7 +1121,7 @@
+@@ -1048,7 +1122,7 @@
  			b.SetBounds(X, Y, IconSize, IconSize);
  
  			PlayerIndex = GetPlayerIndex();
@@ -344,7 +345,7 @@
  		}
  	}
  }
-@@ -1112,6 +1185,13 @@
+@@ -1112,6 +1186,13 @@
  	local bool bValidCharacter;
  	local Material NewCharacterMovie;
  
@@ -358,7 +359,7 @@
  	bValidCharacter = bool(ValidCharMask & (1 << CharIndex[PlayerIndex]));
  	NewCharacterMovie = CharInfo.GetCharacterMovie(CharIndex[PlayerIndex], PlayerIndex, !bValidCharacter, ShouldUseVariant(PlayerIndex, CharIndex[PlayerIndex]));
  
-@@ -1167,11 +1247,46 @@
+@@ -1167,11 +1248,46 @@
  		}
  		else if ( !AltSkinActive(CharIdx) )
  		{
@@ -406,7 +407,7 @@
  }
  
  
-@@ -1257,6 +1372,8 @@
+@@ -1257,6 +1373,8 @@
  
  function UpdateControlVisibility()
  {
@@ -415,7 +416,7 @@
  	if ( bVisible )
  	{
  		if ( IsDisplayingHandicap(0) )
-@@ -1316,6 +1433,15 @@
+@@ -1316,6 +1434,15 @@
  		}
  
  		UpdateControlVisibility34();	// players34
@@ -431,7 +432,7 @@
  	}
  }
  
-@@ -1328,7 +1454,10 @@
+@@ -1328,7 +1455,10 @@
  
  	bValidCharacter = ValidCharacterIndex(CharIndex[0]);
  	bUseVariant = ShouldUseVariant(0, CharIndex[0]);
@@ -443,7 +444,7 @@
  }
  
  
-@@ -1481,6 +1610,68 @@
+@@ -1481,6 +1611,68 @@
  	return bool(AltSkinMask&(1<<CharIdx));
  }
  
@@ -512,7 +513,7 @@
  
  
  
-@@ -1504,6 +1695,7 @@
+@@ -1504,6 +1696,7 @@
  	{
  		PlayerIndex = GetPlayerIndex();
  		ValidCharMask = 0;
@@ -520,7 +521,7 @@
  		for ( i = 0; i < btn_CharIcon.Length; i++ )
  		{
  			CharacterMask = 1 << i;
-@@ -1523,7 +1715,7 @@
+@@ -1523,7 +1716,7 @@
  				bVariant = ShouldUseVariant(PlayerIndex, i);
  				btn_CharIcon[i].StyleName = CharPortraitStyleName;
  				btn_CharIcon[i].Style = Controller.GetStyle(CharPortraitStyleName);
@@ -529,7 +530,7 @@
  			}
  			else
  			{
-@@ -1632,6 +1824,40 @@
+@@ -1632,6 +1825,40 @@
  	}
  
  	ToggleAltSkin(CharIndex[PlayerIndex], !AltSkinActive(CharIndex[PlayerIndex]));
@@ -570,7 +571,7 @@
  
  	Refresh(false);
  	UpdateCharacterData(PlayerIndex);
-@@ -1653,7 +1879,10 @@
+@@ -1653,7 +1880,10 @@
  	CharIdx = CharIndex[PlayerIndex];
  
  	bIgnoreActivation = true;
@@ -582,7 +583,7 @@
  	return true;
  }
  
-@@ -1956,7 +2185,7 @@
+@@ -1956,7 +2186,7 @@
  
  	for ( Part = Under; Part != None; Part = Part.MenuOwner )
  		for ( i = 1; i < MAX_VIEWPORTS; i++ )
@@ -591,7 +592,7 @@
  				return true;
  	return false;
  }
-@@ -2199,6 +2428,8 @@
+@@ -2199,6 +2429,8 @@
  
  	btn_AltChar[0].Setup(XC_X);
  	btn_AltChar[1].Setup(XC_X);
@@ -600,7 +601,7 @@
  
  
  
-@@ -2262,6 +2493,7 @@
+@@ -2262,6 +2494,7 @@
  		FadeOut(lbl_CharacterName[i]);
  		FadeOut(pnl_Handicap[i]);
  		FadeOut(btn_AltChar[i]);
@@ -608,7 +609,7 @@
  		FadeOut(img_Cursor34[i]);	// players34
  		FadeOut(lbl_Players34[i]);
  	}
-@@ -2297,6 +2529,7 @@
+@@ -2297,6 +2530,7 @@
  		FadeIn(lbl_CharacterName[i]);
  		FadeIn(pnl_Handicap[i]);
  		FadeIn(btn_AltChar[i]);
@@ -616,7 +617,7 @@
  		FadeIn(img_Cursor34[i]);	// players34
  		FadeIn(lbl_Players34[i]);
  	}
-@@ -2368,6 +2601,7 @@
+@@ -2368,6 +2602,7 @@
  	{
  		Prepare(img_Cursor[i]);
  		Prepare(btn_AltChar[i]);
@@ -624,7 +625,7 @@
  		Prepare(lbl_CharacterName[i]);
  		Prepare(lbl_PlayerText[i]);
  		Prepare(lbl_JoinText[i]);
-@@ -2574,6 +2808,8 @@
+@@ -2574,6 +2809,8 @@
  	PulseColor.A = 255;
  	btn_AltChar[0].Pulse(PulseColor, AnimTime);
  	btn_AltChar[1].Pulse(PulseColor, AnimTime);
@@ -633,17 +634,19 @@
  
  	FadeIn(btn_Info);
  
-@@ -3206,6 +3442,18 @@
+@@ -3206,6 +3443,20 @@
  		WinWidth=0.15625
  		WinHeight=0.052083
  	End Object
 +	Begin Object Class=ControllerButton Name=PlayerOneBotButton
++		RenderWeight=0.51
 +		WinTop=0.145417
 +		WinLeft=0.640625
 +		WinWidth=0.15625
 +		WinHeight=0.052083
 +	End Object
 +	Begin Object Class=ControllerButton Name=PlayerTwoBotButton
++		RenderWeight=0.51
 +		WinTop=0.6475
 +		WinLeft=0.640625
 +		WinWidth=0.15625
@@ -652,7 +655,7 @@
  	Begin Object Class=GUIImage Name=PlayerOneCursor
  		Image=Texture't_ui_2.Characters.UI_Char_1PSelector'
  		ImageStyle=ISTY_Scaled
-@@ -3363,6 +3611,8 @@
+@@ -3363,6 +3614,8 @@
  	btn_Info=ControllerButton'CharacterInfoButton'
  	btn_AltChar(0)=ControllerButton'PlayerOneAltButton'
  	btn_AltChar(1)=ControllerButton'PlayerTwoAltButton'

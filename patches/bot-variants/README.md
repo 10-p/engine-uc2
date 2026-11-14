@@ -36,7 +36,8 @@ combo table has no light Heal.
       `CreateIcons` and `Refresh`): the game's own unlock, the bot's bit in a profile's character mask (the bot lists'
       rule), or the Unlock-all-content flag (`bUnlockCharacters`), as `UC2PageBase.ValidCharacterIndex` answers.
     - The hint: `btn_BotChar[2]`, one per player as `btn_AltChar`, above the X hint (`PlaceBotHints`; in its place on a slot
-      without an X variant; centred on it in split screen). Shown while the slot's bot is unlocked: usable on a slot the
+      without an X variant; centred on it in split screen, where it lies on the lower edge of the player's preview and is
+      drawn over it, `RenderWeight` 0.51). Shown while the slot's bot is unlocked: usable on a slot the
       player has, shown unusable on a locked slot; hidden on Random, on a slot without a bot, with a locked bot, while the
       handicap panel is up. Each hint names the character its button switches to, or the slot's own one while that is
       shown; switching between the bot and the X variant updates both. Another player's bot hint is inert to the mouse
