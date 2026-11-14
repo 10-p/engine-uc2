@@ -77,7 +77,9 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   keyboard pages, as the keys type it (Latin-1 without control characters, up to the field's length;
   `Engine/Inc/UnPaste.h`).
 - **Split screen and four pads**: up to four players in one window, joining from the menus or a match; players three
-  and four on the character page (players34).
+  and four on the character page (players34). The split views' reduced detail (`SplitScreenFullDetail=False`) removes
+  the actors of the higher detail levels as the Xbox does, and no static light: as on the Xbox, a static light stays at
+  every detail level (`ALight::PostLoad`), since the lightmaps, the static mesh lighting and the BSP leaves use it.
 - **The roster's bots on the character page**: the eight fighters of `UCCharacters.u` without a slot of their own
   (Corrosion, Korig, Mirage, Hyena, Nepthys, Ra, Memphis, Darius), each the bot of a slot of its weight class: the pad's
   Back there (C on the keyboard, a click on its hint) switches the slot between its own character and its bot once

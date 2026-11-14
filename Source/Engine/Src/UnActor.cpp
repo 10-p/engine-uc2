@@ -3161,13 +3161,14 @@ void ALight::PostLoad()
 	{	
 		XLevel->DestroyActor( this,0,1,1 );
 	}
+#endif
 
 	// force static lights to never LOD out
-	if( bStatic )
+	// (lightmaps, static mesh lighting and leaf light lists point at them; the editor keeps the map's value)
+	if( bStatic && !GIsEditor )
 	{
 		DetailLevel = DM_Low;
 	}	
-#endif
 
 	unguard;
 }
