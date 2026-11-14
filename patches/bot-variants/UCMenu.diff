@@ -494,7 +494,7 @@
 +	return true;
 +}
 +
-+// bot-variants: the pad's Back (the keyboard's F1 in [GUI.EmulatedJoypad], a click on the bot hint) switches the slot
++// bot-variants: the pad's Back (the keyboard's C in [GUI.EmulatedJoypad], a click on the bot hint) switches the slot
 +// between its own character and its bot, from the X variant too. It never leaves the page (B does); with no bot to
 +// switch to it does nothing, and with the handicap panel up it is refused as X is. Players three and four's Back
 +// never comes here (UC2Arena_DualBase.InternalOnXControllerEvent: Players34XControl, where it leaves).

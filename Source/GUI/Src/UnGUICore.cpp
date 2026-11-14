@@ -869,6 +869,9 @@ void  UGUIController::NativeTick(FLOAT DeltaTime)
 	pad codes: A B X Y Black White LeftTrigger RightTrigger PadUp PadDown PadLeft PadRight
 	Start Back LeftThumb RightThumb, AltUp AltDown AltLeft AltRight (right stick), Type (the
 	key types or edits text), Raw (not converted). Without the section, Epic's table applies.
+	A key of the section that stands for Back acts as it only on a page that shows a Back hint
+	(PageShowsBackHint); elsewhere the pad's Back leaves the page, which B does on the keyboard,
+	and the key is a plain key.
 -----------------------------------------------------------------------------*/
 
 enum EEmulatedPadSpecial
@@ -891,6 +894,7 @@ struct FEmulatedPadKey
 static FEmulatedPadKey	GEmulatedPad[IK_MAX];
 static UBOOL			GEmulatedPadLoaded = 0;
 static TArray<BYTE>		GEmulatedPadOrder;	// the keys in the order of the section (the first one names a button)
+static UBOOL			GEmulatedPadEpic = 0;	// no section: Epic's table, whose Escape is Back on every page
 
 static BYTE ParseEmulatedPadCode( const TCHAR* Name )
 {
@@ -933,6 +937,7 @@ static void LoadEmulatedPad()
 {
 	guard(LoadEmulatedPad);
 	GEmulatedPadLoaded = 1;
+	GEmulatedPadEpic = 0;
 	appMemzero( GEmulatedPad, sizeof(GEmulatedPad) );
 	GEmulatedPadOrder.Empty();
 
@@ -959,6 +964,7 @@ static void LoadEmulatedPad()
 			GEmulatedPad[Epic[i][0]].Code = GEmulatedPad[Epic[i][0]].TextCode = Epic[i][1];
 			GEmulatedPadOrder.AddItem( Epic[i][0] );
 		}
+		GEmulatedPadEpic = 1;
 		debugf( NAME_Init, TEXT("GUI: no [GUI.EmulatedJoypad] section, using Epic's key table") );
 		return;
 	}
@@ -1058,6 +1064,7 @@ static UBOOL MouseIsOver( UGUIController* C, UGUIComponent* Comp );
 static UGUIComponent* MouseInertOwner( UGUIComponent* Comp );
 static UGUIComponent* MouseInertUnder( UGUIController* C );
 static UGUIComponent* MouseHint( UGUIController* C, BYTE& Code );
+static UBOOL PageShowsBackHint( UGUIController* C );
 static UBOOL MouseOutsideOrHintPress( UGUIController* C );
 static UBOOL MouseOutsideOrHintRelease( UGUIController* C );
 static UBOOL MouseOutsideDialog( UGUIController* C );
@@ -1323,6 +1330,8 @@ UBOOL UGUIController::NativeKeyEvent(BYTE& iKey, BYTE& State, FLOAT Delta )
 		// [GUI.EmulatedJoypad] (LoadEmulatedPad).
 		UGUIEditBox* TextBox = TextEntryTarget( this );
 		BYTE Code = EmulatedPadCode( iKey, TextBox!=NULL );
+		if ( Code == XBC_Back && !GEmulatedPadEpic && !PageShowsBackHint( this ) )
+			Code = EJP_Raw;	// the pad's Back only where the page shows its hint
 		if ( TextBox && Code == EJP_Raw && IsTypingKey(iKey) )
 			Code = EJP_Type;	// a key that makes a character types it while there is a text field
 		if ( State == IST_Press || (State == IST_Release && iKey == GPadKeyHeld) )
@@ -2857,6 +2866,32 @@ static UGUIComponent* MouseHint( UGUIController* C, BYTE& Code )
 		return NULL;
 	Code = *((BYTE*)Hint + CodeProp->Offset);
 	return Hint;
+}
+
+// A shown hint of a pad button in a component: a visible, enabled ControllerButton of that code.
+static UBOOL HintShown( UGUIComponent* Comp, UClass* HintClass, UByteProperty* CodeProp, BYTE Code )
+{
+	UGUIMultiComponent* Multi = Cast<UGUIMultiComponent>( Comp );
+	for ( INT i = 0; Multi && i < Multi->Controls.Num(); i++ )
+	{
+		UGUIComponent* Part = Multi->Controls(i);
+		if ( !Part || !Part->bVisible || Part->MenuState == MSAT_Disabled )
+			continue;
+		if ( Part->IsA(HintClass) ? *((BYTE*)Part + CodeProp->Offset) == Code : HintShown( Part, HintClass, CodeProp, Code ) )
+			return 1;
+	}
+	return 0;
+}
+
+// Whether the active page shows a hint of the pad's Back (the Arena character page's bot switch, the
+// dedicated server's scoreboard): the pages where Back does something other than leave the page.
+static UBOOL PageShowsBackHint( UGUIController* C )
+{
+	static UClass* HintClass = NULL;
+	if ( !HintClass )
+		HintClass = FindObject<UClass>( ANY_PACKAGE, TEXT("ControllerButton") );
+	UByteProperty* CodeProp = HintClass ? FindField<UByteProperty>( HintClass, TEXT("ButtonCode") ) : NULL;
+	return C->ActivePage && CodeProp && HintShown( C->ActivePage, HintClass, CodeProp, XC_Back );
 }
 
 // A message box (GUIMessageBox: SetupQuestion's accept and cancel, or its own buttons) goes out by B when

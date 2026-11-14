@@ -25,9 +25,10 @@ combo table has no light Heal.
   `CharacterInformation.BotNames` entry), its icons.
 - `UCMenu.diff`
   - `UC2Arena_Character`:
-    - The switch: `BackClicked` (the pad's Back; the keyboard's F1 through `[GUI.EmulatedJoypad]`; a click on its hint,
-      which the engine's mouse turns into its pad button) switches the slot under the player's cursor between its own
-      character and its bot, from the X variant too, and Back never leaves the page (B does). With no bot
+    - The switch: `BackClicked` (the pad's Back; the keyboard's C through `[GUI.EmulatedJoypad]`, which the engine
+      passes as Back only to a page that shows a Back hint, so C on any other page backs out of nothing; a click on its
+      hint, which the engine's mouse turns into its pad button) switches the slot under the player's cursor between its
+      own character and its bot, from the X variant too, and Back never leaves the page (B does). With no bot
       to switch to it does nothing; with the player's handicap panel up it is refused with the error sound, as X is.
       `XClicked` from the bot goes to the X variant. Players three and four keep their own Back (players34: they leave).
     - The state: `BotSlotMask`, a bit per slot that shows its bot, a state of the slot as the X variant's

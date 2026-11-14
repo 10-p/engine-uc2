@@ -59,8 +59,10 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   mouse is player one's), and the pointer over a hint selects nothing; a collapsed Arena panel is inert to the mouse, no
   hover focus, no row, no wheel and no hint, and a click on it opens it; while the Arena's mutators are up, the rest of
   the page (its other panels, its header) but the footer's hints is inert the same way and a click there closes the
-  mutators as the pad's B does, patch set menu-mouse), the console on the key left of 1, the PC mouse look of the
-  mouse-look patch set; while player one uses the keyboard or the mouse the pad's button glyphs show the keys that do
+  mutators as the pad's B does, patch set menu-mouse), the pad's Back on C where a page shows its hint (the character
+  page's bot switch, the dedicated server's scoreboard) and nowhere else, the console on the key left of 1, the PC
+  mouse look of the mouse-look patch set; while player one uses the keyboard or the mouse the pad's button glyphs
+  show the keys that do
   the same, the scoreboards' White and Black hints (textures of their own, `Canvas.DrawTile`) too, whose keys (V and
   C by default) turn the scoreboard's pages as the pad's White and Black do (`UnKeyGlyphs.cpp`, patch set key-glyphs);
   in the coup de grace's button prompts (the timed sequences of
@@ -78,9 +80,9 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   and four on the character page (players34).
 - **The roster's bots on the character page**: the eight fighters of `UCCharacters.u` without a slot of their own
   (Corrosion, Korig, Mirage, Hyena, Nepthys, Ra, Memphis, Darius), each the bot of a slot of its weight class: the pad's
-  Back there (F1, a click on its hint) switches the slot between its own character and its bot once the bot is
-  unlocked, X stays the switch to the X variant; the match plays the bot (alone, in split screen, over the network), the
-  profile and User.ini keep the slot's own character (bot-variants).
+  Back there (C on the keyboard, a click on its hint) switches the slot between its own character and its bot once
+  the bot is unlocked, X stays the switch to the X variant; the match plays the bot (alone, in split screen, over the
+  network), the profile and User.ini keep the slot's own character (bot-variants).
 - **Wide windows**: the 640x480 menus and HUD in the largest centred 4:3 box of the window or of a split view, the
   view Hor+; the HUD's left and right groups at the view's sides and its centred items on its centre, the console's
   typing line across the window, the announcement band a gradient under shadowed texts (the status bar's text, which
