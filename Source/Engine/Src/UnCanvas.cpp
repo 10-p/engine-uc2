@@ -602,8 +602,15 @@ static FLOAT DrawString
 						}
 					}
 
+					// UC2's font pages are one-bit masks that the Normal style alpha tests: at 640x480 the Alpha style's
+					// pixels, in the scaled box a stepped edge. There the glyph is drawn Alpha.
+					UBOOL bBlendGlyph = Canvas->Style == STY_Normal && Tex->bMasked && Canvas->IsUIBoxed();
+					if( bBlendGlyph )
+						Canvas->Style = STY_Alpha;
                     Canvas->DrawTile( Tex, TileX, TileY, AdjustedCharUSize, AdjustedCharVSize,
                                       CU, CV, CUSize, CVSize, 0.f, Color);
+					if( bBlendGlyph && Color.W * Canvas->ForcedAlpha == 1.f )	// a faded colour leaves Alpha set, as DrawTile does
+						Canvas->Style = STY_Normal;
 				}
 				// Update underline status.
 				if( bDrawUnderline )
