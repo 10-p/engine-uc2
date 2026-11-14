@@ -42,8 +42,9 @@ combo table has no light Heal.
       shown; switching between the bot and the X variant updates both. Another player's bot hint is inert to the mouse
       (`MouseInert`), as their X hint is.
     - What the bot shows: its name over the preview, its icon on the slot (`SlotIcon`: `Portrait_Icon_<Name>`, Corrosion's
-      `_0`/`_1`), no turntable movie (`PreviewScreen.ClearMovie`), no announcer call, the stats panel with its weapons and
-      its first and third combos and the slot's bars, the White page with its weapons and combos and no bio.
+      `_0`/`_1`), the preview's static in place of the turntable movie (`PreviewScreen.ClearMovie`), no announcer call,
+      the stats panel with its weapons and its first and third combos and the slot's bars, the White page with its
+      weapons and combos and no bio.
     - The choice: `SaveCharacterSelections` keeps the slot's own character in the profile (`SetCharacterIndex`, no
       variant) and `SetBotChoice` puts the bot's class into the player's URL as `BotClass` (`GameStart`'s entry for the
       player, which `UpdatePlayerURL` and `GetSpawnURL` hand on), or removes it (and clears it from the player's URL).
@@ -54,7 +55,9 @@ combo table has no light Heal.
   - `CharacterStatsPanel.Update(..., optional string BotClassName)`: a bot's weapons and combos.
   - `UC2CharacterInfoPage.HandleParameters`: a bot's class in place of the variant flag (the White page from the
     character page): its name, its weapons and combos, no bio.
-  - `PreviewScreen.ClearMovie`: no movie, after the static the panel shows between two movies.
+  - `PreviewScreen.ClearMovie`: no movie; the static the panel shows before a movie (the character frame's
+    `Portrait_Char_Null_LG` on this page) stays up and flickers in a loop (`LoopStatic`: GUIComponent's looping colour
+    frames, between full strength and two thirds of it, a step every few hundredths of a second), until a movie comes.
   - `Armory_PanelBase.ChosenBot` (the player's `BotClass`): the armory's loadout shows the bot's weapons, and
     `Armory_PanelSingle` no character portrait for it.
   - `UC2MidGame_Character.SaveSettings`: a character chosen there during a match replaces the bot (its `BotClass` goes).

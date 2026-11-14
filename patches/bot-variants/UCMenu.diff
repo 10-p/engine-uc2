@@ -102,23 +102,71 @@
  }
 --- a/UCMenu/Classes/PreviewScreen.uc
 +++ b/UCMenu/Classes/PreviewScreen.uc
-@@ -92,6 +92,16 @@
- 	if ( NewMovie != None && NewMovie != img_Movie.Image )
- 	{
- 		CurrentMovie = NewMovie;
+@@ -96,6 +96,16 @@
+ 	}
+ }
+ 
++// bot-variants: no movie (a character without one): the static stays up, looping (LoopStatic)
++final function ClearMovie()
++{
++	if ( img_Movie.Image != None || CurrentMovie != None || img_Static.LoopAnimation[2] == ANIMATIONLOOP_None )
++	{
++		CurrentMovie = None;
 +		bSwitchMovie = true;
 +	}
 +}
 +
-+// bot-variants: no movie (a character without one): the static, as between two movies, and nothing after it
-+final function ClearMovie()
+ final function bool CheckForNewMovie( Canvas C, GUIComponent Sender )
+ {
+ 	if ( bSwitchMovie )
+@@ -122,12 +132,23 @@
+ 		
+ 		img_Static.OnArrival = None;
+ 		img_Static.OnEndAnimation = None;
++		img_Static.LoopAnimation[2] = ANIMATIONLOOP_None;	// bot-variants
+ 		img_Static.KillAnimation();
+ 
+ 		img_Static.ComponentColor = cWhite;
+ 
+ 		
+ 		img_Static.Pulse( cWhite, Interval * 0.5, true );
++
++		// bot-variants: no movie: the static stays, looping, and the movie it covers goes
++		if ( img_Movie.Image == None )
++		{
++			if ( bAutoDispose && MovieMaterial(PreviousMovie) != None )
++				MovieMaterial(PreviousMovie).Dispose();
++			PreviousMovie = None;
++			LoopStatic();
++			return false;
++		}
+ 
+ 		
+ 		img_Static.Pulse( cTrans, Interval * 0.5, true );
+@@ -145,6 +166,23 @@
+ 
+ 
+ 
++
++// bot-variants: the static flickers in a loop, between full strength and two thirds of it, never gone
++// (GUIComponent's looping colour frames: the frames pulsed while LoopAnimation is set repeat until KillAnimation)
++final function LoopStatic()
 +{
-+	if ( img_Movie.Image != None || CurrentMovie != None )
-+	{
-+		CurrentMovie = None;
- 		bSwitchMovie = true;
- 	}
- }
++	local Color Dim;
++
++	img_Static.LoopAnimation[2] = ANIMATIONLOOP_Continuous;
++	Dim = cWhite;
++	Dim.A = 190;
++	img_Static.Pulse( Dim, Interval * 0.2, true );
++	Dim.A = 245;
++	img_Static.Pulse( Dim, Interval * 0.1, true );
++	Dim.A = 170;
++	img_Static.Pulse( Dim, Interval * 0.25, true );
++	img_Static.Pulse( cWhite, Interval * 0.15, true );
++}
+ 
+ final function bool SwallowDraw( Canvas C )
+ {
 --- a/UCMenu/Classes/ScoreboardGroup_General.uc
 +++ b/UCMenu/Classes/ScoreboardGroup_General.uc
 @@ -154,6 +154,7 @@
@@ -300,7 +348,7 @@
  	local bool bValidCharacter;
  	local Material NewCharacterMovie;
  
-+	// bot-variants: a bot has no movie: the preview shows none
++	// bot-variants: a bot has no movie: the preview shows the static, looping
 +	if ( ShouldUseBot(PlayerIndex, CharIndex[PlayerIndex]) )
 +	{
 +		pnl_Preview[PlayerIndex].ClearMovie();
