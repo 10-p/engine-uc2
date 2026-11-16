@@ -84,7 +84,9 @@ tracked. The repository holds no UnrealScript either, only our changes to the sc
   (Corrosion, Korig, Mirage, Hyena, Nepthys, Ra, Memphis, Darius), each the bot of a slot of its weight class: the pad's
   Back there (C on the keyboard, a click on its hint) switches the slot between its own character and its bot once
   the bot is unlocked, X stays the switch to the X variant; the match plays the bot (alone, in split screen, over the
-  network), the profile and User.ini keep the slot's own character (bot-variants).
+  network), the profile and User.ini keep the slot's own character (bot-variants). X on the Random slot steps
+  through the unlocked bots and back to Random, its hint naming the next; a confirm there chooses the bot shown as its
+  own slot's Back switch does, and the Random icon shows two bots beside its "?" (random-bots).
 - **Wide windows**: the 640x480 menus and HUD in the largest centred 4:3 box of the window or of a split view, the
   view Hor+; the HUD's left and right groups at the view's sides and its centred items on its centre, the console's
   typing line across the window, the announcement band a gradient under shadowed texts (the status bar's text, which
