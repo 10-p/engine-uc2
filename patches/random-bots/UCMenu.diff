@@ -1,0 +1,334 @@
+--- a/UCMenu/Classes/UC2Arena_Character.uc
++++ b/UCMenu/Classes/UC2Arena_Character.uc
+@@ -151,6 +151,12 @@
+ var	automated	ControllerButton			btn_BotChar[MAX_VIEWPORTS];
+ var()			int							BotMask;			// the slots whose bot is unlocked (a bit per slot)
+ var() transient	int							BotSlotMask;		// the slots that show their bot
++
++// random-bots: X on the Random slot steps through the bots the Back switch can choose; the Random icon shows two of them
++var()			int							RandomBot;			// the bot the Random slot shows (an index of BotVariants.Bots), or -1
++var() transient	Material					RandomPaneIcon[2];	// the two bots of the split Random icon (DrawRandomIcon)
++var()			int							RandomPaneKey;		// which bots and colour RandomPaneIcon holds, or -1
++var()			int							RandomBotMask;		// the bots X steps through (a bit per index of BotVariants.Bots)
+ 
+ 
+ final function SetRandomMovie()
+@@ -354,6 +360,7 @@
+ 	}
+ 
+ 	UpdateBotMask();	// bot-variants
++	btn_CharIcon[RANDOM_IDX].OnRender = DrawRandomIcon;		// random-bots
+ 	RemapComponents();
+ 	MapControls();
+ }
+@@ -601,7 +608,9 @@
+ 	PlayerIndex = GetPlayerIndex();
+ 
+ 	
+-	if ( CharIndex[PlayerIndex] == RANDOM_IDX )
++	if ( CharIndex[PlayerIndex] == RANDOM_IDX && RandomShowsBot(PlayerIndex) )	// random-bots: the bot it shows
++		ChooseRandomBot(PlayerIndex);
++	else if ( CharIndex[PlayerIndex] == RANDOM_IDX )
+ 	{
+ 		JoyInput[PlayerIndex].bChoseRandom = true;
+ 
+@@ -1187,7 +1196,7 @@
+ 	local Material NewCharacterMovie;
+ 
+ 	// bot-variants: a bot has no movie: the preview shows the static, looping
+-	if ( ShouldUseBot(PlayerIndex, CharIndex[PlayerIndex]) )
++	if ( ShouldUseBot(PlayerIndex, CharIndex[PlayerIndex]) || (CharIndex[PlayerIndex] == RANDOM_IDX && RandomShowsBot(PlayerIndex)) )
+ 	{
+ 		pnl_Preview[PlayerIndex].ClearMovie();
+ 		return;
+@@ -1212,6 +1221,7 @@
+ 	{
+ 		btn_AltChar[PlayerIndex].Hide();
+ 		lbl_CharacterName[PlayerIndex].Caption = Caps(class'Localizer'.default.sRandom);
++		UpdateRandomHint(PlayerIndex);	// random-bots
+ 	}
+ 
+ 	else if ( !bool(ValidCharMask&(1<<CharIdx)) )
+@@ -1391,6 +1401,8 @@
+ 			img_Cursor[0].Show();
+ 			if ( CharIndex[0] != -1 && VariantAvailable(CharIndex[0]) )
+ 				btn_AltChar[0].Show();
++			else if ( RandomHintAvailable(0) )		// random-bots
++				btn_AltChar[0].Show();
+ 
+ 			pnl_Handicap[0].Hide();
+ 		}
+@@ -1412,6 +1424,8 @@
+ 			{
+ 				img_Cursor[1].Show();
+ 				if ( CharIndex[1] != -1 && VariantAvailable(CharIndex[1]) )
++					btn_AltChar[1].Show();
++				else if ( RandomHintAvailable(1) )		// random-bots
+ 					btn_AltChar[1].Show();
+ 
+ 				pnl_Handicap[1].Hide();
+@@ -1452,10 +1466,16 @@
+ final function UpdatePlayerStats()
+ {
+ 	local bool bValidCharacter, bUseVariant;
++	local int Slot;
+ 
+ 	bValidCharacter = ValidCharacterIndex(CharIndex[0]);
+ 	bUseVariant = ShouldUseVariant(0, CharIndex[0]);
+-	if ( ShouldUseBot(0, CharIndex[0]) )	// bot-variants: the bot's weapons and combos, the slot's bars
++	if ( CharIndex[0] == RANDOM_IDX && RandomShowsBot(0) )	// random-bots: as on the bot's own slot
++	{
++		Slot = class'BotVariants'.default.Bots[RandomShown()].Slot;
++		pnl_Stats.Update(Slot, ValidCharacterIndex(Slot), false, class'BotVariants'.static.BotClass(RandomShown()));
++	}
++	else if ( ShouldUseBot(0, CharIndex[0]) )	// bot-variants: the bot's weapons and combos, the slot's bars
+ 		pnl_Stats.Update(CharIndex[0], bValidCharacter, false, class'BotVariants'.static.BotClass(class'BotVariants'.static.Find(CharIndex[0])));
+ 	else
+ 		pnl_Stats.Update(CharIndex[0], bValidCharacter, bUseVariant);
+@@ -1663,14 +1683,208 @@
+ 		if ( Unlock != -1 && ValidCharacterIndex(Unlock) )
+ 			BotMask = BotMask | (1 << i);
+ 	}
++	UpdateRandomBotMask();		// random-bots
+ }
+ 
+ // A slot's icon: its bot's while it shows the bot.
+ final function Material SlotIcon( int PlayerIndex, int CharIdx, bool bColor, bool bVariant )
+ {
++	if ( CharIdx == RANDOM_IDX && RandomShowsBot(PlayerIndex) )		// random-bots
++		return class'BotVariants'.static.Icon(RandomShown(), bColor);
+ 	if ( ShouldUseBot(PlayerIndex, CharIdx) )
+ 		return class'BotVariants'.static.Icon(class'BotVariants'.static.Find(CharIdx), bColor);
+ 	return CharInfo.GetCharacterIconAtIndex(CharIdx, bColor, bVariant);
++}
++
++// random-bots: the bots the Back switch can choose on their own slots (CanUseBot: the bot unlocked and the slot's own
++// character the player's), the cycle of X on the Random slot; from the unlocks, not ValidCharMask, which Refresh
++// rebuilds while it sets the icons.
++final function UpdateRandomBotMask()
++{
++	local int b, Slot;
++
++	RandomBotMask = 0;
++	for ( b = 0; b < class'BotVariants'.default.Bots.Length; b++ )
++	{
++		Slot = class'BotVariants'.default.Bots[b].Slot;
++		if ( BotAvailable(Slot) && ValidCharacterIndex(Slot) )
++			RandomBotMask = RandomBotMask | (1 << b);
++	}
++}
++
++// The bot the Random slot shows (an index of BotVariants.Bots) while it is in the cycle, else -1 (the slot shows
++// Random). Like a slot's bot it is a state of the slot, which both players see.
++final function int RandomShown()
++{
++	if ( RandomBot >= 0 && bool(RandomBotMask & (1 << RandomBot)) )
++		return RandomBot;
++	return -1;
++}
++
++// The player sees the bot on the Random slot (players three and four never do: no switch of theirs).
++final function bool RandomShowsBot( int PlayerIndex )
++{
++	return PlayerIndex < MAX_VIEWPORTS && PlayerIndex < JoyInput.Length && RandomShown() != -1;
++}
++
++// The bot after b (-1: Random) in X's cycle on the Random slot, in the order of BotVariants.Bots, or -1 after the last.
++final function int NextRandomBot( int b )
++{
++	local int i;
++
++	for ( i = Max(b + 1, 0); i < class'BotVariants'.default.Bots.Length; i++ )
++		if ( bool(RandomBotMask & (1 << i)) )
++			return i;
++	return -1;
++}
++
++// The player's X hint is there on the Random slot: a bot to step to.
++final function bool RandomHintAvailable( int PlayerIndex )
++{
++	return PlayerIndex < MAX_VIEWPORTS && CharIndex[PlayerIndex] == RANDOM_IDX && NextRandomBot(-1) != -1;
++}
++
++// The Random slot's X hint names what X chooses next: the next bot, or Random while the last one is shown. The name
++// over the preview is the bot the slot shows.
++final function UpdateRandomHint( int PlayerIndex )
++{
++	local int Next;
++
++	if ( RandomShowsBot(PlayerIndex) )
++		lbl_CharacterName[PlayerIndex].Caption = class'BotVariants'.static.BotName(RandomShown());
++
++	if ( !RandomHintAvailable(PlayerIndex) || IsDisplayingHandicap(PlayerIndex) )
++		return;
++
++	Next = NextRandomBot(RandomShown());
++	btn_AltChar[PlayerIndex].Show();
++	if ( Next == -1 )
++		btn_AltChar[PlayerIndex].SetCaption(class'Localizer'.default.sRandom);
++	else btn_AltChar[PlayerIndex].SetCaption(class'BotVariants'.static.BotName(Next));
++	btn_AltChar[PlayerIndex].EnableComponent();
++}
++
++// X on the Random slot: Random, the first bot, ..., the last bot, Random again. Both players on the slot see it.
++final function bool StepRandomBot( int PlayerIndex )
++{
++	local int i;
++
++	RandomBot = NextRandomBot(RandomShown());
++	PlayAction(CS_Modify);
++	log("random-bots: player" @ PlayerIndex + 1 @ "switched the Random slot to" @
++		(RandomBot == -1 ? "Random" : "the bot" @ class'BotVariants'.static.BotName(RandomBot)), 'DevUI');
++
++	Refresh(false);
++	for ( i = 0; i < MAX_VIEWPORTS && i < JoyInput.Length; i++ )
++		if ( i == PlayerIndex || (CharIndex[i] == RANDOM_IDX && SecondPlayerActive()) )
++			UpdateCharacterData(i);
++
++	return true;
++}
++
++// A confirm on the Random slot while it shows a bot: the outcome of choosing that bot with its own slot's Back switch.
++// The cursor goes to that slot, which shows its bot (as a random pick goes to the character it picks).
++final function ChooseRandomBot( int PlayerIndex )
++{
++	local int Bot;
++
++	Bot = RandomShown();
++	JoyInput[PlayerIndex].bChoseRandom = true;
++	JoyInput[PlayerIndex].LastAnnouncerCue = '';
++	CharIndex[PlayerIndex] = class'BotVariants'.default.Bots[Bot].Slot;
++	if ( !BotActive(CharIndex[PlayerIndex]) )
++		ToggleBot(CharIndex[PlayerIndex], true);
++	log("random-bots: player" @ PlayerIndex + 1 @ "chose the Random slot's bot" @ class'BotVariants'.static.BotName(Bot)
++		@ "(slot" @ CharIndex[PlayerIndex] $ ")", 'DevUI');
++	Refresh(false);
++}
++
++// The Random icon while it shows Random and a bot is there to choose: the first two bots of X's cycle (the one on both
++// sides when there is one) left and right of the "?", over its inner area inside its frame, and a line of the frame's
++// colour at each split; drawn after the icon (its button's OnRender), in the icon's colour.
++final function DrawRandomIcon( Canvas C )
++{
++	local GUIButton b;
++	local int First, Second, Key;
++	local bool bColor;
++
++	b = btn_CharIcon[RANDOM_IDX];
++	First = NextRandomBot(-1);
++	if ( !b.bVisible || b.Graphic == None || b.Style == None || First == -1 || RandomShown() != -1 )
++		return;
++
++	Second = NextRandomBot(First);
++	if ( Second == -1 )
++		Second = First;
++	bColor = b.MenuState == MSAT_Focused;
++	Key = (First * 16 + Second) * 2 + int(bColor);
++	if ( Key != RandomPaneKey )
++	{
++		RandomPaneKey = Key;
++		RandomPaneIcon[0] = class'BotVariants'.static.Icon(First, bColor);
++		RandomPaneIcon[1] = class'BotVariants'.static.Icon(Second, bColor);
++	}
++
++	C.Style = b.Style.RStyles[b.MenuState];
++	if ( b.bOverrideStyle || b.ColorFrame.Length > 0 )
++		C.DrawColor = b.ComponentColor;
++	else C.DrawColor = b.Style.ImgColors[b.MenuState];
++
++	// in texels of the 64-texel icon: each side shows its bot's icon 12 texels nearer to its middle (a face)
++	DrawRandomPane(C, b, RandomPaneIcon[0], 9, 21, 12);
++	DrawRandomPane(C, b, RandomPaneIcon[1], 43, 55, -12);
++	DrawRandomSplit(C, b, 21);
++	DrawRandomSplit(C, b, 43);
++}
++
++// The Random icon's inner area (inside its frame) at a column, in texels: a hexagon with its corners at 9 and 55 on the
++// row 32.5 and its sides 30 degrees off the vertical, cut by the rows 13 and 52.
++final function RandomInner( float X, out float Top, out float Bottom )
++{
++	local float D;
++
++	D = FMin(X - 9.0, 55.0 - X) / 0.5774;
++	Top = FMax(13.0, 32.5 - D);
++	Bottom = FMin(52.0, 32.5 + D);
++}
++
++// One side: the inner area between the columns X0 and X1 from the bot's icon shifted DU texels, in half-texel columns,
++// each as tall as the area at its narrower edge.
++final function DrawRandomPane( Canvas C, GUIButton b, Material Icon, float X0, float X1, float DU )
++{
++	local float X, T0, B0, T1, B1, SX, SY, TU, TV;
++
++	if ( Icon == None )
++		return;
++	SX = b.ActualWidth() / 64.0;
++	SY = b.ActualHeight() / 64.0;
++	TU = Icon.MaterialUSize() / 64.0;
++	TV = Icon.MaterialVSize() / 64.0;
++	for ( X = X0; X < X1; X += 0.5 )
++	{
++		RandomInner(X, T0, B0);
++		RandomInner(X + 0.5, T1, B1);
++		T0 = FMax(T0, T1);
++		B0 = FMin(B0, B1);
++		if ( B0 <= T0 )
++			continue;
++		C.SetPos(b.ActualLeft() + X * SX, b.ActualTop() + T0 * SY);
++		C.DrawTile(Icon, 0.5 * SX, (B0 - T0) * SY, (X + DU) * TU, T0 * TV, 0.5 * TU, (B0 - T0) * TV);
++	}
++}
++
++// The split at column X: one texel of the frame's bright inner ring, stretched into a line a texel wide.
++final function DrawRandomSplit( Canvas C, GUIButton b, float X )
++{
++	local float Top, Bottom, SX, SY, TU, TV;
++
++	RandomInner(X, Top, Bottom);
++	SX = b.ActualWidth() / 64.0;
++	SY = b.ActualHeight() / 64.0;
++	TU = b.Graphic.MaterialUSize() / 64.0;
++	TV = b.Graphic.MaterialVSize() / 64.0;
++	C.SetPos(b.ActualLeft() + (X - 0.5) * SX, b.ActualTop() + Top * SY);
++	C.DrawTile(b.Graphic, SX, (Bottom - Top) * SY, 8.2 * TU, 31.6 * TV, 0.6 * TU, 0.6 * TV);
+ }
+ 
+ 
+@@ -1818,6 +2032,9 @@
+ 
+ 	PlayerIndex = GetPlayerIndex();
+ 
++	if ( CharIndex[PlayerIndex] == RANDOM_IDX )		// random-bots: X steps through the bots there
++		return StepRandomBot(PlayerIndex);
++
+ 	if ( !CanUseVariant(CharIndex[PlayerIndex]) )
+ 	{
+ 		PlayAction(CS_Error);
+@@ -1953,6 +2170,18 @@
+ 	if ( EXControllerCodes(xCode) == XC_X )
+ 	{
+ 		PlayerIndex = GetPlayerIndex();
++		if ( CharIndex[PlayerIndex] == RANDOM_IDX )		// random-bots: X steps through the bots there, if any
++		{
++			if ( !RandomHintAvailable(PlayerIndex) )
++				return false;
++			if ( IsDisplayingHandicap(PlayerIndex) )
++			{
++				PlayAction(CS_Error);
++				return false;
++			}
++			return true;
++		}
++
+ 		if ( !bool(ValidCharMask & 1 << (CharIndex[PlayerIndex]+CHARACTER_COUNT)) )
+ 			return false;
+ 
+@@ -3616,6 +3845,8 @@
+ 	btn_AltChar(1)=ControllerButton'PlayerTwoAltButton'
+ 	btn_BotChar(0)=ControllerButton'PlayerOneBotButton'
+ 	btn_BotChar(1)=ControllerButton'PlayerTwoBotButton'
++	RandomBot=-1
++	RandomPaneKey=-1
+ 	HoneyCombLeft=226
+ 	HoneyCombBottom=335
+ 	HoneyCombDX=53.25
